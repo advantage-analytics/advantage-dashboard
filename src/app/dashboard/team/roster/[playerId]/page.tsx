@@ -13,7 +13,6 @@ import { LastMatchCard } from "@/components/dashboard/team/player-profile/last-m
 import { MatchHistoryCard } from "@/components/dashboard/team/player-profile/match-history-card";
 import { LineHistoryCard } from "@/components/dashboard/team/player-profile/line-history-card";
 import { ServePlacementCard } from "@/components/dashboard/team/player-profile/serve-placement-card";
-import { ProfileDayZero } from "@/components/dashboard/team/player-profile/profile-day-zero";
 
 /**
  * One player's page — Platform Audit `Te` (their own) and `Te2` (a coach's
@@ -141,41 +140,37 @@ export default async function PlayerProfilePage({
           actions={actions}
         />
 
-        {/* The page keeps its frame either way. With no match the tail
-            below the identity row is the same five blocks drawn as ghosts,
-            graded and inert, under one sentence — the identity row stays the
-            one heading and holds the one primary. The first match fills the
-            frame in rather than replacing it with another. */}
-        {profile.matchesPlayed === 0 ? (
-          <ProfileDayZero
-            subject={subject}
-            canUpload={canUpload}
-            importHref={`${newMatchHref}&source=swing-vision`}
-          />
-        ) : (
-          <>
-            <SeasonKpiStrip
-              kpis={profile.kpis}
-              hasStats={profile.hasStats}
+        {/* The same five blocks whether or not a match exists: each card
+            holds its own empty state, so the first match fills this page in
+            rather than replacing it with another. */}
+        <SeasonKpiStrip
+          kpis={profile.kpis}
+          hasStats={profile.hasStats}
+          matchesPlayed={profile.matchesPlayed}
+          subject={subject}
+        />
+
+        <div className="grid items-start gap-4 lg:grid-cols-[1.9fr_1fr]">
+          <div className="flex min-w-0 flex-col gap-4">
+            <LastMatchCard
+              match={profile.lastMatch}
               matchesPlayed={profile.matchesPlayed}
               subject={subject}
             />
-
-            <div className="grid items-start gap-4 lg:grid-cols-[1.9fr_1fr]">
-              <div className="flex min-w-0 flex-col gap-4">
-                <LastMatchCard match={profile.lastMatch} />
-                <MatchHistoryCard
-                  rows={profile.history}
-                  playerName={profile.name}
-                />
-              </div>
-              <div className="flex min-w-0 flex-col gap-4">
-                <LineHistoryCard lines={profile.lines} />
-                <ServePlacementCard serve={profile.serve} subject={subject} />
-              </div>
-            </div>
-          </>
-        )}
+            <MatchHistoryCard
+              rows={profile.history}
+              playerName={profile.name}
+              subject={subject}
+              importHref={
+                canUpload ? `${newMatchHref}&source=swing-vision` : null
+              }
+            />
+          </div>
+          <div className="flex min-w-0 flex-col gap-4">
+            <LineHistoryCard lines={profile.lines} />
+            <ServePlacementCard serve={profile.serve} subject={subject} />
+          </div>
+        </div>
       </div>
     </div>
   );

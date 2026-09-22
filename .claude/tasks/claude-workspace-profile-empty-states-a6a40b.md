@@ -44,7 +44,7 @@ ready).
 
 ## T3 · ProfileDayZero composition, page branch, docs, render spec
 
-- **status:** done
+- **status:** todo
 - **model:** fable
 - **needs:** T1, T2
 - **files:** src/components/dashboard/team/player-profile/profile-day-zero.tsx (new), src/app/dashboard/team/roster/[playerId]/page.tsx, .skills/advantage-analytics-design/reference/empty-and-loading.md, tests/profile-day-zero.spec.ts (new) — guess
