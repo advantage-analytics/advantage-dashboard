@@ -81,3 +81,14 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The header button and the quick-menu row both dispatch `onFiltersChange(DEFAULT_FILM_FILTERS)` independently; a third clear entry point would justify a shared helper.
+
+## T9 · Shot rows reveal with a staggered rise when a point opens — done
+
+**gate:** mechanical pass · completion `VERDICT: pass` · widget-states: loading/empty/error unchanged on `point-list.tsx` and `film-this-point.tsx` (a mount animation class + delay on existing rows; no fallback, fetch exit or `return null` touched)
+
+**changed:** `globals.css` gains `@keyframes film-shot-row-in` (opacity 0 / `translateY(4px)` → rest), `.film-shot-row-in { animation: film-shot-row-in 200ms var(--ease-primary) both }` and a `prefers-reduced-motion: reduce` rule setting `animation: none` (the `.viz-crossfade-in` precedent). `ShotWellRow` (room drawer, 34 px) and `ShotRow` (This point, 40 px) both carry the class and an inline `animationDelay` of `Math.min(order - 1, 8) * 25` ms; heights, column tracks, lit/active classes and `data-shot-id` / `aria-current` untouched; rows stay keyed by `shot.id` and memoized, so the reveal is mount-driven. New `tests/film-shot-row-reveal.spec.ts` + `tests/fixtures/film-shot-row-reveal-harness.tsx` mount `PointList` in the dark tone with a 10-shot playing point and assert the class on every row and `0ms` / `25ms` / `200ms` on rows 1, 2, 10. Numbers kept at 200 ms / 25 ms / 4 px / cap 8 after loading the impeccable skill: 200 ms is `--duration-hover`, 25 ms is under the ≤60 ms sibling stagger; the 4 px rise (vs the viz family's 8 px) is deliberate because 34–40 px butted rows read as the column dropping at 8 px.
+
+**follow-ups:**
+
+1. `Math.min(order - 1, 8) * 25` lives in two components; a third shot-row surface (the Visualizations tab's shot table is the likely one) would justify an exported `shotRowRevealDelay(order)` in `film-shots.ts`.
+2. Nobody has watched the reveal, the mark fade-in (T6) or the docked readout (T7) in the browser; an eyes-on pass in the room before a PR.

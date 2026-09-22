@@ -806,3 +806,43 @@
     animation: none;
   }
 }
+
+/* Shot rows arriving when a point opens — `ShotWellRow` in the room's drawer
+   (point-list.tsx) and `ShotRow` in "This point" (film-this-point.tsx). One
+   keyframe for both, because it is one event on one tab: the rally you are
+   watching becoming readable.
+
+   4px, not the viz family's 8px: these rows are 34–40px tall and sit shoulder
+   to shoulder, so a rise the height of a fifth of the row reads as arrival
+   without the column looking like it dropped. 200ms is `--duration-hover`,
+   the routine-state-change duration, on `--ease-primary`; the per-row
+   `animationDelay` is written inline by each component at 25ms × (order − 1),
+   capped at eight steps, so a 30-shot rally is fully revealed inside 400ms
+   instead of trickling. `both` holds the from-state through the delay, so row
+   nine does not flash in at full opacity before its turn.
+
+   Mount-driven only: the rows are keyed by `shot.id`, so stepping to another
+   point mounts fresh rows and fires this, while the four-times-a-second
+   `timeupdate` re-render bails out of the memoized rows and replays nothing. */
+@keyframes film-shot-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.film-shot-row-in {
+  animation: film-shot-row-in 200ms var(--ease-primary) both;
+}
+/* No transform under reduced motion, and no staggered fade either: the
+   `.viz-crossfade-in` precedent above drops the whole animation, and an
+   opacity-only version of a 25ms-stepped list would still read as movement
+   down the column. The rows simply are there. */
+@media (prefers-reduced-motion: reduce) {
+  .film-shot-row-in {
+    animation: none;
+  }
+}

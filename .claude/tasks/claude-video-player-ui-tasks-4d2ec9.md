@@ -124,7 +124,7 @@ ready).
 
 ## T9 · Shot rows reveal with a staggered rise when a point opens
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/app/globals.css (beside `viz-vt-rise-in` / `.viz-crossfade-in`); src/components/dashboard/matches/match-detail/film/point-list.tsx (`ShotWellRow` L800); film-this-point.tsx (`ShotRow` L217); a spec (extend the winner-mark harness with `shotStops`/`activePointId`/`onSelectShot`, or a `createLoader()` static render of `FilmThisPoint`)
 - **done when:**

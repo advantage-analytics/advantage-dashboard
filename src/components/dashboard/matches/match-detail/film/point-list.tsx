@@ -818,8 +818,15 @@ const ShotWellRow = memo(function ShotWellRow({
       aria-current={isLit ? "true" : undefined}
       aria-label={`${cells.order}. ${cells.player} ${cells.stroke}, ${cells.placement}, ${cells.result} — jump to this shot`}
       onClick={() => onSelect(stop)}
+      // T9: the rally reveals itself as a rally. Mount-driven — the rows are
+      // keyed by `shot.id`, so stepping to another point mounts a fresh set
+      // and replays this, while a `timeupdate` tick bails out of the memo
+      // above and replays nothing. 25ms a step, capped at eight, so a long
+      // rally finishes arriving inside 400ms. `film-shot-row-in`, its cap and
+      // its reduced-motion opt-out are in globals.css.
+      style={{ animationDelay: `${Math.min(order - 1, 8) * 25}ms` }}
       className={cn(
-        "grid h-[34px] w-full shrink-0 cursor-pointer items-center gap-x-2 px-[14px] text-left transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        "film-shot-row-in grid h-[34px] w-full shrink-0 cursor-pointer items-center gap-x-2 px-[14px] text-left transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
         SHOT_COLUMNS,
         isLit
           ? "bg-[rgba(255,255,255,0.12)]"
