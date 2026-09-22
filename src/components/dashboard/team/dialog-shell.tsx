@@ -137,10 +137,12 @@ export { DialogProblem } from "@/components/ui/dialog-problem";
 /**
  * The program's seats as unit boxes — the design system's form for a small
  * countable quota: 8px squares on a 2px radius (circles are for people).
- * Filled = a player on the roster, outlined = held by an open invitation,
- * light blue = what the action in front of the coach would take, grey = free.
- * `full` paints every box `--danger`: at the cap the boxes ARE the message,
- * and severity rides the fill, never the figure alone.
+ * One grammar: outline = not spent, solid = spent. A grey (`--ink-300`)
+ * hairline is a free seat; a blue hairline is one held by an open
+ * invitation. Solid blue is a player on the roster, 40%-opacity solid blue
+ * is what the action in front of the coach would take. `full` paints every
+ * box `--danger`: at the cap the boxes ARE the message, and severity rides
+ * the fill, never the figure alone.
  */
 export function SeatBoxes({
   seats,
@@ -176,7 +178,7 @@ export function SeatBoxes({
               // The seat this action takes: the next square, in a lighter
               // step of the same blue — "one more of these", read without a key.
               kind === "adding" && "bg-[var(--blue)] opacity-40",
-              kind === "free" && "bg-[var(--ink-100)]",
+              kind === "free" && "shadow-[inset_0_0_0_1px_var(--ink-300)]",
             )}
           />
         );

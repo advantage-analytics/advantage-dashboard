@@ -27,3 +27,25 @@ enters grid flow. `match-list-layout.ts` is untouched.
    `flex items-center gap-2` from when it held the name _and_ the pill. It now
    wraps only the name, so the `gap-2` is inert. Harmless; worth tidying if
    someone is in that block anyway.
+
+## T2 · Draw a free seat as an outline in SeatBoxes — done
+
+**gate:** mechanical `GATE PASS`; completion `VERDICT: pass`.
+
+**changed:** A free seat is now an inset `--ink-300` hairline with no fill,
+matching the shape the `held` branch already used. It was `--ink-100` #F3F3F3
+drawn on `SeatNote`'s `--surface-subtle` #F5F5F5 panel — two points apart on
+every channel, so half the quota was not drawn and a 20-seat program with four
+players read as a 5-seat one.
+
+The meter now has one grammar rather than four unrelated treatments: outline
+means not spent (grey free, blue held), solid means spent (blue used, 40% blue
+adding, `--danger` full). An outline is also ground-independent, which matters
+because `SeatBoxes` is drawn on three different backgrounds — `--surface-subtle`
+twice, and `SeatPips` in Settings on no fill at all, since `SettingsCard` sets
+border and shadow only.
+
+`reference/settings.md` needed amending as a consequence: it said an outlined
+seat box stands for an invitation, which stopped being unambiguous once free
+seats are outlined too. It now says the colour marks the invite, not the
+outline alone. No call site changed.

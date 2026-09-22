@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Draw a free seat as an outline in SeatBoxes
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** `src/components/dashboard/team/dialog-shell.tsx` — guess
 - **done when:**
