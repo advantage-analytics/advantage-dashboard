@@ -896,11 +896,14 @@ test("a bookmark the database refused is still gone after a rebuild", async ({
  * The court card moves like the board (T11)
  *
  * The geometry is `film-board-position.spec.ts`'s; what only a browser can
- * answer is whether a real mouse drag on the card's header reaches it, and
- * whether the corner is kept for the next visit.
+ * answer is whether a real mouse drag on the card reaches it, and whether
+ * the corner is kept for the next visit. The whole card is the handle, the
+ * way the whole board is ("moving the court should be as easy as moving the
+ * scorecard", author 2026-09-22) — so the drag starts on the card's BODY,
+ * in the padding below the court drawing, where no mark can sit.
  * ---------------------------------------------------------------------- */
 
-test("dragging the court card's header parks it in a corner of its own", async ({
+test("dragging the court card by its body parks it in a corner of its own", async ({
   page,
 }) => {
   const matchId = "court-drag";
@@ -920,10 +923,14 @@ test("dragging the court card's header parks it in a corner of its own", async (
   await expect(card).toHaveAttribute("data-court-anchor", "follow");
 
   const handle = page.locator("[data-film-court-handle]");
+  // The handle is the card itself, not its header row.
+  await expect(handle).toHaveAttribute("aria-label", "Shot placement");
   const box = await handle.boundingBox();
   if (!box) throw new Error("no court handle");
-  const fromX = box.x + box.width / 2;
-  const fromY = box.y + box.height / 2;
+  // The card's bottom-left padding: below the drawing, left of the foot
+  // note, so the press cannot land on a mark or a glyph.
+  const fromX = box.x + 4;
+  const fromY = box.y + box.height - 4;
 
   await page.mouse.move(fromX, fromY);
   await page.mouse.down();

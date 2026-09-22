@@ -42,12 +42,14 @@ import { UNMEASURED, shotLabel, shotRowCells } from "./film-shots";
  * scorecard" (author, 2026-09-22), reversing R6's "the board is the only
  * movable object". The mechanic is the board's own (`use-corner-drag.ts`) and
  * the room owns the wrapper it moves; this file contributes only the handle.
- * Only the 20px header ROW is grabbable, because every mark and both header
- * glyphs are buttons — a card that lifted from anywhere would swallow the
- * seek. A press that starts on one of the two glyphs is not a grab either:
- * pointer capture on the row would re-target the click away from the button.
- * Every mark is a seek target and is keyboard-reachable in shot order, which
- * the DOM order of the buttons gives.
+ * The WHOLE card is grabbable, the way the whole board is — "moving the court
+ * should be as easy as moving the scorecard" (author, 2026-09-22, after a
+ * first cut that grabbed by the 20px header row alone). Every mark and both
+ * header glyphs are buttons, and a press that starts on one of them is that
+ * button's, never a grab: pointer capture on the card would re-target the
+ * click away from the button, so the mark would stop seeking. Every mark is
+ * a seek target and is keyboard-reachable in shot order, which the DOM order
+ * of the buttons gives.
  *
  * Point mode is the rally as it happens — a donut where the ball was struck,
  * a filled dot where it landed, both fading out two shots later. Match mode
@@ -100,8 +102,8 @@ export interface FilmCourtProps {
    */
   dock?: "left" | "right";
   /**
-   * The pointer half of `useCornerDrag`, for the header row. Absent wherever
-   * the card is not movable, and then the row is an ordinary header.
+   * The pointer half of `useCornerDrag`, for the whole card. Absent wherever
+   * the card is not movable, and then it is an ordinary readout.
    */
   handleProps?: {
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
@@ -110,7 +112,7 @@ export interface FilmCourtProps {
     onPointerCancel: () => void;
     onLostPointerCapture: () => void;
   };
-  /** The card is under the pointer right now: the row shows `cursor-grabbing`. */
+  /** The card is under the pointer right now: it shows `cursor-grabbing`. */
   grabbing?: boolean;
 }
 
@@ -289,7 +291,26 @@ export function FilmCourt({
   return (
     <section
       aria-label="Shot placement"
-      className="box-border flex flex-col items-center"
+      {...handleProps}
+      data-film-court-handle={handleProps ? "" : undefined}
+      // A press that lands on a mark or on either header glyph is that
+      // button's. Capturing the pointer on the card would move the click off
+      // the button it started on, so a mark would stop seeking and "Hide the
+      // court" would stop hiding the court. Everything else on the card —
+      // the heading, the court drawing between the marks, the foot note,
+      // the padding — is a grab, the way the whole board is.
+      onPointerDown={(e) => {
+        if ((e.target as HTMLElement).closest("button")) return;
+        handleProps?.onPointerDown(e);
+      }}
+      className={cn(
+        "box-border flex flex-col items-center",
+        handleProps &&
+          cn(
+            "touch-none select-none",
+            grabbing ? "cursor-grabbing" : "cursor-grab",
+          ),
+      )}
       style={{
         width: FILM_COURT_SIZE.width,
         height: FILM_COURT_SIZE.height,
@@ -302,23 +323,7 @@ export function FilmCourt({
       }}
     >
       <div
-        {...handleProps}
-        data-film-court-handle={handleProps ? "" : undefined}
-        // A press that lands on either glyph is that glyph's. Capturing the
-        // pointer on this row would move the click off the button it started
-        // on, so "Hide the court" would stop hiding the court.
-        onPointerDown={(e) => {
-          if ((e.target as HTMLElement).closest("button")) return;
-          handleProps?.onPointerDown(e);
-        }}
-        className={cn(
-          "flex w-full items-center",
-          handleProps &&
-            cn(
-              "touch-none select-none",
-              grabbing ? "cursor-grabbing" : "cursor-grab",
-            ),
-        )}
+        className="flex w-full items-center"
         style={{ height: 20, gap: 4, paddingLeft: 2 }}
       >
         <span

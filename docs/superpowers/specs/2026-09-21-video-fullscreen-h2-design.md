@@ -207,9 +207,10 @@ same column directly **above** the board, same gap. That last sentence is this d
 inference, not the designer's — say so in the code comment. The drawer never moves either object.
 
 **Author decision, 2026-09-22 — the court moves too.** "I should be able to move the court visual
-like the scorecard." The card is dragged by its 20px header row only (`cursor:grab`), because
-every mark and both header glyphs are buttons and a card that lifted from anywhere would swallow
-the seek; a press that starts on a glyph is that glyph's, never a grab. Otherwise it is the
+like the scorecard." The whole card is the grab (`cursor:grab`), the way the whole board is — a
+first cut grabbed by the 20px header row alone and the author sent it back the same day: "moving
+the court should be as easy as moving the scorecard." Every mark and both header glyphs are
+buttons, and a press that starts on one of them is that button's, never a grab. Otherwise it is the
 board's mechanic exactly — 3px lift threshold, ghost, arrows 8px (⇧ 40px), Space lifts and drops,
 Esc cancels, blur drops where it stands, each landing announced politely, corner persisted under
 `film-room:court-anchor`. The two objects remember SEPARATE corners, and the court's is `null`
