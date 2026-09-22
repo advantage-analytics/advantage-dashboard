@@ -45,7 +45,13 @@ import {
  *   has a corner of its own.
  * - the drag handle — the board IS its handle, so the caller spreads
  *   `handleProps` onto the same element as `containerProps`. The court's card
- *   is all buttons, so only its 20px header row takes them.
+ *   takes them on its root and guards its own buttons (marks, header glyphs)
+ *   with a `closest("button")` check before lifting.
+ *
+ * One rule both callers must keep: `SETTLE_CLASS` goes on the moving element
+ * only while it is NOT `free`. It is the glide into a corner; left on during
+ * a drag it eases every pointer move over 360ms and the object trails the
+ * cursor.
  *
  * Geometry is read off the container element, never off `e.currentTarget`,
  * precisely because those are two different elements once the handle is a

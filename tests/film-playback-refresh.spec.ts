@@ -937,9 +937,28 @@ test("dragging the court card by its body parks it in a corner of its own", asyn
   // Well past the 3px lift threshold, and far enough right that the nearest
   // corner is unambiguous.
   await page.mouse.move(fromX + 600, fromY - 100, { steps: 12 });
+
+  // Under the pointer the card follows it directly: no glide, or every move
+  // would be eased over 360ms and the card would trail the cursor (the board
+  // has always done this; the court's first cut did not). Read on the
+  // wrapper, which is what the hook positions.
+  const duringDrag = await card.evaluate(
+    (el) => getComputedStyle(el).transitionDuration,
+  );
+  expect(duringDrag).toBe("0s");
+  const followed = await card.boundingBox();
+  if (!followed) throw new Error("no card mid-drag");
+  // Clamped to the room, so not exactly +600/-100 — but well away from where
+  // it started, on the very frame the pointer got there.
+  expect(followed.x).toBeGreaterThan(box.x + 300);
+
   await page.mouse.up();
 
   await expect(card).toHaveAttribute("data-court-anchor", "top-right");
+  // Released, the glide into the corner is back on.
+  expect(
+    await card.evaluate((el) => getComputedStyle(el).transitionDuration),
+  ).toBe("0.36s");
   expect(
     await page.evaluate(() => localStorage.getItem("film-room:court-anchor")),
   ).toBe("top-right");

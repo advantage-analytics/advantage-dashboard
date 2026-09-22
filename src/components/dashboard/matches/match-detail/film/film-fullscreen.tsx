@@ -291,16 +291,22 @@ function FilmCourtLayer({
         aria-describedby="film-court-hint"
         className={cn(
           "absolute rounded-[var(--radius-element)]",
-          move.placed && SETTLE_CLASS,
+          // The glide is for landing in a corner, never for following the
+          // pointer: with it on during a drag every move is eased over 360ms
+          // and the card trails the cursor, then slides again on release from
+          // wherever the easing had got to. Same rule as the board ("moving
+          // the court should be as easy as moving the scorecard", author
+          // 2026-09-22).
+          !move.free && move.placed && SETTLE_CLASS,
           // Held is the focus outline at full weight, as on the board (R6).
           move.held && "shadow-[var(--focus-ring)]",
         )}
         style={{ left: move.position.left, top: move.position.top }}
       >
         <span id="film-court-hint" className="sr-only">
-          Drag the court card by its header to move it, or press the arrow keys
-          to nudge it 8 pixels at a time — 40 with Shift. Space picks it up and
-          drops it into the nearest corner; Escape cancels the move.
+          Drag the court card to move it, or press the arrow keys to nudge it 8
+          pixels at a time — 40 with Shift. Space picks it up and drops it into
+          the nearest corner; Escape cancels the move.
         </span>
         <span aria-live="polite" className="sr-only">
           {move.announcement && (
