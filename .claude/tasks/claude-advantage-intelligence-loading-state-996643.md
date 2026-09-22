@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Render FocusCardPending in TeamHomeSkeleton instead of null insight
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/loading/team-home-skeleton.tsx (guess)
 - **done when:**
