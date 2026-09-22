@@ -1,13 +1,21 @@
 "use client";
 
 import { useCallback, useRef, useState, type RefObject } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, ChevronDown, ChevronUp } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { splitInsight } from "@/components/dashboard/matches/match-detail/insight-text";
+import { InsightMark } from "@/components/dashboard/matches/match-detail/insight-mark";
+
+/**
+ * The card's surface (border, radius, shadow). One string shared by the
+ * summary, its empty state and the pane skeleton, so a fold reads as one
+ * card changing and the three conditions can never drift apart.
+ */
+export const INSIGHT_SURFACE =
+  "shrink-0 overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
 
 /** `--ease-out-expo`: the DS curve for layout transitions. */
 const EASE_OUT_EXPO = [0.23, 1, 0.32, 1] as const;
@@ -97,16 +105,18 @@ export function MatchReportInsight() {
     observerRef.current = resize;
   }, []);
 
-  // No summary means no card, not an empty one. An empty string counts as no
-  // summary too.
-  if (!meta.summary) return null;
+  // No summary — an empty string counts too — is the card's anatomy holding
+  // a statement of what is missing (`InsightEmpty`), never a stand-in
+  // finding. `StatisticsView` withholds the card altogether when the match
+  // has no points, so a view with nothing says so once, not per card.
+  if (!meta.summary) return <InsightEmpty />;
 
   const collapsed = state.insight === "collapsed";
 
   return (
     <section
       aria-label="Advantage Intelligence summary"
-      className="shrink-0 overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]"
+      className={INSIGHT_SURFACE}
     >
       {/* The tween runs inside the border, so the measured content height is
           exactly the height the clip gets. On the bordered section itself it
@@ -157,6 +167,41 @@ export function MatchReportInsight() {
           </AnimatePresence>
         </div>
       </motion.div>
+    </section>
+  );
+}
+
+/**
+ * The card with no summary to show: the expanded variant's anatomy — the
+ * claim slot, the evidence slot, the credit foot — with the two text slots
+ * saying what is missing and what fills them, in the quiet inks. No toggle
+ * (there is nothing to fold), no link, no figure, no invented sentence a
+ * screen reader could read out as a finding. It is a status, and says so.
+ */
+function InsightEmpty() {
+  return (
+    <section
+      aria-label="Advantage Intelligence summary"
+      role="status"
+      data-testid="insight-empty"
+      className={INSIGHT_SURFACE}
+    >
+      <div className="flex flex-col gap-2 p-[16px_20px_12px]">
+        <p
+          className="text-body [text-wrap:pretty]"
+          style={{ color: "var(--ink-700)", fontWeight: 500 }}
+        >
+          No Advantage Intelligence summary for this match.
+        </p>
+        <p className="text-[11px] leading-[1.6] [text-wrap:pretty] text-[var(--ink-500)]">
+          One is written when a match is analysed from video or imported from
+          SwingVision: the claim first, then the numbers behind it.
+        </p>
+        <div className="mt-1 flex h-6 items-center gap-[7px] border-t border-[var(--border-hairline)] pt-2.5">
+          <InsightMark />
+          <span className="text-micro">Advantage Intelligence</span>
+        </div>
+      </div>
     </section>
   );
 }
@@ -293,33 +338,6 @@ function InsightCollapsed({
         />
       </button>
     </div>
-  );
-}
-
-/**
- * The engine mark at the size F2 and F3 draw it beside small text: a 16px
- * ink-900 square with the 9×6 swoosh inverted to white (the frame's
- * `logo-mark.svg` is `/logos/logo3.svg` here, as on Home's Focus card). With a
- * `label` the mark is an image that names the engine; without one it is
- * decoration beside the visible credit.
- */
-function InsightMark({ label }: { label?: string }) {
-  return (
-    <span
-      role={label ? "img" : undefined}
-      aria-label={label}
-      aria-hidden={label ? undefined : true}
-      className="flex size-4 shrink-0 items-center justify-center rounded-[3px] bg-[var(--ink-900)]"
-    >
-      <Image
-        src="/logos/logo3.svg"
-        alt=""
-        width={9}
-        height={6}
-        className="brightness-0 invert"
-        aria-hidden="true"
-      />
-    </span>
   );
 }
 

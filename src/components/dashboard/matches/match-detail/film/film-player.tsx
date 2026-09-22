@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
+import { FilmFramePending } from "@/components/dashboard/loading/film-frame-pending";
 import { advButton } from "@/lib/ui/adv-button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -281,6 +282,15 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const [looping, setLooping] = useState(false);
     const [skipDead, setSkipDead] = useState(false);
     const [failed, setFailed] = useState(false);
+    /**
+     * Whether the CURRENT element has metadata — the state twin of
+     * `readyRef`, for the one thing a ref cannot do: draw. Until it does the
+     * frame is black, and after a swap it stays black while the new
+     * credential is fetched; both are a request in flight, so the frame
+     * shows `FilmFramePending` over the element (never in place of it — the
+     * element is what the refresh harness and the room watch).
+     */
+    const [ready, setReady] = useState(false);
 
     const syncClock = useFilmClockVars(
       videoRef,
@@ -385,6 +395,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       if (!el) return;
       setDuration(el.duration || 0);
       readyRef.current = true;
+      setReady(true);
       // Generation zero is the server's own render: the element is already
       // where it should be, and seeking it would move a viewer who has not
       // asked for anything.
@@ -419,6 +430,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
         return;
       }
       readyRef.current = false;
+      setReady(false);
       const onReady = () => settle();
       el.addEventListener("loadedmetadata", onReady);
       return () => el.removeEventListener("loadedmetadata", onReady);
@@ -617,6 +629,12 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       );
     }
 
+    // A credential being (re)signed — `url` is null only between a retry (or
+    // a transient refusal's automatic retry) and the hook's answer — or an
+    // element that has no metadata yet. Both resolve: to a playing element,
+    // or to the problem panel above.
+    const covered = (url === null && !passthrough) || !ready;
+
     return (
       <TooltipProvider>
         <div
@@ -651,14 +669,38 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             }}
             onTimeUpdate={(e) => onTime(e.currentTarget.currentTime)}
             onSeeked={(e) => onTime(e.currentTarget.currentTime)}
-            onError={() => (passthrough ? setFailed(true) : onLoadFailure())}
+            onError={() => {
+              if (passthrough) {
+                setFailed(true);
+                return;
+              }
+              // The dead element is covered until the hook's next generation
+              // (or its problem panel) replaces it.
+              setReady(false);
+              onLoadFailure();
+            }}
           >
             Your browser cannot play this video.
           </video>
 
+          {/* Over the element, never instead of it. `pointer-events-none`:
+              the transport under it stays reachable, so a slow metadata
+              fetch can never trap a click; it is hidden from readers
+              instead, since the status above says what is happening. */}
+          {covered && (
+            <div className="pointer-events-none absolute inset-0">
+              <FilmFramePending
+                overlay
+                caption={
+                  url === null ? "Signing a fresh playback link" : undefined
+                }
+              />
+            </div>
+          )}
+
           {/* The centre play affordance — only while paused, so it never
               sits on top of live play. */}
-          {!playing && (
+          {!playing && !covered && (
             <button
               type="button"
               onClick={togglePlay}
@@ -675,7 +717,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             </button>
           )}
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col justify-end gap-1.5 bg-[linear-gradient(to_top,rgba(13,13,13,0.68)_0%,rgba(13,13,13,0)_100%)] px-4 pt-7 pb-2">
+          <div
+            aria-hidden={covered || undefined}
+            className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col justify-end gap-1.5 bg-[linear-gradient(to_top,rgba(13,13,13,0.68)_0%,rgba(13,13,13,0)_100%)] px-4 pt-7 pb-2"
+          >
             <FilmTrack
               className="pointer-events-auto"
               segments={segments}

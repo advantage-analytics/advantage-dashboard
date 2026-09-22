@@ -8,11 +8,27 @@ import {
 } from "@/components/dashboard/matches/match-detail/report-view";
 import { cn } from "@/lib/utils";
 
-const VIEW_ICONS: Record<ReportView, LucideIcon> = {
+export const VIEW_ICONS: Record<ReportView, LucideIcon> = {
   statistics: Table2,
   shots: ScatterChart,
   film: Video,
 };
+
+/**
+ * One switcher row's classes, exported so the route skeleton
+ * (`loading/match-report-pending.tsx`) can draw the same three rows — real
+ * labels and icons are chrome the page already knows — without becoming a
+ * second copy of them.
+ */
+export function viewRowClass(isActive: boolean): string {
+  return cn(
+    "flex h-10 cursor-pointer items-center rounded-[var(--radius-element)] text-[13px]",
+    "transition-colors duration-200 ease-[var(--ease-primary)]",
+    isActive
+      ? "bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
+      : "text-[var(--nav-fg)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]",
+  );
+}
 
 /**
  * The rail's view switcher (design 04 F1): Statistics · Visualizations · Video,
@@ -44,13 +60,7 @@ export function MatchReportViewSwitcher() {
             role="tab"
             aria-selected={isActive}
             onClick={() => actions.selectView(view.value)}
-            className={cn(
-              "flex h-10 cursor-pointer items-center rounded-[var(--radius-element)] text-[13px]",
-              "transition-colors duration-200 ease-[var(--ease-primary)]",
-              isActive
-                ? "bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
-                : "text-[var(--nav-fg)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]",
-            )}
+            className={viewRowClass(isActive)}
           >
             <span className="flex size-10 shrink-0 items-center justify-center">
               <Icon className="size-4" strokeWidth={1.5} aria-hidden="true" />
