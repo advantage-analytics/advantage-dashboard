@@ -1,7 +1,7 @@
 "use client";
 
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
-import { useId } from "react";
+import { Children, useId } from "react";
 import { Loader2, X } from "lucide-react";
 import {
   AlertDialog,
@@ -89,8 +89,12 @@ export function ConfirmDialog({
   // The body is what the confirm costs, so it is read with the contract on
   // open rather than left for a screen reader to stumble on.
   const bodyId = useId();
+  // Counted, not truthy: a caller's conditional children arrive as
+  // `[null, null]` when every branch is off (Sign out everywhere, nothing
+  // unsaved), and an empty wrapper would still take an 18px gap slot.
+  const hasBody = Children.toArray(children).length > 0;
   const { descriptionRef, contentProps } = useDescribedBody(
-    children ? bodyId : undefined,
+    hasBody ? bodyId : undefined,
   );
   return (
     <AlertDialog
@@ -135,7 +139,7 @@ export function ConfirmDialog({
             </button>
           </div>
 
-          {children && (
+          {hasBody && (
             <div id={bodyId} className="flex flex-col gap-[18px]">
               {children}
             </div>
