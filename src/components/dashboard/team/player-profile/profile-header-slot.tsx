@@ -15,58 +15,39 @@ export interface SwitcherPlayer {
 }
 
 /**
- * What the header says while this profile is on screen.
+ * What the header says while this profile is on screen: `Roster › Name ⌄
+ * 3 / 9` — the trail back to the roster, then the name as a switcher so the
+ * reader can walk the squad without going back, and where in the walk they
+ * are. A staff seat's own page (not a player, so not in the walk) gets the
+ * trail and the name with no switcher.
  *
- * Two treatments, and they are the whole difference between Platform Audit
- * `Te` and `Te2` above the fold:
- *
- * - **self** — the player's own name, in the register a rail destination's
- *   title uses. Reached from the foot of the rail, so there is no trail to
- *   trace: this is a place, not a step.
- * - **staff** — `Roster › Name ⌄ 3 / 9`: the trail back to the roster, then
- *   the name as a switcher so a coach can walk the squad without going back,
- *   and where in the walk they are. A staff seat's own page (not a player,
- *   so not in the walk) gets the trail and the name with no switcher.
+ * One treatment for every viewer. Platform Audit `Te` drew the player's own
+ * page with the name alone, on the argument that a rail destination is a
+ * place, not a step; in use that left a player with no way back to the
+ * squad from their own page, and the coach's trail (`Te2`) is the same trail
+ * from the other side. The **You** pill on the identity row still marks
+ * whose page it is.
  *
  * Renders nothing itself; the header draws what this publishes.
  */
-export function ProfileHeaderSlot(
-  props:
-    | { mode: "self"; name: string }
-    | {
-        mode: "staff";
-        name: string;
-        playerId: string;
-        players: SwitcherPlayer[];
-      },
-) {
+export function ProfileHeaderSlot({
+  name,
+  playerId,
+  players,
+}: {
+  name: string;
+  playerId: string;
+  players: SwitcherPlayer[];
+}) {
   const node = useMemo(
-    () =>
-      props.mode === "self" ? (
-        <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">
-          {props.name}
-        </span>
-      ) : (
-        <StaffTrail
-          name={props.name}
-          playerId={props.playerId}
-          players={props.players}
-        />
-      ),
-    // Each field is listed so a switch to the next player republishes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      props.mode,
-      props.name,
-      props.mode === "staff" ? props.playerId : null,
-      props.mode === "staff" ? props.players : null,
-    ],
+    () => <Trail name={name} playerId={playerId} players={players} />,
+    [name, playerId, players],
   );
   usePublishHeaderSlot(node);
   return null;
 }
 
-function StaffTrail({
+function Trail({
   name,
   playerId,
   players,

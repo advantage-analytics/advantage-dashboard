@@ -21,12 +21,12 @@ import { ServePlacementCard } from "@/components/dashboard/team/player-profile/s
  * Byte-for-byte the same page from both sides. A player's own data lives
  * here rather than in a personal workspace — that one is for people not on
  * a team — reached from their name at the foot of the rail; a coach reaches
- * the same page from the Roster. Three things differ, all chrome: the header
- * says the name alone or `Roster › name ⌄ 3 / 9` with a switcher; the
+ * the same page from the Roster. Two things differ, both chrome: the
  * **You** pill marks whose page it is; and the ghost button is **Edit
  * profile** (a player owns their identity) or **Edit player** (a coach owns
- * the roster). No data is added or withheld — that is what "fully open"
- * buys a program.
+ * the roster). The header reads `Roster › name ⌄ 3 / 9` from either side —
+ * the trail and the switcher are the same walk whoever is walking it. No
+ * data is added or withheld — that is what "fully open" buys a program.
  *
  * Five blocks in a 2:1 split: the things you scan repeatedly (the last
  * match, then every match) on the left, the things you consult (line
@@ -114,16 +114,15 @@ export default async function PlayerProfilePage({
 
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
-      {mode === "staff" ? (
-        <ProfileHeaderSlot
-          mode="staff"
-          name={profile.name}
-          playerId={profile.playerId}
-          players={players}
-        />
-      ) : (
-        <ProfileHeaderSlot mode="self" name={profile.name} />
-      )}
+      {/* `Roster › Name ⌄ n / N` for every viewer, the player included: the
+          trail back to the roster and the switcher to walk it are the same
+          from either side, and a player's own name alone left them with no
+          way back to the squad. */}
+      <ProfileHeaderSlot
+        name={profile.name}
+        playerId={profile.playerId}
+        players={players}
+      />
 
       <div className="mx-auto flex max-w-screen-2xl flex-col gap-5 px-6 pt-5 pb-8 sm:px-14">
         <ProfileIdentity
