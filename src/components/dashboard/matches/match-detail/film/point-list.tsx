@@ -41,12 +41,18 @@ import {
  *   absolutizes on the server first and orients on the viewer second; the
  *   row's point score stays server-first, as the umpire calls it.
  *
- * The decisive-player mark is `point.player` — the player who hit the last
- * shot: the workspace's mark (profile photo on personal, crest on a team)
- * when that is the viewer, an initials chip on `--surface-subtle` when it is
- * not. Initials come from `sides`, so a two-letter chip is never a hardcoded
- * artboard string. The row's hover, the score sliding aside for the bookmark,
- * is the room's (handoff F3) in the light treatment.
+ * The mark is the point's WINNER, not who hit the last shot: the workspace's
+ * mark (profile photo on personal, crest on a team) when the viewer won the
+ * point, an initials chip on `--surface-subtle` when the opponent did.
+ * Initials come from `sides`, so a two-letter chip is never a hardcoded
+ * artboard string. The value is `won_by_player1`, which the Advantage
+ * Intelligence pipeline derives from consecutive point scores
+ * (`resolveWinner` in `derivation/winners.ts`, walking the ladder / game /
+ * set counts and deliberately ignoring the last stroke's `in` flag) and the
+ * SwingVision parser reads straight from the export. It disagrees with "who
+ * hit last" on any point flagged `winner_disputed` — that is exactly the set
+ * this mark exists to get right. The row's hover, the score sliding aside for
+ * the bookmark, is the room's (handoff F3) in the light treatment.
  *
  * ── Two tones, one list ─────────────────────────────────────────────────────
  *
@@ -448,7 +454,7 @@ export const PointList = memo(function PointList({
                   </div>
 
                   {group.points.map((point) => {
-                    const isYou = (point.player === "player1") === youIsPlayer1;
+                    const isYou = point.wonByPlayer1 === youIsPlayer1;
                     const isActive = point.id === activePointId;
                     return (
                       // A fragment, not a wrapper: the well is the row's
@@ -632,10 +638,13 @@ export const PointRow = memo(function PointRow({
         isActive && t.playing,
       )}
     >
-      <span className="inline-flex shrink-0 basis-[34px] items-center justify-center">
+      <span
+        className="inline-flex shrink-0 basis-[34px] items-center justify-center"
+        data-mark={isYou ? "you" : "opp"}
+      >
         {/* The viewer's own mark, never the frame's white initials chip
-            (phase-1 decision): a point you decided reads as yours at a glance
-            on both tones. The opponent keeps initials. */}
+            (phase-1 decision): a point the viewer WON reads as theirs at a
+            glance on both tones. The opponent keeps initials. */}
         {isYou ? (
           <WorkspaceMark
             workspace={workspace}

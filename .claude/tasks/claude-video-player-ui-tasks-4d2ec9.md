@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Point-row mark shows the point's winner, not the last hitter
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/point-list.tsx (the `isYou` line ~451 and the "decisive-player mark" doc comment ~44–49); tests/film-playback-refresh.spec.ts or its fixture tests/fixtures/film-point.ts for the pinning case
 - **done when:**
