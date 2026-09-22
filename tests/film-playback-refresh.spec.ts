@@ -996,3 +996,159 @@ test("T12: double-click no longer exits the room", async ({ page }) => {
   const report = await state(page, REPORT);
   expect(report?.time).toBeCloseTo(0.3, 1);
 });
+
+/* -------------------------------------------------------------------------
+ * A point jump is only a seek (T14)
+ *
+ * What the code already says — `seek` sets `currentTime` and nothing else —
+ * pinned where only a browser can: no `/video` request, no remount, and the
+ * element's own clock on each row's stop start. The credential is given an
+ * hour so no scheduled refresh can land inside the test and be mistaken for
+ * one the jumps caused.
+ * ---------------------------------------------------------------------- */
+
+/** The rendered alignment's stop starts (see "The film's geometry"). */
+const STOP_START: Record<string, number> = { a: 0.2, b: 0.35, c: 0.45 };
+const DRAWER_ROW = (id: string) =>
+  `aside[aria-label="Points"] [data-point-id="${id}"][role="button"]`;
+
+async function polled(page: Page, matchId: string): Promise<number> {
+  const { polls: count } = await (
+    await page.request.get(
+      `${origin}/__polls?matchId=${encodeURIComponent(matchId)}`,
+    )
+  ).json();
+  return count;
+}
+
+/** Open the room with its drawer, settled on the report's playhead. */
+async function openRoomWithDrawer(page: Page, matchId: string) {
+  await page.addInitScript(() => {
+    localStorage.setItem("film-room:drawer-open", "1");
+  });
+  await open(page, matchId, { ttl: String(60 * 60 * 1000) });
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+  await page.waitForFunction(
+    (sel) => {
+      const el = document.querySelector<HTMLVideoElement>(sel);
+      return !!el && el.readyState >= 1;
+    },
+    ROOM,
+    { timeout: 10_000 },
+  );
+  await page.locator(DRAWER_ROW("a")).waitFor();
+}
+
+/** Three different rows, 200 ms apart, each landing on its own stop. */
+async function jumpRows(page: Page) {
+  for (const id of ["c", "a", "b"]) {
+    await page.click(DRAWER_ROW(id));
+    await page.waitForFunction(
+      ([sel, at]) => {
+        const el = document.querySelector<HTMLVideoElement>(sel as string);
+        return !!el && Math.abs(el.currentTime - (at as number)) < 0.1;
+      },
+      [ROOM, STOP_START[id]] as const,
+      { timeout: 5000 },
+    );
+    await page.waitForTimeout(200);
+    const time = (await state(page, ROOM))?.time ?? -1;
+    expect(Math.abs(time - STOP_START[id])).toBeLessThan(0.1);
+  }
+}
+
+test("T14: a point jump in the room issues no request and no remount", async ({
+  page,
+}) => {
+  const matchId = "jump-rows";
+  await openRoomWithDrawer(page, matchId);
+
+  const pollsBefore = await polled(page, matchId);
+  const generationBefore = await page
+    .locator(ROOM)
+    .getAttribute("data-generation");
+  expect(generationBefore).not.toBeNull();
+  // Tag the node itself: a remount would carry the same attribute value on a
+  // different element only if the key had not moved, but this cannot lie.
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel) as
+      (HTMLVideoElement & { __t14?: boolean }) | null;
+    if (el) el.__t14 = true;
+  }, ROOM);
+
+  await jumpRows(page);
+
+  expect(await polled(page, matchId)).toBe(pollsBefore);
+  await expect(page.locator(ROOM)).toHaveAttribute(
+    "data-generation",
+    generationBefore!,
+  );
+  expect(
+    await page.evaluate(
+      (sel) =>
+        (
+          document.querySelector(sel) as
+            (HTMLElement & { __t14?: boolean }) | null
+        )?.__t14 === true,
+      ROOM,
+    ),
+  ).toBe(true);
+});
+
+/** Count calls to the two things a trace would touch, before the app runs. */
+async function spyOnTrace(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __traceCalls: { entries: number; tables: number };
+    };
+    w.__traceCalls = { entries: 0, tables: 0 };
+    const getEntriesByType = performance.getEntriesByType.bind(performance);
+    performance.getEntriesByType = (type: string) => {
+      w.__traceCalls.entries += 1;
+      return getEntriesByType(type);
+    };
+    const table = console.table.bind(console);
+    console.table = (...args: Parameters<typeof console.table>) => {
+      w.__traceCalls.tables += 1;
+      table(...args);
+    };
+  });
+}
+
+async function traceCalls(page: Page) {
+  return page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __traceCalls: { entries: number; tables: number };
+        }
+      ).__traceCalls,
+  );
+}
+
+test("T14: with the trace flag unset, a jump touches neither performance nor console.table", async ({
+  page,
+}) => {
+  await spyOnTrace(page);
+  await openRoomWithDrawer(page, "trace-off");
+  await jumpRows(page);
+  expect(await traceCalls(page)).toEqual({ entries: 0, tables: 0 });
+});
+
+test("T14: with the trace flag set, each jump prints one table", async ({
+  page,
+}) => {
+  await spyOnTrace(page);
+  await page.addInitScript(() => {
+    localStorage.setItem("film-room:trace", "1");
+  });
+  await openRoomWithDrawer(page, "trace-on");
+  await jumpRows(page);
+  // The first two seeks were flushed by the one after them; the third is
+  // still inside its window until the room goes.
+  await expect.poll(async () => (await traceCalls(page)).tables).toBe(2);
+  expect((await traceCalls(page)).entries).toBe(2);
+});

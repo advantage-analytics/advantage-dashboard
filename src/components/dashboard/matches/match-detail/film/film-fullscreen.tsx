@@ -65,6 +65,7 @@ import {
 } from "./film-room-prefs";
 import { boardAt, type BoardColumns } from "./film-score";
 import { FilmScoreboard } from "./film-scoreboard";
+import { createFilmTrace, readTraceFlag, type FilmTrace } from "./film-trace";
 import { useFilmClockVars } from "./film-clock";
 import {
   OPEN_ROOM_FRAME,
@@ -350,6 +351,10 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   );
   const panelOpen = panel === "open";
   const [videoReady, setVideoReady] = useState(false);
+  // T14: the seek trace is opt-in (`localStorage["film-room:trace"]`), read
+  // once. Off, the ref stays null — no listener, no `performance` call.
+  const [traceOn] = useState(readTraceFlag);
+  const traceRef = useRef<FilmTrace | null>(null);
 
   // The drawer unmounts when its slide-out ends. The end event is only the
   // fast path: a page that stops painting (a hidden or throttled tab) never
@@ -689,6 +694,8 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
           ? el.duration
           : undefined;
       const target = Math.max(0, max ? Math.min(seconds, max) : seconds);
+      // Observes only; captures the buffered ranges the jump starts from.
+      traceRef.current?.seek(el, target);
       el.currentTime = target;
       mark(target);
       rootRef.current?.style.setProperty("--film-t", String(target));
@@ -757,6 +764,17 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     el.addEventListener("loadedmetadata", onReady);
     return () => el.removeEventListener("loadedmetadata", onReady);
   }, [p.generation, settle]);
+
+  // T14: follow each element the room mounts. Keyed on `generation` so a
+  // remount mid-seek is recorded on that seek; the trace itself outlives it.
+  useEffect(() => {
+    if (!traceOn) return;
+    const el = videoRef.current;
+    if (!el) return;
+    traceRef.current ??= createFilmTrace("room");
+    return traceRef.current.attach(el, p.generation);
+  }, [traceOn, p.generation]);
+  useEffect(() => () => traceRef.current?.dispose(), []);
 
   // The room moves its own selection on a realign, not just its playhead:
   // `mark` inside `land` sets `currentTime`, which is what the board, the
@@ -1337,6 +1355,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               preload="metadata"
               playsInline
               data-testid="film-room-video"
+              data-generation={p.generation}
               className={cn(
                 "absolute inset-0 h-full w-full object-contain transition-opacity duration-200",
                 videoReady ? "opacity-100" : "opacity-0",

@@ -133,3 +133,26 @@ is the runner's. Newest entries at the bottom.
 1. The provider ignores a NEW server `points` array for the same match id (seeded once by design). If a surface ever calls `router.refresh()` on the match page (e.g. after a re-analysis), saved flags stay right but other point fields go stale until a hard reload — decide deliberately then.
 2. The shell's `FilmPlayer saved=` and the room's `savePoint` are computed from two separate `activeStopAt` calls; a shared `savePointAt(stops, t)` in `film-timeline.ts` would make "always the last point reached" one line.
 3. No browser spec covers the room's save-in-dead-time case itself: seek into the padded gap after a point, press `S`, assert the bookmark lands on that point.
+
+## T14 · Instrument the seek path and pin "a point jump is only a seek" — done
+
+**gate:** mechanical pass (the full run tripped two `(live)` shared-DB specs — `claim-eyebrow-width` and a `match-video-attachments-db` cleanup case; both files passed alone, 45/45 on the attachments file with nothing skipped; neither has a path into the film subtree — reference_live_db_auth_rate_limits) · completion `VERDICT: pass` · widget-states: loading/empty/error unchanged on `film-fullscreen.tsx` and `film-player.tsx` (a `data-generation` attribute, one opt-in effect and one ref call per player; no panel, fallback or `return null` touched)
+
+**changed:** New pure `film-trace.ts`: `summariseSeek(events)` → `{ seekToSeekedMs, seekToPlayingMs, waitingCount, stalled, bufferedAtSeek, remounted }` (summarises from the first `seek` to the next), `readTraceFlag()` (reads `localStorage["film-room:trace"] === "1"` once), and `createFilmTrace()` — a trace object that outlives remounts, attaches the six media listeners per element, captures `buffered` at each seek, counts Resource Timing entries on the credential host since the seek, and prints one `console.table` per seek (when the next seek starts, after 5 s, or on unmount). Both players read the flag in a lazy `useState` initializer; with it off the ref stays null — no listener, no `performance` call. `seek` (room) and `seekTo` (shell) gain exactly one line, `traceRef.current?.seek(el, target)` before `el.currentTime = target`, dependency arrays unchanged; `land`, `settle`, the loop/skip-dead re-seeks and `preload="metadata"` untouched. Both `<video>` elements carry `data-generation`. Specs: `tests/film-trace.spec.ts` (buffered / unbuffered with `waiting`+`stalled` / remount mid-seek / no seek); `tests/film-playback-refresh.spec.ts` adds the three-row jump (rows c, a, b 200 ms apart, each within 0.1 s of its stop start, `/__polls` count unchanged, `data-generation` unchanged, the same DOM node via a marker; harness credential TTL set to 1 h so a scheduled refresh cannot masquerade), plus flag-off (0 `getEntriesByType` calls, 0 tables) and flag-on (2 tables + 2 calls after 3 jumps) cases. 29/29.
+
+**author capture steps (criterion 5):**
+
+1. Open match `1415029e-b062-4c9d-9aea-d25cd4e606d7` (Caden Ace v Matt Goodman) on the Video tab in Chrome.
+2. In the DevTools console run `localStorage.setItem("film-room:trace", "1")`, then reload — the flag is read once when a player mounts.
+3. Open the film room, then the points drawer.
+4. Click five different point rows a few seconds apart; include at least one far from the playhead (e.g. the first point, then a late-match point).
+5. A table prints when the next seek starts or 5 s after its own seek — wait 5 s after the fifth click so its table prints too.
+6. Copy the five `console.table` outputs (surface, generation, target, seekToSeekedMs, seekToPlayingMs, waitingCount, stalled, bufferedAtSeek, remounted, rangeRequests) and paste them into the fix task via `/task-add`.
+7. `localStorage.removeItem("film-room:trace")`.
+
+Reading them: `remounted: true` = a credential swap or an error recovery; `bufferedAtSeek: false` with `waitingCount > 0` or a large `seekToSeekedMs` = the unbuffered-range fetch T15's faststart remux targets; `rangeRequests` counts only what Chrome records under Resource Timing, so a 0 means "not visible", not "none".
+
+**follow-ups:**
+
+1. Neither element has a `waiting`/`stalled` handler; if the trace confirms the unbuffered-fetch case, a buffering indicator in the room is the UI half of the fix.
+2. The room's trace attaches at mount or on a generation change only; after a `failed` panel it is not re-attached until the next generation — acceptable for a debugging tool.

@@ -189,7 +189,7 @@ ready).
 
 ## T14 · Instrument the seek path and pin "a point jump is only a seek"
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-trace.ts (new, pure summariser + attach/detach); film-fullscreen.tsx (`seek` L548–563, the `<video>` props L1199–1253); film-player.tsx (`seekTo` L322–345, the `<video>` L626–657); tests/film-trace.spec.ts (new, node); tests/film-playback-refresh.spec.ts
 - **done when:**

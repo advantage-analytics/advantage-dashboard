@@ -34,6 +34,7 @@ import { RepeatOff } from "./film-glyphs";
 import type { Rect } from "./film-motion";
 import { FILM_REFUSAL_COPY } from "./film-refusal-copy";
 import { FilmTrack } from "./film-track";
+import { createFilmTrace, readTraceFlag, type FilmTrace } from "./film-trace";
 import {
   REACHED_EPSILON_SECONDS,
   activeStopAt,
@@ -281,6 +282,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const [looping, setLooping] = useState(false);
     const [skipDead, setSkipDead] = useState(false);
     const [failed, setFailed] = useState(false);
+    // T14: the seek trace is opt-in (`localStorage["film-room:trace"]`), read
+    // once. Off, the ref stays null — no listener, no `performance` call.
+    const [traceOn] = useState(readTraceFlag);
+    const traceRef = useRef<FilmTrace | null>(null);
 
     const syncClock = useFilmClockVars(
       videoRef,
@@ -328,6 +333,8 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             ? el.duration
             : undefined;
         const target = Math.max(0, max ? Math.min(seconds, max) : seconds);
+        // Observes only; captures the buffered ranges the jump starts from.
+        traceRef.current?.seek(el, target);
         el.currentTime = target;
         // Loop follows the viewer. Every seek is someone asking to be
         // somewhere — a point row, a shot row, the track, a step, an arrow —
@@ -423,6 +430,17 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       el.addEventListener("loadedmetadata", onReady);
       return () => el.removeEventListener("loadedmetadata", onReady);
     }, [generation, settle]);
+
+    // T14: follow each element this player mounts. Keyed on `generation` so a
+    // remount mid-seek is recorded on that seek; the trace itself outlives it.
+    useEffect(() => {
+      if (!traceOn) return;
+      const el = videoRef.current;
+      if (!el) return;
+      traceRef.current ??= createFilmTrace("report");
+      return traceRef.current.attach(el, generation);
+    }, [traceOn, generation]);
+    useEffect(() => () => traceRef.current?.dispose(), []);
 
     // Note 1 of T25's handoff: the intent has to be consumed, and the parent
     // is what consumes it — in its own effect, which React runs after this
@@ -632,6 +650,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             preload="metadata"
             playsInline
             data-testid="film-player-video"
+            data-generation={generation}
             className="absolute inset-0 h-full w-full object-contain"
             onClick={togglePlay}
             onPlay={() => {
