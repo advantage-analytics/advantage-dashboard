@@ -65,3 +65,9 @@ is the runner's. Newest entries at the bottom.
 2. `FilmCourtCardProps.overlay` has no caller; drop it and the `{overlay}` render slot if nothing fills it by the next sweep.
 3. The `film-mark-in` fade-in has no automated coverage and no eyes-on pass — a spec asserting the mark button carries the animation in point mode and none in match mode would pin criterion 4; the room wants a look in the browser.
 4. `film-motion.ts`'s `reducedMotionNow` may have lost its last film-subtree caller — check before the next motion task (T9).
+
+## T7 · Court readout hangs toward the room, never off its edge — done
+
+**gate:** mechanical pass · completion `VERDICT: pass` · widget-states: loading/empty/error unchanged on `film-court-card.tsx` and `film-fullscreen.tsx` (a `dock` prop and a side choice on the existing readout; no fallback, fetch exit or `return null` touched)
+
+**changed:** `readoutPlacement(x, y, dock?)` in `film-court.ts` takes an optional `dock: "left" | "right"` and, when given, hangs the readout toward the room (`dock: "right"` → `side: "left"`, `dock: "left"` → `side: "right"`) regardless of the mark's half; without `dock` the old `x > 50` rule and the `top` clamp are unchanged. `FilmCourt` gains an optional `dock` prop passed straight through. `film-fullscreen.tsx` passes `dock` from `boardRest.anchor`'s column (`top-right` / `bottom-right` → `"right"`, else `"left"`) — the only change in the file. `tests/film-court.spec.ts` gains four dock cases with the 24 px inset / 10 px gap / 168 px width → 154 px off-screen arithmetic in a comment.

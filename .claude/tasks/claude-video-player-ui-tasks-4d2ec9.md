@@ -98,7 +98,7 @@ ready).
 
 ## T7 · Court readout hangs toward the room, never off its edge
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-court.ts (`readoutPlacement`); film-court-card.tsx (`FilmCourtProps`, the readout div ~L408); film-fullscreen.tsx (the `<FilmCourt` mount ~L1310, `boardRest.anchor`); tests/film-court.spec.ts
 - **done when:**

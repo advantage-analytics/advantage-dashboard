@@ -155,10 +155,27 @@ const READOUT_MAX_TOP_PCT = 70;
  * — is read on. A mark in the left half is read on the right and vice versa,
  * so the readout never lands on top of the marks around it, and the top is
  * clamped so the box stays inside the frame.
+ *
+ * `dock` is which side of the room the card itself is parked on. A readout
+ * that hangs toward the room is fine — it has the room's width to spill
+ * into — but one that hangs toward the room's edge runs off-screen, so a
+ * card docked right always reads left and one docked left always reads
+ * right, regardless of the mark's own half. Omit `dock` (point mode, where
+ * the card is centred) and the mark's half decides, as before.
  */
-export function readoutPlacement(x: number, y: number): ReadoutPlacement {
+export function readoutPlacement(
+  x: number,
+  y: number,
+  dock?: "left" | "right",
+): ReadoutPlacement {
   return {
-    side: x > 50 ? "left" : "right",
+    side: dock
+      ? dock === "right"
+        ? "left"
+        : "right"
+      : x > 50
+        ? "left"
+        : "right",
     top: round(
       Math.min(READOUT_MAX_TOP_PCT, Math.max(0, y - READOUT_LIFT_PCT)),
     ),

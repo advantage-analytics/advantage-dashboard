@@ -1320,6 +1320,12 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                       onHide={toggleCourt}
                       onSelectMark={selectMark}
                       seekKey={seekKey}
+                      dock={
+                        boardRest?.anchor === "top-right" ||
+                        boardRest?.anchor === "bottom-right"
+                          ? "right"
+                          : "left"
+                      }
                     />
                   </div>
                 )}

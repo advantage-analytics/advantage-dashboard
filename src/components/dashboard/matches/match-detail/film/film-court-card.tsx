@@ -85,6 +85,12 @@ export interface FilmCourtProps {
    * moment, so it closes the instant the film moves to another one.
    */
   seekKey: number | string;
+  /**
+   * Which side of the room this card is docked on, straight through to
+   * {@link readoutPlacement}. Absent in point mode, where the card sits
+   * centred and the mark's own half decides the readout's side.
+   */
+  dock?: "left" | "right";
 }
 
 /**
@@ -229,6 +235,7 @@ export function FilmCourt({
   onSelectMark,
   overlay,
   seekKey,
+  dock,
 }: FilmCourtProps) {
   // One readout at a time — and the open one remembers the seek it belongs
   // to. A seek moves the film to another moment, so whatever the readout was
@@ -254,7 +261,7 @@ export function FilmCourt({
   const openLines = open
     ? readoutLines(open, open.hitter === "you" ? youName : opponentName)
     : null;
-  const openAt = open ? readoutPlacement(open.x, open.y) : null;
+  const openAt = open ? readoutPlacement(open.x, open.y, dock) : null;
 
   return (
     <section

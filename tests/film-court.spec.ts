@@ -432,6 +432,18 @@ test("the readout hangs opposite the mark and stays in frame", () => {
   // …and is clamped at both ends so three lines always fit on the card.
   expect(readoutPlacement(17, 3).top).toBe(0);
   expect(readoutPlacement(83, 97).top).toBe(70);
+  // A card docked right sits with its right edge 24px from the room's edge
+  // (courtSlot's inset). A readout that hung right there would start 10px
+  // past the card (READOUT_GAP) and be 168px wide, ending 10 + 168 - 24 =
+  // 154px past the room's edge — so a right-docked card always reads left,
+  // even for a mark in the left half that would otherwise read right.
+  expect(readoutPlacement(17, 50, "right").side).toBe("left");
+  // Mirror: a card docked left always reads right, even for a mark in the
+  // right half that would otherwise read left.
+  expect(readoutPlacement(83, 50, "left").side).toBe("right");
+  // Where dock and the x rule already agree, dock changes nothing.
+  expect(readoutPlacement(83, 50, "right").side).toBe("left");
+  expect(readoutPlacement(17, 50, "left").side).toBe("right");
 });
 
 test("the camera view draws the frame as the film shows it, whoever is at which end", () => {
