@@ -4,7 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 
 import { getMatchDetailData } from "@/lib/data/match-detail-server";
+import { getSavedViews } from "@/lib/data/saved-views-server";
+import { getBandSettings } from "@/lib/data/viz-bands-server";
+import { getPreferences } from "@/lib/data/preferences-server";
+import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import { hasComparisonBaseline } from "@/lib/data/match-stats-server";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { canEditBandsFor } from "@/lib/workspace/types";
 import {
   isAnalysisFailed,
   isInFlight,
@@ -84,39 +90,73 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // structurally cannot: whether an attachment EXISTS (a null `video` is not
   // the same fact), and which of Add / Replace / Adjust this viewer may take.
   // Both are server decisions — see `match-film-entry-server.ts`.
-  const [data, jobs, video, filmEntry] = await Promise.all([
-    getMatchDetailData(matchId),
-    createClient().then(async (supabase) => {
-      // Ask the vendor about jobs that look stuck BEFORE reading, so what the
-      // poll learns is what this page renders. Never fatal — and not inside
-      // loadMatchAnalysis, which client components import and the
-      // reconciler's admin/Azure dependencies must never reach.
-      //
-      // Gated on an RLS-scoped existence check first. reconcileBeforePageRead
-      // runs on the ADMIN client, which enforces no ownership of its own —
-      // without this check, this branch races getMatchDetailData's own RLS
-      // read rather than waiting for it, so a signed-in user who merely
-      // knows or guesses a matchId belonging to another account could force
-      // a vendor poll, a status write, and even an auto-resubmission —
-      // spending someone else's quota — before the page's 404 ever fires.
-      // This SELECT uses the same request-scoped, cookie-authenticated
-      // client as everything else here, so it answers exactly what the
-      // viewer's own RLS policy would: nothing, if they cannot see this row.
-      const { data: accessible } = await supabase
-        .from("matches")
-        .select("id")
-        .eq("id", matchId)
-        .maybeSingle();
-      if (accessible) {
-        await reconcileBeforePageRead([matchId], "match-detail");
-      }
-      return loadMatchAnalysis(supabase, [matchId], { reap: true });
-    }),
-    getMatchVideo(matchId),
-    getMatchFilmEntry(matchId),
-  ]);
+  // `getWorkspaceContext()` is `cache()`-wrapped and the layout above this
+  // page already called it once to gate sign-in, so this rides the same
+  // request-scoped result rather than a second query.
+  const [data, jobs, video, filmEntry, workspace, preferences] =
+    await Promise.all([
+      getMatchDetailData(matchId),
+      createClient().then(async (supabase) => {
+        // Ask the vendor about jobs that look stuck BEFORE reading, so what the
+        // poll learns is what this page renders. Never fatal — and not inside
+        // loadMatchAnalysis, which client components import and the
+        // reconciler's admin/Azure dependencies must never reach.
+        //
+        // Gated on an RLS-scoped existence check first. reconcileBeforePageRead
+        // runs on the ADMIN client, which enforces no ownership of its own —
+        // without this check, this branch races getMatchDetailData's own RLS
+        // read rather than waiting for it, so a signed-in user who merely
+        // knows or guesses a matchId belonging to another account could force
+        // a vendor poll, a status write, and even an auto-resubmission —
+        // spending someone else's quota — before the page's 404 ever fires.
+        // This SELECT uses the same request-scoped, cookie-authenticated
+        // client as everything else here, so it answers exactly what the
+        // viewer's own RLS policy would: nothing, if they cannot see this row.
+        const { data: accessible } = await supabase
+          .from("matches")
+          .select("id")
+          .eq("id", matchId)
+          .maybeSingle();
+        if (accessible) {
+          await reconcileBeforePageRead([matchId], "match-detail");
+        }
+        return loadMatchAnalysis(supabase, [matchId], { reap: true });
+      }),
+      getMatchVideo(matchId),
+      getMatchFilmEntry(matchId),
+      getWorkspaceContext(),
+      getPreferences(),
+    ]);
+  const unit = preferences.unit;
 
   if (!data) notFound();
+
+  // The layout above this route already redirects a signed-out visitor to
+  // /login before this page ever renders, so `workspace` is only null here
+  // if the session expired between the two — treated as a personal-workspace
+  // reader with no saved views rather than a 404, since the rest of the page
+  // still has everything it needs from `data`.
+  const activeWorkspace = workspace?.active ?? null;
+  // The least-privileged role, not "owner": this only falls back on a lost
+  // session between the layout's own check and here, and `workspaceRole`
+  // feeds `canManage(view)` — an authorization input should never default
+  // permissively.
+  const workspaceRole = activeWorkspace?.role ?? "player";
+  // Same fallback shape as `workspaceRole` above — the same lost-session
+  // race, and `save-view-dialog.tsx`'s "Share with team" row keys off both:
+  // it only renders in a team workspace, so a "personal" default keeps it
+  // hidden rather than showing a row that names an empty workspace.
+  const workspaceKind = activeWorkspace?.kind ?? "personal";
+  const workspaceName = activeWorkspace?.name ?? "";
+  // Fix round 1: fed from `activeWorkspace?.kind` directly, NOT the
+  // already-defaulted `workspaceKind` above — that default exists so
+  // OTHER UI (the "Share with team" row) reads as a quiet personal
+  // workspace on a lost session, but feeding it here would make a lost
+  // session look like a personal owner and show an ENABLED bands editor
+  // whose Save then always fails RLS. `canEditBandsFor` itself reads a
+  // missing/unrecognised `kind` as "cannot edit" — restrictive, the same
+  // direction `workspaceRole`'s own `?? "player"` fallback already takes.
+  const canEditBands = canEditBandsFor(activeWorkspace?.kind, workspaceRole);
 
   const { match, statsResult, insights, kpiHistory } = data;
 
@@ -167,6 +207,18 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const isAwaitingAnalysis =
     isInFlight(analysis.status) || isAnalysisFailed(analysis.status);
 
+  // Fetched only once there's a view switcher to show it in — the
+  // awaiting-analysis branch below never renders `ShotsTab`, so a match still
+  // analysing skips both queries entirely. Run together: neither depends on
+  // the other's result.
+  const [savedViews, bandSettings] =
+    !isAwaitingAnalysis && activeWorkspace
+      ? await Promise.all([
+          getSavedViews(activeWorkspace.id),
+          getBandSettings(activeWorkspace.id),
+        ])
+      : [[], DEFAULT_BANDS];
+
   // The rail's foot on both variants: the share popover opening upward from
   // its full-width trigger (F1).
   const share = (
@@ -192,6 +244,18 @@ export default async function MatchDetailPage({ params }: PageProps) {
         canCompare={false}
         isDerived={isDerived}
         statsPublished={false}
+        // No view switcher on this branch — ShotsTab never renders — so an
+        // empty list here costs nothing and skips fetching saved views before
+        // the match even has anything to visualize.
+        savedViews={[]}
+        workspaceRole={workspaceRole}
+        workspaceKind={workspaceKind}
+        workspaceName={workspaceName}
+        // Same reasoning as `savedViews` above — `ShotsTab` never renders on
+        // this branch, so the default is enough and skips the query.
+        bandSettings={DEFAULT_BANDS}
+        canEditBands={canEditBands}
+        unit={unit}
       >
         <MatchReportFrame>
           <MatchReportRail>
@@ -221,6 +285,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
         canCompare={hasComparisonBaseline(kpiHistory)}
         isDerived={isDerived}
         statsPublished={statsPublished}
+        savedViews={savedViews}
+        workspaceRole={workspaceRole}
+        workspaceKind={workspaceKind}
+        workspaceName={workspaceName}
+        bandSettings={bandSettings}
+        canEditBands={canEditBands}
+        unit={unit}
       >
         <MatchReportFrame>
           <MatchReportRail>
@@ -256,7 +327,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                   is — genuinely none, or a storage problem over a match that
                   has one — and which actions this viewer may take. Points
                   come from `MatchDataProvider`. */}
-              <FilmTab video={video} entry={filmEntry} />
+              <FilmTab video={video} entry={filmEntry} unit={unit} />
             </MatchReportWhen>
           </MatchReportPane>
         </MatchReportFrame>

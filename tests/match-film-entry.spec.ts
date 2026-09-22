@@ -507,9 +507,17 @@ test("the analysing short-circuit still returns before any Film entry", () => {
 
 test("the capability is resolved on the server and handed down", () => {
   expect(PAGE).toContain("getMatchFilmEntry(matchId)");
-  expect(PAGE).toContain("<FilmTab video={video} entry={filmEntry} />");
+  // `unit` joined in the Units follow-up: film shot speeds read in mph or
+  // km/h, and the film subtree takes the preference as a PROP (it depends on
+  // no report context — see `FilmTab`).
+  expect(PAGE).toContain(
+    "<FilmTab video={video} entry={filmEntry} unit={unit} />",
+  );
   // In the same wave as the rest of the page's reads, not in front of them.
+  // `workspace` joined this wave in Task 6 (saved views need the active
+  // workspace's id), riding the layout's already-`cache()`-wrapped call.
+  // `preferences` joined in Stage 2C (Units) for the same reason.
   expect(PAGE).toMatch(
-    /const \[data, jobs, video, filmEntry\] = await Promise\.all\(\[/,
+    /const \[data, jobs, video, filmEntry, workspace, preferences\] =\s*\n?\s*await Promise\.all\(\[/,
   );
 });

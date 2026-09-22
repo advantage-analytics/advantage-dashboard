@@ -196,7 +196,9 @@ function boot() {
         statsResult={null}
         points={POINTS}
       >
-        <FilmTab video={video} />
+        {/* Feet: the shot rows' speeds read in mph, which is what these
+            specs assert. */}
+        <FilmTab video={video} unit="ft" />
       </MatchDataProvider>
     </WorkspaceProvider>,
   );

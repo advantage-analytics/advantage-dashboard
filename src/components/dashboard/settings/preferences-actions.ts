@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { Preferences } from "@/lib/data/preferences-server";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
@@ -19,10 +20,16 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
  * RLS restricts this to `auth.uid() = user_id` in all three directions, so the
  * id is taken from the session here and never from the caller.
  *
- * No `revalidatePath`: the form is optimistic and owns the state after an `ok`,
- * so re-rendering the server page on every toggle bought a fresh RSC payload
- * nothing read.
+ * The form is optimistic and owns its own state after an `ok`, so the
+ * settings page itself needs no revalidation. The MATCH REPORT does: its
+ * page reads `unit` on the server, and without invalidating it a Back
+ * navigation to a match page served the cached payload in the old unit until
+ * a reload. Keyed on the route FILE (the `(detail)` group is part of it), the
+ * same pattern `viz-bands-actions.ts` uses; `"layout"` covers the page and
+ * everything under it.
  */
+const MATCH_REPORT_PATH_PATTERN = "/dashboard/matches/(detail)/[matchId]";
+
 export async function savePreferences(
   next: Preferences,
 ): Promise<ActionResult> {
@@ -32,6 +39,10 @@ export async function savePreferences(
   } = await supabase.auth.getUser();
 
   if (!user) return { ok: false, error: "Not signed in. Please log back in." };
+
+  if (next.unit !== "ft" && next.unit !== "m") {
+    return { ok: false, error: "Invalid unit preference." };
+  }
 
   const { error } = await supabase.from("user_preferences").upsert(
     {
@@ -44,11 +55,13 @@ export async function savePreferences(
       default_workspace: next.defaultWorkspace,
       match_report_opens_at: next.matchReportOpensAt,
       stat_definitions_on_hover: next.statDefinitionsOnHover,
+      unit: next.unit,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id" },
   );
 
   if (error) return { ok: false, error: error.message };
+  revalidatePath(MATCH_REPORT_PATH_PATTERN, "layout");
   return { ok: true };
 }

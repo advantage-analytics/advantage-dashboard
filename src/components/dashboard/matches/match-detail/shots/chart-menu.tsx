@@ -1,0 +1,101 @@
+"use client";
+
+import { useState } from "react";
+import { Flame, Grid3x3, ScatterChart } from "lucide-react";
+import {
+  FloatMenu,
+  FloatMenuItem,
+  FloatMenuNote,
+  type FloatMenuTone,
+} from "@/components/ui/float-menu";
+import type { Chart } from "./viz-model";
+import { useVizState } from "./use-viz-state";
+import { CHART_LABEL, VizMenuTrigger } from "./viz-labels";
+
+/**
+ * The "Chart" menu (P1e): Scatter, Heat, and Zones — Zones only renders when
+ * the current cut is Serve, since it counts and scores service boxes and has
+ * no meaning off serve (guardrails: Zones is Serve-only, enforced here
+ * rather than trusted to the caller).
+ */
+export function ChartMenu({
+  tone = "light",
+  side = "bottom",
+}: {
+  /** Phase 2A: the fullscreen viewer's dark bottom-slab trigger. */
+  tone?: FloatMenuTone;
+  side?: "top" | "bottom";
+} = {}) {
+  const { state, setState } = useVizState();
+  const [open, setOpen] = useState(false);
+
+  function selectChart(chart: Chart) {
+    setState((prev) => ({ ...prev, chart, viewId: null }));
+    setOpen(false);
+  }
+
+  const triggerIcon =
+    state.chart === "zones"
+      ? Grid3x3
+      : state.chart === "heat"
+        ? Flame
+        : ScatterChart;
+
+  return (
+    <FloatMenu
+      open={open}
+      onOpenChange={setOpen}
+      // Final review #9: the frame draws this menu at 280 in the viewer
+      // (f4b-report P2d) and the shipped light toolbar at 272. Keyed on the
+      // tone rather than a new prop — the two surfaces are the only two
+      // widths there are.
+      width={tone === "dark" ? 280 : 272}
+      side={side}
+      tone={tone}
+      sideOffset={6}
+      align="start"
+      label="Chart"
+      trigger={
+        <VizMenuTrigger
+          icon={triggerIcon}
+          label={CHART_LABEL[state.chart]}
+          open={open}
+          tone={tone}
+        />
+      }
+    >
+      <FloatMenuItem
+        label="Scatter"
+        description="Every landing point, coloured by outcome"
+        chosen={state.chart === "scatter"}
+        onSelect={() => selectChart("scatter")}
+      />
+      <FloatMenuItem
+        label="Heat"
+        description="Where they cluster — the ramp replaces the legend"
+        chosen={state.chart === "heat"}
+        icon={
+          <Flame
+            className="size-[13px] shrink-0 text-[var(--ink-400)]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+        }
+        onSelect={() => selectChart("heat")}
+      />
+      {state.cut === "serve" && (
+        <FloatMenuItem
+          label="Zones"
+          description="Count and points won per service box"
+          chosen={state.chart === "zones"}
+          onSelect={() => selectChart("zones")}
+        />
+      )}
+
+      <FloatMenuNote>
+        Zones is available on Serve placement only. The legend follows the
+        chart.
+      </FloatMenuNote>
+    </FloatMenu>
+  );
+}

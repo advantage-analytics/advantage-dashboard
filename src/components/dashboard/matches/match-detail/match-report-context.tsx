@@ -7,6 +7,10 @@ import {
   reportViewQuery,
   type ReportView,
 } from "@/components/dashboard/matches/match-detail/report-view";
+import type { SavedViewRow } from "@/lib/data/saved-views-server";
+import type { BandSettings } from "@/lib/data/viz-bands";
+import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
+import type { DistanceUnit } from "@/lib/format/distance";
 import { FilmHeadProvider } from "@/components/dashboard/matches/match-detail/film-head-context";
 
 /**
@@ -49,6 +53,53 @@ export interface MatchReportMeta {
   isDerived: boolean;
   /** Both `match_stats` rows present. */
   statsPublished: boolean;
+  /**
+   * Visualizations-tab saved views (Task 8), loaded once in `page.tsx` via
+   * `getSavedViews(activeWorkspace.id)` and threaded down here rather than
+   * prop-drilled through `MatchReportWhen`/`ShotsTab`'s dynamic import — this
+   * is the one place `shots-tab.tsx` already reads other page-level meta
+   * from. Empty on the awaiting-analysis short-circuit, which never renders
+   * `ShotsTab`.
+   */
+  savedViews: SavedViewRow[];
+  /** The active workspace's `Workspace.role` — `canManage(view)`'s other half. */
+  workspaceRole: ProgramRole;
+  /**
+   * The active workspace's `Workspace.kind`/`Workspace.name` (Task 9) —
+   * `save-view-dialog.tsx`'s "Share with team" row only exists in a team
+   * workspace and its micro copy names it. `"personal"`/`""` when there is
+   * no active workspace, same fallback `page.tsx` already uses for
+   * `workspaceRole`.
+   */
+  workspaceKind: WorkspaceKind;
+  workspaceName: string;
+  /**
+   * The active workspace's Visualizations-tab depth/contact bands (Phase 2B)
+   * — one record per workspace, loaded once in `page.tsx` via
+   * `getBandSettings(activeWorkspace.id)` beside `getSavedViews`, and
+   * threaded down here for the same reason `savedViews` is: `use-viz-view.ts`
+   * is the one data path behind both the focused court and the fullscreen
+   * viewer, so reading it there is enough for `computeVizStats` to follow
+   * the workspace's bands everywhere. `DEFAULT_BANDS` on the
+   * awaiting-analysis short-circuit, which never renders `ShotsTab`.
+   */
+  bandSettings: BandSettings;
+  /**
+   * May this viewer change the workspace's bands? Personal workspaces are
+   * always editable by their sole owner; a team workspace follows
+   * `isProgramStaff` (owner/coach/staff) — a player sees the bands but can't
+   * edit them, matching `viz_band_settings`'s own RLS write policy.
+   */
+  canEditBands: boolean;
+  /**
+   * The viewer's Units preference (Settings › Preferences, Stage 2C) —
+   * loaded once in `page.tsx` via `getPreferences()` beside `getSavedViews`/
+   * `getBandSettings`, and threaded down here for the same reason: every
+   * distance-aware piece of the Visualizations tab reads it from here
+   * instead of a prop drilled through `ShotsTab`. Never a per-chart toggle.
+   * Band STORAGE stays feet regardless — this only affects display.
+   */
+  unit: DistanceUnit;
 }
 
 export interface MatchReportContextValue {
@@ -77,6 +128,13 @@ export function MatchReportProvider({
   canCompare,
   isDerived,
   statsPublished,
+  savedViews,
+  workspaceRole,
+  workspaceKind,
+  workspaceName,
+  bandSettings,
+  canEditBands,
+  unit,
   children,
 }: MatchReportProviderProps) {
   const pathname = usePathname();
@@ -114,8 +172,34 @@ export function MatchReportProvider({
   );
 
   const meta = useMemo<MatchReportMeta>(
-    () => ({ matchId, summary, canCompare, isDerived, statsPublished }),
-    [matchId, summary, canCompare, isDerived, statsPublished],
+    () => ({
+      matchId,
+      summary,
+      canCompare,
+      isDerived,
+      statsPublished,
+      savedViews,
+      workspaceRole,
+      workspaceKind,
+      workspaceName,
+      bandSettings,
+      canEditBands,
+      unit,
+    }),
+    [
+      matchId,
+      summary,
+      canCompare,
+      isDerived,
+      statsPublished,
+      savedViews,
+      workspaceRole,
+      workspaceKind,
+      workspaceName,
+      bandSettings,
+      canEditBands,
+      unit,
+    ],
   );
 
   const value = useMemo<MatchReportContextValue>(

@@ -9,6 +9,7 @@ import type { MatchVideo } from "@/lib/data/match-video-server";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { createClient } from "@/lib/supabase/client";
+import type { DistanceUnit } from "@/lib/format/distance";
 
 import {
   filmEntryView,
@@ -74,11 +75,20 @@ const FilmFullscreen = dynamic(loadFilmFullscreen, { ssr: false });
 export function FilmTab({
   video,
   entry = NO_FILM_ENTRY,
+  unit,
 }: {
   video: MatchVideo | null;
   entry?: MatchFilmEntry;
+  /**
+   * The viewer's Units preference (Stage 2C), from the match page. Threaded
+   * as a PROP rather than read off `useMatchReport()`: the film subtree
+   * deliberately depends on no report context (its own browser harness
+   * mounts it with only the workspace and match-data providers), and shot
+   * speeds are the one film value the preference changes.
+   */
+  unit: DistanceUnit;
 }) {
-  if (video) return <FilmRoom video={video} entry={entry} />;
+  if (video) return <FilmRoom video={video} entry={entry} unit={unit} />;
   const view = filmEntryView(entry);
   if (view === "empty") return <FilmEmptyState entry={entry} />;
   return <UnavailableFilm entry={entry} state={view} />;
@@ -101,9 +111,11 @@ function UnavailableFilm({
 function FilmRoom({
   video,
   entry,
+  unit,
 }: {
   video: MatchVideo;
   entry: MatchFilmEntry;
+  unit: DistanceUnit;
 }) {
   const { match, points: serverPoints } = useMatchData();
   const sides = useMatchSides();
@@ -581,6 +593,7 @@ function FilmRoom({
           onEnterFullscreen={enterRoom}
         />
         <FilmThisPoint
+          unit={unit}
           point={activePoint}
           shots={pointShots}
           position={position}

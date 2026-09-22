@@ -88,6 +88,34 @@ const ALLOWED_HEX = {
   ],
   // Third-party provider brand pills — each is that vendor's own colour.
   "src/lib/providers.ts": ["#2D8B4E", "#002B5C", "#5DADE2"],
+  // Visualizations tab redesign (P1a/P1b): the wall tile's court art draws
+  // its own two-tone court — green apron, blue court — instead of the legacy
+  // pastel `HalfCourtSVG` palette. Named explicitly as the only new literals
+  // the task may introduce (visualizations-tab-phase-1 global-constraints.md:
+  // "The only literals allowed: court #86AC91 (out), #6092CE (court) …").
+  // Not promoted to colors.css: `CourtArt` is the one call site (Task 9's
+  // focused view reuses this component rather than duplicating the SVG), not
+  // a role wide enough for a token.
+  // `#F8C84F` (G2b) is the ace star's own fill — added to the same literal
+  // list, not promoted to colors.css: it's an outcome-independent "ace" read
+  // (star shape, not a won/lost/miss colour), one call site, same reasoning
+  // as the court/apron pair above.
+  // `#9FB3A5`/`#9DB4CE` (G3b) are the desaturated apron/court the design
+  // switches to while a heat chart shows (P2i) — same one-call-site
+  // reasoning, not promoted to colors.css.
+  // `#C9CBCE` (Phase 2A, P2b) is the fullscreen VIEWER's own "miss" grey —
+  // the handoff calls it out explicitly as the literal there rather than
+  // `--ink-300`, because the viewer's stage is not a white card. Declared in
+  // this file (`VIEWER_MISS_FILL`) and imported by the viewer's court, so the
+  // court palette stays one allowlisted file rather than two.
+  "src/components/dashboard/matches/match-detail/shots/court-art.tsx": [
+    "#86AC91",
+    "#6092CE",
+    "#F8C84F",
+    "#9FB3A5",
+    "#9DB4CE",
+    "#C9CBCE",
+  ],
 };
 
 // Mail clients do not support CSS custom properties, so shell.ts must carry

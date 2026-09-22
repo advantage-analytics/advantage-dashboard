@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { formatSpeedValue, type DistanceUnit } from "@/lib/format/distance";
 import { cn } from "@/lib/utils";
 
 import { lastNameOf } from "./film-filters";
@@ -47,6 +48,7 @@ export const FilmThisPoint = memo(function FilmThisPoint({
   shots,
   position,
   activeShotId,
+  unit,
   onSelectShot,
   onStep,
 }: {
@@ -58,6 +60,10 @@ export const FilmThisPoint = memo(function FilmThisPoint({
   position: { index: number; total: number } | null;
   activeShotId: string | null;
   onSelectShot: (stop: ShotStop) => void;
+  /** The viewer's Units preference, threaded from the match page (the film
+   *  subtree deliberately depends on no report context). Shot speeds are the
+   *  one film value it changes. */
+  unit: DistanceUnit;
   /** Walk the applied cut — the same step the transport takes. */
   onStep: (direction: -1 | 1) => void;
 }) {
@@ -113,7 +119,9 @@ export const FilmThisPoint = memo(function FilmThisPoint({
         <HeadCell>Stroke</HeadCell>
         <HeadCell className={WIDE_ONLY}>Type</HeadCell>
         <HeadCell>Placement</HeadCell>
-        <HeadCell className={cn(WIDE_ONLY, "text-right")}>Mph</HeadCell>
+        <HeadCell className={cn(WIDE_ONLY, "text-right")}>
+          {unit === "ft" ? "Mph" : "Km/h"}
+        </HeadCell>
         <HeadCell>Result</HeadCell>
       </div>
 
@@ -138,6 +146,7 @@ export const FilmThisPoint = memo(function FilmThisPoint({
                   : sides.opp.name,
               )}
               isActive={stop.shot.id === activeShotId}
+              unit={unit}
               onSelect={onSelectShot}
             />
           ))
@@ -220,6 +229,7 @@ const ShotRow = memo(function ShotRow({
   order,
   playerName,
   isActive,
+  unit,
   onSelect,
 }: {
   stop: ShotStop;
@@ -227,6 +237,10 @@ const ShotRow = memo(function ShotRow({
   order: number;
   playerName: string;
   isActive: boolean;
+  /** The workspace's Units preference — a speed is the one film value it
+   *  changes ("118 mph" / "190 km/h"). Passed down rather than read here so
+   *  this row stays a pure function of its props. */
+  unit: DistanceUnit;
   onSelect: (stop: ShotStop) => void;
 }) {
   const cells = shotRowCells(stop.shot, order, playerName);
@@ -272,7 +286,9 @@ const ShotRow = memo(function ShotRow({
         className={cn(WIDE_ONLY, "tabular text-right")}
         ink={cells.mph === UNMEASURED ? "var(--ink-400)" : "var(--ink-700)"}
       >
-        {cells.mph}
+        {stop.shot.speedMph == null
+          ? UNMEASURED
+          : formatSpeedValue(unit, stop.shot.speedMph)}
       </Cell>
       <Cell
         ink={cells.result === UNMEASURED ? "var(--ink-400)" : "var(--ink-700)"}
