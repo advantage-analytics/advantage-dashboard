@@ -42,3 +42,13 @@ is the runner's. Newest entries at the bottom.
 
 1. Inert until a match is re-derived: `npx tsx scripts/splitstep-derive.ts --job d3bff342-b33a-417a-a332-b5a3192f3f4d --write` (Caden Ace v Matt Goodman) is the author's step, then an eyes-on pass in the room — first time the court draws a measured landing.
 2. Once every Advantage Intelligence match is re-derived, `bounceTimesByShot`/the ball-paths fetch in `courtMarks` is redundant (the moving dot in `film-court-ball.tsx` still needs the file).
+
+## T5 · Design the seek-track set tooltip for the shell player and the room — done
+
+**gate:** mechanical pass · completion `VERDICT: pass` (the subagent hit the session rate limit after writing both files and before reporting; the runner verified the doc's sections, the frame's hex usage and the drift spec itself before gating — note `tests/design-drift.spec.ts` scans only `src/`, so the frame's token discipline was checked by hand)
+
+**changed:** New `docs/superpowers/specs/2026-09-21-film-track-set-tooltip-design.md` (20 KB) and `…/2026-09-21-film-track-set-tooltip/track-tooltip.html` (40 KB frame). Decisions: the readout is a two-line dark data readout (`DARK_READOUT_CLASS`/`STYLE`) on BOTH mounts, positioned by `FilmTrack` itself, not `ChromeTooltip` — one slider, not N triggers; the room's court readout is the precedent. Strings: `Set N · 6–4` over `61 points · 0:00–38:10`; set score from `useMatchSides().sets` (already you-first from `matches.score`), NOT the next set's first-point `setScore`, with the reasoning in "Settled against the code"; all-`0-0` rows change nothing. Interaction table covers enter/move/leave, scrub (closes, stays closed for the drag), touch (never opens), focus (follows the playhead; PageUp/PageDown seek to the previous/next run), Esc, reduced motion. Handoff lists `setSegments` returning `setNumber` + `points`, a pure `trackReadout` builder in `film-score.ts`, `FilmTrack` prop shape and `aria-valuetext`, tests. "Open for the author" has six items. No `src/` or `tests/` change.
+
+**follow-ups:**
+
+1. The author reads the design and, on approval, queues the implementation with `/task-add` pointing at the doc (the doc's Handoff section is the criteria source). Its "Open for the author" items (tiebreak points in the score, PageUp/PageDown as the keys, stacking against a bottom-docked board, the Dartmouth 5-2 vs 4-0 fold) want answers first.

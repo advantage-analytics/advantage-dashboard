@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Film track · set readout — design frame (2026-09-21)</title>
+<!--
+  track-tooltip.html — drawn in-repo 2026-09-21 for the design doc beside it
+  (../2026-09-21-film-track-set-tooltip-design.md). Reference only, never shipped.
+
+  Unlike the two extracted handoffs (…-video-tab-in-shell-h1/, …-video-fullscreen-h2/)
+  this frame links the REAL token files under src/styles/design-system/, so it renders
+  from a checkout with no design bundle. Inline styles are the measurements. Every
+  colour is a token, one of the room's existing white/black alpha literals, or #FFFFFF.
+-->
+<link rel="stylesheet" href="../../../../src/styles/design-system/colors.css">
+<link rel="stylesheet" href="../../../../src/styles/design-system/typography.css">
+<link rel="stylesheet" href="../../../../src/styles/design-system/spacing.css">
+<link rel="stylesheet" href="../../../../src/styles/design-system/effects.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Roboto+Mono:wght@400;500&display=swap">
+<script src="https://unpkg.com/lucide@0.462.0/dist/umd/lucide.min.js"></script>
+<style>
+  /* next/font supplies these two in the app; the frame supplies them itself. */
+  :root { --font-inter: "Inter"; --font-roboto-mono: "Roboto Mono"; }
+  html, body { margin: 0; background: var(--surface-page); font-family: var(--font-sans); color: var(--ink-900); -webkit-font-smoothing: antialiased; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { color: var(--blue-hover); }
+  .eyebrow { font-size: 10px; font-weight: 500; letter-spacing: 2.5px; text-transform: uppercase; color: var(--ink-400); }
+  .text-display { font-size: 30px; font-weight: 300; line-height: 36px; letter-spacing: -0.6px; color: var(--ink-900); }
+  .text-body { font-size: 13px; line-height: 1.6; color: var(--ink-700); }
+  .mono { font-family: var(--font-mono); }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .card { border: 1px solid var(--border-card); border-radius: var(--radius-card); box-shadow: var(--shadow-card); background: var(--surface-card); }
+  .state { display: flex; flex-direction: column; gap: 9px; }
+  .state-head { display: flex; align-items: center; gap: 8px; }
+  .state-id { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: var(--radius-button); background: var(--blue); color: #FFFFFF; font: 500 11px var(--font-sans); }
+  .state-title { font: 500 12px var(--font-sans); color: var(--ink-900); }
+  .state-note { font-size: 12px; color: var(--ink-600); max-width: 900px; text-wrap: pretty; }
+  .spec { display: grid; grid-template-columns: 220px 1fr; gap: 6px 16px; font-size: 12px; color: var(--ink-700); }
+  .spec .k { color: var(--ink-500); }
+  .spec code, .state-note code, .text-body code, td code { font-family: var(--font-mono); font-size: 11px; color: var(--ink-700); }
+  table { border-collapse: collapse; width: 100%; }
+  th { text-align: left; font-size: 9px; font-weight: 500; letter-spacing: 2.5px; text-transform: uppercase; color: var(--ink-400); padding: 10px 0; border-bottom: 1px solid var(--border-hairline); }
+  td { font-size: 12px; color: var(--ink-700); padding: 10px 0; border-bottom: 1px solid var(--border-hairline); vertical-align: top; }
+  td:first-child { color: var(--ink-900); font-weight: 500; white-space: nowrap; }
+
+  /* ── The lane, exactly as film-track.tsx draws it ────────────────────── */
+  .lane { position: relative; display: flex; height: 16px; align-items: center; cursor: pointer; border-radius: 2px; }
+  .lane.focused { box-shadow: var(--focus-ring); }
+  .run { position: absolute; height: 3px; border-radius: var(--radius-pill); }
+  .thumb { position: absolute; top: 50%; width: 11px; height: 11px; transform: translate(-50%, -50%); border-radius: var(--radius-pill); background: #FFFFFF; }
+
+  /* ── The readout: DARK_READOUT_CLASS / DARK_READOUT_STYLE + the court card's inner geometry ── */
+  .readout { position: absolute; bottom: calc(100% + 6px); display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; white-space: nowrap; pointer-events: none; border-radius: var(--radius-dropdown); background: var(--ink-900); box-shadow: var(--shadow-dropdown); transform: translateX(-50%); }
+  .readout .t { font-size: 12px; font-weight: 500; color: #FFFFFF; }
+  .readout .d { font-size: 11px; color: rgba(255,255,255,0.64); }
+  .readout .d .mono { font-size: 11px; }
+  /* A pointer marker for the frame only — the product draws no cursor. */
+  .ptr { position: absolute; top: 100%; margin-top: 4px; transform: translateX(-50%); font-size: 9px; letter-spacing: 1.4px; text-transform: uppercase; color: rgba(255,255,255,0.5); }
+
+  /* ── Room canvas (C3 geometry) ───────────────────────────────────────── */
+  .room { position: relative; width: 1180px; height: 250px; overflow: hidden; border-radius: var(--radius-card); background: var(--surface-dark); }
+  .room .scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(13,13,13,0) 0%, rgba(13,13,13,0.78) 100%); }
+  .room .bar { position: absolute; inset: auto 0 0 0; display: flex; flex-direction: column; gap: 9px; padding: 0 24px 14px; }
+  .glyph15 { display: block; width: 15px; height: 15px; color: rgba(255,255,255,0.85); }
+  .glyph13 { display: block; width: 13px; height: 13px; color: rgba(255,255,255,0.85); }
+
+  /* ── Shell player canvas (film-player.tsx geometry) ──────────────────── */
+  .shell { position: relative; width: 720px; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 14px; background: var(--surface-dark); }
+  .shell .bottom { position: absolute; inset: auto 0 0 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; padding: 28px 16px 8px; background: linear-gradient(to top, rgba(13,13,13,0.68) 0%, rgba(13,13,13,0) 100%); }
+</style>
+</head>
+<body>
+<div style="padding:48px 56px 96px;display:flex;flex-direction:column;align-items:flex-start;gap:80px">
+
+<!-- ═══ Intro ═══════════════════════════════════════════════════════════════ -->
+<section style="display:flex;flex-direction:column;align-items:flex-start">
+  <span class="eyebrow">Design · Video tab — the seek track's set readout</span>
+  <div class="text-display" style="margin-top:16px;max-width:900px">Hover a run of the track and it says which set it is.</div>
+  <div class="text-body" style="margin-top:8px;max-width:960px;text-wrap:pretty">The 3px seek lane is already split per set (<code>setSegments</code>, <code>film-timeline.ts</code>) but the runs are mute: nothing tells a viewer that the second run is the set they lost 4–6. This frame adds one <b style="font-weight:500;color:var(--ink-900)">dark readout</b> over the lane — the box the room's court card already answers hover with (<code>DARK_READOUT_CLASS</code> / <code>DARK_READOUT_STYLE</code>) — on both mounts of <code>FilmTrack</code>: the shell player (<code>film-player.tsx</code>) and the room's transport (<code>film-transport.tsx</code>). No caret, no delay beyond <code>--duration-fast</code>, nothing grows under the cursor. Sample match throughout: <span class="mono" style="font-size:12px;color:var(--ink-700)">Jordan Lee v Marcus Reid</span>, film 1:42:18, entered score 6–4 4–6, and a third set on film that the entered score does not have.</div>
+</section>
+
+<!-- ═══ A — Shell player ═══════════════════════════════════════════════════ -->
+<section style="display:flex;flex-direction:column;gap:32px;align-items:flex-start">
+  <div>
+    <span class="eyebrow">A · Shell player (<code>film-player.tsx</code> l.679–685)</span>
+    <div class="text-body" style="margin-top:8px;max-width:900px">The tab's player at 720px. The lane sits in the bottom block (<code>px-4 pt-7 pb-2</code>, 6px above the 32px control row) over the player's own scrim. The readout hangs 6px above the lane's 16px box, anchored to the pointer's x and clamped inside the lane, and it never leaves the player's <code>overflow-hidden</code> frame.</div>
+  </div>
+
+  <div class="state" id="A1">
+    <div class="state-head"><a class="state-id" href="#A1">A1</a><span class="state-title">Hover — a decided set</span></div>
+    <div class="shell">
+      <div class="bottom">
+        <div class="lane">
+          <span class="run" style="left:0;width:calc(37.3% - 2.5px);background:var(--blue)"></span>
+          <span class="run" style="left:calc(37.3% + 2.5px);width:calc(33.1% - 5px);background:linear-gradient(to right,var(--blue) 0 9%,rgba(255,255,255,0.22) 9% 100%)"></span>
+          <span class="run" style="left:calc(70.4% + 2.5px);width:calc(29.6% - 2.5px);background:rgba(255,255,255,0.22)"></span>
+          <span class="thumb" style="left:40.3%"></span>
+          <div class="readout" role="tooltip" style="left:22%">
+            <span class="t">Set 1 · 6–4</span>
+            <span class="d">61 points · <span class="mono tabular">0:00–38:10</span></span>
+          </div>
+          <span class="ptr" style="left:22%">pointer</span>
+        </div>
+        <div style="display:flex;height:32px;align-items:center;gap:14px">
+          <span class="glyph13"><i data-lucide="play" stroke-width="1.6" fill="currentColor" style="width:13px;height:13px"></i></span>
+          <span class="glyph13"><i data-lucide="skip-back" stroke-width="1.6" fill="currentColor" style="width:13px;height:13px"></i></span>
+          <span class="glyph13"><i data-lucide="skip-forward" stroke-width="1.6" fill="currentColor" style="width:13px;height:13px"></i></span>
+          <span class="mono tabular" style="font-size:11px;color:rgba(255,255,255,0.75)">41:12 / 1:42:18</span>
+          <div style="flex:1"></div>
+          <span class="glyph13"><i data-lucide="bookmark" stroke-width="1.6" style="width:13px;height:13px"></i></span>
+          <span class="glyph13"><i data-lucide="timer-off" stroke-width="1.6" style="width:13px;height:13px"></i></span>
+          <span class="mono" style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.85)">1×</span>
+          <span class="glyph13"><i data-lucide="repeat" stroke-width="1.6" style="width:13px;height:13px"></i></span>
+          <span class="glyph13"><i data-lucide="volume-2" stroke-width="1.6" style="width:13px;height:13px"></i></span>
+          <span class="glyph13"><i data-lucide="maximize" stroke-width="1.6" style="width:13px;height:13px"></i></span>
+        </div>
+      </div>
+    </div>
+    <div class="state-note">Run 1 is fully played, so its hover lift has nowhere to show: the played share stays <code>var(--blue)</code> at any state — blue is never a hover colour. Title from <code>sides.sets[0]</code> (you-first by construction); count from the stops whose <code>point.setNumber === 1</code>; range from the run's <code>start</code>/<code>end</code> through <code>formatClock</code>.</div>
+  </div>
+
+  <div class="state" id="A2">
+    <div class="state-head"><a class="state-id" href="#A2">A2</a><span class="state-title">Keyboard focus — the readout opens at the playhead, for the run it is inside</span></div>
+    <div class="shell">
+      <div class="bottom">
+        <div class="lane focused">
+          <span class="run" style="left:0;width:calc(37.3% - 2.5px);background:var(--blue)"></span>
+          <span class="run" style="left:calc(37.3% + 2.5px);width:calc(33.1% - 5px);background:linear-gradient(to right,var(--blue) 0 9%,rgba(255,255,255,0.34) 9% 100%)"></span>
+          <span class="run" style="left:calc(70.4% + 2.5px);width:calc(29.6% - 2.5px);background:rgba(255,255,255,0.22)"></span>
+          <span class="thumb" style="left:40.3%"></span>
+          <div class="readout" role="tooltip" style="left:40.3%">
+            <span class="t">Set 2 · 4–6</span>
+            <span class="d">74 points · <span class="mono tabular">38:10–1:12:05</span></span>
+          </div>
+        </div>
+        <div style="display:flex;height:32px;align-items:center;gap:14px">
+          <span class="glyph13"><i data-lucide="play" stroke-width="1.6" fill="currentColor" style="width:13px;height:13px"></i></span>
+          <span class="glyph13"><i data-lucide="skip-back" stroke-width="1.6" fill="currentColor" style="width:13px;height:13px"></i></span>
+          <span class="glyph13"><i data-lucide="skip-forward" stroke-width="1.6" fill="currentColor" style="width:13px;height:13px"></i></span>
+          <span class="mono tabular" style="font-size:11px;color:rgba(255,255,255,0.75)">41:12 / 1:42:18</span>
+          <div style="flex:1"></div>
+          <span class="glyph13"><i data-lucide="bookmark" stroke-width="1.6" style="width:13px;height:13px"></i></span>
+          <span class="glyph13"><i data-lucide="timer-off" stroke-width="1.6" style="width:13px;height:13px"></i></span>
+          <span class="mono" style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.85)">1×</span>
+          <span class="glyph13"><i data-lucide="repeat" stroke-width="1.6" style="width:13px;height:13px"></i></span>
+          <span class="glyph13"><i data-lucide="volume-2" stroke-width="1.6" style="width:13px;height:13px"></i></span>
+          <span class="glyph13"><i data-lucide="maximize" stroke-width="1.6" style="width:13px;height:13px"></i></span>
+        </div>
+      </div>
+    </div>
+    <div class="state-note">The lane wears the system ring (<code>--focus-ring</code>, already shipped). The run holding the playhead is the set in progress — the C3 spec's "in-progress set a gradient at the play head" — and its unplayed share lifts from <code>rgba(255,255,255,0.22)</code> to <code>0.34</code>. Arrows step 5s; when the playhead crosses a cut the readout swaps to the next run and follows it. <code>PageDown</code>/<code>PageUp</code> seek to the next/previous run's start. Its string is the same form as a decided set's — nothing in it changes with the playhead.</div>
+  </div>
+</section>
+
+<!-- ═══ B — Room transport ═════════════════════════════════════════════════ -->
+<section style="display:flex;flex-direction:column;gap:32px;align-items:flex-start">
+  <div>
+    <span class="eyebrow">B · Room transport (<code>film-transport.tsx</code> l.204–209, C3 geometry)</span>
+    <div class="text-body" style="margin-top:8px;max-width:900px">The three C3 rows in <code>padding:0 24px 14px</code>, 9px apart, over the room's bottom scrim. Same lane, same readout, same rules — the box is a child of the lane, so it fades with the chrome (<code>data-film-chrome</code>) and never has to negotiate a z-index with the room's portal. The glyph tooltips beside it stay <code>ChromeTooltip</code>: they name controls, this names data.</div>
+  </div>
+
+  <div class="state" id="B1">
+    <div class="state-head"><a class="state-id" href="#B1">B1</a><span class="state-title">Hover — a decided set, mid-run</span></div>
+    <div class="room">
+      <div class="scrim"></div>
+      <div class="bar">
+        <div style="display:flex;align-items:flex-end;gap:12px;padding-bottom:1px">
+          <div style="display:flex;min-width:0;flex-direction:column;gap:2px">
+            <span style="font-size:12px;font-weight:500;color:#FFFFFF">Jordan Lee v Marcus Reid</span>
+            <span style="font-size:10px;color:rgba(255,255,255,0.55)">Coastal Collegiate Invitational · R16 · Sep 14</span>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;align-items:center;gap:14px;text-shadow:0 1px 4px rgba(0,0,0,0.8)">
+            <span class="mono" style="font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,0.5)">Point 96 / 174</span>
+            <span style="display:block;width:14px;height:14px;color:rgba(255,255,255,0.7)"><i data-lucide="chevron-left" stroke-width="1.6" style="width:14px;height:14px"></i></span>
+            <span style="display:block;width:14px;height:14px;color:rgba(255,255,255,0.7)"><i data-lucide="chevron-right" stroke-width="1.6" style="width:14px;height:14px"></i></span>
+          </div>
+        </div>
+        <div class="lane">
+          <span class="run" style="left:0;width:calc(37.3% - 2.5px);background:var(--blue)"></span>
+          <span class="run" style="left:calc(37.3% + 2.5px);width:calc(33.1% - 5px);background:linear-gradient(to right,var(--blue) 0 9%,rgba(255,255,255,0.34) 9% 100%)"></span>
+          <span class="run" style="left:calc(70.4% + 2.5px);width:calc(29.6% - 2.5px);background:rgba(255,255,255,0.22)"></span>
+          <span class="thumb" style="left:40.3%"></span>
+          <div class="readout" role="tooltip" style="left:58%">
+            <span class="t">Set 2 · 4–6</span>
+            <span class="d">74 points · <span class="mono tabular">38:10–1:12:05</span></span>
+          </div>
+          <span class="ptr" style="left:58%">pointer</span>
+        </div>
+        <div style="display:flex;height:40px;align-items:center;gap:18px">
+          <span class="glyph15"><i data-lucide="pause" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="skip-back" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="skip-forward" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="mono tabular" style="font-size:11px;color:rgba(255,255,255,0.75)">41:12 / 1:42:18</span>
+          <div style="flex:1"></div>
+          <span class="glyph15" style="color:#FFFFFF"><i data-lucide="bookmark" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="timer-off" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="mono" style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.85)">1×</span>
+          <span class="glyph15"><i data-lucide="repeat" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="volume-2" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15" style="color:#FFFFFF"><i data-lucide="grid-2x2" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="minimize" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15" style="opacity:0.45"><i data-lucide="more-vertical" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+        </div>
+      </div>
+    </div>
+    <div class="state-note">The pointer is at 58% of the lane — well right of the playhead, inside run 2 — so the readout hangs from the pointer, not from the run's centre or the thumb: a 390px run centred would put the box half a screen from the cursor. The hovered run's unplayed share lifts to <code>0.34</code>; its played share is untouched.</div>
+  </div>
+
+  <div class="state" id="B2">
+    <div class="state-head"><a class="state-id" href="#B2">B2</a><span class="state-title">Hover — a set the entered score does not have</span></div>
+    <div class="room">
+      <div class="scrim"></div>
+      <div class="bar">
+        <div style="display:flex;align-items:flex-end;gap:12px;padding-bottom:1px">
+          <div style="display:flex;min-width:0;flex-direction:column;gap:2px">
+            <span style="font-size:12px;font-weight:500;color:#FFFFFF">Jordan Lee v Marcus Reid</span>
+            <span style="font-size:10px;color:rgba(255,255,255,0.55)">Coastal Collegiate Invitational · R16 · Sep 14</span>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;align-items:center;gap:14px;text-shadow:0 1px 4px rgba(0,0,0,0.8)">
+            <span class="mono" style="font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,0.5)">Point 96 / 174</span>
+            <span style="display:block;width:14px;height:14px;color:rgba(255,255,255,0.7)"><i data-lucide="chevron-left" stroke-width="1.6" style="width:14px;height:14px"></i></span>
+            <span style="display:block;width:14px;height:14px;color:rgba(255,255,255,0.7)"><i data-lucide="chevron-right" stroke-width="1.6" style="width:14px;height:14px"></i></span>
+          </div>
+        </div>
+        <div class="lane">
+          <span class="run" style="left:0;width:calc(37.3% - 2.5px);background:var(--blue)"></span>
+          <span class="run" style="left:calc(37.3% + 2.5px);width:calc(33.1% - 5px);background:linear-gradient(to right,var(--blue) 0 9%,rgba(255,255,255,0.22) 9% 100%)"></span>
+          <span class="run" style="left:calc(70.4% + 2.5px);width:calc(29.6% - 2.5px);background:rgba(255,255,255,0.34)"></span>
+          <span class="thumb" style="left:40.3%"></span>
+          <div class="readout" role="tooltip" style="left:84%">
+            <span class="t">Set 3</span>
+            <span class="d">27 points · <span class="mono tabular">1:12:05–1:42:18</span></span>
+          </div>
+          <span class="ptr" style="left:84%">pointer</span>
+        </div>
+        <div style="display:flex;height:40px;align-items:center;gap:18px">
+          <span class="glyph15"><i data-lucide="pause" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="skip-back" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="skip-forward" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="mono tabular" style="font-size:11px;color:rgba(255,255,255,0.75)">41:12 / 1:42:18</span>
+          <div style="flex:1"></div>
+          <span class="glyph15" style="color:#FFFFFF"><i data-lucide="bookmark" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="timer-off" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="mono" style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.85)">1×</span>
+          <span class="glyph15"><i data-lucide="repeat" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="volume-2" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15" style="color:#FFFFFF"><i data-lucide="grid-2x2" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="minimize" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15" style="opacity:0.45"><i data-lucide="more-vertical" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+        </div>
+      </div>
+    </div>
+    <div class="state-note"><code>sides.sets[2]</code> is undefined, so the title is the set number alone. No games are guessed from <code>gameScore</code>: a point's <code>gameScore</code> is the games BEFORE it was played, so the last stop of a 6–4 set reads 5–4 — one game wrong in the one place a player reads as fact (<code>film-score.ts</code>, <code>scoreColumns</code>'s own argument). This is also every set's title on a match with no entered score, and it is unchanged when every row's <code>setScore</code> is <code>"0-0"</code> — no string here reads that column.</div>
+  </div>
+
+  <div class="state" id="B3">
+    <div class="state-head"><a class="state-id" href="#B3">B3</a><span class="state-title">Scrubbing — pointer down, no readout</span></div>
+    <div class="room">
+      <div class="scrim"></div>
+      <div class="bar">
+        <div style="display:flex;align-items:flex-end;gap:12px;padding-bottom:1px">
+          <div style="display:flex;min-width:0;flex-direction:column;gap:2px">
+            <span style="font-size:12px;font-weight:500;color:#FFFFFF">Jordan Lee v Marcus Reid</span>
+            <span style="font-size:10px;color:rgba(255,255,255,0.55)">Coastal Collegiate Invitational · R16 · Sep 14</span>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;align-items:center;gap:14px;text-shadow:0 1px 4px rgba(0,0,0,0.8)">
+            <span class="mono" style="font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,0.5)">Point 131 / 174</span>
+            <span style="display:block;width:14px;height:14px;color:rgba(255,255,255,0.7)"><i data-lucide="chevron-left" stroke-width="1.6" style="width:14px;height:14px"></i></span>
+            <span style="display:block;width:14px;height:14px;color:rgba(255,255,255,0.7)"><i data-lucide="chevron-right" stroke-width="1.6" style="width:14px;height:14px"></i></span>
+          </div>
+        </div>
+        <div class="lane">
+          <span class="run" style="left:0;width:calc(37.3% - 2.5px);background:var(--blue)"></span>
+          <span class="run" style="left:calc(37.3% + 2.5px);width:calc(33.1% - 5px);background:linear-gradient(to right,var(--blue) 0 63%,rgba(255,255,255,0.22) 63% 100%)"></span>
+          <span class="run" style="left:calc(70.4% + 2.5px);width:calc(29.6% - 2.5px);background:rgba(255,255,255,0.22)"></span>
+          <span class="thumb" style="left:58%"></span>
+          <span class="ptr" style="left:58%">pointer down · dragging</span>
+        </div>
+        <div style="display:flex;height:40px;align-items:center;gap:18px">
+          <span class="glyph15"><i data-lucide="pause" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="skip-back" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="skip-forward" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="mono tabular" style="font-size:11px;color:rgba(255,255,255,0.75)">59:20 / 1:42:18</span>
+          <div style="flex:1"></div>
+          <span class="glyph15"><i data-lucide="bookmark" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="timer-off" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="mono" style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.85)">1×</span>
+          <span class="glyph15"><i data-lucide="repeat" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="volume-2" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15" style="color:#FFFFFF"><i data-lucide="grid-2x2" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="minimize" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15" style="opacity:0.45"><i data-lucide="more-vertical" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+        </div>
+      </div>
+    </div>
+    <div class="state-note">Pointer down closes the readout (200ms fade out) and it stays closed for the whole drag: the pointer is the anchor and mid-drag it routinely leaves the 16px lane (that is why <code>FilmTrack</code> listens on <code>window</code>). The lane's gradient and the clock carry the position, as they do today. No hover lift either — the run's rest alpha returns. The readout comes back only after a fresh pointer-enter and the 150ms rest. Touch never gets here: a touch pointer's first event IS pointer-down, so on touch the lane is exactly what it is now.</div>
+  </div>
+
+  <div class="state" id="B4">
+    <div class="state-head"><a class="state-id" href="#B4">B4</a><span class="state-title">A one-set match — one run, still a readout</span></div>
+    <div class="room">
+      <div class="scrim"></div>
+      <div class="bar">
+        <div style="display:flex;align-items:flex-end;gap:12px;padding-bottom:1px">
+          <div style="display:flex;min-width:0;flex-direction:column;gap:2px">
+            <span style="font-size:12px;font-weight:500;color:#FFFFFF">Jordan Lee v Priya Nair</span>
+            <span style="font-size:10px;color:rgba(255,255,255,0.55)">Practice · Sep 9</span>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;align-items:center;gap:14px;text-shadow:0 1px 4px rgba(0,0,0,0.8)">
+            <span class="mono" style="font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,0.5)">Point 12 / 58</span>
+            <span style="display:block;width:14px;height:14px;color:rgba(255,255,255,0.7)"><i data-lucide="chevron-left" stroke-width="1.6" style="width:14px;height:14px"></i></span>
+            <span style="display:block;width:14px;height:14px;color:rgba(255,255,255,0.7)"><i data-lucide="chevron-right" stroke-width="1.6" style="width:14px;height:14px"></i></span>
+          </div>
+        </div>
+        <div class="lane">
+          <span class="run" style="left:0;width:100%;background:linear-gradient(to right,var(--blue) 0 21%,rgba(255,255,255,0.34) 21% 100%)"></span>
+          <span class="thumb" style="left:21%"></span>
+          <div class="readout" role="tooltip" style="left:66%">
+            <span class="t">Set 1 · 6–3</span>
+            <span class="d">58 points · <span class="mono tabular">0:00–44:28</span></span>
+          </div>
+          <span class="ptr" style="left:66%">pointer</span>
+        </div>
+        <div style="display:flex;height:40px;align-items:center;gap:18px">
+          <span class="glyph15"><i data-lucide="pause" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="skip-back" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="skip-forward" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+          <span class="mono tabular" style="font-size:11px;color:rgba(255,255,255,0.75)">9:20 / 44:28</span>
+          <div style="flex:1"></div>
+          <span class="glyph15"><i data-lucide="bookmark" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="timer-off" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="mono" style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.85)">1×</span>
+          <span class="glyph15"><i data-lucide="repeat" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="volume-2" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15" style="color:#FFFFFF"><i data-lucide="grid-2x2" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15"><i data-lucide="minimize" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+          <span class="glyph15" style="opacity:0.45"><i data-lucide="more-vertical" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+        </div>
+      </div>
+    </div>
+    <div class="state-note"><code>setSegments</code> makes no cut, so the one run has no pads (<code>leftPad</code>/<code>rightPad</code> are 0 at the ends). It still names itself: the count and the range are worth having even when the set number is not news. A film with no timed points at all is also one run — with <code>setNumber: null</code> and nothing to say, so it draws no readout.</div>
+  </div>
+</section>
+
+<!-- ═══ C — Anatomy ════════════════════════════════════════════════════════ -->
+<section style="display:flex;flex-direction:column;gap:20px;align-items:flex-start;width:1180px">
+  <span class="eyebrow">C · The readout, measured</span>
+  <div class="card" style="display:grid;grid-template-columns:320px 1fr;gap:32px;padding:24px">
+    <div style="position:relative;height:120px;border-radius:var(--radius-element);background:var(--surface-dark);overflow:hidden">
+      <div class="lane" style="position:absolute;left:24px;right:24px;bottom:28px">
+        <span class="run" style="left:0;width:100%;background:linear-gradient(to right,var(--blue) 0 30%,rgba(255,255,255,0.34) 30% 100%)"></span>
+        <span class="thumb" style="left:30%"></span>
+        <div class="readout" role="tooltip" style="left:50%">
+          <span class="t">Set 2 · 4–6</span>
+          <span class="d">74 points · <span class="mono tabular">38:10–1:12:05</span></span>
+        </div>
+      </div>
+    </div>
+    <div class="spec">
+      <span class="k">Skin</span><span><code>DARK_READOUT_CLASS</code> (<code>rounded-[12px]</code> = <code>--radius-dropdown</code>) + <code>DARK_READOUT_STYLE</code> (<code>--ink-900</code>, <code>--shadow-dropdown</code>) — <code>chart-tooltip.tsx</code></span>
+      <span class="k">Inner geometry</span><span><code>padding: 10px 12px</code>, <code>gap: 3px</code>, <code>white-space: nowrap</code>, auto width — the court card's readout (<code>film-court-card.tsx</code>), minus its fixed 168px</span>
+      <span class="k">Title</span><span>12px / 500 / <code>#FFFFFF</code> — Inter, tabular-nums for the score</span>
+      <span class="k">Detail</span><span>11px / 400 / <code>rgba(255,255,255,0.64)</code>; the clock range in Roboto Mono (a machine value), the count in Inter</span>
+      <span class="k">Offset</span><span><code>bottom: calc(100% + 6px)</code> from the lane's 16px box — the dark tooltip's 6px, so every dark box over the transport sits the same distance from what it names</span>
+      <span class="k">Anchor</span><span>Pointer x on hover; the playhead's x on focus. <code>translateX(-50%)</code>, then clamped so the box's edges stay inside the lane's box (<code>align</code> start / center / end, as <code>ChartTooltip</code> does)</span>
+      <span class="k">Caret</span><span>None (design system: no caret on any dark box)</span>
+      <span class="k">Reveal</span><span>Open after 150ms (<code>--duration-fast</code>) of the pointer resting over the lane; then <code>opacity 200ms var(--ease-primary)</code> in and out. Moving along the lane swaps the content instantly — no second delay. x follows the pointer with no transition</span>
+      <span class="k">Run lift</span><span>The hovered (or, on focus, the playhead's) run's unplayed share: <code>rgba(255,255,255,0.22)</code> → <code>0.34</code>, 200ms. Played share stays <code>--blue</code>. The lane stays 3px — nothing grows under a crossing cursor</span>
+      <span class="k">Reduced motion</span><span>Identical. The readout has no transform to drop; the fades are opacity, which the room keeps under <code>prefers-reduced-motion</code> (H2 rules)</span>
+      <span class="k">ARIA</span><span><code>role="tooltip"</code>, <code>aria-hidden</code> while closed; the slider's <code>aria-valuetext</code> gains the active run's title: <code>"41:12 of 1:42:18 · Set 2 · 4–6"</code>, so nothing essential lives only in the box</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ D — Strings ════════════════════════════════════════════════════════ -->
+<section style="display:flex;flex-direction:column;gap:20px;align-items:flex-start;width:1180px">
+  <span class="eyebrow">D · Every string, and the field it comes from</span>
+  <div class="card" style="padding:2px 24px 8px">
+    <table>
+      <tr><th style="width:230px">Case</th><th style="width:200px">Title (12/500 white)</th><th style="width:260px">Detail (11px, 64% white)</th><th>Built from</th></tr>
+      <tr><td>Decided set</td><td>Set 1 · 6–4</td><td>61 points · 0:00–38:10</td><td>set number = <code>FilmStop.point.setNumber</code> of the run's stops · games = <code>useMatchSides().sets[setNumber − 1]</code> (<code>matches.score</code> oriented you-first by <code>getMatchSides</code>; guardrails §4) · count = stops with that <code>setNumber</code> · range = <code>formatClock(run.start)</code>–<code>formatClock(run.end)</code></td></tr>
+      <tr><td>The set in progress (the run holding the playhead)</td><td>Set 2 · 4–6</td><td>74 points · 38:10–1:12:05</td><td>Same fields, same form. The lane's gradient already says "here"; a running games count would drift on every seek and the board beside it shows that already</td></tr>
+      <tr><td>A one-set match</td><td>Set 1 · 6–3</td><td>58 points · 0:00–44:28</td><td>Same fields; <code>setSegments</code> returns one run covering <code>[0, duration]</code></td></tr>
+      <tr><td>Set the entered score does not have</td><td>Set 3</td><td>27 points · 1:12:05–1:42:18</td><td><code>sides.sets[2]</code> undefined → no games. Never <code>gameScore</code> (games before the point — off by one at a set's end)</td></tr>
+      <tr><td>No entered score at all</td><td>Set 1</td><td>61 points · 0:00–38:10</td><td><code>sides.sets</code> empty → every title is the set number alone</td></tr>
+      <tr><td>Every row's <code>setScore</code> is <code>"0-0"</code></td><td>Set 1 · 6–4</td><td>61 points · 0:00–38:10</td><td>Unchanged: no string reads <code>setScore</code>. The runs still split on <code>setNumber</code>; the games still come from the entered score</td></tr>
+      <tr><td>Film with no timed points</td><td colspan="2" style="color:var(--ink-500)">— no readout —</td><td>One run, <code>setNumber: null</code>, <code>points: 0</code></td></tr>
+      <tr><td>One point in a run</td><td>Set 3</td><td>1 point · 1:12:05–1:42:18</td><td>Singular</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ═══ E — What draws nothing ═════════════════════════════════════════════ -->
+<section style="display:flex;flex-direction:column;gap:20px;align-items:flex-start;width:1180px">
+  <span class="eyebrow">E · Where the readout is not</span>
+  <div class="card" style="padding:2px 24px 8px">
+    <table>
+      <tr><th style="width:260px">Situation</th><th>Behaviour</th></tr>
+      <tr><td>Pointer down / dragging</td><td>Closes on <code>pointerdown</code>, stays closed until <code>pointerup</code> and a fresh pointer-enter (B3)</td></tr>
+      <tr><td>Touch</td><td>Never opens: a touch pointer's first event is the pointer-down that starts a scrub (<code>pointerType === "touch"</code> is not needed as a guard, but is harmless). The set identity on touch is the board's</td></tr>
+      <tr><td>Room chrome collapsed (3s idle while playing)</td><td>The transport goes <code>pointer-events-none</code> and fades; the lane fires pointer-leave, the readout closes with it. Focus on the lane holds the chrome up (the room's existing <code>focusHolds</code>) and the readout with it</td></tr>
+      <tr><td>Shell player in <code>background</code></td><td>Not a hover surface — the room is over it. Nothing to do</td></tr>
+      <tr><td>Seek from elsewhere (a row click, ← →, D)</td><td>On hover the box follows the pointer, so it is unaffected. On focus it follows the playhead into whichever run now holds it</td></tr>
+      <tr><td>Esc</td><td>Not handled here. In the room Esc is the exit key; blur closes the readout</td></tr>
+    </table>
+  </div>
+</section>
+
+</div>
+<script>if (window.lucide) window.lucide.createIcons();</script>
+</body>
+</html>

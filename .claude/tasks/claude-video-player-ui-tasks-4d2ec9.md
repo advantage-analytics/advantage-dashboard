@@ -72,7 +72,7 @@ ready).
 
 ## T5 · Design the seek-track set tooltip for the shell player and the room
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) docs/superpowers/specs/2026-09-21-film-track-set-tooltip-design.md (new), docs/superpowers/specs/2026-09-21-film-track-set-tooltip/track-tooltip.html (new frame); read-only: film-track.tsx, film-timeline.ts (`setSegments`), film-player.tsx, film-transport.tsx, chrome-tooltip.tsx, chart-tooltip.tsx, .skills/advantage-analytics-design/SKILL.md (+ `foundations`, `components`, `chrome`)
 - **done when:**
