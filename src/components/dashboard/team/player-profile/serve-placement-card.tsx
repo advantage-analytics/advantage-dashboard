@@ -1,5 +1,8 @@
 import { ServePlacementQuietStrip } from "@/components/dashboard/home/serve-placement-quiet-strip";
-import { GhostRule } from "@/components/dashboard/home/day-zero-shape";
+import {
+  GHOST_OPACITY,
+  GhostRule,
+} from "@/components/dashboard/home/day-zero-shape";
 import {
   CardEmpty,
   type CardSubject,
@@ -31,13 +34,26 @@ import type { PlayerProfile } from "@/lib/data/player-profile-server";
  */
 const COURTS = ["Deuce court", "Ad court"] as const;
 
+/**
+ * Three pieces stepping down the product's ghost ladder, as the table cards'
+ * rows do (`GhostRows`): the claim's rule at full strength, then the deuce
+ * court, then the ad court — so the ghost fades toward the band the way its
+ * siblings' rows fade toward theirs.
+ */
 function ServeGhost() {
+  const [claim, ...courts] = GHOST_OPACITY;
   return (
     <div className="flex flex-col gap-4">
       {/* The claim's line — the name-column rule, as on the match row. */}
-      <GhostRule width="60%" tone="200" shape="tall" />
-      {COURTS.map((court) => (
-        <div key={court} className="flex flex-col gap-[5px]">
+      <div style={{ opacity: claim }}>
+        <GhostRule width="60%" tone="200" shape="tall" />
+      </div>
+      {COURTS.map((court, i) => (
+        <div
+          key={court}
+          className="flex flex-col gap-[5px]"
+          style={{ opacity: courts[i] }}
+        >
           <div className="flex items-center">
             <GhostRule width="72px" />
             <div className="flex-1" />
