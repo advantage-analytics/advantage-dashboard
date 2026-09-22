@@ -145,6 +145,9 @@ export function parseBoardAnchor(raw: string | null): BoardAnchor | null {
     : null;
 }
 
+/** The court has no separate corner list — it rests on the same four. */
+export const parseCourtAnchor = parseBoardAnchor;
+
 /** 8px per arrow press, 40px held with shift, kept inside the room. */
 const NUDGE_STEP = 8;
 const NUDGE_STEP_SHIFT = 40;
@@ -198,4 +201,25 @@ export function courtSlot(
       ? boardPosition.top + boardSize.height + COURT_BOARD_GAP
       : boardPosition.top - COURT_BOARD_GAP - courtSize.height;
   return { left, top };
+}
+
+export const COURT_ANCHOR_STORAGE_KEY = "film-room:court-anchor";
+
+/**
+ * Where the court rests: stacked under/above the board's own corner when it
+ * has no stored anchor of its own (or one that matches the board's), or at
+ * its own corner — with the board's insets — when it has been dropped
+ * somewhere else.
+ */
+export function courtRest(
+  courtAnchor: BoardAnchor | null,
+  board: { anchor: BoardAnchor; position: BoardPosition; size: BoardSize },
+  courtSize: BoardSize,
+  room: BoardSize,
+  insets: BoardInsets,
+): BoardPosition {
+  if (courtAnchor === null || courtAnchor === board.anchor) {
+    return courtSlot(board.anchor, board.position, board.size, courtSize);
+  }
+  return anchorPosition(courtAnchor, courtSize, room, insets);
 }

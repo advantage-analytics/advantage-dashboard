@@ -137,7 +137,7 @@ ready).
 
 ## T10 · Court corner geometry and its own stored anchor
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/board-position.ts; tests/film-board-position.spec.ts
 - **done when:**

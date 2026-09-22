@@ -92,3 +92,9 @@ is the runner's. Newest entries at the bottom.
 
 1. `Math.min(order - 1, 8) * 25` lives in two components; a third shot-row surface (the Visualizations tab's shot table is the likely one) would justify an exported `shotRowRevealDelay(order)` in `film-shots.ts`.
 2. Nobody has watched the reveal, the mark fade-in (T6) or the docked readout (T7) in the browser; an eyes-on pass in the room before a PR.
+
+## T10 · Court corner geometry and its own stored anchor — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `board-position.ts` gains `COURT_ANCHOR_STORAGE_KEY = "film-room:court-anchor"`, the alias `parseCourtAnchor = parseBoardAnchor` (no second corner list), and a pure `courtRest(courtAnchor, board, courtSize, room, insets)`: a null or board-matching corner returns `courtSlot(board.anchor, board.position, board.size, courtSize)` (today's stacking, unchanged for an untouched viewer); any other corner returns `anchorPosition(courtAnchor, courtSize, room, insets)` with the same `POINTS_TRIGGER_CLEARANCE` at top-right. `courtSlot`, `anchorPosition`, `nearestAnchor`, `clampBoardPosition`, `nudgeBoard` untouched. `tests/film-board-position.spec.ts` adds two tests (four assertions: null / matching / bottom-right / top-right at `top: 58`); 9 pass. Nothing else under `src/` in the diff; no component wiring yet (T11).
