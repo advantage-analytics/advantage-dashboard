@@ -156,3 +156,16 @@ Reading them: `remounted: true` = a credential swap or an error recovery; `buffe
 
 1. Neither element has a `waiting`/`stalled` handler; if the trace confirms the unbuffered-fetch case, a buffering indicator in the room is the UI half of the fix.
 2. The room's trace attaches at mount or on a generation change only; after a `failed` panel it is not re-attached until the next generation — acceptable for a debugging tool.
+
+## T15 · Front-load the moov in the browser remux — done
+
+**gate:** mechanical pass (the full run tripped one `(live)` spec, `personal-home-scope`, which a comments-only diff cannot reach; 6/6 alone — reference_live_db_auth_rate_limits) · completion `VERDICT: pass`
+
+**changed:** The "keep `false`" branch of criterion 1, with evidence. Mediabunny 1.56.2's `fastStart: 'reserve'` requires `maximumPacketCount` on every output track (`output-format.d.ts:90–93`, the field at `output.d.ts:130`); a copy-only `Conversion` adds its own tracks and never sets it, and `conversion.d.ts` exposes no way to supply it. A node run of the worker's exact `Conversion` against `tests/fixtures/match-video/h264-tail.mp4` into a `BufferTarget` confirmed it: `false` → `[ftyp, mdat, moov]`, `'reserve'` throws "All tracks must specify maximumPacketCount…" (which in the worker would land in the catch and make every trim fall back to uploading the original), `'in-memory'` → `[ftyp, moov, mdat]` but holds the whole multi-GB cut in memory, which OPFS exists to avoid. `trim.worker.ts:134–149` now carries that constraint, the d.ts lines, the measured error and the named trade-off (every fresh `<video>` range-requests the tail before it can seek, black frame meanwhile); the option line is unchanged and the short-write guard untouched. `docs/ui-revamp-guardrails.md` §1 "Superseded, September 2026" gains one sentence: trimmed cuts on Azure keep `moov` at the tail, an untrimmed original keeps whatever the camera wrote. No spec added (criterion 2 applies only when the option changes). `trim-plan.ts`, `trim.ts`, `decideTrim`, the no-audio rule and `lib/services/splitstep/**` not in the diff; `video-trim-plan` + `match-video-file-step` 21/21. The cut is NOT faststart after this task — the fix the author asked for is documented as blocked, not delivered.
+
+**follow-ups:**
+
+1. Faststart IS reachable by building the output tracks by hand instead of `Conversion`: feed the copied packets through own track sources with `maximumPacketCount` estimated from the source's frame count inside the trim window (+ the docs' 33 % buffer). A real rewrite of the trim path — its own task.
+2. Cheaper alternative: a second pass over the finished OPFS file that moves `moov` to the front and rewrites `stco`/`co64` chunk offsets — one extra full write, no memory hold.
+3. Files already on Azure keep their layout either way; rewriting them is an ops job (`azure-storage` skill).
+4. The T14 trace decides whether any of this is worth it: `bufferedAtSeek: false` + `waitingCount > 0` on point jumps is the signature.

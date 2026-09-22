@@ -46,7 +46,12 @@ browser now cuts the selected window out of the athlete's own file before upload
 (a remux — `src/lib/video/trim.ts`), the job is sent as `StartTime 0 / EndTime =
 cut length`, and that file is what the film room plays
 (`src/lib/data/match-video-choice.ts`). It is still the match video, never a
-highlight.
+highlight. The cut is **not** written faststart — its `moov` follows the `mdat`,
+because Mediabunny's `'reserve'` mode needs a per-track packet count that a copy-only
+`Conversion` cannot supply and `'in-memory'` would hold the whole cut in memory (see the
+comment on `fastStart` in `src/lib/video/trim.worker.ts`), so every trimmed file on Azure
+keeps its metadata at the tail; an untrimmed original keeps whatever layout the camera
+wrote.
 
 ---
 

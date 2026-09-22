@@ -202,7 +202,7 @@ ready).
 
 ## T15 · Front-load the moov in the browser remux
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/lib/video/trim.worker.ts (`Mp4OutputFormat({ fastStart: false })` L137 and the comment above it, the moov note L108–110); tests/video-trim-plan.spec.ts or a new tests/video-trim-worker.spec.ts; tests/fixtures/match-video/ (`h264-tail.mp4` / `h264-faststart.mp4` already exist)
 - **done when:**
