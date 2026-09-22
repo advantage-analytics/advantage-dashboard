@@ -164,7 +164,7 @@ ready).
 
 ## T12 · Double-click no longer exits the room
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-fullscreen.tsx (the `<video>` props ~L1214–1222); docs/superpowers/specs/2026-09-21-video-fullscreen-h2-design.md (R1 row ~L190, Doors table ~L246, prose only); tests/film-playback-refresh.spec.ts
 - **done when:**

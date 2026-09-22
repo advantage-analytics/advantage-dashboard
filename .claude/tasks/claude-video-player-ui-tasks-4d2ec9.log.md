@@ -111,3 +111,13 @@ is the runner's. Newest entries at the bottom.
 2. Dropping the court onto the board's own corner makes `courtRest` stack it under the board again ("follow" behaviour) but the landing is announced like any corner; consider announcing "under the scoreboard".
 3. `FilmCourtLayer` sits inside the ~1500-line `film-fullscreen.tsx` with no dependency on the room beyond its props; move it to its own file next time that file grows.
 4. Nobody has watched the court drag, the mark fade-in (T6), the docked readout (T7) or the row reveal (T9) in the browser; one eyes-on pass in the room before a PR.
+
+## T12 · Double-click no longer exits the room — done
+
+**gate:** mechanical pass · completion `VERDICT: pass` (one criterion deviation ruled acceptable: the report player stays mounted under the room whenever the room is open — the existing "the room swaps with the report player" test shows `report.time === 0.3` with the room up — so the "REPORT count 0" assertion the task named would be false against correct behaviour; the spec asserts the report playhead is still at its pre-room value after the burst instead, which is what `exit()` → `onHandoff(state.time)` would have changed) · widget-states: loading/empty/error unchanged on `film-fullscreen.tsx` (one event handler and its comment removed; R10/R11 panels untouched)
+
+**changed:** `film-fullscreen.tsx`: `onDoubleClick={exit}` removed from the room's `<video>`; the R1 comment above `onClick={togglePlay}` now says double-click no longer exits (a click, click, dblclick burst was throwing the viewer out on an ordinary rapid pause/play) and names the three exits that remain — Esc, the transport's minimize, "Back to the report". No `dblclick`/`onDoubleClick` anywhere under `film/`. `exit`, `togglePlay`, the keydown switch and the transport untouched. H2 spec R1 row and Doors table Exit row drop dbl-click, dated as an author decision 2026-09-22 (Prettier reflowed the table columns). `tests/film-playback-refresh.spec.ts` adds "T12: double-click no longer exits the room" — dblclick + three clicks 50 ms apart, 500 ms later `ROOM` count 1 and `REPORT` playhead unchanged; the Escape-exit handoff test passes unmodified. 20/20.
+
+**follow-ups:**
+
+1. A fast click burst still toggles play/pause per click (pause, play) — native behaviour. If the author wants a burst to count once, a ~300 ms settle window in `togglePlay` is a separate decision to queue.

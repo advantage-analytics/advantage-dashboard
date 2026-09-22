@@ -900,3 +900,38 @@ test("a click on the court's hide glyph still hides it, handle or no handle", as
   await page.getByRole("button", { name: "Hide the court" }).click();
   await expect(page.locator("[data-court-anchor]")).toHaveCount(0);
 });
+
+test("T12: double-click no longer exits the room", async ({ page }) => {
+  const matchId = "no-dblclick-exit";
+  await open(page, matchId);
+  await seekTo(page, REPORT, 0.3);
+
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+
+  // A genuine dblclick...
+  await page.locator(ROOM).dblclick();
+  // ...and a fast click burst (click, click, click ~50ms apart), which is
+  // what a real double-click plus one more press dispatches at the browser
+  // level and is exactly the gesture the author described as "pressing too
+  // fast in succession".
+  await page.locator(ROOM).click();
+  await page.waitForTimeout(50);
+  await page.locator(ROOM).click();
+  await page.waitForTimeout(50);
+  await page.locator(ROOM).click();
+
+  await page.waitForTimeout(500);
+  // The room is a fullscreen overlay over the report player, which stays
+  // mounted underneath it the whole time it is open (see "the room swaps
+  // with the report player" above) — so REPORT's count never goes to 0
+  // while the room is open, exit or no exit. The room NOT exiting is what
+  // `ROOM` staying at count 1 proves; that exit never ran is proved by the
+  // report player's playhead staying exactly where it was before the room
+  // opened, since `exit()` hands the room's current playhead back to it.
+  await expect(page.locator(ROOM)).toHaveCount(1);
+  const report = await state(page, REPORT);
+  expect(report?.time).toBeCloseTo(0.3, 1);
+});

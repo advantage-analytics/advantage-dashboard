@@ -1326,14 +1326,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               )}
               onLoadedData={() => setVideoReady(true)}
               onClick={togglePlay}
-              // R1: click the film plays/pauses, double-click exits. It sits
-              // on the element itself rather than the root so the board, the
-              // court and the drawer — siblings, not children — never carry
-              // the gesture: dragging the board with a quick second press
-              // must not throw the viewer out of the room. The two clicks a
-              // double-click also fires cancel each other out, so the film is
-              // left in the state it was in when the room closes.
-              onDoubleClick={exit}
+              // R1 (2026-09-22): click the film plays/pauses. Double-click no
+              // longer exits — a fast click burst (click, click, dblclick)
+              // was throwing the viewer out of the room on an ordinary rapid
+              // pause/play. The three exits that remain are Esc, the
+              // transport's minimize control, and "Back to the report".
               onPlay={() => {
                 setPlaying(true);
                 playingRef.current = true;
