@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Profile card ghosts + serve card CardEmpty shell
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/team/player-profile/last-match-card.tsx, match-history-card.tsx, line-history-card.tsx, serve-placement-card.tsx, src/components/dashboard/home/serve-placement-quiet-strip.tsx, src/app/dashboard/team/roster/[playerId]/page.tsx (call sites only) — guess
 - **done when:**

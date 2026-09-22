@@ -112,6 +112,34 @@ function Legend({ muted = false }: { muted?: boolean }) {
   );
 }
 
+/**
+ * The strip's anatomy holding nothing: a rule where the claim goes, the two
+ * labelled tracks with no serves in them, and the muted legend under its
+ * hairline. Labels stay — what each bar will report is real information;
+ * only the values are absent.
+ *
+ * Exported bare so a card can draw it inside `CardEmpty` with its own band,
+ * and so the profile's day zero can draw it under one eyebrow. The strip's
+ * own empty branch adds the one sentence beneath it.
+ */
+export function ServePlacementGhost() {
+  return (
+    <>
+      <div className="flex flex-col pt-[5px] pb-[5px]" aria-hidden="true">
+        <span className="h-2 w-[60%] rounded-[2px] bg-[var(--ink-200)]" />
+      </div>
+      <div className="flex flex-col gap-4">
+        {COURTS.map((court) => (
+          <EmptyCourtBar key={court.label} label={court.label} />
+        ))}
+      </div>
+      <div className="flex items-center border-t border-[var(--border-hairline)] pt-3">
+        <Legend muted />
+      </div>
+    </>
+  );
+}
+
 /** Which zone dominates, so the claim above the bars is a real reading of the data. */
 function dominantZoneClaim(zoneStats: Record<ZoneKey, ZoneStats>): string {
   const totals = { T: 0, Body: 0, Wide: 0 };
@@ -229,17 +257,7 @@ export function ServePlacementQuietStrip({
         // what fills this. Labels stay — what each bar will report is real
         // information; only the values are absent.
         <>
-          <div className="flex flex-col pt-[5px] pb-[5px]" aria-hidden="true">
-            <span className="h-2 w-[60%] rounded-[2px] bg-[var(--ink-200)]" />
-          </div>
-          <div className="flex flex-col gap-4">
-            {COURTS.map((court) => (
-              <EmptyCourtBar key={court.label} label={court.label} />
-            ))}
-          </div>
-          <div className="flex items-center border-t border-[var(--border-hairline)] pt-3">
-            <Legend muted />
-          </div>
+          <ServePlacementGhost />
           <span className="text-micro" style={{ textWrap: "pretty" }}>
             {awaitingReport
               ? (emptyCopy?.awaiting ??

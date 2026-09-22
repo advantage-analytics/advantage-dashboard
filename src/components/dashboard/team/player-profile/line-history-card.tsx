@@ -32,6 +32,37 @@ function LineHistoryHeader() {
   );
 }
 
+function LineHistoryGhostRows() {
+  return (
+    <GhostRows className={`grid ${LINE_GRID} h-11 items-center gap-2.5`}>
+      <GhostRule width="20px" />
+      <GhostRule width="34px" />
+      <span className="flex justify-end">
+        <GhostRule width="70%" tone="200" shape="tall" />
+      </span>
+      <span className="flex justify-end">
+        <GhostRule width="60%" />
+      </span>
+    </GhostRows>
+  );
+}
+
+/**
+ * The table holding nothing — its column labels, then three grey rows.
+ *
+ * The card below draws the header itself and wraps only the rows, so the
+ * header is never drawn twice; the page's day zero draws this whole shape
+ * under one eyebrow instead.
+ */
+export function LineHistoryGhost() {
+  return (
+    <>
+      <LineHistoryHeader />
+      <LineHistoryGhostRows />
+    </>
+  );
+}
+
 /**
  * The season by line — how this player does at S3, at S2, at D1.
  *
@@ -67,16 +98,7 @@ export function LineHistoryCard({ lines }: { lines: LineRow[] }) {
             },
           }}
         >
-          <GhostRows className={`grid ${LINE_GRID} h-11 items-center gap-2.5`}>
-            <GhostRule width="20px" />
-            <GhostRule width="34px" />
-            <span className="flex justify-end">
-              <GhostRule width="70%" tone="200" shape="tall" />
-            </span>
-            <span className="flex justify-end">
-              <GhostRule width="60%" />
-            </span>
-          </GhostRows>
+          <LineHistoryGhostRows />
         </CardEmpty>
       ) : (
         <>

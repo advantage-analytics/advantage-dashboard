@@ -6,10 +6,6 @@ import { InsightStatChip } from "@/components/dashboard/shared/insight-stat-chip
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { clipText } from "@/lib/data/player-profile";
 import { GhostRule } from "@/components/dashboard/home/day-zero-shape";
-import {
-  CardEmpty,
-  type CardSubject,
-} from "@/components/dashboard/shared/card-empty";
 import type { ProfileLastMatch } from "@/lib/data/player-profile-server";
 
 /**
@@ -31,60 +27,36 @@ function splitClaim(summary: string): { claim: string; body: string | null } {
 }
 
 /**
- * The card before there is a last match: its eyebrow, the match row in grey,
- * and the band. No button — the header's New match is the same step, one row
- * above.
+ * The match row in grey — the card's own anatomy holding nothing.
+ *
+ * Exported bare, with no frame and no band of its own: the page's day zero
+ * draws it under one eyebrow inside the graded shape, which is where the
+ * sentence about what fills it now lives.
  */
-function LastMatchEmpty({ subject }: { subject: CardSubject }) {
+export function LastMatchGhost() {
   return (
-    <section
-      aria-label="Last match"
-      className="surface-card flex flex-col"
-      style={{ padding: "18px 20px" }}
-    >
-      <span className="eyebrow">Last match</span>
-      <CardEmpty
-        description="No match yet: this card shows the most recent match, its score and what the report found."
-        className="mt-3.5"
-        band={{
-          title: subject.isSelf
-            ? "Your last match lands here"
-            : `${subject.firstName}'s last match lands here`,
-          body: "The score, the line, and what the report found.",
-        }}
-      >
-        <div className="grid grid-cols-[32px_minmax(0,1fr)_15px_auto] items-center gap-3">
-          <span className="size-8 rounded-[var(--radius-button)] bg-[var(--ink-100)]" />
-          <span className="flex flex-col gap-1.5">
-            <GhostRule width="40%" tone="200" shape="tall" />
-            <GhostRule width="60%" />
-          </span>
-          <GhostRule width="14px" shape="dot" />
-          <GhostRule width="88px" />
-        </div>
-      </CardEmpty>
-    </section>
+    <div className="grid grid-cols-[32px_minmax(0,1fr)_15px_auto] items-center gap-3">
+      <span className="size-8 rounded-[var(--radius-button)] bg-[var(--ink-100)]" />
+      <span className="flex flex-col gap-1.5">
+        <GhostRule width="40%" tone="200" shape="tall" />
+        <GhostRule width="60%" />
+      </span>
+      <GhostRule width="14px" shape="dot" />
+      <GhostRule width="88px" />
+    </div>
   );
 }
 
 /**
- * The last match, its empty state, or nothing.
+ * The last match, or nothing.
  *
- * Empty only on a profile with no matches at all. A player whose matches are
- * all unscored has matches and no last match to lead with, and a sentence
- * about their first one would be false — so the card is left out there.
+ * A player whose matches are all unscored has matches and no last match to
+ * lead with, and a sentence about their first one would be false — so the
+ * card is left out there. A profile with no matches at all is the page's own
+ * day zero, which draws `LastMatchGhost` itself.
  */
-export function LastMatchCard({
-  match,
-  matchesPlayed,
-  subject,
-}: {
-  match: ProfileLastMatch | null;
-  matchesPlayed: number;
-  subject: CardSubject;
-}) {
-  if (match) return <PlayedMatch match={match} />;
-  return matchesPlayed === 0 ? <LastMatchEmpty subject={subject} /> : null;
+export function LastMatchCard({ match }: { match: ProfileLastMatch | null }) {
+  return match ? <PlayedMatch match={match} /> : null;
 }
 
 /**

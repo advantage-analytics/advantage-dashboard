@@ -152,27 +152,15 @@ export default async function PlayerProfilePage({
 
         <div className="grid items-start gap-4 lg:grid-cols-[1.9fr_1fr]">
           <div className="flex min-w-0 flex-col gap-4">
-            <LastMatchCard
-              match={profile.lastMatch}
-              matchesPlayed={profile.matchesPlayed}
-              subject={subject}
-            />
+            <LastMatchCard match={profile.lastMatch} />
             <MatchHistoryCard
               rows={profile.history}
               playerName={profile.name}
-              subject={subject}
-              importHref={
-                canUpload ? `${newMatchHref}&source=swing-vision` : null
-              }
             />
           </div>
           <div className="flex min-w-0 flex-col gap-4">
             <LineHistoryCard lines={profile.lines} />
-            <ServePlacementCard
-              serve={profile.serve}
-              matchesPlayed={profile.matchesPlayed}
-              isSelf={isSelf}
-            />
+            <ServePlacementCard serve={profile.serve} subject={subject} />
           </div>
         </div>
       </div>
