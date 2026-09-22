@@ -1,7 +1,7 @@
 import { COURT_RECORD_COLS } from "@/components/dashboard/team/court-record-shell";
 import { COURT_RECORD_WINDOW } from "@/lib/data/team-court-record";
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { PendingBar, PendingRegion } from "./pending";
 import { TeamSeasonTitleFrame } from "@/components/dashboard/team/team-season-title";
 import { TopMoversFrame } from "@/components/dashboard/team/top-movers";
 import { CourtRecordFrame } from "@/components/dashboard/team/court-record";
@@ -12,31 +12,7 @@ import {
   HomeFooterPending,
 } from "./home-skeleton";
 
-export function PendingBar({ className = "w-full" }: { className?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "block h-3 max-w-full rounded-[3px] bg-[var(--surface-skeleton)] motion-safe:animate-pulse",
-        className,
-      )}
-    />
-  );
-}
-
-export function PendingRegion({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div role="status" aria-label={`Loading ${label}`}>
-      <div aria-hidden="true">{children}</div>
-    </div>
-  );
-}
+export { PendingBar, PendingRegion } from "./pending";
 
 export function TeamHomeFrame({
   title,

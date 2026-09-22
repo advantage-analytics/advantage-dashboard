@@ -11,6 +11,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/set-scope";
 import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
+import { EmptyMark } from "@/components/ui/empty-mark";
 import { cn } from "@/lib/utils";
 import { surnameLabels } from "@/lib/data/match-utils";
 
@@ -113,8 +114,59 @@ export function RallyLengthCard() {
 
   const visible = bands.filter((b) => b.count > 0);
   // Nothing in this match carries a shot count — a bar of three empty bands
-  // would claim every rally was unrecorded length rather than saying so.
-  if (total === 0 || visible.length === 0) return null;
+  // would claim every rally was unrecorded length rather than saying so. The
+  // card's own anatomy stays (eyebrow, one empty band, the three labels with
+  // a dash where a count goes), with a sentence in the legend's place.
+  if (total === 0 || visible.length === 0) {
+    return (
+      <section
+        aria-labelledby="rally-length-heading"
+        className="surface-card flex min-h-0 flex-1 flex-col gap-3"
+        style={{ padding: "16px 20px 14px" }}
+        data-testid="rally-length-empty"
+      >
+        <div className="flex items-baseline gap-2">
+          <span id="rally-length-heading" className="eyebrow">
+            Rally length
+          </span>
+          <div className="flex-1" />
+          <span className="text-micro tabular whitespace-nowrap">
+            <EmptyMark label="No average" className="text-[10px]" /> shots
+            average
+          </span>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          <div
+            aria-hidden="true"
+            className="min-h-24 flex-1 rounded-[var(--radius-cell)]"
+            style={{ background: "var(--surface-subtle)" }}
+          />
+          <div className="flex">
+            {BAND_META.map((band) => (
+              <div key={band.key} className="box-border flex-1 pr-3">
+                <div className="flex items-baseline gap-1 overflow-hidden whitespace-nowrap">
+                  <span className="text-[11px] text-[var(--ink-700)]">
+                    {band.label}
+                  </span>
+                  <span className="mono tabular text-[10px]">
+                    <EmptyMark
+                      label={`No ${band.label.toLowerCase()} rallies recorded`}
+                      className="text-[10px]"
+                    />
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <p className="text-micro" style={{ color: "var(--ink-500)" }}>
+          No rally lengths were recorded on this match&apos;s points.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section

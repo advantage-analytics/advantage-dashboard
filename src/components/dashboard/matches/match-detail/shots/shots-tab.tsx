@@ -11,6 +11,8 @@ import {
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shots/saved-views-band";
 import { VizBandsProvider } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
+import { VizEmpty } from "@/components/dashboard/matches/match-detail/shots/viz-empty";
+import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 
 /**
  * The Visualizations tab's panel. `?cut=` absent (or unrecognised) renders
@@ -100,6 +102,7 @@ export function ShotsTab() {
 function ShotsTabBody() {
   const { state } = useVizState();
   const { meta } = useMatchReport();
+  const { points } = useMatchData();
   const mounted = useMounted();
 
   // ONE gated value. Anything that ever needs to know "is the viewer up" while
@@ -111,6 +114,9 @@ function ShotsTabBody() {
     state.fullscreen === true &&
     state.cut !== null &&
     state.draft !== true;
+
+  // Before the wall/focused branch, so no URL can reach an empty court.
+  if (points.length === 0) return <VizEmpty />;
 
   const savedViewsBand = (
     <SavedViewsBand
