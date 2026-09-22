@@ -349,8 +349,8 @@ export function EditPlayerDialog({
         <>
           <ConfirmProse>
             <p>
-              Their matches <Em>stay on the program&apos;s record</Em>, still
-              attributed to this profile, and adding them again offers to
+              Their <Em>matches</Em> stay on the <Em>program&apos;s record</Em>,
+              still attributed to this profile, and adding them again offers to
               restore it.
               {member.userId !== null && (
                 <>

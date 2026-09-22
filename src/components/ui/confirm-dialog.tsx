@@ -192,7 +192,7 @@ export function ConfirmDialog({
  */
 export function ConfirmProse({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2.5 text-[12.5px] leading-[1.6] text-pretty text-[var(--ink-700)]">
+    <div className="flex flex-col gap-2.5 text-[12px] leading-[1.6] text-pretty text-[var(--ink-700)]">
       {children}
     </div>
   );
@@ -205,7 +205,7 @@ export function ConfirmProse({ children }: { children: React.ReactNode }) {
  */
 export function ConfirmAside({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[12.5px] leading-[1.6] text-pretty text-[var(--ink-500)]">
+    <p className="text-[12px] leading-[1.6] text-pretty text-[var(--ink-500)]">
       {children}
     </p>
   );
@@ -238,7 +238,7 @@ export function ConfirmNote({
       <span className="mt-px shrink-0 text-[var(--ink-600)] [&>svg]:size-[13px] [&>svg]:stroke-[1.5]">
         {icon}
       </span>
-      <span className="text-[11px] leading-[1.6] text-[var(--ink-700)]">
+      <span className="text-[12px] leading-[1.6] text-[var(--ink-700)]">
         {children}
       </span>
     </div>

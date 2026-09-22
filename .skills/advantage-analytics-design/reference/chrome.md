@@ -199,7 +199,8 @@ all held.
 
 - **What a confirm costs is prose, never bullets** (2026-09-22, in-repo —
   design owner's pick, direction C of the dialog-list mock). `ConfirmProse`:
-  at most two paragraphs at 12.5px/1.6 `--ink-700`, no fill behind them, with
+  at most two paragraphs at 12px/1.6 `--ink-700` (body-sm — the contract
+  sentence's size, so the body never outranks it), no fill behind them, with
   two or three load-bearing nouns in `Em` (`--ink-900`, 500) and any line that
   carries no consequence — where you land afterwards, how to come back — in
   `ConfirmAside` at `--ink-500`. A bulleted list promises items the reader

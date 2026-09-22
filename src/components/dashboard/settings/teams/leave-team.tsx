@@ -318,7 +318,8 @@ function LeaveTeamDialog({
             dialog with, and it used to be the fourth bullet in a grey tub. */}
         <ConfirmProse>
           <p>
-            You lose access to the team&apos;s matches, video and reports
+            You lose access to the team&apos;s{" "}
+            <Em>matches, video and reports</Em>
             {isStaff ? "" : ", including the ones recorded of you"}.
             {isStaff && (
               <>
@@ -333,7 +334,7 @@ function LeaveTeamDialog({
             {isStaff && <>Team matches you uploaded stay with the program. </>}
             {hasProfile && (
               <>
-                Your player profile and its matches stay for{" "}
+                Your <Em>player profile</Em> and its matches stay for{" "}
                 {ownerName ? `${ownerName} and the coaches` : "the coaches"} to
                 manage.{" "}
               </>
