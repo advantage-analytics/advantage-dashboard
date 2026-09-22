@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DialogProblem } from "@/components/ui/dialog-problem";
-import { ConfirmList } from "@/components/ui/confirm-dialog";
+import { ConfirmProse, Em } from "@/components/ui/confirm-dialog";
 import { ConferenceMark } from "@/components/admin/conference-mark";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 import { mergeConferences } from "@/lib/services/programs/admin-conference-actions";
@@ -32,8 +32,8 @@ import { cn } from "@/lib/utils";
  *
  *   choosing   a typeahead over the rows the page already loaded (minus the
  *              source) — no round trip, all ~137 are on the client
- *   chosen     the target as a row with "Change", the `ConfirmList` of what
- *              the merge costs, and the red "Merge conferences"
+ *   chosen     the target as a row with "Change", the prose of what the
+ *              merge costs, and the red "Merge conferences"
  *
  * Not a `ConfirmDialog`: that is an `AlertDialog` whose body is a sentence
  * about a decision already made, and this one makes the decision first.
@@ -216,13 +216,15 @@ export function MergeConferenceDialog({
                 </button>
               </div>
 
-              <ConfirmList
-                items={[
-                  `${teamsPhrase(source.teams)} move to ${target.name}`,
-                  `${source.name} is deleted`,
-                  `Every reader of the conference name sees ${target.name}'s`,
-                ]}
-              />
+              <ConfirmProse>
+                {/* The title already says the source is deleted — this is the
+                    concrete version of it, once a target has a name. */}
+                <p>
+                  {teamsPhrase(source.teams)} move to <Em>{target.name}</Em>,
+                  and anywhere {source.name} appeared, readers see{" "}
+                  <Em>{target.name}</Em> instead.
+                </p>
+              </ConfirmProse>
             </>
           ) : (
             <div className="flex flex-col gap-1.5">

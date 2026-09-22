@@ -158,11 +158,15 @@ self-managed = unmarked initials (default, no chip); coach-managed = border
 ring + grey pill; invited = dashed ring (no person yet, only an email);
 "Claimed today" = a transition-receipt pill that decays after a session (a
 one-time acknowledgment, not a permanent state). State chips are 18px pill,
-10/500 ink-700 on surface-subtle — grey, never an outcome colour; "New" is the
-one blue-tinted exception (Data Table rule 4). The viewer's own `You` wears the
-same grey through `YouPill` (see Settings Pages). 26px in rows, 22px in menus.
-The avatar is the system's one circle — entities are squares, people are
+10/500 ink-700 on surface-subtle — grey, never an outcome colour and never
+blue-tinted, with no exception (Data Table rule 4). The viewer's own `You` wears
+the same grey through `YouPill` (see Settings Pages). 26px in rows, 22px in
+menus. The avatar is the system's one circle — entities are squares, people are
 circles.
+_Supersedes (v3): "grey, never an outcome colour; "New" is the one blue-tinted
+exception (Data Table rule 4)."_ "New" is not a chip of any colour any more —
+an unread match is marked by a 5px `--blue` dot after the opponent's name
+(Data Table rule 4).
 
 **`Radio`** (check-dot) — single-choice selection is a solid Signal Blue 14px
 dot + white 9px check (stroke 2.5); unselected is a 1px ink-300 ring; disabled

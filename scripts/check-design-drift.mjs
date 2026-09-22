@@ -145,7 +145,7 @@ const TW_PREFIXES =
   "bg|text|border|ring|fill|stroke|divide|outline|placeholder|caret|decoration";
 
 const HEX_RE = /#[0-9a-fA-F]{6}\b/g;
-const TEXT_PX_RE = /\btext-\[(\d+)px\]/g;
+const TEXT_PX_RE = /\btext-\[(\d+(?:\.\d+)?)px\]/g;
 const COLOR_PROP_RE =
   /\b(?:fill|stroke|stopColor|color|itemStyle|backgroundColor|borderColor)\s*[=:]\s*\{?["']?(#[0-9a-fA-F]{6})\b/g;
 

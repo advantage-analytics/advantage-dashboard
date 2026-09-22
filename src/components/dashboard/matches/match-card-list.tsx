@@ -12,7 +12,6 @@ import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { formatShortDate } from "@/lib/ui/date-format";
-import { NewPill } from "@/components/ui/new-pill";
 import { PlayerMark } from "@/components/ui/player-mark";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { RowLifecycle } from "./row-state";
@@ -80,7 +79,7 @@ interface MatchCardListProps {
   match: DisplayMatch;
   /** Highlights briefly right after this match was created, this session. */
   isNew?: boolean;
-  /** Never opened on this device — draws the blue "New" pill. */
+  /** Never opened on this device — draws the unread dot after the opponent's name. */
   unseen?: boolean;
   scope?: "personal" | "team";
   /** The team table beside the open drawer, with its Event track dropped. */
@@ -182,7 +181,9 @@ export function MatchCardList({
       )}
 
       {/* Opponent — the name a reader scans for on a personal list; the quiet
-          second name on a team list. The row's one state marker follows it. */}
+          second name on a team list. An unread match's dot trails the name
+          8px after it: it follows the name, so the name's x never changes,
+          and the name truncates while the dot stays pinned after it. */}
       <span className="flex min-w-0 items-center gap-2">
         <span
           className={cn(
@@ -194,7 +195,16 @@ export function MatchCardList({
         >
           {match.player2.name}
         </span>
-        {unseen && <NewPill className="shrink-0" />}
+        {unseen && (
+          <>
+            <span
+              aria-hidden="true"
+              className="size-[5px] shrink-0 rounded-full"
+              style={{ background: "var(--blue)" }}
+            />
+            <span className="sr-only">Unread</span>
+          </>
+        )}
       </span>
 
       {/* Result — the outcome glyph, flush left under its heading, ahead of

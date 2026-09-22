@@ -25,8 +25,8 @@ The form follows the quantity, not the habit:
 - **Countable quota, small N → unit boxes.** Seats are 25 discrete things, so
   they are 25 8px squares on 2px radius (the DS keeps circles for avatars).
   You can see "three left" without reading a number, which a bar at 20% cannot
-  say. Filled = taken, **outlined = reserved but not yet taken**, `--ink-100`
-  = free. That middle state is the reason the form is worth it: a held invite
+  say. Filled = taken, **dashed blue outline = reserved but not yet taken**,
+  solid `--ink-400` outline = free (see Person row, below). That middle state is the reason the form is worth it: a held invite
   is a real thing the data tracks and a sentence buries.
 - **Never both on one card.** Two quota visuals stacked read as one measure
   drawn twice; the second becomes a count in the title slot.
@@ -78,7 +78,14 @@ One shape for every person a card lists — members, invitees, usage lines:
   whom no row was ever a control. Picking commits at once.
 - **Pending → outlined pill + dashed-ring avatar.** An `Invited` row is a state
   of the same list, not a different kind of row. The outlined pill deliberately
-  matches the outlined seat box representing that same invite.
+  matches the **dashed** blue seat box representing that same invite, and the
+  dash matches the avatar's dashed ring: invited is dashed on every surface.
+  `SeatBoxes` draws a free seat as a solid grey (`--ink-400`) outline, so the
+  dash, not the colour alone, is what tells an invite from a free seat.
+  _Supersedes (2026-09-22): "The outlined pill deliberately matches the
+  outlined-**and-blue** seat box representing that same invite — `SeatBoxes`
+  also draws a free seat as an outline, in grey, so it's the colour that marks
+  the invite, not the outline alone."_
 - **`You` is a grey pill, and only `YouPill` draws it** (`ui/you-pill.tsx`;
   design owner's call, 2026-09-13). `StatePill`'s geometry and colour — 18px,
   10/500 `--ink-700` on `--surface-subtle`. It marks identity, not standing, so
@@ -96,7 +103,11 @@ One shape for every person a card lists — members, invitees, usage lines:
   meaning — do not add one." Blue on a card with nothing to click spent the
   action colour on a label, and the wizard already drew `You` grey while the
   roster wrote a lowercase `you`, so the product was marking the viewer three
-  ways at once._
+  ways at once._ The premise that quote names has since gone as well: "New" is
+  no longer a pill of any colour — an unread match is marked by a 5px `--blue`
+  dot after the opponent's name (Data Table rule 4, `reference/tables.md`) — so
+  grey `You` is not a carve-out from a blue norm. No pill in the system is
+  blue-tinted.
 
 ### Selects on a settings page are `MenuSelect`
 
