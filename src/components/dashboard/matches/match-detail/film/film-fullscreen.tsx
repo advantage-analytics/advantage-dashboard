@@ -27,9 +27,12 @@ import { cn } from "@/lib/utils";
 
 import {
   BASE_BOARD_INSETS,
+  COURT_ANCHOR_STORAGE_KEY,
   anchorPosition,
+  courtRest,
   courtSlot,
   type BoardAnchor,
+  type BoardPosition,
   type BoardSize,
 } from "./board-position";
 import { bounceTimesByShot } from "./film-ball";
@@ -39,7 +42,9 @@ import {
   FilmCourt,
   type FilmCourtMark,
   type FilmCourtMode,
+  type FilmCourtProps,
 } from "./film-court-card";
+import { ANCHOR_LABEL, SETTLE_CLASS, useCornerDrag } from "./use-corner-drag";
 import {
   cutName,
   hasActiveFilmFilters,
@@ -204,6 +209,112 @@ const ROOM_PROBLEM_TITLES: Record<AttachmentPlaybackProblem["reason"], string> =
   };
 
 type PanelState = "closed" | "open" | "closing";
+
+/**
+ * The court card's layer: the wrapper that moves, and the mechanic that moves
+ * it.
+ *
+ * It is its own component for one reason — `useCornerDrag` measures the
+ * element it is given, and the court mounts long after the room does (R11:
+ * not before the first point resolves, and not at all while the court is
+ * off). A hook called in `FilmFullscreen` would run its layout effect against
+ * a ref that is still null.
+ *
+ * Until the viewer drops it somewhere, the court has no corner of its own
+ * (`anchor === null`, `data-court-anchor="follow"`) and `courtRest` stacks it
+ * in the board's column exactly where it has always sat. Once dropped it
+ * keeps its corner — and `dock` follows the court's own column rather than
+ * the board's, so the readout hangs off the side that has room for it.
+ */
+function FilmCourtLayer({
+  board,
+  room,
+  court,
+}: {
+  /** The board at rest: the column the court follows until it has its own. */
+  board: { anchor: BoardAnchor; position: BoardPosition; size: BoardSize };
+  room: BoardSize;
+  court: Omit<FilmCourtProps, "dock" | "handleProps" | "grabbing">;
+}) {
+  const rest = useCallback(
+    (at: BoardAnchor | null, size: BoardSize, roomSize: BoardSize) =>
+      courtRest(at, board, size, roomSize, BASE_BOARD_INSETS),
+    [board],
+  );
+  const announce = useCallback(
+    (at: BoardAnchor) => `Court in the ${ANCHOR_LABEL[at]} corner.`,
+    [],
+  );
+  const move = useCornerDrag({
+    storageKey: COURT_ANCHOR_STORAGE_KEY,
+    // Null, not a corner: a viewer who has never moved the court sees it
+    // exactly where it is today, under the board.
+    defaultAnchor: null,
+    rest,
+    // Pre-measurement only, and `useLayoutEffect` measures before paint — so
+    // this is never what anybody sees. `FILM_COURT_SIZE` is the card's pinned
+    // box, which is what the measurement will report anyway.
+    fallback: courtSlot(
+      board.anchor,
+      board.position,
+      board.size,
+      FILM_COURT_SIZE,
+    ),
+    announce,
+  });
+  const column = move.anchor ?? board.anchor;
+
+  return (
+    <>
+      {move.ghost && (
+        <div
+          aria-hidden="true"
+          data-film-court-ghost=""
+          className={cn(
+            "pointer-events-none absolute rounded-[var(--radius-element)] bg-white/[0.06] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]",
+            SETTLE_CLASS,
+          )}
+          style={{
+            left: move.ghost.left,
+            top: move.ghost.top,
+            width: move.sizes?.self.width ?? FILM_COURT_SIZE.width,
+            height: move.sizes?.self.height ?? FILM_COURT_SIZE.height,
+          }}
+        />
+      )}
+      <div
+        {...move.containerProps}
+        data-film-chrome
+        data-court-anchor={move.anchorAttr}
+        aria-describedby="film-court-hint"
+        className={cn(
+          "absolute rounded-[var(--radius-element)]",
+          move.placed && SETTLE_CLASS,
+          // Held is the focus outline at full weight, as on the board (R6).
+          move.held && "shadow-[var(--focus-ring)]",
+        )}
+        style={{ left: move.position.left, top: move.position.top }}
+      >
+        <span id="film-court-hint" className="sr-only">
+          Drag the court card by its header to move it, or press the arrow keys
+          to nudge it 8 pixels at a time — 40 with Shift. Space picks it up and
+          drops it into the nearest corner; Escape cancels the move.
+        </span>
+        <span aria-live="polite" className="sr-only">
+          {move.announcement && (
+            <span key={move.announcement.seq}>{move.announcement.text}</span>
+          )}
+        </span>
+        <FilmCourt
+          {...court}
+          dock={column.endsWith("right") ? "right" : "left"}
+          handleProps={move.handleProps}
+          grabbing={move.free}
+        />
+      </div>
+    </>
+  );
+}
 
 export function FilmFullscreen(p: FilmFullscreenProps) {
   const { match } = useMatchData();
@@ -498,19 +609,22 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     return () => observer.disconnect();
   }, []);
 
-  const courtAt = useMemo(() => {
+  // The board at rest, in pixels — the column the court stacks under while it
+  // has no corner of its own. Null until both are measured, which is also the
+  // court layer's gate: it cannot be placed before there is a board to place
+  // it against.
+  const boardColumn = useMemo(() => {
     if (!boardRest || !roomSize) return null;
-    return courtSlot(
-      boardRest.anchor,
-      anchorPosition(
+    return {
+      anchor: boardRest.anchor,
+      position: anchorPosition(
         boardRest.anchor,
         boardRest.size,
         roomSize,
         BASE_BOARD_INSETS,
       ),
-      boardRest.size,
-      FILM_COURT_SIZE,
-    );
+      size: boardRest.size,
+    };
   }, [boardRest, roomSize]);
 
   const position = useMemo(() => {
@@ -1294,40 +1408,34 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                   onRest={onBoardRest}
                 />
 
-                {courtOn && courtAt && (
-                  // The court sits in the board's own column and never moves
-                  // for the drawer (R6's court rule); turning it off gives that
+                {courtOn && boardColumn && roomSize && (
+                  // The court starts in the board's own column and travels on
+                  // the board's curve, so the two land together — until the
+                  // viewer drags it to a corner of its own, which it then
+                  // keeps (R6's court rule, as revised 2026-09-22). The drawer
+                  // moves neither object. Turning the court off gives that
                   // column back to the film and leaves the board where it is
-                  // (R9). It travels on the board's curve, so the two land
-                  // together. Between points it stays mounted and keeps its
-                  // lines — `mode` goes quiet, the card does not (R7).
-                  <div
-                    data-film-chrome
-                    className="absolute transition-[left,top] duration-[360ms] ease-[var(--ease-out-expo)] motion-reduce:transition-none"
-                    style={{ left: courtAt.left, top: courtAt.top }}
-                  >
-                    <FilmCourt
-                      mode={courtCardMode}
-                      title={courtTitle}
-                      caption={courtCaption}
-                      marks={courtMarks}
+                  // (R9). Between points it stays mounted and keeps its lines
+                  // — `mode` goes quiet, the card does not (R7).
+                  <FilmCourtLayer
+                    board={boardColumn}
+                    room={roomSize}
+                    court={{
+                      mode: courtCardMode,
+                      title: courtTitle,
+                      caption: courtCaption,
+                      marks: courtMarks,
                       // Who is who is `useMatchSides()`'s call, never player order.
-                      youName={lastNameOf(sides.you.name)}
-                      opponentName={lastNameOf(sides.opp.name)}
-                      controls={chrome}
-                      onSwapMode={swapCourtMode}
+                      youName: lastNameOf(sides.you.name),
+                      opponentName: lastNameOf(sides.opp.name),
+                      controls: chrome,
+                      onSwapMode: swapCourtMode,
                       // The header x and the transport's control are one toggle.
-                      onHide={toggleCourt}
-                      onSelectMark={selectMark}
-                      seekKey={seekKey}
-                      dock={
-                        boardRest?.anchor === "top-right" ||
-                        boardRest?.anchor === "bottom-right"
-                          ? "right"
-                          : "left"
-                      }
-                    />
-                  </div>
+                      onHide: toggleCourt,
+                      onSelectMark: selectMark,
+                      seekKey,
+                    }}
+                  />
                 )}
               </>
             )}

@@ -830,3 +830,73 @@ test("a save refused for a reason other than 23505 reverts", async ({
     ),
   ).toBeVisible();
 });
+
+/* -------------------------------------------------------------------------
+ * The court card moves like the board (T11)
+ *
+ * The geometry is `film-board-position.spec.ts`'s; what only a browser can
+ * answer is whether a real mouse drag on the card's header reaches it, and
+ * whether the corner is kept for the next visit.
+ * ---------------------------------------------------------------------- */
+
+test("dragging the court card's header parks it in a corner of its own", async ({
+  page,
+}) => {
+  const matchId = "court-drag";
+  await open(page, matchId);
+  // Inside the second point, so R11's "board, court and point name arrive
+  // together" condition is met before the room opens.
+  await seekTo(page, REPORT, 0.3);
+
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+
+  const card = page.locator("[data-court-anchor]");
+  // A viewer who has never moved it: no corner of its own, stacked under the
+  // board's.
+  await expect(card).toHaveAttribute("data-court-anchor", "follow");
+
+  const handle = page.locator("[data-film-court-handle]");
+  const box = await handle.boundingBox();
+  if (!box) throw new Error("no court handle");
+  const fromX = box.x + box.width / 2;
+  const fromY = box.y + box.height / 2;
+
+  await page.mouse.move(fromX, fromY);
+  await page.mouse.down();
+  // Well past the 3px lift threshold, and far enough right that the nearest
+  // corner is unambiguous.
+  await page.mouse.move(fromX + 600, fromY - 100, { steps: 12 });
+  await page.mouse.up();
+
+  await expect(card).toHaveAttribute("data-court-anchor", "top-right");
+  expect(
+    await page.evaluate(() => localStorage.getItem("film-room:court-anchor")),
+  ).toBe("top-right");
+
+  // The board did not come with it — they remember separate corners.
+  await expect(page.locator("[data-board-anchor]")).toHaveAttribute(
+    "data-board-anchor",
+    "top-left",
+  );
+});
+
+test("a click on the court's hide glyph still hides it, handle or no handle", async ({
+  page,
+}) => {
+  const matchId = "court-glyph";
+  await open(page, matchId);
+  await seekTo(page, REPORT, 0.3);
+
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+  await expect(page.locator("[data-court-anchor]")).toHaveCount(1);
+
+  // The glyph sits inside the drag handle; the press must stay the button's.
+  await page.getByRole("button", { name: "Hide the court" }).click();
+  await expect(page.locator("[data-court-anchor]")).toHaveCount(0);
+});

@@ -150,7 +150,7 @@ ready).
 
 ## T11 · Court card drags to a corner like the board
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T10
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/use-corner-drag.ts (new — the pointer/keyboard mechanic lifted out of film-scoreboard.tsx); film-scoreboard.tsx; film-fullscreen.tsx (the court wrapper ~L1296–1333 and the `dock` expression); film-court-card.tsx (a drag handle on the header row + `data-court-anchor`); docs/superpowers/specs/2026-09-21-video-fullscreen-h2-design.md (R6 row + "R6's court rule" paragraph, prose only); tests/film-playback-refresh.spec.ts (+ its harness) for the browser case

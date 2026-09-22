@@ -36,10 +36,18 @@ import { UNMEASURED, shotLabel, shotRowCells } from "./film-shots";
  *
  * It is a READOUT, not a control. It is a sibling of the `<video>`, never a
  * child, so a click on a mark cannot reach the film underneath and no
- * `stopPropagation` is needed; the board is the only thing in the room that
- * moves, and the points drawer never displaces this card. Unlike the board it
- * carries no drag affordance at all. Every mark is a seek target and is
- * keyboard-reachable in shot order, which the DOM order of the buttons gives.
+ * `stopPropagation` is needed; the points drawer never displaces this card.
+ *
+ * It moves, though — "I should be able to move the court visual like the
+ * scorecard" (author, 2026-09-22), reversing R6's "the board is the only
+ * movable object". The mechanic is the board's own (`use-corner-drag.ts`) and
+ * the room owns the wrapper it moves; this file contributes only the handle.
+ * Only the 20px header ROW is grabbable, because every mark and both header
+ * glyphs are buttons — a card that lifted from anywhere would swallow the
+ * seek. A press that starts on one of the two glyphs is not a grab either:
+ * pointer capture on the row would re-target the click away from the button.
+ * Every mark is a seek target and is keyboard-reachable in shot order, which
+ * the DOM order of the buttons gives.
  *
  * Point mode is the rally as it happens — a donut where the ball was struck,
  * a filled dot where it landed, both fading out two shots later. Match mode
@@ -91,6 +99,19 @@ export interface FilmCourtProps {
    * centred and the mark's own half decides the readout's side.
    */
   dock?: "left" | "right";
+  /**
+   * The pointer half of `useCornerDrag`, for the header row. Absent wherever
+   * the card is not movable, and then the row is an ordinary header.
+   */
+  handleProps?: {
+    onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
+    onPointerMove: (event: React.PointerEvent<HTMLElement>) => void;
+    onPointerUp: (event: React.PointerEvent<HTMLElement>) => void;
+    onPointerCancel: () => void;
+    onLostPointerCapture: () => void;
+  };
+  /** The card is under the pointer right now: the row shows `cursor-grabbing`. */
+  grabbing?: boolean;
 }
 
 /**
@@ -236,6 +257,8 @@ export function FilmCourt({
   overlay,
   seekKey,
   dock,
+  handleProps,
+  grabbing,
 }: FilmCourtProps) {
   // One readout at a time — and the open one remembers the seek it belongs
   // to. A seek moves the film to another moment, so whatever the readout was
@@ -279,7 +302,23 @@ export function FilmCourt({
       }}
     >
       <div
-        className="flex w-full items-center"
+        {...handleProps}
+        data-film-court-handle={handleProps ? "" : undefined}
+        // A press that lands on either glyph is that glyph's. Capturing the
+        // pointer on this row would move the click off the button it started
+        // on, so "Hide the court" would stop hiding the court.
+        onPointerDown={(e) => {
+          if ((e.target as HTMLElement).closest("button")) return;
+          handleProps?.onPointerDown(e);
+        }}
+        className={cn(
+          "flex w-full items-center",
+          handleProps &&
+            cn(
+              "touch-none select-none",
+              grabbing ? "cursor-grabbing" : "cursor-grab",
+            ),
+        )}
         style={{ height: 20, gap: 4, paddingLeft: 2 }}
       >
         <span
