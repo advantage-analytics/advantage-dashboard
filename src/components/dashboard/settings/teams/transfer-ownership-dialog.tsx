@@ -8,6 +8,7 @@ import {
 } from "@/components/dashboard/team/dialog-shell";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { SettingsUnderlineInput } from "@/components/dashboard/settings/settings-card";
+import { ConfirmAside, ConfirmProse, Em } from "@/components/ui/confirm-dialog";
 import { StatePill } from "@/components/ui/state-pill";
 import { YouPill } from "@/components/ui/you-pill";
 import { transferProgramOwnership } from "@/components/dashboard/settings/team-actions";
@@ -143,18 +144,16 @@ export function TransferOwnershipDialog({
       }
     >
       <div className="flex flex-col gap-3.5">
-        <ul className="flex flex-col gap-[7px] rounded-[8px] bg-[var(--surface-subtle)] px-3.5 py-3 text-[11px] leading-[1.5] text-[var(--ink-700)]">
-          <Bullet>
-            {target.name} gains the roster, invites, billing and every team
-            setting.
-          </Bullet>
-          <Bullet>
-            You become a coach — you keep your matches and stay on the roster.
-          </Bullet>
-          <Bullet>
+        <ConfirmProse>
+          <p>
+            <Em>{target.name}</Em> gains the roster, invites, billing and every
+            team setting. You become a <Em>coach</Em> — you keep your matches
+            and stay on the roster.
+          </p>
+          <ConfirmAside>
             Team hours, uploads and shared reports are unaffected.
-          </Bullet>
-        </ul>
+          </ConfirmAside>
+        </ConfirmProse>
 
         <label className="flex flex-col gap-2">
           <span className="text-[11px] text-[var(--ink-600)]">
@@ -179,17 +178,6 @@ export function TransferOwnershipDialog({
         <DialogProblem message={error} />
       </div>
     </RosterDialog>
-  );
-}
-
-function Bullet({ children }: { children: React.ReactNode }) {
-  return (
-    <li className="flex gap-2">
-      <span aria-hidden="true" className="text-[var(--ink-400)]">
-        ·
-      </span>
-      <span>{children}</span>
-    </li>
   );
 }
 

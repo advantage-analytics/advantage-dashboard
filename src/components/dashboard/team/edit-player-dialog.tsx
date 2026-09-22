@@ -6,6 +6,7 @@ import {
   SettingsField,
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
+import { ConfirmAside, ConfirmProse, Em } from "@/components/ui/confirm-dialog";
 import { advButton } from "@/lib/ui/adv-button";
 import {
   archiveProgramPlayer,
@@ -346,25 +347,24 @@ export function EditPlayerDialog({
     >
       {confirming ? (
         <>
-          <ul className="flex flex-col gap-[7px] rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3 text-[11px] leading-[1.5] text-[var(--ink-700)]">
-            <ConfirmBullet>
-              Their matches stay on the program&apos;s record, still attributed
-              to this profile.
-            </ConfirmBullet>
-            {member.userId !== null && (
-              <ConfirmBullet>
-                They sign in for themselves, so they also lose access to the
-                team.
-              </ConfirmBullet>
-            )}
-            <ConfirmBullet>
-              Adding them again offers to restore this profile.
-            </ConfirmBullet>
-            <ConfirmBullet>
+          <ConfirmProse>
+            <p>
+              Their matches <Em>stay on the program&apos;s record</Em>, still
+              attributed to this profile, and adding them again offers to
+              restore it.
+              {member.userId !== null && (
+                <>
+                  {" "}
+                  Because they sign in for themselves, they also lose access to
+                  the team.
+                </>
+              )}
+            </p>
+            <ConfirmAside>
               You&apos;ll land back on the roster — this profile page closes
               with them.
-            </ConfirmBullet>
-          </ul>
+            </ConfirmAside>
+          </ConfirmProse>
           <DialogProblem message={error} />
         </>
       ) : gone ? (
@@ -451,16 +451,5 @@ export function EditPlayerDialog({
         </>
       )}
     </RosterDialog>
-  );
-}
-
-function ConfirmBullet({ children }: { children: React.ReactNode }) {
-  return (
-    <li className="flex gap-2">
-      <span aria-hidden="true" className="text-[var(--ink-400)]">
-        ·
-      </span>
-      <span>{children}</span>
-    </li>
   );
 }

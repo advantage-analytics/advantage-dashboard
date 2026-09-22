@@ -67,7 +67,7 @@ export function ConfirmDialog({
   title: React.ReactNode;
   /** The contract: one sentence on what happens. */
   description: React.ReactNode;
-  /** Optional body — a `ConfirmList` of consequences, an account row, a note. */
+  /** Optional body — `ConfirmProse` of consequences, an account row, a note. */
   children?: React.ReactNode;
   /** A verb that names the object: "Delete match", never "OK" or "Confirm". */
   confirmLabel: string;
@@ -171,22 +171,55 @@ export function ConfirmDialog({
 }
 
 /**
- * What a confirm costs or leaves alone, as a short list on `--surface-subtle`
- * — the block Leave team and Make owner already draw.
+ * What a confirm costs or leaves alone, written as sentences.
+ *
+ * ── Why this is not a list (2026-09-22) ─────────────────────────────────────
+ * It was one: `ConfirmList`, a `--surface-subtle` tub of 11px middot bullets,
+ * hand-copied into Leave team, Make owner and Remove player alongside the two
+ * callers of the primitive. A bulleted list promises items you will compare or
+ * count, and nobody compares consequences — they read for the gist and press
+ * the button. At 11px on a grey fill the block read as fine print inside a
+ * dialog whose whole job is being read, so the sentences that mattered ("your
+ * matches stay with the program") were the ones skimmed past.
+ *
+ * Prose at the body size, with the load-bearing nouns in `Em`, is read. The
+ * cost is that the copy has to be written rather than assembled, which is why
+ * this takes children instead of an `items` array: there is no shape to fill
+ * in without deciding what the sentence says.
+ *
+ * Two paragraphs at most. Past that the facts are genuinely unrelated and the
+ * dialog wants grouping, not prose — see the note in `reference/chrome.md`.
  */
-export function ConfirmList({ items }: { items: React.ReactNode[] }) {
+export function ConfirmProse({ children }: { children: React.ReactNode }) {
   return (
-    <ul className="flex flex-col gap-[7px] rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3 text-[11px] leading-[1.5] text-[var(--ink-700)]">
-      {items.map((item, index) => (
-        <li key={index} className="flex gap-2">
-          <span aria-hidden="true" className="text-[var(--ink-400)]">
-            ·
-          </span>
-          <span>{item}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-2.5 text-[12.5px] leading-[1.6] text-pretty text-[var(--ink-700)]">
+      {children}
+    </div>
   );
+}
+
+/**
+ * The trailing line in a confirm that carries no consequence — where you land
+ * afterwards, how to come back. Quiet enough to skip, present enough to answer
+ * the question if it is the one being asked.
+ */
+export function ConfirmAside({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[12.5px] leading-[1.6] text-pretty text-[var(--ink-500)]">
+      {children}
+    </p>
+  );
+}
+
+/**
+ * A noun in confirm prose the reader must not skim past — the match being
+ * deleted, the person gaining ownership, the thing that survives.
+ *
+ * Use it two or three times in a dialog, never on a whole clause: emphasis
+ * spread over a sentence is the same as no emphasis.
+ */
+export function Em({ children }: { children: React.ReactNode }) {
+  return <span className="font-medium text-[var(--ink-900)]">{children}</span>;
 }
 
 /**
