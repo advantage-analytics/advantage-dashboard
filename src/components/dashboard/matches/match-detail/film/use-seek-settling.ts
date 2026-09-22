@@ -22,8 +22,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
  *   flash. A second `seeking` inside the grace keeps the first timer — the
  *   seek has been in flight since then.
  * - **`seeked` clears it**, pending timer included.
- * - **A new `generation` resets it.** The element is keyed on the generation,
- *   so the old one can never fire the `seeked` that would have cleared it.
+ * - **Only a frame the viewer has SEEN is dimmed.** Before the element's
+ *   first `loadeddata` there is nothing on screen to dim, and on a cold open
+ *   of a large cut the mount nudge's own seek can outlast the grace — the
+ *   black frame would go to 60% and then pop to full as the first frame
+ *   landed. Wire `onLoadedData` too; until it fires, `seeking` stays false.
+ * - **A new `generation` resets both.** The element is keyed on the
+ *   generation, so the old one can never fire the `seeked` that would have
+ *   cleared it, and the new one has a first frame of its own to wait for.
  * - **Unmount clears the timer.**
  *
  * A second listener beside the T14 trace's, never a replacement for it.
@@ -35,16 +41,19 @@ export function useSeekSettling({
   graceMs: number;
   generation: number;
 }) {
-  const [seeking, setSeeking] = useState(false);
-  // The generation `seeking` belongs to. Compared during render, so a stranded
-  // `true` from the old element is never painted on the new one.
+  const [inFlight, setInFlight] = useState(false);
+  // The generation `inFlight` belongs to. Compared during render, so a
+  // stranded `true` from the old element is never painted on the new one.
   const [seekingGeneration, setSeekingGeneration] = useState(generation);
+  // The generation whose first frame has arrived; -1 until any has.
+  const [readyGeneration, setReadyGeneration] = useState(-1);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   if (seekingGeneration !== generation) {
     setSeekingGeneration(generation);
-    setSeeking(false);
+    setInFlight(false);
   }
+  const seeking = inFlight && readyGeneration === generation;
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -57,18 +66,29 @@ export function useSeekSettling({
     if (timerRef.current !== null) return;
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      setSeeking(true);
+      setInFlight(true);
     }, graceMs);
   }, [graceMs]);
 
+  // A completed seek has put a frame on screen too, so it counts as the first
+  // frame as well as ending the seek. This matters because `loadeddata` can
+  // fire before React has attached the handler — a cached file reaches
+  // readyState 4 the moment the element exists (the room's `settle` guards
+  // the same race for `loadedmetadata`) — and a dim that then never happened
+  // would be the T16 fix quietly undone.
   const onSeeked = useCallback(() => {
     clearTimer();
-    setSeeking(false);
-  }, [clearTimer]);
+    setInFlight(false);
+    setReadyGeneration(generation);
+  }, [clearTimer, generation]);
+
+  const onLoadedData = useCallback(() => {
+    setReadyGeneration(generation);
+  }, [generation]);
 
   // Runs on a generation change (the old element's pending grace must not
   // light the new one) and on unmount.
   useEffect(() => clearTimer, [generation, clearTimer]);
 
-  return { seeking, onSeeking, onSeeked };
+  return { seeking, onSeeking, onSeeked, onLoadedData };
 }

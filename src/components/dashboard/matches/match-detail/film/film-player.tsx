@@ -285,16 +285,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const [failed, setFailed] = useState(false);
     // T16: dim the held frame while a seek the chrome already made is still
     // landing. Display only — `seekTo` / `pushTime` are untouched.
+    // `seeking` is already gated on the element's first `loadeddata` (a cold
+    // open of a large cut must not dim a frame nobody has seen), so wiring
+    // `onLoadedData` below is what makes the dim possible at all.
     const settling = useSeekSettling({ graceMs: 120, generation });
-    // The dim is for a frame the viewer has SEEN: before the element's first
-    // `loadeddata` there is nothing on screen to dim, and on a cold open of a
-    // large cut the mount nudge's own seek can outlast the grace — without
-    // this the black frame would go to 60% and then pop to full as the first
-    // frame landed. Per generation, because a keyed remount is a new element
-    // with its own first frame; the room keeps the same rule as `videoReady`.
-    const [readyGeneration, setReadyGeneration] = useState(-1);
-    const frameReady = readyGeneration === generation;
-    const dimming = settling.seeking && frameReady;
     const traceRef = useFilmTrace(videoRef, generation, "report");
 
     const syncClock = useFilmClockVars(
@@ -650,12 +644,12 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             playsInline
             data-testid="film-player-video"
             data-generation={generation}
-            data-film-seeking={dimming ? "true" : undefined}
+            data-film-seeking={settling.seeking ? "true" : undefined}
             className={cn(
               "absolute inset-0 h-full w-full object-contain transition-opacity duration-200",
-              dimming ? "opacity-60" : "opacity-100",
+              settling.seeking ? "opacity-60" : "opacity-100",
             )}
-            onLoadedData={() => setReadyGeneration(generation)}
+            onLoadedData={settling.onLoadedData}
             onClick={togglePlay}
             onPlay={() => {
               setPlaying(true);

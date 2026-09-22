@@ -1284,6 +1284,16 @@ test("T16: a held seek in the room dims the frame while the chrome is already on
   page,
 }) => {
   await openRoomWithDrawer(page, "hold-room");
+  // Opened at time zero the room's element has decoded nothing yet (metadata
+  // preload, no seek to force a frame), and the dim is withheld for a frame
+  // nobody has seen. A real seek first, so there IS a frame on screen.
+  await seekTo(page, ROOM, 0.3);
+  await page.waitForFunction(
+    (sel) =>
+      (document.querySelector(sel) as HTMLVideoElement | null)?.readyState! >=
+      2,
+    ROOM,
+  );
   await expect(page.locator(ROOM)).not.toHaveAttribute(SEEKING, /.*/);
   await holdSeeks(page);
 
@@ -1354,9 +1364,9 @@ test("the report player never dims a frame it has not shown yet", async ({
   // Hold every media request the NEXT element makes, so it can never reach
   // `loadeddata` until released — a cold open of a large cut, where the
   // first frame is seconds away.
-  const held: Route[] = [];
+  const heldRoutes: Route[] = [];
   await page.route("**/fixtures/**", (route) => {
-    held.push(route);
+    heldRoutes.push(route);
   });
 
   // A fresh player (the tab rebuilt), whose element has shown nothing.
@@ -1379,7 +1389,7 @@ test("the report player never dims a frame it has not shown yet", async ({
   // Released, the first frame lands and the same seek in flight now dims.
   // Continue the held ones before unrouting: `unroute` disposes of any
   // request still parked on the handler.
-  for (const route of held) await route.continue();
+  for (const route of heldRoutes) await route.continue();
   await page.unroute("**/fixtures/**");
   await page.waitForFunction(
     (sel) =>

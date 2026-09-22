@@ -1399,7 +1399,10 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                     ? "opacity-60"
                     : "opacity-100",
               )}
-              onLoadedData={() => setVideoReady(true)}
+              onLoadedData={() => {
+                setVideoReady(true);
+                settling.onLoadedData();
+              }}
               onClick={togglePlay}
               // R1 (2026-09-22): click the film plays/pauses. Double-click no
               // longer exits — a fast click burst (click, click, dblclick)
