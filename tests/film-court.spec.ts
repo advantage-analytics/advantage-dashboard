@@ -41,6 +41,7 @@ const shot = (
   zone: null,
   result,
   videoTime: null,
+  bounceVideoTime: null,
   contactX: contact?.[0] ?? null,
   contactY: contact?.[1] ?? null,
   landingX: landing?.[0] ?? null,

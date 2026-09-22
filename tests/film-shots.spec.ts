@@ -20,6 +20,7 @@ const shot = (id: string, videoTime: number | null, extra = {}) => ({
   zone: null,
   result: "In",
   videoTime,
+  bounceVideoTime: null,
   contactX: null,
   contactY: null,
   landingX: null,

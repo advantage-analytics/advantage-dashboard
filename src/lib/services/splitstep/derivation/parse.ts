@@ -49,6 +49,19 @@ export function num(value: unknown): number | null {
   return value;
 }
 
+/**
+ * The bounce frame, or null when it is missing, non-finite, the sentinel, or
+ * earlier than the contact frame — the same ordering rule the trajectories
+ * file gets in ball-paths.ts. A bounce with no contact frame to anchor it is
+ * nulled too: nothing can order it, and the fit in frame-clock.ts would skip
+ * that stroke's pair anyway.
+ */
+function bounceFrame(value: unknown, frame: number | null): number | null {
+  const candidate = num(value);
+  if (candidate === null || frame === null) return null;
+  return candidate < frame ? null : candidate;
+}
+
 /** A string field, or null if it carries the sentinel or is blank. */
 function str(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -147,11 +160,13 @@ export function normalizeStroke(
   const bounce = position(raw.bounce_x_m, raw.bounce_y_m);
   const player = position(raw.player_x_m, raw.player_y_m);
   const opponent = position(raw.opponent_x_m, raw.opponent_y_m);
+  const frame = num(raw.frame);
 
   return {
     eventId: num(raw.event_id) ?? -1,
     videoTime: time + startTimeSeconds,
-    trimmedFrame: num(raw.frame) ?? -1,
+    trimmedFrame: frame ?? -1,
+    bounceFrame: bounceFrame(raw.bounce_frame, frame),
 
     rallyId,
     strokeNumber,

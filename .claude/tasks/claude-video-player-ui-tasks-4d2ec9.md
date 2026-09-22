@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Carry the vendor's bounce_frame to shots.bounce_video_time
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) src/lib/services/splitstep/derivation/types.ts, parse.ts, ball-paths.ts (move `fitFrameToTime` to a new pure `frame-clock.ts` and import it back), transcript.ts, persist-transcript.ts, src/lib/data/match-points-server.ts (select + `MatchShot`), supabase/migrations/<stamp>_add_shot_bounce_video_time.sql (new), tests/splitstep-derivation.spec.ts or a new node spec, tests/splitstep-ball-paths.spec.ts (import path only), the two specs that build `MatchShot` literals
 - **done when:**

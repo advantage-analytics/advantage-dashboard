@@ -1294,6 +1294,8 @@ test.describe("match_video_attachments activation + alignment RPCs (live)", () =
         shot_number: shotNumber,
         is_player1: true,
         video_time: videoTime,
+        // Imported rows never carry a bounce; only the derivation path writes one.
+        bounce_video_time: null,
       })
       .select("id")
       .single();
