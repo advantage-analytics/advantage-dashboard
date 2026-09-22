@@ -96,6 +96,7 @@ import type {
   AttachmentResumeIntent,
 } from "./use-attachment-playback";
 import { useBallPaths } from "./use-ball-paths";
+import { useSeekSettling } from "./use-seek-settling";
 
 /**
  * The fullscreen film room (Film Room Fullscreen handoff, F1–F5).
@@ -351,6 +352,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   );
   const panelOpen = panel === "open";
   const [videoReady, setVideoReady] = useState(false);
+  // T16: the frame admits it is still catching up with a seek the chrome has
+  // already made. Display only — `seek` is untouched and still marks on click.
+  const settling = useSeekSettling({ graceMs: 120, generation: p.generation });
   // T14: the seek trace is opt-in (`localStorage["film-room:trace"]`), read
   // once. Off, the ref stays null — no listener, no `performance` call.
   const [traceOn] = useState(readTraceFlag);
@@ -1356,9 +1360,15 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               playsInline
               data-testid="film-room-video"
               data-generation={p.generation}
+              data-film-seeking={settling.seeking ? "true" : undefined}
               className={cn(
                 "absolute inset-0 h-full w-full object-contain transition-opacity duration-200",
-                videoReady ? "opacity-100" : "opacity-0",
+                // Not ready wins; a seek past its grace dims the held frame.
+                !videoReady
+                  ? "opacity-0"
+                  : settling.seeking
+                    ? "opacity-60"
+                    : "opacity-100",
               )}
               onLoadedData={() => setVideoReady(true)}
               onClick={togglePlay}
@@ -1391,7 +1401,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 syncClock();
               }}
               onTimeUpdate={(e) => onTimeUpdate(e.currentTarget.currentTime)}
+              onSeeking={settling.onSeeking}
               onSeeked={(e) => {
+                settling.onSeeked();
                 mark(e.currentTarget.currentTime);
                 syncClock();
               }}

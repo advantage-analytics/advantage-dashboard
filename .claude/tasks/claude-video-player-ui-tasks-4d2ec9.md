@@ -215,7 +215,7 @@ ready).
 
 ## T16 · The frame says it is catching up: a seeking state on both players
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/use-seek-settling.ts (new, one hook shared by both players — `use-corner-drag.ts` is the naming precedent; no `.tsx` twin); film-fullscreen.tsx (the room's `<video>` L1348–1403, its className L1359–1362); film-player.tsx (the shell's `<video>` L644–676, className L654); tests/film-playback-refresh.spec.ts (a hold seam beside `jumpRows` L1046, cases after the T14 block)
 - **done when:**

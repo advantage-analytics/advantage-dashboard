@@ -1152,3 +1152,118 @@ test("T14: with the trace flag set, each jump prints one table", async ({
   await expect.poll(async () => (await traceCalls(page)).tables).toBe(2);
   expect((await traceCalls(page)).entries).toBe(2);
 });
+
+/* -------------------------------------------------------------------------
+ * The frame says it is catching up (T16)
+ *
+ * A point jump moves the chrome on the click and the film when `seeked`
+ * fires; on a real match that is up to 1.2 s later (the T14 trace). The
+ * fixture is two seconds and buffers at once, so the lag is made here: the
+ * `currentTime` setter announces `seeking` straight away and applies the real
+ * assignment `HOLD_MS` later, so the native `seeking` / `seeked` follow it.
+ *
+ * Installed with `page.evaluate` AFTER the room is ready, never with
+ * `addInitScript` — at mount it would defer `settle` / `land` too.
+ * ---------------------------------------------------------------------- */
+
+const HOLD_MS = 400;
+const SEEKING = "data-film-seeking";
+
+async function holdSeeks(page: Page, holdMs = HOLD_MS) {
+  await page.evaluate((ms) => {
+    const proto = HTMLMediaElement.prototype;
+    const real = Object.getOwnPropertyDescriptor(proto, "currentTime")!;
+    Object.defineProperty(proto, "currentTime", {
+      configurable: true,
+      enumerable: real.enumerable,
+      get: real.get,
+      set(this: HTMLMediaElement, value: number) {
+        this.dispatchEvent(new Event("seeking"));
+        setTimeout(() => real.set!.call(this, value), ms);
+      },
+    });
+  }, holdMs);
+}
+
+/** Present within 200 ms of the click, then gone once the film lands on `c`. */
+async function expectSeekingThenLanded(page: Page, selector: string) {
+  await expect
+    .poll(() => page.locator(selector).getAttribute(SEEKING), {
+      timeout: 200,
+      intervals: [20],
+    })
+    .toBe("true");
+  await expect
+    .poll(() => page.locator(selector).getAttribute(SEEKING), {
+      timeout: 5000,
+    })
+    .toBeNull();
+  const time = (await state(page, selector))?.time ?? -1;
+  expect(Math.abs(time - STOP_START.c)).toBeLessThan(0.1);
+}
+
+test("T16: a held seek in the room dims the frame while the chrome is already on the point", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "hold-room");
+  await expect(page.locator(ROOM)).not.toHaveAttribute(SEEKING, /.*/);
+  await holdSeeks(page);
+
+  await page.click(DRAWER_ROW("c"));
+  // Option A: the row lights on the click, not on `seeked`.
+  await expect
+    .poll(
+      () =>
+        page
+          .locator(
+            `aside[aria-label="Points"] [data-point-id="c"][data-playing="true"]`,
+          )
+          .count(),
+      { timeout: 200, intervals: [20] },
+    )
+    .toBe(1);
+  await expectSeekingThenLanded(page, ROOM);
+});
+
+test("T16: buffered jumps in the room never set the seeking attribute", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "hold-off");
+  await page.evaluate(
+    ([sel, attr]) => {
+      const w = window as unknown as { __seekingSets: number };
+      w.__seekingSets = 0;
+      new MutationObserver((records) => {
+        for (const r of records) {
+          const el = r.target as Element;
+          if (el.getAttribute(attr) !== null) w.__seekingSets += 1;
+        }
+      }).observe(document.querySelector(sel)!, {
+        attributes: true,
+        attributeFilter: [attr],
+      });
+    },
+    [ROOM, SEEKING] as const,
+  );
+
+  await jumpRows(page);
+
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { __seekingSets: number }).__seekingSets,
+    ),
+  ).toBe(0);
+});
+
+test("T16: a held seek in the report player dims its frame the same way", async ({
+  page,
+}) => {
+  await open(page, "hold-shell", { ttl: String(60 * 60 * 1000) });
+  await expect(page.locator(REPORT)).not.toHaveAttribute(SEEKING, /.*/);
+  await holdSeeks(page);
+
+  await page.click(
+    `[data-point-id="c"][role="button"]:not(aside[aria-label="Points"] *)`,
+  );
+  await expectSeekingThenLanded(page, REPORT);
+});

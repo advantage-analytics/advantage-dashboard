@@ -49,6 +49,7 @@ import type {
   AttachmentPlaybackProblem,
   AttachmentResumeIntent,
 } from "./use-attachment-playback";
+import { useSeekSettling } from "./use-seek-settling";
 
 /**
  * The match video with the room's transport under it, in the tab.
@@ -282,6 +283,9 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const [looping, setLooping] = useState(false);
     const [skipDead, setSkipDead] = useState(false);
     const [failed, setFailed] = useState(false);
+    // T16: dim the held frame while a seek the chrome already made is still
+    // landing. Display only — `seekTo` / `pushTime` are untouched.
+    const settling = useSeekSettling({ graceMs: 120, generation });
     // T14: the seek trace is opt-in (`localStorage["film-room:trace"]`), read
     // once. Off, the ref stays null — no listener, no `performance` call.
     const [traceOn] = useState(readTraceFlag);
@@ -651,7 +655,11 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             playsInline
             data-testid="film-player-video"
             data-generation={generation}
-            className="absolute inset-0 h-full w-full object-contain"
+            data-film-seeking={settling.seeking ? "true" : undefined}
+            className={cn(
+              "absolute inset-0 h-full w-full object-contain transition-opacity duration-200",
+              settling.seeking ? "opacity-60" : "opacity-100",
+            )}
             onClick={togglePlay}
             onPlay={() => {
               setPlaying(true);
@@ -669,7 +677,11 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               syncClock();
             }}
             onTimeUpdate={(e) => onTime(e.currentTarget.currentTime)}
-            onSeeked={(e) => onTime(e.currentTarget.currentTime)}
+            onSeeking={settling.onSeeking}
+            onSeeked={(e) => {
+              settling.onSeeked();
+              onTime(e.currentTarget.currentTime);
+            }}
             onError={() => (passthrough ? setFailed(true) : onLoadFailure())}
           >
             Your browser cannot play this video.

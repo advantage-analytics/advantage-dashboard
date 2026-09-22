@@ -169,3 +169,15 @@ Reading them: `remounted: true` = a credential swap or an error recovery; `buffe
 2. Cheaper alternative: a second pass over the finished OPFS file that moves `moov` to the front and rewrites `stco`/`co64` chunk offsets — one extra full write, no memory hold.
 3. Files already on Azure keep their layout either way; rewriting them is an ops job (`azure-storage` skill).
 4. The T14 trace decides whether any of this is worth it: `bufferedAtSeek: false` + `waitingCount > 0` on point jumps is the signature.
+
+## T16 · The frame says it is catching up: a seeking state on both players — done
+
+**gate:** mechanical pass (clean on the first full run) · completion `VERDICT: pass` · widget-states: loading/empty/error unchanged on `film-fullscreen.tsx` and `film-player.tsx` (a `data-film-seeking` attribute and an opacity class on the two existing `<video>` elements; no fallback, panel or `return null` touched)
+
+**changed:** New `use-seek-settling.ts`: `useSeekSettling({ graceMs, generation })` → `{ seeking, onSeeking, onSeeked }`; `seeking` turns true only when a seek has been in flight 120 ms without `seeked` (a second `seeking` inside the grace keeps the first timer), `seeked` clears flag and timer, a `generation` change resets during render and the effect cleanup clears the timer on generation change and unmount. Both players call it and wire `onSeeking` plus a `settling.onSeeked()` at the top of the existing `onSeeked`; each `<video>` carries `data-film-seeking="true"` only while seeking. Opacity only: room `opacity-0` (not ready) still wins, then `opacity-60` while seeking, else `opacity-100`, through the existing `transition-opacity duration-200`; the shell gains the same transition and pair. No spinner, skeleton, readout, transform or new node; `film-transport.tsx`, `film-scoreboard.tsx`, `film-room-drawer.tsx`, `film-trace.ts`, `use-attachment-playback.ts`, `film-tab.tsx` not in the diff. Option A held: `seek`, `mark`, `land`, `settle`, `onTimeUpdate`'s re-seeks, `seekTo`, `pushTime`, `preload` unchanged, so the drawer row, board, transport readout and `savePoint` still advance on the click while the frame dims. Spec: `holdSeeks()` seam via `page.evaluate` after the room opens (wraps the `currentTime` setter — `seeking` at once, real assignment 400 ms later); (a) room hold-on: row `c` lit and the attribute present within 200 ms, then gone with `currentTime` within 0.1 s of 0.45; (b) room hold-off: a `MutationObserver` records zero sets across three buffered jumps; (c) shell hold-on: the same sequence on `film-player-video`. 28/28 refresh, 6/6 trace + motion.
+
+**follow-ups:**
+
+1. The shell's `seekTo` may skip a seek within `REACHED_EPSILON` of the current time (no `seeking`, no dim) — harmless, check if "clicked the current row" ever looks wrong.
+2. The 60 % dim could be named in `reference/empty-and-loading.md` as the "in-flight media seek" pattern so other surfaces reuse it instead of adding a spinner.
+3. Still no eyes-on in the browser for anything on this branch (court drag, mark fade-in, docked readout, row reveal, shot-well unfold, and now the seek dim) — one pass in the room before `/pr-check`.
