@@ -189,3 +189,12 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical pass (the run before it failed only on live-DB `seats-count-players.spec.ts:150`); completion pass against the amended criterion
 **changed:** The author approved shift semantics and the second criterion now reads "D1's pair ends on D3 and the others shift up like singles". The work was restored from stash 53dbb7e5. New `src/lib/schedule/doubles-order.ts` holds `applyDoublesOrder`. `DoublesLineup` renders `ReorderableDoubles`/`PairItem` (grip-only framer `Reorder.Group`, using the same `moveToken` keyboard as singles), or `StaticDoubles` when any doubles line is settled. The grip and keyboard handling were extracted into `LineupGrip`/`gripKey`, which singles and doubles share. `useDualDraft.setDoublesOrder` is passed through `DualLineupStep.onDoublesOrder` and `new-dual-flow.tsx`. The harness adds `?free=1`, and specs were added in `singles-order.spec.ts` and `schedule-doubles-picker.spec.ts`.
 **follow-ups:** see the blocked entry above (mouse drag untested, shared reorder hook, `noPlayer` on a vacated court).
+
+## T20 · Drafts know the match they fill, and fold onto it — done
+
+**gate:** mechanical pass (on re-run; the first run failed only on live-DB specs while the reviewer ran concurrently); completion pass
+**changed:** New `src/lib/wizard/draft-target.ts` holds pure helpers kept out of the "use server" file: `draftTargetMatchId`, `DRAFT_TARGET_SELECT`, `draftTargetFromColumns` and `foldDrafts`. `DraftRow.matchId` is filled by `listMatchDrafts` through a JSON-path select (`payload->preset->>matchId`, `payload->attachedLine->>matchId`). The wizard's `existingMatchId` and `handleCreateMatch` reuse call the helper; a preset with a null `matchId` now falls through to `attachedLine`. `tests/fixtures/upload-wizard-hook.ts` (outside `files:`, required) lists the new module and records `queryCalls`. `upload-draft-resume.spec.ts` pins the helper, the listing, the fold and the no-duplicate update branch. A live check confirmed one draft in `match_drafts` carries `preset.matchId`, which is the double listing the author saw.
+**follow-ups:**
+
+1. The UI half is T21: wire `foldDrafts` into `src/app/dashboard/matches/(list)/page.tsx` and the grid.
+2. Restarting "Add video" from the drawer creates a new draft instead of resuming the existing one.

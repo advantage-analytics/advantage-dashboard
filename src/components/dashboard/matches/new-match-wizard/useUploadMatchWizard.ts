@@ -70,6 +70,7 @@ import {
   type IdentityMatchStatus,
 } from "./types";
 import { deleteMatchDraft, saveMatchDraft } from "@/lib/wizard/actions";
+import { draftTargetMatchId } from "@/lib/wizard/draft-target";
 import { playedSets, scoreSetsFrom } from "@/lib/ui/score-format";
 import type { CreatedMatch } from "./upload-progress";
 import {
@@ -958,7 +959,7 @@ export function useUploadMatchWizard({
   useEffect(() => {
     activeWorkspaceRef.current = activeWorkspace;
   }, [activeWorkspace]);
-  const existingMatchId = (preset ?? attachedLine)?.matchId ?? null;
+  const existingMatchId = draftTargetMatchId({ preset, attachedLine });
   const [pinnedMatchWorkspace, setPinnedMatchWorkspace] =
     useState<Workspace | null>(null);
   useEffect(() => {
@@ -2610,9 +2611,13 @@ export function useUploadMatchWizard({
         // receipt exists to rule out.
         // A line reached either way — pinned by the page, or offered on the
         // details step and accepted — is the same destination.
+        // The same rule the Matches table folds drafts by
+        // (`draftTargetMatchId`), so a resumed draft updates the match it is
+        // listed under rather than minting a second row.
         const line = preset ?? attachedLine;
-        const matchId = line?.matchId ?? crypto.randomUUID();
-        const reusingMatch = Boolean(line?.matchId);
+        const existingTarget = draftTargetMatchId({ preset, attachedLine });
+        const matchId = existingTarget ?? crypto.randomUUID();
+        const reusingMatch = existingTarget !== null;
 
         const adjustedPlayerScores = getAdjustedScores(
           formData.playerScores,

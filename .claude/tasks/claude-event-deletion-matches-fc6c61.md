@@ -270,7 +270,7 @@ ready).
 
 ## T20 · Drafts know the match they fill, and fold onto it
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/wizard/actions.ts (`saveMatchDraft` :586, `DraftRow` :686, `listMatchDrafts` :697), src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (`existingMatchId` :961, `handleCreateMatch` :2613), src/lib/wizard/draft-target.ts (new), tests/upload-draft-resume.spec.ts (guess)
 - **done when:**

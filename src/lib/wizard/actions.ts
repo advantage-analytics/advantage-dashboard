@@ -31,6 +31,11 @@ import type {
   LineOffer,
   MatchDraft,
 } from "@/components/dashboard/matches/new-match-wizard/types";
+import {
+  DRAFT_TARGET_SELECT,
+  draftTargetFromColumns,
+  type DraftTargetColumns,
+} from "@/lib/wizard/draft-target";
 
 /** Days either side of the file's date a line still counts as "this match". */
 const OFFER_WINDOW_DAYS = 2;
@@ -692,6 +697,13 @@ export interface DraftRow {
   stepCount: number;
   fileName: string | null;
   updatedAt: string;
+  /**
+   * The existing match this draft fills — `draftTargetMatchId()` over the
+   * stored payload — or null for a draft that will create one. The Matches
+   * table folds such a draft onto that match (`foldDrafts()`) instead of
+   * listing one court twice.
+   */
+  matchId: string | null;
 }
 
 export async function listMatchDrafts(scope: {
@@ -705,7 +717,9 @@ export async function listMatchDrafts(scope: {
   let query = supabase
     .from("match_drafts")
     .select(
-      "id, player_name, event_label, step_index, step_count, file_name, updated_at",
+      // Two JSON paths, not the whole payload: the list needs one id out of
+      // it, and the payload carries every answer the wizard holds.
+      `id, player_name, event_label, step_index, step_count, file_name, updated_at, ${DRAFT_TARGET_SELECT}`,
     )
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false });
@@ -714,7 +728,7 @@ export async function listMatchDrafts(scope: {
     : query.is("program_id", null);
   const { data } = await query;
   return (
-    (data ?? []) as {
+    (data ?? []) as unknown as ({
       id: string;
       player_name: string | null;
       event_label: string | null;
@@ -722,7 +736,7 @@ export async function listMatchDrafts(scope: {
       step_count: number;
       file_name: string | null;
       updated_at: string;
-    }[]
+    } & DraftTargetColumns)[]
   ).map((row) => ({
     id: row.id,
     playerName: row.player_name,
@@ -731,6 +745,7 @@ export async function listMatchDrafts(scope: {
     stepCount: row.step_count,
     fileName: row.file_name,
     updatedAt: row.updated_at,
+    matchId: draftTargetFromColumns(row),
   }));
 }
 
