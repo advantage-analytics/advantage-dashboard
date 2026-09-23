@@ -132,6 +132,18 @@ export interface EntryMatch {
   opponentLabels: string[];
   /** Has a processing job, i.e. video was actually sent. */
   hasVideo: boolean;
+  /**
+   * `matches.duration` run through the matches list's own formatter ("1H 42M"),
+   * so the event drawer reads the same length the Matches drawer does. Null or
+   * empty when nobody recorded one. Optional so older fixtures need not state it.
+   */
+  duration?: string | null;
+  /** `matches.source_provider` — a `providers` id, or null for a hand score. */
+  sourceProvider?: string | null;
+  /** `processing_jobs.id` from the analysis map — what a retry acts on. */
+  jobId?: string | null;
+  /** The failed job's note, from the analysis map. */
+  failNote?: string | null;
 }
 
 export interface EventEntry {

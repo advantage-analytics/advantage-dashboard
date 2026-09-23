@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Calendar, Info, MapPin, Trophy } from "lucide-react";
+import { Calendar, Clock, Info, MapPin, Trophy } from "lucide-react";
 import { PeekDrawerFrame } from "@/components/dashboard/matches/match-drawer";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 import {
   AnalysisNotice,
   DrawerFact,
   DrawerHeading,
+  ProviderFact,
   SnapshotSection,
   drawerSideName,
   useMatchSnapshot,
@@ -41,6 +42,7 @@ import {
 import { LINE_STATUS } from "@/lib/schedule/line-status";
 import { scoreSetsFrom } from "@/lib/ui/score-format";
 import { advButton } from "@/lib/ui/adv-button";
+import { formatShortDate } from "@/lib/ui/date-format";
 import { cn } from "@/lib/utils";
 import type {
   EventEntry,
@@ -283,8 +285,12 @@ export function EventLineDrawer({
 
         <dl className="flex min-w-0 flex-col gap-0.5 text-left">
           <DrawerFact label="Date" icon={<Calendar />}>
+            {/* The match's own day once there is one — the Matches drawer's
+                formatter — else the event's dates (a tournament's span). */}
             <span className="tabular">
-              {formatEventDatesLong(event.startsOn, event.endsOn)}
+              {played?.date
+                ? formatShortDate(played.date)
+                : formatEventDatesLong(event.startsOn, event.endsOn)}
             </span>
           </DrawerFact>
           <DrawerFact
@@ -307,6 +313,14 @@ export function EventLineDrawer({
             {eventLabel}
             <span className="text-[var(--ink-500)]"> · {lineLabel}</span>
           </DrawerFact>
+          {/* The Matches drawer's order: the match's own facts, then Format
+              last. A line with no match draws neither. */}
+          {played?.duration ? (
+            <DrawerFact label="Duration" icon={<Clock />}>
+              <span className="tabular">{played.duration}</span>
+            </DrawerFact>
+          ) : null}
+          {played ? <ProviderFact providerId={played.sourceProvider} /> : null}
           <DrawerFact label="Format" icon={<Info />}>
             {lineFormatWords(event.format, entry.discipline)}
           </DrawerFact>
@@ -330,7 +344,11 @@ export function EventLineDrawer({
           </div>
         ) : played ? (
           <>
-            <AnalysisNotice status={status} canRetry={false} />
+            <AnalysisNotice
+              status={status}
+              failNote={played.failNote}
+              canRetry={false}
+            />
             {settled && isAnalysisReady(played.status) ? (
               <LineSnapshot matchId={played.id} />
             ) : null}

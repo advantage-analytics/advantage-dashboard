@@ -208,3 +208,13 @@ is the runner's. Newest entries at the bottom.
 1. The drawer footer vs `tables.md`: should "View match" become a ghost "Open match" on every match, with a primary only when an action applies? That affects every match drawer.
 2. On phones (`MatchCardGallery`, below 1024px) there's no Draft pill, and drafts were never listed, so a folded draft can't be reached there.
 3. A failed-analysis match with a folded draft shows View match (ghost), Continue upload (primary) and Retry (outline) together. Needs a design look.
+
+## T22 · The event drawer shows the played match's own facts — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite, first run) · completion `VERDICT: pass`
+
+**changed:** `EntryMatch` gains optional `duration`/`sourceProvider`/`jobId`/`failNote`; `schedule-server.ts` selects `duration`, formats it with `formatDuration`, maps the previously dropped `source_provider`, and takes `jobId`/`failNote` from the analysis loader. `ProviderFact` moved verbatim from `match-drawer.tsx` into `drawer-sections.tsx` and both drawers render it. `EventLineDrawer`'s facts now run Date (the match's own day via `formatShortDate`), Court, Home/Away, Event, Duration, Provider, Format; a line with no match is unchanged. `AnalysisNotice` also receives `failNote`. Specs: dual S2 fact order + Duration "1H 42M" + Provider "SwingVision"; no-match S1 has neither; tournament R16 Date reads "Sep 11"; `drawer-sections.spec.ts` stubs `next/image` and covers `ProviderFact`.
+
+**follow-ups:**
+
+1. No loader spec asserts that `duration`, `sourceProvider`, `jobId` and `failNote` are mapped — one assertion in `tests/schedule-outcome-loader.spec.ts` would cover it.

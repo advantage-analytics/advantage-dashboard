@@ -391,6 +391,28 @@ test("a played singles line opens the drawer with its match, facts and follow-up
   await expect(panel.locator("dl").first()).toContainText(
     "vs Meridian State · S2",
   );
+  // T22: the match's own facts, in the Matches drawer's order — Duration and
+  // Provider after Event, Format last.
+  const facts = panel.locator("dl").first().locator("dt");
+  await expect(facts).toHaveText([
+    "Date",
+    "Court",
+    "Home/Away",
+    "Event",
+    "Duration",
+    "Provider",
+    "Format",
+  ]);
+  const fact = (label: string) =>
+    panel
+      .locator("dl")
+      .first()
+      .locator("div", {
+        has: page.locator("dt", { hasText: new RegExp(`^${label}$`) }),
+      })
+      .locator("dd");
+  await expect(fact("Duration")).toHaveText("1H 42M");
+  await expect(fact("Provider")).toHaveText("SwingVision");
   // The line has its video, and a coach sees ⋯.
   await expect(panel.getByRole("link", { name: "Add video" })).toHaveCount(0);
   await expect(
@@ -492,6 +514,19 @@ test("a doubles line is score only; an unplayed line asks for a result; outcomes
 
   await open(page, "?normal");
   await line(page, "S1").click();
+  // T22: a line with no match draws none of the match's own facts, and
+  // nothing leads to a report.
+  const s1Facts = drawer(page).locator("dl").first().locator("dt");
+  await expect(s1Facts).toHaveText([
+    "Date",
+    "Court",
+    "Home/Away",
+    "Event",
+    "Format",
+  ]);
+  await expect(
+    drawer(page).locator('a[href^="/dashboard/matches/"]'),
+  ).toHaveCount(0);
   const add = drawer(page).getByRole("link", {
     name: "Add result",
     exact: true,

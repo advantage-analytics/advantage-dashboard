@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import { shortName } from "@/lib/data/match-utils";
+import { providers } from "@/lib/providers";
 import {
   ANALYSIS_LABEL,
   isAnalysisFailed,
@@ -56,6 +58,60 @@ export function DrawerFact({
         {children}
       </dd>
     </div>
+  );
+}
+
+/**
+ * The "Provider" fact — where a match's numbers came from, with that source's
+ * mark. Shared so the Matches drawer and the schedule's line drawer draw the
+ * same row. Null for an id `providers` does not hold (a hand score has none).
+ */
+export function ProviderFact({
+  providerId,
+}: {
+  providerId: string | null | undefined;
+}) {
+  const provider = providers.find((p) => p.id === providerId);
+  if (!provider) return null;
+  return (
+    <DrawerFact
+      label="Provider"
+      icon={
+        provider.id === "splitstep" ? (
+          <span className="flex size-4 items-center justify-center rounded-[3px] bg-[var(--ink-900)]">
+            <Image
+              src="/logos/logo3.svg"
+              alt=""
+              width={10}
+              height={7}
+              className="brightness-0 invert"
+            />
+          </span>
+        ) : provider.id === "swing-vision" ? (
+          // Unoptimized: the optimizer's 16/32px q75 rendition of
+          // this 200px app icon reads blurry; let the browser
+          // downsample the source at the screen's own density.
+          <Image
+            src="/providers/swingvision-icon.png"
+            alt=""
+            width={16}
+            height={16}
+            unoptimized
+            className="size-4 rounded-[3px] object-cover"
+          />
+        ) : (
+          <Image
+            src={provider.logo}
+            alt=""
+            width={16}
+            height={16}
+            className="size-4 object-contain"
+          />
+        )
+      }
+    >
+      {provider.name}
+    </DrawerFact>
   );
 }
 

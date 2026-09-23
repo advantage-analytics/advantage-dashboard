@@ -295,7 +295,7 @@ ready).
 
 ## T22 · The event drawer shows the played match's own facts
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/schedule/types.ts (`EntryMatch` :89), src/lib/data/schedule-server.ts (`MATCH_COLUMNS` :42, the `EntryMatch` mapping ~:252), src/components/dashboard/matches/drawer-sections.tsx, src/components/dashboard/matches/match-drawer.tsx (Provider fact :249-288), src/components/dashboard/schedule/event-line-drawer.tsx (facts `<dl>` :284-313), tests/fixtures/schedule-dual-outcomes-data.ts, tests/fixtures/schedule-tournament-outcomes-data.ts, tests/schedule-dual-outcomes.spec.ts, tests/schedule-tournament-outcomes.spec.ts (guess; line refs verified)
 - **done when:**

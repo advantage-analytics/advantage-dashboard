@@ -19,6 +19,8 @@ type Snapshot = {
 const sections = createLoader({
   stubs: {
     "next/link": marker("Link"),
+    // `ProviderFact`'s marks; the real `next/image` reads `process.env`.
+    "next/image": marker("Image"),
     "@/lib/supabase/client": { createClient: () => null },
     "@/components/dashboard/result-mark": { ResultMark: marker("ResultMark") },
     "@/components/dashboard/score-line": { ScoreLine: marker("ScoreLine") },
@@ -26,6 +28,9 @@ const sections = createLoader({
 }).load("src/components/dashboard/matches/drawer-sections.tsx") as {
   toSnapshot: (row: unknown) => Snapshot | null;
   drawerSideName: (name: string) => string;
+  ProviderFact: (props: { providerId: string | null | undefined }) => {
+    props: { label: string; children: unknown };
+  } | null;
 };
 
 test("toSnapshot rounds the percentages and joins break points", () => {
@@ -60,4 +65,12 @@ test("toSnapshot is null for an all-null row and for no row", () => {
 
 test("drawerSideName keeps both doubles partners", () => {
   expect(sections.drawerSideName("Maya Reid / Jess Park")).toContain(" & ");
+});
+
+test("ProviderFact names a known provider and draws nothing otherwise", () => {
+  const fact = sections.ProviderFact({ providerId: "swing-vision" });
+  expect(fact?.props.label).toBe("Provider");
+  expect(fact?.props.children).toBe("SwingVision");
+  expect(sections.ProviderFact({ providerId: "not-a-provider" })).toBeNull();
+  expect(sections.ProviderFact({ providerId: null })).toBeNull();
 });

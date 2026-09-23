@@ -14,7 +14,6 @@ import {
   Trophy,
   X,
 } from "lucide-react";
-import { providers } from "@/lib/providers";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { isAnalysisFailed, isInFlight } from "@/lib/data/match-analysis";
 import { createClient } from "@/lib/supabase/client";
@@ -24,6 +23,7 @@ import {
   AnalysisNotice,
   DrawerFact,
   DrawerHeading,
+  ProviderFact,
   SnapshotSection,
   drawerSideName,
   forgetMatchSnapshot,
@@ -143,7 +143,6 @@ export function MatchDrawer({
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
   const title = `${drawerSideName(match.player1.name)} vs ${drawerSideName(match.player2.name)}`;
-  const provider = providers.find((p) => p.id === match.sourceProvider);
   const canRetry =
     status === "failed" &&
     Boolean(match.analysis?.jobId) &&
@@ -246,46 +245,7 @@ export function MatchDrawer({
                 <span className="tabular">{match.duration}</span>
               </DrawerFact>
             )}
-            {provider && (
-              <DrawerFact
-                label="Provider"
-                icon={
-                  provider.id === "splitstep" ? (
-                    <span className="flex size-4 items-center justify-center rounded-[3px] bg-[var(--ink-900)]">
-                      <Image
-                        src="/logos/logo3.svg"
-                        alt=""
-                        width={10}
-                        height={7}
-                        className="brightness-0 invert"
-                      />
-                    </span>
-                  ) : provider.id === "swing-vision" ? (
-                    // Unoptimized: the optimizer's 16/32px q75 rendition of
-                    // this 200px app icon reads blurry; let the browser
-                    // downsample the source at the screen's own density.
-                    <Image
-                      src="/providers/swingvision-icon.png"
-                      alt=""
-                      width={16}
-                      height={16}
-                      unoptimized
-                      className="size-4 rounded-[3px] object-cover"
-                    />
-                  ) : (
-                    <Image
-                      src={provider.logo}
-                      alt=""
-                      width={16}
-                      height={16}
-                      className="size-4 object-contain"
-                    />
-                  )
-                }
-              >
-                {provider.name}
-              </DrawerFact>
-            )}
+            <ProviderFact providerId={match.sourceProvider} />
           </dl>
         </div>
 

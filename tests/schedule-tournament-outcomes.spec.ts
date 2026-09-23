@@ -310,6 +310,13 @@ test("a played round opens the match drawer with its report and facts", async ({
   await expect(panel.locator("dl").first()).toContainText(
     "Fall Invitational · R16",
   );
+  // T22: the Date fact is the R16 match's own day (Sep 11), not the
+  // tournament's Sep 10–12 span.
+  const date = panel
+    .locator("dl")
+    .first()
+    .locator("div", { has: page.locator("dt", { hasText: /^Date$/ }) });
+  await expect(date.locator("dd")).toHaveText(/^Sep 11(, 2026)?$/);
   // A coach sees ⋯ on a played round, and the entry's next-round result.
   await expect(
     panel.getByRole("button", { name: "Match actions" }),
