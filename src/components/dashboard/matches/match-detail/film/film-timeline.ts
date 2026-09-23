@@ -303,8 +303,11 @@ export interface FollowAffordance {
 
 /**
  * The strings table of the design, one row per case. `null` means no
- * affordance: not held, nothing playing (R7 dead time gets no words), or the
- * playing point IS the held point — the surface already shows the film.
+ * affordance: not held, or nothing playing (R7 dead time gets no words).
+ * Held on the playing point itself still gets one (T24): a hand scroll can
+ * carry that row out of view, and the pill is the way back to it. Whether it
+ * is drawn is the pill's own call — hidden while the lit row is wholly inside
+ * the scroller's box (T21's in-view rule).
  *
  * `playing.index` is the point's 1-based place in the walk over the applied
  * cut (`position.index`), the same number the counter prints; `null` means
@@ -315,7 +318,7 @@ export function followAffordance(
   playing: { id: string; index: number | null } | null,
 ): FollowAffordance | null {
   if (focus.mode !== "held") return null;
-  if (!playing || playing.id === focus.pointId) return null;
+  if (!playing) return null;
   if (playing.index == null) {
     return {
       label: "Now playing · not in this cut",

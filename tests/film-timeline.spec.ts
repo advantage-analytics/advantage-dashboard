@@ -470,7 +470,16 @@ test.describe("followAffordance", () => {
   });
 
   test("held, the playing point is the held point", () => {
-    expect(followAffordance(HELD, { id: "p9", index: 9 })).toBeNull();
+    expect(followAffordance(HELD, { id: "p9", index: 9 })).toEqual({
+      label: "Now playing · Point 9",
+      ariaLabel: "Now playing: point 9 — follow playback",
+      inCut: true,
+    });
+    expect(followAffordance(HELD, { id: "p9", index: null })).toEqual({
+      label: "Now playing · not in this cut",
+      ariaLabel: "Now playing: a point outside this cut — follow playback",
+      inCut: false,
+    });
   });
 
   test("follow never draws it", () => {

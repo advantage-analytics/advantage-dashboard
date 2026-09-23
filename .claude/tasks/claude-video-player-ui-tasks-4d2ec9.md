@@ -321,7 +321,7 @@ ready).
 
 ## T24 · Hand scroll holds the shell list too, and the pill shows whenever the lit row is out of view
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-timeline.ts (`followAffordance` L313–332); point-list.tsx (the intent-listener effect L516–550 and its comment L496–512, the header comment L120–123); film-tab.tsx (stale comments L365–367 and L688–692 only — no logic); tests/film-timeline.spec.ts (L448–480); tests/film-playback-refresh.spec.ts (`wheelDrawer` L1447–1471, the shell helpers L1949–2020, `boundShellList` L2107, new cases after the T23 block L2299); docs/superpowers/specs/2026-09-22-film-follow-hold-design.md (state table L88–96, Enter table L101–114, strings table L119–130, Open item L336–352)
 - **done when:**

@@ -263,3 +263,14 @@ Reading them: `remounted: true` = a credential swap or an error recovery; `buffe
 
 1. Add a `?shellHeight=` option to tests/fixtures/film-playback-refresh-harness.tsx to replace the injected style.
 2. The shell list never opens a shot well (no `onSelectShot`); if the shell should show shots under a held point, that is its own task.
+
+## T24 · Hand scroll holds the shell list too, and the pill shows whenever the lit row is out of view — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** `followAffordance` returns the pill whenever held and a point is playing (the held ≡ playing null branch is gone; T21's in-view rule hides it). point-list.tsx's intent listeners drop the `tone !== "dark"` gate, so wheel/touch/scrollbar/scroll keys hold the shell list too; comments record that a shell arrow on a focused row is a scroll that holds (film-tab's window handler ignores row targets). film-tab.tsx: two stale comments. Tests: film-timeline case rewritten; `wheelDrawer` → `wheelScroller` (+ scroll-into-view for the stacked shell) and three T24 cases (shell wheel hold, shell key hold, drawer held-on-playing pill); verified failing on the committed code. Seek 0.3 not 0.25 in (a)/(b): 0.25 lights `a`. Design doc tables and the T23 note updated. Widget states: loading/empty/error unchanged.
+
+**follow-ups:**
+
+1. A playing point outside the cut now shows the pill even when it is the held point (no row to measure) — check it in person.
+2. One unidentified `toHaveAttribute` failure on the implementer's first full run did not recur in four runs.

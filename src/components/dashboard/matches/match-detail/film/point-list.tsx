@@ -118,9 +118,11 @@ import {
  * `data-playing`, the 2px progress rule) keeps reading `activePointId`, so
  * the row that is playing stays named while the well stays put. A row or
  * shot click holds that point (or re-follows, when it is the playing one) and
- * still seeks; on the dark tone a hand scroll of the list holds too. Nothing
- * animates on hold — holding is the absence of a scroll. Both tones draw the
- * "Now playing" pill as the way back (T23); only the hold sources differ.
+ * still seeks; on either tone a hand scroll of the list holds too (T24).
+ * Nothing animates on hold — holding is the absence of a scroll. Both tones
+ * draw the "Now playing" pill as the way back (T23), whenever held and the
+ * lit row is not wholly inside the scroller's box — including when the held
+ * point IS the playing one, scrolled out of view (T24).
  */
 
 /** Light is the in-report column; dark is the fullscreen room's drawer. */
@@ -497,25 +499,28 @@ export const PointList = memo(function PointList({
   // only part of the scroller that is not a child), or a scrolling key. Each
   // holds the displayed point — an ENTER only: scrolling while already held
   // keeps the held point, so the well never wanders to whatever scrolled into
-  // view. Only the dark tone (the room's drawer) listens; the shell column
-  // holds on clicks (and Enter/Space) alone, though it returns by the same
-  // pill (T23).
+  // view. Both tones listen (T24): the room's drawer and the shell column
+  // hold on the same sources, and return by the same pill (T23).
   //
   // `ArrowUp`/`ArrowDown` with focus on a drawer row hold here, and the
   // room's window handler (film-fullscreen.tsx) then steps on the same key
   // with `preventDefault`, which re-follows — both updates land in one native
   // event and batch, so the net result of an arrow is `follow`, as the design
-  // wants for a step. `Enter`/`Space` on a row are the row's activation, not
+  // wants for a step. On the shell column an arrow on a focused row is a
+  // SCROLL, not a step: the tab's window handler (film-tab.tsx) returns early
+  // for `[role=button]` targets, so nothing re-follows and the net result
+  // there is `held`. `Enter`/`Space` on a row are the row's activation, not
   // a scroll: the row's React handler prevents them, but it runs after this
   // native listener, so Space is skipped here by its target instead.
   const scrollerMounted = !advancedOpen && groups.length > 0;
 
   // The return affordance, on every `PointList` surface (T23: the shell's
-  // card header line is gone, so the pill is the way back there too), and
-  // only while held on a point other than the playing one.
+  // card header line is gone, so the pill is the way back there too), while
+  // held and a point is playing — the pill itself hides while the lit row is
+  // in view (T24).
   const affordance = followAffordance(pointFocus, nowPlaying);
   useEffect(() => {
-    if (tone !== "dark" || !scrollerMounted) return;
+    if (!scrollerMounted) return;
     const list = listRef.current;
     if (!list) return;
     const hold = () => {
@@ -547,7 +552,7 @@ export const PointList = memo(function PointList({
       list.removeEventListener("pointerdown", onPointerDown);
       list.removeEventListener("keydown", onKeyDown);
     };
-  }, [tone, scrollerMounted, onHoldPoint]);
+  }, [scrollerMounted, onHoldPoint]);
 
   return (
     <section aria-label="Point list" className={t.root} style={t.rootStyle}>

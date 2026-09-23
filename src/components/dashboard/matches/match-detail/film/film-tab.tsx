@@ -363,8 +363,8 @@ function FilmRoom({
     return index === -1 ? null : { index: index + 1, total: walkStops.length };
   }, [walkStops, activePoint]);
   // The same shape the room hands its drawer. The shell column's list takes
-  // it and draws no pill yet (T22 took the card's header line away; the
-  // shell's return is a step or re-clicking the playing row).
+  // it and draws the same "Now playing" pill (T23: the card's header line is
+  // gone, T22), shown whenever held and the lit row is out of view (T24).
   const nowPlaying = useMemo(
     () =>
       activePoint
@@ -689,8 +689,8 @@ function FilmRoom({
             onOpenInRoom={openPointInRoom}
             // The same hold as the drawer's: a row click holds and the
             // keep-in-view stops while held. The same "Now playing" pill
-            // (T23), but no intent listeners, which the dark tone alone
-            // installs.
+            // (T23) and the same hand-scroll hold sources (T24) — though an
+            // arrow on a focused row here is a scroll that holds, not a step.
             pointFocus={pointFocus}
             displayedPointId={displayedPointId}
             onHoldPoint={holdPoint}

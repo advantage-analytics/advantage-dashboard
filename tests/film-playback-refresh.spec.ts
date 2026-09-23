@@ -1441,14 +1441,24 @@ async function drawerScrollTop(page: Page): Promise<number> {
 }
 
 /**
- * A real wheel over the drawer's scroller. The drawer slides in over 420ms
- * and `openRoomWithDrawer` only waits for its rows to exist, so on a loaded
- * machine a box read straight away is mid-travel and the pointer lands beside
- * the drawer — the wheel then scrolls nothing and every assertion after it is
- * about the wrong state. Wait for the box to stop moving first.
+ * A real wheel over a scroller (the drawer's, or the shell list's — T24).
+ * The drawer slides in over 420ms and `openRoomWithDrawer` only waits for its
+ * rows to exist, so on a loaded machine a box read straight away is
+ * mid-travel and the pointer lands beside the drawer — the wheel then scrolls
+ * nothing and every assertion after it is about the wrong state. Wait for the
+ * box to stop moving first (the shell's scroller does not move; the wait is
+ * one read long there).
  */
-async function wheelDrawer(page: Page, deltaY: number) {
-  const scroller = page.locator(DRAWER_SCROLLER);
+async function wheelScroller(page: Page, selector: string, deltaY: number) {
+  const scrollTop = () =>
+    page.evaluate(
+      (sel) => document.querySelector(sel)?.scrollTop ?? -1,
+      selector,
+    );
+  const scroller = page.locator(selector);
+  // The harness stacks the shell's columns, so its list can sit below the
+  // viewport, where a wheel lands on nothing.
+  await scroller.scrollIntoViewIfNeeded();
   let box = await scroller.boundingBox();
   for (let i = 0; i < 20; i++) {
     await page.waitForTimeout(120);
@@ -1456,19 +1466,23 @@ async function wheelDrawer(page: Page, deltaY: number) {
     if (box && next && box.x === next.x && box.width === next.width) break;
     box = next;
   }
-  if (!box) throw new Error("no drawer scroller");
+  if (!box) throw new Error(`no scroller at ${selector}`);
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, deltaY);
-  await expect.poll(() => drawerScrollTop(page)).toBeGreaterThan(0);
+  await expect.poll(scrollTop).toBeGreaterThan(0);
   // Chromium animates a wheel scroll; read the position only once it has
   // stopped moving, so a later comparison is not against a frame mid-travel.
-  let last = await drawerScrollTop(page);
+  let last = await scrollTop();
   for (let i = 0; i < 20; i++) {
     await page.waitForTimeout(150);
-    const now = await drawerScrollTop(page);
+    const now = await scrollTop();
     if (now === last) break;
     last = now;
   }
+}
+
+async function wheelDrawer(page: Page, deltaY: number) {
+  await wheelScroller(page, DRAWER_SCROLLER, deltaY);
 }
 
 /** Record every `scrollTo(options)` call, installed after the room opened. */
@@ -2084,9 +2098,8 @@ test("T22: the card's own Next point step button re-follows the list", async ({
  *
  * The same `FollowPill`, gated by the same `followAffordance` rule, with
  * T21's edge pin and hysteresis; on the light tone it floats on
- * `--shadow-floating` instead of the drawer's inset hairline. The shell list
- * still holds on clicks alone — nothing here scrolls it by hand, and no case
- * claims a hand scroll holds it.
+ * `--shadow-floating` instead of the drawer's inset hairline. These cases
+ * hold the shell list by a click; T24 (below) adds the hand-scroll hold.
  *
  * The harness mounts `FilmTab` with no `@container`, so the columns stack
  * and the list's card grows to its content: nothing to scroll. In the app
@@ -2296,4 +2309,107 @@ test("T23: pressing the shell pill re-follows — it leaves, the list scrolls to
   // The shell list draws no well; the drawer, on the same `pointFocus`,
   // shows the held well closed and the well under the playing row.
   expect(await roomWellUnder(page)).toBe("b");
+});
+
+/* -------------------------------------------------------------------------
+ * T24 — a hand scroll holds the shell list too, and the pill shows whenever
+ * held and the lit row is out of the box — including when the held point IS
+ * the playing one (`followAffordance` no longer hides it then; `FollowPill`'s
+ * T21 in-view rule does). A wheel or a scrolling key holds; the list is then
+ * parked by assignment, which is not intent (T18), so "out of view" is
+ * deterministic. `b` is lit at 0.3, as in `shellHoldAThenPlayB`: 0.25 sits
+ * exactly on `b`'s early-reach edge (0.35 − 0.1) and reads `a`.
+ * ---------------------------------------------------------------------- */
+
+/** Wait until the shell scroller's `scrollTop` stops changing. */
+async function shellScrollSettled(page: Page) {
+  let last = await shellScrollTop(page);
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(150);
+    const now = await shellScrollTop(page);
+    if (now === last) break;
+    last = now;
+  }
+}
+
+test("T24: a wheel holds the shell list — the pill offers the playing point back, and the next crossing leaves the list alone", async ({
+  page,
+}) => {
+  await openShell(page, "shell-wheel-hold", {
+    pad: "12",
+    ttl: String(3600_000),
+  });
+  await boundShellList(page, 240);
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => playingRow(page)).toBe("b");
+  await shellScrollSettled(page);
+
+  // A real wheel over the shell's scroller: intent, so it holds `b` — the
+  // playing point — and the list is then parked with `b` above the box.
+  await wheelScroller(page, SHELL_SCROLLER, 200);
+  await parkScroller(page, SHELL_SCROLLER, "end");
+  await expect.poll(() => shellLitPlace(page)).toBe("above");
+  const pill = page.locator(SHELL_PILL);
+  await expect(pill).toHaveCount(1);
+  await expect(pill).toHaveText("Now playing · Point 2");
+  const parked = await shellScrollTop(page);
+
+  // Held: the crossing into `c` does not scroll the list back.
+  await seekTo(page, REPORT, 0.5);
+  await expect.poll(() => playingRow(page)).toBe("c");
+  await page.waitForTimeout(400);
+  expect(await shellScrollTop(page)).toBe(parked);
+  await expect(pill).toHaveText("Now playing · Point 3");
+
+  await pill.click();
+  await expect(pill).toHaveCount(0);
+  await expect.poll(() => shellLitPlace(page)).toBe("inside");
+});
+
+test("T24: an arrow on a focused shell row is a scroll that holds, not a step", async ({
+  page,
+}) => {
+  await openShell(page, "shell-key-hold", {
+    pad: "12",
+    ttl: String(3600_000),
+  });
+  await boundShellList(page, 240);
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => playingRow(page)).toBe("b");
+  await shellScrollSettled(page);
+
+  // The list's native listener holds first; the tab's window handler then
+  // returns early for a `[role=button]` target, so nothing re-follows. The
+  // proof is the pill and the unmoved list, never the time.
+  await page.focus(SHELL_ROW("b"));
+  await page.keyboard.press("ArrowDown");
+  await shellScrollSettled(page);
+  await parkScroller(page, SHELL_SCROLLER, "end");
+  const parked = await shellScrollTop(page);
+
+  await seekTo(page, REPORT, 0.5);
+  await expect.poll(() => playingRow(page)).toBe("c");
+  await page.waitForTimeout(400);
+  expect(await shellScrollTop(page)).toBe(parked);
+  await expect(page.locator(SHELL_PILL)).toHaveCount(1);
+});
+
+test("T24: held on the playing point, scrolled out of view, the drawer's pill offers it back", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "pill-held-playing", { pad: "12" });
+  // A click on `a` at film zero holds `a` and seeks it: held ≡ playing.
+  await page.click(DRAWER_ROW("a"));
+  await expect.poll(() => playingRow(page)).toBe("a");
+  await drawerSettled(page);
+  await parkDrawer(page, "end");
+
+  const pill = page.locator(PILL);
+  await expect(pill).toHaveCount(1);
+  await expect(pill).toHaveText("Now playing · Point 1");
+  await expect.poll(() => pillEdge(page)).toBe("top");
+
+  await pill.click();
+  await expect(pill).toHaveCount(0);
+  await expect.poll(() => litRowInView(page)).toBe(true);
 });
