@@ -123,6 +123,64 @@ export function EventPageSkeleton() {
   );
 }
 
+/**
+ * The team schedule's `[eventId]` page (a dual or a tournament) on
+ * `schedule/event-table.tsx`'s kit: the header's two lines, the summary strip,
+ * the toolbar, then one white card of 48px rows. Spacing is
+ * `EventPageLayout`'s, so the page does not jump when it lands.
+ */
+export function EventTableSkeleton() {
+  return (
+    <Frame label="Loading event">
+      <div className="flex flex-col gap-8 px-14 pt-6 pb-7">
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <Bar className="h-8 w-60" />
+              <Bar className="w-72" />
+            </div>
+            <Bar className="h-8 w-24 shrink-0" />
+          </div>
+          <div className="flex">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="flex flex-col gap-2 border-[var(--border-hairline)] pr-7 not-first:border-l not-first:pl-7"
+              >
+                <Bar className="h-2 w-14" />
+                <Bar className="h-5 w-20" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex gap-2">
+              <Bar className="h-7 w-14 rounded-full" />
+              <Bar className="h-7 w-20 rounded-full" />
+              <Bar className="h-7 w-20 rounded-full" />
+            </div>
+            <Bar className="h-7 w-24" />
+          </div>
+          <div className="surface-card min-w-0 px-6 py-2">
+            {Array.from({ length: 9 }, (_, i) => (
+              <div
+                key={i}
+                className="grid h-12 grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-5 border-[var(--border-hairline)] not-last:border-b"
+              >
+                <Bar className={i % 2 ? "w-32" : "w-40"} />
+                <Bar className={i % 3 ? "w-28" : "w-36"} />
+                <Bar className="w-16" />
+                <Bar className="w-12" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Frame>
+  );
+}
+
 export function WizardPageSkeleton() {
   return (
     <Frame label="Loading form">

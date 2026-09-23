@@ -67,7 +67,8 @@ function entry(
     seed: null,
     playerUserIds: [],
     // A forfeited line carries nobody, which is what `dual-form` writes and
-    // what `line-row` renders as "— no available player".
+    // what the dual page's line table (`dual-detail.tsx`) renders as
+    // "No player".
     playerLabels: forfeit === null ? [`Player ${slot}`] : [],
     opponentLabels: forfeit === null ? ["Rival Player"] : [],
     opponentSchool: "Rival State",
@@ -186,8 +187,8 @@ test.describe("a forfeited line is never a line waiting to be played", () => {
   });
 
   test("every surface that draws a line state has a label for it", () => {
-    // `dual-sheet.tsx`, `line-row.tsx` and the detail pane all render through
-    // this map. A missing entry would silently draw nothing where the outcome
+    // `dual-sheet.tsx`, the event pages' tables and line drawer (through
+    // `lineAction`) and the detail pane all render through this map. A missing entry would silently draw nothing where the outcome
     // belongs — reading as a line still to come.
     expect(LINE_STATUS.forfeited).toEqual({
       label: "Forfeited",

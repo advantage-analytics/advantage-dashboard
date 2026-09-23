@@ -117,3 +117,12 @@ is the runner's. Newest entries at the bottom.
 2. Drawer facts differ from the frame: Date shows the event span not the match day, Event reads "· R16" not "· Main draw R16", and the fifth fact is Format not the provider.
 3. `useMatchSnapshot` (T7) never settles if its query rejects — now used on both event pages.
 4. The run list shortens opponents with `drawerSideName`, giving doubles pairs as "A. X & B. Y".
+
+## T13 · Remove the old event-page pieces and update the schedule README — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite incl. design-drift and generate-map); completion `VERDICT: pass`.
+**changed:** Deleted `line-row.tsx`, `event-page.tsx` and `run-strip.tsx` (reachability checked by grep; no renderer left for `EventPageFrame`, `EventFacts`, `FormatCapsule`, `DetailLine`, `TableCard`, `GroupHead`, `TABLE_ROW_CLS`, `LineRow`, `RunStrip`). Moves, bodies unchanged: `scoreHref` → `lib/schedule/score-seed.ts`; `lineAction`/`LineAction` → new `lib/schedule/line-action.ts`; `runRecord` → `lib/schedule/tournament-run.ts`; `EventTitle` → `event-table.tsx`. `dual-ticks.tsx` drops `lg`. `row-action.tsx` and `event-glyph-row.tsx` kept (still rendered). README §1 route row, §3 live-file list, and the "Scoring has one path" sentence updated. Also: new `EventTableSkeleton` for `[eventId]/loading.tsx` (header, strip, toolbar, card of 48px rows); `EventPageSkeleton` kept for `single/[matchId]`. Comment-only fixes in `forfeited-lines.spec.ts`, `pinned-event-bar.tsx`, `actions.ts`.
+**follow-ups:**
+
+1. `EventPageSkeleton` is now used only by `single/[matchId]`; check it against `single-detail.tsx`'s layout and rename it.
+2. `line-action.ts` has no spec of its own; a pure spec could pin the branch order (outcome, add result, status, report, video) including "doubles never offers video".

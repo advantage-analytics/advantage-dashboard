@@ -17,10 +17,8 @@ import {
   noteIconCls,
   noteStripCls,
 } from "@/components/dashboard/matches/new-match-wizard/styles";
-import {
-  lineAction,
-  scoreHref,
-} from "@/components/dashboard/schedule/line-row";
+import { lineAction } from "@/lib/schedule/line-action";
+import { scoreHref } from "@/lib/schedule/score-seed";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
@@ -65,8 +63,8 @@ import type {
  * a tournament player's rounds — which the page draws and hands in.
  *
  * ── Actions ────────────────────────────────────────────────────────────────
- * What a line offers next is `lineAction` in `line-row.tsx`, the rule the
- * rows used to draw — never restated here. The footer maps it:
+ * What a line offers next is `lineAction` (`src/lib/schedule/line-action.ts`),
+ * the rule the old line rows drew — never restated here. The footer maps it:
  * "Add result" / "Edit result" into the event's `/score` flow as the primary,
  * otherwise a blue "View match" once a match exists, with "Add video" under
  * it for a scored singles line nothing was sent for. A doubles line is score

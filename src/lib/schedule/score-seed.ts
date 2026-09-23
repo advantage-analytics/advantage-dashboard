@@ -300,3 +300,22 @@ export function savedLineUpload(
     action: "Add video",
   };
 }
+
+/**
+ * The score flow, opened on this line. The round rides along on a tournament
+ * so the flow opens on THIS row's round rather than the next one to record —
+ * "Edit result" on the R32 must not open a blank quarter-final.
+ *
+ * Here beside `seedScoreForm` because it is the other half of the same
+ * contract: this writes the `entry` / `round` query the score page reads back
+ * to pick which line (and round) to seed.
+ */
+export function scoreHref(
+  eventId: string,
+  entryId: string,
+  round: string | null,
+): string {
+  const query = new URLSearchParams({ entry: entryId });
+  if (round) query.set("round", round);
+  return `/dashboard/team/schedule/${eventId}/score?${query.toString()}`;
+}

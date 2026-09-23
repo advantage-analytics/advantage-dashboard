@@ -30,7 +30,7 @@ Nine route files render this directory, and all nine read the database.
 | `/dashboard/team/schedule/new`              | `static/static-event-chooser.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | nothing — two links and one piece of local state                                                                                                                                                                                                                                                                                                                     |
 | `/dashboard/team/schedule/new/dual`         | `static/new-dual-flow.tsx` — three steps on `matches/new-match-wizard`'s `WizardShell`, with `static/pinned-event-bar.tsx`: `DualSchoolStep` (`static/dual-school-step.tsx`), then `DualFactsStep` and `DualLineupStep` (`static/dual-build-step.tsx`, rows in `static/lineup-rows.tsx`, with `static/opponent-popup.tsx`)                                                                                                                                                                                                                                       | `getLadder`, `getTeamSettings` → `getOpponentDirectory`, own `program_key`, `getProgramSchedule` → `opponentDualHistory`, a `programs` head count; `/api/programs/search` and `opponentRosterForDual` from the client; writes through `createDual`                                                                                                                   |
 | `/dashboard/team/schedule/new/tournament`   | `static/new-tournament-flow.tsx` — three steps on `matches/new-match-wizard`'s `WizardShell`, with `static/pinned-event-bar.tsx`: `TournamentNameStep`, `TournamentDetailsStep` (Site and Format from `static/event-fact-fields.tsx`, shared with the dual), then `TournamentFieldStep` (all `static/static-tournament-builder.tsx`, over its `useTournamentDraft`)                                                                                                                                                                                              | `getLadder`, `getTeamSettings`; writes through `createTournament`                                                                                                                                                                                                                                                                                                    |
-| `/dashboard/team/schedule/[eventId]`        | `dual-detail.tsx` (on `event-page.tsx`'s frame, one table card of `line-row.tsx` rows under `dual-ticks.tsx`'s summary), `tournament-detail.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                 | `getProgramSchedule` → `eventDetailFrom`; for a tournament also `getEventTeamTotals`                                                                                                                                                                                                                                                                                 |
+| `/dashboard/team/schedule/[eventId]`        | `dual-detail.tsx` (lines grouped Singles/Doubles, `dual-ticks.tsx` in the summary strip) and `tournament-detail.tsx` (matches grouped by entry), both on `event-table.tsx`'s kit with `use-row-selection.ts`; a row opens `event-line-drawer.tsx` beside the table, selected by `?line=` (dual) or `?match=` (tournament)                                                                                                                                                                                                                                        | `getProgramSchedule` → `eventDetailFrom`; for a tournament also `getEventTeamTotals`                                                                                                                                                                                                                                                                                 |
 | `/dashboard/team/schedule/[eventId]/edit`   | branches on the event's kind: a dual gets `static/new-dual-flow.tsx` in `mode="edit"` — the same three-step flow opened at step two, its school pinned by `static/pinned-event-bar.tsx` with no `Change` and step one unreachable, settled lines drawn read-only inside `DualLineupStep` (`static/dual-build-step.tsx`); a tournament gets `static/new-tournament-flow.tsx` in `mode="edit"` — both steps reachable, the field seeded from `static/static-tournament-builder.tsx`'s `useTournamentDraft` with saved ids, draws and seeds, settled entries locked | `getProgramSchedule` → `eventDetailFrom`, `getLadder`, `getTeamSettings`; a dual also reads one `programs` row for the opponent's directory key; `isSettled` from `lib/schedule/entry-plan.ts` decides which lines/entries are read-only; writes through `updateDual` or `updateTournament`, both of which consult `planEntryChanges` before writing anything at all |
 | `/dashboard/team/schedule/[eventId]/score`  | `score-only-flow.tsx` — **the one place a score or outcome is recorded**, for duals and tournaments (a tournament's round is `?round=`). The upload wizard's chrome with its video half switched off — `StepIndicator`, `PinnedLineBar` and `ScoreBlock` come from `matches/new-match-wizard`                                                                                                                                                                                                                                                                    | `getEventDetail`, `programNamesFor`; `presetFor`/`lineupChoices`, `entryState` and `nextRound`; writes through `recordResult` and `setOutcome`                                                                                                                                                                                                                       |
 | `/dashboard/team/schedule/single/[matchId]` | `single-detail.tsx` — its `single-score-entry.tsx` is the one scorer outside `[eventId]/score`, because a single match has no event entry and writes through `PATCH /api/matches/[matchId]`; folding it in is an open follow-up                                                                                                                                                                                                                                                                                                                                  | `getTeamSingleMatch`                                                                                                                                                                                                                                                                                                                                                 |
@@ -85,15 +85,27 @@ that replaced it, and each porting commit names the file it read from.
 
 Everything here is reachable: `dual-detail.tsx`, `tournament-detail.tsx`,
 `single-detail.tsx`, `single-score-entry.tsx`, `event-shell.tsx`,
-`event-page.tsx`, `line-row.tsx`, `score-only-flow.tsx`,
-`event-table.tsx`, `dual-ticks.tsx`, `run-strip.tsx`,
-`row-action.tsx`, `result-choice.tsx`, and everything under `static/`.
+`event-table.tsx`, `use-row-selection.ts`, `event-line-drawer.tsx`,
+`event-header-slot.tsx`, `event-glyph-row.tsx`, `score-only-flow.tsx`,
+`dual-ticks.tsx`, `row-action.tsx`, `result-choice.tsx`, and everything
+under `static/`.
+
+**The event pages' old furniture is deleted** (T11–T13, event pages as
+match tables): `event-page.tsx` (`EventPageFrame`, `EventFacts`,
+`FormatCapsule`, `DetailLine`, `TableCard`, `GroupHead`), `line-row.tsx`
+(`LineRow`), `run-strip.tsx` (`RunStrip`) and `team-totals-widget.tsx`. What
+they knew moved: `EventTitle` to `event-table.tsx`; the row-action rule
+`lineAction` to `lib/schedule/line-action.ts`, read by the drawer's footer;
+`scoreHref` to `lib/schedule/score-seed.ts`, beside the seed it feeds;
+`runRecord` to `lib/schedule/tournament-run.ts`. `dual-ticks.tsx` lost its
+`lg` size, drawn only by the retired score band.
 
 **Scoring has one path.** `score-entry.tsx` (the in-row form),
 `add-result-row.tsx`, `add-result-dialog.tsx` and `add-result-button.tsx` are
-deleted: every "Add result" / "Edit result" on the dual and tournament pages,
-and the drawer's "Enter results", is a link into `[eventId]/score` with the
-line (and round) preset. `nextRound` moved to `lib/schedule/tournament-run.ts`.
+deleted: every "Add result" / "Edit result" — now in the event pages' line
+drawer (`event-line-drawer.tsx`) and the page header's primary — and the
+schedule drawer's "Enter results", is a link into `[eventId]/score` with the
+line (and round) preset (`scoreHref` in `lib/schedule/score-seed.ts`). `nextRound` moved to `lib/schedule/tournament-run.ts`.
 The lineup step's `···` play menu is gone, and the legacy `setForfeit` with
 it.
 
@@ -136,14 +148,14 @@ schedule's "Set next lineup" are deleted.
 Two files are shared across routes and must survive any future deletion.
 `event-shell.tsx` now frames only `single-detail.tsx` and
 `static/static-event-chooser.tsx` — `dual-detail.tsx` and
-`tournament-detail.tsx` moved onto `event-page.tsx`'s `EventPageFrame`
-(T7/T8, dual/tournament designs), and `static-tournament-builder.tsx` lost its
+`tournament-detail.tsx` moved onto `event-table.tsx`'s `EventPageLayout`
+(T8–T11, event pages as match tables), and `static-tournament-builder.tsx` lost its
 frame the same way `dual-build-step.tsx` did, when `static/new-tournament-flow.tsx`
 took over on `WizardShell` (T16, dual/tournament designs). `row-action.tsx` is
 not imported under `static/` at all, but is used from three separate live
-surfaces: `/dashboard/team/roster` directly, `line-row.tsx` (reachable via
-`dual-detail`/`tournament-detail`), and `team/dual-sheet.tsx` via
-`/dashboard/team`.
+surfaces: `/dashboard/team/roster` directly, and the player profile's
+`team/player-profile/last-match-card.tsx` and `match-history-card.tsx`. The
+event pages no longer draw it — their line actions are the drawer's buttons.
 
 ### The near-duplicate that was here
 

@@ -11,10 +11,10 @@
 import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import { Trophy } from "lucide-react";
-import { EventTitle } from "@/components/dashboard/schedule/event-page";
 import {
   EventHeader,
   EventPageLayout,
+  EventTitle,
   EventRow,
   EventTable,
   EventTableFooter,
@@ -29,9 +29,8 @@ import {
   LineContextList,
   LineContextRow,
 } from "@/components/dashboard/schedule/event-line-drawer";
-import { scoreHref } from "@/components/dashboard/schedule/line-row";
+import { scoreHref } from "@/lib/schedule/score-seed";
 import { drawerSideName } from "@/components/dashboard/matches/drawer-sections";
-import { runRecord } from "@/components/dashboard/schedule/run-strip";
 import { RowLifecycle } from "@/components/dashboard/matches/row-state";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import { ResultMark } from "@/components/dashboard/result-mark";
@@ -59,7 +58,7 @@ import {
   siteTitle,
   surfaceTitle,
 } from "@/lib/schedule/format";
-import { nextRound, runFinish } from "@/lib/schedule/tournament-run";
+import { nextRound, runFinish, runRecord } from "@/lib/schedule/tournament-run";
 import type { EventTeamTotals } from "@/lib/data/event-team-totals";
 import type {
   EntryMatch,

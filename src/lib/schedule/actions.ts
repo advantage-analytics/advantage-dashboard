@@ -960,7 +960,7 @@ export async function recordResult(
   /**
    * The opponent's name, back onto the entry the line is drawn from.
    *
-   * The entry's copy is not what `line-row.tsx` prints when a match exists —
+   * The entry's copy is not what the event pages print when a match exists —
    * that prefers `match.opponentLabels` — but it IS what `dualSeed` seeds the
    * edit form from, and what a matchless row and `lineupChoices` fall back to.
    * So a correction that fixed a misspelling on the match left the editor

@@ -15,11 +15,11 @@ import Link from "next/link";
 import { Info, ListOrdered } from "lucide-react";
 import { DOUBLES_SLOTS, SINGLES_SLOTS } from "@/lib/schedule/courts";
 import { DualTicks } from "@/components/dashboard/schedule/dual-ticks";
-import { EventTitle } from "@/components/dashboard/schedule/event-page";
 import {
   EventGroupHead,
   EventHeader,
   EventPageLayout,
+  EventTitle,
   EventRow,
   EventTable,
   EventTableFooter,
@@ -126,8 +126,9 @@ const SORTS: readonly ToolbarOption<Sort>[] = [
  * Rows peek, never navigate: a click selects the line (`aria-current`,
  * `?line=<entry id>`) and opens `EventLineDrawer` beside the table. The row
  * actions that used to sit at the end of each line (Add result, Edit result,
- * View report, Add video) live in that drawer, off `line-row.tsx`'s
- * `lineAction`, and its "This dual" list steps between all nine lines.
+ * View report, Add video) live in that drawer, off `lineAction`
+ * (`src/lib/schedule/line-action.ts`), and its "This dual" list steps
+ * between all nine lines.
  *
  * Every member of the program sees the same data — the membership-only RLS
  * policy hands every member the program's matches.

@@ -178,7 +178,7 @@ ready).
 
 ## T13 · Remove the old event-page pieces and update the schedule README
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T10, T12
 - **files:** src/components/dashboard/schedule/line-row.tsx (delete), src/components/dashboard/schedule/event-page.tsx, src/components/dashboard/schedule/dual-ticks.tsx, src/components/dashboard/schedule/run-strip.tsx, src/lib/schedule/score-seed.ts (receives `scoreHref`), src/components/dashboard/schedule/README.md (guess)

@@ -24,6 +24,24 @@ import { cn } from "@/lib/utils";
 
 export { eventRowId };
 
+/**
+ * "vs Ridgemont Tech" — the `vs` in `--ink-600` so the opponent's name carries
+ * the line on its own. Handed to `EventHeader` as its `title`.
+ *
+ * A helper rather than a rule inside the header: a tournament's title is its
+ * own name with no prefix, and a header that prefixed everything would print
+ * "vs Fall Invitational".
+ */
+export function EventTitle({ vs, name }: { vs?: boolean; name: string }) {
+  if (!vs) return <>{name}</>;
+  return (
+    <>
+      <span style={{ color: "var(--ink-600)" }}>vs </span>
+      {name}
+    </>
+  );
+}
+
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 
 /**
