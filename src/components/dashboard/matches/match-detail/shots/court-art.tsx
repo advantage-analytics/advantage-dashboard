@@ -104,7 +104,7 @@ const SERVE_DOT_R = 2.54;
 // `#F8C84F` literal the checker would flag again.
 export const ACE_STAR_FILL = "#F8C84F";
 // Keep the ace unmistakable at preview size without changing ordinary dots.
-const ACE_STAR_OUTER_R = 6;
+const ACE_STAR_OUTER_R = 5;
 
 /**
  * The won/lost/neutral colour for a dot's outcome — the one piece this

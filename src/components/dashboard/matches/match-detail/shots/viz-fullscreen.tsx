@@ -43,6 +43,7 @@ import {
 } from "./band-editor-state";
 import { ChartMenu } from "./chart-menu";
 import { APRON_FILL, HEAT_APRON_FILL } from "./court-art";
+import { starPoints } from "./court-geometry";
 import { CutMenu } from "./cut-menu";
 import { FiltersPopover } from "./filters-popover";
 import { KEY_PAN_PX, zoomPercentLabel } from "./pan-zoom";
@@ -911,8 +912,8 @@ function ZoomButton({
 
 /**
  * The bottom slab's legend — the SAME `legendItemsFor(cut, chart)` the
- * focused court's legend reads, drawn on the dark surface (8px dots ringed in
- * black so a white-ish swatch still separates from the slab, 11px labels at
+ * focused court's legend reads, drawn on the dark surface (8px dots and a
+ * larger ace star, ringed in black, with 11px labels at
  * 70% white). Heat returns its one ramp item, and the ramp replaces the
  * outcome keys entirely.
  */
@@ -938,18 +939,33 @@ function DarkLegend({ items }: { items: LegendItem[] }) {
     <div className="hidden shrink-0 items-center gap-3 pr-1 xl:flex">
       {items.map((item) => (
         <span key={item.key} className="inline-flex items-center gap-1.5">
-          <span
-            aria-hidden="true"
-            className="size-2 shrink-0 rounded-full"
-            style={{
-              backgroundColor: item.outline ? "transparent" : item.color,
-              boxShadow: item.outline
-                ? `inset 0 0 0 1px ${item.color}`
-                : // The handoff writes `#000000`; `--ink-900` is the design system's own
-                  // black and is indistinguishable at a 0.75px ring.
-                  "0 0 0 0.75px var(--ink-900)",
-            }}
-          />
+          {item.glyph === "star" ? (
+            <svg
+              aria-hidden="true"
+              className="size-3 shrink-0"
+              viewBox="0 0 12 12"
+            >
+              <polygon
+                points={starPoints(6, 6, 5)}
+                fill={item.color}
+                stroke="var(--ink-900)"
+                strokeWidth={0.5}
+              />
+            </svg>
+          ) : (
+            <span
+              aria-hidden="true"
+              className="size-2 shrink-0 rounded-full"
+              style={{
+                backgroundColor: item.outline ? "transparent" : item.color,
+                boxShadow: item.outline
+                  ? `inset 0 0 0 1px ${item.color}`
+                  : // The handoff writes `#000000`; `--ink-900` is the design system's own
+                    // black and is indistinguishable at a 0.75px ring.
+                    "0 0 0 0.75px var(--ink-900)",
+              }}
+            />
+          )}
           <span className="text-[11px] text-white/70">{item.label}</span>
         </span>
       ))}

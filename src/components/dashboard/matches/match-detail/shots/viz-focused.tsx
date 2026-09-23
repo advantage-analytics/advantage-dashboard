@@ -551,14 +551,11 @@ function HeatRampLegend() {
   );
 }
 
-// Sized to fill the same 8x8 box the old plain circle used, roughly matching
-// its visual weight: r=3.6 for the circle, and outer radii picked so the
-// triangle/star glyphs read at a comparable size (not area-matched to the
-// circle the way `court-art.tsx`'s real marks are — this is just a legend
-// key, not a measurement).
+// Ordinary keys stay in an 8px box. The ace uses a 12px box so its star is
+// legible at the same relative emphasis as the plotted ace.
 const LEGEND_GLYPH_R = 3.6;
 const LEGEND_TRIANGLE_SIZE = 2.2;
-const LEGEND_STAR_OUTER_R = 3.6;
+const LEGEND_STAR_OUTER_R = 5;
 
 /**
  * One legend key — circle, triangle or star, reusing `court-art.tsx`'s own
@@ -572,19 +569,22 @@ function LegendMark({ item }: { item: LegendItem }) {
   const fill = item.outline ? "none" : item.color;
   const stroke = item.outline ? item.color : "#000";
   const strokeWidth = item.outline ? 1 : 0.4;
+  const isStar = item.glyph === "star";
+  const glyphSize = isStar ? 12 : 8;
+  const glyphCenter = glyphSize / 2;
   return (
     <span className="inline-flex items-center gap-[6px]">
       <svg
         aria-hidden="true"
-        width={8}
-        height={8}
-        viewBox="0 0 8 8"
+        width={glyphSize}
+        height={glyphSize}
+        viewBox={`0 0 ${glyphSize} ${glyphSize}`}
         className="shrink-0"
       >
         {item.glyph === "circle" && (
           <circle
-            cx={4}
-            cy={4}
+            cx={glyphCenter}
+            cy={glyphCenter}
             r={LEGEND_GLYPH_R}
             fill={fill}
             stroke={stroke}
@@ -593,7 +593,12 @@ function LegendMark({ item }: { item: LegendItem }) {
         )}
         {item.glyph === "triangle" && (
           <polygon
-            points={trianglePointsFor("serve", 4, 4, LEGEND_TRIANGLE_SIZE)}
+            points={trianglePointsFor(
+              "serve",
+              glyphCenter,
+              glyphCenter,
+              LEGEND_TRIANGLE_SIZE,
+            )}
             fill={fill}
             stroke={stroke}
             strokeWidth={strokeWidth}
@@ -601,7 +606,7 @@ function LegendMark({ item }: { item: LegendItem }) {
         )}
         {item.glyph === "star" && (
           <polygon
-            points={starPoints(4, 4, LEGEND_STAR_OUTER_R)}
+            points={starPoints(glyphCenter, glyphCenter, LEGEND_STAR_OUTER_R)}
             fill={item.color}
             stroke="#000"
             strokeWidth={0.4}

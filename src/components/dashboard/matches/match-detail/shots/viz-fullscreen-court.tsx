@@ -766,7 +766,7 @@ function Mark({
   if (dot.shape === "star") {
     return (
       <polygon
-        points={starPoints(x, y, r * 2.73)}
+        points={starPoints(x, y, r * 2.27)}
         fill={fill}
         stroke={stroke}
         strokeWidth={strokeWidth}
