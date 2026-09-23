@@ -495,7 +495,8 @@ export function CourtArt({
                 const cellCy =
                   (SERVE_COURT.zoneTop + SERVE_COURT.zoneBottom) / 2;
                 return (
-                  <g key={z.key}>
+                  <g key={z.key} data-serve-zone={z.key}>
+                    <title>{`${z.key.replace("-", " ")}: ${zs.count} serves, ${zs.winPct}% points won`}</title>
                     <rect
                       x={cell.x1}
                       y={SERVE_COURT.zoneTop}

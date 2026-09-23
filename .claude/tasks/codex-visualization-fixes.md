@@ -27,7 +27,7 @@ ready).
 
 ## T1 · Reconcile serve zones and plotted coordinates
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **files:** Guess: `viz-model.ts`, `court-geometry.ts`, `court-art.tsx`, `viz-focused.tsx`, `viz-fullscreen-court.tsx`; associated visualization and court-geometry tests under `tests/`.
 - **done when:**

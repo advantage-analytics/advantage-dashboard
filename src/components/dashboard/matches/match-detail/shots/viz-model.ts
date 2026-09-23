@@ -17,8 +17,7 @@ import {
 } from "@/lib/data/serve-return-shots";
 import {
   classifyPointResult,
-  computeZoneStats as computeZoneStatsFromServeZones,
-  pointToServeDot as pointToServeDotFromServeZones,
+  ZONES,
   type ServeDot,
   type ServePointInput,
   type ZoneKey,
@@ -131,7 +130,7 @@ export interface VizDotMeta {
  * `court-geometry.ts`'s `projectServeMetricDot`/`projectReturnDot` map those
  * onto their frame. Serve dots: `depthM` holds
  * `ServePlacementMetrics.depthPastNetM` — negative for a net ball — and
- * `lateralM` the same signed metres `normalizeLanding` always produced.
+ * `lateralM` measured to the server's right (rotate x at the high-y end).
  * Return dots: `projectReturnDot`'s "placement" vs "contact" kind
  * (`returnPlacement` vs `returnContact`) determines how `depthM` is read.
  *
@@ -184,15 +183,7 @@ export interface VizResult {
   total: number; // drawable points in the cut's pool (rallyPosition: drawable SHOTS)
   noun: "serves" | "returns" | "shots";
   zoneStats: Record<ZoneKey, ZoneStats> | null; // serve cut only
-  /**
-   * Serve cut only (undefined on every other cut) — how many of the drawn
-   * serves (`dots`, matching `count`) have `kind === "out" || kind ===
-   * "net"` (`servePlacementMetrics`'s own classification). `zoneStats`'s
-   * own population (`pointToServeDot`'s) is NOT an "in" count — it keeps
-   * double faults and faults whose landing the tracker imputed at the
-   * service line — so the stats-card subtitle needs this separate, honest
-   * count instead of deriving one from `zoneStats`.
-   */
+  /** Drawable out/net serves, excluded from the service-zone denominator. */
   serveOutOrNetCount?: number;
 }
 
@@ -214,38 +205,21 @@ export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
 
 const REAL_NET_Y = 11.885;
 const REAL_COURT_LENGTH = 23.77;
-// Same real-world constants `serve-zones.ts` already exports under these
-// names — duplicated here (not imported) since `pointToServeDot` over there
-// keeps its own gate untouched (that file isn't edited here) and
-// this module already keeps its own private copy of the other REAL_* consts
-// above for the same reason.
 const REAL_SERVICE_Y = 5.485;
 const SERVE_BOX_DEPTH_M = REAL_NET_Y - REAL_SERVICE_Y; // ≈6.4
 const SERVE_BOX_HALF_WIDTH_M = 4.115;
 const SERVE_LINE_TOL_M = 0.2;
 
-function normalizeLanding(lx: number, ly: number): { lx: number; ly: number } {
-  if (ly > REAL_NET_Y) {
-    return { lx: -lx, ly: REAL_COURT_LENGTH - ly };
-  }
-  return { lx, ly };
-}
-
 /* ── Serve placement metrics ───────────────────────────────────────────────
  *
- * `serve-zones.ts`'s `pointToServeDot` drops any serve that isn't flagged
- * "In" (or a double fault) once its landing falls outside the service box
- * plus tolerance, and clamps kept "In" serves into the box — so an out
- * serve never reaches the court and an on-the-line serve can't plot on the
- * line. `serve-zones.ts` isn't edited (it's shared with Home, the player
- * profile and the legacy serve-placement widget); `servePlacementMetrics`
- * below is a second, viz-only measurement used ONLY for the dots this cut
- * draws — `pointToServeDot` keeps computing the zone-stats population
- * exactly as before.
+ * Dots, service-side filters and zone stats share these measurements. The
+ * legacy serve-zones.ts landing-based x flip is opposite to this court,
+ * viewed from behind the server. Reusing its normalized dots for aggregation
+ * swapped deuce/ad totals while the plotted dots were
+ * already correct. Keep that legacy helper isolated to its other callers.
  *
  * End detection reads the serve's own CONTACT point, never the landing:
- * every normalisation elsewhere in this file (`normalizeLanding`,
- * `contactMetricsFromLanding`) flips on the LANDING crossing the net, which
+ * a landing-only normalisation flips on the LANDING crossing the net, which
  * is backwards for a netted ball — it bounces back on the HITTER'S OWN
  * side, so a landing-based flip mirrors a net ball the wrong way and sends
  * it to a spot on the opponent's side that was never struck. `contactY`
@@ -268,8 +242,7 @@ function normalizeLanding(lx: number, ly: number): { lx: number; ly: number } {
 export type ServePlacementKind = "in" | "out" | "net";
 
 export interface ServePlacementMetrics {
-  /** Signed metres from the centre line, mirrored the same way
-   *  `serve-zones.ts`'s `normalizeLanding` mirrors: positive = screen right. */
+  /** Signed metres from centre, positive to the server's right. */
   lateralM: number;
   /** Metres past the net in the direction of travel. Negative = the ball
    *  came down on the server's own side, i.e. it hit the net. */
@@ -325,7 +298,15 @@ export function servePlacementMetrics(
   landingY: number | null | undefined,
   result: string | null | undefined,
 ): ServePlacementMetrics | null {
-  if (contactY == null || landingX == null || landingY == null) return null;
+  if (
+    contactY == null ||
+    !Number.isFinite(contactY) ||
+    landingX == null ||
+    !Number.isFinite(landingX) ||
+    landingY == null ||
+    !Number.isFinite(landingY)
+  )
+    return null;
   return classifyServePlacement(
     contactY > REAL_NET_Y,
     landingX,
@@ -366,22 +347,91 @@ export function isReturnOnFirstServe(p: MatchPoint): boolean {
   return p.firstShotType === "First Serve" && p.firstShotResult === "In";
 }
 
+/** Equal thirds of the actual 4.115 m service-box half-width. Boundary
+ * balls belong to the outward zone; both sidelines belong to Wide. */
 export function deriveZoneFromX(lx: number): "t" | "body" | "wide" {
   const a = Math.abs(lx);
-  return a >= 2.74 ? "wide" : a >= 1.37 ? "body" : "t";
+  const third = SERVE_BOX_HALF_WIDTH_M / 3;
+  return a >= 2 * third ? "wide" : a >= third ? "body" : "t";
+}
+
+function resolvedServe(p: MatchPoint) {
+  const shot = pickServeShotBy(p.shots ?? [], (s) => s.shotType);
+  // A resolved row is authoritative as a pair. Never manufacture a landing
+  // by mixing one missing shot coordinate with a different flattened row.
+  const landingX = shot ? shot.landingX : p.firstShotLandingX;
+  const landingY = shot ? shot.landingY : p.firstShotLandingY;
+  const result = shot ? shot.result : p.firstShotResult;
+  if (
+    landingX == null ||
+    landingY == null ||
+    !Number.isFinite(landingX) ||
+    !Number.isFinite(landingY)
+  )
+    return null;
+  const metrics =
+    servePlacementMetrics(shot?.contactY, landingX, landingY, result) ??
+    classifyServePlacement(
+      !(landingY > REAL_NET_Y),
+      landingX,
+      landingY,
+      result,
+    );
+  return { shot, metrics };
 }
 
 function serveLandingSide(p: MatchPoint): "deuce" | "ad" | null {
-  if (p.firstShotLandingX == null || p.firstShotLandingY == null) return null;
-  const { lx } = normalizeLanding(p.firstShotLandingX, p.firstShotLandingY);
-  return lx < 0 ? "deuce" : "ad";
+  const serve = resolvedServe(p);
+  return serve ? (serve.metrics.lateralM < 0 ? "deuce" : "ad") : null;
 }
 
 function serveZone(p: MatchPoint): "t" | "body" | "wide" | null {
-  const z = p.firstShotZone?.toLowerCase();
-  if (z === "t" || z === "body" || z === "wide") return z;
-  if (p.firstShotLandingX != null) return deriveZoneFromX(p.firstShotLandingX);
-  return null;
+  const serve = resolvedServe(p);
+  return serve ? deriveZoneFromX(serve.metrics.lateralM) : null;
+}
+
+/** Only measured in-serves have a service-box zone. Faults remain plotted
+ * but never inflate zone counts, frequency shares or points-won rates. */
+function computeServeZoneStats(
+  serves: {
+    metrics: ServePlacementMetrics;
+    first: boolean;
+    result: ServeDot["result"];
+  }[],
+): Record<ZoneKey, ZoneStats> {
+  const eligible = serves.filter(({ metrics }) => metrics.kind === "in");
+  const stats = Object.fromEntries(
+    ZONES.map(({ key }) => [
+      key,
+      {
+        count: 0,
+        pct: 0,
+        first: 0,
+        second: 0,
+        won: 0,
+        lost: 0,
+        ace: 0,
+        doubleFault: 0,
+        winPct: 0,
+      },
+    ]),
+  ) as Record<ZoneKey, ZoneStats>;
+  for (const { metrics, first, result } of eligible) {
+    const side = metrics.lateralM < 0 ? "deuce" : "ad";
+    const zone = stats[`${side}-${deriveZoneFromX(metrics.lateralM)}`];
+    zone.count++;
+    zone[first ? "first" : "second"]++;
+    if (result) zone[result]++;
+  }
+  for (const zone of Object.values(stats)) {
+    zone.pct = eligible.length
+      ? Math.round((100 * zone.count) / eligible.length)
+      : 0;
+    zone.winPct = zone.count
+      ? Math.round((100 * (zone.won + zone.ace)) / zone.count)
+      : 0;
+  }
+  return stats;
 }
 
 export function toServeInput(p: MatchPoint): ServePointInput {
@@ -621,7 +671,15 @@ export function pointMatchesFilters(
     // the serve returned — a faulted first ball means the return happened
     // on the second (see isReturnOnFirstServe).
     const isFirst =
-      frame === "serve" ? isFirstServePoint(p) : isReturnOnFirstServe(p);
+      frame === "serve"
+        ? courtFrame === "serve"
+          ? !(
+              (resolvedServe(p)?.shot?.shotType ?? p.firstShotType)
+                ?.toLowerCase()
+                .includes("second") ?? false
+            )
+          : isFirstServePoint(p)
+        : isReturnOnFirstServe(p);
     const value: BallValue = isFirst ? "first" : "second";
     if (!filters.ball.includes(value)) return false;
   }
@@ -853,43 +911,15 @@ export function computeViz(
   let count = 0;
   let serveOutOrNetCount = 0;
   const dots: VizDot[] = [];
-  const serveDots: ServeDot[] = [];
+  const serves: Parameters<typeof computeServeZoneStats>[0] = [];
 
   for (const p of points) {
     if (frame === "serve") {
       if (p.serverIsPlayer1 !== subjectIsPlayer1) continue;
 
-      // Resolve the serve actually played by ROLE (never `shot_number`, never
-      // by array position), so a faulted first serve sharing a shot_number
-      // with the second serve can't collide.
-      const serveShot = pickServeShotBy(p.shots ?? [], (s) => s.shotType);
-      const landingX = serveShot?.landingX ?? p.firstShotLandingX ?? null;
-      const landingY = serveShot?.landingY ?? p.firstShotLandingY ?? null;
-      // Primary: end detection from the resolved serve shot's own CONTACT
-      // point. Fallback (no `shots` row to read a contact point from at
-      // all — legacy/fixture data): the landing-based test every other
-      // normalisation in this file already uses, negated (`farEnd`
-      // and the old `didFlip` read the same decision from opposite ends of
-      // the shot — see `classifyServePlacement`'s own doc comment).
-      // `result`: the resolved shot's own tracked call on the
-      // primary path, the point's flattened `firstShotResult` on the
-      // fallback path — both are the AUTHORITY over the geometric rule.
-      const metrics =
-        servePlacementMetrics(
-          serveShot?.contactY,
-          landingX,
-          landingY,
-          serveShot?.result,
-        ) ??
-        (landingX != null && landingY != null
-          ? classifyServePlacement(
-              !(landingY > REAL_NET_Y),
-              landingX,
-              landingY,
-              p.firstShotResult,
-            )
-          : null);
-      if (!metrics) continue;
+      const serve = resolvedServe(p);
+      if (!serve) continue;
+      const { shot: serveShot, metrics } = serve;
 
       total++;
       if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1)) continue;
@@ -898,13 +928,14 @@ export function computeViz(
         serveOutOrNetCount++;
       }
 
-      // The zone-stats population is UNCHANGED — still exactly what
-      // `pointToServeDot` returns (`serve-zones.ts` isn't
-      // touched), independent of whether `metrics` above drew a dot for an
-      // out/net serve that never reached that population before.
       const serveInput = toServeInput(p);
-      const zoneDot = pointToServeDotFromServeZones(serveInput);
-      if (zoneDot) serveDots.push(zoneDot);
+      serves.push({
+        metrics,
+        first: !(serveShot?.shotType ?? p.firstShotType ?? "")
+          .toLowerCase()
+          .includes("second"),
+        result: classifyPointResult(serveInput),
+      });
 
       // ONE expression for "this serve is an ace", read by both
       // the dot's star shape and its `meta.isAce`, so the glyph and the
@@ -984,8 +1015,7 @@ export function computeViz(
     count,
     total,
     noun: frame === "serve" ? "serves" : "returns",
-    zoneStats:
-      cut === "serve" ? computeZoneStatsFromServeZones(serveDots) : null,
+    zoneStats: cut === "serve" ? computeServeZoneStats(serves) : null,
     serveOutOrNetCount: cut === "serve" ? serveOutOrNetCount : undefined,
   };
 }
@@ -1440,21 +1470,13 @@ export function computeVizStats(
   if (cut === "serve") {
     const noun = serveNoun(filters.ball, total);
     const groups = [serveStatsGroup(result.zoneStats)];
-    // The zone rows' population is `pointToServeDot`'s
-    // (unchanged, `serve-zones.ts` isn't touched) — it KEEPS double faults
-    // and it KEEPS faults whose landing the tracker never actually
-    // measured (SwingVision imputes an at-the-line coordinate for a fault
-    // it didn't track), so it has never been a count of serves that landed
-    // in and must not be labelled as one (that's what produced the false
-    // "33 of 34 landed in" reading round 2 shipped). The honest number
-    // instead: `result.serveOutOrNetCount`, built alongside the dots
-    // themselves from each serve's own `kind` ("out"/"net"), independent of
-    // the zone population entirely.
+    // Zone percentages use measured in-serves; total includes every drawable
+    // serve. State the excluded out/net count alongside the full pool.
     const outOrNet = result.serveOutOrNetCount ?? 0;
     const subtitle =
       outOrNet === 0
         ? `Points won by zone · ${total} ${noun}`
-        : `Points won by zone · ${total} ${noun} · ${outOrNet} out or into the net`;
+        : `Points won by zone · ${total - outOrNet} of ${total} ${noun} landed in · ${outOrNet} out or into the net`;
     return {
       title: "Where the serve went",
       subtitle,

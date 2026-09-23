@@ -317,6 +317,7 @@ export function VizFullscreenCourt({
             return (
               <rect
                 key={`cell-${zone.key}`}
+                data-serve-zone-cell={zone.key}
                 x={cell.x1}
                 y={VIEWER_COURT.farServiceY}
                 width={cell.x2 - cell.x1}
@@ -809,8 +810,8 @@ function ServeBoxLabels({
             const cell = zoneCellX(index);
             const cx = (cell.x1 + cell.x2) / 2;
             return (
-              <g key={zone.key}>
-                <title>{`${subjectName} — ${zone.label}: ${stats.winPct}% of ${stats.count} points won`}</title>
+              <g key={zone.key} data-serve-zone={zone.key}>
+                <title>{`${subjectName} — ${zone.key.replace("-", " ")}: ${stats.winPct}% of ${stats.count} points won`}</title>
                 <text
                   x={cx}
                   y={ZONE_PCT_Y}

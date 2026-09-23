@@ -16,7 +16,6 @@ import {
   heatBoundsFor,
   projectServeMetricDot,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
-import { pointToServeDot } from "@/lib/data/serve-zones";
 import { DEFAULT_BANDS, type BandSettings } from "@/lib/data/viz-bands";
 
 // Same real-world constant `viz-model.ts` keeps privately under this name.
@@ -265,7 +264,7 @@ test.describe("computeViz — serve cut, out & net (Task 2)", () => {
     });
   }
 
-  test("total/count include in + out + net; zoneStats keeps exactly pointToServeDot's own population", () => {
+  test("total/count include in + out + net; only in-serves enter service-zone statistics", () => {
     const inPt = point({}); // default synthesized shots -> a legal "in" serve
     const outPt = servePointWith(0.5, -0.155, 20, "Out"); // depthPastNetM ~12.04
     const netPt = servePointWith(0.5, 4.085, 2, "Net"); // depthPastNetM ~-7.8
@@ -279,19 +278,7 @@ test.describe("computeViz — serve cut, out & net (Task 2)", () => {
       (s, z) => s + z.count,
       0,
     );
-    const expectedZoneCount = pts.filter(
-      (p) =>
-        pointToServeDot({
-          id: p.id,
-          serverIsPlayer1: p.serverIsPlayer1,
-          firstShotLandingX: p.firstShotLandingX ?? null,
-          firstShotLandingY: p.firstShotLandingY ?? null,
-          firstShotResult: p.firstShotResult ?? null,
-          resultType: p.resultType,
-          wonByPlayer1: p.wonByPlayer1,
-        }) != null,
-    ).length;
-    expect(zoneCount).toBe(expectedZoneCount);
+    expect(zoneCount).toBe(1);
 
     const outcomes = r.dots.map((d) => d.outcome).sort();
     expect(outcomes).toEqual(["miss", "miss", "won"]);
@@ -454,12 +441,12 @@ test("subjectFor flips for the opponent and for a player-2 viewer", () => {
 // the six serve zones (see viz-model.ts's ZONE_LINES_X derivation) — chosen
 // so none sits near a zone boundary.
 const ZONE_LX = {
-  "deuce-wide": -3.4,
-  "deuce-body": -2.0,
-  "deuce-t": -0.7,
-  "ad-t": 0.7,
-  "ad-body": 2.0,
-  "ad-wide": 3.4,
+  "deuce-wide": 3.4,
+  "deuce-body": 2.0,
+  "deuce-t": 0.7,
+  "ad-t": -0.7,
+  "ad-body": -2.0,
+  "ad-wide": -3.4,
 } as const;
 
 // Same real-world constants the module's doc comments cite (REAL_NET_Y,
@@ -545,9 +532,8 @@ test.describe("computeVizStats — serve", () => {
     expect(stats.subtitle).toContain("second serves");
   });
 
-  /* ── Fix round 3: the subtitle reports out/net serves honestly, not a
-   * derived-from-zoneStats "in" count (zoneStats keeps double faults and
-   * line-imputed faults, so it was never an "in" population). ── */
+  // Zone rows now exclude faults; the subtitle names both their in-serve
+  // denominator and the out/net count in the drawable population.
 
   function outServe(): MatchPoint {
     return point({
@@ -584,7 +570,7 @@ test.describe("computeVizStats — serve", () => {
       "ft",
     );
     expect(stats.subtitle).toBe(
-      "Points won by zone · 2 serves · 1 out or into the net",
+      "Points won by zone · 1 of 2 serves landed in · 1 out or into the net",
     );
   });
 
