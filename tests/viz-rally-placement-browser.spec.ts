@@ -100,7 +100,7 @@ test("Rally placement selector projects Scatter and Heat consistently in preview
   await expect(page.locator("output")).toHaveText("6 of 6");
   await expect(preview.getByRole("img")).toHaveAttribute(
     "aria-label",
-    "rally placement court, 6 points shown",
+    "rally placement court, 6 shots shown",
   );
   await expect(focused.getByRole("img")).toHaveAttribute(
     "style",

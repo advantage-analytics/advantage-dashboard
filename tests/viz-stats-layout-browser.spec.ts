@@ -192,10 +192,44 @@ test("populated and empty statistics align with the court and stay reachable on 
   expect(narrow.width).toBeLessThanOrEqual(narrow.viewport);
   expect(narrow.card!.top).toBeGreaterThan(narrow.court!.bottom);
   await expect(page.getByText("No points match these filters")).toBeVisible();
+  const narrowControls = await page.evaluate(() => {
+    const toolbar = document.querySelector(".viz-vt-toolbar")!;
+    const applied = toolbar.querySelector('[aria-label="Applied filters"]')!;
+    const filterButton = [...toolbar.querySelectorAll("button")].find(
+      (button) => button.textContent?.includes("Filters"),
+    )!;
+    return {
+      applied: applied.getBoundingClientRect().toJSON(),
+      filters: filterButton.getBoundingClientRect().toJSON(),
+      toolbar: toolbar.getBoundingClientRect().toJSON(),
+    };
+  });
+  expect(narrowControls.applied.top).toBeGreaterThanOrEqual(
+    narrowControls.filters.bottom,
+  );
+  expect(narrowControls.applied.right).toBeLessThanOrEqual(
+    narrowControls.toolbar.right,
+  );
+  await expect(
+    page.getByRole("button", { name: "Remove Set 3" }),
+  ).toBeVisible();
   await page.screenshot({
     path: resolve("test-results/viz-stats-empty-narrow.png"),
     fullPage: true,
   });
+  await page.getByRole("button", { name: "Remove Set 3" }).click();
+  await expect(
+    page.getByRole("group", { name: "Applied filters" }),
+  ).toHaveCount(0);
+  await expect(page.getByText("No points match these filters")).toHaveCount(0);
+  for (const width of [320, 550, 560]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+      `toolbar at ${width}px`,
+    ).toBeLessThanOrEqual(width);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${origin}/?tab=shots&cut=serve&fixture=long`);
   await expect(page.getByText("Where the serve went")).toBeVisible();
   expect(

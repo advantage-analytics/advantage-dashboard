@@ -257,8 +257,8 @@ export function VizFocused({
     <div
       className={
         fallbackFadeIn
-          ? "viz-crossfade-in flex flex-col gap-4"
-          : "flex flex-col gap-4"
+          ? "viz-crossfade-in @container flex flex-col gap-4"
+          : "@container flex flex-col gap-4"
       }
     >
       <VizToolbar

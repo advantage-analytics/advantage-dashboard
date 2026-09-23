@@ -12,7 +12,11 @@ import {
   zoneCellX,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
-import { pointToServeDot } from "@/lib/data/serve-zones";
+import {
+  classifyZone,
+  computeZoneStats,
+  pointToServeDot,
+} from "@/lib/data/serve-zones";
 import {
   ASYMMETRIC_SERVES,
   SERVE_ZONE_KEYS,
@@ -52,19 +56,72 @@ for (const player1 of [true, false]) {
   }
 }
 
-test("old dots were correct; legacy zone normalization mirrored both ends' counts", () => {
+test("home and team serve dots use contact-based orientation on both ends", () => {
+  const laterals = [-3.4, -2.1, -0.4, 0.8, 1.9, 3.7];
   for (const highEnd of [false, true]) {
-    const point = servePoint({ highEnd, lateral: -3.4 });
-    const legacy = pointToServeDot({
+    const dots = laterals.map((lateral, index) => {
+      const point = servePoint({ highEnd, lateral });
+      const dot = pointToServeDot({
+        ...point,
+        firstShotLandingX: point.firstShotLandingX!,
+        firstShotLandingY: point.firstShotLandingY!,
+        firstShotContactY: point.shots![0].contactY,
+      })!;
+      expect(dot).not.toBeNull();
+      expect(classifyZone(dot.x)).toBe(SERVE_ZONE_KEYS[index]);
+      const current = computeViz([point], "serve", EMPTY_VIZ_FILTERS, true);
+      expect(current.zoneStats![SERVE_ZONE_KEYS[index]].count).toBe(1);
+      return dot;
+    });
+    const stats = computeZoneStats(dots)!;
+    for (const key of SERVE_ZONE_KEYS) {
+      expect(stats[key].count).toBe(1);
+      expect(stats[key].pct).toBe(17);
+    }
+  }
+});
+
+test("a net fault stays on the server's side when contact is available", () => {
+  for (const highEnd of [false, true]) {
+    const point = servePoint({
+      highEnd,
+      lateral: -3.4,
+      depth: -0.2,
+      result: "Net",
+    });
+    const dot = pointToServeDot({
       ...point,
       firstShotLandingX: point.firstShotLandingX!,
       firstShotLandingY: point.firstShotLandingY!,
+      firstShotContactY: point.shots![0].contactY,
+      resultType: "Double Fault",
     })!;
-    expect(legacy.x).toBeGreaterThan(0.5); // wrongly puts deuce-wide on right
-    const current = computeViz([point], "serve", EMPTY_VIZ_FILTERS, true);
-    expect(current.dots[0].lateralM).toBe(-3.4); // existing dot path was left
-    expect(current.zoneStats!["deuce-wide"].count).toBe(1);
-    expect(current.zoneStats!["ad-wide"].count).toBe(0);
+    expect(classifyZone(dot.x)).toBe("deuce-wide");
+    expect(dot.y).toBeGreaterThan(1);
+  }
+});
+
+test("home and team zone thirds and near-line faults agree with source metres", () => {
+  const third = 4.115 / 3;
+  for (const highEnd of [false, true]) {
+    for (const [lateral, zone] of [
+      [-4.16, "deuce-wide"],
+      [-2 * third, "deuce-body"],
+      [-third, "deuce-t"],
+      [third, "ad-body"],
+      [2 * third, "ad-wide"],
+      [4.16, "ad-wide"],
+    ] as const) {
+      const point = servePoint({ highEnd, lateral, result: "Out" });
+      const dot = pointToServeDot({
+        ...point,
+        firstShotLandingX: point.firstShotLandingX!,
+        firstShotLandingY: point.firstShotLandingY!,
+        firstShotContactY: point.shots![0].contactY,
+      })!;
+      expect(dot).not.toBeNull();
+      expect(classifyZone(dot.x)).toBe(zone);
+    }
   }
 });
 
