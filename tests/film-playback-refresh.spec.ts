@@ -3179,3 +3179,25 @@ test("T4: only the hovered lane mounts a preview, and none of it takes the point
   expect(events.length).toBeGreaterThan(1);
   expect(new Set(events)).toEqual(new Set(["none"]));
 });
+
+// ── Type column (2026-09-23): the shot's role — First · Second · Return ·
+// Rally — from `shotType` rather than row position (the stroke itself is the
+// Stroke column's). The fixture's points are a bare `Serve` then a `Forehand`:
+// the serve reads First (the legacy fallback) and the Forehand is the point's
+// return, so it reads Return.
+// The Type cell is `@min-[880px]` only and the harness has no container, so it
+// is read by `textContent`, which a hidden cell still carries.
+
+test("the card's Type cells read First and Return for the playing point", async ({
+  page,
+}) => {
+  await openShell(page, "card-type");
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => cardShots(page)).toEqual(["b-shot-1", "b-shot-2"]);
+  const types = await page
+    .locator(`${CARD} [data-shot-id]`)
+    .evaluateAll((rows) =>
+      rows.map((row) => row.children[4]?.textContent?.trim() ?? null),
+    );
+  expect(types).toEqual(["First", "Return"]);
+});

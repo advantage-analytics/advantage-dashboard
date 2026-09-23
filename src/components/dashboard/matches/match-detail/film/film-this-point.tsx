@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 import { lastNameOf } from "./film-filters";
 import {
+  pointReturnShotId,
   shotRowCells,
   shotRowRevealDelay,
   UNMEASURED,
@@ -71,6 +72,9 @@ export const FilmThisPoint = memo(function FilmThisPoint({
 
   const seconds = point?.duration != null ? Math.round(point.duration) : null;
   const ended = point ? point.resultType || "Point" : null;
+  // Over ALL the point's shots, timed or not: the return is a role in the
+  // rally, and an untimed serve row still decides which shot it is.
+  const returnShotId = pointReturnShotId(point?.shots);
 
   return (
     <section
@@ -136,6 +140,7 @@ export const FilmThisPoint = memo(function FilmThisPoint({
               key={stop.shot.id}
               stop={stop}
               order={i + 1}
+              returnShotId={returnShotId}
               playerName={lastNameOf(
                 stop.shot.isPlayer1 === youIsPlayer1
                   ? sides.you.name
@@ -222,6 +227,7 @@ function StepButton({
 const ShotRow = memo(function ShotRow({
   stop,
   order,
+  returnShotId,
   playerName,
   isActive,
   onSelect,
@@ -229,11 +235,13 @@ const ShotRow = memo(function ShotRow({
   stop: ShotStop;
   /** Position in the rally, 1-based. */
   order: number;
+  /** The point's return, from all its shots (timed or not), for Type. */
+  returnShotId: string | null;
   playerName: string;
   isActive: boolean;
   onSelect: (stop: ShotStop) => void;
 }) {
-  const cells = shotRowCells(stop.shot, order, playerName);
+  const cells = shotRowCells(stop.shot, order, playerName, returnShotId);
 
   return (
     <button

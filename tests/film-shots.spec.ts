@@ -2,9 +2,11 @@ import { expect, test } from "@playwright/test";
 
 import {
   activeShotAt,
+  pointReturnShotId,
   shotLabel,
   shotRowCells,
   shotStops,
+  shotTypeLabel,
 } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import { filmStops } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 
@@ -127,7 +129,7 @@ test("labels", () => {
   );
 });
 
-test("the serve row: row 1 is the Serve whatever the stroke says", () => {
+test("the serve row: Stroke is Serve, Type is First or Second", () => {
   const serve = shot("a", 1, {
     shotType: "Second Serve",
     spinType: "flat",
@@ -140,14 +142,21 @@ test("the serve row: row 1 is the Serve whatever the stroke says", () => {
     player: "Reid",
     spin: "Flat",
     stroke: "Serve",
-    type: "2nd serve",
+    type: "Second",
     placement: "Body, deuce court",
     mph: "112",
     result: "In",
   });
+  expect(shotTypeLabel(shot("f", 1, { shotType: "First Serve" }), null)).toBe(
+    "First",
+  );
+  // A bare "Serve" (older imports) is still a serve, and reads First.
+  expect(shotTypeLabel(shot("g", 1, { shotType: "Serve" }), null)).toBe(
+    "First",
+  );
 });
 
-test("a rally row: return on 2, rally after", () => {
+test("a rally row: the point's return reads Return, every later shot Rally", () => {
   const rally = shot("b", 1, {
     shotType: "FOREHAND",
     spinType: "topspin",
@@ -155,7 +164,7 @@ test("a rally row: return on 2, rally after", () => {
     zone: "Inside-out, deep",
     result: "Out",
   });
-  expect(shotRowCells(rally, 2, "Lee")).toMatchObject({
+  expect(shotRowCells(rally, 2, "Lee", "b")).toMatchObject({
     order: "2",
     stroke: "Forehand",
     type: "Return",
@@ -163,7 +172,52 @@ test("a rally row: return on 2, rally after", () => {
     mph: "74",
     result: "Out",
   });
-  expect(shotRowCells(rally, 3, "Lee").type).toBe("Rally");
+  // Not the return: Rally, wherever the row sits — the stroke is Stroke's job.
+  expect(shotRowCells(rally, 2, "Lee", "other").type).toBe("Rally");
+  // SwingVision's side-carrying volley keeps its side in Stroke.
+  expect(
+    shotRowCells(shot("v", 1, { shotType: "Forehand Volley" }), 5, "Lee", "x"),
+  ).toMatchObject({ stroke: "Forehand volley", type: "Rally" });
+  expect(shotTypeLabel(shot("c", 1, { shotType: "Backhand" }), "x")).toBe(
+    "Rally",
+  );
+  expect(shotTypeLabel(shot("d", 1, { shotType: "Volley" }), "x")).toBe(
+    "Rally",
+  );
+  expect(shotTypeLabel(shot("e", 1, { shotType: "Overhead" }), "x")).toBe(
+    "Rally",
+  );
+});
+
+test("Type follows shot_type, not row position: faults, feeds, volleyed returns", () => {
+  // A faulted first serve, the second serve, then the real return on row 3 —
+  // the old position rule called that return "Rally".
+  const fault = [
+    shot("f0", 1, { shotType: "Feed", shotNumber: 0 }),
+    shot("f1", 1, { shotType: "First Serve" }),
+    shot("f2", 2, { shotType: "Second Serve" }),
+    shot("f3", 3, { shotType: "Volley", shotNumber: 2 }),
+    shot("f4", 4, { shotType: "Forehand", shotNumber: 3 }),
+    shot("f5", 5, { shotType: "Overhead", shotNumber: 4 }),
+  ];
+  const ret = pointReturnShotId(fault);
+  expect(ret).toBe("f3");
+  expect(fault.map((s) => shotTypeLabel(s, ret))).toEqual([
+    "—", // the Feed is no shot in the rally
+    "First",
+    "Second",
+    "Return", // a volleyed return is still the Return
+    "Rally",
+    "Rally",
+  ]);
+  // An ace or a double fault has no return at all.
+  expect(
+    pointReturnShotId([
+      shot("a1", 1, { shotType: "First Serve" }),
+      shot("a2", 2, { shotType: "Second Serve" }),
+    ]),
+  ).toBeNull();
+  expect(pointReturnShotId(undefined)).toBeNull();
 });
 
 test("nothing unmeasured is ever rendered as a zero", () => {
@@ -179,7 +233,7 @@ test("nothing unmeasured is ever rendered as a zero", () => {
     player: "Lee",
     spin: "—",
     stroke: "—",
-    type: "Rally",
+    type: "—",
     placement: "—",
     mph: "—",
     result: "—",
