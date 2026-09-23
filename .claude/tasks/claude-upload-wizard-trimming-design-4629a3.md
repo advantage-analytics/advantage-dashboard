@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Score caption: "How to enter a tiebreak" popover
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/components/dashboard/matches/new-match-wizard/ScoreBlock.tsx (guess), src/components/ui/popover.tsx (import only), tests/upload-score-help.spec.ts (new, offline render via tests/fixtures/vm-modules.ts `createLoader()` with `@/components/ui/popover` stubbed inline as tests/upload-player-details.spec.ts does)

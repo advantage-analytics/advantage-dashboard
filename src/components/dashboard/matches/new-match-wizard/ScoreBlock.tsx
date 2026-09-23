@@ -1,13 +1,19 @@
 "use client";
 
 import { useRef } from "react";
-import { Plus } from "lucide-react";
+import { HelpCircle, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Kbd } from "@/components/ui/kbd";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { scoreColumns } from "./score-state";
 import type { FormData } from "./types";
 import { setHasData } from "./utils";
 import { FieldCaption } from "./FieldCaption";
+import { floatMenuCls, focusRingCls } from "./styles";
 
 export { Required } from "./FieldCaption";
 
@@ -95,6 +101,99 @@ export const ScoreInput = ({
     )}
   />
 );
+
+// ---------------------------------------------------------------------------
+// "How to enter a tiebreak" — help beside the Score caption
+
+/**
+ * A smaller, read-only `CELL_CLS`: plain spans, never inputs, so the digit
+ * path (and `useWizardKeys`) never counts them. Purely illustrative.
+ */
+const MINI_CELL_CLS =
+  "tabular inline-flex size-[22px] items-center justify-center rounded-[var(--radius-cell)] border border-[var(--border-medium)] bg-white text-[11px] text-[var(--ink-900)]";
+
+const TIEBREAK_EXAMPLES: readonly {
+  rows: readonly (readonly [games: number, tiebreak: number])[];
+  lead: string;
+  rest: string;
+}[] = [
+  {
+    rows: [
+      [7, 7],
+      [6, 4],
+    ],
+    lead: "A set that ends 7–6.",
+    rest: "Type the games and a TB box opens beside the set. The tiebreak points go in it.",
+  },
+  {
+    rows: [
+      [1, 10],
+      [0, 8],
+    ],
+    lead: "A match tiebreak for the third set.",
+    rest: "Enter that set as 1–0 to whoever won it, then the points in its TB box.",
+  },
+];
+
+function TiebreakHelp() {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex cursor-pointer items-center gap-1 text-[11px] leading-[1.4] text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)]",
+            focusRingCls,
+          )}
+        >
+          <HelpCircle
+            className="size-[11px]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+          How to enter a tiebreak
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={8}
+        className={cn(floatMenuCls, "w-[360px] gap-3.5 p-4")}
+      >
+        <span className="text-[13px] font-medium text-[var(--ink-900)]">
+          Entering a tiebreak
+        </span>
+        {TIEBREAK_EXAMPLES.map((ex) => (
+          <div
+            key={ex.lead}
+            className="grid grid-cols-[auto_1fr] items-start gap-3.5"
+          >
+            <span aria-hidden="true" className="flex flex-col gap-[3px]">
+              {ex.rows.map(([games, tb], r) => (
+                <span key={r} className="flex gap-[3px]">
+                  <span className={MINI_CELL_CLS}>{games}</span>
+                  <span
+                    className={cn(
+                      MINI_CELL_CLS,
+                      "border-[var(--blue)] text-[10px] text-[var(--ink-700)]",
+                    )}
+                  >
+                    {tb}
+                  </span>
+                </span>
+              ))}
+            </span>
+            <p className="text-[12px] leading-[1.45] text-[var(--ink-700)]">
+              <span className="font-medium text-[var(--ink-900)]">
+                {ex.lead}
+              </span>
+              {` ${ex.rest}`}
+            </p>
+          </div>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export function ScoreBlock({
   formData,
@@ -399,6 +498,9 @@ export function ScoreBlock({
     <div className="flex flex-col gap-3.5">
       <div className="flex items-baseline gap-3">
         <FieldCaption label="Score" required />
+        {/* An 8-game doubles pro-set has no 7-6 set and no match tiebreak,
+            so neither worked example applies there. */}
+        {gamesTo !== 8 && <TiebreakHelp />}
         <span className="flex-1" />
         <span className="text-[12px] text-[var(--ink-600)]">{format}</span>
       </div>
