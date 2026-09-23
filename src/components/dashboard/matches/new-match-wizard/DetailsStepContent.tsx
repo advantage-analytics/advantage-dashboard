@@ -1238,6 +1238,10 @@ function DetailsStepContentImpl({
     playedShown.some((p) => normalizedPersonName(p.name) === needle) ||
     rosterShown.some((p) => normalizedPersonName(p.name) === needle);
 
+  // The name is read-only here: in a team flow with no line pinned it was
+  // picked on step 1, and SubjectBar's "Not <name>?" is where it changes. Say
+  // so quietly rather than add a second control for the same start-over.
+  const pickedOnStepOne = workspaceKind === "team" && !preset;
   const playerProvenance = provenanceFor(formData.playerStyleSource, {
     isSelf: subject.isSelf,
     school: null,
@@ -1407,9 +1411,11 @@ function DetailsStepContentImpl({
                 <span className="truncate">{subject.name}</span>
                 {subject.isSelf && <YouPill />}
               </span>
-              {playerProvenance && (
+              {(pickedOnStepOne || playerProvenance) && (
                 <span className="text-micro whitespace-nowrap">
-                  {playerProvenance}
+                  {[pickedOnStepOne && "Picked on step 1", playerProvenance]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </span>
               )}
             </span>

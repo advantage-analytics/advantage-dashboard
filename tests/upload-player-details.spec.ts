@@ -321,10 +321,22 @@ test("the opponent's editable name carries a visible edit affordance; the subjec
   // button's own onClick, which is unrelated to the name's editability.
   const subjectNameSpan = detailsSrc.slice(
     detailsSrc.indexOf("The workspace's own player"),
-    detailsSrc.indexOf("{playerProvenance &&"),
+    detailsSrc.indexOf("{(pickedOnStepOne || playerProvenance) &&"),
   );
+  expect(subjectNameSpan.length).toBeGreaterThan(0);
   expect(subjectNameSpan).not.toContain("<Pencil");
   expect(subjectNameSpan).not.toContain("onClick");
+});
+
+test("a team flow with no pinned line says the player was picked on step 1", () => {
+  // SubjectBar's "Not <name>?" owns the change; the row only points back to
+  // where the name was chosen, beside the style provenance on one line.
+  expect(detailsSrc).toContain(
+    'const pickedOnStepOne = workspaceKind === "team" && !preset;',
+  );
+  expect(detailsSrc).toContain(
+    '[pickedOnStepOne && "Picked on step 1", playerProvenance]',
+  );
 });
 
 test("missing hand or backhand answers are collected by the one shared requirements function, not re-derived", () => {
