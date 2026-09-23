@@ -126,7 +126,7 @@ ready).
 
 ## T9 · "Looks like" offer needs the opponent name or the score, not just the date
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/lib/wizard/actions.ts (`offerFor` ~67–93, `findLineOffers` ~127–182 and its doc comment), src/components/dashboard/matches/new-match-wizard/types.ts (`LineOffer` ~539), src/components/dashboard/matches/new-match-wizard/offer-match.ts (new, pure), src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx (header comment ~8–12, the `offer` derivation ~1093), src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (`recordedGames`/`isSeededScore` ~213–241, only to import the shared comparison instead of keeping a copy), tests/upload-line-offers.spec.ts (new)
 - **done when:**

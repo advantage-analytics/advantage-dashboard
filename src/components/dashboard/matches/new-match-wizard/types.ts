@@ -532,8 +532,9 @@ export interface MatchDraft {
 
 /**
  * A lineup slot the schedule OFFERS on the details step — the file's date
- * matched an open line for this player within two days (design 3d/7a).
- * Accepting fills opponent, date, court, format and scoring from the line and
+ * matched an open line for this player within two days (design 3d/7a), and
+ * the strip shows it only once the opponent name or the score also matches
+ * (`rankLineOffers`, `offer-match.ts`). Accepting fills opponent, date, court, format and scoring from the line and
  * the event; Detach empties them again.
  */
 export interface LineOffer {
@@ -554,4 +555,16 @@ export interface LineOffer {
   surface: string | null;
   bestOf: number;
   adScoring: boolean | null;
+  /**
+   * The line's recorded games, when its match was scored — `player1` is our
+   * side, games only (no tiebreak points, no `winner`). Null when the line has
+   * no match or no score. Optional: a draft saved before this field existed
+   * carries an `attachedLine` without it.
+   */
+  score?: { player1: number[]; player2: number[] } | null;
+  /**
+   * Whole days between the file's date and the event — 0 inside the event's
+   * dates. Optional for the same older drafts.
+   */
+  daysFromFile?: number;
 }

@@ -87,6 +87,7 @@ import {
 import {
   asksIfEndedEarly,
   isStoppedResult,
+  sameRecordedScore,
   scoreCheckAnswered,
   scoreGames,
   scoreUndecided,
@@ -204,40 +205,6 @@ const LINE_SWAP_FIELDS = [
 /** Which line a preset fills — what tells a swap from a re-run of the seed. */
 function presetLineKey(preset: EventPreset): string | null {
   return preset.entryId ?? preset.matchId;
-}
-
-/**
- * The games a score records, without the empty trailing sets the form pads
- * with — so a seeded `[6, 6]` and a form's `[6, 6, null]` compare equal.
- */
-function recordedGames(games: readonly (number | null)[]): (number | null)[] {
-  const trimmed = [...games];
-  while (trimmed.length > 0 && trimmed[trimmed.length - 1] == null)
-    trimmed.pop();
-  return trimmed;
-}
-
-/**
- * Whether the form's score is still exactly the one a line's record seeded.
- *
- * Nothing in the form records where a score came from, so this is the test a
- * line swap uses: a score equal to line A's recorded one came from line A's
- * record (or cannot be told apart from it) and is wrong for line B; a score
- * that differs was typed in the wizard, describes the recording, and stays.
- */
-function isSeededScore(
-  form: Pick<MatchFormData, "playerScores" | "opponentScores">,
-  score: NonNullable<EventPreset["score"]>,
-): boolean {
-  const same = (a: readonly (number | null)[], b: readonly number[]) => {
-    const x = recordedGames(a);
-    const y = recordedGames(b);
-    return x.length === y.length && x.every((v, i) => v === y[i]);
-  };
-  return (
-    same(form.playerScores, score.player1) &&
-    same(form.opponentScores, score.player2)
-  );
 }
 
 /** Name, size and mtime — enough to tell one picked recording from another. */
@@ -1426,7 +1393,10 @@ export function useUploadMatchWizard({
       setFormData((prev) => {
         const base = { ...prev, ...(draft?.formData ?? {}) };
         const scoreCleared: Partial<MatchFormData> =
-          previousScore && isSeededScore(base, previousScore)
+          // A score equal to line A's recorded one came from line A's record
+          // (or cannot be told apart from it) and is wrong for line B; a
+          // score that differs was typed in the wizard and stays.
+          previousScore && sameRecordedScore(base, previousScore)
             ? {
                 playerScores: [...DEFAULT_FORM_DATA.playerScores],
                 opponentScores: [...DEFAULT_FORM_DATA.opponentScores],

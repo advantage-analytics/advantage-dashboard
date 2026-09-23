@@ -101,3 +101,12 @@ is the runner's. Newest entries at the bottom.
 1. The source-kind file drop was added beyond the task's scope note (singles↔doubles was out of scope) — the reviewer flagged it for `/pr-check`'s design/correctness pass.
 2. A draft-resumed flow still re-applies the draft on every swap ("Not fixed" #2).
 3. On a singles↔doubles swap the progress step count is set only on the first seed, and the dropped file leaves `videoProbe` and the trim window behind.
+
+## T9 · "Looks like" offer needs the opponent name or the score, not just the date — done
+
+**gate:** mechanical GATE PASS (first run) · completion VERDICT: pass
+**changed:** `LineOffer` gains optional `score` (games only) and `daysFromFile`, filled by `offerFor`/`findLineOffers` (window, inputs and filters unchanged). New pure `offer-match.ts` `rankLineOffers` keeps only opponent-name (`normalizedPersonName` equality, both non-blank) or score matches, ordered name > score > days; a scored line with no games never counts as a score match. The score comparison moved to `score-state.ts` `sameRecordedScore`, shared with the line-swap clear in `useUploadMatchWizard.ts`. `DetailsStepContent.tsx` memoizes the ranked offer on opponent name + scores with no new query; an attached line still wins. New `tests/upload-line-offers.spec.ts`.
+**follow-ups:**
+
+1. The strip could say why a line was offered (name or score), so a score-only offer is easier to trust.
+2. After Detach the strip may not return if the restored opponent name no longer matches (accepted by the author).

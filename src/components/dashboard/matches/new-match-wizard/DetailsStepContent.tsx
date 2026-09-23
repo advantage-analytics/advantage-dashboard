@@ -6,10 +6,12 @@
  * Four things, top to bottom, in the step-1 register:
  *
  *   The schedule's OFFER — in a team workspace the file's date may match an
- *   open line for this player within two days, so the schedule offers, in the
- *   note-strip register: "Looks like #2 Singles › Marcus Reid vs Jordan
- *   Alvarez", Attach and a quiet decline. Accept and six fields fill; Detach
- *   empties them again and touches nothing typed by hand.
+ *   open line for this player within two days, but a line is offered only
+ *   when the opponent name or the score typed here also matches it
+ *   (`rankLineOffers`: name, then score, then nearest date). Then the
+ *   schedule offers, in the note-strip register: "Looks like #2 Singles ›
+ *   Marcus Reid vs Jordan Alvarez", Attach and a quiet decline. Accept and six
+ *   fields fill; Detach empties them again and touches nothing typed by hand.
  *
  *   The SCORE — 40px cells with the set numbers as eyebrows, the format read
  *   back at the right as a fact, no set control: a dashed column after the
@@ -92,6 +94,7 @@ import {
 import { AttachLinePicker } from "@/components/dashboard/matches/match-actions/attach-line-picker";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
+import { rankLineOffers } from "./offer-match";
 import type { EventPreset, FormData, LineOffer, ValueSource } from "./types";
 import {
   floatMenuCls,
@@ -1090,8 +1093,26 @@ function DetailsStepContentImpl({
     onInputChange,
   ]);
 
+  // The date query returns every candidate; the opponent name or the score
+  // must also match before one is offered. Filtered in memory so typing never
+  // re-asks the server. An attached line wins, so Detach stays reachable after
+  // the opponent or score is edited.
+  const rankedOffers = useMemo(
+    () =>
+      rankLineOffers(offers, {
+        opponentName: formData.opponentName,
+        playerScores: formData.playerScores,
+        opponentScores: formData.opponentScores,
+      }),
+    [
+      offers,
+      formData.opponentName,
+      formData.playerScores,
+      formData.opponentScores,
+    ],
+  );
   const offer =
-    attachedLine ?? offers.find((o) => !declined.has(o.entryId)) ?? null;
+    attachedLine ?? rankedOffers.find((o) => !declined.has(o.entryId)) ?? null;
 
   // ---- Players: editing state
 
