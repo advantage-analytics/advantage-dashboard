@@ -73,7 +73,7 @@ ready).
 ## T5 · "Start over with a different player?" dialog and the hook's start-over reset
 
 - **status:** blocked
-- **model:** fable
+- **model:** opus
 - **needs:** T4
 - **files:** src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (new `startOver` handler + return type), src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx or a new StartOverDialog.tsx beside SubjectBar.tsx, src/components/ui/confirm-dialog.tsx (import only), tests/upload-start-over.spec.ts (new, via tests/fixtures/upload-wizard-hook.ts), tests/upload-subject-bar.spec.ts (extend for the dialog copy), docs/investigations/2026-09-23-start-over-guardrails-review.md (new)
 - **done when:**
@@ -87,7 +87,7 @@ ready).
 ## T6 · Investigate what survives a PinnedLineBar line swap
 
 - **status:** blocked
-- **model:** fable
+- **model:** opus
 - **files:** docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md (new, the findings), tests/upload-line-swap.spec.ts (new, via tests/fixtures/upload-wizard-hook.ts — mutate `h.props.preset` then `h.render()` to model `onSwitchPreset`), src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (the preset seeding effect at ~line 1229, only if the fix is trivial and confirmed)
 - **done when:**
   - [ ] The findings doc names, field by field, what the preset seeding effect rewrites on a line swap (`playerName`, `opponentName`, `date`, `bestOf`, `adScoring`, score …) and what it leaves standing, and gives a verdict for each of: `initialTopPlayerIsPlayer1`, `fixedCamera`, `playerHand`/`playerBackhand`/`playerStyleSource`, `opponentHand`/`opponentBackhand`/`opponentStyleSource`, `playerTiebreaks`/`opponentTiebreaks`, the trim window and `topPlayerAnswerStale`'s baseline — with the line numbers the verdict rests on.
@@ -96,3 +96,17 @@ ready).
   - [ ] `PinnedLineBar.tsx`'s header comment ("Picking one rewrites the bar and nothing else") is corrected to say what a swap does clear, if anything now does.
   - [ ] `npm run typecheck`, `npm run lint` pass; `tests/upload-camera-answer-reset.spec.ts` stays green.
 - **notes:** From a read of the code: the seed effect (`useEffect` keyed on `preset` at ~1229) spreads `draft?.formData` then the preset's event facts over `prev` and touches none of the video answers or player styles, so the carry-over looks real for `initialTopPlayerIsPlayer1` (camera-relative "was YOU at the top" — the "you" just changed) and for both hand/backhand pairs. `fixedCamera` is genuinely about the file and should survive. Independent of T5 in code, but both edit the hook — run after T5 if the queue is drained in order.
+
+## T7 · SwingVision "Not <name>?" clears only player fields, no dialog, straight to step 1
+
+- **status:** todo
+- **model:** opus
+- **needs:** T5
+- **files:** src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (new no-arg callback, guess name `resetImportPlayerAnswer`), src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx (the `onNotSubject` wiring), tests/upload-import-not-subject.spec.ts (new, via tests/fixtures/upload-wizard-hook.ts) (guess)
+- **done when:**
+  - [ ] A new no-arg hook callback sets `step` to `firstStep`, resets `playerHand`, `playerBackhand`, `playerStyleSource` to `DEFAULT_FORM_DATA` (undefined) and calls `resetIdentityAnswer()` — and nothing else: it does not call `applyMatchSubject`, and opponent, score/tiebreak, event, round, format, date/time and court fields are untouched.
+  - [ ] In `UploadMatchFlow.tsx`, `onNotSubject` branches on `isProcessingProvider`: import (`false`) calls the new callback; processing (`true`) keeps exactly the behaviour T5 shipped (step 2 → `handleBack`, steps 3–4 → the start-over dialog).
+  - [ ] No dialog or confirm step on the import path: the diff adds no `ConfirmDialog`/`StartOverDialog` use for import providers.
+  - [ ] A spec drives the real hook with an import provider: pick a roster subject, set the three player fields, simulate a parsed import that filled the opponent and score, confirm the identity, call the callback, then assert `step === firstStep`, the three player fields are undefined, the identity answer is cleared, and the opponent and score are unchanged.
+  - [ ] `npm run typecheck` and `npm run lint` pass; `tests/upload-subject-bar.spec.ts` and `tests/upload-start-over.spec.ts` stay green.
+- **notes:** Author decision 2026-09-23. The player-1 check re-asks by itself: its confirmation is keyed to the chosen athlete (useUploadMatchWizard.ts ~869–899) and an effect resets it when the athlete changes (~955) — don't rebuild that, only clear the answer on the click. Hand-edited score/opponent values are kept by construction (only the three player fields are touched). `chooseMatchSubject` already clears style fields when a new subject is picked; this is a separate, earlier clear — don't merge the two.
