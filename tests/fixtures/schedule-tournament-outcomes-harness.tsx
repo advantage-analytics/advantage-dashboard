@@ -16,7 +16,8 @@ window.routerPushes = [];
 window.routerRefreshes = 0;
 
 /**
- * The tournament event page on fixture entries. `?match=` is handed in as the
+ * The tournament event page on fixture entries. `?viewer=player` renders a
+ * member who cannot manage the schedule; `?match=` is handed in as the
  * initial selection, the way the server page hands `searchParams.match` down
  * (the navigation mock's `useSearchParams()` returns null).
  */
@@ -26,7 +27,7 @@ createRoot(document.getElementById("root")!).render(
   <TooltipProvider>
     <TournamentDetail
       detail={detail}
-      canEdit
+      canEdit={query.get("viewer") !== "player"}
       totals={null}
       rosterPlayerIds={rosterPlayerIds}
       initialMatchId={query.get("match")}

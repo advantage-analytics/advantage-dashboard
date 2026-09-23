@@ -24,6 +24,13 @@ import {
   type ToolbarOption,
 } from "@/components/dashboard/schedule/event-table";
 import { useRowSelection } from "@/components/dashboard/schedule/use-row-selection";
+import {
+  EventLineDrawer,
+  LineContextList,
+  LineContextRow,
+} from "@/components/dashboard/schedule/event-line-drawer";
+import { scoreHref } from "@/components/dashboard/schedule/line-row";
+import { drawerSideName } from "@/components/dashboard/matches/drawer-sections";
 import { runRecord } from "@/components/dashboard/schedule/run-strip";
 import { RowLifecycle } from "@/components/dashboard/matches/row-state";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
@@ -52,7 +59,7 @@ import {
   siteTitle,
   surfaceTitle,
 } from "@/lib/schedule/format";
-import { runFinish } from "@/lib/schedule/tournament-run";
+import { nextRound, runFinish } from "@/lib/schedule/tournament-run";
 import type { EventTeamTotals } from "@/lib/data/event-team-totals";
 import type {
   EntryMatch,
@@ -115,10 +122,12 @@ export interface TournamentRow {
  * as a table grouped by entry.
  *
  * Rows peek, never navigate: a click selects the round (`aria-current`,
- * `?match=<id>`, see `TournamentRow.id`). The drawer that opens beside the
- * table — and with it the per-round and per-entry actions (Add result for the
- * next round, Edit result, View report, Add video) — is T12's; until then
- * `drawer` is null and the header's "Add result" is the one write.
+ * `?match=<id>`, see `TournamentRow.id`) and opens `EventLineDrawer` beside
+ * the table as "Match n / N", with the player's run as its context list. The
+ * per-round and per-entry actions live in that drawer: Edit result on an
+ * outcome-only round, View match, Add video, and the entry's next-round Add
+ * result. An entry with nothing played has no row to open, so its group head
+ * carries its own "Add first result" for a coach.
  *
  * ── Why there is no team result on this page ───────────────────────────────
  * A dual is over when every line is in and the page can check that. A
@@ -186,6 +195,23 @@ export function TournamentDetail({
     initialId: initialMatchId,
     param: "match",
   });
+
+  const drawerRow = selection.drawerId
+    ? (allRows.find((row) => row.id === selection.drawerId) ?? null)
+    : null;
+  const drawerRun = drawerRow
+    ? (runs.find((run) => run.entry.id === drawerRow.entry.id) ?? null)
+    : null;
+  // The run list names every round of the entry, whatever the toolbar hides.
+  // Choosing one the cut hides lifts the cut first, so the selection is not
+  // cleared the moment it lands on a row that is not listed.
+  const chooseRow = (id: string) => {
+    if (!visibleIds.includes(id)) {
+      setPill("all");
+      setResultCut(null);
+    }
+    selection.select(id, false);
+  };
 
   // Matches, not entries, and not outcome-only rounds: a default or a
   // withdrawal decided a round without a match, so it has no score to count
@@ -349,6 +375,7 @@ export function TournamentDetail({
                 entry={run.entry}
                 rosterPlayerIds={rosterPlayerIds}
                 first={index === 0}
+                canEdit={canEdit}
               />
               {run.rows.map((row) => (
                 <MatchTableRow
@@ -371,8 +398,49 @@ export function TournamentDetail({
           ].join(" · ")}
         />
       }
-      // T12 renders the match drawer here, from `selection`.
-      drawer={null}
+      drawer={
+        drawerRow && drawerRun ? (
+          <EventLineDrawer
+            kind="Match"
+            event={event}
+            entry={drawerRow.entry}
+            round={drawerRow.round}
+            lineLabel={drawerRow.round ?? "—"}
+            eventLabel={event.name}
+            canEdit={canEdit}
+            nextResultHref={scoreHref(
+              event.id,
+              drawerRow.entry.id,
+              nextRound(drawerRow.entry),
+            )}
+            index={selection.index}
+            total={selection.total}
+            canPrev={selection.canPrev}
+            canNext={selection.canNext}
+            closing={selection.closing}
+            autoFocus={selection.openedByKeyboard}
+            onPrev={() => selection.step(-1)}
+            onNext={() => selection.step(1)}
+            onClose={() => selection.close(drawerRow.id)}
+            onClosed={selection.finishClose}
+            context={
+              <LineContextList
+                eyebrow={runEyebrow(drawerRun.entry)}
+                summary={runSummary(drawerRun.entry)}
+              >
+                {drawerRun.rows.map((row) => (
+                  <RunContextRow
+                    key={row.id}
+                    row={row}
+                    current={row.id === drawerRow.id}
+                    onSelect={chooseRow}
+                  />
+                ))}
+              </LineContextList>
+            }
+          />
+        ) : null
+      }
     />
   );
 }
@@ -388,10 +456,12 @@ function EntryHead({
   entry,
   rosterPlayerIds,
   first,
+  canEdit,
 }: {
   entry: EventEntry;
   rosterPlayerIds: Record<string, string>;
   first: boolean;
+  canEdit: boolean;
 }) {
   const record = runRecord(entry.matches);
   const finish = runFinish(entry);
@@ -447,12 +517,25 @@ function EntryHead({
       <span className="flex-1" />
 
       {entry.matches.length === 0 ? (
-        <span
-          className="shrink-0 text-[11px] leading-none"
-          style={{ color: "var(--ink-500)" }}
-        >
-          No matches yet
-        </span>
+        <>
+          <span
+            className="shrink-0 text-[11px] leading-none"
+            style={{ color: "var(--ink-500)" }}
+          >
+            No matches yet
+          </span>
+          {/* Nothing played means no row, so no drawer to hold this entry's
+              first result — the head carries it. The score flow needs the
+              entry named to land on this player, not the first one waiting. */}
+          {canEdit && entry.playerLabels.length > 0 ? (
+            <Link
+              href={scoreHref(entry.eventId, entry.id, nextRound(entry))}
+              className="shrink-0 rounded-[4px] text-[11px] leading-none font-medium text-[var(--blue)] outline-none hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)]"
+            >
+              Add first result
+            </Link>
+          ) : null}
+        </>
       ) : (
         <>
           <span
@@ -587,6 +670,74 @@ function MatchTableRow({
         )}
       </span>
     </EventRow>
+  );
+}
+
+/* ── Drawer context ─────────────────────────────────────────────────────── */
+
+/** "Lee's run", "Brooks / Reid's run" — the frame's surname eyebrow. */
+function runEyebrow(entry: EventEntry): string {
+  const names = entry.playerLabels.map(surname).join(" / ");
+  return names ? `${names}'s run` : "This run";
+}
+
+/**
+ * "Seed 3 · 1–0". The record is `runRecord`, the group head's figure, so it
+ * counts matches only — an outcome-only round has no score behind it. The
+ * seed prints whatever the draw: inside one player's run there is no other
+ * entry's seed to compare it against.
+ */
+function runSummary(entry: EventEntry): string {
+  const record = runRecord(entry.matches);
+  return [
+    entry.seed ? `Seed ${entry.seed}` : null,
+    `${record.won}–${record.lost}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/**
+ * One round in the drawer's run: round, opponent, the score — or the
+ * outcome's words, never an invented score — and the mark.
+ */
+function RunContextRow({
+  row,
+  current,
+  onSelect,
+}: {
+  row: TournamentRow;
+  current: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const result = resolveEntryResult(row.entry, row.round);
+  const played = result.kind === "played" ? result.match : null;
+  const outcome =
+    result.kind === "non-played"
+      ? (LINE_STATUS[resultState(result)] ?? null)
+      : null;
+  const sets = played ? scoreSetsFrom(played.score) : [];
+  const theirs =
+    row.match?.opponentLabels.join(" / ") ||
+    row.entry.opponentLabels.join(" / ");
+
+  return (
+    <LineContextRow
+      label={row.round ?? "—"}
+      name={theirs ? drawerSideName(theirs) : "No opponent yet"}
+      won={resultWon(result)}
+      current={current}
+      onSelect={() => onSelect(row.id)}
+      score={
+        outcome ? (
+          <span className="text-[var(--ink-500)]">{outcome.label}</span>
+        ) : sets.length > 0 ? (
+          <ScoreLine sets={sets} />
+        ) : (
+          <EmptyMark label="No score yet" />
+        )
+      }
+    />
   );
 }
 

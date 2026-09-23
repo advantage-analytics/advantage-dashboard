@@ -120,8 +120,12 @@ async function open(page: import("@playwright/test").Page, path = "") {
 
 type Page = import("@playwright/test").Page;
 
+/** A table row by its round — scoped to the table, since the drawer's run
+ * list prints the same round labels. */
 function row(page: Page, round: string) {
-  return page.getByText(round, { exact: true }).locator("..");
+  return matchRows(page).filter({
+    has: page.getByText(round, { exact: true }),
+  });
 }
 
 /** Every match row on screen (the header row carries no `event-row-` id). */
@@ -139,7 +143,11 @@ test("renders played and outcome-only rounds in the established ladder order", a
 }) => {
   await open(page);
 
-  await expect(page.locator("span.mono")).toHaveText(["Q1", "R16", "QF"]);
+  await expect(matchRows(page).locator("span.mono")).toHaveText([
+    "Q1",
+    "R16",
+    "QF",
+  ]);
 
   await expect(
     row(page, "Q1").getByText("Defaulted", { exact: true }),
@@ -242,12 +250,12 @@ test("the pills cut rows by draw, and a row click selects it", async ({
   ).toHaveText(["All matches", "Main draw", "Qualifying", "Needs video"]);
 
   await page.getByRole("button", { name: "Qualifying", exact: true }).click();
-  await expect(page.locator("span.mono")).toHaveText(["Q1"]);
+  await expect(matchRows(page).locator("span.mono")).toHaveText(["Q1"]);
   // An entry the cut leaves empty drops out with its head.
   await expect(page.getByText("Sam Park", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Main draw", exact: true }).click();
-  await expect(page.locator("span.mono")).toHaveText(["R16", "QF"]);
+  await expect(matchRows(page).locator("span.mono")).toHaveText(["R16", "QF"]);
 
   await page.getByRole("button", { name: "All matches", exact: true }).click();
   await row(page, "R16").click();
@@ -264,4 +272,146 @@ test("outcome-only rounds never enter match analysis totals", () => {
   expect(lineCoverageFrom([entry])).toEqual({ analyzed: 1, total: 1 });
   expect(readyMatchIdsFrom([entry])).toEqual(["played-r16"]);
   expect(entry.matches).toHaveLength(1);
+});
+
+/* ── The match drawer (T12) ─────────────────────────────────────────────── */
+
+function drawer(page: Page) {
+  return page.getByRole("dialog");
+}
+
+const SCORE = "/dashboard/team/schedule/tournament-outcomes/score";
+// `nextRound(entry)`: the round after the run's last match, R16.
+const NEXT = `${SCORE}?entry=tournament-entry&round=QF`;
+
+test("a played round opens the match drawer with its report and facts", async ({
+  page,
+}) => {
+  await open(page);
+  await row(page, "R16").click();
+
+  const panel = drawer(page);
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText("Match", { exact: true })).toBeVisible();
+  await expect(panel.getByText("2 / 3", { exact: true })).toBeVisible();
+
+  const report = "/dashboard/matches/played-r16";
+  await expect(panel.locator("h2 a")).toHaveAttribute("href", report);
+  await expect(
+    panel.getByRole("link", { name: "View match", exact: true }),
+  ).toHaveAttribute("href", report);
+  await expect(panel.locator("dl").first()).toContainText(
+    "Fall Invitational · R16",
+  );
+  // A coach sees ⋯ on a played round, and the entry's next-round result.
+  await expect(
+    panel.getByRole("button", { name: "Match actions" }),
+  ).toHaveCount(1);
+  await expect(
+    panel.getByRole("link", { name: "Add result", exact: true }),
+  ).toHaveAttribute("href", NEXT);
+  expect(await page.evaluate(() => window.actionCalls)).toEqual([]);
+});
+
+test("?match=played-r16 opens the drawer on load", async ({ page }) => {
+  await open(page, "?match=played-r16");
+  const panel = drawer(page);
+  await expect(panel).toBeVisible();
+  await expect(panel.locator("h2 a")).toHaveAttribute(
+    "href",
+    "/dashboard/matches/played-r16",
+  );
+});
+
+test("the drawer lists the player's run, outcome-only rounds included", async ({
+  page,
+}) => {
+  await open(page, "?match=played-r16");
+
+  const list = drawer(page).getByRole("region", { name: "Lee's run" });
+  await expect(list.getByText("Lee's run", { exact: true })).toBeVisible();
+  // `runRecord`: matches only, so the default and the withdrawal do not count.
+  await expect(list.getByText("Seed 3 · 1–0", { exact: true })).toBeVisible();
+
+  const rounds = list.getByRole("button");
+  await expect(rounds.locator("span.mono")).toHaveText(["Q1", "R16", "QF"]);
+  await expect(rounds.nth(1)).toHaveAttribute("aria-current", "true");
+  await expect(rounds.nth(0)).not.toHaveAttribute("aria-current", "true");
+  await expect(rounds.nth(0)).toContainText("Defaulted");
+  await expect(rounds.nth(1)).toContainText("6-2, 6-3");
+  await expect(rounds.nth(2)).toContainText("Withdrawn");
+
+  // Choosing a round moves the drawer and the table's selection with it.
+  await rounds.nth(2).click();
+  await expect(rounds.nth(2)).toHaveAttribute("aria-current", "true");
+  await expect(row(page, "QF")).toHaveAttribute("aria-current", "true");
+  await expect.poll(() => page.url()).toContain("match=outcome-qf");
+});
+
+for (const round of ["Q1", "QF"]) {
+  test(`the outcome-only ${round} round offers Edit result, not a snapshot`, async ({
+    page,
+  }) => {
+    await open(page);
+    await row(page, round).click();
+
+    const panel = drawer(page);
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText("Snapshot", { exact: true })).toHaveCount(0);
+    await expect(
+      panel.getByRole("link", { name: "Edit result", exact: true }),
+    ).toHaveAttribute("href", `${SCORE}?entry=tournament-entry&round=${round}`);
+    await expect(
+      panel.getByRole("link", { name: "Add result", exact: true }),
+    ).toHaveAttribute("href", NEXT);
+    // No match, so nothing to view or manage.
+    await expect(
+      panel.getByRole("link", { name: "View match", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      panel.getByRole("button", { name: "Match actions" }),
+    ).toHaveCount(0);
+    expect(await page.evaluate(() => window.actionCalls)).toEqual([]);
+  });
+}
+
+test("a member who cannot edit sees no writes in the drawer", async ({
+  page,
+}) => {
+  await open(page, "?viewer=player&match=played-r16");
+  const panel = drawer(page);
+  await expect(panel).toBeVisible();
+  await expect(
+    panel.getByRole("link", { name: "View match", exact: true }),
+  ).toHaveAttribute("href", "/dashboard/matches/played-r16");
+  await expect(
+    panel.getByRole("button", { name: "Match actions" }),
+  ).toHaveCount(0);
+  await expect(
+    panel.getByRole("link", { name: /^(Add|Edit) result$/ }),
+  ).toHaveCount(0);
+
+  await row(page, "QF").click();
+  await expect(panel.getByText("3 / 3", { exact: true })).toBeVisible();
+  await expect(
+    panel.getByRole("link", { name: /^(Add|Edit) result$/ }),
+  ).toHaveCount(0);
+  // Nor does the waiting entry's head offer its first result.
+  await expect(
+    page.getByRole("link", { name: "Add first result" }),
+  ).toHaveCount(0);
+});
+
+test("an entry with nothing played offers its first result from its head", async ({
+  page,
+}) => {
+  await open(page);
+  const parkHead = page.getByText("Sam Park", { exact: true }).locator("..");
+  // Main draw, nothing recorded: `nextRound` starts the run at R32.
+  await expect(
+    parkHead.getByRole("link", { name: "Add first result", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    `${SCORE}?entry=tournament-entry-waiting&round=R32`,
+  );
 });

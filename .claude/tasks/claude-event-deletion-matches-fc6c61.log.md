@@ -106,3 +106,14 @@ is the runner's. Newest entries at the bottom.
 3. `event-page.tsx`'s `EventPageFrame`, `TableCard`, `GroupHead`, `DetailLine`, `EventFacts` and `line-row.tsx`'s `LineRow` now have no importers; README ~line 139 still describes the tournament page on `EventPageFrame` — T13.
 4. `runRecord`/`runFinish` ignore outcome-only rounds, so a head can read "through the round of 16" after a QF withdrawal.
 5. Entry heads show initials only; the dual page shows the viewer's own photo.
+
+## T12 · Tournament match drawer with the player's run — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite incl. design-drift); completion `VERDICT: pass`.
+**changed:** `tournament-detail.tsx` replaces `drawer={null}` with `EventLineDrawer kind="Match"` (round as the line label, event name as the event label) and a "<player>'s run" context list — "Seed n · W–L" from `runRecord`, every round of the entry in table order incl. outcome-only rounds, `aria-current` on the open one, picking a hidden round clears the filter. Selection keeps T11's bare ids (`?match=played-r16`). Empty entries get a coach-only "Add first result" link in their group head (the score page without `?entry=` only reaches the first empty entry). `event-line-drawer.tsx` gains optional `nextResultHref` (an outline "Add result" beside the round's own primary, never two primaries) and a round-aware `focusKey`; the dual drawer is unchanged. Harness `?viewer=player` → `canEdit={false}`; spec selectors narrowed to the table because the run list repeats round labels; seven new drawer tests.
+**follow-ups:**
+
+1. `nextRound()` looks only at matches, so it can offer a round that already has an outcome (QF withdrawal), and a finished run still offers "Add result" — hide it once a run is over, or make `nextRound` skip rounds with an outcome.
+2. Drawer facts differ from the frame: Date shows the event span not the match day, Event reads "· R16" not "· Main draw R16", and the fifth fact is Format not the provider.
+3. `useMatchSnapshot` (T7) never settles if its query rejects — now used on both event pages.
+4. The run list shortens opponents with `drawerSideName`, giving doubles pairs as "A. X & B. Y".

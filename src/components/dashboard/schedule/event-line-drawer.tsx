@@ -53,7 +53,8 @@ import type {
 /**
  * The event pages' line drawer — one line (a dual's court, a tournament
  * round) as the Matches page's peek rail. Frames: `DualDrawer.dc.html`
- * (singles) and `DualDoublesDrawer.dc.html` (doubles) in
+ * (singles), `DualDoublesDrawer.dc.html` (doubles) and
+ * `TournamentDrawer.dc.html` (a tournament round) in
  * `docs/superpowers/specs/2026-09-23-event-pages-match-table/`.
  *
  * The shell is `PeekDrawerFrame`, and the body is `drawer-sections.tsx`'s
@@ -72,6 +73,11 @@ import type {
  * only: its follow-up is editing the score, and it has no snapshot, video or
  * report to offer.
  *
+ * A tournament round also carries the entry's next step — `nextResultHref`,
+ * an outline "Add result" into the score flow at the round after the run's
+ * last match — so every round's drawer, a played one included, can move the
+ * run on. It sits under the primary, never beside a second primary.
+ *
  * ⋯ is `MatchActionsMenu` (Edit · Delete), drawn only when the line has a
  * played match and the viewer can edit the schedule. `EntryMatch` carries no
  * uploader, so `canEdit` gates it and the server actions refuse anyone who
@@ -85,6 +91,7 @@ export function EventLineDrawer({
   lineLabel,
   eventLabel,
   canEdit,
+  nextResultHref = null,
   context,
   index,
   total,
@@ -108,6 +115,11 @@ export function EventLineDrawer({
   /** The event fact's words — "vs Meridian State" on a dual. */
   eventLabel: string;
   canEdit: boolean;
+  /**
+   * The score flow at the entry's next round — a tournament's "Add result".
+   * Drawn only when the viewer can score this line, and never twice.
+   */
+  nextResultHref?: string | null;
   /** The page's own list under the line — "This dual", a player's rounds. */
   context?: React.ReactNode;
   /** The counter — "Line 2 / 9". */
@@ -178,6 +190,10 @@ export function EventLineDrawer({
         : null;
   const viewMatch = href && !(doubles && resultLink) ? href : null;
   const addVideo = action?.kind === "add-video" ? action.href : null;
+  const nextResult =
+    canScore && nextResultHref && resultLink?.label !== "Add result"
+      ? nextResultHref
+      : null;
 
   return (
     <PeekDrawerFrame
@@ -189,7 +205,8 @@ export function EventLineDrawer({
       canNext={canNext}
       closing={closing}
       autoFocus={autoFocus}
-      focusKey={entry.id}
+      // A tournament's rounds share an entry, so the round is part of the key.
+      focusKey={round ? `${entry.id}:${round}` : entry.id}
       onPrev={onPrev}
       onNext={onNext}
       onClose={onClose}
@@ -204,7 +221,7 @@ export function EventLineDrawer({
         ) : null
       }
       footer={
-        resultLink || viewMatch || addVideo ? (
+        resultLink || viewMatch || addVideo || nextResult ? (
           <>
             {resultLink ? (
               <Link
@@ -228,6 +245,14 @@ export function EventLineDrawer({
                 className={cn(advButton("outline", "md"), "w-full")}
               >
                 Add video
+              </Link>
+            ) : null}
+            {nextResult ? (
+              <Link
+                href={nextResult}
+                className={cn(advButton("outline", "md"), "w-full")}
+              >
+                Add result
               </Link>
             ) : null}
           </>

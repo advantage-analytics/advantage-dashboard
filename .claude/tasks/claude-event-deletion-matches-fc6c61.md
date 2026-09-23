@@ -164,7 +164,7 @@ ready).
 
 ## T12 · Tournament match drawer with the player's run
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T10, T11
 - **files:** src/components/dashboard/schedule/tournament-detail.tsx, src/components/dashboard/schedule/event-line-drawer.tsx, tests/fixtures/schedule-tournament-outcomes-harness.tsx, tests/schedule-tournament-outcomes.spec.ts (guess)
