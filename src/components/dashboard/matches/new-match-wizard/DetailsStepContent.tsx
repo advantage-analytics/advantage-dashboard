@@ -760,8 +760,8 @@ function ScheduleFooter({
         </>
       ) : (
         <span>
-          One-off · not on the schedule. A coach who runs the schedule can add
-          it to an event.
+          One-off for now. A coach who runs the schedule can add it to an event
+          later.
         </span>
       )}
     </span>
@@ -1784,6 +1784,7 @@ function DetailsStepContentImpl({
                   onAttach(picked.offer);
                 }}
                 onClose={() => setPickingLine(false)}
+                unsaved
               />
             </Cell>
           ) : (
