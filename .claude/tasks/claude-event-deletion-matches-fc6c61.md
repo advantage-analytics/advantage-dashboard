@@ -348,7 +348,7 @@ ready).
 
 ## T26 · The Add result page's skeleton mirrors the score flow
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T25
 - **files:** src/components/dashboard/loading/score-flow-pending.tsx (new), src/app/dashboard/team/schedule/[eventId]/score/loading.tsx, src/components/dashboard/schedule/score-only-flow.tsx (export the title copy; `CONTENT_CLS` :76), tests/score-flow-pending.spec.ts (new) (guess)

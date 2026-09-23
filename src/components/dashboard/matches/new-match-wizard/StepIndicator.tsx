@@ -26,7 +26,7 @@ export function StepIndicator({ currentStep, totalSteps }: StepIndicatorProps) {
         <div
           key={index}
           className={`h-[2px] flex-1 transition-colors duration-200 ${
-            index <= currentStep ? "bg-[#3B82F6]" : "bg-[#F3F3F3]"
+            index <= currentStep ? "bg-[var(--blue)]" : "bg-[var(--ink-100)]"
           }`}
         />
       ))}

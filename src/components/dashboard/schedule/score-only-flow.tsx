@@ -71,9 +71,15 @@ import type {
   MatchEnding,
   OutcomeSide,
 } from "@/lib/schedule/types";
+import {
+  SCORE_FLOW_CONTENT_CLS,
+  SCORE_FLOW_TITLE,
+} from "@/components/dashboard/schedule/score-flow-copy";
+
+export { SCORE_FLOW_TITLE };
 
 /** The wizard's own content column, copied so the two pages measure the same. */
-const CONTENT_CLS = "mx-auto w-full max-w-[832px] px-14";
+const CONTENT_CLS = SCORE_FLOW_CONTENT_CLS;
 
 function replaceAt(
   list: (number | null)[],
@@ -216,7 +222,7 @@ export function ScoreOnlyFlow({
             className="max-w-[560px] text-[30px] leading-[1.15] font-light tracking-[-0.3px] text-[var(--ink-900)]"
             style={{ textWrap: "pretty" }}
           >
-            The result.
+            {SCORE_FLOW_TITLE}
           </h1>
           <p
             className="max-w-[480px] text-[13px] leading-[1.55] text-[var(--ink-600)]"

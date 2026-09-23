@@ -261,3 +261,23 @@ is the runner's. Newest entries at the bottom.
 1. T26 and T27 should use `PendingFrame pulse={false}` so real copy, such as the "The result." heading, doesn't pulse; only the bars should.
 2. `.skills/advantage-analytics-design/reference/foundations.md:108` still lists `bg-skeleton` as `bg-[#F0F0F0]`. It should point at `--surface-skeleton`.
 3. SKILL.md's routing row for `empty-and-loading.md` could mention the primitives and the guard spec.
+
+## T26 · The Add result page's skeleton mirrors the score flow — done
+
+**gate:** mechanical GATE PASS (first run) · completion `VERDICT: pass`
+
+**changed:** `score/loading.tsx` default-exports the new `ScoreFlowPending` (`loading/score-flow-pending.tsx`). It is built on `PendingFrame pulse={false}` plus `PendingBar`, so the real heading stays still while the bars pulse. Top to bottom:
+
+- the real one-step `StepIndicator`
+- the pinned strip in `PinnedLineBar`'s classes, with its bars on `--ink-200` because the skeleton token is invisible on `--surface-subtle`
+- the real "The result." `<h1>`
+- `ScoreBlock`'s two side rows of 40px cells
+- the `h-16` footer
+
+The title and content class moved into a new shared module, `schedule/score-flow-copy.ts`. `score-only-flow.tsx` is `"use client"`, so a server `loading.tsx` can't import a string from it; `score-only-flow.tsx` imports both constants and re-exports the title. Outside `files:`: `StepIndicator.tsx` swaps `#3B82F6`/`#F3F3F3` for `var(--blue)`/`var(--ink-100)`, which are the same values. `tests/score-flow-pending.spec.ts` checks the static markup against the skeleton contract.
+
+**follow-ups:**
+
+1. The page's crumb still reads "Add score" while every entry point says "Add result".
+2. The tournament Round menu and "Upload it instead" line depend on the event, so they aren't reserved in the skeleton. The page shifts down when they land on a tournament.
+3. No one has checked the pixel alignment against the real page (eyebrow height, whether the lede fits on one line) in a browser.
