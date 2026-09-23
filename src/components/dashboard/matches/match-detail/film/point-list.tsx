@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, memo, useEffect, useMemo, useRef } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { Bookmark, PanelRightClose, X } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
@@ -13,8 +13,10 @@ import { cn } from "@/lib/utils";
 
 import { filmProgressWidth } from "./film-clock";
 import { FilmAdvancedPanel } from "./film-advanced-panel";
+import { reducedMotionNow } from "./film-motion";
 import { FilmQuickFilters } from "./film-quick-filters";
 import { shotRowCells, shotRowRevealDelay, type ShotStop } from "./film-shots";
+import type { PointFocus } from "./film-timeline";
 import type { FilmSectionId } from "./filters/types";
 import { scoreColumns, youFirstScore } from "./film-score";
 import {
@@ -86,6 +88,18 @@ import {
  * point's own fragment, so it inherits the row's 14px side padding and runs
  * edge to edge under it. Without those props nothing changes, which is how the
  * in-report column (`film-tab.tsx`) keeps the list it has always had.
+ *
+ * ── Follow the film, or hold the point you are reading ──────────────────────
+ *
+ * `pointFocus` (T17 design, `2026-09-22-film-follow-hold-design.md`) splits
+ * exactly two reads in here. The WELL reads `displayedPointId` — the held
+ * point while held, else the playing one — and so does the keep-in-view
+ * effect, which stops entirely while held. The LIT ROW (`isActive`,
+ * `data-playing`, the 2px progress rule) keeps reading `activePointId`, so
+ * the row that is playing stays named while the well stays put. A row or
+ * shot click holds that point (or re-follows, when it is the playing one) and
+ * still seeks; on the dark tone a hand scroll of the list holds too. Nothing
+ * animates on hold — holding is the absence of a scroll.
  */
 
 /** Light is the in-report column; dark is the fullscreen room's drawer. */
@@ -93,6 +107,31 @@ export type FilmListTone = "light" | "dark";
 
 /** One frozen empty slice, so "no well" never re-renders a memoized row. */
 const NO_STOPS: ShotStop[] = [];
+
+/** A list with no owner of the focus state simply follows. */
+const FOLLOW: PointFocus = { mode: "follow" };
+const NOOP = () => {};
+
+/**
+ * Keys that scroll a scroller (or the row focused inside it) without a
+ * `wheel`, `touchmove` or `pointerdown` — the fourth hold source (author's
+ * answer to Open item 3).
+ */
+const SCROLL_KEYS = new Set([
+  "PageDown",
+  "PageUp",
+  "Home",
+  "End",
+  " ",
+  "ArrowUp",
+  "ArrowDown",
+]);
+
+/**
+ * How long the follow flag stays up when the scroller never reports
+ * `scrollend` (Safari). Chromium's smooth scroll eases in about 300ms.
+ */
+const FOLLOW_SCROLL_FALLBACK_MS = 400;
 
 /** The list's chrome: card, header strip, count and game headers. */
 const LIST_TONE = {
@@ -182,6 +221,20 @@ interface PointListProps {
   activeShotId?: string | null;
   /** Stable identity, please — the well's rows are memoized on it. */
   onSelectShot?: (stop: ShotStop) => void;
+  /**
+   * Follow-or-hold, owned by `FilmRoom` (film-tab.tsx) and shared by the
+   * shell column and the room's drawer. Absent, the list follows — the
+   * fixtures that mount it alone keep the list they had.
+   */
+  pointFocus?: PointFocus;
+  /**
+   * The point whose well is open: the held one while held, else the playing
+   * one. Absent, it is `activePointId`.
+   */
+  displayedPointId?: string | null;
+  /** Stable identity, please — the click wrappers below are memoized on both. */
+  onHoldPoint?: (pointId: string) => void;
+  onFollow?: () => void;
 }
 
 interface GameGroup {
@@ -224,8 +277,15 @@ export const PointList = memo(function PointList({
   shotStops,
   activeShotId = null,
   onSelectShot,
+  pointFocus = FOLLOW,
+  displayedPointId: displayedPointIdProp,
+  onHoldPoint = NOOP,
+  onFollow = NOOP,
 }: PointListProps) {
   const t = LIST_TONE[tone];
+  const displayedPointId =
+    displayedPointIdProp === undefined ? activePointId : displayedPointIdProp;
+  const held = pointFocus.mode === "held";
   const sides = useMatchSides();
   // The viewer's rows lead with the workspace's own mark — the profile photo
   // on personal, the program's crest on a team — so a point you decided reads
@@ -287,21 +347,66 @@ export const PointList = memo(function PointList({
 
   const clearAll = () => onFiltersChange(DEFAULT_FILM_FILTERS);
 
-  // The playing point's shots, and nobody else's: the feed the room hands over
-  // covers the whole film, and one open well at a time is the rule — stepping
-  // to another point refolds the last one because this slice moves with
-  // `activePointId` rather than accumulating.
+  // The DISPLAYED point's shots, and nobody else's: the feed the room hands
+  // over covers the whole film, and one open well at a time is the rule —
+  // stepping to another point refolds the last one because this slice moves
+  // with `displayedPointId` rather than accumulating. While held that id is
+  // the held point, so the well stays put as the film moves on.
   const wellStops = useMemo(() => {
-    if (!shotStops || !activePointId) return NO_STOPS;
-    return shotStops.filter((stop) => stop.point.id === activePointId);
-  }, [shotStops, activePointId]);
+    if (!shotStops || !displayedPointId) return NO_STOPS;
+    return shotStops.filter((stop) => stop.point.id === displayedPointId);
+  }, [shotStops, displayedPointId]);
   // A feed with no handler is a feed nothing can be done with, so it draws
   // nothing: the well's rows are seek targets before they are text.
   const wellOpen = onSelectShot != null && wellStops.length > 0;
 
+  // The click wrappers and the intent listeners below read the playing and
+  // displayed ids through refs, written after each commit, so their identity
+  // never moves with the film: `PointRow` and `ShotWellRow` are memoized on
+  // the callbacks they get, and a wrapper re-made on every point crossing
+  // would re-render every row of a 174-point match roughly once every ten
+  // seconds. Written in an effect rather than during render — the handlers
+  // run on a later event, never inside the render that changed the value.
+  const activePointRef = useRef(activePointId);
+  const displayedPointRef = useRef(displayedPointId);
+  const heldRef = useRef(held);
+  useEffect(() => {
+    activePointRef.current = activePointId;
+    displayedPointRef.current = displayedPointId;
+    heldRef.current = held;
+  }, [activePointId, displayedPointId, held]);
+
+  // A click on a row holds its point — or re-follows, when the row is the one
+  // already playing: that click is the way back without the pill, and the
+  // seek still happens as a restart of the point. The seek itself is
+  // untouched: the hold lands first, then `onSelect` as it always did.
+  const selectPoint = useCallback(
+    (point: MatchPoint) => {
+      if (point.id === activePointRef.current) onFollow();
+      else onHoldPoint(point.id);
+      onSelect(point);
+    },
+    [onFollow, onHoldPoint, onSelect],
+  );
+  // A shot click holds the shot's own point, by the same rule.
+  const selectShot = useCallback(
+    (stop: ShotStop) => {
+      if (stop.point.id === activePointRef.current) onFollow();
+      else onHoldPoint(stop.point.id);
+      onSelectShot?.(stop);
+    },
+    [onFollow, onHoldPoint, onSelectShot],
+  );
+
   // Keep whatever is lit in view as the film moves on — the playing shot while
-  // a well is open, the playing row otherwise — without fighting a user who is
-  // scrolling the list themselves.
+  // a well is open, the playing row otherwise — and stop entirely while held:
+  // the viewer's own scrolling is what the listeners after this effect read
+  // as intent (`wheel`, `touchmove`, `pointerdown` on the scroller, and the
+  // scrolling keys), never the `scroll` event, which a programmatic scroll
+  // fires exactly as a wheel does. Around its own `scrollTo` the effect
+  // raises `followScrollRef`, so nothing derived from the scroller's motion
+  // can mistake the effect's travel for the viewer's; the intent listeners do
+  // not consult it — a wheel arriving mid-follow-scroll is intent and holds.
   //
   // Moves this scroller's own `scrollTop` and nothing else. The DOM's
   // scroll-an-element-into-view method walks every ancestor instead, and while
@@ -309,7 +414,11 @@ export const PointList = memo(function PointList({
   // room — video included — sideways toward the row. The room's retired dark
   // list hit exactly that, which is why the rule is written down here.
   const listRef = useRef<HTMLDivElement>(null);
+  const followScrollRef = useRef(false);
+  /** Cancels the pending settle of the last follow scroll, flag untouched. */
+  const cancelSettleRef = useRef<() => void>(NOOP);
   useEffect(() => {
+    if (held) return;
     const list = listRef.current;
     const selector =
       wellOpen && activeShotId
@@ -320,12 +429,83 @@ export const PointList = memo(function PointList({
     if (!row) return;
     const listBox = list.getBoundingClientRect();
     const rowBox = row.getBoundingClientRect();
-    if (rowBox.top < listBox.top) {
-      list.scrollTop += rowBox.top - listBox.top;
-    } else if (rowBox.bottom > listBox.bottom) {
-      list.scrollTop += rowBox.bottom - listBox.bottom;
-    }
-  }, [activePointId, activeShotId, wellOpen]);
+    let top = list.scrollTop;
+    if (rowBox.top < listBox.top) top += rowBox.top - listBox.top;
+    else if (rowBox.bottom > listBox.bottom)
+      top += rowBox.bottom - listBox.bottom;
+    else return;
+
+    cancelSettleRef.current();
+    followScrollRef.current = true;
+    const settle = () => {
+      cancel();
+      followScrollRef.current = false;
+    };
+    // `scrollend` is the honest end of the travel; the timer is for the
+    // engines that never send it.
+    const timer = window.setTimeout(settle, FOLLOW_SCROLL_FALLBACK_MS);
+    const cancel = () => {
+      window.clearTimeout(timer);
+      list.removeEventListener("scrollend", settle);
+      cancelSettleRef.current = NOOP;
+    };
+    cancelSettleRef.current = cancel;
+    list.addEventListener("scrollend", settle);
+    // Smooth on the list's own scrollTop — Chromium eases it in about 300ms,
+    // no scroll-jacking of our own — and instant under reduced motion.
+    list.scrollTo({ top, behavior: reducedMotionNow() ? "auto" : "smooth" });
+  }, [activePointId, activeShotId, wellOpen, held]);
+
+  // Intent, read where a programmatic scroll never produces it: a wheel, a
+  // touch drag, a press on the scroller's own gutter (the scrollbar is the
+  // only part of the scroller that is not a child), or a scrolling key. Each
+  // holds the displayed point — an ENTER only: scrolling while already held
+  // keeps the held point, so the well never wanders to whatever scrolled into
+  // view. Only the dark tone (the room's drawer) listens; the shell column
+  // holds on clicks alone and has no pill to return by.
+  //
+  // `ArrowUp`/`ArrowDown` with focus on a drawer row hold here, and the
+  // room's window handler (film-fullscreen.tsx) then steps on the same key
+  // with `preventDefault`, which re-follows — both updates land in one native
+  // event and batch, so the net result of an arrow is `follow`, as the design
+  // wants for a step. `Enter`/`Space` on a row are the row's activation, not
+  // a scroll: the row's React handler prevents them, but it runs after this
+  // native listener, so Space is skipped here by its target instead.
+  const scrollerMounted = !advancedOpen && groups.length > 0;
+  useEffect(() => {
+    if (tone !== "dark" || !scrollerMounted) return;
+    const list = listRef.current;
+    if (!list) return;
+    const hold = () => {
+      if (heldRef.current) return;
+      const id = displayedPointRef.current;
+      if (id) onHoldPoint(id);
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.target === list) hold();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !SCROLL_KEYS.has(e.key)) return;
+      if (
+        e.key === " " &&
+        e.target instanceof Element &&
+        e.target.closest("button, [role=button]")
+      ) {
+        return;
+      }
+      hold();
+    };
+    list.addEventListener("wheel", hold, { passive: true });
+    list.addEventListener("touchmove", hold, { passive: true });
+    list.addEventListener("pointerdown", onPointerDown);
+    list.addEventListener("keydown", onKeyDown);
+    return () => {
+      list.removeEventListener("wheel", hold);
+      list.removeEventListener("touchmove", hold);
+      list.removeEventListener("pointerdown", onPointerDown);
+      list.removeEventListener("keydown", onKeyDown);
+    };
+  }, [tone, scrollerMounted, onHoldPoint]);
 
   return (
     <section aria-label="Point list" className={t.root} style={t.rootStyle}>
@@ -472,19 +652,24 @@ export const PointList = memo(function PointList({
                           isActive={isActive}
                           activeStart={isActive ? activeStart : 0}
                           activeEnd={isActive ? activeEnd : 0}
-                          onSelect={onSelect}
+                          onSelect={selectPoint}
                           onToggleSaved={onToggleSaved}
                           onOpenInRoom={onOpenInRoom}
                           tone={tone}
                         />
-                        {isActive && wellOpen && onSelectShot && (
+                        {/* Under the DISPLAYED row, not the lit one: while
+                            held the well stays here as `isActive` moves on.
+                            The lit shot inside it is the playing shot, which
+                            is in this well only when the displayed point is
+                            the playing point. */}
+                        {point.id === displayedPointId && wellOpen && (
                           <ShotWell
                             stops={wellStops}
                             activeShotId={activeShotId}
                             youIsPlayer1={youIsPlayer1}
                             youLastName={youLastName}
                             oppLastName={oppLastName}
-                            onSelectShot={onSelectShot}
+                            onSelectShot={selectShot}
                           />
                         )}
                       </Fragment>

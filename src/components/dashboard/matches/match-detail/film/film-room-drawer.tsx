@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 import type { FilmFilters } from "./film-filters";
 import type { ShotStop } from "./film-shots";
+import type { PointFocus } from "./film-timeline";
 import type { FilmSectionId } from "./filters/types";
 import { PointList } from "./point-list";
 
@@ -49,6 +50,11 @@ export interface FilmRoomDrawerProps {
   shotStops: ShotStop[];
   activeShotId: string | null;
   onSelectShot: (stop: ShotStop) => void;
+  /** Follow-or-hold, the room's pass-through from `FilmRoom` to the list. */
+  pointFocus: PointFocus;
+  displayedPointId: string | null;
+  onHoldPoint: (pointId: string) => void;
+  onFollow: () => void;
 }
 
 export function FilmRoomDrawer({
@@ -67,6 +73,10 @@ export function FilmRoomDrawer({
   shotStops,
   activeShotId,
   onSelectShot,
+  pointFocus,
+  displayedPointId,
+  onHoldPoint,
+  onFollow,
 }: FilmRoomDrawerProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [openSections, setOpenSections] = useState<FilmSectionId[]>([]);
@@ -125,6 +135,10 @@ export function FilmRoomDrawer({
         shotStops={shotStops}
         activeShotId={activeShotId}
         onSelectShot={onSelectShot}
+        pointFocus={pointFocus}
+        displayedPointId={displayedPointId}
+        onHoldPoint={onHoldPoint}
+        onFollow={onFollow}
       />
     </aside>
   );

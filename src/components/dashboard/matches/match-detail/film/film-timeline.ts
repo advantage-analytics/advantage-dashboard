@@ -269,6 +269,67 @@ export function prevStop(stops: FilmStop[], filmTime: number): FilmStop | null {
   return null;
 }
 
+/* ── Follow playback, or hold the point you are reading ─────────────────── */
+
+/**
+ * Whether the points surfaces track the film or stay on one point
+ * (`docs/superpowers/specs/2026-09-22-film-follow-hold-design.md`).
+ *
+ * In `follow` the drawer's open well and the shell's "This point" card show
+ * the PLAYING point. In `held` they stay on `pointId` while the lit row, the
+ * board, the court and the counters keep following the film. One state for
+ * both surfaces, owned by `FilmRoom` (film-tab.tsx) so it survives the room
+ * opening and closing and resets on tab-leave with no reset code.
+ */
+export type PointFocus = { mode: "follow" } | { mode: "held"; pointId: string };
+
+/** The point a surface shows: the held one while held, else the playing one. */
+export function displayedPointId(
+  focus: PointFocus,
+  playingPointId: string | null,
+): string | null {
+  return focus.mode === "held" ? focus.pointId : playingPointId;
+}
+
+/** What the return affordance (the drawer's pill, the card's line) says. */
+export interface FollowAffordance {
+  /** The visible text: a sentence, with a middot. */
+  label: string;
+  /** One spoken sentence — a colon and an em dash, and what pressing does. */
+  ariaLabel: string;
+  /** Whether the playing point has a row in the applied cut to point at. */
+  inCut: boolean;
+}
+
+/**
+ * The strings table of the design, one row per case. `null` means no
+ * affordance: not held, nothing playing (R7 dead time gets no words), or the
+ * playing point IS the held point — the surface already shows the film.
+ *
+ * `playing.index` is the point's 1-based place in the walk over the applied
+ * cut (`position.index`), the same number the counter prints; `null` means
+ * the film is on a point the cut excludes.
+ */
+export function followAffordance(
+  focus: PointFocus,
+  playing: { id: string; index: number | null } | null,
+): FollowAffordance | null {
+  if (focus.mode !== "held") return null;
+  if (!playing || playing.id === focus.pointId) return null;
+  if (playing.index == null) {
+    return {
+      label: "Now playing · not in this cut",
+      ariaLabel: "Now playing: a point outside this cut — follow playback",
+      inCut: false,
+    };
+  }
+  return {
+    label: `Now playing · Point ${playing.index}`,
+    ariaLabel: `Now playing: point ${playing.index} — follow playback`,
+    inCut: true,
+  };
+}
+
 /**
  * Where "Skip dead time" should jump to, or null to keep playing.
  *

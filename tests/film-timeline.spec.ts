@@ -4,8 +4,10 @@ import {
   activeStopAt,
   setSegments,
   deadTimeJump,
+  displayedPointId,
   filmClock,
   filmStops,
+  followAffordance,
   nextStop,
   playingStopAt,
   POINT_BUFFER_SECONDS,
@@ -13,6 +15,7 @@ import {
   toFilmTime,
   toPointTime,
   type FilmClock,
+  type PointFocus,
 } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 
 import { pt } from "./fixtures/film-point";
@@ -416,5 +419,63 @@ test.describe("setSegments", () => {
   test("no points or no duration", () => {
     expect(setSegments([], 90)).toEqual([{ start: 0, end: 90 }]);
     expect(setSegments([], 0)).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * Follow-or-hold (T18): the displayed point and the strings table
+ *
+ * One case per row of the design's strings table
+ * (docs/superpowers/specs/2026-09-22-film-follow-hold-design.md), so a
+ * reworded pill fails here rather than in a browser.
+ * ---------------------------------------------------------------------- */
+
+test.describe("displayedPointId", () => {
+  const FOLLOW: PointFocus = { mode: "follow" };
+  const HELD: PointFocus = { mode: "held", pointId: "p9" };
+
+  test("follow shows the playing point, or nothing between points", () => {
+    expect(displayedPointId(FOLLOW, "p14")).toBe("p14");
+    expect(displayedPointId(FOLLOW, null)).toBeNull();
+  });
+
+  test("held shows the held point whatever is playing", () => {
+    expect(displayedPointId(HELD, "p14")).toBe("p9");
+    expect(displayedPointId(HELD, null)).toBe("p9");
+  });
+});
+
+test.describe("followAffordance", () => {
+  const FOLLOW: PointFocus = { mode: "follow" };
+  const HELD: PointFocus = { mode: "held", pointId: "p9" };
+
+  test("held, playing point in the cut", () => {
+    expect(followAffordance(HELD, { id: "p14", index: 14 })).toEqual({
+      label: "Now playing · Point 14",
+      ariaLabel: "Now playing: point 14 — follow playback",
+      inCut: true,
+    });
+  });
+
+  test("held, playing point outside the applied cut", () => {
+    expect(followAffordance(HELD, { id: "p14", index: null })).toEqual({
+      label: "Now playing · not in this cut",
+      ariaLabel: "Now playing: a point outside this cut — follow playback",
+      inCut: false,
+    });
+  });
+
+  test("held, no point playing (R7 dead time) says nothing", () => {
+    expect(followAffordance(HELD, null)).toBeNull();
+  });
+
+  test("held, the playing point is the held point", () => {
+    expect(followAffordance(HELD, { id: "p9", index: 9 })).toBeNull();
+  });
+
+  test("follow never draws it", () => {
+    expect(followAffordance(FOLLOW, { id: "p14", index: 14 })).toBeNull();
+    expect(followAffordance(FOLLOW, { id: "p14", index: null })).toBeNull();
+    expect(followAffordance(FOLLOW, null)).toBeNull();
   });
 });

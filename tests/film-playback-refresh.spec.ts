@@ -358,10 +358,16 @@ async function seekTo(page: Page, selector: string, seconds: number) {
     },
     [selector, seconds] as const,
   );
+  // `currentTime` reads the target the moment it is assigned, before the
+  // seek has landed; `seeking` stays true until it has. Waiting on both is
+  // what lets the next assertion read a row the `seeked` handler has lit,
+  // rather than racing it under a loaded machine.
   await page.waitForFunction(
     ([sel, at]) => {
       const el = document.querySelector<HTMLVideoElement>(sel as string);
-      return !!el && Math.abs(el.currentTime - (at as number)) < 0.02;
+      return (
+        !!el && !el.seeking && Math.abs(el.currentTime - (at as number)) < 0.02
+      );
     },
     [selector, seconds] as const,
   );
@@ -1100,11 +1106,15 @@ async function polled(page: Page, matchId: string): Promise<number> {
 }
 
 /** Open the room with its drawer, settled on the report's playhead. */
-async function openRoomWithDrawer(page: Page, matchId: string) {
+async function openRoomWithDrawer(
+  page: Page,
+  matchId: string,
+  extra: Record<string, string> = {},
+) {
   await page.addInitScript(() => {
     localStorage.setItem("film-room:drawer-open", "1");
   });
-  await open(page, matchId, { ttl: String(60 * 60 * 1000) });
+  await open(page, matchId, { ttl: String(60 * 60 * 1000), ...extra });
   await page
     .getByRole("button", { name: "Open the film room fullscreen" })
     .click();
@@ -1403,4 +1413,198 @@ test("the report player never dims a frame it has not shown yet", async ({
   await expect(page.locator(REPORT)).toHaveAttribute(SEEKING, "true", {
     timeout: 1000,
   });
+});
+
+/* -------------------------------------------------------------------------
+ * Follow the film, or hold the point you are reading (T18)
+ *
+ * The drawer's well reads the DISPLAYED point and the lit row the PLAYING
+ * one (`docs/superpowers/specs/2026-09-22-film-follow-hold-design.md`). The
+ * harness gives `a`/`b`/`c` two shots each so there is a well to hold, and
+ * `pad=12` makes the list taller than the viewport so a wheel really scrolls.
+ * Each case is one row of the design's enter/leave table: a row click holds;
+ * a hand scroll holds and the next crossing leaves the scroller alone; a step
+ * re-follows with the smooth scroll; a cut that drops the held point
+ * re-follows without a click.
+ * ---------------------------------------------------------------------- */
+
+const DRAWER = 'aside[aria-label="Points"]';
+const DRAWER_SCROLLER = `${DRAWER} .overflow-y-auto`;
+const WELL_UNDER = (id: string) =>
+  `${DRAWER} [data-point-id="${id}"] + [data-shot-well]`;
+
+async function drawerScrollTop(page: Page): Promise<number> {
+  return page.evaluate(
+    (sel) => document.querySelector(sel)?.scrollTop ?? -1,
+    DRAWER_SCROLLER,
+  );
+}
+
+/**
+ * A real wheel over the drawer's scroller. The drawer slides in over 420ms
+ * and `openRoomWithDrawer` only waits for its rows to exist, so on a loaded
+ * machine a box read straight away is mid-travel and the pointer lands beside
+ * the drawer — the wheel then scrolls nothing and every assertion after it is
+ * about the wrong state. Wait for the box to stop moving first.
+ */
+async function wheelDrawer(page: Page, deltaY: number) {
+  const scroller = page.locator(DRAWER_SCROLLER);
+  let box = await scroller.boundingBox();
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(120);
+    const next = await scroller.boundingBox();
+    if (box && next && box.x === next.x && box.width === next.width) break;
+    box = next;
+  }
+  if (!box) throw new Error("no drawer scroller");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, deltaY);
+  await expect.poll(() => drawerScrollTop(page)).toBeGreaterThan(0);
+  // Chromium animates a wheel scroll; read the position only once it has
+  // stopped moving, so a later comparison is not against a frame mid-travel.
+  let last = await drawerScrollTop(page);
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(150);
+    const now = await drawerScrollTop(page);
+    if (now === last) break;
+    last = now;
+  }
+}
+
+/** Record every `scrollTo(options)` call, installed after the room opened. */
+async function spyScrollTo(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { __scrollTos: ScrollToOptions[] };
+    w.__scrollTos = [];
+    const real = Element.prototype.scrollTo;
+    Element.prototype.scrollTo = function (this: Element, ...args: unknown[]) {
+      if (args.length === 1 && typeof args[0] === "object" && args[0]) {
+        w.__scrollTos.push(args[0] as ScrollToOptions);
+      }
+      return (real as (...a: unknown[]) => void).apply(this, args);
+    } as typeof real;
+  });
+}
+
+async function scrollTos(page: Page): Promise<ScrollToOptions[]> {
+  return page.evaluate(
+    () => (window as unknown as { __scrollTos: ScrollToOptions[] }).__scrollTos,
+  );
+}
+
+test("T18: a row click holds its well while the lit row moves on", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "hold-click", { pad: "12" });
+
+  // Nothing is playing at film zero, so the click holds `a` (and seeks it).
+  await page.click(DRAWER_ROW("a"));
+  await expect.poll(() => playingRow(page)).toBe("a");
+  await expect(page.locator(WELL_UNDER("a"))).toHaveCount(1);
+
+  await seekTo(page, ROOM, 0.4);
+  await expect.poll(() => playingRow(page)).toBe("b");
+  // The well stayed under the held row; the lit row is the playing one.
+  await expect(page.locator(WELL_UNDER("a"))).toHaveCount(1);
+  await expect(page.locator(WELL_UNDER("b"))).toHaveCount(0);
+});
+
+test("T18: a hand scroll holds, and the next crossing leaves the scroller alone", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "hold-wheel", { pad: "12" });
+  await seekTo(page, ROOM, 0.4);
+  await expect.poll(() => playingRow(page)).toBe("b");
+  await expect(page.locator(WELL_UNDER("b"))).toHaveCount(1);
+
+  // A real wheel over the drawer: intent, read from the event and not from
+  // `scroll`.
+  await wheelDrawer(page, 200);
+  await page.waitForTimeout(400);
+  const scrolled = await drawerScrollTop(page);
+
+  await seekTo(page, ROOM, 0.5);
+  await expect.poll(() => playingRow(page)).toBe("c");
+  await expect(page.locator(WELL_UNDER("b"))).toHaveCount(1);
+  await expect(page.locator(WELL_UNDER("c"))).toHaveCount(0);
+  // Held: the keep-in-view effect did not fire on the crossing.
+  await page.waitForTimeout(400);
+  expect(await drawerScrollTop(page)).toBe(scrolled);
+});
+
+test("T18: a step re-follows — the well moves to the playing row on a smooth scroll", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "hold-step", { pad: "12" });
+  await seekTo(page, ROOM, 0.4);
+  await expect.poll(() => playingRow(page)).toBe("b");
+  await expect(page.locator(WELL_UNDER("b"))).toHaveCount(1);
+
+  await wheelDrawer(page, 200);
+  await seekTo(page, ROOM, 0.5);
+  await expect.poll(() => playingRow(page)).toBe("c");
+  await expect(page.locator(WELL_UNDER("b"))).toHaveCount(1);
+  // The wheel was the intent; how far it travelled depends on the machine.
+  // Park the scroller a known distance down so the lit row is out of view
+  // for certain — a programmatic scroll is not intent and changes no state.
+  await page.evaluate((sel) => {
+    const list = document.querySelector<HTMLElement>(sel);
+    if (list) list.scrollTop = list.scrollHeight;
+  }, DRAWER_SCROLLER);
+  // The lit row sits above the scroller's top edge: out of view.
+  await expect
+    .poll(() =>
+      page.evaluate((sel) => {
+        const list = document.querySelector<HTMLElement>(sel);
+        const lit = list?.querySelector<HTMLElement>('[data-playing="true"]');
+        if (!list || !lit) return false;
+        return (
+          lit.getBoundingClientRect().bottom < list.getBoundingClientRect().top
+        );
+      }, DRAWER_SCROLLER),
+    )
+    .toBe(true);
+
+  // Installed AFTER the room opened, like `holdSeeks`, so the room's own
+  // mount scrolls are not in the record. `→` at the end of the cut has
+  // nothing to step to; re-following still happens, and the effect scrolls
+  // the lit row — pushed above the viewport — back into view.
+  await spyScrollTo(page);
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(WELL_UNDER("c"))).toHaveCount(1);
+  await expect(page.locator(WELL_UNDER("b"))).toHaveCount(0);
+  await expect
+    .poll(async () =>
+      (await scrollTos(page)).some((o) => o.behavior === "smooth"),
+    )
+    .toBe(true);
+});
+
+test("T18: a cut that drops the held point re-follows without a click", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "hold-cut", { pad: "12" });
+
+  // The click holds `b` (its well opens) and seeks it. Not asserted on the
+  // lit row: `b`'s start is 1.85 − 1.5 in floating point, a hair past the
+  // 0.35 the element snaps to, so the boundary frame still lights `a`.
+  await page.click(DRAWER_ROW("b"));
+  await expect(page.locator(WELL_UNDER("b"))).toHaveCount(1);
+  await seekTo(page, ROOM, 0.5);
+  await expect.poll(() => playingRow(page)).toBe("c");
+  await expect(page.locator(WELL_UNDER("b"))).toHaveCount(1);
+
+  // "Saved only" keeps `a` alone: the held `b` has no row left to hold.
+  const drawer = page.locator(DRAWER);
+  const menu = page.getByRole("menu", { name: "Point filters" });
+  await drawer.getByRole("button", { name: "Filters" }).click();
+  await menu.getByText("Saved only").click();
+  await expect(drawer.locator('[data-point-id="b"]')).toHaveCount(0);
+
+  await drawer.getByRole("button", { name: "Filters" }).click();
+  await menu.getByText("Clear all filters").click();
+  await expect(drawer.locator('[data-point-id="b"]')).toHaveCount(1);
+  // Back to following: the well is under the playing row, with no click.
+  await expect(page.locator(WELL_UNDER("c"))).toHaveCount(1);
+  await expect(page.locator(WELL_UNDER("b"))).toHaveCount(0);
 });

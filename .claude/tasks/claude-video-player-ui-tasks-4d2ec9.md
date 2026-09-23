@@ -241,7 +241,7 @@ ready).
 
 ## T18 · Follow-or-hold state: the pure layer, the drawer's split reads, scroll intent, re-follow on step
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-timeline.ts (the `PointFocus` type and two pure helpers, after `prevStop` L265); tests/film-timeline.spec.ts (EXISTS — extend, do not create); film-tab.tsx (state beside `room` L166–168, reset effect near `filteredPoints` L250–253, props on the shell `<PointList>` L608–629 and `<FilmFullscreen>` L634–661); film-fullscreen.tsx (`step` L798–808, props interface L137–175, the `<FilmRoomDrawer>` mount L1590–1609); film-room-drawer.tsx (four pass-through props L29–52, L109–128); point-list.tsx (`wellStops` L294–297, the comment L302–304 and effect L311–328, the well mount L480–489, `PointRow` `onSelect` L625/L630, `ShotWellRow` L828, props L146–185); tests/fixtures/film-playback-refresh-harness.tsx (`POINTS` L129–137, `boot` L216); tests/film-playback-refresh.spec.ts (new block after the T16 cases, L1359+)
 - **done when:**

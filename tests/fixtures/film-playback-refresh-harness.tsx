@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-tab";
-import type { MatchPoint } from "@/lib/data/match-points-server";
+import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
 import type { Match } from "@/lib/data/types";
 import type { WorkspaceContextValue } from "@/lib/workspace/types";
@@ -126,14 +126,61 @@ const WORKSPACE: WorkspaceContextValue = {
   },
 };
 
+/**
+ * Two timed shots per point, so the drawer has a well to hold (T18). On the
+ * same clock as `videoTime`, 40ms apart, inside the last half-second of the
+ * clip beside the point's own serve; every other field is what the source
+ * never measured.
+ */
+function shots(pointId: string, first: number): MatchShot[] {
+  return [first, first + 0.04].map((videoTime, i) => ({
+    id: `${pointId}-shot-${i + 1}`,
+    shotNumber: i + 1,
+    isPlayer1: i % 2 === 0,
+    shotType: i === 0 ? "Serve" : "Forehand",
+    spinType: null,
+    speedMph: null,
+    zone: null,
+    result: null,
+    videoTime: Number(videoTime.toFixed(2)),
+    bounceVideoTime: null,
+    contactX: null,
+    contactY: null,
+    landingX: null,
+    landingY: null,
+  }));
+}
+
+/**
+ * `?pad=N` appends N untimed points after the four below, so the drawer's
+ * list is taller than a 720px viewport and really scrolls. Untimed rows are
+ * not seekable and have no stop, so the pad never touches the walk.
+ */
+const PAD = Number(new URLSearchParams(location.search).get("pad") ?? "0");
+
 const POINTS: MatchPoint[] = [
   // Saved from the start so a spec can drive the unsave path — a delete
   // that matches zero rows (the mock's default shape) without first having
   // to land a save through the same mock.
-  point("a", 1.7, { saved: true }),
-  point("b", 1.85, { pointNumber: 2, resultType: "Ace" }),
-  point("c", 1.95, { pointNumber: 3, resultType: "Backhand Winner" }),
+  point("a", 1.7, { saved: true, shots: shots("a", 1.7) }),
+  point("b", 1.85, {
+    pointNumber: 2,
+    resultType: "Ace",
+    shots: shots("b", 1.85),
+  }),
+  point("c", 1.95, {
+    pointNumber: 3,
+    resultType: "Backhand Winner",
+    shots: shots("c", 1.95),
+  }),
   point("untimed", null, { pointNumber: 4, resultType: "Double Fault" }),
+  ...Array.from({ length: PAD }, (_, i) =>
+    point(`pad-${i + 1}`, null, {
+      pointNumber: 5 + i,
+      gameNumber: 2,
+      resultType: "Unforced Error",
+    }),
+  ),
 ];
 
 /**

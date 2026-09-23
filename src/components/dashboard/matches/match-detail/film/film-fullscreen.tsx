@@ -87,8 +87,10 @@ import {
   playingStopAt,
   prevStop,
   REACHED_EPSILON_SECONDS,
+  displayedPointId as displayedPointOf,
   type FilmClock,
   type FilmStop,
+  type PointFocus,
 } from "./film-timeline";
 import { FilmTransport, PLAYBACK_RATES } from "./film-transport";
 import type {
@@ -172,6 +174,19 @@ export interface FilmFullscreenProps {
   filters: FilmFilters;
   onFiltersChange: (filters: FilmFilters) => void;
   onToggleSaved: (pointId: string) => void;
+  /**
+   * Follow-or-hold (T17 design), owned by `FilmRoom` so it outlives this
+   * room. The state and the two callbacks are forwarded to the drawer's list
+   * untouched; the DISPLAYED point is derived here from the room's own
+   * playing point, because the displayed point is per surface (the design's
+   * "drawer: `playingStop`, shell: `activeStopAt`") and the shell's playhead
+   * does not move while the room is open — `onPlaybackTime` feeds the
+   * credential hook's anchor, not the tab's clock. The room's own `step`
+   * calls `onFollow` because stepping means "take me on".
+   */
+  pointFocus: PointFocus;
+  onHoldPoint: (pointId: string) => void;
+  onFollow: () => void;
   onExit: (state: { time: number; playing: boolean }) => void;
   /** The report player's frame on screen — where the room grows from and returns to. */
   originRect: () => Rect | null;
@@ -476,6 +491,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     ],
   );
   const activePoint = playingStop?.point ?? null;
+  // The drawer's well: the held point while held, else the room's playing one.
+  const displayedPointId = displayedPointOf(
+    p.pointFocus,
+    activePoint?.id ?? null,
+  );
   /**
    * The point a "save that" means (T13).
    *
@@ -795,8 +815,13 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.onPlayRejected]);
 
+  const { onFollow } = p;
   const step = useCallback(
     (direction: -1 | 1) => {
+      // Stepping means "take me on": ← → ↑ ↓ and the transport chevrons
+      // re-follow first, then walk from the PLAYING point — even at the end
+      // of the cut, where there is nothing left to step to.
+      onFollow();
       const now = videoRef.current?.currentTime ?? currentTime;
       const stop =
         direction === 1
@@ -804,7 +829,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
           : prevStop(p.walkStops, now);
       if (stop) seek(stop.start);
     },
-    [p.walkStops, currentTime, seek],
+    [p.walkStops, onFollow, currentTime, seek],
   );
 
   // Stable, because the panel's rows are memoized on them and the room
@@ -1606,6 +1631,10 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 shotStops={shotStops}
                 activeShotId={activeShot?.stop.shot.id ?? null}
                 onSelectShot={selectShot}
+                pointFocus={p.pointFocus}
+                displayedPointId={displayedPointId}
+                onHoldPoint={p.onHoldPoint}
+                onFollow={p.onFollow}
               />
             )}
           </>
