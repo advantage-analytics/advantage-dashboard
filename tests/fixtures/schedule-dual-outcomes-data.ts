@@ -34,8 +34,14 @@ function entry(slot: string, overrides: Partial<EventEntry> = {}): EventEntry {
     position: Number(slot.slice(1)) - 1,
     draw: null,
     seed: null,
-    playerUserIds: [`player-${slot.toLowerCase()}`],
-    playerLabels: [`Our ${slot}`],
+    // A doubles line is a real pair, so the table's surname display
+    // ("Lee / Park") is exercised; singles keep one placeholder name.
+    playerUserIds: slot.startsWith("D")
+      ? [`player-${slot.toLowerCase()}-a`, `player-${slot.toLowerCase()}-b`]
+      : [`player-${slot.toLowerCase()}`],
+    playerLabels: slot.startsWith("D")
+      ? ["Ana Lee", "Bo Park"]
+      : [`Our ${slot}`],
     opponentLabels: [`Opponent ${slot}`],
     opponentSchool: "Meridian State",
     forfeit: null,

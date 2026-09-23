@@ -45,7 +45,8 @@ import { ScoreLine } from "@/components/dashboard/score-line";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { StatusChip } from "@/components/ui/status-chip";
-import { getInitials } from "@/lib/data/match-utils";
+import { getInitials, surname } from "@/lib/data/match-utils";
+import { cn } from "@/lib/utils";
 import { isAnalysisReady } from "@/lib/data/match-analysis";
 import { scoreSetsFrom } from "@/lib/ui/score-format";
 import { advButton } from "@/lib/ui/adv-button";
@@ -564,7 +565,14 @@ function LineTableRow({
   const forfeitSide = lineupForfeitSide(entry);
   const theirs =
     played?.opponentLabels.join(" / ") || entry.opponentLabels.join(" / ");
-  const ours = noPlayer ? "No player" : ourLabel(entry) || "—";
+  // A doubles pair reads by surname, "Brooks / Osei" — the lineup step's
+  // pair trigger (`static/lineup-rows.tsx`), so a pair is named one way from
+  // the wizard to the table.
+  const ours = noPlayer
+    ? "No player"
+    : (entry.discipline === "doubles"
+        ? entry.playerLabels.map(surname).join(" / ")
+        : ourLabel(entry)) || "—";
 
   return (
     <EventRow
@@ -718,8 +726,9 @@ function DualContextRow({
 }
 
 /**
- * One 24px avatar per player. A doubles pair sits side by side 2px apart
- * (`Main.dc.html`), not overlapped: both partners stay readable at a glance.
+ * One 24px avatar per player. A doubles pair overlaps the way the lineup
+ * step's `PairFaces` does (`static/lineup-rows.tsx`): the first face on top so
+ * its initials stay whole, the second tucked 6px under it behind a 2px ring.
  */
 function PlayerAvatars({
   labels,
@@ -732,17 +741,24 @@ function PlayerAvatars({
 }) {
   if (labels.length === 0) return null;
   return (
-    <span className="flex shrink-0 gap-0.5">
+    <span className="flex shrink-0 items-center">
       {labels.map((name, index) => {
         const isViewer =
           viewer !== null && viewer.ids.includes(userIds[index] ?? "");
         return (
-          <PersonAvatar
+          <span
             key={`${name}-${index}`}
-            initials={isViewer ? viewer.initials : getInitials(name)}
-            photoUrl={isViewer ? viewer.avatarUrl : null}
-            className="size-6 text-[9px]"
-          />
+            className={cn(
+              "rounded-full ring-2 ring-[var(--surface-card)]",
+              index === 0 ? "relative z-[1]" : "-ml-1.5",
+            )}
+          >
+            <PersonAvatar
+              initials={isViewer ? viewer.initials : getInitials(name)}
+              photoUrl={isViewer ? viewer.avatarUrl : null}
+              className="size-6 text-[9px]"
+            />
+          </span>
         );
       })}
     </span>

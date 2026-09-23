@@ -315,6 +315,11 @@ test("the line table: columns, groups, doubles, footer and pills", async ({
     await expect(
       line(page, slot).getByText("Score only", { exact: true }),
     ).toBeVisible();
+    // A pair reads by surname, as the lineup step's pair trigger does.
+    await expect(
+      line(page, slot).getByText("Lee / Park", { exact: true }),
+    ).toBeVisible();
+    await expect(line(page, slot).getByText("Ana Lee")).toHaveCount(0);
   }
 
   await expect(
