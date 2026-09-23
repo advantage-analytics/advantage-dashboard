@@ -198,3 +198,13 @@ is the runner's. Newest entries at the bottom.
 
 1. The UI half is T21: wire `foldDrafts` into `src/app/dashboard/matches/(list)/page.tsx` and the grid.
 2. Restarting "Add video" from the drawer creates a new draft instead of resuming the existing one.
+
+## T21 · A match row with a video draft shows Draft and Continue upload — done
+
+**gate:** mechanical pass; completion pass (the reviewer read criterion 3's "Open match" as the drawer's existing "View match" link)
+**changed:** `MatchesPageContent` runs `foldDrafts(allDrafts, serverMatches.map(m => m.id))`. Only standalone drafts become rows, stepping entries and `?draft=` targets; a `?draft=` naming a folded draft opens its match. `MatchesGrid` (outside `files:`, the pass-through) hands the fold to `MatchCardList`, which draws an outlined `StatePill` "Draft" beside the row's name. `MatchDrawer` takes a plain `continueHref`. When it is set, "Continue upload" is the primary and "View match" drops to ghost; other matches' footers are unchanged. The drawer doesn't import `draft-row.tsx`, because that import pulled server code into the schedule drawers. Adds a Matches-page harness (`matches-drafts-harness.tsx` plus navigation and actions browser mocks) and `matches-drafts.spec.ts` covering personal and team.
+**follow-ups:**
+
+1. The drawer footer vs `tables.md`: should "View match" become a ghost "Open match" on every match, with a primary only when an action applies? That affects every match drawer.
+2. On phones (`MatchCardGallery`, below 1024px) there's no Draft pill, and drafts were never listed, so a folded draft can't be reached there.
+3. A failed-analysis match with a folded draft shows View match (ghost), Continue upload (primary) and Retry (outline) together. Needs a design look.

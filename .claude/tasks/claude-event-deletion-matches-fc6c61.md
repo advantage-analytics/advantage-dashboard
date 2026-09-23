@@ -282,7 +282,7 @@ ready).
 
 ## T21 · A match row with a video draft shows Draft and Continue upload
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T20
 - **files:** src/components/dashboard/matches/matches-page-content.tsx (drafts :415-662), src/components/dashboard/matches/match-card-list.tsx, src/components/dashboard/matches/match-drawer.tsx, src/components/dashboard/matches/draft-row.tsx (`draftHref` :36), tests/fixtures/matches-drafts-harness.tsx (new), tests/matches-drafts.spec.ts (new) (guess)

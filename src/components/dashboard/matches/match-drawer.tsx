@@ -86,6 +86,11 @@ export function forgetMatchDetails(matchId: string): void {
  * "Retry" sits under it on a failed analysis for the person who uploaded it
  * (the resubmit route refuses anyone else).
  *
+ * When a saved upload fills this match (a draft folded onto its row), the
+ * footer's one primary is "Continue upload", back into that draft's wizard,
+ * and "View match" steps down to the ghost above it — still there for every
+ * viewer, but a footer holds one blue action, not two.
+ *
  * ── Row-click law ──────────────────────────────────────────────────────────
  * On the Matches page a match row peeks instead of travelling — the ruling is
  * in `tables.md`. ⌘-click on the row and this drawer's title still open the
@@ -93,6 +98,7 @@ export function forgetMatchDetails(matchId: string): void {
  */
 export function MatchDrawer({
   match,
+  continueHref = null,
   scope,
   index,
   total,
@@ -106,6 +112,13 @@ export function MatchDrawer({
   onClosed,
 }: {
   match: DisplayMatch;
+  /**
+   * Where the saved upload that fills this match resumes (`draftHref` of the
+   * draft folded onto its row), or null when there is none. A string, not the
+   * draft, so this module — which the schedule's drawers share — does not
+   * pull the Matches table's rows into their bundles.
+   */
+  continueHref?: string | null;
   scope: "personal" | "team";
   /** Position within the filtered list — "3 / 24" counts what the filters left. */
   index: number;
@@ -169,10 +182,21 @@ export function MatchDrawer({
         <>
           <Link
             href={href}
-            className={cn(advButton("primary", "md"), "w-full")}
+            className={cn(
+              advButton(continueHref ? "ghost" : "primary", "md"),
+              "w-full",
+            )}
           >
             View match
           </Link>
+          {continueHref && (
+            <Link
+              href={continueHref}
+              className={cn(advButton("primary", "md"), "w-full")}
+            >
+              Continue upload
+            </Link>
+          )}
           {canRetry && match.analysis?.jobId && (
             <RetryButton jobId={match.analysis.jobId} />
           )}
