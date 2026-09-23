@@ -73,23 +73,30 @@ export function VizWall({
       <div
         className="flex flex-wrap items-center gap-2"
         role="group"
-        aria-label="View collection"
+        aria-label="View"
       >
-        {(["default", "saved"] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={collection === value}
-            onClick={() => onCollectionChange(value)}
-            className={`min-h-8 cursor-pointer rounded-full border px-3 py-1.5 text-[10px] font-medium tracking-[1.5px] uppercase transition-colors duration-200 motion-reduce:transition-none ${
-              collection === value
-                ? "border-[var(--ink-900)] bg-[var(--ink-900)] text-white"
-                : "border-[var(--border-hairline)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]"
-            }`}
-          >
-            {value === "default" ? "Default" : "Saved"}
-          </button>
-        ))}
+        {(["default", "saved"] as const).map((value) => {
+          const isActive = collection === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => onCollectionChange(value)}
+              className={`flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] px-[11px] text-[12px] transition-colors duration-200 motion-reduce:transition-none ${
+                isActive ? "" : "hover:bg-[var(--surface-subtle)]"
+              }`}
+              style={{
+                border: `1px solid var(${isActive ? "--border-medium" : "--border-hairline"})`,
+                background: isActive ? "var(--surface-subtle)" : undefined,
+                color: isActive ? "var(--ink-900)" : "var(--ink-600)",
+                fontWeight: isActive ? 500 : 400,
+              }}
+            >
+              {value === "default" ? "Default" : "Saved"}
+            </button>
+          );
+        })}
       </div>
       {collection === "default" ? (
         visibleTiles.length > 0 ? (
