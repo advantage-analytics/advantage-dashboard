@@ -99,7 +99,7 @@ ready).
 
 ## T7 · SwingVision "Not <name>?" clears only player fields, no dialog, straight to step 1
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (new no-arg callback, guess name `resetImportPlayerAnswer`), src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx (the `onNotSubject` wiring), tests/upload-import-not-subject.spec.ts (new, via tests/fixtures/upload-wizard-hook.ts) (guess)

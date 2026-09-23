@@ -239,6 +239,7 @@ function UploadWizardPage() {
       whoPlayed,
       isProcessingProvider,
       startOver,
+      resetImportPlayerAnswer,
     },
     view: {
       title,
@@ -258,15 +259,19 @@ function UploadWizardPage() {
   // (and the score) were answered for that player, and starting over clears
   // them (`wizard.startOver()`).
   //
-  // An import's details step keeps plain Back: its score and names were READ
-  // from the kept file, and the approved copy ("the video check…") does not
-  // describe that flow.
+  // An import never asks: its score and names were READ from the kept file,
+  // and the approved copy ("the video check…") does not describe that flow.
+  // It goes straight to step 1 from any step, clearing only the player's
+  // style and the "player 1 in the export?" answer — the opponent and score
+  // stay (`wizard.resetImportPlayerAnswer()`).
   const [startOverOpen, setStartOverOpen] = useState(false);
   const startOverStep =
     isProcessingProvider && (step === "trim" || step === "match") ? step : null;
-  const onNotSubject = startOverStep
-    ? () => setStartOverOpen(true)
-    : handleBack;
+  const onNotSubject = !isProcessingProvider
+    ? resetImportPlayerAnswer
+    : startOverStep
+      ? () => setStartOverOpen(true)
+      : handleBack;
   const subjectName =
     whoPlayed.subject?.kind === "roster" ? whoPlayed.subject.name : null;
 

@@ -536,6 +536,15 @@ export interface UseUploadMatchWizardReturn {
    * installs a subject — only step 1's For field does that.
    */
   startOver: () => void;
+  /**
+   * "Not Marcus?" on an IMPORT (SwingVision) flow — straight back to step 1,
+   * no dialog. Clears only the player's own style (hand, backhand and where
+   * they came from) and the "is this player 1 in the export?" answer, which
+   * the next subject must give afresh. The subject itself is left for step
+   * 1's For field; the opponent, score, event and date — read from the kept
+   * file or typed by hand — are untouched.
+   */
+  resetImportPlayerAnswer: () => void;
 
   // The schedule offer on the details step (design 3d/7a)
   /** The lineup slot accepted with Attach, or null. */
@@ -2268,6 +2277,31 @@ export function useUploadMatchWizard({
     setStep(firstStep);
   }, [applyMatchSubject, resetIdentityAnswer, firstStep]);
 
+  /**
+   * "Not Marcus?" on an import flow. See
+   * `UseUploadMatchWizardReturn.resetImportPlayerAnswer`.
+   *
+   * Deliberately separate from `chooseMatchSubject`'s own style clear: this
+   * one runs on the click, before any new subject is picked. It never writes
+   * the subject. The player-1 confirmation re-asks by itself once the athlete
+   * changes (the identity effect above); clearing it here only stops the old
+   * answer standing while the same athlete is still selected.
+   */
+  const resetImportPlayerAnswer = useCallback(() => {
+    resetIdentityAnswer();
+    // `error` is one slot for the whole wizard and the file step renders it:
+    // a failed save left from the details step would reappear there as if the
+    // file were at fault — the same reason `handleBack` clears it.
+    setError(null);
+    setFormData((prev) => ({
+      ...prev,
+      playerHand: DEFAULT_FORM_DATA.playerHand,
+      playerBackhand: DEFAULT_FORM_DATA.playerBackhand,
+      playerStyleSource: DEFAULT_FORM_DATA.playerStyleSource,
+    }));
+    setStep(firstStep);
+  }, [resetIdentityAnswer, firstStep]);
+
   // Close keeps localStorage intact so an accidental ✕ doesn't destroy in-flight
   // typing. Storage is cleared only after a successful create (see handleCreateMatch)
   // or when the user explicitly removes the file. Reopening picks up where they left off.
@@ -3231,6 +3265,7 @@ export function useUploadMatchWizard({
     handleBack,
     firstStep,
     startOver,
+    resetImportPlayerAnswer,
 
     // The schedule offer
     attachedLine,

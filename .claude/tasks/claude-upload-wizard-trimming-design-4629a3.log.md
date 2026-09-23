@@ -72,3 +72,11 @@ is the runner's. Newest entries at the bottom.
 
 1. A line swap drops the picked video (an effect keyed on `preset?.entryId`, ~line 1020) although `UploadMatchFlow.tsx` and `types.ts` comments say the file stays — fix one or the other.
 2. A singles ↔ doubles line swap is untested; the progress step count is set only on the first seed.
+
+## T7 · SwingVision "Not <name>?" clears only player fields, no dialog, straight to step 1 — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `useUploadMatchWizard.ts` — new `resetImportPlayerAnswer()`: back to the first step, `playerHand`/`playerBackhand`/`playerStyleSource` to defaults, the import identity answer reset, and the shared `error` cleared (as `handleBack` and `startOver` do); no subject write, no other form field touched. `UploadMatchFlow.tsx` — `onNotSubject` calls it for import providers, video uploads keep T5's wiring. New `tests/upload-import-not-subject.spec.ts` (2 tests: the reset, and hand-typed opponent/score surviving it).
+**follow-ups:**
+
+1. Nothing tests the `UploadMatchFlow` wiring itself; a small render test with a SwingVision provider could click "Not <name>?" and assert no dialog opens.
