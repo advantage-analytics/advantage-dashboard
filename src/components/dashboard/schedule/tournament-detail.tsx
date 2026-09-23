@@ -32,6 +32,10 @@ import {
   LineContextRow,
 } from "@/components/dashboard/schedule/event-line-drawer";
 import { scoreHref } from "@/lib/schedule/score-seed";
+import {
+  DATE_COL,
+  RESULT_COL,
+} from "@/components/dashboard/matches/match-list-layout";
 import { drawerSideName } from "@/components/dashboard/matches/drawer-sections";
 import { RowLifecycle } from "@/components/dashboard/matches/row-state";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
@@ -72,12 +76,54 @@ import type {
 /**
  * Date · Round · Opponent · Result · Score · Analysis
  * (`TournamentDrawer.dc.html`). No Player column: the entry's group head
- * names who played every row under it. Opponent and Analysis share the
- * spare width, as the Matches grid's text columns do, so the table spans the
- * page.
+ * names who played every row under it.
+ *
+ * **Spatial thesis.** A coach reads this table down, a run at a time: the
+ * entry's head names the player, then each round answers "when, which round,
+ * against whom, how did it go". Date leads and the outcome sits in fixed
+ * tracks so the eye drops straight down one x per fact; the two text columns
+ * take the slack. It is the Matches table's grammar with Round in Player's
+ * place, so the tracks it shares are that table's, not look-alikes:
+ *
+ * - **Date** — `DATE_COL`, 72px: `tables.md` rule 1, "Date leads … 72px".
+ *   The narrower track it had was a near-miss that put this table's first
+ *   column a different width from every other list in the product.
+ * - **Round** — 48px: sized to its heading, not its cell. "ROUND" in the 9px
+ *   eyebrow with 2.5px tracking is ~46px and clipped at the 40px it had; the
+ *   widest code (`R128`, 11px mono) is ~27px, so the heading sets the floor.
+ * - **Opponent** — `minmax(150px,1fr)`: a name, truncating, sharing spare
+ *   width with Analysis as the Matches team grid's text columns do
+ *   (d233f439).
+ * - **Result** — `RESULT_COL`, 60px: sized to its widest content, the
+ *   "RESULT" heading, which the narrower track it had clipped (`tables.md`
+ *   rule 1). The glyph and `EmptyMark`'s dash start at one x inside it.
+ * - **Score** — 140px: wider than Matches' 116px because a tournament cell
+ *   also carries the ending ("ret.") or a `StatusChip` ("Withdrawn") where
+ *   a round was not played.
+ * - **Analysis** — `minmax(96px,1fr)`: the lifecycle word or "Score only".
+ *
+ * Beside the 340px drawer the column narrows; below the tracks' minimums the
+ * card scrolls sideways (`TABLE_MIN_WIDTH`) instead of crushing a track, so
+ * no heading clips and the Score column keeps one x in both states.
  */
-const GRID =
-  "grid-cols-[56px_40px_minmax(150px,1fr)_52px_140px_minmax(96px,1fr)]";
+const ROUND_COL = "48px";
+const SCORE_COL = "140px";
+const OPPONENT_MIN = "150px";
+const ANALYSIS_MIN = "96px";
+const TRACKS = `${DATE_COL} ${ROUND_COL} minmax(${OPPONENT_MIN},1fr) ${RESULT_COL} ${SCORE_COL} minmax(${ANALYSIS_MIN},1fr)`;
+/** Six tracks' minimums plus five 16px gaps (`gap-x-4`): 646px. */
+const TABLE_MIN_PX =
+  [DATE_COL, ROUND_COL, OPPONENT_MIN, RESULT_COL, SCORE_COL, ANALYSIS_MIN]
+    .map((track) => parseInt(track, 10))
+    .reduce((sum, px) => sum + px, 0) +
+  5 * 16;
+/** The header and every row read their tracks from this one custom property. */
+const GRID = "grid-cols-(--tournament-tracks)";
+const TABLE_MIN_WIDTH = "min-w-(--tournament-min-width)";
+const TABLE_VARS = {
+  "--tournament-tracks": TRACKS,
+  "--tournament-min-width": `${TABLE_MIN_PX}px`,
+} as React.CSSProperties;
 const COLUMNS = [
   "Date",
   "Round",
@@ -407,52 +453,55 @@ export function TournamentDetail({
         />
       }
       table={
-        <EventTable
-          grid={GRID}
-          columns={COLUMNS}
-          // Group heads count: an entry with no results still draws its head
-          // and "No matches yet", so the card is not empty.
-          rowCount={visible.length}
-          empty={
-            entries.length === 0 ? (
-              <TableEmptyBody
-                icon={Trophy}
-                title="No entries on this tournament"
-              />
-            ) : (
-              <TableEmptyBody
-                icon={Trophy}
-                title="No matches in this view"
-                action={{
-                  label: "Show all matches",
-                  onClick: () => {
-                    setPill("all");
-                    setResultCut(null);
-                  },
-                }}
-              />
-            )
-          }
-        >
-          {visible.map((run, index) => (
-            <Fragment key={run.entry.id}>
-              <EntryHead
-                entry={run.entry}
-                rosterPlayerIds={rosterPlayerIds}
-                first={index === 0}
-                canEdit={canEdit}
-              />
-              {run.rows.map((row) => (
-                <MatchTableRow
-                  key={row.id}
-                  row={row}
-                  selected={selection.selectedId === row.id}
-                  onToggle={selection.toggle}
+        <div style={TABLE_VARS}>
+          <EventTable
+            grid={GRID}
+            columns={COLUMNS}
+            minWidth={TABLE_MIN_WIDTH}
+            // Group heads count: an entry with no results still draws its head
+            // and "No matches yet", so the card is not empty.
+            rowCount={visible.length}
+            empty={
+              entries.length === 0 ? (
+                <TableEmptyBody
+                  icon={Trophy}
+                  title="No entries on this tournament"
                 />
-              ))}
-            </Fragment>
-          ))}
-        </EventTable>
+              ) : (
+                <TableEmptyBody
+                  icon={Trophy}
+                  title="No matches in this view"
+                  action={{
+                    label: "Show all matches",
+                    onClick: () => {
+                      setPill("all");
+                      setResultCut(null);
+                    },
+                  }}
+                />
+              )
+            }
+          >
+            {visible.map((run, index) => (
+              <Fragment key={run.entry.id}>
+                <EntryHead
+                  entry={run.entry}
+                  rosterPlayerIds={rosterPlayerIds}
+                  first={index === 0}
+                  canEdit={canEdit}
+                />
+                {run.rows.map((row) => (
+                  <MatchTableRow
+                    key={row.id}
+                    row={row}
+                    selected={selection.selectedId === row.id}
+                    onToggle={selection.toggle}
+                  />
+                ))}
+              </Fragment>
+            ))}
+          </EventTable>
+        </div>
       }
       footer={
         <EventTableFooter

@@ -230,3 +230,15 @@ is the runner's. Newest entries at the bottom.
 1. Clicking Retry is untested — a `fetch` stub in the dual harness could assert the POST to `/api/splitstep/jobs/job-s4/resubmit` and one router refresh.
 2. The event drawer now hides the fail note from non-editors, while the Matches drawer shows it to everyone — decide whether they should agree.
 3. A tournament round with a failed analysis AND a next round gives Retry the primary and makes "Add result" outline; no fixture covers it.
+
+## T24 · Tournament table tracks: Matches' Date/Result widths, no crushed columns beside the drawer — done
+
+**gate:** mechanical GATE PASS (first run; covers the criterion's lint/typecheck/targeted specs) · completion `VERDICT: pass`
+
+**changed:** `RESULT_COL` is exported from `match-list-layout.ts`. The tournament tracks are `72px 48px minmax(150px,1fr) 60px 140px minmax(96px,1fr)`, built from the imported `DATE_COL`/`RESULT_COL` through a CSS variable (`grid-cols-(--tournament-tracks)`). The Round track grew from 40px to 48px because the "ROUND" heading measured 44.5px and was clipping. The docblock above `GRID` gives the reason for each track's width. `EventTable` takes an optional `minWidth` and wraps the header and rows in one `overflow-x-auto` region; the tournament passes 646px, the dual passes nothing, so its markup is unchanged. The tournament harness now serves the real stylesheet and has a 1280×800 spec, run with the drawer closed and open, checking: no clipped headers, Score aligned with its header to within 1px, Date at 72±1px, no Round overflow. The /impeccable layout scan came back clean.
+
+**follow-ups:**
+
+1. The dual page's 52px Result track can clip the same way (a 48px heading, plus "Not played"). It could use `RESULT_COL` and `minWidth` the way the tournament now does.
+2. A 1024px spec with the drawer open would pin the table's sideways scroll. This was checked once by hand but not kept.
+3. `tables.md` says "exactly one fluid cell per table", but the Matches team grid and the tournament table both break that. Reconcile the rule in the design skill.

@@ -341,22 +341,33 @@ function SortMenu<S extends string>({
  * heads and 48px rows with no dividers. `grid` is the Tailwind
  * `grid-cols-[…]` class the header and every `EventRow` share. With no rows,
  * `empty` (a `TableEmptyBody`) is drawn under the headers — the card stays.
+ *
+ * `minWidth` (a `min-w-[…]` class) is the table's floor: when given, the
+ * header and rows sit in one `overflow-x-auto` region at least that wide, so
+ * a narrow column — the open drawer takes 340px — scrolls the card sideways
+ * rather than crushing a track below its minimum. The Matches card does the
+ * same (`LIST_MIN_WIDTH`). The region is widened by the rows' `-mx-4` inset
+ * and padded back, so the hover wash is not clipped at the card's edge and
+ * every cell keeps the header's x. Without it the markup is unchanged.
  */
 export function EventTable({
   grid,
   columns,
   rowCount,
   empty,
+  minWidth,
   children,
 }: {
   grid: string;
   columns: readonly string[];
   rowCount: number;
   empty?: React.ReactNode;
+  /** A `min-w-[…]` class: the sum of the tracks' minimums plus their gaps. */
+  minWidth?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <div className="surface-card min-w-0 px-6 pt-0.5 pb-2.5">
+  const body = (
+    <>
       <div
         role="row"
         className={cn(
@@ -375,6 +386,18 @@ export function EventTable({
         ))}
       </div>
       {rowCount === 0 ? empty : children}
+    </>
+  );
+
+  return (
+    <div className="surface-card min-w-0 px-6 pt-0.5 pb-2.5">
+      {minWidth ? (
+        <div data-event-table-scroll="" className="-mx-4 overflow-x-auto px-4">
+          <div className={minWidth}>{body}</div>
+        </div>
+      ) : (
+        body
+      )}
     </div>
   );
 }

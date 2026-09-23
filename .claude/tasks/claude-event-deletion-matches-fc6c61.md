@@ -322,7 +322,7 @@ ready).
 
 ## T24 · Tournament table tracks: Matches' Date/Result widths, no crushed columns beside the drawer
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/schedule/tournament-detail.tsx (`GRID` :79, `EntryHead` :520, `MatchTableRow` :628), src/components/dashboard/schedule/event-table.tsx (`EventTable` :345), src/components/dashboard/matches/match-list-layout.ts (`RESULT_COL` :22), tests/schedule-tournament-outcomes.spec.ts (guess)
 - **done when:**

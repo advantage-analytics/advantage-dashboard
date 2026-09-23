@@ -4,6 +4,8 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import * as nextWebpack from "next/dist/compiled/webpack/webpack";
+import postcss from "postcss";
+import tailwind from "@tailwindcss/postcss";
 import {
   lineCoverageFrom,
   readyMatchIdsFrom,
@@ -87,15 +89,28 @@ test.beforeAll(async () => {
   expect(result.errors ?? []).toEqual([]);
 
   const bundle = readFileSync(join(outputPath, "bundle.js"));
+  // The real stylesheet: the column-width spec below measures tracks, and
+  // without Tailwind every grid is one unstyled column.
+  const styles = (
+    await postcss([tailwind()]).process(
+      readFileSync("src/app/globals.css", "utf8"),
+      { from: resolve("src/app/globals.css") },
+    )
+  ).css;
   server = createServer((request, response) => {
     if (request.url?.startsWith("/bundle.js")) {
       response.setHeader("content-type", "text/javascript; charset=utf-8");
       response.end(bundle);
       return;
     }
+    if (request.url?.startsWith("/app.css")) {
+      response.setHeader("content-type", "text/css; charset=utf-8");
+      response.end(styles);
+      return;
+    }
     response.setHeader("content-type", "text/html; charset=utf-8");
     response.end(
-      '<!doctype html><html><body><div id="root"></div><script src="/bundle.js"></script></body></html>',
+      '<!doctype html><html><head><link rel="stylesheet" href="/app.css"></head><body><div id="root"></div><script src="/bundle.js"></script></body></html>',
     );
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
@@ -268,6 +283,80 @@ test("the pills cut rows by draw, and a row click selects it", async ({
   await row(page, "R16").click();
   await expect(row(page, "R16")).toHaveAttribute("aria-current", "true");
   await expect.poll(() => page.url()).toContain("match=played-r16");
+});
+
+/* ── Column tracks (T24) ────────────────────────────────────────────────── */
+
+/**
+ * Every heading and every Round cell fits its track, every row's Score cell
+ * starts on the "Score" heading's x, and Date is the Matches table's 72px —
+ * with the drawer closed and again beside it.
+ */
+async function assertTracks(page: Page) {
+  const headers = page.getByRole("columnheader");
+  await expect(headers).toHaveText([
+    "Date",
+    "Round",
+    "Opponent",
+    "Result",
+    "Score",
+    "Analysis",
+  ]);
+
+  const clipped = await headers.evaluateAll((els) =>
+    els
+      .filter((el) => el.scrollWidth > el.clientWidth)
+      .map((el) => el.textContent),
+  );
+  expect(clipped).toEqual([]);
+
+  const date = await page
+    .getByRole("columnheader", { name: "Date" })
+    .boundingBox();
+  expect(date?.width ?? 0).toBeGreaterThanOrEqual(71);
+  expect(date?.width ?? 0).toBeLessThanOrEqual(73);
+
+  // Cells are the row's direct children in header order: Score is the 5th.
+  const scoreX = (await page
+    .getByRole("columnheader", { name: "Score" })
+    .boundingBox())!.x;
+  const rows = await matchRows(page).evaluateAll((els) =>
+    els.map((el) => {
+      const cells = Array.from(el.children) as HTMLElement[];
+      const round = cells[1];
+      return {
+        scoreX: cells[4].getBoundingClientRect().x,
+        roundFits: round.scrollWidth <= round.clientWidth,
+      };
+    }),
+  );
+  expect(rows).toHaveLength(3);
+  for (const cell of rows) {
+    expect(Math.abs(cell.scoreX - scoreX)).toBeLessThanOrEqual(1);
+    expect(cell.roundFits).toBe(true);
+  }
+  await expect(matchRows(page).locator("span.mono")).toHaveText([
+    "Q1",
+    "R16",
+    "QF",
+  ]);
+}
+
+test("the tracks hold with the drawer closed and open", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await open(page);
+  await assertTracks(page);
+
+  await row(page, "R16").click();
+  const panel = drawer(page);
+  await expect(panel).toBeVisible();
+  // The rail (the dialog's `aside`) widens in over 200ms while the dialog
+  // inside it is 340px from the first frame; measure once the rail landed.
+  const rail = panel.locator("xpath=..");
+  await expect
+    .poll(async () => Math.round((await rail.boundingBox())?.width ?? 0))
+    .toBe(340);
+  await assertTracks(page);
 });
 
 test("?match= opens with that round selected", async ({ page }) => {
