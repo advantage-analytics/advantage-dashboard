@@ -151,7 +151,11 @@ function TiebreakHelp() {
             strokeWidth={1.5}
             aria-hidden="true"
           />
-          How to enter a tiebreak
+          {/* Trimmed to its cap height, so `items-center` centres the icon on
+              the capitals rather than on the line box's leading. */}
+          <span className="[text-box:trim-both_cap_alphabetic]">
+            How to enter a tiebreak
+          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent

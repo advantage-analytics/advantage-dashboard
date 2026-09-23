@@ -78,7 +78,7 @@ test.describe("ScoreBlock tiebreak help", () => {
     const body = text(html);
 
     expect(html).toMatch(
-      /<button type="button"[^>]*>(?:<span[^>]*data-icon[^>]*><\/span>|<svg[\s\S]*?<\/svg>)How to enter a tiebreak<\/button>/,
+      /<button type="button"[^>]*>(?:<span[^>]*data-icon[^>]*><\/span>|<svg[\s\S]*?<\/svg>)<span[^>]*>How to enter a tiebreak<\/span><\/button>/,
     );
     expect(body).toContain("Entering a tiebreak");
     expect(body).toContain(EXAMPLE_1);
