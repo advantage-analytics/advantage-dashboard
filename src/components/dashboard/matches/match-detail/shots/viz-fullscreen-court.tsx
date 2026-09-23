@@ -8,6 +8,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import {
   ACE_STAR_FILL,
+  ACE_STAR_RADIUS_RATIO,
   APRON_FILL,
   COURT_FILL,
   HEAT_APRON_FILL,
@@ -766,7 +767,7 @@ function Mark({
   if (dot.shape === "star") {
     return (
       <polygon
-        points={starPoints(x, y, r * 2.27)}
+        points={starPoints(x, y, r * ACE_STAR_RADIUS_RATIO)}
         fill={fill}
         stroke={stroke}
         strokeWidth={strokeWidth}

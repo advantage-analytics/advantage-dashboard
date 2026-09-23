@@ -103,8 +103,10 @@ const SERVE_DOT_R = 2.54;
 // legend's Ace glyph to the court's own fill exactly, instead of a second
 // `#F8C84F` literal the checker would flag again.
 export const ACE_STAR_FILL = "#F8C84F";
-// Keep the ace unmistakable at preview size without changing ordinary dots.
-const ACE_STAR_OUTER_R = 5;
+// Aces should read as a distinct shape without overpowering nearby dots.
+// Shared with the fullscreen court so both views use the same relative scale.
+export const ACE_STAR_RADIUS_RATIO = 1.4;
+const ACE_STAR_OUTER_R = SERVE_DOT_R * ACE_STAR_RADIUS_RATIO;
 
 /**
  * The won/lost/neutral colour for a dot's outcome — the one piece this

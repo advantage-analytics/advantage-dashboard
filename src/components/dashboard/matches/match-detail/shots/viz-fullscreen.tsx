@@ -913,7 +913,7 @@ function ZoomButton({
 /**
  * The bottom slab's legend — the SAME `legendItemsFor(cut, chart)` the
  * focused court's legend reads, drawn on the dark surface (8px dots and a
- * larger ace star, ringed in black, with 11px labels at
+ * modest ace star, ringed in black, with 11px labels at
  * 70% white). Heat returns its one ramp item, and the ramp replaces the
  * outcome keys entirely.
  */
@@ -942,11 +942,11 @@ function DarkLegend({ items }: { items: LegendItem[] }) {
           {item.glyph === "star" ? (
             <svg
               aria-hidden="true"
-              className="size-3 shrink-0"
-              viewBox="0 0 12 12"
+              className="size-2.5 shrink-0"
+              viewBox="0 0 10 10"
             >
               <polygon
-                points={starPoints(6, 6, 5)}
+                points={starPoints(5, 5, 4.2)}
                 fill={item.color}
                 stroke="var(--ink-900)"
                 strokeWidth={0.5}

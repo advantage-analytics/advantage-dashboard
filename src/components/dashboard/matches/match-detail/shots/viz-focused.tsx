@@ -544,11 +544,10 @@ function HeatRampLegend() {
   );
 }
 
-// Ordinary keys stay in an 8px box. The ace uses a 12px box so its star is
-// legible at the same relative emphasis as the plotted ace.
+// The ace remains distinct without dominating the 8px ordinary legend keys.
 const LEGEND_GLYPH_R = 3.6;
 const LEGEND_TRIANGLE_SIZE = 2.2;
-const LEGEND_STAR_OUTER_R = 5;
+const LEGEND_STAR_OUTER_R = 4.2;
 
 /**
  * One legend key — circle, triangle or star, reusing `court-art.tsx`'s own
@@ -563,7 +562,7 @@ function LegendMark({ item }: { item: LegendItem }) {
   const stroke = item.outline ? item.color : "#000";
   const strokeWidth = item.outline ? 1 : 0.4;
   const isStar = item.glyph === "star";
-  const glyphSize = isStar ? 12 : 8;
+  const glyphSize = isStar ? 10 : 8;
   const glyphCenter = glyphSize / 2;
   return (
     <span className="inline-flex items-center gap-[6px]">
