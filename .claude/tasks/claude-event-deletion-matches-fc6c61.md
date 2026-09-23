@@ -72,7 +72,7 @@ ready).
 
 ## T5 · Wizard and upload page refuse a doubles preset
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/components/dashboard/matches/new-match-wizard/subject-eligibility.ts, src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts, src/app/dashboard/team/upload/page.tsx, src/lib/workspace/upload-eligibility.ts (only if the reason joins the contract union), tests/upload-eligibility.spec.ts (guess; seams verified)
 - **done when:**

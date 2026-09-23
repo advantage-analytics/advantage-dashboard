@@ -173,6 +173,14 @@ export default async function TeamUploadPage({
       const entry = group.entries.find((candidate) => candidate.id === entryId);
       if (!entry) continue;
 
+      // Doubles is score-only (decision 2026-09-22): no video analysis, no
+      // SwingVision statistics. No link on the site sends a doubles line here
+      // any more, but a hand-built URL or a stale bookmark still can, and the
+      // wizard would otherwise open with a preset `wizardUploadEligibility()`
+      // refuses on sight. Same style as the `entryId && !staff` redirect
+      // above: the URL is not honoured, the picker is.
+      if (entry.discipline !== "singles") redirect("/dashboard/team/upload");
+
       // The row that was clicked, not just the entry's first match. A
       // tournament entry is a whole run, so `?match=` is what says which round
       // this video belongs to.

@@ -275,26 +275,6 @@ const DEFAULT_PROVIDER_ID: ProviderId | null =
   )?.id ?? null;
 
 /**
- * Where a line that CANNOT take video starts instead.
- *
- * A doubles line was handed the processing provider like every other preset,
- * and a preset opens on the file step, so there was no way to choose anything
- * else. The coach picked a multi-gigabyte file and met
- * "Video analysis supports singles matches only" from `job-request.ts` after
- * the upload — a 422 at the end of the most expensive step, with an orphaned
- * blob and a job stuck at `uploaded`.
- *
- * `supportsVideo()` already knows this at page-build time, and the import
- * provider is a real path for a doubles line: it parses numbers and never goes
- * near the vision pipeline. Its step order also skips the video step, so the
- * wizard asks for a file instead of a video.
- */
-const DEFAULT_IMPORT_PROVIDER_ID: ProviderId | null =
-  providers.find(
-    (p) => p.available !== false && providerKindOrNull(p.id) === "import",
-  )?.id ?? null;
-
-/**
  * The flow the progress bar starts on, before anyone has chosen anything.
  *
  * Read off DEFAULT_PROVIDER_ID's kind so the first paint draws the same number
@@ -667,7 +647,6 @@ export function useUploadMatchWizard({
    * can be built at the right length instead of resizing into it.
    */
   const [progressKind, setProgressKind] = useState<ProviderKind>(() => {
-    if (preset && !preset.supportsVideo) return "import";
     if (initialProvider) return getProviderKind(initialProvider);
     return DEFAULT_PROVIDER_KIND;
   });
@@ -1228,12 +1207,11 @@ export function useUploadMatchWizard({
     if (preset) {
       // This is where a preset answers the source question implicitly, which
       // is why it may only be built where the answer is a fact — see the bar
-      // on `EventPreset`. `job-request.ts` refusing a doubles line is what
-      // makes `supportsVideo: false` one.
-      const presetProvider = preset.supportsVideo
-        ? DEFAULT_PROVIDER_ID
-        : DEFAULT_IMPORT_PROVIDER_ID;
-      setSelectedProvider(presetProvider);
+      // on `EventPreset`. Always the default source: a doubles line is not
+      // routed onto an import instead, it is refused outright by
+      // `wizardUploadEligibility()` (doubles is score-only), and the page
+      // that builds a `?entry=` preset never hands one over.
+      setSelectedProvider(DEFAULT_PROVIDER_ID);
       setFormData((prev) => ({
         ...prev,
         ...(draft?.formData ?? {}),
@@ -1255,9 +1233,7 @@ export function useUploadMatchWizard({
             ? "Dual Match"
             : preset.eventKind === "tournament"
               ? "Tournament"
-              : preset.supportsVideo
-                ? "Singles"
-                : "Doubles",
+              : "Singles",
         opponentProgramKey: preset.opponentProgramKey ?? undefined,
         opponentSchool: preset.opponentSchool ?? undefined,
         ...(preset.score
@@ -1273,7 +1249,7 @@ export function useUploadMatchWizard({
       // bar re-runs this effect and must leave the step where it is.
       if (!seededRef.current) {
         seededRef.current = true;
-        setProgressKind(preset.supportsVideo ? "processing" : "import");
+        setProgressKind(DEFAULT_PROVIDER_KIND);
         setStep("file");
       }
       return;
@@ -1806,14 +1782,10 @@ export function useUploadMatchWizard({
 
   const handleProviderContinue = useCallback(() => {
     if (!selectedProvider) return;
-    // Belt as well as braces. The preset above already opens a doubles line on
-    // the import provider, but nothing else stops a processing provider being
-    // selected for one, and the cost of getting it wrong is paid entirely by
-    // the coach — a full video upload, then a 422.
-    if (preset && !preset.supportsVideo && isProcessingProvider) return;
     // May this match be recorded here, and for whom — the pending program,
-    // the restricted role, the missing or off-roster athlete all stop here,
-    // with the contract's own sentence. A reading not yet obtained (roster
+    // the restricted role, the missing or off-roster athlete, and a doubles
+    // line (score-only, `doubles-unsupported`) all stop here, with the
+    // decision's own sentence. A reading not yet obtained (roster
     // still loading, status unknown) stops too, silently: nothing has been
     // decided, and the page offers Retry for those rather than an error.
     if (!eligibility.ok) {
@@ -1835,8 +1807,6 @@ export function useUploadMatchWizard({
     selectedProvider,
     stepOrder,
     providerKind,
-    preset,
-    isProcessingProvider,
     eligibility,
     providerQuotaRefusal,
   ]);
@@ -2658,9 +2628,10 @@ export function useUploadMatchWizard({
         //
         // The id `uploadEligibility()` resolved and nothing else: the picked
         // roster profile's (`program_players.id`, the id
-        // `matches_block_client_regraft` checks against the roster), the
-        // viewer's own in a personal workspace, or null for a doubles line
-        // (`wizardUploadEligibility`). There is deliberately no `?? userId`
+        // `matches_block_client_regraft` checks against the roster) or the
+        // viewer's own in a personal workspace (`wizardUploadEligibility`,
+        // which refuses a doubles line before it gets here — doubles is
+        // score-only). There is deliberately no `?? userId`
         // here. Falling back to the uploader was the bug this replaces: it
         // attributed an athlete's match to their coach, and since `player1_id`
         // is half the `matches` SELECT policy, it also handed the coach read

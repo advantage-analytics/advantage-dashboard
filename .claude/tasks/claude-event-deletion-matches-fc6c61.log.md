@@ -37,3 +37,13 @@ is the runner's. Newest entries at the bottom.
 
 1. The score page still says "the score is entered with the file" beside "Upload it instead"; now that only video is offered, "with the video" reads truer.
 2. `useUploadMatchWizard.ts`'s comment above `DEFAULT_IMPORT_PROVIDER_ID` still explains why a doubles line defaults to the SwingVision import — T5 removes that path and should drop the comment with it.
+
+## T5 · Wizard and upload page refuse a doubles preset — done
+
+**gate:** mechanical GATE PASS on the second run; completion `VERDICT: pass`. The first gate run failed one real test (`tests/upload-validation.spec.ts:444`) that encoded the removed `supportsVideo → import provider` routing; the same subagent was resumed to fix it (the test now selects the import provider explicitly, assertions unchanged) before re-gating.
+**changed:** `wizardUploadEligibility()` refuses `discipline === "doubles"` first, with reason `doubles-unsupported` kept wizard-local (`WizardEligibility` widened; the contract union and its reason table untouched) and the message "Doubles lines record a score only. Statistics are singles only for now."; the doubles carve-out and `attribution: null` case are gone. `useUploadMatchWizard.ts` drops `DEFAULT_IMPORT_PROVIDER_ID` and every `supportsVideo` read — a preset always opens on the default provider with `matchType` "Singles" — and the silent pre-eligibility guard in `handleProviderContinue` is removed so the refusal reaches `EligibilityNotice`. The team upload page redirects a non-singles `?entry=` to `/dashboard/team/upload`. Specs: four new eligibility cases; `upload-source.spec.ts` and `upload-validation.spec.ts` updated to the new routing.
+**follow-ups:**
+
+1. `EventPreset.supportsVideo` is now written by `presetFor` and read by nothing in the wizard; dropping it touches schedule code (`entrySupportsVideo`) and wants its own pass.
+2. The `?match=` single-match preset (`singleMatchPreset`) carries no `discipline`; confirm `getTeamSingleMatch` can never return a doubles row, else that seam needs the same gate.
+3. T3's copy and `DOUBLES_UNSUPPORTED_REFUSAL` spell the same sentence in two places; one constant if they ever drift.
