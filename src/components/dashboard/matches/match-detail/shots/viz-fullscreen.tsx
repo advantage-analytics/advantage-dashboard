@@ -139,6 +139,7 @@ export function VizFullscreen() {
   // the court's `MarkLayer` memo survive a pan frame.
   const [activeMarkId, setActiveMarkId] = useState<string | null>(null);
   const [focusedMarkId, setFocusedMarkId] = useState<string | null>(null);
+  const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
   // Final review #3: the marks' single tab stop. `null` = "the first mark" —
   // nobody has moved within the group yet.
   const [rovingMarkId, setRovingMarkId] = useState<string | null>(null);
@@ -157,7 +158,18 @@ export function VizFullscreen() {
   const dropActiveMark = useCallback(() => {
     setActiveMarkId(null);
     setFocusedMarkId(null);
+    setSelectedMarkId(null);
   }, []);
+  const selectMark = useCallback((id: string) => {
+    setActiveMarkId(null);
+    setSelectedMarkId((prev) => (prev === id ? null : id));
+  }, []);
+
+  const visibleSelectedMarkId =
+    selectedMarkId !== null &&
+    result?.dots.some((dot) => dot.id === selectedMarkId)
+      ? selectedMarkId
+      : null;
 
   /* ── Band editor (Phase 2B, Task 4) ───────────────────────────────────── */
 
@@ -517,12 +529,14 @@ export function VizFullscreen() {
             transform={pz.t}
             stage={pz.stage}
             panning={pz.panning}
-            activeId={activeMarkId}
+            activeId={activeMarkId ?? visibleSelectedMarkId}
             focusedId={focusedMarkId}
+            selectedId={visibleSelectedMarkId}
             rovingId={rovingMarkId}
             onActivate={activateMark}
             onDeactivate={deactivateMark}
             onRove={roveMark}
+            onSelect={selectMark}
             editing={editing}
             editorLayer={
               activeEditor !== null ? (

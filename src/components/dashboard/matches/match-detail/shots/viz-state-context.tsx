@@ -346,7 +346,18 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
       targetKey: string | null;
       reducedMotion: boolean;
     }): void => {
-      if (reducedMotion || !sourceEl || !supportsViewTransitions()) {
+      // A gallery tile can be selected after scrolling deep into the pane.
+      // That selection scrolls the destination court to the top; morphing
+      // during the scroll makes the shared court appear to jump. In that
+      // position, make the state change directly and let the focused view
+      // perform its existing scroll/focus landing.
+      const pane = document.getElementById("match-report-pane");
+      if (
+        reducedMotion ||
+        !sourceEl ||
+        !supportsViewTransitions() ||
+        (pane !== null && pane.scrollTop > 8)
+      ) {
         setState(next);
         return;
       }

@@ -44,6 +44,7 @@ const RETURN_POINTS = RALLY_POINTS.flatMap((p) => {
 function Harness() {
   const { state, setState } = useVizState();
   const [contactHidden, setContactHidden] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [bands, setBands] = useState<BandSettings>(DEFAULT_BANDS);
   const cut = state.cut ?? "rallyPosition";
   const points =
@@ -164,12 +165,16 @@ function Harness() {
           transform={{ px: 0, py: 0, z: 1 }}
           stage={{ w: 700, h: 700 }}
           panning={false}
-          activeId={null}
+          activeId={selectedId}
           focusedId={null}
+          selectedId={selectedId}
           rovingId={null}
           onActivate={() => {}}
           onDeactivate={() => {}}
           onRove={() => {}}
+          onSelect={(id) =>
+            setSelectedId((current) => (current === id ? null : id))
+          }
         />
       </section>
     </>

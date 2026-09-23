@@ -107,9 +107,9 @@ export const ACE_STAR_FILL = "#F8C84F";
 // to the SERVE_DOT_R=2.54 circle's: a regular 10-point star with inner
 // radius R/2 has area
 // 2.5·sin(36°)·R² ≈ 1.4695·R²; solving 1.4695·R² = π·2.54² gives R≈3.714 —
-// 4.44 is exactly 20% larger than the original 3.7 radius (see
-// `tests/court-geometry.spec.ts`).
-const ACE_STAR_OUTER_R = 4.44;
+// A 5-unit radius gives the ace a little more separation from ordinary dots
+// at preview size without changing their radius or colour.
+const ACE_STAR_OUTER_R = 5;
 
 /**
  * The won/lost/neutral colour for a dot's outcome — the one piece this

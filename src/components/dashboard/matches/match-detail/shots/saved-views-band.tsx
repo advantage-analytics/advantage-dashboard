@@ -53,11 +53,7 @@ import {
   tileCountLabel,
   EMPTY_VIZ_FILTERS,
 } from "./viz-model";
-import {
-  truncatePillLabels,
-  VIZ_TILE_GRID_CLASS,
-  VIZ_TILE_GRID_STYLE,
-} from "./viz-labels";
+import { truncatePillLabels, VIZ_TILE_GRID_CLASS } from "./viz-labels";
 import { buildDefaultTiles, type DefaultTile } from "./default-tiles";
 
 // M3: `variant="wall"` never renders a default tile (`viz-wall.tsx` builds
@@ -106,7 +102,7 @@ export function SavedViewsBand({
    * F4: `"wall"` (default) is the pre-existing grid — saved views only,
    * absent with zero of them. `"focused"` is the focused view's "Views"
    * grid — the SAME 3-column wrapping grid the wall draws
-   * (`VIZ_TILE_GRID_CLASS`/`VIZ_TILE_GRID_STYLE`, `viz-labels.tsx`), never a
+   * (`VIZ_TILE_GRID_CLASS`, `viz-labels.tsx`), never a
    * horizontally scrolling row (that shape shipped once in this file's
    * history and was corrected: the design frame's "5 views" with three
    * tiles visible meant a second grid ROW below the fold, not a scroll
@@ -1021,7 +1017,6 @@ export function SavedViewsBand({
           // `globals.css`'s `::view-transition-new(.viz-vt-views-grid)
           // :only-child` rule.
           className={`${VIZ_TILE_GRID_CLASS} viz-vt-views-grid`}
-          style={VIZ_TILE_GRID_STYLE}
         >
           {galleryDefaultTiles.map((tile) => {
             return (
@@ -1070,7 +1065,6 @@ export function SavedViewsBand({
             role="list"
             aria-label="Saved views"
             className={VIZ_TILE_GRID_CLASS}
-            style={VIZ_TILE_GRID_STYLE}
           >
             {optimisticViews.map((view) => (
               <div key={view.id} role="listitem">

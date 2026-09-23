@@ -6,7 +6,7 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { CourtTile, TileFullscreenGlyph } from "./court-tile";
 import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
 import { buildDefaultTiles } from "./default-tiles";
-import { VIZ_TILE_GRID_CLASS, VIZ_TILE_GRID_STYLE } from "./viz-labels";
+import { VIZ_TILE_GRID_CLASS } from "./viz-labels";
 
 /**
  * P1a/P1b: the wall of default cuts, one row per subject (you first, then
@@ -59,8 +59,8 @@ export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
     <div
       className={
         fallbackFadeIn
-          ? "viz-crossfade-in flex flex-col gap-6"
-          : "flex flex-col gap-6"
+          ? "viz-crossfade-in @container flex flex-col gap-6"
+          : "@container flex flex-col gap-6"
       }
     >
       {rows.map((row) => {
@@ -79,7 +79,6 @@ export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
                 role="list"
                 aria-label={row.name}
                 className={VIZ_TILE_GRID_CLASS}
-                style={VIZ_TILE_GRID_STYLE}
               >
                 {rowTiles.map((tile) => (
                   <div key={tile.key} role="listitem">

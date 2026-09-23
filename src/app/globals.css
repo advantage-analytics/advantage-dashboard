@@ -698,15 +698,13 @@
   animation-timing-function: var(--ease-primary);
 }
 
-/* Everything else on the page (the rest of the wall fading out, the
-   focused view's card chrome fading in) is the browser's default root
-   crossfade - just brought in under the morph's own 300ms so neither
-   outruns the other. */
+/* The root includes the surrounding match report. Crossfading it produces
+   two ghosted copies of the page while the court moves. Only the selected
+   court has spatial motion; the supporting blocks enter with opacity. */
 ::view-transition-group(root),
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation-duration: 200ms;
-  animation-timing-function: var(--ease-primary);
+  animation: none;
 }
 
 /* view-transition-names the toolbar/stats-card/Views-grid blocks carry
@@ -724,36 +722,24 @@
   view-transition-name: viz-vt-views-grid;
 }
 
-@keyframes viz-vt-rise-in {
+@keyframes viz-vt-appear {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
-/* :only-child is what scopes these to a GENUINE entrance: a named
-   view-transition-group with only a "new" image (no "old" to pair with)
-   has exactly one child in its ::view-transition-image-pair, which is what
-   :only-child matches here. On a same-page update (the Views grid's own
-   tile swapping which court is focused, without leaving the focused view)
-   these elements persist in both old and new snapshots, so the pair has
-   two children, :only-child doesn't match, and the browser's default
-   cross-fade plays instead - a quiet update, not a re-staggered entrance,
-   which is the "same idea" the task brief asks for there. Stagger between
-   the three blocks stays under 60ms, 200ms fades each, never coupled to
-   the court's own 300ms morph. */
-::view-transition-new(viz-vt-toolbar):only-child {
-  animation: 200ms var(--ease-primary) both viz-vt-rise-in;
-}
+/* Only genuinely new blocks fade in. Existing blocks are present in both
+   snapshots and keep their place while the selected court changes. The
+   supporting fade follows the court without adding another motion vector. */
+::view-transition-new(viz-vt-toolbar):only-child,
 ::view-transition-new(viz-vt-stats-card):only-child {
-  animation: 200ms var(--ease-primary) 30ms both viz-vt-rise-in;
+  animation: 160ms var(--ease-primary) 120ms both viz-vt-appear;
 }
 ::view-transition-new(viz-vt-views-grid):only-child {
-  animation: 200ms var(--ease-primary) 60ms both viz-vt-rise-in;
+  animation: 140ms var(--ease-primary) 180ms both viz-vt-appear;
 }
 
 /* Keep the page interactive while a transition plays - the overlay
@@ -780,12 +766,11 @@
    could not wrap in a shared-element transition - browser back/forward,
    where Next's router commits the new DOM with no synchronous hook to
    snapshot the outgoing one first (VizStateContextValue.externalCourtSwap's
-   doc comment). Reuses viz-vt-rise-in above rather than a second identical
-   @keyframes: it IS the same rise-in (8px), same family as the morph's own
-   entrance, so the fallback reads as a quieter sibling of the real thing
+   doc comment). Reuses the supporting opacity entrance above, without
+   spatial movement when the browser cannot animate a shared court
    rather than a different animation. */
 .viz-crossfade-in {
-  animation: 200ms var(--ease-primary) both viz-vt-rise-in;
+  animation: 160ms var(--ease-primary) both viz-vt-appear;
 }
 @media (prefers-reduced-motion: reduce) {
   .viz-crossfade-in {

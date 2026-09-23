@@ -160,3 +160,26 @@ test("Rally placement selector projects Scatter and Heat consistently in preview
   });
   expect(errors).toEqual([]);
 });
+
+test("fullscreen marks can be selected by pointer and keyboard", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?view=shots&cut=rallyPlacement`);
+  const marks = page.getByTestId("fullscreen").locator("[data-viz-mark]");
+  await expect(marks).toHaveCount(6);
+  const top = fullscreenMark("high-p1-deep");
+  const beneath = fullscreenMark("low-p1-deep");
+  await top.click();
+  await expect(top).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("fullscreen")).toContainText("won the point");
+  await top.click();
+  await expect(beneath).toHaveAttribute("aria-pressed", "true");
+  await beneath.press("Enter");
+  await expect(beneath).toHaveAttribute("aria-pressed", "false");
+  await beneath.press(" ");
+  await expect(beneath).toHaveAttribute("aria-pressed", "true");
+
+  function fullscreenMark(id: string) {
+    return page.getByTestId("fullscreen").locator(`[data-viz-mark="${id}"]`);
+  }
+});

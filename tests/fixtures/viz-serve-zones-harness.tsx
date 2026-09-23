@@ -98,10 +98,12 @@ function Harness() {
           panning={false}
           activeId={null}
           focusedId={null}
+          selectedId={null}
           rovingId={null}
           onActivate={() => {}}
           onDeactivate={() => {}}
           onRove={() => {}}
+          onSelect={() => {}}
         />
       </section>
     </>

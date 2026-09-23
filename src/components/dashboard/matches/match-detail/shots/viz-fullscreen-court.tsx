@@ -162,10 +162,12 @@ export function VizFullscreenCourt({
   panning,
   activeId,
   focusedId,
+  selectedId,
   rovingId,
   onActivate,
   onDeactivate,
   onRove,
+  onSelect,
   editing = false,
   editorLayer = null,
 }: {
@@ -200,11 +202,13 @@ export function VizFullscreenCourt({
    */
   activeId: string | null;
   focusedId: string | null;
+  selectedId: string | null;
   /** The marks' single tab stop — see `viz-mark-roving.ts`. */
   rovingId: string | null;
   onActivate: (id: string, keyboard: boolean) => void;
   onDeactivate: (id: string) => void;
   onRove: (id: string) => void;
+  onSelect: (id: string) => void;
   /**
    * Phase 2B, Task 4: the band editor is open. The marks and heat dim to 35%
    * and stop being interactive (no hover, no focus, no readout) — a hover
@@ -291,7 +295,7 @@ export function VizFullscreenCourt({
         height={VIEWER_COURT.artPx.h * z}
         viewBox={`${vb.minX} ${vb.minY} ${vb.w} ${vb.h}`}
         preserveAspectRatio="xMidYMid meet"
-        role="img"
+        role="group"
         aria-label={`${subjectName} — full court, ${dots.length} mark${dots.length === 1 ? "" : "s"}`}
         className="absolute top-0 left-0 block"
       >
@@ -401,11 +405,13 @@ export function VizFullscreenCourt({
               unit={unit}
               activeId={activeId}
               focusedId={focusedId}
+              selectedId={selectedId}
               rovingId={rovingId}
               interactive={!editing}
               onActivate={onActivate}
               onDeactivate={onDeactivate}
               onRove={onRove}
+              onSelect={onSelect}
             />
           )}
         </g>
@@ -541,11 +547,13 @@ const MarkLayer = memo(function MarkLayer({
   unit,
   activeId,
   focusedId,
+  selectedId,
   rovingId,
   interactive,
   onActivate,
   onDeactivate,
   onRove,
+  onSelect,
 }: {
   cut: Cut;
   dots: VizDot[];
@@ -558,12 +566,14 @@ const MarkLayer = memo(function MarkLayer({
   interactive: boolean;
   activeId: string | null;
   focusedId: string | null;
+  selectedId: string | null;
   /** Final review #3: the ONE mark that is a tab stop. `null` means "the
    *  first one" — nobody has moved within the group yet. */
   rovingId: string | null;
   onActivate: (id: string, keyboard: boolean) => void;
   onDeactivate: (id: string) => void;
   onRove: (id: string) => void;
+  onSelect: (id: string) => void;
 }) {
   const placed = useMemo(
     () =>
@@ -599,6 +609,12 @@ const MarkLayer = memo(function MarkLayer({
     index: number,
   ): void {
     const next = nextMarkIndex(index, placed.length, e.key);
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelect(placed[index].dot.id);
+      return;
+    }
     if (next === null) {
       // Still swallow an arrow the group owns but cannot act on (the first
       // or last mark), so it doesn't fall through to the viewer's window
@@ -638,8 +654,9 @@ const MarkLayer = memo(function MarkLayer({
             // court, not one per mark. On `rallyPosition` that was 150-250
             // Tab presses before a keyboard user reached the View menu.
             tabIndex={interactive && index === rovingIndex ? 0 : -1}
-            role="img"
+            role="button"
             aria-label={label}
+            aria-pressed={dot.id === selectedId}
             className="cursor-pointer outline-none"
             onMouseEnter={() => onActivate(dot.id, false)}
             onMouseLeave={() => onDeactivate(dot.id)}
@@ -648,6 +665,22 @@ const MarkLayer = memo(function MarkLayer({
             }
             onBlur={() => onDeactivate(dot.id)}
             onKeyDown={(e) => handleKeyDown(e, index)}
+            onClick={(e) => {
+              e.stopPropagation();
+              // Two shots can land on the same coordinate. Repeated clicks
+              // cycle that stack, so the mark underneath is selectable too.
+              const stack = placed.filter(
+                (item) => Math.hypot(item.x - x, item.y - y) < 0.5,
+              );
+              const selectedIndex = stack.findIndex(
+                (item) => item.dot.id === selectedId,
+              );
+              const next =
+                selectedIndex < 0
+                  ? dot.id
+                  : stack[(selectedIndex + 1) % stack.length].dot.id;
+              onSelect(next);
+            }}
           >
             {isFocused && (
               // Fix round 1 #10: a keyboard-only ring OUTSIDE the hover halo.
@@ -676,6 +709,7 @@ const MarkLayer = memo(function MarkLayer({
                 vectorEffect="non-scaling-stroke"
               />
             )}
+            <circle cx={x} cy={y} r={9} fill="transparent" />
             <Mark dot={dot} x={x} y={y} fill={fill} active={isActive} />
           </g>
         );
@@ -732,7 +766,7 @@ function Mark({
   if (dot.shape === "star") {
     return (
       <polygon
-        points={starPoints(x, y, r * 2.016)}
+        points={starPoints(x, y, r * 2.27)}
         fill={fill}
         stroke={stroke}
         strokeWidth={strokeWidth}
