@@ -15,7 +15,11 @@
 
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { persistTranscript } from "./persist-transcript";
-import { requestMatchInsights } from "./request-insights";
+import {
+  insightsWaitMs,
+  requestMatchInsights,
+  waitForInsights,
+} from "./request-insights";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
 import type { Transcript } from "./derivation";
 
@@ -46,8 +50,16 @@ export type DeriveOutcome =
 export async function deriveAndPublish(params: {
   supabase: ReturnType<typeof createAdminClient>;
   jobId: string;
+  /**
+   * Epoch ms by which the caller must be finished — the webhook's
+   * `maxDuration`, less headroom. Bounds the wait on the review so the job is
+   * always settled before the platform kills the invocation; a job frozen at
+   * `deriving` would read as analysing forever. Omitted by the CLI, which has
+   * no ceiling.
+   */
+  deadline?: number;
 }): Promise<DeriveOutcome> {
-  const { supabase, jobId } = params;
+  const { supabase, jobId, deadline } = params;
 
   try {
     await supabase
@@ -116,6 +128,27 @@ export async function deriveAndPublish(params: {
       return { ok: false, reason: `${fn} failed: ${error.message}` };
     }
 
+    // The Advantage Intelligence review the report's insight card shows, as
+    // `process-match` requests it for a SwingVision import. BEFORE `completed`
+    // and the mail: those are what tell the player the analysis is done, and
+    // announcing it first sent people to a report whose review had not been
+    // written yet — the page draws no stand-in and never re-reads it, so the
+    // card simply was not there. Measured at 15–25s (one model call, retried
+    // on Gemini's transient refusals). Capped, because it is the only optional
+    // step: a model outage must delay the statistics by seconds, never withhold
+    // them. `requestMatchInsights` never throws; a review that misses the cap
+    // is not cancelled.
+    const reviewSettled = await waitForInsights(
+      requestMatchInsights({ supabase, matchId }),
+      insightsWaitMs(deadline),
+    );
+    if (!reviewSettled) {
+      console.warn(`${LOG} review not written in time; publishing`, {
+        jobId,
+        matchId,
+      });
+    }
+
     await supabase
       .from("processing_jobs")
       .update({ status: "completed", error_message: null })
@@ -126,13 +159,6 @@ export async function deriveAndPublish(params: {
     // page readable — and here rather than in each caller so a re-run from the
     // CLI announces itself the same way. Deduped per job; never throws.
     await notifyAnalysisOutcome({ supabase, jobId, outcome: "ready" });
-
-    // The Advantage Intelligence summary the report's insight card shows, as
-    // `process-match` requests it for a SwingVision import. After `completed`
-    // and the mail, because it is the slow step (one model call) and the only
-    // optional one; never throws, so a failure leaves the published report
-    // without a card rather than failing the analysis.
-    await requestMatchInsights({ supabase, matchId });
 
     // `unreconciled` is reachable now (ACCEPT_UNRECONCILED_FOLD): the fold did
     // not reproduce the entered score and the rows were written anyway, with

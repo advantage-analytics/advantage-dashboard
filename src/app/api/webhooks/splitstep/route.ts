@@ -74,6 +74,12 @@ export const maxDuration = 60;
 
 const LOG = "[splitstep-webhook]";
 
+/**
+ * Kept back from `maxDuration` when derivation waits on the review: enough for
+ * the `completed` write and the ready mail that follow it.
+ */
+const DEADLINE_HEADROOM_MS = 8_000;
+
 /* Bucket for raw provider results (created by the 20260805005801 migration).
    Imported rather than re-declared: the verification script reads the same
    bucket, and two literals would drift silently. */
@@ -246,6 +252,10 @@ function safeHeaders(request: NextRequest): Record<string, string> {
 }
 
 export async function POST(request: NextRequest) {
+  // The clock `maxDuration` runs on. after() work shares it, so derivation is
+  // handed a deadline rather than guessing how much of it is left.
+  const deadline = Date.now() + maxDuration * 1000 - DEADLINE_HEADROOM_MS;
+
   // 1. Raw body FIRST, before any parsing or validation can throw. If the
   //    payload differs from the vendor's docs at all, this is the only thing
   //    that will tell us (handoff §3).
@@ -489,7 +499,9 @@ export async function POST(request: NextRequest) {
           // route that already declares maxDuration = 60 and has returned its
           // 200 before any of this starts. The spec asked for one against an
           // unmeasured workload; the workload turned out not to need it.
-          await deriveAndPublish({ supabase, jobId });
+          // The one slow part is the review it waits on before announcing
+          // `completed` (~15–25s), bounded by `deadline`.
+          await deriveAndPublish({ supabase, jobId, deadline });
         }
 
         // The per-frame files, last of all. Nothing reads them yet — they are

@@ -51,3 +51,44 @@ export async function requestMatchInsights(params: {
     return { ok: false };
   }
 }
+
+/** Longest a job waits on its review before publishing without it. */
+export const INSIGHTS_CAP_MS = 35_000;
+
+/**
+ * How long to wait on the review: the cap, or whatever is left before
+ * `deadline` (epoch ms) if that is sooner. No deadline, no ceiling but the cap.
+ */
+export function insightsWaitMs(
+  deadline: number | undefined,
+  now: number = Date.now(),
+): number {
+  if (deadline === undefined) return INSIGHTS_CAP_MS;
+  return Math.max(0, Math.min(INSIGHTS_CAP_MS, deadline - now));
+}
+
+/**
+ * Waits for a review request to settle, for at most `ms`. True when it settled
+ * in time (whether or not it succeeded), false when the wait ran out — the
+ * request itself is not cancelled here.
+ */
+export async function waitForInsights(
+  request: Promise<unknown>,
+  ms: number,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), ms);
+  });
+  try {
+    return await Promise.race([
+      request.then(
+        () => true,
+        () => true,
+      ),
+      timedOut,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}

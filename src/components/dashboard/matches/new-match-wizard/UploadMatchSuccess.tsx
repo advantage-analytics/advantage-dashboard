@@ -488,7 +488,7 @@ function stepBody(
       <p className={NOTE}>
         {view.slow
           ? "This is taking longer than usual. You can open the match now; the stats appear on it as soon as they're ready."
-          : "This usually takes a few seconds."}
+          : "Your stats and Advantage Intelligence review usually take under a minute."}
       </p>
     );
   }
