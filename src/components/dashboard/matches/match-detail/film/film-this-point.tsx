@@ -14,6 +14,7 @@ import {
   UNMEASURED,
   type ShotStop,
 } from "./film-shots";
+import type { followAffordance } from "./film-timeline";
 
 /**
  * "This point" (handoff H1 §B, frame `E-route-P1-P2.html`): the card under
@@ -52,16 +53,43 @@ export const FilmThisPoint = memo(function FilmThisPoint({
   shots,
   position,
   activeShotId,
+  affordance,
+  onFollow,
   onSelectShot,
   onStep,
 }: {
-  /** The point the playhead is inside, or null before the first serve. */
+  /**
+   * The DISPLAYED point (T20): the held one while the viewer holds a point,
+   * else the one the playhead is inside; null before the first serve. The
+   * rows, the footer and the empty copy all read it, so while held they stay
+   * put when the film crosses into the next point.
+   */
   point: MatchPoint | null;
-  /** This point's timed shots, in rally order, on the film clock. */
+  /** The displayed point's timed shots, in rally order, on the film clock. */
   shots: ShotStop[];
-  /** 1-based place of the point in the applied cut, and the cut's size. */
+  /**
+   * The PLAYING point's 1-based place in the applied cut, and the cut's size
+   * — null in dead time and for a point outside the cut.
+   */
   position: { index: number; total: number } | null;
+  /**
+   * The playing point's lit shot. It belongs to the playing point's shots, so
+   * while held on another point no drawn row matches it and none is washed.
+   */
   activeShotId: string | null;
+  /**
+   * The header line's strings while held on a point other than the playing
+   * one; null otherwise. Non-null replaces the counter with the line.
+   */
+  affordance: ReturnType<typeof followAffordance>;
+  /** Back to following the film — the header line's press. */
+  onFollow: () => void;
+  /**
+   * Hold a point. The card's shot clicks already arrive wrapped (the tab's
+   * `onSelectShot` holds or follows before it seeks), so the card itself
+   * never calls this; it is here so the card's props name both transitions.
+   */
+  onHoldPoint: (pointId: string) => void;
   onSelectShot: (stop: ShotStop) => void;
   /** Walk the applied cut — the same step the transport takes. */
   onStep: (direction: -1 | 1) => void;
@@ -88,14 +116,32 @@ export const FilmThisPoint = memo(function FilmThisPoint({
             disabled={!position}
             onStep={onStep}
           />
-          <span
-            className="mono tabular min-w-[56px] text-center text-[11px] whitespace-nowrap"
-            style={{ color: "var(--ink-500)" }}
-          >
-            {position
-              ? `${position.index} / ${position.total}`
-              : `${UNMEASURED} / ${UNMEASURED}`}
-          </span>
+          {affordance ? (
+            // T20 (frame C1): while held, the line takes the counter's place
+            // between the step buttons — it carries the playing point's number
+            // — and the counter returns as-is on re-follow. `h-7` in the
+            // `size-7` row, so the head keeps its height; the counter's 56px
+            // `min-w` is not applied here.
+            <button
+              type="button"
+              aria-label={affordance.ariaLabel}
+              onClick={onFollow}
+              className="film-follow-pill-in inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-[var(--radius-element)] px-1.5 text-[11px] font-medium whitespace-nowrap transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              style={{ color: "var(--ink-600)" }}
+            >
+              {affordance.label}
+              <ChevronRight aria-hidden className="size-3" strokeWidth={1.6} />
+            </button>
+          ) : (
+            <span
+              className="mono tabular min-w-[56px] text-center text-[11px] whitespace-nowrap"
+              style={{ color: "var(--ink-500)" }}
+            >
+              {position
+                ? `${position.index} / ${position.total}`
+                : `${UNMEASURED} / ${UNMEASURED}`}
+            </span>
+          )}
           <StepButton
             direction={1}
             label="Next point"

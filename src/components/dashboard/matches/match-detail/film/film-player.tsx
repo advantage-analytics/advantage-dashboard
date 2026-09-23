@@ -183,6 +183,21 @@ interface FilmPlayerProps {
   /** The fullscreen glyph. Entered by user action only, never automatically. */
   onEnterFullscreen: () => void;
   /**
+   * A point step is about to happen — the transport's Previous/Next point
+   * glyphs, or `step` called through the handle (the tab's arrow keys, the
+   * "This point" card's stepper). Fires before the seek, so the tab can
+   * re-follow the film and the step reads as "take me on".
+   *
+   * A notification rather than lifting `step` up to the tab: `step` reads the
+   * element's own `currentTime` (never a render behind) and seeks through this
+   * player's `seekTo`, which carries the landing and seek-dim bookkeeping.
+   * Lifting it would make the tab reach through the handle for both halves
+   * anyway and leave the transport's two glyphs needing a callback in; one
+   * optional callback here puts every step path — glyphs, keys, card — through
+   * the same function with nothing duplicated.
+   */
+  onStep?: () => void;
+  /**
    * Where `--film-t` is written, so the point list beside the player can read
    * it too. Defaults to the frame.
    */
@@ -268,6 +283,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       onRetry,
       onToggleSaved,
       onEnterFullscreen,
+      onStep,
       clockTargetRef,
     },
     ref,
@@ -465,12 +481,13 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
 
     const step = useCallback(
       (direction: -1 | 1) => {
+        onStep?.();
         const now = videoRef.current?.currentTime ?? 0;
         const stop =
           direction === 1 ? nextStop(stops, now) : prevStop(stops, now);
         if (stop) seekTo(stop.start);
       },
-      [stops, seekTo],
+      [stops, seekTo, onStep],
     );
 
     useImperativeHandle(

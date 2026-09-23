@@ -268,7 +268,7 @@ ready).
 
 ## T20 · The shell card holds: the header line, the card's click wrapper, `FilmPlayer.onStep`
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T18, T19
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-this-point.tsx (props L50–68, the head L81–106, `ShotRow` `onClick` L244); film-tab.tsx (the `<FilmThisPoint>` mount L592–601, `pointShots` L295–301, `handleSelectShot` L303–305, `handleStep` L308–310, `<FilmPlayer>` L568–591); film-player.tsx (`step` L466–474, props L160–185 / destructure L260–272, no other change); tests/film-playback-refresh.spec.ts (cases after the T19 block)

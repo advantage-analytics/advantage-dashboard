@@ -34,6 +34,7 @@ import { FilmThisPoint } from "./film-this-point";
 import {
   activeStopAt,
   displayedPointId as displayedPointOf,
+  followAffordance,
   type PointFocus,
 } from "./film-timeline";
 import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
@@ -329,17 +330,43 @@ function FilmRoom({
     [activePoint, currentTime, columns],
   );
   usePublishFilmHead(filmHead);
+  // The card shows the DISPLAYED point (T20): the held one while held, so its
+  // rows, footer and empty copy stay put when the film crosses into the next
+  // point; the playing one otherwise. Its counter, step buttons and lit row
+  // keep reading the playing point (`position`, `activeShot`).
+  const displayedPoint = useMemo(
+    () =>
+      displayedPointId
+        ? (stops.find((s) => s.point.id === displayedPointId)?.point ?? null)
+        : null,
+    [stops, displayedPointId],
+  );
   const pointShots = useMemo(
     () =>
-      activePoint
-        ? allShotStops.filter((s) => s.point.id === activePoint.id)
+      displayedPointId
+        ? allShotStops.filter((s) => s.point.id === displayedPointId)
         : [],
-    [allShotStops, activePoint],
+    [allShotStops, displayedPointId],
   );
 
-  const handleSelectShot = useCallback((stop: ShotStop) => {
-    playerRef.current?.seekTo(stop.start);
-  }, []);
+  // The playing point's id for the card's shot-click wrapper, read through a
+  // ref written after each commit so the wrapper's identity never moves with
+  // the film — `ShotRow` is memoized on it (the list's `selectShot` pattern).
+  const activePointIdRef = useRef<string | null>(activePoint?.id ?? null);
+  useEffect(() => {
+    activePointIdRef.current = activePoint?.id ?? null;
+  }, [activePoint]);
+
+  // A shot click holds the shot's own point — or re-follows, when that point
+  // is the one playing — and then seeks, as it always did.
+  const handleSelectShot = useCallback(
+    (stop: ShotStop) => {
+      if (stop.point.id === activePointIdRef.current) followPlayback();
+      else holdPoint(stop.point.id);
+      playerRef.current?.seekTo(stop.start);
+    },
+    [followPlayback, holdPoint],
+  );
 
   /** The transport's own step, handed to anything else that walks points. */
   const handleStep = useCallback(
@@ -366,6 +393,11 @@ function FilmRoom({
         ? { id: activePoint.id, index: position?.index ?? null }
         : null,
     [activePoint, position],
+  );
+  // The card's header line (T20): what it says, or null when there is none.
+  const affordance = useMemo(
+    () => followAffordance(pointFocus, nowPlaying),
+    [pointFocus, nowPlaying],
   );
 
   const handleSelect = useCallback(
@@ -640,12 +672,19 @@ function FilmRoom({
           onRetry={retry}
           onToggleSaved={toggleSavedActive}
           onEnterFullscreen={enterRoom}
+          // Every point step — the transport's two glyphs, the arrow keys
+          // above, the card's stepper — runs the player's own `step`, which
+          // calls this first: stepping re-follows the film.
+          onStep={followPlayback}
         />
         <FilmThisPoint
-          point={activePoint}
+          point={displayedPoint}
           shots={pointShots}
           position={position}
           activeShotId={activeShot?.stop.shot.id ?? null}
+          affordance={affordance}
+          onFollow={followPlayback}
+          onHoldPoint={holdPoint}
           onSelectShot={handleSelectShot}
           // The same step the transport takes, so the widget's stepper walks
           // the applied cut rather than opening a second stepping path.
