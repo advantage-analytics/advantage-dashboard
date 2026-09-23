@@ -216,7 +216,7 @@ ready).
 
 ## T16 · Event header subline as icon facts in the match-metadata register
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T14
 - **files:** src/components/dashboard/schedule/event-table.tsx, src/components/dashboard/schedule/dual-detail.tsx, src/components/dashboard/schedule/tournament-detail.tsx, tests/schedule-dual-outcomes.spec.ts, tests/schedule-tournament-outcomes.spec.ts (guess; seams verified)

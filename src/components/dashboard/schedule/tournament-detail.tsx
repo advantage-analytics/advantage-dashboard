@@ -10,8 +10,10 @@
 
 import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
-import { Trophy } from "lucide-react";
+import Image from "next/image";
+import { Calendar, GraduationCap, MapPin, Trophy, Users } from "lucide-react";
 import {
+  EventFact,
   EventHeader,
   EventPageLayout,
   EventTitle,
@@ -236,11 +238,73 @@ export function TournamentDetail({
         <EventHeader
           title={<EventTitle name={event.name} />}
           subline={[
-            formatEventSpanWithYear(event.startsOn, event.endsOn),
-            siteTitle(event.site),
-            event.host,
-            event.surface ? surfaceTitle(event.surface) : null,
-            plural(entries.length, "entry", "entries"),
+            <EventFact
+              key="date"
+              tabular
+              icon={
+                <Calendar
+                  className="size-[13px] text-[var(--ink-400)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+              }
+            >
+              {formatEventSpanWithYear(event.startsOn, event.endsOn)}
+            </EventFact>,
+            <EventFact
+              key="site"
+              icon={
+                <MapPin
+                  className="size-[13px] text-[var(--ink-400)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+              }
+            >
+              {siteTitle(event.site)}
+            </EventFact>,
+            event.host ? (
+              <EventFact
+                key="host"
+                icon={
+                  <GraduationCap
+                    className="size-[13px] text-[var(--ink-400)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                }
+              >
+                {event.host}
+              </EventFact>
+            ) : null,
+            event.surface ? (
+              <EventFact
+                key="surface"
+                icon={
+                  <Image
+                    src="/icons/tennis-court-icon.svg"
+                    width={13}
+                    height={13}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                }
+              >
+                {surfaceTitle(event.surface)}
+              </EventFact>
+            ) : null,
+            <EventFact
+              key="entries"
+              icon={
+                <Users
+                  className="size-[13px] text-[var(--ink-400)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+              }
+            >
+              {plural(entries.length, "entry", "entries")}
+            </EventFact>,
           ]}
           actions={
             canEdit ? (

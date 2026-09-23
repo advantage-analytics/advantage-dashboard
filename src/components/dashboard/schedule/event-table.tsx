@@ -89,8 +89,34 @@ export function EventPageLayout({
 /* ── Header ─────────────────────────────────────────────────────────────── */
 
 /**
- * Title row: optional mark, the display title, one 12px ink-600 subline
- * whose parts are separated by ink-300 `·`, and the actions on the right.
+ * One fact in the event header's subline, in the match-metadata register
+ * (`MatchMetadataRow`, the Glyph Registry's "Fixture/event metadata" row): a
+ * 13px glyph at --ink-400 and a `text-micro` label (11px, --ink-500), 5px
+ * apart. `tabular` holds a date's digits in their columns. The icon is passed
+ * in already sized — a lucide glyph with `size-[13px] text-[var(--ink-400)]`
+ * and stroke 1.5, or the 13px court SVG.
+ */
+export function EventFact({
+  icon,
+  tabular = false,
+  children,
+}: {
+  icon: React.ReactNode;
+  tabular?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-[5px] whitespace-nowrap">
+      {icon}
+      <span className={cn("text-micro", tabular && "tabular")}>{children}</span>
+    </span>
+  );
+}
+
+/**
+ * Title row: optional mark, the display title, one subline of icon facts
+ * (`EventFact`s, 14px between them, no separators), and the actions on the
+ * right.
  */
 export function EventHeader({
   title,
@@ -101,7 +127,8 @@ export function EventHeader({
 }: {
   title: React.ReactNode;
   mark?: React.ReactNode;
-  /** "Sat, Sep 20 · 3:00 PM", "Away", "Hard" — empty parts are dropped. */
+  /** `EventFact`s — date, site, surface… — in reading order; empty parts
+   *  (null, false, "") are dropped. */
   subline?: React.ReactNode[];
   actions?: React.ReactNode;
   titleId?: string;
@@ -123,22 +150,9 @@ export function EventHeader({
             {title}
           </h1>
           {parts.length > 0 ? (
-            <div
-              className="flex flex-wrap items-center gap-2 text-[12px] leading-none"
-              style={{ color: "var(--ink-600)" }}
-            >
+            <div className="flex flex-wrap items-center gap-[14px]">
               {parts.map((part, i) => (
-                <Fragment key={i}>
-                  {i > 0 ? (
-                    <span
-                      aria-hidden="true"
-                      style={{ color: "var(--ink-300)" }}
-                    >
-                      ·
-                    </span>
-                  ) : null}
-                  <span>{part}</span>
-                </Fragment>
+                <Fragment key={i}>{part}</Fragment>
               ))}
             </div>
           ) : null}

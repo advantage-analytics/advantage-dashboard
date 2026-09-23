@@ -136,3 +136,12 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical GATE PASS on the second run (the first run's failures were live-DB specs hitting the Supabase sign-in rate limit); completion `VERDICT: pass`.
 **changed:** The dual's Singles and Doubles group heads no longer pass a `value`, so the W–L count is gone; `tally()` deleted. "point ours"/"point theirs" stays beside Doubles (`groupRecord()` still feeds `teamPointNote()`). Spec asserts the Singles head reads exactly "Singles" and the Doubles head carries no "2–1". `EventGroupHead`, the harness and the tournament page untouched.
+
+## T16 · Event header subline as icon facts in the match-metadata register — done
+
+**gate:** mechanical GATE PASS on the second run (the first failed one live-RLS spec on the Supabase sign-in rate limit); completion `VERDICT: pass`.
+**changed:** New exported `EventFact` in `event-table.tsx`, classes copied from `matches/match-metadata-row.tsx` (13px ink-400 glyph, `text-micro` label, 5px inside a pair). `EventHeader`'s subline is now `flex flex-wrap items-center gap-[14px]` with no colour override, no `text-[12px]` and no `·` separators. Dual: Calendar (date · time), MapPin (site), court SVG (surface), Trophy (conference). Tournament: Calendar (span), MapPin (site), GraduationCap (host), court SVG (surface), Users (entries). Specs assert each icon once and no bare "·".
+**follow-ups:**
+
+1. `tests/fixtures/event-table-harness.tsx` still passes plain strings as `subline`; switch it to `EventFact`s so the harness matches production.
+2. `SummaryCell`'s trailing label still uses `text-[12px]`; consider a type token.

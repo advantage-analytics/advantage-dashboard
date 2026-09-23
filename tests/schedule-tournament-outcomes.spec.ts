@@ -187,6 +187,13 @@ test("the header, strip, columns, group heads and footer", async ({ page }) => {
     "Fall Invitational",
   );
   await expect(page.getByText("2 entries", { exact: true })).toBeVisible();
+  // T16: the subline is icon facts in the match-metadata register — one
+  // glyph per fact, no `·` separators between them.
+  const header = page.getByRole("heading", { level: 1 }).locator("..");
+  await expect(header.locator("svg.lucide-calendar")).toHaveCount(1);
+  await expect(header.locator("svg.lucide-map-pin")).toHaveCount(1);
+  await expect(header.locator("svg.lucide-users")).toHaveCount(1);
+  await expect(header.getByText("·", { exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: "Edit tournament" }),
   ).toHaveAttribute(

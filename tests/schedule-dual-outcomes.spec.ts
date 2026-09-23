@@ -192,6 +192,16 @@ test("the header, strip and primary follow the dual's state", async ({
   await expect(header.getByText("Home", { exact: true })).toBeVisible();
   await expect(header.getByText("Hard", { exact: true })).toBeVisible();
   await expect(header.getByText("Big Ten", { exact: true })).toBeVisible();
+  // T16: the subline is icon facts in the match-metadata register — one
+  // glyph per fact, no `·` separators between them (the date's own inner
+  // " · 3:00 PM" is part of its text, not a separator element).
+  await expect(header.locator("svg.lucide-calendar")).toHaveCount(1);
+  await expect(header.locator("svg.lucide-map-pin")).toHaveCount(1);
+  await expect(
+    header.locator('img[src="/icons/tennis-court-icon.svg"]'),
+  ).toHaveCount(1);
+  await expect(header.locator("svg.lucide-trophy")).toHaveCount(1);
+  await expect(header.getByText("·", { exact: true })).toHaveCount(0);
 
   // The retired score band: no 40px score, no double-size ticks.
   await expect(page.locator(".text-\\[40px\\]")).toHaveCount(0);

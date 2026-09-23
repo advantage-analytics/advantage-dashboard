@@ -12,11 +12,13 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Info, ListOrdered } from "lucide-react";
+import Image from "next/image";
+import { Calendar, Info, ListOrdered, MapPin, Trophy } from "lucide-react";
 import { DOUBLES_SLOTS, SINGLES_SLOTS } from "@/lib/schedule/courts";
 import { DualTicks } from "@/components/dashboard/schedule/dual-ticks";
 import {
   EventGroupHead,
+  EventFact,
   EventHeader,
   EventPageLayout,
   EventTitle,
@@ -236,14 +238,65 @@ export function DualDetail({
           mark={<EventMark kind={event.kind} name={event.name} size={56} />}
           title={<EventTitle vs name={event.name} />}
           subline={[
-            `${formatEventDatesLong(event.startsOn, event.endsOn)}${
-              event.startsAtTime
-                ? ` · ${formatEventTime(event.startsAtTime)}`
-                : ""
-            }`,
-            siteTitle(event.site),
-            event.surface ? surfaceTitle(event.surface) : null,
-            conference,
+            <EventFact
+              key="date"
+              tabular
+              icon={
+                <Calendar
+                  className="size-[13px] text-[var(--ink-400)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+              }
+            >
+              {`${formatEventDatesLong(event.startsOn, event.endsOn)}${
+                event.startsAtTime
+                  ? ` · ${formatEventTime(event.startsAtTime)}`
+                  : ""
+              }`}
+            </EventFact>,
+            <EventFact
+              key="site"
+              icon={
+                <MapPin
+                  className="size-[13px] text-[var(--ink-400)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+              }
+            >
+              {siteTitle(event.site)}
+            </EventFact>,
+            event.surface ? (
+              <EventFact
+                key="surface"
+                icon={
+                  <Image
+                    src="/icons/tennis-court-icon.svg"
+                    width={13}
+                    height={13}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                }
+              >
+                {surfaceTitle(event.surface)}
+              </EventFact>
+            ) : null,
+            conference ? (
+              <EventFact
+                key="conference"
+                icon={
+                  <Trophy
+                    className="size-[13px] text-[var(--ink-400)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                }
+              >
+                {conference}
+              </EventFact>
+            ) : null,
           ]}
           actions={
             canEdit ? (
