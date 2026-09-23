@@ -126,3 +126,8 @@ is the runner's. Newest entries at the bottom.
 
 1. `EventPageSkeleton` is now used only by `single/[matchId]`; check it against `single-detail.tsx`'s layout and rename it.
 2. `line-action.ts` has no spec of its own; a pure spec could pin the branch order (outcome, add result, status, report, video) including "doubles never offers video".
+
+## T14 · Set the event-table footer 16px off the card, on the cell x — done
+
+**gate:** mechanical GATE PASS on the second run (the first run's failures were live-DB specs hitting the shared-IP Supabase sign-in limit, unrelated to a class change); completion `VERDICT: pass`.
+**changed:** `EventPageLayout`'s table+footer wrapper `gap-2.5` → `gap-4` (docblock now says 16px); `EventTableFooter` gains `px-6` so the caption starts on the card's cell x. Both event pages inherit it; no other file touched.

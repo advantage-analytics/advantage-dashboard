@@ -191,7 +191,7 @@ ready).
 
 ## T14 · Set the event-table footer 16px off the card, on the cell x
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/schedule/event-table.tsx (guess; the only file — `EventPageLayout` and `EventTableFooter` are shared by `dual-detail.tsx` and `tournament-detail.tsx`, which need no change)
 - **done when:**

@@ -46,7 +46,7 @@ export function EventTitle({ vs, name }: { vs?: boolean; name: string }) {
 
 /**
  * The page: a column of two groups — header + strip (24px apart), then
- * toolbar + table + footer (12px apart, the footer 10px under the card) —
+ * toolbar + table + footer (12px apart, the footer 16px under the card) —
  * with 32px between the groups, and the peek drawer as the column's flex
  * sibling, so the table reflows to the width the drawer leaves.
  */
@@ -75,7 +75,7 @@ export function EventPageLayout({
         </div>
         <div className="flex flex-col gap-3">
           {toolbar}
-          <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col gap-4">
             {table}
             {footer}
           </div>
@@ -467,7 +467,7 @@ export function EventTableFooter({
   end?: React.ReactNode;
 }) {
   return (
-    <div className="text-micro flex items-center justify-between gap-4">
+    <div className="text-micro flex items-center justify-between gap-4 px-6">
       <span>{start}</span>
       {end ? <span className="flex items-center gap-1.5">{end}</span> : null}
     </div>
