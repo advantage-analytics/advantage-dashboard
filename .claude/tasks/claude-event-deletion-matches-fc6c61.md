@@ -242,7 +242,7 @@ ready).
 
 ## T18 · "Add your player" in our doubles pair picker
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/schedule/static/lineup-rows.tsx (`PairPicker` ~line 359, `DoublesLineup` ~line 692), src/components/dashboard/schedule/static/lineup-name-picker.tsx (`ADD_ROW_LABEL` :50, `addTypedPlayer` :298), src/components/dashboard/schedule/static/dual-build-step.tsx (`onAddPlayer` :1057), tests/fixtures/roster-actions-browser-mock.ts, tests/schedule-doubles-picker.spec.ts (guess)
 - **done when:**

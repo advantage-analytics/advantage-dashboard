@@ -166,3 +166,8 @@ is the runner's. Newest entries at the bottom.
 
 1. `useDualDraft`'s `extraPlayers` learns about new players only through the singles label path. A player added from a doubles pair and then typed as free text into a singles line won't resolve to an id.
 2. Nothing checks for duplicate names when adding a player; the singles picker has the same gap.
+
+## T18 · "Add your player" in our doubles pair picker — done
+
+**gate:** mechanical pass (on re-run once the live DB recovered; the one failure before it, `match-video-attachments-db.spec.ts:2708`, passed alone 42/42); completion pass (from the blocked run, on the same diff)
+**changed:** Our doubles pair picker gains the singles picker's "Don't see your player? Add your player" row. It shares the `ADD_ROW_LABEL` and new `ADD_NAME_REQUIRED` constants from `lineup-name-picker.tsx` and is offered only while the pair has a free seat. It refuses one-word names before the server, and a refused add shows the error and leaves the line unchanged. A successful add joins the pair by id through `DualLineupStep.onAddPairPlayer` → `onOurSelection` and lands in the shared `added` roster. The roster-actions browser mock can now succeed (`window.__addProgramPlayer`) and records calls. `schedule-doubles-picker.spec.ts` covers the three cases. The work was restored from stash 3d5a87d6.

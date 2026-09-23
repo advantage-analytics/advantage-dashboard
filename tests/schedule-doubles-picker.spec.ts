@@ -9,6 +9,10 @@ import {
   filledDualLines,
   seedDualLines,
 } from "@/components/dashboard/schedule/static/dual-build-step";
+import {
+  ADD_NAME_REQUIRED,
+  ADD_ROW_LABEL,
+} from "@/components/dashboard/schedule/static/lineup-name-picker";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 
 const webpack = (
@@ -542,4 +546,112 @@ test("a doubles-only opponent is added in place, and No pair is their forfeit", 
     theirLabels: [],
     theirNoPlayer: true,
   });
+});
+
+/* ── Adding our own player from a pair picker (T18) ─────────────────────── */
+
+const addCalls = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => window.__addProgramPlayerCalls ?? []);
+
+test("our pair picker offers the singles picker's add row, only while a seat is free", async ({
+  page,
+}) => {
+  await openFixture(page);
+
+  // D1 is empty: the row is offered, in the singles picker's own words.
+  await page.getByRole("button", { name: "Our pair at D1" }).click();
+  await expect(
+    page.getByRole("menuitem", { name: ADD_ROW_LABEL, exact: true }),
+  ).toBeVisible();
+  // One partner picked still leaves a seat.
+  await pick(page, "D1", RILEY);
+  await expect(
+    page.getByRole("menuitem", { name: ADD_ROW_LABEL, exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // D2 already has two: no seat, no row.
+  await page.getByRole("button", { name: "Our pair at D2" }).click();
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: CASEY }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: ADD_ROW_LABEL, exact: true }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  // D3 is settled: drawn read-only, with no picker to offer the row at all.
+  await expect(
+    page.getByRole("button", { name: "Our pair at D3" }),
+  ).toHaveCount(0);
+});
+
+test("a one-word name is refused before the server, and a refused add changes nothing", async ({
+  page,
+}) => {
+  await openFixture(page);
+  await pick(page, "D1", RILEY);
+  await page.getByRole("menuitem", { name: ADD_ROW_LABEL }).click();
+  const field = page.getByLabel("Add a player to our pair at D1");
+
+  await field.fill("Sam");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(ADD_NAME_REQUIRED)).toBeVisible();
+  expect(await addCalls(page)).toEqual([]);
+
+  await page.evaluate(() => {
+    window.__addProgramPlayer = { error: "That roster is full." };
+  });
+  await field.fill("Sam Hill");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("alert")).toHaveText("That roster is full.");
+  expect(await addCalls(page)).toEqual([
+    { firstName: "Sam", lastName: "Hill" },
+  ]);
+  await expect(page.getByLabel("D1 roster ids")).toHaveText("riley-chen");
+  await expect(page.getByLabel("D1 roster labels")).toHaveText("Riley Chen");
+});
+
+test("an added player joins the pair by id and every other picker offers them", async ({
+  page,
+}) => {
+  await openFixture(page);
+  await page.evaluate(() => {
+    window.__addProgramPlayer = { profileId: "sam-hill-id" };
+  });
+  await pick(page, "D1", RILEY);
+  await page.getByRole("menuitem", { name: ADD_ROW_LABEL }).click();
+  await page.getByLabel("Add a player to our pair at D1").fill("Sam  Hill");
+  await page.keyboard.press("Enter");
+
+  // Beside the partner already picked, by id — and the pair is complete.
+  await expect(page.getByLabel("D1 roster ids")).toHaveText(
+    "riley-chen|sam-hill-id",
+  );
+  await expect(page.getByLabel("D1 roster labels")).toHaveText(
+    "Riley Chen|Sam Hill",
+  );
+  await expect(
+    page.getByRole("button", { name: "Our pair at D1" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  expect(await page.evaluate(() => window.doublesSelections.at(-1))).toEqual({
+    key: "D1",
+    ids: ["riley-chen", "sam-hill-id"],
+    labels: ["Riley Chen", "Sam Hill"],
+  });
+
+  // Another doubles picker lists them — taken, and saying where.
+  await page.getByRole("button", { name: "Our pair at D2" }).click();
+  const row = page.getByRole("menuitemcheckbox", { name: /^Sam Hill/ });
+  await expect(row).toHaveAttribute("aria-disabled", "true");
+  await expect(row).toContainText("on D1");
+  await page.keyboard.press("Escape");
+
+  // And the singles picker offers them too.
+  await page.getByLabel("Our player at S1").fill("Sam");
+  await expect(
+    page
+      .getByRole("listbox", { name: "Players for S1" })
+      .getByRole("option", { name: /^Sam Hill/ }),
+  ).toHaveCount(1);
 });

@@ -1054,13 +1054,32 @@ export function DualLineupStep({
     [ladder, added],
   );
 
-  function onAddPlayer(key: string, player: LadderPlayer, value: string) {
+  function remember(player: LadderPlayer) {
     setAdded((current) =>
       current.some((entry) => entry.userId === player.userId)
         ? current
         : [...current, player],
     );
+  }
+
+  /** Singles: the picker names them by label — see `editOurLabels`. */
+  function onAddPlayer(key: string, player: LadderPlayer, value: string) {
+    remember(player);
     onOurLabels(key, value, player);
+  }
+
+  /**
+   * Doubles: the pair picker already holds ids, so the new player joins the
+   * pair by id beside any partner picked — never reparsed from a label. The
+   * same `added` list, so every other picker offers them too.
+   */
+  function onAddPairPlayer(
+    key: string,
+    player: LadderPlayer,
+    selection: { ids: string[]; labels: string[] },
+  ) {
+    remember(player);
+    onOurSelection(key, selection);
   }
 
   const shared = {
@@ -1070,6 +1089,7 @@ export function DualLineupStep({
     onOurLabels,
     onOurSelection,
     onAddPlayer,
+    onAddPairPlayer,
     onTheirLabels,
     onNoPlayer,
     onTheirNoPlayer,

@@ -35,7 +35,14 @@
  * picker leaves a player already on another singles line out of its list.
  */
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { Reorder, useDragControls, useReducedMotion } from "framer-motion";
 import { ChevronDown, GripVertical, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -51,7 +58,12 @@ import {
   OpponentPopup,
   type OpponentPool,
 } from "@/components/dashboard/schedule/static/opponent-popup";
-import { LineupNamePicker } from "@/components/dashboard/schedule/static/lineup-name-picker";
+import {
+  ADD_NAME_REQUIRED,
+  ADD_ROW_LABEL,
+  LineupNamePicker,
+} from "@/components/dashboard/schedule/static/lineup-name-picker";
+import { addProgramPlayer } from "@/components/dashboard/team/roster-actions";
 import {
   isDraftOpponentSet,
   isDraftOurSideSet,
@@ -362,6 +374,7 @@ function PairPicker({
   pairedOn,
   clashWith,
   onOurSelection,
+  onAddPlayer,
   onNoPlayer,
 }: {
   line: LineupLine;
@@ -374,9 +387,19 @@ function PairPicker({
     key: string,
     selection: { ids: string[]; labels: string[] },
   ) => void;
+  /** `BlockProps.onAddPairPlayer` — the created player, joining this pair. */
+  onAddPlayer: (
+    key: string,
+    player: LadderPlayer,
+    selection: { ids: string[]; labels: string[] },
+  ) => void;
   onNoPlayer: (key: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
   const unset = !isDraftOurSideSet(line) || clashWith !== undefined;
   const ids = line.ourIds;
   const labels = line.ourLabels;
@@ -424,6 +447,62 @@ function PairPicker({
     if (!has && nextIds.length === 2) setOpen(false);
   }
 
+  // A full pair has no seat for a new player: untick one first. A settled
+  // line never reaches here — `LineRow` draws it read-only, without a picker.
+  const canAdd = ids.length < 2;
+
+  function closeAdd() {
+    setAdding(false);
+    setDraft("");
+    setError(null);
+  }
+
+  /**
+   * Create the typed person, then seat them — `LineupNamePicker`'s
+   * `addTypedPlayer`, joined by id rather than by label. A single word is
+   * refused here, not sent; a refused write shows what the server said and
+   * changes nothing on the line.
+   */
+  function addTyped() {
+    const words = draft.trim().split(/\s+/).filter(Boolean);
+    if (words.length < 2) {
+      setError(ADD_NAME_REQUIRED);
+      return;
+    }
+    const firstName = words[0];
+    const lastName = words.slice(1).join(" ");
+    const name = `${firstName} ${lastName}`;
+    setError(null);
+    startTransition(async () => {
+      const result = await addProgramPlayer({ firstName, lastName });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      if (result.profileId === null) {
+        // The row exists but its id did not come back. Seat nobody rather
+        // than invent one; the roster reload offers them as an ordinary row.
+        setError(
+          `${name} was added to your roster. Pick them once it reloads.`,
+        );
+        return;
+      }
+      const player: LadderPlayer = {
+        userId: result.profileId,
+        name,
+        // Added mid-lineup, so nobody has ranked them.
+        ladderPosition: null,
+      };
+      const nextIds = [...ids, player.userId];
+      onAddPlayer(line.key, player, {
+        ids: nextIds,
+        labels: [...labels, name],
+      });
+      closeAdd();
+      if (nextIds.length === 2) setOpen(false);
+    });
+  }
+
   const summary =
     labels.length === 0
       ? null
@@ -434,7 +513,10 @@ function PairPicker({
   return (
     <FloatMenu
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) closeAdd();
+      }}
       label={`Pair for ${line.slot}`}
       align="start"
       width={264}
@@ -526,6 +608,56 @@ function PairPicker({
         })}
       </div>
       <FloatMenuDivider />
+      {!canAdd ? null : adding ? (
+        <div className="flex min-h-[34px] items-center gap-2.5 rounded-[7px] bg-[var(--surface-subtle)] px-2.5 py-1">
+          <Plus
+            className="size-3 shrink-0 text-[var(--ink-500)]"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+          <input
+            autoFocus
+            value={draft}
+            disabled={pending}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setError(null);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                if (!pending) addTyped();
+              }
+            }}
+            placeholder="First and last name"
+            aria-label={`Add a player to our pair at ${line.slot}`}
+            data-focus-ring="none"
+            className="min-w-0 flex-1 bg-transparent text-[12px] text-[var(--ink-900)] caret-[var(--blue)] outline-none placeholder:text-[var(--ink-300)]"
+          />
+          <span className="mono shrink-0 text-[10px] text-[var(--ink-500)]">
+            {pending ? "Adding…" : "↵"}
+          </span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => setAdding(true)}
+          className={cn(
+            "flex min-h-[34px] cursor-pointer items-center gap-2.5 rounded-[7px] px-2.5 py-1 text-left transition-colors duration-100",
+            "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none",
+          )}
+        >
+          <Plus
+            className="size-3 shrink-0 text-[var(--ink-500)]"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+          <span className="text-[12px] text-[var(--ink-900)]">
+            {ADD_ROW_LABEL}
+          </span>
+        </button>
+      )}
       {/* The last resort, after every player: nobody to send to this court. */}
       <button
         type="button"
@@ -553,11 +685,17 @@ function PairPicker({
         )}
       </button>
       <FloatMenuNote>
-        {clashWith !== undefined
-          ? `A player here is already on ${clashWith}. A player can play one doubles line.`
-          : ids.length >= 2
-            ? "Untick a player to swap in someone else."
-            : "A player can play one doubles line."}
+        {error !== null ? (
+          <span role="alert">{error}</span>
+        ) : clashWith !== undefined ? (
+          `A player here is already on ${clashWith}. A player can play one doubles line.`
+        ) : ids.length >= 2 ? (
+          "Untick a player to swap in someone else."
+        ) : adding ? (
+          "Adds them to your roster, unranked."
+        ) : (
+          "A player can play one doubles line."
+        )}
       </FloatMenuNote>
     </FloatMenu>
   );
@@ -676,6 +814,15 @@ interface BlockProps {
     selection: { ids: string[]; labels: string[] },
   ) => void;
   onAddPlayer: (key: string, player: LadderPlayer, value: string) => void;
+  /**
+   * A player created from a doubles pair picker, joining that pair by id —
+   * `DualLineupStep.onAddPairPlayer`, which also offers them to every picker.
+   */
+  onAddPairPlayer: (
+    key: string,
+    player: LadderPlayer,
+    selection: { ids: string[]; labels: string[] },
+  ) => void;
   onTheirLabels: (key: string, value: string) => void;
   /** Nobody on our side of this court — the save records our forfeit. */
   onNoPlayer: (key: string) => void;
@@ -739,6 +886,7 @@ export function DoublesLineup(props: BlockProps) {
                 pairedOn={pairedOn}
                 clashWith={props.clashes.get(line.slot)}
                 onOurSelection={onOurSelection}
+                onAddPlayer={props.onAddPairPlayer}
                 onNoPlayer={props.onNoPlayer}
               />
             }
