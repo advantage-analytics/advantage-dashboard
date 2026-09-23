@@ -77,9 +77,13 @@ export function WizardFooterStatus() {
   // this exact workspace, and the jobs route bills whichever one it names.
   if (workspaces.available.length > 1) {
     return (
-      <span className="text-[11px] text-[var(--ink-500)]">
-        Saves in{" "}
-        <span className="font-medium text-[var(--ink-900)]">
+      // One line, always, never a column beside the meter: "University of
+      // California, Los Angeles" fits in 320px and only a longer name
+      // truncates. The hairline matches the meter's, so the footer reads
+      // Back | the allowance | whose allowance it is.
+      <span className="flex min-w-0 items-baseline gap-1 border-l border-[var(--border-medium)] pl-4 text-[11px] whitespace-nowrap text-[var(--ink-500)]">
+        <span className="shrink-0">Saves in</span>
+        <span className="max-w-[320px] min-w-0 truncate font-medium text-[var(--ink-900)]">
           {workspaces.active.name}
         </span>
       </span>
