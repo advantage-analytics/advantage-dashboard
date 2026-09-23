@@ -62,3 +62,13 @@ is the runner's. Newest entries at the bottom.
 
 1. A browser check of the dialog — Esc, and focus returning to "Not Marcus?" after Cancel.
 2. The subject bar's "Not them?" fallback has no matching dialog wording (unreachable today).
+
+## T6 · Investigate what survives a PinnedLineBar line swap — blocked
+
+**gate:** mechanical GATE FAIL twice (lint and typecheck clean; `npm test` failed only on live-DB specs — 4, then 1: `claim-eyebrow-width.spec.ts:153`, which passes 3/3 run alone). Completion review not run. Ran on opus (author re-route).
+**stash:** bd6de1b365e49369c9e9726ce014b85562b081a8 — to retry: `git stash apply bd6de1b3`, reset T6's status, re-run the gate.
+**implementer notes:** carry-over confirmed and fix shipped in the stash: on a real line change (new `entryId ?? matchId`) the seed effect now clears `initialTopPlayerIsPlayer1` (to undefined), both players' hand/backhand/`*StyleSource`, `opponentPlayerId`, both tiebreak arrays, and re-arms the top-player baseline; `fixedCamera` and the trim window are kept; first seed and draft resume unchanged. Two residual defects documented with `test.fail()`: a courtside score from line A survives a swap to a line with none (product decision), and a draft-resumed flow re-applies the draft on every swap. Findings at docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md; new tests/upload-line-swap.spec.ts (11 tests).
+**follow-ups:**
+
+1. A line swap drops the picked video (an effect keyed on `preset?.entryId`, ~line 1020) although `UploadMatchFlow.tsx` and `types.ts` comments say the file stays — fix one or the other.
+2. A singles ↔ doubles line swap is untested; the progress step count is set only on the first seed.
