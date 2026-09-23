@@ -10,6 +10,14 @@ import {
 } from "@/lib/schedule/entry-state";
 import { entry } from "./fixtures/schedule-tournament-outcomes-data";
 
+/**
+ * The tournament's event page (`schedule/tournament-detail.tsx`) as an
+ * entry-grouped match table on the event-table kit: header, summary strip,
+ * group heads, rows, pills and footer, on `fixtures/schedule-tournament-
+ * outcomes-*` — one qualifying run (Q1 default won, R16 played, QF withdrawn)
+ * and one main-draw entry with nothing played yet.
+ */
+
 const webpack = (
   nextWebpack as unknown as {
     webpack: (
@@ -52,6 +60,16 @@ test.beforeAll(async () => {
             "@/lib/schedule/actions": resolve(
               "tests/fixtures/schedule-actions-browser-mock.ts",
             ),
+            // `use-row-selection.ts` reads `DRAWER_ATTR` from the Matches
+            // drawer, which brings its menu, image and client imports along.
+            "@/components/dashboard/matches/match-actions/match-actions-menu":
+              resolve("tests/fixtures/match-drawer-deps-browser-mock.tsx"),
+            "next/image": resolve(
+              "tests/fixtures/match-drawer-deps-browser-mock.tsx",
+            ),
+            "@/lib/supabase/client": resolve(
+              "tests/fixtures/supabase-client-browser-mock.ts",
+            ),
             "next/navigation": resolve(
               "tests/fixtures/next-navigation-browser-mock.ts",
             ),
@@ -93,15 +111,27 @@ test.afterAll(async () => {
   );
 });
 
-async function open(page: import("@playwright/test").Page) {
-  await page.goto(origin);
+async function open(page: import("@playwright/test").Page, path = "") {
+  await page.goto(`${origin}/${path}`);
   await expect
     .poll(() => page.locator("html").getAttribute("data-hydrated"))
     .toBe("true");
 }
 
-function row(page: import("@playwright/test").Page, round: string) {
+type Page = import("@playwright/test").Page;
+
+function row(page: Page, round: string) {
   return page.getByText(round, { exact: true }).locator("..");
+}
+
+/** Every match row on screen (the header row carries no `event-row-` id). */
+function matchRows(page: Page) {
+  return page.locator('[role="row"][id^="event-row-"]');
+}
+
+/** A summary-strip cell, by its eyebrow. */
+function cell(page: Page, label: string) {
+  return page.getByText(label, { exact: true }).locator("..");
 }
 
 test("renders played and outcome-only rounds in the established ladder order", async ({
@@ -120,38 +150,114 @@ test("renders played and outcome-only rounds in the established ladder order", a
   await expect(
     row(page, "R16").getByText("6-2, 6-3", { exact: true }),
   ).toBeVisible();
-  await expect(
-    row(page, "R16").getByRole("link", { name: "View report" }),
-  ).toHaveAttribute("href", "/dashboard/matches/played-r16");
+  await expect(row(page, "R16").getByText("Won", { exact: true })).toHaveCount(
+    1,
+  );
   await expect(
     row(page, "QF").getByText("Withdrawn", { exact: true }),
   ).toBeVisible();
   await expect(row(page, "QF").getByText("Lost", { exact: true })).toHaveCount(
     1,
   );
+
+  // The played round carries its match date; an outcome-only round has no
+  // match, so no date of its own.
+  await expect(row(page, "R16")).toContainText("Sep 11");
+  await expect(row(page, "Q1").getByText("No date")).toHaveCount(1);
+
+  // Rows carry no actions any more. "Edit result" (each round, into the score
+  // flow at that round), "View report" and the entry's next-round "Add
+  // result" move into the match drawer, and T12 re-asserts them there.
+  await expect(matchRows(page).getByRole("link")).toHaveCount(0);
+  expect(await page.evaluate(() => window.actionCalls)).toEqual([]);
 });
 
-test("each round's result action opens the score flow at that round", async ({
+test("the header, strip, columns, group heads and footer", async ({ page }) => {
+  await open(page);
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Fall Invitational",
+  );
+  await expect(page.getByText("2 entries", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Edit tournament" }),
+  ).toHaveAttribute(
+    "href",
+    "/dashboard/team/schedule/tournament-outcomes/edit",
+  );
+  await expect(page.getByRole("link", { name: "Add result" })).toHaveAttribute(
+    "href",
+    "/dashboard/team/schedule/tournament-outcomes/score",
+  );
+
+  await expect(cell(page, "Record")).toContainText("1–0across 1 match");
+  await expect(cell(page, "Deepest run")).toContainText("R16Lee");
+  // No totals: nothing measured is a dash, never 0%.
+  await expect(cell(page, "First serve in")).toContainText("—");
+  await expect(cell(page, "Reports")).toContainText("1 of 1ready");
+
+  await expect(page.getByRole("columnheader")).toHaveText([
+    "Date",
+    "Round",
+    "Opponent",
+    "Result",
+    "Score",
+    "Analysis",
+  ]);
+
+  // The first entry's head: name linked to the roster (its lineup id is a
+  // roster player), draw words, and the run's record on the right.
+  const lee = page.getByRole("link", { name: "Jordan Lee" });
+  await expect(lee).toHaveAttribute(
+    "href",
+    "/dashboard/team/roster/player-browser",
+  );
+  const leeHead = lee.locator("../..");
+  await expect(leeHead).toContainText("Qualifying");
+  await expect(leeHead).toContainText("1–0");
+
+  // The second entry has played nothing: its head still draws, unlinked,
+  // because its lineup id resolves to nobody on the roster.
+  await expect(page.getByRole("link", { name: "Sam Park" })).toHaveCount(0);
+  const parkHead = page.getByText("Sam Park", { exact: true }).locator("..");
+  await expect(parkHead).toContainText("Main draw · Seed 1");
+  await expect(parkHead).toContainText("No matches yet");
+
+  await expect(
+    page.getByText("3 matches · 2 entries · Best of 3 sets, no-ad scoring", {
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
+test("the pills cut rows by draw, and a row click selects it", async ({
   page,
 }) => {
   await open(page);
 
-  // Nothing is scored in place. Each row links into the score flow with its
-  // own round, so "Edit result" on Q1 can never open a blank quarter-final —
-  // clearing and replacing a round is the flow's job, pinned in
-  // `schedule-score-flow-outcomes.spec.ts`.
-  for (const round of ["Q1", "QF"]) {
-    await expect(
-      row(page, round).getByRole("link", { name: "Edit result" }),
-    ).toHaveAttribute(
-      "href",
-      `/dashboard/team/schedule/tournament-outcomes/score?entry=tournament-entry&round=${round}`,
-    );
-  }
-  await expect(page.getByRole("button", { name: "Edit result" })).toHaveCount(
-    0,
-  );
-  expect(await page.evaluate(() => window.actionCalls)).toEqual([]);
+  await expect(
+    page.getByRole("button", {
+      name: /^(All matches|Main draw|Qualifying|Needs video)$/,
+    }),
+  ).toHaveText(["All matches", "Main draw", "Qualifying", "Needs video"]);
+
+  await page.getByRole("button", { name: "Qualifying", exact: true }).click();
+  await expect(page.locator("span.mono")).toHaveText(["Q1"]);
+  // An entry the cut leaves empty drops out with its head.
+  await expect(page.getByText("Sam Park", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Main draw", exact: true }).click();
+  await expect(page.locator("span.mono")).toHaveText(["R16", "QF"]);
+
+  await page.getByRole("button", { name: "All matches", exact: true }).click();
+  await row(page, "R16").click();
+  await expect(row(page, "R16")).toHaveAttribute("aria-current", "true");
+  await expect.poll(() => page.url()).toContain("match=played-r16");
+});
+
+test("?match= opens with that round selected", async ({ page }) => {
+  await open(page, "?match=outcome-qf");
+  await expect(row(page, "QF")).toHaveAttribute("aria-current", "true");
 });
 
 test("outcome-only rounds never enter match analysis totals", () => {

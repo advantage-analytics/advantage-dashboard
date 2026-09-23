@@ -86,7 +86,7 @@ that replaced it, and each porting commit names the file it read from.
 Everything here is reachable: `dual-detail.tsx`, `tournament-detail.tsx`,
 `single-detail.tsx`, `single-score-entry.tsx`, `event-shell.tsx`,
 `event-page.tsx`, `line-row.tsx`, `score-only-flow.tsx`,
-`team-totals-widget.tsx`, `dual-ticks.tsx`, `run-strip.tsx`,
+`event-table.tsx`, `dual-ticks.tsx`, `run-strip.tsx`,
 `row-action.tsx`, `result-choice.tsx`, and everything under `static/`.
 
 **Scoring has one path.** `score-entry.tsx` (the in-row form),

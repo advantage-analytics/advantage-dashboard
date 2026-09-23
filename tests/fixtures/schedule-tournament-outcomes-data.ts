@@ -8,6 +8,8 @@ import type {
 const played: EntryMatch = {
   id: "played-r16",
   round: "R16",
+  // What `recordResult` writes: the event's day at noon.
+  date: "2026-09-11T12:00:00+00:00",
   status: "imported",
   score: { player1: [6, 6], player2: [2, 3] },
   opponentLabels: ["Played Rival"],
@@ -53,6 +55,34 @@ export const entry: EventEntry = {
   ],
 };
 
+/**
+ * A main-draw entry that has played nothing yet: its group head still draws,
+ * with "No matches yet", and it contributes no rows. Its lineup id is an auth
+ * uid the roster does not know, so its name stays plain text.
+ */
+export const waitingEntry: EventEntry = {
+  id: "tournament-entry-waiting",
+  eventId: "tournament-outcomes",
+  discipline: "singles",
+  slot: null,
+  position: 1,
+  draw: "main",
+  seed: 1,
+  playerUserIds: ["auth-uid-not-on-roster"],
+  playerLabels: ["Sam Park"],
+  opponentLabels: [],
+  opponentSchool: null,
+  opponentProgramId: null,
+  forfeit: null,
+  matches: [],
+  outcomes: [],
+};
+
+/** Lineup id → roster profile id, as the server page builds it. */
+export const rosterPlayerIds: Record<string, string> = {
+  "player-browser": "player-browser",
+};
+
 export const detail: EventDetail = {
   event: {
     id: "tournament-outcomes",
@@ -66,5 +96,5 @@ export const detail: EventDetail = {
     host: null,
     format: { bestOf: 3, adScoring: false },
   },
-  entries: [entry],
+  entries: [entry, waitingEntry],
 };

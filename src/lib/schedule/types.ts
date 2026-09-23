@@ -91,6 +91,13 @@ export interface EntryMatch {
   /** 'R16' for a tournament. Null on a dual line, whose slot is its round. */
   round: string | null;
   /**
+   * `matches.date` — the day the match was played, as the timestamptz
+   * Postgres returns (`recordResult` writes the event's day at noon, so the
+   * first ten characters are the calendar day). Optional so fixtures written
+   * before the column need not state it; the loader always sets it.
+   */
+  date?: string | null;
+  /**
    * From `resolveAnalysisStatus` — the shared vocabulary, so "Analyzing" here
    * and "Analyzing" on the match page are the same claim about the same job.
    */

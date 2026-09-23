@@ -94,3 +94,15 @@ is the runner's. Newest entries at the bottom.
 2. Context rows render doubles through `drawerSideName`; the frame shows surnames only ("Brooks / Osei").
 3. `useMatchSnapshot` (T7) never settles if its query rejects, leaving the skeleton up.
 4. The counter counts visible rows ("Line 2 / 3" under a pill filter), per the selection model.
+
+## T11 · Rebuild the tournament page as an entry-grouped match table — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite incl. design-drift); completion `VERDICT: pass`.
+**changed:** `EntryMatch` gains optional `date`, selected and mapped by `schedule-server.ts`'s `MATCH_COLUMNS` (loader only, nothing under `supabase/`). `tournament-detail.tsx` rewritten as a client component on T8's kit: header + subline (span · site · host · surface · n entries), ghost "Edit tournament" + primary "Add result" for `canEdit`; strip Record / Deepest run / First serve in / Reports ("—" when nothing played or no totals); the exact six columns grouped by entry (avatar, name, draw text, record + finish, "No matches yet"), outcome-only rounds with "—" dates and a status chip; pills, Result filter, Round order/Player sort; footer with count and format; `?match=` selection with `drawer={null}` for T12. `page.tsx` passes `searchParams.match` and a `rosterPlayerIds` map (one cached `getRosterPlayerOptions` call) so an entry name links only to a real roster profile. `team-totals-widget.tsx` deleted (no other importer); `SchoolsFaced`, rail/detail, `LineRow`, `TableCard` gone. Outside `files:`: `schedule/README.md` live-file list.
+**follow-ups:**
+
+1. T12: `selection.drawerId` is a `TournamentRow.id` (match id, or outcome id for an outcome-only round); `tournamentRows(entry)` returns `{ id, entry, round, match, draw }` in ladder order. An entry with no matches has no selectable row, so its "Add first result" needs a home.
+2. `EventPageSkeleton` (`loading/page-skeletons.tsx`) still draws the old layout for both event pages.
+3. `event-page.tsx`'s `EventPageFrame`, `TableCard`, `GroupHead`, `DetailLine`, `EventFacts` and `line-row.tsx`'s `LineRow` now have no importers; README ~line 139 still describes the tournament page on `EventPageFrame` — T13.
+4. `runRecord`/`runFinish` ignore outcome-only rounds, so a head can read "through the round of 16" after a QF withdrawal.
+5. Entry heads show initials only; the dual page shows the viewer's own photo.

@@ -150,7 +150,7 @@ ready).
 
 ## T11 · Rebuild the tournament page as an entry-grouped match table
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8, T9
 - **files:** src/components/dashboard/schedule/tournament-detail.tsx, src/app/dashboard/team/schedule/[eventId]/page.tsx, src/lib/data/schedule-server.ts (`MATCH_COLUMNS` :42), src/lib/schedule/types.ts (`EntryMatch` :89), src/components/dashboard/schedule/team-totals-widget.tsx (delete), tests/fixtures/schedule-tournament-outcomes-data.ts, tests/fixtures/schedule-tournament-outcomes-harness.tsx, tests/schedule-tournament-outcomes.spec.ts (guess)
