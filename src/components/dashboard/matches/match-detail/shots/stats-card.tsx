@@ -40,7 +40,7 @@ export function StatsCard({
         className,
       )}
     >
-      <div className="flex shrink-0 flex-col gap-3 px-5 pt-5 pb-4">
+      <div className="flex shrink-0 flex-col gap-3 px-[var(--pad-card)] pt-[var(--pad-card)] pb-4">
         <h2
           className="eyebrow tracking-[1.5px]"
           style={{ color: "var(--ink-600)" }}
@@ -66,7 +66,7 @@ export function StatsCard({
         </div>
       ) : (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-[var(--pad-card)] pb-4">
             {stats.groups.map((group, i) => (
               <div
                 key={group.key}
@@ -149,7 +149,7 @@ export function StatsCard({
           </div>
           {stats.sentence && (
             <p
-              className="mx-5 shrink-0 border-t border-[var(--border-hairline)] pt-3 pb-5 text-[12px] leading-[1.6] text-[var(--ink-700)]"
+              className="mx-[var(--pad-card)] shrink-0 border-t border-[var(--border-hairline)] pt-3 pb-[var(--pad-card)] text-[12px] leading-[1.6] text-[var(--ink-700)]"
               style={{ textWrap: "pretty" }}
             >
               {stats.sentence}
