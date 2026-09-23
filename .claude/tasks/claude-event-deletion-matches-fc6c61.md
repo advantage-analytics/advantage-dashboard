@@ -254,7 +254,7 @@ ready).
 
 ## T19 · Drag whole doubles pairs between D1–D3
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **files:** src/lib/schedule/singles-order.ts (or new src/lib/schedule/doubles-order.ts), src/components/dashboard/schedule/static/lineup-rows.tsx (`DoublesLineup`; reuse `ReorderableSingles`/`PlayerItem` grip + keyboard), src/components/dashboard/schedule/static/dual-build-step.tsx (`setSinglesOrder` :699, `DualLineupStep` props), src/components/dashboard/schedule/static/new-dual-flow.tsx (:595), tests/singles-order.spec.ts, tests/schedule-doubles-picker.spec.ts, tests/fixtures/schedule-doubles-picker-harness.tsx (guess)
 - **done when:**

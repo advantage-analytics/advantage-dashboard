@@ -171,3 +171,15 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical pass (on re-run once the live DB recovered; the one failure before it, `match-video-attachments-db.spec.ts:2708`, passed alone 42/42); completion pass (from the blocked run, on the same diff)
 **changed:** Our doubles pair picker gains the singles picker's "Don't see your player? Add your player" row. It shares the `ADD_ROW_LABEL` and new `ADD_NAME_REQUIRED` constants from `lineup-name-picker.tsx` and is offered only while the pair has a free seat. It refuses one-word names before the server, and a refused add shows the error and leaves the line unchanged. A successful add joins the pair by id through `DualLineupStep.onAddPairPlayer` → `onOurSelection` and lands in the shared `added` roster. The roster-actions browser mock can now succeed (`window.__addProgramPlayer`) and records calls. `schedule-doubles-picker.spec.ts` covers the three cases. The work was restored from stash 3d5a87d6.
+
+## T19 · Drag whole doubles pairs between D1–D3 — blocked
+
+**gate:** mechanical pass (after one run where only the known full-suite flake `match-video-attachment-flow.spec.ts:868` failed); completion needs-work
+**reason:** The second done-when line is wrong, not the code. It says Space, ArrowDown ×2, Space on D1's grip moves "D1's pair to D3 and D3's pair to D1", which is a swap. The singles gesture the notes say to reuse (`moveToken`) moves one step per arrow press, so D1 moved down twice gives D2, D3, D1: D1's pair lands on D3, D3's on D2 and D2's on D1. The implementation matches singles, and its spec asserts that real result. The reviewer scored the literal criterion not met. Every other criterion passed, and so did all 32 targeted specs. The wording was a planner error in the T19 draft.
+**stash:** 53dbb7e5a37cf272b1031c0e981bbb4c26acf5bc
+**recover:** The author amends the criterion to "D1's pair ends on D3 and the others shift up (D2→D1, D3→D2)" (or asks for swap semantics instead). Then run `git stash apply 53dbb7e5`, set the status to `doing`, re-run the gate and the reviewer, and commit as T19.
+**follow-ups:**
+
+1. Mouse drag is untested; the specs cover keyboard only (same framer setup as singles).
+2. `ReorderableDoubles` repeats about 60 lines of lift/drop/cancel logic from `ReorderableSingles`, which could become a shared hook.
+3. A pair dragged off a "No pair" court leaves that court's `noPlayer` flag set, as singles does. Worth a UX check.
