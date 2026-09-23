@@ -362,7 +362,7 @@ ready).
 
 ## T27 · The upload wizard's skeleton mirrors its first step (team upload + new match)
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T25, T26
 - **files:** src/components/dashboard/loading/upload-wizard-pending.tsx (new), src/app/dashboard/team/upload/loading.tsx, src/app/dashboard/matches/new/loading.tsx, src/components/dashboard/loading/page-skeletons.tsx (`WizardPageSkeleton` :184, delete), tests/upload-wizard-pending.spec.ts (new) (guess; the opening step is read from `useUploadMatchWizard.ts` / `wizard-view.ts` `STEP_CONFIG`)

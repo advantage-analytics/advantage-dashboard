@@ -1,1 +1,6 @@
-export { WizardPageSkeleton as default } from "@/components/dashboard/loading/page-skeletons";
+import { UploadWizardPending } from "@/components/dashboard/loading/upload-wizard-pending";
+
+/** A fresh wizard, on its provider step. */
+export default function Loading() {
+  return <UploadWizardPending pinned={false} />;
+}

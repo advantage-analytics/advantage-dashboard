@@ -281,3 +281,22 @@ The title and content class moved into a new shared module, `schedule/score-flow
 1. The page's crumb still reads "Add score" while every entry point says "Add result".
 2. The tournament Round menu and "Upload it instead" line depend on the event, so they aren't reserved in the skeleton. The page shifts down when they land on a tournament.
 3. No one has checked the pixel alignment against the real page (eyebrow height, whether the lede fits on one line) in a browser.
+
+## T27 · The upload wizard's skeleton mirrors its first step (team upload + new match) — done
+
+**gate:** mechanical GATE PASS (second run; the first failed only on the live-DB `match-video-attachments-db.spec.ts:2708`) · completion `VERDICT: pass`
+
+**changed:**
+
+- New `UploadWizardPending({ pinned })`. The pinned variant (`/dashboard/team/upload`) mirrors the file step, 2 of 4, because a preset opens there: the pinned strip, the 280px drop zone and the "What the analysis needs" block. The unpinned variant (`/dashboard/matches/new`) mirrors the provider step, 1 of 4: Workspace · For · Source field rows. Both use the real `StepIndicator` and "Step N of M", take their title and lede from `stepHeading()`, and have the sticky 64px footer. It uses `pulse={false}`.
+- `WizardPageSkeleton` and `FormRows` are deleted.
+- T26's pinned strip is extracted as `PinnedLinePending` in `score-flow-pending.tsx`; its markup is unchanged.
+- `CONTENT_CLS` moved from the client `WizardShell.tsx` into `new-match-wizard/styles.ts`, and `WizardShell` re-exports it.
+- New `tests/upload-wizard-pending.spec.ts` checks the skeleton contract for both variants.
+
+**follow-ups:**
+
+1. The provider field labels (Workspace / For / Source) and the video-requirements copy could move into a shared constants module, so the skeleton shows them as real text instead of bars.
+2. Sharing the default provider kind (`DEFAULT_PROVIDER_KIND`) would let the skeleton read the step count instead of assuming the 4-step video flow.
+3. `--ink-200` bars on tinted backgrounds now appear in two skeletons. A `PendingBar` option for tinted backgrounds would replace these one-off overrides.
+4. A personal user with a saved source can jump from provider to file after hydration (`localStorage`), and the skeleton can't know this ahead of time.

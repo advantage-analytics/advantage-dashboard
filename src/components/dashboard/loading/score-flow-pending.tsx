@@ -38,27 +38,7 @@ export function ScoreFlowPending() {
       <div className="flex min-h-[calc(100vh-44px)] flex-col">
         <StepIndicator currentStep={0} totalSteps={1} />
 
-        {/* PinnedLineBar */}
-        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px]">
-          <PendingBar className="h-2.5 w-14 bg-[var(--ink-200)]" />
-          <ChevronRight
-            className="size-3 shrink-0 text-[var(--ink-300)]"
-            strokeWidth={1.5}
-          />
-          <PendingBar className="h-3 w-48 bg-[var(--ink-200)]" />
-          <span className="mx-2 h-3.5 w-px shrink-0 bg-[var(--border-medium)]" />
-          <span className="inline-flex shrink-0 items-center gap-1.5">
-            <Calendar
-              className="size-[13px] text-[var(--ink-400)]"
-              strokeWidth={1.5}
-            />
-            <PendingBar className="h-2.5 w-14 bg-[var(--ink-200)]" />
-          </span>
-          <span className="flex-1" />
-          <span className="inline-flex h-[22px] items-center px-2">
-            <PendingBar className="h-2.5 w-11 bg-[var(--ink-200)]" />
-          </span>
-        </div>
+        <PinnedLinePending />
 
         {/* Eyebrow, title, lede */}
         <div className={`${CONTENT_CLS} pt-16 pb-10`}>
@@ -131,5 +111,39 @@ export function ScoreFlowPending() {
         </div>
       </div>
     </PendingFrame>
+  );
+}
+
+/**
+ * `PinnedLineBar`'s 36px strip, pending: the event link · chevron · "player vs
+ * opponent" · rule · date, Change on the right. Its own export because two
+ * skeletons draw it — this page's and the upload wizard's
+ * (`upload-wizard-pending.tsx`), which a lineup slot opens with the same bar.
+ *
+ * The bars take `--ink-200`: the skeleton token is `--ink-100`, which vanishes
+ * on the strip's `--surface-subtle`.
+ */
+export function PinnedLinePending() {
+  return (
+    <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px]">
+      <PendingBar className="h-2.5 w-14 bg-[var(--ink-200)]" />
+      <ChevronRight
+        className="size-3 shrink-0 text-[var(--ink-300)]"
+        strokeWidth={1.5}
+      />
+      <PendingBar className="h-3 w-48 bg-[var(--ink-200)]" />
+      <span className="mx-2 h-3.5 w-px shrink-0 bg-[var(--border-medium)]" />
+      <span className="inline-flex shrink-0 items-center gap-1.5">
+        <Calendar
+          className="size-[13px] text-[var(--ink-400)]"
+          strokeWidth={1.5}
+        />
+        <PendingBar className="h-2.5 w-14 bg-[var(--ink-200)]" />
+      </span>
+      <span className="flex-1" />
+      <span className="inline-flex h-[22px] items-center px-2">
+        <PendingBar className="h-2.5 w-11 bg-[var(--ink-200)]" />
+      </span>
+    </div>
   );
 }

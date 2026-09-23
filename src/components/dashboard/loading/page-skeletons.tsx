@@ -149,45 +149,6 @@ export function EventTableSkeleton() {
   );
 }
 
-export function WizardPageSkeleton() {
-  return (
-    <PendingFrame label="form">
-      <div className="flex min-h-[calc(100vh-var(--header-h))] flex-col">
-        <PendingBar className="h-1 w-full rounded-none" />
-        <div className="mx-auto flex w-full max-w-[832px] flex-1 flex-col gap-9 px-14 pt-16 pb-16">
-          <div className="flex flex-col gap-3">
-            <PendingBar className="h-2 w-20" />
-            <PendingBar className="h-9 w-80" />
-            <PendingBar className="w-96" />
-          </div>
-          <FormRows />
-        </div>
-        <div className="border-t border-[var(--border-hairline)]">
-          <div className="mx-auto flex h-16 max-w-[832px] items-center justify-between px-14">
-            <PendingBar className="w-16" />
-            <PendingBar className="h-8 w-28" />
-          </div>
-        </div>
-      </div>
-    </PendingFrame>
-  );
-}
-
-function FormRows() {
-  return (
-    <div className="flex flex-col gap-7">
-      {[0, 1, 2, 3].map((i) => (
-        <div key={i} className="flex flex-col gap-3">
-          <PendingBar className="h-2 w-24" />
-          <div className="border-b border-[var(--border-hairline)] pb-3">
-            <PendingBar className={i % 2 ? "w-48" : "w-64"} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function SimplePageLoader() {
   return (
     <div
