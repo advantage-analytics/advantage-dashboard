@@ -227,3 +227,68 @@ ready).
   - [ ] `EventGlyphRow` (`src/components/dashboard/schedule/event-glyph-row.tsx`) and `MatchMetadataRow` are not modified; `grep -rn "text-\[12px\]" src/components/dashboard/schedule/event-table.tsx` returns only `EventGroupHead`'s value span (or nothing) — the header no longer carries it.
   - [ ] `npm run lint && npm run typecheck` pass; `npx playwright test tests/design-drift.spec.ts tests/schedule-dual-outcomes.spec.ts tests/schedule-tournament-outcomes.spec.ts tests/event-table.spec.ts` pass.
 - **notes:** Read `.skills/advantage-analytics-design/SKILL.md` and `docs/ui-revamp-guardrails.md` first. Register: the Matches card/Home "match metadata" row, `src/components/dashboard/matches/match-metadata-row.tsx` (13px lucide at `--ink-400`, `text-micro` 11px ink-500 labels, 5px inside a pair, 14px between pairs) — what the codebase calls match metadata, and the register the Glyph Registry prescribes for "Fixture/event metadata" (`.skills/advantage-analytics-design/reference/chrome.md:316`). Its props are fixed (date/matchType/courtType/verification), so mirror its classes in `EventFact` rather than import it. Do NOT copy the match-detail hero's `MatchReportFacts` (`match-detail/report-facts.tsx`, ink-700) — that is the report-pane register. `EventGlyphRow` (schedule drawer only) is a near-twin at 12px/gap-3; leave it. Icons the registry does not name are guesses — `Trophy` for conference, `GraduationCap` for a tournament's host, `Users` for entries; swap freely within Lucide. lucide-react stamps `lucide-<name>` classes on its SVGs, which the spec selectors rely on. The date fact keeps its inner ` · 3:00 PM` — one fact, as `EventGlyphRow` draws it.
+
+## T17 · Event name on the Schedule list links straight to the event page
+
+- **status:** todo
+- **model:** opus
+- **files:** src/components/dashboard/schedule/static/schedule-table.tsx (`EventRow` ~line 112), tests/schedule-drawer-actions.spec.ts, tests/fixtures/schedule-drawer-actions-harness.tsx (guess; pattern to copy is `src/components/dashboard/team/roster-table.tsx:392-563`)
+- **done when:**
+  - [ ] In `EventRow` the event name is a `next/link` to `/dashboard/team/schedule/<row.id>`. It uses the roster name link's classes (`block truncate rounded-[var(--radius-cell)] text-[13px] font-medium text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`) and has `onClick={(e) => e.stopPropagation()}`.
+  - [ ] The row is no longer a `<button>`, because a link can't sit inside one. Like the roster row, it keeps `id={scheduleRowId(row.id)}` and `tabIndex={0}`, exposes its selected state (e.g. `aria-current`), and opens the drawer on Enter/Space only when `event.target === event.currentTarget`.
+  - [ ] A Playwright spec on the schedule harness asserts the name link's `href`, asserts that clicking the date cell still opens the drawer, and asserts that clicking the name link (with navigation intercepted) does not open the drawer.
+  - [ ] The same spec asserts that ⌘/Ctrl-clicking the row (not the link) records `/dashboard/team/schedule/<id>` in `window.routerPushes`, as `roster-table.tsx:427-430` does.
+- **notes:** How Roster does it: the row is a `Reorder.Item` `li` whose `onClick` opens the drawer, or runs `router.push(href)` on ⌘/Ctrl. The name is a `Link` that stops propagation. The schedule row is currently `<button aria-pressed>` (`schedule-table.tsx:126-139`), so the row element has to change before the name can become a link. Existing specs find rows by `getByRole("button", { name: /Long Open Dual/ })` (`tests/schedule-drawer-actions.spec.ts:101` and others), so update those locators. The row-click law (`.skills/advantage-analytics-design/reference/tables.md:83-101`) still holds: the row opens the drawer, and the name is a shortcut, as on Roster.
+
+## T18 · "Add your player" in our doubles pair picker
+
+- **status:** todo
+- **model:** opus
+- **files:** src/components/dashboard/schedule/static/lineup-rows.tsx (`PairPicker` ~line 359, `DoublesLineup` ~line 692), src/components/dashboard/schedule/static/lineup-name-picker.tsx (`ADD_ROW_LABEL` :50, `addTypedPlayer` :298), src/components/dashboard/schedule/static/dual-build-step.tsx (`onAddPlayer` :1057), tests/fixtures/roster-actions-browser-mock.ts, tests/schedule-doubles-picker.spec.ts (guess)
+- **done when:**
+  - [ ] Our "Pair for D<n>" menu offers a "Don't see your player? Add your player" row. It uses the singles picker's `ADD_ROW_LABEL` text, not a retyped copy. The row is not offered while the pair already has two players or the line is locked.
+  - [ ] Typing a one-word name shows "Type a first and last name to add a player." and does not call `addProgramPlayer`. When the server refuses the add, its error shows and the line's `ourIds`/`ourLabels` stay unchanged.
+  - [ ] When the add succeeds, the new player's `profileId` and name join that line's `ourIds`/`ourLabels` next to any partner already picked. The player also appears in every other doubles and singles picker's roster, through the same `added` list that `DualLineupStep.onAddPlayer` keeps.
+  - [ ] `tests/schedule-doubles-picker.spec.ts` covers all three cases, and `roster-actions-browser-mock.ts` can return a success (e.g. a window flag that sets `profileId`).
+- **notes:** Singles already does this through `LineupNamePicker` → `addProgramPlayer` (`lineup-name-picker.tsx:298-343`). `DoublesLineup` receives `onAddPlayer` in its props but never passes it to `PairPicker` (`lineup-rows.tsx:737-745`). Our side has real roster ids, so use `onOurSelection` with ids rather than the label path. `OpponentPairPicker`'s in-place "Add a player" field (`lineup-rows.tsx:~1000-1025`) is the layout model. The rule of one doubles line per player still applies (`pairedOn`). T18 comes before T19 in file order and both edit `DoublesLineup`, so keep that order.
+
+## T19 · Drag whole doubles pairs between D1–D3
+
+- **status:** todo
+- **model:** opus
+- **files:** src/lib/schedule/singles-order.ts (or new src/lib/schedule/doubles-order.ts), src/components/dashboard/schedule/static/lineup-rows.tsx (`DoublesLineup`; reuse `ReorderableSingles`/`PlayerItem` grip + keyboard), src/components/dashboard/schedule/static/dual-build-step.tsx (`setSinglesOrder` :699, `DualLineupStep` props), src/components/dashboard/schedule/static/new-dual-flow.tsx (:595), tests/singles-order.spec.ts, tests/schedule-doubles-picker.spec.ts, tests/fixtures/schedule-doubles-picker-harness.tsx (guess)
+- **done when:**
+  - [ ] A pure `applyDoublesOrder(lines, order, locked)` does four things, each covered by a spec:
+    - It moves only `ourIds`/`ourLabels` between doubles lines, in the given order.
+    - It clears `noPlayer` on a court that receives a non-empty pair, as `applySinglesOrder` does.
+    - It leaves each line's `theirLabels`/`theirNoPlayer` and every singles line unchanged.
+    - It returns the lines unchanged when any doubles line is locked.
+  - [ ] Each unlocked doubles row has a grip button labelled `Move <A / B>, line D<n>`. A Playwright spec focuses D1's grip and presses Space, ArrowDown ×2, Space. It asserts that D1's pair moved to D3, D3's pair moved to D1, and every line's opponent labels are unchanged (read from the harness's "Lineup state").
+  - [ ] Pressing Escape after a lift and before the drop leaves "Lineup state" exactly as it was.
+  - [ ] With a settled doubles line (`?locked` fixture / `lockedByKey`), no doubles grip renders.
+- **notes:** Scope: a drag moves the whole pair between courts, the way singles moves the player on a line and not the court (`lineup-rows.tsx:15-27`, `singles-order.ts:1-17`). The opponent stays with the court. There is no doubles bench. Reuse the singles gesture: `Reorder.Group`, a grip-only `dragListener={false}` with `useDragControls`, and Space/↑↓/Space/Esc. Update the file header's "Doubles are picked, not typed" section.
+
+## T20 · Drafts know the match they fill, and fold onto it
+
+- **status:** todo
+- **model:** fable
+- **files:** src/lib/wizard/actions.ts (`saveMatchDraft` :586, `DraftRow` :686, `listMatchDrafts` :697), src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (`existingMatchId` :961, `handleCreateMatch` :2613), src/lib/wizard/draft-target.ts (new), tests/upload-draft-resume.spec.ts (guess)
+- **done when:**
+  - [ ] One exported pure helper, `draftTargetMatchId(draft)`, returns `preset?.matchId ?? attachedLine?.matchId ?? null`. The wizard's `existingMatchId` (:961) and the match-id reuse in `handleCreateMatch` (:2613-2615) both call it. A spec covers three cases: the id comes from `preset`, from `attachedLine`, or from neither.
+  - [ ] `DraftRow` gains `matchId: string | null`. `listMatchDrafts` fills it from the stored payload by the same rule, using a JSON-path select rather than reading the whole payload. A spec asserts that a draft saved from a `?entry=E&match=M` preset lists with `matchId === "M"`.
+  - [ ] A pure `foldDrafts(drafts, matchIds)` returns `{ standalone, byMatchId }`. Only each listed match's newest draft goes into `byMatchId`. Everything else stays in `standalone`: a draft whose match isn't listed, a draft with no match, and an older draft for a match that already has one folded. A spec covers each case.
+  - [ ] A spec pins that no duplicate match is created: `saveMatchDraft` writes only to `match_drafts`, and a resumed preset draft goes down the update branch with the draft's `matchId`.
+- **notes:** This is a regression pin plus the data half of the fix, with no migration; the evidence is in the diagnosis. Older drafts for the same match stay standalone so they can still be discarded. Out of scope, possible follow-up: starting "Add video" again from the drawer creates a new draft rather than resuming the existing one.
+
+## T21 · A match row with a video draft shows Draft and Continue upload
+
+- **status:** todo
+- **model:** opus
+- **needs:** T20
+- **files:** src/components/dashboard/matches/matches-page-content.tsx (drafts :415-662), src/components/dashboard/matches/match-card-list.tsx, src/components/dashboard/matches/match-drawer.tsx, src/components/dashboard/matches/draft-row.tsx (`draftHref` :36), tests/fixtures/matches-drafts-harness.tsx (new), tests/matches-drafts.spec.ts (new) (guess)
+- **done when:**
+  - [ ] `MatchesPageContent` renders `DraftRow`s only for `foldDrafts(...).standalone`. In a harness with one scored match M and one draft targeting M, that match gets exactly one row, not two.
+  - [ ] That match row shows a grey outlined `StatePill` reading "Draft" beside its name, in the same variant `draft-row.tsx:119` uses.
+  - [ ] That match's drawer footer has a "Continue upload" primary that links to `draftHref(draft.id, scope)`, and the ghost "Open match" button is still there. A match without a folded draft gets no such primary.
+  - [ ] Drawer stepping (↑/↓) goes through standalone drafts, then matches, and no longer stops on the folded draft by itself.
+- **notes:** This is the author's intent 3 ("it saves as two separate matches"). It follows the table laws: Draft is one of the allowed grey state pills (`tables.md` rule 4), and the match drawer's footer gets one primary only when an action applies. The Matches page has no harness yet, so this task builds a new Playwright harness; `tests/fixtures/match-drawer-deps-browser-mock.tsx` already exists for the drawer's dependencies.
