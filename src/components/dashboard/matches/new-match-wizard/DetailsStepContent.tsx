@@ -1373,7 +1373,7 @@ function DetailsStepContentImpl({
             once; a narrow column stacks each row and brings its labels back.
             Anything a row says beyond its three answers lives under the name,
             never in a fourth column that would knock the grid out of line. */}
-        <div className="flex flex-col gap-6 sm:grid sm:grid-cols-[minmax(0,1fr)_150px_150px] sm:gap-x-5 sm:gap-y-4">
+        <div className="flex flex-col gap-6 sm:grid sm:grid-cols-[260px_minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-4">
           <div aria-hidden="true" className="hidden sm:contents">
             <span />
             <FieldCaption label="Hand" required />

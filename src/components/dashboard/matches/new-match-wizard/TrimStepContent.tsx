@@ -91,6 +91,7 @@ import { JUMP_STEP_SECONDS } from "../match-video-attachment/use-attachment-alig
 import type { VideoProbeSummary } from "./types";
 import { focusRingCls, noteIconCls, noteStripCls } from "./styles";
 import { Kbd } from "@/components/ui/kbd";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { isFormControl } from "./useWizardKeys";
 import { formatClipLength, formatClock, formatTimecode } from "./utils";
 import { FieldCaption } from "./FieldCaption";
@@ -205,45 +206,58 @@ function CutField({
   const Glyph = isStart ? ArrowLeftToLine : ArrowRightToLine;
 
   const readout = (
-    <button
-      type="button"
-      onClick={onJump}
-      aria-label={`Jump to the trim ${isStart ? "start" : "end"}`}
-      // `items-center`, not `items-baseline`: the field is `items-stretch`, so
-      // a baseline-aligned label sits at the TOP of the stretched box while the
-      // glyph beside it centres, and the two read as misaligned. Centring also
-      // suits the pairing — a 9px letter-spaced label against a 12px mono
-      // number looks dropped on a shared baseline. `min-w` + `justify-center`
-      // give Start and End one width with the pair centred in it, and
-      // `leading-none` drops the line-box slack that sat the text off-centre.
-      className={`inline-flex min-w-[112px] cursor-pointer items-center justify-center gap-1.5 px-2.5 py-2 leading-none ${
-        isStart ? "rounded-l-[5px]" : "rounded-r-[5px]"
-      } ${focusRingCls}`}
-    >
-      <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-        {label}
-      </span>
-      <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
-        {formatTimecode(time)}
-      </span>
-    </button>
+    <ChromeTooltip label={`Go to the ${isStart ? "start" : "end"}`}>
+      <button
+        type="button"
+        onClick={onJump}
+        aria-label={`Jump to the trim ${isStart ? "start" : "end"}`}
+        // `items-center`, not `items-baseline`: the field is `items-stretch`, so
+        // a baseline-aligned label sits at the TOP of the stretched box while the
+        // glyph beside it centres, and the two read as misaligned. Centring also
+        // suits the pairing — a 9px letter-spaced label against a 12px mono
+        // number looks dropped on a shared baseline. `min-w` + `justify-center`
+        // give Start and End one width with the pair centred in it. Centring
+        // line boxes is not centring letters: `text-box` trims each span to its
+        // cap height, so the 9px capitals and the 12px digits centre on the
+        // ink, and the label's negative margin takes back the trailing 2.5px of
+        // letter-spacing that pushed the pair off-centre.
+        className={`inline-flex min-w-[112px] cursor-pointer items-center justify-center gap-1.5 px-2.5 py-2 leading-none transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] ${
+          isStart ? "rounded-l-[5px]" : "rounded-r-[5px]"
+        } ${focusRingCls}`}
+      >
+        <span
+          className="eyebrow-sm mr-[-2.5px] [text-box:trim-both_cap_alphabetic]"
+          style={{ color: "var(--ink-400)" }}
+        >
+          {label}
+        </span>
+        <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)] [text-box:trim-both_cap_alphabetic]">
+          {formatTimecode(time)}
+        </span>
+      </button>
+    </ChromeTooltip>
   );
 
   const action = (
-    <button
-      type="button"
-      onClick={onSet}
-      disabled={setDisabled}
-      aria-label={`Set the trim ${isStart ? "start" : "end"} to the current position`}
-      aria-describedby={ruleId}
-      className={`inline-flex w-8 cursor-pointer items-center justify-center text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-50 ${
-        isStart
-          ? "rounded-r-[5px] border-l border-[var(--border-field)]"
-          : "rounded-l-[5px] border-r border-[var(--border-field)]"
-      } ${focusRingCls}`}
+    <ChromeTooltip
+      label={`Set the ${isStart ? "start" : "end"} here`}
+      shortcut={isStart ? "I" : "O"}
     >
-      <Glyph className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-    </button>
+      <button
+        type="button"
+        onClick={onSet}
+        disabled={setDisabled}
+        aria-label={`Set the trim ${isStart ? "start" : "end"} to the current position`}
+        aria-describedby={ruleId}
+        className={`inline-flex w-8 cursor-pointer items-center justify-center text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-50 ${
+          isStart
+            ? "rounded-r-[5px] border-l border-[var(--border-field)]"
+            : "rounded-l-[5px] border-r border-[var(--border-field)]"
+        } ${focusRingCls}`}
+      >
+        <Glyph className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+      </button>
+    </ChromeTooltip>
   );
 
   return (

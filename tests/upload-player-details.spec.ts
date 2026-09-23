@@ -292,10 +292,10 @@ test("hand and backhand answer in one word, so their menus need no extra width",
 
 test("both player rows share one grid, stacking only below sm", () => {
   // One three-column grid owns both rows, so the opponent's selects sit
-  // exactly under the player's; each row is a subgrid of it. The name column
-  // takes the slack; the two one-word selects stay narrow.
+  // exactly under the player's; each row is a subgrid of it. A fixed name
+  // column, with the two selects splitting what is left.
   expect(detailsSrc).toContain(
-    "sm:grid sm:grid-cols-[minmax(0,1fr)_150px_150px]",
+    "sm:grid sm:grid-cols-[260px_minmax(0,1fr)_minmax(0,1fr)]",
   );
   const row =
     /className="flex flex-col gap-3 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-start[^"]*"/g;
