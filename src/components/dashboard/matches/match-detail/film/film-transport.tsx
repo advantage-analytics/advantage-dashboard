@@ -99,6 +99,12 @@ export interface FilmTransportProps {
   canStep: boolean;
   /** Whether the mini court is drawn over the film. */
   courtOn: boolean;
+  /**
+   * The room's own credential for the lane's frame preview (handoff T4): the
+   * same `url` and `generation` the room's video plays, so a credential swap
+   * moves the preview with it. The lane draws the 256×144 room size.
+   */
+  previewSource: { url: string | null; generation: number };
   onSeek: (seconds: number) => void;
   onTogglePlay: () => void;
   onStep: (direction: -1 | 1) => void;
@@ -209,6 +215,7 @@ export function FilmTransport(p: FilmTransportProps) {
         duration={p.duration}
         currentTime={p.currentTime}
         onSeek={p.onSeek}
+        preview={{ ...p.previewSource, size: "room" }}
       />
 
       <div className="flex h-10 items-center gap-[18px]">

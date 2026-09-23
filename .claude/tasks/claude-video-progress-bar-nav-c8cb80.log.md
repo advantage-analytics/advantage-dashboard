@@ -47,3 +47,14 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. No one has looked at the painted preview in a browser yet; check it on the report player before the PR.
+
+## T4 · The room's lane gets the 256×144 preview, drawn above the board and the court — done
+
+**gate:** mechanical pass on re-run (the full suite failed only `claim-eyebrow-width.spec.ts` and `match-video-attachments-db.spec.ts`, both live shared-database specs untouched by this diff; the two files re-run alone passed 45/45) · completion `VERDICT: pass`
+
+**changed:** `film-transport.tsx`: `FilmTransportProps.previewSource` and `preview={{ ...p.previewSource, size: "room" }}` on `FilmTrack`. `film-fullscreen.tsx`: one line at the `<FilmTransport>` call site. `tests/film-playback-refresh.spec.ts`: room selectors and `hoverRoomLane`, the credential-swap flow extended (preview `src` follows to `cred=1` on a new node), and three cases — 256×144 clamped inside the drawer-shortened lane, a paint-order probe proving the preview draws above the scoreboard and the court (no z-index change needed), and one preview element with no pointer capture. Reviewer-accepted deviations: pre-swap `src` compared to the room video's (`cred=initial`, not `cred=0`); court probed before the board moves, since a court in the board's corner stacks above it.
+
+**follow-ups:**
+
+1. Queue fully done. Author eyes-on before the PR: the painted preview in both players, 160×90 vs 192×108 on Revelli vs Stepanov, and how long a cold moov-at-tail Azure file sits in the empty state on first hover.
+2. The live shared-database specs (`match-video-attachments-db`, `claim-eyebrow-width`) fail intermittently in the full suite; fix on their own branch.

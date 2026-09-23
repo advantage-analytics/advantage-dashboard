@@ -59,7 +59,7 @@ ready).
 
 ## T4 · The room's lane gets the 256×144 preview, drawn above the board and the court
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-transport.tsx; src/components/dashboard/matches/match-detail/film/film-fullscreen.tsx (the `<FilmTransport>` call site at ~1567-1592 only); tests/film-playback-refresh.spec.ts

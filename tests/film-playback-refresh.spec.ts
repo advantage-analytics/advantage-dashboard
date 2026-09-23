@@ -330,6 +330,22 @@ test.afterAll(async () => {
 
 const REPORT = '[data-testid="film-player-video"]';
 const ROOM = '[data-testid="film-room-video"]';
+/** The room's own lane — inside its bottom-block positioning layer. */
+const ROOM_LANE = '[data-film-chrome] [role="slider"][aria-label="Seek"]';
+const ROOM_PREVIEW = `${ROOM_LANE} [data-testid="film-seek-preview"]`;
+const ROOM_PREVIEW_VIDEO = `${ROOM_LANE} [data-testid="film-seek-preview-video"]`;
+
+/** Hover the room's lane at `fraction` of its width; returns the lane's box. */
+async function hoverRoomLane(page: Page, fraction: number) {
+  const box = await page.locator(ROOM_LANE).boundingBox();
+  if (!box) throw new Error("no room lane");
+  await page.mouse.move(box.x + fraction * box.width, box.y + box.height / 2);
+  await expect(page.locator(ROOM_PREVIEW)).not.toHaveAttribute(
+    "data-state",
+    "closed",
+  );
+  return box;
+}
 
 async function open(
   page: Page,
@@ -591,11 +607,40 @@ test("the room swaps with the report player and hands the playhead back", async 
     { timeout: 10_000 },
   );
 
+  // The room's lane previews the room's credential (T4): hover it, mark the
+  // element, and step off before the swap.
+  const lane = await hoverRoomLane(page, 0.5);
+  await expect(page.locator(ROOM_PREVIEW_VIDEO)).toHaveCount(1);
+  expect(
+    await page
+      .locator(ROOM_PREVIEW_VIDEO)
+      .evaluate((el) => (el as HTMLVideoElement).src),
+  ).toBe((await state(page, ROOM))?.src);
+  await page
+    .locator(ROOM_PREVIEW_VIDEO)
+    .evaluate((el) => ((el as HTMLElement).dataset.marker = "first"));
+  await page.mouse.move(lane.x + lane.width / 2, lane.y - 200);
+
   await release(page, matchId);
   // One credential, both surfaces: the room and the player behind it move
   // together because they are reading one hook.
   await awaitCredential(page, ROOM, 1);
   await awaitCredential(page, REPORT, 1);
+
+  // …and the preview moved with them: a new node on the new `cred=`.
+  await hoverRoomLane(page, 0.6);
+  await expect(page.locator(ROOM_PREVIEW_VIDEO)).toHaveCount(1);
+  expect(
+    await page
+      .locator(ROOM_PREVIEW_VIDEO)
+      .evaluate((el) => (el as HTMLVideoElement).src),
+  ).toContain("cred=1");
+  expect(
+    await page
+      .locator(ROOM_PREVIEW_VIDEO)
+      .evaluate((el) => (el as HTMLElement).dataset.marker ?? null),
+  ).toBeNull();
+  await page.mouse.move(lane.x + lane.width / 2, lane.y - 200);
 
   const room = await state(page, ROOM);
   expect(room?.time).toBeCloseTo(0.3, 1);
@@ -1667,4 +1712,148 @@ test("T2 (f): a refreshed credential remounts the preview element on the new URL
   expect(
     await preview.evaluate((el) => (el as HTMLElement).dataset.marker ?? null),
   ).toBeNull();
+});
+
+/* -------------------------------------------------------------------------
+ * The room's lane preview (T4)
+ *
+ * The room passes its own credential to the lane, which draws the 256×144
+ * size with no overhang — clamped to the slider, which the drawer shortens —
+ * and paints above the scoreboard and the court. `elementFromPoint` skips
+ * `pointer-events: none`, so the paint-order probe turns the box's pointer
+ * events on for exactly one call.
+ * ---------------------------------------------------------------------- */
+
+async function previewRect(page: Page) {
+  const box = await page.locator(ROOM_PREVIEW).boundingBox();
+  const frame = await page
+    .locator(`${ROOM_PREVIEW} [data-testid="film-seek-preview-frame"]`)
+    .boundingBox();
+  if (!box || !frame) throw new Error("no room preview");
+  return { box, frame };
+}
+
+/** Whether the preview box paints above `selector` where the two overlap. */
+async function paintsAbove(page: Page, selector: string) {
+  return page.evaluate(
+    ([previewSel, otherSel]) => {
+      const box = document.querySelector<HTMLElement>(previewSel);
+      const other = document.querySelector<HTMLElement>(otherSel);
+      if (!box || !other) return { overlap: false, above: false };
+      const a = box.getBoundingClientRect();
+      const b = other.getBoundingClientRect();
+      const left = Math.max(a.left, b.left);
+      const right = Math.min(a.right, b.right);
+      const top = Math.max(a.top, b.top);
+      const bottom = Math.min(a.bottom, b.bottom);
+      if (right - left < 2 || bottom - top < 2)
+        return { overlap: false, above: false };
+      const was = box.style.pointerEvents;
+      box.style.pointerEvents = "auto";
+      try {
+        const hit = document.elementFromPoint(
+          (left + right) / 2,
+          (top + bottom) / 2,
+        );
+        return { overlap: true, above: !!hit && box.contains(hit) };
+      } finally {
+        box.style.pointerEvents = was;
+      }
+    },
+    [ROOM_PREVIEW, selector] as const,
+  );
+}
+
+/** Drag a room overlay by its body into the room's bottom-left corner. */
+async function dragToBottomLeft(page: Page, selector: string) {
+  const handle = await page.locator(selector).boundingBox();
+  const room = await page.locator(ROOM).boundingBox();
+  if (!handle || !room) throw new Error(`nothing to drag at ${selector}`);
+  const fromX = handle.x + 4;
+  const fromY = handle.y + handle.height - 4;
+  await page.mouse.move(fromX, fromY);
+  await page.mouse.down();
+  await page.mouse.move(room.x + 40, room.y + room.height - 160, {
+    steps: 12,
+  });
+  await page.mouse.up();
+}
+
+test("T4: the room lane previews at 256×144, clamped inside the drawer-shortened lane", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "room-preview-geometry");
+  const slider = await page.locator(ROOM_LANE).boundingBox();
+  if (!slider) throw new Error("no room lane");
+
+  await hoverRoomLane(page, 0.999);
+  const right = await previewRect(page);
+  expect(right.frame.width).toBeCloseTo(256, 0);
+  expect(right.frame.height).toBeCloseTo(144, 0);
+  expect(right.box.x + right.box.width).toBeLessThanOrEqual(
+    slider.x + slider.width + 0.5,
+  );
+
+  await hoverRoomLane(page, 0.001);
+  const left = await previewRect(page);
+  expect(left.frame.width).toBeCloseTo(256, 0);
+  expect(left.frame.height).toBeCloseTo(144, 0);
+  expect(left.box.x).toBeGreaterThanOrEqual(slider.x - 0.5);
+});
+
+test("T4: the room preview paints above the scoreboard and the court", async ({
+  page,
+}) => {
+  await open(page, "room-preview-paint");
+  // Inside a point, so the board and the court are both drawn.
+  await seekTo(page, REPORT, 0.3);
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+  await expect(page.locator("[data-court-anchor]")).toHaveCount(1);
+
+  // The court first, while the board is still top-left: a court dropped in
+  // the board's own corner stacks above it, out of the preview's reach.
+  await dragToBottomLeft(page, "[data-film-court-handle]");
+  await expect(page.locator("[data-court-anchor]")).toHaveAttribute(
+    "data-court-anchor",
+    "bottom-left",
+  );
+  await hoverRoomLane(page, 0.001);
+  expect(await paintsAbove(page, "[data-court-anchor]")).toEqual({
+    overlap: true,
+    above: true,
+  });
+
+  await dragToBottomLeft(page, "[data-board-anchor]");
+  await expect(page.locator("[data-board-anchor]")).toHaveAttribute(
+    "data-board-anchor",
+    "bottom-left",
+  );
+  await hoverRoomLane(page, 0.001);
+  expect(await paintsAbove(page, "[data-board-anchor]")).toEqual({
+    overlap: true,
+    above: true,
+  });
+});
+
+test("T4: only the hovered lane mounts a preview, and none of it takes the pointer", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "room-preview-one");
+  await hoverRoomLane(page, 0.5);
+
+  await expect(page.locator(PREVIEW_VIDEO)).toHaveCount(1);
+  await expect(page.locator(ROOM_PREVIEW_VIDEO)).toHaveCount(1);
+
+  const events = await page
+    .locator(ROOM_PREVIEW)
+    .evaluate((box) =>
+      [box, ...Array.from(box.querySelectorAll("*"))].map(
+        (el) => getComputedStyle(el).pointerEvents,
+      ),
+    );
+  expect(events.length).toBeGreaterThan(1);
+  expect(new Set(events)).toEqual(new Set(["none"]));
 });

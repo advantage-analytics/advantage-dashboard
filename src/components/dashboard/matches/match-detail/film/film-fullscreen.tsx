@@ -1573,6 +1573,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 saved={savePoint ? savePoint.saved : null}
                 canStep={p.walkStops.length > 0}
                 courtOn={courtOn}
+                previewSource={{ url: p.url, generation: p.generation }}
                 onSeek={seek}
                 onTogglePlay={togglePlay}
                 onStep={step}
