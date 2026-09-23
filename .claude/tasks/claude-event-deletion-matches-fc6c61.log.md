@@ -155,3 +155,14 @@ is the runner's. Newest entries at the bottom.
 1. Each row is now two Tab stops (row + name link), as on Roster; consider `tabIndex={-1}` on the link.
 2. Row `div` has no ARIA role (same as Roster's `li`); a shared row role/label treatment for both tables.
 3. Roster rows get a `has-[:focus-visible]` wash when the name link is focused; Schedule rows don't yet.
+
+## T18 · "Add your player" in our doubles pair picker — blocked
+
+**gate:** mechanical FAIL (environmental); completion pass
+**reason:** Lint, typecheck and every schedule/lineup spec passed (89/89; doubles-picker 19/19), and `task-completion-reviewer` returned `VERDICT: pass`. The full suite failed on four consecutive runs, each on a different set of live-DB specs (`claim-eyebrow-width`, `match-video-attachments-db`, `teams-management`, `program-owner-name-live`, `seats-count-players`, `viz-bands-rls`; errors were `57014 statement timeout` and `AuthRetryableFetchError`). One run's only failure was the known full-suite flake `match-video-attachment-flow.spec.ts:868`, which passes alone (20/20). None of these touch the lineup step. The shared Supabase was degraded, so this was stashed by rule, not for a code fault.
+**stash:** 3d5a87d6bab7c8e95d0f614b94d004ed1ea79a88
+**recover:** `git stash apply 3d5a87d6`, set status back to `doing`, re-run `check.sh gate`, then commit as T18.
+**follow-ups:**
+
+1. `useDualDraft`'s `extraPlayers` learns about new players only through the singles label path. A player added from a doubles pair and then typed as free text into a singles line won't resolve to an id.
+2. Nothing checks for duplicate names when adding a player; the singles picker has the same gap.
