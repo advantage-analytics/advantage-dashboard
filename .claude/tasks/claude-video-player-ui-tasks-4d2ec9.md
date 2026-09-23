@@ -308,7 +308,7 @@ ready).
 
 ## T23 · Give the shell's own point list the "Now playing" pill too
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T21, T22
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/point-list.tsx (the affordance gate, currently `tone === "dark" ? followAffordance(pointFocus, nowPlaying) : null` ~L512–513; `FollowPill`'s props and className, T21's edge/hysteresis version); docs/superpowers/specs/2026-09-22-film-follow-hold-design.md (the state table L88–95, the strings table's "Card header line" column L118–129); tests/film-playback-refresh.spec.ts (the `SHELL_PILL` assertions inside T22's rewritten card-following block)

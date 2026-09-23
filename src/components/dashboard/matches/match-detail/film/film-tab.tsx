@@ -688,8 +688,9 @@ function FilmRoom({
             // the same component without it.
             onOpenInRoom={openPointInRoom}
             // The same hold as the drawer's: a row click holds and the
-            // keep-in-view stops while held. No pill here yet, and no intent
-            // listeners, which the dark tone alone installs.
+            // keep-in-view stops while held. The same "Now playing" pill
+            // (T23), but no intent listeners, which the dark tone alone
+            // installs.
             pointFocus={pointFocus}
             displayedPointId={displayedPointId}
             onHoldPoint={holdPoint}

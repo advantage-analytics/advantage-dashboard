@@ -119,7 +119,8 @@ import {
  * the row that is playing stays named while the well stays put. A row or
  * shot click holds that point (or re-follows, when it is the playing one) and
  * still seeks; on the dark tone a hand scroll of the list holds too. Nothing
- * animates on hold — holding is the absence of a scroll.
+ * animates on hold — holding is the absence of a scroll. Both tones draw the
+ * "Now playing" pill as the way back (T23); only the hold sources differ.
  */
 
 /** Light is the in-report column; dark is the fullscreen room's drawer. */
@@ -264,8 +265,8 @@ interface PointListProps {
   /**
    * The playing point and its 1-based place in the walk over the applied cut
    * (`position.index`, the number the counters print) — null in dead time,
-   * `index: null` when the cut excludes it. The pill's inputs: only the dark
-   * tone draws one; the shell passes the same value and draws nothing.
+   * `index: null` when the cut excludes it. The pill's inputs, in both
+   * tones (T23: the shell column draws the drawer's pill too).
    * Stable identity, please — the list is memoized on it.
    */
   nowPlaying?: { id: string; index: number | null } | null;
@@ -497,7 +498,8 @@ export const PointList = memo(function PointList({
   // holds the displayed point — an ENTER only: scrolling while already held
   // keeps the held point, so the well never wanders to whatever scrolled into
   // view. Only the dark tone (the room's drawer) listens; the shell column
-  // holds on clicks alone and has no pill to return by.
+  // holds on clicks (and Enter/Space) alone, though it returns by the same
+  // pill (T23).
   //
   // `ArrowUp`/`ArrowDown` with focus on a drawer row hold here, and the
   // room's window handler (film-fullscreen.tsx) then steps on the same key
@@ -508,10 +510,10 @@ export const PointList = memo(function PointList({
   // native listener, so Space is skipped here by its target instead.
   const scrollerMounted = !advancedOpen && groups.length > 0;
 
-  // The return affordance: the drawer's alone (the shell's is the card's
-  // header line), and only while held on a point other than the playing one.
-  const affordance =
-    tone === "dark" ? followAffordance(pointFocus, nowPlaying) : null;
+  // The return affordance, on every `PointList` surface (T23: the shell's
+  // card header line is gone, so the pill is the way back there too), and
+  // only while held on a point other than the playing one.
+  const affordance = followAffordance(pointFocus, nowPlaying);
   useEffect(() => {
     if (tone !== "dark" || !scrollerMounted) return;
     const list = listRef.current;
@@ -731,6 +733,7 @@ export const PointList = memo(function PointList({
                 listRef={listRef}
                 nowPlaying={nowPlaying}
                 onFollow={onFollow}
+                tone={tone}
               />
             </div>
           )}
@@ -802,7 +805,10 @@ function nextPillPlace(prev: PillPlace, row: DOMRect, box: DOMRect): PillPlace {
  * well unfolds under the playing row; this does nothing else.
  *
  * The "Points" trigger's recipe (film-fullscreen.tsx) plus the drawer's own
- * 10% inset hairline, so it reads over a lit row as well as the sheet. It is
+ * 10% inset hairline, so it reads over a lit row as well as the sheet. On
+ * the light tone (the shell's column, T23) the same dark pill floats over a
+ * white card instead, so it takes `--shadow-floating` in place of the
+ * hairline — foundations.md's "Dark floating UI" — and nothing else. It is
  * a button with visible text, so the chevron is `aria-hidden` and there is
  * no tooltip. `data-film-chrome`, so the chrome collapse and the room's exit
  * fade take it with everything else.
@@ -824,11 +830,13 @@ function FollowPill({
   listRef,
   nowPlaying,
   onFollow,
+  tone,
 }: {
   affordance: FollowAffordance | null;
   listRef: RefObject<HTMLDivElement | null>;
   nowPlaying: { id: string; index: number | null } | null;
   onFollow: () => void;
+  tone: FilmListTone;
 }) {
   // The lit row against the scroller's box. Read in a layout effect, so a
   // pill that should not show (the row is in view) is never painted, and
@@ -936,7 +944,10 @@ function FollowPill({
       }}
       className={cn(
         "inline-flex h-7 items-center gap-[7px] rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium text-white transition-[opacity,transform,background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-        "absolute left-1/2 -translate-x-1/2 cursor-pointer whitespace-nowrap shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)] active:scale-[0.97]",
+        "absolute left-1/2 -translate-x-1/2 cursor-pointer whitespace-nowrap active:scale-[0.97]",
+        tone === "light"
+          ? "shadow-[var(--shadow-floating)]"
+          : "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]",
         // The same 12px inset on either edge; the rise comes from the edge
         // side, so pinned top it drops in (the keyframe reads the sign).
         edge === "top" ? "top-3 [--film-pill-rise:-4px]" : "bottom-3",

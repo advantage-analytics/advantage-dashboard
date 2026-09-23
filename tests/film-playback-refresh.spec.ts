@@ -1648,6 +1648,11 @@ async function drawerSettled(page: Page) {
  * instead of a wheel, whose travel is machine-dependent.
  */
 async function parkDrawer(page: Page, top: number | "end") {
+  await parkScroller(page, DRAWER_SCROLLER, top);
+}
+
+/** `parkDrawer` for any scroller (T23 parks the shell's list the same way). */
+async function parkScroller(page: Page, scroller: string, top: number | "end") {
   await page.evaluate(
     ([sel, to]) =>
       new Promise<void>((resolve) => {
@@ -1663,7 +1668,7 @@ async function parkDrawer(page: Page, top: number | "end") {
           frame();
         }
       }),
-    [DRAWER_SCROLLER, top] as const,
+    [scroller, top] as const,
   );
 }
 
@@ -2008,11 +2013,15 @@ async function shellHoldAThenPlayB(page: Page) {
 }
 
 /** `open`, with the room's drawer remembered open for `roomWellUnder`. */
-async function openShell(page: Page, matchId: string) {
+async function openShell(
+  page: Page,
+  matchId: string,
+  extra: Record<string, string> = {},
+) {
   await page.addInitScript(() => {
     localStorage.setItem("film-room:drawer-open", "1");
   });
-  await open(page, matchId);
+  await open(page, matchId, extra);
 }
 
 test("T22: with the list held, the card follows the playing point and draws no header line", async ({
@@ -2067,5 +2076,224 @@ test("T22: the card's own Next point step button re-follows the list", async ({
   await expect(page.locator(`${CARD_HEAD} .mono`)).toHaveText("2 / 3");
   await expect(page.locator(LINE)).toHaveCount(0);
   await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+  expect(await roomWellUnder(page)).toBe("b");
+});
+
+/* -------------------------------------------------------------------------
+ * T23 — the shell's own point list gets the drawer's "Now playing" pill.
+ *
+ * The same `FollowPill`, gated by the same `followAffordance` rule, with
+ * T21's edge pin and hysteresis; on the light tone it floats on
+ * `--shadow-floating` instead of the drawer's inset hairline. The shell list
+ * still holds on clicks alone — nothing here scrolls it by hand, and no case
+ * claims a hand scroll holds it.
+ *
+ * The harness mounts `FilmTab` with no `@container`, so the columns stack
+ * and the list's card grows to its content: nothing to scroll. In the app
+ * the tab's column bounds it (`max-h-full` inside a pane-height column);
+ * `boundShellList` gives the column that bound here, and `pad=12` makes the
+ * rows outgrow it. The shell list opens no well (it takes no
+ * `onSelectShot`), so "the well opens under the playing row" is read through
+ * the room's drawer (`roomWellUnder`), which shares the tab's `pointFocus`.
+ * ---------------------------------------------------------------------- */
+
+const SHELL_SCROLLER = `${SHELL_LIST} .overflow-y-auto`;
+
+/**
+ * Give the shell list's column a height, as the tab's side-by-side layout
+ * does in the app. The column's outer box is a `shrink-0` flex item, so a
+ * height on it holds; the card inside is `max-h-full`.
+ */
+async function boundShellList(page: Page, px: number) {
+  await page.evaluate(
+    ([sel, h]) =>
+      new Promise<void>((resolve) => {
+        const column = document.querySelector<HTMLElement>(sel as string)
+          ?.parentElement?.parentElement;
+        if (column) column.style.height = `${h}px`;
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+    [SHELL_LIST, px] as const,
+  );
+  const { client, scroll } = await page.evaluate((sel) => {
+    const list = document.querySelector<HTMLElement>(sel)!;
+    return { client: list.clientHeight, scroll: list.scrollHeight };
+  }, SHELL_SCROLLER);
+  // The precondition every case below rests on: the list really scrolls.
+  expect(scroll).toBeGreaterThan(client);
+}
+
+/** The shell pill's edge, read from its classes, as `pillEdge` does. */
+async function shellPillEdge(page: Page): Promise<string> {
+  return page.locator(SHELL_PILL).evaluate((el) => {
+    const top = el.classList.contains("top-3");
+    const bottom = el.classList.contains("bottom-3");
+    return top && !bottom ? "top" : bottom && !top ? "bottom" : "both/none";
+  });
+}
+
+/** The shell's lit row against its scroller's box. */
+async function shellLitPlace(page: Page): Promise<string | null> {
+  return page.evaluate((sel) => {
+    const list = document.querySelector<HTMLElement>(sel);
+    const lit = list?.querySelector<HTMLElement>(
+      '[data-point-id][data-playing="true"]',
+    );
+    if (!list || !lit) return null;
+    const box = list.getBoundingClientRect();
+    const row = lit.getBoundingClientRect();
+    if (row.top >= box.bottom) return "below";
+    if (row.bottom <= box.top) return "above";
+    if (row.top >= box.top - 0.5 && row.bottom <= box.bottom + 0.5)
+      return "inside";
+    return row.bottom > box.bottom ? "straddles-bottom" : "straddles-top";
+  }, SHELL_SCROLLER);
+}
+
+async function shellScrollTop(page: Page): Promise<number> {
+  return page.evaluate(
+    (sel) => document.querySelector(sel)?.scrollTop ?? -1,
+    SHELL_SCROLLER,
+  );
+}
+
+/**
+ * Held on `a` by the shell row's click, the list parked at its end so `b`
+ * lights ABOVE the box, then the film moved into `b`: the pill's first state.
+ */
+async function shellHoldAThenPlayBAbove(page: Page) {
+  await page.click(SHELL_ROW("a"));
+  await expect.poll(() => playingRow(page)).toBe("a");
+  // Held ≡ playing: nothing to return to yet.
+  await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+  await parkScroller(page, SHELL_SCROLLER, "end");
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => playingRow(page)).toBe("b");
+  await expect.poll(() => shellLitPlace(page)).toBe("above");
+}
+
+test("T23: the shell list's pill names the playing point with the drawer's words, pinned top over a floating shadow", async ({
+  page,
+}) => {
+  await openShell(page, "shell-pill", { pad: "12", ttl: String(3600_000) });
+  await boundShellList(page, 240);
+  await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+  await shellHoldAThenPlayBAbove(page);
+
+  const pill = page.locator(SHELL_PILL);
+  await expect(pill).toHaveCount(1);
+  await expect(pill).toHaveText("Now playing · Point 2");
+  await expect(pill).toHaveAttribute(
+    "aria-label",
+    "Now playing: point 2 — follow playback",
+  );
+  await expect(pill).toHaveAttribute("type", "button");
+  // T21's placement, reused: the edge the lit row is beyond, chevron to it.
+  await expect.poll(() => shellPillEdge(page)).toBe("top");
+  await expect(pill.locator("svg.lucide-chevron-up")).toHaveCount(1);
+  await expect(pill.locator("svg.lucide-chevron-down")).toHaveCount(0);
+  await expect(pill.locator("svg")).toHaveAttribute("aria-hidden", "true");
+  expect(
+    await pill.evaluate((el) =>
+      getComputedStyle(el).getPropertyValue("--film-pill-rise").trim(),
+    ),
+  ).toBe("-4px");
+  // The light tone's one difference: the floating shadow, not the hairline.
+  await expect(pill).toHaveClass(
+    /(^|\s)shadow-\[var\(--shadow-floating\)\](\s|$)/,
+  );
+  await expect(pill).not.toHaveClass(/inset_0_0_0_1px/);
+  for (const cls of [
+    "bg-[rgba(13,13,13,0.72)]",
+    "text-white",
+    "rounded-[var(--radius-button)]",
+    "text-[11px]",
+  ]) {
+    expect(await pill.evaluate((el, c) => el.classList.contains(c), cls)).toBe(
+      true,
+    );
+  }
+});
+
+test("T23: no shell pill while the lit row is fully in the shell list's view", async ({
+  page,
+}) => {
+  await openShell(page, "shell-pill-in-view", {
+    pad: "12",
+    ttl: String(3600_000),
+  });
+  await boundShellList(page, 240);
+  await shellHoldAThenPlayBAbove(page);
+  await expect(page.locator(SHELL_PILL)).toHaveCount(1);
+
+  // Back to the top: `b` is wholly inside the box, nothing to return to.
+  await parkScroller(page, SHELL_SCROLLER, 0);
+  await expect.poll(() => shellLitPlace(page)).toBe("inside");
+  await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+
+  // Out of view again, and it is back — still held, nothing re-followed.
+  await parkScroller(page, SHELL_SCROLLER, "end");
+  await expect.poll(() => shellLitPlace(page)).toBe("above");
+  await expect(page.locator(SHELL_PILL)).toHaveCount(1);
+});
+
+test("T23: the shell pill pins bottom below the box, keeps its edge while straddling, and flips only once wholly above", async ({
+  page,
+}) => {
+  await openShell(page, "shell-pill-edge", {
+    pad: "12",
+    ttl: String(3600_000),
+  });
+  // A short column, so `b` sits wholly BELOW the box with the list at its top.
+  await boundShellList(page, 140);
+  await page.click(SHELL_ROW("a"));
+  await expect.poll(() => playingRow(page)).toBe("a");
+  await parkScroller(page, SHELL_SCROLLER, 0);
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => playingRow(page)).toBe("b");
+
+  const pill = page.locator(SHELL_PILL);
+  await expect.poll(() => shellLitPlace(page)).toBe("below");
+  await expect(pill).toHaveCount(1);
+  await expect.poll(() => shellPillEdge(page)).toBe("bottom");
+  await expect(pill.locator("svg.lucide-chevron-down")).toHaveCount(1);
+
+  const nudge = await page.evaluate((sel) => {
+    const list = document.querySelector<HTMLElement>(sel)!;
+    const lit = list.querySelector<HTMLElement>('[data-playing="true"]')!;
+    const box = list.getBoundingClientRect();
+    const row = lit.getBoundingClientRect();
+    return Math.ceil(row.top - box.bottom + row.height / 2);
+  }, SHELL_SCROLLER);
+  await parkScroller(page, SHELL_SCROLLER, nudge);
+  await expect.poll(() => shellLitPlace(page)).toBe("straddles-bottom");
+  await expect(pill).toHaveCount(1);
+  expect(await shellPillEdge(page)).toBe("bottom");
+
+  await parkScroller(page, SHELL_SCROLLER, "end");
+  await expect.poll(() => shellLitPlace(page)).toBe("above");
+  await expect.poll(() => shellPillEdge(page)).toBe("top");
+  await expect(pill.locator("svg.lucide-chevron-up")).toHaveCount(1);
+  await expect(pill.locator("svg.lucide-chevron-down")).toHaveCount(0);
+});
+
+test("T23: pressing the shell pill re-follows — it leaves, the list scrolls to the playing row, the well opens under it", async ({
+  page,
+}) => {
+  await openShell(page, "shell-pill-press", {
+    pad: "12",
+    ttl: String(3600_000),
+  });
+  await boundShellList(page, 240);
+  await shellHoldAThenPlayBAbove(page);
+  const parked = await shellScrollTop(page);
+
+  await page.locator(SHELL_PILL).click();
+  await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+  // Following again: the keep-in-view brings the lit row back into the box.
+  await expect.poll(() => shellLitPlace(page)).toBe("inside");
+  expect(await shellScrollTop(page)).toBeLessThan(parked);
+  // The shell list draws no well; the drawer, on the same `pointFocus`,
+  // shows the held well closed and the well under the playing row.
   expect(await roomWellUnder(page)).toBe("b");
 });

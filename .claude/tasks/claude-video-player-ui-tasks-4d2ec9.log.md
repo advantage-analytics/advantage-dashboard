@@ -252,3 +252,14 @@ Reading them: `remounted: true` = a credential swap or an error recovery; `buffe
 
 1. The design doc's "Shell (outside the card)" row doesn't mention the shell point list holds — T23 adds that row.
 2. Until T23 lands the shell shows no sign of a hold; only a step or re-clicking the playing row re-follows.
+
+## T23 · Give the shell's own point list the "Now playing" pill too — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** point-list.tsx computes the affordance for both tones (hand-scroll hold listeners still dark-only); `FollowPill` takes `tone`, light gets `shadow-[var(--shadow-floating)]` in place of the dark inset hairline, all other classes shared; T21's edge pin reused. film-tab.tsx: one stale comment only. Design doc: own row for the shell point list (notes it draws no well today — the shell passes no `onSelectShot`), strings column "Card header line" → "List pill", three "pill / header line" spots updated. Spec: `parkDrawer` generalised to `parkScroller`, `openShell` takes extra params, four T23 cases on a pad=12 shell list with an injected column height (`boundShellList`; the harness's shell column never scrolls unbounded); re-follow proven via pill gone, list scroll back and `roomWellUnder`; verified the cases fail with the old gate restored. Widget states: unchanged.
+
+**follow-ups:**
+
+1. Add a `?shellHeight=` option to tests/fixtures/film-playback-refresh-harness.tsx to replace the injected style.
+2. The shell list never opens a shot well (no `onSelectShot`); if the shell should show shots under a held point, that is its own task.
