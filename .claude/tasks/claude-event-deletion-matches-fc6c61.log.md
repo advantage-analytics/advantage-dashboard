@@ -71,3 +71,15 @@ is the runner's. Newest entries at the bottom.
 1. T9/T11: a click on a player-name link inside an `EventRow` must not also toggle the row (`match-card-list.tsx` stops propagation).
 2. Move `PeekDrawerFrame` out of `match-drawer.tsx` into its own file so harnesses stop needing the deps mock.
 3. When a filter hides the selected row the drawer closes without its slide-out; Esc, × and re-click still animate.
+
+## T9 · Rebuild the dual page as a line table with the new header, strip and primary-action rule — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite incl. design-drift); completion `VERDICT: pass`.
+**changed:** New `dualPrimaryAction()` in `src/lib/schedule/dual-primary-action.ts` (Add result → one-line Add video → bare Add video → null; doubles and forfeited lines never count) with its spec. `dual-detail.tsx` is now a client component on T8's kit: 40px mark + subline header, ghost "Edit dual" + the computed primary for `canEdit`; strip Result (from `dualScore`: Won/Lost/Tied X–Y + Final, or In progress + n of 9 decided), Lines (nine `md` ticks + n of 9 won), Analysis (a of 6 + singles have stats, counting ready statuses completed/imported/timeline); toolbar pills, Result filter, Line order/Player sort; the exact column template with Singles/Doubles group heads, outcome chips in the Score cell, "Score only" on doubles, footer format via `lineFormat` + "Doubles lines record a score only."; `?line=` selection. `page.tsx` passes `searchParams.line`. Outside `files:`: `dual-ticks.tsx` gains an `md` size and `static/event-mark.tsx` a 40px mark. No drawer yet (`drawer={null}`) — rows carry no actions until T10; do not ship between T9 and T10.
+**follow-ups:**
+
+1. T10 renders the drawer from `selection.drawerId`/`index`/`total`/`closing`/`openedByKeyboard`/`finishClose`; row actions move there (rules in `line-row.tsx`'s `Action` and `scoreHref`).
+2. `EventPageSkeleton` in `loading/page-skeletons.tsx` still draws the old layout for both event pages — update it once T11 lands.
+3. Player names are plain text because lineup ids can be auth uids that 404 on the roster route; link them once a lineup id can be told to be a roster player id.
+4. The footer always prints doubles scoring (from `lineFormat`'s fallback); the frame omits it when no doubles format was recorded.
+5. The subline shows site ("Away") rather than `event.host`, matching the frame; the old glyph row preferred host.

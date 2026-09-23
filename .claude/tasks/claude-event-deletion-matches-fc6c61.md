@@ -122,7 +122,7 @@ ready).
 
 ## T9 · Rebuild the dual page as a line table with the new header, strip and primary-action rule
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8
 - **files:** src/components/dashboard/schedule/dual-detail.tsx, src/app/dashboard/team/schedule/[eventId]/page.tsx, src/lib/schedule/dual-primary-action.ts (new), tests/dual-primary-action.spec.ts (new), tests/fixtures/schedule-dual-outcomes-harness.tsx, tests/fixtures/schedule-dual-outcomes-data.ts, tests/schedule-dual-outcomes.spec.ts (guess)

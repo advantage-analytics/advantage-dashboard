@@ -26,13 +26,21 @@ import { TournamentDetail } from "@/components/dashboard/schedule/tournament-det
  * `getProgramSchedule` is `cache()`d, so Team Home, the Schedule and this page
  * share one round trip. Team totals are read for a tournament only; a dual's
  * page is its lines.
+ *
+ * **`?line=`** names the dual line whose drawer is open. It is read here and
+ * handed down as a prop — the table mirrors later changes into the URL with
+ * `history.replaceState`, never a navigation — and ignored unless it names
+ * one of the dual's lines.
  */
 export default async function EventPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ eventId: string }>;
+  searchParams: Promise<{ line?: string | string[] }>;
 }) {
-  const { eventId } = await params;
+  const [{ eventId }, query] = await Promise.all([params, searchParams]);
+  const initialLineId = typeof query.line === "string" ? query.line : null;
 
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
@@ -60,7 +68,8 @@ export default async function EventPage({
     );
   }
 
-  // The conference printed beside the opponent's name — the drawer's subline.
+  // The conference, last in the header's subline after the date, time, site
+  // and surface `DualDetail` reads off the event itself.
   const opponentProgramId = detail.entries.find(
     (entry) => entry.opponentProgramId,
   )?.opponentProgramId;
@@ -80,6 +89,7 @@ export default async function EventPage({
         detail={detail}
         canEdit={canEdit}
         conference={opponent?.conference ?? null}
+        initialLineId={initialLineId}
         viewer={{
           // A lineup can name the viewer by auth uid or by their claimed
           // program player id — `matches.player1_id`'s two id spaces.
