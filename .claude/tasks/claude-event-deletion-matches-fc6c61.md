@@ -109,7 +109,7 @@ ready).
 
 ## T8 · Build the event-page table kit (layout, header, strip, toolbar, grouped table, row selection)
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/schedule/event-table.tsx (new), src/components/dashboard/schedule/use-row-selection.ts (new), tests/fixtures/event-table-harness.tsx (new), tests/event-table.spec.ts (new) (guess; the selection model to copy is `static/static-schedule.tsx:146-380` plus `:758-770`)
 - **done when:**

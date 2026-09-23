@@ -61,3 +61,13 @@ is the runner's. Newest entries at the bottom.
 
 1. T10 needs `tests/fixtures/supabase-client-browser-mock.ts` to support `.select().eq().eq().maybeSingle()` before a browser harness can render `useMatchSnapshot`.
 2. `MatchDrawer`'s doc comment still describes its body inline; point it at `drawer-sections.tsx` once the event drawers share it.
+
+## T8 · Build the event-page table kit (layout, header, strip, toolbar, grouped table, row selection) — done
+
+**gate:** mechanical GATE PASS on the second run; completion `VERDICT: pass`. The first run failed `design-drift.spec.ts` on a real finding: `SummaryCell`'s value was `text-[15px]`, off the type scale. The same subagent snapped it to 16px, the size the Matches drawer's snapshot figures use; the design system outranks the mockup's 15px.
+**changed:** New `schedule/event-table.tsx` (presentational, props-driven): `EventPageLayout` (two groups, `gap-6`/`gap-3`, `gap-8` between, drawer as a flex sibling), `EventHeader`, `SummaryStrip`/`SummaryCell`, `EventToolbar` (`Chip` pills, `MatchesFilterPanel` filters, `SortTrigger` + `FloatMenu` sort), `EventTable` (empty body inside the card via `TableEmptyBody`), `EventGroupHead`, `EventRow` (48px, `aria-current` + the Matches wash) and `EventTableFooter`. New `schedule/use-row-selection.ts`: the Schedule page's selection model lifted — click/re-click, Esc, ↑/↓ over visible ids, `?<param>=` via `replaceState`, the same key guard, and a filter cut clears the selection. Harness + `tests/event-table.spec.ts`. Outside `files:`: `tests/fixtures/match-drawer-deps-browser-mock.tsx` stubs `MatchActionsMenu` and `next/image` so a browser harness can bundle `PeekDrawerFrame`. Live pages untouched.
+**follow-ups:**
+
+1. T9/T11: a click on a player-name link inside an `EventRow` must not also toggle the row (`match-card-list.tsx` stops propagation).
+2. Move `PeekDrawerFrame` out of `match-drawer.tsx` into its own file so harnesses stop needing the deps mock.
+3. When a filter hides the selected row the drawer closes without its slide-out; Esc, × and re-click still animate.
