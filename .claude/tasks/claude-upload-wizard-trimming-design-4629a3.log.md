@@ -25,3 +25,10 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical GATE PASS (first run failed only on the live-DB `match-video-attachments-db.spec.ts` cleanup test, unrelated to this diff; the re-run passed) · completion VERDICT: pass
 **changed:** `DetailsStepContent.tsx` — while naming the opponent, the line under the name input is now a `enter` Kbd chip + "to add them" (11px, --ink-600), replacing "Hand and backhand after the name"; a new line under the two disabled selects (`sm:col-span-2 sm:col-start-2`) reads "Hand and backhand open once the opponent is added." and disappears once an opponent is set. `tests/upload-player-details.spec.ts` gains source assertions for both strings and the removed one.
+
+## T4 · Subject bar on steps 2–4 for non-preset flows — blocked
+
+**gate:** mechanical GATE FAIL (lint and typecheck clean; `npm test` failed) · completion not run
+**reason:** the failures are live-database specs timing out (`57014 canceling statement due to statement timeout`) — 11 failures on the first full run, a different set of live specs on a targeted re-run (admin-conferences-rpcs, match-video-attachments-db, point-bookmarks-db, program-owner-name-live, rls-workspace-isolation, saved-views-rls, teams-management, viz-bands-rls). None touch T4's files (SubjectBar.tsx, UploadMatchFlow.tsx, wizard-view.ts, tests/upload-subject-bar.spec.ts), and the new spec passed 3/3. Most likely the shared Supabase project was overloaded; blocked under the fail-closed rule rather than waved through.
+**stash:** 4227c33619216c24a5ed000287a24cf467f955be — to retry: `git stash apply 4227c336`, reset T4's status to `todo`, re-run the gate once the live specs are healthy.
+**implementer notes:** "For" is 11px `--ink-500` (canvas) rather than the 12px the criterion implies; `wizard-view.ts` changed type-only (`subjectFirstNameOf` takes `Pick<WhoPlayed, "subject">`); an empty roster name falls back to "Not them?".
