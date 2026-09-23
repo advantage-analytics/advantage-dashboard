@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Let event deletion detach matches (migration + deleteEvent)
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/20260922<HHMMSS>_event_delete_detaches_matches.sql (new, guess), src/lib/schedule/actions.ts (`deleteEvent`, ~line 233), tests/schedule-event-delete.spec.ts, tests/schedule-event-delete-db.spec.ts
 - **done when:**

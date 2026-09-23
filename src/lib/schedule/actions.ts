@@ -249,6 +249,8 @@ export async function deleteEvent(
   if (error) return scheduleWriteError(error);
   revalidatePath("/dashboard/team/schedule");
   revalidatePath(`/dashboard/team/schedule/${eventId}`);
+  // Recorded matches survive the event as unassigned program matches.
+  revalidatePath("/dashboard/matches");
   return { ok: true };
 }
 
