@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Subject bar on steps 2–4 for non-preset flows
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/new-match-wizard/SubjectBar.tsx (new), src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx (the `pinned` slot), src/components/dashboard/matches/new-match-wizard/RosterMenu.tsx (`workspaceLabel` import only), tests/upload-subject-bar.spec.ts (new, offline render via tests/fixtures/vm-modules.ts)
 - **done when:**

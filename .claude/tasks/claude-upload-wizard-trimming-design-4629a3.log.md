@@ -38,3 +38,11 @@ is the runner's. Newest entries at the bottom.
 **gate:** not reached — the implementer subagent (model: fable) terminated before doing any work: API rate limit, "You've reached your Fable limit" (HTTP 429).
 **stash:** no stash — the task produced no changes
 **retry:** reset T6 to `todo` once Fable usage is available again; the task routing is unchanged. Pre-dispatch probe this run: the load-sensitive live spec `match-video-attachments-db.spec.ts:2708` failed under a multi-spec run but passed twice alone.
+
+## T4 · Subject bar on steps 2–4 for non-preset flows — done
+
+**gate:** mechanical GATE PASS (retry of the blocked run from stash 4227c336, applied by the author; first re-run failed only on live-DB specs `program-member-avatars.spec.ts:90` and `program-owner-name-live.spec.ts:176`, the second passed) · completion VERDICT: pass
+**changed:** New `SubjectBar.tsx` — a PinnedLineBar-shaped bar ("For <name> | <Users> <workspace label> … Not <first>?" / "Not you?") read from `whoPlayed.subject`, rendering nothing without a roster subject. `UploadMatchFlow.tsx` puts it in `WizardShell`'s `pinned` slot for team, non-preset flows past step 1; `onNotSubject` is wired to `handleBack` with a `// T5` note for the dialog swap. `wizard-view.ts`: `subjectFirstNameOf` takes `Pick<WhoPlayed, "subject">` (type-only). New offline spec `tests/upload-subject-bar.spec.ts` (3 tests).
+**follow-ups:**
+
+1. An empty roster name falls back to "Not them?" — cannot happen today, but the copy may want a design call.

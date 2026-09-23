@@ -19,7 +19,9 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderId } from "@/lib/services/upload";
 import type { EventPreset, MatchDraft } from "./types";
 import type { RosterSubject, VideoUploadEvent } from "./useUploadMatchWizard";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { PinnedLineBar } from "./PinnedLineBar";
+import { SubjectBar } from "./SubjectBar";
 import { UploadMatchSuccess } from "./UploadMatchSuccess";
 import {
   UploadWizardProvider,
@@ -227,11 +229,25 @@ const UploadMatchWizard = memo(function UploadMatchWizard(
 /** The shell, with the step body and footer pieces composed into its slots. */
 function UploadWizardPage() {
   const {
-    wizard: { step, stepOrder, progressTotalSteps, firstStep, handleBack },
+    wizard: {
+      step,
+      stepOrder,
+      progressTotalSteps,
+      firstStep,
+      handleBack,
+      whoPlayed,
+    },
     view: { title, description, continueLabel, continueDisabled },
     actions,
-    meta: { contentRef, exitHref, preset, onSwitchPreset },
+    meta: { contentRef, exitHref, preset, onSwitchPreset, workspaceKind },
   } = useUploadWizard();
+  const { active: workspace } = useWorkspace();
+
+  // "Not Marcus?" on step 2 (stepOrder[1]) goes straight back to step 1, where
+  // the For field is — no dialog. Later steps call the same prop.
+  // T5: on steps after stepOrder[1], swap `handleBack` for the opener of T5's
+  // "change the player?" dialog; step 2 keeps `handleBack`.
+  const onNotSubject = handleBack;
 
   return (
     <WizardShell
@@ -241,13 +257,20 @@ function UploadWizardPage() {
       description={description}
       pinned={
         /* Step 1, already answered: the line this flow is filling, pinned. */
-        preset && (
+        preset ? (
           <PinnedLineBar
             preset={preset}
             onSwitch={onSwitchPreset}
             outsideHref="/dashboard/matches/new"
           />
-        )
+        ) : workspaceKind === "team" && step !== firstStep ? (
+          /* No line to pin: keep step 1's For answer on screen instead. */
+          <SubjectBar
+            subject={whoPlayed.subject}
+            workspace={workspace}
+            onNotSubject={onNotSubject}
+          />
+        ) : null
       }
       contentRef={contentRef}
       contentKey={step}
