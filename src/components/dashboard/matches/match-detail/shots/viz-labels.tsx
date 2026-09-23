@@ -24,6 +24,7 @@ export const CUT_LABEL: Record<Cut, string> = {
   returnPlacement: "Return placement",
   returnContact: "Return contact",
   rallyPosition: "Rally position",
+  rallyPlacement: "Rally placement",
 };
 
 export const CHART_LABEL: Record<Chart, string> = {

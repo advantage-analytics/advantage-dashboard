@@ -38,7 +38,7 @@ ready).
 
 ## T2 · Add rally placement
 
-- **status:** blocked
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T1
 - **files:** Guess: `viz-model.ts`, `cut-menu.tsx`, `default-cuts.ts`, `default-tiles.ts`, `viz-url.ts`, `viz-labels.tsx`, `court-art.tsx`, `court-geometry.ts`, `viz-fullscreen-court.tsx`; `src/lib/data/saved-views-logic.ts` and associated tests under `tests/`.

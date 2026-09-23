@@ -75,6 +75,9 @@ const seen = new Map<string, RecordedRequest[]>();
 const polls = new Map<string, number>();
 /** One attachment id per match, so a retry finds the attempt it reserved. */
 const attachmentIds = new Map<string, string>();
+/** Cancellation scenarios control reservation and upload separately, so a
+ * visible preparing state can never stand in for an in-flight upload. */
+const heldReservations = new Map<string, () => void>();
 
 interface RecordedRequest {
   method: string;
@@ -200,6 +203,10 @@ test.beforeAll(async () => {
       });
       request.resume();
       request.on("end", () => {
+        // Keep the real XHR in flight until cancellation or page teardown
+        // closes its socket. An elapsed-time delay can finish before a busy
+        // browser reaches the action the cancellation test is exercising.
+        if (scenarioOf(matchId) === "held") return;
         const finish = () => {
           response.statusCode = 201;
           response.end();
@@ -238,11 +245,16 @@ test.beforeAll(async () => {
 
       // Reserve
       if (method === "POST" && rest === "/uploads") {
-        json(200, {
-          attachmentId: attachmentIdFor(matchId),
-          uploadUrl: `${origin}/azure/${encodeURIComponent(matchId)}?sig=REDACTED`,
-          uploadExpiresAt: new Date(Date.now() + 6 * 3_600_000).toISOString(),
-        });
+        const reserve = () =>
+          json(200, {
+            attachmentId: attachmentIdFor(matchId),
+            uploadUrl: `${origin}/azure/${encodeURIComponent(matchId)}?sig=REDACTED`,
+            uploadExpiresAt: new Date(Date.now() + 6 * 3_600_000).toISOString(),
+          });
+        if (scenarioOf(matchId) === "held") {
+          heldReservations.set(matchId, reserve);
+          response.on("close", () => heldReservations.delete(matchId));
+        } else reserve();
         return;
       }
 
@@ -817,13 +829,31 @@ test("progress reads real bytes and then names the publication", async ({
  * Cancel, unmount, and a closed tab
  * ---------------------------------------------------------------------- */
 
+async function startHeldUpload(page: Page, matchId: string) {
+  await continueButton(page).click();
+  // Saving is already visible BEFORE an attachment id has been returned.
+  // Prove this phase, then release the reservation and wait for real bytes.
+  await expect(page.getByTestId("attachment-saving")).toContainText(
+    "Preparing the upload",
+  );
+  await expect.poll(() => heldReservations.has(matchId)).toBe(true);
+  heldReservations.get(matchId)!();
+  await expect
+    .poll(() =>
+      (seen.get(matchId) ?? []).some((entry) => entry.path === "/azure/block"),
+    )
+    .toBe(true);
+  await expect(page.getByTestId("attachment-saving")).toContainText(
+    "Uploading the video",
+  );
+}
+
 test("cancelling aborts the upload, retires the attempt, and shows no error", async ({
   page,
 }) => {
-  const matchId = matchIdFor("slow");
+  const matchId = matchIdFor("held");
   await armAdd(page, matchId);
-  await continueButton(page).click();
-  await expect(page.getByTestId("attachment-saving")).toBeVisible();
+  await startHeldUpload(page, matchId);
 
   await page.getByTestId("attachment-cancel-upload").click();
 
@@ -846,10 +876,9 @@ test("cancelling aborts the upload, retires the attempt, and shows no error", as
 });
 
 test("unmounting mid-upload cancels the attempt", async ({ page }) => {
-  const matchId = matchIdFor("slow");
+  const matchId = matchIdFor("held");
   await armAdd(page, matchId);
-  await continueButton(page).click();
-  await expect(page.getByTestId("attachment-saving")).toBeVisible();
+  await startHeldUpload(page, matchId);
 
   await page.evaluate(() =>
     (window as unknown as AttachmentFlowHarnessWindow).unmount(),
@@ -862,14 +891,19 @@ test("unmounting mid-upload cancels the attempt", async ({ page }) => {
       ),
     )
     .toBe(true);
+  expect(
+    (await requests(page, matchId)).some(
+      (entry) =>
+        entry.path === "/azure/blocklist" || entry.path.endsWith("/complete"),
+    ),
+  ).toBe(false);
   expect(await savedEvents(page)).toEqual([]);
 });
 
 test("a tab closing mid-upload still retires the attempt", async ({ page }) => {
-  const matchId = matchIdFor("slow");
+  const matchId = matchIdFor("held");
   await armAdd(page, matchId);
-  await continueButton(page).click();
-  await expect(page.getByTestId("attachment-saving")).toBeVisible();
+  await startHeldUpload(page, matchId);
 
   // No unmount, no `finally`, no cleanup of any kind runs when a document goes
   // away — which is why this is a `keepalive` request fired from `pagehide`.

@@ -171,6 +171,12 @@ export function CutMenu({
         onSelect={() => selectCut("returnContact")}
       />
       <FloatMenuItem
+        label="Rally placement"
+        description="Where every rally shot lands"
+        chosen={state.cut === "rallyPlacement"}
+        onSelect={() => selectCut("rallyPlacement")}
+      />
+      <FloatMenuItem
         label="Rally position"
         description="Where every rally shot was struck"
         chosen={state.cut === "rallyPosition"}

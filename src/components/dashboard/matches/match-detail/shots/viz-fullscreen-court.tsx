@@ -684,6 +684,7 @@ const VIEWER_HEAT_PROJECTORS: Record<
   returnPlacement: (d) => toCxCy("returnPlacement", d),
   returnContact: (d) => toCxCy("returnContact", d),
   rallyPosition: (d) => toCxCy("rallyPosition", d),
+  rallyPlacement: (d) => toCxCy("rallyPlacement", d),
 };
 
 function toCxCy(cut: Cut, dot: VizDot): { cx: number; cy: number } {

@@ -36,7 +36,11 @@ import type { DistanceUnit } from "@/lib/format/distance";
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
 export type Cut =
-  "serve" | "returnPlacement" | "returnContact" | "rallyPosition";
+  | "serve"
+  | "returnPlacement"
+  | "returnContact"
+  | "rallyPosition"
+  | "rallyPlacement";
 export type Chart = "scatter" | "zones" | "heat";
 export type PlayerFilter = "you" | "opponent";
 
@@ -772,8 +776,32 @@ function shapeFromShotType(
     : "circle";
 }
 
+/** Landing frame viewed from behind the hitter. Require a measured contact
+ * end: inferring it from a landing would put netted shots on the wrong half.
+ * Rally depth uses the full singles court, never the shorter service box. */
+function rallyLandingMetrics(shot: MatchShot) {
+  const { contactY, landingX, landingY } = shot;
+  if (
+    contactY == null ||
+    landingX == null ||
+    landingY == null ||
+    ![contactY, landingX, landingY].every(Number.isFinite)
+  )
+    return null;
+  const farEnd = contactY > REAL_NET_Y;
+  const lateralM = farEnd ? -landingX : landingX;
+  const depthM = farEnd ? REAL_NET_Y - landingY : landingY - REAL_NET_Y;
+  const atNet = shot.result === "Net" || depthM < 0;
+  const miss =
+    atNet ||
+    shot.result === "Out" ||
+    Math.abs(lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS ||
+    depthM > REAL_NET_Y + IN_COURT_EPS;
+  return { lateralM, depthM, atNet, miss };
+}
+
 /**
- * Rally position: every shot AFTER the return the SUBJECT struck,
+ * Rally cuts: every shot AFTER the return the SUBJECT struck,
  * across every point — not gated on who served, unlike the serve/return arms
  * above, since a rally shot can come from either the server or the returner.
  * Rally shots are picked by ROLE (`pickRallyShots`), not by
@@ -785,14 +813,14 @@ function shapeFromShotType(
  * is every qualifying rally shot regardless of filters (the drawable pool,
  * same "before filtering" meaning `total` carries for every other cut, just
  * measured in shots here), `count` the ones whose POINT also passes
- * `filters`. Outcome is the subject's own point result (won/lost — no
- * "miss" class; a rally shot's own placement carries no separate
- * ace/fault-style failure the way a serve or a return does).
+ * `filters`. Position uses point won/lost; placement additionally marks
+ * out/net landings as misses. Both retain the actual point result in meta.
  */
 function computeRallyViz(
   points: MatchPoint[],
   filters: VizFilters,
   subjectIsPlayer1: boolean,
+  placement: boolean,
 ): VizResult {
   let total = 0;
   let count = 0;
@@ -817,7 +845,10 @@ function computeRallyViz(
     for (const shot of rallyShots) {
       if (shot.isPlayer1 !== subjectIsPlayer1) continue;
 
-      const metrics = contactMetrics(shot.contactX, shot.contactY);
+      const landing = placement ? rallyLandingMetrics(shot) : null;
+      const metrics = placement
+        ? landing
+        : contactMetrics(shot.contactX, shot.contactY);
       if (!metrics) continue;
 
       total++;
@@ -828,9 +859,9 @@ function computeRallyViz(
         id: shot.id,
         lateralM: metrics.lateralM,
         depthM: metrics.depthM,
-        outcome: subjectWon ? "won" : "lost",
+        outcome: landing?.miss ? "miss" : subjectWon ? "won" : "lost",
         shape: shapeFromShotType(shot.shotType),
-        atNet: false,
+        atNet: landing?.atNet ?? false,
         meta: pointDotMeta(p, subjectIsPlayer1, shot),
       });
     }
@@ -902,8 +933,13 @@ export function computeViz(
   subjectIsPlayer1: boolean,
   chart: Chart = "scatter",
 ): VizResult {
-  if (cut === "rallyPosition") {
-    return computeRallyViz(points, filters, subjectIsPlayer1);
+  if (cut === "rallyPosition" || cut === "rallyPlacement") {
+    return computeRallyViz(
+      points,
+      filters,
+      subjectIsPlayer1,
+      cut === "rallyPlacement",
+    );
   }
 
   const frame = cutFrame(cut);
@@ -1508,6 +1544,39 @@ export function computeVizStats(
       subtitle,
       groups,
       sentence: buildSentence(groups, noun),
+      total,
+    };
+  }
+
+  if (cut === "rallyPlacement") {
+    const eligible = result.dots.filter(isPlacementRow);
+    const rows = depthBandRows(bands, unit);
+    const acc = bandRowAccumulator(rows);
+    const bucket = makeDepthBucketer(bands);
+    for (const dot of eligible) {
+      if (!rows.length) break;
+      const key = rows[bucket(dot.depthM)].key;
+      acc[key].count++;
+      if (dot.outcome === "won") acc[key].won++;
+    }
+    const groups = rows.length
+      ? [
+          {
+            key: "depth",
+            label: "Depth",
+            rows: sortRows(
+              rows.map((r) =>
+                makeRow(r.key, r.label, acc[r.key].count, acc[r.key].won),
+              ),
+            ),
+          },
+        ]
+      : [];
+    return {
+      title: "Where rally shots landed",
+      subtitle: `Points won by placement · ${eligible.length} of ${total} shots landed in`,
+      groups,
+      sentence: buildSentence(groups, "shots"),
       total,
     };
   }

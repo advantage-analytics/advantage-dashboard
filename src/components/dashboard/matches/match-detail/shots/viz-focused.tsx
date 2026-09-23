@@ -59,6 +59,7 @@ import {
 const LEGEND_CAPTION: Record<Cut, string> = {
   serve: "Half court · landing point",
   returnPlacement: "Far half · landing point",
+  rallyPlacement: "Far half · landing point",
   returnContact: "Near half · contact point",
   // rallyPosition renders through the returnContact frame — same caption,
   // since it's the same half.

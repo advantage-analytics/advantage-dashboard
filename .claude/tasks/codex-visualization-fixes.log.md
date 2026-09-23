@@ -36,3 +36,11 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical: GATE PASS (lint, typecheck, full suite). Completion: VERDICT: pass.
 
 **changed:** Enlarged shared preview/focused ace radius from 3.7 to 4.44 and fullscreen multiplier from 1.68 to 2.016, each exactly 20%, preserving centers, regular dots, classification, colors and interactions. Updated existing geometry size assertion; all 130 targeted geometry tests passed.
+
+## T2 · Add rally placement — done
+
+**gate:** Recovery mechanical: GATE PASS (complete lint, typecheck and full suite); completion: VERDICT: pass. Recovered exact stash f50821970837b589b51d78a3478e254077751071, retained as backup.
+
+**changed:** Added role-resolved rally landing cut, default previews, Scatter/Heat projections, filters, URL and saved-view round trips. Applied only migration 20260923210000_saved_views_rally_placement atomically to verified project pouxujkhtbvkdwbzfvka: validated widened constraint and exactly one migration-history entry, saved rows unchanged, RLS and four policies preserved. Authenticated saved-view persistence suite passed25/25;501 targeted checks passed. Reviewer lacked direct SQL access; orchestrator verified the live result through execution-worker readback.
+
+Recovery investigation:79/79 previously failing live tests passed serialized. Observed external worktrees overlapping full gates against shared database; set Playwright workers to1 without changing assertions/timeouts/retries. Reproduced unrelated upload-test failure with500ms reservation delay; replaced timing assumptions with held reservation and actual upload-block barriers, retaining assertions and adding no-publication check.30/30 cancellation repetitions and20/20 attachment-flow tests passed. These recovery fixes were expressly user-authorized; T7 sizing preserved.

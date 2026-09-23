@@ -459,9 +459,7 @@ export const RETURN_HEAT_BOUNDS: HeatBounds = {
  * return-frame view (`RETURN_HEAT_BOUNDS`) since they share one frame —
  * only `serve` differs, on its own frame (`SERVE_HEAT_BOUNDS`).
  */
-export function heatBoundsFor(
-  cut: "serve" | "returnPlacement" | "returnContact" | "rallyPosition",
-): HeatBounds {
+export function heatBoundsFor(cut: Cut): HeatBounds {
   return cut === "serve" ? SERVE_HEAT_BOUNDS : RETURN_HEAT_BOUNDS;
 }
 
@@ -520,9 +518,7 @@ export const SERVE_HEAT_DOT_RADIUS =
 
 /** A cut's blob radius, in the SAME projected coordinate space
  * `heatBoundsFor(cut)` and `projectServeDot`/`projectReturnDot` share. */
-export function heatDotRadiusFor(
-  cut: "serve" | "returnPlacement" | "returnContact" | "rallyPosition",
-): number {
+export function heatDotRadiusFor(cut: Cut): number {
   return cut === "serve" ? SERVE_HEAT_DOT_RADIUS : RETURN_HEAT_DOT_RADIUS;
 }
 
@@ -552,9 +548,7 @@ export interface HeatFilterRegion {
  * view" the same rectangle — so this needing to fully cover `heatBoundsFor`
  * is exactly what "the tint fills the entire view" comes down to.
  */
-export function heatFilterRegionFor(
-  cut: "serve" | "returnPlacement" | "returnContact" | "rallyPosition",
-): HeatFilterRegion {
+export function heatFilterRegionFor(cut: Cut): HeatFilterRegion {
   const bounds = heatBoundsFor(cut);
   const margin = heatDotRadiusFor(cut) * HEAT_FILTER_MARGIN_RATIO;
   return {
@@ -830,9 +824,10 @@ const SERVE_NET_GUTTER_INSET_M = 0.3;
  * which already reads the dot's true lateral position correctly) —
  * `court-art.tsx` does exactly that merge.
  */
-export function netGutterFor(
-  cut: "serve" | "returnPlacement" | "returnContact" | "rallyPosition",
-): { cx: number | null; cy: number | null } {
+export function netGutterFor(cut: Cut): {
+  cx: number | null;
+  cy: number | null;
+} {
   if (cut === "serve") {
     return {
       cx: null,
@@ -1184,7 +1179,8 @@ export function projectViewerDot(
 ): { x: number; y: number } {
   const rawX =
     VIEWER_COURT.centreX + dot.lateralM * SERVE_LATERAL_UNITS_PER_METER;
-  const isLanding = cut === "serve" || cut === "returnPlacement";
+  const isLanding =
+    cut === "serve" || cut === "returnPlacement" || cut === "rallyPlacement";
   const rawY = dot.atNet
     ? VIEWER_COURT.netY
     : isLanding
@@ -1249,7 +1245,8 @@ export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
   const frameW = frame.w * pxPerUnit;
   const frameH = frame.h * pxPerUnit;
   const fitZ = Math.min(stage.w / frameW, stage.h / frameH);
-  const isLanding = cut === "serve" || cut === "returnPlacement";
+  const isLanding =
+    cut === "serve" || cut === "returnPlacement" || cut === "rallyPlacement";
   const rawZ = isLanding ? fitZ : fitZ * VIEWER_CONTACT_ZOOM_MULTIPLIER;
   const z = clampNum(rawZ, ZOOM_MIN, ZOOM_MAX);
 

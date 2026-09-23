@@ -156,6 +156,7 @@ const CUT_NOUN: Record<Cut, string> = {
   returnPlacement: "return placement",
   returnContact: "return contact",
   rallyPosition: "rally position",
+  rallyPlacement: "rally placement",
 };
 
 // Heat mode's aria-label reads "Serve placement heat map, 63 serves" — a
@@ -168,12 +169,14 @@ const HEAT_CUT_LABEL: Record<Cut, string> = {
   returnPlacement: "Return placement",
   returnContact: "Return contact",
   rallyPosition: "Rally position",
+  rallyPlacement: "Rally placement",
 };
 const HEAT_NOUN: Record<Cut, "serves" | "returns" | "shots"> = {
   serve: "serves",
   returnPlacement: "returns",
   returnContact: "returns",
   rallyPosition: "shots",
+  rallyPlacement: "shots",
 };
 
 /**
@@ -444,7 +447,7 @@ export function CourtArt({
   const heatProject =
     cut === "serve"
       ? projectServeHeatDot
-      : cut === "returnPlacement"
+      : cut === "returnPlacement" || cut === "rallyPlacement"
         ? projectReturnPlacementHeatDot
         : projectReturnContactHeatDot;
 
@@ -690,7 +693,10 @@ export function CourtArt({
   // sets the design's own `rotate(180deg)` on the svg; `returnContact` does
   // not. `projectReturnDot` accounts for that extra flip in the lateral
   // sign it uses for each kind — see its own doc comment.
-  const kind = cut === "returnPlacement" ? "placement" : "contact";
+  const kind =
+    cut === "returnPlacement" || cut === "rallyPlacement"
+      ? "placement"
+      : "contact";
   return (
     <svg
       viewBox={`${RETURN_COURT.viewBox.minX} ${RETURN_COURT.viewBox.minY} ${RETURN_COURT.viewBox.w} ${RETURN_COURT.viewBox.h}`}

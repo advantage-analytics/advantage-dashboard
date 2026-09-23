@@ -372,7 +372,8 @@ export function parseVizState(params: URLSearchParams): VizState {
     cutParam === "serve" ||
     cutParam === "returnPlacement" ||
     cutParam === "returnContact" ||
-    cutParam === "rallyPosition"
+    cutParam === "rallyPosition" ||
+    cutParam === "rallyPlacement"
   ) {
     cut = cutParam;
   }
