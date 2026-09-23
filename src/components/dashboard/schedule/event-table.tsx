@@ -472,7 +472,7 @@ export function EventRow({
   );
 }
 
-/** The line under the card: format on the left, an optional note on the right. */
+/** The line under the card, flush with its edges: format on the left, an optional note on the right. */
 export function EventTableFooter({
   start,
   end,
@@ -481,7 +481,7 @@ export function EventTableFooter({
   end?: React.ReactNode;
 }) {
   return (
-    <div className="text-micro flex items-center justify-between gap-4 px-6">
+    <div className="text-micro flex items-center justify-between gap-4">
       <span>{start}</span>
       {end ? <span className="flex items-center gap-1.5">{end}</span> : null}
     </div>
