@@ -46,3 +46,10 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. An empty roster name falls back to "Not them?" — cannot happen today, but the copy may want a design call.
+
+## T5 · "Start over with a different player?" dialog and the hook's start-over reset — blocked
+
+**gate:** mechanical GATE FAIL twice (lint and typecheck clean; `npm test` failed only on live-DB specs — 7 then 9, a different set each run: match-video-attachments-db, pending-invites, personal-home-scope, program-owner-name-live, rls-workspace-isolation, saved-views-rls, seats-count-players, claim-eyebrow-width). Everything outside the live specs passed: `npx playwright test --grep-invert "\(live"` → 2759 passed, 0 failed. Completion review not run.
+**model:** ran on opus at the author's explicit request (task is routed fable; Fable usage limit reached).
+**stash:** f66eb0deaf060c90e8f107b162fbffd08c6dc85f — to retry: `git stash apply f66eb0de`, reset T5's status, re-run the gate.
+**implementer notes:** pipeline-guardrails-reviewer returned PASS (report at docs/investigations/2026-09-23-start-over-guardrails-review.md, in the stash). Beyond `files:`: `useWizardKeys.ts` ignores Esc/Enter while an open dialog is on the page (also fixes the existing "Remove entered set scores?" dialog); `handleFileContinue` restores a whole-recording trim window for a kept video after a start-over; `startOver` also drops a lineup slot attached on the details step. SwingVision imports keep plain Back with no dialog — an author decision is pending on an import version. Cancel label is "Keep <first name>" even in the "Not you?" case.

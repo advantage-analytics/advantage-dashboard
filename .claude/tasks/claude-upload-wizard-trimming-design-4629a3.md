@@ -72,7 +72,7 @@ ready).
 
 ## T5 · "Start over with a different player?" dialog and the hook's start-over reset
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **needs:** T4
 - **files:** src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (new `startOver` handler + return type), src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx or a new StartOverDialog.tsx beside SubjectBar.tsx, src/components/ui/confirm-dialog.tsx (import only), tests/upload-start-over.spec.ts (new, via tests/fixtures/upload-wizard-hook.ts), tests/upload-subject-bar.spec.ts (extend for the dialog copy), docs/investigations/2026-09-23-start-over-guardrails-review.md (new)
