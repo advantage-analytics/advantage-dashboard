@@ -21,6 +21,7 @@ import type { EventPreset, MatchDraft } from "./types";
 import type { RosterSubject, VideoUploadEvent } from "./useUploadMatchWizard";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { PinnedLineBar } from "./PinnedLineBar";
+import { StartOverDialog } from "./StartOverDialog";
 import { SubjectBar } from "./SubjectBar";
 import { UploadMatchSuccess } from "./UploadMatchSuccess";
 import {
@@ -236,18 +237,38 @@ function UploadWizardPage() {
       firstStep,
       handleBack,
       whoPlayed,
+      isProcessingProvider,
+      startOver,
     },
-    view: { title, description, continueLabel, continueDisabled },
+    view: {
+      title,
+      description,
+      continueLabel,
+      continueDisabled,
+      subjectFirstName,
+    },
     actions,
     meta: { contentRef, exitHref, preset, onSwitchPreset, workspaceKind },
   } = useUploadWizard();
   const { active: workspace } = useWorkspace();
 
   // "Not Marcus?" on step 2 (stepOrder[1]) goes straight back to step 1, where
-  // the For field is — no dialog. Later steps call the same prop.
-  // T5: on steps after stepOrder[1], swap `handleBack` for the opener of T5's
-  // "change the player?" dialog; step 2 keeps `handleBack`.
-  const onNotSubject = handleBack;
+  // the For field is — no dialog, nothing was set up for the player yet. On the
+  // trim and details steps of a video upload it asks first: the video check
+  // (and the score) were answered for that player, and starting over clears
+  // them (`wizard.startOver()`).
+  //
+  // An import's details step keeps plain Back: its score and names were READ
+  // from the kept file, and the approved copy ("the video check…") does not
+  // describe that flow.
+  const [startOverOpen, setStartOverOpen] = useState(false);
+  const startOverStep =
+    isProcessingProvider && (step === "trim" || step === "match") ? step : null;
+  const onNotSubject = startOverStep
+    ? () => setStartOverOpen(true)
+    : handleBack;
+  const subjectName =
+    whoPlayed.subject?.kind === "roster" ? whoPlayed.subject.name : null;
 
   return (
     <WizardShell
@@ -290,6 +311,21 @@ function UploadWizardPage() {
       {step === "file" && <FileStep />}
       {step === "trim" && <TrimStep />}
       {step === "match" && <MatchStep />}
+      {startOverStep && subjectName && (
+        <StartOverDialog
+          open={startOverOpen}
+          onOpenChange={setStartOverOpen}
+          step={startOverStep}
+          subjectName={subjectName}
+          firstName={subjectFirstName}
+          onConfirm={() => {
+            startOver();
+            // The early-end question belongs to the score just cleared; the
+            // next score is asked about afresh at its own Save.
+            actions.dismissScoreCheck();
+          }}
+        />
+      )}
     </WizardShell>
   );
 }

@@ -136,6 +136,45 @@ const CLEARED_CAMERA_ANSWERS = {
   initialTopPlayerIsPlayer1: undefined,
 } as const;
 
+/**
+ * What `startOver()` returns to `DEFAULT_FORM_DATA` — and nothing else.
+ *
+ * Everything here was set up for ONE player: their name and style, the
+ * opponent as seen from their side, the score in their order, and the video
+ * check (the window and both camera answers, which are read relative to
+ * player 1 — `docs/ui-revamp-guardrails.md` §4). A different player makes
+ * every one of them suspect. The match's own facts — event, round, format,
+ * scoring, date, court — describe the match whoever played it, and stay.
+ *
+ * The camera answers go back to `undefined`, never to a boolean: unanswered
+ * is not "no" (§3.1).
+ */
+const START_OVER_FIELDS = [
+  "playerName",
+  "playerHand",
+  "playerBackhand",
+  "playerStyleSource",
+  "opponentName",
+  "opponentSource",
+  "opponentPlayerId",
+  "opponentHand",
+  "opponentBackhand",
+  "opponentStyleSource",
+  "opponentProgramKey",
+  "opponentSchool",
+  "playerScores",
+  "opponentScores",
+  "playerTiebreaks",
+  "opponentTiebreaks",
+  "numberOfSets",
+  "result",
+  "retiredSide",
+  "videoStartSeconds",
+  "videoEndSeconds",
+  "fixedCamera",
+  "initialTopPlayerIsPlayer1",
+] as const satisfies readonly (keyof MatchFormData)[];
+
 /** Name, size and mtime — enough to tell one picked recording from another. */
 function videoSignature(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}`;
@@ -488,6 +527,15 @@ export interface UseUploadMatchWizardReturn {
    * answered, so it opens on the file step and Back there is Cancel.
    */
   firstStep: Step;
+  /**
+   * "Start over with a different player?" — back to step 1 with the subject
+   * cleared and everything that was set up FOR that player cleared with it:
+   * the trim window, both camera answers, the score and the players
+   * ({@link START_OVER_FIELDS}). The video file, its probe, the source and
+   * the match's own facts (event, date, format, court) are kept. It never
+   * installs a subject — only step 1's For field does that.
+   */
+  startOver: () => void;
 
   // The schedule offer on the details step (design 3d/7a)
   /** The lineup slot accepted with Attach, or null. */
@@ -1870,10 +1918,31 @@ export function useUploadMatchWizard({
       return;
     }
     setError(null);
+    // A kept video with no window — what `startOver()` leaves, since the
+    // window was the old player's — gets the whole recording again, exactly
+    // as a fresh pick does. Without it the trim step would draw the full rail
+    // over an empty form and hold Continue until a handle was touched.
+    const probedEnd = videoProbe?.durationSeconds;
+    if (
+      isProcessingProvider &&
+      probedEnd !== undefined &&
+      formData.videoStartSeconds === undefined &&
+      formData.videoEndSeconds === undefined
+    ) {
+      setFormData((prev) => ({
+        ...prev,
+        videoStartSeconds: 0,
+        videoEndSeconds: probedEnd,
+        duration: Math.max(0, Math.round(probedEnd)) * 1000,
+      }));
+    }
     const index = stepOrder.indexOf("file");
     if (index >= 0 && index + 1 < stepOrder.length)
       setStep(stepOrder[index + 1]);
   }, [
+    videoProbe,
+    formData.videoStartSeconds,
+    formData.videoEndSeconds,
     stepOrder,
     selectedProvider,
     uploadedFile,
@@ -2154,6 +2223,50 @@ export function useUploadMatchWizard({
       setStep(stepOrder[index - 1]);
     }
   }, [step, stepOrder, firstStep]);
+
+  /**
+   * "Start over with a different player?" — confirmed from the subject bar on
+   * the trim and details steps. See `UseUploadMatchWizardReturn.startOver`.
+   *
+   * Writes the subject as null and nothing else: the next answer comes from
+   * step 1's For field through `chooseMatchSubject`, like the first one did.
+   *
+   * Storage is left to the autosave effect, which writes this emptier form on
+   * its own. `clearStorageData()` would also drop the kept file's entry and
+   * the selected source.
+   */
+  const startOver = useCallback(() => {
+    applyMatchSubject(null);
+    resetIdentityAnswer();
+    setError(null);
+    // The drift rule's baseline and the "why is this blank again" hint both
+    // describe answers that no longer exist. `cameraAnswerFileRef` stays: the
+    // file is kept, so answers given after this still belong to it.
+    topPlayerAnswerStartRef.current = null;
+    topPlayerAnswerRef.current = { start: undefined, answered: false };
+    setTopPlayerAnswerStale(false);
+    // A lineup slot accepted on the details step is the OLD player's line.
+    // Left attached, the next player's match would be filed under it — or
+    // would overwrite that line's existing match. Dropped without Detach's
+    // snapshot restore: the event, date, format and court it filled are
+    // match facts this reset keeps, and the opponent it filled is cleared
+    // below anyway.
+    attachedLineRef.current = null;
+    detachSnapshot.current = null;
+    setAttachedLine(null);
+    setFormData((prev) => {
+      const next = { ...prev };
+      for (const field of START_OVER_FIELDS) {
+        // Arrays are copied so the default's own arrays are never shared.
+        const value = DEFAULT_FORM_DATA[field];
+        (next as Record<string, unknown>)[field] = Array.isArray(value)
+          ? [...value]
+          : value;
+      }
+      return next;
+    });
+    setStep(firstStep);
+  }, [applyMatchSubject, resetIdentityAnswer, firstStep]);
 
   // Close keeps localStorage intact so an accidental ✕ doesn't destroy in-flight
   // typing. Storage is cleared only after a successful create (see handleCreateMatch)
@@ -3117,6 +3230,7 @@ export function useUploadMatchWizard({
     handleTrimContinue,
     handleBack,
     firstStep,
+    startOver,
 
     // The schedule offer
     attachedLine,

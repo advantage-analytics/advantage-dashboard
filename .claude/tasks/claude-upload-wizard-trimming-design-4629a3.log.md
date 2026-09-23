@@ -53,3 +53,12 @@ is the runner's. Newest entries at the bottom.
 **model:** ran on opus at the author's explicit request (task is routed fable; Fable usage limit reached).
 **stash:** f66eb0deaf060c90e8f107b162fbffd08c6dc85f — to retry: `git stash apply f66eb0de`, reset T5's status, re-run the gate.
 **implementer notes:** pipeline-guardrails-reviewer returned PASS (report at docs/investigations/2026-09-23-start-over-guardrails-review.md, in the stash). Beyond `files:`: `useWizardKeys.ts` ignores Esc/Enter while an open dialog is on the page (also fixes the existing "Remove entered set scores?" dialog); `handleFileContinue` restores a whole-recording trim window for a kept video after a start-over; `startOver` also drops a lineup slot attached on the details step. SwingVision imports keep plain Back with no dialog — an author decision is pending on an import version. Cancel label is "Keep <first name>" even in the "Not you?" case.
+
+## T5 · "Start over with a different player?" dialog and the hook's start-over reset — done
+
+**gate:** mechanical GATE PASS (retry of the blocked run from stash f66eb0de, applied by the author) · completion VERDICT: pass
+**changed:** `useUploadMatchWizard.ts` — new `startOver()`: back to the first step, subject cleared (null only), identity answer, error and top-player staleness baseline reset, exactly the 23 `START_OVER_FIELDS` back to defaults (camera answers to `undefined`), the video file, provider and match facts kept, and an attached lineup slot dropped; `handleFileContinue` restores a whole-recording trim window for a kept file. New `StartOverDialog.tsx` (ConfirmDialog, tone danger, approved step-3/step-4 copy, "Keep <first name>" / "Start over"); `UploadMatchFlow.tsx` opens it from the subject bar on the trim and details steps of processing uploads, step 2 keeps plain Back. `useWizardKeys.ts` ignores Esc/Enter while an open dialog is on the page (also fixes "Remove entered set scores?"). New `tests/upload-start-over.spec.ts`, extended `tests/upload-subject-bar.spec.ts`, guardrails review (PASS) at `docs/investigations/2026-09-23-start-over-guardrails-review.md`. Ran on opus at the author's request.
+**follow-ups:**
+
+1. A browser check of the dialog — Esc, and focus returning to "Not Marcus?" after Cancel.
+2. The subject bar's "Not them?" fallback has no matching dialog wording (unreachable today).

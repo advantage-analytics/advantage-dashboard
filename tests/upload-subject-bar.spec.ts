@@ -70,3 +70,69 @@ test.describe("SubjectBar", () => {
     expect(render(null)).toBe("");
   });
 });
+
+/**
+ * T5 — "Start over with a different player?" (`StartOverDialog.tsx`), opened
+ * by the bar's button on the trim and details steps of a video upload.
+ *
+ * Radix portals the dialog, which renders nothing on the server, so the copy
+ * is checked through `startOverCopy()` — the one place the component reads
+ * its words from, body paragraphs included. Copy is author-approved; these
+ * pin it verbatim.
+ */
+const { startOverCopy } = loader.load(
+  "src/components/dashboard/matches/new-match-wizard/StartOverDialog.tsx",
+) as {
+  startOverCopy: (input: {
+    step: "trim" | "match";
+    subjectName: string;
+    firstName: string | null;
+  }) => Record<string, string>;
+};
+
+test.describe("StartOverDialog copy", () => {
+  test("the trim step: the video check is redone", () => {
+    const copy = startOverCopy({
+      step: "trim",
+      subjectName: "Marcus Reid",
+      firstName: "Marcus",
+    });
+    expect(copy.title).toBe("Start over with a different player?");
+    expect(copy.description).toBe(
+      "The video check was set up for Marcus Reid, so you'll pick the player again and redo it.",
+    );
+    expect(`Kept: ${copy.kept}.`).toBe("Kept: your video file.");
+    expect(`Cleared: ${copy.cleared}`).toBe(
+      "Cleared: the trim window and both camera answers.",
+    );
+    expect(copy.confirmLabel).toBe("Start over");
+    expect(copy.cancelLabel).toBe("Keep Marcus");
+  });
+
+  test("the details step: the score and players go too", () => {
+    const copy = startOverCopy({
+      step: "match",
+      subjectName: "Marcus Reid",
+      firstName: "Marcus",
+    });
+    expect(copy.title).toBe("Start over with a different player?");
+    expect(copy.description).toBe(
+      "The video check and this score were set up for Marcus Reid, so you'll go through each step again from step 1.",
+    );
+    expect(`Kept: ${copy.kept}.`).toBe("Kept: your video file.");
+    expect(`Cleared: ${copy.cleared}`).toBe(
+      "Cleared: the trim window, both camera answers, this score and the players.",
+    );
+    expect(copy.confirmLabel).toBe("Start over");
+    expect(copy.cancelLabel).toBe("Keep Marcus");
+  });
+
+  test("the viewer's own profile still keeps by first name", () => {
+    const copy = startOverCopy({
+      step: "trim",
+      subjectName: "Casey Lin",
+      firstName: "Casey",
+    });
+    expect(copy.cancelLabel).toBe("Keep Casey");
+  });
+});
