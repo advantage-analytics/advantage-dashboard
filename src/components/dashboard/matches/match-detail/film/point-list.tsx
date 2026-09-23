@@ -428,26 +428,32 @@ export const PointList = memo(function PointList({
     heldRef.current = held;
   }, [activePointId, displayedPointId, held]);
 
-  // A click on a row holds its point — or re-follows, when the row is the one
-  // already playing: that click is the way back without the pill, and the
-  // seek still happens as a restart of the point. The seek itself is
-  // untouched: the hold lands first, then `onSelect` as it always did.
+  // A click holds its point — or re-follows, when it is the one already
+  // playing: that click is the way back without the pill, and the seek still
+  // happens as a restart of the point. Shared by a row click and a shot click
+  // (which holds the shot's own point), by the same rule.
+  const holdOrFollow = useCallback(
+    (pointId: string) => {
+      if (pointId === activePointRef.current) onFollow();
+      else onHoldPoint(pointId);
+    },
+    [onFollow, onHoldPoint],
+  );
+  // The seek itself is untouched: the hold lands first, then `onSelect` as it
+  // always did.
   const selectPoint = useCallback(
     (point: MatchPoint) => {
-      if (point.id === activePointRef.current) onFollow();
-      else onHoldPoint(point.id);
+      holdOrFollow(point.id);
       onSelect(point);
     },
-    [onFollow, onHoldPoint, onSelect],
+    [holdOrFollow, onSelect],
   );
-  // A shot click holds the shot's own point, by the same rule.
   const selectShot = useCallback(
     (stop: ShotStop) => {
-      if (stop.point.id === activePointRef.current) onFollow();
-      else onHoldPoint(stop.point.id);
+      holdOrFollow(stop.point.id);
       onSelectShot?.(stop);
     },
-    [onFollow, onHoldPoint, onSelectShot],
+    [holdOrFollow, onSelectShot],
   );
 
   // Two ways to follow (T26). A re-follow — any held → follow transition: the
