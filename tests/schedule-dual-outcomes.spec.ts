@@ -269,7 +269,7 @@ test("the line table: columns, groups, doubles, footer and pills", async ({
     .getByRole("row")
     .filter({ has: page.getByRole("columnheader") });
   await expect(page.getByRole("columnheader")).toHaveText([
-    "Line",
+    "#",
     "Player",
     "Opponent",
     "Result",
@@ -277,7 +277,7 @@ test("the line table: columns, groups, doubles, footer and pills", async ({
     "Analysis",
   ]);
   await expect(headerRow).toHaveClass(
-    /grid-cols-\[28px_minmax\(170px,250px\)_minmax\(140px,220px\)_52px_120px_minmax\(96px,1fr\)\]/,
+    /grid-cols-\[28px_minmax\(170px,1fr\)_minmax\(140px,1fr\)_52px_120px_minmax\(96px,1fr\)\]/,
   );
 
   await expect(lineRows(page).locator("span.mono")).toHaveText([

@@ -70,10 +70,12 @@ import type {
 /**
  * Date · Round · Opponent · Result · Score · Analysis
  * (`TournamentDrawer.dc.html`). No Player column: the entry's group head
- * names who played every row under it.
+ * names who played every row under it. Opponent and Analysis share the
+ * spare width, as the Matches grid's text columns do, so the table spans the
+ * page.
  */
 const GRID =
-  "grid-cols-[56px_40px_minmax(150px,240px)_52px_140px_minmax(96px,1fr)]";
+  "grid-cols-[56px_40px_minmax(150px,1fr)_52px_140px_minmax(96px,1fr)]";
 const COLUMNS = [
   "Date",
   "Round",

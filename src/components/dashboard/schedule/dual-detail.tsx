@@ -86,14 +86,15 @@ export interface DualViewer {
 }
 
 /**
- * Line · Player · Opponent · Result · Score · Analysis (`Main.dc.html`). The
- * names take bounded tracks so the Result glyph and the score start on one x
- * on every row; Analysis takes what is left.
+ * # · Player · Opponent · Result · Score · Analysis (`Main.dc.html`). The
+ * Matches grid's rule: the three text columns share the spare width in equal
+ * `1fr` shares above their minimums, and Result and Score keep fixed tracks,
+ * so the table spans the page at any width instead of bunching left.
  */
 const GRID =
-  "grid-cols-[28px_minmax(170px,250px)_minmax(140px,220px)_52px_120px_minmax(96px,1fr)]";
+  "grid-cols-[28px_minmax(170px,1fr)_minmax(140px,1fr)_52px_120px_minmax(96px,1fr)]";
 const COLUMNS = [
-  "Line",
+  "#",
   "Player",
   "Opponent",
   "Result",
