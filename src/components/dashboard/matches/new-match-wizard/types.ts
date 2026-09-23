@@ -259,9 +259,9 @@ export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
     },
     // Only a processing provider reaches this step, so there is no import copy.
     trim: {
-      title: "Trim to the first serve.",
+      title: "Keep every point.",
       description:
-        "Start at the first point, end at the last. The window has to match the score you enter next.",
+        "Cut the warm-up and the handshake, nothing in between. The window has to match the score you enter next.",
     },
     // The import copy; the video copy is the processing override below.
     match: {
@@ -283,7 +283,7 @@ export const STEP_CONFIG_PROCESSING: Partial<
   file: {
     title: "The file.",
     description:
-      "One full match from one camera. Leave the warm-up in — you'll trim to the first serve next.",
+      "One full match from one camera. Leave the warm-up in — you'll trim it off next.",
   },
   match: {
     title: "Score and context.",

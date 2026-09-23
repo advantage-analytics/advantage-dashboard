@@ -63,7 +63,15 @@
  * both answers are given (`docs/ui-revamp-guardrails.md` §3.1).
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   ArrowLeftToLine,
@@ -181,6 +189,7 @@ function CutField({
   onJump,
   onSet,
   setDisabled,
+  rule,
 }: {
   side: Handle;
   label: string;
@@ -188,8 +197,11 @@ function CutField({
   onJump: () => void;
   onSet: () => void;
   setDisabled: boolean;
+  /** Where this cut belongs, printed under the field it applies to. */
+  rule: string;
 }) {
   const isStart = side === "start";
+  const ruleId = useId();
   const Glyph = isStart ? ArrowLeftToLine : ArrowRightToLine;
 
   const readout = (
@@ -221,6 +233,7 @@ function CutField({
       onClick={onSet}
       disabled={setDisabled}
       aria-label={`Set the trim ${isStart ? "start" : "end"} to the current position`}
+      aria-describedby={ruleId}
       className={`inline-flex w-8 cursor-pointer items-center justify-center text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-50 ${
         isStart
           ? "rounded-r-[5px] border-l border-[var(--border-field)]"
@@ -232,9 +245,19 @@ function CutField({
   );
 
   return (
-    <div className="inline-flex items-stretch rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)]">
-      {isStart ? readout : action}
-      {isStart ? action : readout}
+    <div
+      className={`flex flex-col gap-1.5 ${isStart ? "items-start" : "items-end"}`}
+    >
+      <div className="inline-flex items-stretch rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)]">
+        {isStart ? readout : action}
+        {isStart ? action : readout}
+      </div>
+      <span
+        id={ruleId}
+        className="px-0.5 text-[11px] leading-[1.4] text-[var(--ink-600)]"
+      >
+        {rule}
+      </span>
     </div>
   );
 }
@@ -1154,9 +1177,9 @@ function TrimStepContentImpl({
       </div>
 
       {/* Trim */}
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2">
         <div className="flex items-baseline gap-2.5">
-          <span className="eyebrow whitespace-nowrap">Trim to the match</span>
+          <span className="eyebrow whitespace-nowrap">Window</span>
           <span className="flex-1" />
           {/* The window against the file. */}
           <span className="mono tabular text-[11px] text-[var(--ink-500)]">
@@ -1335,7 +1358,7 @@ function TrimStepContentImpl({
             that moves it in one field. The set half is disabled past the other
             cut: a start on or after the end is not a window, and the step
             refuses rather than clamping to a frame nobody chose. */}
-        <div className="flex items-center justify-between gap-3 px-0.5 pt-0.5">
+        <div className="flex items-start justify-between gap-3 px-0.5 pt-0.5">
           <CutField
             side="start"
             label="Start"
@@ -1343,6 +1366,7 @@ function TrimStepContentImpl({
             onJump={() => seekLatest(start)}
             onSet={() => setHandleToPlayhead("start")}
             setDisabled={!canSetStart}
+            rule="Just before the first point"
           />
           <CutField
             side="end"
@@ -1351,6 +1375,7 @@ function TrimStepContentImpl({
             onJump={() => seekLatest(end)}
             onSet={() => setHandleToPlayhead("end")}
             setDisabled={!canSetEnd}
+            rule="Just after the last point"
           />
         </div>
 
@@ -1358,7 +1383,7 @@ function TrimStepContentImpl({
             one keyboard chip; `sm` is its inline-hint size, and a combo is
             adjacent chips, never one chip holding both keys. Lowercase for
             word-named keys, as the roster's hint and Help write them. */}
-        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] leading-[1.5] text-[var(--ink-600)]">
+        <p className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] leading-[1.5] text-[var(--ink-600)]">
           <Kbd size="sm">space</Kbd>
           <span>play</span>
           <span aria-hidden="true" className="text-[var(--ink-300)]">
@@ -1391,7 +1416,7 @@ function TrimStepContentImpl({
             />
             <span>
               The window is under {formatClipLength(minTrimSeconds)} — widen it
-              to cover the match.
+              to cover every point.
             </span>
           </div>
         ) : null}
