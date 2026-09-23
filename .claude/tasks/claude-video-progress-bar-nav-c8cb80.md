@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Seek-preview geometry, lane-lift gradient and seek coalescer as pure helpers
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-seek-preview.ts (new); tests/film-seek-preview.spec.ts (new, node-only like tests/film-motion.spec.ts)
 - **done when:**
