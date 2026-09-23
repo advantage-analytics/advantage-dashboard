@@ -1612,23 +1612,80 @@ test("T18: a cut that drops the held point re-follows without a click", async ({
 /* -------------------------------------------------------------------------
  * The drawer's "Now playing" pill (T19)
  *
- * Shown only while held on a point other than the playing one; its words are
- * `followAffordance`'s, its number the counter's (`position.index`), and its
- * chevron points from the scroller's centre toward the lit row — none when
- * that row is fully in view or has no row in the cut. Pressing it follows:
- * the T18 effect scrolls the list and the well unfolds under the playing row.
- * A click on `a` at film zero holds `a` (nothing is playing yet); the seek to
- * 0.4 then plays `b`, which is what brings the pill in.
+ * Shown only while held on a point other than the playing one AND the lit
+ * row is not wholly inside the scroller's box; its words are
+ * `followAffordance`'s, its number the counter's (`position.index`). It pins
+ * to the edge the lit row is beyond (T21) with a chevron toward it — bottom
+ * with none when the playing point has no row in the cut. Pressing it
+ * follows: the T18 effect scrolls the list and the well unfolds under the
+ * playing row. A click on `a` at film zero holds `a` (nothing is playing
+ * yet); the list is then parked at its end, so `b` sits above the box, and
+ * the seek to 0.4 plays `b`, which is what brings the pill in.
  * ---------------------------------------------------------------------- */
 
 const PILL = `${DRAWER} button[aria-label^="Now playing:"]`;
 
-/** Held on `a`, the film playing `b`: the pill's first state. */
+/**
+ * Wait for the drawer's slide-in to finish: its box moves for 420ms after
+ * `openRoomWithDrawer` returns, and a read mid-travel is of the wrong place.
+ */
+async function drawerSettled(page: Page) {
+  const scroller = page.locator(DRAWER_SCROLLER);
+  let box = await scroller.boundingBox();
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(120);
+    const next = await scroller.boundingBox();
+    if (box && next && box.x === next.x && box.height === next.height) break;
+    box = next;
+  }
+}
+
+/**
+ * Park the drawer's scroller at `top` (`"end"` = `scrollHeight`, clamped by
+ * the browser) and resolve once its `scroll` event has fired and a frame has
+ * passed, so the pill has re-read its place. A programmatic scroll is not
+ * intent (T18): it changes where the list is, never the held state. Used
+ * instead of a wheel, whose travel is machine-dependent.
+ */
+async function parkDrawer(page: Page, top: number | "end") {
+  await page.evaluate(
+    ([sel, to]) =>
+      new Promise<void>((resolve) => {
+        const list = document.querySelector<HTMLElement>(sel as string);
+        if (!list) return resolve();
+        const frame = () =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        const before = list.scrollTop;
+        list.addEventListener("scroll", frame, { once: true });
+        list.scrollTop = to === "end" ? list.scrollHeight : (to as number);
+        if (list.scrollTop === before) {
+          list.removeEventListener("scroll", frame);
+          frame();
+        }
+      }),
+    [DRAWER_SCROLLER, top] as const,
+  );
+}
+
+/** The pill's edge, read from its classes: exactly one of the two. */
+async function pillEdge(page: Page): Promise<string> {
+  return page.locator(PILL).evaluate((el) => {
+    const top = el.classList.contains("top-3");
+    const bottom = el.classList.contains("bottom-3");
+    return top && !bottom ? "top" : bottom && !top ? "bottom" : "both/none";
+  });
+}
+
+/** Held on `a`, the film playing `b` above the box: the pill's first state. */
 async function holdAThenPlayB(page: Page) {
   await page.click(DRAWER_ROW("a"));
   await expect.poll(() => playingRow(page)).toBe("a");
   await expect(page.locator(WELL_UNDER("a"))).toHaveCount(1);
   await expect(page.locator(PILL)).toHaveCount(0);
+  // Held, so nothing scrolls the list back: `b` will light above the box.
+  // (With `b` in view the pill would be unmounted — T21.)
+  await drawerSettled(page);
+  await parkDrawer(page, "end");
   await seekTo(page, ROOM, 0.4);
   await expect.poll(() => playingRow(page)).toBe("b");
   await expect(page.locator(PILL)).toHaveCount(1);
@@ -1701,14 +1758,15 @@ test("T19: pressing the pill follows — it leaves, the well is under the playin
   expect(await drawerScrollTop(page)).toBeLessThan(wheeled);
 });
 
-test("T19: no chevron while the lit row is already fully in view", async ({
+test("T19: no pill while the lit row is already fully in view", async ({
   page,
 }) => {
   await openRoomWithDrawer(page, "pill-in-view", { pad: "12" });
   await holdAThenPlayB(page);
+  // Back to the top: `b` is wholly inside the box, nothing to return to.
+  await parkDrawer(page, 0);
   await expect.poll(() => litRowInView(page)).toBe(true);
-  await expect(page.locator(PILL)).toHaveText("Now playing · Point 2");
-  await expect(page.locator(`${PILL} svg`)).toHaveCount(0);
+  await expect(page.locator(PILL)).toHaveCount(0);
 });
 
 test("T19: a playing point the cut excludes reads 'not in this cut', with no chevron", async ({
@@ -1775,6 +1833,94 @@ test("T19: reduced motion — the pill's follow scrolls instantly and it fades i
   );
   expect(fade).not.toBeNull();
   expect(fade![1]).not.toMatch(/transform:/);
+});
+
+/* -------------------------------------------------------------------------
+ * T21 — the pill pins to the edge the lit row is beyond, with hysteresis.
+ *
+ * The edge changes only once the lit row is WHOLLY beyond one of the
+ * scroller's edges; while the row straddles an edge the pill keeps the edge
+ * it had. The scroller is parked with `scrollTop`, never a wheel.
+ * ---------------------------------------------------------------------- */
+
+test("T21: the lit row above the box pins the pill to the top, chevron up, dropping in", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "pill-top", { pad: "12" });
+  await holdAThenPlayB(page);
+  await parkDrawer(page, "end");
+  await expect.poll(() => litRowInView(page)).toBe(false);
+
+  const pill = page.locator(PILL);
+  await expect.poll(() => pillEdge(page)).toBe("top");
+  await expect(pill).toHaveClass(/(^|\s)left-1\/2(\s|$)/);
+  await expect(pill).toHaveClass(/(^|\s)-translate-x-1\/2(\s|$)/);
+  await expect(pill.locator("svg.lucide-chevron-up")).toHaveCount(1);
+  await expect(pill.locator("svg.lucide-chevron-down")).toHaveCount(0);
+  // The rise comes from the edge side: pinned top it starts 4px ABOVE.
+  expect(
+    await pill.evaluate((el) =>
+      getComputedStyle(el).getPropertyValue("--film-pill-rise").trim(),
+    ),
+  ).toBe("-4px");
+});
+
+test("T21: hysteresis — a lit row straddling the edge keeps the pill's edge; wholly above flips it", async ({
+  page,
+}) => {
+  // A short room, so the drawer's scroller ends above row `c` and the lit
+  // row can sit wholly BELOW the box with the list at its top.
+  await page.setViewportSize({ width: 1280, height: 240 });
+  await openRoomWithDrawer(page, "pill-hysteresis", { pad: "12" });
+  await page.click(DRAWER_ROW("a"));
+  await expect.poll(() => playingRow(page)).toBe("a");
+  await drawerSettled(page);
+  await parkDrawer(page, 0);
+  await seekTo(page, ROOM, 0.5);
+  await expect.poll(() => playingRow(page)).toBe("c");
+
+  /** The lit row's box against the scroller's, as the pill reads it. */
+  const litPlace = () =>
+    page.evaluate((sel) => {
+      const list = document.querySelector<HTMLElement>(sel);
+      const lit = list?.querySelector<HTMLElement>(
+        '[data-point-id][data-playing="true"]',
+      );
+      if (!list || !lit) return null;
+      const box = list.getBoundingClientRect();
+      const row = lit.getBoundingClientRect();
+      if (row.top >= box.bottom) return "below";
+      if (row.bottom <= box.top) return "above";
+      if (row.top >= box.top && row.bottom <= box.bottom) return "inside";
+      return row.bottom > box.bottom ? "straddles-bottom" : "straddles-top";
+    }, DRAWER_SCROLLER);
+
+  const pill = page.locator(PILL);
+  await expect.poll(litPlace).toBe("below");
+  await expect(pill).toHaveCount(1);
+  await expect.poll(() => pillEdge(page)).toBe("bottom");
+  await expect(pill.locator("svg.lucide-chevron-down")).toHaveCount(1);
+
+  // Nudge the list so the row's top slides just inside the box's bottom edge.
+  const nudge = await page.evaluate((sel) => {
+    const list = document.querySelector<HTMLElement>(sel)!;
+    const lit = list.querySelector<HTMLElement>('[data-playing="true"]')!;
+    const box = list.getBoundingClientRect();
+    const row = lit.getBoundingClientRect();
+    return Math.ceil(row.top - box.bottom + row.height / 2);
+  }, DRAWER_SCROLLER);
+  await parkDrawer(page, nudge);
+  await expect.poll(litPlace).toBe("straddles-bottom");
+  await expect(pill).toHaveCount(1);
+  expect(await pillEdge(page)).toBe("bottom");
+  await expect(pill.locator("svg.lucide-chevron-down")).toHaveCount(1);
+
+  // Straight to the end: the row is wholly above the box, and only now flips.
+  await parkDrawer(page, "end");
+  await expect.poll(litPlace).toBe("above");
+  await expect.poll(() => pillEdge(page)).toBe("top");
+  await expect(pill.locator("svg.lucide-chevron-up")).toHaveCount(1);
+  await expect(pill.locator("svg.lucide-chevron-down")).toHaveCount(0);
 });
 
 /* -------------------------------------------------------------------------

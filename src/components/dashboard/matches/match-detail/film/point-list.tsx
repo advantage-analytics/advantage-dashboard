@@ -5,6 +5,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -741,14 +742,64 @@ export const PointList = memo(function PointList({
 
 /* ── The "Now playing" pill ──────────────────────────────────────────────── */
 
-type PillDirection = "up" | "down" | null;
+type PillEdge = "top" | "bottom";
+
+/**
+ * Where the lit row sits against the scroller's box, as the pill reads it.
+ * `edge` is the edge the pill is pinned to; `remembered` says whether that
+ * edge is a live memory (the pill has been placed since the row was last
+ * fully in view) or only what the last pill used, kept so an exit fade does
+ * not jump across the list. `inView` is `null` until read for this episode.
+ */
+type PillPlace = {
+  edge: PillEdge;
+  remembered: boolean;
+  inView: boolean | null;
+};
+
+const PLACE_UNREAD: PillPlace = {
+  edge: "bottom",
+  remembered: false,
+  inView: null,
+};
+
+/**
+ * The next place from the lit row's box against the scroller's (T21). The
+ * edge changes only once the row is wholly beyond one — `row.bottom <=
+ * box.top` pins top, `row.top >= box.bottom` pins bottom — and while the row
+ * straddles an edge the remembered edge holds, so the pill cannot flip-flop
+ * as a row slides past. With no memory (the row was fully in view, or this is
+ * the episode's first read), a straddling row takes the edge it crosses.
+ * Fully in view clears the memory: the pill is unmounted then, and the row
+ * leaving the box re-seeds it from the side it leaves by.
+ */
+function nextPillPlace(prev: PillPlace, row: DOMRect, box: DOMRect): PillPlace {
+  let next: PillPlace;
+  if (row.bottom <= box.top) {
+    next = { edge: "top", remembered: true, inView: false };
+  } else if (row.top >= box.bottom) {
+    next = { edge: "bottom", remembered: true, inView: false };
+  } else if (row.top >= box.top && row.bottom <= box.bottom) {
+    next = { edge: prev.edge, remembered: false, inView: true };
+  } else {
+    next = {
+      edge: prev.remembered ? prev.edge : row.top < box.top ? "top" : "bottom",
+      remembered: true,
+      inView: false,
+    };
+  }
+  return next.edge === prev.edge &&
+    next.remembered === prev.remembered &&
+    next.inView === prev.inView
+    ? prev
+    : next;
+}
 
 /**
  * The drawer's return affordance while held (T17 design, frame B1): "Now
- * playing · Point 14", and a chevron toward the lit row when it is out of
- * view. Pressing it follows the film again — the keep-in-view effect does
- * the smooth scroll and the well unfolds under the playing row; this does
- * nothing else.
+ * playing · Point 14", and a chevron toward the lit row. Pressing it follows
+ * the film again — the keep-in-view effect does the smooth scroll and the
+ * well unfolds under the playing row; this does nothing else.
  *
  * The "Points" trigger's recipe (film-fullscreen.tsx) plus the drawer's own
  * 10% inset hairline, so it reads over a lit row as well as the sheet. It is
@@ -756,10 +807,17 @@ type PillDirection = "up" | "down" | null;
  * no tooltip. `data-film-chrome`, so the chrome collapse and the room's exit
  * fade take it with everything else.
  *
+ * Pinned 12px (`top-3` / `bottom-3`) inside the edge the lit row is beyond,
+ * with `nextPillPlace`'s hysteresis; the chevron points at that edge. A
+ * playing point with no row in the cut pins bottom with no chevron. While
+ * the lit row is fully inside the scroller's box there is nothing to return
+ * to, so the pill is unmounted.
+ *
  * Unmounted when hidden — never `opacity-0` in the tab order. It arrives on
- * `film-follow-pill-in` (150ms, a 4px rise; the rise drops under reduced
- * motion, the fade stays) and leaves on a 100ms opacity transition, unmounting
- * on its own `transitionend` or a 150ms timer, whichever is first.
+ * `film-follow-pill-in` (150ms, a 4px rise away from its edge — the
+ * `--film-pill-rise` sign; the rise drops under reduced motion, the fade
+ * stays) and leaves on a 100ms opacity transition, unmounting on its own
+ * `transitionend` or a 150ms timer, whichever is first.
  */
 function FollowPill({
   affordance,
@@ -772,19 +830,67 @@ function FollowPill({
   nowPlaying: { id: string; index: number | null } | null;
   onFollow: () => void;
 }) {
+  // The lit row against the scroller's box. Read in a layout effect, so a
+  // pill that should not show (the row is in view) is never painted, and
+  // re-read on the scroller's `scroll` (placement, not intent: the follow
+  // effect's own travel is harmless here) and whenever the playing point
+  // changes. This component stays mounted while the pill is not, so the
+  // edge memory outlives the button.
+  const active = affordance !== null;
+  const inCut = affordance?.inCut ?? false;
+  const [place, setPlace] = useState<PillPlace>(PLACE_UNREAD);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list || !active || !inCut) {
+      // A new episode, or no row to place against: forget the edge but keep
+      // it for the exit fade, and read afresh next time.
+      setPlace((p) =>
+        p.remembered || p.inView !== null
+          ? { edge: p.edge, remembered: false, inView: null }
+          : p,
+      );
+      return;
+    }
+    const read = () => {
+      const lit = list.querySelector<HTMLElement>(
+        '[data-point-id][data-playing="true"]',
+      );
+      // No lit row to measure (it should not happen in the cut): show the
+      // pill where it last was rather than never.
+      if (!lit) {
+        setPlace((p) => (p.inView === false ? p : { ...p, inView: false }));
+        return;
+      }
+      const box = list.getBoundingClientRect();
+      const row = lit.getBoundingClientRect();
+      setPlace((p) => nextPillPlace(p, row, box));
+    };
+    read();
+    list.addEventListener("scroll", read, { passive: true });
+    return () => list.removeEventListener("scroll", read);
+  }, [listRef, active, inCut, nowPlaying]);
+
   // What is on screen, which outlives `affordance` by the exit's 100ms.
-  const [shown, setShown] = useState<FollowAffordance | null>(affordance);
+  const [shown, setShown] = useState<FollowAffordance | null>(null);
   const [leaving, setLeaving] = useState(false);
+  // In-cut, the pill mounts only once the row is read as out of view, and a
+  // mounted one leaves only once it is read as in view — an unread place
+  // neither mounts it nor starts an exit.
+  const rowInView = inCut ? place.inView : false;
+  const wanted =
+    affordance && (shown ? rowInView !== true : rowInView === false)
+      ? affordance
+      : null;
   // Adjusted during render, not in an effect: the pill must never paint one
   // frame with the old words, or linger a frame before its exit begins.
-  if (affordance) {
+  if (wanted) {
     if (
       !shown ||
-      shown.label !== affordance.label ||
-      shown.ariaLabel !== affordance.ariaLabel ||
-      shown.inCut !== affordance.inCut
+      shown.label !== wanted.label ||
+      shown.ariaLabel !== wanted.ariaLabel ||
+      shown.inCut !== wanted.inCut
     ) {
-      setShown(affordance);
+      setShown(wanted);
     }
     if (leaving) setLeaving(false);
   } else if (shown && !leaving) {
@@ -801,48 +907,20 @@ function FollowPill({
     return () => window.clearTimeout(timer);
   }, [leaving, finishLeave]);
 
-  // The chevron points from the list's centre toward the lit row, and is
-  // hidden when that row is already fully in view — or has no row in this
-  // cut at all. Re-read on the scroller's `scroll` (direction, not intent:
-  // the follow effect's own travel is harmless here) and whenever the
-  // playing point changes.
-  const inCut = shown?.inCut ?? false;
-  const [direction, setDirection] = useState<PillDirection>(null);
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list || !inCut) {
-      setDirection(null);
-      return;
-    }
-    const read = () => {
-      const lit = list.querySelector<HTMLElement>(
-        '[data-point-id][data-playing="true"]',
-      );
-      if (!lit) {
-        setDirection(null);
-        return;
-      }
-      const box = list.getBoundingClientRect();
-      const row = lit.getBoundingClientRect();
-      if (row.top >= box.top && row.bottom <= box.bottom) {
-        setDirection(null);
-        return;
-      }
-      setDirection(row.top > box.top + box.height / 2 ? "down" : "up");
-    };
-    read();
-    list.addEventListener("scroll", read, { passive: true });
-    return () => list.removeEventListener("scroll", read);
-  }, [listRef, inCut, nowPlaying]);
-
   if (!shown) return null;
-  const Chevron =
-    direction === "down" ? ChevronDown : direction === "up" ? ChevronUp : null;
+  // Out of the cut there is no row to point at: bottom, no chevron.
+  const edge: PillEdge = shown.inCut ? place.edge : "bottom";
+  const Chevron = !shown.inCut
+    ? null
+    : edge === "top"
+      ? ChevronUp
+      : ChevronDown;
 
   return (
     <button
       type="button"
       data-film-chrome
+      data-edge={edge}
       aria-label={shown.ariaLabel}
       onClick={onFollow}
       // Leaving, it is already on its way out: not a target, not a stop.
@@ -858,7 +936,10 @@ function FollowPill({
       }}
       className={cn(
         "inline-flex h-7 items-center gap-[7px] rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium text-white transition-[opacity,transform,background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-        "absolute bottom-3 left-1/2 -translate-x-1/2 cursor-pointer whitespace-nowrap shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)] active:scale-[0.97]",
+        "absolute left-1/2 -translate-x-1/2 cursor-pointer whitespace-nowrap shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)] active:scale-[0.97]",
+        // The same 12px inset on either edge; the rise comes from the edge
+        // side, so pinned top it drops in (the keyframe reads the sign).
+        edge === "top" ? "top-3 [--film-pill-rise:-4px]" : "bottom-3",
         // The enter keyframe holds its end state (`both`), so it comes off
         // for the exit or it would pin the opacity at 1.
         leaving

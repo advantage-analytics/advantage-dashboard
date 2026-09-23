@@ -899,13 +899,19 @@
    `-translate-x-1/2`, which is the `translate` property, not `transform`, so
    this keyframe's `transform` composes with it rather than undoing it.
 
+   The rise moves away from the edge the pill is pinned to (T21): pinned
+   bottom it comes up from 4px below; pinned top the pill sets
+   `--film-pill-rise: -4px` and drops in from 4px above. The header line in
+   the shell card sets nothing and rises as before.
+
    Reduced motion keeps the fade and drops the rise ("skip transforms, keep
-   opacity"). Unlike the shot rows' `animation: none`, the pill carries state
-   — the film has moved on without you — so it must still visibly arrive. */
+   opacity") on both edges. Unlike the shot rows' `animation: none`, the
+   pill carries state — the film has moved on without you — so it must still
+   visibly arrive. */
 @keyframes film-follow-pill-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(var(--film-pill-rise, 4px));
   }
   to {
     opacity: 1;

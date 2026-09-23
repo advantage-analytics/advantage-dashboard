@@ -229,3 +229,15 @@ Reading them: `remounted: true` = a credential swap or an error recovery; `buffe
 2. Pressing the header line by keyboard unmounts the focused button, so focus drops to `body` — the same issue T19 noted for the pill; moving focus to the counter or a step button would keep a keyboard viewer placed.
 3. The header line has no 100 ms exit fade (optional per the doc — the counter simply returns).
 4. Nobody has watched any of T18–T20 in a browser: the held well, the pill, the header line, the smooth follow scroll. One eyes-on pass in the room and the shell before `/pr-check`.
+
+## T21 · Drawer pill pins to the edge the playing row is beyond, with hysteresis — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** `FollowPill` (point-list.tsx) pins `top-3` or `bottom-3` by a pure `nextPillPlace` with edge memory (flips only once the lit row is wholly past the other edge; memory cleared while the row is fully in view), unmounts while the lit row is fully in view, chevron-up/down by edge; not-in-cut stays bottom, no chevron. `film-follow-pill-in` reads `--film-pill-rise` (−4px when pinned top); reduced motion unchanged. Spec: in-view case asserts count 0, `holdAThenPlayB` setup parks the list at its end (assertions unchanged), two T21 cases (top pin; hysteresis at a 240px viewport). Design doc: strings rows, new "Where the drawer pill sits (T21)" section, open item removed. Widget states: loading/empty/error unchanged.
+
+**follow-ups:**
+
+1. Drop the debugging `data-edge` attribute on the pill (tests read classes).
+2. Hysteresis only shows when the list jumps or a row is taller than the box; smooth scrolling passes through "fully in view" and clears memory.
+3. `wheelDrawer` (T18) could reuse the new `drawerSettled` helper.

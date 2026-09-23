@@ -282,7 +282,7 @@ ready).
 
 ## T21 · Drawer pill pins to the edge the playing row is beyond, with hysteresis
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/point-list.tsx (`FollowPill`, ~L764–870: the `direction`/`inCut` effect and the `className`); src/app/globals.css (`film-follow-pill-in` / `film-follow-pill-fade`, if the rise needs a per-edge variant); docs/superpowers/specs/2026-09-22-film-follow-hold-design.md; tests/film-playback-refresh.spec.ts (the T19 block)
 - **done when:**

@@ -117,15 +117,16 @@ not move to whatever scrolled into view).
 
 ## The strings
 
-| Case                                                        | Drawer pill                                 | Card header line                             | `aria-label`                                              | Shown when                                                                                                 |
-| ----------------------------------------------------------- | ------------------------------------------- | -------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Held; playing point in the cut, below the viewport's centre | `Now playing · Point 14` + `chevron-down`   | `Now playing · Point 14 →` (`chevron-right`) | `Now playing: point 14 — follow playback`                 | `held` AND a point is playing AND `playing.id ≠ held.pointId`                                              |
-| Held; playing point in the cut, above the viewport's centre | `Now playing · Point 14` + `chevron-up`     | same                                         | same                                                      | same                                                                                                       |
-| Held; playing point outside the applied cut                 | `Now playing · not in this cut`, no chevron | `Now playing · not in this cut →`            | `Now playing: a point outside this cut — follow playback` | same — there is no row to point at, but re-follow still puts the list back on the film's next in-cut point |
-| Held; held point filtered out of the cut                    | — (state resets to `follow`)                | —                                            | —                                                         | never                                                                                                      |
-| Held; no point playing (R7 dead time)                       | —                                           | —                                            | —                                                         | never — "Between points … gets no words" (H2 R7); the pill returns when the next point begins              |
-| Held; playing point is the held point                       | —                                           | —                                            | —                                                         | never — the surface is already showing the film                                                            |
-| `follow`                                                    | —                                           | —                                            | —                                                         | never                                                                                                      |
+| Case                                                      | Drawer pill                                                | Card header line                             | `aria-label`                                              | Shown when                                                                                                                                                          |
+| --------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Held; playing point in the cut, lit row pinned **bottom** | `Now playing · Point 14` + `chevron-down`                  | `Now playing · Point 14 →` (`chevron-right`) | `Now playing: point 14 — follow playback`                 | `held` AND a point is playing AND `playing.id ≠ held.pointId` AND (drawer only) the lit row is not wholly inside the scroller's box                                 |
+| Held; playing point in the cut, lit row pinned **top**    | `Now playing · Point 14` + `chevron-up`                    | same                                         | same                                                      | same                                                                                                                                                                |
+| Held; playing point in the cut, lit row fully in view     | — (the drawer pill is unmounted)                           | same as the rows above                       | — (drawer) / same (card)                                  | drawer: never — the lit row is on screen, there is nothing to point at; the card's line is unaffected                                                               |
+| Held; playing point outside the applied cut               | `Now playing · not in this cut`, no chevron, pinned bottom | `Now playing · not in this cut →`            | `Now playing: a point outside this cut — follow playback` | `held` AND a point is playing AND `playing.id ≠ held.pointId` — there is no row to point at, but re-follow still puts the list back on the film's next in-cut point |
+| Held; held point filtered out of the cut                  | — (state resets to `follow`)                               | —                                            | —                                                         | never                                                                                                                                                               |
+| Held; no point playing (R7 dead time)                     | —                                                          | —                                            | —                                                         | never — "Between points … gets no words" (H2 R7); the pill returns when the next point begins                                                                       |
+| Held; playing point is the held point                     | —                                                          | —                                            | —                                                         | never — the surface is already showing the film                                                                                                                     |
+| `follow`                                                  | —                                                          | —                                            | —                                                         | never                                                                                                                                                               |
 
 Where each part comes from:
 
@@ -134,10 +135,36 @@ Where each part comes from:
   agree. A playing point with no index (`position === null`) is the "not in this cut" row.
 - The visible string is `Now playing · Point N` with a middot; the number is Inter, not mono —
   it is a sentence, not a machine value. The pill's chevron is Lucide at 12px (chrome.md's chevron
-  size), `chevron-down`/`chevron-up` chosen by the lit row's offset against the scroller's
-  viewport centre. The line's arrow is `chevron-right` at 12px — its "→" in the plan is that glyph.
+  size): `chevron-up` when the pill is pinned top, `chevron-down` when pinned bottom — it always
+  points at the edge the pill sits on, which is the side the lit row is beyond (next section).
+  The line's arrow is `chevron-right` at 12px — its "→" in the plan is that glyph.
 - The `aria-label` uses a colon and an em dash so the spoken form is one sentence; "follow
   playback" says what pressing does.
+
+### Where the drawer pill sits (T21)
+
+- **Two edges, one inset.** The pill pins inside the edge of the scroller the lit row is beyond:
+  `top-3` or `bottom-3` — the same 12px inset on both — with `left-1/2 -translate-x-1/2`
+  unchanged. Exactly one of the two classes is ever on it.
+- **Hysteresis.** The edge changes only once the lit row is _wholly_ beyond one: it becomes top
+  once `row.bottom <= box.top` and bottom once `row.top >= box.bottom` (the lit
+  `[data-point-id][data-playing="true"]` row's `getBoundingClientRect()` against the scroller's).
+  While the row straddles an edge the pill keeps the edge it had, so a row sliding past the box
+  cannot flip it back and forth.
+- **Hidden while the lit row is fully in view.** With `row.top >= box.top && row.bottom <=
+box.bottom` the pill is **unmounted** (not merely chevron-less) — the playing row is on screen,
+  and the lit wash already names it. It leaves on the usual 100ms fade and returns on the enter
+  rise once the row leaves the box again. The placement is read in a layout effect, so a pill whose
+  row is already in view is never painted.
+- **Memory across the hidden spell.** The memory lives in `FollowPill`, which stays mounted while
+  its button is not, but it is **cleared** whenever the lit row is fully in view and whenever the
+  affordance goes away (follow, dead time, held ≡ playing). With no memory, a row that straddles
+  an edge takes the edge it crosses (`row.top < box.top` → top, else bottom); a row wholly beyond
+  one sets it outright. So a pill returning after the row was in view pins to the side the row
+  left by, never to a stale edge from before; hysteresis applies only to a pill that is on screen.
+  The last edge is kept (not reset) for the exit fade, so a leaving pill does not jump edges.
+- **Not in this cut.** No row to measure: always bottom, no chevron, always mounted while the
+  affordance says so.
 
 ## Interaction — with the motion values
 
@@ -146,16 +173,16 @@ smooth scroll to the playing row and its well unfolding together, which is the s
 legible. Everything else is feedback at the fast end of the scale. Nothing new animates on hold:
 holding is the _absence_ of a scroll.
 
-| Event                          | Drawer                                                                                                        | Card                                                               | Motion                                                                                                                                                   |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Follow-mode keep-in-view       | The effect (l.312–328) computes the target `scrollTop` as today and applies it via `scrollTo` on the scroller | n/a (the card does not scroll to its point)                        | `scrollTo({ top, behavior: "smooth" })` on the list's own `scrollTop` — Chromium eases ~300ms; no custom scroll-jacking; no `scrollIntoView` (l.306–310) |
-| Pill / header line appears     | Mounts as a child of the positioning wrapper                                                                  | Replaces the counter span between the step buttons                 | Enter: 150ms (`--duration-fast`) opacity 0→1 + 4px rise on `--ease-primary` (the rise is `film-shot-row-in`'s, globals.css l.827)                        |
-| Pill / header line disappears  | Unmounts after the exit                                                                                       | The counter returns                                                | Exit: 100ms opacity only                                                                                                                                 |
-| Re-follow                      | Smooth scroll to the lit row; the well mounts under it                                                        | Rows re-key to the playing point                                   | Scroll as above; well fold `film-shot-well-open` (250ms) and row stagger `film-shot-row-in` (200ms, 25ms steps) **unchanged**                            |
-| Hold (click or hand scroll)    | The effect stops firing; the well stays                                                                       | Rows stay                                                          | None. The lit row's wash moves to the playing row with its shipped 200ms colour transition                                                               |
-| Pill hover / press             | `rgba(13,13,13,0.72)` → `0.9`                                                                                 | `hover:bg-[var(--surface-subtle)]` (the step buttons')             | 200ms `--ease-primary` (the trigger's own transition); press `scale 0.97`                                                                                |
-| R2 chrome collapse / room exit | The pill fades with the transport (it is `data-film-chrome`)                                                  | n/a                                                                | Collapse 200ms opacity; exit fade 120ms (film-fullscreen.tsx l.926–934)                                                                                  |
-| `prefers-reduced-motion`       | Instant scroll; pill fades, no rise                                                                           | Line fades, no rise; rows swap with `animation: none` (as shipped) | `behavior: "auto"`; opacity only (foundations.md l.349: "skip transforms, keep opacity"); the well's `film-shot-well-fade` path is already there         |
+| Event                          | Drawer                                                                                                        | Card                                                               | Motion                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Follow-mode keep-in-view       | The effect (l.312–328) computes the target `scrollTop` as today and applies it via `scrollTo` on the scroller | n/a (the card does not scroll to its point)                        | `scrollTo({ top, behavior: "smooth" })` on the list's own `scrollTop` — Chromium eases ~300ms; no custom scroll-jacking; no `scrollIntoView` (l.306–310)                                                                                                                                                                                       |
+| Pill / header line appears     | Mounts as a child of the positioning wrapper, pinned top or bottom                                            | Replaces the counter span between the step buttons                 | Enter: 150ms (`--duration-fast`) opacity 0→1 + a 4px travel on `--ease-primary` (`film-shot-row-in`'s distance) _away from the edge it lands on_: pinned bottom it rises from 4px below, pinned top it drops from 4px above (`--film-pill-rise: -4px`, read by the one `film-follow-pill-in` keyframe). The card line rises as the bottom pill |
+| Pill / header line disappears  | Unmounts after the exit                                                                                       | The counter returns                                                | Exit: 100ms opacity only                                                                                                                                                                                                                                                                                                                       |
+| Re-follow                      | Smooth scroll to the lit row; the well mounts under it                                                        | Rows re-key to the playing point                                   | Scroll as above; well fold `film-shot-well-open` (250ms) and row stagger `film-shot-row-in` (200ms, 25ms steps) **unchanged**                                                                                                                                                                                                                  |
+| Hold (click or hand scroll)    | The effect stops firing; the well stays                                                                       | Rows stay                                                          | None. The lit row's wash moves to the playing row with its shipped 200ms colour transition                                                                                                                                                                                                                                                     |
+| Pill hover / press             | `rgba(13,13,13,0.72)` → `0.9`                                                                                 | `hover:bg-[var(--surface-subtle)]` (the step buttons')             | 200ms `--ease-primary` (the trigger's own transition); press `scale 0.97`                                                                                                                                                                                                                                                                      |
+| R2 chrome collapse / room exit | The pill fades with the transport (it is `data-film-chrome`)                                                  | n/a                                                                | Collapse 200ms opacity; exit fade 120ms (film-fullscreen.tsx l.926–934)                                                                                                                                                                                                                                                                        |
+| `prefers-reduced-motion`       | Instant scroll; pill fades, no rise or drop on either edge                                                    | Line fades, no rise; rows swap with `animation: none` (as shipped) | `behavior: "auto"`; opacity only (foundations.md l.349: "skip transforms, keep opacity"); the well's `film-shot-well-fade` path is already there                                                                                                                                                                                               |
 
 No value outside this table is introduced.
 
@@ -191,8 +218,9 @@ text-[11px] font-medium text-white transition-[opacity,transform,background-colo
 duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)]
 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`, plus the drawer's own
   `shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]` so it reads over a lit row as well as the
-  sheet. `data-film-chrome`. Positioned `absolute bottom-3 left-1/2 -translate-x-1/2` inside the
-  wrapper. The chevron `size-3` (12px) at `strokeWidth 1.6`.
+  sheet. `data-film-chrome`. Positioned `absolute left-1/2 -translate-x-1/2` inside the wrapper,
+  plus `top-3` xor `bottom-3` (12px either way — "Where the drawer pill sits"). The chevron `size-3`
+  (12px) at `strokeWidth 1.6`.
 - **Header line** — `inline-flex h-7 items-center gap-1 rounded-[var(--radius-element)] px-1.5
 text-[11px] font-medium whitespace-nowrap transition-colors duration-200
 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)]
@@ -234,10 +262,10 @@ pointFocus.pointId : activePointId`. Two stable callbacks: `holdPoint(id)` and
    `relative flex min-h-0 flex-1 flex-col` wrapper and render the pill as the wrapper's second
    child, only on `tone="dark"`, only while `nowPlaying.visible`. The wrapper, not the drawer:
    the drawer has no padding and the Advanced branch (l.337) replaces the scroller in the same
-   `section`, so the pill must sit with the scroller it belongs to. The chevron direction is
-   computed from the lit row's `getBoundingClientRect().top` against the scroller's box centre,
-   re-read on `scroll` of the scroller (reading `scroll` for _direction_ is fine; it is intent
-   that `scroll` cannot carry).
+   `section`, so the pill must sit with the scroller it belongs to. The pill's edge (and so its
+   chevron) is computed from the lit row's box against the scroller's with the T21 hysteresis
+   ("Where the drawer pill sits"), re-read on `scroll` of the scroller (reading `scroll` for
+   _placement_ is fine; it is intent that `scroll` cannot carry).
 5. **The well slice and the lit row split.** `wellStops` (l.294–297) filters by
    `displayedPointId`; `isActive` (l.456) keeps `activePointId`. The keep-in-view effect
    (l.312–328) early-returns while `pointFocus.mode === "held"`; otherwise it computes the target
@@ -312,9 +340,6 @@ author prefers two tasks; the motion values are few.
 - **"Not in this cut" wording.** `Now playing · not in this cut` is the design's string for a
   playing point the cut excludes. It is the one case where the pill points at nothing. Alternative:
   hide the pill and let the transport's blank counter carry it (as R7 does for dead time).
-- **Chevron direction threshold.** Above/below the scroller's viewport centre. A lit row already
-  in view (held with a short list) would still show a chevron; alternative: no chevron when the
-  lit row is fully visible.
 - **Hold from the room's court marks.** A mark click seeks to a shot (`selectMark`,
   film-fullscreen.tsx l.827–836) — it is a shot click in spirit. The design does not hold on it
   (the court follows, and its marks are the playing point's); confirm.
