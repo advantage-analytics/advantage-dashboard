@@ -91,3 +91,13 @@ is the runner's. Newest entries at the bottom.
 2. Clear a line-A score on a swap unless it was typed in this wizard (author decision 2026-09-23).
 3. Draft-resumed flows re-apply the draft on every swap.
 4. A singles ↔ doubles line swap is untested.
+
+## T8 · Line swap keeps the picked video and clears line A's recorded score — done
+
+**gate:** mechanical GATE PASS (first run failed only on the load-sensitive live spec `match-video-attachments-db.spec.ts:2708`; the re-run passed) · completion VERDICT: pass
+**changed:** `useUploadMatchWizard.ts` — the file-reset effect is keyed on `preset?.eventId` instead of `entryId`, so a same-event line swap keeps the file, probe and trim window; a new `seededPresetRef` + `isSeededScore` clears the score, `numberOfSets`, `result` and `retiredSide` on a swap only when the form's games still equal line A's recorded score (a typed score stays); a swap across source kinds (`supportsVideo` changes, singles ↔ doubles) still drops the file. Comments in `PinnedLineBar.tsx` and `types.ts` updated; the investigation doc marks the file drop and "Not fixed" #1 resolved. `tests/upload-line-swap.spec.ts` now 16 tests (the draft-resume `test.fail` stays).
+**follow-ups:**
+
+1. The source-kind file drop was added beyond the task's scope note (singles↔doubles was out of scope) — the reviewer flagged it for `/pr-check`'s design/correctness pass.
+2. A draft-resumed flow still re-applies the draft on every swap ("Not fixed" #2).
+3. On a singles↔doubles swap the progress step count is set only on the first seed, and the dropped file leaves `videoProbe` and the trim window behind.

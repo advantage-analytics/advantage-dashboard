@@ -490,8 +490,9 @@ export interface EventPreset {
   opponentSchool: string | null;
   /**
    * The event's other lines, for the pinned bar's Change menu — picking one
-   * rewrites the bar and nothing else, so the file already dropped stays.
-   * Only on a preset that came from an event.
+   * re-seeds the line and clears the answers about its players (see
+   * `PinnedLineBar`), but the file already dropped stays, with its trim
+   * window. Only on a preset that came from an event.
    */
   lineup?: LineChoice[];
 }

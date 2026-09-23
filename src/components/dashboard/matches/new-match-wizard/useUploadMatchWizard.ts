@@ -206,6 +206,40 @@ function presetLineKey(preset: EventPreset): string | null {
   return preset.entryId ?? preset.matchId;
 }
 
+/**
+ * The games a score records, without the empty trailing sets the form pads
+ * with — so a seeded `[6, 6]` and a form's `[6, 6, null]` compare equal.
+ */
+function recordedGames(games: readonly (number | null)[]): (number | null)[] {
+  const trimmed = [...games];
+  while (trimmed.length > 0 && trimmed[trimmed.length - 1] == null)
+    trimmed.pop();
+  return trimmed;
+}
+
+/**
+ * Whether the form's score is still exactly the one a line's record seeded.
+ *
+ * Nothing in the form records where a score came from, so this is the test a
+ * line swap uses: a score equal to line A's recorded one came from line A's
+ * record (or cannot be told apart from it) and is wrong for line B; a score
+ * that differs was typed in the wizard, describes the recording, and stays.
+ */
+function isSeededScore(
+  form: Pick<MatchFormData, "playerScores" | "opponentScores">,
+  score: NonNullable<EventPreset["score"]>,
+): boolean {
+  const same = (a: readonly (number | null)[], b: readonly number[]) => {
+    const x = recordedGames(a);
+    const y = recordedGames(b);
+    return x.length === y.length && x.every((v, i) => v === y[i]);
+  };
+  return (
+    same(form.playerScores, score.player1) &&
+    same(form.opponentScores, score.player2)
+  );
+}
+
 /** Name, size and mtime — enough to tell one picked recording from another. */
 function videoSignature(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}`;
@@ -1023,8 +1057,13 @@ export function useUploadMatchWizard({
     setIdentityAnswer({ key: identityKey, confirmed: false });
   }, [identityKey, parsedImport]);
 
-  // A workspace/preset switch must not carry file results into a different
-  // event or revive a confirmation when the user switches back. Form values
+  // A workspace, event or draft switch must not carry file results into a
+  // different event or revive a confirmation when the user switches back.
+  // Keyed on the EVENT, not the line: a PinnedLineBar swap between lines of
+  // one event is a wrong-line fix, not a new video, so the picked file, its
+  // probe and parse, and the trim window stay (the seed effect drops the file
+  // only when the swap changes the source kind). The import identity answer
+  // is keyed on the athlete and resets through the effect below. Form values
   // remain under the existing event seeding rules.
   useEffect(() => {
     resetFileGeneration();
@@ -1035,7 +1074,7 @@ export function useUploadMatchWizard({
     open,
     activeWorkspace.id,
     activeWorkspace.kind,
-    preset?.entryId,
+    preset?.eventId,
     draft?.id,
     resetFileGeneration,
   ]);
@@ -1245,6 +1284,11 @@ export function useUploadMatchWizard({
   const seededRef = useRef(false);
   /** The line the last seed was for ({@link presetLineKey}) — a swap is a new one. */
   const seededLineRef = useRef<string | null>(null);
+  /**
+   * The preset the last seed was for. A swap reads line A's recorded score
+   * from it (to tell a carried score from a typed one) and its source kind.
+   */
+  const seededPresetRef = useRef<EventPreset | null>(null);
 
   // The wizard autosaves as you answer (design 11c): every change lands in
   // localStorage a moment later, and the header says so. A draft ROW is
@@ -1330,11 +1374,33 @@ export function useUploadMatchWizard({
       // players are cleared beside it (LINE_SWAP_FIELDS), and the top-player
       // drift baseline and its stale hint with them — they described an answer
       // that no longer exists. `cameraAnswerFileRef` stays: the recording did
-      // not change. A re-run for the SAME line (another dependency moved)
-      // clears nothing.
+      // not change, and neither does the picked file or its trim window (the
+      // file-generation reset is keyed on the event, not the line).
+      //
+      // The score rule: a score that came from line A's RECORD is wrong for
+      // line B and is cleared — games, set count, and the `result` /
+      // `retiredSide` beside it — before line B's own score (if any) is
+      // seeded. A score typed in the wizard describes the recording and stays.
+      // Nothing in the form records provenance, so "came from the record"
+      // means "still equals the score line A seeded"; one that cannot be told
+      // apart from it is cleared. A re-run for the SAME line (another
+      // dependency moved) clears nothing.
       const lineKey = presetLineKey(preset);
       const swapped = seededRef.current && seededLineRef.current !== lineKey;
+      const previousPreset = seededPresetRef.current;
       seededLineRef.current = lineKey;
+      seededPresetRef.current = preset;
+      const previousScore = swapped ? (previousPreset?.score ?? null) : null;
+      // A swap across source kinds (a singles line to a doubles one) turns a
+      // video flow into an import one: the file picked for the other kind
+      // cannot ride along. Every other swap keeps it.
+      if (
+        swapped &&
+        previousPreset &&
+        previousPreset.supportsVideo !== preset.supportsVideo
+      ) {
+        resetFileGeneration();
+      }
       if (swapped) {
         topPlayerAnswerStartRef.current = null;
         // `start` is the live window start, which a swap does not move — and
@@ -1357,43 +1423,56 @@ export function useUploadMatchWizard({
             : value;
         }
       }
-      setFormData((prev) => ({
-        ...prev,
-        ...(draft?.formData ?? {}),
-        // After the draft: a swap in a resumed flow re-spreads the draft,
-        // whose answers were given for its line's players too.
-        ...swapCleared,
-        eventName: preset.eventName ?? "",
-        eventKind: preset.eventKind ?? prev.eventKind,
-        round: preset.round ?? "",
-        playerName: preset.playerName,
-        opponentName: preset.opponentName,
-        opponentSource: preset.opponentName ? ("event" as const) : undefined,
-        date: preset.date,
-        dateSource: "event" as const,
-        courtType: preset.surface
-          ? surfaceToCourtType(preset.surface)
-          : prev.courtType,
-        bestOf: String(preset.bestOf),
-        adScoring: preset.adScoring ?? undefined,
-        matchType:
-          preset.eventKind === "dual"
-            ? "Dual Match"
-            : preset.eventKind === "tournament"
-              ? "Tournament"
-              : preset.supportsVideo
-                ? "Singles"
-                : "Doubles",
-        opponentProgramKey: preset.opponentProgramKey ?? undefined,
-        opponentSchool: preset.opponentSchool ?? undefined,
-        ...(preset.score
-          ? {
-              playerScores: preset.score.player1,
-              opponentScores: preset.score.player2,
-              numberOfSets: preset.score.player1.length,
-            }
-          : {}),
-      }));
+      setFormData((prev) => {
+        const base = { ...prev, ...(draft?.formData ?? {}) };
+        const scoreCleared: Partial<MatchFormData> =
+          previousScore && isSeededScore(base, previousScore)
+            ? {
+                playerScores: [...DEFAULT_FORM_DATA.playerScores],
+                opponentScores: [...DEFAULT_FORM_DATA.opponentScores],
+                numberOfSets: DEFAULT_FORM_DATA.numberOfSets,
+                result: DEFAULT_FORM_DATA.result,
+                retiredSide: DEFAULT_FORM_DATA.retiredSide,
+              }
+            : {};
+        return {
+          ...base,
+          // After the draft: a swap in a resumed flow re-spreads the draft,
+          // whose answers were given for its line's players too.
+          ...swapCleared,
+          ...scoreCleared,
+          eventName: preset.eventName ?? "",
+          eventKind: preset.eventKind ?? prev.eventKind,
+          round: preset.round ?? "",
+          playerName: preset.playerName,
+          opponentName: preset.opponentName,
+          opponentSource: preset.opponentName ? ("event" as const) : undefined,
+          date: preset.date,
+          dateSource: "event" as const,
+          courtType: preset.surface
+            ? surfaceToCourtType(preset.surface)
+            : prev.courtType,
+          bestOf: String(preset.bestOf),
+          adScoring: preset.adScoring ?? undefined,
+          matchType:
+            preset.eventKind === "dual"
+              ? "Dual Match"
+              : preset.eventKind === "tournament"
+                ? "Tournament"
+                : preset.supportsVideo
+                  ? "Singles"
+                  : "Doubles",
+          opponentProgramKey: preset.opponentProgramKey ?? undefined,
+          opponentSchool: preset.opponentSchool ?? undefined,
+          ...(preset.score
+            ? {
+                playerScores: preset.score.player1,
+                opponentScores: preset.score.player2,
+                numberOfSets: preset.score.player1.length,
+              }
+            : {}),
+        };
+      });
       // A line arrives with step 1 answered, so the flow opens on the file
       // (design 7b). Only on the first seed: switching lines from the pinned
       // bar re-runs this effect and must leave the step where it is.
@@ -1562,7 +1641,15 @@ export function useUploadMatchWizard({
     return () => {
       cancelled = true;
     };
-  }, [open, supabase, preset, draft, askWhoPlayed, seededPlayerName]);
+  }, [
+    open,
+    supabase,
+    preset,
+    draft,
+    askWhoPlayed,
+    seededPlayerName,
+    resetFileGeneration,
+  ]);
 
   /**
    * A fresher `programs.status` than `eligibilityWorkspace` carries — the

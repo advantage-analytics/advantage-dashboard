@@ -5,7 +5,10 @@ import {
   type EventPreset,
   type MatchDraft,
 } from "@/components/dashboard/matches/new-match-wizard/types";
-import { uploadWizardHarness } from "./fixtures/upload-wizard-hook";
+import {
+  parsedNames,
+  uploadWizardHarness,
+} from "./fixtures/upload-wizard-hook";
 
 /**
  * T6 — what survives a PinnedLineBar line swap.
@@ -20,7 +23,10 @@ import { uploadWizardHarness } from "./fixtures/upload-wizard-hook";
  * answer is the dangerous one (`docs/ui-revamp-guardrails.md` §4): carried
  * over, it maps the vendor's per-player predictions onto the wrong person with
  * nothing on screen looking wrong. The trim window and `fixedCamera` describe
- * the recording, not the players, and stay.
+ * the recording, not the players, and stay — and so does the picked file (T8):
+ * a swap is a wrong-line fix, not a new video. A score carried from line A's
+ * record is wrong for line B and is cleared; a score typed in the wizard
+ * describes the recording and stays.
  *
  * Findings: `docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md`.
  * Driven through `uploadWizardHarness` — the real hook in a VM, no DOM.
@@ -118,6 +124,13 @@ async function answeredOnLineA(
   return h;
 }
 
+/** A score array without the empty trailing sets the form pads with. */
+function recorded(games: readonly (number | null)[]) {
+  const out = [...games];
+  while (out.length > 0 && out[out.length - 1] == null) out.pop();
+  return out;
+}
+
 /** What `onSwitchPreset` does: hand the hook a different line. */
 async function swapTo(
   h: Awaited<ReturnType<typeof answeredOnLineA>>,
@@ -208,16 +221,21 @@ test.describe("a PinnedLineBar line swap", () => {
     expect(f.duration).toBe((3600 - 120) * 1000);
   });
 
-  test("the picked file itself is dropped by the file-generation reset (current behaviour)", async () => {
+  test("the picked file, its probe and the trim window stay across a swap", async () => {
     const h = await answeredOnLineA();
     expect(h.current.uploadedFile?.name).toBe("court-one.mp4");
+    const probeBefore = h.current.videoProbe;
 
     await swapTo(h, LINE_B);
 
-    // Not a wrong-person carry-over, but it contradicts the "the file you've
-    // dropped stays" design claim: the `preset?.entryId`-keyed reset effect
-    // runs `resetFileGeneration()`, which nulls `uploadedFile`. See the doc.
-    expect(h.current.uploadedFile).toBeNull();
+    // The file-generation reset is keyed on the event, not the line: a swap
+    // inside one event keeps what was picked (T8).
+    expect(h.current.uploadedFile?.name).toBe("court-one.mp4");
+    expect(h.current.videoProbe).toEqual(probeBefore);
+    const f = h.current.formData;
+    expect(f.videoStartSeconds).toBe(120);
+    expect(f.videoEndSeconds).toBe(3600);
+    expect(f.duration).toBe((3600 - 120) * 1000);
   });
 
   test("the top-player baseline is re-armed: a new answer is measured from where it was given", async () => {
@@ -265,20 +283,140 @@ test.describe("a PinnedLineBar line swap", () => {
   });
 
   test("line A's courtside score does not survive onto an unscored line B", async () => {
-    test.fail(
-      true,
-      `Known carry-over, not fixed in T6 — see "Not fixed" in ${DOC}`,
-    );
     const h = await answeredOnLineA({
       lineA: line({ score: { player1: [6, 6], player2: [3, 4] } }),
     });
     expect(h.current.formData.playerScores).toEqual([6, 6]);
+    h.current.handleInputChange("result", "Retired");
+    h.current.handleInputChange("retiredSide", "opponent");
+    h.render();
 
     await swapTo(h, LINE_B);
 
-    // The seed only writes a score when line B has one, so line A's recorded
-    // result stays and would be filed as line B's match.
-    expect(h.current.formData.playerScores).not.toEqual([6, 6]);
+    // The score came from line A's record, so it — and the result beside
+    // it — would otherwise be filed as line B's match.
+    const f = h.current.formData;
+    expect(f.playerScores).toEqual(DEFAULT_FORM_DATA.playerScores);
+    expect(f.opponentScores).toEqual(DEFAULT_FORM_DATA.opponentScores);
+    expect(f.numberOfSets).toEqual(DEFAULT_FORM_DATA.numberOfSets);
+    expect(f.result).toEqual(DEFAULT_FORM_DATA.result);
+    expect(f.retiredSide).toEqual(DEFAULT_FORM_DATA.retiredSide);
+  });
+
+  test("a score typed in the wizard stays across a swap", async () => {
+    // Line A unscored: whatever score is on the form was typed from the video,
+    // which describes the recording — the right match — not line A.
+    const h = await answeredOnLineA();
+    h.current.handleScoreChange("player", 0, "6");
+    h.render();
+    h.current.handleScoreChange("player", 1, "7");
+    h.render();
+    h.current.handleScoreChange("opponent", 0, "4");
+    h.render();
+    h.current.handleScoreChange("opponent", 1, "5");
+    h.render();
+    h.current.handleInputChange("result", "Final Score");
+    h.render();
+    const typed = {
+      playerScores: [...h.current.formData.playerScores],
+      opponentScores: [...h.current.formData.opponentScores],
+    };
+    expect(recorded(typed.playerScores)).toEqual([6, 7]);
+    expect(recorded(typed.opponentScores)).toEqual([4, 5]);
+
+    await swapTo(h, LINE_B);
+
+    const f = h.current.formData;
+    expect(f.playerScores).toEqual(typed.playerScores);
+    expect(f.opponentScores).toEqual(typed.opponentScores);
+    expect(f.result).toBe("Final Score");
+  });
+
+  test("a score typed over line A's recorded one stays across a swap", async () => {
+    const h = await answeredOnLineA({
+      lineA: line({ score: { player1: [6, 6], player2: [3, 4] } }),
+    });
+    // The coach corrected the courtside record from the video.
+    h.current.handleScoreChange("opponent", 1, "7");
+    h.render();
+    h.current.handleScoreChange("player", 1, "5");
+    h.render();
+
+    await swapTo(h, LINE_B);
+
+    expect(recorded(h.current.formData.playerScores)).toEqual([6, 5]);
+    expect(recorded(h.current.formData.opponentScores)).toEqual([3, 7]);
+  });
+
+  test("a scored line B's own score replaces line A's recorded one", async () => {
+    const h = await answeredOnLineA({
+      lineA: line({ score: { player1: [6, 6], player2: [3, 4] } }),
+    });
+
+    await swapTo(h, {
+      ...LINE_B,
+      score: { player1: [4, 6, 6], player2: [6, 3, 2] },
+    });
+
+    expect(h.current.formData.playerScores).toEqual([4, 6, 6]);
+    expect(h.current.formData.opponentScores).toEqual([6, 3, 2]);
+    expect(h.current.formData.numberOfSets).toBe(3);
+  });
+
+  test("an import-line swap keeps the parsed file and re-asks the player-1 check", async () => {
+    const importLine = (overrides: Partial<EventPreset> = {}) =>
+      line({ supportsVideo: false, ...overrides });
+    const h = uploadWizardHarness({
+      team: true,
+      props: { preset: importLine() },
+    });
+    await h.flush();
+    expect(h.current.step).toBe("file");
+
+    const pending = await h.pick("match.csv");
+    pending.resolve(parsedNames("M. Reid", "File Opponent"));
+    await h.flush();
+    expect(h.current.parsingState.parseSuccess).toBe(true);
+    expect(h.current.importIdentity.comparison?.requiresConfirmation).toBe(
+      true,
+    );
+    h.current.importIdentity.confirm();
+    h.render();
+    expect(h.current.importIdentity.confirmed).toBe(true);
+    const uploaded = h.current.uploadedFile;
+
+    await swapTo(
+      h,
+      importLine({
+        entryId: "entry-b",
+        round: "S2",
+        playerName: "Sam Ortiz",
+        playerUserId: "first",
+        opponentName: "Chris Lee",
+      }),
+    );
+
+    // The file and its parse stay…
+    expect(h.current.uploadedFile).toBe(uploaded);
+    expect(h.current.parsingState.parseSuccess).toBe(true);
+    expect(h.current.importIdentity.parsedNames).toEqual({
+      playerName: "M. Reid",
+      opponentName: "File Opponent",
+    });
+    // …but "player 1 is Marcus Reid" is no answer about Sam Ortiz: the
+    // athlete-keyed reset drops it, and the check asks again.
+    expect(h.current.importIdentity.confirmed).toBe(false);
+    expect(h.current.importIdentity.blocked).toBe(true);
+  });
+
+  test("a swap across source kinds still drops the file", async () => {
+    const h = await answeredOnLineA();
+    expect(h.current.uploadedFile?.name).toBe("court-one.mp4");
+
+    // A doubles line cannot take video; the picked recording cannot ride on.
+    await swapTo(h, { ...LINE_B, supportsVideo: false });
+
+    expect(h.current.uploadedFile).toBeNull();
   });
 
   test("a draft-resumed line flow keeps the window the coach set after resuming", async () => {

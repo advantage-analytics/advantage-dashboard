@@ -17,9 +17,11 @@
  * when it has one). It also clears what was answered about the previous line's
  * PEOPLE — the camera-relative top-player answer, both players' hand, backhand
  * and their sources, the opponent's roster id and the tiebreaks — because
- * "you" just changed (`docs/ui-revamp-guardrails.md` §4). The trim window and
- * the fixed-camera answer describe the recording and stay; the picked file
- * itself is currently dropped and must be re-picked (see
+ * "you" just changed (`docs/ui-revamp-guardrails.md` §4). A score carried from
+ * the previous line's courtside record is cleared too (with its result), since
+ * it is that line's match; a score typed in the wizard stays. The picked file,
+ * the trim window and the fixed-camera answer describe the recording and stay —
+ * a swap fixes the line, not the video (see
  * `docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md`).
  * Below a hairline, "A match outside this event" is the escape hatch that
  * does reopen step 1.

@@ -6,6 +6,9 @@
 - **Outcome:** carry-over confirmed for the player-bound answers. **Fix shipped** in the
   seed effect. Two neighbouring carry-overs are left as known failures (`test.fail()`),
   written up under [Not fixed](#not-fixed).
+- **Update (T8, 2026-09-23):** the file drop and "Not fixed" #1 (line A's recorded
+  score) are **resolved** — see [Resolved in T8](#resolved-in-t8). Only the
+  draft-resume regression (#2) and the singles↔doubles follow-up remain open.
 
 Line numbers are for `src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts`
 **after** the fix unless marked "at HEAD". At HEAD the seed spread ran from 1287 to 1320.
@@ -22,7 +25,8 @@ on it:
    already `true`, so the first-seed-only block at 1391–1395 (`setProgressKind`,
    `setStep("file")`) is skipped. The step stays where it was.
 2. **The file-generation reset** (1020–1032). This effect is keyed on `preset?.entryId`,
-   and it calls `resetFileGeneration()` (915–930).
+   and it calls `resetFileGeneration()` (915–930). _Since T8 it is keyed on
+   `preset?.eventId`, so a swap inside one event no longer runs it._
 3. **The eligibility and identity memos.** These are not effects: they read `preset`
    again on every render (`identityAthleteFor` at 949, `eligibilityInput` at ~1812).
 
@@ -71,7 +75,7 @@ stays whenever line B has no score of its own.
 | Trim window (`videoStartSeconds` / `videoEndSeconds` / `duration`)                         | Kept                                                                                           | **Correct to keep.** The window describes the file: where the first serve and the final point are. It does not describe the players. The swap exists because the coach picked the wrong line, not the wrong video.                                                                                                                                                                                                                                                                                           | Kept                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Not in the seed spread. `handleTrimChange` (2154) is the only other writer.                              |
 | `topPlayerAnswerStale` and its baseline (`topPlayerAnswerStartRef` / `topPlayerAnswerRef`) | **Carried over.** A stale hint stayed up, and the baseline stayed anchored to line A's answer. | Wrong. Both describe an answer that no longer exists.                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Re-armed at 1332–1340. `topPlayerAnswerStartRef` is set to `null`, `answered` to `false`, and `topPlayerAnswerStale` to `false`. `topPlayerAnswerRef.start` is **kept**: it is the live window start, which the swap does not move, and the sync effect (879–884) will not refresh it when neither of its inputs changes. Blanking it would anchor the next answer at 0 through `start ?? 0` (2637). The spec's baseline test caught this in the first draft of the fix. | —                                                                                                        |
 | `cameraAnswerFileRef`                                                                      | Kept                                                                                           | Correct. The recording did not change. A re-pick of the same file still counts as `sameRecording` (2118) and keeps `fixedCamera`.                                                                                                                                                                                                                                                                                                                                                                            | Kept                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | —                                                                                                        |
-| The picked file (`uploadedFile`)                                                           | **Dropped**                                                                                    | Not a wrong-person carry-over, but it **contradicts the design claim** ("the file you've dropped stays"). The file-reset effect (1020–1032) is keyed on `preset?.entryId`, and its `resetFileGeneration()` sets `uploadedFile` to `null` (918). `videoProbe` is not cleared. The coach has to re-pick the file, and `handleCreateMatch` refuses without it (2709). A re-pick through `onVideoPick` also rewrites the window to `[0, duration]`, so in practice the kept window only lasts until the re-pick. | Unchanged. It is outside the seed/swap path; see follow-ups.                                                                                                                                                                                                                                                                                                                                                                                                             | Spec: "the picked file itself is dropped…"                                                               |
+| The picked file (`uploadedFile`)                                                           | **Dropped**                                                                                    | Not a wrong-person carry-over, but it **contradicts the design claim** ("the file you've dropped stays"). The file-reset effect (1020–1032) is keyed on `preset?.entryId`, and its `resetFileGeneration()` sets `uploadedFile` to `null` (918). `videoProbe` is not cleared. The coach has to re-pick the file, and `handleCreateMatch` refuses without it (2709). A re-pick through `onVideoPick` also rewrites the window to `[0, duration]`, so in practice the kept window only lasts until the re-pick. | **Resolved in T8:** kept. The reset effect is keyed on `preset?.eventId`.                                                                                                                                                                                                                                                                                                                                                                                                | Spec: "the picked file itself is dropped…"                                                               |
 
 ## Attribution inputs (`matches.player1_id`, `event_entry_id`)
 
@@ -117,9 +121,10 @@ nothing about the subject or the step is reset.
 
 ## Not fixed
 
-Both are pinned in the spec as `test.fail()`, and each annotation points at this doc.
+Both were pinned in the spec as `test.fail()`, each annotation pointing at this doc. #1 is
+resolved in T8 and its `test.fail()` removed; #2 keeps its annotation.
 
-1. **An unscored line B keeps line A's score.** The seed writes the score only
+1. **Resolved in T8.** **An unscored line B keeps line A's score.** The seed writes the score only
    `if (preset.score)` (1380). If line A was already scored courtside and line B was
    not, line A's recorded result stays on the form and gets filed as line B's match.
    `result` and `retiredSide` have the same problem: the seed never writes them, even
@@ -139,9 +144,34 @@ Both are pinned in the spec as `test.fail()`, and each annotation points at this
    first seed (`!seededRef.current`). **Why it was not shipped:** it changes the
    draft-resume path, which the task puts out of scope for a trivial fix.
 
+## Resolved in T8
+
+Author decisions (2026-09-23): a swap is a wrong-line fix, not a new video; a score
+from line A's record is wrong for line B; a score typed in the wizard describes the
+recording and stays; if provenance cannot be told apart, clear it.
+
+- **The file stays.** The file-generation reset effect's `preset?.entryId` dependency
+  is now `preset?.eventId`. `open`, the workspace id/kind and `draft?.id` still reset
+  the file, and so does an event change. The picked file, its probe, a parsed import
+  and the trim window survive a swap between lines of one event. One exception keeps
+  the old drop: a swap that changes the source kind (a singles line to a doubles one,
+  `supportsVideo` flipping) calls `resetFileGeneration()` from the seed's swap branch,
+  because a video cannot ride into an import flow.
+- **The import identity answer still resets.** `identityAthleteFor` returns the
+  preset's player, so a swap changes `identityAthleteId`/`Name` and the athlete-keyed
+  effect clears the answer. The confirmation key also embeds the athlete, so an old
+  answer could not match the new key anyway. The spec's "an import-line swap keeps the
+  parsed file and re-asks the player-1 check" covers it.
+- **Line A's recorded score is cleared.** `seededPresetRef` holds the last seeded
+  preset. On a swap, if the form's games (trailing empty sets ignored) still equal
+  line A's `preset.score`, the seed resets `playerScores`, `opponentScores`,
+  `numberOfSets`, `result` and `retiredSide` to `DEFAULT_FORM_DATA` before line B's own
+  score (if any) is written. A score that differs — typed from scratch, or edited over
+  the record — stays, and so does its `result`.
+
 ## Follow-ups (not in T6's files)
 
-- **The file drop on a swap.** Decide whether the `preset?.entryId` dependency of the
+- **Resolved in T8. The file drop on a swap.** Decide whether the `preset?.entryId` dependency of the
   file-reset effect (1029) is intended. If the design's promise ("the file you've
   dropped stays") holds, a swap inside the same event should keep `uploadedFile`, and
   `resetFileGeneration` should run only on a workspace change, an event change or a

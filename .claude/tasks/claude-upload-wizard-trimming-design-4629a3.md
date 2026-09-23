@@ -113,7 +113,7 @@ ready).
 
 ## T8 · Line swap keeps the picked video and clears line A's recorded score
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (the file-reset effect keyed on `preset?.entryId` ~1026–1041; the seed effect's preset branch ~1319–1400 beside `LINE_SWAP_FIELDS`), tests/upload-line-swap.spec.ts, src/components/dashboard/matches/new-match-wizard/PinnedLineBar.tsx (header comment), src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx (comment ~77–79), src/components/dashboard/matches/new-match-wizard/types.ts (`EventPreset.lineup` doc), docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md (mark the file-drop follow-up and "Not fixed" #1 as resolved)
 - **done when:**
