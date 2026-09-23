@@ -228,7 +228,7 @@ ready).
 
 ## T17 · Design follow-or-hold for the film points: the drawer pill and the card's header line
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) docs/superpowers/specs/2026-09-22-film-follow-hold-design.md (new), docs/superpowers/specs/2026-09-22-film-follow-hold/frames.html (new frame); read-only: point-list.tsx, film-room-drawer.tsx, film-this-point.tsx, film-fullscreen.tsx (the "Points" trigger L1509–1536, `step` L798–808), film-tab.tsx (`active` L262–265, `position` L313–317, the `FilmThisPoint` mount L592–601), src/app/globals.css (`film-shot-well-open` L867–891, `film-shot-row-in` L827–840), .skills/advantage-analytics-design/SKILL.md (+ `reference/foundations.md` Duration Scale L299–316 and Reduced Motion L349–351, `reference/chrome.md`, `reference/components.md`), docs/superpowers/specs/2026-09-21-video-fullscreen-h2-design.md (R2/R3/R7 L191–196, "The drawer's unfolded shots" L223–232)
 - **done when:**

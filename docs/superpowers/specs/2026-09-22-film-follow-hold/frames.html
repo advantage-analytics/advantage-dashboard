@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Film points · follow or hold — design frame (2026-09-22)</title>
+<!--
+  frames.html — drawn in-repo 2026-09-22 for the design doc beside it
+  (../2026-09-22-film-follow-hold-design.md). Reference only, never shipped.
+
+  Like T5's track-tooltip.html this frame links the REAL token files under
+  src/styles/design-system/, so it renders from a checkout with no design bundle.
+  Inline styles are the measurements. Every colour is a token, one of the
+  white/black alpha literals already in point-list.tsx / film-room-drawer.tsx /
+  film-fullscreen.tsx, or #FFFFFF. `--shadow-card` lives in globals.css, not the
+  token files, so cards here carry only their hairline — as in T5's frame.
+-->
+<link rel="stylesheet" href="../../../../src/styles/design-system/colors.css">
+<link rel="stylesheet" href="../../../../src/styles/design-system/typography.css">
+<link rel="stylesheet" href="../../../../src/styles/design-system/spacing.css">
+<link rel="stylesheet" href="../../../../src/styles/design-system/effects.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Roboto+Mono:wght@400;500&display=swap">
+<script src="https://unpkg.com/lucide@0.462.0/dist/umd/lucide.min.js"></script>
+<style>
+  /* next/font supplies these two in the app; the frame supplies them itself. */
+  :root { --font-inter: "Inter"; --font-roboto-mono: "Roboto Mono"; }
+  html, body { margin: 0; background: var(--surface-page); font-family: var(--font-sans); color: var(--ink-900); -webkit-font-smoothing: antialiased; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { color: var(--blue-hover); }
+  .eyebrow { font-size: 10px; font-weight: 500; letter-spacing: 2.5px; text-transform: uppercase; color: var(--ink-400); }
+  .text-display { font-size: 30px; font-weight: 300; line-height: 36px; letter-spacing: -0.6px; color: var(--ink-900); }
+  .text-body { font-size: 13px; line-height: 1.6; color: var(--ink-700); }
+  .text-micro { font-size: 11px; color: var(--ink-500); }
+  .mono { font-family: var(--font-mono); }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .card { border: 1px solid var(--border-card); border-radius: var(--radius-card); box-shadow: var(--shadow-card); background: var(--surface-card); }
+  .state { display: flex; flex-direction: column; gap: 9px; }
+  .state-head { display: flex; align-items: center; gap: 8px; }
+  .state-id { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: var(--radius-button); background: var(--blue); color: #FFFFFF; font: 500 11px var(--font-sans); }
+  .state-title { font: 500 12px var(--font-sans); color: var(--ink-900); }
+  .state-note { font-size: 12px; color: var(--ink-600); max-width: 900px; text-wrap: pretty; }
+  .spec { display: grid; grid-template-columns: 220px 1fr; gap: 6px 16px; font-size: 12px; color: var(--ink-700); }
+  .spec .k { color: var(--ink-500); }
+  .spec code, .state-note code, .text-body code, td code, .callout code { font-family: var(--font-mono); font-size: 11px; color: var(--ink-700); }
+  table { border-collapse: collapse; width: 100%; }
+  th { text-align: left; font-size: 9px; font-weight: 500; letter-spacing: 2.5px; text-transform: uppercase; color: var(--ink-400); padding: 10px 0; border-bottom: 1px solid var(--border-hairline); }
+  td { font-size: 12px; color: var(--ink-700); padding: 10px 0; border-bottom: 1px solid var(--border-hairline); vertical-align: top; }
+  td:first-child { color: var(--ink-900); font-weight: 500; white-space: nowrap; }
+
+  /* ── The room canvas: film under the drawer (film-fullscreen.tsx) ─────── */
+  .room { position: relative; width: 900px; height: 560px; overflow: hidden; border-radius: var(--radius-card); background: var(--surface-dark); }
+  .room .scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(13,13,13,0) 0%, rgba(13,13,13,0.78) 100%); }
+  /* The court card's title strip, the one room surface this design names: it keeps following. */
+  .court-title { position: absolute; left: 24px; top: 24px; display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.85); }
+  .court-title .sub { font-weight: 400; color: rgba(255,255,255,0.5); }
+
+  /* ── The drawer sheet, exactly as film-room-drawer.tsx L98 draws it ───── */
+  .drawer { position: absolute; inset: 0 0 0 auto; display: flex; width: 320px; flex-direction: column; background: rgba(13,13,13,0.88); box-shadow: inset 1px 0 0 rgba(255,255,255,0.1), -24px 0 48px -12px rgba(0,0,0,0.45); }
+  /* PointList's dark header (point-list.tsx L129): px-2.5 pt-[13px] pb-[3px] over an inset hairline. */
+  .list-head { display: flex; align-items: center; gap: 8px; padding: 13px 10px 3px; box-shadow: inset 0 -1px 0 rgba(255,255,255,0.08); }
+  .list-head > * { margin-bottom: 7px; }
+  .cut-trigger { display: inline-flex; height: 26px; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-element); font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.08); }
+  .count { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 10px; white-space: nowrap; color: rgba(255,255,255,0.45); }
+  .glyph26 { display: inline-flex; width: 26px; height: 26px; align-items: center; justify-content: center; border-radius: var(--radius-element); color: rgba(255,255,255,0.7); }
+  /* The positioning wrapper the design adds (see doc, Handoff 4): the scroller is inside it, the pill is its child. */
+  .list-frame { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; }
+  .list { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow-y: auto; }
+  .game-head { display: flex; align-items: center; padding: 13px 14px 5px; }
+  .game-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 1.4px; text-transform: uppercase; color: rgba(255,255,255,0.45); }
+  .game-meta { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 10px; color: rgba(255,255,255,0.4); }
+  /* Dark row (point-list.tsx L534–541): min-h 52, px 14, py 6; playing = white/[0.08]; hover = white/[0.06]. */
+  .row { position: relative; display: flex; min-height: 52px; align-items: center; gap: 12px; padding: 6px 14px; box-sizing: border-box; }
+  .row.playing { background: rgba(255,255,255,0.08); }
+  .row .mark { display: flex; width: 30px; height: 30px; flex: 0 0 34px; align-items: center; justify-content: center; }
+  .row .mark span { display: flex; width: 30px; height: 30px; align-items: center; justify-content: center; border-radius: var(--radius-button); background: rgba(255,255,255,0.14); font-size: 11px; font-weight: 500; letter-spacing: 0.3px; color: rgba(255,255,255,0.9); }
+  /* The viewer's own rows carry WorkspaceMark (a photo or crest) in the product; the frame stands in with the initials chip. */
+  .row .mark span.you { color: #FFFFFF; }
+  .row .text { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+  .row .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; color: #FFFFFF; }
+  .row .detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: rgba(255,255,255,0.45); }
+  .row .score { font-family: var(--font-mono); font-variant-numeric: tabular-nums; display: inline-block; min-width: 52px; text-align: right; font-size: 11px; color: rgba(255,255,255,0.85); }
+  /* The playing row's 2px --blue progress rule (point-list.tsx L720), width = --film-t. */
+  .row .rule { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--blue); }
+  /* The well (point-list.tsx L771–772): rgba(0,0,0,0.28) + 6% inset hairlines top and bottom. */
+  .well { display: flex; flex-direction: column; overflow: hidden; background: rgba(0,0,0,0.28); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(255,255,255,0.06); }
+  /* Shot rows (L835–839): h 34, px 14, gap-x 2 on SHOT_COLUMNS; lit 0.12, hover 0.05. */
+  .shot { display: grid; grid-template-columns: 12px minmax(0,0.75fr) minmax(0,1fr) minmax(0,1.25fr) auto; column-gap: 8px; align-items: center; height: 34px; padding: 0 14px; box-sizing: border-box; }
+  .shot.lit { background: rgba(255,255,255,0.12); }
+  .shot .n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 10px; color: rgba(255,255,255,0.35); }
+  .shot .p { font-size: 11px; color: rgba(255,255,255,0.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shot .s { font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.72); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shot.lit .s { color: #FFFFFF; }
+  .shot .w { font-size: 11px; color: rgba(255,255,255,0.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shot .r { font-size: 11px; color: rgba(255,255,255,0.5); text-align: right; }
+  /* ── The pill: the "Points" trigger's recipe (film-fullscreen.tsx L1509–1536), pinned inside the list's bottom edge. ── */
+  button { border: 0; font-family: inherit; background: none; }
+  .pill { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: inline-flex; height: 28px; align-items: center; gap: 7px; padding: 0 10px; border-radius: var(--radius-button); background: rgba(13,13,13,0.72); font-size: 11px; font-weight: 500; color: #FFFFFF; white-space: nowrap; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1); }
+  .pill i { width: 12px; height: 12px; color: rgba(255,255,255,0.85); }
+  /* The frame-only marker for where the film is (no cursor is drawn by the product). */
+  .tag { position: absolute; right: 14px; top: 3px; font-size: 8px; letter-spacing: 1.4px; text-transform: uppercase; color: rgba(255,255,255,0.5); }
+
+  /* ── The shell card (film-this-point.tsx L76–106) ────────────────────── */
+  .this-point { display: flex; flex-direction: column; width: 720px; box-sizing: border-box; padding: 10px 8px 8px; background: var(--surface-card); border: 1px solid var(--border-card); border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
+  .this-point .head { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; padding: 2px 5px 10px 12px; }
+  .step { display: inline-flex; width: 28px; height: 28px; flex: 0 0 28px; align-items: center; justify-content: center; border-radius: var(--radius-element); cursor: pointer; }
+  .step i { width: 14px; height: 14px; color: var(--nav-fg); }
+  .counter { font-family: var(--font-mono); font-variant-numeric: tabular-nums; min-width: 56px; text-align: center; font-size: 11px; white-space: nowrap; color: var(--ink-500); }
+  /* The header line: the card's own eyebrow face on --ink-600, with the 12px chevron. */
+  .header-line { display: inline-flex; height: 28px; align-items: center; gap: 4px; padding: 0 6px; border-radius: var(--radius-element); font-size: 11px; font-weight: 500; white-space: nowrap; color: var(--ink-600); cursor: pointer; }
+  .header-line i { width: 12px; height: 12px; color: var(--ink-600); }
+  .cols { display: grid; grid-template-columns: 16px 104px 88px minmax(0,1fr) 48px; column-gap: 16px; align-items: center; }
+  .this-point .thead { padding: 0 12px 10px; margin-bottom: 6px; border-bottom: 1px solid var(--border-hairline); }
+  .this-point .thead span { font-size: 10px; color: var(--ink-400); }
+  .srow { height: 40px; padding: 0 12px; border-radius: var(--radius-element); box-sizing: border-box; }
+  .srow.active { background: var(--surface-subtle); }
+  .srow .n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 10px; color: var(--ink-400); }
+  .srow .c { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .this-point .foot { display: flex; align-items: center; gap: 10px; margin: 10px 12px 0; padding: 12px 0 4px; border-top: 1px solid var(--border-hairline); }
+
+  /* ── Motion swatches for section D (the real values; the frame only demonstrates them) ── */
+  @keyframes pill-in { from { opacity: 0; transform: translate(-50%, 4px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  .pill.demo-in { animation: pill-in var(--duration-fast) var(--ease-primary) both; }
+  @keyframes line-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .header-line.demo-in { animation: line-in var(--duration-fast) var(--ease-primary) both; }
+  @media (prefers-reduced-motion: reduce) {
+    @keyframes pill-in { from { opacity: 0; transform: translate(-50%, 0); } to { opacity: 1; transform: translate(-50%, 0); } }
+    @keyframes line-in { from { opacity: 0; transform: none; } to { opacity: 1; transform: none; } }
+  }
+  .callout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .callout h4 { margin: 0 0 8px; font: 500 12px var(--font-sans); color: var(--ink-900); }
+  .callout ul { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.6; color: var(--ink-700); }
+</style>
+</head>
+<body>
+<div style="padding:48px 56px 96px;display:flex;flex-direction:column;align-items:flex-start;gap:80px">
+
+<!-- ═══ Intro ═══════════════════════════════════════════════════════════════ -->
+<section style="display:flex;flex-direction:column;align-items:flex-start">
+  <span class="eyebrow">Design · Video tab — the film points follow playback, or hold</span>
+  <div class="text-display" style="margin-top:16px;max-width:900px">Touch the list and it stays where you are reading; one pill takes you back to the film.</div>
+  <div class="text-body" style="margin-top:8px;max-width:960px;text-wrap:pretty">Both the room's points drawer (<code>film-room-drawer.tsx</code> → <code>PointList tone="dark"</code>) and the shell's "This point" card (<code>film-this-point.tsx</code>) track the playing point. This frame adds one shared state, <code>pointFocus: follow | held(pointId)</code>. The <b style="font-weight:500;color:var(--ink-900)">well and the card hold</b>; the lit <code>data-playing</code> row, the scoreboard, the court, the position counter and the room's court title <b style="font-weight:500;color:var(--ink-900)">keep following</b>. No second well, no accordion, nothing persisted, playback untouched. Sample match throughout: <span class="mono" style="font-size:12px;color:var(--ink-700)">Jordan Lee v Marcus Reid</span>, an 87-point cut of a 174-point film; the viewer is reading point 9 while the film plays point 14.</div>
+</section>
+
+<!-- ═══ A — Drawer following ════════════════════════════════════════════════ -->
+<section style="display:flex;flex-direction:column;gap:32px;align-items:flex-start">
+  <div>
+    <span class="eyebrow">A · Room drawer — following (<code>film-room-drawer.tsx</code> l.98, <code>point-list.tsx</code> l.433–436)</span>
+    <div class="text-body" style="margin-top:8px;max-width:900px">The 320px sheet at <code>rgba(13,13,13,0.88)</code> with its inset left hairline, no padding of its own. The list's dark header, then the one scroller. The playing row is lit (<code>bg-white/[0.08]</code>) with its 2px <code>--blue</code> progress rule, and its well is open beneath it. Nothing here changes: A is the drawer as shipped, drawn so B can be read against it.</div>
+  </div>
+
+  <div class="state" id="A1">
+    <div class="state-head"><a class="state-id" href="#A1">A1</a><span class="state-title">Follow — the well is under the lit row, and the list scrolls to keep it in view</span></div>
+    <div class="room">
+      <div class="scrim"></div>
+      <div class="court-title"><span>This point</span><span class="sub">· follows the film, held or not</span></div>
+      <aside class="drawer" aria-label="Points">
+        <div class="list-head">
+          <span class="cut-trigger"><i data-lucide="sliders-horizontal" stroke-width="1.6" style="width:13px;height:13px"></i>Cut</span>
+          <div style="flex:1"></div>
+          <span class="count">87 <span style="color:rgba(255,255,255,0.25)">/</span> 174</span>
+          <span class="glyph26"><i data-lucide="panel-right-close" stroke-width="1.6" style="width:14px;height:14px"></i></span>
+        </div>
+        <div class="list-frame">
+          <div class="list">
+            <div class="game-head"><span class="game-label">Set 2 · Game 5</span><div style="flex:1"></div><span class="game-meta">2–2 · Reid serves</span></div>
+            <div class="row"><span class="mark"><span>MR</span></span><span class="text"><span class="title">Winner</span><span class="detail">Reid forehand cross-court</span></span><div style="flex:1"></div><span class="score">0–15</span></div>
+            <div class="row"><span class="mark"><span class="you">JL</span></span><span class="text"><span class="title">Unforced error</span><span class="detail">Reid backhand into the net</span></span><div style="flex:1"></div><span class="score">15–15</span></div>
+            <div class="row playing" data-playing="true"><span class="mark"><span class="you">JL</span></span><span class="text"><span class="title">Winner</span><span class="detail">Lee forehand down the line</span></span><div style="flex:1"></div><span class="score">15–30</span><span class="rule" style="width:41%"></span><span class="tag">playing · point 14</span></div>
+            <div class="well" data-shot-well>
+              <div class="shot"><span class="n">1</span><span class="p">Reid</span><span class="s">Serve</span><span class="w">Wide</span><span class="r">In</span></div>
+              <div class="shot"><span class="n">2</span><span class="p">Lee</span><span class="s">Backhand</span><span class="w">Cross-court</span><span class="r">In</span></div>
+              <div class="shot lit"><span class="n">3</span><span class="p">Reid</span><span class="s">Forehand</span><span class="w">Deep middle</span><span class="r">In</span></div>
+              <div class="shot"><span class="n">4</span><span class="p">Lee</span><span class="s">Forehand</span><span class="w">Down the line</span><span class="r">Winner</span></div>
+            </div>
+            <div class="row"><span class="mark"><span>MR</span></span><span class="text"><span class="title">Ace</span><span class="detail">Reid serve out wide</span></span><div style="flex:1"></div><span class="score">30–30</span></div>
+            <div class="game-head"><span class="game-label">Set 2 · Game 6</span><div style="flex:1"></div><span class="game-meta">2–3 · Lee serves</span></div>
+            <div class="row"><span class="mark"><span class="you">JL</span></span><span class="text"><span class="title">Forced error</span><span class="detail">Reid forehand long</span></span><div style="flex:1"></div><span class="score">15–0</span></div>
+            <div class="row"><span class="mark"><span>MR</span></span><span class="text"><span class="title">Winner</span><span class="detail">Reid backhand pass</span></span><div style="flex:1"></div><span class="score">15–15</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+    <div class="state-note">Follow mode is the drawer today, with one change in how it moves: the keep-in-view effect calls <code>list.scrollTo({ top, behavior: "smooth" })</code> on its own <code>scrollTop</code> — never <code>scrollIntoView</code> (point-list.tsx l.306–310: the DOM method walks every ancestor and dragged the whole room sideways while the sheet was mid-slide). The lit shot advances with the film at <code>rgba(255,255,255,0.12)</code>; the well fold (<code>film-shot-well-open</code>) and the row stagger (<code>film-shot-row-in</code>) are untouched. No pill: nothing is held.</div>
+  </div>
+</section>
+
+<!-- ═══ B — Drawer held ═════════════════════════════════════════════════════ -->
+<section style="display:flex;flex-direction:column;gap:32px;align-items:flex-start">
+  <div>
+    <span class="eyebrow">B · Room drawer — held (<code>point-list.tsx</code> l.294–297 and l.456 split)</span>
+    <div class="text-body" style="margin-top:8px;max-width:900px">The viewer clicked point 9 (or scrolled the list by hand) and the film has since moved on to point 14, further down. The <b style="font-weight:500;color:var(--ink-900)">well stays under point 9</b> — <code>wellStops</code> now reads the held id. The <b style="font-weight:500;color:var(--ink-900)">lit row is point 14</b> — <code>isActive</code> still reads the playing id — and the list did not scroll to it. The pill sits inside the list's bottom edge, its chevron pointing down toward the lit row.</div>
+  </div>
+
+  <div class="state" id="B1">
+    <div class="state-head"><a class="state-id" href="#B1">B1</a><span class="state-title">Held on point 9 — the film plays point 14, below; the pill says so</span></div>
+    <div class="room">
+      <div class="scrim"></div>
+      <div class="court-title"><span>This point</span><span class="sub">· still the court for point 14</span></div>
+      <aside class="drawer" aria-label="Points">
+        <div class="list-head">
+          <span class="cut-trigger"><i data-lucide="sliders-horizontal" stroke-width="1.6" style="width:13px;height:13px"></i>Cut</span>
+          <div style="flex:1"></div>
+          <span class="count">87 <span style="color:rgba(255,255,255,0.25)">/</span> 174</span>
+          <span class="glyph26"><i data-lucide="panel-right-close" stroke-width="1.6" style="width:14px;height:14px"></i></span>
+        </div>
+        <div class="list-frame">
+          <div class="list">
+            <div class="game-head"><span class="game-label">Set 2 · Game 3</span><div style="flex:1"></div><span class="game-meta">1–1 · Lee serves</span></div>
+            <div class="row"><span class="mark"><span class="you">JL</span></span><span class="text"><span class="title">Ace</span><span class="detail">Lee serve down the T</span></span><div style="flex:1"></div><span class="score">15–0</span></div>
+            <div class="row"><span class="mark"><span>MR</span></span><span class="text"><span class="title">Unforced error</span><span class="detail">Lee forehand wide</span></span><div style="flex:1"></div><span class="score">15–15</span><span class="tag">held · point 9 · not lit</span></div>
+            <div class="well" data-shot-well>
+              <div class="shot"><span class="n">1</span><span class="p">Lee</span><span class="s">Serve</span><span class="w">Body</span><span class="r">In</span></div>
+              <div class="shot"><span class="n">2</span><span class="p">Reid</span><span class="s">Backhand</span><span class="w">Deep middle</span><span class="r">In</span></div>
+              <div class="shot"><span class="n">3</span><span class="p">Lee</span><span class="s">Forehand</span><span class="w">Cross-court</span><span class="r">In</span></div>
+              <div class="shot"><span class="n">4</span><span class="p">Reid</span><span class="s">Forehand</span><span class="w">Short angle</span><span class="r">In</span></div>
+              <div class="shot"><span class="n">5</span><span class="p">Lee</span><span class="s">Forehand</span><span class="w">Wide</span><span class="r">Out</span></div>
+            </div>
+            <div class="row"><span class="mark"><span class="you">JL</span></span><span class="text"><span class="title">Winner</span><span class="detail">Lee backhand down the line</span></span><div style="flex:1"></div><span class="score">30–15</span></div>
+            <div class="game-head"><span class="game-label">Set 2 · Game 4</span><div style="flex:1"></div><span class="game-meta">2–1 · Reid serves</span></div>
+            <div class="row"><span class="mark"><span>MR</span></span><span class="text"><span class="title">Winner</span><span class="detail">Reid forehand cross-court</span></span><div style="flex:1"></div><span class="score">0–15</span></div>
+            <div class="row"><span class="mark"><span class="you">JL</span></span><span class="text"><span class="title">Forced error</span><span class="detail">Reid backhand long</span></span><div style="flex:1"></div><span class="score">15–15</span></div>
+            <div class="row playing" data-playing="true"><span class="mark"><span class="you">JL</span></span><span class="text"><span class="title">Winner</span><span class="detail">Lee forehand down the line</span></span><div style="flex:1"></div><span class="score">15–30</span><span class="rule" style="width:41%"></span><span class="tag">playing · point 14 · lit, no well</span></div>
+            <div class="row"><span class="mark"><span>MR</span></span><span class="text"><span class="title">Ace</span><span class="detail">Reid serve out wide</span></span><div style="flex:1"></div><span class="score">30–30</span></div>
+          </div>
+          <button class="pill demo-in" type="button" data-film-chrome aria-label="Now playing: point 14 — follow playback">Now playing · Point 14<i data-lucide="chevron-down" stroke-width="1.6"></i></button>
+        </div>
+      </aside>
+    </div>
+    <div class="state-note">The pill is the "Points" trigger's recipe (film-fullscreen.tsx l.1509–1536): 28px, <code>rgba(13,13,13,0.72)</code> → <code>0.9</code> on hover, <code>px-2.5</code>, 11px/500 white, <code>--radius-button</code>, the same 200ms <code>--ease-primary</code> colour transition — plus the drawer's own 1px 10% inset hairline so it reads over the lit row as well as over the sheet. Centred, <code>bottom: 12px</code>, inside the positioning wrapper the design adds around the scroller (not inside it, or it would scroll away). It carries <code>data-film-chrome</code>, so the R2 collapse and the exit fade (l.926–934) take it with the rest of the chrome. Chevron is Lucide at 12px: <code>chevron-down</code> when the lit row is below the viewport's centre, <code>chevron-up</code> when above. The pill never covers the held well: the wrapper pins it to the list's bottom edge and the well sits wherever the viewer left it — a well that runs under the pill is the viewer's own scroll position, and one wheel tick clears it. Press → follow: the list scrolls smoothly to point 14, its well unfolds, the pill exits (100ms opacity).</div>
+  </div>
+</section>
+
+<!-- ═══ C — Shell card held ═════════════════════════════════════════════════ -->
+<section style="display:flex;flex-direction:column;gap:32px;align-items:flex-start">
+  <div>
+    <span class="eyebrow">C · Shell "This point" card — held (<code>film-this-point.tsx</code> l.76–106, <code>NARROW_COLUMNS</code> l.44)</span>
+    <div class="text-body" style="margin-top:8px;max-width:900px">The same state, read on the light page. The card shows the held point's shots and footer; the header line takes the counter's place between the two step buttons. The counter itself keeps following — the number the line carries <em>is</em> the counter's number (<code>position.index</code>, film-tab.tsx l.313–317), so the pill in B and the line here always agree with the <code>14 / 87</code> that returns on re-follow.</div>
+  </div>
+
+  <div class="state" id="C1">
+    <div class="state-head"><a class="state-id" href="#C1">C1</a><span class="state-title">Held on point 9 — the header line in the counter's slot</span></div>
+    <section class="this-point" aria-label="This point">
+      <div class="head">
+        <span class="eyebrow">This point</span>
+        <div style="flex:1"></div>
+        <div style="display:inline-flex;flex:0 0 auto;align-items:center;gap:2px">
+          <span class="step" role="button" tabindex="0" aria-label="Previous point"><i data-lucide="chevron-left" stroke-width="1.5"></i></span>
+          <button class="header-line demo-in" type="button" aria-label="Now playing: point 14 — follow playback">Now playing · Point 14<i data-lucide="chevron-right" stroke-width="1.6"></i></button>
+          <span class="step" role="button" tabindex="0" aria-label="Next point"><i data-lucide="chevron-right" stroke-width="1.5"></i></span>
+        </div>
+      </div>
+      <div class="cols thead"><span>#</span><span>Player</span><span>Stroke</span><span>Placement</span><span>Result</span></div>
+      <div class="cols srow"><span class="n">1</span><span class="c" style="color:var(--ink-900)">Lee</span><span class="c" style="color:var(--ink-900)">Serve</span><span class="c" style="color:var(--ink-700)">Body</span><span class="c" style="color:var(--ink-700)">In</span></div>
+      <div class="cols srow"><span class="n">2</span><span class="c" style="color:var(--ink-900)">Reid</span><span class="c" style="color:var(--ink-700)">Backhand</span><span class="c" style="color:var(--ink-700)">Deep middle</span><span class="c" style="color:var(--ink-700)">In</span></div>
+      <div class="cols srow"><span class="n">3</span><span class="c" style="color:var(--ink-900)">Lee</span><span class="c" style="color:var(--ink-700)">Forehand</span><span class="c" style="color:var(--ink-700)">Cross-court</span><span class="c" style="color:var(--ink-700)">In</span></div>
+      <div class="cols srow"><span class="n">4</span><span class="c" style="color:var(--ink-900)">Reid</span><span class="c" style="color:var(--ink-700)">Forehand</span><span class="c" style="color:var(--ink-700)">Short angle</span><span class="c" style="color:var(--ink-700)">In</span></div>
+      <div class="cols srow"><span class="n">5</span><span class="c" style="color:var(--ink-900)">Lee</span><span class="c" style="color:var(--ink-700)">Forehand</span><span class="c" style="color:var(--ink-700)">Wide</span><span class="c" style="color:var(--ink-700)">Out</span></div>
+      <div class="foot">
+        <span class="text-micro tabular">5 shots · 11s</span>
+        <span style="font-size:11px;color:var(--ink-300)">·</span>
+        <span style="font-size:11px;color:var(--ink-600)">Unforced error</span>
+      </div>
+    </section>
+    <div class="state-note">No row is active in the card while held and the film is on another point — <code>activeShotId</code> belongs to point 14's shots, none of which are drawn — so <code>bg-[var(--surface-subtle)]</code> appears on no row (l.255). The line is the card's own quiet register: 11px/500 on <code>var(--ink-600)</code> (the footer's ink, l.161), the eyebrow's weight without its tracking, in a 28px hit box on <code>--radius-element</code> with the step buttons' <code>hover:bg-[var(--surface-subtle)]</code>; the 12px <code>chevron-right</code> is the trailing arrow. It is a button: press → follow, the rows swap to point 14's (the T9 stagger replays because the rows re-key), the counter returns as <code>14 / 87</code>. The step buttons stay: stepping re-follows and walks from the playing point. The 56px <code>min-w</code> of the counter is released while the line is in its place; the head does not change height.</div>
+  </div>
+</section>
+
+<!-- ═══ D — Motion and reduced motion ═══════════════════════════════════════ -->
+<section style="display:flex;flex-direction:column;gap:20px;align-items:flex-start;width:1180px">
+  <span class="eyebrow">D · Motion, measured — and what reduced motion keeps</span>
+  <div class="card" style="display:grid;grid-template-columns:320px 1fr;gap:32px;padding:24px">
+    <div style="position:relative;height:200px;border-radius:var(--radius-element);background:var(--surface-dark);overflow:hidden">
+      <div class="list-frame" style="position:absolute;inset:0">
+        <div class="list">
+          <div class="row"><span class="mark"><span>MR</span></span><span class="text"><span class="title">Winner</span><span class="detail">Reid forehand cross-court</span></span><div style="flex:1"></div><span class="score">0–15</span></div>
+          <div class="row playing"><span class="mark"><span class="you">JL</span></span><span class="text"><span class="title">Winner</span><span class="detail">Lee forehand down the line</span></span><div style="flex:1"></div><span class="score">15–30</span><span class="rule" style="width:41%"></span></div>
+          <div class="row"><span class="mark"><span>MR</span></span><span class="text"><span class="title">Ace</span><span class="detail">Reid serve out wide</span></span><div style="flex:1"></div><span class="score">30–30</span></div>
+        </div>
+        <span class="pill" data-film-chrome>Now playing · Point 14<i data-lucide="chevron-up" stroke-width="1.6"></i></span>
+      </div>
+    </div>
+    <div class="spec">
+      <span class="k">Follow-mode scroll</span><span><code>list.scrollTo({ top, behavior: "smooth" })</code> on the scroller's own <code>scrollTop</code> — Chromium eases ~300ms, no custom scroll-jacking, never <code>scrollIntoView</code> (point-list.tsx l.306–310). The effect sets a flag around its own call so its scroll never reads as the viewer's</span>
+      <span class="k">Pill / header line enter</span><span><code>--duration-fast</code> (150ms) opacity 0→1 with a 4px rise on <code>--ease-primary</code> — the rise is <code>film-shot-row-in</code>'s own (globals.css l.827), so the two things that appear in this list arrive the same way</span>
+      <span class="k">Pill / header line exit</span><span>100ms opacity only. Exit faster than entrance; nothing travels on the way out</span>
+      <span class="k">Re-follow</span><span>The smooth scroll and the well unfold (<code>film-shot-well-open</code>, 250ms) start together; the well's rows stagger inside it (<code>film-shot-row-in</code>, 200ms, 25ms steps). Both unchanged</span>
+      <span class="k">Chrome collapse</span><span>The pill is <code>data-film-chrome</code>: R2's 3s collapse fades it with the transport at 200ms opacity, and the room's exit fade (film-fullscreen.tsx l.926–934) takes it at 120ms. The header line is on the light page and has no collapse</span>
+      <span class="k">Pill hover / press</span><span>Background <code>rgba(13,13,13,0.72)</code> → <code>0.9</code>, 200ms <code>--ease-primary</code> (the trigger's); press <code>scale 0.97</code> (DS buttons)</span>
+      <span class="k">Reduced motion</span><span>Instant scroll (<code>behavior: "auto"</code>), and the pill and the line fade with no rise — foundations.md l.349: "skip transforms, keep opacity". The well's own reduced-motion path (<code>film-shot-well-fade</code>, 150ms) and the rows' <code>animation: none</code> are already there</span>
+      <span class="k">What does not move</span><span>The list's header, the lit row's wash (a colour swap, 200ms as shipped), the board, the court. Holding is the absence of a scroll, and it needs no animation of its own</span>
+    </div>
+  </div>
+  <div class="card" style="padding:20px 24px;width:1180px;box-sizing:border-box">
+    <div class="callout">
+      <div>
+        <h4>Reduced motion, in one line per surface</h4>
+        <ul>
+          <li>Drawer: re-follow lands on the playing row at once; the pill fades in 150ms, out 100ms; the well is at full height from its first frame and fades (as it does today).</li>
+          <li>Card: the rows swap without the stagger (<code>film-shot-row-in</code> is <code>animation: none</code>); the header line fades in and out, no rise.</li>
+          <li>Nothing is removed from the reduced-motion path that carries state: the line and the pill still appear, the lit row still moves, the well still opens.</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Keyboard and screen reader</h4>
+        <ul>
+          <li>The pill is a <code>&lt;button&gt;</code> inside <code>aside[aria-label="Points"]</code>, in DOM order after the scroller — Tab reaches it after the last row; it is never in the tab order while hidden (unmounted, not opacity 0).</li>
+          <li><code>aria-label="Now playing: point 14 — follow playback"</code> on both the pill and the header line; the visible string stays the short one.</li>
+          <li>The lit row's <code>data-playing="true"</code> and its <code>aria-current</code> keep naming the playing point while held; the held row gets no attribute of its own — its open well is the mark.</li>
+          <li>Focus on the pill holds the room's chrome up (<code>focusHolds</code>), like focus on any other chrome control.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div>
+<script>if (window.lucide) window.lucide.createIcons();</script>
+</body>
+</html>
