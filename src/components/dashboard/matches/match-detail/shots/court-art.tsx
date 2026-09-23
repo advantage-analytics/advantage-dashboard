@@ -103,13 +103,8 @@ const SERVE_DOT_R = 2.54;
 // legend's Ace glyph to the court's own fill exactly, instead of a second
 // `#F8C84F` literal the checker would flag again.
 export const ACE_STAR_FILL = "#F8C84F";
-// The original outer radius was chosen so the star's area was comparable
-// to the SERVE_DOT_R=2.54 circle's: a regular 10-point star with inner
-// radius R/2 has area
-// 2.5·sin(36°)·R² ≈ 1.4695·R²; solving 1.4695·R² = π·2.54² gives R≈3.714 —
-// A 5-unit radius gives the ace a little more separation from ordinary dots
-// at preview size without changing their radius or colour.
-const ACE_STAR_OUTER_R = 5;
+// Keep the ace unmistakable at preview size without changing ordinary dots.
+const ACE_STAR_OUTER_R = 6;
 
 /**
  * The won/lost/neutral colour for a dot's outcome — the one piece this

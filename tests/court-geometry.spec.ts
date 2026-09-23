@@ -413,12 +413,12 @@ test.describe("starPoints", () => {
   test("ace star remains larger than an ordinary dot at preview size", () => {
     // Regular 10-point star (outer R, inner R/2): area = 5 * R * (R/2) *
     // sin(36°) = 2.5 * sin(36°) * R² ≈ 1.4695 * R². Circle area = π * 2.54²
-    // ≈ 20.268. The court uses a 5-unit outer radius.
-    const outerR = 5;
+    // ≈ 20.268. The court uses a 6-unit outer radius.
+    const outerR = 6;
     const starArea = 2.5 * Math.sin((36 * Math.PI) / 180) * outerR * outerR;
     const dotArea = Math.PI * 2.54 * 2.54;
-    expect(starArea).toBeGreaterThan(dotArea * 1.8);
-    expect(starArea).toBeLessThan(dotArea * 1.85);
+    expect(starArea).toBeGreaterThan(dotArea * 2.6);
+    expect(starArea).toBeLessThan(dotArea * 2.65);
   });
 });
 
