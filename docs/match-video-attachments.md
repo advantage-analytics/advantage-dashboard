@@ -181,6 +181,8 @@ CORS rule for attachments:
 Two things that look like gaps and are not. **Playback needs nothing from
 CORS**: no player sets `crossOrigin`, so the `<video>` loads in no-cors mode
 and the rule is never consulted — do not add origins on playback's account.
+The seek lane's hover-preview `<video>` (`use-seek-preview.ts`) sets no
+cross-origin attribute either, and plays the player's own URL string.
 And **`DELETE` is absent on purpose**: cancelling an upload is a `DELETE` to
 this app's own API, never to Azure.
 

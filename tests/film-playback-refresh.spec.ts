@@ -331,6 +331,22 @@ test.afterAll(async () => {
 
 const REPORT = '[data-testid="film-player-video"]';
 const ROOM = '[data-testid="film-room-video"]';
+/** The room's own lane — inside its bottom-block positioning layer. */
+const ROOM_LANE = '[data-film-chrome] [role="slider"][aria-label="Seek"]';
+const ROOM_PREVIEW = `${ROOM_LANE} [data-testid="film-seek-preview"]`;
+const ROOM_PREVIEW_VIDEO = `${ROOM_LANE} [data-testid="film-seek-preview-video"]`;
+
+/** Hover the room's lane at `fraction` of its width; returns the lane's box. */
+async function hoverRoomLane(page: Page, fraction: number) {
+  const box = await page.locator(ROOM_LANE).boundingBox();
+  if (!box) throw new Error("no room lane");
+  await page.mouse.move(box.x + fraction * box.width, box.y + box.height / 2);
+  await expect(page.locator(ROOM_PREVIEW)).not.toHaveAttribute(
+    "data-state",
+    "closed",
+  );
+  return box;
+}
 
 async function open(
   page: Page,
@@ -598,11 +614,40 @@ test("the room swaps with the report player and hands the playhead back", async 
     { timeout: 10_000 },
   );
 
+  // The room's lane previews the room's credential (T4): hover it, mark the
+  // element, and step off before the swap.
+  const lane = await hoverRoomLane(page, 0.5);
+  await expect(page.locator(ROOM_PREVIEW_VIDEO)).toHaveCount(1);
+  expect(
+    await page
+      .locator(ROOM_PREVIEW_VIDEO)
+      .evaluate((el) => (el as HTMLVideoElement).src),
+  ).toBe((await state(page, ROOM))?.src);
+  await page
+    .locator(ROOM_PREVIEW_VIDEO)
+    .evaluate((el) => ((el as HTMLElement).dataset.marker = "first"));
+  await page.mouse.move(lane.x + lane.width / 2, lane.y - 200);
+
   await release(page, matchId);
   // One credential, both surfaces: the room and the player behind it move
   // together because they are reading one hook.
   await awaitCredential(page, ROOM, 1);
   await awaitCredential(page, REPORT, 1);
+
+  // …and the preview moved with them: a new node on the new `cred=`.
+  await hoverRoomLane(page, 0.6);
+  await expect(page.locator(ROOM_PREVIEW_VIDEO)).toHaveCount(1);
+  expect(
+    await page
+      .locator(ROOM_PREVIEW_VIDEO)
+      .evaluate((el) => (el as HTMLVideoElement).src),
+  ).toContain("cred=1");
+  expect(
+    await page
+      .locator(ROOM_PREVIEW_VIDEO)
+      .evaluate((el) => (el as HTMLElement).dataset.marker ?? null),
+  ).toBeNull();
+  await page.mouse.move(lane.x + lane.width / 2, lane.y - 200);
 
   const room = await state(page, ROOM);
   expect(room?.time).toBeCloseTo(0.3, 1);
@@ -2725,4 +2770,412 @@ test("T26: a jump near the end of the list clamps to the end, the row inside the
     c!.top >= REFOLLOW_JUMP_INSET_PX - 1 &&
       c!.top <= REFOLLOW_JUMP_INSET_PX + 1,
   ).toBe(false);
+});
+
+/* -------------------------------------------------------------------------
+ * The seek lane's hover frame (handoff T2)
+ *
+ * The report lane floats a second, muted `<video>` on the player's own
+ * credential over the pointer. What only a browser can settle: that it opens
+ * for a mouse and a scrub but not for focus or a passing touch, that it seeks
+ * to the lane time under the pointer without a seek per move, and that a
+ * refreshed credential remounts it rather than swapping its `src`.
+ *
+ * The fixture is 2.000 s, so 75% of the lane is 1.5 s and 70% is 1.4 s —
+ * both read "0:01" on the clock.
+ * ---------------------------------------------------------------------- */
+
+const LANE = `div:has(> ${REPORT}) [role="slider"][aria-label="Seek"]`;
+const PREVIEW = '[data-testid="film-seek-preview"]';
+const PREVIEW_VIDEO = '[data-testid="film-seek-preview-video"]';
+const PREVIEW_TIME = '[data-testid="film-seek-preview-time"]';
+/** `PREVIEW_SEEK_INTERVAL_MS`, written out so a retune fails here first. */
+const PREVIEW_SEEK_INTERVAL_MS = 120;
+
+async function laneBox(page: Page) {
+  const box = await page.locator(LANE).boundingBox();
+  if (!box) throw new Error("no report lane");
+  return {
+    ...box,
+    at: (fraction: number) => box.x + fraction * box.width,
+    y: box.y + box.height / 2,
+  };
+}
+
+async function previewTime(page: Page) {
+  return page.evaluate(
+    (sel) =>
+      document.querySelector<HTMLVideoElement>(sel)?.currentTime ?? Number.NaN,
+    PREVIEW_VIDEO,
+  );
+}
+
+test("T2 (a): hovering the report lane opens a live frame at the pointer's time, and leaving closes it", async ({
+  page,
+}) => {
+  await open(page, "preview-hover", { ttl: String(60 * 60 * 1000) });
+  const lane = await laneBox(page);
+
+  await page.mouse.move(lane.at(0.75), lane.y);
+  await expect(page.locator(PREVIEW)).not.toHaveAttribute(
+    "data-state",
+    "closed",
+  );
+  await expect(page.locator(PREVIEW_TIME)).toHaveText("0:01");
+  const hover = await page
+    .locator(LANE)
+    .evaluate((el) =>
+      Number((el as HTMLElement).style.getPropertyValue("--film-hover")),
+    );
+  expect(Math.abs(hover - 1.5)).toBeLessThan(0.05);
+
+  await expect
+    .poll(() => page.locator(PREVIEW).getAttribute("data-state"), {
+      timeout: 5000,
+    })
+    .toBe("live");
+  await expect
+    .poll(async () => Math.abs((await previewTime(page)) - 1.5))
+    .toBeLessThan(0.1);
+
+  await page.mouse.move(lane.at(0.75), lane.y + 40);
+  await expect(page.locator(PREVIEW)).toHaveAttribute("data-state", "closed");
+  await expect(page.locator(PREVIEW)).toBeHidden();
+});
+
+test("T2 (b): keyboard focus opens nothing, and the arrows still seek", async ({
+  page,
+}) => {
+  await open(page, "preview-focus", { ttl: String(60 * 60 * 1000) });
+  await page.mouse.move(2, 2);
+
+  const slider = page.locator(LANE);
+  await slider.focus();
+  const state = await page.locator(PREVIEW).getAttribute("data-state");
+  expect(state === null || state === "closed").toBe(true);
+
+  const before = Number(await slider.getAttribute("aria-valuenow"));
+  await page.keyboard.press("ArrowRight");
+  // 5 s on, or to the end of a 2 s film.
+  await expect(slider).toHaveAttribute(
+    "aria-valuenow",
+    String(Math.min(2, before + 5)),
+  );
+  const after = await page.locator(PREVIEW).getAttribute("data-state");
+  expect(after === null || after === "closed").toBe(true);
+  await expect(page.locator(PREVIEW_VIDEO)).toHaveCount(0);
+});
+
+test("T2 (c): a scrub keeps the preview on the thumb off the lane, and releasing there closes it", async ({
+  page,
+}) => {
+  await open(page, "preview-scrub", { ttl: String(60 * 60 * 1000) });
+  const lane = await laneBox(page);
+
+  await page.mouse.move(lane.at(0.3), lane.y);
+  await page.mouse.down();
+  await page.mouse.move(lane.at(0.7), lane.y, { steps: 5 });
+  await page.mouse.move(lane.at(0.7), lane.y + 40);
+
+  await expect(page.locator(PREVIEW)).not.toHaveAttribute(
+    "data-state",
+    "closed",
+  );
+  await expect(page.locator(PREVIEW_TIME)).toHaveText("0:01");
+  await expect
+    .poll(async () => Math.abs(((await state(page, REPORT))?.time ?? 0) - 1.4))
+    .toBeLessThan(0.1);
+
+  await page.mouse.up();
+  await expect(page.locator(PREVIEW)).toHaveAttribute("data-state", "closed");
+});
+
+test("T2 (d): a touch opens the preview only while it drags", async ({
+  page,
+}) => {
+  await open(page, "preview-touch", { ttl: String(60 * 60 * 1000) });
+  const lane = await laneBox(page);
+  const slider = page.locator(LANE);
+  const at = { clientX: lane.at(0.5), clientY: lane.y, isPrimary: true };
+
+  await slider.dispatchEvent("pointermove", { pointerType: "touch", ...at });
+  // Past the rest a hover would have waited for.
+  await page.waitForTimeout(300);
+  await expect(page.locator(PREVIEW_VIDEO)).toHaveCount(0);
+  await expect(page.locator(PREVIEW)).toHaveAttribute("data-state", "closed");
+
+  await slider.dispatchEvent("pointerdown", { pointerType: "touch", ...at });
+  await expect(page.locator(PREVIEW)).not.toHaveAttribute(
+    "data-state",
+    "closed",
+  );
+
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { pointerType: "touch", bubbles: true }),
+    ),
+  );
+  await expect(page.locator(PREVIEW)).toHaveAttribute("data-state", "closed");
+});
+
+test("T2 (e): a sweep across the lane coalesces the preview's seeks and lands on the last one", async ({
+  page,
+}) => {
+  await open(page, "preview-sweep", { ttl: String(60 * 60 * 1000) });
+  const lane = await laneBox(page);
+
+  // A first hover mounts the element; wait until it has metadata.
+  await page.mouse.move(lane.at(0.5), lane.y);
+  await page.waitForFunction(
+    (sel) =>
+      (document.querySelector<HTMLVideoElement>(sel)?.readyState ?? 0) >= 1,
+    PREVIEW_VIDEO,
+    { timeout: 5000 },
+  );
+  await page.mouse.move(lane.at(0) + 1, lane.y);
+  await page.waitForTimeout(300);
+
+  // The `holdSeeks` idiom, on this one element and passing straight through:
+  // count every `currentTime` set and keep the last value and when it was.
+  await page.evaluate((sel) => {
+    const el = document.querySelector<HTMLVideoElement>(sel)!;
+    const real = Object.getOwnPropertyDescriptor(
+      HTMLMediaElement.prototype,
+      "currentTime",
+    )!;
+    const w = window as unknown as {
+      __previewSets: {
+        count: number;
+        last: number;
+        lastAt: number;
+        start: number;
+      };
+    };
+    w.__previewSets = {
+      count: 0,
+      last: -1,
+      lastAt: 0,
+      start: performance.now(),
+    };
+    Object.defineProperty(el, "currentTime", {
+      configurable: true,
+      get() {
+        return real.get!.call(this);
+      },
+      set(this: HTMLMediaElement, value: number) {
+        w.__previewSets.count += 1;
+        w.__previewSets.last = value;
+        w.__previewSets.lastAt = performance.now();
+        real.set!.call(this, value);
+      },
+    });
+  }, PREVIEW_VIDEO);
+
+  const endX = lane.at(1) - 1;
+  await page.mouse.move(endX, lane.y, { steps: 30 });
+  const finalTime = ((endX - lane.x) / lane.width) * 2;
+
+  const sets = () =>
+    page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __previewSets: {
+              count: number;
+              last: number;
+              lastAt: number;
+              start: number;
+            };
+          }
+        ).__previewSets,
+    );
+  await expect
+    .poll(async () => Math.abs((await sets()).last - finalTime), {
+      timeout: 5000,
+    })
+    .toBeLessThan(0.1);
+  // Let any trailing timer fire, so a late extra set would be counted.
+  await page.waitForTimeout(PREVIEW_SEEK_INTERVAL_MS * 3);
+  const { count, last, lastAt, start } = await sets();
+  expect(Math.abs(last - finalTime)).toBeLessThan(0.1);
+  expect(count).toBeGreaterThan(0);
+  expect(count).toBeLessThanOrEqual(
+    Math.ceil((lastAt - start) / PREVIEW_SEEK_INTERVAL_MS) + 2,
+  );
+});
+
+test("T2 (f): a refreshed credential remounts the preview element on the new URL", async ({
+  page,
+}) => {
+  const matchId = "ok-preview-refresh";
+  await open(page, matchId);
+  const lane = await laneBox(page);
+
+  await page.mouse.move(lane.at(0.5), lane.y);
+  await expect(page.locator(PREVIEW_VIDEO)).toHaveCount(1);
+  await page
+    .locator(PREVIEW_VIDEO)
+    .evaluate((el) => ((el as HTMLElement).dataset.marker = "first"));
+  await page.mouse.move(lane.at(0.5), lane.y + 40);
+
+  await release(page, matchId);
+  await awaitCredential(page, REPORT, 1);
+
+  await page.mouse.move(lane.at(0.6), lane.y);
+  await expect(page.locator(PREVIEW)).not.toHaveAttribute(
+    "data-state",
+    "closed",
+  );
+  const preview = page.locator(PREVIEW_VIDEO);
+  await expect(preview).toHaveCount(1);
+  expect(
+    await preview.evaluate((el) => (el as HTMLVideoElement).src),
+  ).toContain("cred=1");
+  expect(
+    await preview.evaluate((el) => (el as HTMLElement).dataset.marker ?? null),
+  ).toBeNull();
+});
+
+/* -------------------------------------------------------------------------
+ * The room's lane preview (T4)
+ *
+ * The room passes its own credential to the lane, which draws the 256×144
+ * size with no overhang — clamped to the slider, which the drawer shortens —
+ * and paints above the scoreboard and the court. `elementFromPoint` skips
+ * `pointer-events: none`, so the paint-order probe turns the box's pointer
+ * events on for exactly one call.
+ * ---------------------------------------------------------------------- */
+
+async function previewRect(page: Page) {
+  const box = await page.locator(ROOM_PREVIEW).boundingBox();
+  const frame = await page
+    .locator(`${ROOM_PREVIEW} [data-testid="film-seek-preview-frame"]`)
+    .boundingBox();
+  if (!box || !frame) throw new Error("no room preview");
+  return { box, frame };
+}
+
+/** Whether the preview box paints above `selector` where the two overlap. */
+async function paintsAbove(page: Page, selector: string) {
+  return page.evaluate(
+    ([previewSel, otherSel]) => {
+      const box = document.querySelector<HTMLElement>(previewSel);
+      const other = document.querySelector<HTMLElement>(otherSel);
+      if (!box || !other) return { overlap: false, above: false };
+      const a = box.getBoundingClientRect();
+      const b = other.getBoundingClientRect();
+      const left = Math.max(a.left, b.left);
+      const right = Math.min(a.right, b.right);
+      const top = Math.max(a.top, b.top);
+      const bottom = Math.min(a.bottom, b.bottom);
+      if (right - left < 2 || bottom - top < 2)
+        return { overlap: false, above: false };
+      const was = box.style.pointerEvents;
+      box.style.pointerEvents = "auto";
+      try {
+        const hit = document.elementFromPoint(
+          (left + right) / 2,
+          (top + bottom) / 2,
+        );
+        return { overlap: true, above: !!hit && box.contains(hit) };
+      } finally {
+        box.style.pointerEvents = was;
+      }
+    },
+    [ROOM_PREVIEW, selector] as const,
+  );
+}
+
+/** Drag a room overlay by its body into the room's bottom-left corner. */
+async function dragToBottomLeft(page: Page, selector: string) {
+  const handle = await page.locator(selector).boundingBox();
+  const room = await page.locator(ROOM).boundingBox();
+  if (!handle || !room) throw new Error(`nothing to drag at ${selector}`);
+  const fromX = handle.x + 4;
+  const fromY = handle.y + handle.height - 4;
+  await page.mouse.move(fromX, fromY);
+  await page.mouse.down();
+  await page.mouse.move(room.x + 40, room.y + room.height - 160, {
+    steps: 12,
+  });
+  await page.mouse.up();
+}
+
+test("T4: the room lane previews at 256×144, clamped inside the drawer-shortened lane", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "room-preview-geometry");
+  const slider = await page.locator(ROOM_LANE).boundingBox();
+  if (!slider) throw new Error("no room lane");
+
+  await hoverRoomLane(page, 0.999);
+  const right = await previewRect(page);
+  expect(right.frame.width).toBeCloseTo(256, 0);
+  expect(right.frame.height).toBeCloseTo(144, 0);
+  expect(right.box.x + right.box.width).toBeLessThanOrEqual(
+    slider.x + slider.width + 0.5,
+  );
+
+  await hoverRoomLane(page, 0.001);
+  const left = await previewRect(page);
+  expect(left.frame.width).toBeCloseTo(256, 0);
+  expect(left.frame.height).toBeCloseTo(144, 0);
+  expect(left.box.x).toBeGreaterThanOrEqual(slider.x - 0.5);
+});
+
+test("T4: the room preview paints above the scoreboard and the court", async ({
+  page,
+}) => {
+  await open(page, "room-preview-paint");
+  // Inside a point, so the board and the court are both drawn.
+  await seekTo(page, REPORT, 0.3);
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+  await expect(page.locator("[data-court-anchor]")).toHaveCount(1);
+
+  // The court first, while the board is still top-left: a court dropped in
+  // the board's own corner stacks above it, out of the preview's reach.
+  await dragToBottomLeft(page, "[data-film-court-handle]");
+  await expect(page.locator("[data-court-anchor]")).toHaveAttribute(
+    "data-court-anchor",
+    "bottom-left",
+  );
+  await hoverRoomLane(page, 0.001);
+  expect(await paintsAbove(page, "[data-court-anchor]")).toEqual({
+    overlap: true,
+    above: true,
+  });
+
+  await dragToBottomLeft(page, "[data-board-anchor]");
+  await expect(page.locator("[data-board-anchor]")).toHaveAttribute(
+    "data-board-anchor",
+    "bottom-left",
+  );
+  await hoverRoomLane(page, 0.001);
+  expect(await paintsAbove(page, "[data-board-anchor]")).toEqual({
+    overlap: true,
+    above: true,
+  });
+});
+
+test("T4: only the hovered lane mounts a preview, and none of it takes the pointer", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "room-preview-one");
+  await hoverRoomLane(page, 0.5);
+
+  await expect(page.locator(PREVIEW_VIDEO)).toHaveCount(1);
+  await expect(page.locator(ROOM_PREVIEW_VIDEO)).toHaveCount(1);
+
+  const events = await page
+    .locator(ROOM_PREVIEW)
+    .evaluate((box) =>
+      [box, ...Array.from(box.querySelectorAll("*"))].map(
+        (el) => getComputedStyle(el).pointerEvents,
+      ),
+    );
+  expect(events.length).toBeGreaterThan(1);
+  expect(new Set(events)).toEqual(new Set(["none"]));
 });
