@@ -17,7 +17,7 @@ import {
   resultWon,
   type EntryState,
 } from "@/lib/schedule/entry-state";
-import { LINE_STATUS } from "@/lib/schedule/line-status";
+import { LINE_STATUS, type LineStatus } from "@/lib/schedule/line-status";
 import { lineupForfeitSide } from "@/lib/schedule/entry-plan";
 import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
 
@@ -274,7 +274,29 @@ export function scoreHref(
   return `/dashboard/team/schedule/${eventId}/score?${query.toString()}`;
 }
 
-function Action({
+/**
+ * What a line offers next — the one rule, drawn by `LineRow`'s `Action` and
+ * by the event pages' line drawer (`event-line-drawer.tsx`), so the row and
+ * the drawer cannot disagree about a line's job.
+ *
+ * - `outcome` — forfeited, defaulted or withdrawn: the outcome's words, and
+ *   the score flow to correct it when the viewer can.
+ * - `add-result` — nobody has recorded anything, and the viewer can.
+ * - `status` — a waiting state (working, waiting, failed), words from
+ *   `LINE_STATUS`.
+ * - `view-report` — there is a report to read.
+ * - `add-video` — a scored singles line nothing was sent for.
+ * - `null` — nothing to offer this viewer.
+ */
+export type LineAction =
+  | { kind: "outcome"; status: LineStatus; editHref: string | null }
+  | { kind: "add-result"; href: string }
+  | { kind: "status"; status: LineStatus }
+  | { kind: "view-report"; href: string }
+  | { kind: "add-video"; href: string }
+  | null;
+
+export function lineAction({
   state,
   match,
   entryId,
@@ -293,42 +315,27 @@ function Action({
   canEdit: boolean;
   /** The score flow with this line preset — where a result is written. */
   scoreHref: string;
-}) {
+}): LineAction {
   if (state === "forfeited" || state === "defaulted" || state === "withdrawn") {
-    const status = LINE_STATUS[state]!;
-    if (!canEdit) {
-      return <StatusChip tone={status.tone}>{status.label}</StatusChip>;
-    }
-    return (
-      <span className="flex items-center justify-end gap-2">
-        <StatusChip tone={status.tone}>{status.label}</StatusChip>
-        <RowAction href={scoreHref}>Edit result</RowAction>
-      </span>
-    );
+    return {
+      kind: "outcome",
+      status: LINE_STATUS[state]!,
+      editHref: canEdit ? scoreHref : null,
+    };
   }
 
   if (state === "empty") {
-    if (!canEdit) return null;
-
-    return <RowAction href={scoreHref}>Add result</RowAction>;
+    return canEdit ? { kind: "add-result", href: scoreHref } : null;
   }
 
   // The waiting states — working, waiting, failed — and their words come from
   // `LINE_STATUS`, which the dual sheet on Team Home reads too. The words are
   // not retyped here.
   const status = LINE_STATUS[state];
-  if (status) {
-    return (
-      <StatusChip tone={status.tone} live={status.live}>
-        {status.label}
-      </StatusChip>
-    );
-  }
+  if (status) return { kind: "status", status };
 
   if (state === "ready" && match) {
-    return (
-      <RowAction href={`/dashboard/matches/${match.id}`}>View report</RowAction>
-    );
+    return { kind: "view-report", href: `/dashboard/matches/${match.id}` };
   }
 
   // Played, scored, nothing sent. The one thing left to do with this line — and
@@ -342,17 +349,47 @@ function Action({
   // link carrying only the entry would preset every round's upload to whichever
   // match came back first — attaching a video to Q1 when the coach clicked R32,
   // with nothing on screen to show for it.
-  return (
-    <RowAction
-      href={
-        matchId
-          ? `/dashboard/team/upload?entry=${entryId}&match=${matchId}`
-          : `/dashboard/team/upload?entry=${entryId}`
+  return {
+    kind: "add-video",
+    href: matchId
+      ? `/dashboard/team/upload?entry=${entryId}&match=${matchId}`
+      : `/dashboard/team/upload?entry=${entryId}`,
+  };
+}
+
+function Action(props: Parameters<typeof lineAction>[0]) {
+  const action = lineAction(props);
+  if (!action) return null;
+  switch (action.kind) {
+    case "outcome":
+      if (!action.editHref) {
+        return (
+          <StatusChip tone={action.status.tone}>
+            {action.status.label}
+          </StatusChip>
+        );
       }
-    >
-      Add video
-    </RowAction>
-  );
+      return (
+        <span className="flex items-center justify-end gap-2">
+          <StatusChip tone={action.status.tone}>
+            {action.status.label}
+          </StatusChip>
+          <RowAction href={action.editHref}>Edit result</RowAction>
+        </span>
+      );
+    case "add-result":
+      return <RowAction href={action.href}>Add result</RowAction>;
+    case "status":
+      return (
+        <StatusChip tone={action.status.tone} live={action.status.live}>
+          {action.status.label}
+        </StatusChip>
+      );
+    case "view-report":
+      return <RowAction href={action.href}>View report</RowAction>;
+    case "add-video":
+      return <RowAction href={action.href}>Add video</RowAction>;
+  }
 }
 
 export interface LineViewer {

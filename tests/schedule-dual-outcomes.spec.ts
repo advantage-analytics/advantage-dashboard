@@ -346,3 +346,171 @@ test("a row click selects the line and mirrors ?line=", async ({ page }) => {
   await open(page, "?normal&line=entry-s1");
   await expect(line(page, "S1")).toHaveAttribute("aria-current", "true");
 });
+
+/* ── The line drawer (`event-line-drawer.tsx`) ─────────────────────────── */
+
+/** The open line drawer — `PeekDrawerFrame`'s dialog. */
+function drawer(page: Page) {
+  return page.getByRole("dialog");
+}
+
+const SCORE = "/dashboard/team/schedule/dual-outcomes/score";
+
+test("a played singles line opens the drawer with its match, facts and follow-ups", async ({
+  page,
+}) => {
+  await open(page, "?normal");
+  await line(page, "S2").click();
+
+  const panel = drawer(page);
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText("Line", { exact: true })).toBeVisible();
+  await expect(panel.getByText("2 / 9", { exact: true })).toBeVisible();
+
+  // The title and the footer both lead to the report.
+  const report = "/dashboard/matches/normal-ready-match";
+  await expect(panel.locator("h2 a")).toHaveAttribute("href", report);
+  await expect(
+    panel.getByRole("link", { name: "View match", exact: true }),
+  ).toHaveAttribute("href", report);
+  await expect(panel.locator("dl").first()).toContainText(
+    "vs Meridian State · S2",
+  );
+  // The line has its video, and a coach sees ⋯.
+  await expect(panel.getByRole("link", { name: "Add video" })).toHaveCount(0);
+  await expect(
+    panel.getByRole("button", { name: "Match actions" }),
+  ).toHaveCount(1);
+  // The snapshot read finds no stats row, so the skeleton gives way.
+  await expect(
+    panel.getByRole("status", { name: "Loading snapshot" }),
+  ).toHaveCount(0);
+
+  // A scored singles line with nothing sent offers the video, preset on its
+  // entry and match — the old row action's link.
+  await line(page, "S3").click();
+  await expect(panel.getByText("3 / 9", { exact: true })).toBeVisible();
+  await expect(
+    panel.getByRole("link", { name: "Add video", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    "/dashboard/team/upload?entry=entry-s3&match=normal-manual-loss",
+  );
+  await expect(
+    panel.getByRole("link", { name: "View match", exact: true }),
+  ).toHaveAttribute("href", "/dashboard/matches/normal-manual-loss");
+});
+
+test("the drawer's This dual list names all nine lines and steps between them", async ({
+  page,
+}) => {
+  await open(page);
+  await line(page, "S2").click();
+
+  const list = drawer(page).getByRole("region", { name: "This dual" });
+  await expect(list.getByText("This dual", { exact: true })).toBeVisible();
+  await expect(list.getByText("Won 4–3", { exact: true })).toBeVisible();
+  const rows = list.getByRole("button");
+  await expect(rows).toHaveCount(9);
+  await expect(rows.locator("span.mono")).toHaveText([
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6",
+    "D1",
+    "D2",
+    "D3",
+  ]);
+  await expect(rows.nth(1)).toHaveAttribute("aria-current", "true");
+  await expect(list.locator('[aria-current="true"]')).toHaveCount(1);
+
+  await rows.nth(4).click();
+  await expect(rows.nth(4)).toHaveAttribute("aria-current", "true");
+  await expect(line(page, "S5")).toHaveAttribute("aria-current", "true");
+  await expect(drawer(page).getByText("5 / 9", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => location.search)).toContain("line=entry-s5");
+
+  // A line the toolbar hides lifts the cut rather than losing the selection.
+  await page.getByRole("button", { name: "Singles", exact: true }).click();
+  await drawer(page)
+    .getByRole("region", { name: "This dual" })
+    .getByRole("button")
+    .nth(6)
+    .click();
+  await expect(line(page, "D1")).toHaveAttribute("aria-current", "true");
+  await expect(lineRows(page)).toHaveCount(9);
+});
+
+test("a doubles line is score only; an unplayed line asks for a result; outcomes edit", async ({
+  page,
+}) => {
+  await open(page);
+  await line(page, "D1").click();
+  const panel = drawer(page);
+  await expect(panel.getByText("7 / 9", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Snapshot")).toHaveCount(0);
+  await expect(panel.getByRole("link", { name: "Add video" })).toHaveCount(0);
+  await expect(
+    panel.getByText(
+      "Doubles lines record a score only. Statistics and video analysis are singles only for now.",
+    ),
+  ).toBeVisible();
+  const edit = panel.getByRole("link", { name: "Edit result", exact: true });
+  await expect(edit).toHaveAttribute("href", `${SCORE}?entry=entry-d1`);
+  await expect(edit).toHaveAttribute("class", PRIMARY_CLASS);
+
+  for (let n = 1; n <= 6; n++) {
+    await line(page, `S${n}`).click();
+    await expect(
+      panel.getByRole("link", { name: "Edit result", exact: true }),
+    ).toHaveAttribute("href", `${SCORE}?entry=entry-s${n}`);
+    await expect(panel.getByRole("link", { name: "View report" })).toHaveCount(
+      0,
+    );
+    // The outcome is authoritative — S1's contradictory match is not linked.
+    await expect(panel.getByRole("link", { name: "View match" })).toHaveCount(
+      0,
+    );
+  }
+
+  await open(page, "?normal");
+  await line(page, "S1").click();
+  const add = drawer(page).getByRole("link", {
+    name: "Add result",
+    exact: true,
+  });
+  await expect(add).toHaveAttribute("href", /\/score\?entry=/);
+  await expect(add).toHaveAttribute("href", `${SCORE}?entry=entry-s1`);
+  await expect(
+    drawer(page).getByRole("button", { name: "Match actions" }),
+  ).toHaveCount(0);
+
+  // An unscored doubles line: "Add result" into the same flow.
+  await line(page, "D2").click();
+  await expect(
+    drawer(page).getByRole("link", { name: "Add result", exact: true }),
+  ).toHaveAttribute("href", `${SCORE}?entry=entry-d2`);
+});
+
+test("a member who cannot manage the schedule reads the drawer without actions", async ({
+  page,
+}) => {
+  await open(page, "?normal&viewer=player");
+  for (const slot of ["S1", "S2", "S3", "D1"]) {
+    await line(page, slot).click();
+    const panel = drawer(page);
+    await expect(panel).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: "Match actions" }),
+    ).toHaveCount(0);
+    await expect(
+      panel.getByRole("link", { name: /^(Add result|Edit result|Add video)$/ }),
+    ).toHaveCount(0);
+  }
+  await line(page, "S2").click();
+  await expect(
+    drawer(page).getByRole("link", { name: "View match", exact: true }),
+  ).toHaveAttribute("href", "/dashboard/matches/normal-ready-match");
+});

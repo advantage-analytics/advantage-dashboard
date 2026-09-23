@@ -136,7 +136,7 @@ ready).
 
 ## T10 · Dual line drawer, including the doubles and unplayed variants
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7, T9
 - **files:** src/components/dashboard/schedule/event-line-drawer.tsx (new), src/components/dashboard/schedule/dual-detail.tsx, tests/fixtures/schedule-dual-outcomes-harness.tsx, tests/fixtures/supabase-client-browser-mock.ts, tests/schedule-dual-outcomes.spec.ts (guess)

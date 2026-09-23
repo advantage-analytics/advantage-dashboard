@@ -9,7 +9,7 @@ import {
 
 /**
  * The dual event page on fixture lines. `?normal` swaps the all-outcomes
- * card for the two-line in-progress one; `?viewer=player` renders a member
+ * card for the nine-line in-progress one; `?viewer=player` renders a member
  * who cannot manage the schedule; `?line=` is handed in as the initial
  * selection, the way the server page hands `searchParams.line` down (the
  * navigation mock's `useSearchParams()` returns null).

@@ -29,6 +29,12 @@ import {
   type ToolbarOption,
 } from "@/components/dashboard/schedule/event-table";
 import { useRowSelection } from "@/components/dashboard/schedule/use-row-selection";
+import {
+  EventLineDrawer,
+  LineContextList,
+  LineContextRow,
+} from "@/components/dashboard/schedule/event-line-drawer";
+import { drawerSideName } from "@/components/dashboard/matches/drawer-sections";
 import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
 import { RowLifecycle } from "@/components/dashboard/matches/row-state";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
@@ -118,9 +124,10 @@ const SORTS: readonly ToolbarOption<Sort>[] = [
  * strip, and the nine lines as a table grouped Singles then Doubles.
  *
  * Rows peek, never navigate: a click selects the line (`aria-current`,
- * `?line=<entry id>`) for the drawer T10 adds beside the table. Until then no
- * drawer is drawn — the row actions that used to sit at the end of each line
- * (Add result, Edit result, View report, Add video) move into that drawer.
+ * `?line=<entry id>`) and opens `EventLineDrawer` beside the table. The row
+ * actions that used to sit at the end of each line (Add result, Edit result,
+ * View report, Add video) live in that drawer, off `line-row.tsx`'s
+ * `lineAction`, and its "This dual" list steps between all nine lines.
  *
  * Every member of the program sees the same data — the membership-only RLS
  * policy hands every member the program's matches.
@@ -205,6 +212,20 @@ export function DualDetail({
   );
 
   const rowCount = visibleIds.length;
+
+  const drawerEntry = selection.drawerId
+    ? (entries.find((entry) => entry.id === selection.drawerId) ?? null)
+    : null;
+  // The context list names every line, whatever the toolbar hides. Choosing
+  // one the cut hides lifts the cut first, so the selection is not cleared
+  // the moment it lands on a row that is not listed.
+  const chooseLine = (id: string) => {
+    if (!visibleIds.includes(id)) {
+      setPill("all");
+      setResultCut(null);
+    }
+    selection.select(id, false);
+  };
 
   return (
     <EventPageLayout
@@ -362,8 +383,43 @@ export function DualDetail({
           }
         />
       }
-      // T10 draws the line drawer here, from `selection.drawerId`.
-      drawer={null}
+      drawer={
+        drawerEntry ? (
+          <EventLineDrawer
+            kind="Line"
+            event={event}
+            entry={drawerEntry}
+            lineLabel={drawerEntry.slot ?? "—"}
+            eventLabel={`vs ${event.name}`}
+            canEdit={canEdit}
+            index={selection.index}
+            total={selection.total}
+            canPrev={selection.canPrev}
+            canNext={selection.canNext}
+            closing={selection.closing}
+            autoFocus={selection.openedByKeyboard}
+            onPrev={() => selection.step(-1)}
+            onNext={() => selection.step(1)}
+            onClose={() => selection.close(drawerEntry.id)}
+            onClosed={selection.finishClose}
+            context={
+              <LineContextList
+                eyebrow="This dual"
+                summary={dualResultWords(score)}
+              >
+                {[...singles, ...doubles].map((entry) => (
+                  <DualContextRow
+                    key={entry.id}
+                    entry={entry}
+                    current={entry.id === drawerEntry.id}
+                    onSelect={chooseLine}
+                  />
+                ))}
+              </LineContextList>
+            }
+          />
+        ) : null
+      }
     />
   );
 }
@@ -395,6 +451,18 @@ function DualResult({
       </span>
     </>
   );
+}
+
+/** The same answer as `DualResult`, as words for the drawer's "This dual". */
+function dualResultWords(score: {
+  us: number;
+  them: number;
+  decided: boolean;
+}): string {
+  if (!score.decided) return "In progress";
+  const word =
+    score.us === score.them ? "Tied" : score.us > score.them ? "Won" : "Lost";
+  return `${word} ${score.us}–${score.them}`;
 }
 
 /**
@@ -548,6 +616,50 @@ function LineTableRow({
         )}
       </span>
     </EventRow>
+  );
+}
+
+/**
+ * One line in the drawer's "This dual" list: slot, our side abbreviated, the
+ * score — or the outcome's words, never an invented score — and the mark.
+ */
+function DualContextRow({
+  entry,
+  current,
+  onSelect,
+}: {
+  entry: EventEntry;
+  current: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const result = resolveEntryResult(entry, null);
+  const played = result.kind === "played" ? result.match : null;
+  const state = resultState(result);
+  const outcome =
+    result.kind === "non-played" ? (LINE_STATUS[state] ?? null) : null;
+  const sets = played ? scoreSetsFrom(played.score) : [];
+  const name =
+    entry.playerLabels.length === 0
+      ? "No player"
+      : entry.playerLabels.map((label) => drawerSideName(label)).join(" / ");
+
+  return (
+    <LineContextRow
+      label={entry.slot ?? "—"}
+      name={name}
+      won={resultWon(result)}
+      current={current}
+      onSelect={() => onSelect(entry.id)}
+      score={
+        outcome ? (
+          <span className="text-[var(--ink-500)]">{outcome.label}</span>
+        ) : sets.length > 0 ? (
+          <ScoreLine sets={sets} />
+        ) : (
+          <EmptyMark label="No score yet" />
+        )
+      }
+    />
   );
 }
 

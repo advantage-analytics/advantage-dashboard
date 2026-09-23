@@ -83,3 +83,14 @@ is the runner's. Newest entries at the bottom.
 3. Player names are plain text because lineup ids can be auth uids that 404 on the roster route; link them once a lineup id can be told to be a roster player id.
 4. The footer always prints doubles scoring (from `lineFormat`'s fallback); the frame omits it when no doubles format was recorded.
 5. The subline shows site ("Away") rather than `event.host`, matching the frame; the old glyph row preferred host.
+
+## T10 · Dual line drawer, including the doubles and unplayed variants — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite incl. design-drift); completion `VERDICT: pass`. The first dispatch was cut off by a session rate limit mid-work; a fresh subagent resumed from the uncommitted draft and kept it.
+**changed:** New `schedule/event-line-drawer.tsx`: `EventLineDrawer` on `PeekDrawerFrame` composing T7's sections (heading, facts, analysis notice, snapshot with a `role="status"` skeleton), a `context` slot, and a footer from the shared rule — "Add result"/"Edit result" when due, else "View match"; outline "Add video" for a scored singles line with no video; doubles = grey score-only strip, no snapshot; ⋯ only with a played match and `canEdit`. Also exports `LineContextList`, `LineContextRow`, `lineFormatWords`. `line-row.tsx`'s row-action rule is now an exported pure `lineAction()` used by rows and drawer. `dual-detail.tsx` renders the drawer with a "This dual" context list (result on the right, nine lines, `aria-current`, click to switch; selecting a hidden line resets the filters first). Outside `files:`: `NORMAL_ENTRIES` filled to nine lines (S3 manual loss without video) and the `MatchActionsMenu` stub draws a testable button. The dual page is whole again — line actions are reachable through the drawer.
+**follow-ups:**
+
+1. `MatchActionsMenu` gets no `onDeleted`, so after a delete the drawer stays open until the server refresh.
+2. Context rows render doubles through `drawerSideName`; the frame shows surnames only ("Brooks / Osei").
+3. `useMatchSnapshot` (T7) never settles if its query rejects, leaving the skeleton up.
+4. The counter counts visible rows ("Line 2 / 3" under a pill filter), per the selection model.

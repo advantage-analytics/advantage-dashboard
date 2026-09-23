@@ -116,6 +116,15 @@ export const NORMAL_ENTRIES: EventEntry[] = [
       }),
     ],
   }),
+  // Scored by hand, nothing sent: the line the drawer offers "Add video" on.
+  entry("S3", { matches: [match("normal-manual-loss", false)] }),
+  // The rest of the card, unplayed — a dual saves with all nine lines.
+  entry("S4"),
+  entry("S5"),
+  entry("S6"),
+  entry("D1"),
+  entry("D2"),
+  entry("D3"),
 ];
 
 export function detail(entries: EventEntry[]): EventDetail {
