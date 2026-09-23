@@ -1,6 +1,7 @@
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { ReactNode, MouseEvent } from "react";
-import { servePoint } from "./viz-serve-points";
+import { ASYMMETRIC_SERVES, servePoint } from "./viz-serve-points";
+import { RALLY_POINTS } from "./viz-rally-points";
 
 export const points = [
   servePoint({ id: "p1" }),
@@ -8,7 +9,11 @@ export const points = [
 ];
 
 export function useMatchData() {
-  return { points };
+  return {
+    points: window.location.search.includes("fixture=long")
+      ? [...ASYMMETRIC_SERVES, ...RALLY_POINTS]
+      : points,
+  };
 }
 
 export function useMatchSides() {
@@ -52,6 +57,9 @@ export function savedViewNamePool() {
   return [];
 }
 export function ManageableSavedViewTile() {
+  return null;
+}
+export function SaveViewDialog() {
   return null;
 }
 export async function deleteSavedView() {

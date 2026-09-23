@@ -76,7 +76,7 @@ ready).
 
 ## T5 · Redesign the statistics widget and match court height
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-sol
 - **needs:** T3, T4
 - **files:** Guess: `stats-card.tsx`, `viz-focused.tsx`; layout regression tests under `tests/`.

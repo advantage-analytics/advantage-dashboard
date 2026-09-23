@@ -62,3 +62,11 @@ Recovery investigation:79/79 previously failing live tests passed serialized. Ob
 **gate:** Mechanical: GATE PASS; completion: VERDICT: pass.
 
 **changed:** Enabled Zones for all five cuts; serve retains six cells while other cuts derive bands/counts from shared filtered statistics. Preview/focused/fullscreen, saved views and URL parsing preserve chart combinations and react consistently to subject/filter/band edits. Explicit No bands preserves chart selection and shows explanatory empty state. Fresh live saved_views constraints confirmed no additional migration required.498 targeted logic tests,11 browser regressions, local checks and final screenshots passed.
+
+## T5 · Redesign the statistics widget and match court height — done
+
+**gate:** Mechanical: GATE PASS; completion: VERDICT: pass. Initial gate caught off-scale17px value text; corrected to documented16px without changing the drift baseline, then drift/layout tests and complete gate passed.
+
+**changed:** Restyled statistics with documented typography/surfaces/spacing, removed unnecessary internal dividers, preserved values and accessible announcements. Pane container breakpoint aligns court and statistics top/bottom edges; long statistics scroll internally, narrow layouts stack without horizontal overflow. Styled production-component browser coverage verifies populated/empty states, all five cuts, equal edges, scroll and narrow containment. Worker and parent visually inspected wide/narrow screenshots in the task visualization folder.
+
+**follow-ups:** 1. Existing focused toolbar can squeeze an applied Set3 chip beside Filters at390px in the empty fixture; left outside the statistics/court layout scope.

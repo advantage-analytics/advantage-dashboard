@@ -279,9 +279,9 @@ export function VizFocused({
         stripSlot={hasFilters ? <AppliedStrip /> : undefined}
       />
 
-      <div className="flex items-start gap-4">
+      <div className="flex min-w-0 flex-col gap-4 @min-[720px]:flex-row @min-[720px]:items-stretch">
         <div
-          className="flex min-w-[360px] flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] border"
+          className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] border"
           style={{
             borderColor: "var(--border-hairline)",
             backgroundColor: "var(--surface-card)",
@@ -449,7 +449,14 @@ export function VizFocused({
           )}
         </div>
 
-        {!isDraft && <StatsCard stats={stats} className="viz-vt-stats-card" />}
+        {!isDraft && (
+          <div className="relative w-full min-w-0 shrink-0 @min-[720px]:w-[292px]">
+            <StatsCard
+              stats={stats}
+              className="viz-vt-stats-card @min-[720px]:absolute @min-[720px]:inset-0"
+            />
+          </div>
+        )}
       </div>
 
       {savedViewsBand}
