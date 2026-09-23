@@ -20,3 +20,8 @@ is the runner's. Newest entries at the bottom.
 
 1. An 8-game pro-set still opens a TB box on a 9–8 score via `isTiebreakSet` — whether a pro-set should have one at all is an open question.
 2. Edit Match (`edit-match-score.tsx`) uses `ScoreInput` directly and does not get the tiebreak help.
+
+## T3 · Opponent naming hints under the name input and the selects — done
+
+**gate:** mechanical GATE PASS (first run failed only on the live-DB `match-video-attachments-db.spec.ts` cleanup test, unrelated to this diff; the re-run passed) · completion VERDICT: pass
+**changed:** `DetailsStepContent.tsx` — while naming the opponent, the line under the name input is now a `enter` Kbd chip + "to add them" (11px, --ink-600), replacing "Hand and backhand after the name"; a new line under the two disabled selects (`sm:col-span-2 sm:col-start-2`) reads "Hand and backhand open once the opponent is added." and disappears once an opponent is set. `tests/upload-player-details.spec.ts` gains source assertions for both strings and the removed one.

@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Opponent naming hints under the name input and the selects
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx (guess — the `namingOpponent` branch of the players section, ~lines 1462–1650), tests/upload-player-details.spec.ts (extend)
 - **done when:**

@@ -69,6 +69,7 @@ import { DateField } from "@/components/ui/date-field";
 import { YouPill } from "@/components/ui/you-pill";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { advField } from "@/lib/ui/adv-field";
 import { getInitials } from "@/lib/data/match-utils";
@@ -1641,8 +1642,8 @@ function DetailsStepContentImpl({
                 </Popover>
                 {/* The selects beside it wait on the name; say so where the
                   eye already is, not in a column of its own. */}
-                <span className="text-micro">
-                  Hand and backhand after the name
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
+                  <Kbd size="sm">enter</Kbd> to add them
                 </span>
               </span>
             ) : (
@@ -1711,6 +1712,11 @@ function DetailsStepContentImpl({
                 />
               </Cell>
             </div>
+            {namingOpponent && (
+              <span className="text-[11px] text-[var(--ink-600)] sm:col-span-2 sm:col-start-2">
+                Hand and backhand open once the opponent is added.
+              </span>
+            )}
           </div>
         </div>
 

@@ -265,6 +265,24 @@ test("both players get required underline MenuSelect fields for hand and backhan
   expect(detailsSrc).not.toContain("function WordSelect");
 });
 
+test("the opponent-naming hints read '[enter] to add them' under the name and 'Hand and backhand open once the opponent is added.' under the selects", () => {
+  // The old single-line hint under the name is gone.
+  expect(detailsSrc).not.toContain("Hand and backhand after the name");
+
+  // The Kbd chip + inline copy under the name input.
+  expect(detailsSrc).toContain('<Kbd size="sm">enter</Kbd> to add them');
+
+  // The hint spanning under the two disabled selects, only while naming is
+  // in progress, in the DS-layering-safe Tailwind ink colour (not
+  // `text-micro`, which is unlayered — see `FieldCaption.tsx`).
+  expect(detailsSrc).toContain(
+    "Hand and backhand open once the opponent is added.",
+  );
+  expect(detailsSrc).toContain(
+    '<span className="text-[11px] text-[var(--ink-600)] sm:col-span-2 sm:col-start-2">',
+  );
+});
+
 test("the backhand field reserves extra menu width so its longer labels don't wrap", () => {
   expect(detailsSrc.match(/width=\{220\}/g)?.length).toBe(2);
 });
