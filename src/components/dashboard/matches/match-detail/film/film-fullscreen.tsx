@@ -76,6 +76,7 @@ import {
   ROOM_EXIT_MS,
   collapsedRoomFrame,
   reducedMotionNow as prefersReducedMotion,
+  roomMotionPath,
   type Rect,
 } from "./film-motion";
 import { activeShotAt, shotStops as buildShotStops } from "./film-shots";
@@ -120,7 +121,12 @@ import { useSeekSettling } from "./use-seek-settling";
  * ── Motion ──────────────────────────────────────────────────────────────────
  * The report player's frame grows into the room (`film-motion.ts`): a uniform
  * scale plus a clip to the frame's shape, 460ms on the expo ease-out, and the
- * chrome fades in once the film has landed. Exit runs the same path backwards
+ * chrome fades in once the film has landed. The transform is about the room's
+ * top-left corner (`origin-top-left`, and `transformOrigin` in every keyframe)
+ * — the keyframe maths assumes it, and the default centre origin started the
+ * room beside the player. A frame with no area on screen (the ⇧-click door
+ * from a scrolled-away player) has nothing to grow from, so the room fades in
+ * over 200ms instead, its chrome with it. Exit runs the same path backwards
  * in 320ms, chrome first, and only then hands the playhead back. The points
  * drawer slides on the same curve and the transport's right edge travels with
  * it. Progress rules and the playhead read `--film-t` (`film-clock.ts`), so
@@ -1048,24 +1054,22 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
+    const roomSize = { width: root.clientWidth, height: root.clientHeight };
+    // The rect is never read under reduced motion: there is no travel to aim.
     const reduced = prefersReducedMotion();
     const frame = reduced ? null : p.originRect();
+    const path = reduced ? "fade" : roomMotionPath(frame, roomSize);
 
-    enterAnimation.current = frame
-      ? root.animate(
-          [
-            collapsedRoomFrame(frame, {
-              width: root.clientWidth,
-              height: root.clientHeight,
-            }),
-            OPEN_ROOM_FRAME,
-          ],
-          { duration: ROOM_ENTER_MS, easing: ROOM_EASE_ENTER },
-        )
-      : root.animate([{ opacity: 0 }, { opacity: 1 }], {
-          duration: 200,
-          easing: "linear",
-        });
+    enterAnimation.current =
+      path === "frame" && frame
+        ? root.animate([collapsedRoomFrame(frame, roomSize), OPEN_ROOM_FRAME], {
+            duration: ROOM_ENTER_MS,
+            easing: ROOM_EASE_ENTER,
+          })
+        : root.animate([{ opacity: 0 }, { opacity: 1 }], {
+            duration: 200,
+            easing: "linear",
+          });
 
     // Chrome arrives as the film settles, not while it is still travelling.
     for (const node of root.querySelectorAll<HTMLElement>(
@@ -1073,7 +1077,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     )) {
       node.animate([{ opacity: 0 }, { opacity: 1 }], {
         duration: 220,
-        delay: frame ? ROOM_ENTER_MS * 0.55 : 0,
+        delay: path === "frame" ? ROOM_ENTER_MS * 0.55 : 0,
         easing: "linear",
         fill: "backwards",
       });
@@ -1334,7 +1338,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         onPointerDown={wake}
         onFocus={wake}
         className={cn(
-          "fixed inset-0 z-50 overflow-clip bg-black outline-none",
+          // `origin-top-left`: the grow/shrink keyframes assume it (and carry
+          // it); a centre origin lands the first frame beside the player.
+          "fixed inset-0 z-50 origin-top-left overflow-clip bg-black outline-none",
           // R2 counts the cursor among the operable things that go: it is the
           // one piece of chrome the viewer's own hand draws. The first pointer
           // move brings it back, which `wake` is already listening for.

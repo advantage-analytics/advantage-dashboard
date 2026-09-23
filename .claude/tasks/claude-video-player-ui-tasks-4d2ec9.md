@@ -360,7 +360,7 @@ ready).
 
 ## T27 · The room grows from the report frame: top-left origin, off-screen fade, entrance pinned in the harness
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-motion.ts (`RoomKeyframe`, `collapsedRoomFrame`, `OPEN_ROOM_FRAME`, header doc); film-fullscreen.tsx (the entrance layout effect L1047–1088, the root `className` L1336, the "Motion" doc block L120–128); tests/film-motion.spec.ts; tests/fixtures/film-motion-box.ts (new — `screenBox` moved out of the unit spec so both specs share it); tests/film-playback-refresh.spec.ts (new `spyAnimate` / `openRoomSpied` helpers + three cases); docs/superpowers/specs/2026-09-21-video-fullscreen-h2-design.md (L31, one parenthetical)
 - **done when:**

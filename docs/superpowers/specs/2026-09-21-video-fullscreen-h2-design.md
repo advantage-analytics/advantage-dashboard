@@ -28,7 +28,7 @@ Scope: `src/components/dashboard/matches/match-detail/film/*`. The room is
 ## This is a refactor plus one new object
 
 The room already exists and is mature (PR #225): portal to `document.body` (deliberately not
-`requestFullscreen()`), grow/shrink motion (`film-motion.ts`), scroll lock, 3s idle chrome, window
+`requestFullscreen()`), grow/shrink motion (`film-motion.ts` (origin-top-left fix + off-screen fade, T27 2026-09-23)), scroll lock, 3s idle chrome, window
 key handler, its own `<video>` handed off with the report player, problem/failed panels.
 **Keep all of that.** What changes:
 

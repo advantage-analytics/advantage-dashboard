@@ -7,6 +7,7 @@ import postcss from "postcss";
 import tailwind from "@tailwindcss/postcss";
 import * as nextWebpack from "next/dist/compiled/webpack/webpack";
 
+import { screenBox } from "./fixtures/film-motion-box";
 import type { FilmRefreshHarnessWindow } from "./fixtures/film-playback-refresh-window";
 import { REFOLLOW_JUMP_INSET_PX } from "../src/components/dashboard/matches/match-detail/film/point-list";
 
@@ -3200,4 +3201,213 @@ test("the card's Type cells read First and Return for the playing point", async 
       rows.map((row) => row.children[4]?.textContent?.trim() ?? null),
     );
   expect(types).toEqual(["First", "Return"]);
+});
+
+/* -------------------------------------------------------------------------
+ * T27 — the room grows FROM the report frame.
+ *
+ * `film-motion.spec.ts` proves the keyframe maths on paper, with the transform
+ * taken about the room's top-left corner. What only a browser can show is
+ * that the room really animates those keyframes from the frame the viewer is
+ * looking at: the spy records every `Element.animate` call and hands back the
+ * real `Animation`, so the room still enters (and exits on `finished`).
+ *
+ * Installed by `page.evaluate` after `open()` and BEFORE the maximize click —
+ * never `addInitScript`, which would also record the page's own boot.
+ * ---------------------------------------------------------------------- */
+
+interface AnimationRecord {
+  room: boolean;
+  chrome: boolean;
+  keyframes: Record<string, string | number>[];
+  options: KeyframeAnimationOptions;
+}
+
+async function spyAnimate(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { __filmAnimations: unknown[] };
+    w.__filmAnimations = [];
+    const real = Element.prototype.animate;
+    Element.prototype.animate = function (
+      this: Element,
+      keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      w.__filmAnimations.push({
+        room: this.getAttribute("aria-label") === "Film room",
+        chrome: this.hasAttribute("data-film-chrome"),
+        keyframes: JSON.parse(JSON.stringify(keyframes)),
+        options: typeof options === "number" ? { duration: options } : options,
+      });
+      return real.call(this, keyframes, options);
+    };
+  });
+}
+
+async function readAnimations(page: Page): Promise<AnimationRecord[]> {
+  return page.evaluate(
+    () =>
+      (window as unknown as { __filmAnimations: AnimationRecord[] })
+        .__filmAnimations,
+  );
+}
+
+/** The room's own size, read off the dialog root rather than assumed. */
+async function roomSize(page: Page) {
+  return page.evaluate(() => {
+    const root = document.querySelector<HTMLElement>(
+      '[role="dialog"][aria-label="Film room"]',
+    )!;
+    return { width: root.clientWidth, height: root.clientHeight };
+  });
+}
+
+async function waitForRoom(page: Page) {
+  await page.waitForFunction(
+    (sel) => {
+      const el = document.querySelector<HTMLVideoElement>(sel);
+      return !!el && el.readyState >= 1;
+    },
+    ROOM,
+    { timeout: 10_000 },
+  );
+}
+
+/**
+ * Open the tab, install the spy, and enter the room by its maximize button.
+ * Returns the report frame's box as it was the moment before the click —
+ * the box the room must start on.
+ */
+async function openRoomSpied(
+  page: Page,
+  matchId: string,
+  extra: Record<string, string> = {},
+) {
+  await open(page, matchId, extra);
+  await spyAnimate(page);
+  const box = await page.locator(REPORT).boundingBox();
+  if (!box) throw new Error("no report frame");
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await waitForRoom(page);
+  return box;
+}
+
+/**
+ * The harness mounts the tab with no column around it, so the report frame
+ * is the viewport's full width and the room's first frame is `scale(1)` —
+ * where the transform's origin changes nothing and a centre-origin bug is
+ * invisible. A narrower, inset column makes the frame smaller than the room,
+ * which is the app's real shape (the player shares the pane with the list).
+ */
+async function narrowReportColumn(page: Page) {
+  await page.addInitScript(() => {
+    document.addEventListener("DOMContentLoaded", () => {
+      const style = document.createElement("style");
+      style.textContent = "#root { width: 720px; margin: 48px 0 0 200px; }";
+      document.head.append(style);
+    });
+  });
+}
+
+function expectBoxWithin1px(
+  box: { left: number; top: number; width: number; height: number },
+  want: { x: number; y: number; width: number; height: number },
+) {
+  expect(Math.abs(box.left - want.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(box.top - want.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(box.width - want.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(box.height - want.height)).toBeLessThanOrEqual(1);
+}
+
+test("T27: the room's first entrance frame sits exactly on the report player", async ({
+  page,
+}) => {
+  await narrowReportColumn(page);
+  const frame = await openRoomSpied(page, "grow-from-frame");
+  // The precondition: a frame smaller than the room, so the scale is not 1.
+  const room = await roomSize(page);
+  expect(frame.width).toBeLessThan(room.width * 0.75);
+  const records = await readAnimations(page);
+
+  const rooms = records.filter((r) => r.room);
+  expect(rooms).toHaveLength(1);
+  const [enter] = rooms;
+  expect(enter.keyframes).toHaveLength(2);
+  expect(enter.keyframes[0].transformOrigin).toBe("0 0");
+  expect(enter.options.duration).toBe(460);
+  expectBoxWithin1px(
+    screenBox(
+      enter.keyframes[0] as { transform: string; clipPath: string },
+      room,
+    ),
+    frame,
+  );
+
+  // The chrome only fades, and only once the film has landed.
+  const chrome = records.filter((r) => r.chrome);
+  expect(chrome.length).toBeGreaterThan(0);
+  for (const r of chrome) {
+    for (const kf of r.keyframes) expect(Object.keys(kf)).toEqual(["opacity"]);
+    expect(r.options.delay ?? 0).toBeGreaterThan(0);
+  }
+});
+
+test("T27: under reduced motion the room fades in, and so does its chrome, at once", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openRoomSpied(page, "grow-reduced");
+  const records = await readAnimations(page);
+
+  const rooms = records.filter((r) => r.room);
+  expect(rooms).toHaveLength(1);
+  for (const kf of rooms[0].keyframes) {
+    expect(kf).toHaveProperty("opacity");
+    expect(kf).not.toHaveProperty("transform");
+    expect(kf).not.toHaveProperty("clipPath");
+  }
+  expect(rooms[0].options.duration).toBe(200);
+
+  const chrome = records.filter((r) => r.chrome);
+  expect(chrome.length).toBeGreaterThan(0);
+  for (const r of chrome) expect(r.options.delay ?? 0).toBe(0);
+});
+
+test("T27: the ⇧-click door with the player scrolled off-screen fades the room in", async ({
+  page,
+}) => {
+  await open(page, "grow-offscreen", { pad: "12" });
+  await spyAnimate(page);
+
+  const player = await page.locator(REPORT).boundingBox();
+  if (!player) throw new Error("no report frame");
+  await page.evaluate(
+    (y) =>
+      new Promise<void>((resolve) => {
+        window.scrollTo(0, y);
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+    player.y + player.height + 8,
+  );
+
+  // The precondition: the frame is wholly above the viewport while the row
+  // the viewer is about to ⇧-click is inside it.
+  const off = await page.locator(REPORT).boundingBox();
+  expect(off!.y + off!.height).toBeLessThanOrEqual(0);
+  const row = await page.locator(SHELL_ROW("c")).boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(row!.y).toBeGreaterThanOrEqual(0);
+  expect(row!.y + row!.height).toBeLessThanOrEqual(viewport.height);
+
+  await page.locator(SHELL_ROW("c")).click({ modifiers: ["Shift"] });
+  await waitForRoom(page);
+
+  const rooms = (await readAnimations(page)).filter((r) => r.room);
+  expect(rooms).toHaveLength(1);
+  for (const kf of rooms[0].keyframes) {
+    expect(kf).toHaveProperty("opacity");
+    expect(kf).not.toHaveProperty("transform");
+  }
 });

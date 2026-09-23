@@ -295,3 +295,14 @@ Reading them: `remounted: true` = a credential swap or an error recovery; `buffe
 
 1. A real-key test of (d) needs harness stops more than 0.5 s apart; changing the fixture would touch many existing cases.
 2. Watch the jump in the app, including the two smooth scrolls about 100 ms apart on a step.
+
+## T27 · The room grows from the report frame: top-left origin, off-screen fade, entrance pinned in the harness — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** `RoomKeyframe` carries `transformOrigin: "0 0"` on both keyframes and the room root gains `origin-top-left` — measured in the harness, the old first frame drew at (480, 205.5) against the player at (200, 48); now it lands on the player exactly. New `roomMotionPath(frame, room)` → "frame" | "fade"; the entrance fades (200 ms) when the player has no area on screen or under reduced motion, and the chrome delay applies only on the grow path. Tests: `screenBox` moved to `tests/fixtures/film-motion-box.ts`; film-motion unit cases for the origin, a bottom-right frame and five `roomMotionPath` cases; harness `spyAnimate`/`readAnimations`/`roomSize`/`openRoomSpied` and three T27 cases (grow geometry within 1px, reduced motion, ⇧-click from a scrolled-off player → fade). Case (a) narrows the report column by an injected stylesheet (the harness renders it full width → scale 1, where the origin changes nothing). (a) and (c) fail on the old code. Film-fullscreen Motion block and the H2 spec updated. Exit keyframes inherit the origin; its predicate is T28. Widget states: loading/empty/error unchanged.
+
+**follow-ups:**
+
+1. The chrome fade-in delay (0.55 × 460 ms) was left as is — eyeball it now that the origin is right.
+2. T28 should reuse `narrowReportColumn` for its on-screen shrink case, or scale 1 hides the origin again.
