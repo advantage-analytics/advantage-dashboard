@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Rewrite doubles-via-SwingVision copy to score-only
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/app/dashboard/help/page.tsx, src/components/dashboard/team/dual-sheet.tsx, .skills/advantage-analytics-design/reference/primitives.md, src/lib/schedule/entry-state.ts, src/lib/data/team-court-record.ts, src/components/dashboard/schedule/README.md (guess; the grep pins are exact)
 - **done when:**

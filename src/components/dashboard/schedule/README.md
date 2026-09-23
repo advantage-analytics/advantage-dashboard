@@ -116,7 +116,8 @@ viewer `canUploadForProgram` admits. A dual line with no result and no digits
 typed offers "Upload it instead" — the wizard takes the score at its last
 step; never on a tournament, whose `?entry=` alone would pick another round's
 match. After "Save and next line" on a played score, the footer names the line
-just saved with its "Add video" / "Add file", carrying `?match=`.
+just saved with its "Add video", carrying `?match=`, on a singles line; a
+doubles line offers nothing.
 
 **A dual saves complete.** Every line S1–S6 and D1–D3 must hold a player, a
 pair, or **No player** (`validateDualLineup` in `lib/schedule/lineup-validation.ts`,

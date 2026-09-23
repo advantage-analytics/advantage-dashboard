@@ -148,8 +148,8 @@ export type EntryState =
  * No, if it is doubles. `job-request.ts` rejects a doubles match_type outright
  * with "Video analysis supports singles matches only", so offering a doubles
  * line an Upload button produces a 422 the coach only meets after picking a
- * multi-gigabyte file. A doubles line can still take a SwingVision export —
- * that path parses numbers and never goes near the vision pipeline.
+ * multi-gigabyte file. A doubles line records a score only — it can't take a
+ * SwingVision export either; statistics, like video, are singles-only.
  *
  * No, if it is forfeited. A forfeited line has no match to analyse.
  *

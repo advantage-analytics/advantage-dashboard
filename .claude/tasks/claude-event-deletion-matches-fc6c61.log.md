@@ -20,3 +20,11 @@ is the runner's. Newest entries at the bottom.
 
 1. Fix the `dual-settled` fixture's list-row `teamScore { us: 9, them: 0 }` (`tests/fixtures/schedule-drawer-actions-harness.tsx:184`) to 7–0 so it agrees with its own lines.
 2. The outcome-only sentence ("Lines settled by forfeit, default or withdrawal…") has no harness fixture with an outcome, so it is untested.
+
+## T3 · Rewrite doubles-via-SwingVision copy to score-only — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite); completion `VERDICT: pass`.
+**changed:** Every claim that doubles arrive via SwingVision now says doubles lines record a score only: the help page's SwingVision card ("Singles only.") and video section, the Team Home dual card footer, the design-system primitives reference, the `supportsVideo` doc comment in `entry-state.ts`, the court-record note, the schedule README's post-save footer sentence (a doubles line offers nothing), and the D8 row of `docs/ux-overhaul-brief.md` (outside `files:`, required by the grep criterion). Comments and copy only; no logic. The first dispatch was cut off by a session rate limit after lint/typecheck passed; the same subagent was resumed to finish the README line and the spec.
+**follow-ups:**
+
+1. Sweep `supabase/functions/` and the email templates for the same "doubles via SwingVision" phrasing — the grep criterion covered only `src`, `.skills` and `docs`.
