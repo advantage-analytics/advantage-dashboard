@@ -284,3 +284,14 @@ Reading them: `remounted: true` = a credential swap or an error recovery; `buffe
 **follow-ups:**
 
 1. Still unhandled, as the task notes recorded: a wheel during the list's own 300 ms smooth scroll, and middle-click / selection-drag autoscroll never holding.
+
+## T26 · A re-follow jump puts the playing row at the top of the box; continuous follow stays minimal — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** point-list.tsx exports `REFOLLOW_JUMP_INSET_PX = 8` and `REFOLLOW_JUMP_WINDOW_MS = 800`; the keep-in-view effect tracks `prevHeldRef` and arms an 800 ms jump window on held → follow (null holds included). Inside the window it aligns the playing point row 8px below the box top, clamped to the scroll range, even when already in view; outside it the continuous minimal scroll is unchanged. One shared `scrollTo` and settle path. Tests: `rowOffset`/`rowTop` helpers and six T26 cases; (d) reproduces `step`'s order in one `page.evaluate` (the harness's stops sit inside `nextStop`'s 0.5 s cushion, so a real `→` steps nowhere); (f) clamps at pad 0 with a 200px column (140px did not clamp, measured). Verified (a)–(d),(f) fail and (e) passes on the old effect. Design doc Enter and motion tables plus a "Jump vs. continuous (T26)" note. Widget states: loading/empty/error unchanged.
+
+**follow-ups:**
+
+1. A real-key test of (d) needs harness stops more than 0.5 s apart; changing the fixture would touch many existing cases.
+2. Watch the jump in the app, including the two smooth scrolls about 100 ms apart on a step.

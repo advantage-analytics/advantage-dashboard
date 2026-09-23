@@ -8,6 +8,7 @@ import tailwind from "@tailwindcss/postcss";
 import * as nextWebpack from "next/dist/compiled/webpack/webpack";
 
 import type { FilmRefreshHarnessWindow } from "./fixtures/film-playback-refresh-window";
+import { REFOLLOW_JUMP_INSET_PX } from "../src/components/dashboard/matches/match-detail/film/point-list";
 
 /**
  * The credential refresh, in the two players (T26).
@@ -2519,4 +2520,209 @@ test("T25: a wheel before the first point holds the shell list, and the next poi
   await page.waitForTimeout(400);
   expect(await shellScrollTop(page)).toBe(parked);
   await expect(page.locator(SHELL_PILL)).toHaveCount(1);
+});
+
+/* -------------------------------------------------------------------------
+ * T26 — a re-follow is a JUMP: the playing row goes to the top of the box,
+ * `REFOLLOW_JUMP_INSET_PX` in, clamped at the end of the list. Continuous
+ * follow keeps the minimal scroll. A step re-follows before its seek lands,
+ * so the jump is a window (`REFOLLOW_JUMP_WINDOW_MS`) and the crossing that
+ * follows inside it is part of the same jump.
+ * ---------------------------------------------------------------------- */
+
+/** The row's edges against its scroller's box: `top` ≥ 0 and `bottom` ≤ 0 is inside. */
+async function rowOffset(
+  page: Page,
+  scroller: string,
+  id: string,
+): Promise<{ top: number; bottom: number } | null> {
+  return page.evaluate(
+    ([sel, pointId]) => {
+      const list = document.querySelector<HTMLElement>(sel as string);
+      const row = list?.querySelector<HTMLElement>(
+        `[data-point-id="${pointId}"]`,
+      );
+      if (!list || !row) return null;
+      const box = list.getBoundingClientRect();
+      const r = row.getBoundingClientRect();
+      return { top: r.top - box.top, bottom: r.bottom - box.bottom };
+    },
+    [scroller, id] as const,
+  );
+}
+
+/** `rowOffset(…).top`, NaN when the row is missing, for `expect.poll`. */
+async function rowTop(page: Page, scroller: string, id: string) {
+  return (await rowOffset(page, scroller, id))?.top ?? Number.NaN;
+}
+
+test("T26: pressing the shell pill with the lit row below jumps it to the top of the box", async ({
+  page,
+}) => {
+  await openShell(page, "jump-shell-below", {
+    pad: "12",
+    ttl: String(3600_000),
+  });
+  await boundShellList(page, 140);
+  await page.click(SHELL_ROW("a"));
+  await expect.poll(() => playingRow(page)).toBe("a");
+  await parkScroller(page, SHELL_SCROLLER, 0);
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => playingRow(page)).toBe("b");
+  await expect.poll(() => shellLitPlace(page)).toBe("below");
+
+  await page.locator(SHELL_PILL).click();
+  await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+  // Not the minimal scroll (which would leave `b` at the box's bottom).
+  await expect
+    .poll(() => rowTop(page, SHELL_SCROLLER, "b"))
+    .toBeGreaterThanOrEqual(REFOLLOW_JUMP_INSET_PX - 1);
+  await expect
+    .poll(() => rowTop(page, SHELL_SCROLLER, "b"))
+    .toBeLessThanOrEqual(REFOLLOW_JUMP_INSET_PX + 1);
+});
+
+test("T26: pressing the shell pill with the lit row above jumps it to the top of the box", async ({
+  page,
+}) => {
+  await openShell(page, "jump-shell-above", {
+    pad: "12",
+    ttl: String(3600_000),
+  });
+  await boundShellList(page, 240);
+  await shellHoldAThenPlayBAbove(page);
+
+  await page.locator(SHELL_PILL).click();
+  await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+  await expect
+    .poll(() => rowTop(page, SHELL_SCROLLER, "b"))
+    .toBeGreaterThanOrEqual(REFOLLOW_JUMP_INSET_PX - 1);
+  await expect
+    .poll(() => rowTop(page, SHELL_SCROLLER, "b"))
+    .toBeLessThanOrEqual(REFOLLOW_JUMP_INSET_PX + 1);
+});
+
+test("T26: pressing the drawer pill jumps the playing row to the top on a smooth scroll", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "jump-drawer-pill", { pad: "12" });
+  await holdAThenPlayB(page);
+  await spyScrollTo(page);
+
+  await page.locator(PILL).click();
+  await expect(page.locator(PILL)).toHaveCount(0);
+  await expect
+    .poll(() => rowTop(page, DRAWER_SCROLLER, "b"))
+    .toBeGreaterThanOrEqual(REFOLLOW_JUMP_INSET_PX - 1);
+  await expect
+    .poll(() => rowTop(page, DRAWER_SCROLLER, "b"))
+    .toBeLessThanOrEqual(REFOLLOW_JUMP_INSET_PX + 1);
+  expect((await scrollTos(page)).some((o) => o.behavior === "smooth")).toBe(
+    true,
+  );
+});
+
+test("T26: a step from held jumps to the point it lands on — the crossing is inside the window", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "jump-drawer-step", { pad: "12" });
+  await holdAThenPlayB(page);
+
+  // What `step` does, in its order: re-follow, then seek. A real `→` cannot
+  // be the trigger here — the harness's stops sit 0.1–0.15s apart and
+  // `nextStop` skips anything within its 0.5s cushion, so from `b` there is
+  // nothing to step to. The pill's re-follow, then a seek into `c` in the same
+  // task: `b` jumps first, `c` lights a tick later inside the window, and the
+  // jump that wins is `c`'s.
+  await page.evaluate(
+    ([pill, video]) => {
+      document.querySelector<HTMLElement>(pill as string)?.click();
+      const el = document.querySelector<HTMLVideoElement>(video as string);
+      if (el) el.currentTime = 0.5;
+    },
+    [PILL, ROOM] as const,
+  );
+  await expect.poll(() => playingRow(page)).toBe("c");
+  await expect
+    .poll(() => rowTop(page, DRAWER_SCROLLER, "c"))
+    .toBeGreaterThanOrEqual(REFOLLOW_JUMP_INSET_PX - 1);
+  await expect
+    .poll(() => rowTop(page, DRAWER_SCROLLER, "c"))
+    .toBeLessThanOrEqual(REFOLLOW_JUMP_INSET_PX + 1);
+});
+
+test("T26: continuous follow keeps the minimal scroll — the crossing lands the row at the box's bottom, not its top", async ({
+  page,
+}) => {
+  await openShell(page, "jump-continuous", {
+    pad: "12",
+    ttl: String(3600_000),
+  });
+  await boundShellList(page, 140);
+  // Following from the start: no hold, so no transition and no window.
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => playingRow(page)).toBe("b");
+  await seekTo(page, REPORT, 0.5);
+  await expect.poll(() => playingRow(page)).toBe("c");
+
+  await expect
+    .poll(async () =>
+      Math.abs(
+        (await rowOffset(page, SHELL_SCROLLER, "c"))?.bottom ?? Number.NaN,
+      ),
+    )
+    .toBeLessThanOrEqual(1);
+  await shellScrollSettled(page);
+  expect(await rowTop(page, SHELL_SCROLLER, "c")).toBeGreaterThan(
+    REFOLLOW_JUMP_INSET_PX + 1,
+  );
+});
+
+test("T26: a jump near the end of the list clamps to the end, the row inside the box", async ({
+  page,
+}) => {
+  // Measured: at pad 0 the list is 240px tall and `c` starts 136px down, so
+  // aligning it needs 128px of travel; a 200px column leaves a 135px box and
+  // only 105px of travel (the task's guess, pad 0 at 140px, has 165px and
+  // aligns without clamping). `c` (136–188px) is wholly below the 135px box.
+  await openShell(page, "jump-clamp", { pad: "0", ttl: String(3600_000) });
+  await boundShellList(page, 200);
+  await page.click(SHELL_ROW("a"));
+  await expect.poll(() => playingRow(page)).toBe("a");
+  await parkScroller(page, SHELL_SCROLLER, 0);
+  await seekTo(page, REPORT, 0.5);
+  await expect.poll(() => playingRow(page)).toBe("c");
+  await expect.poll(() => shellLitPlace(page)).toBe("below");
+  // The precondition the case rests on: `c` aligned to the top would need
+  // more travel than the list has.
+  const { aligned, end } = await page.evaluate(
+    ([sel, inset]) => {
+      const list = document.querySelector<HTMLElement>(sel as string)!;
+      const row = list.querySelector<HTMLElement>('[data-point-id="c"]')!;
+      const box = list.getBoundingClientRect();
+      return {
+        aligned:
+          list.scrollTop +
+          row.getBoundingClientRect().top -
+          box.top -
+          (inset as number),
+        end: list.scrollHeight - list.clientHeight,
+      };
+    },
+    [SHELL_SCROLLER, REFOLLOW_JUMP_INSET_PX] as const,
+  );
+  expect(aligned).toBeGreaterThan(end + 1);
+
+  await page.locator(SHELL_PILL).click();
+  await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+  await expect.poll(() => shellScrollTop(page)).toBeGreaterThanOrEqual(end - 1);
+  await shellScrollSettled(page);
+  expect(Math.abs((await shellScrollTop(page)) - end)).toBeLessThanOrEqual(1);
+  const c = await rowOffset(page, SHELL_SCROLLER, "c");
+  expect(c!.top).toBeGreaterThanOrEqual(-0.5);
+  expect(c!.bottom).toBeLessThanOrEqual(0.5);
+  expect(
+    c!.top >= REFOLLOW_JUMP_INSET_PX - 1 &&
+      c!.top <= REFOLLOW_JUMP_INSET_PX + 1,
+  ).toBe(false);
 });

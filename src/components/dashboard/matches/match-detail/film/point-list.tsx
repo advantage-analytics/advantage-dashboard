@@ -157,6 +157,22 @@ const SCROLL_KEYS = new Set([
 const FOLLOW_SCROLL_FALLBACK_MS = 400;
 
 /**
+ * Where a re-follow JUMP (T26) puts the playing row: its top this far below
+ * the scroller's top edge. 8px is the spacing scale's 8px step (`gap-2`,
+ * foundations.md) and clears the row's own `py-1.5`, so the row reads as the
+ * first thing in the box rather than as one cut off by the edge.
+ */
+export const REFOLLOW_JUMP_INSET_PX = 8;
+
+/**
+ * How long after a held → follow transition the keep-in-view runs as a jump.
+ * A window, not a one-shot: a step re-follows and then seeks, and the seek
+ * lands (`activePointId` moves) on a later tick — the crossing that follows
+ * inside the window is part of the same jump.
+ */
+export const REFOLLOW_JUMP_WINDOW_MS = 800;
+
+/**
  * How long the pill's 100ms exit may take before it unmounts anyway: a page
  * that stops painting never delivers `transitionend`.
  */
@@ -437,6 +453,21 @@ export const PointList = memo(function PointList({
     [onFollow, onHoldPoint, onSelectShot],
   );
 
+  // Two ways to follow (T26). A re-follow — any held → follow transition: the
+  // pill, a step or transport from held, a click on the playing row from
+  // held, a cut that drops the held point, a null hold (T25) included — is a
+  // JUMP: the playing point's row goes to the top of the box, 8px in
+  // (`REFOLLOW_JUMP_INSET_PX`), clamped at the end of the list, even when it
+  // is already in view. It always targets the point row, never the shot: the
+  // well mounts under the row, so aligning the shot would push the row off
+  // the top. The jump is a window (`REFOLLOW_JUMP_WINDOW_MS`), not one run: a
+  // step re-follows before its seek lands, so the crossing that follows inside
+  // the window is part of the same jump and the second scroll wins. Outside
+  // the window it is CONTINUOUS keep-in-view, below: the minimal scroll that
+  // brings the lit thing inside the box, and nothing when it already is — no
+  // lurch per point. The transition is observed here (`prevHeldRef`), not
+  // signalled by a prop.
+  //
   // Keep whatever is lit in view as the film moves on — the playing shot while
   // a well is open, the playing row otherwise — and stop entirely while held:
   // the viewer's own scrolling is what the listeners after this effect read
@@ -456,11 +487,21 @@ export const PointList = memo(function PointList({
   const followScrollRef = useRef(false);
   /** Cancels the pending settle of the last follow scroll, flag untouched. */
   const cancelSettleRef = useRef<() => void>(NOOP);
+  /** `held` as of the effect's last run: the re-follow transition's memory. */
+  const prevHeldRef = useRef(held);
+  /** `performance.now()` until which a follow run is a jump (T26). */
+  const jumpUntilRef = useRef(0);
   useEffect(() => {
+    const wasHeld = prevHeldRef.current;
+    prevHeldRef.current = held;
     if (held) return;
+    if (wasHeld)
+      jumpUntilRef.current = performance.now() + REFOLLOW_JUMP_WINDOW_MS;
+    const jump = performance.now() < jumpUntilRef.current;
     const list = listRef.current;
-    const selector =
-      wellOpen && activeShotId
+    const selector = jump
+      ? activePointId && `[data-point-id="${activePointId}"]`
+      : wellOpen && activeShotId
         ? `[data-shot-id="${activeShotId}"]`
         : activePointId && `[data-point-id="${activePointId}"]`;
     if (!list || !selector) return;
@@ -469,7 +510,12 @@ export const PointList = memo(function PointList({
     const listBox = list.getBoundingClientRect();
     const rowBox = row.getBoundingClientRect();
     let top = list.scrollTop;
-    if (rowBox.top < listBox.top) top += rowBox.top - listBox.top;
+    if (jump) {
+      top += rowBox.top - listBox.top - REFOLLOW_JUMP_INSET_PX;
+      const end = list.scrollHeight - list.clientHeight;
+      top = Math.max(0, Math.min(top, end));
+      if (Math.abs(top - list.scrollTop) < 1) return;
+    } else if (rowBox.top < listBox.top) top += rowBox.top - listBox.top;
     else if (rowBox.bottom > listBox.bottom)
       top += rowBox.bottom - listBox.bottom;
     else return;

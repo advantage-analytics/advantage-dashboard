@@ -347,7 +347,7 @@ ready).
 
 ## T26 · A re-follow jump puts the playing row at the top of the box; continuous follow stays minimal
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T25
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/point-list.tsx (the keep-in-view effect L440–493 and its comment, the constants beside `FOLLOW_SCROLL_FALLBACK_MS` L150–155); tests/film-playback-refresh.spec.ts (new cases after T25's; the T19 press case L1737 and T23 press case L2280 keep their assertions); docs/superpowers/specs/2026-09-22-film-follow-hold-design.md (Enter table L109, motion table L179/L182, "Where the drawer pill sits" L145+)
