@@ -24,3 +24,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical: GATE FAIL. Lint and typecheck passed; full suite had 5 live-database failures, 2900 passed, 64 skipped, 44 did not run. Failures were in video cleanup, owner names, seat counting, team management, and visualization-band RLS; multiple fixture program inserts timed out. Completion: not run because mechanical failed.
 
 **changed:** Implementation preserved in stash `d53c68234ca24de6cb7963940fc6219d32c80256`. Focused gallery omits only selected stable view identity. Targeted browser regression passed for default/saved switching, keyboard, fullscreen, overview, back/forward and reduced motion; typecheck, targeted lint and format passed.
+
+## T6 · Fix fullscreen filter overflow and selected-person avatar — blocked
+
+**gate:** Mechanical: GATE FAIL. Lint and typecheck passed; full suite had 1 failure, 2948 passed, 64 skipped. tests/match-video-attachment-flow.spec.ts:848 (unmounting mid-upload cancels the attempt) timed out after 5000ms waiting for DELETE. Completion: not run because mechanical failed.
+
+**changed:** Implementation preserved in stash `832b33a4383e3b8a5508079ef0e921c22ece9675`. Added fullscreen-only scrollable single-line filters, narrow control reachability and subject-bound avatar initials without score changes. Targeted browser regression at 320px with real Tailwind CSS passed, including both subjects, reopen, keyboard scrolling, filter removal and control reachability; typecheck, targeted lint and formatting passed.
