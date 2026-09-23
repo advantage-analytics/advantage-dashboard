@@ -117,6 +117,17 @@ test("populated and empty statistics align with the court and stay reachable on 
   await expect(page.getByText("No points match these filters")).toHaveCount(0);
   await expect(card.getByText("Deuce wide", { exact: true })).toBeVisible();
   await expect(card.getByText("100%", { exact: true })).toBeVisible();
+  const courtArt = page.locator("[data-viz-focused-art] > svg");
+  const artSize = await courtArt.evaluate((svg) => {
+    const rect = svg.getBoundingClientRect();
+    return { width: rect.width, height: rect.height };
+  });
+  expect(artSize.width).toBeLessThanOrEqual(520);
+  expect(artSize.height).toBeLessThanOrEqual(340);
+  const artContainerWidth = await page
+    .locator("[data-viz-focused-art]")
+    .evaluate((element) => element.getBoundingClientRect().width);
+  expect(artSize.width).toBeLessThanOrEqual(artContainerWidth * 0.89);
   expect(await card.locator("li").first().ariaSnapshot()).toContain(
     "Deuce wide: 100% of 4 points won",
   );
@@ -163,6 +174,12 @@ test("populated and empty statistics align with the court and stay reachable on 
   ]) {
     await page.goto(`${origin}/?tab=shots&cut=${cut}&fixture=long`);
     await expect(page.getByText(title, { exact: true })).toBeVisible();
+    const size = await courtArt.evaluate((svg) => {
+      const rect = svg.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    });
+    expect(size.width, cut).toBeLessThanOrEqual(520);
+    expect(size.height, cut).toBeLessThanOrEqual(340);
     const rows = await page.locator(".viz-vt-stats-card li").count();
     const empty = await page.getByText("No points match these filters").count();
     expect(rows > 0 || empty > 0, cut).toBe(true);

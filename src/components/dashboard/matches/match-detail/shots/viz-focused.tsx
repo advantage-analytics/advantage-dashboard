@@ -308,6 +308,7 @@ export function VizFocused({
 
           <div
             ref={courtArtRef}
+            data-viz-focused-art
             className="relative w-full"
             style={{
               backgroundColor: artBoxFill,
@@ -333,20 +334,12 @@ export function VizFocused({
                   : undefined
               }
               labels
-              // The court area spans the card's full width, capped at 400px
-              // tall, with the apron green painted behind it — so any
-              // letterboxing `preserveAspectRatio` (`xMidYMid meet`) leaves is
-              // green, never the white the card background used to show
-              // through. The cap lives on the SVG itself (`max-h-[400px]
-              // w-full`, no `fill`): `width` is definite (100%) and `height`
-              // is auto, so the replaced-element sizing algorithm derives a
-              // height from the viewBox's intrinsic ratio and only THEN
-              // clamps it to 400px — capping height on the wrapper instead
-              // (an indefinite-height box) resolves the svg's `height:100%`
-              // to `auto`, which lays it out at its full intrinsic height and
-              // lets the wrapper's `overflow-hidden` crop it top and bottom
-              // (round 1's regression).
-              className="block max-h-[400px] w-full"
+              // The plotted court is capped in both dimensions, centred in
+              // the card, with the apron filling the remaining width. Size
+              // the SVG itself rather than its wrapper: its intrinsic ratio
+              // then resolves before the height cap, avoiding the older
+              // top-and-bottom cropping regression.
+              className="mx-auto block max-h-[340px] w-[88%] max-w-[520px]"
             />
             {heatHasDots && (
               <div
