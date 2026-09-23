@@ -271,7 +271,7 @@ ready).
 ## T20 · Drafts know the match they fill, and fold onto it
 
 - **status:** todo
-- **model:** fable
+- **model:** opus
 - **files:** src/lib/wizard/actions.ts (`saveMatchDraft` :586, `DraftRow` :686, `listMatchDrafts` :697), src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (`existingMatchId` :961, `handleCreateMatch` :2613), src/lib/wizard/draft-target.ts (new), tests/upload-draft-resume.spec.ts (guess)
 - **done when:**
   - [ ] One exported pure helper, `draftTargetMatchId(draft)`, returns `preset?.matchId ?? attachedLine?.matchId ?? null`. The wizard's `existingMatchId` (:961) and the match-id reuse in `handleCreateMatch` (:2613-2615) both call it. A spec covers three cases: the id comes from `preset`, from `attachedLine`, or from neither.
