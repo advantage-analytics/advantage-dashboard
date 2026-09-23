@@ -1,3 +1,4 @@
+import { CourtBandZones } from "./viz-bands-overlay";
 import { useId, useMemo, type ReactNode } from "react";
 import { ZONES, type ZoneKey, type ZoneStats } from "@/lib/data/serve-zones";
 import {
@@ -21,7 +22,7 @@ import {
   trianglePointsFor,
   starPoints,
 } from "./court-geometry";
-import type { Chart, Cut, VizDot } from "./viz-model";
+import type { Chart, Cut, VizDot, VizBandZones } from "./viz-model";
 
 /**
  * The recoloured court SVG for one cut — the wall tile's art and the focused
@@ -370,6 +371,7 @@ export function CourtArt({
   cut,
   dots,
   zones,
+  bandZones,
   chart = "scatter",
   className,
   fill,
@@ -382,9 +384,10 @@ export function CourtArt({
    * Serve · Zones overlay (Task 5): when present, draws the six service-box
    * cells shaded by each zone's share of serves and skips the dots — the
    * cells ARE the chart, per `computeViz`'s `zoneStats`. Ignored off the
-   * serve cut (Zones has no meaning there and the toolbar never offers it).
+   * serve cut; other cuts use their depth/contact bands.
    */
   zones?: Record<ZoneKey, ZoneStats>;
+  bandZones?: VizBandZones | null;
   /**
    * `"heat"` draws a density blob per dot (`heatDotCircle`/`HeatFilterDef`)
    * instead of the usual outcome-coloured marks, and desaturates the court.
@@ -420,7 +423,7 @@ export function CourtArt({
 }) {
   const clipId = useId();
   const showHeat = chart === "heat";
-  const showZones = !showHeat && cut === "serve" && zones != null;
+  const showZones = chart === "zones" && cut === "serve" && zones != null;
   const maxZonePct = zones
     ? Math.max(...ZONES.map((z) => zones[z.key].pct))
     : 0;
@@ -430,9 +433,11 @@ export function CourtArt({
     ? "Empty court — pick what to plot"
     : showHeat
       ? `${HEAT_CUT_LABEL[cut]} heat map, ${dots.length} ${HEAT_NOUN[cut]}`
-      : showZones
-        ? "Serve placement by zone: six service-box zones shaded by serve frequency"
-        : `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
+      : chart === "zones" && cut !== "serve"
+        ? `${CUT_NOUN[cut]} by ${bandZones?.kind ?? (cut === "returnPlacement" || cut === "rallyPlacement" ? "depth" : "contact")} bands${bandZones ? "" : " — no bands selected"}`
+        : showZones
+          ? "Serve placement by zone: six service-box zones shaded by serve frequency"
+          : `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
   // Zero dots ⇒ drawing the filter would still paint the floor tint over
   // the whole view (every pixel of the filter region gets touched, dots or
   // not — see `HeatFilterDef`'s doc comment), which would wash an empty
@@ -729,6 +734,9 @@ export function CourtArt({
               height={RETURN_COURT.singlesBottom - RETURN_COURT.singlesTop}
               fill={courtFillColor}
             />
+            {chart === "zones" && !draft && bandZones && (
+              <CourtBandZones zones={bandZones} labels={labels} />
+            )}
             <line
               x1={RETURN_COURT.farBaselineX}
               y1={RETURN_COURT.doublesTop}
@@ -818,7 +826,7 @@ export function CourtArt({
               <HeatLayer cut={cut} dots={dots} project={heatProject} />
             )}
 
-            {!showHeat &&
+            {chart === "scatter" &&
               dots.map((d) => {
                 const color = colorFor(d.outcome);
                 const projected = projectReturnDot(kind, {
@@ -857,6 +865,25 @@ export function CourtArt({
           </g>
         </g>
       </g>
+      {chart === "zones" && !draft && !bandZones && labels && (
+        <text
+          x={RETURN_COURT.viewBox.minX + RETURN_COURT.viewBox.w / 2}
+          y={RETURN_COURT.viewBox.minY + RETURN_COURT.viewBox.h / 2}
+          transform={
+            kind === "placement"
+              ? `rotate(180 ${RETURN_COURT.viewBox.minX + RETURN_COURT.viewBox.w / 2} ${RETURN_COURT.viewBox.minY + RETURN_COURT.viewBox.h / 2})`
+              : undefined
+          }
+          textAnchor="middle"
+          fill={LINE_COLOR}
+          fontFamily="var(--font-sans)"
+          fontSize={10}
+        >
+          {kind === "placement"
+            ? "No depth bands selected"
+            : "No contact bands selected"}
+        </text>
+      )}
     </svg>
   );
 }

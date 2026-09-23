@@ -37,6 +37,7 @@ import {
   restoreSavedView,
   setSavedViewShared,
 } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
+import { useVizBands } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
 import { CourtTile, TileFullscreenGlyph } from "./court-tile";
 import { ManageableSavedViewTile } from "./manageable-saved-view-tile";
 import { savedViewNamePool } from "./save-view-dialog";
@@ -46,6 +47,8 @@ import type { VizState } from "./viz-url";
 import { activeFilterEntries, viewIdentityKey } from "./viz-url";
 import {
   computeViz,
+  computeVizStats,
+  bandZonesFor,
   subjectFor,
   tileCountLabel,
   EMPTY_VIZ_FILTERS,
@@ -119,6 +122,7 @@ export function SavedViewsBand({
 }) {
   const router = useRouter();
   const { points } = useMatchData();
+  const { bands, unit, contactHidden } = useVizBands();
   const { you, opp } = useMatchSides();
   const { state, hrefFor } = useVizState();
   const [, startTransition] = useTransition();
@@ -224,6 +228,25 @@ export function SavedViewsBand({
       pills,
       countLabel,
       dots: result.dots,
+      zones: result.zoneStats ?? undefined,
+      bandZones:
+        view.chart === "zones"
+          ? bandZonesFor(
+              view.cut,
+              bands,
+              unit,
+              computeVizStats(
+                points,
+                view.cut,
+                view.filters,
+                subjectIsPlayer1,
+                result,
+                bands,
+                unit,
+              ),
+              contactHidden,
+            )
+          : null,
       chart: view.chart,
       href,
     };
@@ -260,7 +283,17 @@ export function SavedViewsBand({
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `viewsKey` already captures every view's id/cut/filters, order-independent; including `optimisticViews`/`tileDataFor` directly would recompute on every reorder, defeating the memo
-  }, [points, you.isPlayer1, you.name, opp.name, hrefFor, viewsKey]);
+  }, [
+    points,
+    you.isPlayer1,
+    you.name,
+    opp.name,
+    hrefFor,
+    viewsKey,
+    bands,
+    unit,
+    contactHidden,
+  ]);
 
   // F4 (`variant="focused"` only, but computed unconditionally — hooks can't
   // run conditionally): the same six default tiles the wall draws
@@ -813,6 +846,8 @@ export function SavedViewsBand({
         countLabel={data.countLabel}
         cut={view.cut}
         dots={data.dots}
+        zones={data.zones}
+        bandZones={data.bandZones}
         chart={data.chart}
         href={data.href}
         navigateState={{

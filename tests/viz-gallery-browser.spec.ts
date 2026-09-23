@@ -42,6 +42,8 @@ test.beforeAll(async () => {
         resolve: {
           extensions: [".tsx", ".ts", ".jsx", ".js"],
           alias: {
+            "@/components/dashboard/matches/match-detail/shots/viz-bands-context":
+              mock,
             "@/components/dashboard/matches/match-data-provider": mock,
             "@/components/dashboard/matches/match-detail/use-match-sides": mock,
             "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions":

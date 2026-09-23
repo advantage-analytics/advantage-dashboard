@@ -28,6 +28,7 @@ import {
   depthBandRows,
   makeContactBucketer,
   makeDepthBucketer,
+  resolveDepthDividersFt,
   type BandRow,
   type BandSettings,
 } from "@/lib/data/viz-bands";
@@ -191,18 +192,17 @@ export interface VizResult {
   serveOutOrNetCount?: number;
 }
 
-/**
- * Zones only exists off serve; scatter and heat draw on every cut. The one
- * pure rule behind every chart-coercion decision in the tab: `parseVizState`
- * (a garbage/legacy URL), `cut-menu.tsx`'s `selectCut` (switching cuts keeps
- * the current chart when it's still legal, drops to scatter otherwise — so
- * heat survives a cut switch but zones doesn't survive leaving serve) and
- * `validateVizInput` (a saved-view row) all decide "is this chart legal on
- * this cut" through this function, never by re-deriving the rule inline.
- */
+/** All three chart types support every visualization cut. */
 export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
-  if (chart === "zones") return cut === "serve";
-  return true;
+  return (
+    [
+      "serve",
+      "returnPlacement",
+      "returnContact",
+      "rallyPosition",
+      "rallyPlacement",
+    ].includes(cut) && ["scatter", "heat", "zones"].includes(chart)
+  );
 }
 
 /* ── Helpers moved from the retired shot-filters hook ────────────────────── */
@@ -1607,5 +1607,41 @@ export function computeVizStats(
     groups,
     sentence: buildSentence(groups, noun),
     total,
+  };
+}
+
+/** Geometry and values share the SAME settings and computed statistics. */
+export interface VizBandZones {
+  kind: "depth" | "contact";
+  dividersFt: number[];
+  rows: BandRow[];
+  statRows: StatRow[] | null;
+}
+
+export function bandZonesFor(
+  cut: Cut,
+  bands: BandSettings,
+  unit: DistanceUnit,
+  stats: VizStats | null,
+  contactHidden = false,
+): VizBandZones | null {
+  if (cut === "serve") return null;
+  const kind =
+    cut === "returnPlacement" || cut === "rallyPlacement" ? "depth" : "contact";
+  if (kind === "contact" && contactHidden) return null;
+  const rows =
+    kind === "depth"
+      ? depthBandRows(bands, unit)
+      : contactBandRows(bands, unit);
+  if (!rows.length) return null;
+  return {
+    kind,
+    rows,
+    dividersFt:
+      kind === "depth"
+        ? resolveDepthDividersFt(bands)
+        : [...bands.contactDividersFt],
+    statRows:
+      stats?.groups.find((group) => group.key === "depth")?.rows ?? null,
   };
 }

@@ -354,9 +354,25 @@ export function VizFullscreenCourt({
             the landings sit on, and a wash drawn over a hairline would
             make the baseline itself look dimmed. Outside `MarkLayer` and
             memo'd on its own props, so a pan frame never re-renders it. */}
-        {bands !== null && <VizBandsOverlay {...bands} />}
+        {bands !== null && (
+          <VizBandsOverlay {...bands} zones={chart === "zones"} />
+        )}
 
         <CourtLines />
+        {chart === "zones" && cut !== "serve" && bands === null && (
+          <text
+            x={VIEWER_COURT.centreX}
+            y={VIEWER_COURT.farServiceY}
+            textAnchor="middle"
+            fill={LINE_COLOR}
+            fontFamily="var(--font-sans)"
+            fontSize={8}
+          >
+            {cut === "returnPlacement" || cut === "rallyPlacement"
+              ? "No depth bands selected"
+              : "No contact bands selected"}
+          </text>
+        )}
 
         {cut === "serve" && (
           <ServeBoxLabels zoneStats={zoneStats} subjectName={subjectName} />

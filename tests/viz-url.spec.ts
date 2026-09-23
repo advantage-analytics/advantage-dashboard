@@ -156,11 +156,11 @@ test("parseVizState resets serve-only filters when cut is off serve", () => {
   expect(withZone.filters.zone).toEqual([]);
 });
 
-test("garbage values read as defaults; zones off serve reads as scatter", () => {
+test("garbage filters read as defaults while Zones survives every cut", () => {
   const s = parseVizState(
     new URLSearchParams("cut=returnContact&chart=zones&ball=third&vset=x"),
   );
-  expect(s.chart).toBe("scatter");
+  expect(s.chart).toBe("zones");
   expect(s.filters.ball).toEqual([]);
   expect(s.filters.set).toEqual([]);
   expect(parseVizState(new URLSearchParams("cut=nope")).cut).toBeNull();
@@ -204,9 +204,9 @@ test("heat parses on every cut, including a serve-only zones URL swapped for hea
   }
 });
 
-test("zones still reads as scatter off serve even for rallyPosition", () => {
+test("Zones survives rallyPosition", () => {
   const s = parseVizState(new URLSearchParams("cut=rallyPosition&chart=zones"));
-  expect(s.chart).toBe("scatter");
+  expect(s.chart).toBe("zones");
 });
 
 test("cut = null clears every viz key", () => {

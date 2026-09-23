@@ -11,7 +11,7 @@ import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 import { cn } from "@/lib/utils";
 import { CourtTile } from "./court-tile";
 import { ManageTileMenu } from "./manage-tile-menu";
-import { computeViz, type Chart } from "./viz-model";
+import { computeViz, type Chart, type VizBandZones } from "./viz-model";
 import { SharedGlyph } from "./saved-views-band";
 
 /**
@@ -86,6 +86,8 @@ export function ManageableSavedViewTile({
     countLabel: string;
     dots: ReturnType<typeof computeViz>["dots"];
     chart: Chart;
+    zones?: NonNullable<ReturnType<typeof computeViz>["zoneStats"]>;
+    bandZones: VizBandZones | null;
     href: string;
   };
   /**
@@ -180,6 +182,8 @@ export function ManageableSavedViewTile({
         countLabel={data.countLabel}
         cut={view.cut}
         dots={data.dots}
+        zones={data.zones}
+        bandZones={data.bandZones}
         chart={data.chart}
         href={data.href}
         as="static"

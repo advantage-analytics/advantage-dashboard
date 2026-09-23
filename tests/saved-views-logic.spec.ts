@@ -127,17 +127,18 @@ test("validateVizInput rejects an unknown chart", () => {
   ).toBeNull();
 });
 
-test("validateVizInput rejects zones off serve rather than downgrading it", () => {
-  // parseVizState itself would silently read this as "scatter" (a URL must
-  // always resolve to something drawable); a stored/submitted row asking for
-  // the impossible pairing is invalid, not a scatter chart in disguise.
-  expect(
-    validateVizInput({
-      cut: "returnPlacement",
-      chart: "zones",
-      filters: {},
-    }),
-  ).toBeNull();
+test("validateVizInput preserves Zones on every cut", () => {
+  for (const cut of [
+    "serve",
+    "returnPlacement",
+    "returnContact",
+    "rallyPlacement",
+    "rallyPosition",
+  ]) {
+    expect(
+      validateVizInput({ cut, chart: "zones", filters: {} }),
+    ).toMatchObject({ cut, chart: "zones" });
+  }
 });
 
 /* ── G3a: rallyPosition + heat ────────────────────────────────────────── */
@@ -221,10 +222,10 @@ test("rowToSavedView drops a row with a stale/unknown cut", () => {
   expect(rowToSavedView(dbRow({ cut: "smash" }))).toBeNull();
 });
 
-test("rowToSavedView drops a row asking for zones off serve", () => {
+test("rowToSavedView preserves Zones off serve", () => {
   expect(
     rowToSavedView(dbRow({ cut: "returnPlacement", chart: "zones" })),
-  ).toBeNull();
+  ).toMatchObject({ cut: "returnPlacement", chart: "zones" });
 });
 
 test("rowToSavedViewRow adds shared/mine for the viewer", () => {

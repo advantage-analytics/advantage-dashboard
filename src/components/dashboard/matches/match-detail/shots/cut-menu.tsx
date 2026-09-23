@@ -42,8 +42,8 @@ function filterCountLabel(cut: Cut, chart: Chart, filters: VizFilters): string {
  * current one. `savedViews` is the read-only list already resolved by the
  * caller — this component holds no fetch of its own.
  *
- * Switching cuts resets serve-only filter values (`carryFilters`) and drops
- * to `scatter` off serve, since Zones is Serve-only (guardrails: the chart
+ * Switching cuts resets serve-only filter values (`carryFilters`) and keeps
+ * the chart where supported (the chart
  * pairing lives here, not duplicated at each call site). Switching to a
  * saved view instead replaces cut/chart/filters wholesale and remembers
  * `viewId`, so the trigger and the "chosen" check both track it.
@@ -84,8 +84,8 @@ export function CutMenu({
     setState((prev) => ({
       ...prev,
       cut,
-      // Zones falls back to scatter off serve; heat (allowed on every cut)
-      // survives the switch — `chartAllowedOn` is the one pure rule behind
+      // Every current chart type is allowed on every cut.
+      // `chartAllowedOn` is the one pure rule behind
       // this, also used by `parseVizState` and `validateVizInput`.
       chart: chartAllowedOn(cut, prev.chart) ? prev.chart : "scatter",
       filters: carryFilters(prev.filters, cut),

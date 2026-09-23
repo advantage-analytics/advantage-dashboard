@@ -83,8 +83,17 @@ export function VizFocused({
   // — including where "you" is resolved (guardrails §4). Extracted from here
   // rather than copied into the viewer, so the two courts can never draw a
   // different mark count for the same URL.
-  const { result, stats, subjectName, you, opp, points, hasFilters, isDraft } =
-    useVizView();
+  const {
+    result,
+    stats,
+    bandZones,
+    subjectName,
+    you,
+    opp,
+    points,
+    hasFilters,
+    isDraft,
+  } = useVizView();
   const { state, setState, runCourtMorph, morphTargetKey } = useVizState();
   const reducedMotion = usePrefersReducedMotion();
   // `availableSets` is an O(points) scan; this component re-renders on every
@@ -316,6 +325,7 @@ export function VizFocused({
               // withheld here.
               dots={isDraft ? [] : result.dots}
               chart={state.chart}
+              bandZones={bandZones}
               draft={isDraft}
               zones={
                 !isDraft && state.chart === "zones" && cut === "serve"
@@ -416,6 +426,14 @@ export function VizFocused({
 
           {!isDraft && (
             <div className="flex items-center gap-3 px-4 pt-[14px] pb-4">
+              {state.chart === "zones" && cut !== "serve" && (
+                <span
+                  className="text-micro"
+                  style={{ color: "var(--ink-600)" }}
+                >
+                  Count · points won
+                </span>
+              )}
               {legendItemsFor(cut, state.chart).map((item) =>
                 item.glyph === "ramp" ? (
                   <HeatRampLegend key={item.key} />

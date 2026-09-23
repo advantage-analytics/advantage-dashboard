@@ -24,11 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  contactBandRows,
-  depthBandRows,
-  resolveDepthDividersFt,
-} from "@/lib/data/viz-bands";
+import { contactBandRows, depthBandRows } from "@/lib/data/viz-bands";
 import { formatScoreboardStatus } from "@/lib/data/match-utils";
 import { playedSets } from "@/lib/ui/score-format";
 import { overlayIsOpen } from "@/lib/ui/overlay-is-open";
@@ -119,9 +115,10 @@ export function VizFullscreen() {
     points,
     hasFilters,
     bands,
+    bandZones: savedBandZones,
     unit,
   } = useVizView();
-  const { contactHidden, receipt, canEdit, applyBands } = useVizBands();
+  const { receipt, canEdit, applyBands } = useVizBands();
   // `availableSets` is an O(points) scan; this viewer re-renders on every
   // pan/zoom frame (see the `VizBandsOverlay`/`MarkLayer` memoization below),
   // so it's memoized on `points` alone rather than re-scanning on every one
@@ -320,28 +317,8 @@ export function VizFullscreen() {
         editing: true,
       };
     }
-    const kind = cut === null ? null : bandKindFor(cut);
-    if (kind === null) return null;
-    if (kind === "depth" && bands.depthScheme === "none") return null;
-    if (kind === "contact" && contactHidden) return null;
-
-    const rows =
-      kind === "depth"
-        ? depthBandRows(bands, unit)
-        : contactBandRows(bands, unit);
-    if (rows.length === 0) return null;
-    const dividersFt =
-      kind === "depth"
-        ? resolveDepthDividersFt(bands)
-        : [...bands.contactDividersFt];
-
-    return {
-      kind,
-      dividersFt,
-      rows,
-      statRows: stats?.groups.find((g) => g.key === "depth")?.rows ?? null,
-    };
-  }, [cut, bands, unit, contactHidden, stats, activeEditor]);
+    return savedBandZones;
+  }, [unit, savedBandZones, activeEditor]);
 
   /* ── Exit ─────────────────────────────────────────────────────────────── */
 

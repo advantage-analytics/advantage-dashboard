@@ -134,7 +134,7 @@ const RAMP_ITEM: LegendItem = {
  */
 export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
   if (chart === "heat") return [RAMP_ITEM];
-  if (chart === "zones") return OUTCOME_ITEMS;
+  if (chart === "zones") return cut === "serve" ? OUTCOME_ITEMS : [];
   if (cut === "rallyPosition") {
     return [WON_ITEM, LOST_ITEM, FOREHAND_ITEM, BACKHAND_ITEM];
   }

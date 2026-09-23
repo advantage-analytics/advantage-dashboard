@@ -6,7 +6,7 @@ import { Maximize2 } from "lucide-react";
 import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
 import { heatFloorTintRgba } from "./court-geometry";
 import { VIZ_PILL_RADIUS } from "./viz-labels";
-import type { Chart, Cut, VizDot } from "./viz-model";
+import type { Chart, Cut, VizDot, VizBandZones, VizResult } from "./viz-model";
 import type { VizState } from "./viz-url";
 import { viewIdentityKey } from "./viz-url";
 import { useVizState } from "./use-viz-state";
@@ -113,6 +113,8 @@ export function CourtTile({
   countLabel,
   cut,
   dots,
+  zones,
+  bandZones,
   chart = "scatter",
   href,
   overlay,
@@ -139,6 +141,8 @@ export function CourtTile({
   countLabel: string;
   cut: Cut;
   dots: VizDot[];
+  zones?: NonNullable<VizResult["zoneStats"]>;
+  bandZones?: VizBandZones | null;
   /** G3b: forwarded straight to `CourtArt` — a saved-view tile can be a heat
    * chart same as the focused view; the six default tiles never are
    * (`DEFAULT_CUTS` is scatter-only), so they simply omit it and get the
@@ -255,6 +259,8 @@ export function CourtTile({
         <CourtArt
           cut={cut}
           dots={dots}
+          zones={zones}
+          bandZones={bandZones}
           chart={chart}
           fill
           className="block h-full w-full"

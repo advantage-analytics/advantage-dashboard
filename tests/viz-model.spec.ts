@@ -1909,11 +1909,12 @@ test.describe("statRowAnnouncement", () => {
 /* ── G3a: chartAllowedOn ───────────────────────────────────────────────── */
 
 test.describe("chartAllowedOn", () => {
-  test("zones is serve-only", () => {
+  test("zones is supported on every cut", () => {
+    expect(chartAllowedOn("rallyPlacement", "zones")).toBe(true);
     expect(chartAllowedOn("serve", "zones")).toBe(true);
-    expect(chartAllowedOn("returnPlacement", "zones")).toBe(false);
-    expect(chartAllowedOn("returnContact", "zones")).toBe(false);
-    expect(chartAllowedOn("rallyPosition", "zones")).toBe(false);
+    expect(chartAllowedOn("returnPlacement", "zones")).toBe(true);
+    expect(chartAllowedOn("returnContact", "zones")).toBe(true);
+    expect(chartAllowedOn("rallyPosition", "zones")).toBe(true);
   });
 
   test("scatter and heat are legal on every cut", () => {

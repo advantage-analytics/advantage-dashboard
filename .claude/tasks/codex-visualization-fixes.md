@@ -51,7 +51,7 @@ ready).
 
 ## T3 · Enable zones for every visualization type
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T1, T2
 - **files:** Guess: `chart-menu.tsx`, `viz-model.ts`, `viz-bands-overlay.tsx`, `court-art.tsx`, `viz-focused.tsx`, `viz-fullscreen-court.tsx`, `viz-url.ts`; `src/lib/data/saved-views-logic.ts` and associated tests under `tests/`.

@@ -1,3 +1,4 @@
+import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { ReactNode, MouseEvent } from "react";
 import { servePoint } from "./viz-serve-points";
 
@@ -70,4 +71,8 @@ export async function restoreSavedView() {
 }
 export async function setSavedViewShared() {
   return { ok: false };
+}
+
+export function useVizBands() {
+  return { bands: DEFAULT_BANDS, unit: "ft" as const };
 }
