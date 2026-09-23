@@ -64,7 +64,7 @@ ready).
 
 ## T4 · Remove the selected preview's duplicate while focused
 
-- **status:** blocked
+- **status:** done
 - **model:** gpt-6-sol
 - **files:** Guess: `shots-tab.tsx`, `viz-focused.tsx`, `saved-views-band.tsx`, `default-tiles.ts`, `viz-state-context.tsx`; navigation regression tests under `tests/`.
 - **done when:**

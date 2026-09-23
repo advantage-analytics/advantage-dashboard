@@ -43,7 +43,7 @@ import { savedViewNamePool } from "./save-view-dialog";
 import { useVizState } from "./use-viz-state";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import type { VizState } from "./viz-url";
-import { activeFilterEntries, sameView } from "./viz-url";
+import { activeFilterEntries, viewIdentityKey } from "./viz-url";
 import {
   computeViz,
   subjectFor,
@@ -764,17 +764,8 @@ export function SavedViewsBand({
     }
   }
 
-  /**
-   * One saved-view tile — the Manage-mode/plain branch shared by the wall's
-   * grid and the focused view's grid, so the two can never draw it
-   * differently. `current` rings the tile Signal Blue (F4) — omitted
-   * (defaults to `false`) by the wall's own call, which never has a
-   * "current" tile to mark.
-   */
-  function renderSavedTile(
-    view: SavedViewRow,
-    opts: { current?: boolean } = {},
-  ) {
+  /** One saved-view tile shared by the wall and focused grids. */
+  function renderSavedTile(view: SavedViewRow) {
     const manageable = canManageSavedView(view, workspaceRole);
     const data = tileDataById.get(view.id) ?? tileDataFor(view);
 
@@ -791,7 +782,6 @@ export function SavedViewsBand({
           renameValue={renameValue}
           renameDuplicate={renameDuplicate}
           menuOpen={openMenuId === view.id}
-          current={opts.current}
           onMenuOpenChange={(open) => handleMenuOpenChange(view.id, open)}
           onRegisterTileEl={(el) => registerTileEl(view.id, el)}
           onRegisterMenuTriggerEl={(el) => registerMenuTriggerEl(view.id, el)}
@@ -825,7 +815,6 @@ export function SavedViewsBand({
         dots={data.dots}
         chart={data.chart}
         href={data.href}
-        current={opts.current}
         navigateState={{
           cut: view.cut,
           chart: view.chart,
@@ -847,7 +836,25 @@ export function SavedViewsBand({
     );
   }
 
-  const totalRowViews = visibleDefaultTiles.length + optimisticViews.length;
+  // A focused court already presents the selected view at full size. Match
+  // the tile's navigation identity, so a saved view with the same cut/player
+  // as a default (or another saved view) remains available in the gallery.
+  // Filter edits keep the same tile selected; the URL's view id distinguishes
+  // saved records without changing their data or order.
+  const selectedKey = variant === "focused" ? viewIdentityKey(state) : null;
+  const galleryDefaultTiles = visibleDefaultTiles.filter(
+    (tile) => viewIdentityKey(tile.state) !== selectedKey,
+  );
+  const gallerySavedViews = optimisticViews.filter(
+    (view) =>
+      viewIdentityKey({
+        cut: view.cut,
+        chart: view.chart,
+        filters: view.filters,
+        viewId: view.id,
+      }) !== selectedKey,
+  );
+  const totalRowViews = galleryDefaultTiles.length + gallerySavedViews.length;
 
   return (
     <div
@@ -981,12 +988,7 @@ export function SavedViewsBand({
           className={`${VIZ_TILE_GRID_CLASS} viz-vt-views-grid`}
           style={VIZ_TILE_GRID_STYLE}
         >
-          {visibleDefaultTiles.map((tile) => {
-            const isCurrent = sameView(state, {
-              cut: tile.cut,
-              chart: tile.state.chart,
-              filters: tile.state.filters,
-            });
+          {galleryDefaultTiles.map((tile) => {
             return (
               <div key={tile.key} role="listitem">
                 <CourtTile
@@ -998,7 +1000,6 @@ export function SavedViewsBand({
                   dots={tile.dots}
                   chart={tile.chart}
                   href={tile.href}
-                  current={isCurrent}
                   navigateState={tile.state}
                   actionSlot={
                     <TileFullscreenGlyph
@@ -1011,16 +1012,10 @@ export function SavedViewsBand({
             );
           })}
 
-          {optimisticViews.map((view) => {
-            const isCurrent = sameView(state, {
-              cut: view.cut,
-              chart: view.chart,
-              filters: view.filters,
-              id: view.id,
-            });
+          {gallerySavedViews.map((view) => {
             return (
               <div key={view.id} role="listitem">
-                {renderSavedTile(view, { current: isCurrent })}
+                {renderSavedTile(view)}
               </div>
             );
           })}

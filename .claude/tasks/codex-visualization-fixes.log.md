@@ -44,3 +44,9 @@ is the runner's. Newest entries at the bottom.
 **changed:** Added role-resolved rally landing cut, default previews, Scatter/Heat projections, filters, URL and saved-view round trips. Applied only migration 20260923210000_saved_views_rally_placement atomically to verified project pouxujkhtbvkdwbzfvka: validated widened constraint and exactly one migration-history entry, saved rows unchanged, RLS and four policies preserved. Authenticated saved-view persistence suite passed25/25;501 targeted checks passed. Reviewer lacked direct SQL access; orchestrator verified the live result through execution-worker readback.
 
 Recovery investigation:79/79 previously failing live tests passed serialized. Observed external worktrees overlapping full gates against shared database; set Playwright workers to1 without changing assertions/timeouts/retries. Reproduced unrelated upload-test failure with500ms reservation delay; replaced timing assumptions with held reservation and actual upload-block barriers, retaining assertions and adding no-publication check.30/30 cancellation repetitions and20/20 attachment-flow tests passed. These recovery fixes were expressly user-authorized; T7 sizing preserved.
+
+## T4 · Remove the selected preview's duplicate while focused — done
+
+**gate:** Recovery mechanical: GATE PASS. Completion: VERDICT: pass.
+
+**changed:** Recovered exact stash d53c68234ca24de6cb7963940fc6219d32c80256, retained as backup. Focused gallery excludes only the selected player/cut/saved-view identity and restores tiles when changing selection or returning to overview. Browser regression covers default/saved selection, keyboard, filters, explicit fullscreen, reduced motion and back/forward; updated counts for T2 rally previews. Targeted checks and screenshot inspection passed.
