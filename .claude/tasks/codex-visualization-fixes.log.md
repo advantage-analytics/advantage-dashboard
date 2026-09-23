@@ -50,3 +50,9 @@ Recovery investigation:79/79 previously failing live tests passed serialized. Ob
 **gate:** Recovery mechanical: GATE PASS. Completion: VERDICT: pass.
 
 **changed:** Recovered exact stash d53c68234ca24de6cb7963940fc6219d32c80256, retained as backup. Focused gallery excludes only the selected player/cut/saved-view identity and restores tiles when changing selection or returning to overview. Browser regression covers default/saved selection, keyboard, filters, explicit fullscreen, reduced motion and back/forward; updated counts for T2 rally previews. Targeted checks and screenshot inspection passed.
+
+## T6 · Fix fullscreen filter overflow and selected-person avatar — done
+
+**gate:** Recovery mechanical: GATE PASS; completion: VERDICT: pass. Initial recovery full run had one search_programs statement timeout; isolated suite passed2/2 (RPC310ms), then complete gate passed without test/RPC changes.
+
+**changed:** Recovered exact stash832b33a4383e3b8a5508079ef0e921c22ece9675, retained as backup. Fullscreen filter strip stays single-line and keyboard-scrollable; narrow top/bottom controls remain reachable; avatar uses the court subject identity without score changes. Real-CSS browser regression at320px and adjacent rally browser regression passed, plus local checks.

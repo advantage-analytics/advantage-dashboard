@@ -89,7 +89,7 @@ ready).
 
 ## T6 · Fix fullscreen filter overflow and selected-person avatar
 
-- **status:** blocked
+- **status:** done
 - **model:** gpt-6-sol
 - **files:** Guess: `viz-fullscreen.tsx`, `applied-strip.tsx`; fullscreen regression tests under `tests/`.
 - **done when:**

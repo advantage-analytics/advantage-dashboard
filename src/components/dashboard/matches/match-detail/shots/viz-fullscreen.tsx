@@ -113,6 +113,7 @@ export function VizFullscreen() {
     result,
     stats,
     subjectName,
+    subjectIsPlayer1,
     you,
     opp,
     points,
@@ -596,14 +597,15 @@ export function VizFullscreen() {
           {/* ── Top chrome ─────────────────────────────────────────────── */}
           <div
             data-chrome=""
-            className="absolute top-[14px] right-[18px] left-[18px] flex items-start gap-3"
+            className="absolute top-[14px] right-[18px] left-[18px] flex flex-wrap items-start justify-end gap-3"
           >
             <ViewerScoreboard
               cutLabel={CUT_LABEL[cut]}
               count={result.count}
               noun={result.noun}
+              subjectIsPlayer1={subjectIsPlayer1}
             />
-            <div className="flex-1" />
+            <div className="hidden flex-1 sm:block" />
             {/* P2n: the bands receipt takes the filter pill's slot for four
                 seconds — no toast, no green tick. The pill is the one piece
                 of chrome a coach is already looking at when they pick a
@@ -714,7 +716,7 @@ export function VizFullscreen() {
               inert={editing}
               aria-hidden={editing || undefined}
               className={cn(
-                "flex h-full min-w-0 items-center gap-2 px-3 transition-opacity duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none",
+                "flex h-full min-w-0 items-center gap-2 overflow-x-auto px-3 transition-opacity duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none",
                 editing && "opacity-0",
               )}
             >
@@ -733,8 +735,29 @@ export function VizFullscreen() {
                   <SlabDivider />
                   {/* The tokens are the one item allowed to give up width when
                     the slab runs out; everything else is fixed-size chrome. */}
-                  <div className="flex min-w-0 shrink overflow-hidden">
-                    <AppliedStrip tone="dark" readOnly={viewIsPristine} />
+                  <div
+                    aria-label="Applied filters, scroll horizontally"
+                    tabIndex={0}
+                    className="min-w-[72px] shrink overflow-x-auto overscroll-x-contain whitespace-nowrap"
+                    onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget) return;
+                      if (
+                        event.key !== "ArrowLeft" &&
+                        event.key !== "ArrowRight"
+                      )
+                        return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      event.currentTarget.scrollBy({
+                        left: event.key === "ArrowRight" ? 80 : -80,
+                      });
+                    }}
+                  >
+                    <AppliedStrip
+                      tone="dark"
+                      readOnly={viewIsPristine}
+                      fullscreen
+                    />
                   </div>
                 </>
               )}
@@ -959,14 +982,18 @@ function ViewerScoreboard({
   cutLabel,
   count,
   noun,
+  subjectIsPlayer1,
 }: {
   cutLabel: string;
   count: number;
   noun: string;
+  subjectIsPlayer1: boolean;
 }) {
   const { match } = useMatchData();
   const sides = useMatchSides();
   const sets = playedSets(sides.sets);
+  const subject =
+    subjectIsPlayer1 === sides.you.isPlayer1 ? sides.you : sides.opp;
   const status = formatScoreboardStatus(match.matchContext);
   const clock =
     typeof match.durationSec === "number" && match.durationSec > 0
@@ -975,7 +1002,8 @@ function ViewerScoreboard({
 
   return (
     <div
-      className="flex min-w-[236px] flex-col gap-[14px] rounded-[12px] backdrop-blur-[8px]"
+      data-testid="fullscreen-scoreboard"
+      className="mr-auto flex w-full min-w-[236px] flex-col gap-[14px] rounded-[12px] backdrop-blur-[8px] sm:w-auto"
       style={{ background: "rgba(13,13,13,0.74)", padding: "14px 15px 12px" }}
     >
       <div className="flex items-baseline gap-2">
@@ -998,10 +1026,11 @@ function ViewerScoreboard({
       <div className="flex items-center gap-2 border-t border-white/[0.14] pt-[9px]">
         <span
           aria-hidden="true"
+          data-testid="fullscreen-subject-avatar"
           className="flex size-[22px] shrink-0 items-center justify-center rounded-full text-[10px] font-medium text-white"
           style={{ background: "rgba(255,255,255,0.14)" }}
         >
-          {sides.you.initials}
+          {subject.initials}
         </span>
         <span className="truncate text-[11px] text-white/55">{cutLabel}</span>
         <div className="flex-1" />
