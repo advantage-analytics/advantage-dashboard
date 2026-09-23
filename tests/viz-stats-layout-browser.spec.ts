@@ -185,6 +185,26 @@ test("populated and empty statistics align with the court and stay reachable on 
     expect(rows > 0 || empty > 0, cut).toBe(true);
   }
 
+  await page.goto(`${origin}/?tab=shots&cut=rallyPlacement&fixture=long`);
+  await page.screenshot({
+    path: resolve("test-results/viz-stats-short-wide.png"),
+    fullPage: true,
+  });
+  const shortRows = await page.locator(".viz-vt-stats-card li").count();
+  if (shortRows > 0 && shortRows <= 4) {
+    const bottomGap = await page.evaluate(() => {
+      const body = document.querySelector(
+        ".viz-vt-stats-card .overflow-y-auto",
+      )!;
+      const lastRow = body.querySelector("li:last-child")!;
+      return (
+        body.getBoundingClientRect().bottom -
+        lastRow.getBoundingClientRect().bottom
+      );
+    });
+    expect(bottomGap).toBeLessThan(50);
+  }
+
   await page.goto(`${origin}/?tab=shots&cut=serve&vset=3&fixture=long`);
   await expect(page.getByText("No points match these filters")).toBeVisible();
   await expect(page.getByText("Where the serve went")).toBeVisible();

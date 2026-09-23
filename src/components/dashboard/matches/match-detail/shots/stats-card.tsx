@@ -1,5 +1,6 @@
 import { statRowAnnouncement, statsAreEmpty, type VizStats } from "./viz-model";
 import { cn } from "@/lib/utils";
+import { HOME_CLAIM_CLASS } from "@/lib/ui/home-claim";
 
 /**
  * The focused-view's statistics card (Task F3): generalises the old
@@ -29,28 +30,26 @@ export function StatsCard({
    * `VizToolbar`'s identical `className` prop for why. */
   className?: string;
 }) {
+  const compactGroup =
+    stats.groups.length === 1 && stats.groups[0].rows.length <= 4;
+
   return (
     <div
       className={cn(
-        "flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[var(--radius-card)] border",
+        "surface-card flex min-h-0 w-full min-w-0 flex-col overflow-hidden",
         className,
       )}
-      style={{
-        borderColor: "var(--border-card)",
-        backgroundColor: "var(--surface-card)",
-        boxShadow: "var(--shadow-card)",
-      }}
     >
-      <div className="flex shrink-0 flex-col gap-1 px-5 pt-5 pb-4">
-        <p
-          className="text-[14px] leading-[1.4] font-medium"
-          style={{ color: "var(--ink-900)" }}
+      <div className="flex shrink-0 flex-col gap-3 px-5 pt-5 pb-4">
+        <h2
+          className="eyebrow tracking-[1.5px]"
+          style={{ color: "var(--ink-600)" }}
         >
           {stats.title}
-        </p>
+        </h2>
         <p
-          className="text-[12px] leading-[1.5]"
-          style={{ color: "var(--ink-600)" }}
+          className={HOME_CLAIM_CLASS}
+          style={{ maxWidth: "30ch", textWrap: "pretty" }}
         >
           {stats.subtitle}
         </p>
@@ -67,18 +66,31 @@ export function StatsCard({
         </div>
       ) : (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">
             {stats.groups.map((group, i) => (
-              <div key={group.key} className={i > 0 ? "mt-5" : ""}>
+              <div
+                key={group.key}
+                className={cn(
+                  i > 0 && "mt-5",
+                  compactGroup &&
+                    "@min-[720px]:flex @min-[720px]:h-full @min-[720px]:flex-col",
+                )}
+              >
                 {group.label && (
                   <p
-                    className="mb-3 text-[11px] font-medium"
+                    className="text-micro mb-3 font-medium"
                     style={{ color: "var(--ink-600)" }}
                   >
                     {group.label}
                   </p>
                 )}
-                <ul className="flex flex-col gap-3.5">
+                <ul
+                  className={cn(
+                    "flex flex-col gap-3.5",
+                    compactGroup &&
+                      "@min-[720px]:flex-1 @min-[720px]:justify-evenly",
+                  )}
+                >
                   {group.rows.map((row) => (
                     <li key={row.key} className="flex flex-col gap-1.5">
                       <div className="flex items-baseline justify-between gap-2">
@@ -103,7 +115,7 @@ export function StatsCard({
                           className="flex shrink-0 items-baseline gap-1.5"
                         >
                           <span
-                            className="text-[16px] leading-none font-normal tabular-nums"
+                            className="text-[13px] leading-none font-normal tabular-nums"
                             style={{ color: "var(--ink-900)" }}
                           >
                             {row.winPct === null ? "—" : `${row.winPct}%`}
@@ -118,11 +130,11 @@ export function StatsCard({
                       </div>
                       <span
                         aria-hidden="true"
-                        className="flex h-1 w-full overflow-hidden rounded-[2px]"
+                        className="flex h-1.5 w-full overflow-hidden rounded-[var(--radius-cell)]"
                         style={{ backgroundColor: "var(--surface-subtle)" }}
                       >
                         <span
-                          className="h-1"
+                          className="h-1.5"
                           style={{
                             width: row.winPct === null ? 0 : `${row.winPct}%`,
                             backgroundColor: "var(--viz-you)",
@@ -134,15 +146,15 @@ export function StatsCard({
                 </ul>
               </div>
             ))}
-            {stats.sentence && (
-              <p
-                className="mt-5 text-[11px] leading-[1.5]"
-                style={{ color: "var(--ink-600)" }}
-              >
-                {stats.sentence}
-              </p>
-            )}
           </div>
+          {stats.sentence && (
+            <p
+              className="mx-5 shrink-0 border-t border-[var(--border-hairline)] pt-3 pb-5 text-[12px] leading-[1.6] text-[var(--ink-700)]"
+              style={{ textWrap: "pretty" }}
+            >
+              {stats.sentence}
+            </p>
+          )}
         </>
       )}
     </div>
