@@ -143,6 +143,8 @@ export {
   type BuildOptions,
 } from "./transcript";
 
+export { fitFrameToTime, bounceVideoTimes } from "./frame-clock";
+
 export {
   deriveBallPaths,
   BALL_PATHS_VERSION,

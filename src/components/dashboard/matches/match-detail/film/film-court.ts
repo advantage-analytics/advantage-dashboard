@@ -74,16 +74,21 @@ export const OPP = "#94A3B8";
 export const OUT = "#FF6478";
 
 /**
- * ── How long a mark stays on the court (author decision, 2026-09-21) ─────────
+ * ── How long a mark stays on the court (author decision, 2026-09-22) ─────────
  *
- * A mark appears at full opacity at its own moment, holds {@link
+ * A mark reaches full opacity at its own moment, holds {@link
  * MARK_HOLD_SECONDS}, fades linearly over {@link MARK_FADE_SECONDS} and is gone
- * five seconds after it happened. Opacity is a PURE FUNCTION of film time, not
- * of how many shots have been struck since: pausing freezes the court, and
- * seeking backwards un-draws what has not happened yet.
+ * 4.5 seconds after it happened — the fade was shortened from 3 s to 2.5 s so
+ * the court clears a little sooner behind the play. Opacity is a PURE FUNCTION
+ * of film time, not of how many shots have been struck since: pausing freezes
+ * the court, and seeking backwards un-draws what has not happened yet.
+ *
+ * The fade IN is not here: it is one 150 ms keyframe on the mark element
+ * (`film-mark-in`, `globals.css`), because it is keyed to the element's own
+ * mount rather than to the film clock.
  */
 export const MARK_HOLD_SECONDS = 2;
-export const MARK_FADE_SECONDS = 3;
+export const MARK_FADE_SECONDS = 2.5;
 /**
  * Opacity is quantised to this step, so the four-times-a-second playhead does
  * not hand React a new number on every tick.
@@ -150,10 +155,21 @@ const READOUT_MAX_TOP_PCT = 70;
  * — is read on. A mark in the left half is read on the right and vice versa,
  * so the readout never lands on top of the marks around it, and the top is
  * clamped so the box stays inside the frame.
+ *
+ * `dock` is which side of the room the card itself is parked on. A readout
+ * that hangs toward the room is fine — it has the room's width to spill
+ * into — but one that hangs toward the room's edge runs off-screen, so a
+ * card docked right always reads left and one docked left always reads
+ * right, regardless of the mark's own half. Omit `dock` (point mode, where
+ * the card is centred) and the mark's half decides, as before.
  */
-export function readoutPlacement(x: number, y: number): ReadoutPlacement {
+export function readoutPlacement(
+  x: number,
+  y: number,
+  dock?: "left" | "right",
+): ReadoutPlacement {
   return {
-    side: x > 50 ? "left" : "right",
+    side: (dock ? dock === "right" : x > 50) ? "left" : "right",
     top: round(
       Math.min(READOUT_MAX_TOP_PCT, Math.max(0, y - READOUT_LIFT_PCT)),
     ),
@@ -357,8 +373,10 @@ export type CourtView = "camera" | "you-bottom";
  * When the ball of a shot lands, as a share of the way from its contact to the
  * next one. Measured on a real match's per-frame ball trajectories (414
  * consecutive strokes): the bounce falls at 0.42 / 0.62 / 0.85 of that gap
- * (p10 / p50 / p90). This is the fallback for every match whose rows carry no
- * measured landing time, which today is all of them.
+ * (p10 / p50 / p90). This is the fallback for a shot with neither a stored
+ * landing time (`shots.bounce_video_time`, carried in as `ShotStop.bounce`) nor
+ * a ball-paths match — every SwingVision shot, and every Advantage Intelligence
+ * shot derived before that column was written.
  */
 export const BOUNCE_REVEAL_SHARE = 0.6;
 /** The same for a rally's last shot, which has no next contact: median flight. */

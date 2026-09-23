@@ -1,7 +1,22 @@
 "use client";
 
-import { Fragment, memo, useEffect, useMemo, useRef } from "react";
-import { Bookmark, PanelRightClose, X } from "lucide-react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
+import {
+  Bookmark,
+  ChevronDown,
+  ChevronUp,
+  PanelRightClose,
+} from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { Workspace } from "@/lib/workspace/types";
@@ -13,8 +28,14 @@ import { cn } from "@/lib/utils";
 
 import { filmProgressWidth } from "./film-clock";
 import { FilmAdvancedPanel } from "./film-advanced-panel";
+import { reducedMotionNow } from "./film-motion";
 import { FilmQuickFilters } from "./film-quick-filters";
-import { shotRowCells, type ShotStop } from "./film-shots";
+import { shotRowCells, shotRowRevealDelay, type ShotStop } from "./film-shots";
+import {
+  followAffordance,
+  type FollowAffordance,
+  type PointFocus,
+} from "./film-timeline";
 import type { FilmSectionId } from "./filters/types";
 import { scoreColumns, youFirstScore } from "./film-score";
 import {
@@ -41,12 +62,18 @@ import {
  *   absolutizes on the server first and orients on the viewer second; the
  *   row's point score stays server-first, as the umpire calls it.
  *
- * The decisive-player mark is `point.player` — the player who hit the last
- * shot: the workspace's mark (profile photo on personal, crest on a team)
- * when that is the viewer, an initials chip on `--surface-subtle` when it is
- * not. Initials come from `sides`, so a two-letter chip is never a hardcoded
- * artboard string. The row's hover, the score sliding aside for the bookmark,
- * is the room's (handoff F3) in the light treatment.
+ * The mark is the point's WINNER, not who hit the last shot: the workspace's
+ * mark (profile photo on personal, crest on a team) when the viewer won the
+ * point, an initials chip on `--surface-subtle` when the opponent did.
+ * Initials come from `sides`, so a two-letter chip is never a hardcoded
+ * artboard string. The value is `won_by_player1`, which the Advantage
+ * Intelligence pipeline derives from consecutive point scores
+ * (`resolveWinner` in `derivation/winners.ts`, walking the ladder / game /
+ * set counts and deliberately ignoring the last stroke's `in` flag) and the
+ * SwingVision parser reads straight from the export. It disagrees with "who
+ * hit last" on any point flagged `winner_disputed` — that is exactly the set
+ * this mark exists to get right. The row's hover, the score sliding aside for
+ * the bookmark, is the room's (handoff F3) in the light treatment.
  *
  * ── Two tones, one list ─────────────────────────────────────────────────────
  *
@@ -80,6 +107,21 @@ import {
  * point's own fragment, so it inherits the row's 14px side padding and runs
  * edge to edge under it. Without those props nothing changes, which is how the
  * in-report column (`film-tab.tsx`) keeps the list it has always had.
+ *
+ * ── Follow the film, or hold the point you are reading ──────────────────────
+ *
+ * `pointFocus` (T17 design, `2026-09-22-film-follow-hold-design.md`) splits
+ * exactly two reads in here. The WELL reads `displayedPointId` — the held
+ * point while held, else the playing one — and so does the keep-in-view
+ * effect, which stops entirely while held. The LIT ROW (`isActive`,
+ * `data-playing`, the 2px progress rule) keeps reading `activePointId`, so
+ * the row that is playing stays named while the well stays put. A row or
+ * shot click holds that point (or re-follows, when it is the playing one) and
+ * still seeks; on either tone a hand scroll of the list holds too (T24).
+ * Nothing animates on hold — holding is the absence of a scroll. Both tones
+ * draw the "Now playing" pill as the way back (T23), whenever held and the
+ * lit row is not wholly inside the scroller's box — including when the held
+ * point IS the playing one, scrolled out of view (T24).
  */
 
 /** Light is the in-report column; dark is the fullscreen room's drawer. */
@@ -87,6 +129,53 @@ export type FilmListTone = "light" | "dark";
 
 /** One frozen empty slice, so "no well" never re-renders a memoized row. */
 const NO_STOPS: ShotStop[] = [];
+
+/** A list with no owner of the focus state simply follows. */
+const FOLLOW: PointFocus = { mode: "follow" };
+const NOOP = () => {};
+
+/**
+ * Keys that scroll a scroller (or the row focused inside it) without a
+ * `wheel`, `touchmove` or `pointerdown` — the fourth hold source (author's
+ * answer to Open item 3).
+ */
+const SCROLL_KEYS = new Set([
+  "PageDown",
+  "PageUp",
+  "Home",
+  "End",
+  " ",
+  "ArrowUp",
+  "ArrowDown",
+]);
+
+/**
+ * How long the follow flag stays up when the scroller never reports
+ * `scrollend` (Safari). Chromium's smooth scroll eases in about 300ms.
+ */
+const FOLLOW_SCROLL_FALLBACK_MS = 400;
+
+/**
+ * Where a re-follow JUMP (T26) puts the playing row: its top this far below
+ * the scroller's top edge. 8px is the spacing scale's 8px step (`gap-2`,
+ * foundations.md) and clears the row's own `py-1.5`, so the row reads as the
+ * first thing in the box rather than as one cut off by the edge.
+ */
+export const REFOLLOW_JUMP_INSET_PX = 8;
+
+/**
+ * How long after a held → follow transition the keep-in-view runs as a jump.
+ * A window, not a one-shot: a step re-follows and then seeks, and the seek
+ * lands (`activePointId` moves) on a later tick — the crossing that follows
+ * inside the window is part of the same jump.
+ */
+export const REFOLLOW_JUMP_WINDOW_MS = 800;
+
+/**
+ * How long the pill's 100ms exit may take before it unmounts anyway: a page
+ * that stops painting never delivers `transitionend`.
+ */
+const PILL_EXIT_FALLBACK_MS = 150;
 
 /** The list's chrome: card, header strip, count and game headers. */
 const LIST_TONE = {
@@ -99,8 +188,7 @@ const LIST_TONE = {
     header:
       "mx-1 flex items-center gap-1.5 border-b border-[var(--border-hairline)] pt-1 pb-2.5",
     clear:
-      "inline-flex h-[22px] w-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-cell)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-    clearIcon: "h-3 w-3 text-[var(--ink-500)]",
+      "inline-flex h-[22px] shrink-0 cursor-pointer items-center text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
     count:
       "mono tabular pr-2 text-[10px] whitespace-nowrap text-[var(--ink-400)]",
     countSlash: "var(--ink-300)",
@@ -124,8 +212,7 @@ const LIST_TONE = {
     header:
       "flex items-center gap-2 px-2.5 pt-[13px] pb-[3px] shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)]",
     clear:
-      "mb-[7px] inline-flex h-[22px] w-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-cell)] transition-colors duration-200 hover:bg-white/[0.08] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-    clearIcon: "h-3 w-3 text-white/70",
+      "mb-[7px] inline-flex h-[22px] shrink-0 cursor-pointer items-center text-[11px] font-medium text-white/70 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
     count: "mono tabular mb-[7px] text-[10px] whitespace-nowrap text-white/45",
     countSlash: "rgba(255,255,255,0.25)",
     collapse:
@@ -176,6 +263,29 @@ interface PointListProps {
   activeShotId?: string | null;
   /** Stable identity, please — the well's rows are memoized on it. */
   onSelectShot?: (stop: ShotStop) => void;
+  /**
+   * Follow-or-hold, owned by `FilmRoom` (film-tab.tsx) and shared by the
+   * shell column and the room's drawer. Absent, the list follows — the
+   * fixtures that mount it alone keep the list they had.
+   */
+  pointFocus?: PointFocus;
+  /**
+   * The point whose well is open: the held one while held, else the playing
+   * one. Absent, it is `activePointId`.
+   */
+  displayedPointId?: string | null;
+  /** Stable identity, please — the click wrappers below are memoized on both. */
+  /** `null` holds with no well: a hand scroll with nothing displayed (T25). */
+  onHoldPoint?: (pointId: string | null) => void;
+  onFollow?: () => void;
+  /**
+   * The playing point and its 1-based place in the walk over the applied cut
+   * (`position.index`, the number the counters print) — null in dead time,
+   * `index: null` when the cut excludes it. The pill's inputs, in both
+   * tones (T23: the shell column draws the drawer's pill too).
+   * Stable identity, please — the list is memoized on it.
+   */
+  nowPlaying?: { id: string; index: number | null } | null;
 }
 
 interface GameGroup {
@@ -218,8 +328,16 @@ export const PointList = memo(function PointList({
   shotStops,
   activeShotId = null,
   onSelectShot,
+  pointFocus = FOLLOW,
+  displayedPointId: displayedPointIdProp,
+  onHoldPoint = NOOP,
+  onFollow = NOOP,
+  nowPlaying = null,
 }: PointListProps) {
   const t = LIST_TONE[tone];
+  const displayedPointId =
+    displayedPointIdProp === undefined ? activePointId : displayedPointIdProp;
+  const held = pointFocus.mode === "held";
   const sides = useMatchSides();
   // The viewer's rows lead with the workspace's own mark — the profile photo
   // on personal, the program's crest on a team — so a point you decided reads
@@ -281,21 +399,87 @@ export const PointList = memo(function PointList({
 
   const clearAll = () => onFiltersChange(DEFAULT_FILM_FILTERS);
 
-  // The playing point's shots, and nobody else's: the feed the room hands over
-  // covers the whole film, and one open well at a time is the rule — stepping
-  // to another point refolds the last one because this slice moves with
-  // `activePointId` rather than accumulating.
+  // The DISPLAYED point's shots, and nobody else's: the feed the room hands
+  // over covers the whole film, and one open well at a time is the rule —
+  // stepping to another point refolds the last one because this slice moves
+  // with `displayedPointId` rather than accumulating. While held that id is
+  // the held point, so the well stays put as the film moves on.
   const wellStops = useMemo(() => {
-    if (!shotStops || !activePointId) return NO_STOPS;
-    return shotStops.filter((stop) => stop.point.id === activePointId);
-  }, [shotStops, activePointId]);
+    if (!shotStops || !displayedPointId) return NO_STOPS;
+    return shotStops.filter((stop) => stop.point.id === displayedPointId);
+  }, [shotStops, displayedPointId]);
   // A feed with no handler is a feed nothing can be done with, so it draws
   // nothing: the well's rows are seek targets before they are text.
   const wellOpen = onSelectShot != null && wellStops.length > 0;
 
+  // The click wrappers and the intent listeners below read the playing and
+  // displayed ids through refs, written after each commit, so their identity
+  // never moves with the film: `PointRow` and `ShotWellRow` are memoized on
+  // the callbacks they get, and a wrapper re-made on every point crossing
+  // would re-render every row of a 174-point match roughly once every ten
+  // seconds. Written in an effect rather than during render — the handlers
+  // run on a later event, never inside the render that changed the value.
+  const activePointRef = useRef(activePointId);
+  const displayedPointRef = useRef(displayedPointId);
+  const heldRef = useRef(held);
+  useEffect(() => {
+    activePointRef.current = activePointId;
+    displayedPointRef.current = displayedPointId;
+    heldRef.current = held;
+  }, [activePointId, displayedPointId, held]);
+
+  // A click holds its point — or re-follows, when it is the one already
+  // playing: that click is the way back without the pill, and the seek still
+  // happens as a restart of the point. Shared by a row click and a shot click
+  // (which holds the shot's own point), by the same rule.
+  const holdOrFollow = useCallback(
+    (pointId: string) => {
+      if (pointId === activePointRef.current) onFollow();
+      else onHoldPoint(pointId);
+    },
+    [onFollow, onHoldPoint],
+  );
+  // The seek itself is untouched: the hold lands first, then `onSelect` as it
+  // always did.
+  const selectPoint = useCallback(
+    (point: MatchPoint) => {
+      holdOrFollow(point.id);
+      onSelect(point);
+    },
+    [holdOrFollow, onSelect],
+  );
+  const selectShot = useCallback(
+    (stop: ShotStop) => {
+      holdOrFollow(stop.point.id);
+      onSelectShot?.(stop);
+    },
+    [holdOrFollow, onSelectShot],
+  );
+
+  // Two ways to follow (T26). A re-follow — any held → follow transition: the
+  // pill, a step or transport from held, a click on the playing row from
+  // held, a cut that drops the held point, a null hold (T25) included — is a
+  // JUMP: the playing point's row goes to the top of the box, 8px in
+  // (`REFOLLOW_JUMP_INSET_PX`), clamped at the end of the list, even when it
+  // is already in view. It always targets the point row, never the shot: the
+  // well mounts under the row, so aligning the shot would push the row off
+  // the top. The jump is a window (`REFOLLOW_JUMP_WINDOW_MS`), not one run: a
+  // step re-follows before its seek lands, so the crossing that follows inside
+  // the window is part of the same jump and the second scroll wins. Outside
+  // the window it is CONTINUOUS keep-in-view, below: the minimal scroll that
+  // brings the lit thing inside the box, and nothing when it already is — no
+  // lurch per point. The transition is observed here (`prevHeldRef`), not
+  // signalled by a prop.
+  //
   // Keep whatever is lit in view as the film moves on — the playing shot while
-  // a well is open, the playing row otherwise — without fighting a user who is
-  // scrolling the list themselves.
+  // a well is open, the playing row otherwise — and stop entirely while held:
+  // the viewer's own scrolling is what the listeners after this effect read
+  // as intent (`wheel`, `touchmove`, `pointerdown` on the scroller, and the
+  // scrolling keys), never the `scroll` event, which a programmatic scroll
+  // fires exactly as a wheel does. Around its own `scrollTo` the effect
+  // raises `followScrollRef`, so nothing derived from the scroller's motion
+  // can mistake the effect's travel for the viewer's; the intent listeners do
+  // not consult it — a wheel arriving mid-follow-scroll is intent and holds.
   //
   // Moves this scroller's own `scrollTop` and nothing else. The DOM's
   // scroll-an-element-into-view method walks every ancestor instead, and while
@@ -303,10 +487,24 @@ export const PointList = memo(function PointList({
   // room — video included — sideways toward the row. The room's retired dark
   // list hit exactly that, which is why the rule is written down here.
   const listRef = useRef<HTMLDivElement>(null);
+  const followScrollRef = useRef(false);
+  /** Cancels the pending settle of the last follow scroll, flag untouched. */
+  const cancelSettleRef = useRef<() => void>(NOOP);
+  /** `held` as of the effect's last run: the re-follow transition's memory. */
+  const prevHeldRef = useRef(held);
+  /** `performance.now()` until which a follow run is a jump (T26). */
+  const jumpUntilRef = useRef(0);
   useEffect(() => {
+    const wasHeld = prevHeldRef.current;
+    prevHeldRef.current = held;
+    if (held) return;
+    if (wasHeld)
+      jumpUntilRef.current = performance.now() + REFOLLOW_JUMP_WINDOW_MS;
+    const jump = performance.now() < jumpUntilRef.current;
     const list = listRef.current;
-    const selector =
-      wellOpen && activeShotId
+    const selector = jump
+      ? activePointId && `[data-point-id="${activePointId}"]`
+      : wellOpen && activeShotId
         ? `[data-shot-id="${activeShotId}"]`
         : activePointId && `[data-point-id="${activePointId}"]`;
     if (!list || !selector) return;
@@ -314,12 +512,100 @@ export const PointList = memo(function PointList({
     if (!row) return;
     const listBox = list.getBoundingClientRect();
     const rowBox = row.getBoundingClientRect();
-    if (rowBox.top < listBox.top) {
-      list.scrollTop += rowBox.top - listBox.top;
-    } else if (rowBox.bottom > listBox.bottom) {
-      list.scrollTop += rowBox.bottom - listBox.bottom;
-    }
-  }, [activePointId, activeShotId, wellOpen]);
+    let top = list.scrollTop;
+    if (jump) {
+      top += rowBox.top - listBox.top - REFOLLOW_JUMP_INSET_PX;
+      const end = list.scrollHeight - list.clientHeight;
+      top = Math.max(0, Math.min(top, end));
+      if (Math.abs(top - list.scrollTop) < 1) return;
+    } else if (rowBox.top < listBox.top) top += rowBox.top - listBox.top;
+    else if (rowBox.bottom > listBox.bottom)
+      top += rowBox.bottom - listBox.bottom;
+    else return;
+
+    cancelSettleRef.current();
+    followScrollRef.current = true;
+    const settle = () => {
+      cancel();
+      followScrollRef.current = false;
+    };
+    // `scrollend` is the honest end of the travel; the timer is for the
+    // engines that never send it.
+    const timer = window.setTimeout(settle, FOLLOW_SCROLL_FALLBACK_MS);
+    const cancel = () => {
+      window.clearTimeout(timer);
+      list.removeEventListener("scrollend", settle);
+      cancelSettleRef.current = NOOP;
+    };
+    cancelSettleRef.current = cancel;
+    list.addEventListener("scrollend", settle);
+    // Smooth on the list's own scrollTop — Chromium eases it in about 300ms,
+    // no scroll-jacking of our own — and instant under reduced motion.
+    list.scrollTo({ top, behavior: reducedMotionNow() ? "auto" : "smooth" });
+  }, [activePointId, activeShotId, wellOpen, held]);
+
+  // Intent, read where a programmatic scroll never produces it: a wheel, a
+  // touch drag, a press on the scroller's own gutter (the scrollbar is the
+  // only part of the scroller that is not a child), or a scrolling key. Each
+  // holds the displayed point — an ENTER only: scrolling while already held
+  // keeps the held point, so the well never wanders to whatever scrolled into
+  // view. With nothing displayed the hold is `null` — held with no well
+  // (T25). Both tones listen (T24): the room's drawer and the shell column
+  // hold on the same sources, and return by the same pill (T23).
+  //
+  // `ArrowUp`/`ArrowDown` with focus on a drawer row hold here, and the
+  // room's window handler (film-fullscreen.tsx) then steps on the same key
+  // with `preventDefault`, which re-follows — both updates land in one native
+  // event and batch, so the net result of an arrow is `follow`, as the design
+  // wants for a step. On the shell column an arrow on a focused row is a
+  // SCROLL, not a step: the tab's window handler (film-tab.tsx) returns early
+  // for `[role=button]` targets, so nothing re-follows and the net result
+  // there is `held`. `Enter`/`Space` on a row are the row's activation, not
+  // a scroll: the row's React handler prevents them, but it runs after this
+  // native listener, so Space is skipped here by its target instead.
+  const scrollerMounted = !advancedOpen && groups.length > 0;
+
+  // The return affordance, on every `PointList` surface (T23: the shell's
+  // card header line is gone, so the pill is the way back there too), while
+  // held and a point is playing — the pill itself hides while the lit row is
+  // in view (T24).
+  const affordance = followAffordance(pointFocus, nowPlaying);
+  useEffect(() => {
+    if (!scrollerMounted) return;
+    const list = listRef.current;
+    if (!list) return;
+    // Null when nothing is displayed — dead time, or before the first point
+    // — and that still holds (T25): no well opens, and the list stays where
+    // the viewer put it instead of jumping to the next point that lights.
+    const hold = () => {
+      if (heldRef.current) return;
+      onHoldPoint(displayedPointRef.current);
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.target === list) hold();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !SCROLL_KEYS.has(e.key)) return;
+      if (
+        e.key === " " &&
+        e.target instanceof Element &&
+        e.target.closest("button, [role=button]")
+      ) {
+        return;
+      }
+      hold();
+    };
+    list.addEventListener("wheel", hold, { passive: true });
+    list.addEventListener("touchmove", hold, { passive: true });
+    list.addEventListener("pointerdown", onPointerDown);
+    list.addEventListener("keydown", onKeyDown);
+    return () => {
+      list.removeEventListener("wheel", hold);
+      list.removeEventListener("touchmove", hold);
+      list.removeEventListener("pointerdown", onPointerDown);
+      list.removeEventListener("keydown", onKeyDown);
+    };
+  }, [scrollerMounted, onHoldPoint]);
 
   return (
     <section aria-label="Point list" className={t.root} style={t.rootStyle}>
@@ -367,19 +653,13 @@ export const PointList = memo(function PointList({
 
             {/* One control clears every axis at once, Advanced included. Drawn
             only while something is applied, so the resting header is the
-            trigger and the count and nothing else. */}
+            trigger and the count and nothing else. A text action, no glyph:
+            an X beside a "Filters" trigger reads as "close the menu", and the
+            word already names it. Blue on the light tone like every other
+            clear in the app; white on the dark one, where blue is progress. */}
             {filtered && (
-              <button
-                type="button"
-                onClick={clearAll}
-                aria-label="Clear the cut"
-                className={t.clear}
-              >
-                <X
-                  className={t.clearIcon}
-                  strokeWidth={1.6}
-                  aria-hidden="true"
-                />
+              <button type="button" onClick={clearAll} className={t.clear}>
+                Clear all
               </button>
             )}
 
@@ -423,71 +703,92 @@ export const PointList = memo(function PointList({
               tone={tone}
             />
           ) : (
-            // The one scroller in the card: the header stays put while the rows
-            // scroll, the way the room's panel scrolls its list under a fixed
-            // header.
-            <div
-              ref={listRef}
-              className="flex min-h-0 flex-1 flex-col overflow-y-auto"
-            >
-              {groups.map((group) => (
-                <div key={group.key} className="flex flex-col">
-                  {/* The game header: "SET 1 · GAME 3" in tracked mono on the
+            // The pill's positioning wrapper. It sits around the scroller, not
+            // on the drawer: the drawer has no padding, and Advanced replaces
+            // the scroller in this same section, so the pill goes with the
+            // scroller it belongs to — pinned to the list's bottom edge, and
+            // not inside the scroller, where it would scroll away.
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              {/* The one scroller in the card: the header stays put while the rows
+            scroll, the way the room's panel scrolls its list under a fixed
+            header. */}
+              <div
+                ref={listRef}
+                className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+              >
+                {groups.map((group) => (
+                  <div key={group.key} className="flex flex-col">
+                    {/* The game header: "SET 1 · GAME 3" in tracked mono on the
                   left, the you-first game score and the server on the right.
                   No rule under it — the rows' own spacing separates the games.
                   The same header in both tones; only the inks are looked up. */}
-                  <div className={t.gameHeader}>
-                    <span className={t.gameLabel}>
-                      Set {group.setNumber} · Game {group.gameNumber}
-                    </span>
-                    <div className="flex-1" />
-                    <span className={t.gameMeta}>
-                      {group.gameScore ? `${group.gameScore} · ` : ""}
-                      {group.serverName} serves
-                    </span>
-                  </div>
+                    <div className={t.gameHeader}>
+                      <span className={t.gameLabel}>
+                        Set {group.setNumber} · Game {group.gameNumber}
+                      </span>
+                      <div className="flex-1" />
+                      <span className={t.gameMeta}>
+                        {group.gameScore ? `${group.gameScore} · ` : ""}
+                        {group.serverName} serves
+                      </span>
+                    </div>
 
-                  {group.points.map((point) => {
-                    const isYou = (point.player === "player1") === youIsPlayer1;
-                    const isActive = point.id === activePointId;
-                    return (
-                      // A fragment, not a wrapper: the well is the row's
-                      // SIBLING in the game's own column, so it spans the
-                      // drawer edge to edge under the row rather than being
-                      // boxed beside it. With no well the DOM is the row alone,
-                      // exactly as the report column has always drawn it.
-                      <Fragment key={point.id}>
-                        <PointRow
-                          point={point}
-                          isYou={isYou}
-                          initials={
-                            isYou ? sides.you.initials : sides.opp.initials
-                          }
-                          workspace={workspace}
-                          showPointScore={showPointScore}
-                          isActive={isActive}
-                          activeStart={isActive ? activeStart : 0}
-                          activeEnd={isActive ? activeEnd : 0}
-                          onSelect={onSelect}
-                          onToggleSaved={onToggleSaved}
-                          onOpenInRoom={onOpenInRoom}
-                          tone={tone}
-                        />
-                        {isActive && wellOpen && onSelectShot && (
-                          <ShotWell
-                            stops={wellStops}
-                            activeShotId={activeShotId}
-                            youIsPlayer1={youIsPlayer1}
-                            youLastName={youLastName}
-                            oppLastName={oppLastName}
-                            onSelectShot={onSelectShot}
+                    {group.points.map((point) => {
+                      const isYou = point.wonByPlayer1 === youIsPlayer1;
+                      const isActive = point.id === activePointId;
+                      return (
+                        // A fragment, not a wrapper: the well is the row's
+                        // SIBLING in the game's own column, so it spans the
+                        // drawer edge to edge under the row rather than being
+                        // boxed beside it. With no well the DOM is the row alone,
+                        // exactly as the report column has always drawn it.
+                        <Fragment key={point.id}>
+                          <PointRow
+                            point={point}
+                            isYou={isYou}
+                            initials={
+                              isYou ? sides.you.initials : sides.opp.initials
+                            }
+                            workspace={workspace}
+                            showPointScore={showPointScore}
+                            isActive={isActive}
+                            activeStart={isActive ? activeStart : 0}
+                            activeEnd={isActive ? activeEnd : 0}
+                            onSelect={selectPoint}
+                            onToggleSaved={onToggleSaved}
+                            onOpenInRoom={onOpenInRoom}
+                            tone={tone}
                           />
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </div>
-              ))}
+                          {/* Under the DISPLAYED row, not the lit one: while
+                            held the well stays here as `isActive` moves on.
+                            The lit shot inside it is the playing shot, which
+                            is in this well only when the displayed point is
+                            the playing point. */}
+                          {point.id === displayedPointId && wellOpen && (
+                            <ShotWell
+                              stops={wellStops}
+                              activeShotId={activeShotId}
+                              youIsPlayer1={youIsPlayer1}
+                              youLastName={youLastName}
+                              oppLastName={oppLastName}
+                              onSelectShot={selectShot}
+                            />
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+              {/* After the scroller in DOM order, so Tab reaches it after the
+            last row and before the transport. */}
+              <FollowPill
+                affordance={affordance}
+                listRef={listRef}
+                nowPlaying={nowPlaying}
+                onFollow={onFollow}
+                tone={tone}
+              />
             </div>
           )}
         </>
@@ -495,6 +796,233 @@ export const PointList = memo(function PointList({
     </section>
   );
 });
+
+/* ── The "Now playing" pill ──────────────────────────────────────────────── */
+
+type PillEdge = "top" | "bottom";
+
+/**
+ * Where the lit row sits against the scroller's box, as the pill reads it.
+ * `edge` is the edge the pill is pinned to; `remembered` says whether that
+ * edge is a live memory (the pill has been placed since the row was last
+ * fully in view) or only what the last pill used, kept so an exit fade does
+ * not jump across the list. `inView` is `null` until read for this episode.
+ */
+type PillPlace = {
+  edge: PillEdge;
+  remembered: boolean;
+  inView: boolean | null;
+};
+
+const PLACE_UNREAD: PillPlace = {
+  edge: "bottom",
+  remembered: false,
+  inView: null,
+};
+
+/**
+ * The next place from the lit row's box against the scroller's (T21). The
+ * edge changes only once the row is wholly beyond one — `row.bottom <=
+ * box.top` pins top, `row.top >= box.bottom` pins bottom — and while the row
+ * straddles an edge the remembered edge holds, so the pill cannot flip-flop
+ * as a row slides past. With no memory (the row was fully in view, or this is
+ * the episode's first read), a straddling row takes the edge it crosses.
+ * Fully in view clears the memory: the pill is unmounted then, and the row
+ * leaving the box re-seeds it from the side it leaves by.
+ */
+function nextPillPlace(prev: PillPlace, row: DOMRect, box: DOMRect): PillPlace {
+  let next: PillPlace;
+  if (row.bottom <= box.top) {
+    next = { edge: "top", remembered: true, inView: false };
+  } else if (row.top >= box.bottom) {
+    next = { edge: "bottom", remembered: true, inView: false };
+  } else if (row.top >= box.top && row.bottom <= box.bottom) {
+    next = { edge: prev.edge, remembered: false, inView: true };
+  } else {
+    next = {
+      edge: prev.remembered ? prev.edge : row.top < box.top ? "top" : "bottom",
+      remembered: true,
+      inView: false,
+    };
+  }
+  return next.edge === prev.edge &&
+    next.remembered === prev.remembered &&
+    next.inView === prev.inView
+    ? prev
+    : next;
+}
+
+/**
+ * The drawer's return affordance while held (T17 design, frame B1): "Now
+ * playing · Point 14", and a chevron toward the lit row. Pressing it follows
+ * the film again — the keep-in-view effect does the smooth scroll and the
+ * well unfolds under the playing row; this does nothing else.
+ *
+ * The "Points" trigger's recipe (film-fullscreen.tsx) plus the drawer's own
+ * 10% inset hairline, so it reads over a lit row as well as the sheet. On
+ * the light tone (the shell's column, T23) the same dark pill floats over a
+ * white card instead, so it takes `--shadow-floating` in place of the
+ * hairline — foundations.md's "Dark floating UI" — and nothing else. It is
+ * a button with visible text, so the chevron is `aria-hidden` and there is
+ * no tooltip. `data-film-chrome`, so the chrome collapse and the room's exit
+ * fade take it with everything else.
+ *
+ * Pinned 12px (`top-3` / `bottom-3`) inside the edge the lit row is beyond,
+ * with `nextPillPlace`'s hysteresis; the chevron points at that edge. A
+ * playing point with no row in the cut pins bottom with no chevron. While
+ * the lit row is fully inside the scroller's box there is nothing to return
+ * to, so the pill is unmounted.
+ *
+ * Unmounted when hidden — never `opacity-0` in the tab order. It arrives on
+ * `film-follow-pill-in` (150ms, a 4px rise away from its edge — the
+ * `--film-pill-rise` sign; the rise drops under reduced motion, the fade
+ * stays) and leaves on a 100ms opacity transition, unmounting on its own
+ * `transitionend` or a 150ms timer, whichever is first.
+ */
+function FollowPill({
+  affordance,
+  listRef,
+  nowPlaying,
+  onFollow,
+  tone,
+}: {
+  affordance: FollowAffordance | null;
+  listRef: RefObject<HTMLDivElement | null>;
+  nowPlaying: { id: string; index: number | null } | null;
+  onFollow: () => void;
+  tone: FilmListTone;
+}) {
+  // The lit row against the scroller's box. Read in a layout effect, so a
+  // pill that should not show (the row is in view) is never painted, and
+  // re-read on the scroller's `scroll` (placement, not intent: the follow
+  // effect's own travel is harmless here) and whenever the playing point
+  // changes. This component stays mounted while the pill is not, so the
+  // edge memory outlives the button.
+  const active = affordance !== null;
+  const inCut = affordance?.inCut ?? false;
+  const [place, setPlace] = useState<PillPlace>(PLACE_UNREAD);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list || !active || !inCut) {
+      // A new episode, or no row to place against: forget the edge but keep
+      // it for the exit fade, and read afresh next time.
+      setPlace((p) =>
+        p.remembered || p.inView !== null
+          ? { edge: p.edge, remembered: false, inView: null }
+          : p,
+      );
+      return;
+    }
+    const read = () => {
+      const lit = list.querySelector<HTMLElement>(
+        '[data-point-id][data-playing="true"]',
+      );
+      // No lit row to measure (it should not happen in the cut): show the
+      // pill where it last was rather than never.
+      if (!lit) {
+        setPlace((p) => (p.inView === false ? p : { ...p, inView: false }));
+        return;
+      }
+      const box = list.getBoundingClientRect();
+      const row = lit.getBoundingClientRect();
+      setPlace((p) => nextPillPlace(p, row, box));
+    };
+    read();
+    list.addEventListener("scroll", read, { passive: true });
+    return () => list.removeEventListener("scroll", read);
+  }, [listRef, active, inCut, nowPlaying]);
+
+  // What is on screen, which outlives `affordance` by the exit's 100ms.
+  const [shown, setShown] = useState<FollowAffordance | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  // In-cut, the pill mounts only once the row is read as out of view, and a
+  // mounted one leaves only once it is read as in view — an unread place
+  // neither mounts it nor starts an exit.
+  const rowInView = inCut ? place.inView : false;
+  const wanted =
+    affordance && (shown ? rowInView !== true : rowInView === false)
+      ? affordance
+      : null;
+  // Adjusted during render, not in an effect: the pill must never paint one
+  // frame with the old words, or linger a frame before its exit begins.
+  if (wanted) {
+    if (
+      !shown ||
+      shown.label !== wanted.label ||
+      shown.ariaLabel !== wanted.ariaLabel ||
+      shown.inCut !== wanted.inCut
+    ) {
+      setShown(wanted);
+    }
+    if (leaving) setLeaving(false);
+  } else if (shown && !leaving) {
+    setLeaving(true);
+  }
+
+  const finishLeave = useCallback(() => {
+    setShown(null);
+    setLeaving(false);
+  }, []);
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = window.setTimeout(finishLeave, PILL_EXIT_FALLBACK_MS);
+    return () => window.clearTimeout(timer);
+  }, [leaving, finishLeave]);
+
+  if (!shown) return null;
+  // Out of the cut there is no row to point at: bottom, no chevron.
+  const edge: PillEdge = shown.inCut ? place.edge : "bottom";
+  const Chevron = !shown.inCut
+    ? null
+    : edge === "top"
+      ? ChevronUp
+      : ChevronDown;
+
+  return (
+    <button
+      type="button"
+      data-film-chrome
+      data-edge={edge}
+      aria-label={shown.ariaLabel}
+      onClick={onFollow}
+      // Leaving, it is already on its way out: not a target, not a stop.
+      tabIndex={leaving ? -1 : undefined}
+      onTransitionEnd={(e) => {
+        if (
+          e.target === e.currentTarget &&
+          e.propertyName === "opacity" &&
+          leaving
+        ) {
+          finishLeave();
+        }
+      }}
+      className={cn(
+        "inline-flex h-7 items-center gap-[7px] rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium text-white transition-[opacity,transform,background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        "absolute left-1/2 -translate-x-1/2 cursor-pointer whitespace-nowrap active:scale-[0.97]",
+        tone === "light"
+          ? "shadow-[var(--shadow-floating)]"
+          : "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]",
+        // The same 12px inset on either edge; the rise comes from the edge
+        // side, so pinned top it drops in (the keyframe reads the sign).
+        edge === "top" ? "top-3 [--film-pill-rise:-4px]" : "bottom-3",
+        // The enter keyframe holds its end state (`both`), so it comes off
+        // for the exit or it would pin the opacity at 1.
+        leaving
+          ? "pointer-events-none opacity-0 duration-100"
+          : "film-follow-pill-in",
+      )}
+    >
+      {shown.label}
+      {Chevron && (
+        <Chevron
+          className="size-3 text-white/85"
+          strokeWidth={1.6}
+          aria-hidden="true"
+        />
+      )}
+    </button>
+  );
+}
 
 /* ── Row ────────────────────────────────────────────────────────────────── */
 
@@ -632,10 +1160,13 @@ export const PointRow = memo(function PointRow({
         isActive && t.playing,
       )}
     >
-      <span className="inline-flex shrink-0 basis-[34px] items-center justify-center">
+      <span
+        className="inline-flex shrink-0 basis-[34px] items-center justify-center"
+        data-mark={isYou ? "you" : "opp"}
+      >
         {/* The viewer's own mark, never the frame's white initials chip
-            (phase-1 decision): a point you decided reads as yours at a glance
-            on both tones. The opponent keeps initials. */}
+            (phase-1 decision): a point the viewer WON reads as theirs at a
+            glance on both tones. The opponent keeps initials. */}
         {isYou ? (
           <WorkspaceMark
             workspace={workspace}
@@ -755,19 +1286,27 @@ function ShotWell({
   onSelectShot: (stop: ShotStop) => void;
 }) {
   return (
-    <div className="flex flex-col bg-[rgba(0,0,0,0.28)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]">
-      {stops.map((stop, i) => (
-        <ShotWellRow
-          key={stop.shot.id}
-          stop={stop}
-          order={i + 1}
-          playerName={
-            stop.shot.isPlayer1 === youIsPlayer1 ? youLastName : oppLastName
-          }
-          isLit={stop.shot.id === activeShotId}
-          onSelect={onSelectShot}
-        />
-      ))}
+    // Two elements, not one: the outer grid is what `film-shot-well-open`
+    // (globals.css) unfolds — its single row track grows from 0fr to 1fr on
+    // mount — and the inner `min-h-0 overflow-hidden` column is what that
+    // track clips, carrying the wash, the hairlines and the rows. Rows below
+    // the well slide down with the track instead of jumping when it mounts;
+    // the rows' own stagger plays inside the clip from the same instant.
+    <div data-shot-well className="film-shot-well-open">
+      <div className="flex min-h-0 flex-col overflow-hidden bg-[rgba(0,0,0,0.28)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]">
+        {stops.map((stop, i) => (
+          <ShotWellRow
+            key={stop.shot.id}
+            stop={stop}
+            order={i + 1}
+            playerName={
+              stop.shot.isPlayer1 === youIsPlayer1 ? youLastName : oppLastName
+            }
+            isLit={stop.shot.id === activeShotId}
+            onSelect={onSelectShot}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -811,8 +1350,13 @@ const ShotWellRow = memo(function ShotWellRow({
       aria-current={isLit ? "true" : undefined}
       aria-label={`${cells.order}. ${cells.player} ${cells.stroke}, ${cells.placement}, ${cells.result} — jump to this shot`}
       onClick={() => onSelect(stop)}
+      // T9: the rally reveals itself as a rally. Mount-driven — the rows are
+      // keyed by `shot.id`, so stepping to another point mounts a fresh set
+      // and replays this, while a `timeupdate` tick bails out of the memo
+      // above and replays nothing.
+      style={{ animationDelay: `${shotRowRevealDelay(order)}ms` }}
       className={cn(
-        "grid h-[34px] w-full shrink-0 cursor-pointer items-center gap-x-2 px-[14px] text-left transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        "film-shot-row-in grid h-[34px] w-full shrink-0 cursor-pointer items-center gap-x-2 px-[14px] text-left transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
         SHOT_COLUMNS,
         isLit
           ? "bg-[rgba(255,255,255,0.12)]"

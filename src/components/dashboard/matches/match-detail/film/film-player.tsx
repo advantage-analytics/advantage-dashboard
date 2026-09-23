@@ -35,6 +35,7 @@ import { RepeatOff } from "./film-glyphs";
 import type { Rect } from "./film-motion";
 import { FILM_REFUSAL_COPY } from "./film-refusal-copy";
 import { FilmTrack } from "./film-track";
+import { useFilmTrace } from "./use-film-trace";
 import {
   REACHED_EPSILON_SECONDS,
   activeStopAt,
@@ -49,6 +50,7 @@ import type {
   AttachmentPlaybackProblem,
   AttachmentResumeIntent,
 } from "./use-attachment-playback";
+import { useSeekSettling } from "./use-seek-settling";
 
 /**
  * The match video with the room's transport under it, in the tab.
@@ -182,6 +184,21 @@ interface FilmPlayerProps {
   /** The fullscreen glyph. Entered by user action only, never automatically. */
   onEnterFullscreen: () => void;
   /**
+   * A point step is about to happen — the transport's Previous/Next point
+   * glyphs, or `step` called through the handle (the tab's arrow keys, the
+   * "This point" card's stepper). Fires before the seek, so the tab can
+   * re-follow the film and the step reads as "take me on".
+   *
+   * A notification rather than lifting `step` up to the tab: `step` reads the
+   * element's own `currentTime` (never a render behind) and seeks through this
+   * player's `seekTo`, which carries the landing and seek-dim bookkeeping.
+   * Lifting it would make the tab reach through the handle for both halves
+   * anyway and leave the transport's two glyphs needing a callback in; one
+   * optional callback here puts every step path — glyphs, keys, card — through
+   * the same function with nothing duplicated.
+   */
+  onStep?: () => void;
+  /**
    * Where `--film-t` is written, so the point list beside the player can read
    * it too. Defaults to the frame.
    */
@@ -267,6 +284,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       onRetry,
       onToggleSaved,
       onEnterFullscreen,
+      onStep,
       clockTargetRef,
     },
     ref,
@@ -282,6 +300,13 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const [looping, setLooping] = useState(false);
     const [skipDead, setSkipDead] = useState(false);
     const [failed, setFailed] = useState(false);
+    // T16: dim the held frame while a seek the chrome already made is still
+    // landing. Display only — `seekTo` / `pushTime` are untouched.
+    // `seeking` is already gated on the element's first `loadeddata` (a cold
+    // open of a large cut must not dim a frame nobody has seen), so wiring
+    // `onLoadedData` below is what makes the dim possible at all.
+    const settling = useSeekSettling({ graceMs: 120, generation });
+    const traceRef = useFilmTrace(videoRef, generation, "report");
     /**
      * Whether the CURRENT element has metadata — the state twin of
      * `readyRef`, for the one thing a ref cannot do: draw. Until it does the
@@ -338,6 +363,8 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             ? el.duration
             : undefined;
         const target = Math.max(0, max ? Math.min(seconds, max) : seconds);
+        // Observes only; captures the buffered ranges the jump starts from.
+        traceRef.current?.seek(el, target);
         el.currentTime = target;
         // Loop follows the viewer. Every seek is someone asking to be
         // somewhere — a point row, a shot row, the track, a step, an arrow —
@@ -353,7 +380,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
         loopStopRef.current = activeStopAt(allStops, target)?.stop ?? null;
         pushTime(target);
       },
-      [allStops, pushTime],
+      [allStops, pushTime, traceRef],
     );
 
     /**
@@ -466,12 +493,13 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
 
     const step = useCallback(
       (direction: -1 | 1) => {
+        onStep?.();
         const now = videoRef.current?.currentTime ?? 0;
         const stop =
           direction === 1 ? nextStop(stops, now) : prevStop(stops, now);
         if (stop) seekTo(stop.start);
       },
-      [stops, seekTo],
+      [stops, seekTo, onStep],
     );
 
     useImperativeHandle(
@@ -650,7 +678,13 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             preload="metadata"
             playsInline
             data-testid="film-player-video"
-            className="absolute inset-0 h-full w-full object-contain"
+            data-generation={generation}
+            data-film-seeking={settling.seeking ? "true" : undefined}
+            className={cn(
+              "absolute inset-0 h-full w-full object-contain transition-opacity duration-200",
+              settling.seeking ? "opacity-60" : "opacity-100",
+            )}
+            onLoadedData={settling.onLoadedData}
             onClick={togglePlay}
             onPlay={() => {
               setPlaying(true);
@@ -668,7 +702,11 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               syncClock();
             }}
             onTimeUpdate={(e) => onTime(e.currentTarget.currentTime)}
-            onSeeked={(e) => onTime(e.currentTarget.currentTime)}
+            onSeeking={settling.onSeeking}
+            onSeeked={(e) => {
+              settling.onSeeked();
+              onTime(e.currentTarget.currentTime);
+            }}
             onError={() => {
               if (passthrough) {
                 setFailed(true);
@@ -727,6 +765,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               duration={duration}
               currentTime={currentTime}
               onSeek={seekTo}
+              preview={{ url, generation, size: "report" }}
             />
 
             <div className="pointer-events-auto flex h-8 items-center gap-3.5">

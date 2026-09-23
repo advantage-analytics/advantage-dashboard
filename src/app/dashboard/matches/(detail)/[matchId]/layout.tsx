@@ -49,6 +49,11 @@ export default async function MatchLayout({
     // correctly; this was the one broken link.
     <div className="flex h-[calc(100vh-var(--header-h))] w-full flex-col overflow-hidden bg-white">
       <MatchDataProvider
+        // The provider now holds the points array the film tab's bookmark
+        // toggle writes into, so it must NOT carry one match's saved flags
+        // into another: React would otherwise keep this instance's state when
+        // only the `[matchId]` param changes.
+        key={match.id}
         match={match}
         statsResult={statsResult}
         points={points}

@@ -27,6 +27,7 @@ import {
 } from "./film-dark-menu";
 import {
   cutName,
+  DEFAULT_FILM_FILTERS,
   hasActiveFilmFilters,
   lastNameOf,
   type FilmFilters,
@@ -64,6 +65,11 @@ export function FilmQuickFilters({
 
   const pick = (next: Partial<FilmFilters>) => {
     onFiltersChange({ ...filters, ...next });
+    setOpen(false);
+  };
+
+  const clearAll = () => {
+    onFiltersChange(DEFAULT_FILM_FILTERS);
     setOpen(false);
   };
 
@@ -161,6 +167,12 @@ export function FilmQuickFilters({
         {serveRows.map((row, i) => (
           <FloatMenuItem key={i} {...row} />
         ))}
+        {hasActiveFilmFilters(filters) ? (
+          <>
+            <FloatMenuDivider />
+            <FloatMenuItem label="Clear all filters" onSelect={clearAll} />
+          </>
+        ) : null}
         {onOpenAdvanced ? (
           <>
             <FloatMenuDivider />
@@ -216,6 +228,12 @@ export function FilmQuickFilters({
       {serveRows.map((row, i) => (
         <FilmDarkMenuItem key={i} {...row} />
       ))}
+      {hasActiveFilmFilters(filters) ? (
+        <>
+          <FilmDarkMenuDivider />
+          <FilmDarkMenuItem label="Clear all filters" onSelect={clearAll} />
+        </>
+      ) : null}
       {onOpenAdvanced ? (
         <>
           <FilmDarkMenuDivider />

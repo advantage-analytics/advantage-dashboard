@@ -59,6 +59,7 @@ function stroke(over: Partial<SplitStepStroke>): SplitStepStroke {
     eventId: 0,
     videoTime: 0,
     trimmedFrame: 0,
+    bounceFrame: null,
     rallyId: 1,
     strokeNumber: 1,
     playerLabel: "A",

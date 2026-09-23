@@ -276,6 +276,7 @@ export async function persistTranscript(params: {
         landing_y: s.landing_y,
         result: s.result,
         video_time: s.video_time,
+        bounce_video_time: s.bounce_video_time,
         zone: s.zone,
         flags: s.flags,
         derived: true,

@@ -28,7 +28,7 @@ Scope: `src/components/dashboard/matches/match-detail/film/*`. The room is
 ## This is a refactor plus one new object
 
 The room already exists and is mature (PR #225): portal to `document.body` (deliberately not
-`requestFullscreen()`), grow/shrink motion (`film-motion.ts`), scroll lock, 3s idle chrome, window
+`requestFullscreen()`), grow/shrink motion (`film-motion.ts` (origin-top-left fix + off-screen fade, T27 2026-09-23)), scroll lock, 3s idle chrome, window
 key handler, its own `<video>` handed off with the report player, problem/failed panels.
 **Keep all of that.** What changes:
 
@@ -185,26 +185,40 @@ but empty of progress.
 
 ## B — The eleven states
 
-| Frame | State              | The rule it carries                                                                                                                                                                                                                                                                                                                                                 |
-| ----- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R1    | Chrome up          | Board 24/24; court same left, `top:198`; "Points" trigger inset 24/18 top-right, 28px, `rgba(13,13,13,.72)`, **labelled**. Click the film plays/pauses, double-click exits; board and court stop the gesture. Scroll locked, focus trapped, `aria-modal`. No second scoreboard, no title bar, no back chevron.                                                      |
-| R2    | Chrome collapsed   | After 3s of stillness **while playing**, every operable thing goes: transport, "Points" trigger, the court's header glyphs, the bottom scrim, the cursor. Board, its point line and the court stay. Any pointer move, key or focus restores in 200ms opacity. Never while paused, while a menu is open, or while focus is inside the chrome. Nothing reflows.       |
-| R3    | Drawer open        | 320px, full height, `rgba(13,13,13,.88)`, inset 1px `rgba(255,255,255,.1)` left hairline + `-24px 0 48px -12px rgba(0,0,0,.45)`. Phase-1 list, `tone="dark"`. The playing point unfolds its shots in place. Slides 200ms; the left column does not move; never opens on hover; the film keeps playing; open/closed persists. Esc closes the drawer before the room. |
-| R4    | Cut menu           | 268px, `rgba(20,20,22,.97)`, 1px `rgba(255,255,255,.1)`, 10px radius, 5px inset. Anchored 6px under the trigger, 10px from the drawer's left edge. Note reads `← →`. Chrome does not collapse while open. Advanced opens in the drawer's own column — never a modal over the film.                                                                                  |
-| R5    | Cut applied        | A cut governs the list, the point stepper (chevrons, `← →`, `Point 4 / 14`) **and the court's match mode** — not the seek lane. Clearing via the header X returns all three. The cut survives the trip to the shell and back. The film never pauses on apply or clear.                                                                                              |
-| R6    | Moving the board   | See C1 and the paragraph under this table. The board is the only movable object; transport and drawer are fixed.                                                                                                                                                                                                                                                    |
-| R7    | Between points     | No point name, **no position counter (blank, not dashed)**, an empty court that keeps its lines, no row selected in the drawer. Board keeps the score and moves the game state into the point line. Not an empty state; gets no words. The court is not hidden and does not animate out.                                                                            |
-| R8    | Match mode readout | See C2.                                                                                                                                                                                                                                                                                                                                                             |
-| R9    | Saved · court off  | Saving is the one filled glyph — no toast, no tick. Optimistic, reversible from the same control. Court off gives the left column back to the film; the board never moves to fill the space. Court off survives exit and re-entry.                                                                                                                                  |
-| R10   | Film cannot play   | No board, no court, no transport — one centred statement and the way back. Headings from `FILM_REFUSAL_COPY`. "Try again" only where asking again could change the answer. If the film dies **while** the room is open, the room stays open and shows this. "Back to the report" and Esc close the portal.                                                          |
-| R11   | Opening            | No spinner, no skeleton — the black frame with its chrome is the loading state. Duration and position read `—`; **no board for a point nobody is on**. Board, court and point name appear together the moment the first point resolves, never half-populated. The 3s collapse timer does not start until the film is actually playing.                              |
+| Frame | State              | The rule it carries                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1    | Chrome up          | Board 24/24; court same left, `top:198`; "Points" trigger inset 24/18 top-right, 28px, `rgba(13,13,13,.72)`, **labelled**. Click the film plays/pauses; board and court stop the gesture. Scroll locked, focus trapped, `aria-modal`. No second scoreboard, no title bar, no back chevron. Author decision, 2026-09-22: double-click no longer exits the room — it was firing on an ordinary rapid pause/play click burst. |
+| R2    | Chrome collapsed   | After 3s of stillness **while playing**, every operable thing goes: transport, "Points" trigger, the court's header glyphs, the bottom scrim, the cursor. Board, its point line and the court stay. Any pointer move, key or focus restores in 200ms opacity. Never while paused, while a menu is open, or while focus is inside the chrome. Nothing reflows.                                                              |
+| R3    | Drawer open        | 320px, full height, `rgba(13,13,13,.88)`, inset 1px `rgba(255,255,255,.1)` left hairline + `-24px 0 48px -12px rgba(0,0,0,.45)`. Phase-1 list, `tone="dark"`. The playing point unfolds its shots in place. Slides 200ms; the left column does not move; never opens on hover; the film keeps playing; open/closed persists. Esc closes the drawer before the room.                                                        |
+| R4    | Cut menu           | 268px, `rgba(20,20,22,.97)`, 1px `rgba(255,255,255,.1)`, 10px radius, 5px inset. Anchored 6px under the trigger, 10px from the drawer's left edge. Note reads `← →`. Chrome does not collapse while open. Advanced opens in the drawer's own column — never a modal over the film.                                                                                                                                         |
+| R5    | Cut applied        | A cut governs the list, the point stepper (chevrons, `← →`, `Point 4 / 14`) **and the court's match mode** — not the seek lane. Clearing via the header X returns all three. The cut survives the trip to the shell and back. The film never pauses on apply or clear.                                                                                                                                                     |
+| R6    | Moving the board   | See C1 and the paragraph under this table. The board and the court card both move, on one mechanic (`use-corner-drag.ts`); transport and drawer are fixed. **Author decision, 2026-09-22: the court is movable too** — "I should be able to move the court visual like the scorecard" — reversing this row's original "the board is the only movable object".                                                              |
+| R7    | Between points     | No point name, **no position counter (blank, not dashed)**, an empty court that keeps its lines, no row selected in the drawer. Board keeps the score and moves the game state into the point line. Not an empty state; gets no words. The court is not hidden and does not animate out.                                                                                                                                   |
+| R8    | Match mode readout | See C2.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| R9    | Saved · court off  | Saving is the one filled glyph — no toast, no tick. Optimistic, reversible from the same control. Court off gives the left column back to the film; the board never moves to fill the space. Court off survives exit and re-entry.                                                                                                                                                                                         |
+| R10   | Film cannot play   | No board, no court, no transport — one centred statement and the way back. Headings from `FILM_REFUSAL_COPY`. "Try again" only where asking again could change the answer. If the film dies **while** the room is open, the room stays open and shows this. "Back to the report" and Esc close the portal.                                                                                                                 |
+| R11   | Opening            | No spinner, no skeleton — the black frame with its chrome is the loading state. Duration and position read `—`; **no board for a point nobody is on**. Board, court and point name appear together the moment the first point resolves, never half-populated. The 3s collapse timer does not start until the film is actually playing.                                                                                     |
 
-R6's court rule: the court lives in the board's column. The handoff's example — "if the board
+R6's court rule: the court STARTS in the board's column. The handoff's example — "if the board
 lands top-right, the court follows to the right column, still beneath it" — is the settled case:
 board in a top corner, court directly beneath it (R1 draws the gap as 28px: board at `top:24`,
 court at `top:198`). The handoff does not draw a bottom-corner board; there the court sits in the
 same column directly **above** the board, same gap. That last sentence is this document's
 inference, not the designer's — say so in the code comment. The drawer never moves either object.
+
+**Author decision, 2026-09-22 — the court moves too.** "I should be able to move the court visual
+like the scorecard." The whole card is the grab (`cursor:grab`), the way the whole board is — a
+first cut grabbed by the 20px header row alone and the author sent it back the same day: "moving
+the court should be as easy as moving the scorecard." Every mark and both header glyphs are
+buttons, and a press that starts on one of them is that button's, never a grab. Otherwise it is the
+board's mechanic exactly — 3px lift threshold, ghost, arrows 8px (⇧ 40px), Space lifts and drops,
+Esc cancels, blur drops where it stands, each landing announced politely, corner persisted under
+`film-room:court-anchor`. The two objects remember SEPARATE corners, and the court's is `null`
+until it is first dropped: a viewer who never moves it sees it stacked under the board exactly as
+above, which is `courtRest(null, …)` (`board-position.ts`). Once it has a corner of its own it
+rests there with the board's insets, and `dock` — which side the shot readout hangs off —
+follows the COURT's column, not the board's. The mechanic itself is `use-corner-drag.ts`, used by
+`FilmScoreboard` and by the room's `FilmCourtLayer`; there is deliberately no second copy.
 
 ### The drawer's unfolded shots (R3)
 
@@ -239,11 +253,11 @@ shortcut overlay — the tooltips carry the keys.
 
 ## Doors
 
-| Door              | Opens on                   | Carries                                 |
-| ----------------- | -------------------------- | --------------------------------------- |
-| Player maximize   | The shell player's control | Position, playing state, applied cut    |
-| Point row ⇧-click | Any row in the shell list  | That point, playing from its first shot |
-| Exit              | Esc · minimize · dbl-click | Position and cut back into the shell    |
+| Door              | Opens on                              | Carries                                                                               |
+| ----------------- | ------------------------------------- | ------------------------------------------------------------------------------------- |
+| Player maximize   | The shell player's control            | Position, playing state, applied cut                                                  |
+| Point row ⇧-click | Any row in the shell list             | That point, playing from its first shot                                               |
+| Exit              | Esc · minimize · "Back to the report" | Position and cut back into the shell (dbl-click removed 2026-09-22 — author decision) |
 
 ## Type
 

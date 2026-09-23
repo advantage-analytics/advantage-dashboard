@@ -99,7 +99,7 @@ const PANEL_TONE = {
       "mx-1.5 flex h-[52px] flex-none items-center gap-2.5 border-t border-[var(--border-hairline)]",
     footerCount: "text-[12px] text-[var(--ink-700)]",
     clear:
-      "cursor-pointer text-[11px] font-medium text-[var(--ink-600)] transition-colors duration-200 hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+      "cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
   },
   dark: {
     // No card: the drawer draws the 320px surface and its hairline; the panel
@@ -123,7 +123,7 @@ const PANEL_TONE = {
       "mx-1.5 flex h-[52px] flex-none items-center gap-2.5 border-t border-white/10",
     footerCount: "text-[12px] text-white/70",
     clear:
-      "cursor-pointer text-[11px] font-medium text-white/60 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+      "cursor-pointer text-[11px] font-medium text-white/70 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
   },
 } satisfies Record<FilmListTone, Record<string, unknown>>;
 
