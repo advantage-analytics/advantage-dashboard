@@ -9,14 +9,14 @@ import { buildDefaultTiles } from "./default-tiles";
 import { VIZ_TILE_GRID_CLASS } from "./viz-labels";
 
 /**
- * P1a/P1b: the wall of default cuts, one row per subject (you first, then
- * the opponent — never player1/player2), three tiles per row.
+ * The wall switches between default cuts and saved views. Default cuts form
+ * one gallery in subject order, without separate player/phase sections.
  *
  * Attribution (guardrails §4): `useMatchSides()` is the only place "you" is
- * resolved here; each row's subject is read straight off the side
+ * resolved here; each tile's subject is read straight off the side
  * (`side.isPlayer1`) and passed to `computeViz` (inside `buildDefaultTiles`),
- * never re-derived. Won/lost stays relative to the row's own subject — on
- * the opponent's row green means the opponent won.
+ * never re-derived. Won/lost stays relative to the tile's own subject — on
+ * an opponent tile green means the opponent won.
  *
  * F4: the six tiles themselves come from `buildDefaultTiles` (`default-tiles.ts`)
  * — the same builder the focused view's Views grid uses (a wrapping grid
@@ -24,7 +24,17 @@ import { VIZ_TILE_GRID_CLASS } from "./viz-labels";
  * that grid can never draw a different set of tiles.
  */
 
-export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
+export type WallCollection = "default" | "saved";
+
+export function VizWall({
+  savedViewsBand,
+  collection,
+  onCollectionChange,
+}: {
+  savedViewsBand?: ReactNode;
+  collection: WallCollection;
+  onCollectionChange: (collection: WallCollection) => void;
+}) {
   const { points } = useMatchData();
   const { you, opp } = useMatchSides();
   const { hrefFor } = useVizState();
@@ -50,10 +60,7 @@ export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
     [points, you.isPlayer1, you.name, opp.name, hrefFor],
   );
 
-  const rows: { subject: "you" | "opponent"; name: string }[] = [
-    { subject: "you", name: you.name },
-    { subject: "opponent", name: opp.name },
-  ];
+  const visibleTiles = tiles.filter((tile) => tile.total > 0);
 
   return (
     <div
@@ -63,62 +70,70 @@ export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
           : "@container flex flex-col gap-6"
       }
     >
-      {rows.map((row) => {
-        const rowTiles = tiles.filter((t) => t.subject === row.subject);
-        const isEmpty = rowTiles.every((t) => t.total === 0);
-        return (
-          <div key={row.subject}>
-            {isEmpty ? (
-              <EmptySubjectRow name={row.name} />
-            ) : (
-              // M9: one list per player, labelled with the player's name —
-              // matches the shape the focused Views grid and the saved-views
-              // grid use, so this row's three tiles are one announced group
-              // instead of three unrelated cards.
-              <div
-                role="list"
-                aria-label={row.name}
-                className={VIZ_TILE_GRID_CLASS}
-              >
-                {rowTiles.map((tile) => (
-                  <div key={tile.key} role="listitem">
-                    <CourtTile
-                      playerName={tile.playerName}
+      <div
+        className="flex flex-wrap items-center gap-2"
+        role="group"
+        aria-label="View collection"
+      >
+        {(["default", "saved"] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={collection === value}
+            onClick={() => onCollectionChange(value)}
+            className={`min-h-8 cursor-pointer rounded-full border px-3 py-1.5 text-[10px] font-medium tracking-[1.5px] uppercase transition-colors duration-200 motion-reduce:transition-none ${
+              collection === value
+                ? "border-[var(--ink-900)] bg-[var(--ink-900)] text-white"
+                : "border-[var(--border-hairline)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]"
+            }`}
+          >
+            {value === "default" ? "Default" : "Saved"}
+          </button>
+        ))}
+      </div>
+      {collection === "default" ? (
+        visibleTiles.length > 0 ? (
+          <div
+            role="list"
+            aria-label="Default views"
+            className={VIZ_TILE_GRID_CLASS}
+          >
+            {visibleTiles.map((tile) => (
+              <div key={tile.key} role="listitem">
+                <CourtTile
+                  playerName={tile.playerName}
+                  name={tile.name}
+                  pills={tile.pills}
+                  countLabel={tile.countLabel}
+                  cut={tile.cut}
+                  dots={tile.dots}
+                  chart={tile.chart}
+                  href={tile.href}
+                  navigateState={tile.state}
+                  actionSlot={
+                    <TileFullscreenGlyph
                       name={tile.name}
-                      pills={tile.pills}
-                      countLabel={tile.countLabel}
-                      cut={tile.cut}
-                      dots={tile.dots}
-                      chart={tile.chart}
-                      href={tile.href}
-                      navigateState={tile.state}
-                      actionSlot={
-                        <TileFullscreenGlyph
-                          name={tile.name}
-                          tileState={tile.state}
-                        />
-                      }
+                      tileState={tile.state}
                     />
-                  </div>
-                ))}
+                  }
+                />
               </div>
-            )}
+            ))}
           </div>
-        );
-      })}
-      {savedViewsBand}
+        ) : (
+          <EmptyWall />
+        )
+      ) : null}
+      <div hidden={collection !== "saved"}>{savedViewsBand}</div>
     </div>
   );
 }
 
 /**
- * Honest zero for a subject with nothing drawable in any default cut — never
- * an empty court (an empty serve chart reads as "you hit no serves", per
- * `reference/empty-and-loading.md`). One bar across the row, not three blank
- * tiles, so the page states plainly what is missing instead of repeating an
- * empty shape three times.
+ * Honest zero when no default cut has drawable data — never an empty court
+ * (an empty serve chart reads as "you hit no serves").
  */
-function EmptySubjectRow({ name }: { name: string }) {
+function EmptyWall() {
   return (
     <div
       className="flex items-center justify-center rounded-[var(--radius-card)] border px-6 py-8 text-center"
@@ -128,7 +143,7 @@ function EmptySubjectRow({ name }: { name: string }) {
       }}
     >
       <p className="text-[12px]" style={{ color: "var(--ink-500)" }}>
-        No serves or returns recorded for {name} yet.
+        No serves, returns, or rallies recorded yet.
       </p>
     </div>
   );

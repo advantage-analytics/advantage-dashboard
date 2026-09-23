@@ -70,12 +70,9 @@ const EMPTY_DEFAULT_TILES: readonly DefaultTile[] = Object.freeze([]);
  * its `savedViewsBand` slot) and `VizFocused` (ditto), so it is the SAME
  * band on both surfaces — one component, two mount points.
  *
- * Revised P1b: the `"wall"` band is ALWAYS mounted, even with zero saved
- * views and nothing pending — the dashed "Create view" tile must stay
- * reachable from the wall. At zero views the heading's count is replaced by
- * the micro line "Save a court you want to come back to", there is no
- * "Manage views" link (nothing to manage — `canManageAny` is already false
- * on an empty list), and the grid holds only the "Create view" tile. The one
+ * The `"wall"` band stays mounted under the Saved collection, even with zero
+ * saved views. It has no separate section heading or divider; at zero views
+ * the dashed "Create view" tile is the only item. The one
  * exception is transient: if deleting the LAST view leaves a status message
  * (the Undo window, or an error) on screen, the band renders status-only
  * (heading + status line, no tiles, no "Create view" tile either) until that
@@ -889,88 +886,62 @@ export function SavedViewsBand({
 
   return (
     <div
-      className="flex flex-col gap-4"
-      style={{
-        marginTop: 8,
-        paddingTop: 24,
-        borderTop: "1px solid var(--border-hairline)",
-      }}
+      className={
+        variant === "wall"
+          ? "flex flex-col gap-4"
+          : "mt-2 flex flex-col gap-4 border-t border-[var(--border-hairline)] pt-6"
+      }
     >
-      <div className="flex items-center justify-between gap-3">
-        {variant === "focused" ? (
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <h2
-              style={{
-                fontSize: 24,
-                fontWeight: 300,
-                letterSpacing: "-0.3px",
-                color: "var(--ink-900)",
-              }}
-            >
-              Views
-            </h2>
-            <span className="text-micro truncate">
-              {totalRowViews} view{totalRowViews === 1 ? "" : "s"} · {you.name}{" "}
-              vs {opp.name}
-            </span>
-          </div>
-        ) : (
-          <div className="flex items-baseline gap-2">
-            <h2
-              style={{
-                fontSize: 24,
-                fontWeight: 300,
-                letterSpacing: "-0.3px",
-                color: "var(--ink-900)",
-              }}
-            >
-              Saved views
-            </h2>
-            {visibility === "full" && (
-              <span className="text-micro">
-                {optimisticViews.length} saved view
-                {optimisticViews.length === 1 ? "" : "s"}
+      {(variant === "focused" || manageMode || canManageAny) && (
+        <div
+          className={`flex items-center gap-3 ${variant === "wall" ? "justify-end" : "justify-between"}`}
+        >
+          {variant === "focused" ? (
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <h2
+                style={{
+                  fontSize: 24,
+                  fontWeight: 300,
+                  letterSpacing: "-0.3px",
+                  color: "var(--ink-900)",
+                }}
+              >
+                Views
+              </h2>
+              <span className="text-micro truncate">
+                {totalRowViews} view{totalRowViews === 1 ? "" : "s"} ·{" "}
+                {you.name} vs {opp.name}
               </span>
-            )}
-            {visibility === "hidden" && (
-              // Zero views, nothing pending: the count has nothing to count,
-              // so this invites the first save instead — never "0 saved
-              // views". Absent in `status-only` (mid-delete-of-last-view):
-              // the status line below already carries the Undo affordance,
-              // and this line would just flash between the two.
-              <span className="text-micro">
-                Save a court you want to come back to
+            </div>
+          ) : null}
+          {manageMode ? (
+            <div className="flex shrink-0 items-center gap-3">
+              <span id={manageHintId} className="text-micro whitespace-nowrap">
+                Drag a view to reorder, or focus it and press ⌥← / ⌥→ · ⋯ to
+                rename or delete
               </span>
-            )}
-          </div>
-        )}
-        {manageMode ? (
-          <div className="flex shrink-0 items-center gap-3">
-            <span id={manageHintId} className="text-micro whitespace-nowrap">
-              Drag a view to reorder, or focus it and press ⌥← / ⌥→ · ⋯ to
-              rename or delete
-            </span>
-            <button
-              type="button"
-              ref={doneButtonRef}
-              onClick={toggleManageMode}
-              className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
-            >
-              Done
-            </button>
-          </div>
-        ) : (
-          canManageAny && (
-            <button
-              type="button"
-              onClick={toggleManageMode}
-              className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
-            >
-              Manage views
-            </button>
-          )
-        )}
-      </div>
+              <button
+                type="button"
+                ref={doneButtonRef}
+                onClick={toggleManageMode}
+                className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            canManageAny && (
+              <button
+                type="button"
+                onClick={toggleManageMode}
+                className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
+              >
+                Manage views
+              </button>
+            )
+          )}
+        </div>
+      )}
 
       {/* Gated on `status !== null` alone, never `manageMode`: pressing Done
           only toggles Manage mode off (`toggleManageMode` doesn't touch
@@ -1118,19 +1089,23 @@ function NewViewTile({
   return (
     <Link
       href={href}
-      className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-[var(--border-medium)] transition-colors duration-200 ease-[var(--ease-primary)] hover:border-[var(--blue)] motion-reduce:transition-none"
+      className="relative block h-full overflow-hidden rounded-[var(--radius-card)] border border-dashed border-[var(--border-medium)] bg-[var(--surface-card)] transition-colors duration-200 ease-[var(--ease-primary)] hover:border-[var(--blue)] motion-reduce:transition-none"
     >
-      <Plus
-        className="size-4 shrink-0"
-        strokeWidth={1.5}
-        style={{ color: "var(--ink-500)" }}
-        aria-hidden="true"
-      />
-      <span
-        className="text-[12px] font-medium"
-        style={{ color: "var(--ink-500)" }}
-      >
-        Create view
+      <span aria-hidden="true" className="block aspect-[334/216] w-full" />
+      <span aria-hidden="true" className="block h-[77px]" />
+      <span className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+        <Plus
+          className="size-4 shrink-0"
+          strokeWidth={1.5}
+          style={{ color: "var(--ink-500)" }}
+          aria-hidden="true"
+        />
+        <span
+          className="text-[12px] font-medium"
+          style={{ color: "var(--ink-700)" }}
+        >
+          Create view
+        </span>
       </span>
     </Link>
   );

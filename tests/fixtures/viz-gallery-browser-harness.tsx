@@ -1,9 +1,13 @@
 import { createRoot } from "react-dom/client";
+import { useEffect, useState } from "react";
 import {
   VizStateProvider,
   useVizState,
 } from "@/components/dashboard/matches/match-detail/shots/viz-state-context";
-import { VizWall } from "@/components/dashboard/matches/match-detail/shots/viz-wall";
+import {
+  VizWall,
+  type WallCollection,
+} from "@/components/dashboard/matches/match-detail/shots/viz-wall";
 import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shots/saved-views-band";
 import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import type { SavedViewRow } from "@/lib/data/saved-views-logic";
@@ -33,6 +37,15 @@ const views: SavedViewRow[] = [
 
 function Harness() {
   const { state, setState } = useVizState();
+  const [wallCollection, setWallCollection] =
+    useState<WallCollection>("default");
+  useEffect(() => {
+    if (state.cut !== null && !state.draft) {
+      // Mirror ShotsTab's persisted wall selection across the focused branch.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setWallCollection(state.viewId ? "saved" : "default");
+    }
+  }, [state.cut, state.draft, state.viewId]);
   const band = (
     <SavedViewsBand
       views={views}
@@ -44,7 +57,11 @@ function Harness() {
   return (
     <main>
       {state.cut === null ? (
-        <VizWall savedViewsBand={band} />
+        <VizWall
+          savedViewsBand={band}
+          collection={wallCollection}
+          onCollectionChange={setWallCollection}
+        />
       ) : (
         <>
           <section data-testid="focused">

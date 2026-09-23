@@ -99,8 +99,25 @@ test("default and saved gallery navigation omits only the selected identity", as
   page.on("pageerror", (error) => errors.push(error.message));
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(`${origin}/?tab=shots`);
+  await expect(page.getByRole("button", { name: "Default" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByRole("list", { name: "Default views" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Saved serve/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Saved", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Saved", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByRole("list", { name: "Saved views" }).getByRole("listitem"),
+  ).toHaveCount(3);
+  await expect(page.getByRole("link", { name: "Create view" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Saved views" })).toHaveCount(
+    0,
+  );
+  await page.getByRole("button", { name: "Default" }).click();
   const gallery = page.getByRole("list").last();
-  await expect(page.getByRole("link", { name: /Saved serve/ })).toBeVisible();
   const defaultServe = page.locator(
     'a[href*="cut=serve"][href*="ball=first"]:not([href*="player="])',
   );
@@ -114,6 +131,12 @@ test("default and saved gallery navigation omits only the selected identity", as
   await expect(gallery.getByRole("listitem")).toHaveCount(10);
   await page.getByRole("link", { name: /Saved serve/ }).click();
   await expect(page.getByTestId("focused")).toContainText("saved-serve");
+  await page.getByRole("button", { name: "Back to wall" }).click();
+  await expect(
+    page.getByRole("button", { name: "Saved", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("link", { name: /Saved serve/ })).toBeVisible();
+  await page.getByRole("link", { name: /Saved serve/ }).click();
   await page.screenshot({
     path: test.info().outputPath("gallery-focused-saved.png"),
     fullPage: true,
@@ -151,8 +174,10 @@ test("default and saved gallery navigation omits only the selected identity", as
   await page.goForward();
   await expect(defaultServe).toHaveCount(0);
   await page.getByRole("button", { name: "Back to wall" }).click();
-  await expect(page.getByRole("link", { name: /Saved serve/ })).toBeVisible();
   await expect(defaultServe).toBeVisible();
+  await page.getByRole("button", { name: "Saved", exact: true }).click();
+  await expect(page.getByRole("link", { name: /Saved serve/ })).toBeVisible();
+  await page.getByRole("button", { name: "Default" }).click();
   await page.screenshot({
     path: test.info().outputPath("gallery-overview.png"),
     fullPage: true,
