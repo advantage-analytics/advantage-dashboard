@@ -1,7 +1,22 @@
 "use client";
 
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef } from "react";
-import { Bookmark, PanelRightClose, X } from "lucide-react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
+import {
+  Bookmark,
+  ChevronDown,
+  ChevronUp,
+  PanelRightClose,
+  X,
+} from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { Workspace } from "@/lib/workspace/types";
@@ -16,7 +31,11 @@ import { FilmAdvancedPanel } from "./film-advanced-panel";
 import { reducedMotionNow } from "./film-motion";
 import { FilmQuickFilters } from "./film-quick-filters";
 import { shotRowCells, shotRowRevealDelay, type ShotStop } from "./film-shots";
-import type { PointFocus } from "./film-timeline";
+import {
+  followAffordance,
+  type FollowAffordance,
+  type PointFocus,
+} from "./film-timeline";
 import type { FilmSectionId } from "./filters/types";
 import { scoreColumns, youFirstScore } from "./film-score";
 import {
@@ -133,6 +152,12 @@ const SCROLL_KEYS = new Set([
  */
 const FOLLOW_SCROLL_FALLBACK_MS = 400;
 
+/**
+ * How long the pill's 100ms exit may take before it unmounts anyway: a page
+ * that stops painting never delivers `transitionend`.
+ */
+const PILL_EXIT_FALLBACK_MS = 150;
+
 /** The list's chrome: card, header strip, count and game headers. */
 const LIST_TONE = {
   light: {
@@ -235,6 +260,14 @@ interface PointListProps {
   /** Stable identity, please — the click wrappers below are memoized on both. */
   onHoldPoint?: (pointId: string) => void;
   onFollow?: () => void;
+  /**
+   * The playing point and its 1-based place in the walk over the applied cut
+   * (`position.index`, the number the counters print) — null in dead time,
+   * `index: null` when the cut excludes it. The pill's inputs: only the dark
+   * tone draws one; the shell passes the same value and draws nothing.
+   * Stable identity, please — the list is memoized on it.
+   */
+  nowPlaying?: { id: string; index: number | null } | null;
 }
 
 interface GameGroup {
@@ -281,6 +314,7 @@ export const PointList = memo(function PointList({
   displayedPointId: displayedPointIdProp,
   onHoldPoint = NOOP,
   onFollow = NOOP,
+  nowPlaying = null,
 }: PointListProps) {
   const t = LIST_TONE[tone];
   const displayedPointId =
@@ -472,6 +506,11 @@ export const PointList = memo(function PointList({
   // a scroll: the row's React handler prevents them, but it runs after this
   // native listener, so Space is skipped here by its target instead.
   const scrollerMounted = !advancedOpen && groups.length > 0;
+
+  // The return affordance: the drawer's alone (the shell's is the card's
+  // header line), and only while held on a point other than the playing one.
+  const affordance =
+    tone === "dark" ? followAffordance(pointFocus, nowPlaying) : null;
   useEffect(() => {
     if (tone !== "dark" || !scrollerMounted) return;
     const list = listRef.current;
@@ -607,76 +646,91 @@ export const PointList = memo(function PointList({
               tone={tone}
             />
           ) : (
-            // The one scroller in the card: the header stays put while the rows
-            // scroll, the way the room's panel scrolls its list under a fixed
-            // header.
-            <div
-              ref={listRef}
-              className="flex min-h-0 flex-1 flex-col overflow-y-auto"
-            >
-              {groups.map((group) => (
-                <div key={group.key} className="flex flex-col">
-                  {/* The game header: "SET 1 · GAME 3" in tracked mono on the
+            // The pill's positioning wrapper. It sits around the scroller, not
+            // on the drawer: the drawer has no padding, and Advanced replaces
+            // the scroller in this same section, so the pill goes with the
+            // scroller it belongs to — pinned to the list's bottom edge, and
+            // not inside the scroller, where it would scroll away.
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              {/* The one scroller in the card: the header stays put while the rows
+            scroll, the way the room's panel scrolls its list under a fixed
+            header. */}
+              <div
+                ref={listRef}
+                className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+              >
+                {groups.map((group) => (
+                  <div key={group.key} className="flex flex-col">
+                    {/* The game header: "SET 1 · GAME 3" in tracked mono on the
                   left, the you-first game score and the server on the right.
                   No rule under it — the rows' own spacing separates the games.
                   The same header in both tones; only the inks are looked up. */}
-                  <div className={t.gameHeader}>
-                    <span className={t.gameLabel}>
-                      Set {group.setNumber} · Game {group.gameNumber}
-                    </span>
-                    <div className="flex-1" />
-                    <span className={t.gameMeta}>
-                      {group.gameScore ? `${group.gameScore} · ` : ""}
-                      {group.serverName} serves
-                    </span>
-                  </div>
+                    <div className={t.gameHeader}>
+                      <span className={t.gameLabel}>
+                        Set {group.setNumber} · Game {group.gameNumber}
+                      </span>
+                      <div className="flex-1" />
+                      <span className={t.gameMeta}>
+                        {group.gameScore ? `${group.gameScore} · ` : ""}
+                        {group.serverName} serves
+                      </span>
+                    </div>
 
-                  {group.points.map((point) => {
-                    const isYou = point.wonByPlayer1 === youIsPlayer1;
-                    const isActive = point.id === activePointId;
-                    return (
-                      // A fragment, not a wrapper: the well is the row's
-                      // SIBLING in the game's own column, so it spans the
-                      // drawer edge to edge under the row rather than being
-                      // boxed beside it. With no well the DOM is the row alone,
-                      // exactly as the report column has always drawn it.
-                      <Fragment key={point.id}>
-                        <PointRow
-                          point={point}
-                          isYou={isYou}
-                          initials={
-                            isYou ? sides.you.initials : sides.opp.initials
-                          }
-                          workspace={workspace}
-                          showPointScore={showPointScore}
-                          isActive={isActive}
-                          activeStart={isActive ? activeStart : 0}
-                          activeEnd={isActive ? activeEnd : 0}
-                          onSelect={selectPoint}
-                          onToggleSaved={onToggleSaved}
-                          onOpenInRoom={onOpenInRoom}
-                          tone={tone}
-                        />
-                        {/* Under the DISPLAYED row, not the lit one: while
+                    {group.points.map((point) => {
+                      const isYou = point.wonByPlayer1 === youIsPlayer1;
+                      const isActive = point.id === activePointId;
+                      return (
+                        // A fragment, not a wrapper: the well is the row's
+                        // SIBLING in the game's own column, so it spans the
+                        // drawer edge to edge under the row rather than being
+                        // boxed beside it. With no well the DOM is the row alone,
+                        // exactly as the report column has always drawn it.
+                        <Fragment key={point.id}>
+                          <PointRow
+                            point={point}
+                            isYou={isYou}
+                            initials={
+                              isYou ? sides.you.initials : sides.opp.initials
+                            }
+                            workspace={workspace}
+                            showPointScore={showPointScore}
+                            isActive={isActive}
+                            activeStart={isActive ? activeStart : 0}
+                            activeEnd={isActive ? activeEnd : 0}
+                            onSelect={selectPoint}
+                            onToggleSaved={onToggleSaved}
+                            onOpenInRoom={onOpenInRoom}
+                            tone={tone}
+                          />
+                          {/* Under the DISPLAYED row, not the lit one: while
                             held the well stays here as `isActive` moves on.
                             The lit shot inside it is the playing shot, which
                             is in this well only when the displayed point is
                             the playing point. */}
-                        {point.id === displayedPointId && wellOpen && (
-                          <ShotWell
-                            stops={wellStops}
-                            activeShotId={activeShotId}
-                            youIsPlayer1={youIsPlayer1}
-                            youLastName={youLastName}
-                            oppLastName={oppLastName}
-                            onSelectShot={selectShot}
-                          />
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </div>
-              ))}
+                          {point.id === displayedPointId && wellOpen && (
+                            <ShotWell
+                              stops={wellStops}
+                              activeShotId={activeShotId}
+                              youIsPlayer1={youIsPlayer1}
+                              youLastName={youLastName}
+                              oppLastName={oppLastName}
+                              onSelectShot={selectShot}
+                            />
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+              {/* After the scroller in DOM order, so Tab reaches it after the
+            last row and before the transport. */}
+              <FollowPill
+                affordance={affordance}
+                listRef={listRef}
+                nowPlaying={nowPlaying}
+                onFollow={onFollow}
+              />
             </div>
           )}
         </>
@@ -684,6 +738,145 @@ export const PointList = memo(function PointList({
     </section>
   );
 });
+
+/* ── The "Now playing" pill ──────────────────────────────────────────────── */
+
+type PillDirection = "up" | "down" | null;
+
+/**
+ * The drawer's return affordance while held (T17 design, frame B1): "Now
+ * playing · Point 14", and a chevron toward the lit row when it is out of
+ * view. Pressing it follows the film again — the keep-in-view effect does
+ * the smooth scroll and the well unfolds under the playing row; this does
+ * nothing else.
+ *
+ * The "Points" trigger's recipe (film-fullscreen.tsx) plus the drawer's own
+ * 10% inset hairline, so it reads over a lit row as well as the sheet. It is
+ * a button with visible text, so the chevron is `aria-hidden` and there is
+ * no tooltip. `data-film-chrome`, so the chrome collapse and the room's exit
+ * fade take it with everything else.
+ *
+ * Unmounted when hidden — never `opacity-0` in the tab order. It arrives on
+ * `film-follow-pill-in` (150ms, a 4px rise; the rise drops under reduced
+ * motion, the fade stays) and leaves on a 100ms opacity transition, unmounting
+ * on its own `transitionend` or a 150ms timer, whichever is first.
+ */
+function FollowPill({
+  affordance,
+  listRef,
+  nowPlaying,
+  onFollow,
+}: {
+  affordance: FollowAffordance | null;
+  listRef: RefObject<HTMLDivElement | null>;
+  nowPlaying: { id: string; index: number | null } | null;
+  onFollow: () => void;
+}) {
+  // What is on screen, which outlives `affordance` by the exit's 100ms.
+  const [shown, setShown] = useState<FollowAffordance | null>(affordance);
+  const [leaving, setLeaving] = useState(false);
+  // Adjusted during render, not in an effect: the pill must never paint one
+  // frame with the old words, or linger a frame before its exit begins.
+  if (affordance) {
+    if (
+      !shown ||
+      shown.label !== affordance.label ||
+      shown.ariaLabel !== affordance.ariaLabel ||
+      shown.inCut !== affordance.inCut
+    ) {
+      setShown(affordance);
+    }
+    if (leaving) setLeaving(false);
+  } else if (shown && !leaving) {
+    setLeaving(true);
+  }
+
+  const finishLeave = useCallback(() => {
+    setShown(null);
+    setLeaving(false);
+  }, []);
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = window.setTimeout(finishLeave, PILL_EXIT_FALLBACK_MS);
+    return () => window.clearTimeout(timer);
+  }, [leaving, finishLeave]);
+
+  // The chevron points from the list's centre toward the lit row, and is
+  // hidden when that row is already fully in view — or has no row in this
+  // cut at all. Re-read on the scroller's `scroll` (direction, not intent:
+  // the follow effect's own travel is harmless here) and whenever the
+  // playing point changes.
+  const inCut = shown?.inCut ?? false;
+  const [direction, setDirection] = useState<PillDirection>(null);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || !inCut) {
+      setDirection(null);
+      return;
+    }
+    const read = () => {
+      const lit = list.querySelector<HTMLElement>(
+        '[data-point-id][data-playing="true"]',
+      );
+      if (!lit) {
+        setDirection(null);
+        return;
+      }
+      const box = list.getBoundingClientRect();
+      const row = lit.getBoundingClientRect();
+      if (row.top >= box.top && row.bottom <= box.bottom) {
+        setDirection(null);
+        return;
+      }
+      setDirection(row.top > box.top + box.height / 2 ? "down" : "up");
+    };
+    read();
+    list.addEventListener("scroll", read, { passive: true });
+    return () => list.removeEventListener("scroll", read);
+  }, [listRef, inCut, nowPlaying]);
+
+  if (!shown) return null;
+  const Chevron =
+    direction === "down" ? ChevronDown : direction === "up" ? ChevronUp : null;
+
+  return (
+    <button
+      type="button"
+      data-film-chrome
+      aria-label={shown.ariaLabel}
+      onClick={onFollow}
+      // Leaving, it is already on its way out: not a target, not a stop.
+      tabIndex={leaving ? -1 : undefined}
+      onTransitionEnd={(e) => {
+        if (
+          e.target === e.currentTarget &&
+          e.propertyName === "opacity" &&
+          leaving
+        ) {
+          finishLeave();
+        }
+      }}
+      className={cn(
+        "inline-flex h-7 items-center gap-[7px] rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium text-white transition-[opacity,transform,background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        "absolute bottom-3 left-1/2 -translate-x-1/2 cursor-pointer whitespace-nowrap shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)] active:scale-[0.97]",
+        // The enter keyframe holds its end state (`both`), so it comes off
+        // for the exit or it would pin the opacity at 1.
+        leaving
+          ? "pointer-events-none opacity-0 duration-100"
+          : "film-follow-pill-in",
+      )}
+    >
+      {shown.label}
+      {Chevron && (
+        <Chevron
+          className="size-3 text-white/85"
+          strokeWidth={1.6}
+          aria-hidden="true"
+        />
+      )}
+    </button>
+  );
+}
 
 /* ── Row ────────────────────────────────────────────────────────────────── */
 

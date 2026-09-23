@@ -55,6 +55,8 @@ export interface FilmRoomDrawerProps {
   displayedPointId: string | null;
   onHoldPoint: (pointId: string) => void;
   onFollow: () => void;
+  /** The playing point and its place in the cut: the pill's inputs. */
+  nowPlaying: { id: string; index: number | null } | null;
 }
 
 export function FilmRoomDrawer({
@@ -77,6 +79,7 @@ export function FilmRoomDrawer({
   displayedPointId,
   onHoldPoint,
   onFollow,
+  nowPlaying,
 }: FilmRoomDrawerProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [openSections, setOpenSections] = useState<FilmSectionId[]>([]);
@@ -139,6 +142,7 @@ export function FilmRoomDrawer({
         displayedPointId={displayedPointId}
         onHoldPoint={onHoldPoint}
         onFollow={onFollow}
+        nowPlaying={nowPlaying}
       />
     </aside>
   );

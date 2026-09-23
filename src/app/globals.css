@@ -891,3 +891,41 @@
     animation: film-shot-well-fade var(--duration-fast) var(--ease-primary) both;
   }
 }
+
+/* The drawer's "Now playing" pill arriving (point-list.tsx `FollowPill`,
+   T17 design frame B1): 150ms (`--duration-fast`) opacity 0 → 1 with the
+   same 4px rise as `film-shot-row-in`, so the two things that appear in the
+   list arrive the same way. The pill is centred with Tailwind's
+   `-translate-x-1/2`, which is the `translate` property, not `transform`, so
+   this keyframe's `transform` composes with it rather than undoing it.
+
+   Reduced motion keeps the fade and drops the rise ("skip transforms, keep
+   opacity"). Unlike the shot rows' `animation: none`, the pill carries state
+   — the film has moved on without you — so it must still visibly arrive. */
+@keyframes film-follow-pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.film-follow-pill-in {
+  animation: film-follow-pill-in var(--duration-fast) var(--ease-primary) both;
+}
+@keyframes film-follow-pill-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .film-follow-pill-in {
+    animation: film-follow-pill-fade var(--duration-fast) var(--ease-primary)
+      both;
+  }
+}

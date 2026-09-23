@@ -254,7 +254,7 @@ ready).
 
 ## T19 · The drawer's "Now playing" pill: mount, strings, chevron, motion
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T18
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/point-list.tsx (the `listRef` div L433–436 gets a wrapper; a new `nowPlaying` prop; the pill component beside `ShotWell`); film-fullscreen.tsx (`position` L659–662 → the drawer's `nowPlaying`); film-room-drawer.tsx (one pass-through prop); src/app/globals.css (a `film-follow-pill-in` keyframe after `film-shot-well-fade` L884–893); tests/film-playback-refresh.spec.ts (cases after the T18 block)

@@ -1608,3 +1608,171 @@ test("T18: a cut that drops the held point re-follows without a click", async ({
   await expect(page.locator(WELL_UNDER("c"))).toHaveCount(1);
   await expect(page.locator(WELL_UNDER("b"))).toHaveCount(0);
 });
+
+/* -------------------------------------------------------------------------
+ * The drawer's "Now playing" pill (T19)
+ *
+ * Shown only while held on a point other than the playing one; its words are
+ * `followAffordance`'s, its number the counter's (`position.index`), and its
+ * chevron points from the scroller's centre toward the lit row — none when
+ * that row is fully in view or has no row in the cut. Pressing it follows:
+ * the T18 effect scrolls the list and the well unfolds under the playing row.
+ * A click on `a` at film zero holds `a` (nothing is playing yet); the seek to
+ * 0.4 then plays `b`, which is what brings the pill in.
+ * ---------------------------------------------------------------------- */
+
+const PILL = `${DRAWER} button[aria-label^="Now playing:"]`;
+
+/** Held on `a`, the film playing `b`: the pill's first state. */
+async function holdAThenPlayB(page: Page) {
+  await page.click(DRAWER_ROW("a"));
+  await expect.poll(() => playingRow(page)).toBe("a");
+  await expect(page.locator(WELL_UNDER("a"))).toHaveCount(1);
+  await expect(page.locator(PILL)).toHaveCount(0);
+  await seekTo(page, ROOM, 0.4);
+  await expect.poll(() => playingRow(page)).toBe("b");
+  await expect(page.locator(PILL)).toHaveCount(1);
+}
+
+/** Whether the lit row sits wholly inside the drawer scroller's box. */
+async function litRowInView(page: Page): Promise<boolean> {
+  return page.evaluate((sel) => {
+    const list = document.querySelector<HTMLElement>(sel);
+    const lit = list?.querySelector<HTMLElement>(
+      '[data-point-id][data-playing="true"]',
+    );
+    if (!list || !lit) return false;
+    const box = list.getBoundingClientRect();
+    const row = lit.getBoundingClientRect();
+    return row.top >= box.top - 0.5 && row.bottom <= box.bottom + 0.5;
+  }, DRAWER_SCROLLER);
+}
+
+test("T19: the pill names the playing point, and its chevron points up once the lit row scrolls above", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "pill-names", { pad: "12" });
+  // Following: no pill at all, not merely a hidden one.
+  await expect(page.locator(PILL)).toHaveCount(0);
+  await holdAThenPlayB(page);
+
+  const pill = page.locator(PILL);
+  await expect(pill).toHaveText("Now playing · Point 2");
+  await expect(pill).toHaveAttribute(
+    "aria-label",
+    "Now playing: point 2 — follow playback",
+  );
+  await expect(pill).toHaveAttribute("type", "button");
+  await expect(pill).toHaveAttribute("data-film-chrome", /.*/);
+
+  // A real wheel: the lit row goes above the scroller's box.
+  await wheelDrawer(page, 600);
+  await expect.poll(() => litRowInView(page)).toBe(false);
+  await expect(pill.locator("svg")).toHaveClass(/lucide-chevron-up/);
+  await expect(pill.locator("svg")).toHaveAttribute("aria-hidden", "true");
+});
+
+test("T19: pressing the pill follows — it leaves, the well is under the playing row, the list scrolls to it", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "pill-press", { pad: "12" });
+  await holdAThenPlayB(page);
+  await wheelDrawer(page, 600);
+  await expect.poll(() => litRowInView(page)).toBe(false);
+  const wheeled = await drawerScrollTop(page);
+
+  await page.locator(PILL).click();
+  await expect(page.locator(PILL)).toHaveCount(0);
+  await expect(page.locator(WELL_UNDER("b"))).toHaveCount(1);
+  await expect(page.locator(WELL_UNDER("a"))).toHaveCount(0);
+  // The follow effect's smooth scroll brings row `b` back inside the box.
+  await expect
+    .poll(() =>
+      page.evaluate((sel) => {
+        const list = document.querySelector<HTMLElement>(sel);
+        const row = list?.querySelector<HTMLElement>('[data-point-id="b"]');
+        if (!list || !row) return false;
+        const box = list.getBoundingClientRect();
+        const r = row.getBoundingClientRect();
+        return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
+      }, DRAWER_SCROLLER),
+    )
+    .toBe(true);
+  expect(await drawerScrollTop(page)).toBeLessThan(wheeled);
+});
+
+test("T19: no chevron while the lit row is already fully in view", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "pill-in-view", { pad: "12" });
+  await holdAThenPlayB(page);
+  await expect.poll(() => litRowInView(page)).toBe(true);
+  await expect(page.locator(PILL)).toHaveText("Now playing · Point 2");
+  await expect(page.locator(`${PILL} svg`)).toHaveCount(0);
+});
+
+test("T19: a playing point the cut excludes reads 'not in this cut', with no chevron", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "pill-cut", { pad: "12" });
+  await holdAThenPlayB(page);
+
+  // "Saved only" keeps `a` (the held point) and drops `b` (the playing one).
+  const drawer = page.locator(DRAWER);
+  const menu = page.getByRole("menu", { name: "Point filters" });
+  await drawer.getByRole("button", { name: "Filters" }).click();
+  await menu.getByText("Saved only").click();
+  await expect(drawer.locator('[data-point-id="b"]')).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  const pill = page.locator(PILL);
+  await expect(pill).toHaveText("Now playing · not in this cut");
+  await expect(pill).toHaveAttribute(
+    "aria-label",
+    "Now playing: a point outside this cut — follow playback",
+  );
+  await expect(pill.locator("svg")).toHaveCount(0);
+});
+
+test("T19: reduced motion — the pill's follow scrolls instantly and it fades in with no rise", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openRoomWithDrawer(page, "pill-reduced", { pad: "12" });
+  await holdAThenPlayB(page);
+  // The opacity-only keyframe, not the rise: the pill still visibly arrives.
+  await expect
+    .poll(() =>
+      page.locator(PILL).evaluate((el) => getComputedStyle(el).animationName),
+    )
+    .toBe("film-follow-pill-fade");
+
+  await wheelDrawer(page, 600);
+  await expect.poll(() => litRowInView(page)).toBe(false);
+  await spyScrollTo(page);
+  await page.locator(PILL).click();
+  await expect(page.locator(PILL)).toHaveCount(0);
+  await expect
+    .poll(async () => (await scrollTos(page)).map((o) => o.behavior))
+    .toContain("auto");
+  expect((await scrollTos(page)).some((o) => o.behavior === "smooth")).toBe(
+    false,
+  );
+
+  // The stylesheet half: reduced motion swaps the pill's animation for a
+  // keyframe with no transform — never `animation: none`.
+  const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+  const block = css.match(
+    /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.film-follow-pill-in\s*\{([^}]*)\}\s*\}/,
+  );
+  expect(block).not.toBeNull();
+  expect(block![1]).not.toMatch(/transform:/);
+  expect(block![1]).not.toMatch(/animation:\s*none/);
+  const fadeName = block![1].match(/animation:\s*([\w-]+)/)?.[1];
+  expect(fadeName).toBeTruthy();
+  const fade = css.match(
+    new RegExp(`@keyframes ${fadeName}\\s*\\{([\\s\\S]*?)\\n\\}`),
+  );
+  expect(fade).not.toBeNull();
+  expect(fade![1]).not.toMatch(/transform:/);
+});

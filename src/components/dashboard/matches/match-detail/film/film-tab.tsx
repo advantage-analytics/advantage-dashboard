@@ -358,6 +358,15 @@ function FilmRoom({
     const index = walkStops.findIndex((s) => s.point.id === activePoint.id);
     return index === -1 ? null : { index: index + 1, total: walkStops.length };
   }, [walkStops, activePoint]);
+  // The same shape the room hands its drawer. The shell column's list takes
+  // it and draws no pill (the card's header line is the shell's return).
+  const nowPlaying = useMemo(
+    () =>
+      activePoint
+        ? { id: activePoint.id, index: position?.index ?? null }
+        : null,
+    [activePoint, position],
+  );
 
   const handleSelect = useCallback(
     (point: MatchPoint) => {
@@ -677,6 +686,7 @@ function FilmRoom({
             displayedPointId={displayedPointId}
             onHoldPoint={holdPoint}
             onFollow={followPlayback}
+            nowPlaying={nowPlaying}
           />
         </div>
       </div>

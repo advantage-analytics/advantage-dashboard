@@ -684,6 +684,17 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       : { index: index + 1, total: p.walkStops.length };
   }, [activePoint, p.walkStops]);
 
+  // The drawer's pill names the playing point by the same number the
+  // transport's `Point 14 / 87` prints; `index: null` is a point the cut
+  // excludes. Memoized: the drawer's list is memoized on it.
+  const nowPlaying = useMemo(
+    () =>
+      activePoint
+        ? { id: activePoint.id, index: position?.index ?? null }
+        : null,
+    [activePoint, position],
+  );
+
   const segments = useMemo(
     () => setSegments(p.stops, duration),
     [p.stops, duration],
@@ -1635,6 +1646,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 displayedPointId={displayedPointId}
                 onHoldPoint={p.onHoldPoint}
                 onFollow={p.onFollow}
+                nowPlaying={nowPlaying}
               />
             )}
           </>
