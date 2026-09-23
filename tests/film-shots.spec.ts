@@ -218,6 +218,24 @@ test("Type follows shot_type, not row position: faults, feeds, volleyed returns"
     ]),
   ).toBeNull();
   expect(pointReturnShotId(undefined)).toBeNull();
+  // An untyped row is never the Return: it may be the serve itself. A point
+  // the source never typed reads "—" throughout, and an untyped row ahead of
+  // a typed return leaves the Return on the typed one.
+  const untyped = [
+    shot("u1", 1, { shotType: null, shotNumber: 0 }),
+    shot("u2", 2, { shotType: null, shotNumber: 0 }),
+  ];
+  expect(pointReturnShotId(untyped)).toBeNull();
+  expect(
+    untyped.map((s) => shotTypeLabel(s, pointReturnShotId(untyped))),
+  ).toEqual(["—", "—"]);
+  expect(
+    pointReturnShotId([
+      shot("m1", 1, { shotType: "First Serve" }),
+      shot("m2", 2, { shotType: null, shotNumber: 2 }),
+      shot("m3", 3, { shotType: "Backhand", shotNumber: 3 }),
+    ]),
+  ).toBe("m3");
 });
 
 test("nothing unmeasured is ever rendered as a zero", () => {

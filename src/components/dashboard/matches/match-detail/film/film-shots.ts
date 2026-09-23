@@ -145,18 +145,21 @@ function isServeRow(shotType: string): boolean {
 }
 
 /**
- * The point's return: its first shot that is neither a serve nor a Feed —
- * `pickReturnShot`'s rule (`serve-return-shots.ts`), widened by the same bare
- * `Serve` fallback as {@link isServeRow}. `shots` in `shot_number` order, as
- * `MatchPoint.shots` already is. Null when the point has no such shot (an ace,
- * a double fault, or shots the source never typed).
+ * The point's return: its first TYPED shot that is neither a serve nor a
+ * Feed — `pickReturnShot`'s rule (`serve-return-shots.ts`), widened by the
+ * same bare `Serve` fallback as {@link isServeRow}, and narrowed to shots the
+ * source typed: an untyped row may be the serve itself (a point whose every
+ * shot is untyped exists live), so calling it the Return is a guess the
+ * table would print as fact. `shots` in `shot_number` order, as
+ * `MatchPoint.shots` already is. Null when the point has no such shot (an
+ * ace, a double fault, or shots the source never typed).
  */
 export function pointReturnShotId(
   shots: readonly MatchShot[] | undefined,
 ): string | null {
   const found = shots?.find((s) => {
     const type = s.shotType?.trim() ?? "";
-    return !isServeRow(type) && !isFeedShotType(type);
+    return type !== "" && !isServeRow(type) && !isFeedShotType(type);
   });
   return found?.id ?? null;
 }
