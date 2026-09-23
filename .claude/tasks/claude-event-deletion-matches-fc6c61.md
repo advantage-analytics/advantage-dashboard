@@ -97,7 +97,7 @@ ready).
 
 ## T7 · Lift the Matches drawer's body sections into a shared module
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/drawer-sections.tsx (new), src/components/dashboard/matches/match-drawer.tsx, tests/drawer-sections.spec.ts (new) (guess; `DrawerFact` at match-drawer.tsx:389, `drawerSideName` :381, `toSnapshot`/`percent` :669-700, `useMatchDetails` :596)
 - **done when:**

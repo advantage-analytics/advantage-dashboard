@@ -52,3 +52,12 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical GATE PASS on the second run (the first run failed four live-DB specs — admin RPCs, point bookmarks, owner name, seat counts — the shared-IP Supabase sign-in rate limit, unrelated to a static strip); completion `VERDICT: pass`.
 **changed:** `DualFactsStep` draws a grey fact strip under the Time / Singles format / Doubles format row on the wizard's `noteStripCls` with a lucide `Info` icon: bold "Doubles lines record a score only." then "Statistics and video analysis are singles only for now." Grey by the design rule (a fact, not a question); `warningStripCls` unused. Header comments on the step and the strip say why. `schedule-static-copy.spec.ts` asserts the sentence on step two.
+
+## T7 · Lift the Matches drawer's body sections into a shared module — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite); completion `VERDICT: pass`.
+**changed:** New `matches/drawer-sections.tsx` holds `drawerSideName`, `DrawerFact`, `DrawerHeading`, `AnalysisNotice`, `SnapshotSection`, `toSnapshot` and `useMatchSnapshot` (its own cache, plus `forgetMatchSnapshot`); nothing in it imports `DisplayMatch`. `match-drawer.tsx` composes them with unchanged props and markup; its team-only schedule query became a private `useScheduleLink` with its own cache, and `forgetMatchDetails` keeps its signature and now clears both caches. Pure spec `tests/drawer-sections.spec.ts` via `createLoader()`. Deviations the reviewer accepted: `useMatchSnapshot(matchId, pending = false)` takes an optional in-flight flag so an empty answer is not cached while analysing; the snapshot and the schedule row are now two queries that can land a moment apart.
+**follow-ups:**
+
+1. T10 needs `tests/fixtures/supabase-client-browser-mock.ts` to support `.select().eq().eq().maybeSingle()` before a browser harness can render `useMatchSnapshot`.
+2. `MatchDrawer`'s doc comment still describes its body inline; point it at `drawer-sections.tsx` once the event drawers share it.
