@@ -277,6 +277,14 @@ test.beforeAll(async () => {
       response.end("ok");
       return;
     }
+    // Re-arm the latch: the NEXT answer for this match is parked again until
+    // the next release. For asserting what the page shows while a retry is
+    // in flight — with the latch set, the store answers a retry at once.
+    if (path === "/__hold") {
+      released.delete(url.searchParams.get("matchId") ?? "");
+      response.end("ok");
+      return;
+    }
     if (path.startsWith("/fixtures/")) {
       serveClip(
         response,
@@ -394,6 +402,13 @@ async function seekTo(page: Page, selector: string, seconds: number) {
 async function release(page: Page, matchId: string) {
   await page.request.get(
     `${origin}/__release?matchId=${encodeURIComponent(matchId)}`,
+  );
+}
+
+/** Park the match's next answer again (see `/__hold`). */
+async function hold(page: Page, matchId: string) {
+  await page.request.get(
+    `${origin}/__hold?matchId=${encodeURIComponent(matchId)}`,
   );
 }
 
@@ -582,13 +597,28 @@ test("an unreachable store offers a retry, and the retry recovers", async ({
   await expect(panel).toBeVisible();
   await expect(panel).toHaveAttribute("data-film-problem", "unreachable");
 
+  // Park the retry's answer, so what the page shows in between is observable.
+  await hold(page, matchId);
   await panel.getByRole("button", { name: "Try again" }).click();
+
+  // Between the retry and the store's answer the frame is a request in
+  // flight: the pending overlay, over a mounted element — never a blank and
+  // never the problem panel that was just dismissed.
+  const pending = page.locator('[role="status"][aria-label="Loading video"]');
+  await expect(pending).toBeVisible();
+  await expect(page.locator(REPORT)).toHaveCount(1);
+  await expect(
+    page.locator('[data-testid="film-playback-problem"]'),
+  ).toHaveCount(0);
+
   await release(page, matchId);
 
   await awaitCredential(page, REPORT, 2);
   await expect(
     page.locator('[data-testid="film-playback-problem"]'),
   ).toHaveCount(0);
+  // The credential landed and the element has metadata: the overlay is gone.
+  await expect(pending).toHaveCount(0);
 });
 
 /* -------------------------------------------------------------------------

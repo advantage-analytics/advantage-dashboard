@@ -100,9 +100,13 @@ _The marker_ is a **24px outlined pill** — hairline border, no fill, ink-600 a
 11/500 — and the three alternatives were each rejected for a reason worth
 keeping. An eyebrow labels a SECTION; this labels the page's condition. Grey
 `StatePill` is the right register but is sized for a table row, and 18px alone
-above a 24px statement reads undersized. The blue-tinted pill is spoken for:
-it belongs to "New" and to nothing else, and a second blue pill costs the
-first its meaning.
+above a 24px statement reads undersized. And a blue-tinted pill is not an
+option — not because it is taken, but because the system has none: every pill
+is grey (Data Table rule 4). Blue marks action and emphasis, and a page's
+condition is neither.
+_Supersedes (v3): "The blue-tinted pill is spoken for: it belongs to "New" and
+to nothing else, and a second blue pill costs the first its meaning."_ "New" is
+no longer a pill at all — it is a 5px `--blue` dot after the opponent's name in the Matches row.
 
 The middle row is a judgement, not a loophole: Home dims one card and one row
 because those are shapes worth previewing, and Statistics does not because

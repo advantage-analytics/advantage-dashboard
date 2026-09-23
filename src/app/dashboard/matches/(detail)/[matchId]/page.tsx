@@ -53,6 +53,10 @@ import {
   ShareRailTrigger,
 } from "@/components/dashboard/matches/match-detail/share-match-button";
 import { StatisticsView } from "@/components/dashboard/matches/match-detail/statistics-view";
+import {
+  FilmPanePending,
+  VisualizationsPanePending,
+} from "@/components/dashboard/loading/match-report-pending";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMatchFilmEntry } from "@/lib/data/match-film-entry-server";
@@ -61,15 +65,23 @@ import { getMatchFilmEntry } from "@/lib/data/match-film-entry-server";
 // Film are each a substantial subtree (filters, an SVG court, a video
 // player) that a visitor landing on Statistics never needs — code-split so
 // their JS is fetched only once the view is actually opened.
-const ShotsTab = dynamic(() =>
-  import("@/components/dashboard/matches/match-detail/shots/shots-tab").then(
-    (m) => m.ShotsTab,
-  ),
+// Each carries its pane's skeleton as the chunk fallback: the first click on
+// a view otherwise paints nothing at all while its JS downloads. The
+// Visualizations fallback draws the wall — the focused court is a `?cut=`
+// deep link, and the chunk is sub-second either way.
+const ShotsTab = dynamic(
+  () =>
+    import("@/components/dashboard/matches/match-detail/shots/shots-tab").then(
+      (m) => m.ShotsTab,
+    ),
+  { loading: () => <VisualizationsPanePending /> },
 );
-const FilmTab = dynamic(() =>
-  import("@/components/dashboard/matches/match-detail/film/film-tab").then(
-    (m) => m.FilmTab,
-  ),
+const FilmTab = dynamic(
+  () =>
+    import("@/components/dashboard/matches/match-detail/film/film-tab").then(
+      (m) => m.FilmTab,
+    ),
+  { loading: () => <FilmPanePending /> },
 );
 
 interface PageProps {
