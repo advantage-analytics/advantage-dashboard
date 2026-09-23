@@ -232,7 +232,7 @@ export function DualDetail({
     <EventPageLayout
       header={
         <EventHeader
-          mark={<EventMark kind={event.kind} name={event.name} size={40} />}
+          mark={<EventMark kind={event.kind} name={event.name} size={56} />}
           title={<EventTitle vs name={event.name} />}
           subline={[
             `${formatEventDatesLong(event.startsOn, event.endsOn)}${

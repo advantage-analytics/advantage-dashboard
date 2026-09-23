@@ -18,12 +18,12 @@ import { cn } from "@/lib/utils";
  * takes 9 and 48 takes 14, so a 32 sharing 26's 9px was the odd one out
  * rather than a decision. That is a 3px change to the picker's initials.
  */
-/** The box each size draws — the legend's three, plus the event pages' 40px header mark. */
+/** The box each size draws — the legend's three, plus the dual page's 56px header mark. */
 const BOX = {
   26: "size-[26px]",
   32: "size-8",
-  40: "size-10",
   48: "size-12",
+  56: "size-14",
 } as const;
 
 export function EventMark({
@@ -33,11 +33,11 @@ export function EventMark({
 }: {
   kind: EventKind;
   name: string;
-  size: 26 | 32 | 40 | 48;
+  size: 26 | 32 | 48 | 56;
 }) {
-  // 40 is the event pages' header (`EventHeader`, `Main.dc.html`): 13px type,
-  // and the 48's 20px glyph for a tournament.
-  const large = size === 48 || size === 40;
+  // 56 is the dual page's header (`EventHeader`): as tall as the title and its
+  // subline together, 16px type, and the 48's 20px glyph for a tournament.
+  const large = size === 48 || size === 56;
   const medium = size === 32;
   return (
     <span
@@ -47,8 +47,8 @@ export function EventMark({
         BOX[size],
         // One box map, one type step per size — the alternative was a
         // three-arm ternary repeating the same six classes three times.
-        size === 40
-          ? "text-[13px]"
+        size === 56
+          ? "text-[16px] tracking-[0.2px]"
           : large
             ? "text-[14px] tracking-[0.2px]"
             : medium

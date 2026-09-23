@@ -89,7 +89,7 @@ export function EventPageLayout({
 /* ── Header ─────────────────────────────────────────────────────────────── */
 
 /**
- * Title row: optional 40px mark, the display title, one 12px ink-600 subline
+ * Title row: optional mark, the display title, one 12px ink-600 subline
  * whose parts are separated by ink-300 `·`, and the actions on the right.
  */
 export function EventHeader({
