@@ -292,3 +292,174 @@ ready).
   - [ ] That match's drawer footer has a "Continue upload" primary that links to `draftHref(draft.id, scope)`, and the ghost "Open match" button is still there. A match without a folded draft gets no such primary.
   - [ ] Drawer stepping (↑/↓) goes through standalone drafts, then matches, and no longer stops on the folded draft by itself.
 - **notes:** This is the author's intent 3 ("it saves as two separate matches"). It follows the table laws: Draft is one of the allowed grey state pills (`tables.md` rule 4), and the match drawer's footer gets one primary only when an action applies. The Matches page has no harness yet, so this task builds a new Playwright harness; `tests/fixtures/match-drawer-deps-browser-mock.tsx` already exists for the drawer's dependencies.
+
+## T22 · The event drawer shows the played match's own facts
+
+- **status:** todo
+- **model:** opus
+- **files:** src/lib/schedule/types.ts (`EntryMatch` :89), src/lib/data/schedule-server.ts (`MATCH_COLUMNS` :42, the `EntryMatch` mapping ~:252), src/components/dashboard/matches/drawer-sections.tsx, src/components/dashboard/matches/match-drawer.tsx (Provider fact :249-288), src/components/dashboard/schedule/event-line-drawer.tsx (facts `<dl>` :284-313), tests/fixtures/schedule-dual-outcomes-data.ts, tests/fixtures/schedule-tournament-outcomes-data.ts, tests/schedule-dual-outcomes.spec.ts, tests/schedule-tournament-outcomes.spec.ts (guess; line refs verified)
+- **done when:**
+  - [ ] `EntryMatch` gains optional `duration?: string | null`, `sourceProvider?: string | null`, `jobId?: string | null` and `failNote?: string | null`. `MATCH_COLUMNS` adds `duration`; the loader maps `duration` through the same formatter `transformDbMatch` uses (`src/lib/data/matches-list-types.ts:123`), maps `source_provider` (already selected, currently dropped) onto `sourceProvider`, and takes `jobId`/`failNote` from the `analysisLoader` map entry. No file under `supabase/` is in the diff.
+  - [ ] `drawer-sections.tsx` exports `ProviderFact({ providerId })` — the "Provider" `DrawerFact` with its splitstep / swing-vision / logo icon branches moved verbatim from `match-drawer.tsx:249-288`, returning null for an id `providers` doesn't hold. `match-drawer.tsx` renders `<ProviderFact>` and no longer contains the string `/providers/swingvision-icon.png`. `MatchDrawer`'s props are unchanged.
+  - [ ] For a line with a played match, `EventLineDrawer`'s facts run in the Matches drawer's order: Date, Court, Home/Away, Event, Duration (only when set), Provider (only when set), then Format last. Date reads the match's own day through the formatter `MatchDrawer` uses (`formatShortDate`) when `played.date` is set, else the event's dates. A line with no match keeps the event dates and draws neither Duration nor Provider.
+  - [ ] `tests/schedule-tournament-outcomes.spec.ts`: the R16 drawer's Date fact shows the R16 fixture match's day, not the tournament span. `tests/schedule-dual-outcomes.spec.ts`: a singles fixture match given `duration` and `sourceProvider: "swing-vision"` shows its formatted duration and that provider's `name` from `providers`; NORMAL S1 (no match) shows no "Duration" or "Provider" fact and no link to `/dashboard/matches/`.
+  - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/drawer-sections.spec.ts tests/schedule-dual-outcomes.spec.ts tests/schedule-tournament-outcomes.spec.ts tests/schedule-drawer-outcomes.spec.ts tests/schedule-outcome-loader.spec.ts tests/team-home-schedule-reads.spec.ts` passes.
+- **notes:** Intent: "Drawer should be of match information like the matches route drawer". Traced: `/dashboard/team/schedule/[eventId]` → `page.tsx` → `dual-detail.tsx` / `tournament-detail.tsx` → `schedule/event-line-drawer.tsx`. T10/T12 already build that drawer from T7's `drawer-sections.tsx`; the remaining gap is that its facts come from the EVENT (event dates, no duration, no provider) where `MatchDrawer`'s come from the match. Keep the `context` list ("This dual" / "<player>'s run") — it does the Matches drawer's "Schedule" record row's job. Court stays `event.surface` (don't widen `EntryMatch` for a court type). A line with no match yet is unchanged: plain `h2` title + outcome chip, event dates, no snapshot, footer from `lineAction`. Doubles keep the grey score-only strip. Read `.skills/advantage-analytics-design/SKILL.md` and `reference/tables.md` § Peek Drawer "Match body" first.
+
+## T23 · The event drawer's failed analysis and footer follow the Matches drawer
+
+- **status:** todo
+- **model:** opus
+- **needs:** T22
+- **files:** src/components/dashboard/schedule/event-line-drawer.tsx (footer :221-258, `AnalysisNotice` :333), src/components/dashboard/matches/match-drawer.tsx (`RetryButton` :457), src/components/dashboard/matches/drawer-sections.tsx, tests/fixtures/schedule-dual-outcomes-data.ts, tests/schedule-dual-outcomes.spec.ts, tests/schedule-tournament-outcomes.spec.ts (guess)
+- **done when:**
+  - [ ] `RetryButton` is defined once (exported from `drawer-sections.tsx` or `match-drawer.tsx`) and both drawers render that one definition. For a played line whose `status` is `"failed"`, `EventLineDrawer` passes `failNote={played.failNote}` and `canRetry={canEdit && Boolean(played.jobId)}` to `AnalysisNotice`, and renders `RetryButton` in the footer under the same condition.
+  - [ ] The footer follows `MatchDrawer`'s `continueHref` rule: with a played match and no follow-up, "View match" is the only footer control and uses `advButton("primary", "md")`; when a follow-up applies (the singles "Add video", the tournament's next-round "Add result", or Retry) that follow-up is the one primary and "View match" drops to `advButton("ghost", "md")`. No drawer state renders two primaries.
+  - [ ] Dual harness spec: a singles fixture line with a failed match and a `failNote` shows the note inside the drawer's `role="alert"` and a "Retry" button for the coach viewer; under `?viewer=player` it shows neither and still shows "View match". A scored singles line without video shows "Add video" as the primary and "View match" not primary. Opening S1–D3 in turn, no footer holds more than one element carrying the primary variant's background class (read the exact class from `src/lib/ui/adv-button.ts` ~:60).
+  - [ ] Tournament harness spec: with `canEdit`, the R16 drawer shows the next-round "Add result" as the primary and "View match" as ghost; `window.actionCalls` stays `[]`.
+  - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/schedule-dual-outcomes.spec.ts tests/schedule-tournament-outcomes.spec.ts tests/drawer-sections.spec.ts tests/matches-drafts.spec.ts tests/schedule-drawer-actions.spec.ts` passes.
+- **notes:** Author's ruling (2026-09-23): follow the shipped `MatchDrawer` ("View match" primary, ghost when a follow-up takes the primary), not `tables.md`'s always-ghost "Open match" — this also settles T21 follow-up 1. Retry POSTs `/api/splitstep/jobs/<jobId>/resubmit`; the harness needs a `fetch` stub, or assert presence only. `EntryMatch` has no uploader field, so gate on `canEdit` and let the server refuse anyone else (T10's precedent). Doubles lines keep "Edit result"/"Add result" as their one primary.
+
+## T24 · Tournament table tracks: Matches' Date/Result widths, no crushed columns beside the drawer
+
+- **status:** todo
+- **model:** opus
+- **files:** src/components/dashboard/schedule/tournament-detail.tsx (`GRID` :79, `EntryHead` :520, `MatchTableRow` :628), src/components/dashboard/schedule/event-table.tsx (`EventTable` :345), src/components/dashboard/matches/match-list-layout.ts (`RESULT_COL` :22), tests/schedule-tournament-outcomes.spec.ts (guess)
+- **done when:**
+  - [ ] The tournament `GRID`'s Date track is `DATE_COL` and its Result track is `RESULT_COL`, both imported from `matches/match-list-layout.ts` (`RESULT_COL` newly exported; the Matches grids keep using it), so they are the Matches table's 72px/60px; `56px`/`52px` no longer appear in `tournament-detail.tsx`. The docblock above `GRID` states why each track has its width.
+  - [ ] `EventTable` takes an optional min-inner-width class and, when given, wraps the header row and rows in one `overflow-x-auto` region carrying it. The tournament passes a width at least the sum of its tracks' minimums plus five 16px gaps. The dual page passes none, so its markup is unchanged and `tests/schedule-dual-outcomes.spec.ts` passes untouched.
+  - [ ] A spec in `tests/schedule-tournament-outcomes.spec.ts` at viewport 1280×800, run once with the R16 drawer closed and once open, asserts: every `columnheader` has `scrollWidth <= clientWidth` (no clipped heading, "Round" included); every row's Score cell left x equals the "Score" header's left x within 1px; the "Date" header's width is 72±1px in both states.
+  - [ ] Column headers stay exactly `["Date","Round","Opponent","Result","Score","Analysis"]`; the existing `span.mono` → `["Q1","R16","QF"]` assertion still holds; no Round cell overflows (`scrollWidth <= clientWidth`).
+  - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/schedule-tournament-outcomes.spec.ts tests/schedule-dual-outcomes.spec.ts tests/event-table.spec.ts` passes.
+- **notes:** Apply /impeccable layout: read `/Users/cjgimena/.claude/skills/impeccable/reference/layout.md`, run its scan (`/Users/cjgimena/.claude/skills/impeccable/scripts/impeccable detect --json --scope layout src/components/dashboard/schedule/tournament-detail.tsx`), and write the spatial thesis into the `GRID` docblock. The DS binds over taste: `tables.md` rule 1 — Date leads at 72px, Result sized to its widest content (60px, not the clipping 52px). Commit `d233f439` deliberately made Opponent and Analysis share spare width as `1fr` to match the Matches team grid; keep that unless the layout pass argues otherwise. `tables.md`'s "exactly one fluid cell" line is contradicted by the shipped team Matches grid, so it is not a criterion. `EntryHead`'s right cluster (W–L, finish) is the layout pass's call. The dual page's 52px Result has the same clipping risk — separate follow-up.
+
+## T25 · One skeleton primitive family, a guard spec, and the DS/Carbon rules written down
+
+- **status:** todo
+- **model:** opus
+- **files:** src/components/dashboard/loading/pending.tsx, src/components/dashboard/loading/page-skeletons.tsx, src/components/ui/skeleton.tsx (delete), .skills/advantage-analytics-design/reference/empty-and-loading.md, tests/skeleton-primitives.spec.ts (new) (guess)
+- **done when:**
+  - [ ] `pending.tsx` exports `PendingBar`, `PendingRegion` and a new `PendingFrame` — the page-level wrapper now inlined as `Frame` in `page-skeletons.tsx`: `role="status"`, `aria-label`, `w-full flex-1 bg-[var(--surface-card)]`, and an `aria-hidden` inner carrying `motion-safe:animate-pulse`. `page-skeletons.tsx` defines no `Bar` or `Frame` of its own, builds on these, and its export names are unchanged, so every `loading.tsx` still resolves.
+  - [ ] `src/components/ui/skeleton.tsx` is deleted and `grep -rn "ui/skeleton" src` returns nothing.
+  - [ ] `tests/skeleton-primitives.spec.ts` scans `src/**/*.{ts,tsx}` and asserts: `--surface-skeleton` appears only in `pending.tsx`, `src/styles/design-system/colors.css` and a `LEGACY` array listing exactly the files that still carry it at this commit; every `animate-pulse` is written `motion-safe:animate-pulse` outside `LEGACY` files; no `animate-spin` appears in `src/components/dashboard/loading/**` or any `src/app/**/loading.tsx`, except `page-skeletons.tsx` while it holds `SimplePageLoader` (listed with a comment naming T34).
+  - [ ] `empty-and-loading.md` § Loading Skeleton no longer shows `bg-[#F0F0F0] rounded animate-pulse`; it names the three primitives in `pending.tsx`, the `--surface-skeleton` token and `motion-safe:animate-pulse`, and adds a short "Carbon and this system" list: skeletons for container and page loads, mirroring the loaded layout, known chrome rendered as real text; the spinner only for blocking actions and inline button states; pulse, where Carbon shimmers; a token, never hex; one `role="status"` per region.
+  - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/skeleton-primitives.spec.ts tests/match-report-pending.spec.ts tests/team-loading.spec.ts tests/home-empty-loading.spec.ts tests/event-route-loading.spec.ts` passes.
+- **notes:** Routing rule said fable (cross-cutting; defines the grammar every other skeleton task depends on); the author chose opus while Fable is at its limit. Carbon loading pattern: https://carbondesignsystem.com/patterns/loading-pattern/. The DS outranks it (`.skills/advantage-analytics-design/SKILL.md` precedence; `.claude/skills/widget-states/SKILL.md`). They agree: skeletons for containers and page loads, mirroring final structure, showing what is known, never a skeleton for empty ("A skeleton is a promise"). Where they differ the DS wins: pulse not shimmer, the `--surface-skeleton` token not the stale `#F0F0F0`, no spinner inside a card. Today there are three competing primitive sets: `ui/skeleton.tsx` (unused), `page-skeletons.tsx`'s local `Bar`/`Frame`, and `pending.tsx`. T26–T34 each remove their files from `LEGACY`. Behaviour-neutral: move, don't restyle.
+
+## T26 · The Add result page's skeleton mirrors the score flow
+
+- **status:** todo
+- **model:** opus
+- **needs:** T25
+- **files:** src/components/dashboard/loading/score-flow-pending.tsx (new), src/app/dashboard/team/schedule/[eventId]/score/loading.tsx, src/components/dashboard/schedule/score-only-flow.tsx (export the title copy; `CONTENT_CLS` :76), tests/score-flow-pending.spec.ts (new) (guess)
+- **done when:**
+  - [ ] `src/app/dashboard/team/schedule/[eventId]/score/loading.tsx` default-exports `ScoreFlowPending` and no longer references `WizardPageSkeleton`.
+  - [ ] `ScoreFlowPending` mirrors `ScoreOnlyFlow` top to bottom: the real `StepIndicator currentStep={0} totalSteps={1}`; a row with `PinnedLineBar`'s classes (`h-9 border-b border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px]`) holding bars where the event link and "player vs opponent" sit; the `CONTENT_CLS` column at `pt-16 pb-10` with an eyebrow bar, the real `<h1>` "The result." taken from a constant exported by `score-only-flow.tsx`, and a lede bar; bars in `ScoreBlock`'s geometry (two side rows of set cells); a hairline-topped `h-16` footer with bars where Cancel, the status slot and the primary sit.
+  - [ ] `tests/score-flow-pending.spec.ts` renders it to static markup through `tests/fixtures/vm-modules`' `createLoader` (like `tests/match-report-pending.spec.ts`) and asserts: exactly one `role="status"`, labelled "Loading result form"; the markup contains "The result."; no `<button`, `<a ` or `<input`; no `#` hex colour; every element carrying `--surface-skeleton` sits under an `aria-hidden="true"` ancestor and carries `motion-safe:animate-pulse`.
+  - [ ] It is built only on `PendingFrame`/`PendingBar`/`PendingRegion`, with no local bar component, so `tests/skeleton-primitives.spec.ts` passes without adding to `LEGACY`.
+  - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/score-flow-pending.spec.ts tests/skeleton-primitives.spec.ts tests/event-route-loading.spec.ts tests/schedule-score-flow-outcomes.spec.ts` passes.
+- **notes:** "Add Result page" traced: the event pages' "Add result" (`src/lib/schedule/dual-primary-action.ts`, `event-line-drawer.tsx`) → `/dashboard/team/schedule/[eventId]/score` → `score/page.tsx` → `schedule/score-only-flow.tsx`. Today it loads with `WizardPageSkeleton` (four form rows, no pinned bar), so the page jumps when it lands. Precedent: `src/components/dashboard/loading/event-wizard-pending.tsx` — fixed copy renders as itself, only loaded parts pulse. Apply /impeccable layout (`/Users/cjgimena/.claude/skills/impeccable/reference/layout.md`). Carbon: https://carbondesignsystem.com/patterns/loading-pattern/. "Line n of N" and the dual-vs-tournament lede can't be known in `loading.tsx`, so they stay bars. The page's crumb reads "Add score" while entry points read "Add result" — not changed here.
+
+## T27 · The upload wizard's skeleton mirrors its first step (team upload + new match)
+
+- **status:** todo
+- **model:** opus
+- **needs:** T25, T26
+- **files:** src/components/dashboard/loading/upload-wizard-pending.tsx (new), src/app/dashboard/team/upload/loading.tsx, src/app/dashboard/matches/new/loading.tsx, src/components/dashboard/loading/page-skeletons.tsx (`WizardPageSkeleton` :184, delete), tests/upload-wizard-pending.spec.ts (new) (guess; the opening step is read from `useUploadMatchWizard.ts` / `wizard-view.ts` `STEP_CONFIG`)
+- **done when:**
+  - [ ] `UploadWizardPending({ pinned }: { pinned: boolean })` exists; `team/upload/loading.tsx` renders it with `pinned`, `matches/new/loading.tsx` without. `WizardPageSkeleton` is deleted and `grep -rn "WizardPageSkeleton" src` returns nothing.
+  - [ ] It mirrors `UploadMatchFlow` on the step it opens on: the real `StepIndicator` with that step's index and the wizard's step count; the 36px pinned-bar row (`PinnedLineBar`'s classes) only when `pinned`; `WizardShell`'s `CONTENT_CLS` column at `pt-16` with that step's title and lede as real text from `STEP_CONFIG`; the step body as bars in that step component's layout; `WizardShell`'s 64px hairline-topped footer.
+  - [ ] `tests/upload-wizard-pending.spec.ts` (static markup, `createLoader`) asserts the T26 contract for both variants (one `role="status"`, no `<button`/`<a `/`<input`, no hex, bars `aria-hidden` and `motion-safe:`), that the pinned variant contains the `h-9` `bg-[var(--surface-subtle)]` row and the unpinned one does not, and that both contain the step's title text.
+  - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/upload-wizard-pending.spec.ts tests/skeleton-primitives.spec.ts tests/match-video-wizard-route.spec.ts` passes.
+- **notes:** "Upload it Instead page" traced: `score-only-flow.tsx:644` "Upload it instead", href from `uploadInsteadHref()` (`src/lib/schedule/score-seed.ts:256`) → `/dashboard/team/upload?entry=<id>` → `upload/page.tsx`'s `?entry=` branch (:170-217) → `UploadMatchFlow` with a preset. A `loading.tsx` cannot read `searchParams`, and `team/upload` serves four branches; the pinned wizard is what every in-app link lands on, so that is the shape to mirror. The bare staff queue list will briefly show the wizard shape — accepted. `needs: T26` only because T26 removes the score page's use of `WizardPageSkeleton` before this task deletes it. Apply /impeccable layout (`/Users/cjgimena/.claude/skills/impeccable/reference/layout.md`). Carbon: https://carbondesignsystem.com/patterns/loading-pattern/.
+
+## T28 · The upload page on an event line shows the event's trail
+
+- **status:** todo
+- **model:** opus
+- **files:** src/components/dashboard/schedule/event-header-slot.tsx, src/app/dashboard/team/upload/page.tsx (`?entry=` branch :170-217), tests/event-header-trail.spec.ts (new), tests/upload-page-trail.spec.ts (new) (guess)
+- **done when:**
+  - [ ] `event-header-slot.tsx` exports a pure `eventTrail({ eventId, name, kind, leaf })` returning the crumb array, and `EventHeaderSlot` renders from it. `tests/event-header-trail.spec.ts` asserts a dual with leaf "Upload video" gives `[{label:"Schedule",href:"/dashboard/team/schedule"},{label:"vs Stanford",href:"/dashboard/team/schedule/e1"},{label:"Upload video"}]`, a tournament's crumb is its bare name, and with no leaf the event crumb has no `href`.
+  - [ ] The `?entry=` branch of `upload/page.tsx` returns `<EventHeaderSlot eventId={group.event.id} name={group.event.name} kind={group.event.kind} leaf="Upload video" />` beside `<UploadMatchFlow preset={preset} />`, composed as `score/page.tsx` does. The bare, `?draft=` and `?match=`-only branches publish no slot and keep the static "Upload video" crumb (`src/lib/dashboard/nav.ts:163` `UNLISTED`).
+  - [ ] `tests/upload-page-trail.spec.ts` transpiles `upload/page.tsx` with mocked modules (the `tests/event-route-loading.spec.ts` pattern) and asserts a staff request with `?entry=` naming a singles entry in the mocked `getUploadQueue` returns a tree containing the mocked `EventHeaderSlot` with exactly those four props, while a bare staff request and a `?match=`-only request contain no `EventHeaderSlot`.
+  - [ ] `src/app/dashboard/header.tsx` is not in the diff. `npm run lint && npm run typecheck` clean; `npm test -- tests/event-header-trail.spec.ts tests/upload-page-trail.spec.ts tests/schedule-leaf.spec.ts tests/event-route-loading.spec.ts tests/upload-eligibility.spec.ts` passes.
+- **notes:** Today the header draws only "Upload video" for `/dashboard/team/upload`. The pages beside it under one event (`[eventId]`, `/edit`, `/score`) publish "Schedule › vs Stanford (› Leaf)" through `EventHeaderSlot` (`header-slot.tsx`). An upload aimed at an event line belongs with them: "Schedule › vs Stanford › Upload video" for a dual, "Schedule › <Tournament> › Upload video" for a tournament. The trail shows where the page sits, not how you got there — not "… › Add score › Upload video". `header.tsx`'s `EVENT_PAGE` comment forbids another render-time path check, so the static crumb shows for one frame before the slot lands; accept that. The single-match branch's trail is out of scope.
+
+## T29 · Schedule event and single-match skeletons mirror their pages
+
+- **status:** todo
+- **model:** opus
+- **needs:** T25
+- **files:** src/components/dashboard/loading/page-skeletons.tsx (`EventTableSkeleton` :132, `EventPageSkeleton` :98), src/app/dashboard/team/schedule/single/[matchId]/loading.tsx, src/components/dashboard/schedule/event-line-drawer.tsx (`SnapshotPending` :359), tests/schedule-skeletons.spec.ts (new), tests/skeleton-primitives.spec.ts (guess)
+- **done when:**
+  - [ ] `EventTableSkeleton` mirrors `event-table.tsx`'s `EventTable`: inside the `surface-card px-6` card, a header row carrying a hairline `border-b` with six label bars on a six-track grid, one group-head bar, then nine `h-12` rows with no border of their own. `not-last:border-b` is gone. Header, strip and toolbar spacing stay `EventPageLayout`'s.
+  - [ ] `EventPageSkeleton` is renamed `SingleMatchPending` (T13 follow-up 1) and mirrors `schedule/single-detail.tsx`: an eyebrow bar; a 30px title bar with a 40px score bar at the right; a facts row; a hairline-topped row at `mt-[26px] pt-3.5`; a `max-w-[640px]` subtle box shape; a `max-w-[560px]` section. No 300px rail and no nine-row list. `single/[matchId]/loading.tsx` exports it.
+  - [ ] `SnapshotPending` in `event-line-drawer.tsx` is built on `PendingRegion`/`PendingBar`, keeping its real "Snapshot" eyebrow, and `event-line-drawer.tsx` leaves `LEGACY` in `tests/skeleton-primitives.spec.ts`.
+  - [ ] `tests/schedule-skeletons.spec.ts` (static markup) asserts the T26 contract for both skeletons; inside `EventTableSkeleton`'s table card exactly one element carries `border-b` (the header row); `SingleMatchPending` has no element with a `grid-cols` class containing `300px`.
+  - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/schedule-skeletons.spec.ts tests/skeleton-primitives.spec.ts tests/schedule-dual-outcomes.spec.ts tests/schedule-tournament-outcomes.spec.ts` passes.
+- **notes:** A `loading.tsx` can't know dual (three strip cells) vs tournament (four); draw the dual's three. If `single-detail.tsx`'s "From the report" box renders conditionally, draw its shape only if always present — a skeleton must never promise something that may not arrive. The Schedule list's `SchedulePageSkeleton` is already on `pending.tsx`; leave it. Apply /impeccable layout (`/Users/cjgimena/.claude/skills/impeccable/reference/layout.md`). Carbon: https://carbondesignsystem.com/patterns/loading-pattern/.
+
+## T30 · In-component loading states: the edit-match dialog and the search palette
+
+- **status:** todo
+- **model:** opus
+- **needs:** T25
+- **files:** src/components/dashboard/matches/match-actions/edit-match-dialog.tsx (:756), src/components/dashboard/loading/edit-match-pending.tsx (new), src/components/dashboard/search/search-command-palette.tsx (:922-927), tests/edit-match-pending.spec.ts (new), tests/skeleton-primitives.spec.ts (guess)
+- **done when:**
+  - [ ] While `!match && !loadError`, `EditMatchDialog` renders `<EditMatchPending />` — a `PendingRegion` labelled "Loading match" whose bars sit where the form's field rows render once loaded. `Loader2` and "Reading the match…" are gone from that branch. The Save button's inline `Loader2` (:734) stays.
+  - [ ] The palette's three loading rows are one `PendingRegion` labelled "Loading results" built from `PendingBar`s; no bare `animate-pulse` remains in `search-command-palette.tsx`, and it leaves `LEGACY`.
+  - [ ] `tests/edit-match-pending.spec.ts` (static markup) asserts the T26 contract for `EditMatchPending`, and that its bar-row count equals the number of field rows the form renders (a constant exported beside the form, or counted from its field list).
+  - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/edit-match-pending.spec.ts tests/edit-match-dialog-logic.spec.ts tests/skeleton-primitives.spec.ts` passes.
+- **notes:** Every other `animate-spin`/`Loader2` in `src/` is an inline action (Save/Retry/Switching buttons, workspace-row switch, attach-line search spinner, file-drop busy glyph, `vertical-steps.tsx` current step) — Carbon's inline-loading pattern, so they stay. Only the edit dialog's first load is content arriving. `team/page.tsx:143`'s `region("Getting set up", null, …)` stays null: a set-up team has no line, so a skeleton would promise one that never arrives. Carbon: https://carbondesignsystem.com/patterns/loading-pattern/.
+
+## T31 · Matches and match report skeleton bars on the shared primitives
+
+- **status:** todo
+- **model:** sonnet
+- **needs:** T25
+- **files:** src/components/dashboard/matches/matches-skeleton.tsx, src/components/dashboard/matches/matches-title-row.tsx (:62-64), src/components/dashboard/loading/film-frame-pending.tsx, src/components/dashboard/loading/match-report-pending.tsx, tests/skeleton-primitives.spec.ts
+- **done when:**
+  - [ ] None of the four files defines its own bar component or writes `bg-[var(--surface-skeleton)]`; bars are `PendingBar` and status wrappers `PendingRegion`/`PendingFrame`, keeping each bar's size classes and each region's `aria-label`.
+  - [ ] None of the four files is listed in `LEGACY` in `tests/skeleton-primitives.spec.ts`.
+  - [ ] No other markup changes: `tests/match-report-pending.spec.ts`'s assertions pass unedited.
+  - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/skeleton-primitives.spec.ts tests/match-report-pending.spec.ts tests/matches-drafts.spec.ts` passes.
+- **notes:** Mechanical swap: move, don't restyle. `PendingBar` defaults to `h-3 w-full`; check that `cn` lets a passed size class override the default before relying on it.
+
+## T32 · Home, team, header and event-wizard skeleton bars on the shared primitives
+
+- **status:** todo
+- **model:** sonnet
+- **needs:** T25
+- **files:** src/components/dashboard/loading/home-skeleton.tsx, src/components/dashboard/home/home-ai-insight.tsx (:134-136), src/components/dashboard/loading/event-wizard-pending.tsx (local `Bar` :35), src/app/dashboard/header.tsx (match-crumb bars :428-440), src/app/dashboard/team/roster/[playerId]/loading.tsx (:101), tests/skeleton-primitives.spec.ts
+- **done when:**
+  - [ ] None of the five files defines its own bar or writes the skeleton token or `animate-pulse` directly; bars are `PendingBar`, wrappers `PendingRegion`/`PendingFrame`. The header's three match-crumb bars sit in one `PendingRegion` labelled "Loading breadcrumb" and no longer use `bg-[var(--ink-100)]`; the roster profile's bars no longer use `--color-surface-muted`.
+  - [ ] None of the five files is listed in `LEGACY`.
+  - [ ] No other markup changes: `tests/home-empty-loading.spec.ts` and `tests/team-loading.spec.ts` pass unedited.
+  - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/skeleton-primitives.spec.ts tests/home-empty-loading.spec.ts tests/team-loading.spec.ts tests/schedule-static-copy.spec.ts` passes.
+- **notes:** Mechanical swap. The header crumb and roster profile are the two off-token skeletons in `src/` (ink-100, surface-muted). Keep sizes and labels.
+
+## T33 · Settings skeletons on the shared primitives
+
+- **status:** todo
+- **model:** sonnet
+- **needs:** T25
+- **files:** src/components/dashboard/loading/settings-pending.tsx, tests/settings-pending.spec.ts (new), tests/skeleton-primitives.spec.ts
+- **done when:**
+  - [ ] `settings-pending.tsx` defines no bar component of its own and does not write `bg-[var(--surface-skeleton)]`; it builds on `PendingBar`/`PendingRegion`/`PendingFrame`, keeping every size class and label.
+  - [ ] `settings-pending.tsx` is not in `LEGACY`.
+  - [ ] `tests/settings-pending.spec.ts` renders each of `SettingsAccountPending`, `SettingsPlanPending`, `SettingsPreferencesPending`, `SettingsProfilePending`, `SettingsTeamDetailPending`, `SettingsTeamsPending` and `SettingsUsagePending` to static markup and asserts the T26 contract for each (one `role="status"` per region, no `<button`/`<a `/`<input`, no hex, bars `aria-hidden` and `motion-safe:`).
+  - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/settings-pending.spec.ts tests/skeleton-primitives.spec.ts` passes.
+- **notes:** The file is ~1021 lines; change only the bar primitive and its wrappers. If an export has several regions, assert that exact `role="status"` count rather than one.
+
+## T34 · The dashboard root loading fallback becomes a skeleton, not a spinner
+
+- **status:** todo
+- **model:** sonnet
+- **needs:** T25
+- **files:** src/app/dashboard/loading.tsx, src/components/dashboard/loading/page-skeletons.tsx (`SimplePageLoader` :223), tests/skeleton-primitives.spec.ts, tests/dashboard-page-pending.spec.ts (new)
+- **done when:**
+  - [ ] `src/app/dashboard/loading.tsx` default-exports `DashboardPagePending`; `SimplePageLoader` is deleted, `page-skeletons.tsx` contains no `animate-spin`, and the spin exception in `tests/skeleton-primitives.spec.ts` is removed.
+  - [ ] `DashboardPagePending` uses `ComingSoonPage`'s frame (`src/components/dashboard/coming-soon.tsx:53-54`: `bg-white`, `max-w-screen-2xl px-14 pt-5 pb-8`) with one bar at the `text-display` `<h1>`'s height and nothing below it.
+  - [ ] `tests/dashboard-page-pending.spec.ts` (static markup) asserts exactly one `role="status"` labelled "Loading page", exactly one skeleton bar, and no `<button`/`<a `.
+  - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/dashboard-page-pending.spec.ts tests/skeleton-primitives.spec.ts` passes.
+- **notes:** This boundary catches every dashboard route without its own `loading.tsx`: Ask, Help, Opponents, Statistics, Team Ask, Team Statistics and the settings redirects. Carbon keeps spinners for blocking operations; a page load gets a skeleton. The one shape those pages share is the h1, so draw only the h1 — more would invent a layout. Confirm `help/page.tsx` opens with the same frame and h1; if not, draw the h1 bar at the shared x only.
