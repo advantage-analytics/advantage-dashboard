@@ -27,6 +27,7 @@ import type { CreatedMatch, UploadState } from "./upload-progress";
 import { formatFileSize } from "./utils";
 import { addVideoHref } from "@/lib/matches/add-video-href";
 import { createClient } from "@/lib/supabase/client";
+import { useLeaveGuard } from "@/components/dashboard/leave-guard-context";
 
 /**
  * Where finishing lands: what is happening now, the match it is happening to,
@@ -74,6 +75,10 @@ export function UploadMatchSuccess({
       : null,
   );
   const view = successView(match, upload, removedError, stats);
+  // The chrome's links ask before leaving while this tab is still working —
+  // starting, uploading, handing off. This screen's own links do not: each
+  // is a deliberate exit it offers.
+  useLeaveGuard(view.busy);
   const matchHref = `/dashboard/matches/${match.matchId}`;
   const backToEvent = preset !== null && preset.eventHref !== matchHref;
 

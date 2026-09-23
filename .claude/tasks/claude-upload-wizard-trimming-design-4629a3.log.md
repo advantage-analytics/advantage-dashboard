@@ -110,3 +110,13 @@ is the runner's. Newest entries at the bottom.
 
 1. The strip could say why a line was offered (name or score), so a score-only offer is easier to trust.
 2. After Detach the strip may not return if the restored opponent name no longer matches (accepted by the author).
+
+## T10 · Leave-mid-upload dialog on dashboard chrome links — done
+
+**gate:** mechanical GATE PASS (first run) · completion VERDICT: pass
+**changed:** New pure `leave-guard.ts` (`shouldAskBeforeLeaving`, `leaveConfirmLabel`) and `leave-guard-context.tsx` (`LeaveGuardProvider` with an armed count, `useLeaveGuard`, `useConfirmLeave`, `LeaveUploadDialog`), mounted in `dashboard-shell.tsx` inside `UnsavedChangesProvider`. `UploadMatchSuccess` arms it with `view.busy`. Sidebar main/bottom links, the profile footer ("your profile"), header breadcrumbs and account-menu Preferences/Usage/Help route through it; `RailItem.onClick` now receives the event. New `tests/upload-leave-guard.spec.ts`.
+**follow-ups:**
+
+1. Nobody has seen the dialog in a real browser yet (sidebar click mid-upload, account menu closing behind it).
+2. The profile footer's button reads "Go to your profile"; the viewer's name is the alternative.
+3. Still unguarded by design: browser Back/Forward, search palette, activity tray, workspace switcher, "Claim a team", and a sidebar click on a Settings page with unsaved changes.

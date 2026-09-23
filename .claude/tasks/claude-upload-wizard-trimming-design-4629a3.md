@@ -139,7 +139,7 @@ ready).
 
 ## T10 · Leave-mid-upload dialog on dashboard chrome links
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/leave-guard-context.tsx (new: `LeaveGuardProvider`, `useLeaveGuard(armed)`, `useConfirmLeave()`, and a presentational `LeaveUploadDialog`), src/components/dashboard/leave-guard.ts (new, pure: `shouldAskBeforeLeaving`, `leaveConfirmLabel`), src/components/dashboard/dashboard-shell.tsx (mount the provider inside `UnsavedChangesProvider`), src/components/dashboard/matches/new-match-wizard/UploadMatchSuccess.tsx (arm with `view.busy`), src/components/dashboard/sidebar/rail-item.tsx (`onClick` must receive the event so it can `preventDefault`), src/components/dashboard/app-sidebar.tsx (main and bottom `RailItem`s and the profile footer `Link` ~160), src/app/dashboard/header.tsx (breadcrumb `Link` ~460 and the account menu `Link`s ~627–656), src/components/ui/confirm-dialog.tsx (import only), tests/upload-leave-guard.spec.ts (new)
 - **done when:**
