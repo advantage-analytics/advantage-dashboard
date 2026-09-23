@@ -242,3 +242,22 @@ is the runner's. Newest entries at the bottom.
 1. The dual page's 52px Result track can clip the same way (a 48px heading, plus "Not played"). It could use `RESULT_COL` and `minWidth` the way the tournament now does.
 2. A 1024px spec with the drawer open would pin the table's sideways scroll. This was checked once by hand but not kept.
 3. `tables.md` says "exactly one fluid cell per table", but the Matches team grid and the tournament table both break that. Reconcile the rule in the design skill.
+
+## T25 · One skeleton primitive family, a guard spec, and the DS/Carbon rules written down — done
+
+**gate:** mechanical GATE PASS (second run; the first failed only on live-DB specs, teams-management and viz-bands-rls among them) · completion `VERDICT: pass`
+
+**changed:**
+
+- `pending.tsx` adds `PendingFrame`, the page-level status wrapper. Its inner layer is `aria-hidden` and pulses with `motion-safe`. The bars inside it stop pulsing on their own, so they don't dim twice as deep. It takes an optional `pulse` prop.
+- `PendingBar` gains a `data-pending-bar` attribute.
+- `page-skeletons.tsx` builds on these instead of a local `Bar`/`Frame`. Its export names are unchanged.
+- `ui/skeleton.tsx` is deleted.
+- `tests/skeleton-primitives.spec.ts` keeps the skeleton token and bare `animate-pulse` to `LEGACY` files. It keeps `animate-spin` out of loading files, except `page-skeletons.tsx` until T34. It fails on a `LEGACY` entry that's no longer needed, so each later task must delete its own line. `LEGACY` maps to T29–T33.
+- `empty-and-loading.md` § Loading Skeleton now names the primitives, the token and the motion-safe pulse, and adds the "Carbon and this system" list.
+
+**follow-ups:**
+
+1. T26 and T27 should use `PendingFrame pulse={false}` so real copy, such as the "The result." heading, doesn't pulse; only the bars should.
+2. `.skills/advantage-analytics-design/reference/foundations.md:108` still lists `bg-skeleton` as `bg-[#F0F0F0]`. It should point at `--surface-skeleton`.
+3. SKILL.md's routing row for `empty-and-loading.md` could mention the primitives and the guard spec.

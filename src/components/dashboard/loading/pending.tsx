@@ -2,16 +2,20 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * The two skeleton primitives every `*Pending` component is built from.
+ * The three skeleton primitives every `*Pending` component is built from —
+ * the only place in `src/` that writes the `--surface-skeleton` token
+ * (`tests/skeleton-primitives.spec.ts` holds that).
  *
  * `PendingBar` is one pulsing bar in the skeleton token; it carries its own
  * `aria-hidden`, so a bar dropped anywhere is already silent. `PendingRegion`
  * is the one `role="status"` per loading region (Carbon: one status message
  * per container, never one per bar) with everything visual under an
- * `aria-hidden` wrapper.
+ * `aria-hidden` wrapper. `PendingFrame` is the same contract for a whole
+ * route's `loading.tsx`: it fills the page's white ground and, by default,
+ * pulses its contents as one.
  *
  * Their own file so a route's loading chunk (the match report's, say) pulls
- * in two tiny components and not the team frames `team-home-skeleton.tsx`
+ * in three tiny components and not the team frames `team-home-skeleton.tsx`
  * composes around them.
  */
 export function PendingBar({ className = "w-full" }: { className?: string }) {
@@ -22,6 +26,7 @@ export function PendingBar({ className = "w-full" }: { className?: string }) {
         "block h-3 max-w-full rounded-[3px] bg-[var(--surface-skeleton)] motion-safe:animate-pulse",
         className,
       )}
+      data-pending-bar=""
     />
   );
 }
@@ -42,6 +47,46 @@ export function PendingRegion({
   return (
     <div role="status" aria-label={`Loading ${label}`} className={className}>
       <div aria-hidden="true" className={innerClassName}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A whole page's loading state. With `pulse` (the default) the hidden inner
+ * pulses as one and stills the bars' own pulse, so a bar never compounds to
+ * double depth. Pass `pulse={false}` when the frame holds real text the page
+ * already knows (a title, a step name): that text must render as itself, and
+ * only the bars — which pulse on their own — stand for what is arriving.
+ */
+export function PendingFrame({
+  label,
+  className,
+  pulse = true,
+  children,
+}: {
+  label: string;
+  /** On the status element, after its `w-full flex-1` white ground. */
+  className?: string;
+  pulse?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="status"
+      aria-label={`Loading ${label}`}
+      className={cn("w-full flex-1 bg-[var(--surface-card)]", className)}
+    >
+      <span className="sr-only">{`Loading ${label}`}</span>
+      <div
+        aria-hidden="true"
+        className={cn(
+          "h-full",
+          pulse &&
+            "motion-safe:animate-pulse [&_[data-pending-bar]]:animate-none",
+        )}
+      >
         {children}
       </div>
     </div>

@@ -1,49 +1,17 @@
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+
+import { PendingBar, PendingFrame } from "./pending";
 
 /** Quiet placeholders only: no fabricated values, charts, or focusable controls. */
-function Bar({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn(
-        "h-3 max-w-full rounded-[3px] bg-[var(--surface-skeleton)]",
-        className,
-      )}
-    />
-  );
-}
-
-function Frame({
-  children,
-  label,
-  className,
-}: {
-  children: ReactNode;
-  label: string;
-  className?: string;
-}) {
-  return (
-    <div
-      role="status"
-      aria-label={label}
-      className={cn("w-full flex-1 bg-[var(--surface-card)]", className)}
-    >
-      <span className="sr-only">{label}</span>
-      <div aria-hidden="true" className="h-full motion-safe:animate-pulse">
-        {children}
-      </div>
-    </div>
-  );
-}
 
 function Title() {
   return (
     <div className="flex items-end justify-between gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-3">
-        <Bar className="h-9 w-52" />
-        <Bar className="w-64" />
+        <PendingBar className="h-9 w-52" />
+        <PendingBar className="w-64" />
       </div>
-      <Bar className="h-8 w-24 shrink-0" />
+      <PendingBar className="h-8 w-24 shrink-0" />
     </div>
   );
 }
@@ -56,9 +24,9 @@ function Kpis({ count = 5 }: { count?: number }) {
           key={i}
           className="flex min-w-0 flex-col gap-3 border-t border-[var(--border-hairline)] pt-3"
         >
-          <Bar className="h-2 w-20" />
-          <Bar className="h-8 w-16" />
-          <Bar className="h-2 w-24" />
+          <PendingBar className="h-2 w-20" />
+          <PendingBar className="h-8 w-16" />
+          <PendingBar className="h-2 w-24" />
         </div>
       ))}
     </div>
@@ -73,9 +41,9 @@ function Rows({ count = 5 }: { count?: number }) {
           key={i}
           className="grid h-[52px] grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-5"
         >
-          <Bar className={i % 2 ? "w-32" : "w-40"} />
-          <Bar className="w-20" />
-          <Bar className="w-14" />
+          <PendingBar className={i % 2 ? "w-32" : "w-40"} />
+          <PendingBar className="w-20" />
+          <PendingBar className="w-14" />
         </div>
       ))}
     </div>
@@ -85,7 +53,7 @@ function Rows({ count = 5 }: { count?: number }) {
 function Section({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-4 border-t border-[var(--border-hairline)] pt-4">
-      <Bar className="h-2 w-28" />
+      <PendingBar className="h-2 w-28" />
       {children}
     </div>
   );
@@ -97,13 +65,13 @@ export { MatchesPagePending as MatchesPageSkeleton } from "./matches-page-pendin
 
 export function EventPageSkeleton() {
   return (
-    <Frame label="Loading event">
+    <PendingFrame label="event">
       <div className="flex flex-col gap-6 px-12 pt-[26px] pb-8">
         <Title />
         <div className="flex gap-5">
-          <Bar className="w-28" />
-          <Bar className="w-20" />
-          <Bar className="w-20" />
+          <PendingBar className="w-28" />
+          <PendingBar className="w-20" />
+          <PendingBar className="w-20" />
         </div>
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
           <Section>
@@ -119,7 +87,7 @@ export function EventPageSkeleton() {
           </div>
         </div>
       </div>
-    </Frame>
+    </PendingFrame>
   );
 }
 
@@ -131,15 +99,15 @@ export function EventPageSkeleton() {
  */
 export function EventTableSkeleton() {
   return (
-    <Frame label="Loading event">
+    <PendingFrame label="event">
       <div className="flex flex-col gap-8 px-14 pt-6 pb-7">
         <div className="flex flex-col gap-6">
           <div className="flex items-center justify-between gap-6">
             <div className="flex min-w-0 flex-1 flex-col gap-2">
-              <Bar className="h-8 w-60" />
-              <Bar className="w-72" />
+              <PendingBar className="h-8 w-60" />
+              <PendingBar className="w-72" />
             </div>
-            <Bar className="h-8 w-24 shrink-0" />
+            <PendingBar className="h-8 w-24 shrink-0" />
           </div>
           <div className="flex">
             {[0, 1, 2].map((i) => (
@@ -147,8 +115,8 @@ export function EventTableSkeleton() {
                 key={i}
                 className="flex flex-col gap-2 border-[var(--border-hairline)] pr-7 not-first:border-l not-first:pl-7"
               >
-                <Bar className="h-2 w-14" />
-                <Bar className="h-5 w-20" />
+                <PendingBar className="h-2 w-14" />
+                <PendingBar className="h-5 w-20" />
               </div>
             ))}
           </div>
@@ -156,11 +124,11 @@ export function EventTableSkeleton() {
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-4">
             <div className="flex gap-2">
-              <Bar className="h-7 w-14 rounded-full" />
-              <Bar className="h-7 w-20 rounded-full" />
-              <Bar className="h-7 w-20 rounded-full" />
+              <PendingBar className="h-7 w-14 rounded-full" />
+              <PendingBar className="h-7 w-20 rounded-full" />
+              <PendingBar className="h-7 w-20 rounded-full" />
             </div>
-            <Bar className="h-7 w-24" />
+            <PendingBar className="h-7 w-24" />
           </div>
           <div className="surface-card min-w-0 px-6 py-2">
             {Array.from({ length: 9 }, (_, i) => (
@@ -168,40 +136,40 @@ export function EventTableSkeleton() {
                 key={i}
                 className="grid h-12 grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-5 border-[var(--border-hairline)] not-last:border-b"
               >
-                <Bar className={i % 2 ? "w-32" : "w-40"} />
-                <Bar className={i % 3 ? "w-28" : "w-36"} />
-                <Bar className="w-16" />
-                <Bar className="w-12" />
+                <PendingBar className={i % 2 ? "w-32" : "w-40"} />
+                <PendingBar className={i % 3 ? "w-28" : "w-36"} />
+                <PendingBar className="w-16" />
+                <PendingBar className="w-12" />
               </div>
             ))}
           </div>
         </div>
       </div>
-    </Frame>
+    </PendingFrame>
   );
 }
 
 export function WizardPageSkeleton() {
   return (
-    <Frame label="Loading form">
+    <PendingFrame label="form">
       <div className="flex min-h-[calc(100vh-var(--header-h))] flex-col">
-        <Bar className="h-1 w-full rounded-none" />
+        <PendingBar className="h-1 w-full rounded-none" />
         <div className="mx-auto flex w-full max-w-[832px] flex-1 flex-col gap-9 px-14 pt-16 pb-16">
           <div className="flex flex-col gap-3">
-            <Bar className="h-2 w-20" />
-            <Bar className="h-9 w-80" />
-            <Bar className="w-96" />
+            <PendingBar className="h-2 w-20" />
+            <PendingBar className="h-9 w-80" />
+            <PendingBar className="w-96" />
           </div>
           <FormRows />
         </div>
         <div className="border-t border-[var(--border-hairline)]">
           <div className="mx-auto flex h-16 max-w-[832px] items-center justify-between px-14">
-            <Bar className="w-16" />
-            <Bar className="h-8 w-28" />
+            <PendingBar className="w-16" />
+            <PendingBar className="h-8 w-28" />
           </div>
         </div>
       </div>
-    </Frame>
+    </PendingFrame>
   );
 }
 
@@ -210,9 +178,9 @@ function FormRows() {
     <div className="flex flex-col gap-7">
       {[0, 1, 2, 3].map((i) => (
         <div key={i} className="flex flex-col gap-3">
-          <Bar className="h-2 w-24" />
+          <PendingBar className="h-2 w-24" />
           <div className="border-b border-[var(--border-hairline)] pb-3">
-            <Bar className={i % 2 ? "w-48" : "w-64"} />
+            <PendingBar className={i % 2 ? "w-48" : "w-64"} />
           </div>
         </div>
       ))}

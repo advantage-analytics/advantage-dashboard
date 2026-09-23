@@ -335,7 +335,7 @@ ready).
 
 ## T25 · One skeleton primitive family, a guard spec, and the DS/Carbon rules written down
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/loading/pending.tsx, src/components/dashboard/loading/page-skeletons.tsx, src/components/ui/skeleton.tsx (delete), .skills/advantage-analytics-design/reference/empty-and-loading.md, tests/skeleton-primitives.spec.ts (new) (guess)
 - **done when:**
