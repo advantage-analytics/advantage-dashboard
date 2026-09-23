@@ -85,7 +85,7 @@ ready).
 
 ## T6 · Grey "score only" fact strip on the dual facts step
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/schedule/static/dual-build-step.tsx, tests/schedule-static-copy.spec.ts (guess; `DualFactsStep` at `:850`, `screen("dual-build-step.tsx")` already bound to `step2` at `:545`)
 - **done when:**

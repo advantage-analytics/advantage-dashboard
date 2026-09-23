@@ -814,6 +814,12 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
     //   college doubles plays its own. Two labelled cells now.
     drawn(step2, "dual-build-step.tsx", '"Singles format"');
     drawn(step2, "dual-build-step.tsx", '"Doubles format"');
+    // T6: the grey fact strip under the format row — doubles is score only.
+    drawn(
+      step2,
+      "dual-build-step.tsx",
+      "Doubles lines record a score only. Statistics and video analysis are singles only for now.",
+    );
     // The doubles words ("One Set to 6", "8-Game Pro-Set") are
     // `doublesSetLabel()`'s, pinned in `tests/doubles-format.spec.ts`.
     drawn(facts, "event-fact-fields.tsx", "Tiebreak at ");

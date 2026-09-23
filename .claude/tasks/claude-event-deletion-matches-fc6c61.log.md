@@ -47,3 +47,8 @@ is the runner's. Newest entries at the bottom.
 1. `EventPreset.supportsVideo` is now written by `presetFor` and read by nothing in the wizard; dropping it touches schedule code (`entrySupportsVideo`) and wants its own pass.
 2. The `?match=` single-match preset (`singleMatchPreset`) carries no `discipline`; confirm `getTeamSingleMatch` can never return a doubles row, else that seam needs the same gate.
 3. T3's copy and `DOUBLES_UNSUPPORTED_REFUSAL` spell the same sentence in two places; one constant if they ever drift.
+
+## T6 · Grey "score only" fact strip on the dual facts step — done
+
+**gate:** mechanical GATE PASS on the second run (the first run failed four live-DB specs — admin RPCs, point bookmarks, owner name, seat counts — the shared-IP Supabase sign-in rate limit, unrelated to a static strip); completion `VERDICT: pass`.
+**changed:** `DualFactsStep` draws a grey fact strip under the Time / Singles format / Doubles format row on the wizard's `noteStripCls` with a lucide `Info` icon: bold "Doubles lines record a score only." then "Statistics and video analysis are singles only for now." Grey by the design rule (a fact, not a question); `warningStripCls` unused. Header comments on the step and the strip say why. `schedule-static-copy.spec.ts` asserts the sentence on step two.

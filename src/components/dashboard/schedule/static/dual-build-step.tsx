@@ -1,10 +1,15 @@
 "use client";
 
+import { Info } from "lucide-react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { DOUBLES_SLOTS, SINGLES_SLOTS } from "@/lib/schedule/courts";
 import { DateField } from "@/components/ui/date-field";
 import { MenuSelect } from "@/components/ui/menu-select";
+import {
+  noteIconCls,
+  noteStripCls,
+} from "@/components/dashboard/matches/new-match-wizard/styles";
 import {
   DOUBLES_FORMATS,
   FORMATS,
@@ -826,6 +831,10 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
  * 8-game pro-set rather than the singles best-of. Both rows are the same
  * three columns at the same gap, the format pair in the right two.
  *
+ * A grey fact strip follows the format row as its footnote: doubles lines
+ * record a score only, no statistics or video — see the note strip below
+ * `DualFactsStep`'s JSX.
+ *
  * ── What draws what ────────────────────────────────────────────────────────
  *   Date                `DateField variant="bare"` inside `FieldCell`'s ruled
  *                       row. The primitive brings the app's own segments,
@@ -947,6 +956,24 @@ export function DualFactsStep({
             }}
           />
         </FieldCell>
+      </div>
+
+      {/* Grey, not the warning yellow: nothing here is wrong and nothing is
+          the coach's to fix — doubles just isn't measured yet, which is a
+          fact about the product, not a question the row above is asking.
+          See "Notice strips" in the design skill's primitives.md. */}
+      <div className={noteStripCls}>
+        <Info
+          className={`${noteIconCls} text-[var(--ink-400)]`}
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+        <span>
+          <b className="font-medium text-[var(--ink-900)]">
+            Doubles lines record a score only.
+          </b>{" "}
+          Statistics and video analysis are singles only for now.
+        </span>
       </div>
     </div>
   );
