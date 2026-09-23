@@ -37,3 +37,13 @@ is the runner's. Newest entries at the bottom.
 
 1. The 150 ms rest applies on every hover entry from closed, so a pointer crossing the lane to reach the buttons does not flash the box; a scrub opens at once. Author to confirm.
 2. `match-video-attachments-db.spec.ts` flakes on the shared live database in more cases than the known "50 rows per claim" one; fix on its own branch.
+
+## T3 · Paint the seek preview to the Spec artboard — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `film-track.tsx` only. Box `rounded-[12px] bg-[var(--ink-900)]` with `--shadow-dropdown` plus a 1px inset ring at 8% white; frame `rounded-[8px]`, `bg-white/[0.06]` while `empty`; preview video `opacity-0` / `opacity-60` / `opacity-100` for `empty` / `held` / `live` with a 200 ms `--ease-primary` opacity transition, merged after the hook's own `h-full w-full object-cover` through `cn`; time `mono tabular text-[11px] text-white/90` in a 16 px row 4 px under the frame; hover marker `bg-white/70`. T2's size, position, visibility and test cases untouched. The run was interrupted by a session restart after the mechanical gate and resumed at the completion review.
+
+**follow-ups:**
+
+1. No one has looked at the painted preview in a browser yet; check it on the report player before the PR.

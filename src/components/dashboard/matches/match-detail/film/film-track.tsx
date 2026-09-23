@@ -265,7 +265,7 @@ export function FilmTrack({
           <span
             aria-hidden="true"
             data-testid="film-seek-hover-marker"
-            className="pointer-events-none absolute top-1/2 hidden h-[9px] w-px -translate-x-1/2 -translate-y-1/2 group-data-[film-hover]/lane:block"
+            className="pointer-events-none absolute top-1/2 hidden h-[9px] w-px -translate-x-1/2 -translate-y-1/2 bg-white/70 group-data-[film-hover]/lane:block"
             style={{ left: "var(--film-hover-x)" }}
           />
           <div
@@ -273,28 +273,47 @@ export function FilmTrack({
             aria-hidden="true"
             data-testid="film-seek-preview"
             data-state={seekPreview.open ? seekPreview.state : "closed"}
-            className="pointer-events-none absolute z-10 p-1"
+            className="pointer-events-none absolute z-10 rounded-[12px] bg-[var(--ink-900)] p-1"
             style={{
               bottom: `calc(100% + ${PREVIEW_HANG_PX}px)`,
               width: previewBoxWidth(previewSize),
               opacity: seekPreview.open ? 1 : 0,
               visibility: seekPreview.visible ? "visible" : "hidden",
+              boxShadow:
+                "var(--shadow-dropdown), inset 0 0 0 1px rgba(255,255,255,0.08)",
               transition: `opacity ${PREVIEW_FADE_MS}ms var(--ease-primary)`,
             }}
           >
             <div
               data-testid="film-seek-preview-frame"
-              className="overflow-hidden"
+              className={cn(
+                "overflow-hidden rounded-[8px]",
+                seekPreview.state === "empty" && "bg-white/[0.06]",
+              )}
               style={{
                 width: PREVIEW_FRAME[previewSize].width,
                 height: PREVIEW_FRAME[previewSize].height,
               }}
             >
               {seekPreview.video && (
-                <video key={seekPreview.videoKey} {...seekPreview.video} />
+                <video
+                  key={seekPreview.videoKey}
+                  {...seekPreview.video}
+                  className={cn(
+                    seekPreview.video.className,
+                    "transition-opacity duration-200 ease-[var(--ease-primary)]",
+                    seekPreview.state === "empty" && "opacity-0",
+                    seekPreview.state === "held" && "opacity-60",
+                    seekPreview.state === "live" && "opacity-100",
+                  )}
+                />
               )}
             </div>
-            <div ref={timeRef} data-testid="film-seek-preview-time" />
+            <div
+              ref={timeRef}
+              data-testid="film-seek-preview-time"
+              className="mono tabular mt-1 flex h-4 items-center justify-center text-[11px] text-white/90"
+            />
           </div>
         </>
       )}

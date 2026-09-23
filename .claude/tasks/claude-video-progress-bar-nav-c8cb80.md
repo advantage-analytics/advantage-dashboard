@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Paint the seek preview to the Spec artboard
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T2
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-track.tsx
