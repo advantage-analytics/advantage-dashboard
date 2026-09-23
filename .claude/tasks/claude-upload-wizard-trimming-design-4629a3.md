@@ -86,7 +86,7 @@ ready).
 
 ## T6 · Investigate what survives a PinnedLineBar line swap
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **files:** docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md (new, the findings), tests/upload-line-swap.spec.ts (new, via tests/fixtures/upload-wizard-hook.ts — mutate `h.props.preset` then `h.render()` to model `onSwitchPreset`), src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (the preset seeding effect at ~line 1229, only if the fix is trivial and confirmed)
 - **done when:**

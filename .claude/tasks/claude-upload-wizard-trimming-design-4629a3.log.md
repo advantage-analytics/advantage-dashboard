@@ -32,3 +32,9 @@ is the runner's. Newest entries at the bottom.
 **reason:** the failures are live-database specs timing out (`57014 canceling statement due to statement timeout`) — 11 failures on the first full run, a different set of live specs on a targeted re-run (admin-conferences-rpcs, match-video-attachments-db, point-bookmarks-db, program-owner-name-live, rls-workspace-isolation, saved-views-rls, teams-management, viz-bands-rls). None touch T4's files (SubjectBar.tsx, UploadMatchFlow.tsx, wizard-view.ts, tests/upload-subject-bar.spec.ts), and the new spec passed 3/3. Most likely the shared Supabase project was overloaded; blocked under the fail-closed rule rather than waved through.
 **stash:** 4227c33619216c24a5ed000287a24cf467f955be — to retry: `git stash apply 4227c336`, reset T4's status to `todo`, re-run the gate once the live specs are healthy.
 **implementer notes:** "For" is 11px `--ink-500` (canvas) rather than the 12px the criterion implies; `wizard-view.ts` changed type-only (`subjectFirstNameOf` takes `Pick<WhoPlayed, "subject">`); an empty roster name falls back to "Not them?".
+
+## T6 · Investigate what survives a PinnedLineBar line swap — blocked
+
+**gate:** not reached — the implementer subagent (model: fable) terminated before doing any work: API rate limit, "You've reached your Fable limit" (HTTP 429).
+**stash:** no stash — the task produced no changes
+**retry:** reset T6 to `todo` once Fable usage is available again; the task routing is unchanged. Pre-dispatch probe this run: the load-sensitive live spec `match-video-attachments-db.spec.ts:2708` failed under a multi-spec run but passed twice alone.
