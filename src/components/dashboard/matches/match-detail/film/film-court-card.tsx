@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 
 import { OPP, OUT, YOU, readoutPlacement, type CourtMark } from "./film-court";
 import { UNMEASURED, shotLabel, shotRowCells } from "./film-shots";
+import type { CornerDrag } from "./use-corner-drag";
 
 /**
  * The mini court over the film (handoff H2 §C2, frame `C2-FilmCourt.html`).
@@ -105,13 +106,7 @@ export interface FilmCourtProps {
    * The pointer half of `useCornerDrag`, for the whole card. Absent wherever
    * the card is not movable, and then it is an ordinary readout.
    */
-  handleProps?: {
-    onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
-    onPointerMove: (event: React.PointerEvent<HTMLElement>) => void;
-    onPointerUp: (event: React.PointerEvent<HTMLElement>) => void;
-    onPointerCancel: () => void;
-    onLostPointerCapture: () => void;
-  };
+  handleProps?: CornerDrag["handleProps"];
   /** The card is under the pointer right now: it shows `cursor-grabbing`. */
   grabbing?: boolean;
 }

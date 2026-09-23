@@ -34,6 +34,7 @@ import { FilmThisPoint } from "./film-this-point";
 import {
   activeStopAt,
   displayedPointId as displayedPointOf,
+  nowPlayingOf,
   type PointFocus,
 } from "./film-timeline";
 import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
@@ -370,10 +371,7 @@ function FilmRoom({
   // it and draws the same "Now playing" pill (T23: the card's header line is
   // gone, T22), shown whenever held and the lit row is out of view (T24).
   const nowPlaying = useMemo(
-    () =>
-      activePoint
-        ? { id: activePoint.id, index: position?.index ?? null }
-        : null,
+    () => nowPlayingOf(activePoint, position),
     [activePoint, position],
   );
 

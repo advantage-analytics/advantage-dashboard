@@ -89,6 +89,7 @@ import {
   prevStop,
   REACHED_EPSILON_SECONDS,
   displayedPointId as displayedPointOf,
+  nowPlayingOf,
   type FilmClock,
   type FilmStop,
   type PointFocus,
@@ -347,6 +348,20 @@ function FilmCourtLayer({
       </div>
     </>
   );
+}
+
+/**
+ * The room's current size, plus the frame to travel from/to and which path
+ * (`roomMotionPath`) that travel takes — shared by the entrance and exit
+ * animations, which read the same three things from the same root element.
+ * The rect is never read under reduced motion: there is no travel to aim.
+ */
+function roomTravel(root: HTMLElement, originRect: () => Rect | null) {
+  const roomSize = { width: root.clientWidth, height: root.clientHeight };
+  const reduced = prefersReducedMotion();
+  const frame = reduced ? null : originRect();
+  const path = reduced ? "fade" : roomMotionPath(frame, roomSize);
+  return { roomSize, frame, path };
 }
 
 export function FilmFullscreen(p: FilmFullscreenProps) {
@@ -698,10 +713,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // transport's `Point 14 / 87` prints; `index: null` is a point the cut
   // excludes. Memoized: the drawer's list is memoized on it.
   const nowPlaying = useMemo(
-    () =>
-      activePoint
-        ? { id: activePoint.id, index: position?.index ?? null }
-        : null,
+    () => nowPlayingOf(activePoint, position),
     [activePoint, position],
   );
 
@@ -981,13 +993,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       });
     }
 
-    // The rect is never read under reduced motion: there is no travel to aim.
     // A frame with no area on screen (the window resized under the room, or
     // the ⇧-click door from a scrolled-off player) has nothing to shrink into.
-    const roomSize = { width: root.clientWidth, height: root.clientHeight };
-    const reduced = prefersReducedMotion();
-    const frame = reduced ? null : p.originRect();
-    const path = reduced ? "fade" : roomMotionPath(frame, roomSize);
+    const { roomSize, frame, path } = roomTravel(root, p.originRect);
     const animation =
       path === "frame" && frame
         ? root.animate([OPEN_ROOM_FRAME, collapsedRoomFrame(frame, roomSize)], {
@@ -1062,11 +1070,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    const roomSize = { width: root.clientWidth, height: root.clientHeight };
-    // The rect is never read under reduced motion: there is no travel to aim.
-    const reduced = prefersReducedMotion();
-    const frame = reduced ? null : p.originRect();
-    const path = reduced ? "fade" : roomMotionPath(frame, roomSize);
+    const { roomSize, frame, path } = roomTravel(root, p.originRect);
 
     enterAnimation.current =
       path === "frame" && frame

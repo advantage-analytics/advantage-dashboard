@@ -117,11 +117,7 @@ export function FilmTrack({
       if (!bar || !(duration > 0)) return;
       const rect = bar.getBoundingClientRect();
       if (rect.width === 0) return;
-      const fraction = Math.min(
-        1,
-        Math.max(0, (clientX - rect.left) / rect.width),
-      );
-      onSeek(fraction * duration);
+      onSeek(laneFraction(clientX, rect.left, rect.width) * duration);
     },
     [duration, onSeek],
   );

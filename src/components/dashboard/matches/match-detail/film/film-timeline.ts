@@ -302,6 +302,21 @@ export function displayedPointId(
   return focus.mode === "held" ? focus.pointId : playingPointId;
 }
 
+/**
+ * The `nowPlaying` shape the "Now playing" pill draws from, on both lists
+ * (shell column and room drawer): the playing point's id, plus its 1-based place in the
+ * applied-cut walk (`position.index`), or `null` when the film is on a point
+ * the cut excludes. `null` outright when nothing is playing.
+ */
+export function nowPlayingOf(
+  activePoint: MatchPoint | null,
+  position: { index: number; total: number } | null,
+): { id: string; index: number | null } | null {
+  return activePoint
+    ? { id: activePoint.id, index: position?.index ?? null }
+    : null;
+}
+
 /** What the return affordance (the drawer's pill, the card's line) says. */
 export interface FollowAffordance {
   /** The visible text: a sentence, with a middot. */
