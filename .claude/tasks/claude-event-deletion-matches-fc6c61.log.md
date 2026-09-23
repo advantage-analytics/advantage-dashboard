@@ -11,3 +11,12 @@ is the runner's. Newest entries at the bottom.
 
 1. Add a one-line pointer in the header of `20260910190731_delete_eligible_schedule_event.sql` to the superseding migration.
 2. Matches list may want a "reassign to event" affordance now that detached matches are a first-class state (`route.ts:160` already computes `attachable`).
+
+## T2 · Warn about attached matches in the delete-event dialog — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite); completion `VERDICT: pass`.
+**changed:** `EventActionsMenu` takes `entries` + `isDual` from the drawer's loaded `detail`; a local `deleteCost()` derives match count, outcome presence and `dualScore` — no new query. Empty events keep a one-line description; events with matches/outcomes render `ConfirmProse` naming the count (pluralised), that matches stay in the library but lose their line, the dual team result, and "There is no undo." Menu-item description now reads "Recorded matches stay in the library". Spec gains the Settled Dual case; refusal test uses a generic server error. Deviation from criterion 4: test asserts "7–0" not "9–0" — `dualScore` applies ITA scoring (6 singles + 1 doubles) so nine won lines are 7–0, matching the drawer's own score row; the "9–0" in the criterion was the fixture's stale list-row `teamScore`. Reviewer verified and accepted.
+**follow-ups:**
+
+1. Fix the `dual-settled` fixture's list-row `teamScore { us: 9, them: 0 }` (`tests/fixtures/schedule-drawer-actions-harness.tsx:184`) to 7–0 so it agrees with its own lines.
+2. The outcome-only sentence ("Lines settled by forfeit, default or withdrawal…") has no harness fixture with an outcome, so it is untested.

@@ -3,7 +3,11 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  ConfirmDialog,
+  ConfirmProse,
+  Em,
+} from "@/components/ui/confirm-dialog";
 import {
   FloatMenu,
   FloatMenuDivider,
@@ -11,6 +15,8 @@ import {
 } from "@/components/ui/float-menu";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { deleteEvent } from "@/lib/schedule/actions";
+import { dualScore } from "@/lib/schedule/entry-state";
+import type { EventEntry } from "@/lib/schedule/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,14 +39,41 @@ const DESTRUCTIVE_ICON =
 const TRIGGER =
   "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] data-[state=open]:bg-[var(--surface-subtle)] data-[state=open]:text-[var(--ink-700)]";
 
+/**
+ * What deleting an event costs, counted off the lines the drawer already
+ * holds — no fetch of its own. Deletion detaches rather than refuses: the
+ * matches survive in the library with their line cleared, while outcome rows
+ * and the dual's team result go with the event.
+ */
+function deleteCost(entries: EventEntry[], isDual: boolean) {
+  const matchCount = entries.reduce(
+    (sum, entry) => sum + entry.matches.length,
+    0,
+  );
+  const hasOutcome = entries.some(
+    (entry) => entry.forfeit !== null || (entry.outcomes?.length ?? 0) > 0,
+  );
+  const score = isDual ? dualScore(entries) : null;
+  const teamScore =
+    score && (score.us > 0 || score.them > 0)
+      ? `${score.us}–${score.them}`
+      : null;
+  return { matchCount, hasOutcome, teamScore };
+}
+
 export function EventActionsMenu({
   eventId,
   eventName,
+  isDual,
+  entries,
   canDelete,
   onDeleted,
 }: {
   eventId: string;
   eventName: string;
+  isDual: boolean;
+  /** The drawer's loaded lines; the confirm's copy is counted from these. */
+  entries: EventEntry[];
   /** Presentation gate only. `deleteEvent` re-checks the active workspace. */
   canDelete: boolean;
   onDeleted: () => void;
@@ -52,6 +85,8 @@ export function EventActionsMenu({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { matchCount, hasOutcome, teamScore } = deleteCost(entries, isDual);
+  const costsSomething = matchCount > 0 || hasOutcome;
 
   async function confirmDelete() {
     setDeleting(true);
@@ -121,7 +156,7 @@ export function EventActionsMenu({
                 <FloatMenuDivider />
                 <FloatMenuItem
                   label="Delete event"
-                  description="Empty schedule lines are removed too"
+                  description="Recorded matches stay in the library"
                   icon={
                     <Trash2
                       className={cn(MENU_ROW_ICON, DESTRUCTIVE_ICON)}
@@ -150,7 +185,11 @@ export function EventActionsMenu({
             if (!open) setError(null);
           }}
           title={`Delete ${eventName}?`}
-          description="Removes the event and its empty lines from the team schedule. Events with recorded matches or outcomes can't be deleted, and this can't be undone."
+          description={
+            costsSomething
+              ? "Removes the event and every line under it from the team schedule."
+              : "Removes the event and its empty lines from the team schedule. There is no undo."
+          }
           tone="danger"
           confirmLabel="Delete event"
           pendingLabel="Deleting…"
@@ -165,7 +204,42 @@ export function EventActionsMenu({
             }
             triggerRef.current?.focus();
           }}
-        />
+        >
+          {costsSomething ? (
+            <ConfirmProse>
+              {matchCount > 0 ? (
+                <p>
+                  {matchCount === 1 ? (
+                    <>
+                      <Em>1 match</Em> stays in the match library, with its
+                      statistics and video, but loses its line in this event.
+                    </>
+                  ) : (
+                    <>
+                      <Em>{matchCount} matches</Em> stay in the match library,
+                      with their statistics and video, but lose their lines in
+                      this event.
+                    </>
+                  )}
+                </p>
+              ) : null}
+              <p>
+                {teamScore ? (
+                  <>
+                    The <Em>{teamScore}</Em> team result is removed with
+                    it.{" "}
+                  </>
+                ) : hasOutcome ? (
+                  <>
+                    Lines settled by <Em>forfeit, default or withdrawal</Em>{" "}
+                    lose that result.{" "}
+                  </>
+                ) : null}
+                There is no undo.
+              </p>
+            </ConfirmProse>
+          ) : null}
+        </ConfirmDialog>
       ) : null}
     </>
   );

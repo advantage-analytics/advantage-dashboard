@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Warn about attached matches in the delete-event dialog
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/components/dashboard/schedule/static/event-actions-menu.tsx, src/components/dashboard/schedule/static/event-drawer.tsx (call site ~line 236, guess), tests/schedule-drawer-actions.spec.ts

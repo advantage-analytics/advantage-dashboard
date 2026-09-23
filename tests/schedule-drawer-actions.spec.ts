@@ -268,6 +268,9 @@ test("only owners and coaches are offered deletion, with named confirmation and 
     await expect(confirmation).toContainText(
       "Removes the event and its empty lines from the team schedule",
     );
+    // No match or outcome under this dual, so nothing is counted.
+    await expect(confirmation).not.toContainText(/\bmatch(es)? stays?\b/);
+    await expect(confirmation).not.toContainText("team result");
     await expect(
       confirmation.getByRole("button", { name: "Cancel" }),
     ).toBeFocused();
@@ -284,8 +287,7 @@ test("server refusal stays in the open confirmation and leaves drawer and list u
   await openSchedule(page, "owner");
   await openEventWithKeyboard(page, "Long Open Dual");
   await page.evaluate(() => {
-    window.failNextDelete =
-      "This event has recorded matches or outcomes and cannot be deleted.";
+    window.failNextDelete = "Couldn't delete this event. Try again.";
   });
 
   await page.getByRole("button", { name: "Event actions" }).press("Enter");
@@ -300,7 +302,7 @@ test("server refusal stays in the open confirmation and leaves drawer and list u
 
   await expect(confirmation).toBeVisible();
   await expect(confirmation.getByRole("alert")).toHaveText(
-    "This event has recorded matches or outcomes and cannot be deleted.",
+    "Couldn't delete this event. Try again.",
   );
   await expect(
     page.locator('[data-schedule-drawer] [role="dialog"]'),
@@ -345,4 +347,37 @@ test("successful deletion closes the selection, removes the row, and refreshes s
   await expect
     .poll(() => page.evaluate(() => window.actionCalls))
     .toEqual([{ action: "deleteEvent", input: "dual-open" }]);
+});
+
+test("deleting a dual with recorded matches names what stays and what goes", async ({
+  page,
+}) => {
+  await openSchedule(page, "owner");
+  await openEventWithKeyboard(page, "Settled Dual");
+  await page.getByRole("button", { name: "Event actions" }).press("Enter");
+  await page
+    .getByRole("menu", { name: "Event actions" })
+    .getByRole("menuitem", { name: /Delete event/ })
+    .press("Enter");
+
+  const confirmation = page.getByRole("alertdialog");
+  await expect(
+    confirmation.getByRole("heading", { name: "Delete Settled Dual?" }),
+  ).toBeVisible();
+  await expect(confirmation).toContainText("9 matches");
+  // Nine won lines score 7–0 under ITA rules (six singles points and one
+  // doubles point) — `dualScore()`, the figure the drawer's score row draws.
+  // The fixture's list-row `teamScore` of 9–0 is not what the dialog reads.
+  await expect(confirmation).toContainText("7–0");
+  await expect(confirmation).toContainText("There is no undo.");
+  await expect(confirmation).not.toContainText("can't be deleted");
+
+  await confirmation
+    .getByRole("button", { name: "Delete event" })
+    .press("Enter");
+
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => window.actionCalls))
+    .toEqual([{ action: "deleteEvent", input: "dual-settled" }]);
 });
