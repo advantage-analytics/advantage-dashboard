@@ -505,10 +505,10 @@ test.describe("upload score regression reproduction", () => {
 async function answerPlayerStyles(page: Page) {
   await expect(page.locator("[data-wizard-continue]")).toBeDisabled();
   const picks: [string, string][] = [
-    ["Player hand", "Right-handed"],
-    ["Player backhand", "Two-handed backhand"],
-    ["Opponent hand", "Left-handed"],
-    ["Opponent backhand", "One-handed backhand"],
+    ["Player hand", "Right"],
+    ["Player backhand", "Two-handed"],
+    ["Opponent hand", "Left"],
+    ["Opponent backhand", "One-handed"],
   ];
   for (const [trigger, option] of picks) {
     await page.getByRole("button", { name: trigger, exact: true }).click();

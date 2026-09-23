@@ -213,8 +213,10 @@ function CutField({
       // a baseline-aligned label sits at the TOP of the stretched box while the
       // glyph beside it centres, and the two read as misaligned. Centring also
       // suits the pairing — a 9px letter-spaced label against a 12px mono
-      // number looks dropped on a shared baseline.
-      className={`inline-flex cursor-pointer items-center gap-1.5 px-2.5 py-2 ${
+      // number looks dropped on a shared baseline. `min-w` + `justify-center`
+      // give Start and End one width with the pair centred in it, and
+      // `leading-none` drops the line-box slack that sat the text off-centre.
+      className={`inline-flex min-w-[112px] cursor-pointer items-center justify-center gap-1.5 px-2.5 py-2 leading-none ${
         isStart ? "rounded-l-[5px]" : "rounded-r-[5px]"
       } ${focusRingCls}`}
     >

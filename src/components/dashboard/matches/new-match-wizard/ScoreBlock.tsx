@@ -496,7 +496,7 @@ export function ScoreBlock({
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="flex items-baseline gap-3">
+      <div className="flex items-center gap-3">
         <FieldCaption label="Score" required />
         {/* An 8-game doubles pro-set has no 7-6 set and no match tiebreak,
             so neither worked example applies there. */}

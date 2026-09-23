@@ -283,15 +283,19 @@ test("the opponent-naming hints read '[enter] to add them' under the name and 'H
   );
 });
 
-test("the backhand field reserves extra menu width so its longer labels don't wrap", () => {
-  expect(detailsSrc.match(/width=\{220\}/g)?.length).toBe(2);
+test("hand and backhand answer in one word, so their menus need no extra width", () => {
+  // The column headings already say Hand and Backhand; the options don't repeat it.
+  expect(detailsSrc).toContain('{ value: "right", label: "Right" }');
+  expect(detailsSrc).toContain('{ value: "two-handed", label: "Two-handed" }');
+  expect(detailsSrc).not.toMatch(/width=\{220\}/);
 });
 
 test("both player rows share one grid, stacking only below sm", () => {
   // One three-column grid owns both rows, so the opponent's selects sit
-  // exactly under the player's; each row is a subgrid of it.
+  // exactly under the player's; each row is a subgrid of it. The name column
+  // takes the slack; the two one-word selects stay narrow.
   expect(detailsSrc).toContain(
-    "sm:grid sm:grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)]",
+    "sm:grid sm:grid-cols-[minmax(0,1fr)_150px_150px]",
   );
   const row =
     /className="flex flex-col gap-3 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-start[^"]*"/g;

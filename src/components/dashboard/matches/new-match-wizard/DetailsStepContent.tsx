@@ -74,7 +74,7 @@ import { cn } from "@/lib/utils";
 import { advField } from "@/lib/ui/adv-field";
 import { getInitials } from "@/lib/data/match-utils";
 import { normalizedPersonName } from "@/lib/data/person-name";
-import { siteLabel, todayISO } from "@/lib/schedule/format";
+import { siteLabel, siteTitle, todayISO } from "@/lib/schedule/format";
 import { saveOpponentPlayer } from "@/lib/schedule/actions";
 import {
   findLineOffers,
@@ -824,7 +824,7 @@ function OfferStrip({
           strokeWidth={1.5}
           aria-hidden="true"
         />
-        {siteLabel(offer.site)}
+        {siteTitle(offer.site)}
       </span>
       <span className="flex-1" />
       {attached ? (
@@ -867,12 +867,12 @@ function OfferStrip({
  * what actually blocks Save on it, this is only the control.
  */
 const HAND_OPTIONS: readonly { value: Hand; label: string }[] = [
-  { value: "right", label: "Right-handed" },
-  { value: "left", label: "Left-handed" },
+  { value: "right", label: "Right" },
+  { value: "left", label: "Left" },
 ];
 const BACKHAND_OPTIONS: readonly { value: Backhand; label: string }[] = [
-  { value: "two-handed", label: "Two-handed backhand" },
-  { value: "one-handed", label: "One-handed backhand" },
+  { value: "two-handed", label: "Two-handed" },
+  { value: "one-handed", label: "One-handed" },
 ];
 
 function provenanceFor(
@@ -1373,7 +1373,7 @@ function DetailsStepContentImpl({
             once; a narrow column stacks each row and brings its labels back.
             Anything a row says beyond its three answers lives under the name,
             never in a fourth column that would knock the grid out of line. */}
-        <div className="flex flex-col gap-6 sm:grid sm:grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-4">
+        <div className="flex flex-col gap-6 sm:grid sm:grid-cols-[minmax(0,1fr)_150px_150px] sm:gap-x-5 sm:gap-y-4">
           <div aria-hidden="true" className="hidden sm:contents">
             <span />
             <FieldCaption label="Hand" required />
@@ -1423,7 +1423,6 @@ function DetailsStepContentImpl({
                   variant="underline"
                   value={playerBackhand}
                   placeholder="Backhand"
-                  width={220}
                   options={BACKHAND_OPTIONS}
                   onChange={(v) => {
                     onInputChange("playerBackhand", v);
@@ -1702,7 +1701,6 @@ function DetailsStepContentImpl({
                   variant="underline"
                   value={opponentBackhand}
                   placeholder="Backhand"
-                  width={220}
                   disabled={namingOpponent}
                   options={BACKHAND_OPTIONS}
                   onChange={(v) => {
