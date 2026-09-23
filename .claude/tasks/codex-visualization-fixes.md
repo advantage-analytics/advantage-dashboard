@@ -101,7 +101,7 @@ ready).
 
 ## T7 · Enlarge ace stars slightly
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-luna
 - **files:** Guess: `court-art.tsx`, `court-geometry.ts`, `viz-focused.tsx`, `viz-fullscreen-court.tsx`.
 - **done when:**

@@ -102,11 +102,13 @@ const SERVE_DOT_R = 2.54;
 // legend's Ace glyph to the court's own fill exactly, instead of a second
 // `#F8C84F` literal the checker would flag again.
 export const ACE_STAR_FILL = "#F8C84F";
-// Chosen so the star's area is comparable to the SERVE_DOT_R=2.54 circle's:
-// a regular 10-point star with inner radius R/2 has area
+// The original outer radius was chosen so the star's area was comparable
+// to the SERVE_DOT_R=2.54 circle's: a regular 10-point star with inner
+// radius R/2 has area
 // 2.5·sin(36°)·R² ≈ 1.4695·R²; solving 1.4695·R² = π·2.54² gives R≈3.714 —
-// 3.7 is within ~0.7% of that exact match (see `tests/court-geometry.spec.ts`).
-const ACE_STAR_OUTER_R = 3.7;
+// 4.44 is exactly 20% larger than the original 3.7 radius (see
+// `tests/court-geometry.spec.ts`).
+const ACE_STAR_OUTER_R = 4.44;
 
 /**
  * The won/lost/neutral colour for a dot's outcome — the one piece this

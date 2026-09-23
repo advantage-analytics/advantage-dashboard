@@ -410,16 +410,17 @@ test.describe("starPoints", () => {
     });
   });
 
-  test("outer radius ≈3.7 gives a star area comparable to the r=2.54 dot's circle area", () => {
+  test("outer radius 4.44 is 20% larger than the original ace star", () => {
     // Regular 10-point star (outer R, inner R/2): area = 5 * R * (R/2) *
     // sin(36°) = 2.5 * sin(36°) * R² ≈ 1.4695 * R². Circle area = π * 2.54²
-    // ≈ 20.268. Solving for R gives ≈3.714 — 3.7 is the value court-art.tsx
-    // actually draws with, within ~0.7% of an exact area match.
-    const outerR = 3.7;
+    // ≈ 20.268. The court uses 4.44, exactly 20% larger than the original
+    // 3.7 outer radius.
+    const outerR = 4.44;
     const starArea = 2.5 * Math.sin((36 * Math.PI) / 180) * outerR * outerR;
     const dotArea = Math.PI * 2.54 * 2.54;
-    expect(starArea).toBeGreaterThan(dotArea * 0.9);
-    expect(starArea).toBeLessThan(dotArea * 1.1);
+    expect(outerR).toBe(3.7 * 1.2);
+    expect(starArea).toBeGreaterThan(dotArea * 1.4);
+    expect(starArea).toBeLessThan(dotArea * 1.46);
   });
 });
 

@@ -30,3 +30,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical: GATE FAIL. Lint and typecheck passed; full suite had 1 failure, 2948 passed, 64 skipped. tests/match-video-attachment-flow.spec.ts:848 (unmounting mid-upload cancels the attempt) timed out after 5000ms waiting for DELETE. Completion: not run because mechanical failed.
 
 **changed:** Implementation preserved in stash `832b33a4383e3b8a5508079ef0e921c22ece9675`. Added fullscreen-only scrollable single-line filters, narrow control reachability and subject-bound avatar initials without score changes. Targeted browser regression at 320px with real Tailwind CSS passed, including both subjects, reopen, keyboard scrolling, filter removal and control reachability; typecheck, targeted lint and formatting passed.
+
+## T7 · Enlarge ace stars slightly — done
+
+**gate:** Mechanical: GATE PASS (lint, typecheck, full suite). Completion: VERDICT: pass.
+
+**changed:** Enlarged shared preview/focused ace radius from 3.7 to 4.44 and fullscreen multiplier from 1.68 to 2.016, each exactly 20%, preserving centers, regular dots, classification, colors and interactions. Updated existing geometry size assertion; all 130 targeted geometry tests passed.
