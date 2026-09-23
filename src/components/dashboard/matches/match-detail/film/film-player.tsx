@@ -703,6 +703,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               duration={duration}
               currentTime={currentTime}
               onSeek={seekTo}
+              preview={{ url, generation, size: "report" }}
             />
 
             <div className="pointer-events-auto flex h-8 items-center gap-3.5">

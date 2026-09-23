@@ -26,3 +26,14 @@ is the runner's. Newest entries at the bottom.
 
 1. The 150 ms rest applies on every hover entry from closed, not only the first, so a pointer crossing the lane to reach the buttons does not flash the box; a scrub opens at once. Confirm that is wanted.
 2. The hover marker is an unpainted span (`data-testid="film-seek-hover-marker"`) until T3.
+
+## T2 · Hover frame preview on the report player's lane — done
+
+**gate:** mechanical: lint pass, typecheck pass, full suite pass except `tests/match-video-attachments-db.spec.ts` (live shared database; the failing case differed on each of three runs, once expecting 50 rows and receiving 42; T2 touches no database code); committed past it on the author's explicit decision · completion `VERDICT: pass` (re-review after the fix)
+
+**changed:** Stash `807069006b04a736deba4ede9c8755aafe7d02d8` applied; the one blocking line fixed by rewording `use-seek-preview.ts:38` to "cross-origin attribute". New `film/use-seek-preview.ts`: the preview element's props, lazy mount on first hover or scrub, coalesced seeks via T1's `createSeekCoalescer`, a pre-metadata hold, and `empty | held | live` state. `film-track.tsx`: optional `preview` prop, the box, frame and time markup, `--film-hover` / `--film-hover-x` / `data-film-hover` written without React state, runs painted by `trackRunGradient`, a 1×9 marker. `film-player.tsx`: `preview={{ url, generation, size: "report" }}`. `tests/film-playback-refresh.spec.ts`: cases T2 (a)–(f). `docs/match-video-attachments.md`: one sentence. Reviewer-accepted deviations: (f) awaits `cred=1` (the harness refreshes once), the `<video>` JSX renders in `film-track.tsx` (React-compiler lint rejects JSX in the hook).
+
+**follow-ups:**
+
+1. The 150 ms rest applies on every hover entry from closed, so a pointer crossing the lane to reach the buttons does not flash the box; a scrub opens at once. Author to confirm.
+2. `match-video-attachments-db.spec.ts` flakes on the shared live database in more cases than the known "50 rows per claim" one; fix on its own branch.

@@ -1404,3 +1404,267 @@ test("the report player never dims a frame it has not shown yet", async ({
     timeout: 1000,
   });
 });
+
+/* -------------------------------------------------------------------------
+ * The seek lane's hover frame (handoff T2)
+ *
+ * The report lane floats a second, muted `<video>` on the player's own
+ * credential over the pointer. What only a browser can settle: that it opens
+ * for a mouse and a scrub but not for focus or a passing touch, that it seeks
+ * to the lane time under the pointer without a seek per move, and that a
+ * refreshed credential remounts it rather than swapping its `src`.
+ *
+ * The fixture is 2.000 s, so 75% of the lane is 1.5 s and 70% is 1.4 s —
+ * both read "0:01" on the clock.
+ * ---------------------------------------------------------------------- */
+
+const LANE = `div:has(> ${REPORT}) [role="slider"][aria-label="Seek"]`;
+const PREVIEW = '[data-testid="film-seek-preview"]';
+const PREVIEW_VIDEO = '[data-testid="film-seek-preview-video"]';
+const PREVIEW_TIME = '[data-testid="film-seek-preview-time"]';
+/** `PREVIEW_SEEK_INTERVAL_MS`, written out so a retune fails here first. */
+const PREVIEW_SEEK_INTERVAL_MS = 120;
+
+async function laneBox(page: Page) {
+  const box = await page.locator(LANE).boundingBox();
+  if (!box) throw new Error("no report lane");
+  return {
+    ...box,
+    at: (fraction: number) => box.x + fraction * box.width,
+    y: box.y + box.height / 2,
+  };
+}
+
+async function previewTime(page: Page) {
+  return page.evaluate(
+    (sel) =>
+      document.querySelector<HTMLVideoElement>(sel)?.currentTime ?? Number.NaN,
+    PREVIEW_VIDEO,
+  );
+}
+
+test("T2 (a): hovering the report lane opens a live frame at the pointer's time, and leaving closes it", async ({
+  page,
+}) => {
+  await open(page, "preview-hover", { ttl: String(60 * 60 * 1000) });
+  const lane = await laneBox(page);
+
+  await page.mouse.move(lane.at(0.75), lane.y);
+  await expect(page.locator(PREVIEW)).not.toHaveAttribute(
+    "data-state",
+    "closed",
+  );
+  await expect(page.locator(PREVIEW_TIME)).toHaveText("0:01");
+  const hover = await page
+    .locator(LANE)
+    .evaluate((el) =>
+      Number((el as HTMLElement).style.getPropertyValue("--film-hover")),
+    );
+  expect(Math.abs(hover - 1.5)).toBeLessThan(0.05);
+
+  await expect
+    .poll(() => page.locator(PREVIEW).getAttribute("data-state"), {
+      timeout: 5000,
+    })
+    .toBe("live");
+  await expect
+    .poll(async () => Math.abs((await previewTime(page)) - 1.5))
+    .toBeLessThan(0.1);
+
+  await page.mouse.move(lane.at(0.75), lane.y + 40);
+  await expect(page.locator(PREVIEW)).toHaveAttribute("data-state", "closed");
+  await expect(page.locator(PREVIEW)).toBeHidden();
+});
+
+test("T2 (b): keyboard focus opens nothing, and the arrows still seek", async ({
+  page,
+}) => {
+  await open(page, "preview-focus", { ttl: String(60 * 60 * 1000) });
+  await page.mouse.move(2, 2);
+
+  const slider = page.locator(LANE);
+  await slider.focus();
+  const state = await page.locator(PREVIEW).getAttribute("data-state");
+  expect(state === null || state === "closed").toBe(true);
+
+  const before = Number(await slider.getAttribute("aria-valuenow"));
+  await page.keyboard.press("ArrowRight");
+  // 5 s on, or to the end of a 2 s film.
+  await expect(slider).toHaveAttribute(
+    "aria-valuenow",
+    String(Math.min(2, before + 5)),
+  );
+  const after = await page.locator(PREVIEW).getAttribute("data-state");
+  expect(after === null || after === "closed").toBe(true);
+  await expect(page.locator(PREVIEW_VIDEO)).toHaveCount(0);
+});
+
+test("T2 (c): a scrub keeps the preview on the thumb off the lane, and releasing there closes it", async ({
+  page,
+}) => {
+  await open(page, "preview-scrub", { ttl: String(60 * 60 * 1000) });
+  const lane = await laneBox(page);
+
+  await page.mouse.move(lane.at(0.3), lane.y);
+  await page.mouse.down();
+  await page.mouse.move(lane.at(0.7), lane.y, { steps: 5 });
+  await page.mouse.move(lane.at(0.7), lane.y + 40);
+
+  await expect(page.locator(PREVIEW)).not.toHaveAttribute(
+    "data-state",
+    "closed",
+  );
+  await expect(page.locator(PREVIEW_TIME)).toHaveText("0:01");
+  await expect
+    .poll(async () => Math.abs(((await state(page, REPORT))?.time ?? 0) - 1.4))
+    .toBeLessThan(0.1);
+
+  await page.mouse.up();
+  await expect(page.locator(PREVIEW)).toHaveAttribute("data-state", "closed");
+});
+
+test("T2 (d): a touch opens the preview only while it drags", async ({
+  page,
+}) => {
+  await open(page, "preview-touch", { ttl: String(60 * 60 * 1000) });
+  const lane = await laneBox(page);
+  const slider = page.locator(LANE);
+  const at = { clientX: lane.at(0.5), clientY: lane.y, isPrimary: true };
+
+  await slider.dispatchEvent("pointermove", { pointerType: "touch", ...at });
+  // Past the rest a hover would have waited for.
+  await page.waitForTimeout(300);
+  await expect(page.locator(PREVIEW_VIDEO)).toHaveCount(0);
+  await expect(page.locator(PREVIEW)).toHaveAttribute("data-state", "closed");
+
+  await slider.dispatchEvent("pointerdown", { pointerType: "touch", ...at });
+  await expect(page.locator(PREVIEW)).not.toHaveAttribute(
+    "data-state",
+    "closed",
+  );
+
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { pointerType: "touch", bubbles: true }),
+    ),
+  );
+  await expect(page.locator(PREVIEW)).toHaveAttribute("data-state", "closed");
+});
+
+test("T2 (e): a sweep across the lane coalesces the preview's seeks and lands on the last one", async ({
+  page,
+}) => {
+  await open(page, "preview-sweep", { ttl: String(60 * 60 * 1000) });
+  const lane = await laneBox(page);
+
+  // A first hover mounts the element; wait until it has metadata.
+  await page.mouse.move(lane.at(0.5), lane.y);
+  await page.waitForFunction(
+    (sel) =>
+      (document.querySelector<HTMLVideoElement>(sel)?.readyState ?? 0) >= 1,
+    PREVIEW_VIDEO,
+    { timeout: 5000 },
+  );
+  await page.mouse.move(lane.at(0) + 1, lane.y);
+  await page.waitForTimeout(300);
+
+  // The `holdSeeks` idiom, on this one element and passing straight through:
+  // count every `currentTime` set and keep the last value and when it was.
+  await page.evaluate((sel) => {
+    const el = document.querySelector<HTMLVideoElement>(sel)!;
+    const real = Object.getOwnPropertyDescriptor(
+      HTMLMediaElement.prototype,
+      "currentTime",
+    )!;
+    const w = window as unknown as {
+      __previewSets: {
+        count: number;
+        last: number;
+        lastAt: number;
+        start: number;
+      };
+    };
+    w.__previewSets = {
+      count: 0,
+      last: -1,
+      lastAt: 0,
+      start: performance.now(),
+    };
+    Object.defineProperty(el, "currentTime", {
+      configurable: true,
+      get() {
+        return real.get!.call(this);
+      },
+      set(this: HTMLMediaElement, value: number) {
+        w.__previewSets.count += 1;
+        w.__previewSets.last = value;
+        w.__previewSets.lastAt = performance.now();
+        real.set!.call(this, value);
+      },
+    });
+  }, PREVIEW_VIDEO);
+
+  const endX = lane.at(1) - 1;
+  await page.mouse.move(endX, lane.y, { steps: 30 });
+  const finalTime = ((endX - lane.x) / lane.width) * 2;
+
+  const sets = () =>
+    page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __previewSets: {
+              count: number;
+              last: number;
+              lastAt: number;
+              start: number;
+            };
+          }
+        ).__previewSets,
+    );
+  await expect
+    .poll(async () => Math.abs((await sets()).last - finalTime), {
+      timeout: 5000,
+    })
+    .toBeLessThan(0.1);
+  // Let any trailing timer fire, so a late extra set would be counted.
+  await page.waitForTimeout(PREVIEW_SEEK_INTERVAL_MS * 3);
+  const { count, last, lastAt, start } = await sets();
+  expect(Math.abs(last - finalTime)).toBeLessThan(0.1);
+  expect(count).toBeGreaterThan(0);
+  expect(count).toBeLessThanOrEqual(
+    Math.ceil((lastAt - start) / PREVIEW_SEEK_INTERVAL_MS) + 2,
+  );
+});
+
+test("T2 (f): a refreshed credential remounts the preview element on the new URL", async ({
+  page,
+}) => {
+  const matchId = "ok-preview-refresh";
+  await open(page, matchId);
+  const lane = await laneBox(page);
+
+  await page.mouse.move(lane.at(0.5), lane.y);
+  await expect(page.locator(PREVIEW_VIDEO)).toHaveCount(1);
+  await page
+    .locator(PREVIEW_VIDEO)
+    .evaluate((el) => ((el as HTMLElement).dataset.marker = "first"));
+  await page.mouse.move(lane.at(0.5), lane.y + 40);
+
+  await release(page, matchId);
+  await awaitCredential(page, REPORT, 1);
+
+  await page.mouse.move(lane.at(0.6), lane.y);
+  await expect(page.locator(PREVIEW)).not.toHaveAttribute(
+    "data-state",
+    "closed",
+  );
+  const preview = page.locator(PREVIEW_VIDEO);
+  await expect(preview).toHaveCount(1);
+  expect(
+    await preview.evaluate((el) => (el as HTMLVideoElement).src),
+  ).toContain("cred=1");
+  expect(
+    await preview.evaluate((el) => (el as HTMLElement).dataset.marker ?? null),
+  ).toBeNull();
+});

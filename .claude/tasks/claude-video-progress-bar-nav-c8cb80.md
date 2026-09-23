@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Hover frame preview on the report player's lane
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/use-seek-preview.ts (new); src/components/dashboard/matches/match-detail/film/film-track.tsx; src/components/dashboard/matches/match-detail/film/film-player.tsx (one prop on `<FilmTrack>`); tests/film-playback-refresh.spec.ts; docs/match-video-attachments.md (one sentence)
