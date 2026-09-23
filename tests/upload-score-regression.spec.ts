@@ -185,6 +185,54 @@ test.describe("upload score regression reproduction", () => {
     await expect(playerSecond).toBeFocused();
   });
 
+  test("Tab follows the digit path through a tiebreak set, then leaves the grid", async ({
+    page,
+  }) => {
+    await page.goto(`${baseURL}/wizard-reproduction?mode=new`);
+    await chooseSource(page, "SwingVision export");
+    await page
+      .locator('input[type="file"]')
+      .setInputFiles(await oneSetExport());
+    await expect(page.getByText(/XLSX.*read/)).toBeVisible();
+    await page.locator("[data-wizard-continue]").click();
+    await setFormat(page, "Best of 3");
+
+    const player = "Riley Reproduction";
+    const opponent = "Casey Opponent";
+    const focused = () =>
+      page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
+
+    // The import typed 6-4; Tab moves down the set, not along the row.
+    await page.getByLabel(`${player}, set 1`, { exact: true }).click();
+    await page.keyboard.press("Tab");
+    await expect.poll(focused).toBe(`${opponent}, set 1`);
+
+    // 6-7 opens the tiebreak column, and the digit lands on the player's box.
+    await page.keyboard.press("7");
+    await expect.poll(focused).toBe(`${player}, set 1 tiebreak`);
+    await page.keyboard.press("Tab");
+    await expect.poll(focused).toBe(`${opponent}, set 1 tiebreak`);
+    await page.keyboard.press("Tab");
+    await expect.poll(focused).toBe(`${player}, set 2`);
+
+    // Shift+Tab is the browser's: back along the DOM, into set 1's tiebreak.
+    await page.keyboard.press("Shift+Tab");
+    await expect.poll(focused).toBe(`${player}, set 1 tiebreak`);
+
+    // From the last reachable cell Tab is not intercepted and leaves the grid.
+    await page.getByLabel(`${player}, set 2`, { exact: true }).click();
+    await page.keyboard.press("Tab");
+    await expect.poll(focused).toBe(`${opponent}, set 2`);
+    await page.keyboard.press("Tab");
+    await expect.poll(focused).toBe(`${player}, add set 3`);
+    await page.keyboard.press("Tab");
+    await expect.poll(focused).toBe(`${opponent}, add set 3`);
+    await page.keyboard.press("Tab");
+    await expect
+      .poll(async () => (await focused()) ?? "")
+      .not.toMatch(new RegExp(`^(${player}|${opponent}), `));
+  });
+
   test("reducing format keeps entered scores until the loss is confirmed", async ({
     page,
   }) => {
@@ -477,7 +525,8 @@ async function chooseSource(page: Page, name: string) {
 
 async function setFormat(page: Page, label: string) {
   await page.locator("button").filter({ hasText: "Best of 1" }).last().click();
-  await page.getByRole("button", { name: label, exact: true }).click();
+  // The format menu is a MenuSelect: its options are radio menu items.
+  await page.getByRole("menuitemradio", { name: label, exact: true }).click();
 }
 
 async function enterSecondAndThirdSets(

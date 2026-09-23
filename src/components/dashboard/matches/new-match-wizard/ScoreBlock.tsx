@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Kbd } from "@/components/ui/kbd";
 import { scoreColumns } from "./score-state";
 import type { FormData } from "./types";
 import { setHasData } from "./utils";
@@ -38,6 +39,7 @@ export const ScoreInput = ({
   tiebreak = false,
   invalid = false,
   onEnter,
+  onTab,
   set,
 }: {
   value: number | null;
@@ -48,6 +50,12 @@ export const ScoreInput = ({
   invalid?: boolean;
   /** Called on Enter; the keypress is always prevented so no form submits. */
   onEnter?: () => void;
+  /**
+   * Called on a plain Tab (no Shift or other modifier). Returns whether it
+   * moved focus; only then is the keypress prevented, so a cell with nowhere
+   * to send focus lets Tab leave the grid as the browser would.
+   */
+  onTab?: () => boolean;
   /** Zero-based set index, so a caller can find one set's cells in the DOM. */
   set?: number;
 }) => (
@@ -62,14 +70,23 @@ export const ScoreInput = ({
     value={value === null ? "" : String(value)}
     onChange={(e) => onValue(e.target.value.replace(/[^0-9]/g, ""))}
     onFocus={(e) => e.currentTarget.select()}
-    onKeyDown={
-      onEnter &&
-      ((e) => {
-        if (e.key !== "Enter") return;
+    onKeyDown={(e) => {
+      if (e.key === "Enter" && onEnter) {
         e.preventDefault();
         onEnter();
-      })
-    }
+        return;
+      }
+      if (
+        e.key === "Tab" &&
+        onTab &&
+        !e.shiftKey &&
+        !e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        onTab()
+      )
+        e.preventDefault();
+    }}
     data-focus-ring="none"
     className={cn(
       CELL_CLS,
@@ -226,9 +243,32 @@ export function ScoreBlock({
 
   // Enter in a tiebreak cell: player -> opponent tiebreak (same set);
   // opponent -> next set's player cell, or nowhere past the last set.
+  const tiebreakTarget = (row: "player" | "opponent", i: number) =>
+    row === "player"
+      ? key("o", i, true)
+      : i + 1 < displayed || ghost
+        ? key("p", i + 1)
+        : null;
   const enterTiebreak = (row: "player" | "opponent", i: number) => {
-    if (row === "player") focusKey(key("o", i, true));
-    else if (i + 1 < displayed || ghost) focusKey(key("p", i + 1));
+    const k = tiebreakTarget(row, i);
+    if (k) focusKey(k);
+  };
+
+  // Tab walks the path a digit does, not DOM order (which runs along the
+  // player's whole row first): player -> opponent cell of the same set;
+  // opponent -> the player's tiebreak box when the set went to one (where a
+  // digit completing that pair lands), else the next set's player cell or the
+  // dashed add-set cell. With nowhere left to go it returns false and Tab
+  // leaves the grid, so a keyboard user is never trapped in it.
+  const gameTabTarget = (row: "player" | "opponent", i: number) => {
+    if (row === "player") return key("o", i);
+    if (tie(i)) return key("p", i, true);
+    return i + 1 < displayed || ghost ? key("p", i + 1) : null;
+  };
+  const tabTo = (k: string | null) => {
+    if (!k || !refs.current[k]) return false;
+    focusKey(k);
+    return true;
   };
 
   // Typing in the dashed column adds the set and keeps the digit.
@@ -291,6 +331,7 @@ export function ScoreBlock({
                   refs.current[key(r, i)] = el;
                 }}
                 label={`${name}, set ${i + 1}`}
+                onTab={() => tabTo(gameTabTarget(row, i))}
               />
               {tie(i) && (
                 <ScoreInput
@@ -303,6 +344,7 @@ export function ScoreBlock({
                   }}
                   label={`${name}, set ${i + 1} tiebreak`}
                   onEnter={() => enterTiebreak(row, i)}
+                  onTab={() => tabTo(tiebreakTarget(row, i))}
                 />
               )}
             </span>
@@ -329,6 +371,20 @@ export function ScoreBlock({
                 onChange={(e) =>
                   ghostDigit(row, e.target.value.replace(/[^0-9]/g, ""))
                 }
+                // The dashed pair follows the digit path too: the player's
+                // cell tabs to the opponent's; the opponent's is the end.
+                onKeyDown={(e) => {
+                  if (
+                    e.key === "Tab" &&
+                    row === "player" &&
+                    !e.shiftKey &&
+                    !e.altKey &&
+                    !e.ctrlKey &&
+                    !e.metaKey &&
+                    tabTo(key("o", displayed))
+                  )
+                    e.preventDefault();
+                }}
                 data-focus-ring="none"
                 className="size-full cursor-text bg-transparent text-center text-[16px] text-[var(--ink-900)] outline-none focus:rounded-[var(--radius-cell)] focus:shadow-[0_0_0_1.5px_var(--blue)]"
               />
@@ -364,9 +420,19 @@ export function ScoreBlock({
       </div>
       {renderRow("player", playerName || "You", false)}
       {renderRow("opponent", opponentName || "Opponent", true)}
-      <span className="text-micro pt-0.5">
-        Digits move on <span className="text-[var(--ink-300)]">·</span> Enter
-        leaves a tiebreak cell
+      {/* Size set here rather than via `text-micro`: that DS class is
+          unlayered and its --ink-500 would beat this line's --ink-600. */}
+      <span className="pt-0.5 text-[11px] leading-[1.4] text-[var(--ink-600)]">
+        Each digit moves to the next box{" "}
+        <span className="text-[var(--ink-300)]">·</span>{" "}
+        <Kbd size="sm" className="align-middle">
+          tab
+        </Kbd>{" "}
+        or{" "}
+        <Kbd size="sm" className="align-middle">
+          enter
+        </Kbd>{" "}
+        leaves a tiebreak box
         {ghost && (
           <>
             {" "}

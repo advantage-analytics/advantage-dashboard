@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Score grid: Tab follows the digit path, new hint copy
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/new-match-wizard/ScoreBlock.tsx (guess), src/components/ui/kbd.tsx (import only), tests/upload-score-regression.spec.ts or a sibling spec on the `/wizard-reproduction?mode=new` route (guess)
 - **done when:**
