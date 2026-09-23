@@ -352,7 +352,7 @@ export function DualDetail({
         >
           {visible.singles.length > 0 ? (
             <>
-              <EventGroupHead label="Singles" value={tally(singles)} first />
+              <EventGroupHead label="Singles" first />
               {visible.singles.map(row)}
             </>
           ) : null}
@@ -360,7 +360,6 @@ export function DualDetail({
             <>
               <EventGroupHead
                 label="Doubles"
-                value={tally(doubles)}
                 trailing={teamPointNote(doubles)}
                 first={visible.singles.length === 0}
               />
@@ -746,12 +745,6 @@ function groupRecord(entries: EventEntry[]): { won: number; lost: number } {
     (entry) => entryPlayed(entry) && lineWon(entry) !== true,
   ).length;
   return { won, lost };
-}
-
-/** "4–2" beside a group's heading. Always the whole group, never the cut. */
-function tally(entries: EventEntry[]): string {
-  const { won, lost } = groupRecord(entries);
-  return `${won}–${lost}`;
 }
 
 /**

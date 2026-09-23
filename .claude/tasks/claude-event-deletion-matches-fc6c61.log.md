@@ -131,3 +131,8 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical GATE PASS on the second run (the first run's failures were live-DB specs hitting the shared-IP Supabase sign-in limit, unrelated to a class change); completion `VERDICT: pass`.
 **changed:** `EventPageLayout`'s table+footer wrapper `gap-2.5` → `gap-4` (docblock now says 16px); `EventTableFooter` gains `px-6` so the caption starts on the card's cell x. Both event pages inherit it; no other file touched.
+
+## T15 · Drop the W–L tally from the dual's Singles/Doubles heads — done
+
+**gate:** mechanical GATE PASS on the second run (the first run's failures were live-DB specs hitting the Supabase sign-in rate limit); completion `VERDICT: pass`.
+**changed:** The dual's Singles and Doubles group heads no longer pass a `value`, so the W–L count is gone; `tally()` deleted. "point ours"/"point theirs" stays beside Doubles (`groupRecord()` still feeds `teamPointNote()`). Spec asserts the Singles head reads exactly "Singles" and the Doubles head carries no "2–1". `EventGroupHead`, the harness and the tournament page untouched.

@@ -203,7 +203,7 @@ ready).
 
 ## T15 · Drop the W–L tally from the dual's Singles/Doubles heads
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/schedule/dual-detail.tsx, tests/schedule-dual-outcomes.spec.ts (guess; seams verified)
 - **done when:**

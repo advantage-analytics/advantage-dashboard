@@ -293,12 +293,12 @@ test("the line table: columns, groups, doubles, footer and pills", async ({
   ]);
 
   const singlesHead = page.getByText("Singles", { exact: true }).last();
-  await expect(singlesHead.locator("..")).toContainText("3–3");
+  await expect(singlesHead.locator("..")).toHaveText("Singles");
   const doublesHead = page
     .locator("span.eyebrow")
     .filter({ hasText: /^Doubles$/ })
     .locator("..");
-  await expect(doublesHead).toContainText("2–1");
+  await expect(doublesHead).not.toContainText("2–1");
   await expect(doublesHead).toContainText("point ours");
 
   for (const slot of ["D1", "D2", "D3"]) {
