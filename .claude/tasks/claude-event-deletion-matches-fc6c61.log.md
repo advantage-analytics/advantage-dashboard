@@ -145,3 +145,13 @@ is the runner's. Newest entries at the bottom.
 
 1. `tests/fixtures/event-table-harness.tsx` still passes plain strings as `subline`; switch it to `EventFact`s so the harness matches production.
 2. `SummaryCell`'s trailing label still uses `text-[12px]`; consider a type token.
+
+## T17 · Event name on the Schedule list links straight to the event page — done
+
+**gate:** mechanical pass (lint, typecheck, full suite); completion pass
+**changed:** `schedule-table.tsx` `EventRow` is now a focusable `div` (`aria-current`, Enter/Space only on the row itself, ⌘/Ctrl-click pushes the event route) and the event name is a roster-style `next/link` to `/dashboard/team/schedule/<id>` that stops propagation. `schedule-drawer-actions.spec.ts` adds a test for the link href, name-click-doesn't-peek, date-cell-peeks and ⌘/Ctrl-click routerPushes; row locators moved off role "button", and "Open dual" link lookups became `exact: true`.
+**follow-ups:**
+
+1. Each row is now two Tab stops (row + name link), as on Roster; consider `tabIndex={-1}` on the link.
+2. Row `div` has no ARIA role (same as Roster's `li`); a shared row role/label treatment for both tables.
+3. Roster rows get a `has-[:focus-visible]` wash when the name link is focused; Schedule rows don't yet.

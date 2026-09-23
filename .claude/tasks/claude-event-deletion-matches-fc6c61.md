@@ -230,7 +230,7 @@ ready).
 
 ## T17 · Event name on the Schedule list links straight to the event page
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/schedule/static/schedule-table.tsx (`EventRow` ~line 112), tests/schedule-drawer-actions.spec.ts, tests/fixtures/schedule-drawer-actions-harness.tsx (guess; pattern to copy is `src/components/dashboard/team/roster-table.tsx:392-563`)
 - **done when:**
