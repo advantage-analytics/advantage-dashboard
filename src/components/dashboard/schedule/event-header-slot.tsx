@@ -14,6 +14,7 @@ const SCHEDULE_HREF = "/dashboard/team/schedule";
  *   /schedule/<id>          Schedule › vs Stanford
  *   /schedule/<id>/edit     Schedule › vs Stanford › Edit
  *   /schedule/<id>/score    Schedule › vs Stanford › Add score
+ *   /upload?entry=<line>    Schedule › vs Stanford › Upload video
  *
  * The header cannot name the event itself — it is a client component and the
  * name comes from the page's server read — so the page publishes the trail
@@ -25,6 +26,36 @@ const SCHEDULE_HREF = "/dashboard/team/schedule";
  * trail grammar, restated here because a published slot draws its own markup.
  * The event's crumb links back to the event page from its flows.
  */
+export type EventCrumb = { label: string; href?: string };
+
+/**
+ * The crumbs `EventHeaderSlot` draws, as data, so the trail is pinned by a spec
+ * without rendering a client component. A dual's crumb is "vs <opponent>", a
+ * tournament's its bare name; the event crumb links only when a leaf follows,
+ * because on the event page itself it is the page you are on.
+ */
+export function eventTrail({
+  eventId,
+  name,
+  kind,
+  leaf,
+}: {
+  eventId: string;
+  name: string;
+  kind: EventDetail["event"]["kind"];
+  leaf?: string;
+}): EventCrumb[] {
+  const eventCrumb: EventCrumb = {
+    label: kind === "dual" ? `vs ${name}` : name,
+  };
+  if (leaf) eventCrumb.href = `${SCHEDULE_HREF}/${eventId}`;
+  return [
+    { label: "Schedule", href: SCHEDULE_HREF },
+    eventCrumb,
+    ...(leaf ? [{ label: leaf }] : []),
+  ];
+}
+
 export function EventHeaderSlot({
   eventId,
   name,
@@ -34,18 +65,11 @@ export function EventHeaderSlot({
   eventId: string;
   name: string;
   kind: EventDetail["event"]["kind"];
-  /** The flow screen's word ("Edit", "Add score"); omitted on the event page. */
+  /** The flow screen's word ("Edit", "Add score", "Upload video"); omitted on the event page. */
   leaf?: string;
 }) {
   const node = useMemo(() => {
-    const crumbs: { label: string; href?: string }[] = [
-      { label: "Schedule", href: SCHEDULE_HREF },
-      {
-        label: kind === "dual" ? `vs ${name}` : name,
-        href: leaf ? `${SCHEDULE_HREF}/${eventId}` : undefined,
-      },
-      ...(leaf ? [{ label: leaf }] : []),
-    ];
+    const crumbs = eventTrail({ eventId, name, kind, leaf });
 
     return (
       <nav

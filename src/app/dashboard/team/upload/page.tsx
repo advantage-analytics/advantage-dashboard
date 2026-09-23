@@ -22,6 +22,7 @@ import { getTeamSingleMatch } from "@/lib/data/single-match-server";
 import { supportsVideo } from "@/lib/schedule/entry-state";
 import { formatEventSpan, siteLabel } from "@/lib/schedule/format";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard";
+import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-slot";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
 
 /**
@@ -214,7 +215,23 @@ export default async function TeamUploadPage({
         lineup: lineupChoices(group.event, siblings, programs),
       };
 
-      return <UploadMatchFlow preset={preset} />;
+      // An upload aimed at a line sits under its event, like `/edit` and
+      // `/score` beside it: "Schedule › vs Stanford › Upload video". Where the
+      // page is, not how you got here — never "… › Add score › Upload video".
+      // The header has no path check for this route (`EVENT_PAGE` covers the
+      // schedule tree only), so the static "Upload video" crumb shows for the
+      // frame before this effect publishes; the other branches keep it.
+      return (
+        <>
+          <EventHeaderSlot
+            eventId={group.event.id}
+            name={group.event.name}
+            kind={group.event.kind}
+            leaf="Upload video"
+          />
+          <UploadMatchFlow preset={preset} />
+        </>
+      );
     }
     // The id names a line that already has video, or one from another program.
     redirect("/dashboard/team/upload");

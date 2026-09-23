@@ -300,3 +300,18 @@ The title and content class moved into a new shared module, `schedule/score-flow
 2. Sharing the default provider kind (`DEFAULT_PROVIDER_KIND`) would let the skeleton read the step count instead of assuming the 4-step video flow.
 3. `--ink-200` bars on tinted backgrounds now appear in two skeletons. A `PendingBar` option for tinted backgrounds would replace these one-off overrides.
 4. A personal user with a saved source can jump from provider to file after hydration (`localStorage`), and the skeleton can't know this ahead of time.
+
+## T28 · The upload page on an event line shows the event's trail — done
+
+**gate:** mechanical GATE PASS on the third run. The first two runs each failed on one unrelated live-DB spec: `rls-workspace-isolation`, then `match-video-attachments-db`. · completion `VERDICT: pass`
+
+**changed:**
+
+- `event-header-slot.tsx` exports a pure `eventTrail({ eventId, name, kind, leaf })` that returns the crumb array. `EventHeaderSlot` builds from it, and existing callers render the same trail.
+- The `?entry=` branch of `team/upload/page.tsx` publishes `<EventHeaderSlot … leaf="Upload video" />` beside the unchanged `<UploadMatchFlow preset />`, so the header reads "Schedule › vs Stanford › Upload video" (or the tournament's bare name). The bare, `?draft=` and `?match=` branches keep the static crumb. `header.tsx` is untouched.
+- New specs: `event-header-trail.spec.ts` (the three trail shapes) and `upload-page-trail.spec.ts` (transpiles the page with mocks; checks the slot and props on `?entry=` and no slot on the bare or `?match=` requests).
+
+**follow-ups:**
+
+1. A resumed `?draft=` that started from an event line still shows only "Upload video". The draft carries its preset, so it could publish the same trail.
+2. The `?match=`-only single-match branch could publish a trail to `/dashboard/team/schedule/single/<id>`.

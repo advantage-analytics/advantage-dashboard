@@ -375,7 +375,7 @@ ready).
 
 ## T28 · The upload page on an event line shows the event's trail
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/schedule/event-header-slot.tsx, src/app/dashboard/team/upload/page.tsx (`?entry=` branch :170-217), tests/event-header-trail.spec.ts (new), tests/upload-page-trail.spec.ts (new) (guess)
 - **done when:**
