@@ -12,9 +12,17 @@
  * Change doesn't throw you back to step 1 — the thing you most likely got
  * wrong is WHICH LINE, and that lives in the event you came from. So it opens
  * the lineup as a float menu under the bar: mono line label, the player, and
- * the slot's own state. Picking one rewrites the bar and nothing else — the
- * file you've dropped stays. Below a hairline, "A match outside this event" is
- * the escape hatch that does reopen step 1.
+ * the slot's own state. Picking one keeps the step you are on and re-seeds the
+ * form from that line (players, round, date, format, scoring, and its score
+ * when it has one). It also clears what was answered about the previous line's
+ * PEOPLE — the camera-relative top-player answer, both players' hand, backhand
+ * and their sources, the opponent's roster id and the tiebreaks — because
+ * "you" just changed (`docs/ui-revamp-guardrails.md` §4). The trim window and
+ * the fixed-camera answer describe the recording and stay; the picked file
+ * itself is currently dropped and must be re-picked (see
+ * `docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md`).
+ * Below a hairline, "A match outside this event" is the escape hatch that
+ * does reopen step 1.
  */
 
 import { useState } from "react";

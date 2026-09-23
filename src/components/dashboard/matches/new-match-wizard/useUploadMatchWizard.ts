@@ -175,6 +175,37 @@ const START_OVER_FIELDS = [
   "initialTopPlayerIsPlayer1",
 ] as const satisfies readonly (keyof MatchFormData)[];
 
+/**
+ * What a PinnedLineBar line swap returns to `DEFAULT_FORM_DATA` — the answers
+ * given about line A's PEOPLE, which the new line's seed does not rewrite.
+ *
+ * A swap is not a start-over: the event facts, date and format come from the
+ * new line, and the trim window and `fixedCamera` describe the recording, not
+ * who is in it, so they stay. The top-player answer is camera-relative — "were
+ * YOU at the top" — and "you" just changed (`docs/ui-revamp-guardrails.md`
+ * §4); the styles and the opponent's roster id belong to line A's players; the
+ * tiebreaks belong to a score the new line may rewrite. The top-player answer
+ * goes back to `undefined`, never to a boolean (§3.1).
+ * See `docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md`.
+ */
+const LINE_SWAP_FIELDS = [
+  "initialTopPlayerIsPlayer1",
+  "playerHand",
+  "playerBackhand",
+  "playerStyleSource",
+  "opponentHand",
+  "opponentBackhand",
+  "opponentStyleSource",
+  "opponentPlayerId",
+  "playerTiebreaks",
+  "opponentTiebreaks",
+] as const satisfies readonly (keyof MatchFormData)[];
+
+/** Which line a preset fills — what tells a swap from a re-run of the seed. */
+function presetLineKey(preset: EventPreset): string | null {
+  return preset.entryId ?? preset.matchId;
+}
+
 /** Name, size and mtime — enough to tell one picked recording from another. */
 function videoSignature(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}`;
@@ -1212,6 +1243,8 @@ export function useUploadMatchWizard({
   const cachedUserIdRef = useRef<string | null>(null);
   /** Whether a preset has seeded the step yet — see the preset branch below. */
   const seededRef = useRef(false);
+  /** The line the last seed was for ({@link presetLineKey}) — a swap is a new one. */
+  const seededLineRef = useRef<string | null>(null);
 
   // The wizard autosaves as you answer (design 11c): every change lands in
   // localStorage a moment later, and the header says so. A draft ROW is
@@ -1292,9 +1325,44 @@ export function useUploadMatchWizard({
         ? DEFAULT_PROVIDER_ID
         : DEFAULT_IMPORT_PROVIDER_ID;
       setSelectedProvider(presetProvider);
+      // A PinnedLineBar swap re-runs this with a different line. The seed
+      // below rewrites the line's facts; the answers given about line A's
+      // players are cleared beside it (LINE_SWAP_FIELDS), and the top-player
+      // drift baseline and its stale hint with them — they described an answer
+      // that no longer exists. `cameraAnswerFileRef` stays: the recording did
+      // not change. A re-run for the SAME line (another dependency moved)
+      // clears nothing.
+      const lineKey = presetLineKey(preset);
+      const swapped = seededRef.current && seededLineRef.current !== lineKey;
+      seededLineRef.current = lineKey;
+      if (swapped) {
+        topPlayerAnswerStartRef.current = null;
+        // `start` is the live window start, which a swap does not move — and
+        // the sync effect above will not refresh it when neither of its
+        // inputs changes, so it is kept rather than blanked (a blank start
+        // would anchor the next answer at 0).
+        topPlayerAnswerRef.current = {
+          ...topPlayerAnswerRef.current,
+          answered: false,
+        };
+        setTopPlayerAnswerStale(false);
+      }
+      const swapCleared: Partial<MatchFormData> = {};
+      if (swapped) {
+        for (const field of LINE_SWAP_FIELDS) {
+          // Arrays are copied so the default's own arrays are never shared.
+          const value = DEFAULT_FORM_DATA[field];
+          (swapCleared as Record<string, unknown>)[field] = Array.isArray(value)
+            ? [...value]
+            : value;
+        }
+      }
       setFormData((prev) => ({
         ...prev,
         ...(draft?.formData ?? {}),
+        // After the draft: a swap in a resumed flow re-spreads the draft,
+        // whose answers were given for its line's players too.
+        ...swapCleared,
         eventName: preset.eventName ?? "",
         eventKind: preset.eventKind ?? prev.eventKind,
         round: preset.round ?? "",

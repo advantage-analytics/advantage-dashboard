@@ -80,3 +80,14 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. Nothing tests the `UploadMatchFlow` wiring itself; a small render test with a SwingVision provider could click "Not <name>?" and assert no dialog opens.
+
+## T6 · Investigate what survives a PinnedLineBar line swap — done
+
+**gate:** mechanical GATE PASS (retry of the blocked run from stash bd6de1b3) · completion VERDICT: pass
+**changed:** `useUploadMatchWizard.ts` — the preset seed effect detects a real line change (new `entryId ?? matchId`) and then resets `LINE_SWAP_FIELDS`: `initialTopPlayerIsPlayer1` (to undefined), both players' hand/backhand/`*StyleSource`, `opponentPlayerId`, both tiebreak arrays, and re-arms the top-player baseline; `fixedCamera` and the trim window are kept; first seed and draft resume unchanged. `PinnedLineBar.tsx` header says what a swap clears and keeps (and that the picked file is currently dropped). New `tests/upload-line-swap.spec.ts` (11 tests, 2 `test.fail()` for documented residual defects) and findings at `docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md`.
+**follow-ups:**
+
+1. Keep the picked video on a line swap (author decision 2026-09-23: keep) — the effect keyed on `preset?.entryId` drops it today.
+2. Clear a line-A score on a swap unless it was typed in this wizard (author decision 2026-09-23).
+3. Draft-resumed flows re-apply the draft on every swap.
+4. A singles ↔ doubles line swap is untested.
