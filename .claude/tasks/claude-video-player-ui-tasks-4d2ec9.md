@@ -373,7 +373,7 @@ ready).
 
 ## T28 · Exit shrinks into the report frame only when it is on screen; the exit path pinned in the harness
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T27
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-fullscreen.tsx (`exit` L939–990, the "Motion" doc block); tests/film-playback-refresh.spec.ts (three cases after T27's, reusing `spyAnimate` / `openRoomSpied` / `roomSize`); tests/fixtures/film-motion-box.ts (read-only)

@@ -306,3 +306,13 @@ Reading them: `remounted: true` = a credential swap or an error recovery; `buffe
 
 1. The chrome fade-in delay (0.55 × 460 ms) was left as is — eyeball it now that the origin is right.
 2. T28 should reuse `narrowReportColumn` for its on-screen shrink case, or scale 1 hides the origin again.
+
+## T28 · Exit shrinks into the report frame only when it is on screen; the exit path pinned in the harness — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** `exit` in film-fullscreen.tsx picks its path with T27's `roomMotionPath` (rect read only when motion is allowed): on screen it runs the existing 320 ms shrink into the report frame, off screen or under reduced motion the existing 180 ms fade. Order unchanged and stated in one comment (pause → handoff → chrome fade-out → root → onExit). Motion doc block updated, including a correction: the playhead is handed back before the shrink, not after. Tests: T27 (c)'s setup factored into `openRoomOffscreen`; helpers `clearAnimations`, `leaveRoom`, `expectOpacityFadeOut`; three T28 cases (on-screen shrink geometry within 1px on the narrowed column with handoff time, off-screen fade, reduced-motion fade). Case (b) fails on the old exit. Widget states: loading/empty/error unchanged.
+
+**follow-ups:**
+
+1. No case covers the "window resized under the room" exit directly; only the scrolled-off version is pinned.

@@ -3375,10 +3375,13 @@ test("T27: under reduced motion the room fades in, and so does its chrome, at on
   for (const r of chrome) expect(r.options.delay ?? 0).toBe(0);
 });
 
-test("T27: the ⇧-click door with the player scrolled off-screen fades the room in", async ({
-  page,
-}) => {
-  await open(page, "grow-offscreen", { pad: "12" });
+/**
+ * Open the room by the ⇧-click door with the report frame scrolled wholly
+ * above the viewport — the frame has no area on screen to grow from (T27) or
+ * shrink into (T28). The spy is installed before the click.
+ */
+async function openRoomOffscreen(page: Page, matchId: string) {
+  await open(page, matchId, { pad: "12" });
   await spyAnimate(page);
 
   const player = await page.locator(REPORT).boundingBox();
@@ -3403,6 +3406,12 @@ test("T27: the ⇧-click door with the player scrolled off-screen fades the room
 
   await page.locator(SHELL_ROW("c")).click({ modifiers: ["Shift"] });
   await waitForRoom(page);
+}
+
+test("T27: the ⇧-click door with the player scrolled off-screen fades the room in", async ({
+  page,
+}) => {
+  await openRoomOffscreen(page, "grow-offscreen");
 
   const rooms = (await readAnimations(page)).filter((r) => r.room);
   expect(rooms).toHaveLength(1);
@@ -3410,4 +3419,104 @@ test("T27: the ⇧-click door with the player scrolled off-screen fades the room
     expect(kf).toHaveProperty("opacity");
     expect(kf).not.toHaveProperty("transform");
   }
+});
+
+/* -------------------------------------------------------------------------
+ * T28 — the exit shrinks INTO the report frame, but only when that frame is
+ * on screen. The order is pinned here too: pause → hand-back → chrome fade →
+ * the room's own animation → unmount on `finished`.
+ * ---------------------------------------------------------------------- */
+
+async function clearAnimations(page: Page) {
+  await page.evaluate(() => {
+    (window as unknown as { __filmAnimations: unknown[] }).__filmAnimations =
+      [];
+  });
+}
+
+/** Escape, then wait for the room to unmount — which only `finished` does. */
+async function leaveRoom(page: Page) {
+  await page.keyboard.press("Escape");
+  await expect(page.locator(ROOM)).toHaveCount(0);
+}
+
+function expectOpacityFadeOut(record: AnimationRecord) {
+  expect(record.keyframes).toHaveLength(2);
+  for (const kf of record.keyframes) {
+    expect(kf).toHaveProperty("opacity");
+    expect(kf).not.toHaveProperty("transform");
+    expect(kf).not.toHaveProperty("clipPath");
+  }
+  expect(Number(record.keyframes[0].opacity)).toBe(1);
+  expect(Number(record.keyframes[1].opacity)).toBe(0);
+  expect(record.options.duration).toBe(180);
+}
+
+test("T28: the room shrinks into the report frame on screen, chrome first, playhead handed back", async ({
+  page,
+}) => {
+  await narrowReportColumn(page);
+  await openRoomSpied(page, "shrink-into-frame");
+  const room = await roomSize(page);
+  await seekTo(page, ROOM, 0.4);
+  await clearAnimations(page);
+
+  await leaveRoom(page);
+  const records = await readAnimations(page);
+
+  const roomIndex = records.findIndex((r) => r.room);
+  expect(records.filter((r) => r.room)).toHaveLength(1);
+  const shrink = records[roomIndex];
+  expect(shrink.keyframes).toHaveLength(2);
+  expect(shrink.keyframes[1].transformOrigin).toBe("0 0");
+  expect(shrink.options.duration).toBe(320);
+  expect(shrink.options.fill).toBe("forwards");
+
+  // The last frame sits exactly on the report player — which is smaller than
+  // the room, so the scale is not 1 and the geometry is not vacuous.
+  const frame = await page.locator(REPORT).boundingBox();
+  if (!frame) throw new Error("no report frame");
+  expect(frame.width).toBeLessThan(room.width * 0.75);
+  expectBoxWithin1px(
+    screenBox(
+      shrink.keyframes[1] as { transform: string; clipPath: string },
+      room,
+    ),
+    frame,
+  );
+
+  // Chrome leaves first: every chrome fade-out was started before the room's.
+  const chrome = records.map((r, i) => ({ r, i })).filter(({ r }) => r.chrome);
+  expect(chrome.length).toBeGreaterThan(0);
+  for (const { r, i } of chrome) {
+    expect(i).toBeLessThan(roomIndex);
+    expect(r.keyframes.map((kf) => Number(kf.opacity))).toEqual([1, 0]);
+    expect(r.options.duration).toBe(120);
+  }
+
+  const report = await state(page, REPORT);
+  expect(Math.abs((report?.time ?? -1) - 0.4)).toBeLessThanOrEqual(0.1);
+});
+
+test("T28: with the report frame scrolled off-screen the room fades out", async ({
+  page,
+}) => {
+  await openRoomOffscreen(page, "shrink-offscreen");
+  await clearAnimations(page);
+
+  await leaveRoom(page);
+  const rooms = (await readAnimations(page)).filter((r) => r.room);
+  expect(rooms).toHaveLength(1);
+  expectOpacityFadeOut(rooms[0]);
+});
+
+test("T28: under reduced motion the room fades out", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openRoomSpied(page, "shrink-reduced");
+  await clearAnimations(page);
+
+  await leaveRoom(page);
+  const rooms = (await readAnimations(page)).filter((r) => r.room);
+  expect(rooms).toHaveLength(1);
+  expectOpacityFadeOut(rooms[0]);
 });

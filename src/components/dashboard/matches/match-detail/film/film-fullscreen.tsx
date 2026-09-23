@@ -126,12 +126,16 @@ import { useSeekSettling } from "./use-seek-settling";
  * — the keyframe maths assumes it, and the default centre origin started the
  * room beside the player. A frame with no area on screen (the ⇧-click door
  * from a scrolled-away player) has nothing to grow from, so the room fades in
- * over 200ms instead, its chrome with it. Exit runs the same path backwards
- * in 320ms, chrome first, and only then hands the playhead back. The points
- * drawer slides on the same curve and the transport's right edge travels with
- * it. Progress rules and the playhead read `--film-t` (`film-clock.ts`), so
- * they move every frame instead of every `timeupdate`. Reduced motion keeps
- * every change as an opacity fade and drops the travel.
+ * over 200ms instead, its chrome with it. Exit runs the entrance backwards
+ * in 320ms, INTO the report frame, when that frame is on screen, and fades
+ * over 180ms when it is not (the window resized under the room, or the
+ * ⇧-click door opened it from a scrolled-off player). Either way the playhead
+ * is handed back first, so the report player is already on this frame, then
+ * the chrome leaves and the room goes. The points drawer slides on the same
+ * curve and the transport's right edge travels with it. Progress rules and
+ * the playhead read `--film-t` (`film-clock.ts`), so they move every frame
+ * instead of every `timeupdate`. Reduced motion keeps every change as an
+ * opacity fade and drops the travel.
  *
  * ── Chrome ──────────────────────────────────────────────────────────────────
  * 3s of stillness **while the film is playing** collapses everything operable
@@ -942,6 +946,8 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     setMuted(el.muted);
   }, []);
 
+  // Exit order: pause → `p.onHandoff(time)` → chrome 120ms fade-out → the
+  // root's shrink (or fade) → `p.onExit` once that animation has finished.
   const exit = useCallback(() => {
     if (leavingRef.current) return;
     leavingRef.current = true;
@@ -975,23 +981,25 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       });
     }
 
-    const frame = prefersReducedMotion() ? null : p.originRect();
-    const animation = frame
-      ? root.animate(
-          [
-            OPEN_ROOM_FRAME,
-            collapsedRoomFrame(frame, {
-              width: root.clientWidth,
-              height: root.clientHeight,
-            }),
-          ],
-          { duration: ROOM_EXIT_MS, easing: ROOM_EASE_EXIT, fill: "forwards" },
-        )
-      : root.animate([{ opacity: 1 }, { opacity: 0 }], {
-          duration: 180,
-          easing: "linear",
-          fill: "forwards",
-        });
+    // The rect is never read under reduced motion: there is no travel to aim.
+    // A frame with no area on screen (the window resized under the room, or
+    // the ⇧-click door from a scrolled-off player) has nothing to shrink into.
+    const roomSize = { width: root.clientWidth, height: root.clientHeight };
+    const reduced = prefersReducedMotion();
+    const frame = reduced ? null : p.originRect();
+    const path = reduced ? "fade" : roomMotionPath(frame, roomSize);
+    const animation =
+      path === "frame" && frame
+        ? root.animate([OPEN_ROOM_FRAME, collapsedRoomFrame(frame, roomSize)], {
+            duration: ROOM_EXIT_MS,
+            easing: ROOM_EASE_EXIT,
+            fill: "forwards",
+          })
+        : root.animate([{ opacity: 1 }, { opacity: 0 }], {
+            duration: 180,
+            easing: "linear",
+            fill: "forwards",
+          });
     void animation.finished.catch(() => {}).then(() => p.onExit(state));
   }, [p, currentTime]);
 
