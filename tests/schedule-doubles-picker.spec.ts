@@ -97,8 +97,8 @@ test.afterAll(async () => {
   );
 });
 
-async function openFixture(page: import("@playwright/test").Page) {
-  await page.goto(origin);
+async function openFixture(page: import("@playwright/test").Page, query = "") {
+  await page.goto(`${origin}/${query}`);
   await expect
     .poll(() => page.locator("html").getAttribute("data-hydrated"))
     .toBe("true");
@@ -653,5 +653,93 @@ test("an added player joins the pair by id and every other picker offers them", 
     page
       .getByRole("listbox", { name: "Players for S1" })
       .getByRole("option", { name: /^Sam Hill/ }),
+  ).toHaveCount(1);
+});
+
+type StateLine = {
+  key: string;
+  discipline: string;
+  ourIds: string[];
+  ourLabels: string[];
+  theirLabels: string[];
+  theirNoPlayer: boolean;
+};
+
+async function lineupState(
+  page: import("@playwright/test").Page,
+): Promise<StateLine[]> {
+  return JSON.parse((await page.getByLabel("Lineup state").textContent())!);
+}
+
+test("a doubles pair moves between courts with the keyboard, opponents stay", async ({
+  page,
+}) => {
+  await openFixture(page, "?free=1");
+  const before = await lineupState(page);
+  const pairOn = (lines: StateLine[], key: string) =>
+    lines.find((line) => line.key === key)!.ourIds;
+
+  await expect(
+    page.getByRole("button", { name: "Move Alex Kim / Casey Lee, line D2" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Move Alex Kim / Jordan Lee, line D3" }),
+  ).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "Move Riley Chen / Drew Park, line D1" })
+    .focus();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Space");
+
+  await expect(
+    page.getByRole("button", { name: "Move Riley Chen / Drew Park, line D3" }),
+  ).toBeFocused();
+  const after = await lineupState(page);
+  // The singles gesture exactly: each ↓ swaps with the next line, so D1's
+  // pair travels to D3 and the two it passed each move up one court.
+  expect(pairOn(after, "D3")).toEqual(pairOn(before, "D1"));
+  expect(pairOn(after, "D2")).toEqual(pairOn(before, "D3"));
+  expect(pairOn(after, "D1")).toEqual(pairOn(before, "D2"));
+  // Every court keeps its opponent, and singles is untouched.
+  expect(after.map((line) => [line.key, line.theirLabels])).toEqual(
+    before.map((line) => [line.key, line.theirLabels]),
+  );
+  expect(after.filter((line) => line.discipline === "singles")).toEqual(
+    before.filter((line) => line.discipline === "singles"),
+  );
+});
+
+test("escape puts a lifted doubles pair back without changing the lineup", async ({
+  page,
+}) => {
+  await openFixture(page, "?free=1");
+  const original = await page.getByLabel("Lineup state").textContent();
+  await page
+    .getByRole("button", { name: "Move Riley Chen / Drew Park, line D1" })
+    .focus();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Escape");
+  await expect(page.getByLabel("Lineup state")).toHaveText(original!);
+  await expect(
+    page.getByRole("button", { name: "Move Riley Chen / Drew Park, line D1" }),
+  ).toBeFocused();
+});
+
+test("a settled doubles line leaves no doubles grip to drag", async ({
+  page,
+}) => {
+  // The default fixture has D3 played.
+  await openFixture(page);
+  await expect(
+    page.getByRole("button", { name: /^Move .*, line D\d$/ }),
+  ).toHaveCount(0);
+  // Singles are still reorderable — only the doubles block is frozen.
+  await expect(
+    page.getByRole("button", { name: /^Move .*, line 1$/ }),
   ).toHaveCount(1);
 });

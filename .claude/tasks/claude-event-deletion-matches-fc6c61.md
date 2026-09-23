@@ -254,7 +254,7 @@ ready).
 
 ## T19 · Drag whole doubles pairs between D1–D3
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **files:** src/lib/schedule/singles-order.ts (or new src/lib/schedule/doubles-order.ts), src/components/dashboard/schedule/static/lineup-rows.tsx (`DoublesLineup`; reuse `ReorderableSingles`/`PlayerItem` grip + keyboard), src/components/dashboard/schedule/static/dual-build-step.tsx (`setSinglesOrder` :699, `DualLineupStep` props), src/components/dashboard/schedule/static/new-dual-flow.tsx (:595), tests/singles-order.spec.ts, tests/schedule-doubles-picker.spec.ts, tests/fixtures/schedule-doubles-picker-harness.tsx (guess)
 - **done when:**
@@ -263,7 +263,7 @@ ready).
     - It clears `noPlayer` on a court that receives a non-empty pair, as `applySinglesOrder` does.
     - It leaves each line's `theirLabels`/`theirNoPlayer` and every singles line unchanged.
     - It returns the lines unchanged when any doubles line is locked.
-  - [ ] Each unlocked doubles row has a grip button labelled `Move <A / B>, line D<n>`. A Playwright spec focuses D1's grip and presses Space, ArrowDown ×2, Space. It asserts that D1's pair moved to D3, D3's pair moved to D1, and every line's opponent labels are unchanged (read from the harness's "Lineup state").
+  - [ ] Each unlocked doubles row has a grip button labelled `Move <A / B>, line D<n>`. A Playwright spec focuses D1's grip and presses Space, ArrowDown ×2, Space. It asserts that D1's pair ends on D3 and the others shift up like singles (D2's pair on D1, D3's pair on D2), and every line's opponent labels are unchanged (read from the harness's "Lineup state").
   - [ ] Pressing Escape after a lift and before the drop leaves "Lineup state" exactly as it was.
   - [ ] With a settled doubles line (`?locked` fixture / `lockedByKey`), no doubles grip renders.
 - **notes:** Scope: a drag moves the whole pair between courts, the way singles moves the player on a line and not the court (`lineup-rows.tsx:15-27`, `singles-order.ts:1-17`). The opponent stays with the court. There is no doubles bench. Reuse the singles gesture: `Reorder.Group`, a grip-only `dragListener={false}` with `useDragControls`, and Space/↑↓/Space/Esc. Update the file header's "Doubles are picked, not typed" section.

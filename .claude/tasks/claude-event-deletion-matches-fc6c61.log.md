@@ -183,3 +183,9 @@ is the runner's. Newest entries at the bottom.
 1. Mouse drag is untested; the specs cover keyboard only (same framer setup as singles).
 2. `ReorderableDoubles` repeats about 60 lines of lift/drop/cancel logic from `ReorderableSingles`, which could become a shared hook.
 3. A pair dragged off a "No pair" court leaves that court's `noPlayer` flag set, as singles does. Worth a UX check.
+
+## T19 · Drag whole doubles pairs between D1–D3 — done
+
+**gate:** mechanical pass (the run before it failed only on live-DB `seats-count-players.spec.ts:150`); completion pass against the amended criterion
+**changed:** The author approved shift semantics and the second criterion now reads "D1's pair ends on D3 and the others shift up like singles". The work was restored from stash 53dbb7e5. New `src/lib/schedule/doubles-order.ts` holds `applyDoublesOrder`. `DoublesLineup` renders `ReorderableDoubles`/`PairItem` (grip-only framer `Reorder.Group`, using the same `moveToken` keyboard as singles), or `StaticDoubles` when any doubles line is settled. The grip and keyboard handling were extracted into `LineupGrip`/`gripKey`, which singles and doubles share. `useDualDraft.setDoublesOrder` is passed through `DualLineupStep.onDoublesOrder` and `new-dual-flow.tsx`. The harness adds `?free=1`, and specs were added in `singles-order.spec.ts` and `schedule-doubles-picker.spec.ts`.
+**follow-ups:** see the blocked entry above (mouse drag untested, shared reorder hook, `noPlayer` on a vacated court).

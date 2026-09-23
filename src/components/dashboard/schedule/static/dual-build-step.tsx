@@ -55,6 +55,10 @@ import {
   applySinglesOrder,
   type SinglesOccupant,
 } from "@/lib/schedule/singles-order";
+import {
+  applyDoublesOrder,
+  type DoublesOccupant,
+} from "@/lib/schedule/doubles-order";
 import { courtIndex } from "@/lib/schedule/courts";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
@@ -700,6 +704,15 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     setLines((current) => applySinglesOrder(current, order, lockedByKey));
   }
 
+  /**
+   * A new doubles order from the lineup's drag — D1…D3's pairs, in order.
+   * The doubles half of `setSinglesOrder`: whole pairs move, opponents stay
+   * on their courts, and it is refused while any doubles line is settled.
+   */
+  function setDoublesOrder(order: DoublesOccupant[]) {
+    setLines((current) => applyDoublesOrder(current, order, lockedByKey));
+  }
+
   // A line counts once it is set — a player, a pair, or No player — and a
   // settled line counts whoever is on it. The dual saves at nine of nine: a
   // hole would read as unfinished and as forfeited at once, and `dualScore`
@@ -811,6 +824,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     setNoPlayer,
     setTheirNoPlayer,
     setSinglesOrder,
+    setDoublesOrder,
     lineCount,
     lineTotal,
     opponentName,
@@ -1006,6 +1020,7 @@ export function DualLineupStep({
   onNoPlayer,
   onTheirNoPlayer,
   onSinglesOrder,
+  onDoublesOrder,
 }: {
   lines: LineupLine[];
   /**
@@ -1034,6 +1049,8 @@ export function DualLineupStep({
   onTheirNoPlayer: (key: string) => void;
   /** `useDualDraft().setSinglesOrder` — a drag's whole new singles order. */
   onSinglesOrder: (order: SinglesOccupant[]) => void;
+  /** `useDualDraft().setDoublesOrder` — a drag's whole new doubles order. */
+  onDoublesOrder: (order: DoublesOccupant[]) => void;
 }) {
   const singles = lines.filter((line) => line.discipline === "singles");
   const doubles = lines.filter((line) => line.discipline === "doubles");
@@ -1117,7 +1134,7 @@ export function DualLineupStep({
           set={setCount(doubles, locked, shared.clashes)}
           total={doubles.length}
         />
-        <DoublesLineup {...shared} lines={doubles} />
+        <DoublesLineup {...shared} lines={doubles} onOrder={onDoublesOrder} />
       </div>
     </>
   );

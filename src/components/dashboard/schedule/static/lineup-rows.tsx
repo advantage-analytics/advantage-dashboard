@@ -27,9 +27,17 @@
  * A dual with a settled singles line cannot be reordered at all, because the
  * save refuses any submission that moves one. Its singles draw as plain rows.
  *
- * ── Doubles are picked, not typed ──────────────────────────────────────────
+ * ── Doubles are picked, not typed — and move as pairs ──────────────────────
  * One trigger per court — the pair's two faces, overlapped — opening a
- * pick-two checklist of the roster. A player already on another doubles line
+ * pick-two checklist of the roster. The pair then moves between D1–D3 by the
+ * singles gesture exactly — a grip-only drag, Space/↑/↓/Space/Esc — and the
+ * same three columns: what moves is our pair, never the court or the opponent
+ * pair across the net. There is no doubles bench, so an order is just the
+ * three pairs, written through ONE `onOrder` call and resolved in
+ * `applyDoublesOrder` (`lib/schedule/doubles-order.ts`). A settled doubles
+ * line freezes the block into plain rows, as a settled singles line does.
+ *
+ * Picking: A player already on another doubles line
  * shows which and cannot be picked: a player plays one singles line and one
  * doubles line, the `lineupClashes` rule the server enforces. The singles
  * picker leaves a player already on another singles line out of its list.
@@ -70,6 +78,7 @@ import {
 } from "@/lib/schedule/lineup-validation";
 import { splitNames } from "@/lib/schedule/format";
 import { saveOpponentPlayer } from "@/lib/schedule/actions";
+import type { DoublesOccupant } from "@/lib/schedule/doubles-order";
 import {
   BENCH,
   EMPTY_OCCUPANT,
@@ -836,7 +845,38 @@ interface BlockProps {
 
 /* ── Doubles ───────────────────────────────────────────────────────────── */
 
-export function DoublesLineup(props: BlockProps) {
+/** `useDualDraft().setDoublesOrder` — D1…D3's pairs, in order. */
+export type DoublesOrderHandler = (order: DoublesOccupant[]) => void;
+
+/** Player id → the OTHER doubles lines they are on — `PairPicker.pairedOn`. */
+function pairedOnOthers(
+  lines: readonly LineupLine[],
+  key: string,
+): Map<string, string[]> {
+  const pairedOn = new Map<string, string[]>();
+  for (const other of lines) {
+    if (other.key === key) continue;
+    for (const id of other.ourIds) {
+      pairedOn.set(id, [...(pairedOn.get(id) ?? []), other.slot]);
+    }
+  }
+  return pairedOn;
+}
+
+export function DoublesLineup(
+  props: BlockProps & { onOrder: DoublesOrderHandler },
+) {
+  const reorderable = !props.lines.some(
+    (line) => props.locked?.[line.key] !== undefined,
+  );
+  if (reorderable) {
+    return <ReorderableDoubles key={props.pool.key} {...props} />;
+  }
+  return <StaticDoubles {...props} />;
+}
+
+/** Doubles as plain rows — a dual with a settled doubles line. */
+function StaticDoubles(props: BlockProps) {
   const { lines, locked, pool, roster, onOurSelection } = props;
   const opponentChoices = opponentPairChoices(
     props.opponentSinglesNames,
@@ -846,13 +886,7 @@ export function DoublesLineup(props: BlockProps) {
   return (
     <div className="-mx-2 flex flex-col">
       {lines.map((line, index) => {
-        const others = lines.filter((other) => other.key !== line.key);
-        const pairedOn = new Map<string, string[]>();
-        for (const other of others) {
-          for (const id of other.ourIds) {
-            pairedOn.set(id, [...(pairedOn.get(id) ?? []), other.slot]);
-          }
-        }
+        const pairedOn = pairedOnOthers(lines, line.key);
         return (
           <LineRow
             // The school's key rides in the row key: every name on this row was
@@ -1262,6 +1296,102 @@ export function SinglesLineup(
 const benchToken = (userId: string) => `bench:${userId}`;
 const gripId = (token: string) => `lineup-grip-${token}`;
 
+/** A lift in progress, as the grip's keyboard drives it. */
+interface GripActions {
+  lift: (token: string) => void;
+  drop: (token: string) => void;
+  step: (token: string, direction: 1 | -1) => void;
+  cancel: (token: string) => void;
+}
+
+/**
+ * The Roster's keyboard, for one grip: Space (or Enter) lifts and drops, ↑/↓
+ * move one line while lifted, Escape puts it back. Shared by singles and
+ * doubles so the two blocks cannot drift apart.
+ */
+function gripKey(
+  event: React.KeyboardEvent<HTMLButtonElement>,
+  token: string,
+  lifted: string | null,
+  { lift, drop, step, cancel }: GripActions,
+) {
+  if (event.key === " " || event.key === "Enter") {
+    event.preventDefault();
+    event.stopPropagation();
+    if (lifted === token) drop(token);
+    else lift(token);
+    return;
+  }
+  if (lifted !== token) return;
+  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+    event.preventDefault();
+    event.stopPropagation();
+    step(token, event.key === "ArrowDown" ? 1 : -1);
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    cancel(token);
+  }
+}
+
+/**
+ * The drag handle at the head of a reorderable line — the only thing that
+ * starts a drag — and, while it is held, the blue disc in the gutter saying
+ * which line it would land on.
+ */
+function LineupGrip({
+  token,
+  label,
+  spot,
+  held,
+  hot,
+  controls,
+  onKey,
+}: {
+  token: string;
+  label: string;
+  /** What the held disc reads — the line it would land on. */
+  spot: React.ReactNode;
+  held: boolean;
+  hot: boolean;
+  controls: ReturnType<typeof useDragControls>;
+  onKey: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <>
+      {held ? (
+        <span
+          aria-hidden
+          className="mono tabular absolute top-1/2 -left-[86px] inline-flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--blue)] text-[10px] font-medium text-white"
+        >
+          {spot}
+        </span>
+      ) : null}
+
+      <button
+        id={gripId(token)}
+        type="button"
+        aria-label={label}
+        aria-pressed={held}
+        onPointerDown={(event) => {
+          event.currentTarget.focus({ preventScroll: true });
+          controls.start(event);
+        }}
+        onKeyDown={onKey}
+        className={cn(
+          "-ml-1 inline-flex h-7 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-[5px] text-[var(--ink-400)] transition-opacity duration-[var(--duration-hover)] active:cursor-grabbing",
+          "focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+          held || hot
+            ? cn("opacity-100", held && "text-[var(--ink-900)]")
+            : "opacity-0 group-hover:opacity-100",
+        )}
+      >
+        <GripVertical className="size-3.5" strokeWidth={1.5} aria-hidden />
+      </button>
+    </>
+  );
+}
+
 function ReorderableSingles({
   lines,
   locked,
@@ -1531,25 +1661,9 @@ function ReorderableSingles({
                 setDragging(null);
                 commit(draftRef.current ?? resting);
               }}
-              onKey={(event) => {
-                if (event.key === " " || event.key === "Enter") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (lifted === token) drop(token);
-                  else lift(token);
-                  return;
-                }
-                if (lifted !== token) return;
-                if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  step(token, event.key === "ArrowDown" ? 1 : -1);
-                } else if (event.key === "Escape") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  cancel(token);
-                }
-              }}
+              onKey={(event) =>
+                gripKey(event, token, lifted, { lift, drop, step, cancel })
+              }
               onOurLabels={onOurLabels}
               onOurSelection={onOurSelection}
               onAddPlayer={onAddPlayer}
@@ -1688,35 +1802,15 @@ function PlayerItem({
         picking && "z-30!",
       )}
     >
-      {held ? (
-        <span
-          aria-hidden
-          className="mono tabular absolute top-1/2 -left-[86px] inline-flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--blue)] text-[10px] font-medium text-white"
-        >
-          {spot ?? "—"}
-        </span>
-      ) : null}
-
-      <button
-        id={gripId(token)}
-        type="button"
-        aria-label={`Move ${label || "empty line"}${spot ? `, line ${spot}` : ", not in the lineup"}`}
-        aria-pressed={held}
-        onPointerDown={(event) => {
-          event.currentTarget.focus({ preventScroll: true });
-          controls.start(event);
-        }}
-        onKeyDown={onKey}
-        className={cn(
-          "-ml-1 inline-flex h-7 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-[5px] text-[var(--ink-400)] transition-opacity duration-[var(--duration-hover)] active:cursor-grabbing",
-          "focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-          held || hot
-            ? cn("opacity-100", held && "text-[var(--ink-900)]")
-            : "opacity-0 group-hover:opacity-100",
-        )}
-      >
-        <GripVertical className="size-3.5" strokeWidth={1.5} aria-hidden />
-      </button>
+      <LineupGrip
+        token={token}
+        label={`Move ${label || "empty line"}${spot ? `, line ${spot}` : ", not in the lineup"}`}
+        spot={spot ?? "—"}
+        held={held}
+        hot={hot}
+        controls={controls}
+        onKey={onKey}
+      />
 
       {benched ? (
         <span className="flex min-w-0 items-center gap-2.5">
@@ -1741,6 +1835,341 @@ function PlayerItem({
           onNoPlayer={onNoPlayer}
         />
       )}
+    </Reorder.Item>
+  );
+}
+
+/* ── Doubles, reorderable ──────────────────────────────────────────────── */
+
+/**
+ * D1–D3 as the singles block draws S1–S6: static courts, the reorderable
+ * pairs, static opponents. `ReorderableSingles` without the bench — a pair
+ * cannot be sat out, only moved to another court.
+ */
+function ReorderableDoubles({
+  lines,
+  locked,
+  pool,
+  roster,
+  onOurSelection,
+  onAddPairPlayer,
+  onTheirLabels,
+  onNoPlayer,
+  onTheirNoPlayer,
+  clashes,
+  opponentSinglesNames,
+  onOrder,
+}: BlockProps & { onOrder: DoublesOrderHandler }) {
+  const reduceMotion = useReducedMotion();
+  // A settled SINGLES line still draws the trailing column in both blocks.
+  const trailing = hasLocks(locked);
+  const listRef = useRef<HTMLDivElement>(null);
+  const opponentChoices = opponentPairChoices(
+    opponentSinglesNames,
+    pool,
+    lines,
+  );
+
+  // One stable token per court's pair, moving with the pair on a drop — the
+  // singles block's scheme, for the same reason: a token is never parsed.
+  const tokenBase = useId();
+  const [tokens, setTokens] = useState<string[]>(() =>
+    lines.map((_, index) => `${tokenBase}-${index}`),
+  );
+  const resting = tokens.slice(0, lines.length);
+
+  /** The line each token's pair sits on at rest — what its picker edits. */
+  const lineOf = (token: string): LineupLine | undefined =>
+    lines[tokens.indexOf(token)];
+
+  const [draft, setDraft] = useState<string[] | null>(null);
+  const draftRef = useRef<string[] | null>(null);
+  const [lifted, setLifted] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [hot, setHot] = useState<string | null>(null);
+  const [activeOpp, setActiveOpp] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+
+  const sequence = draft ?? resting;
+
+  function setDraftSeq(next: string[] | null) {
+    draftRef.current = next;
+    setDraft(next);
+  }
+
+  function occupantOf(token: string): DoublesOccupant {
+    const line = lineOf(token);
+    return line ? { ids: line.ourIds, labels: line.ourLabels } : EMPTY_OCCUPANT;
+  }
+
+  function nameOf(token: string): string {
+    return occupantOf(token).labels.join(" / ") || "Empty line";
+  }
+
+  const slotAt = (seq: string[], token: string) =>
+    lines[seq.indexOf(token)]?.slot ?? "";
+
+  function commit(seq: string[]) {
+    const order = seq.map(occupantOf);
+    setTokens(seq);
+    setDraftSeq(null);
+    onOrder(order);
+  }
+
+  function lift(token: string) {
+    setDraftSeq(resting);
+    setLifted(token);
+    setAnnouncement(
+      `${nameOf(token)} lifted, line ${slotAt(resting, token)}. Arrows move, Space drops, Escape cancels.`,
+    );
+  }
+
+  function drop(token: string) {
+    const seq = draftRef.current ?? resting;
+    setLifted(null);
+    commit(seq);
+    setAnnouncement(`${nameOf(token)} dropped, line ${slotAt(seq, token)}.`);
+    requestAnimationFrame(() =>
+      document.getElementById(gripId(token))?.focus(),
+    );
+  }
+
+  function cancel(token: string) {
+    setLifted(null);
+    setDraftSeq(null);
+    setAnnouncement(`${nameOf(token)} put back.`);
+    requestAnimationFrame(() =>
+      document.getElementById(gripId(token))?.focus(),
+    );
+  }
+
+  function step(token: string, direction: 1 | -1) {
+    const seq = moveToken(draftRef.current ?? resting, token, direction);
+    setDraftSeq(seq);
+    setAnnouncement(`${nameOf(token)}, line ${slotAt(seq, token)}.`);
+    requestAnimationFrame(() =>
+      document.getElementById(gripId(token))?.focus(),
+    );
+  }
+
+  // A lift abandoned by tabbing away is put back rather than half-applied.
+  useEffect(() => {
+    if (!lifted) return;
+    function onFocusIn(event: FocusEvent) {
+      if ((event.target as HTMLElement | null)?.id !== gripId(lifted!)) {
+        setLifted(null);
+        setDraftSeq(null);
+      }
+    }
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, [lifted]);
+
+  const held = lifted ?? dragging;
+
+  return (
+    <div className="relative -mx-2 flex">
+      <p className="sr-only" aria-live="polite">
+        {announcement}
+      </p>
+
+      {/* The courts. They never move. */}
+      <div aria-hidden className="flex flex-col">
+        {lines.map((line, index) => (
+          <CourtCell
+            key={line.key}
+            slot={line.slot}
+            className={cn(
+              COL.slot,
+              LINE_H,
+              "border-b transition-colors duration-[var(--duration-hover)]",
+              index === lines.length - 1 || hot === line.key
+                ? "border-transparent"
+                : "border-[var(--border-hairline)]",
+              hot === line.key && !held && cn(WASH, "rounded-l-[8px]"),
+            )}
+          />
+        ))}
+      </div>
+
+      {/* Our pairs — the only column a drag moves. */}
+      <Reorder.Group
+        ref={listRef}
+        as="div"
+        axis="y"
+        values={sequence}
+        onReorder={(next) => setDraftSeq(next)}
+        className="flex min-w-0 flex-1 flex-col"
+      >
+        {sequence.map((token, index) => {
+          const line = lineOf(token);
+          if (!line) return null;
+          const court = lines[index];
+          return (
+            <PairItem
+              key={token}
+              token={token}
+              line={line}
+              court={court?.slot ?? line.slot}
+              lastLine={index === lines.length - 1}
+              held={held === token}
+              hot={court !== undefined && hot === court.key && !held}
+              reduceMotion={Boolean(reduceMotion)}
+              listRef={listRef}
+              onHot={(on) => setHot(on && court ? court.key : null)}
+              onDragStart={() => {
+                setDragging(token);
+                setDraftSeq(resting);
+              }}
+              onDragEnd={() => {
+                setDragging(null);
+                commit(draftRef.current ?? resting);
+              }}
+              onKey={(event) =>
+                gripKey(event, token, lifted, { lift, drop, step, cancel })
+              }
+            >
+              <PairPicker
+                line={line}
+                roster={roster}
+                pairedOn={pairedOnOthers(lines, line.key)}
+                clashWith={clashes.get(line.slot)}
+                onOurSelection={onOurSelection}
+                onAddPlayer={onAddPairPlayer}
+                onNoPlayer={onNoPlayer}
+              />
+            </PairItem>
+          );
+        })}
+      </Reorder.Group>
+
+      {/* The opponent pairs. They never move either. */}
+      <div className="flex flex-col">
+        {lines.map((line, index) => (
+          <div
+            key={`${pool.key}:${line.key}`}
+            onPointerEnter={() => setHot(line.key)}
+            onPointerLeave={() => setHot(null)}
+            onFocus={() => setHot(line.key)}
+            onBlur={() => setHot(null)}
+            className={cn(
+              "relative flex items-center border-b transition-colors duration-[var(--duration-hover)]",
+              LINE_H,
+              index === lines.length - 1 || hot === line.key
+                ? "border-transparent"
+                : "border-[var(--border-hairline)]",
+              hot === line.key && !held && cn(LIT, "rounded-r-[8px]"),
+              activeOpp === line.key && "z-20",
+            )}
+          >
+            <span className={COL.opp}>
+              {line.noPlayer ? (
+                // Our forfeit leaves nobody to name across the net; the cell
+                // says who wins instead.
+                <OpponentCell
+                  line={line}
+                  pool={pool}
+                  onTheirLabels={onTheirLabels}
+                  onTheirNoPlayer={onTheirNoPlayer}
+                  onActiveChange={(active) =>
+                    setActiveOpp((current) =>
+                      active ? line.key : current === line.key ? null : current,
+                    )
+                  }
+                />
+              ) : (
+                <OpponentPairPicker
+                  line={line}
+                  pool={pool}
+                  choices={opponentChoices}
+                  pairedOn={opponentPairedOn(lines, line.key)}
+                  onTheirLabels={onTheirLabels}
+                  onTheirNoPlayer={onTheirNoPlayer}
+                />
+              )}
+            </span>
+            {trailing ? <span className={COL.trail} /> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** One pair in the reorderable doubles column — `PlayerItem`'s doubles twin. */
+function PairItem({
+  token,
+  line,
+  court,
+  lastLine,
+  held,
+  hot,
+  reduceMotion,
+  listRef,
+  onHot,
+  onDragStart,
+  onDragEnd,
+  onKey,
+  children,
+}: {
+  token: string;
+  /** The line this pair sits on at rest — its picker edits that line. */
+  line: LineupLine;
+  /** The court the pair is drawn against right now, mid-drag included. */
+  court: string;
+  lastLine: boolean;
+  held: boolean;
+  hot: boolean;
+  reduceMotion: boolean;
+  listRef: React.RefObject<HTMLDivElement | null>;
+  onHot: (on: boolean) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onKey: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
+  children: React.ReactNode;
+}) {
+  const controls = useDragControls();
+  const label = line.ourLabels.join(" / ");
+
+  return (
+    <Reorder.Item
+      as="div"
+      value={token}
+      // Only the grip starts a drag, so opening the picker never moves a row.
+      dragListener={false}
+      dragControls={controls}
+      dragConstraints={listRef}
+      dragElastic={0.08}
+      dragTransition={ROW_SETTLE}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      layout="position"
+      transition={{ layout: reduceMotion ? { duration: 0 } : ROW_SLIDE }}
+      onPointerEnter={() => onHot(true)}
+      onPointerLeave={() => onHot(false)}
+      onFocus={() => onHot(true)}
+      onBlur={() => onHot(false)}
+      className={cn(
+        "group relative flex items-center gap-2 border-b pr-4 transition-[background-color,box-shadow] duration-[var(--duration-hover)]",
+        LINE_H,
+        lastLine || hot || held
+          ? "border-transparent"
+          : "border-[var(--border-hairline)]",
+        hot && LIT,
+        held &&
+          "z-[3]! rounded-[8px] bg-[var(--surface-card)] shadow-[0_0_0_2px_var(--blue),var(--shadow-card-emphasis)]!",
+      )}
+    >
+      <LineupGrip
+        token={token}
+        label={`Move ${label || "empty line"}, line ${court}`}
+        spot={court.replace(/^D/, "")}
+        held={held}
+        hot={hot}
+        controls={controls}
+        onKey={onKey}
+      />
+      <span className="flex min-w-0 flex-1 items-center">{children}</span>
     </Reorder.Item>
   );
 }
