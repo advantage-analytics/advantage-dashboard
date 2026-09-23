@@ -413,8 +413,21 @@ export function PeekDrawerFrame({
   );
 }
 
-/** "Try again" — the match page's resubmit, as the drawer's one primary. */
-function RetryButton({ jobId }: { jobId: string }) {
+/**
+ * "Retry" — the match page's resubmit, POSTed to
+ * `/api/splitstep/jobs/<jobId>/resubmit`. The one definition both peek
+ * drawers draw: the Matches drawer keeps it outline under its blue "View
+ * match"; the event pages' line drawer (`event-line-drawer.tsx`) makes it the
+ * footer's one primary and drops "View match" to ghost. The route refuses
+ * anyone who may not resubmit, so a caller gates only on what it knows.
+ */
+export function RetryButton({
+  jobId,
+  variant = "outline",
+}: {
+  jobId: string;
+  variant?: "primary" | "outline";
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -441,7 +454,7 @@ function RetryButton({ jobId }: { jobId: string }) {
             router.refresh();
           })
         }
-        className={cn(advButton("outline", "md"), "w-full")}
+        className={cn(advButton(variant, "md"), "w-full")}
       >
         {pending ? "Retrying…" : "Retry"}
       </button>

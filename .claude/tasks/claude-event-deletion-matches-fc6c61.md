@@ -308,7 +308,7 @@ ready).
 
 ## T23 · The event drawer's failed analysis and footer follow the Matches drawer
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T22
 - **files:** src/components/dashboard/schedule/event-line-drawer.tsx (footer :221-258, `AnalysisNotice` :333), src/components/dashboard/matches/match-drawer.tsx (`RetryButton` :457), src/components/dashboard/matches/drawer-sections.tsx, tests/fixtures/schedule-dual-outcomes-data.ts, tests/schedule-dual-outcomes.spec.ts, tests/schedule-tournament-outcomes.spec.ts (guess)

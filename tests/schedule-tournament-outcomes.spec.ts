@@ -288,6 +288,9 @@ function drawer(page: Page) {
 }
 
 const SCORE = "/dashboard/team/schedule/tournament-outcomes/score";
+/** `advButton("primary")`'s fill and `advButton("ghost")`'s — adv-button.ts. */
+const PRIMARY_CLASS = /(^|\s)bg-\[var\(--blue\)\](\s|$)/;
+const GHOST_CLASS = /(^|\s)bg-transparent(\s|$)/;
 // `nextRound(entry)`: the round after the run's last match, R16.
 const NEXT = `${SCORE}?entry=tournament-entry&round=QF`;
 
@@ -321,9 +324,15 @@ test("a played round opens the match drawer with its report and facts", async ({
   await expect(
     panel.getByRole("button", { name: "Match actions" }),
   ).toHaveCount(1);
-  await expect(
-    panel.getByRole("link", { name: "Add result", exact: true }),
-  ).toHaveAttribute("href", NEXT);
+  const next = panel.getByRole("link", { name: "Add result", exact: true });
+  await expect(next).toHaveAttribute("href", NEXT);
+  // T23: the next-round result is the follow-up, so it takes the one primary
+  // and View match drops to ghost — the Matches drawer's `continueHref` rule.
+  await expect(next).toHaveAttribute("class", PRIMARY_CLASS);
+  const view = panel.getByRole("link", { name: "View match", exact: true });
+  await expect(view).not.toHaveAttribute("class", PRIMARY_CLASS);
+  await expect(view).toHaveAttribute("class", GHOST_CLASS);
+  await expect(panel.locator('[class*="bg-[var(--blue)]"]')).toHaveCount(1);
   expect(await page.evaluate(() => window.actionCalls)).toEqual([]);
 });
 

@@ -3,7 +3,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Calendar, Clock, Info, MapPin, Trophy } from "lucide-react";
-import { PeekDrawerFrame } from "@/components/dashboard/matches/match-drawer";
+import {
+  PeekDrawerFrame,
+  RetryButton,
+} from "@/components/dashboard/matches/match-drawer";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 import {
   AnalysisNotice,
@@ -66,17 +69,24 @@ import type {
  *
  * ── Actions ────────────────────────────────────────────────────────────────
  * What a line offers next is `lineAction` (`src/lib/schedule/line-action.ts`),
- * the rule the old line rows drew — never restated here. The footer maps it:
- * "Add result" / "Edit result" into the event's `/score` flow as the primary,
- * otherwise a blue "View match" once a match exists, with "Add video" under
- * it for a scored singles line nothing was sent for. A doubles line is score
- * only: its follow-up is editing the score, and it has no snapshot, video or
- * report to offer.
+ * the rule the old line rows drew — never restated here. The footer maps it
+ * onto the Matches drawer's rule (`MatchDrawer`'s `continueHref`): "View
+ * match" is the blue primary while nothing else is on offer, and drops to
+ * ghost the moment a follow-up applies — the follow-up is then the one
+ * primary. Follow-ups, first one wins the primary:
  *
- * A tournament round also carries the entry's next step — `nextResultHref`,
- * an outline "Add result" into the score flow at the round after the run's
- * last match — so every round's drawer, a played one included, can move the
- * run on. It sits under the primary, never beside a second primary.
+ *   1. "Add result" / "Edit result" into the event's `/score` flow — a line
+ *      with no match, an outcome, or any doubles line (score only: no
+ *      snapshot, video or report to offer).
+ *   2. "Retry" — a singles match whose analysis failed, for a viewer who can
+ *      edit the schedule. `EntryMatch` carries no uploader, so `canEdit`
+ *      gates it and the resubmit route refuses anyone else (T10's rule).
+ *   3. "Add video" — a scored singles line nothing was sent for.
+ *   4. A tournament round's next step — `nextResultHref`, "Add result" into
+ *      the score flow at the round after the run's last match — so every
+ *      round's drawer, a played one included, can move the run on.
+ *
+ * Any later follow-up is outline. No footer ever holds two primaries.
  *
  * ⋯ is `MatchActionsMenu` (Edit · Delete), drawn only when the line has a
  * played match and the viewer can edit the schedule. `EntryMatch` carries no
@@ -194,6 +204,27 @@ export function EventLineDrawer({
     canScore && nextResultHref && resultLink?.label !== "Add result"
       ? nextResultHref
       : null;
+  // A failed singles analysis the coach can resubmit. `status` is the line's
+  // match's own — the in-flight and ready states never offer it.
+  const retryJobId =
+    !doubles && canEdit && played?.status === "failed" && played.jobId
+      ? played.jobId
+      : null;
+  // The first follow-up on offer is the footer's one primary; "View match"
+  // is primary only when there is none (the Matches drawer's rule).
+  const primary: "result" | "retry" | "video" | "next" | "view" = resultLink
+    ? "result"
+    : retryJobId
+      ? "retry"
+      : addVideo
+        ? "video"
+        : nextResult
+          ? "next"
+          : "view";
+  const variant = (slot: typeof primary) =>
+    primary === slot ? "primary" : slot === "view" ? "ghost" : "outline";
+  // Retry is a follow-up, never "view", so it is primary or outline.
+  const retryVariant = primary === "retry" ? "primary" : "outline";
 
   return (
     <PeekDrawerFrame
@@ -221,12 +252,12 @@ export function EventLineDrawer({
         ) : null
       }
       footer={
-        resultLink || viewMatch || addVideo || nextResult ? (
+        resultLink || viewMatch || retryJobId || addVideo || nextResult ? (
           <>
             {resultLink ? (
               <Link
                 href={resultLink.href}
-                className={cn(advButton("primary", "md"), "w-full")}
+                className={cn(advButton(variant("result"), "md"), "w-full")}
               >
                 {resultLink.label}
               </Link>
@@ -234,15 +265,22 @@ export function EventLineDrawer({
             {viewMatch ? (
               <Link
                 href={viewMatch}
-                className={cn(advButton("primary", "md"), "w-full")}
+                className={cn(advButton(variant("view"), "md"), "w-full")}
               >
                 View match
               </Link>
             ) : null}
+            {retryJobId ? (
+              <RetryButton
+                key={retryJobId}
+                jobId={retryJobId}
+                variant={retryVariant}
+              />
+            ) : null}
             {addVideo ? (
               <Link
                 href={addVideo}
-                className={cn(advButton("outline", "md"), "w-full")}
+                className={cn(advButton(variant("video"), "md"), "w-full")}
               >
                 Add video
               </Link>
@@ -250,7 +288,7 @@ export function EventLineDrawer({
             {nextResult ? (
               <Link
                 href={nextResult}
-                className={cn(advButton("outline", "md"), "w-full")}
+                className={cn(advButton(variant("next"), "md"), "w-full")}
               >
                 Add result
               </Link>
@@ -346,8 +384,10 @@ export function EventLineDrawer({
           <>
             <AnalysisNotice
               status={status}
-              failNote={played.failNote}
-              canRetry={false}
+              // The job's note travels with the retry: a viewer who cannot
+              // resubmit reads only that analysis stopped.
+              failNote={retryJobId ? played.failNote : null}
+              canRetry={retryJobId !== null}
             />
             {settled && isAnalysisReady(played.status) ? (
               <LineSnapshot matchId={played.id} />

@@ -128,8 +128,19 @@ export const NORMAL_ENTRIES: EventEntry[] = [
   }),
   // Scored by hand, nothing sent: the line the drawer offers "Add video" on.
   entry("S3", { matches: [match("normal-manual-loss", false)] }),
+  // T23: a video whose analysis failed — the drawer shows the job's note in
+  // its alert and, for a coach, Retry as the footer's one primary.
+  entry("S4", {
+    matches: [
+      match("normal-failed-match", false, {
+        status: "failed",
+        hasVideo: true,
+        jobId: "job-s4",
+        failNote: "The video ended before the match did",
+      }),
+    ],
+  }),
   // The rest of the card, unplayed — a dual saves with all nine lines.
-  entry("S4"),
   entry("S5"),
   entry("S6"),
   entry("D1"),

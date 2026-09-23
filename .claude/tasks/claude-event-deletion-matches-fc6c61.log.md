@@ -218,3 +218,15 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. No loader spec asserts that `duration`, `sourceProvider`, `jobId` and `failNote` are mapped — one assertion in `tests/schedule-outcome-loader.spec.ts` would cover it.
+
+## T23 · The event drawer's failed analysis and footer follow the Matches drawer — done
+
+**gate:** mechanical GATE PASS (second run; the first failed only on live-DB specs — program-owner-name, rls-workspace-isolation, seats-count-players, teams-management) · completion `VERDICT: pass`
+
+**changed:** `RetryButton` is exported from `match-drawer.tsx` as the one definition, with a `variant` prop defaulting to outline (Matches drawer unchanged). `EventLineDrawer` offers Retry on a failed singles match with a `jobId` when `canEdit`, and passes `failNote` only then (a player sees neither note nor Retry). The footer gives the primary to the first follow-up (Add/Edit result, Retry, Add video, next-round Add result); "View match" is primary only when there is none, ghost otherwise. Dual fixture S4 (in-progress card) is now a failed match with `jobId`/`failNote`. Specs: primary/ghost per line, coach vs player on the failed line, no drawer with two primaries across S1–D3, tournament R16 next-round "Add result" primary.
+
+**follow-ups:**
+
+1. Clicking Retry is untested — a `fetch` stub in the dual harness could assert the POST to `/api/splitstep/jobs/job-s4/resubmit` and one router refresh.
+2. The event drawer now hides the fail note from non-editors, while the Matches drawer shows it to everyone — decide whether they should agree.
+3. A tournament round with a failed analysis AND a next round gives Retry the primary and makes "Add result" outline; no fixture covers it.

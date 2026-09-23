@@ -438,6 +438,109 @@ test("a played singles line opens the drawer with its match, facts and follow-up
   ).toHaveAttribute("href", "/dashboard/matches/normal-manual-loss");
 });
 
+/* ── T23: the footer follows the Matches drawer ─────────────────────────── */
+
+test("View match is the primary until a follow-up takes it", async ({
+  page,
+}) => {
+  await open(page, "?normal");
+  const panel = drawer(page);
+
+  // S2 has its video and its report: nothing follows, View match leads.
+  await line(page, "S2").click();
+  await expect(panel.getByText("2 / 9", { exact: true })).toBeVisible();
+  await expect(
+    panel.getByRole("link", { name: "View match", exact: true }),
+  ).toHaveAttribute("class", PRIMARY_CLASS);
+  await expect(panel.getByRole("button", { name: "Retry" })).toHaveCount(0);
+
+  // S3 is scored by hand with nothing sent: Add video is the one primary and
+  // View match drops to ghost.
+  await line(page, "S3").click();
+  await expect(panel.getByText("3 / 9", { exact: true })).toBeVisible();
+  await expect(
+    panel.getByRole("link", { name: "Add video", exact: true }),
+  ).toHaveAttribute("class", PRIMARY_CLASS);
+  await expect(
+    panel.getByRole("link", { name: "View match", exact: true }),
+  ).not.toHaveAttribute("class", PRIMARY_CLASS);
+});
+
+test("a failed analysis shows its note and offers Retry to a coach only", async ({
+  page,
+}) => {
+  await open(page, "?normal");
+  await line(page, "S4").click();
+  const panel = drawer(page);
+  await expect(panel.getByText("4 / 9", { exact: true })).toBeVisible();
+
+  const alert = panel.getByRole("alert");
+  await expect(alert).toContainText("The video ended before the match did");
+  await expect(alert).toContainText("Retrying uses the video you already");
+  const retry = panel.getByRole("button", { name: "Retry", exact: true });
+  await expect(retry).toBeVisible();
+  await expect(retry).toHaveAttribute("class", PRIMARY_CLASS);
+  const view = panel.getByRole("link", { name: "View match", exact: true });
+  await expect(view).toHaveAttribute(
+    "href",
+    "/dashboard/matches/normal-failed-match",
+  );
+  await expect(view).not.toHaveAttribute("class", PRIMARY_CLASS);
+
+  // A member who cannot edit reads only that analysis stopped — no job note,
+  // no retry promise, no Retry — and can still open the match, which is
+  // then the primary.
+  await open(page, "?normal&viewer=player");
+  await line(page, "S4").click();
+  await expect(drawer(page).getByText("4 / 9", { exact: true })).toBeVisible();
+  await expect(drawer(page).getByRole("alert")).toContainText(
+    "The match page has the details.",
+  );
+  await expect(drawer(page).getByRole("alert")).not.toContainText("Retrying");
+  await expect(drawer(page).getByRole("alert")).not.toContainText(
+    "The video ended before the match did",
+  );
+  await expect(drawer(page).getByRole("button", { name: "Retry" })).toHaveCount(
+    0,
+  );
+  const playerView = drawer(page).getByRole("link", {
+    name: "View match",
+    exact: true,
+  });
+  await expect(playerView).toHaveAttribute(
+    "href",
+    "/dashboard/matches/normal-failed-match",
+  );
+  await expect(playerView).toHaveAttribute("class", PRIMARY_CLASS);
+});
+
+test("no line's drawer holds two primaries", async ({ page }) => {
+  for (const path of ["", "?normal", "?normal&viewer=player"]) {
+    await open(page, path);
+    for (const [n, slot] of [
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5",
+      "S6",
+      "D1",
+      "D2",
+      "D3",
+    ].entries()) {
+      await line(page, slot).click();
+      const panel = drawer(page);
+      await expect(
+        panel.getByText(`${n + 1} / 9`, { exact: true }),
+      ).toBeVisible();
+      expect(
+        await panel.locator('[class*="bg-[var(--blue)]"]').count(),
+        `${path || "outcomes"} ${slot}`,
+      ).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
 test("the drawer's This dual list names all nine lines and steps between them", async ({
   page,
 }) => {
