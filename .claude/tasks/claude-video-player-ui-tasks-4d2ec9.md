@@ -333,7 +333,7 @@ ready).
 
 ## T25 · A hand scroll with no displayed point still holds: `held` with `pointId: null`
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T24
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-timeline.ts (`PointFocus` L284, `displayedPointId` L287–292); film-tab.tsx (`holdPoint` L183–186, the cut-change effect L279–284); point-list.tsx (`onHoldPoint` prop type L263, `hold()` L521–525 and the listener comment); film-fullscreen.tsx (`onHoldPoint` in the props L188); film-room-drawer.tsx (L56); tests/film-timeline.spec.ts (L433–445, L448–480); tests/film-playback-refresh.spec.ts (new cases after T24's); docs/superpowers/specs/2026-09-22-film-follow-hold-design.md (state table L88–96, Enter table L108, strings row L128)

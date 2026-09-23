@@ -53,7 +53,7 @@ export interface FilmRoomDrawerProps {
   /** Follow-or-hold, the room's pass-through from `FilmRoom` to the list. */
   pointFocus: PointFocus;
   displayedPointId: string | null;
-  onHoldPoint: (pointId: string) => void;
+  onHoldPoint: (pointId: string | null) => void;
   onFollow: () => void;
   /** The playing point and its place in the cut: the pill's inputs. */
   nowPlaying: { id: string; index: number | null } | null;

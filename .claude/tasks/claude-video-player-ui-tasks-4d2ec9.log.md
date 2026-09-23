@@ -274,3 +274,13 @@ Reading them: `remounted: true` = a credential swap or an error recovery; `buffe
 
 1. A playing point outside the cut now shows the pill even when it is the held point (no row to measure) — check it in person.
 2. One unidentified `toHaveAttribute` failure on the implementer's first full run did not recur in four runs.
+
+## T25 · A hand scroll with no displayed point still holds: `held` with `pointId: null` — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** `PointFocus` held variant takes `pointId: string | null` (null = held with no well, the list stays put). `holdPoint`/`onHoldPoint` accept null through film-tab, point-list, film-fullscreen, film-room-drawer; `hold()` no longer skips when nothing is displayed; the cut-change re-follow skips a null hold. Every consumer checked: the well slice and render draw nothing for null. Tests: two film-timeline cases; `wheelAtFilmZero` + four harness cases (drawer: null hold survives a crossing with no well and the pill re-follows; survives a cut change; a click replaces it; shell: list stays put). Verified (a), (b) and the shell case fail on the old code (drawer jumped scrollTop 721 → 84, the reported bug). Design doc tables, PointFocus and handoff items updated. Widget states: loading/empty/error unchanged.
+
+**follow-ups:**
+
+1. Still unhandled, as the task notes recorded: a wheel during the list's own 300 ms smooth scroll, and middle-click / selection-drag autoscroll never holding.

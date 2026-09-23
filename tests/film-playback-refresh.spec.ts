@@ -2413,3 +2413,110 @@ test("T24: held on the playing point, scrolled out of view, the drawer's pill of
   await expect(pill).toHaveCount(0);
   await expect.poll(() => litRowInView(page)).toBe(true);
 });
+
+/* -------------------------------------------------------------------------
+ * T25 — a hand scroll with nothing displayed still holds: `held` with
+ * `pointId: null`, a hold with no well. The harness has no dead time between
+ * `a`/`b`/`c` (`filmStops` clamps each window's end to the next start), so
+ * the only gap it can reach is film 0 → 0.1 s, before the first point: every
+ * case wheels there, and first proves nothing is lit and the film is still
+ * at zero — otherwise the wheel would be an ordinary hold on a real point.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * A wheel over `scroller` at film zero, asserted to land before any point:
+ * the film paused inside the 0 → 0.1 s gap (the report player parks a hair
+ * past zero, 0.001, to paint its first frame) with no row lit, both before
+ * and after the wheel.
+ */
+async function wheelAtFilmZero(page: Page, video: string, scroller: string) {
+  const beforeFirstPoint = async () => {
+    const s = await state(page, video);
+    expect(s?.paused).toBe(true);
+    expect(s?.time).toBeLessThan(0.1);
+    expect(await playingRow(page)).toBeNull();
+  };
+  await beforeFirstPoint();
+  await wheelScroller(page, scroller, 200);
+  // Still nothing displayed: the hold the wheel made is a null one.
+  await beforeFirstPoint();
+}
+
+test("T25: a wheel before the first point holds with no well, and the next point does not scroll the drawer", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "null-hold-drawer", { pad: "12" });
+  await drawerSettled(page);
+  await wheelAtFilmZero(page, ROOM, DRAWER_SCROLLER);
+  await parkDrawer(page, "end");
+  const parked = await drawerScrollTop(page);
+
+  await seekTo(page, ROOM, 0.4);
+  await expect.poll(() => playingRow(page)).toBe("b");
+  await page.waitForTimeout(400);
+  // Held: the crossing did not scroll the list to `b`, and the hold opened
+  // no well of its own.
+  expect(await drawerScrollTop(page)).toBe(parked);
+  await expect(page.locator(`${DRAWER} [data-shot-well]`)).toHaveCount(0);
+  const pill = page.locator(PILL);
+  await expect(pill).toHaveCount(1);
+  await expect(pill).toHaveText("Now playing · Point 2");
+
+  await pill.click();
+  await expect(pill).toHaveCount(0);
+  await expect(page.locator(WELL_UNDER("b"))).toHaveCount(1);
+  await expect.poll(() => litRowInView(page)).toBe(true);
+});
+
+test("T25: a null hold survives a cut change — the pill says the playing point is not in this cut", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "null-hold-cut", { pad: "12" });
+  await drawerSettled(page);
+  await wheelAtFilmZero(page, ROOM, DRAWER_SCROLLER);
+
+  // "Saved only" keeps `a`; `b` is unsaved. A held point the cut dropped
+  // would re-follow here — a null hold has no row to drop, so it stays.
+  const drawer = page.locator(DRAWER);
+  const menu = page.getByRole("menu", { name: "Point filters" });
+  await drawer.getByRole("button", { name: "Filters" }).click();
+  await menu.getByText("Saved only").click();
+  await expect(drawer.locator('[data-point-id="b"]')).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  await seekTo(page, ROOM, 0.4);
+  await expect(page.locator(PILL)).toHaveCount(1);
+  await expect(page.locator(PILL)).toHaveText("Now playing · not in this cut");
+});
+
+test("T25: a row click replaces a null hold with a real one", async ({
+  page,
+}) => {
+  await openRoomWithDrawer(page, "null-hold-click", { pad: "12" });
+  await drawerSettled(page);
+  await wheelAtFilmZero(page, ROOM, DRAWER_SCROLLER);
+
+  await page.locator(DRAWER_ROW("a")).scrollIntoViewIfNeeded();
+  await page.click(DRAWER_ROW("a"));
+  await expect.poll(() => playingRow(page)).toBe("a");
+  await expect(page.locator(WELL_UNDER("a"))).toHaveCount(1);
+});
+
+test("T25: a wheel before the first point holds the shell list, and the next point does not scroll it", async ({
+  page,
+}) => {
+  await openShell(page, "null-hold-shell", {
+    pad: "12",
+    ttl: String(3600_000),
+  });
+  await boundShellList(page, 240);
+  await wheelAtFilmZero(page, REPORT, SHELL_SCROLLER);
+  await parkScroller(page, SHELL_SCROLLER, "end");
+  const parked = await shellScrollTop(page);
+
+  await seekTo(page, REPORT, 0.3);
+  await expect.poll(() => playingRow(page)).toBe("b");
+  await page.waitForTimeout(400);
+  expect(await shellScrollTop(page)).toBe(parked);
+  await expect(page.locator(SHELL_PILL)).toHaveCount(1);
+});

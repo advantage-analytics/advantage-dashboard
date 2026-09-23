@@ -181,7 +181,7 @@ function FilmRoom({
   // persisted: neither localStorage nor the URL.
   const [pointFocus, setPointFocus] = useState<PointFocus>(FOLLOW);
   const holdPoint = useCallback(
-    (pointId: string) => setPointFocus({ mode: "held", pointId }),
+    (pointId: string | null) => setPointFocus({ mode: "held", pointId }),
     [],
   );
   const followPlayback = useCallback(() => setPointFocus(FOLLOW), []);
@@ -276,8 +276,12 @@ function FilmRoom({
   // value: the hold is an event the viewer made, and the cut dropping its
   // point is the one thing that undoes it besides the viewer — it runs once
   // per cut change, never per frame.
+  //
+  // A null hold (a hand scroll with no point displayed, T25) survives every
+  // cut: it has no row for the cut to drop, and what it holds — the scroll
+  // position — is the viewer's, not the cut's.
   useEffect(() => {
-    if (pointFocus.mode !== "held") return;
+    if (pointFocus.mode !== "held" || pointFocus.pointId === null) return;
     if (filteredPoints.some((p) => p.id === pointFocus.pointId)) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     followPlayback();

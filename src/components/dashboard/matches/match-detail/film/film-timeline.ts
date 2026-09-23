@@ -280,10 +280,21 @@ export function prevStop(stops: FilmStop[], filmTime: number): FilmStop | null {
  * board, the court and the counters keep following the film. One state for
  * both surfaces, owned by `FilmRoom` (film-tab.tsx) so it survives the room
  * opening and closing and resets on tab-leave with no reset code.
+ *
+ * `held` with `pointId: null` is "held with no well" (T25): a hand scroll
+ * made while nothing was displayed — the drawer's R7 dead time, where
+ * `playingStop` is null, or either surface before the first point, where
+ * `activeStopAt` is null — keeps the list where the viewer left it and opens
+ * no well. It holds the scroll position and nothing else visible; it does
+ * not adopt the last point reached, which would pop a well open on a wheel.
  */
-export type PointFocus = { mode: "follow" } | { mode: "held"; pointId: string };
+export type PointFocus =
+  { mode: "follow" } | { mode: "held"; pointId: string | null };
 
-/** The point a surface shows: the held one while held, else the playing one. */
+/**
+ * The point a surface shows: the held one while held (null for a hold with
+ * no well), else the playing one.
+ */
 export function displayedPointId(
   focus: PointFocus,
   playingPointId: string | null,

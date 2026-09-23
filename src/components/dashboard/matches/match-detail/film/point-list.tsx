@@ -262,7 +262,8 @@ interface PointListProps {
    */
   displayedPointId?: string | null;
   /** Stable identity, please — the click wrappers below are memoized on both. */
-  onHoldPoint?: (pointId: string) => void;
+  /** `null` holds with no well: a hand scroll with nothing displayed (T25). */
+  onHoldPoint?: (pointId: string | null) => void;
   onFollow?: () => void;
   /**
    * The playing point and its 1-based place in the walk over the applied cut
@@ -499,7 +500,8 @@ export const PointList = memo(function PointList({
   // only part of the scroller that is not a child), or a scrolling key. Each
   // holds the displayed point — an ENTER only: scrolling while already held
   // keeps the held point, so the well never wanders to whatever scrolled into
-  // view. Both tones listen (T24): the room's drawer and the shell column
+  // view. With nothing displayed the hold is `null` — held with no well
+  // (T25). Both tones listen (T24): the room's drawer and the shell column
   // hold on the same sources, and return by the same pill (T23).
   //
   // `ArrowUp`/`ArrowDown` with focus on a drawer row hold here, and the
@@ -523,10 +525,12 @@ export const PointList = memo(function PointList({
     if (!scrollerMounted) return;
     const list = listRef.current;
     if (!list) return;
+    // Null when nothing is displayed — dead time, or before the first point
+    // — and that still holds (T25): no well opens, and the list stays where
+    // the viewer put it instead of jumping to the next point that lights.
     const hold = () => {
       if (heldRef.current) return;
-      const id = displayedPointRef.current;
-      if (id) onHoldPoint(id);
+      onHoldPoint(displayedPointRef.current);
     };
     const onPointerDown = (e: PointerEvent) => {
       if (e.target === list) hold();

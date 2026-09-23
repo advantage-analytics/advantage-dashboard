@@ -443,6 +443,12 @@ test.describe("displayedPointId", () => {
     expect(displayedPointId(HELD, "p14")).toBe("p9");
     expect(displayedPointId(HELD, null)).toBe("p9");
   });
+
+  test("a hold with no point (T25) shows nothing, whatever is playing", () => {
+    const HELD_NONE: PointFocus = { mode: "held", pointId: null };
+    expect(displayedPointId(HELD_NONE, "p14")).toBeNull();
+    expect(displayedPointId(HELD_NONE, null)).toBeNull();
+  });
 });
 
 test.describe("followAffordance", () => {
@@ -480,6 +486,16 @@ test.describe("followAffordance", () => {
       ariaLabel: "Now playing: a point outside this cut — follow playback",
       inCut: false,
     });
+  });
+
+  test("a hold with no point (T25) still draws it once a point plays", () => {
+    const HELD_NONE: PointFocus = { mode: "held", pointId: null };
+    expect(followAffordance(HELD_NONE, { id: "p14", index: 14 })).toEqual({
+      label: "Now playing · Point 14",
+      ariaLabel: "Now playing: point 14 — follow playback",
+      inCut: true,
+    });
+    expect(followAffordance(HELD_NONE, null)).toBeNull();
   });
 
   test("follow never draws it", () => {

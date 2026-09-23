@@ -185,7 +185,7 @@ export interface FilmFullscreenProps {
    * calls `onFollow` because stepping means "take me on".
    */
   pointFocus: PointFocus;
-  onHoldPoint: (pointId: string) => void;
+  onHoldPoint: (pointId: string | null) => void;
   onFollow: () => void;
   onExit: (state: { time: number; playing: boolean }) => void;
   /** The report player's frame on screen — where the room grows from and returns to. */
