@@ -34,7 +34,6 @@ import { FilmThisPoint } from "./film-this-point";
 import {
   activeStopAt,
   displayedPointId as displayedPointOf,
-  followAffordance,
   type PointFocus,
 } from "./film-timeline";
 import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
@@ -314,8 +313,9 @@ function FilmRoom({
     [allShotStops, currentTime],
   );
   const activePoint = active?.stop.point ?? null;
-  // What the well and the card show: the held point while held, else the
-  // playing one. The lit row, the board and the counters read `activePoint`.
+  // What the shell list's well shows: the held point while held, else the
+  // playing one. The card, the lit row, the board and the counters read
+  // `activePoint`.
   const displayedPointId = displayedPointOf(
     pointFocus,
     activePoint?.id ?? null,
@@ -330,43 +330,20 @@ function FilmRoom({
     [activePoint, currentTime, columns],
   );
   usePublishFilmHead(filmHead);
-  // The card shows the DISPLAYED point (T20): the held one while held, so its
-  // rows, footer and empty copy stay put when the film crosses into the next
-  // point; the playing one otherwise. Its counter, step buttons and lit row
-  // keep reading the playing point (`position`, `activeShot`).
-  const displayedPoint = useMemo(
-    () =>
-      displayedPointId
-        ? (stops.find((s) => s.point.id === displayedPointId)?.point ?? null)
-        : null,
-    [stops, displayedPointId],
-  );
+  // The card always shows the PLAYING point (T22 reverts T20's hold): like the
+  // scoreboard, court and transport counter beside it, it follows the film.
+  // Only the shell list and the room drawer keep follow-or-hold.
   const pointShots = useMemo(
     () =>
-      displayedPointId
-        ? allShotStops.filter((s) => s.point.id === displayedPointId)
+      activePoint
+        ? allShotStops.filter((s) => s.point.id === activePoint.id)
         : [],
-    [allShotStops, displayedPointId],
+    [allShotStops, activePoint],
   );
 
-  // The playing point's id for the card's shot-click wrapper, read through a
-  // ref written after each commit so the wrapper's identity never moves with
-  // the film — `ShotRow` is memoized on it (the list's `selectShot` pattern).
-  const activePointIdRef = useRef<string | null>(activePoint?.id ?? null);
-  useEffect(() => {
-    activePointIdRef.current = activePoint?.id ?? null;
-  }, [activePoint]);
-
-  // A shot click holds the shot's own point — or re-follows, when that point
-  // is the one playing — and then seeks, as it always did.
-  const handleSelectShot = useCallback(
-    (stop: ShotStop) => {
-      if (stop.point.id === activePointIdRef.current) followPlayback();
-      else holdPoint(stop.point.id);
-      playerRef.current?.seekTo(stop.start);
-    },
-    [followPlayback, holdPoint],
-  );
+  const handleSelectShot = useCallback((stop: ShotStop) => {
+    playerRef.current?.seekTo(stop.start);
+  }, []);
 
   /** The transport's own step, handed to anything else that walks points. */
   const handleStep = useCallback(
@@ -386,18 +363,14 @@ function FilmRoom({
     return index === -1 ? null : { index: index + 1, total: walkStops.length };
   }, [walkStops, activePoint]);
   // The same shape the room hands its drawer. The shell column's list takes
-  // it and draws no pill (the card's header line is the shell's return).
+  // it and draws no pill yet (T22 took the card's header line away; the
+  // shell's return is a step or re-clicking the playing row).
   const nowPlaying = useMemo(
     () =>
       activePoint
         ? { id: activePoint.id, index: position?.index ?? null }
         : null,
     [activePoint, position],
-  );
-  // The card's header line (T20): what it says, or null when there is none.
-  const affordance = useMemo(
-    () => followAffordance(pointFocus, nowPlaying),
-    [pointFocus, nowPlaying],
   );
 
   const handleSelect = useCallback(
@@ -678,13 +651,10 @@ function FilmRoom({
           onStep={followPlayback}
         />
         <FilmThisPoint
-          point={displayedPoint}
+          point={activePoint}
           shots={pointShots}
           position={position}
           activeShotId={activeShot?.stop.shot.id ?? null}
-          affordance={affordance}
-          onFollow={followPlayback}
-          onHoldPoint={holdPoint}
           onSelectShot={handleSelectShot}
           // The same step the transport takes, so the widget's stepper walks
           // the applied cut rather than opening a second stepping path.
@@ -718,8 +688,7 @@ function FilmRoom({
             // the same component without it.
             onOpenInRoom={openPointInRoom}
             // The same hold as the drawer's: a row click holds and the
-            // keep-in-view stops while held. No pill here — the card's
-            // header line (T20) is the shell's return — and no intent
+            // keep-in-view stops while held. No pill here yet, and no intent
             // listeners, which the dark tone alone installs.
             pointFocus={pointFocus}
             displayedPointId={displayedPointId}

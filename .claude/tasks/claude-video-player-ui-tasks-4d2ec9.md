@@ -295,7 +295,7 @@ ready).
 
 ## T22 · Revert the shell card to following playback (undo T20's hold)
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-this-point.tsx (props L50–91, the head's ternary L119–142); film-tab.tsx (`displayedPoint` L337–343, `pointShots` L344–350, `activePointIdRef` L355–358, `handleSelectShot` L362–369, `affordance` L397–401, the `<FilmThisPoint>` mount L680–692); tests/film-playback-refresh.spec.ts (the T20 block, L1780–1887); docs/superpowers/specs/2026-09-22-film-follow-hold-design.md (the state table L88–95, Handoff items 3/7/9/10/11f L214+); docs/superpowers/specs/2026-09-22-film-follow-hold/frames.html (`#C1` L241–243)
 - **done when:**

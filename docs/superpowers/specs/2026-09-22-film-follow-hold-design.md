@@ -87,12 +87,12 @@ tabs of any kind"). Playback, loop and skip-dead are untouched. The state is not
 
 ## The state, per surface
 
-| Surface                                   | HOLDS on `held.pointId`                                                                                                                    | KEEPS FOLLOWING the playing point                                                                                                                                                                                        |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Room drawer (`PointList tone="dark"`)     | The open well (`wellStops` reads the displayed id); the list's scroll position (the keep-in-view effect is off while held)                 | The lit `data-playing` row and its 2px progress rule (`isActive`, `activeStart`/`activeEnd`); the lit shot _inside_ the well only when the playing point is the held point                                               |
-| Room (outside the drawer)                 | Nothing                                                                                                                                    | The scoreboard, the court and its marks, the court title "This point", the transport's `Point 14 / 87` counter and its chevrons, `S` (save the point on screen — the playing one)                                        |
-| Shell "This point" card (`FilmThisPoint`) | The shot rows (`shots` = the displayed point's), the footer (`N shots · Ns · Result`), the empty copy if the held point has no timed shots | The position counter (`14 / 87` — while held its number is carried by the header line and the counter returns as-is on re-follow); the step buttons; the active-row wash (only when the playing point is the held point) |
-| Shell (outside the card)                  | Nothing                                                                                                                                    | The player, the seek lane, the rail scoreboard (`usePublishFilmHead`), the shell point list's lit row                                                                                                                    |
+| Surface                                   | HOLDS on `held.pointId`                                                                                                    | KEEPS FOLLOWING the playing point                                                                                                                                                                           |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Room drawer (`PointList tone="dark"`)     | The open well (`wellStops` reads the displayed id); the list's scroll position (the keep-in-view effect is off while held) | The lit `data-playing` row and its 2px progress rule (`isActive`, `activeStart`/`activeEnd`); the lit shot _inside_ the well only when the playing point is the held point                                  |
+| Room (outside the drawer)                 | Nothing                                                                                                                    | The scoreboard, the court and its marks, the court title "This point", the transport's `Point 14 / 87` counter and its chevrons, `S` (save the point on screen — the playing one)                           |
+| Shell "This point" card (`FilmThisPoint`) | Nothing (T22, 2026-09-23: the card follows again — T20's hold is reverted)                                                 | The shot rows, the footer (`N shots · Ns · Result`), the empty copy, the position counter (`14 / 87`), the step buttons, the active-row wash — the whole card, as the room's own "(outside the drawer)" row |
+| Shell (outside the card)                  | Nothing                                                                                                                    | The player, the seek lane, the rail scoreboard (`usePublishFilmHead`), the shell point list's lit row                                                                                                       |
 
 The **displayed point** on each surface is `held.pointId` when held, else the playing point —
 drawer: `playingStop`, shell: `activeStopAt`, both unchanged.
@@ -258,6 +258,8 @@ pointFocus.pointId : activePointId`. Two stable callbacks: `holdPoint(id)` and
    column's `PointList` (film-tab.tsx l.608) gets the same props: its row clicks hold, its lit row
    follows, but it draws no pill (`tone="light"` has no scroller-following effect to stop —
    confirm in Open).
+   _Superseded for the card by T22 (2026-09-23): `FilmThisPoint` keeps `point` = the playing
+   point and takes no `nowPlaying`/`onFollow`; the list and room props stand._
 4. **Where the pill lives — `point-list.tsx`.** Wrap the `listRef` div (l.433–436) in a
    `relative flex min-h-0 flex-1 flex-col` wrapper and render the pill as the wrapper's second
    child, only on `tone="dark"`, only while `nowPlaying.visible`. The wrapper, not the drawer:
@@ -284,6 +286,8 @@ pointFocus.pointId : activePointId`. Two stable callbacks: `holdPoint(id)` and
    (l.828): the list's `handleSelect` wrapper calls `onHoldPoint(point.id)` then `onSelect(point)`
    — except when `point.id === activePointId`, where it calls `onFollow()` then `onSelect`. Same
    wrapper for `FilmThisPoint`'s `ShotRow` (l.244) with `stop.point.id`.
+   _Superseded for the card by T22 (2026-09-23): `FilmThisPoint`'s shot click only seeks again —
+   no hold/follow wrapper; the list's wrapper stands._
 8. **Re-following on a step.** `step` (film-fullscreen.tsx l.798–808) and `handleStep`
    (film-tab.tsx l.308–310) call `onFollow()` / `followPlayback()` before seeking. The shell's key
    handler (film-tab.tsx l.427–445) routes through `playerRef.current?.step`, whose two transport
@@ -293,11 +297,15 @@ pointFocus.pointId : activePointId`. Two stable callbacks: `holdPoint(id)` and
 9. **The card's head — `film-this-point.tsx` l.84–105.** While `nowPlaying.visible`, the counter
    span is replaced by the header-line button (geometry above); otherwise the counter as today.
    The step buttons' `disabled={!position}` stays keyed to the _playing_ position.
+   _Superseded by T22 (2026-09-23): the card's head always shows the counter; there is no header
+   line._
 10. **Motion.** The pill and the line get an enter class — a new `film-follow-pill-in` keyframe
     in `globals.css` beside `film-shot-row-in` (150ms, opacity + 4px rise, `--ease-primary`, with
     a `prefers-reduced-motion` block that drops the transform) — and exit via the room's
     `data-film-chrome` fade or a 100ms opacity transition before unmount (the drawer's
     `onTransitionEnd` pattern, film-room-drawer.tsx l.94–96, is the precedent for waiting on it).
+    _Superseded for the line by T22 (2026-09-23): the card has no line, so `film-follow-pill-in`
+    serves the drawer pill only._
 11. **Harness specs.** Extend `tests/film-playback-refresh.spec.ts` (it already mounts both
     surfaces): (a) click a row, drive the film into the next point → `data-shot-well` stays under
     the clicked row, `data-playing` moves, the pill names the playing point; (b) press the pill →
@@ -309,6 +317,8 @@ pointFocus.pointId : activePointId`. Two stable callbacks: `holdPoint(id)` and
     `scrollTo` or the absence of intermediate `scrollTop` values) and no transform on the pill.
     A pure spec `tests/film-timeline.spec.ts` for the `PointFocus` helpers (`displayedPointId`,
     the pill's visibility rule over the strings table).
+    _(f) superseded by T22 (2026-09-23): the shell card now follows — the spec asserts its rows
+    and counter read the playing point while the list holds, and no header line mounts._
 12. **Widget-states / drift.** No new hex; the two alphas the pill uses are the trigger's and the
     drawer's. Run the `widget-states` skill on the dashboard diff before commit, as the hooks
     require. Hook naming precedent if a hook is extracted (`useScrollIntent`): `use-scroll-intent.ts`

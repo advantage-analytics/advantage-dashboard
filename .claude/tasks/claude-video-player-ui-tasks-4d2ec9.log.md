@@ -241,3 +241,14 @@ Reading them: `remounted: true` = a credential swap or an error recovery; `buffe
 1. Drop the debugging `data-edge` attribute on the pill (tests read classes).
 2. Hysteresis only shows when the list jumps or a row is taller than the box; smooth scrolling passes through "fully in view" and clears memory.
 3. `wheelDrawer` (T18) could reuse the new `drawerSettled` helper.
+
+## T22 · Revert the shell card to following playback (undo T20's hold) — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** film-this-point.tsx is byte-identical to its pre-T20 state (no hold props, no header line, counter always shown). film-tab.tsx mounts the card on `activePoint`, `pointShots` by `activePoint.id`, `handleSelectShot` only seeks; `displayedPoint`, `activePointIdRef`, `affordance` and the `followAffordance` import removed; `onStep`/`handleStep` re-follow and the shell list's hold props kept; three comments rewritten. Spec: the three T20 cases become T22 cases (card shows the playing point, `2 / 3`, no line); step cases prove the list re-follows via a new `roomWellUnder` helper (verified to fail with re-follow removed). Design doc card row → holds nothing; handoff 3/7/9/10/11f marked superseded; frames.html `#C1` title prefixed "Superseded — ". Criterion's grep matches `const displayedPointId` (kept); `grep -cw` is 0. Widget states: empty copies unchanged.
+
+**follow-ups:**
+
+1. The design doc's "Shell (outside the card)" row doesn't mention the shell point list holds — T23 adds that row.
+2. Until T23 lands the shell shows no sign of a hold; only a step or re-clicking the playing row re-follows.

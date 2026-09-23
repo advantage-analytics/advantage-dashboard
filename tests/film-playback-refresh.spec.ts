@@ -1924,12 +1924,15 @@ test("T21: hysteresis — a lit row straddling the edge keeps the pill's edge; w
 });
 
 /* -------------------------------------------------------------------------
- * T20 — the shell's "This point" card holds.
+ * T20, reverted by T22 — the shell's "This point" card follows the film.
  *
- * The card shows the DISPLAYED point: while held, its rows stay on the held
- * point as the film plays on, and the header line takes the counter's place
- * between the step buttons. Every step — the card's, the transport's glyphs,
- * the arrow keys — re-follows through `FilmPlayer.onStep`.
+ * T20 made the card hold with the shell list; T22 returned it to always
+ * showing the PLAYING point, like the scoreboard, court and transport counter
+ * beside it. Only the shell list (and the room drawer) hold. So with the list
+ * held on `a` and the film playing `b`, the card reads `b`, its counter stays,
+ * and there is no header line. Every step — the card's, the transport's
+ * glyphs, the arrow keys — still re-follows the LIST through
+ * `FilmPlayer.onStep`.
  *
  * `a` is held by a click at film zero, where nothing is playing yet: a click
  * on the row that IS playing re-follows (design, "Enter and leave"), so a
@@ -1940,9 +1943,50 @@ const CARD = 'section[aria-label="This point"]';
 const CARD_HEAD = `${CARD} > div:first-child`;
 const SHELL_ROW = (id: string) =>
   `[data-point-id="${id}"][role="button"]:not(aside *)`;
+/** T20's card header line — must never mount now. */
 const LINE = `${CARD} button[aria-label^="Now playing:"]`;
 const SHELL_LIST = 'section[aria-label="Point list"]:not(aside *)';
 const SHELL_PILL = `${SHELL_LIST} button[aria-label^="Now playing:"]`;
+
+/**
+ * Where the tab's `pointFocus` points, read through the room: the shell list
+ * opens no well (it takes no `onSelectShot`) and its keep-in-view has nothing
+ * to scroll on four rows, so its hold draws nothing on the shell. The room's
+ * drawer takes the tab's `pointFocus` and opens its well under the DISPLAYED
+ * point — the held one while held — so entering the room shows whether the
+ * shell is still holding `a` or has re-followed to the playing `b`.
+ */
+async function roomWellUnder(page: Page): Promise<string | null> {
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+  await page.locator(DRAWER_ROW("a")).waitFor();
+  // The room's clock has no early-reach epsilon, so the shell's 0.3 is still
+  // `a` in here: move it to 0.4 (inside `b`, the room cases' value) so a
+  // well under `a` can only mean held, and one under `b` only following.
+  await seekTo(page, ROOM, 0.4);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .querySelector('aside [data-point-id][data-playing="true"]')
+            ?.getAttribute("data-point-id") ?? null,
+      ),
+    )
+    .toBe("b");
+  let under: string | null = null;
+  await expect
+    .poll(async () => {
+      under = null;
+      for (const id of ["a", "b", "c"])
+        if ((await page.locator(WELL_UNDER(id)).count()) > 0) under = id;
+      return under;
+    })
+    .not.toBeNull();
+  return under;
+}
 
 async function cardShots(page: Page): Promise<(string | null)[]> {
   return page
@@ -1955,79 +1999,73 @@ async function shellHoldAThenPlayB(page: Page) {
   await page.click(SHELL_ROW("a"));
   await expect.poll(() => playingRow(page)).toBe("a");
   await expect.poll(() => cardShots(page)).toEqual(["a-shot-1", "a-shot-2"]);
-  // Held ≡ playing: no line yet.
   await expect(page.locator(LINE)).toHaveCount(0);
   // 0.3, not the room cases' 0.4: on the shell a stop counts as reached
   // `REACHED_EPSILON_SECONDS` (0.1) early, so 0.4 is already inside `c`
   // (0.45); `b` (0.35) is the lit row from 0.25 (the file's own L425 case).
   await seekTo(page, REPORT, 0.3);
   await expect.poll(() => playingRow(page)).toBe("b");
-  await expect(page.locator(LINE)).toHaveCount(1);
 }
 
-test("T20: the card holds its point's rows while the film plays on, and its header line follows", async ({
+/** `open`, with the room's drawer remembered open for `roomWellUnder`. */
+async function openShell(page: Page, matchId: string) {
+  await page.addInitScript(() => {
+    localStorage.setItem("film-room:drawer-open", "1");
+  });
+  await open(page, matchId);
+}
+
+test("T22: with the list held, the card follows the playing point and draws no header line", async ({
   page,
 }) => {
-  await open(page, "card-hold");
+  await openShell(page, "card-hold");
   await expect(page.locator(SHELL_LIST)).toHaveCount(1);
   await expect(page.locator(SHELL_PILL)).toHaveCount(0);
   await shellHoldAThenPlayB(page);
 
-  // (f1) The rows are still `a`'s; the line names the playing point and has
-  // taken the counter's place — the counter is not beside it.
-  await expect.poll(() => cardShots(page)).toEqual(["a-shot-1", "a-shot-2"]);
-  const line = page.locator(
-    `${CARD} button[aria-label="Now playing: point 2 — follow playback"]`,
-  );
-  await expect(line).toHaveText("Now playing · Point 2");
-  await expect(line).toHaveAttribute("type", "button");
-  await expect(line.locator("svg")).toHaveClass(/lucide-chevron-right/);
-  await expect(line.locator("svg")).toHaveAttribute("aria-hidden", "true");
-  await expect(page.locator(`${CARD_HEAD} .mono`)).toHaveCount(0);
-  await expect(page.locator(CARD_HEAD)).not.toContainText("2 / 3");
-  // (f5) The shell's own list draws no pill: the line is its return.
+  // The card reads the PLAYING point `b`, counter and all — no line.
+  await expect.poll(() => cardShots(page)).toEqual(["b-shot-1", "b-shot-2"]);
+  await expect(page.locator(`${CARD_HEAD} .mono`)).toHaveText("2 / 3");
+  await expect(page.locator(LINE)).toHaveCount(0);
   await expect(page.locator(SHELL_PILL)).toHaveCount(0);
 
-  // (f2) Pressing it follows: the line goes, the counter returns, the rows
-  // swap to the playing point's.
-  await line.click();
-  await expect(page.locator(LINE)).toHaveCount(0);
-  await expect(page.locator(`${CARD_HEAD} .mono`)).toHaveText("2 / 3");
-  await expect.poll(() => cardShots(page)).toEqual(["b-shot-1", "b-shot-2"]);
-  await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+  // …while the list really is holding `a` — the room's drawer shows it.
+  expect(await roomWellUnder(page)).toBe("a");
 });
 
-test("T20: the transport's Next point glyph re-follows the card through onStep", async ({
+test("T22: the transport's Next point glyph re-follows the list through onStep", async ({
   page,
 }) => {
-  await open(page, "card-transport-step");
+  await openShell(page, "card-transport-step");
   await shellHoldAThenPlayB(page);
-  await expect.poll(() => cardShots(page)).toEqual(["a-shot-1", "a-shot-2"]);
+  await expect.poll(() => cardShots(page)).toEqual(["b-shot-1", "b-shot-2"]);
 
-  // (f3) The player's own glyph — not the card's — which only `onStep` lets
-  // the tab observe. The fixture's stops sit 0.1-0.15s apart, inside the
-  // step's 0.5s cushion, so from `b` there is nothing to step to (as in
-  // T18's `→` case): the step re-follows and the card lands on the PLAYING
-  // point, which is what proves the notification fired.
+  // The player's own glyph — not the card's — which only `onStep` lets the
+  // tab observe. The fixture's stops sit 0.1-0.15s apart, inside the step's
+  // 0.5s cushion, so from `b` there is nothing to step to (as in T18's `→`
+  // case): the step re-follows, which the room's drawer then shows — its
+  // well under the PLAYING point — proving the notification fired.
   await page.locator(`button[aria-label="Next point"]:not(${CARD} *)`).click();
-  await expect(page.locator(LINE)).toHaveCount(0);
   await expect.poll(() => playingRow(page)).toBe("b");
   await expect.poll(() => cardShots(page)).toEqual(["b-shot-1", "b-shot-2"]);
   await expect(page.locator(`${CARD_HEAD} .mono`)).toHaveText("2 / 3");
+  await expect(page.locator(LINE)).toHaveCount(0);
+  expect(await roomWellUnder(page)).toBe("b");
 });
 
-test("T20: the card's own Next point step button re-follows", async ({
+test("T22: the card's own Next point step button re-follows the list", async ({
   page,
 }) => {
-  await open(page, "card-own-step");
+  await openShell(page, "card-own-step");
   await shellHoldAThenPlayB(page);
 
-  // (f4) The step buttons stay beside the line and keep working; same
-  // cushion as above, so the proof is the card landing on the playing point.
+  // Same cushion as above, so the proof is the room's well landing on the
+  // playing point (`handleStep` calls `followPlayback` before the step).
   await page.locator(`${CARD} button[aria-label="Next point"]`).click();
-  await expect(page.locator(LINE)).toHaveCount(0);
   await expect.poll(() => playingRow(page)).toBe("b");
   await expect.poll(() => cardShots(page)).toEqual(["b-shot-1", "b-shot-2"]);
   await expect(page.locator(`${CARD_HEAD} .mono`)).toHaveText("2 / 3");
+  await expect(page.locator(LINE)).toHaveCount(0);
   await expect(page.locator(SHELL_PILL)).toHaveCount(0);
+  expect(await roomWellUnder(page)).toBe("b");
 });
