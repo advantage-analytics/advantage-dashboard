@@ -28,3 +28,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. Sweep `supabase/functions/` and the email templates for the same "doubles via SwingVision" phrasing — the grep criterion covered only `src`, `.skills` and `docs`.
+
+## T4 · Doubles line never offers an upload on the score flow or schedule row — done
+
+**gate:** mechanical GATE PASS on the second run (the first run's one failure was the known live `match-video-attachments-db` claim flake, unrelated to this diff); completion `VERDICT: pass`.
+**changed:** `uploadInsteadHref` and `savedLineUpload` return null for a doubles preset, `SavedLineUpload.action` is `"Add video"` only, the score flow's file/video ternary is gone (only "Have the match video?" remains, and a doubles line never reaches it), and `line-row.tsx`'s `Action` takes a `doubles` prop instead of `videoAllowed` and renders nothing on a scored doubles line. "Add file" no longer appears anywhere in `src/` (one wizard doc-comment phrase trimmed outside `files:`). Both specs flipped to assert the absence.
+**follow-ups:**
+
+1. The score page still says "the score is entered with the file" beside "Upload it instead"; now that only video is offered, "with the video" reads truer.
+2. `useUploadMatchWizard.ts`'s comment above `DEFAULT_IMPORT_PROVIDER_ID` still explains why a doubles line defaults to the SwingVision import — T5 removes that path and should drop the comment with it.

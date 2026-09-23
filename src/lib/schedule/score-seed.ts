@@ -252,6 +252,8 @@ const UPLOAD_PATH = "/dashboard/team/upload";
  *   the offer once a digit is in keeps them from being silently dropped.
  * - **A viewer who may upload.** Scoring follows the events policy and
  *   uploading its own, so a coach may hold one and not the other.
+ * - **A singles line.** Doubles is score-only: neither video analysis nor
+ *   SwingVision statistics take it, so there is nothing to upload.
  */
 export function uploadInsteadHref(
   preset: EventPreset,
@@ -259,6 +261,7 @@ export function uploadInsteadHref(
   { canUpload, hasOutcome }: { canUpload: boolean; hasOutcome: boolean },
 ): string | null {
   if (!canUpload || hasOutcome) return null;
+  if (preset.discipline === "doubles") return null;
   if (preset.eventKind !== "dual" || !preset.entryId || preset.matchId) {
     return null;
   }
@@ -272,8 +275,7 @@ export interface SavedLineUpload {
   /** The slot on a dual, the round on a tournament. */
   label: string;
   href: string;
-  /** "Add video" on a line the vision pipeline takes, "Add file" otherwise. */
-  action: "Add video" | "Add file";
+  action: "Add video";
 }
 
 /**
@@ -281,7 +283,8 @@ export interface SavedLineUpload {
  *
  * The match id rides along for the same reason it does on the event page's
  * row: a tournament entry holds many matches, and the upload page attaches to
- * whichever one `?match=` names.
+ * whichever one `?match=` names. A doubles line is score-only, so it offers
+ * nothing.
  */
 export function savedLineUpload(
   preset: EventPreset,
@@ -289,10 +292,11 @@ export function savedLineUpload(
   canUpload: boolean,
 ): SavedLineUpload | null {
   if (!canUpload || !preset.entryId || !matchId) return null;
+  if (preset.discipline === "doubles") return null;
   const query = new URLSearchParams({ entry: preset.entryId, match: matchId });
   return {
     label: preset.round ?? "Line",
     href: `${UPLOAD_PATH}?${query}`,
-    action: preset.supportsVideo ? "Add video" : "Add file",
+    action: "Add video",
   };
 }

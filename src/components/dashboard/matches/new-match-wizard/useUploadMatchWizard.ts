@@ -287,8 +287,7 @@ const DEFAULT_PROVIDER_ID: ProviderId | null =
  * `supportsVideo()` already knows this at page-build time, and the import
  * provider is a real path for a doubles line: it parses numbers and never goes
  * near the vision pipeline. Its step order also skips the video step, so the
- * wizard asks for a file instead of a video and the "Add file" label the
- * schedule row already shows becomes true.
+ * wizard asks for a file instead of a video.
  */
 const DEFAULT_IMPORT_PROVIDER_ID: ProviderId | null =
   providers.find(

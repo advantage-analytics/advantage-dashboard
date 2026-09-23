@@ -15,7 +15,6 @@ import {
   resolveEntryResult,
   resultState,
   resultWon,
-  supportsVideo,
   type EntryState,
 } from "@/lib/schedule/entry-state";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
@@ -110,7 +109,7 @@ export function LineRow({
       match={match}
       entryId={entry.id}
       matchId={match?.id ?? null}
-      videoAllowed={supportsVideo(entry, round)}
+      doubles={entry.discipline === "doubles"}
       // A "No player" forfeit, either side's, is the lineup's own answer: it
       // changes through Edit dual, not the score flow.
       canEdit={canEdit && forfeitSide === null}
@@ -280,7 +279,7 @@ function Action({
   match,
   entryId,
   matchId,
-  videoAllowed,
+  doubles,
   canEdit,
   scoreHref,
 }: {
@@ -289,7 +288,8 @@ function Action({
   entryId: string;
   /** Which of the entry's matches this row is. Null on an unplayed line. */
   matchId: string | null;
-  videoAllowed: boolean;
+  /** A doubles line is score-only: once scored it offers no upload. */
+  doubles: boolean;
   canEdit: boolean;
   /** The score flow with this line preset — where a result is written. */
   scoreHref: string;
@@ -335,10 +335,9 @@ function Action({
   // the pinned entry point 22f describes: the wizard opens on its video step
   // with this line already the destination.
   //
-  // "Add file" on a doubles line, not "Add video": the vision pipeline is
-  // singles-only, so a doubles line can only take a SwingVision export and a
-  // button promising video would be a promise the submit route refuses.
-  if (!canEdit) return null;
+  // A doubles line is score-only — neither video analysis nor SwingVision
+  // statistics take it — so a scored doubles line has nothing left to do.
+  if (!canEdit || doubles) return null;
   // The match id rides along, because a tournament ENTRY has many matches. A
   // link carrying only the entry would preset every round's upload to whichever
   // match came back first — attaching a video to Q1 when the coach clicked R32,
@@ -351,7 +350,7 @@ function Action({
           : `/dashboard/team/upload?entry=${entryId}`
       }
     >
-      {videoAllowed ? "Add video" : "Add file"}
+      Add video
     </RowAction>
   );
 }

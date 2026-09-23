@@ -250,15 +250,19 @@ test.describe("the links into the upload wizard", () => {
     ).toBeNull();
   });
 
-  test("a saved score offers video on a singles line and the file otherwise, naming the match", () => {
+  test("a saved score offers video on a singles line and nothing on doubles, naming the match", () => {
     expect(savedLineUpload(preset(), "match-1", true)).toEqual({
       label: "S1",
       href: "/dashboard/team/upload?entry=entry-1&match=match-1",
       action: "Add video",
     });
     expect(
-      savedLineUpload(preset({ supportsVideo: false, round: "D2" }), "m", true),
-    ).toMatchObject({ label: "D2", action: "Add file" });
+      savedLineUpload(
+        preset({ discipline: "doubles", supportsVideo: false, round: "D2" }),
+        "m",
+        true,
+      ),
+    ).toBeNull();
     expect(savedLineUpload(preset(), "match-1", false)).toBeNull();
   });
 });

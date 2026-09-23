@@ -623,10 +623,10 @@ function ScoreForm({
             </div>
 
             {/* For the coach holding the file already: the wizard takes the
-                score at its last step, so the two go in together. A singles
-                line opens an Advantage Intelligence video; a doubles line,
-                which the pipeline refuses, the SwingVision export. Gone once a
-                digit is typed — those digits would not come along. */}
+                score at its last step, so the two go in together. Singles
+                only: a doubles line is score-only, so uploadInsteadHref gives
+                it no link. Gone once a digit is typed — those digits would not
+                come along. */}
             {uploadHref ? (
               <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border-hairline)] pt-5">
                 <Upload
@@ -635,9 +635,7 @@ function ScoreForm({
                   aria-hidden="true"
                 />
                 <span className="text-[12px] text-[var(--ink-600)]">
-                  {preset.supportsVideo
-                    ? "Have the match video?"
-                    : "Have the SwingVision file?"}
+                  Have the match video?
                 </span>
                 <Link
                   href={uploadHref}

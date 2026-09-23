@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Doubles line never offers an upload on the score flow or schedule row
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/schedule/score-seed.ts, src/components/dashboard/schedule/score-only-flow.tsx, src/components/dashboard/schedule/line-row.tsx, tests/score-seed.spec.ts, tests/schedule-score-flow-outcomes.spec.ts (guess; functions verified)
 - **done when:**
