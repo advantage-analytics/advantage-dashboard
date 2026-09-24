@@ -7,10 +7,13 @@ import {
   SKIP_REASON,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import {
+  POOL_USER_DEFAULTS,
+  clearPoolLeftovers,
+  poolLogins,
+} from "./fixtures/live-db-pool";
 
 /**
  * `20260914100200_admin_program_rpcs.sql`'s admin-only RPC gates, proven
@@ -29,6 +32,11 @@ import {
  *     missing its required fields, and creates a club program with
  *     `program_key` left null and `status='unclaimed'`.
  *
+ * The eight logins are reused pool users (`fixtures/live-db-pool`), never
+ * deleted: `afterAll` deletes this run's programs by id and demotes the admin
+ * through the service role, and `beforeAll` sweeps what a crashed run left
+ * under this file's marker.
+ *
  * Run on demand:  npx playwright test admin-program-rpcs
  */
 
@@ -37,7 +45,19 @@ const UNIQUE_VIOLATION = "23505";
 
 /** A crashed run is findable by hand:
  *  `select * from programs where program_key like 'admin-rpc-%'`. */
-const { mark: MARK, password: PASSWORD } = runMarker("admin-rpc");
+const { mark: MARK } = runMarker("admin-rpc");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = [
+  "admin-program-rpcs-admin",
+  "admin-program-rpcs-stranger",
+  "admin-program-rpcs-owner-a",
+  "admin-program-rpcs-coach-a",
+  "admin-program-rpcs-owner-b",
+  "admin-program-rpcs-coach-b",
+  "admin-program-rpcs-player-b",
+  "admin-program-rpcs-coach-c",
+];
 
 test.describe("Admin program RPC gates (live)", () => {
   test.describe.configure({ mode: "serial", timeout: 60_000 });
@@ -56,7 +76,6 @@ test.describe("Admin program RPC gates (live)", () => {
 
   let coachC: Session;
 
-  const authUserIds: string[] = [];
   const programIds: string[] = [];
 
   let programA: string;
@@ -68,21 +87,24 @@ test.describe("Admin program RPC gates (live)", () => {
     test.setTimeout(180_000);
     admin = createAdminClient();
 
+    // A crashed run's programs A and B are owned by pool users, which the
+    // pool sweep takes whole; C (ownerless) and the admin-created club are
+    // not, so they go by this file's marker — on `program_key` for A–C and on
+    // `school_name` for the club, whose key is null. Members and audit rows
+    // cascade with each program.
+    await clearPoolLeftovers(admin, SLOTS);
+    for (const column of ["program_key", "school_name"]) {
+      const stale = await admin
+        .from("programs")
+        .delete()
+        .like(column, "admin-rpc-%");
+      if (stale.error) {
+        throw new Error(`programs sweep (${column}): ${stale.error.message}`);
+      }
+    }
+
     [adminSession, stranger, ownerA, coachA, ownerB, coachB, playerB, coachC] =
-      await createLogins(
-        admin,
-        [
-          "admin",
-          "stranger",
-          "ownerA",
-          "coachA",
-          "ownerB",
-          "coachB",
-          "playerB",
-          "coachC",
-        ],
-        { mark: MARK, password: PASSWORD, authUserIds },
-      );
+      await poolLogins(admin, SLOTS);
 
     const flip = await admin
       .from("users")
@@ -173,13 +195,26 @@ test.describe("Admin program RPC gates (live)", () => {
 
   test.afterAll(async () => {
     if (!admin) return;
+    // The promotion goes first: a pool user left an admin is a standing admin
+    // account on the target, and it must not wait on the rest.
+    const demote = adminSession
+      ? await admin
+          .from("users")
+          .update({ is_admin: POOL_USER_DEFAULTS.is_admin })
+          .eq("id", adminSession.userId)
+      : { error: null };
+
+    // By id, never through the users: B's owner changes mid-run, and the pool
+    // users outlive it.
     if (createdProgram) programIds.push(createdProgram);
     for (const id of programIds) {
       await admin.from("program_audit_log").delete().eq("program_id", id);
       await admin.from("program_members").delete().eq("program_id", id);
       await admin.from("programs").delete().eq("id", id);
     }
-    await deleteAuthUsers(admin, authUserIds);
+    if (demote.error) {
+      throw new Error(`is_admin reset: ${demote.error.message}`);
+    }
   });
 
   // ── set_program_member_role — admin gate ──────────────────────────────────

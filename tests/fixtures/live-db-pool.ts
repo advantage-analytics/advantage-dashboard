@@ -80,11 +80,14 @@ export function poolPassword(
 export const POOL_USER_DEFAULTS = {
   // admin-routes, admin-program-rpcs and admin-conferences-rpcs promote their
   // admin with the service role; admin-self-promotion flips it both ways.
+  // Each demotes again in its own afterAll; this reset is the backstop for a
+  // run that died before afterAll could.
   is_admin: false,
   // No spec writes it today. Billing owns it, and a stray `pro` would unlock
   // features for whichever spec draws the slot next.
   plan: "free",
-  // pending-invites and program-owner-name-live name their program's owner.
+  // pending-invites and program-owner-name-live name their program's owner;
+  // program-owner-name-live also clears the name in its afterAll.
   first_name: null,
   last_name: null,
   // program-member-avatars points it at a test path.

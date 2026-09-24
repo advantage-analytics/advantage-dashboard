@@ -47,3 +47,11 @@ is the runner's. Newest entries at the bottom.
 
 1. A crashed run's owner-less program rows are left orphaned by `clearPoolLeftovers` (they no longer block the slot) — a periodic sweep of `programs` with no owner created by pool users may be worth it.
 2. First real verification needs a non-prod target (Supabase branch or dev project) per the AGENTS.md note — until then the migrated specs only prove they compile and list.
+
+## T6 · Move the admin and program live specs onto the user pool — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** All eight specs (`admin-self-promotion`, `admin-routes`, `admin-program-rpcs`, `admin-conferences-rpcs`, `join-requests-staff-read`, `leave-program`, `teams-management`, `program-owner-name-live`) now take sessions from `poolLogins` with file-prefixed slots; none needed to stay on `createLogin`. Admin specs demote `is_admin` via the service role in `afterAll` (the pool reset is the crash backstop); `admin-self-promotion` asserts the user starts non-admin; `program-owner-name-live` restores the name columns. Each `beforeAll` runs `clearPoolLeftovers` plus a run-marker sweep of the file's programs, conferences, requests or matches; `afterAll` deletes audit log, players, members and programs by id, adding member deletes that previously relied on a cascade. `admin-routes`' `afterAll` is now a no-op when its gates are shut. `live-db-pool.ts`: comments only. The only `createLogin` callers left in `tests/` are the three intended exclusions (`account-deletion-retention`, `match-video-attachments-db`, `schedule-outcomes-db`).
+**follow-ups:**
+
+1. None of the 16 migrated specs has executed against a real database — run them once against a non-prod project (per AGENTS.md) before trusting the cleanup paths.

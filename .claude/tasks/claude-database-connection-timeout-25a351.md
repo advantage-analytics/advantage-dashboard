@@ -85,7 +85,7 @@ ready).
 
 ## T6 · Move the admin and program live specs onto the user pool
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4
 - **files:** guess: `tests/admin-self-promotion.spec.ts`, `tests/admin-routes.spec.ts`, `tests/admin-program-rpcs.spec.ts`, `tests/admin-conferences-rpcs.spec.ts`, `tests/join-requests-staff-read.spec.ts`, `tests/leave-program.spec.ts`, `tests/teams-management.spec.ts`, `tests/program-owner-name-live.spec.ts`

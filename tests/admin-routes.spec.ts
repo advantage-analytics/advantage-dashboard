@@ -12,10 +12,13 @@ import {
   SUPABASE_URL,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import {
+  POOL_USER_DEFAULTS,
+  clearPoolLeftovers,
+  poolLogins,
+} from "./fixtures/live-db-pool";
 
 /**
  * Route-level smoke test for the admin console this whole queue built (T25,
@@ -33,15 +36,17 @@ import {
  *    (e.g. `http://localhost:3500`).
  *  - `ADMIN_SMOKE_CONFIRM=yes` — an explicit second opt-in. Having
  *    `ADMIN_SMOKE_BASE_URL` set is not by itself proof the runner wants this:
- *    the suite creates and deletes real Supabase auth users (and a real
- *    throwaway program) against whichever project that server's own
- *    `.env.local` points at. Requiring both makes running this a decision,
- *    not a side effect of a base URL left set in the shell.
+ *    the suite signs in real Supabase auth users, promotes one to admin and
+ *    creates a real throwaway program against whichever project that
+ *    server's own `.env.local` points at. Requiring both makes running this
+ *    a decision, not a side effect of a base URL left set in the shell.
  *
  * It otherwise follows this repo's `HAVE_ENV`-gated live-DB convention (see
  * `tests/admin-program-rpcs.spec.ts`, `tests/fixtures/live-db.ts`) for the
- * Supabase side: two throwaway logins via `createLogins`, one promoted to
- * `is_admin = true` with the service-role client.
+ * Supabase side: two reused pool users via `poolLogins`
+ * (`fixtures/live-db-pool`), one promoted to `is_admin = true` with the
+ * service-role client and demoted again in `afterAll` — the user outlives the
+ * run, so the flag must not.
  *
  * Auth is proven at the HTTP layer, not the Supabase client layer: each
  * session's access/refresh tokens are packed into the same
@@ -67,15 +72,18 @@ const ADMIN_SMOKE_SKIP_REASON = !HAVE_ENV
   ? SKIP_REASON
   : !BASE_URL
     ? "ADMIN_SMOKE_BASE_URL not set — point it at a running `npm run build && npm run start` server (npm run dev is broken on this branch, see AGENTS.md's queue notes)"
-    : 'ADMIN_SMOKE_CONFIRM not set to "yes" — this spec creates/deletes real throwaway Supabase auth users and a throwaway program against whatever project the server at ADMIN_SMOKE_BASE_URL is wired to';
+    : 'ADMIN_SMOKE_CONFIRM not set to "yes" — this spec signs in real Supabase auth users, promotes one to admin and creates a throwaway program against whatever project the server at ADMIN_SMOKE_BASE_URL is wired to';
 
 /** A crashed run is findable by hand:
  *  `select * from programs where program_key is null and school_name like 'admin-smoke-%'`. */
-const { mark: MARK, password: PASSWORD } = runMarker("admin-smoke");
+const { mark: MARK } = runMarker("admin-smoke");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = ["admin-routes-admin", "admin-routes-member"];
 
 // @supabase/ssr chunks a cookie once its encoded value exceeds this many
 // characters (node_modules/@supabase/ssr/dist/main/utils/chunker.js). These
-// fixture sessions are throwaway users with no profile metadata, so the
+// fixture sessions are pool users with no profile metadata, so the
 // encoded session never gets close — the helper below throws instead of
 // silently truncating if that ever stops being true, rather than
 // reimplementing chunking for a case this spec never hits.
@@ -89,7 +97,7 @@ function projectRefFrom(url: string): string {
 /**
  * Build the raw `Cookie` header value `@supabase/ssr` would read back as this
  * session, from the tokens already sitting in the signed-in client's memory
- * (`createLogin` in `fixtures/live-db.ts` already called
+ * (`poolLogin` in `fixtures/live-db-pool.ts` already called
  * `signInWithPassword`, so this is a local read, not a network round trip).
  */
 async function sessionCookieHeader(session: Session): Promise<string> {
@@ -149,18 +157,25 @@ test.describe("Admin console route smoke test (live)", () => {
   let adminSession: Session; // is_admin = true
   let memberSession: Session; // signed in, not an admin
 
-  const authUserIds: string[] = [];
   let programId: string | null = null;
 
   test.beforeAll(async () => {
     test.setTimeout(120_000);
     admin = createAdminClient();
 
-    [adminSession, memberSession] = await createLogins(
-      admin,
-      ["admin", "member"],
-      { mark: MARK, password: PASSWORD, authUserIds },
-    );
+    // A crashed run's club program has no owner and no members, so the pool
+    // would not refuse the slots over it — but it is this file's, so it goes
+    // (audit rows cascade with it).
+    await clearPoolLeftovers(admin, SLOTS);
+    const stale = await admin
+      .from("programs")
+      .delete()
+      .like("school_name", "admin-smoke-%");
+    if (stale.error) {
+      throw new Error(`programs sweep: ${stale.error.message}`);
+    }
+
+    [adminSession, memberSession] = await poolLogins(admin, SLOTS);
 
     const flip = await admin
       .from("users")
@@ -194,7 +209,19 @@ test.describe("Admin console route smoke test (live)", () => {
   });
 
   test.afterAll(async () => {
-    if (!admin) return;
+    // Nothing was created unless the gates opened; with them shut, touching
+    // the target at all (the prod guard included) is wrong.
+    if (!READY || !admin) return;
+
+    // The promotion goes first: a pool user left an admin is a standing
+    // admin account on the target, and it must not wait on the rest.
+    const demote = adminSession
+      ? await admin
+          .from("users")
+          .update({ is_admin: POOL_USER_DEFAULTS.is_admin })
+          .eq("id", adminSession.userId)
+      : { error: null };
+
     if (programId) {
       await admin
         .from("program_audit_log")
@@ -203,7 +230,9 @@ test.describe("Admin console route smoke test (live)", () => {
       await admin.from("program_members").delete().eq("program_id", programId);
       await admin.from("programs").delete().eq("id", programId);
     }
-    await deleteAuthUsers(admin, authUserIds);
+    if (demote.error) {
+      throw new Error(`is_admin reset: ${demote.error.message}`);
+    }
   });
 
   // ── unauthenticated ─────────────────────────────────────────────────────
