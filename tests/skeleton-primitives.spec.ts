@@ -26,9 +26,7 @@ const TOKEN_HOMES = [
  * Exact: an entry that no longer breaks either rule fails the last test, so a
  * task that migrates a file deletes its line here. Never add to it.
  */
-const LEGACY = [
-  "src/components/dashboard/loading/settings-pending.tsx", // T33
-];
+const LEGACY: string[] = [];
 
 /** Loading files allowed a spinner while they still hold one. */
 const SPIN_EXCEPTIONS = [

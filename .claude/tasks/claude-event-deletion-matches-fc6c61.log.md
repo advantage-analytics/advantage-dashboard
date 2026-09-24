@@ -410,3 +410,13 @@ The title and content class moved into a new shared module, `schedule/score-flow
 `help/page.tsx` does not use ComingSoonPage's frame (it's 1032px, `px-6 py-8`), so Help won't pixel-align during the loading flash. The bar keeps the frame the criterion states.
 
 **to resume:** once the live DB is healthy, run `git stash apply be16e15c`, reset the status to `todo`, then re-run the gate and the completion review.
+
+## T33 · Settings skeletons on the shared primitives — done
+
+**gate:** mechanical GATE PASS on the second run after resuming (the first failed only on the live-DB `point-bookmarks-db.spec.ts:204`). The shared Supabase recovered at about 04:30 UTC. · completion `VERDICT: pass`, from the earlier review of the identical diff (stash `4dd7cb9f`, re-applied unchanged).
+
+**changed:** `settings-pending.tsx` is built on `PendingBar`/`PendingRegion`, and `SKELETON_BG` and the `BAND` gradient-text technique are removed. `Text`/`Button`/`PillSelect`/`Pill` use a grid stack: an invisible copy of the content sets the size, and one `PendingBar` overlays it. `Column` is a `PendingRegion`. `LEGACY` in `skeleton-primitives.spec.ts` is now empty. New `tests/settings-pending.spec.ts` renders all 7 exports and checks each one's skeleton contract, including exactly one `role="status"` per export.
+
+**follow-ups:**
+
+1. A multi-line text placeholder is now one block instead of one band per wrapped line. `PendingBar` has no children, which is why. If per-line bands matter, `PendingBar` would need a text-band variant.
