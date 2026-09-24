@@ -387,7 +387,7 @@ ready).
 
 ## T29 · Schedule event and single-match skeletons mirror their pages
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T25
 - **files:** src/components/dashboard/loading/page-skeletons.tsx (`EventTableSkeleton` :132, `EventPageSkeleton` :98), src/app/dashboard/team/schedule/single/[matchId]/loading.tsx, src/components/dashboard/schedule/event-line-drawer.tsx (`SnapshotPending` :359), tests/schedule-skeletons.spec.ts (new), tests/skeleton-primitives.spec.ts (guess)

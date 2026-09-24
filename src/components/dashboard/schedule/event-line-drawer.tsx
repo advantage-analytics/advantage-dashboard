@@ -21,6 +21,10 @@ import {
   noteIconCls,
   noteStripCls,
 } from "@/components/dashboard/matches/new-match-wizard/styles";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { lineAction } from "@/lib/schedule/line-action";
 import { scoreHref } from "@/lib/schedule/score-seed";
 import { ResultMark } from "@/components/dashboard/result-mark";
@@ -413,24 +417,24 @@ function LineSnapshot({ matchId }: { matchId: string }) {
   return snapshot ? <SnapshotSection snapshot={snapshot} /> : null;
 }
 
-/** `SnapshotSection`'s frame — its eyebrow and four figure bars. */
+/**
+ * `SnapshotSection`'s frame — its real "Snapshot" eyebrow over four figure
+ * bars in the section's 2×2 grid: a 20px bar for the 16px figure, a 12px bar
+ * for its 11px label, 3px apart as the `dt`/`dd` pair sits.
+ */
 function SnapshotPending() {
   return (
-    <div
-      role="status"
-      aria-label="Loading snapshot"
-      className="flex flex-col gap-3"
-    >
+    <PendingRegion label="snapshot" innerClassName="flex flex-col gap-3">
       <span className="eyebrow-sm">Snapshot</span>
-      <div aria-hidden="true" className="grid grid-cols-2 gap-x-4 gap-y-3">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
         {[0, 1, 2, 3].map((cell) => (
           <div key={cell} className="flex flex-col gap-[3px]">
-            <span className="h-5 w-10 rounded-[3px] bg-[var(--surface-skeleton)] motion-safe:animate-pulse" />
-            <span className="h-3 w-20 rounded-[3px] bg-[var(--surface-skeleton)] motion-safe:animate-pulse" />
+            <PendingBar className="h-5 w-10" />
+            <PendingBar className="h-3 w-20" />
           </div>
         ))}
       </div>
-    </div>
+    </PendingRegion>
   );
 }
 

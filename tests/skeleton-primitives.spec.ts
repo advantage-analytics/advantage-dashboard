@@ -37,7 +37,6 @@ const LEGACY = [
   "src/components/dashboard/loading/settings-pending.tsx", // T33
   "src/components/dashboard/matches/matches-skeleton.tsx", // T31
   "src/components/dashboard/matches/matches-title-row.tsx", // T31
-  "src/components/dashboard/schedule/event-line-drawer.tsx", // T29
   "src/components/dashboard/search/search-command-palette.tsx", // T30
 ];
 

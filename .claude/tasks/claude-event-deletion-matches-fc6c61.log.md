@@ -315,3 +315,27 @@ The title and content class moved into a new shared module, `schedule/score-flow
 
 1. A resumed `?draft=` that started from an event line still shows only "Upload video". The draft carries its preset, so it could publish the same trail.
 2. The `?match=`-only single-match branch could publish a trail to `/dashboard/team/schedule/single/<id>`.
+
+## T29 · Schedule event and single-match skeletons mirror their pages — done
+
+**gate:** mechanical GATE PASS (first run) · completion `VERDICT: pass` (criterion 2's 640px box ruled "met, qualified by the note")
+
+**changed:**
+
+- `EventTableSkeleton` now mirrors `EventTable`:
+  - The only `border-b` is on the header row, which has six label bars on the dual's grid.
+  - One group-head bar.
+  - Nine borderless `h-12` rows.
+  - The strip has three cells; the edit-only action bar was dropped.
+- `EventPageSkeleton` is renamed `SingleMatchPending` and mirrors `single-detail.tsx`:
+  - Eyebrow, then the 30px title with a 40px score bar, then the facts row.
+  - The hairline status row, then the 560px section.
+  - The conditional "From the report" 640px box is omitted, per the task's note.
+  - Only the old skeleton used the `Title`/`Kpis`/`Rows`/`Section` helpers, so they're deleted.
+- `SnapshotPending` is built on `PendingRegion`/`PendingBar` and dropped from `LEGACY`.
+- New `tests/schedule-skeletons.spec.ts`: the skeleton contract, one `border-b` row, the header grid matching `dual-detail.tsx`'s `GRID`, no 300px rail and no 640px box.
+
+**follow-ups:**
+
+1. The skeleton copies the dual's grid string instead of importing it. Export `GRID` from `dual-detail.tsx` (or move it next to `EventTable`); for now the spec catches drift.
+2. `SingleMatchPending` draws both the score bar (only present once scored) and the Score/Video rows (only present before scoring), a combination no real page state shows. Decide whether one state should win.
