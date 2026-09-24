@@ -214,12 +214,17 @@ async function assertNoLeftovers(
   userId: string,
   email: string,
 ): Promise<void> {
-  for (const { table, columns } of LEFTOVER_REFERENCES) {
-    const filter = columns.map((column) => `${column}.eq.${userId}`).join(",");
-    const { count, error } = await admin
-      .from(table)
-      .select("id", { count: "exact", head: true })
-      .or(filter);
+  const checks = await Promise.all(
+    LEFTOVER_REFERENCES.map(async ({ table, columns }) => ({
+      table,
+      columns,
+      ...(await admin
+        .from(table)
+        .select("id", { count: "exact", head: true })
+        .or(columns.map((column) => `${column}.eq.${userId}`).join(","))),
+    })),
+  );
+  for (const { table, columns, count, error } of checks) {
     if (error) {
       throw new Error(`${table} leftover check (${email}): ${error.message}`);
     }
@@ -232,6 +237,26 @@ async function assertNoLeftovers(
       );
     }
   }
+}
+
+/**
+ * Put a pool user a spec promoted with the service role back to a plain user.
+ * Call it first in `afterAll` — a pool user left an admin is a standing admin
+ * account on the target, and it must not wait on the rest of the cleanup —
+ * then throw what it returns last, so that cleanup still runs. The reset in
+ * `poolLogin` is the backstop for a run that never reached `afterAll`.
+ * Resolves to the failure message, or null.
+ */
+export async function demotePoolAdmin(
+  admin: SupabaseClient,
+  session: Session | undefined,
+): Promise<string | null> {
+  if (!session) return null;
+  const { error } = await admin
+    .from("users")
+    .update({ is_admin: POOL_USER_DEFAULTS.is_admin })
+    .eq("id", session.userId);
+  return error ? `is_admin reset: ${error.message}` : null;
 }
 
 function isInvalidCredentials(error: unknown): boolean {
@@ -363,32 +388,26 @@ export async function clearPoolLeftovers(
   }
   const ownedIds = ((owned.data ?? []) as { id: string }[]).map((p) => p.id);
 
-  const inList = `(${ids.join(",")})`;
-  const steps: [
-    string,
-    () => PromiseLike<{ error: { message: string } | null }>,
-  ][] = [
-    [
-      "owned programs' members",
-      () => admin.from("program_members").delete().in("program_id", ownedIds),
-    ],
-    [
-      "memberships",
-      () =>
-        admin
-          .from("program_members")
-          .delete()
-          .or(`user_id.in.${inList},invited_by.in.${inList}`),
-    ],
-    [
-      "owned programs",
-      () => admin.from("programs").delete().in("id", ownedIds),
-    ],
-  ];
-  for (const [label, run] of steps) {
-    if (label.startsWith("owned") && ownedIds.length === 0) continue;
-    const { error } = await run();
+  const fail = (label: string, error: { message: string } | null) => {
     if (error) throw new Error(`clearPoolLeftovers ${label}: ${error.message}`);
+  };
+
+  // The two membership sweeps are independent; the programs wait on both.
+  const inList = `(${ids.join(",")})`;
+  const [ownedMembers, memberships] = await Promise.all([
+    ownedIds.length > 0
+      ? admin.from("program_members").delete().in("program_id", ownedIds)
+      : { error: null },
+    admin
+      .from("program_members")
+      .delete()
+      .or(`user_id.in.${inList},invited_by.in.${inList}`),
+  ]);
+  fail("owned programs' members", ownedMembers.error);
+  fail("memberships", memberships.error);
+  if (ownedIds.length > 0) {
+    const programs = await admin.from("programs").delete().in("id", ownedIds);
+    fail("owned programs", programs.error);
   }
   return ids;
 }

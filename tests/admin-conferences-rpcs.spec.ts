@@ -12,7 +12,7 @@ import {
   runMarker,
 } from "./fixtures/live-db";
 import {
-  POOL_USER_DEFAULTS,
+  demotePoolAdmin,
   clearPoolLeftovers,
   poolLogins,
 } from "./fixtures/live-db-pool";
@@ -173,14 +173,7 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
   test.afterAll(async () => {
     if (!admin) return;
 
-    // The promotion goes first: a pool user left an admin is a standing admin
-    // account on the target, and it must not wait on the rest.
-    const demote = adminSession
-      ? await admin
-          .from("users")
-          .update({ is_admin: POOL_USER_DEFAULTS.is_admin })
-          .eq("id", adminSession.userId)
-      : { error: null };
+    const demoteError = await demotePoolAdmin(admin, adminSession);
 
     // Programs first — conferences.id is `on delete restrict` from programs.
     const leftover = await admin
@@ -200,9 +193,7 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
     // Then every conference this run created (A, B, and the trigger-made new + svc).
     await admin.from("conferences").delete().like("name", `${MARK}%`);
 
-    if (demote.error) {
-      throw new Error(`is_admin reset: ${demote.error.message}`);
-    }
+    if (demoteError) throw new Error(demoteError);
   });
 
   // ── admin_upsert_conference + the five gates ──────────────────────────────

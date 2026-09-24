@@ -10,7 +10,7 @@ import {
   runMarker,
 } from "./fixtures/live-db";
 import {
-  POOL_USER_DEFAULTS,
+  demotePoolAdmin,
   clearPoolLeftovers,
   poolLogins,
 } from "./fixtures/live-db-pool";
@@ -195,14 +195,7 @@ test.describe("Admin program RPC gates (live)", () => {
 
   test.afterAll(async () => {
     if (!admin) return;
-    // The promotion goes first: a pool user left an admin is a standing admin
-    // account on the target, and it must not wait on the rest.
-    const demote = adminSession
-      ? await admin
-          .from("users")
-          .update({ is_admin: POOL_USER_DEFAULTS.is_admin })
-          .eq("id", adminSession.userId)
-      : { error: null };
+    const demoteError = await demotePoolAdmin(admin, adminSession);
 
     // By id, never through the users: B's owner changes mid-run, and the pool
     // users outlive it.
@@ -212,9 +205,7 @@ test.describe("Admin program RPC gates (live)", () => {
       await admin.from("program_members").delete().eq("program_id", id);
       await admin.from("programs").delete().eq("id", id);
     }
-    if (demote.error) {
-      throw new Error(`is_admin reset: ${demote.error.message}`);
-    }
+    if (demoteError) throw new Error(demoteError);
   });
 
   // ── set_program_member_role — admin gate ──────────────────────────────────

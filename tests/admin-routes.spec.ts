@@ -15,7 +15,7 @@ import {
   runMarker,
 } from "./fixtures/live-db";
 import {
-  POOL_USER_DEFAULTS,
+  demotePoolAdmin,
   clearPoolLeftovers,
   poolLogins,
 } from "./fixtures/live-db-pool";
@@ -213,14 +213,7 @@ test.describe("Admin console route smoke test (live)", () => {
     // the target at all (the prod guard included) is wrong.
     if (!READY || !admin) return;
 
-    // The promotion goes first: a pool user left an admin is a standing
-    // admin account on the target, and it must not wait on the rest.
-    const demote = adminSession
-      ? await admin
-          .from("users")
-          .update({ is_admin: POOL_USER_DEFAULTS.is_admin })
-          .eq("id", adminSession.userId)
-      : { error: null };
+    const demoteError = await demotePoolAdmin(admin, adminSession);
 
     if (programId) {
       await admin
@@ -230,9 +223,7 @@ test.describe("Admin console route smoke test (live)", () => {
       await admin.from("program_members").delete().eq("program_id", programId);
       await admin.from("programs").delete().eq("id", programId);
     }
-    if (demote.error) {
-      throw new Error(`is_admin reset: ${demote.error.message}`);
-    }
+    if (demoteError) throw new Error(demoteError);
   });
 
   // ── unauthenticated ─────────────────────────────────────────────────────
