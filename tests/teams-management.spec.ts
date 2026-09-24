@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import { expect, test } from "@playwright/test";
 import { type SupabaseClient } from "@supabase/supabase-js";
 
@@ -10,6 +12,7 @@ import {
   runMarker,
 } from "./fixtures/live-db";
 import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
+import { generateToken, hashToken } from "@/lib/services/programs/tokens";
 
 /**
  * Settings › Teams' rules, proven against the live database.
@@ -30,6 +33,11 @@ import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
  * themselves, a coach moves people between staff and player only, `owner`
  * is never assignable, no-ops write no audit row — and the gate on
  * `program_usage_pending`: a stranger gets zero, not an error.
+ *
+ * And the 2026-09-24 coach-authority rule on the two doors that bypassed the
+ * role menu: only the owner invites a coach (`create_program_invite`); only the
+ * owner removes a coach and only the owner or a coach removes staff
+ * (`remove_program_member`).
  *
  * The four logins are reused pool users (`fixtures/live-db-pool`), never
  * deleted. Ownership moves from the owner slot to the coach slot mid-run, so
@@ -146,6 +154,7 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
         .from("program_audit_log")
         .delete()
         .eq("program_id", programId);
+      await admin.from("program_invites").delete().eq("program_id", programId);
       await admin.from("program_members").delete().eq("program_id", programId);
       await admin.from("programs").delete().eq("id", programId);
     }
@@ -467,6 +476,98 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
       .eq("user_id", coach.userId)
       .single();
     expect(row.data?.role).toBe("coach");
+  });
+
+  // ── coach authority: invites and removals ─────────────────────────────────
+
+  /** Sets a fixture member's role (or adds the row) behind the RPCs' backs. */
+  async function seat(userId: string, role: "coach" | "staff" | "player") {
+    const { error } = await admin
+      .from("program_members")
+      .upsert(
+        { program_id: programId, user_id: userId, role },
+        { onConflict: "program_id,user_id" },
+      );
+    if (error) throw new Error(`seat ${role}: ${error.message}`);
+  }
+
+  const inviteAs = (session: Session, role: string) =>
+    session.client.rpc("create_program_invite", {
+      p_program_id: programId,
+      p_email: `${MARK}-${role}-${randomBytes(4).toString("hex")}@example.com`,
+      p_role: role,
+      p_token_hash: hashToken(generateToken()),
+      p_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+      p_player_id: null,
+    });
+
+  const remove = (session: Session, userId: string) =>
+    session.client.rpc("remove_program_member", {
+      p_program_id: programId,
+      p_user_id: userId,
+    });
+
+  const isMember = async (userId: string) => {
+    const { data } = await admin
+      .from("program_members")
+      .select("role")
+      .eq("program_id", programId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    return data !== null;
+  };
+
+  test("only the owner may invite a coach; staff and coaches may invite staff", async () => {
+    await seat(player.userId, "staff");
+    try {
+      expect((await inviteAs(player, "coach")).error?.code).toBe(
+        INSUFFICIENT_PRIVILEGE,
+      );
+      expect((await inviteAs(coach, "coach")).error?.code).toBe(
+        INSUFFICIENT_PRIVILEGE,
+      );
+      expect((await inviteAs(player, "staff")).error).toBeNull();
+      expect((await inviteAs(owner, "coach")).error).toBeNull();
+    } finally {
+      await seat(player.userId, "player");
+    }
+  });
+
+  test("only the owner removes a coach; only the owner or a coach removes staff", async () => {
+    // `player` sits as a staff member throughout; `stranger` is the target,
+    // re-seated in each role and left off the program at the end — the
+    // transfer tests below rely on them being a non-member.
+    await seat(player.userId, "staff");
+    try {
+      await seat(stranger.userId, "coach");
+      expect((await remove(player, stranger.userId)).error?.code).toBe(
+        INSUFFICIENT_PRIVILEGE,
+      );
+      expect((await remove(coach, stranger.userId)).error?.code).toBe(
+        INSUFFICIENT_PRIVILEGE,
+      );
+      expect(await isMember(stranger.userId)).toBe(true);
+      expect((await remove(owner, stranger.userId)).error).toBeNull();
+      expect(await isMember(stranger.userId)).toBe(false);
+
+      await seat(stranger.userId, "staff");
+      expect((await remove(player, stranger.userId)).error?.code).toBe(
+        INSUFFICIENT_PRIVILEGE,
+      );
+      expect((await remove(coach, stranger.userId)).error).toBeNull();
+      expect(await isMember(stranger.userId)).toBe(false);
+
+      await seat(stranger.userId, "player");
+      expect((await remove(player, stranger.userId)).error).toBeNull();
+      expect(await isMember(stranger.userId)).toBe(false);
+    } finally {
+      await admin
+        .from("program_members")
+        .delete()
+        .eq("program_id", programId)
+        .eq("user_id", stranger.userId);
+      await seat(player.userId, "player");
+    }
   });
 
   // ── transfer_program_ownership ────────────────────────────────────────────
