@@ -1,4 +1,4 @@
-import { PendingBar, PendingFrame } from "./pending";
+import { PendingBar, PendingFrame, PendingRegion } from "./pending";
 
 /** Quiet placeholders only: no fabricated values, charts, or focusable controls. */
 
@@ -155,18 +155,24 @@ export function EventTableSkeleton() {
   );
 }
 
-export function SimplePageLoader() {
+/**
+ * The dashboard root's `loading.tsx` — the boundary that catches every route
+ * with no `loading.tsx` of its own (Ask, Help, Opponents, Statistics, Team
+ * Ask, Team Statistics, the settings redirects). The one shape those pages
+ * share is `ComingSoonPage`'s frame (`coming-soon.tsx`) and its `<h1
+ * className="text-display">`, so that's all this draws — one bar at the
+ * `text-display` line height, nothing invented below it.
+ */
+export function DashboardPagePending() {
   return (
-    <div
-      role="status"
-      className="flex flex-1 items-center justify-center gap-2 py-20 text-[13px] text-[var(--ink-600)]"
+    <PendingRegion
+      label="page"
+      className="flex w-full flex-1 flex-col bg-white"
     >
-      <span
-        aria-hidden="true"
-        className="size-4 rounded-full border-2 border-[var(--border-hairline)] border-t-[var(--ink-400)] motion-safe:animate-spin"
-      />
-      <span className="sr-only">Loading page</span>
-    </div>
+      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
+        <PendingBar className="h-9 w-64" />
+      </div>
+    </PendingRegion>
   );
 }
 

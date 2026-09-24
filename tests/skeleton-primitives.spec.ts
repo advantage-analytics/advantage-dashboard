@@ -29,9 +29,7 @@ const TOKEN_HOMES = [
 const LEGACY: string[] = [];
 
 /** Loading files allowed a spinner while they still hold one. */
-const SPIN_EXCEPTIONS = [
-  "src/components/dashboard/loading/page-skeletons.tsx", // T34 (SimplePageLoader)
-];
+const SPIN_EXCEPTIONS: string[] = [];
 
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

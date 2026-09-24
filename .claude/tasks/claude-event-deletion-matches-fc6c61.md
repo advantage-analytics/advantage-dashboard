@@ -453,7 +453,7 @@ ready).
 
 ## T34 · The dashboard root loading fallback becomes a skeleton, not a spinner
 
-- **status:** blocked
+- **status:** done
 - **model:** sonnet
 - **needs:** T25
 - **files:** src/app/dashboard/loading.tsx, src/components/dashboard/loading/page-skeletons.tsx (`SimplePageLoader` :223), tests/skeleton-primitives.spec.ts, tests/dashboard-page-pending.spec.ts (new)
@@ -462,4 +462,4 @@ ready).
   - [ ] `DashboardPagePending` uses `ComingSoonPage`'s frame (`src/components/dashboard/coming-soon.tsx:53-54`: `bg-white`, `max-w-screen-2xl px-14 pt-5 pb-8`) with one bar at the `text-display` `<h1>`'s height and nothing below it.
   - [ ] `tests/dashboard-page-pending.spec.ts` (static markup) asserts exactly one `role="status"` labelled "Loading page", exactly one skeleton bar, and no `<button`/`<a `.
   - [ ] `npm run lint && npm run typecheck` clean; `npm test -- tests/dashboard-page-pending.spec.ts tests/skeleton-primitives.spec.ts` passes.
-- **notes:** This boundary catches every dashboard route without its own `loading.tsx`: Ask, Help, Opponents, Statistics, Team Ask, Team Statistics and the settings redirects. Carbon keeps spinners for blocking operations; a page load gets a skeleton. The one shape those pages share is the h1, so draw only the h1 — more would invent a layout. Confirm `help/page.tsx` opens with the same frame and h1; if not, draw the h1 bar at the shared x only.
+- **notes:** This boundary catches every dashboard route without its own `loading.tsx`: Ask, Help, Opponents, Statistics, Team Ask, Team Statistics and the settings redirects. Carbon keeps spinners for blocking operations; a page load gets a skeleton. The one shape those pages share is the h1, so draw only the h1 — more would invent a layout. Author ruling (2026-09-24): keep ComingSoonPage's frame even though `help/page.tsx` uses its own 1032px `px-6 py-8` frame; Help's title shifting on load is accepted.

@@ -428,3 +428,22 @@ The title and content class moved into a new shared module, `schedule/score-flow
 **stash:** `0e3f0bc6a956bcb11982519a13743a09e456bdce`. It is the same work as `be16e15c`, re-applied onto T33's commit with no conflict.
 
 **to resume:** decide what the root fallback should draw, given that Help's frame differs from ComingSoonPage's. Then apply the stash and amend `DashboardPagePending` (and criterion 2 if needed).
+
+## T34 · The dashboard root loading fallback becomes a skeleton, not a spinner — done
+
+**gate:**
+
+- **Mechanical: GATE PASS.** The byte-identical code passed a full gate on 2026-09-24, right after the live DB recovered. Two later re-runs failed only on live-DB specs (21 each) when the shared Supabase degraded again; only the task note changed in between.
+- **Completion: `VERDICT: pass`**, judged against the task as amended by the author's ruling.
+
+**changed:**
+
+- `src/app/dashboard/loading.tsx` default-exports `DashboardPagePending`. It lives in `page-skeletons.tsx` and uses ComingSoonPage's frame: one `PendingRegion` labelled "Loading page" and one `h-9 w-64` title bar.
+- `SimplePageLoader`, the spinner, is deleted. `SPIN_EXCEPTIONS` is now empty.
+- New `tests/dashboard-page-pending.spec.ts`.
+- The author ruled on 2026-09-24 to keep ComingSoonPage's frame and accept Help's title shift. The ruling is recorded in the T34 note.
+
+**follow-ups:**
+
+1. Help is the only real page that falls through to this fallback. A `help/loading.tsx` in Help's own 1032px frame would remove the shift.
+2. The live DB degrades after back-to-back full-suite runs. Recovery was followed by one passing run, then two runs with 21 failures each. The suite's live specs may be exhausting the project's compute or disk-IO budget.
