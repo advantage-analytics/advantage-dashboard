@@ -372,6 +372,30 @@ export function dualScore(entries: EventEntry[]): {
 }
 
 /**
+ * What a delete confirmation has to warn about: how many matches are on the
+ * event, whether any line already has an outcome, and (for a dual) the team
+ * score to name in the copy — `null` when it is still 0–0.
+ */
+export function eventDeleteCost(
+  entries: EventEntry[],
+  isDual: boolean,
+): { matchCount: number; hasOutcome: boolean; teamScore: string | null } {
+  const matchCount = entries.reduce(
+    (sum, entry) => sum + entry.matches.length,
+    0,
+  );
+  const hasOutcome = entries.some(
+    (entry) => entry.forfeit !== null || (entry.outcomes?.length ?? 0) > 0,
+  );
+  const score = isDual ? dualScore(entries) : null;
+  const teamScore =
+    score && (score.us > 0 || score.them > 0)
+      ? `${score.us}–${score.them}`
+      : null;
+  return { matchCount, hasOutcome, teamScore };
+}
+
+/**
  * One event's lines analyzed, over its lines owed.
  *
  * Exported because two surfaces print this ratio — the season strip, which

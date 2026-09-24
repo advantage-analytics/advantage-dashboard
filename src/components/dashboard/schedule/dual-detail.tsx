@@ -30,7 +30,10 @@ import {
   SummaryStrip,
   type ToolbarOption,
 } from "@/components/dashboard/schedule/event-table";
-import { useRowSelection } from "@/components/dashboard/schedule/use-row-selection";
+import {
+  selectIgnoringCut,
+  useRowSelection,
+} from "@/components/dashboard/schedule/use-row-selection";
 import {
   EventLineDrawer,
   LineContextList,
@@ -224,13 +227,11 @@ export function DualDetail({
   // The context list names every line, whatever the toolbar hides. Choosing
   // one the cut hides lifts the cut first, so the selection is not cleared
   // the moment it lands on a row that is not listed.
-  const chooseLine = (id: string) => {
-    if (!visibleIds.includes(id)) {
+  const chooseLine = (id: string) =>
+    selectIgnoringCut(selection, id, visibleIds, () => {
       setPill("all");
       setResultCut(null);
-    }
-    selection.select(id, false);
-  };
+    });
 
   return (
     <EventPageLayout

@@ -201,6 +201,23 @@ export function useRowSelection({
   };
 }
 
+/**
+ * Select `id` from the context list — every row, whatever the toolbar's
+ * pill/result cut hides — lifting the cut first when it hides `id`, so
+ * choosing an off-screen row doesn't land the selection on nothing. Shared by
+ * `dual-detail.tsx` and `tournament-detail.tsx`, which both list-pick this
+ * way; `resetCut` is the caller's own `setPill("all"); setResultCut(null)`.
+ */
+export function selectIgnoringCut(
+  selection: Pick<RowSelection, "select">,
+  id: string,
+  visibleIds: readonly string[],
+  resetCut: () => void,
+): void {
+  if (!visibleIds.includes(id)) resetCut();
+  selection.select(id, false);
+}
+
 /** Mirror the selection into `?<param>=` without a navigation. */
 function syncUrl(param: string, id: string | null) {
   if (typeof window === "undefined") return;

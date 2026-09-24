@@ -25,7 +25,10 @@ import {
   SummaryStrip,
   type ToolbarOption,
 } from "@/components/dashboard/schedule/event-table";
-import { useRowSelection } from "@/components/dashboard/schedule/use-row-selection";
+import {
+  selectIgnoringCut,
+  useRowSelection,
+} from "@/components/dashboard/schedule/use-row-selection";
 import {
   EventLineDrawer,
   LineContextList,
@@ -254,13 +257,11 @@ export function TournamentDetail({
   // The run list names every round of the entry, whatever the toolbar hides.
   // Choosing one the cut hides lifts the cut first, so the selection is not
   // cleared the moment it lands on a row that is not listed.
-  const chooseRow = (id: string) => {
-    if (!visibleIds.includes(id)) {
+  const chooseRow = (id: string) =>
+    selectIgnoringCut(selection, id, visibleIds, () => {
       setPill("all");
       setResultCut(null);
-    }
-    selection.select(id, false);
-  };
+    });
 
   // Matches, not entries, and not outcome-only rounds: a default or a
   // withdrawal decided a round without a match, so it has no score to count

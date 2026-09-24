@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/float-menu";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { deleteEvent } from "@/lib/schedule/actions";
-import { dualScore } from "@/lib/schedule/entry-state";
+import { eventDeleteCost } from "@/lib/schedule/entry-state";
 import type { EventEntry } from "@/lib/schedule/types";
 import { cn } from "@/lib/utils";
 
@@ -45,22 +45,6 @@ const TRIGGER =
  * matches survive in the library with their line cleared, while outcome rows
  * and the dual's team result go with the event.
  */
-function deleteCost(entries: EventEntry[], isDual: boolean) {
-  const matchCount = entries.reduce(
-    (sum, entry) => sum + entry.matches.length,
-    0,
-  );
-  const hasOutcome = entries.some(
-    (entry) => entry.forfeit !== null || (entry.outcomes?.length ?? 0) > 0,
-  );
-  const score = isDual ? dualScore(entries) : null;
-  const teamScore =
-    score && (score.us > 0 || score.them > 0)
-      ? `${score.us}–${score.them}`
-      : null;
-  return { matchCount, hasOutcome, teamScore };
-}
-
 export function EventActionsMenu({
   eventId,
   eventName,
@@ -85,7 +69,10 @@ export function EventActionsMenu({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { matchCount, hasOutcome, teamScore } = deleteCost(entries, isDual);
+  const { matchCount, hasOutcome, teamScore } = eventDeleteCost(
+    entries,
+    isDual,
+  );
   const costsSomething = matchCount > 0 || hasOutcome;
 
   async function confirmDelete() {
