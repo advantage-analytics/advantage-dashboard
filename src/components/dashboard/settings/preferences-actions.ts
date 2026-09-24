@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { Preferences } from "@/lib/data/preferences-server";
+import { isReportView } from "@/components/dashboard/matches/match-detail/report-view";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
 
 /**
@@ -42,6 +43,9 @@ export async function savePreferences(
 
   if (next.unit !== "ft" && next.unit !== "m") {
     return { ok: false, error: "Invalid unit preference." };
+  }
+  if (!isReportView(next.matchReportOpensAt)) {
+    return { ok: false, error: "Invalid match report preference." };
   }
 
   const { error } = await supabase.from("user_preferences").upsert(

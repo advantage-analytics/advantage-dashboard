@@ -123,6 +123,11 @@ export function useMatchReport(): MatchReportContextValue {
 }
 
 export interface MatchReportProviderProps extends MatchReportMeta {
+  /**
+   * The view a URL without `?tab=` opens at — the reader's "Match report opens
+   * at" preference, resolved in `page.tsx`. An explicit `?tab=` still wins.
+   */
+  defaultView?: ReportView;
   children: ReactNode;
 }
 
@@ -140,12 +145,13 @@ export function MatchReportProvider({
   bandSettings,
   canEditBands,
   unit,
+  defaultView = "statistics",
   children,
 }: MatchReportProviderProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  // Anything that is not a known view reads as Statistics, never an error.
-  const view = parseReportView(searchParams.get("tab"));
+  // Anything that is not a known view reads as the default, never an error.
+  const view = parseReportView(searchParams.get("tab"), defaultView);
 
   // Collapse is only this visit's state; every visit opens expanded.
   const [insight, setInsight] = useState<InsightStatus>("expanded");
@@ -159,7 +165,7 @@ export function MatchReportProvider({
         // report again, and each push is its own entry, so Back restores the
         // previous view. `reportViewQuery` carries every other parameter
         // through.
-        const query = reportViewQuery(searchParams, next);
+        const query = reportViewQuery(searchParams, next, defaultView);
         window.history.pushState(
           null,
           "",
@@ -180,7 +186,7 @@ export function MatchReportProvider({
         setInsight("expanded");
       },
     }),
-    [view, searchParams, pathname],
+    [view, searchParams, pathname, defaultView],
   );
 
   const meta = useMemo<MatchReportMeta>(
