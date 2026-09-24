@@ -15,6 +15,11 @@
  *                                        workspace is the match's own scope.
  *                                        Required before any reserve, renew,
  *                                        cancel, complete or align (T8–T11).
+ *   {@link authorizeMatchVideoRemoval}   visibility, then: the caller uploaded
+ *                                        this attachment, or is an owner or
+ *                                        coach of the match's program. The
+ *                                        one write that is NOT creator-only
+ *                                        (SwingVision Add video T5).
  *
  * Every privileged step downstream — the service-role RPCs, the SAS signer —
  * is reached only through a {@link MatchVideoMutationAccess}, and the only
@@ -85,6 +90,35 @@ export interface MatchVideoAccessDeps {
   activeWorkspace(): Promise<Pick<Workspace, "id" | "kind"> | null>;
 }
 
+/**
+ * The two extra reads removal needs. Kept off {@link MatchVideoAccessDeps}
+ * so no existing route has to provide them.
+ */
+export interface MatchVideoRemovalAccessDeps extends MatchVideoAccessDeps {
+  /**
+   * `uploaded_by` of the attachment filed under THIS match, through the
+   * service role (the table has no client-role access). `attachment` is null
+   * when no row has that id on that match. Any state: whether a retired or
+   * pending row may be "removed" is the RPC's call, not this check's.
+   */
+  loadAttachmentUploader(
+    matchId: string,
+    attachmentId: string,
+  ): Promise<{
+    attachment: { uploaded_by: string | null } | null;
+    error: string | null;
+  }>;
+  /**
+   * `userId`'s `program_members.role` in `programId`, through the CALLER's
+   * client — its select policy always shows a member their own row. `userId`
+   * is always the session's own id. Null when there is no membership there.
+   */
+  loadProgramRole(
+    programId: string,
+    userId: string,
+  ): Promise<{ role: string | null; error: string | null }>;
+}
+
 /** The session's identity. Never a request field. */
 export interface MatchVideoActor {
   readonly id: string;
@@ -115,6 +149,28 @@ declare const AUTHORIZED_MUTATION: unique symbol;
 export interface MatchVideoMutationAccess extends MatchVisibilityAccess {
   readonly workspace: MatchVideoWorkspaceScope;
   readonly [AUTHORIZED_MUTATION]: true;
+}
+
+declare const AUTHORIZED_REMOVAL: unique symbol;
+
+/** The program roles that may remove any video on their program's matches. */
+export const MATCH_VIDEO_REMOVAL_LEAD_ROLES: readonly string[] = Object.freeze([
+  "owner",
+  "coach",
+]);
+
+/**
+ * Visibility and the removal rule passed, for ONE attachment. Constructed
+ * only by {@link authorizeMatchVideoRemoval}, branded like
+ * {@link MatchVideoMutationAccess} and for the same reason — and a distinct
+ * brand, so a removal decision can never be passed where a creator's
+ * mutation access is required, nor the other way round.
+ */
+export interface MatchVideoRemovalAccess extends MatchVisibilityAccess {
+  readonly attachmentId: string;
+  /** Which half of the rule let the caller through. For logs only. */
+  readonly basis: "uploader" | "program_lead";
+  readonly [AUTHORIZED_REMOVAL]: true;
 }
 
 /* -------------------------------------------------------------------------
@@ -205,6 +261,80 @@ export async function authorizeMatchVideoMutation(
   return ok(access);
 }
 
+/**
+ * Everything {@link authorizeMatchVisibility} asks, then who may remove THIS
+ * attachment: its uploader, or an owner or coach of the match's program.
+ *
+ * Deliberately NOT {@link authorizeMatchVideoMutation}: removal is the one
+ * write a non-creator may make (a coach taking down a player's upload), and
+ * it is not workspace-exact — the role is read against the match's own
+ * program, whichever workspace the switcher shows. Provenance is not asked
+ * either: only a SwingVision match can have an active attachment at all.
+ *
+ * Visibility first, so a coach of another program or a stranger gets the same
+ * 404 as for a match that does not exist. An attachment id that is not filed
+ * under this match is a 404 too. Only a caller who can see the match learns
+ * that this video is not theirs to remove (403). A staff member or player is
+ * refused for any row they did not upload; a personal match has no program,
+ * so only its uploader passes. `match_video_remove_attachment` rechecks the
+ * same rule under the row locks — this is the gate that keeps a refused
+ * request from reaching it.
+ */
+export async function authorizeMatchVideoRemoval(
+  matchId: string,
+  attachmentId: string,
+  deps: MatchVideoRemovalAccessDeps,
+): Promise<MatchVideoResult<MatchVideoRemovalAccess>> {
+  const visible = await authorizeMatchVisibility(matchId, deps);
+  if (!visible.ok) return visible;
+  const { actor, match } = visible.value;
+
+  if (!isUuid(attachmentId)) {
+    return fail("match_not_found", "malformed_attachment_id");
+  }
+  const id = attachmentId.toLowerCase();
+
+  const loaded = await deps.loadAttachmentUploader(match.id, id);
+  if (loaded.error) {
+    console.error(`${LOG} could not read attachment`, {
+      matchId,
+      attachmentId: id,
+      error: loaded.error,
+    });
+    return fail("storage_unavailable", "attachment_read_failed");
+  }
+  if (!loaded.attachment) return fail("match_not_found", "no_such_attachment");
+
+  let basis: MatchVideoRemovalAccess["basis"] | null = null;
+  if (loaded.attachment.uploaded_by === actor.id) {
+    basis = "uploader";
+  } else if (match.program_id !== null) {
+    const membership = await deps.loadProgramRole(match.program_id, actor.id);
+    if (membership.error) {
+      console.error(`${LOG} could not read program role`, {
+        matchId,
+        error: membership.error,
+      });
+      return fail("storage_unavailable", "role_read_failed");
+    }
+    if (
+      membership.role !== null &&
+      MATCH_VIDEO_REMOVAL_LEAD_ROLES.includes(membership.role)
+    ) {
+      basis = "program_lead";
+    }
+  }
+  if (!basis) return fail("forbidden", "not_uploader_or_program_lead");
+
+  const access = {
+    actor,
+    match,
+    attachmentId: id,
+    basis,
+  } as MatchVideoRemovalAccess;
+  return ok(access);
+}
+
 /* -------------------------------------------------------------------------
  * Production wiring
  * ---------------------------------------------------------------------- */
@@ -246,6 +376,52 @@ export function matchVideoAccessDeps(input: {
 
     async activeWorkspace() {
       return (await input.workspaceContext())?.active ?? null;
+    },
+  };
+}
+
+/**
+ * {@link matchVideoAccessDeps} plus removal's two reads. The attachment is
+ * read through the service-role client — the table has no client-role access
+ * — but only after visibility has passed on the caller's own client, and
+ * only by `id AND match_id`, so it can never answer for a match the caller
+ * cannot see. The role is read through the caller's client, whose
+ * `program_members` policy always shows them their own row.
+ */
+export function matchVideoRemovalAccessDeps(input: {
+  supabase: SupabaseClient;
+  admin: SupabaseClient;
+  workspaceContext: () => Promise<{ active: Workspace } | null>;
+}): MatchVideoRemovalAccessDeps {
+  const base = matchVideoAccessDeps(input);
+  return {
+    ...base,
+
+    async loadAttachmentUploader(matchId, attachmentId) {
+      const { data, error } = await input.admin
+        .from("match_video_attachments")
+        .select("uploaded_by")
+        .eq("id", attachmentId)
+        .eq("match_id", matchId)
+        .maybeSingle();
+      return {
+        attachment:
+          (data as { uploaded_by: string | null } | null | undefined) ?? null,
+        error: error?.message ?? null,
+      };
+    },
+
+    async loadProgramRole(programId, userId) {
+      const { data, error } = await input.supabase
+        .from("program_members")
+        .select("role")
+        .eq("program_id", programId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      return {
+        role: (data as { role: string } | null)?.role ?? null,
+        error: error?.message ?? null,
+      };
     },
   };
 }

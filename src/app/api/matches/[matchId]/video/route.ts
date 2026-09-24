@@ -11,10 +11,14 @@
  * `lib/services/match-video/playback.ts`, which the access spec drives with
  * none of these real clients.
  *
- * This file has no POST, PATCH or DELETE, and that is the whole shape of the
- * route: there is nothing here to authorize a write with. The mutation
- * endpoints sit one directory down under `video/uploads` and `video/alignment`
- * and ask the second, stricter question.
+ * `DELETE` (SwingVision Add video T5) removes the ACTIVE video — body
+ * `{ attachmentId }`. It asks neither of the two questions above alone:
+ * visibility, then `authorizeMatchVideoRemoval` (the uploader, or an owner or
+ * coach of the match's program), then `match_video_remove_attachment`, then a
+ * best-effort cleanup run after the response. Every rule lives in
+ * `lib/services/match-video/remove.ts`. There is still no POST or PATCH: the
+ * creator-only mutation endpoints sit one directory down under
+ * `video/uploads` and `video/alignment`.
  *
  * The service-role client is built lazily behind a proxy, so an anonymous
  * caller or one who cannot see the match — both refused before the database
@@ -23,12 +27,25 @@
 
 import type { NextRequest } from "next/server";
 
-import { matchVideoAccessDeps } from "@/lib/services/match-video/access";
+import {
+  matchVideoAccessDeps,
+  matchVideoRemovalAccessDeps,
+} from "@/lib/services/match-video/access";
+import {
+  productionCleanupDeps,
+  type CleanupDeps,
+} from "@/lib/services/match-video/cleanup";
 import {
   azurePlaybackStorage,
   handleGetPlayback,
   supabaseActiveAttachment,
 } from "@/lib/services/match-video/playback";
+import {
+  handleRemoveAttachment,
+  rpcRemoveAttachment,
+  scheduleAfterResponse,
+} from "@/lib/services/match-video/remove";
+import { siteUrl } from "@/lib/site-url";
 import { lazyAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -52,5 +69,32 @@ export async function GET(
     }),
     loadActiveAttachment,
     ...azurePlaybackStorage(),
+  });
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ matchId: string }> },
+) {
+  const { matchId } = await params;
+  const supabase = await createClient();
+  const admin = lazyAdminClient();
+
+  // Lazy: building it reads the Azure config, which throws on a deployment
+  // without one — and a refused removal never needs it.
+  let cleanup: CleanupDeps | null = null;
+
+  return handleRemoveAttachment(request, matchId, {
+    ...matchVideoRemovalAccessDeps({
+      supabase,
+      admin,
+      workspaceContext: getWorkspaceContext,
+    }),
+    allowedOrigins: [siteUrl()],
+    remove: rpcRemoveAttachment(admin),
+    get cleanup(): CleanupDeps {
+      return (cleanup ??= productionCleanupDeps(admin));
+    },
+    schedule: scheduleAfterResponse,
   });
 }

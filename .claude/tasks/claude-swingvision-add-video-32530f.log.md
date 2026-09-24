@@ -65,3 +65,17 @@ is the runner's. Newest entries at the bottom.
 3. Drop the `p_active_limit` null default once no deployed caller omits it.
 4. `match_video_begin_finalization` doesn't check the cap — a pending add can publish before activation refuses it (cleanup removes it); the wizard needs user-facing copy for the new code.
 5. Product review of the error copy ("You can still replace a match's existing video.").
+
+## T5 · Let the uploader, or a team owner/coach, remove an active match video — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass · ran on **opus** (routed fable; user override)
+
+**changed:** New migration `20260924130000_match_video_remove_attachment.sql` — **written, NOT applied to live**, not executed anywhere (no local Postgres); checked by reading against live definitions. Adds `retired_reason` (check `removed|expired`, plus reason-only-on-retired) and service-role-only `match_video_remove_attachment(actor, match, attachment)`: uploader or program owner/coach, retires an active row with `retired_reason='removed'`, idempotent, refuses pending with `mode_conflict`, never calls `match_video_authorize_match`. New `remove.ts` handler + `authorizeMatchVideoRemoval` in `access.ts`; `DELETE /api/matches/[matchId]/video` (same-origin → sign-in → `{ attachmentId }` → visibility → removal check → RPC → cleanup via `after()`). Access-handler spec 68/68 incl. the five required cases; live-DB block written (skips on prod) incl. point-count + full snapshot unchanged. MAP.md API row mentions DELETE.
+
+**follow-ups:**
+
+1. **Deploy order:** apply `20260924120000_…cap` then `20260924130000_…remove`, then deploy code (DELETE 500s before). Run the live removal block against a non-prod project.
+2. Removal doesn't require the active workspace — a coach's role is checked against the match's own program. Decide whether it should.
+3. DELETE on a row already retired another way (e.g. replaced) returns 200 with `retiredReason: null`.
+4. Add `remove.ts` to `tests/client-bundle-boundary.spec.ts`'s server-only list.
+5. `scheduleAfterResponse` is duplicated in `purge.ts` and `remove.ts` — share it.

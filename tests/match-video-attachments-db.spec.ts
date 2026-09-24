@@ -3855,3 +3855,593 @@ test.describe("match_video_attachments workspace cap + usage RPCs (live)", () =>
     );
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * SwingVision Add video T5 · removing an active video
+ * `20260924130000_match_video_remove_attachment.sql`
+ *
+ *  1. Privilege boundary: anon and a signed-in session cannot execute
+ *     `match_video_remove_attachment`; `retired_reason` is checked.
+ *  2. Who: the row's uploader, or an owner / coach of the match's program.
+ *     Staff and players are refused rows they did not upload; a coach of
+ *     another program and a stranger are refused; a personal match has no
+ *     program lead. None of this goes through the creator-only gate.
+ *  3. What: an ACTIVE row is retired with retired_reason = 'removed',
+ *     retired_at and cleanup_next_attempt_at = now(); a repeat changes
+ *     nothing; a pending attempt is mode_conflict; an attachment on another
+ *     match is not found. The freed seat shows in usage.
+ *  4. Never the source: the match row, its points (count and content),
+ *     shots and match_stats are byte-for-byte what they were.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+const { mark: RM_MARK, password: RM_PASSWORD } = runMarker("mvrm");
+
+test.describe("match_video_attachments removal RPC (live)", () => {
+  test.describe.configure({ mode: "serial", timeout: 60_000 });
+  test.skip(!HAVE_ENV, SKIP_REASON);
+
+  let admin: SupabaseClient;
+  let owner: Session; // program owner
+  let coach: Session; // program coach
+  let staff: Session; // program staff; uploads to their own match
+  let player: Session; // program player; uploads to their own matches
+  let teammate: Session; // program player; uploads to their own match
+  let otherCoach: Session; // coach of a different program
+  let stranger: Session; // member of nothing
+
+  const authUserIds: string[] = [];
+  let programId: string;
+  let otherProgramId: string;
+
+  let playerMatch: string;
+  let playerMatch2: string;
+  let teammateMatch: string;
+  let staffMatch: string;
+  let personalMatch: string; // player's, no program
+
+  const rpc = (fn: string, args: Record<string, unknown>) =>
+    admin.rpc(fn, args) as unknown as Promise<RpcResult>;
+
+  type Scope = { actor: Session; kind: "personal" | "team"; id: string };
+  const teamOf = (actor: Session): Scope => ({
+    actor,
+    kind: "team",
+    id: programId,
+  });
+  const personalOf = (actor: Session): Scope => ({
+    actor,
+    kind: "personal",
+    id: actor.userId,
+  });
+  const who = (scope: Scope, matchId: string) => ({
+    p_actor_id: scope.actor.userId,
+    p_workspace_kind: scope.kind,
+    p_workspace_id: scope.id,
+    p_match_id: matchId,
+  });
+
+  const CONFIRMED = 10;
+
+  /** Reserve → lease → activate as the match's creator. Returns the row id. */
+  const publish = async (scope: Scope, matchId: string) => {
+    const reserved = firstRow(
+      await rpc("match_video_reserve_upload", {
+        ...who(scope, matchId),
+        p_filename: `${RM_MARK}-v.mp4`,
+        p_declared_size_bytes: 2_000_000,
+        p_declared_content_type: "video/mp4",
+        p_client_request_id: randomUUID(),
+        p_expected_active_id: null,
+        p_expected_active_version: null,
+        p_upload_sas_expires_at: new Date(
+          Date.now() + 6 * 3_600_000,
+        ).toISOString(),
+      }),
+    );
+    const id = reserved.attachment_id as string;
+    const token = randomUUID();
+    firstRow(
+      await rpc("match_video_begin_finalization", {
+        ...who(scope, matchId),
+        p_attachment_id: id,
+        p_lease_token: token,
+        p_lease_seconds: 300,
+        p_confirmed_video_time_seconds: CONFIRMED,
+        p_expected_active_id: null,
+        p_expected_active_version: null,
+      }),
+    );
+    firstRow(
+      await rpc("match_video_activate_attachment", {
+        ...who(scope, matchId),
+        p_attachment_id: id,
+        p_lease_token: token,
+        p_confirmed_video_time_seconds: CONFIRMED,
+        p_verified_size_bytes: 1_999_000,
+        p_verified_content_type: "video/mp4",
+        p_verified_duration_seconds: 200,
+      }),
+    );
+    return id;
+  };
+
+  const removeAs = (actor: Session, matchId: string, attachmentId: string) =>
+    rpc("match_video_remove_attachment", {
+      p_actor_id: actor.userId,
+      p_match_id: matchId,
+      p_attachment_id: attachmentId,
+    });
+
+  const rowOf = async (id: string) => {
+    const result = await admin
+      .from(TABLE)
+      .select(
+        "state, retired_reason, retired_at, cleanup_next_attempt_at, cleaned_up_at, final_blob_key, staged_blob_key",
+      )
+      .eq("id", id)
+      .single();
+    expect(result.error).toBeNull();
+    return result.data!;
+  };
+
+  const pointCount = async (matchId: string) => {
+    const result = await admin
+      .from("points")
+      .select("id", { count: "exact", head: true })
+      .eq("match_id", matchId);
+    expect(result.error).toBeNull();
+    return result.count;
+  };
+
+  /** The imported rows of a match, in a stable order, for a byte-equal check. */
+  const importedSnapshot = async (matchId: string) => {
+    const match = await admin.from("matches").select("*").eq("id", matchId);
+    const points = await admin
+      .from("points")
+      .select("*")
+      .eq("match_id", matchId)
+      .order("point_number");
+    const shots = await admin
+      .from("shots")
+      .select("*")
+      .in(
+        "point_id",
+        (points.data ?? []).map((p) => p.id as string),
+      )
+      .order("id");
+    const stats = await admin
+      .from("match_stats")
+      .select("*")
+      .eq("match_id", matchId)
+      .order("is_player1");
+    for (const r of [match, points, shots, stats]) expect(r.error).toBeNull();
+    return {
+      match: match.data,
+      points: points.data,
+      shots: shots.data,
+      stats: stats.data,
+    };
+  };
+
+  const insertMatch = async (
+    createdBy: string,
+    label: string,
+    extra: Record<string, unknown> = {},
+  ) => {
+    const match = await admin
+      .from("matches")
+      .insert({
+        created_by: createdBy,
+        player1_id: createdBy,
+        player1_name: `Removal Player ${label}`,
+        player2_name: `Removal Opponent ${label}`,
+        date: new Date().toISOString(),
+        tournament_name: `${RM_MARK}-${label}`,
+        source_provider: "swing-vision",
+        ...extra,
+      })
+      .select("id")
+      .single();
+    if (match.error) throw new Error(`match: ${match.error.message}`);
+    const id = match.data.id as string;
+
+    const points = await admin
+      .from("points")
+      .insert([
+        {
+          match_id: id,
+          point_number: 1,
+          set_number: 1,
+          game_number: 1,
+          server_is_player1: true,
+          won_by_player1: true,
+          video_time: 12.345,
+          duration: 8.5,
+        },
+        {
+          match_id: id,
+          point_number: 2,
+          set_number: 1,
+          game_number: 1,
+          server_is_player1: true,
+          won_by_player1: false,
+          video_time: 20,
+          duration: 5,
+        },
+      ])
+      .select("id");
+    if (points.error) throw new Error(`points: ${points.error.message}`);
+
+    const shots = await admin.from("shots").insert(
+      points.data.map((p, i) => ({
+        point_id: p.id,
+        shot_number: 1,
+        is_player1: true,
+        video_time: i === 0 ? 12.5 : 20.2,
+        bounce_video_time: null,
+      })),
+    );
+    if (shots.error) throw new Error(`shots: ${shots.error.message}`);
+    return id;
+  };
+
+  test.beforeAll(async () => {
+    test.setTimeout(120_000);
+    admin = createAdminClient();
+
+    [owner, coach, staff, player, teammate, otherCoach, stranger] =
+      await createLogins(
+        admin,
+        [
+          "owner",
+          "coach",
+          "staff",
+          "player",
+          "teammate",
+          "other-coach",
+          "stranger",
+        ],
+        { mark: RM_MARK, password: RM_PASSWORD, authUserIds },
+      );
+
+    const programs = await admin
+      .from("programs")
+      .insert([
+        {
+          org_type: "club",
+          school_name: `${RM_MARK} Club`,
+          status: "active",
+          owner_user_id: owner.userId,
+        },
+        {
+          org_type: "club",
+          school_name: `${RM_MARK} Other Club`,
+          status: "active",
+          owner_user_id: otherCoach.userId,
+        },
+      ])
+      .select("id, school_name");
+    if (programs.error) throw new Error(`programs: ${programs.error.message}`);
+    programId = programs.data.find((p) => !p.school_name.includes("Other"))!
+      .id as string;
+    otherProgramId = programs.data.find((p) => p.school_name.includes("Other"))!
+      .id as string;
+
+    const members = await admin.from("program_members").insert([
+      { program_id: programId, user_id: owner.userId, role: "owner" },
+      { program_id: programId, user_id: coach.userId, role: "coach" },
+      { program_id: programId, user_id: staff.userId, role: "staff" },
+      { program_id: programId, user_id: player.userId, role: "player" },
+      { program_id: programId, user_id: teammate.userId, role: "player" },
+      { program_id: otherProgramId, user_id: otherCoach.userId, role: "coach" },
+    ]);
+    if (members.error) throw new Error(`members: ${members.error.message}`);
+
+    const team = { program_id: programId };
+    playerMatch = await insertMatch(player.userId, "player", team);
+    playerMatch2 = await insertMatch(player.userId, "player-2", team);
+    teammateMatch = await insertMatch(teammate.userId, "teammate", team);
+    staffMatch = await insertMatch(staff.userId, "staff", team);
+    personalMatch = await insertMatch(player.userId, "personal");
+  });
+
+  test.afterAll(async () => {
+    if (!admin) return;
+    await admin.from(TABLE).delete().like("filename", `${RM_MARK}%`);
+    // points (and their shots) cascade from the match.
+    await admin.from("matches").delete().like("tournament_name", `${RM_MARK}%`);
+    for (const id of [programId, otherProgramId]) {
+      if (!id) continue;
+      await admin.from("program_members").delete().eq("program_id", id);
+      await admin.from("programs").delete().eq("id", id);
+    }
+    await deleteAuthUsers(admin, authUserIds);
+  });
+
+  // ── 1. Privilege boundary ─────────────────────────────────────────────────
+
+  test("anon and authenticated sessions cannot execute the removal RPC; retired_reason is checked", async () => {
+    const anon = createClient(SUPABASE_URL!, ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const args = {
+      p_actor_id: player.userId,
+      p_match_id: playerMatch,
+      p_attachment_id: randomUUID(),
+    };
+    for (const [label, client] of [
+      ["anon", anon],
+      ["authenticated (player)", player.client],
+      ["authenticated (owner)", owner.client],
+    ] as const) {
+      const result = (await client.rpc(
+        "match_video_remove_attachment",
+        args,
+      )) as unknown as RpcResult;
+      expect(result.error?.code, label).toBe(INSUFFICIENT_PRIVILEGE);
+    }
+
+    expectRefused(
+      await rpc("match_video_remove_attachment", {
+        ...args,
+        p_attachment_id: null,
+      }),
+      INVALID_PARAMETER,
+      "actor, match and attachment are required",
+      "missing_argument",
+    );
+
+    // The column: only the two reasons, and only on a retired row.
+    const pending = await admin
+      .from(TABLE)
+      .insert({
+        match_id: playerMatch,
+        uploaded_by: player.userId,
+        state: "pending",
+        filename: `${RM_MARK}-check.mp4`,
+        declared_size_bytes: 1_000,
+        declared_content_type: "video/mp4",
+        staged_blob_key: `${RM_MARK}/staged/${randomUUID()}.mp4`,
+        final_blob_key: `${RM_MARK}/final/${randomUUID()}.mp4`,
+        client_request_id: randomUUID(),
+      })
+      .select("id")
+      .single();
+    expect(pending.error).toBeNull();
+    const pendingId = pending.data!.id as string;
+
+    const onPending = await admin
+      .from(TABLE)
+      .update({ retired_reason: "removed" })
+      .eq("id", pendingId);
+    expect(onPending.error?.code).toBe(CHECK_VIOLATION);
+
+    const bogus = await admin
+      .from(TABLE)
+      .update({
+        state: "retired",
+        retired_at: new Date().toISOString(),
+        retired_reason: "replaced",
+      })
+      .eq("id", pendingId);
+    expect(bogus.error?.code).toBe(CHECK_VIOLATION);
+
+    await admin.from(TABLE).delete().eq("id", pendingId);
+  });
+
+  // ── 2–4. Who, what, and never the source ─────────────────────────────────
+
+  let playerVideo: string;
+  let teammateVideo: string;
+  let staffVideo: string;
+  let personalVideo: string;
+
+  test("staff, players, a coach of another program and a stranger are refused rows they did not upload", async () => {
+    playerVideo = await publish(teamOf(player), playerMatch);
+    teammateVideo = await publish(teamOf(teammate), teammateMatch);
+    staffVideo = await publish(teamOf(staff), staffMatch);
+    personalVideo = await publish(personalOf(player), personalMatch);
+
+    for (const [label, actor, matchId, id] of [
+      ["player → teammate's", player, teammateMatch, teammateVideo],
+      ["staff → player's", staff, playerMatch, playerVideo],
+      ["player → staff's", player, staffMatch, staffVideo],
+      ["other coach → player's", otherCoach, playerMatch, playerVideo],
+      ["stranger → player's", stranger, playerMatch, playerVideo],
+      // A personal match has no program lead: the team's owner is nobody here.
+      ["owner → player's personal", owner, personalMatch, personalVideo],
+      ["coach → player's personal", coach, personalMatch, personalVideo],
+    ] as const) {
+      expectRefused(
+        await removeAs(actor, matchId, id),
+        INSUFFICIENT_PRIVILEGE,
+        "forbidden",
+        "not_uploader_or_program_lead",
+        label,
+      );
+    }
+    for (const id of [playerVideo, teammateVideo, staffVideo, personalVideo]) {
+      expect((await rowOf(id)).state).toBe("active");
+    }
+  });
+
+  test("the uploader removes their own video: retired as 'removed', due for cleanup now, and the source rows are untouched", async () => {
+    const before = await importedSnapshot(playerMatch);
+    const pointsBefore = await pointCount(playerMatch);
+    expect(pointsBefore).toBe(2);
+    expect(before.shots).toHaveLength(2);
+    const keysBefore = await rowOf(playerVideo);
+
+    const startedAt = Date.now();
+    const removed = firstRow(await removeAs(player, playerMatch, playerVideo));
+    expect(removed).toEqual({
+      attachment_id: playerVideo,
+      state: "retired",
+      retired_reason: "removed",
+    });
+
+    const row = await rowOf(playerVideo);
+    expect(row.state).toBe("retired");
+    expect(row.retired_reason).toBe("removed");
+    expect(row.retired_at).not.toBeNull();
+    expect(row.cleanup_next_attempt_at).toBe(row.retired_at);
+    // now(), give or take clock skew between the runner and the database.
+    expect(
+      Math.abs(new Date(row.retired_at as string).getTime() - startedAt),
+    ).toBeLessThan(60_000);
+    expect(row.cleaned_up_at).toBeNull();
+    // The keys stay for the worker.
+    expect(row.final_blob_key).toBe(keysBefore.final_blob_key);
+    expect(row.staged_blob_key).toBe(keysBefore.staged_blob_key);
+
+    expect(await pointCount(playerMatch)).toBe(pointsBefore);
+    expect(await importedSnapshot(playerMatch)).toEqual(before);
+  });
+
+  test("running it again does no harm: same answer, nothing moves", async () => {
+    const before = await rowOf(playerVideo);
+    const again = firstRow(await removeAs(player, playerMatch, playerVideo));
+    expect(again).toEqual({
+      attachment_id: playerVideo,
+      state: "retired",
+      retired_reason: "removed",
+    });
+    expect(await rowOf(playerVideo)).toEqual(before);
+
+    // A row retired some other way (replacement) keeps its NULL reason.
+    const first = await publish(teamOf(player), playerMatch2);
+    const replacement = await (async () => {
+      const scope = teamOf(player);
+      const reserved = firstRow(
+        await rpc("match_video_reserve_upload", {
+          ...who(scope, playerMatch2),
+          p_filename: `${RM_MARK}-v2.mp4`,
+          p_declared_size_bytes: 2_000_000,
+          p_declared_content_type: "video/mp4",
+          p_client_request_id: randomUUID(),
+          p_expected_active_id: first,
+          p_expected_active_version: 0,
+          p_upload_sas_expires_at: new Date(
+            Date.now() + 6 * 3_600_000,
+          ).toISOString(),
+        }),
+      );
+      const id = reserved.attachment_id as string;
+      const token = randomUUID();
+      firstRow(
+        await rpc("match_video_begin_finalization", {
+          ...who(scope, playerMatch2),
+          p_attachment_id: id,
+          p_lease_token: token,
+          p_lease_seconds: 300,
+          p_confirmed_video_time_seconds: CONFIRMED,
+          p_expected_active_id: first,
+          p_expected_active_version: 0,
+        }),
+      );
+      firstRow(
+        await rpc("match_video_activate_attachment", {
+          ...who(scope, playerMatch2),
+          p_attachment_id: id,
+          p_lease_token: token,
+          p_confirmed_video_time_seconds: CONFIRMED,
+          p_verified_size_bytes: 1_999_000,
+          p_verified_content_type: "video/mp4",
+          p_verified_duration_seconds: 200,
+        }),
+      );
+      return id;
+    })();
+    const replaced = await rowOf(first);
+    expect(replaced.state).toBe("retired");
+    expect(firstRow(await removeAs(player, playerMatch2, first))).toEqual({
+      attachment_id: first,
+      state: "retired",
+      retired_reason: null,
+    });
+    expect(await rowOf(first)).toEqual(replaced);
+    expect((await rowOf(replacement)).state).toBe("active");
+  });
+
+  test("a team coach and the owner remove anyone's video; staff remove their own", async () => {
+    expect(
+      firstRow(await removeAs(coach, teammateMatch, teammateVideo)),
+    ).toMatchObject({ state: "retired", retired_reason: "removed" });
+
+    const replacement = await publish(teamOf(teammate), teammateMatch);
+    expect(
+      firstRow(await removeAs(owner, teammateMatch, replacement)),
+    ).toMatchObject({ state: "retired", retired_reason: "removed" });
+
+    expect(
+      firstRow(await removeAs(staff, staffMatch, staffVideo)),
+    ).toMatchObject({ state: "retired", retired_reason: "removed" });
+
+    // Personal: only the uploader.
+    expect(
+      firstRow(await removeAs(player, personalMatch, personalVideo)),
+    ).toMatchObject({ state: "retired", retired_reason: "removed" });
+  });
+
+  test("a pending attempt is mode_conflict; an attachment on another match or an unknown match is not found", async () => {
+    const scope = teamOf(teammate);
+    const reserved = firstRow(
+      await rpc("match_video_reserve_upload", {
+        ...who(scope, teammateMatch),
+        p_filename: `${RM_MARK}-pending.mp4`,
+        p_declared_size_bytes: 2_000_000,
+        p_declared_content_type: "video/mp4",
+        p_client_request_id: randomUUID(),
+        p_expected_active_id: null,
+        p_expected_active_version: null,
+        p_upload_sas_expires_at: new Date(
+          Date.now() + 6 * 3_600_000,
+        ).toISOString(),
+      }),
+    );
+    const pendingId = reserved.attachment_id as string;
+
+    expectRefused(
+      await removeAs(teammate, teammateMatch, pendingId),
+      RPC_STATE_CONFLICT,
+      "mode_conflict",
+      "attachment_pending",
+    );
+    expect((await rowOf(pendingId)).state).toBe("pending");
+
+    expectRefused(
+      await removeAs(coach, playerMatch, pendingId),
+      RPC_NOT_FOUND,
+      "match_not_found",
+      "no_such_attachment",
+    );
+    expectRefused(
+      await removeAs(coach, randomUUID(), pendingId),
+      RPC_NOT_FOUND,
+      "match_not_found",
+      "no_such_match",
+    );
+
+    firstRow(
+      await rpc("match_video_cancel_upload", {
+        ...who(scope, teammateMatch),
+        p_attachment_id: pendingId,
+      }),
+    );
+  });
+
+  test("a removed video frees its seat in the workspace's usage", async () => {
+    const usage = await rpc("match_video_workspace_usage", {
+      p_actor_id: coach.userId,
+      p_workspace_kind: "team",
+      p_workspace_id: programId,
+    });
+    expect(usage.error).toBeNull();
+    const ids = (usage.data as Record<string, unknown>[]).map(
+      (r) => r.attachment_id,
+    );
+    for (const removed of [playerVideo, teammateVideo, staffVideo]) {
+      expect(ids).not.toContain(removed);
+    }
+  });
+});

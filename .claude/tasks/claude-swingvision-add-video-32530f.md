@@ -96,7 +96,7 @@ ready).
 
 ## T5 · Let the uploader, or a team owner/coach, remove an active match video
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) `supabase/migrations/<ts>_match_video_remove_attachment.sql` (new), `src/lib/services/match-video/access.ts`, `src/lib/services/match-video/remove.ts` (new), `src/app/api/matches/[matchId]/video/route.ts` (add DELETE), `MAP.md` (API row), `tests/match-video-access-handlers.spec.ts`, `tests/match-video-attachments-db.spec.ts`
 - **done when:**
