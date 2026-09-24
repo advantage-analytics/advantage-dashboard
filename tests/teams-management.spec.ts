@@ -7,10 +7,9 @@ import {
   SKIP_REASON,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
 
 /**
  * Settings › Teams' rules, proven against the live database.
@@ -32,6 +31,10 @@ import {
  * is never assignable, no-ops write no audit row — and the gate on
  * `program_usage_pending`: a stranger gets zero, not an error.
  *
+ * The four logins are reused pool users (`fixtures/live-db-pool`), never
+ * deleted. Ownership moves from the owner slot to the coach slot mid-run, so
+ * cleanup goes by program id, never by who owns it at the end.
+ *
  * Run on demand:  npx playwright test tests/teams-management.spec.ts
  */
 
@@ -40,7 +43,15 @@ const UNIQUE_VIOLATION = "23505";
 
 /** A crashed run is findable by hand:
  *  `select * from programs where program_key like 'teams-mgmt-%'`. */
-const { mark: MARK, password: PASSWORD } = runMarker("teams-mgmt");
+const { mark: MARK } = runMarker("teams-mgmt");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = [
+  "teams-management-owner",
+  "teams-management-coach",
+  "teams-management-player",
+  "teams-management-stranger",
+];
 
 test.describe("Settings › Teams — owner gate, transfer, one owner (live)", () => {
   test.describe.configure({ mode: "serial", timeout: 60_000 });
@@ -52,7 +63,6 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
   let player: Session;
   let stranger: Session; // no membership anywhere
 
-  const authUserIds: string[] = [];
   let programId: string;
   const schoolName = `Teams Mgmt School ${MARK}`;
   /** Unique per run: `programs_sync_conference` creates a `conferences` row
@@ -87,11 +97,20 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
     test.setTimeout(180_000);
     admin = createAdminClient();
 
-    [owner, coach, player, stranger] = await createLogins(
-      admin,
-      ["owner", "coach", "player", "stranger"],
-      { mark: MARK, password: PASSWORD, authUserIds },
-    );
+    // A crashed run's program is owned by the owner slot, or by the coach
+    // slot if it died after the transfer — both are in SLOTS, so the pool
+    // sweep takes it either way (its audit rows cascade). The conference its
+    // owner test minted is then free to go, by this file's marker.
+    await clearPoolLeftovers(admin, SLOTS);
+    const staleConferences = await admin
+      .from("conferences")
+      .delete()
+      .like("name", "Owner Conference teams-mgmt-%");
+    if (staleConferences.error) {
+      throw new Error(`conferences sweep: ${staleConferences.error.message}`);
+    }
+
+    [owner, coach, player, stranger] = await poolLogins(admin, SLOTS);
 
     // `owner_user_id` is set here on purpose: the transfer test proves the
     // RPC rewrites it, which it cannot do if the fixture left it null.
@@ -134,7 +153,6 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
     // `on delete restrict` only protects rows a program still points at, so
     // it would otherwise outlive the program.
     await admin.from("conferences").delete().eq("name", ownerConference);
-    await deleteAuthUsers(admin, authUserIds);
   });
 
   // ── is_program_owner ──────────────────────────────────────────────────────

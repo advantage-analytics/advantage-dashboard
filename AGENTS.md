@@ -28,6 +28,16 @@ npm run typecheck    # tsc --noEmit
 npm run map          # Regenerate MAP.md's route table
 ```
 
+Live-DB specs (`tests/fixtures/live-db.ts`) skip against the production project
+(`pouxujkhtbvkdwbzfvka`) unless `LIVE_DB_ALLOW_PROD=1`, and run serially under a
+machine-wide lock (`tests/fixtures/live-db-lock.ts`) — a 2026-09-23 incident had
+parallel gate runs from several worktrees saturate prod auth until sign-in broke
+for real users. Never set the opt-in in a gate or loop, and never raise the auth
+rate limit. To point live specs at another project, export
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
+`SUPABASE_SERVICE_ROLE_KEY` in the shell — these take precedence over
+`.env.local` — and make sure all three name the same project.
+
 ## Architecture
 
 **[`MAP.md`](MAP.md) is the code directory** — routes, source layout and the data

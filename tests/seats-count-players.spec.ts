@@ -8,10 +8,9 @@ import {
   SKIP_REASON,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
 import { hashToken, generateToken } from "@/lib/services/programs/tokens";
 
 /**
@@ -25,7 +24,8 @@ import { hashToken, generateToken } from "@/lib/services/programs/tokens";
  * that already held their matches. Each test below is one of those, reversed.
  *
  * The program is created with TWO seats so the cap is reachable in three
- * writes. Everything is named with a per-run marker and deleted in `afterAll`.
+ * writes. Everything is named with a per-run marker and deleted by program in
+ * `afterAll`; the two logins are reused pool users, never deleted.
  *
  * `20260921060000_seats_count_contributed_players.sql` rides along: rows another
  * program contributed count too.
@@ -33,7 +33,11 @@ import { hashToken, generateToken } from "@/lib/services/programs/tokens";
  * Run on demand:  npx playwright test tests/seats-count-players.spec.ts
  */
 
-const { mark: MARK, password: PASSWORD } = runMarker("seat-rule");
+const { mark: MARK } = runMarker("seat-rule");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = ["seats-count-players-owner", "seats-count-players-claimant"];
+
 const DAY = 86_400_000;
 const PROGRAM_LIMIT = "54000";
 const junkHash = () => randomBytes(32).toString("hex");
@@ -52,8 +56,6 @@ test.describe("seats count roster players (live DB)", () => {
   /** A second program, only so a row can name a contributor that is not itself. */
   let contributorId: string;
   let firstPlayer: string;
-
-  const authUserIds: string[] = [];
 
   async function usage(): Promise<Usage> {
     const { data, error } = await owner.client.rpc("program_seat_usage", {
@@ -77,11 +79,29 @@ test.describe("seats count roster players (live DB)", () => {
     test.setTimeout(180_000);
     admin = createAdminClient();
 
-    [owner, claimant] = await createLogins(admin, ["owner", "claimant"], {
-      mark: MARK,
-      password: PASSWORD,
-      authUserIds,
-    });
+    // An interrupted run's memberships would make the pool refuse the slots.
+    // Its invitations and notifications would linger on the reused users too;
+    // none is read here (every count is this run's program), but they are
+    // this file's rows, so they go as well.
+    const leftoverIds = await clearPoolLeftovers(admin, SLOTS);
+    if (leftoverIds.length > 0) {
+      const notes = await admin
+        .from("user_notifications")
+        .delete()
+        .in("recipient_user_id", leftoverIds);
+      if (notes.error) {
+        throw new Error(`notifications sweep: ${notes.error.message}`);
+      }
+      const invites = await admin
+        .from("program_invites")
+        .delete()
+        .in("invited_by", leftoverIds);
+      if (invites.error) {
+        throw new Error(`invites sweep: ${invites.error.message}`);
+      }
+    }
+
+    [owner, claimant] = await poolLogins(admin, SLOTS);
 
     const who = await claimant.client.auth.getUser();
     if (!who.data.user?.email) throw new Error("claimant has no address");
@@ -136,6 +156,12 @@ test.describe("seats count roster players (live DB)", () => {
         .from("program_audit_log")
         .delete()
         .eq("program_id", programId);
+      // The claim invitation notified the claimant; the accept minted their
+      // membership. Both go by program, not by the user, who stays.
+      await admin
+        .from("user_notifications")
+        .delete()
+        .eq("program_id", programId);
       await admin.from("program_invites").delete().eq("program_id", programId);
       await admin.from("program_players").delete().eq("program_id", programId);
       await admin.from("program_members").delete().eq("program_id", programId);
@@ -144,7 +170,6 @@ test.describe("seats count roster players (live DB)", () => {
     if (contributorId) {
       await admin.from("programs").delete().eq("id", contributorId);
     }
-    await deleteAuthUsers(admin, authUserIds);
   });
 
   test("staff hold no seat: an owner alone is 0 of 2", async () => {

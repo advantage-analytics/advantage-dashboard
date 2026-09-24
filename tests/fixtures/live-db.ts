@@ -7,6 +7,7 @@ import {
   createClient,
   isAuthApiError,
   isAuthRetryableFetchError,
+  type AuthError,
   type SupabaseClient,
   type User,
 } from "@supabase/supabase-js";
@@ -62,11 +63,103 @@ const env = (key: string): string | undefined =>
 export const SUPABASE_URL = env("NEXT_PUBLIC_SUPABASE_URL");
 export const ANON_KEY = env("NEXT_PUBLIC_SUPABASE_ANON_KEY");
 export const SERVICE_ROLE_KEY = env("SUPABASE_SERVICE_ROLE_KEY");
-export const HAVE_ENV = Boolean(SUPABASE_URL && ANON_KEY && SERVICE_ROLE_KEY);
 
-/** For `test.skip(!HAVE_ENV, SKIP_REASON)` — the suite passes in a keyless checkout. */
-export const SKIP_REASON =
+// ---------------------------------------------------------------------------
+// Production guard — the live specs write throwaway auth users, and prod is
+// not where they belong unless someone asks for it by name.
+// ---------------------------------------------------------------------------
+
+/** The production Supabase project's ref. */
+export const PRODUCTION_REF = "pouxujkhtbvkdwbzfvka";
+
+/** The opt-in that lets the write specs run against production anyway. */
+export const ALLOW_PROD_VAR = "LIVE_DB_ALLOW_PROD";
+
+/**
+ * The `ref` claim of a legacy JWT API key, or null for anything else. The new
+ * `sb_publishable_…` / `sb_secret_…` keys are opaque and carry no ref, and a
+ * malformed key is simply not a JWT — neither throws. No signature check: this
+ * only reads which project a key was minted for.
+ */
+function jwtRef(key: string | undefined): string | null {
+  if (!key) return null;
+  const parts = key.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const payload: unknown = JSON.parse(
+      Buffer.from(parts[1], "base64url").toString("utf8"),
+    );
+    if (payload && typeof payload === "object" && "ref" in payload) {
+      const ref = (payload as { ref: unknown }).ref;
+      return typeof ref === "string" ? ref : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when a target is — or is half-wired to — the production project.
+ *
+ * The URL alone is not enough: `env()` falls back per key to `.env.local`, so
+ * exporting only a branch URL pairs it with the production keys from the file.
+ * Either the hostname or any key minted for the prod ref counts.
+ */
+export function isProductionTarget(
+  url: string | undefined,
+  ...keys: (string | undefined)[]
+): boolean {
+  if (url) {
+    let host: string;
+    try {
+      host = new URL(url).hostname;
+    } catch {
+      host = url;
+    }
+    if (host.includes(PRODUCTION_REF)) return true;
+  }
+  return keys.some((key) => jwtRef(key) === PRODUCTION_REF);
+}
+
+const PRODUCTION_TARGET = isProductionTarget(
+  SUPABASE_URL,
+  ANON_KEY,
+  SERVICE_ROLE_KEY,
+);
+// Read from the process only, never `.env.local`: the opt-in is per run.
+const PROD_ALLOWED = process.env[ALLOW_PROD_VAR] === "1";
+const PROD_REFUSED = PRODUCTION_TARGET && !PROD_ALLOWED;
+
+const PROD_REFUSAL = `target is the production project (${PRODUCTION_REF}); set ${ALLOW_PROD_VAR}=1 to run write specs against it`;
+
+const MISSING_ENV =
   "NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY not set";
+
+/**
+ * For read-only specs, which create and delete nothing: credentials present is
+ * enough, production included. Pair with `READ_SKIP_REASON`.
+ */
+export const HAVE_READ_ENV = Boolean(
+  SUPABASE_URL && ANON_KEY && SERVICE_ROLE_KEY,
+);
+export const READ_SKIP_REASON = MISSING_ENV;
+
+/** For specs that write — false against production without the opt-in. */
+export const HAVE_ENV = HAVE_READ_ENV && !PROD_REFUSED;
+
+/** For `test.skip(!HAVE_ENV, SKIP_REASON)` — the suite passes in a keyless
+ *  checkout, and skips rather than fails against production. */
+export const SKIP_REASON = !HAVE_READ_ENV ? MISSING_ENV : PROD_REFUSAL;
+
+/**
+ * Backstop for a spec whose gate is something other than `HAVE_ENV` (e.g.
+ * `admin-routes.spec.ts`): the auth helpers below refuse production before
+ * any call leaves the process. `./live-db-pool.ts` calls it too.
+ */
+export function assertWritableTarget(caller: string): void {
+  if (PROD_REFUSED) throw new Error(`${caller}: ${PROD_REFUSAL}`);
+}
 
 /**
  * One value from the same `.env.local`-or-process lookup the Supabase keys use.
@@ -176,7 +269,7 @@ export interface HookDeadline {
   extendedTo: number;
 }
 
-function hookDeadline(): HookDeadline {
+export function hookDeadline(): HookDeadline {
   return { start: Date.now(), extendedTo: 0 };
 }
 
@@ -248,7 +341,7 @@ export async function retryAuthCall<R extends { error: unknown }>(
 }
 
 /** "(after 4 attempts over 23s)", or nothing when the first attempt settled it. */
-function retrySuffix(outcome: RetryOutcome<unknown>): string {
+export function retrySuffix(outcome: RetryOutcome<unknown>): string {
   return outcome.attempts > 1
     ? ` (after ${outcome.attempts} attempts over ${Math.round(outcome.waitedMs / 1000)}s)`
     : "";
@@ -299,7 +392,7 @@ export function createAdminClient(): SupabaseClient {
  * 500 or 504 can land after the user was written, and without this the retry
  * would fail on a user this run created and orphan it on the live project.
  */
-async function findUserByEmail(
+export async function findUserByEmail(
   admin: SupabaseClient,
   email: string,
   deadline: HookDeadline,
@@ -318,12 +411,24 @@ async function findUserByEmail(
   }
 }
 
-async function signIn(
-  label: string,
+/** A password sign-in's client, and the answer it settled on after load retries. */
+export interface SignInAttempt {
+  client: SupabaseClient;
+  error: AuthError | null;
+  /** `retrySuffix` of the attempt, for the caller's error message. */
+  suffix: string;
+}
+
+/**
+ * Sign in with the anon key, retrying load, and hand back whatever answer
+ * came — the pool needs to see an invalid-credentials answer rather than a
+ * throw, so it can repair a stale password once.
+ */
+export async function passwordSignIn(
   email: string,
   password: string,
   deadline: HookDeadline,
-): Promise<SupabaseClient> {
+): Promise<SignInAttempt> {
   const client = createClient(SUPABASE_URL!, ANON_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -331,22 +436,44 @@ async function signIn(
     () => client.auth.signInWithPassword({ email, password }),
     { budgetMs: SIGN_IN_RETRY_BUDGET_MS, deadline },
   );
-  if (outcome.result.error) {
-    throw new Error(
-      `signIn(${label}): ${authErrorDetails(outcome.result.error)}${retrySuffix(outcome)}`,
-    );
-  }
-  return client;
+  return {
+    client,
+    error: outcome.result.error,
+    suffix: retrySuffix(outcome),
+  };
 }
 
-/** Create an auth user and sign it in with the anon key — a real RLS-scoped
- *  session. The new user's id is pushed onto `authUserIds` for cleanup. */
+async function signIn(
+  label: string,
+  email: string,
+  password: string,
+  deadline: HookDeadline,
+): Promise<SupabaseClient> {
+  const attempt = await passwordSignIn(email, password, deadline);
+  if (attempt.error) {
+    throw new Error(
+      `signIn(${label}): ${authErrorDetails(attempt.error)}${attempt.suffix}`,
+    );
+  }
+  return attempt.client;
+}
+
+/**
+ * Create an auth user and sign it in with the anon key — a real RLS-scoped
+ * session. The new user's id is pushed onto `authUserIds` for cleanup.
+ *
+ * Use this only when a spec must delete the auth user it creates — account
+ * deletion, say, or a cascade from `auth.users`. Every other spec takes a
+ * reused user from `poolLogin` in `./live-db-pool.ts`, which creates each
+ * pool user once and never deletes one.
+ */
 export async function createLogin(
   admin: SupabaseClient,
   label: string,
   opts: { mark: string; password: string; authUserIds: string[] },
   deadline: HookDeadline = hookDeadline(),
 ): Promise<Session> {
+  assertWritableTarget(`createLogin(${label})`);
   const email = `${opts.mark}-${label}@example.com`;
 
   let failedForLoad = false;
@@ -388,6 +515,9 @@ export async function createLogin(
 }
 
 /**
+ * Use this only when a spec must delete the auth users it creates; otherwise
+ * `poolLogins` in `./live-db-pool.ts`.
+ *
  * Create several logins concurrently, letting every underlying `createUser`
  * settle before a failure surfaces. Under a bare `Promise.all` a rejected
  * login makes `beforeAll` throw while a sibling's `createUser` is still in
@@ -403,6 +533,7 @@ export async function createLogins(
   labels: string[],
   opts: { mark: string; password: string; authUserIds: string[] },
 ): Promise<Session[]> {
+  assertWritableTarget("createLogins");
   const deadline = hookDeadline();
   const results = await Promise.allSettled(
     labels.map((label) => createLogin(admin, label, opts, deadline)),
@@ -420,6 +551,7 @@ export async function deleteAuthUsers(
   admin: SupabaseClient,
   ids: string[],
 ): Promise<void> {
+  assertWritableTarget("deleteAuthUsers");
   const deadline = hookDeadline();
   await Promise.allSettled(
     ids.map((id) =>

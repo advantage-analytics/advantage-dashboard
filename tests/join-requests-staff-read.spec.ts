@@ -10,10 +10,9 @@ import {
   SKIP_REASON,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
 import type { DbJoinRequestRow } from "@/lib/data/join-requests-server";
 
 /**
@@ -37,11 +36,13 @@ import type { DbJoinRequestRow } from "@/lib/data/join-requests-server";
  * exercising them with real signed-in sessions here IS exercising the
  * loader's and the action's access mechanism.
  *
- * Session plumbing (env loading, skip guard, logins, auth-user cleanup) comes
- * from `fixtures/live-db`: every row is created by the service-role client in
- * `beforeAll` under a per-run marker
- * (`select * from programs where program_key like 'jr-req-%'` finds a crashed
- * run) and deleted in `afterAll`.
+ * Session plumbing (env loading, skip guard) comes from `fixtures/live-db` and
+ * the four logins are reused pool users from `fixtures/live-db-pool`: every
+ * row is created by the service-role client in `beforeAll` under a per-run
+ * marker (`select * from programs where program_key like 'jr-req-%'` finds a
+ * crashed run) and deleted by id in `afterAll`. The pool users outlive the
+ * run, so `beforeAll` first sweeps what an interrupted run left under that
+ * marker.
  *
  * Run on demand:  npx playwright test tests/join-requests-staff-read.spec.ts
  * (or the full suite via `npm run test`).
@@ -51,7 +52,15 @@ import type { DbJoinRequestRow } from "@/lib/data/join-requests-server";
 // Fixture — two programs, four logins, five program_requests rows.
 // ---------------------------------------------------------------------------
 
-const { mark: MARK, password: PASSWORD } = runMarker("jr-req");
+const { mark: MARK } = runMarker("jr-req");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = [
+  "join-requests-staff-read-a-staff",
+  "join-requests-staff-read-a-player",
+  "join-requests-staff-read-b-staff",
+  "join-requests-staff-read-outsider",
+];
 
 // The RPC's row shape is the loader's `DbJoinRequestRow`, imported type-only
 // above — one declaration, so a column change cannot drift the two apart.
@@ -68,7 +77,6 @@ test.describe("staff read path for pending join requests (live DB)", () => {
   let bStaff: Session; // coach in B only — staff, wrong program
   let outsider: Session; // no membership anywhere
 
-  const authUserIds: string[] = [];
   const programIds: string[] = [];
   const requestIds: string[] = [];
 
@@ -87,11 +95,27 @@ test.describe("staff read path for pending join requests (live DB)", () => {
 
     admin = createAdminClient();
 
-    [aStaff, aPlayer, bStaff, outsider] = await createLogins(
-      admin,
-      ["a-staff", "a-player", "b-staff", "outsider"],
-      { mark: MARK, password: PASSWORD, authUserIds },
-    );
+    // An interrupted run leaves memberships the pool would refuse, plus its
+    // programs (ownerless, so the pool sweep leaves them) and requests — one
+    // of them stamped `resolved_by` a pool user. Requests go by their marked
+    // address first, then the programs by key; members cascade with them.
+    await clearPoolLeftovers(admin, SLOTS);
+    const staleRequests = await admin
+      .from("program_requests")
+      .delete()
+      .like("email", "jr-req-%");
+    if (staleRequests.error) {
+      throw new Error(`requests sweep: ${staleRequests.error.message}`);
+    }
+    const stalePrograms = await admin
+      .from("programs")
+      .delete()
+      .like("program_key", "jr-req-%");
+    if (stalePrograms.error) {
+      throw new Error(`programs sweep: ${stalePrograms.error.message}`);
+    }
+
+    [aStaff, aPlayer, bStaff, outsider] = await poolLogins(admin, SLOTS);
 
     const programs = await admin
       .from("programs")
@@ -196,10 +220,11 @@ test.describe("staff read path for pending join requests (live DB)", () => {
     if (requestIds.length > 0) {
       await admin.from("program_requests").delete().in("id", requestIds);
     }
+    // Members by program, not through the users, who stay.
     if (programIds.length > 0) {
+      await admin.from("program_members").delete().in("program_id", programIds);
       await admin.from("programs").delete().in("id", programIds);
     }
-    await deleteAuthUsers(admin, authUserIds);
   });
 
   // -------------------------------------------------------------------------

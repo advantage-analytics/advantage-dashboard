@@ -1,7 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { type SupabaseClient } from "@supabase/supabase-js";
 
-import { HAVE_ENV, SKIP_REASON, createAdminClient } from "./fixtures/live-db";
+import {
+  HAVE_READ_ENV,
+  READ_SKIP_REASON,
+  createAdminClient,
+} from "./fixtures/live-db";
 import { programEyebrow } from "@/lib/data/programs-server";
 
 /**
@@ -114,7 +118,7 @@ test.describe("claim eyebrow width budget (live DB)", () => {
   // once per worker — and so that a short read stops the suite instead of
   // letting the two data assertions "pass" over half a table.
   test.describe.configure({ mode: "serial", timeout: 60_000 });
-  test.skip(!HAVE_ENV, SKIP_REASON);
+  test.skip(!HAVE_READ_ENV, READ_SKIP_REASON);
 
   let rows: Row[];
   let exactCount: number;

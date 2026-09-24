@@ -9,10 +9,9 @@ import {
   SUPABASE_URL,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
 
 /**
  * `20260919180000_saved_views.sql`'s RLS policies (Task 7), proven against
@@ -62,8 +61,18 @@ const CHECK_VIOLATION = "23514";
  *  not been applied. */
 const UNDEFINED_TABLE = "PGRST205";
 
-const { mark: MARK, password: PASSWORD } = runMarker("saved-views-rls");
+const { mark: MARK } = runMarker("saved-views-rls");
 const PROGRAM_NAME = `ZZ RLS saved_views ${MARK}`;
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = [
+  "saved-views-rls-user-a",
+  "saved-views-rls-user-b",
+  "saved-views-rls-player1",
+  "saved-views-rls-player2",
+  "saved-views-rls-staff",
+  "saved-views-rls-non-member",
+];
 
 test.describe("saved_views RLS (live)", () => {
   test.describe.configure({ mode: "serial", timeout: 60_000 });
@@ -80,7 +89,8 @@ test.describe("saved_views RLS (live)", () => {
   let staff: Session; // team member, role staff
   let nonMember: Session; // signed in, no membership on the team
 
-  const authUserIds: string[] = [];
+  /** The pool users' ids — every saved view this file writes is created by one. */
+  let poolUserIds: string[] = [];
   let programId: string | null = null;
 
   /** The private view Player1 creates, then shares, across several tests. */
@@ -103,10 +113,27 @@ test.describe("saved_views RLS (live)", () => {
       throw new Error(`saved_views probe: ${probe.error.message}`);
     }
 
-    [userA, userB, player1, player2, staff, nonMember] = await createLogins(
+    // Pool users outlive the run, and so would a crashed run's views: the
+    // duplicate-name test below would then collide with last run's "Return
+    // Zones" rather than with its own.
+    const leftoverIds = await clearPoolLeftovers(admin, SLOTS);
+    if (leftoverIds.length > 0) {
+      const inList = `(${leftoverIds.join(",")})`;
+      const swept = await admin
+        .from("saved_views")
+        .delete()
+        .or(`created_by.in.${inList},account_id.in.${inList}`);
+      if (swept.error) {
+        throw new Error(`saved_views sweep: ${swept.error.message}`);
+      }
+    }
+
+    [userA, userB, player1, player2, staff, nonMember] = await poolLogins(
       admin,
-      ["userA", "userB", "player1", "player2", "staff", "nonMember"],
-      { mark: MARK, password: PASSWORD, authUserIds },
+      SLOTS,
+    );
+    poolUserIds = [userA, userB, player1, player2, staff, nonMember].map(
+      (s) => s.userId,
     );
 
     const program = await admin
@@ -141,12 +168,15 @@ test.describe("saved_views RLS (live)", () => {
 
   test.afterAll(async () => {
     if (!admin || tableMissing !== null) return;
-    await admin.from("saved_views").delete().in("created_by", authUserIds);
+    // No auth-user delete follows to cascade anything: every row goes by id.
+    if (poolUserIds.length > 0) {
+      await admin.from("saved_views").delete().in("created_by", poolUserIds);
+    }
     if (programId) {
+      await admin.from("saved_views").delete().eq("account_id", programId);
       await admin.from("program_members").delete().eq("program_id", programId);
       await admin.from("programs").delete().eq("id", programId);
     }
-    await deleteAuthUsers(admin, authUserIds);
   });
 
   // ── personal workspace ─────────────────────────────────────────────────

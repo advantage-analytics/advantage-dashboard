@@ -12,10 +12,9 @@ import {
   SUPABASE_URL,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
 
 /**
  * `20260921004305_point_bookmarks.sql` (T1: the table and backfill) and
@@ -83,7 +82,14 @@ const TABLE = "point_bookmarks";
 
 /** A crashed run is findable by hand:
  *  `select * from programs where program_key like 'pbm-%'`. */
-const { mark: MARK, password: PASSWORD } = runMarker("pbm");
+const { mark: MARK } = runMarker("pbm");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = [
+  "point-bookmarks-db-creator",
+  "point-bookmarks-db-mate",
+  "point-bookmarks-db-outsider",
+];
 
 test.describe("point_bookmarks table + RLS boundary (live)", () => {
   test.describe.configure({ mode: "serial", timeout: 60_000 });
@@ -94,7 +100,8 @@ test.describe("point_bookmarks table + RLS boundary (live)", () => {
   let mate: Session; // coach in the same program — sees the match via membership
   let outsider: Session; // no route to the match at all
 
-  const authUserIds: string[] = [];
+  /** The pool users' ids — every bookmark this file writes names one. */
+  let poolUserIds: string[] = [];
   let programId: string;
   let matchId: string;
   /** The point the bookmark tests toggle. `saved = false`. */
@@ -117,11 +124,26 @@ test.describe("point_bookmarks table + RLS boundary (live)", () => {
     test.setTimeout(180_000);
     admin = createAdminClient();
 
-    [creator, mate, outsider] = await createLogins(
-      admin,
-      ["creator", "mate", "outsider"],
-      { mark: MARK, password: PASSWORD, authUserIds },
-    );
+    // The reused users outlive the run, and so would an interrupted run's
+    // match and bookmarks. Bookmarks by user first, then the matches (points
+    // and anything left under them cascade off the match).
+    const leftoverIds = await clearPoolLeftovers(admin, SLOTS);
+    if (leftoverIds.length > 0) {
+      const marks = await admin.from(TABLE).delete().in("user_id", leftoverIds);
+      if (marks.error)
+        throw new Error(`bookmarks sweep: ${marks.error.message}`);
+      const matches = await admin
+        .from("matches")
+        .delete()
+        .in("created_by", leftoverIds);
+      if (matches.error) {
+        throw new Error(`matches sweep: ${matches.error.message}`);
+      }
+    }
+
+    const sessions = await poolLogins(admin, SLOTS);
+    [creator, mate, outsider] = sessions;
+    poolUserIds = sessions.map((s) => s.userId);
 
     const program = await admin
       .from("programs")
@@ -192,11 +214,17 @@ test.describe("point_bookmarks table + RLS boundary (live)", () => {
   test.afterAll(async () => {
     test.setTimeout(180_000);
     if (!admin) return;
-    // Bookmarks cascade from points, points from the match. The match first:
-    // `matches.created_by` has no ON DELETE, so it would block the user.
+    // Bookmarks by the users who made them, then the match (points and any
+    // bookmark left on them cascade off it), then the memberships and the
+    // program. The pool users stay, so nothing here may lean on their delete.
+    if (poolUserIds.length > 0) {
+      await admin.from(TABLE).delete().in("user_id", poolUserIds);
+    }
     if (matchId) await admin.from("matches").delete().eq("id", matchId);
-    if (programId) await admin.from("programs").delete().eq("id", programId);
-    await deleteAuthUsers(admin, authUserIds);
+    if (programId) {
+      await admin.from("program_members").delete().eq("program_id", programId);
+      await admin.from("programs").delete().eq("id", programId);
+    }
   });
 
   // ── 0. Fixture sanity — zero rows below must mean "withheld", never "not there".

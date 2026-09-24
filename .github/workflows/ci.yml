@@ -6,9 +6,9 @@
 # and /task-next both commit from worktrees, this workflow is the only check
 # every commit is guaranteed to face.
 #
-# No secrets required, on purpose. The 9 live-database specs guard on
-# `test.skip(!HAVE_ENV, SKIP_REASON)`, so a keyless checkout runs the other 54
-# and skips those cleanly. Adding secrets here would buy little and put a
+# No secrets required, on purpose. The live-database specs guard on
+# `test.skip(!HAVE_ENV, SKIP_REASON)`, so a keyless checkout runs everything
+# else and skips those cleanly. Adding secrets here would buy little and put a
 # service-role key in CI.
 #
 # `npm run build` is deliberately absent: Vercel already builds every push, and

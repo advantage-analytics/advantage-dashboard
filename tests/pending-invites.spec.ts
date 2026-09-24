@@ -11,10 +11,13 @@ import {
   SUPABASE_URL,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import {
+  clearPoolLeftovers,
+  poolEmail,
+  poolLogins,
+} from "./fixtures/live-db-pool";
 import type { DbPendingInviteRow } from "@/lib/data/pending-invites-server";
 import {
   INVITE_TTL_HOURS,
@@ -49,14 +52,17 @@ import {
  *    hashes it — because the whole design rests on the two doors sharing it.
  *
  * The unconfirmed-address branch is deliberately NOT covered here: a password
- * login is confirmed by construction (`createLogins` passes
+ * login is confirmed by construction (the pool creates its users with
  * `email_confirm: true`), so it cannot be reached from a real session.
  *
- * Session plumbing (env loading, skip guard, logins, auth-user cleanup) comes
- * from `fixtures/live-db`: every row is created by the service-role client in
- * `beforeAll` under a per-run marker
- * (`select * from programs where program_key like 'pend-inv-%'` finds a
- * crashed run) and deleted in `afterAll`.
+ * Session plumbing (env loading, skip guard) comes from `fixtures/live-db` and
+ * the three logins are reused pool users from `fixtures/live-db-pool`: every
+ * row is created by the service-role client in `beforeAll` under a per-run
+ * marker (`select * from programs where program_key like 'pend-inv-%'` finds
+ * a crashed run) and deleted by program in `afterAll`. The pool users — and
+ * so their addresses — outlive the run, which is why `beforeAll` first sweeps
+ * any invitation an interrupted run left addressed to them: the reads below
+ * expect exactly one row for A and none for B.
  *
  * Run on demand:  npx playwright test tests/pending-invites.spec.ts
  * (or the full suite via `npm run test`).
@@ -66,7 +72,14 @@ import {
 // Fixture — four programs, three logins, three invitations to one address.
 // ---------------------------------------------------------------------------
 
-const { mark: MARK, password: PASSWORD } = runMarker("pend-inv");
+const { mark: MARK } = runMarker("pend-inv");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = [
+  "pending-invites-owner",
+  "pending-invites-invitee-a",
+  "pending-invites-stranger-b",
+];
 
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
@@ -111,7 +124,6 @@ test.describe("pending invitations, read and accepted by id (live DB)", () => {
   /** A's address, read back from the login rather than rebuilt from MARK. */
   let inviteeEmail: string;
 
-  const authUserIds: string[] = [];
   const programIds: string[] = [];
 
   let programLive: string; // the one open invitation A can act on
@@ -131,14 +143,42 @@ test.describe("pending invitations, read and accepted by id (live DB)", () => {
 
     admin = createAdminClient();
 
-    [owner, invitee, stranger] = await createLogins(
-      admin,
-      ["owner", "invitee-a", "stranger-b"],
-      { mark: MARK, password: PASSWORD, authUserIds },
-    );
+    // An interrupted run leaves memberships the pool would refuse, and — worse
+    // for this file — open invitations addressed to A and B, which would show
+    // up in the reads below as rows this run never made. Sweep both, by the
+    // addresses (any case: the live row is stored upper-cased) and by the
+    // inviter, plus the notifications those invitations raised.
+    const leftoverIds = await clearPoolLeftovers(admin, SLOTS);
+    for (const slot of SLOTS) {
+      const swept = await admin
+        .from("program_invites")
+        .delete()
+        .ilike("email", poolEmail(slot));
+      if (swept.error) {
+        throw new Error(`invites sweep (${slot}): ${swept.error.message}`);
+      }
+    }
+    if (leftoverIds.length > 0) {
+      const byInviter = await admin
+        .from("program_invites")
+        .delete()
+        .in("invited_by", leftoverIds);
+      if (byInviter.error) {
+        throw new Error(`invites sweep: ${byInviter.error.message}`);
+      }
+      const notes = await admin
+        .from("user_notifications")
+        .delete()
+        .in("recipient_user_id", leftoverIds);
+      if (notes.error) {
+        throw new Error(`notifications sweep: ${notes.error.message}`);
+      }
+    }
+
+    [owner, invitee, stranger] = await poolLogins(admin, SLOTS);
 
     // The address the functions match on is the session's, so take it from the
-    // session. Rebuilding it from MARK would pass even if `createLogin` changed
+    // session. Rebuilding it from the slot would pass even if the pool changed
     // how it derives one.
     const who = await invitee.client.auth.getUser();
     if (!who.data.user?.email) {
@@ -279,12 +319,17 @@ test.describe("pending invitations, read and accepted by id (live DB)", () => {
         .from("program_audit_log")
         .delete()
         .in("program_id", programIds);
+      await admin
+        .from("user_notifications")
+        .delete()
+        .in("program_id", programIds);
       await admin.from("program_invites").delete().in("program_id", programIds);
       await admin.from("program_players").delete().in("program_id", programIds);
       await admin.from("program_members").delete().in("program_id", programIds);
       await admin.from("programs").delete().in("id", programIds);
     }
-    await deleteAuthUsers(admin, authUserIds);
+    // The pool users stay. The inviter's name written above is put back by the
+    // pool's reset on the next hand-out.
   });
 
   // -------------------------------------------------------------------------

@@ -9,10 +9,13 @@ import {
   SKIP_REASON,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import {
+  demotePoolAdmin,
+  clearPoolLeftovers,
+  poolLogins,
+} from "./fixtures/live-db-pool";
 
 /**
  * `20260915100000_conferences_table.sql`'s sync triggers and
@@ -41,7 +44,10 @@ import {
  *     `P0001` and succeeds once it is empty.
  *
  * Every conference name and program name starts with the run mark, so no
- * real conference or program is ever touched.
+ * real conference or program is ever touched. The three logins are reused
+ * pool users (`fixtures/live-db-pool`), never deleted: `afterAll` demotes the
+ * admin through the service role, and `beforeAll` sweeps a crashed run's
+ * programs and conferences by this file's marker.
  *
  * Run on demand:  npx playwright test admin-conferences-rpcs
  */
@@ -51,7 +57,14 @@ const RAISE_EXCEPTION = "P0001";
 /** A crashed run is findable by hand:
  *  `select * from conferences where name like 'admin-conf-%'` and
  *  `select * from programs where school_name like 'admin-conf-%'`. */
-const { mark: MARK, password: PASSWORD } = runMarker("admin-conf");
+const { mark: MARK } = runMarker("admin-conf");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = [
+  "admin-conferences-rpcs-admin",
+  "admin-conferences-rpcs-stranger",
+  "admin-conferences-rpcs-owner",
+];
 
 const NAME_A = `${MARK}-a League`;
 const NAME_B = `${MARK}-b League`;
@@ -80,7 +93,6 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
   let stranger: Session; // not an admin
   let owner: Session; // program_members owner of ownerProgram, not an admin
 
-  const authUserIds: string[] = [];
   const programIds: string[] = [];
 
   let conferenceA: string;
@@ -127,11 +139,27 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
     test.setTimeout(120_000);
     admin = createAdminClient();
 
-    [adminSession, stranger, owner] = await createLogins(
-      admin,
-      ["admin", "stranger", "owner"],
-      { mark: MARK, password: PASSWORD, authUserIds },
-    );
+    // A crashed run's owner program goes with the pool sweep; its other
+    // programs are ownerless and go by marker, and only then its conferences
+    // (`on delete restrict` from programs). Every name starts with a mark, so
+    // nothing outside this file matches.
+    await clearPoolLeftovers(admin, SLOTS);
+    const stalePrograms = await admin
+      .from("programs")
+      .delete()
+      .like("school_name", "admin-conf-%");
+    if (stalePrograms.error) {
+      throw new Error(`programs sweep: ${stalePrograms.error.message}`);
+    }
+    const staleConferences = await admin
+      .from("conferences")
+      .delete()
+      .like("name", "admin-conf-%");
+    if (staleConferences.error) {
+      throw new Error(`conferences sweep: ${staleConferences.error.message}`);
+    }
+
+    [adminSession, stranger, owner] = await poolLogins(admin, SLOTS);
 
     const flip = await admin
       .from("users")
@@ -144,6 +172,8 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
 
   test.afterAll(async () => {
     if (!admin) return;
+
+    const demoteError = await demotePoolAdmin(admin, adminSession);
 
     // Programs first — conferences.id is `on delete restrict` from programs.
     const leftover = await admin
@@ -163,7 +193,7 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
     // Then every conference this run created (A, B, and the trigger-made new + svc).
     await admin.from("conferences").delete().like("name", `${MARK}%`);
 
-    await deleteAuthUsers(admin, authUserIds);
+    if (demoteError) throw new Error(demoteError);
   });
 
   // ── admin_upsert_conference + the five gates ──────────────────────────────
