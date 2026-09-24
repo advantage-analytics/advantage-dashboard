@@ -420,3 +420,11 @@ The title and content class moved into a new shared module, `schedule/score-flow
 **follow-ups:**
 
 1. A multi-line text placeholder is now one block instead of one band per wrapped line. `PendingBar` has no children, which is why. If per-line bands matter, `PendingBar` would need a text-band variant.
+
+## T34 · The dashboard root loading fallback becomes a skeleton, not a spinner — blocked
+
+**gate:** mechanical GATE PASS (first run, live DB healthy again) · completion `VERDICT: needs-work`. Criterion 2 is not met as the note qualifies it: `help/page.tsx` does not use ComingSoonPage's frame (it uses 1032px, `px-6 py-8`), and the note says "draw the h1 bar at the shared x only" in that case. The implementation kept the full `max-w-screen-2xl px-14 pt-5 pb-8` frame, so Help shifts on load. The other three criteria are met.
+
+**stash:** `0e3f0bc6a956bcb11982519a13743a09e456bdce`. It is the same work as `be16e15c`, re-applied onto T33's commit with no conflict.
+
+**to resume:** decide what the root fallback should draw, given that Help's frame differs from ComingSoonPage's. Then apply the stash and amend `DashboardPagePending` (and criterion 2 if needed).
