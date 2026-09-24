@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -92,8 +93,13 @@ export function LeaveGuardProvider({
     [pathname],
   );
 
+  const value = useMemo(
+    () => ({ arm, confirmLeave, shouldAsk }),
+    [arm, confirmLeave, shouldAsk],
+  );
+
   return (
-    <LeaveGuardContext.Provider value={{ arm, confirmLeave, shouldAsk }}>
+    <LeaveGuardContext.Provider value={value}>
       {children}
 
       <LeaveUploadDialog
