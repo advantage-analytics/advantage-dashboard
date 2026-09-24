@@ -306,3 +306,80 @@ test("populated and empty statistics align with the court and stay reachable on 
   });
   expect(errors).toEqual([]);
 });
+
+test("focused scatter points share the fullscreen readout and remain inspectable by pointer and keyboard", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 760, height: 800 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&fixture=long`);
+  const art = page.locator("[data-viz-focused-art]");
+  const marks = art.locator("[data-viz-mark]");
+  expect(await marks.count()).toBeGreaterThan(1);
+  await expect(marks.first()).toHaveAttribute("tabindex", "0");
+  await expect(marks.nth(1)).toHaveAttribute("tabindex", "-1");
+
+  const pointerMark = marks.last();
+  await pointerMark.hover();
+  const readout = art.locator("[data-viz-focused-readout]");
+  await expect(readout).toBeVisible();
+  const title = await readout.locator("span").first().textContent();
+  expect(title).toMatch(/Avery (won|lost) the point/);
+  await expect(pointerMark).toHaveAttribute(
+    "aria-label",
+    /Avery (won|lost) the point/,
+  );
+
+  await pointerMark.click();
+  await page.mouse.move(745, 750);
+  await expect(pointerMark).toHaveAttribute("aria-pressed", "true");
+  await expect(readout).toBeVisible();
+  await page.screenshot({
+    path: resolve("test-results/viz-focused-point-readout.png"),
+    fullPage: true,
+  });
+  await art.click({ position: { x: 10, y: 10 } });
+  await expect(pointerMark).toHaveAttribute("aria-pressed", "false");
+  await expect(readout).toHaveCount(0);
+
+  await marks.first().focus();
+  await expect(readout).toBeVisible();
+  await page.keyboard.press("ArrowRight");
+  await expect(marks.nth(1)).toBeFocused();
+  await expect(marks.nth(1)).toHaveAttribute("tabindex", "0");
+  await page.keyboard.press("Enter");
+  await expect(marks.nth(1)).toHaveAttribute("aria-pressed", "true");
+
+  await page.goto(`${origin}/?tab=shots&cut=serve&chart=heat&fixture=long`);
+  await expect(art.locator("[data-viz-mark]")).toHaveCount(0);
+  await expect(art.locator("[data-viz-focused-readout]")).toHaveCount(0);
+
+  for (const cut of ["rallyPlacement", "rallyPosition"]) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}&fixture=long`);
+    const cutMarks = art.locator("[data-viz-mark]");
+    expect(await cutMarks.count(), cut).toBeGreaterThan(0);
+    await cutMarks.last().hover();
+    await expect(readout).toBeVisible();
+  }
+
+  await page.goto(
+    `${origin}/?tab=shots&cut=serve&player=opponent&fixture=long`,
+  );
+  await art.locator("[data-viz-mark]").last().hover();
+  await expect(readout).toContainText(/Blake (won|lost) the point/);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&fixture=long`);
+  await art.locator("[data-viz-mark]").last().click();
+  await expect(readout).toBeVisible();
+  const mobile = await Promise.all([art.boundingBox(), readout.boundingBox()]);
+  expect(mobile[0]).not.toBeNull();
+  expect(mobile[1]).not.toBeNull();
+  expect(mobile[1]!.x).toBeGreaterThanOrEqual(mobile[0]!.x);
+  expect(mobile[1]!.x + mobile[1]!.width).toBeLessThanOrEqual(
+    mobile[0]!.x + mobile[0]!.width,
+  );
+
+  await page.goto(`${origin}/?tab=shots&cut=serve&chart=zones&fixture=long`);
+  await expect(art.locator("[data-viz-mark]")).toHaveCount(0);
+  await expect(readout).toHaveCount(0);
+});

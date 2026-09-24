@@ -23,6 +23,7 @@ import {
   starPoints,
 } from "./court-geometry";
 import type { Chart, Cut, VizDot, VizBandZones } from "./viz-model";
+import { nextMarkIndex } from "./viz-mark-roving";
 
 /**
  * The recoloured court SVG for one cut — the wall tile's art and the focused
@@ -107,6 +108,193 @@ export const ACE_STAR_FILL = "#F8C84F";
 // Shared with the fullscreen court so both views use the same relative scale.
 export const ACE_STAR_RADIUS_RATIO = 1.4;
 const ACE_STAR_OUTER_R = SERVE_DOT_R * ACE_STAR_RADIUS_RATIO;
+
+export interface CourtMarkInteraction {
+  activeId: string | null;
+  focusedId: string | null;
+  selectedId: string | null;
+  rovingId: string | null;
+  labelFor: (dot: VizDot) => string;
+  onActivate: (
+    id: string,
+    mark: SVGGElement,
+    source: "hover" | "focus",
+    focusVisible?: boolean,
+  ) => void;
+  onDeactivate: (id: string, source: "hover" | "focus") => void;
+  onRove: (id: string) => void;
+  onSelect: (id: string, mark: SVGGElement) => void;
+}
+
+function CourtMark({
+  dot,
+  cut,
+  cx,
+  cy,
+  radius,
+  index,
+  count,
+  interaction,
+}: {
+  dot: VizDot;
+  cut: Cut;
+  cx: number;
+  cy: number;
+  radius: number;
+  index: number;
+  count: number;
+  interaction?: CourtMarkInteraction;
+}) {
+  const color = colorFor(dot.outcome);
+  const shape =
+    dot.shape === "star" ? (
+      <polygon
+        points={starPoints(cx, cy, ACE_STAR_OUTER_R)}
+        fill={ACE_STAR_FILL}
+        stroke={DOT_STROKE}
+        strokeWidth={DOT_STROKE_W}
+        vectorEffect="non-scaling-stroke"
+      />
+    ) : dot.shape === "triangle" ? (
+      <polygon
+        points={trianglePointsFor(
+          cut === "serve"
+            ? "serve"
+            : cut === "returnPlacement" || cut === "rallyPlacement"
+              ? "placement"
+              : "contact",
+          cx,
+          cy,
+          radius,
+        )}
+        fill={color}
+        stroke={DOT_STROKE}
+        strokeWidth={DOT_STROKE_W}
+        vectorEffect="non-scaling-stroke"
+      />
+    ) : (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={radius}
+        fill={color}
+        stroke={DOT_STROKE}
+        strokeWidth={DOT_STROKE_W}
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+
+  return (
+    <g
+      data-viz-mark={interaction ? dot.id : undefined}
+      role={interaction ? "button" : undefined}
+      tabIndex={
+        interaction
+          ? interaction.rovingId === dot.id ||
+            (interaction.rovingId === null && index === 0)
+            ? 0
+            : -1
+          : undefined
+      }
+      aria-label={interaction?.labelFor(dot)}
+      aria-pressed={interaction ? interaction.selectedId === dot.id : undefined}
+      className={interaction ? "cursor-pointer outline-none" : undefined}
+      onMouseEnter={
+        interaction
+          ? (event) =>
+              interaction.onActivate(dot.id, event.currentTarget, "hover")
+          : undefined
+      }
+      onMouseLeave={
+        interaction
+          ? () => interaction.onDeactivate(dot.id, "hover")
+          : undefined
+      }
+      onFocus={
+        interaction
+          ? (event) =>
+              interaction.onActivate(
+                dot.id,
+                event.currentTarget,
+                "focus",
+                event.currentTarget.matches(":focus-visible"),
+              )
+          : undefined
+      }
+      onBlur={
+        interaction
+          ? () => interaction.onDeactivate(dot.id, "focus")
+          : undefined
+      }
+      onClick={
+        interaction
+          ? (event) => {
+              event.stopPropagation();
+              interaction.onSelect(dot.id, event.currentTarget);
+            }
+          : undefined
+      }
+      onKeyDown={
+        interaction
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                event.stopPropagation();
+                interaction.onSelect(dot.id, event.currentTarget);
+                return;
+              }
+              const next = nextMarkIndex(index, count, event.key);
+              if (next === null) {
+                if (
+                  event.key.startsWith("Arrow") ||
+                  event.key === "Home" ||
+                  event.key === "End"
+                ) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              const target = event.currentTarget
+                .closest("svg")
+                ?.querySelectorAll<SVGGElement>("[data-viz-mark]")[next];
+              if (target) {
+                interaction.onRove(target.dataset.vizMark!);
+                target.focus();
+              }
+            }
+          : undefined
+      }
+    >
+      {interaction?.activeId === dot.id && (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={radius + 3}
+          fill="none"
+          stroke={LINE_COLOR}
+          strokeWidth={1.5}
+          pointerEvents="none"
+        />
+      )}
+      {interaction?.focusedId === dot.id && (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={radius + 5.5}
+          fill="none"
+          stroke={LINE_COLOR}
+          strokeWidth={1.5}
+          pointerEvents="none"
+        />
+      )}
+      {shape}
+      {interaction && <circle cx={cx} cy={cy} r={9} fill="transparent" />}
+    </g>
+  );
+}
 
 /**
  * The won/lost/neutral colour for a dot's outcome — the one piece this
@@ -374,6 +562,7 @@ export function CourtArt({
   fill,
   labels,
   draft = false,
+  markInteraction,
 }: {
   cut: Cut;
   dots: VizDot[];
@@ -417,6 +606,8 @@ export function CourtArt({
    * announced label to reflect the actual state.
    */
   draft?: boolean;
+  /** Focused scatter inspection. Preview courts omit it and remain static. */
+  markInteraction?: CourtMarkInteraction;
 }) {
   const clipId = useId();
   const showHeat = chart === "heat";
@@ -460,7 +651,7 @@ export function CourtArt({
         {...(fill ? { height: "100%" } : {})}
         width="100%"
         preserveAspectRatio="xMidYMid meet"
-        role="img"
+        role={markInteraction ? "group" : "img"}
         aria-label={ariaLabel}
         className={className}
       >
@@ -635,7 +826,7 @@ export function CourtArt({
 
             {!showHeat &&
               !showZones &&
-              dots.map((d) => {
+              dots.map((d, index) => {
                 const projected = projectServeMetricDot({
                   lateralM: d.lateralM,
                   depthPastNetM: d.depthM,
@@ -647,41 +838,17 @@ export function CourtArt({
                 // every other dot uses (an ordinary miss-coloured circle —
                 // an ace is always "in", so `d.shape` is never "star" here).
                 const { cx, cy } = atNetPosition(d.atNet, "serve", projected);
-                // G2b: an ace draws as a star, regardless of outcome colour —
-                // it's always "won" already, but the shape carries the "ace"
-                // read before the colour would.
-                if (d.shape === "star") {
-                  return (
-                    <polygon
-                      key={d.id}
-                      points={starPoints(cx, cy, ACE_STAR_OUTER_R)}
-                      fill={ACE_STAR_FILL}
-                      stroke={DOT_STROKE}
-                      strokeWidth={DOT_STROKE_W}
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  );
-                }
-                const color = colorFor(d.outcome);
-                return d.shape === "triangle" ? (
-                  <polygon
+                return (
+                  <CourtMark
                     key={d.id}
-                    points={trianglePointsFor("serve", cx, cy, SERVE_DOT_R)}
-                    fill={color}
-                    stroke={DOT_STROKE}
-                    strokeWidth={DOT_STROKE_W}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                ) : (
-                  <circle
-                    key={d.id}
+                    dot={d}
+                    cut={cut}
                     cx={cx}
                     cy={cy}
-                    r={SERVE_DOT_R}
-                    fill={color}
-                    stroke={DOT_STROKE}
-                    strokeWidth={DOT_STROKE_W}
-                    vectorEffect="non-scaling-stroke"
+                    radius={SERVE_DOT_R}
+                    index={index}
+                    count={dots.length}
+                    interaction={markInteraction}
                   />
                 );
               })}
@@ -705,7 +872,7 @@ export function CourtArt({
       {...(fill ? { height: "100%" } : {})}
       width="100%"
       preserveAspectRatio="xMidYMid meet"
-      role="img"
+      role={markInteraction ? "group" : "img"}
       aria-label={ariaLabel}
       className={className}
       style={kind === "placement" ? { transform: "rotate(180deg)" } : undefined}
@@ -824,8 +991,7 @@ export function CourtArt({
             )}
 
             {chart === "scatter" &&
-              dots.map((d) => {
-                const color = colorFor(d.outcome);
+              dots.map((d, index) => {
                 const projected = projectReturnDot(kind, {
                   lateralM: d.lateralM ?? 0,
                   depthM: d.depthM ?? 0,
@@ -837,25 +1003,17 @@ export function CourtArt({
                 // POSITION only: it draws through the same forehand-circle/
                 // backhand-triangle glyph path every other dot uses.
                 const { cx, cy } = atNetPosition(d.atNet, cut, projected);
-                return d.shape === "triangle" ? (
-                  <polygon
+                return (
+                  <CourtMark
                     key={d.id}
-                    points={trianglePointsFor(kind, cx, cy, RETURN_DOT_R)}
-                    fill={color}
-                    stroke={DOT_STROKE}
-                    strokeWidth={DOT_STROKE_W}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                ) : (
-                  <circle
-                    key={d.id}
+                    dot={d}
+                    cut={cut}
                     cx={cx}
                     cy={cy}
-                    r={RETURN_DOT_R}
-                    fill={color}
-                    stroke={DOT_STROKE}
-                    strokeWidth={DOT_STROKE_W}
-                    vectorEffect="non-scaling-stroke"
+                    radius={RETURN_DOT_R}
+                    index={index}
+                    count={dots.length}
+                    interaction={markInteraction}
                   />
                 );
               })}
