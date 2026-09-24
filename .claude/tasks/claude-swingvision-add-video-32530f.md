@@ -115,7 +115,7 @@ ready).
 
 ## T6 · Show the match-video count and the at-cap states in the Film empty state
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4
 - **files:** (guess) `src/lib/match-video/film-entry.ts`, `src/lib/data/match-film-entry-server.ts`, `src/components/dashboard/matches/match-detail/film/film-empty-state.tsx`, `tests/film-empty-state-cap.spec.ts` (new, `createLoader()` from `tests/fixtures/vm-modules.ts` + `renderToStaticMarkup`), `tests/match-film-entry.spec.ts`

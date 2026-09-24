@@ -60,6 +60,7 @@ import {
   type SourcePoint,
   type SourceShot,
 } from "@/lib/match-video/alignment";
+import { matchFilmHref } from "@/lib/match-video/film-entry";
 import {
   isMatchVideoMode,
   modeRequiresActiveAttachment,
@@ -96,18 +97,11 @@ const LOG = "[match-video-attachment-target]";
 export const MATCHES_LIST_HREF = "/dashboard/matches";
 
 /**
- * A match's Video view.
- *
- * `?tab=film` is the EXISTING selection contract — `parseReportView()` in
- * `components/dashboard/matches/match-detail/report-view.ts` reads it, and
- * `reportViewQuery()` writes it. Match detail is a single page with no
- * sub-routes, so this query parameter is the whole mechanism; no new one was
- * invented for this feature, and T22's return after a successful save uses
- * this same href.
+ * A match's Video view — `?tab=film`, the existing selection contract. Defined
+ * client-safe in `lib/match-video/film-entry.ts` so the Film empty state can
+ * link with it too; T22's return after a successful save uses this same href.
  */
-export function matchFilmHref(matchId: string): string {
-  return `/dashboard/matches/${encodeURIComponent(matchId)}?tab=film`;
-}
+export { matchFilmHref };
 
 /* -------------------------------------------------------------------------
  * Shapes

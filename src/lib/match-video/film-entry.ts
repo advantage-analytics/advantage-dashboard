@@ -68,6 +68,36 @@ export interface MatchFilmEntry {
   /** Empty for every viewer but the authorized creator. */
   actions: readonly FilmEntryAction[];
   problem: FilmEntryProblem | null;
+  /**
+   * The workspace's match-video allowance, for a viewer who may `add`.
+   * `null` for everyone else, and when the count could not be read — the
+   * empty state then keeps its plain copy rather than guessing a number.
+   */
+  quota: FilmEntryQuota | null;
+}
+
+/**
+ * The one match currently holding a personal workspace's only video — what
+ * the at-cap empty state points at ("Open Reid vs Cho"). Names and date are
+ * `matches` columns as stored; formatting is the view's job.
+ */
+export interface FilmEntryQuotaHolder {
+  matchId: string;
+  playerName: string | null;
+  opponentName: string | null;
+  /** ISO 8601 — `matches.date`. */
+  date: string | null;
+}
+
+/**
+ * `used` of `cap` active match videos in the active workspace (T4's
+ * `getMatchVideoUsage`). `holder` is set for a personal workspace holding its
+ * video and null for a team, whose at-cap offer is Settings › Usage instead.
+ */
+export interface FilmEntryQuota {
+  used: number;
+  cap: number;
+  holder: FilmEntryQuotaHolder | null;
 }
 
 /**
@@ -79,6 +109,7 @@ export const NO_FILM_ENTRY: MatchFilmEntry = {
   attachment: null,
   actions: [],
   problem: null,
+  quota: null,
 };
 
 /* -------------------------------------------------------------------------
@@ -117,6 +148,59 @@ export function canTakeFilmAction(
   return entry.actions.includes(action);
 }
 
+/** Whether the workspace has no match video left to spend. */
+export function atMatchVideoCap(quota: FilmEntryQuota | null): boolean {
+  return quota !== null && quota.used >= quota.cap;
+}
+
+/** "1 of 1 match video used" / "3 of 25 match videos used". */
+export function matchVideoCountLabel(quota: FilmEntryQuota): string {
+  const noun = quota.cap === 1 ? "match video" : "match videos";
+  return `${quota.used} of ${quota.cap} ${noun} used`;
+}
+
+/** The last word of a full name — "Marcus Reid" → "Reid". */
+function surname(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return parts[parts.length - 1] ?? name;
+}
+
+/**
+ * "Aug 30" from `matches.date`. A bare `YYYY-MM-DD` is a calendar day, so it
+ * is read in UTC — local time would print the day before west of Greenwich.
+ */
+function shortMatchDate(iso: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(
+    /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00Z` : iso,
+  );
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/**
+ * How the at-cap copy names the holder: "Marcus Reid vs Daniel Cho (Aug 30)"
+ * in the sentence, "Reid vs Cho" on the button. Either name missing falls back
+ * to "another match", which is true and names nobody wrongly.
+ */
+export function quotaHolderLabels(holder: FilmEntryQuotaHolder): {
+  full: string;
+  short: string;
+} {
+  const a = holder.playerName?.trim();
+  const b = holder.opponentName?.trim();
+  if (!a || !b) return { full: "another match", short: "that match" };
+  const date = shortMatchDate(holder.date);
+  return {
+    full: `${a} vs ${b}${date ? ` (${date})` : ""}`,
+    short: `${surname(a)} vs ${surname(b)}`,
+  };
+}
+
 /* -------------------------------------------------------------------------
  * Where the actions go
  * ---------------------------------------------------------------------- */
@@ -136,3 +220,19 @@ export function matchVideoWizardHref(
 ): string {
   return `/dashboard/matches/new?videoFor=${encodeURIComponent(matchId)}&mode=${mode}`;
 }
+
+/**
+ * A match's Video view.
+ *
+ * `?tab=film` is the EXISTING selection contract — `parseReportView()` in
+ * `components/dashboard/matches/match-detail/report-view.ts` reads it, and
+ * `reportViewQuery()` writes it. Lives here, client-safe, so the empty
+ * state's "Open Reid vs Cho" can link with it;
+ * `match-video-attachment-server.ts` re-exports it for the wizard route.
+ */
+export function matchFilmHref(matchId: string): string {
+  return `/dashboard/matches/${encodeURIComponent(matchId)}?tab=film`;
+}
+
+/** Settings › Usage, where a team manages its match videos. */
+export const MATCH_VIDEO_USAGE_HREF = "/dashboard/settings/usage";

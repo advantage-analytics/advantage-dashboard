@@ -38,6 +38,7 @@ import { cache } from "react";
 import {
   NO_FILM_ENTRY,
   type FilmEntryAction,
+  type FilmEntryQuota,
   type MatchFilmEntry,
 } from "@/lib/match-video/film-entry";
 import type { MatchVideoResult } from "@/lib/match-video/types";
@@ -50,7 +51,12 @@ import type { HttpResult } from "@/lib/services/match-video/http";
 import type { PlaybackAttachmentRow } from "@/lib/services/match-video/playback";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import type { Workspace } from "@/lib/workspace/types";
 
+import {
+  getMatchVideoUsage,
+  type MatchVideoUsage,
+} from "./match-video-usage-server";
 import { activeAttachment, finalObjectExists } from "./match-video-seams";
 
 const LOG = "[match-film-entry]";
@@ -72,6 +78,14 @@ export interface FilmEntryDeps extends MatchVideoAccessDeps {
   finalObjectExists(
     row: PlaybackAttachmentRow,
   ): Promise<MatchVideoResult<boolean>>;
+  /**
+   * T4's `getMatchVideoUsage` — the same count the upload routes enforce.
+   * Asked only for a viewer who may `add`, in the workspace the access
+   * ladder validated.
+   */
+  loadUsage(
+    workspace: Pick<Workspace, "id" | "kind">,
+  ): Promise<MatchVideoUsage>;
 }
 
 /** Storage could not be asked. Never `absent`, and never an `add`. */
@@ -79,7 +93,44 @@ const UNREADABLE: MatchFilmEntry = {
   attachment: null,
   actions: [],
   problem: "storage_unavailable",
+  quota: null,
 };
+
+/**
+ * The allowance the empty state prints, or null when it could not be read —
+ * a missing count keeps the plain copy, and never blocks the page.
+ *
+ * `getMatchVideoUsage` already folds a failed read into "0 of cap"; the catch
+ * here is for a seam that throws anyway. The holder is named only for a
+ * personal workspace, whose one video is on exactly one other match; a team
+ * is sent to Settings › Usage to choose.
+ */
+async function readQuota(
+  workspace: Pick<Workspace, "id" | "kind">,
+  deps: FilmEntryDeps,
+): Promise<FilmEntryQuota | null> {
+  let usage: MatchVideoUsage;
+  try {
+    usage = await deps.loadUsage(workspace);
+  } catch (cause) {
+    console.error(`${LOG} could not read match-video usage`, {
+      workspaceKind: workspace.kind,
+      cause,
+    });
+    return null;
+  }
+  const first = usage.rows[0];
+  const holder =
+    workspace.kind === "personal" && first
+      ? {
+          matchId: first.matchId,
+          playerName: first.player1Name,
+          opponentName: first.player2Name,
+          date: first.matchDate,
+        }
+      : null;
+  return { used: usage.used, cap: usage.cap, holder };
+}
 
 /* -------------------------------------------------------------------------
  * The ladder
@@ -138,8 +189,12 @@ export async function resolveMatchFilmEntry(
   if (!row) {
     // The one branch that may offer an add, and it is reached only by having
     // actually read the state and been told there is nothing attached.
-    const actions: FilmEntryAction[] = mayMutate ? ["add"] : [];
-    return { attachment: "absent", actions, problem: null };
+    if (!access.ok) {
+      return { attachment: "absent", actions: [], problem: null, quota: null };
+    }
+    const actions: FilmEntryAction[] = ["add"];
+    const quota = await readQuota(access.value.workspace, deps);
+    return { attachment: "absent", actions, problem: null, quota };
   }
 
   // Replace and adjust are the repairs for everything below, so they survive a
@@ -150,6 +205,7 @@ export async function resolveMatchFilmEntry(
     attachment: "present",
     actions,
     problem,
+    quota: null,
   });
 
   let exists: MatchVideoResult<boolean>;
@@ -206,5 +262,6 @@ export const getMatchFilmEntry = cache(async function getMatchFilmEntry(
     }),
     loadActiveAttachment: activeAttachment,
     finalObjectExists,
+    loadUsage: getMatchVideoUsage,
   });
 });

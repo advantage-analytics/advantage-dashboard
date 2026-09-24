@@ -79,3 +79,14 @@ is the runner's. Newest entries at the bottom.
 3. DELETE on a row already retired another way (e.g. replaced) returns 200 with `retiredReason: null`.
 4. Add `remove.ts` to `tests/client-bundle-boundary.spec.ts`'s server-only list.
 5. `scheduleAfterResponse` is duplicated in `purge.ts` and `remove.ts` — share it.
+
+## T6 · Show the match-video count and the at-cap states in the Film empty state — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** `MatchFilmEntry.quota` (`{ used, cap, holder } | null`), filled by `resolveMatchFilmEntry` via a `loadUsage` seam (→ `getMatchVideoUsage`) only on the `add` path; holder = the personal workspace's one video, null for teams; a throwing usage read degrades to `quota: null` (today's copy). `film-empty-state.tsx`: under-cap micro line "MP4 up to 8 GB · N of M match video(s) used"; personal cap body + "Open <P1 surname> vs <P2 surname>" → `matchFilmHref(holder.matchId)`; team cap body + "Manage match videos" → `/dashboard/settings/usage`. `matchFilmHref` moved into client-safe `film-entry.ts` (re-exported from the server file). New `tests/film-empty-state-cap.spec.ts` (createLoader, 4 states).
+
+**follow-ups:**
+
+1. Nobody sees the at-cap states until T4's migration is applied (usage reads return 0 until then).
+2. "More with Pro" goes on the micro line when pricing tiers land.
