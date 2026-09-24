@@ -446,6 +446,7 @@ export function VizFocused({
           <div className="relative w-full min-w-0 shrink-0 @min-[720px]:w-[292px]">
             <StatsCard
               stats={stats}
+              cut={cut}
               className="viz-vt-stats-card @min-[720px]:absolute @min-[720px]:inset-0"
             />
           </div>

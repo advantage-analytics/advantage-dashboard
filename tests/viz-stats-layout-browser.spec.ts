@@ -115,8 +115,7 @@ test("populated and empty statistics align with the court and stay reachable on 
   const card = page.getByText("Where the serve went").locator("../..");
   await expect(card).toBeVisible();
   await expect(page.getByText("No points match these filters")).toHaveCount(0);
-  await expect(card.getByText("Deuce wide", { exact: true })).toBeVisible();
-  await expect(card.getByText("100%", { exact: true })).toBeVisible();
+  await expect(card.getByText("Wide 100% · 4", { exact: true })).toBeVisible();
   const courtArt = page.locator("[data-viz-focused-art] > svg");
   const artSize = await courtArt.evaluate((svg) => {
     const rect = svg.getBoundingClientRect();
@@ -128,8 +127,21 @@ test("populated and empty statistics align with the court and stay reachable on 
     .locator("[data-viz-focused-art]")
     .evaluate((element) => element.getBoundingClientRect().width);
   expect(artSize.width).toBeLessThanOrEqual(artContainerWidth * 0.89);
-  expect(await card.locator("li").first().ariaSnapshot()).toContain(
-    "Deuce wide: 100% of 4 points won",
+  expect(
+    await card.locator("li").filter({ hasText: "Deuce wide" }).ariaSnapshot(),
+  ).toContain("Deuce wide: 100% of 4 points won");
+  await expect(card.getByText("Deuce court")).toBeVisible();
+  await expect(card.getByText("Ad court")).toBeVisible();
+  const serveBody = card.locator(".overflow-y-auto");
+  const adValues = card.getByText("Wide 17% · 12", { exact: true });
+  const adVisible = await Promise.all([
+    serveBody.boundingBox(),
+    adValues.boundingBox(),
+  ]);
+  expect(adVisible[0]).not.toBeNull();
+  expect(adVisible[1]).not.toBeNull();
+  expect(adVisible[1]!.y + adVisible[1]!.height).toBeLessThanOrEqual(
+    adVisible[0]!.y + adVisible[0]!.height,
   );
   const wide = await page.evaluate(() => {
     const statsEl = document.querySelector(".viz-vt-stats-card");
