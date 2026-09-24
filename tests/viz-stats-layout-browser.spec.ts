@@ -198,6 +198,22 @@ test("populated and empty statistics align with the court and stay reachable on 
   }
 
   await page.goto(`${origin}/?tab=shots&cut=rallyPlacement&fixture=long`);
+  const courtSpacing = await page.evaluate(() => {
+    const art = document.querySelector("[data-viz-focused-art]")!;
+    const svg = art.querySelector("svg")!;
+    const card = art.parentElement!;
+    const header = card.firstElementChild!;
+    const legend = card.lastElementChild!;
+    return {
+      apron:
+        art.getBoundingClientRect().bottom - svg.getBoundingClientRect().bottom,
+      headerInset: parseFloat(getComputedStyle(header).paddingLeft),
+      legendInset: parseFloat(getComputedStyle(legend).paddingLeft),
+    };
+  });
+  expect(courtSpacing.apron).toBeGreaterThanOrEqual(15);
+  expect(courtSpacing.headerInset).toBe(20);
+  expect(courtSpacing.legendInset).toBe(20);
   await page.screenshot({
     path: resolve("test-results/viz-stats-short-wide.png"),
     fullPage: true,

@@ -288,7 +288,7 @@ export function VizFocused({
             boxShadow: "var(--shadow-card)",
           }}
         >
-          <div className="flex items-center justify-between gap-3 px-4 pt-[14px] pb-3">
+          <div className="flex items-center justify-between gap-3 px-[var(--pad-card)] pt-[14px] pb-3">
             <span
               id={VIZ_FOCUSED_HEADING_ID}
               tabIndex={-1}
@@ -309,7 +309,7 @@ export function VizFocused({
           <div
             ref={courtArtRef}
             data-viz-focused-art
-            className="relative w-full"
+            className={`relative w-full ${cut === "returnPlacement" || cut === "rallyPlacement" ? "pb-[var(--space-4)]" : ""}`}
             style={{
               backgroundColor: artBoxFill,
               viewTransitionName: isMorphTarget
@@ -418,7 +418,7 @@ export function VizFocused({
           </div>
 
           {!isDraft && (
-            <div className="flex items-center gap-3 px-4 pt-[14px] pb-4">
+            <div className="flex items-center gap-3 px-[var(--pad-card)] pt-[14px] pb-4">
               {state.chart === "zones" && cut !== "serve" && (
                 <span
                   className="text-micro"
