@@ -76,6 +76,10 @@ interface VizStateContextValue {
 
 const VizStateContext = createContext<VizStateContextValue | null>(null);
 
+// Below this, the pane reads as "not scrolled" — a few px of rubber-band
+// or rounding jitter shouldn't disqualify the court morph.
+const SCROLL_MORPH_THRESHOLD_PX = 8;
+
 /**
  * The Visualizations tab's client-side URL binding: `useSearchParams()` in,
  * `router.replace` out. Reads the ONE store `VizStateProvider` mounts —
@@ -356,7 +360,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
         reducedMotion ||
         !sourceEl ||
         !supportsViewTransitions() ||
-        (pane !== null && pane.scrollTop > 8)
+        (pane !== null && pane.scrollTop > SCROLL_MORPH_THRESHOLD_PX)
       ) {
         setState(next);
         return;

@@ -293,6 +293,7 @@ test.describe("ShotsTab", () => {
           workspaceKind: "personal",
           workspaceName: "",
         },
+        actions: { watchPoint: () => {} },
       }),
     },
     "@/components/dashboard/matches/match-detail/shots/viz-state-context": {

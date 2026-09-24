@@ -345,8 +345,15 @@ export function getPointSide(
     : "ad";
 }
 
+/** A shot type counts as a first serve unless its label mentions "second". */
+export function isFirstServeShotType(
+  shotType: string | null | undefined,
+): boolean {
+  return !(shotType?.toLowerCase().includes("second") ?? false);
+}
+
 export function isFirstServePoint(p: MatchPoint): boolean {
-  return !(p.firstShotType?.toLowerCase().includes("second") ?? false);
+  return isFirstServeShotType(p.firstShotType);
 }
 
 export function isReturnOnFirstServe(p: MatchPoint): boolean {
@@ -679,10 +686,8 @@ export function pointMatchesFilters(
     const isFirst =
       frame === "serve"
         ? courtFrame === "serve"
-          ? !(
-              (resolvedServe(p)?.shot?.shotType ?? p.firstShotType)
-                ?.toLowerCase()
-                .includes("second") ?? false
+          ? isFirstServeShotType(
+              resolvedServe(p)?.shot?.shotType ?? p.firstShotType,
             )
           : isFirstServePoint(p)
         : isReturnOnFirstServe(p);
@@ -970,9 +975,7 @@ export function computeViz(
       const serveInput = toServeInput(p);
       serves.push({
         metrics,
-        first: !(serveShot?.shotType ?? p.firstShotType ?? "")
-          .toLowerCase()
-          .includes("second"),
+        first: isFirstServeShotType(serveShot?.shotType ?? p.firstShotType),
         result: classifyPointResult(serveInput),
       });
 
