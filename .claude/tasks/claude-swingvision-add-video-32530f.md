@@ -53,7 +53,7 @@ ready).
 
 ## T3 · Show the "Uploading your video" and "Video saved" screens for attachments
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T2
 - **files:** (guess) `src/components/dashboard/matches/match-video-attachment/AttachmentUploadStatus.tsx` (new, or a body shared with `new-match-wizard/UploadMatchSuccess.tsx`), `MatchVideoAttachmentFlow.tsx`, `AttachmentWizardRoute.tsx`, `src/components/dashboard/shared/vertical-steps.tsx` (reused), `tests/match-video-attachment-flow.spec.ts`

@@ -26,3 +26,20 @@ is the runner's. Newest entries at the bottom.
 1. `WizardShell` renders the h1 at 30px and an 832px column (canvas: 24px, 720px) — a per-flow variant if the proportions matter.
 2. The rail has no filmstrip thumbnails; the wizard's `useVideoFilmstrip` could supply them.
 3. Eyes-on in the running app at 1440px and on a phone — the footer note is hidden on phones.
+
+## T3 · Show the "Uploading your video" and "Video saved" screens for attachments — blocked
+
+**gate:** mechanical GATE FAIL (2 specs) · completion not run
+
+**reason:** The work itself looked complete (new `AttachmentUploadStatus.tsx`, leave guard armed while saving, "Video saved" screen, `AttachmentWizardRoute` no longer navigates on save; attachment-flow 35/35, upload-success-actions and upload-leave-guard unchanged and passing). Two full-suite specs fail as consequences of the change:
+
+1. `tests/design-drift.spec.ts` — off-scale `text-[Npx]` 5 vs seed 4: `AttachmentUploadStatus.tsx:325 text-[24px]` is new. Snap to the SKILL.md type scale (or reuse whatever `UploadMatchSuccess.tsx:90` renders through), don't raise the seed.
+2. `tests/match-film-entry.spec.ts:350` "a successful save returns to the same match with Video selected" asserts the OLD route source (`router.replace(href)`, `router.refresh()` in `AttachmentWizardRoute`). T3's criteria deliberately remove that auto-return, so the spec must be updated to the new contract (Saved screen's "Watch the film" → `returnTarget.href`, no `?tab=`).
+
+**stash:** 6295ddfcde2b630ad3b2377210fa9faebffd8ba2 — recover with `git stash apply 6295ddfc`, fix the two specs above, then reset T3 to `todo` (or finish by hand).
+
+**follow-ups:**
+
+1. The shared leave dialog says the upload continues if you leave — false for attachments; needs attachment wording.
+2. Subtitle shows the server-formatted score without "Won"/"Lost".
+3. "Video trimmed" shows even when the cut failed and the original uploaded — add a `trimmed` flag to the save state.
