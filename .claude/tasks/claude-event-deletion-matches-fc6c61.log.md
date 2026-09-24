@@ -371,3 +371,19 @@ The title and content class moved into a new shared module, `schedule/score-flow
 - `match-report-pending.tsx`: its two court thumbnails are sizing wrappers, each holding a `PendingBar`. `PendingBar` takes no `style` prop, so the `aspect-ratio` has to sit on the wrapper.
 - `tests/skeleton-primitives.spec.ts`: all four files are off `LEGACY`.
 - `match-report-pending.spec.ts` passes without any edits to it.
+
+## T32 · Home, team, header and event-wizard skeleton bars on the shared primitives — done
+
+**gate:** mechanical GATE PASS (first run) · completion `VERDICT: pass`
+
+**changed:**
+
+- Local bar components are removed and every call site uses `PendingBar` directly:
+  - `home-skeleton.tsx`'s `Bar`. A first pass kept it as a pass-through; it was removed before the gate.
+  - `event-wizard-pending.tsx`'s `Bar`.
+  - The roster profile's `Pulse`. It was on `--color-surface-muted` and now uses the token.
+- Hand-built status wrappers in `home-skeleton.tsx` and `home-ai-insight.tsx` are now `PendingRegion`.
+- `RecentMatchesSkeletonContent`'s `animate={false}` now uses `[&_[data-pending-bar]]:animate-none`.
+- `EditEventPending`'s raw progress rule is now `PendingBar rounded-none`.
+- The header's three match-crumb bars sit in one `PendingRegion` labelled "Loading breadcrumb", off `--ink-100`.
+- All five files are off `LEGACY`. `home-empty-loading` and `team-loading` pass unedited.

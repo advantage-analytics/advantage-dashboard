@@ -27,11 +27,6 @@ const TOKEN_HOMES = [
  * task that migrates a file deletes its line here. Never add to it.
  */
 const LEGACY = [
-  "src/app/dashboard/header.tsx", // T32 (bare pulse, --ink-100 crumb bars)
-  "src/app/dashboard/team/roster/[playerId]/loading.tsx", // T32 (bare pulse, --color-surface-muted)
-  "src/components/dashboard/home/home-ai-insight.tsx", // T32
-  "src/components/dashboard/loading/event-wizard-pending.tsx", // T32
-  "src/components/dashboard/loading/home-skeleton.tsx", // T32
   "src/components/dashboard/loading/settings-pending.tsx", // T33
 ];
 

@@ -1,3 +1,5 @@
+import { PendingBar } from "@/components/dashboard/loading/pending";
+
 /**
  * The profile's shape while its reads land — the identity row, the five-tile
  * strip and the 2:1 card grid, each at the height it will settle at, so the
@@ -9,14 +11,14 @@ export default function Loading() {
       <div className="mx-auto flex max-w-screen-2xl flex-col gap-5 px-6 pt-5 pb-8 sm:px-14">
         {/* Identity */}
         <div className="flex items-center gap-5">
-          <Pulse className="size-[76px] rounded-full" />
+          <PendingBar className="size-[76px] rounded-full" />
           <div className="flex flex-1 flex-col gap-2.5">
-            <Pulse className="h-8 w-[260px] max-w-full rounded-md" />
-            <Pulse className="h-3 w-[220px] max-w-full rounded" />
+            <PendingBar className="h-8 w-[260px] max-w-full rounded-md" />
+            <PendingBar className="h-3 w-[220px] max-w-full rounded" />
           </div>
           <div className="flex shrink-0 gap-2">
-            <Pulse className="h-9 w-[104px] rounded-[6px]" />
-            <Pulse className="h-9 w-[110px] rounded-[6px]" />
+            <PendingBar className="h-9 w-[104px] rounded-[6px]" />
+            <PendingBar className="h-9 w-[110px] rounded-[6px]" />
           </div>
         </div>
 
@@ -27,9 +29,9 @@ export default function Loading() {
               key={i}
               className="flex min-w-0 flex-1 flex-col gap-3 px-5 py-5"
             >
-              <Pulse className="h-2.5 w-20 rounded" />
-              <Pulse className="h-7 w-16 rounded-md" />
-              <Pulse className="h-2.5 w-24 rounded" />
+              <PendingBar className="h-2.5 w-20 rounded" />
+              <PendingBar className="h-7 w-16 rounded-md" />
+              <PendingBar className="h-2.5 w-24 rounded" />
             </div>
           ))}
         </div>
@@ -40,27 +42,27 @@ export default function Loading() {
               className="surface-card flex flex-col gap-3.5"
               style={{ padding: "18px 20px" }}
             >
-              <Pulse className="h-2.5 w-20 rounded" />
+              <PendingBar className="h-2.5 w-20 rounded" />
               <div className="flex items-center gap-3">
-                <Pulse className="size-8 rounded-[6px]" />
+                <PendingBar className="size-8 rounded-[6px]" />
                 <div className="flex flex-1 flex-col gap-1.5">
-                  <Pulse className="h-3.5 w-32 rounded" />
-                  <Pulse className="h-2.5 w-44 rounded" />
+                  <PendingBar className="h-3.5 w-32 rounded" />
+                  <PendingBar className="h-2.5 w-44 rounded" />
                 </div>
-                <Pulse className="h-4 w-24 rounded" />
+                <PendingBar className="h-4 w-24 rounded" />
               </div>
             </div>
             <div
               className="surface-card flex flex-col gap-3"
               style={{ padding: 20 }}
             >
-              <Pulse className="h-2.5 w-24 rounded" />
+              <PendingBar className="h-2.5 w-24 rounded" />
               {[0, 1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="flex h-8 items-center gap-3">
-                  <Pulse className="h-2.5 w-10 rounded" />
-                  <Pulse className="h-3 w-32 rounded" />
-                  <Pulse className="h-3 flex-1 rounded" />
-                  <Pulse className="h-2.5 w-16 rounded" />
+                  <PendingBar className="h-2.5 w-10 rounded" />
+                  <PendingBar className="h-3 w-32 rounded" />
+                  <PendingBar className="h-3 flex-1 rounded" />
+                  <PendingBar className="h-2.5 w-16 rounded" />
                 </div>
               ))}
             </div>
@@ -70,12 +72,12 @@ export default function Loading() {
               className="surface-card flex flex-col gap-3"
               style={{ padding: 20 }}
             >
-              <Pulse className="h-2.5 w-20 rounded" />
+              <PendingBar className="h-2.5 w-20 rounded" />
               {[0, 1, 2].map((i) => (
                 <div key={i} className="flex h-8 items-center gap-3">
-                  <Pulse className="h-2.5 w-6 rounded" />
-                  <Pulse className="h-3 w-8 rounded" />
-                  <Pulse className="h-2.5 flex-1 rounded" />
+                  <PendingBar className="h-2.5 w-6 rounded" />
+                  <PendingBar className="h-3 w-8 rounded" />
+                  <PendingBar className="h-2.5 flex-1 rounded" />
                 </div>
               ))}
             </div>
@@ -83,22 +85,14 @@ export default function Loading() {
               className="surface-card flex flex-col gap-3"
               style={{ padding: "18px 20px" }}
             >
-              <Pulse className="h-2.5 w-28 rounded" />
-              <Pulse className="h-4 w-48 rounded" />
-              <Pulse className="h-3.5 w-full rounded-[4px]" />
-              <Pulse className="h-3.5 w-full rounded-[4px]" />
+              <PendingBar className="h-2.5 w-28 rounded" />
+              <PendingBar className="h-4 w-48 rounded" />
+              <PendingBar className="h-3.5 w-full rounded-[4px]" />
+              <PendingBar className="h-3.5 w-full rounded-[4px]" />
             </div>
           </div>
         </div>
       </div>
     </div>
-  );
-}
-
-function Pulse({ className = "" }: { className?: string }) {
-  return (
-    <div
-      className={`animate-pulse bg-[var(--color-surface-muted)] motion-reduce:animate-none ${className}`}
-    />
   );
 }

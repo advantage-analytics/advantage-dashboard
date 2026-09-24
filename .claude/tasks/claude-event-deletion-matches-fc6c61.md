@@ -427,7 +427,7 @@ ready).
 
 ## T32 · Home, team, header and event-wizard skeleton bars on the shared primitives
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T25
 - **files:** src/components/dashboard/loading/home-skeleton.tsx, src/components/dashboard/home/home-ai-insight.tsx (:134-136), src/components/dashboard/loading/event-wizard-pending.tsx (local `Bar` :35), src/app/dashboard/header.tsx (match-crumb bars :428-440), src/app/dashboard/team/roster/[playerId]/loading.tsx (:101), tests/skeleton-primitives.spec.ts

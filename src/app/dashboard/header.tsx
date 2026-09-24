@@ -40,6 +40,10 @@ import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 import { HeaderGreeting } from "@/components/dashboard/header-greeting";
 import { MENU_ROW_CLASS, MENU_RULE_CLASS } from "@/lib/ui/menu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 
 interface MatchCrumb {
   tournamentName: string;
@@ -424,21 +428,24 @@ export function Header({
           )}
 
           {isMatchDetailPage && matchCrumbLoading && !matchCrumb && (
-            <div className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-14 animate-pulse rounded bg-[var(--ink-100)]" />
+            <PendingRegion
+              label="breadcrumb"
+              innerClassName="flex items-center gap-1.5"
+            >
+              <PendingBar className="h-3 w-14 rounded" />
               <ChevronRight
                 className="h-3 w-3 shrink-0 text-[#CCCCCC]"
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
-              <span className="inline-block h-3 w-24 animate-pulse rounded bg-[var(--ink-100)]" />
+              <PendingBar className="h-3 w-24 rounded" />
               <ChevronRight
                 className="h-3 w-3 shrink-0 text-[#CCCCCC]"
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
-              <span className="inline-block h-3 w-32 animate-pulse rounded bg-[var(--ink-100)]" />
-            </div>
+              <PendingBar className="h-3 w-32 rounded" />
+            </PendingRegion>
           )}
 
           {breadcrumbs.length > 0 &&
