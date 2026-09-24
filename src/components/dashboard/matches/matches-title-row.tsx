@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { PendingBar } from "@/components/dashboard/loading/pending";
 import { advButton } from "@/lib/ui/adv-button";
 import { useUnseenReportIds } from "@/lib/ui/seen-reports";
 import {
@@ -58,11 +59,9 @@ export function MatchesTitleRow({
           {readyMatches ? (
             <span className="text-body-sm">{subline}</span>
           ) : (
-            <span
-              role="status"
-              aria-label="Loading match summary"
-              className="block h-3 w-40 rounded bg-[var(--surface-skeleton)] motion-safe:animate-pulse"
-            />
+            <span role="status" aria-label="Loading match summary">
+              <PendingBar className="h-3 w-40 rounded" />
+            </span>
           )}
           <span
             className={`text-micro tabular transition-opacity duration-300 ${dateText ? "opacity-100" : "opacity-0"}`}

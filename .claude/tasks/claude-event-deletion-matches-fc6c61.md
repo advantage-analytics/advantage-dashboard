@@ -414,7 +414,7 @@ ready).
 
 ## T31 · Matches and match report skeleton bars on the shared primitives
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T25
 - **files:** src/components/dashboard/matches/matches-skeleton.tsx, src/components/dashboard/matches/matches-title-row.tsx (:62-64), src/components/dashboard/loading/film-frame-pending.tsx, src/components/dashboard/loading/match-report-pending.tsx, tests/skeleton-primitives.spec.ts

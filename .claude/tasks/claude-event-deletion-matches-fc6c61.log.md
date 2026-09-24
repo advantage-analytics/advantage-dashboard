@@ -358,3 +358,16 @@ The title and content class moved into a new shared module, `schedule/score-flow
 1. A match already linked to a schedule line shows its event's sentence instead of the three Details rows, so the dialog shrinks when that match loads.
 2. The palette's loading status sits inside `role="listbox"`. Move it out, or put `aria-busy` on the listbox, in an accessibility pass.
 3. The form doesn't render from `EDIT_MATCH_FIELD_ROWS`, so only the spec's source checks guard it against drift.
+
+## T31 · Matches and match report skeleton bars on the shared primitives — done
+
+**gate:** mechanical GATE PASS (first run) · completion `VERDICT: pass`
+
+**changed:**
+
+- `matches-skeleton.tsx`: the local `Bar` is gone, so every bar is a `PendingBar`. The outer status is a `PendingRegion`, which drops the hand-written `aria-busy` and `sr-only` span, as the other `PendingRegion` skeletons already do.
+- `matches-title-row.tsx`: nests a `PendingBar` inside its own status span.
+- `film-frame-pending.tsx`: now a `PendingRegion` wrapped around an absolute `PendingBar`, with the caption layered above it.
+- `match-report-pending.tsx`: its two court thumbnails are sizing wrappers, each holding a `PendingBar`. `PendingBar` takes no `style` prop, so the `aspect-ratio` has to sit on the wrapper.
+- `tests/skeleton-primitives.spec.ts`: all four files are off `LEGACY`.
+- `match-report-pending.spec.ts` passes without any edits to it.

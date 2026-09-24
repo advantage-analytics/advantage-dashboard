@@ -31,12 +31,8 @@ const LEGACY = [
   "src/app/dashboard/team/roster/[playerId]/loading.tsx", // T32 (bare pulse, --color-surface-muted)
   "src/components/dashboard/home/home-ai-insight.tsx", // T32
   "src/components/dashboard/loading/event-wizard-pending.tsx", // T32
-  "src/components/dashboard/loading/film-frame-pending.tsx", // T31
   "src/components/dashboard/loading/home-skeleton.tsx", // T32
-  "src/components/dashboard/loading/match-report-pending.tsx", // T31
   "src/components/dashboard/loading/settings-pending.tsx", // T33
-  "src/components/dashboard/matches/matches-skeleton.tsx", // T31
-  "src/components/dashboard/matches/matches-title-row.tsx", // T31
 ];
 
 /** Loading files allowed a spinner while they still hold one. */
