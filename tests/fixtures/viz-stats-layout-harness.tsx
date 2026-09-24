@@ -9,6 +9,13 @@ createRoot(document.getElementById("root")!).render(
         savedViews={[]}
         workspaceKind="personal"
         workspaceName="Avery"
+        hasPlayableVideo={!window.location.search.includes("video=none")}
+        onWatchPoint={(pointId) => {
+          const query = new URLSearchParams(window.location.search);
+          query.set("tab", "film");
+          query.set("point", pointId);
+          window.history.pushState(null, "", `/?${query.toString()}`);
+        }}
       />
     </main>
   </VizStateProvider>,

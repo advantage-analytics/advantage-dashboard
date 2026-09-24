@@ -97,6 +97,20 @@ test.afterAll(async () => {
   if (outputPath) rmSync(outputPath, { recursive: true, force: true });
 });
 
+test("fullscreen selected points can open their timed video", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watch`);
+  await page.getByRole("button", { name: "Open fullscreen" }).click();
+  await page.locator('[data-viz-mark="p1-low-0-0"]').focus();
+  await page.keyboard.press("Enter");
+  const watch = page.getByRole("button", { name: "Watch point" });
+  await expect(watch).toBeVisible();
+  await watch.click();
+  await expect(page).toHaveURL(/tab=film.*point=p1-low-0-0/);
+  await expect(page).not.toHaveURL(/fullscreen=1/);
+});
+
 test("fullscreen chips scroll in one line, preserve controls and follow both subjects after reopening", async ({
   page,
 }) => {

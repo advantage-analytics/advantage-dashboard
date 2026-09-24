@@ -107,7 +107,7 @@ function ShotsTabBody() {
   const { state } = useVizState();
   const [wallCollection, setWallCollection] =
     useState<WallCollection>("default");
-  const { meta } = useMatchReport();
+  const { meta, actions } = useMatchReport();
   const { points } = useMatchData();
   const mounted = useMounted();
 
@@ -172,6 +172,8 @@ function ShotsTabBody() {
             savedViewsBand={savedViewsBand}
             workspaceKind={meta.workspaceKind}
             workspaceName={meta.workspaceName}
+            hasPlayableVideo={meta.hasPlayableVideo}
+            onWatchPoint={actions.watchPoint}
           />
         )}
       </div>

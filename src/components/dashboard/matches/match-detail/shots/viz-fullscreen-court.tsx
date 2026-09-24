@@ -169,6 +169,9 @@ export function VizFullscreenCourt({
   onDeactivate,
   onRove,
   onSelect,
+  watchPointId = null,
+  canWatchPoint,
+  onWatchPoint,
   editing = false,
   editorLayer = null,
 }: {
@@ -210,6 +213,9 @@ export function VizFullscreenCourt({
   onDeactivate: (id: string) => void;
   onRove: (id: string) => void;
   onSelect: (id: string) => void;
+  watchPointId?: string | null;
+  canWatchPoint?: (pointId: string) => boolean;
+  onWatchPoint?: (pointId: string) => void;
   /**
    * Phase 2B, Task 4: the band editor is open. The marks and heat dim to 35%
    * and stop being interactive (no hover, no focus, no readout) — a hover
@@ -250,6 +256,10 @@ export function VizFullscreenCourt({
   const readout = activeMeta
     ? buildReadout(activeMeta, { subject: subjectName }, cut, unit)
     : null;
+  const watchablePointId =
+    selectedId === activeId && watchPointId && canWatchPoint?.(watchPointId)
+      ? watchPointId
+      : null;
 
   let readoutStyle: React.CSSProperties | null = null;
   if (active !== null && readout !== null) {
@@ -422,8 +432,9 @@ export function VizFullscreenCourt({
 
       {readout !== null && readoutStyle !== null && (
         <div
-          aria-hidden="true"
-          className={`pointer-events-none absolute flex flex-col gap-1.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
+          aria-hidden={watchablePointId ? undefined : true}
+          className={`${watchablePointId ? "pointer-events-auto" : "pointer-events-none"} absolute flex flex-col gap-1.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
+          onPointerDown={(event) => event.stopPropagation()}
           style={readoutStyle}
         >
           <span className="text-[12px] font-medium text-white">
@@ -447,6 +458,16 @@ export function VizFullscreenCourt({
               {line}
             </span>
           ))}
+          {watchablePointId && onWatchPoint && (
+            <button
+              type="button"
+              data-viz-watch-point
+              onClick={() => onWatchPoint(watchablePointId)}
+              className="mt-1 cursor-pointer self-start text-[11px] font-medium text-white underline underline-offset-2 hover:text-white/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              Watch point
+            </button>
+          )}
         </div>
       )}
     </div>

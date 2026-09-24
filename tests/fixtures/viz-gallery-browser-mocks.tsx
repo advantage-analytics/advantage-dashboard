@@ -12,7 +12,12 @@ export function useMatchData() {
   return {
     points: window.location.search.includes("fixture=long")
       ? [...ASYMMETRIC_SERVES, ...RALLY_POINTS]
-      : points,
+      : window.location.search.includes("fixture=watch")
+        ? [
+            { ...servePoint({ id: "timed-point" }), videoTime: 42 },
+            servePoint({ id: "untimed-point", lateral: 1.9 }),
+          ]
+        : points,
   };
 }
 

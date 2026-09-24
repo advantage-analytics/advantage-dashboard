@@ -45,7 +45,13 @@ createRoot(document.getElementById("root")!).render(
   <MatchDataProvider
     match={match}
     statsResult={null}
-    points={ASYMMETRIC_SERVES}
+    points={
+      window.location.search.includes("fixture=watch")
+        ? ASYMMETRIC_SERVES.map((point, index) =>
+            index === 0 ? { ...point, videoTime: 42 } : point,
+          )
+        : ASYMMETRIC_SERVES
+    }
   >
     <MatchReportProvider
       matchId="fixture"
@@ -53,6 +59,7 @@ createRoot(document.getElementById("root")!).render(
       canCompare={false}
       isDerived={false}
       statsPublished={false}
+      hasPlayableVideo={window.location.search.includes("fixture=watch")}
       savedViews={[]}
       workspaceRole="owner"
       workspaceKind="personal"

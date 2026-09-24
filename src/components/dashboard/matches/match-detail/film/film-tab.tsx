@@ -499,6 +499,27 @@ function FilmRoom({
     writeRoomParam(false);
   }, [writeRoomParam]);
 
+  // A visualization's Watch point action carries the source point ID, not a
+  // timestamp: `stops` owns the attachment/trim alignment. Wait for playable
+  // media and the resolved clock, then consume the one-shot intent so later
+  // filter or credential updates cannot restart the point.
+  const pointToWatch = searchParams?.get("point") ?? null;
+  useEffect(() => {
+    if (!pointToWatch || !playback.url) return;
+    const stop = stops.find((candidate) => candidate.point.id === pointToWatch);
+    if (!stop) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRoom({ time: stop.start, playing: true });
+    const query = new URLSearchParams(window.location.search);
+    query.delete("point");
+    query.set("fullscreen", "1");
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}?${query.toString()}${window.location.hash}`,
+    );
+  }, [pointToWatch, playback.url, stops]);
+
   /** Door one: the report player's maximize control, from wherever it is. */
   const enterRoom = useCallback(() => {
     const snapshot = playerRef.current?.snapshot() ?? {

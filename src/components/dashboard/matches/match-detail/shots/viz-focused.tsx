@@ -91,6 +91,8 @@ export function VizFocused({
   savedViewsBand,
   workspaceKind,
   workspaceName,
+  hasPlayableVideo = false,
+  onWatchPoint,
 }: {
   savedViews: SavedViewRow[];
   savedViewsBand?: ReactNode;
@@ -98,6 +100,8 @@ export function VizFocused({
    * workspace, and its micro copy names the workspace it shares into. */
   workspaceKind: WorkspaceKind;
   workspaceName: string;
+  hasPlayableVideo?: boolean;
+  onWatchPoint?: (pointId: string) => void;
 }) {
   // The ONE data path, shared with the fullscreen viewer (`use-viz-view.ts`)
   // — including where "you" is resolved (guardrails §4). Extracted from here
@@ -247,6 +251,18 @@ export function VizFocused({
   const readout =
     activeDot?.meta && cut
       ? buildReadout(activeDot.meta, { subject: subjectName }, cut, unit)
+      : null;
+  const watchPointId =
+    selected?.id === activeDot?.id &&
+    hasPlayableVideo &&
+    activeDot?.meta?.pointId &&
+    points.some(
+      (point) =>
+        point.id === activeDot.meta?.pointId &&
+        point.videoTime !== null &&
+        Number.isFinite(point.videoTime),
+    )
+      ? activeDot.meta.pointId
       : null;
 
   function anchorFor(id: string, mark: SVGGElement): MarkAnchor | null {
@@ -468,8 +484,8 @@ export function VizFocused({
             {readout && activeMark && (
               <div
                 data-viz-focused-readout
-                aria-hidden="true"
-                className={`pointer-events-none absolute z-[2] flex flex-col gap-1.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
+                aria-hidden={watchPointId ? undefined : true}
+                className={`${watchPointId ? "pointer-events-auto" : "pointer-events-none"} absolute z-[2] flex flex-col gap-1.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
                 style={{
                   ...DARK_READOUT_STYLE,
                   left: readoutX,
@@ -499,6 +515,16 @@ export function VizFocused({
                     {line}
                   </span>
                 ))}
+                {watchPointId && onWatchPoint && (
+                  <button
+                    type="button"
+                    data-viz-watch-point
+                    onClick={() => onWatchPoint(watchPointId)}
+                    className="mt-1 cursor-pointer self-start text-[11px] font-medium text-white underline underline-offset-2 hover:text-white/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                  >
+                    Watch point
+                  </button>
+                )}
               </div>
             )}
             {heatHasDots && (

@@ -104,7 +104,7 @@ const ZOOM_READOUT_W = 38;
 
 export function VizFullscreen() {
   const { state, setState } = useVizState();
-  const { meta } = useMatchReport();
+  const { meta, actions } = useMatchReport();
   const {
     cut,
     result,
@@ -538,6 +538,21 @@ export function VizFullscreen() {
             onDeactivate={deactivateMark}
             onRove={roveMark}
             onSelect={selectMark}
+            watchPointId={
+              meta.hasPlayableVideo && visibleSelectedMarkId
+                ? (result.dots.find((dot) => dot.id === visibleSelectedMarkId)
+                    ?.meta?.pointId ?? null)
+                : null
+            }
+            canWatchPoint={(pointId) =>
+              points.some(
+                (point) =>
+                  point.id === pointId &&
+                  point.videoTime !== null &&
+                  Number.isFinite(point.videoTime),
+              )
+            }
+            onWatchPoint={actions.watchPoint}
             editing={editing}
             editorLayer={
               activeEditor !== null ? (

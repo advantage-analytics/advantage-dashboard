@@ -113,6 +113,8 @@ export type Outcome = "won" | "lost" | "miss";
  * video alignment does; if a shot row has no speed, this dot has no speed.
  */
 export interface VizDotMeta {
+  /** Source point, shared by all rally-shot marks from that point. */
+  pointId?: string;
   setNumber: number;
   pointScore: string | null;
   wonBySubject: boolean;
@@ -900,6 +902,7 @@ function pointDotMeta(
   isAce = false,
 ): VizDotMeta {
   return {
+    pointId: p.id,
     isAce,
     setNumber: p.setNumber,
     pointScore: p.pointScore ?? null,

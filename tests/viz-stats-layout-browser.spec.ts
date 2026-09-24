@@ -383,3 +383,27 @@ test("focused scatter points share the fullscreen readout and remain inspectable
   await expect(art.locator("[data-viz-mark]")).toHaveCount(0);
   await expect(readout).toHaveCount(0);
 });
+
+test("a selected timed point offers Watch point only when video is available", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watch`);
+  const art = page.locator("[data-viz-focused-art]");
+  const timed = art.locator('[data-viz-mark="timed-point"]');
+  const untimed = art.locator('[data-viz-mark="untimed-point"]');
+  await timed.click();
+  await expect(art.getByRole("button", { name: "Watch point" })).toBeVisible();
+  await untimed.click();
+  await expect(art.getByRole("button", { name: "Watch point" })).toHaveCount(0);
+  await timed.focus();
+  await page.keyboard.press("Enter");
+  await expect(art.getByRole("button", { name: "Watch point" })).toBeVisible();
+  await art.getByRole("button", { name: "Watch point" }).click();
+  await expect(page).toHaveURL(/tab=film.*point=timed-point/);
+
+  await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watch&video=none`);
+  await page.locator('[data-viz-mark="timed-point"]').click();
+  await expect(page.getByRole("button", { name: "Watch point" })).toHaveCount(
+    0,
+  );
+});

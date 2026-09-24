@@ -56,6 +56,7 @@ test("rally placement counts each role-resolved landing for either player at bot
       expect(dot.atNet).toBe(net);
       expect(dot.outcome).toBe(outcome);
       expect(dot.meta?.wonBySubject).toBe(player1);
+      expect(dot.meta?.pointId).toBe(dot.id.split("-")[0]);
       expect(projectViewerDot("rallyPlacement", dot)).toEqual(
         projectViewerDot("returnPlacement", dot),
       );
