@@ -18,8 +18,12 @@
  */
 export const DATE_COL = "72px";
 export const DATE_COL_WITH_YEAR = "84px";
-/** Wide enough for its own "RESULT" heading, which is wider than the glyph. */
-const RESULT_COL = "60px";
+/**
+ * Wide enough for its own "RESULT" heading, which is wider than the glyph.
+ * Exported for the tournament table (`schedule/tournament-detail.tsx`), which
+ * draws the same Date and Result tracks so the two lists share their x's.
+ */
+export const RESULT_COL = "60px";
 const SCORE_COL = "116px";
 
 export const LIST_GRID_COLS = {

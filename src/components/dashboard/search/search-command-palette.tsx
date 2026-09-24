@@ -45,6 +45,10 @@ import {
   type Workspace,
 } from "@/lib/workspace/types";
 import { cn } from "@/lib/utils";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 
 /**
  * ⌘K. Finds things, and — since it is already the fastest surface in the
@@ -917,17 +921,21 @@ export function SearchCommandPalette({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15, ease: EASE_CURVE }}
-                className="flex flex-col gap-3 p-4"
               >
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <div className="size-3 shrink-0 animate-pulse rounded bg-[var(--surface-skeleton)]" />
-                    <div className="flex flex-1 flex-col gap-1.5">
-                      <div className="h-3 w-40 animate-pulse rounded bg-[var(--surface-skeleton)]" />
-                      <div className="h-2.5 w-28 animate-pulse rounded bg-[var(--surface-skeleton)]" />
+                <PendingRegion
+                  label="results"
+                  innerClassName="flex flex-col gap-3 p-4"
+                >
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <PendingBar className="size-3 shrink-0" />
+                      <div className="flex flex-1 flex-col gap-1.5">
+                        <PendingBar className="h-3 w-40" />
+                        <PendingBar className="h-2.5 w-28" />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </PendingRegion>
               </motion.div>
             )}
 

@@ -8,6 +8,10 @@ import {
   SettingsCard,
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 import { capitalize, cn } from "@/lib/utils";
@@ -31,10 +35,10 @@ import { teamLabel, uploadPolicyLabel } from "@/lib/workspace/types";
  * - **Measure.** A bar is never a box with a guessed width and height. `Text`
  *   sets the copy the loaded page will show — the real string where it is
  *   static or already in the workspace, a same-length sample where a request
- *   supplies it — in transparent ink at the real size and leading, and paints
- *   a band on each line box it wraps to. So every row is as tall as its text
- *   and every paragraph wraps where the real one does, at 1440 and at 375
- *   alike. Controls are measured the same way, from their own labels.
+ *   supplies it — invisibly, at the real size and leading, and stacks a
+ *   `PendingBar` over it in the same grid cell. So every row is as tall and
+ *   as wide as its text, at 1440 and at 375 alike. Controls are measured the
+ *   same way, from their own labels.
  *
  * Counts no request has answered — members, usage lines, seats — use a
  * typical number. Nothing here is focusable, selectable or announced beyond
@@ -43,17 +47,12 @@ import { teamLabel, uploadPolicyLabel } from "@/lib/workspace/types";
 
 /* ---------------------------------------------------------------- atoms */
 
-const SKELETON_BG = "bg-[var(--surface-skeleton)]";
-
 /**
- * A band per rendered line. `box-decoration-break: clone` repeats the
- * background on every line fragment, and the gradient is sized to a 0.7em
- * stripe centred on the line — the visible bar — inside the transparent text.
+ * Copy in skeleton form: `className` carries the real type size and leading.
+ * The real text renders invisibly (`select-none`, hidden from the tree) so it
+ * sizes the row exactly as the loaded copy would; `PendingBar` stacks over it
+ * in the same grid cell for the visible band.
  */
-const BAND =
-  "text-transparent select-none [-webkit-box-decoration-break:clone] [box-decoration-break:clone] bg-[linear-gradient(var(--surface-skeleton),var(--surface-skeleton))] bg-[length:100%_0.7em] bg-[position:0_55%] bg-no-repeat";
-
-/** Copy in skeleton form: `className` carries the real type size and leading. */
 function Text({
   children,
   className,
@@ -63,14 +62,22 @@ function Text({
 }) {
   return (
     <div className={className}>
-      <span className={BAND}>{children}</span>
+      <span className="inline-grid max-w-full align-top">
+        <span
+          aria-hidden="true"
+          className="invisible col-start-1 row-start-1 select-none"
+        >
+          {children}
+        </span>
+        <PendingBar className="col-start-1 row-start-1 h-[0.7em] w-full self-center rounded-[2px]" />
+      </span>
     </div>
   );
 }
 
 /** A box whose size is the thing itself: avatar, crest, meter, toggle. */
 function Box({ className }: { className?: string }) {
-  return <div className={cn("shrink-0", SKELETON_BG, className)} />;
+  return <PendingBar className={cn("shrink-0", className)} />;
 }
 
 /** `SettingsButton`, sized by its own label. */
@@ -84,15 +91,17 @@ function Button({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-2 rounded-[6px] border border-transparent font-medium text-transparent select-none",
-        size === "sm" ? "h-8 px-3 text-[12px]" : "h-9 px-4 text-[13px]",
-        SKELETON_BG,
-        className,
-      )}
-    >
-      {children}
+    <div className={cn("inline-grid shrink-0", className)}>
+      <div
+        aria-hidden="true"
+        className={cn(
+          "invisible col-start-1 row-start-1 flex items-center justify-center gap-2 font-medium select-none",
+          size === "sm" ? "h-8 px-3 text-[12px]" : "h-9 px-4 text-[13px]",
+        )}
+      >
+        {children}
+      </div>
+      <PendingBar className="col-start-1 row-start-1 h-full w-full rounded-[6px]" />
     </div>
   );
 }
@@ -100,14 +109,15 @@ function Button({
 /** `MenuSelect`'s pill trigger, sized by its current label and chevron. */
 function PillSelect({ children }: { children: ReactNode }) {
   return (
-    <div
-      className={cn(
-        "flex h-[30px] shrink-0 items-center gap-2 rounded-[6px] border border-transparent px-3 text-[12px] text-transparent select-none",
-        SKELETON_BG,
-      )}
-    >
-      {children}
-      <ChevronDown className="size-3 opacity-0" aria-hidden="true" />
+    <div className="inline-grid shrink-0">
+      <div
+        aria-hidden="true"
+        className="invisible col-start-1 row-start-1 flex h-[30px] items-center gap-2 px-3 text-[12px] whitespace-nowrap select-none"
+      >
+        {children}
+        <ChevronDown className="size-3" aria-hidden="true" />
+      </div>
+      <PendingBar className="col-start-1 row-start-1 h-full w-full rounded-[6px]" />
     </div>
   );
 }
@@ -115,13 +125,14 @@ function PillSelect({ children }: { children: ReactNode }) {
 /** `StatePill` / `YouPill` geometry. */
 function Pill({ children }: { children: ReactNode }) {
   return (
-    <span
-      className={cn(
-        "inline-flex h-[18px] shrink-0 items-center rounded-full px-[7px] text-[10px] font-medium whitespace-nowrap text-transparent select-none",
-        SKELETON_BG,
-      )}
-    >
-      {children}
+    <span className="inline-grid shrink-0">
+      <span
+        aria-hidden="true"
+        className="invisible col-start-1 row-start-1 inline-flex h-[18px] items-center rounded-full px-[7px] text-[10px] font-medium whitespace-nowrap select-none"
+      >
+        {children}
+      </span>
+      <PendingBar className="col-start-1 row-start-1 h-full w-full rounded-full" />
     </span>
   );
 }
@@ -137,6 +148,7 @@ function CardTitle({ children }: { children: ReactNode }) {
   );
 }
 
+/** `label` is the region's name without "Loading" — `PendingRegion` adds it. */
 function Column({
   label,
   width = 640,
@@ -147,22 +159,16 @@ function Column({
   children: ReactNode;
 }) {
   return (
-    <div
-      role="status"
-      aria-label={label}
+    <PendingRegion
+      label={label}
       className={cn(
         "flex w-full flex-col",
         width === 660 ? "max-w-[660px]" : "max-w-[640px]",
       )}
+      innerClassName="flex flex-col gap-5"
     >
-      <span className="sr-only">{label}</span>
-      <div
-        aria-hidden="true"
-        className="flex flex-col gap-5 motion-safe:animate-pulse"
-      >
-        {children}
-      </div>
-    </div>
+      {children}
+    </PendingRegion>
   );
 }
 
@@ -257,7 +263,7 @@ export function SettingsProfilePending() {
   const { viewer } = useWorkspace();
 
   return (
-    <Column label="Loading profile" width={660}>
+    <Column label="profile" width={660}>
       <SettingsCard className="flex-row items-start gap-6 py-7">
         <div className="flex min-w-0 flex-1 items-center gap-6">
           <Box className="size-20 rounded-full" />
@@ -329,7 +335,7 @@ export function SettingsAccountPending() {
   );
 
   return (
-    <Column label="Loading account" width={660}>
+    <Column label="account" width={660}>
       <SettingsCard>
         <SettingsCardTitle className="pb-2">Sign-in</SettingsCardTitle>
         <FactRow label="Account email">
@@ -467,7 +473,7 @@ export function SettingsPlanPending() {
   ].filter((fact): fact is NonNullable<typeof fact> => fact !== null);
 
   return (
-    <Column label="Loading plan">
+    <Column label="plan">
       <SettingsCard className="overflow-hidden p-0">
         <div
           className={cn(
@@ -558,7 +564,7 @@ export function SettingsPreferencesPending() {
     (active.role === "owner" || active.role === "coach");
 
   return (
-    <Column label="Loading preferences">
+    <Column label="preferences">
       <SettingsCard>
         <SettingsCardTitle className="pb-2">Notifications</SettingsCardTitle>
         <GroupLabel>Your matches</GroupLabel>
@@ -628,7 +634,7 @@ export function SettingsUsagePending() {
     .sort((a, b) => Number(b.id === active.id) - Number(a.id === active.id));
 
   return (
-    <Column label="Loading usage">
+    <Column label="usage">
       <SettingsCard className="gap-3 py-5">
         <SettingsCardTitle
           trailing={<Text className="mono text-[11px]">{SAMPLE.clock}</Text>}
@@ -707,7 +713,7 @@ export function SettingsTeamsPending() {
   const teams = available.filter((workspace) => workspace.kind === "team");
 
   return (
-    <Column label="Loading teams">
+    <Column label="teams">
       <SettingsCard className="gap-0 pt-[18px] pb-2">
         <div className="flex items-baseline gap-2.5 pb-1.5">
           <CardTitle>Your teams</CardTitle>
@@ -767,7 +773,7 @@ export function SettingsTeamDetailPending() {
   const conferenceIsSelect = isOwner && program?.orgType === "college";
 
   return (
-    <Column label="Loading team">
+    <Column label="team">
       {/* Program hours */}
       <SettingsCard className="gap-3.5">
         <div className="flex items-baseline gap-2.5">

@@ -19,9 +19,13 @@ import Link from "next/link";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { StepIndicator } from "./StepIndicator";
+import { CONTENT_CLS } from "./styles";
 
-/** The design's column: 720px of content inside 56px gutters. */
-export const CONTENT_CLS = "mx-auto w-full max-w-[832px] px-14";
+// Re-exported for the callers that already import it from here. It lives in
+// `styles.ts` because this file is `"use client"`, and a Server Component (a
+// route's `loading.tsx` skeleton) that imports a plain string from a client
+// module receives a client reference, not the string.
+export { CONTENT_CLS };
 
 /** Back and Cancel: two quiet ink words, drawn identically. */
 const FOOTER_LINK_CLS =

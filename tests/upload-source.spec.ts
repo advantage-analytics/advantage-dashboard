@@ -497,16 +497,13 @@ test("every default source is resolved by kind, so the order cannot change one",
     "utf8",
   );
 
-  // The two defaults are found by kind — never by index, never by name.
+  // The one default is found by kind — never by index, never by name.
   expect(hook).toMatch(
     /DEFAULT_PROVIDER_ID[^=]*=\s*providers\.find\(\s*\(p\) =>\s*p\.available !== false && providerKindOrNull\(p\.id\) === "processing",/,
   );
-  expect(hook).toMatch(
-    /DEFAULT_IMPORT_PROVIDER_ID[^=]*=\s*providers\.find\(\s*\(p\) =>\s*p\.available !== false && providerKindOrNull\(p\.id\) === "import",/,
-  );
   expect(hook).not.toMatch(/providers\[\d+\]/);
 
-  // What those two expressions resolve to, on the list as it is ordered now.
+  // What that expression resolves to, on the list as it is ordered now.
   const byKind = (kind: string) =>
     providers.find(
       (p) => p.available !== false && providerKindOrNull(p.id) === kind,
@@ -514,12 +511,13 @@ test("every default source is resolved by kind, so the order cannot change one",
   expect(byKind("processing")).toBe("splitstep");
   expect(byKind("import")).toBe("swing-vision");
 
-  // An import-only preset is handed the IMPORT provider — whose step order
-  // skips the video step, so the wizard never offers video for a line that
-  // `job-request.ts` would refuse after the upload.
-  expect(hook).toContain(
-    "preset.supportsVideo\n        ? DEFAULT_PROVIDER_ID\n        : DEFAULT_IMPORT_PROVIDER_ID",
-  );
+  // There is no second, import default for a preset any more. Doubles is
+  // score-only (2026-09-22): a doubles line is refused by
+  // `wizardUploadEligibility()` and never routed onto the import provider,
+  // and every preset opens on the one default source.
+  expect(hook).not.toContain("DEFAULT_IMPORT_PROVIDER_ID");
+  expect(hook).not.toMatch(/preset\.supportsVideo/);
+  expect(hook).toContain("setSelectedProvider(DEFAULT_PROVIDER_ID);");
   const order = readFileSync(resolve(`${WIZARD}/types.ts`), "utf8");
   const importOrder = /import:\s*\[([^\]]*)\]/.exec(order)?.[1] ?? "";
   expect(importOrder).not.toContain("video");

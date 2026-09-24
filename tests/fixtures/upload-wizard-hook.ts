@@ -8,6 +8,7 @@ import * as scoreState from "@/components/dashboard/matches/new-match-wizard/sco
 import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import * as scoreFormat from "@/lib/ui/score-format";
 import * as quota from "@/lib/services/splitstep/quota";
+import * as draftTarget from "@/lib/wizard/draft-target";
 import { secondsLeft } from "@/lib/data/usage-format";
 import type {
   UseUploadMatchWizardProps,
@@ -136,6 +137,11 @@ export function uploadWizardHarness(
   const checks = new Map<string, ReturnType<typeof deferred<any>>>();
   const apiChecks = new Map<string, ReturnType<typeof deferred<any>>>();
   const writes: unknown[] = [];
+  /**
+   * Every call on the shared query chain, in order — `from` included — so a
+   * spec can tell an `update(…).eq("id", M)` from an `insert(…)`.
+   */
+  const queryCalls: { method: string; args: unknown[] }[] = [];
   const stored = new Map<string, string>();
   const storage = {
     getItem: (key: string) => stored.get(key) ?? null,
@@ -199,9 +205,13 @@ export function uploadWizardHarness(
         if (key === "insert" || key === "update")
           return (row: unknown) => {
             writes.push(row);
+            queryCalls.push({ method: key, args: [row] });
             return query;
           };
-        return () => query;
+        return (...args: unknown[]) => {
+          queryCalls.push({ method: String(key), args });
+          return query;
+        };
       },
     },
   );
@@ -253,12 +263,12 @@ export function uploadWizardHarness(
   );
   const supabase = {
     auth: { getUser: async () => ({ data: { user: { id: "user" } } }) },
-    from: (table: string) =>
-      table === "program_players"
-        ? ownProfileQuery
-        : table === "programs"
-          ? programStatusQuery
-          : query,
+    from: (table: string) => {
+      if (table === "program_players") return ownProfileQuery;
+      if (table === "programs") return programStatusQuery;
+      queryCalls.push({ method: "from", args: [table] });
+      return query;
+    },
     // By name, so an RPC this harness has never heard of fails loudly
     // instead of being answered with — and counted as — a roster.
     rpc: async (fn: string) => {
@@ -331,6 +341,8 @@ export function uploadWizardHarness(
         draftDeletes.push(id);
       },
     },
+    // Pure: the rule a draft's match is reused by (T20).
+    "@/lib/wizard/draft-target": draftTarget,
     "./types": types,
     "./validation": validation,
     "./score-state": scoreState,
@@ -448,6 +460,7 @@ export function uploadWizardHarness(
     workspace,
     props,
     writes,
+    queryCalls,
     winnerCalls,
     draftSaves,
     draftDeletes,

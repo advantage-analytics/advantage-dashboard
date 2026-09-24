@@ -7,12 +7,13 @@ const DUAL_SINGLES = SINGLES_SLOTS.length;
 const DUAL_DOUBLES = DOUBLES_SLOTS.length;
 
 /**
- * `sm` is the Form Ticks size the drawer draws. `lg` is the same strip at twice
- * the size, for the event page's score band, where it sits beside a 40px score.
+ * `sm` is the Form Ticks size the Schedule drawer draws. `md` is the dual
+ * page's summary strip (`Main.dc.html`'s Lines cell: 4×16px, 3px apart, a 5px
+ * break).
  */
 const SIZES = {
   sm: { tick: "h-3 w-[2.5px] rounded-[1px]", gap: "gap-[3px]", split: "w-1.5" },
-  lg: { tick: "h-6 w-[5px] rounded-[2px]", gap: "gap-[5px]", split: "w-3" },
+  md: { tick: "h-4 w-1 rounded-[1px]", gap: "gap-[3px]", split: "w-[5px]" },
 } as const;
 
 /**

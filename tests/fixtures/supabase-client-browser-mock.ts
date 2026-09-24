@@ -20,6 +20,8 @@
  *   - `refused` — the insert resolves a different error code (an RLS
  *     refusal). Not landed — the component must revert.
  *
+ * `select` answers the peek drawers' snapshot read with no row.
+ *
  * There is deliberately no `rpc` — the `set_point_saved` RPC is dropped, and
  * a regression to `supabase.rpc` must throw here.
  */
@@ -53,9 +55,17 @@ export function createClient() {
     select: () => deleteResult,
     then: deleteResult.then.bind(deleteResult),
   };
+  // `useMatchSnapshot`'s read — `.select().eq().eq().maybeSingle()` — finds
+  // no stats row, so a drawer's snapshot settles to nothing.
+  const readResult = Promise.resolve({ data: null, error: null });
+  const readChain = {
+    eq: () => readChain,
+    maybeSingle: () => readResult,
+  };
   const chain = {
     insert: () => insertChain,
     delete: () => deleteChain,
+    select: () => readChain,
   };
   return { from: () => chain } as never;
 }

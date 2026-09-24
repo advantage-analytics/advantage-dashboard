@@ -343,10 +343,9 @@ export function StatisticsPanePending() {
 function TilePending() {
   return (
     <div className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div
-        className="w-full bg-[var(--surface-skeleton)] motion-safe:animate-pulse"
-        style={{ aspectRatio: "334 / 216" }}
-      />
+      <div className="w-full" style={{ aspectRatio: "334 / 216" }}>
+        <PendingBar className="h-full w-full rounded-none" />
+      </div>
       <div className="flex flex-col gap-2 px-4 pt-[14px] pb-[15px]">
         <div className="flex h-5 items-center">
           <PendingBar className="h-3.5 w-40" />
@@ -392,10 +391,9 @@ export function VisualizationsPanePending({
                 <div className="flex-1" />
                 <PendingBar className="size-7 rounded-[8px]" />
               </div>
-              <div
-                className="mx-4 bg-[var(--surface-skeleton)] motion-safe:animate-pulse"
-                style={{ aspectRatio: "334 / 216" }}
-              />
+              <div className="mx-4" style={{ aspectRatio: "334 / 216" }}>
+                <PendingBar className="h-full w-full rounded-none" />
+              </div>
               <div className="flex h-[46px] items-center gap-3 px-4">
                 <PendingBar className="h-2.5 w-16" />
                 <PendingBar className="h-2.5 w-16" />

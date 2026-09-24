@@ -74,6 +74,7 @@ test("only team owners and coaches submit active-program deletion", async () => 
       expect(action.refreshed).toEqual([
         "/dashboard/team/schedule",
         "/dashboard/team/schedule/event",
+        "/dashboard/matches",
       ]);
     } else {
       expect(result).toHaveProperty("error");
@@ -83,10 +84,9 @@ test("only team owners and coaches submit active-program deletion", async () => 
   }
 });
 
-test("foreign-event, dependency, and audit failures return without revalidation", async () => {
+test("foreign-event and audit failures return without revalidation", async () => {
   for (const message of [
     "That event is unavailable in your active program.",
-    "This event has recorded matches or outcomes and cannot be deleted.",
     "Audit unavailable",
   ]) {
     const action = deletion("coach", message);

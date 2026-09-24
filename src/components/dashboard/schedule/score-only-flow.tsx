@@ -71,9 +71,15 @@ import type {
   MatchEnding,
   OutcomeSide,
 } from "@/lib/schedule/types";
+import {
+  SCORE_FLOW_CONTENT_CLS,
+  SCORE_FLOW_TITLE,
+} from "@/components/dashboard/schedule/score-flow-copy";
+
+export { SCORE_FLOW_TITLE };
 
 /** The wizard's own content column, copied so the two pages measure the same. */
-const CONTENT_CLS = "mx-auto w-full max-w-[832px] px-14";
+const CONTENT_CLS = SCORE_FLOW_CONTENT_CLS;
 
 function replaceAt(
   list: (number | null)[],
@@ -216,7 +222,7 @@ export function ScoreOnlyFlow({
             className="max-w-[560px] text-[30px] leading-[1.15] font-light tracking-[-0.3px] text-[var(--ink-900)]"
             style={{ textWrap: "pretty" }}
           >
-            The result.
+            {SCORE_FLOW_TITLE}
           </h1>
           <p
             className="max-w-[480px] text-[13px] leading-[1.55] text-[var(--ink-600)]"
@@ -623,10 +629,10 @@ function ScoreForm({
             </div>
 
             {/* For the coach holding the file already: the wizard takes the
-                score at its last step, so the two go in together. A singles
-                line opens an Advantage Intelligence video; a doubles line,
-                which the pipeline refuses, the SwingVision export. Gone once a
-                digit is typed — those digits would not come along. */}
+                score at its last step, so the two go in together. Singles
+                only: a doubles line is score-only, so uploadInsteadHref gives
+                it no link. Gone once a digit is typed — those digits would not
+                come along. */}
             {uploadHref ? (
               <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border-hairline)] pt-5">
                 <Upload
@@ -635,9 +641,7 @@ function ScoreForm({
                   aria-hidden="true"
                 />
                 <span className="text-[12px] text-[var(--ink-600)]">
-                  {preset.supportsVideo
-                    ? "Have the match video?"
-                    : "Have the SwingVision file?"}
+                  Have the match video?
                 </span>
                 <Link
                   href={uploadHref}

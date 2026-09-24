@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { PendingBar, PendingRegion } from "./pending";
 
 /**
  * The film player's 16:9 frame, pending: pulsing in the skeleton token rather
@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils";
  * element stays mounted underneath, which is what the refresh harness and
  * the fullscreen room watch.
  *
- * Its own file, with no import beyond `cn`: `film-player.tsx` draws it, and
- * the film harness bundles that player for the browser — the rest of
+ * Its own file, with no import beyond the primitives: `film-player.tsx` draws
+ * it, and the film harness bundles that player for the browser — the rest of
  * `match-report-pending.tsx` reaches the report frame and, through its
  * context, `next/navigation`, which that bundle cannot resolve.
  */
@@ -22,22 +22,20 @@ export function FilmFramePending({
   caption?: string;
 }) {
   return (
-    <div
-      role="status"
-      aria-label="Loading video"
-      className={cn(
-        "flex items-end overflow-hidden rounded-[14px] bg-[var(--surface-skeleton)] motion-safe:animate-pulse",
-        overlay ? "absolute inset-0" : "aspect-video w-full",
-      )}
+    <PendingRegion
+      label="video"
+      className={overlay ? "absolute inset-0" : "aspect-video w-full"}
+      innerClassName="relative flex h-full items-end overflow-hidden rounded-[14px]"
     >
+      <PendingBar className="absolute inset-0 h-full w-full rounded-[14px]" />
       {caption ? (
         <span
-          className="text-micro px-4 pb-3"
+          className="text-micro relative px-4 pb-3"
           style={{ color: "var(--ink-500)" }}
         >
           {caption}
         </span>
       ) : null}
-    </div>
+    </PendingRegion>
   );
 }
