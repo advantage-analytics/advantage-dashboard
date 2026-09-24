@@ -32,7 +32,11 @@ import {
 } from "@/lib/workspace/types";
 import {
   currentBillingMonth,
+  getIndividualPoolCapSeconds,
   getMonthlyCapSeconds,
+  INDIVIDUAL_POOL_PLAYER_LIMIT,
+  INDIVIDUAL_POOL_PLAYERS_SINCE,
+  PROVIDER_DISPLAY_NAME,
   type AccountType,
 } from "./config";
 
@@ -189,6 +193,22 @@ export async function reserveQuota(params: {
   // the program ledger but draws the individual figure. See quotaTierFor().
   const capSeconds = monthlyCapSecondsFor(workspace);
 
+  // The individual figure is also a SHARED one: every workspace on it draws
+  // from one monthly pool with a player limit (see config.ts). Collegiate
+  // programs keep the plain per-account function below.
+  if (quotaTierFor(workspace) === "individual") {
+    return reservePooled({
+      supabase,
+      jobId,
+      userId,
+      workspace,
+      accountType,
+      capSeconds,
+      seconds,
+      now,
+    });
+  }
+
   const { data, error } = await supabase
     .rpc("reserve_processing_quota", {
       p_job_id: jobId,
@@ -237,6 +257,110 @@ export async function reserveQuota(params: {
   };
 }
 
+/** Which limit a pooled reservation or peek was stopped by. */
+export type QuotaLimit = "account" | "pool_hours" | "pool_players";
+
+async function reservePooled(params: {
+  supabase: SupabaseClient;
+  jobId: string;
+  userId: string;
+  workspace: Workspace;
+  accountType: AccountType;
+  capSeconds: number;
+  seconds: number;
+  now?: Date;
+}): Promise<QuotaReservation> {
+  const { supabase, jobId, userId, workspace, accountType, capSeconds } =
+    params;
+
+  // Atomic, like reserve_processing_quota: the pool is a sum across accounts,
+  // so a read-then-insert here would let two players race past it.
+  const { data, error } = await supabase
+    .rpc("reserve_individual_pool_quota", {
+      p_job_id: jobId,
+      p_account_id: workspace.id,
+      p_account_type: accountType,
+      p_created_by: userId,
+      p_billing_month: currentBillingMonth(params.now),
+      p_seconds: Math.ceil(params.seconds),
+      p_cap_seconds: capSeconds,
+      p_pool_cap_seconds: getIndividualPoolCapSeconds(),
+      p_pool_player_limit: INDIVIDUAL_POOL_PLAYER_LIMIT,
+      p_players_since: INDIVIDUAL_POOL_PLAYERS_SINCE,
+    })
+    .single();
+
+  if (error || !data) {
+    throw new Error(
+      `Could not reserve processing quota: ${error?.message ?? "no row returned"}`,
+    );
+  }
+
+  const row = data as {
+    ok: boolean;
+    refusal: QuotaLimit | null;
+    used_seconds: number;
+    cap_seconds: number;
+    pool_used_seconds: number;
+    pool_cap_seconds: number;
+  };
+
+  if (row.ok) {
+    return {
+      ok: true,
+      usedSeconds: row.used_seconds,
+      capSeconds: row.cap_seconds,
+    };
+  }
+
+  const limit: QuotaLimit = row.refusal ?? "account";
+  const pooled = limit !== "account";
+  const usedSeconds = pooled ? row.pool_used_seconds : row.used_seconds;
+  const refusedCap = pooled ? row.pool_cap_seconds : row.cap_seconds;
+
+  return {
+    ok: false,
+    usedSeconds,
+    capSeconds: refusedCap,
+    message: quotaRefusalMessage({
+      limit,
+      neededSeconds: params.seconds,
+      remainingSeconds: secondsLeft(usedSeconds, refusedCap),
+      capSeconds: refusedCap,
+    }),
+  };
+}
+
+/**
+ * The refusal for whichever limit said no. `account` is `capRefusalMessage()`
+ * unchanged; the pool ones say it is a shared limit, because the person's own
+ * meter can still read hours left when the pool has none.
+ */
+export function quotaRefusalMessage(params: {
+  limit: QuotaLimit;
+  neededSeconds: number;
+  remainingSeconds: number;
+  capSeconds: number;
+}): string {
+  const { limit, neededSeconds, remainingSeconds } = params;
+  if (limit === "pool_players") {
+    return (
+      `${PROVIDER_DISPLAY_NAME} video analysis is limited to ` +
+      `${INDIVIDUAL_POOL_PLAYER_LIMIT} individual players during the pilot, ` +
+      `and every place is taken. You can still import SwingVision matches.`
+    );
+  }
+  if (limit === "pool_hours") {
+    return (
+      `This match needs ${formatMinutes(neededSeconds)} of analysis but only ` +
+      `${formatMinutes(remainingSeconds)} is left in this month's shared ` +
+      `allowance for individual players. It resets at the start of next ` +
+      `month; a shorter trim will fit sooner.`
+    );
+  }
+  return capRefusalMessage(params);
+}
+
 /**
  * The allowance refusal, in one place. `reserveQuota()` says it at the spend;
  * `/api/splitstep/upload-url` says it before a credential exists, from
@@ -279,6 +403,27 @@ export interface QuotaPeek {
   usedSeconds: number;
   capSeconds: number;
   remainingSeconds: number;
+  /**
+   * Which limit `remainingSeconds` comes from. For a workspace on the
+   * individual figure it is the tighter of its own cap and the shared pool
+   * (and 0 when the player limit is full); the three figures above belong to
+   * that limit.
+   */
+  limit: QuotaLimit;
+}
+
+/**
+ * The refusal an upload that needs `neededSeconds` gets from a peek, or null
+ * when it fits. The same words `reserveQuota()` would say.
+ */
+export function peekRefusalMessage(
+  peek: QuotaPeek,
+  neededSeconds: number,
+): string | null {
+  if (peek.limit !== "pool_players" && neededSeconds <= peek.remainingSeconds) {
+    return null;
+  }
+  return quotaRefusalMessage({ ...peek, neededSeconds });
 }
 
 /**
@@ -303,6 +448,8 @@ export interface QuotaPeek {
 export async function peekQuota(
   supabase: SupabaseClient,
   workspace: Workspace,
+  /** Who is uploading — the player limit is per person. */
+  userId: string,
 ): Promise<QuotaPeek> {
   const capSeconds = monthlyCapSecondsFor(workspace);
 
@@ -319,12 +466,59 @@ export async function peekQuota(
   }
 
   const usedSeconds = sumUsedSeconds((data ?? []) as UsageRow[]);
-
-  return {
+  const own: QuotaPeek = {
     usedSeconds,
     capSeconds,
     remainingSeconds: secondsLeft(usedSeconds, capSeconds),
+    limit: "account",
   };
+
+  if (quotaTierFor(workspace) !== "individual") return own;
+
+  const { data: pool, error: poolError } = await supabase
+    .rpc("individual_pool_usage", {
+      p_billing_month: currentBillingMonth(),
+      p_players_since: INDIVIDUAL_POOL_PLAYERS_SINCE,
+      p_created_by: userId,
+    })
+    .single();
+
+  if (poolError || !pool) {
+    throw new Error(
+      `Could not read individual pool usage: ${poolError?.message ?? "no row returned"}`,
+    );
+  }
+
+  return pickPeek(own, pool as PoolUsageRow);
+}
+
+/** One row of `individual_pool_usage()`. */
+export interface PoolUsageRow {
+  pool_used_seconds: number;
+  player_count: number;
+  is_player: boolean;
+}
+
+/**
+ * The tighter of a workspace's own figure and the shared pool, in the order
+ * `reserve_individual_pool_quota` refuses: player limit, own cap, pool hours.
+ * Pure, so the ordering is testable without a database.
+ */
+export function pickPeek(own: QuotaPeek, pool: PoolUsageRow): QuotaPeek {
+  const poolCap = getIndividualPoolCapSeconds();
+  const poolFigures = {
+    usedSeconds: pool.pool_used_seconds,
+    capSeconds: poolCap,
+    remainingSeconds: secondsLeft(pool.pool_used_seconds, poolCap),
+  };
+
+  if (!pool.is_player && pool.player_count >= INDIVIDUAL_POOL_PLAYER_LIMIT) {
+    return { ...poolFigures, remainingSeconds: 0, limit: "pool_players" };
+  }
+  if (poolFigures.remainingSeconds < own.remainingSeconds) {
+    return { ...poolFigures, limit: "pool_hours" };
+  }
+  return own;
 }
 
 /** Hand back a reservation. Safe to call twice. */

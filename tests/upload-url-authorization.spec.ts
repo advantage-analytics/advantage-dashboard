@@ -147,6 +147,7 @@ function harness(input: {
         remainingSeconds,
         usedSeconds: CAP_SECONDS - remainingSeconds,
         capSeconds: CAP_SECONDS,
+        limit: "account" as const,
       };
     },
     mintUploadSas: ({ blobName }) => {
