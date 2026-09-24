@@ -103,3 +103,16 @@ is the runner's. Newest entries at the bottom.
 2. A credential refresh mid-playback counts as a new source → ~one extra POST per refresh; key on attachment id instead if it matters.
 3. "11 months" copy can read 10 months in a leap-year edge — decide before T9's copy.
 4. `remove.ts` (T5) still missing from `tests/client-bundle-boundary.spec.ts`'s server-only list.
+
+## T7 · Add the "Match videos" card to Settings › Usage & quota — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** New `match-videos-usage-card.tsx` (third card on Settings › Usage & quota, follows the active workspace): personal "Your match videos" / team `WorkspaceMark` + "<team> · <squad> · match videos", meter "<used> / <cap>"; one `aria-expanded` row per uploader sorted by count ("Name · N videos · X.X GB", `YouPill` on the viewer's row); expanded matches "Surname vs Surname · date · Watched …" or "Added …"; grey `StatePill` "N expires <date>" from `matchVideoExpiry`; Remove (own rows; all rows for team owner/coach) → confirm dialog → T5 DELETE → row leaves local state and the meter drops. Honest empty line ("No match videos yet…"), skeleton in `settings-pending.tsx`. Page subtitle updated in `nav.ts`. New service-role `getMatchVideoUploaderNames(ids)` in `match-video-usage-server.ts` (only ids the membership-checked usage function returned). Spec: Remove count player 1 / staff 1 / coach 6 / owner 6, footnote exact.
+
+**follow-ups:**
+
+1. Eyes-on in a browser (populated, empty, loading) via the preview harness.
+2. No spec clicks Remove and asserts the row leaves the DOM — needs a DOM-based test.
+3. `getMatchVideoUsage` can't tell a failed read from zero videos — an error flag would let the card show an error line.
+4. `ProgramUsageCard` doesn't mark the viewer's row with `YouPill`, as the settings rules ask.

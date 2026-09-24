@@ -119,3 +119,46 @@ export async function getMatchVideoUsage(
 
   return { used: rows.length, cap, rows };
 }
+
+/**
+ * Display names for the uploaders `getMatchVideoUsage` returned — what
+ * Settings › Usage's match-videos card labels each person's row with.
+ *
+ * `match_video_workspace_usage` returns ids, not names, so this is a second
+ * batched read. Service role because `users` RLS does not let a coach read a
+ * teammate's row; that is safe only because the ids come from the usage
+ * function, which has already checked the caller belongs to the workspace —
+ * never pass ids from anywhere else. A person with no name on file, or a
+ * failed read, is simply absent from the map; the card has its own fallback.
+ */
+export async function getMatchVideoUploaderNames(
+  userIds: readonly string[],
+): Promise<Record<string, string>> {
+  const ids = [...new Set(userIds)];
+  if (ids.length === 0) return {};
+
+  const { data, error } = await createAdminClient()
+    .from("users")
+    .select("id, first_name, last_name")
+    .in("id", ids);
+  if (error) {
+    console.error("[match-video-usage] could not read uploader names", {
+      message: error.message,
+    });
+    return {};
+  }
+
+  const names: Record<string, string> = {};
+  for (const row of (data ?? []) as {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+  }[]) {
+    const name = [row.first_name, row.last_name]
+      .map((part) => part?.trim() ?? "")
+      .filter(Boolean)
+      .join(" ");
+    if (name) names[row.id] = name;
+  }
+  return names;
+}

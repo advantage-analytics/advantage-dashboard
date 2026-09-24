@@ -135,7 +135,7 @@ ready).
 
 ## T7 · Add the "Match videos" card to Settings › Usage & quota
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T5, T8
 - **files:** (guess) `src/lib/dashboard/nav.ts`, `src/app/dashboard/settings/usage/page.tsx`, `src/components/dashboard/settings/match-videos-usage-card.tsx` (new), `src/components/dashboard/settings/usage-actions.ts`, `src/components/ui/state-pill.tsx` (reused), `tests/settings-match-videos-card.spec.ts` (new, `createLoader()`)
