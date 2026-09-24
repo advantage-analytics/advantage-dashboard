@@ -1,5 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import type { DistanceUnit } from "@/lib/format/distance";
+import {
+  parseReportView,
+  type ReportView,
+} from "@/components/dashboard/matches/match-detail/report-view";
 
 /**
  * Notification and default-view settings.
@@ -9,12 +13,12 @@ import type { DistanceUnit } from "@/lib/format/distance";
  * defaults" are the same state. That is deliberate: it means the notifier can
  * read a missing row as "email me when analysis is ready" without a backfill.
  * DEFAULTS below has to stay in step with the column defaults in
- * 20260818040318_user_preferences.sql, 20260913230000_notification_prefs_team.sql
- * and 20260921120000_user_preferences_unit.sql.
+ * 20260818040318_user_preferences.sql, 20260913230000_notification_prefs_team.sql,
+ * 20260921120000_user_preferences_unit.sql and
+ * 20260924120000_report_opens_at_views.sql.
  */
 
 export type DefaultWorkspace = "last_used" | "personal" | "team";
-export type ReportEntryPoint = "story" | "stats" | "video";
 
 export interface Preferences {
   notifyAnalysisReady: boolean;
@@ -25,7 +29,8 @@ export interface Preferences {
   /** Owner/coach: the program's allowance at 80% and when spent. */
   notifyUsageAlerts: boolean;
   defaultWorkspace: DefaultWorkspace;
-  matchReportOpensAt: ReportEntryPoint;
+  /** The match report's own views (`REPORT_VIEWS`), stored as their `?tab=` values. */
+  matchReportOpensAt: ReportView;
   statDefinitionsOnHover: boolean;
   /** Court distances, ball speed and contact depth across every chart. */
   unit: DistanceUnit;
@@ -42,7 +47,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   notifyTeamActivity: true,
   notifyUsageAlerts: true,
   defaultWorkspace: "last_used",
-  matchReportOpensAt: "story",
+  matchReportOpensAt: "statistics",
   statDefinitionsOnHover: true,
   unit: "ft",
 };
@@ -77,7 +82,7 @@ export async function getPreferences(): Promise<Preferences> {
     notifyTeamActivity: data.notify_team_activity,
     notifyUsageAlerts: data.notify_usage_alerts,
     defaultWorkspace: data.default_workspace as DefaultWorkspace,
-    matchReportOpensAt: data.match_report_opens_at as ReportEntryPoint,
+    matchReportOpensAt: parseReportView(data.match_report_opens_at),
     statDefinitionsOnHover: data.stat_definitions_on_hover,
     unit: data.unit as DistanceUnit,
   };

@@ -607,7 +607,7 @@ export function SettingsPreferencesPending() {
         />
         <CardRow
           label="Match report opens at"
-          control={<PillSelect>The story</PillSelect>}
+          control={<PillSelect>Statistics</PillSelect>}
         />
         <CardRow
           label="Stat definitions on hover"
