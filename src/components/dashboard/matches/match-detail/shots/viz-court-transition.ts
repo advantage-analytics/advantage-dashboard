@@ -1,7 +1,7 @@
 /**
- * The Visualizations tab's ONE animation: the clicked court (a wall tile, or
+ * The Visualizations tab's ONE animation: the complete clicked card (a wall tile, or
  * a tile in the focused view's own "Views" grid) growing into the focused
- * view's big court, and the reverse on "Back to wall". Nothing else in the
+ * view's complete court card, and the reverse on "Back to wall". Nothing else in the
  * tab animates.
  *
  * ── Mechanism decision ──────────────────────────────────────────────────

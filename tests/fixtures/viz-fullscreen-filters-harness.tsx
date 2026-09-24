@@ -1,3 +1,4 @@
+import { useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import { MatchReportProvider } from "@/components/dashboard/matches/match-detail/match-report-context";
@@ -6,6 +7,7 @@ import {
   useVizState,
 } from "@/components/dashboard/matches/match-detail/shots/viz-state-context";
 import { VizFullscreen } from "@/components/dashboard/matches/match-detail/shots/viz-fullscreen";
+import { VizFocused } from "@/components/dashboard/matches/match-detail/shots/viz-focused";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { Match } from "@/lib/data/types";
 import { ASYMMETRIC_SERVES } from "./viz-serve-points";
@@ -25,18 +27,41 @@ const match = {
   },
 } as Match;
 
+function SlowFirstRender() {
+  useLayoutEffect(() => {
+    const until = performance.now() + 500;
+    while (performance.now() < until) {
+      /* Simulate a costly court mount. */
+    }
+  }, []);
+  return null;
+}
+
 function Harness() {
   const { state, setState } = useVizState();
   return (
     <>
-      <button
-        type="button"
-        data-viz-fullscreen-door=""
-        onClick={() => setState((prev) => ({ ...prev, fullscreen: true }))}
+      <div
+        inert={state.fullscreen || undefined}
+        className="mx-auto max-w-[920px] p-4"
       >
-        Open fullscreen
-      </button>
+        <button
+          type="button"
+          data-viz-fullscreen-door=""
+          onClick={() => setState((prev) => ({ ...prev, fullscreen: true }))}
+        >
+          Open fullscreen
+        </button>
+        <VizFocused
+          savedViews={[]}
+          workspaceKind="personal"
+          workspaceName="Personal"
+        />
+      </div>
       {state.fullscreen && <VizFullscreen />}
+      {state.fullscreen && window.location.search.includes("slowMount=1") && (
+        <SlowFirstRender />
+      )}
     </>
   );
 }

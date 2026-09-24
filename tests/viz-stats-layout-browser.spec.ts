@@ -409,3 +409,79 @@ test("a selected timed point offers Watch point only when video is available", a
     0,
   );
 });
+
+for (const width of [1100, 390]) {
+  test(`focused entrance carries the entire card at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.goto(`${origin}/?tab=shots`);
+    await page.evaluate(() => {
+      const start = document.startViewTransition.bind(document);
+      (window as any).captures = [];
+      document.startViewTransition = ((update: () => void) => {
+        const capture = () => {
+          const named = [...document.querySelectorAll<HTMLElement>("*")].filter(
+            (el) => el.style.viewTransitionName === "viz-court-shared",
+          );
+          return named.map((el) => ({
+            hasCourt: !!el.querySelector("svg"),
+            hasText: !!el.textContent?.trim(),
+            isArt:
+              el.hasAttribute("data-viz-court-art") ||
+              el.hasAttribute("data-viz-focused-art"),
+          }));
+        };
+        const before = capture();
+        const transition = start(() => {
+          update();
+          (window as any).captures.push({ before, after: capture() });
+        });
+        (window as any).lastTransition = transition;
+        transition.ready.then(() => {
+          for (const animation of document.getAnimations()) animation.pause();
+        });
+        return transition;
+      }) as typeof document.startViewTransition;
+    });
+    await page
+      .locator('a[href*="cut=serve"][href*="ball=first"]')
+      .first()
+      .click();
+    await expect(page.locator("[data-viz-focused-card]")).toBeVisible();
+    await page.evaluate(async () => {
+      await (window as any).lastTransition.ready;
+      for (const animation of document.getAnimations())
+        animation.currentTime = 150;
+    });
+    await page.screenshot({
+      path: test.info().outputPath(`focus-midpoint-${width}.png`),
+    });
+    expect(await page.evaluate(() => (window as any).captures)).toEqual([
+      {
+        before: [{ hasCourt: true, hasText: true, isArt: false }],
+        after: [{ hasCourt: true, hasText: true, isArt: false }],
+      },
+    ]);
+    await page.evaluate(async () => {
+      for (const animation of document.getAnimations()) animation.finish();
+      await (window as any).lastTransition.finished;
+    });
+    await expect(page.locator("#viz-focused-heading")).toBeFocused();
+    await page.getByRole("button", { name: "Back to wall" }).click();
+    await page.evaluate(async () => {
+      await (window as any).lastTransition.ready;
+      for (const animation of document.getAnimations()) animation.finish();
+      await (window as any).lastTransition.finished;
+    });
+    expect(await page.evaluate(() => (window as any).captures.length)).toBe(2);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page
+      .locator('a[href*="cut=serve"][href*="ball=first"]')
+      .first()
+      .click();
+    await expect(page.locator("#viz-focused-heading")).toBeFocused();
+    expect(await page.evaluate(() => (window as any).captures.length)).toBe(2);
+  });
+}

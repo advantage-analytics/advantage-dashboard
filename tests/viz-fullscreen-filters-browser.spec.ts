@@ -102,7 +102,10 @@ test("fullscreen selected points can open their timed video", async ({
 }) => {
   await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watch`);
   await page.getByRole("button", { name: "Open fullscreen" }).click();
-  await page.locator('[data-viz-mark="p1-high-0-0"]').hover();
+  await page
+    .getByRole("region", { name: "Serve placement fullscreen" })
+    .locator('[data-viz-mark="p1-high-0-0"]')
+    .hover();
   const watch = page.getByRole("button", { name: "Watch point" });
   await expect(watch).toBeVisible();
   await watch.click();
@@ -134,7 +137,10 @@ test("fullscreen chips scroll in one line, preserve controls and follow both sub
     (scoreboardBox?.y ?? 0) + (scoreboardBox?.height ?? 0),
   );
   expect((exitBox?.x ?? 0) + (exitBox?.width ?? 0)).toBeLessThanOrEqual(320);
-  const strip = page.getByRole("group", { name: "Applied filters" });
+  const fullscreen = page.getByRole("region", {
+    name: "Serve placement fullscreen",
+  });
+  const strip = fullscreen.getByRole("group", { name: "Applied filters" });
   const viewport = page.getByLabel("Applied filters, scroll horizontally");
   await expect(strip.locator("button").first()).toBeVisible();
   const chipLayout = await strip.evaluate((node) => ({
@@ -165,14 +171,14 @@ test("fullscreen chips scroll in one line, preserve controls and follow both sub
     "Fit the court",
     "Exit fullscreen",
   ]) {
-    const control = page.getByRole("button", { name });
+    const control = fullscreen.getByRole("button", { name });
     await control.focus();
     await expect(control).toBeInViewport();
   }
   await page.getByRole("button", { name: "Exit fullscreen" }).click();
   await page.getByRole("button", { name: "Open fullscreen" }).click();
   await expect(avatar).toHaveText("AK");
-  await page.locator('[aria-haspopup="dialog"]').click();
+  await fullscreen.locator('[aria-haspopup="dialog"]').click();
   await page.getByRole("button", { name: /Blake Rivera/ }).click();
   await expect(avatar).toHaveText("BR");
   const scoreRows = page.getByTestId("fullscreen-scoreboard");
@@ -184,3 +190,161 @@ test("fullscreen chips scroll in one line, preserve controls and follow both sub
   await expect(scoreRows.getByText("4", { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+for (const [reducedMotion, width] of [
+  ["no-preference", 1100],
+  ["no-preference", 390],
+  ["reduce", 390],
+] as const) {
+  test(`fullscreen reveals the whole viewer and returns focus (${reducedMotion}, ${width}px)`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion });
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto(`${origin}/?tab=shots&cut=serve`);
+    // Next's CSS optimizer converts these tokens to seconds; the raw
+    // PostCSS harness otherwise preserves ms and misses unit parsing bugs.
+    await page.addStyleTag({
+      content:
+        ":root { --duration-reveal: .4s; --duration-hover: .2s; --duration-fast: .15s; }",
+    });
+    await page.evaluate(() => {
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function (...args) {
+        const animation = animate.apply(this, args);
+        if (
+          this.getAttribute("role") === "region" &&
+          this.getAttribute("aria-label")?.endsWith("fullscreen")
+        ) {
+          animation.pause();
+          animation.play = () => {};
+        }
+        return animation;
+      };
+    });
+    await page.keyboard.press("f");
+    const viewer = page.getByRole("region", {
+      name: "Serve placement fullscreen",
+    });
+    await expect(viewer).toBeVisible();
+    const entrance = await viewer.evaluate((element) => {
+      const animation = element.getAnimations()[0];
+      const effect = animation.effect as KeyframeEffect;
+      animation.currentTime = Number(effect.getTiming().duration) / 2;
+      return {
+        frames: effect.getKeyframes(),
+        duration: effect.getTiming().duration,
+        progress: effect.getComputedTiming().progress,
+      };
+    });
+    expect(entrance.duration).toBe(reducedMotion === "reduce" ? 150 : 200);
+    expect(
+      entrance.frames.every((frame) => !frame.clipPath && !frame.transform),
+    ).toBe(true);
+    expect(entrance.frames[0].opacity).toBe("0");
+    expect(entrance.frames.at(-1)?.opacity).toBe("1");
+    await page.screenshot({
+      path: test
+        .info()
+        .outputPath(`fullscreen-midpoint-${reducedMotion}-${width}.png`),
+    });
+    await viewer.evaluate((element) =>
+      element.getAnimations().forEach((animation) => animation.finish()),
+    );
+    await expect(viewer).toBeFocused();
+    await page.keyboard.press("Escape");
+    // The portal remains until its exit finishes, including on repeated Escape.
+    await page.keyboard.press("Escape");
+    await expect(viewer).toBeVisible();
+    expect(
+      await viewer.evaluate(
+        (element) => element.getAnimations()[0].effect?.getTiming().duration,
+      ),
+    ).toBe(150);
+    await viewer.evaluate((element) =>
+      element.getAnimations().forEach((animation) => animation.finish()),
+    );
+    await expect(viewer).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Open fullscreen", exact: true }),
+    ).toBeFocused();
+    await expect(page).not.toHaveURL(/fullscreen=1/);
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+  });
+}
+
+test("Escape can interrupt the fullscreen entrance", async ({ page }) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  await page
+    .getByRole("button", { name: "Open fullscreen", exact: true })
+    .click();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("region", { name: "Serve placement fullscreen" }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Open fullscreen", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Serve placement fullscreen" }),
+  ).toBeVisible();
+});
+
+test("a slow court mount does not consume the fullscreen entrance before paint", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto(`${origin}/?tab=shots&cut=serve&slowMount=1`);
+  await page
+    .getByRole("button", { name: "Open fullscreen", exact: true })
+    .click();
+  const viewer = page.getByRole("region", {
+    name: "Serve placement fullscreen",
+  });
+  const progress = await viewer.evaluate((element) => {
+    const animation = element.getAnimations()[0];
+    return animation ? Number(animation.currentTime) : null;
+  });
+  expect(progress).not.toBeNull();
+  expect(progress!).toBeLessThan(200);
+  await expect
+    .poll(() => viewer.evaluate((element) => element.getAnimations().length))
+    .toBe(0);
+  await expect(viewer).toBeFocused();
+});
+
+for (const key of ["f", "F"]) {
+  test(`the ${key} shortcut plays a live fullscreen entrance`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.goto(`${origin}/?tab=shots&cut=serve`);
+    await page.locator("#viz-focused-heading").focus();
+    await page.keyboard.press(key);
+    const viewer = page.getByRole("region", {
+      name: "Serve placement fullscreen",
+    });
+    await expect(viewer).toBeVisible();
+    const motion = await viewer.evaluate((element) => {
+      const animation = element.getAnimations()[0];
+      if (!animation) return null;
+      return {
+        duration: animation.effect?.getTiming().duration,
+        time: Number(animation.currentTime),
+        clip: getComputedStyle(element).clipPath,
+      };
+    });
+    expect(motion).not.toBeNull();
+    expect(motion?.duration).toBe(200);
+    expect(motion!.time).toBeLessThan(200);
+    expect(motion?.clip).toBe("none");
+    await expect
+      .poll(() => viewer.evaluate((element) => element.getAnimations().length))
+      .toBe(0);
+    await expect(viewer).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(viewer).toHaveCount(0);
+    await page.keyboard.press(key);
+    await expect(viewer).toBeVisible();
+  });
+}

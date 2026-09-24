@@ -58,11 +58,11 @@ import {
  * `player` filter into the boolean `computeViz` needs, and nothing below this
  * reads player1/player2 off the match.
  *
- * F5: the big court's art box carries this view's `view-transition-name`
+ * The complete court card carries this view's `view-transition-name`
  * whenever it's the morph's destination (`morphTargetKey` matching this
  * view's own `viewIdentityKey`) — the wall/Views-grid tile that was clicked
  * grows into it. "Back to wall" runs the reverse through the same
- * `runCourtMorph`, using this court itself (`courtArtRef`) as the morph's
+ * `runCourtMorph`, using the complete card (`courtCardRef`) as the morph's
  * source. The eyebrow (`VIZ_FOCUSED_HEADING_ID`, `tabIndex={-1}`) is
  * `runCourtMorph`'s focus-landing target for every morph that arrives here.
  */
@@ -132,6 +132,7 @@ export function VizFocused({
   const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const courtArtRef = useRef<HTMLDivElement>(null);
+  const courtCardRef = useRef<HTMLDivElement>(null);
   const [hoveredMark, setHoveredMark] = useState<MarkAnchor | null>(null);
   const [focusedMark, setFocusedMark] = useState<MarkAnchor | null>(null);
   const [selectedMark, setSelectedMark] = useState<MarkAnchor | null>(null);
@@ -353,7 +354,7 @@ export function VizFocused({
     // `viewIdentityKey`, for the reason `VIZ_FOCUSED_COURT_MORPH_TARGET`'s
     // doc comment explains.
     runCourtMorph({
-      sourceEl: courtArtRef.current,
+      sourceEl: courtCardRef.current,
       next: {
         cut: null,
         chart: "scatter",
@@ -422,11 +423,16 @@ export function VizFocused({
 
       <div className="flex min-w-0 flex-col gap-4 @min-[720px]:flex-row @min-[720px]:items-stretch">
         <div
+          ref={courtCardRef}
+          data-viz-focused-card
           className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] border"
           style={{
             borderColor: "var(--border-hairline)",
             backgroundColor: "var(--surface-card)",
             boxShadow: "var(--shadow-card)",
+            viewTransitionName: isMorphTarget
+              ? VIZ_COURT_TRANSITION_NAME
+              : undefined,
           }}
         >
           <div className="flex items-center justify-between gap-3 px-[var(--pad-card)] pt-[14px] pb-3">
@@ -468,9 +474,6 @@ export function VizFocused({
             }}
             style={{
               backgroundColor: artBoxFill,
-              viewTransitionName: isMorphTarget
-                ? VIZ_COURT_TRANSITION_NAME
-                : undefined,
             }}
           >
             <CourtArt

@@ -72,6 +72,7 @@ import {
 import { availableSets } from "./viz-model";
 import { activeFilterEntries, clearedFilters } from "./viz-url";
 import { VIZ_FOCUSED_HEADING_ID } from "./viz-court-transition";
+import { useFullscreenReveal } from "./use-fullscreen-reveal";
 
 /**
  * The fullscreen court viewer (Phase 2A, Task 4; spec A5, f4b-report
@@ -127,6 +128,7 @@ export function VizFullscreen() {
   const sets = useMemo(() => availableSets(points), [points]);
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const closeWithReveal = useFullscreenReveal(rootRef);
   const stageRef = useRef<HTMLDivElement>(null);
   const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -357,9 +359,11 @@ export function VizFullscreen() {
   // Drops the key rather than setting `false` — `applyVizUpdate` and the URL
   // round-trip both treat "absent" as the only off state.
   function exit() {
-    setState((prev) => {
-      const { fullscreen: _fullscreen, ...rest } = prev;
-      return rest;
+    closeWithReveal(() => {
+      setState((prev) => {
+        const { fullscreen: _fullscreen, ...rest } = prev;
+        return rest;
+      });
     });
   }
 

@@ -690,17 +690,22 @@
    or console message - caught only by diffing the served chunk's bytes
    against the source file. Keep every comment in this block ASCII-only. */
 
-/* The shared court itself: 300ms, the design system's primary ease. */
+/* The complete card moves as one surface, including its header and footer. */
 ::view-transition-group(viz-court-shared),
 ::view-transition-old(viz-court-shared),
 ::view-transition-new(viz-court-shared) {
   animation-duration: 300ms;
-  animation-timing-function: var(--ease-primary);
+  animation-timing-function: var(--ease-out-expo);
+}
+
+/* Retire the tile copy early so it does not ghost over the focused legend. */
+::view-transition-old(viz-court-shared) {
+  animation-duration: var(--duration-fast);
 }
 
 /* The root includes the surrounding match report. Crossfading it produces
    two ghosted copies of the page while the court moves. Only the selected
-   court has spatial motion; the supporting blocks enter with opacity. */
+   card has spatial motion; the supporting blocks enter with opacity. */
 ::view-transition-group(root),
 ::view-transition-old(root),
 ::view-transition-new(root) {
@@ -731,15 +736,11 @@
   }
 }
 
-/* Only genuinely new blocks fade in. Existing blocks are present in both
-   snapshots and keep their place while the selected court changes. The
-   supporting fade follows the court without adding another motion vector. */
+/* Supporting blocks appear together, without a staggered assembly. */
 ::view-transition-new(viz-vt-toolbar):only-child,
-::view-transition-new(viz-vt-stats-card):only-child {
-  animation: 160ms var(--ease-primary) 120ms both viz-vt-appear;
-}
+::view-transition-new(viz-vt-stats-card):only-child,
 ::view-transition-new(viz-vt-views-grid):only-child {
-  animation: 140ms var(--ease-primary) 180ms both viz-vt-appear;
+  animation: var(--duration-hover) var(--ease-primary) both viz-vt-appear;
 }
 
 /* Keep the page interactive while a transition plays - the overlay

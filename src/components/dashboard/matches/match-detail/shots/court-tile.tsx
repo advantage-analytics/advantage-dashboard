@@ -43,7 +43,7 @@ import {
  * navigation (`e.preventDefault()`; Next's `<Link>` skips its own handling
  * once the passed `onClick` does this — see `node_modules/next/dist/
  * client/link.js`) and instead hands `runCourtMorph`
- * (`viz-state-context.tsx`) this tile's own art box as the transition's
+ * (`viz-state-context.tsx`) this tile's complete card as the transition's
  * source element. A modified click (⌘/ctrl/shift/alt/middle-button) is left
  * alone, so opening a tile in a new tab still works exactly like any other
  * link — the one reason these tiles are real `<Link>`s and not buttons.
@@ -215,9 +215,7 @@ export function CourtTile({
   function handleClick(e: MouseEvent<HTMLAnchorElement>): void {
     if (!navigateState || !isPlainLeftClick(e)) return;
     e.preventDefault();
-    const sourceEl = e.currentTarget.querySelector<HTMLElement>(
-      "[data-viz-court-art]",
-    );
+    const sourceEl = e.currentTarget;
     runCourtMorph({
       sourceEl,
       next: navigateState,
@@ -251,9 +249,6 @@ export function CourtTile({
         style={{
           aspectRatio: "334 / 216",
           backgroundColor: showHeat ? HEAT_APRON_FILL : APRON_FILL,
-          viewTransitionName: isMorphTarget
-            ? VIZ_COURT_TRANSITION_NAME
-            : undefined,
         }}
       >
         <CourtArt
@@ -353,7 +348,12 @@ export function CourtTile({
         id={domId}
         onClick={handleClick}
         className={CARD_CLASS}
-        style={ringStyle}
+        style={{
+          ...ringStyle,
+          viewTransitionName: isMorphTarget
+            ? VIZ_COURT_TRANSITION_NAME
+            : undefined,
+        }}
         aria-current={current ? "true" : undefined}
       >
         {body}
