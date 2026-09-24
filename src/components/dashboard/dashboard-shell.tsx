@@ -9,6 +9,7 @@ import { PageTransition } from "@/components/dashboard/page-transition";
 import { SidebarStateProvider } from "@/components/dashboard/sidebar/sidebar-state";
 import { UnsavedChangesProvider } from "@/components/dashboard/settings/unsaved-changes-context";
 import { LogoutProvider } from "@/components/dashboard/logout-dialog";
+import { LeaveGuardProvider } from "@/components/dashboard/leave-guard-context";
 import { HeaderStatusProvider } from "@/components/dashboard/header-status";
 import { HeaderSlotProvider } from "@/components/dashboard/header-slot";
 import { WorkspaceSync } from "@/components/dashboard/workspace-sync";
@@ -68,42 +69,47 @@ export function DashboardShell({
 
   return (
     <UnsavedChangesProvider>
-      {/* Inside UnsavedChangesProvider — the confirmation warns about unsaved
+      {/* Asks before the chrome's links leave an upload in progress. A
+          sibling of the unsaved-changes guard, not a use of it: the chrome
+          consults only this one. */}
+      <LeaveGuardProvider>
+        {/* Inside UnsavedChangesProvider — the confirmation warns about unsaved
           work, so it has to be able to read it. */}
-      <LogoutProvider>
-        <SidebarStateProvider>
-          {/* Wraps both, because the page sets the status and the header reads it. */}
-          <HeaderStatusProvider>
-            {/* Same reason, other end of the bar: the page publishes a leading
+        <LogoutProvider>
+          <SidebarStateProvider>
+            {/* Wraps both, because the page sets the status and the header reads it. */}
+            <HeaderStatusProvider>
+              {/* Same reason, other end of the bar: the page publishes a leading
               slot and the header reads it. */}
-            <HeaderSlotProvider>
-              {/* Keeps this chrome on the workspace the cookie names — see
+              <HeaderSlotProvider>
+                {/* Keeps this chrome on the workspace the cookie names — see
                   WorkspaceSync for why a navigation can leave it behind. */}
-              <WorkspaceSync />
-              <div className="flex h-screen w-full overflow-hidden bg-white">
-                <AppSidebar />
-                {/* The gutter is reserved even when nothing overflows: with
+                <WorkspaceSync />
+                <div className="flex h-screen w-full overflow-hidden bg-white">
+                  <AppSidebar />
+                  {/* The gutter is reserved even when nothing overflows: with
                     always-visible scrollbars, a page whose height changes (a
                     skeleton swapping for its rows) would otherwise gain and
                     lose 15px of width and slide every fluid table column. */}
-                <div className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth [scrollbar-gutter:stable] motion-reduce:scroll-auto">
-                  <Header activitySlot={activitySlot} greeting={greeting} />
-                  {/* Grows to fill whatever the header leaves, so a page shorter
+                  <div className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth [scrollbar-gutter:stable] motion-reduce:scroll-auto">
+                    <Header activitySlot={activitySlot} greeting={greeting} />
+                    {/* Grows to fill whatever the header leaves, so a page shorter
                     than the viewport can still push its own footer to the
                     bottom edge instead of leaving it hanging under the cards.
                     Content taller than the viewport is unaffected — `flex-1`
                     cannot shrink a flex item below its min-content height, so
                     tall pages keep scrolling in normal flow. */}
-                  <main className="flex flex-1 flex-col">
-                    <PageTransition>{children}</PageTransition>
-                  </main>
+                    <main className="flex flex-1 flex-col">
+                      <PageTransition>{children}</PageTransition>
+                    </main>
+                  </div>
                 </div>
-              </div>
-            </HeaderSlotProvider>
-          </HeaderStatusProvider>
-          <MobileGate />
-        </SidebarStateProvider>
-      </LogoutProvider>
+              </HeaderSlotProvider>
+            </HeaderStatusProvider>
+            <MobileGate />
+          </SidebarStateProvider>
+        </LogoutProvider>
+      </LeaveGuardProvider>
     </UnsavedChangesProvider>
   );
 }

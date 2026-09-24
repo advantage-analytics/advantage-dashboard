@@ -27,6 +27,7 @@ import type { CreatedMatch, UploadState } from "./upload-progress";
 import { formatFileSize } from "./utils";
 import { addVideoHref } from "@/lib/matches/add-video-href";
 import { createClient } from "@/lib/supabase/client";
+import { useLeaveGuard } from "@/components/dashboard/leave-guard-context";
 
 /**
  * Where finishing lands: what is happening now, the match it is happening to,
@@ -74,7 +75,12 @@ export function UploadMatchSuccess({
       : null,
   );
   const view = successView(match, upload, removedError, stats);
+  // The chrome's links ask before leaving while this tab is still working —
+  // starting, uploading, handing off. This screen's own links do not: each
+  // is a deliberate exit it offers.
+  useLeaveGuard(view.busy);
   const matchHref = `/dashboard/matches/${match.matchId}`;
+  const backToEvent = preset !== null && preset.eventHref !== matchHref;
 
   return (
     <div className="mx-auto w-full max-w-[488px] px-6 pt-[clamp(64px,18vh,176px)] pb-24">
@@ -137,10 +143,18 @@ export function UploadMatchSuccess({
             </>
           )}
           {/* A personal re-upload's preset "returns" to this same match. */}
-          {preset && preset.eventHref !== matchHref && (
+          {backToEvent ? (
             <Link href={exitHref} className={QUIET_LINK}>
               Back to the event
             </Link>
+          ) : (
+            // Only once this tab has nothing left to do: mid-transfer the one
+            // action is waiting, and the sidebar already reaches Matches.
+            !view.busy && (
+              <Link href={MATCHES_HREF} className={QUIET_LINK}>
+                Back to matches
+              </Link>
+            )
           )}
         </div>
       </div>
@@ -350,6 +364,8 @@ function successView(
 
 // ── Pieces ─────────────────────────────────────────────────────────────────
 
+const MATCHES_HREF = "/dashboard/matches";
+
 const QUIET_LINK =
   "inline-flex h-9 items-center gap-1.5 text-[13px] text-[var(--ink-700)] transition-colors duration-200 hover:text-[var(--ink-900)] focus-visible:outline-none";
 
@@ -464,9 +480,15 @@ function stepBody(
             </button>
           )}
         </div>
-        <p className={cn(NOTE, "mt-1 text-[var(--ink-700)]")}>
-          Keep this tab open until the upload finishes.
-        </p>
+        {/* The instruction first, in the darker ink; the reassurance under it,
+            quieter. Leaving in-app is safe — only closing the tab stops the
+            transfer, and `beforeunload` guards that. */}
+        <div className="mt-1 flex flex-col gap-0.5">
+          <p className={cn(NOTE, "text-[var(--ink-700)]")}>
+            Keep this tab open until the upload finishes.
+          </p>
+          <p className={NOTE}>You can keep using the dashboard.</p>
+        </div>
       </>
     );
   }

@@ -71,6 +71,8 @@ function offerFor(
   entry: EventEntry,
   match: EventEntry["matches"][number] | null,
   fallbackPlayerName: string,
+  /** Days from the file's date — known to `findLineOffers`, not the picker. */
+  daysFromFile?: number,
 ): LineOffer {
   return {
     entryId: entry.id,
@@ -89,6 +91,12 @@ function offerFor(
     surface: event.surface,
     bestOf: event.format.bestOf,
     adScoring: event.format.adScoring,
+    // Games only: the client compares them with the typed score, and tiebreak
+    // points and `winner` are not part of that comparison.
+    score: match?.score
+      ? { player1: [...match.score.player1], player2: [...match.score.player2] }
+      : null,
+    ...(daysFromFile === undefined ? {} : { daysFromFile }),
   };
 }
 
@@ -123,6 +131,12 @@ async function withProgramKeys<T extends LineOffer>(
  * for the named player within two days of the file's date, in the active
  * program. Empty for a personal workspace, for a player, and when nothing is
  * close enough — an offer that has to be declined is worse than none.
+ *
+ * This is the candidate list, not what the strip shows: the client filters it
+ * further (`rankLineOffers`), keeping only lines whose opponent name or score
+ * also matches what was typed. That filter runs in memory on every keystroke,
+ * so this query takes no opponent or score and is re-asked only when the date
+ * or the player changes.
  */
 export async function findLineOffers(input: {
   date: string;
@@ -136,7 +150,7 @@ export async function findLineOffers(input: {
 
   const schedule = await getProgramSchedule(workspace.active.id);
   const wanted = normalizedPersonName(input.playerName);
-  const offers: (LineOffer & { distance: number })[] = [];
+  const offers: LineOffer[] = [];
 
   for (const event of schedule.events) {
     const distance = Math.min(
@@ -167,17 +181,16 @@ export async function findLineOffers(input: {
       const round = event.kind === "dual" ? null : (match?.round ?? null);
       if (resolveEntryResult(entry, round).kind === "non-played") continue;
 
-      offers.push({
-        ...offerFor(event, entry, match, input.playerName),
-        distance: inside ? 0 : distance,
-      });
+      offers.push(
+        offerFor(event, entry, match, input.playerName, inside ? 0 : distance),
+      );
     }
   }
 
   const supabase = await createClient();
-  const sorted = offers
-    .sort((a, b) => a.distance - b.distance)
-    .map(({ distance: _distance, ...offer }) => offer);
+  const sorted = offers.sort(
+    (a, b) => (a.daysFromFile ?? 0) - (b.daysFromFile ?? 0),
+  );
   return withProgramKeys(supabase, sorted);
 }
 

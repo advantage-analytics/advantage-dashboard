@@ -265,15 +265,37 @@ test("both players get required underline MenuSelect fields for hand and backhan
   expect(detailsSrc).not.toContain("function WordSelect");
 });
 
-test("the backhand field reserves extra menu width so its longer labels don't wrap", () => {
-  expect(detailsSrc.match(/width=\{220\}/g)?.length).toBe(2);
+test("the opponent-naming hints read '[enter] to add them' under the name and 'Hand and backhand open once the opponent is added.' under the selects", () => {
+  // The old single-line hint under the name is gone.
+  expect(detailsSrc).not.toContain("Hand and backhand after the name");
+
+  // The Kbd chip + inline copy under the name input.
+  expect(detailsSrc).toContain('<Kbd size="sm">enter</Kbd> to add them');
+
+  // The hint spanning under the two disabled selects, only while naming is
+  // in progress, in the DS-layering-safe Tailwind ink colour (not
+  // `text-micro`, which is unlayered — see `FieldCaption.tsx`).
+  expect(detailsSrc).toContain(
+    "Hand and backhand open once the opponent is added.",
+  );
+  expect(detailsSrc).toContain(
+    '<span className="text-[11px] text-[var(--ink-600)] sm:col-span-2 sm:col-start-2">',
+  );
+});
+
+test("hand and backhand answer in one word, so their menus need no extra width", () => {
+  // The column headings already say Hand and Backhand; the options don't repeat it.
+  expect(detailsSrc).toContain('{ value: "right", label: "Right" }');
+  expect(detailsSrc).toContain('{ value: "two-handed", label: "Two-handed" }');
+  expect(detailsSrc).not.toMatch(/width=\{220\}/);
 });
 
 test("both player rows share one grid, stacking only below sm", () => {
   // One three-column grid owns both rows, so the opponent's selects sit
-  // exactly under the player's; each row is a subgrid of it.
+  // exactly under the player's; each row is a subgrid of it. A fixed name
+  // column, with the two selects splitting what is left.
   expect(detailsSrc).toContain(
-    "sm:grid sm:grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)]",
+    "sm:grid sm:grid-cols-[260px_minmax(0,1fr)_minmax(0,1fr)]",
   );
   const row =
     /className="flex flex-col gap-3 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-start[^"]*"/g;
@@ -299,10 +321,22 @@ test("the opponent's editable name carries a visible edit affordance; the subjec
   // button's own onClick, which is unrelated to the name's editability.
   const subjectNameSpan = detailsSrc.slice(
     detailsSrc.indexOf("The workspace's own player"),
-    detailsSrc.indexOf("{playerProvenance &&"),
+    detailsSrc.indexOf("{(pickedOnStepOne || playerProvenance) &&"),
   );
+  expect(subjectNameSpan.length).toBeGreaterThan(0);
   expect(subjectNameSpan).not.toContain("<Pencil");
   expect(subjectNameSpan).not.toContain("onClick");
+});
+
+test("a team flow with no pinned line says the player was picked on step 1", () => {
+  // SubjectBar's "Not <name>?" owns the change; the row only points back to
+  // where the name was chosen, beside the style provenance on one line.
+  expect(detailsSrc).toContain(
+    'const pickedOnStepOne = workspaceKind === "team" && !preset;',
+  );
+  expect(detailsSrc).toContain(
+    '[pickedOnStepOne && "Picked on step 1", playerProvenance]',
+  );
 });
 
 test("missing hand or backhand answers are collected by the one shared requirements function, not re-derived", () => {
