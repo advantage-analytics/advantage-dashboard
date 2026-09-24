@@ -116,3 +116,13 @@ is the runner's. Newest entries at the bottom.
 2. No spec clicks Remove and asserts the row leaves the DOM — needs a DOM-based test.
 3. `getMatchVideoUsage` can't tell a failed read from zero videos — an error flag would let the card show an error line.
 4. `ProgramUsageCard` doesn't mark the viewer's row with `YouPill`, as the settings rules ask.
+
+## T9 · Warn at 11 months and expire at 1 year in the cleanup cron, with the email — blocked
+
+**gate:** mechanical GATE PASS · completion VERDICT: needs-work · ran on **opus** (routed fable; user override)
+
+**reason:** One criterion unmet, caused by the runner's dispatch prompt, not the subagent: the approved body text fixes "in 11 months", but the runner told the subagent to use `matchVideoExpiry().monthsUnwatched`, which reads "10 months" at day 335 for many clocks (e.g. Mar 1 → Jan 30). Everything else met: `match_video_expire_unwatched(p_limit, p_expiry_days)` / `match_video_claim_expiry_warnings(p_limit, p_expiry_days, p_warn_days)` in `20260924150000_match_video_expiry_sweep.sql` (not applied to live), `expiry-sweep.ts`, cron runs expire → warn → sweep with counts, template + `claimSend` dedupe + fake-sender spec, `index.ts` row, `docs/email-system.md` §8 "Scheduled mail". `shell.ts` gained opt-in bold spans + `footer` (reviewer: no auth-template change needed). `remove.ts` + `expiry-sweep.ts` added to the bundle-boundary list.
+
+**stash:** 89ade8047a63fb9ea2b987f08e1001a6ae7f337c — recover with `git stash apply 89ade804`. Fix: make the body say "in 11 months" (drop `monthsUnwatched` from the template input or ignore it) and update `tests/match-video-expiry-email.spec.ts` accordingly — or amend the criterion if the user prefers the computed count.
+
+**follow-ups:** warnings capped at 25/run within a 15 s budget (stamped before send; a failed send is not retried); the removal date is clock + 365 d UTC but the sweep runs 05:00 UTC so it can land a day later; "Keep this video" in the email only links to the Film tab — playing counts as a view (T10 adds the explicit Keep).
