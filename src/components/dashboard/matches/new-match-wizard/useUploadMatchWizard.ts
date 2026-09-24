@@ -88,6 +88,7 @@ import {
 import {
   asksIfEndedEarly,
   isStoppedResult,
+  sameRecordedScore,
   scoreCheckAnswered,
   scoreGames,
   scoreUndecided,
@@ -136,6 +137,76 @@ const CLEARED_CAMERA_ANSWERS = {
   fixedCamera: undefined,
   initialTopPlayerIsPlayer1: undefined,
 } as const;
+
+/**
+ * What `startOver()` returns to `DEFAULT_FORM_DATA` — and nothing else.
+ *
+ * Everything here was set up for ONE player: their name and style, the
+ * opponent as seen from their side, the score in their order, and the video
+ * check (the window and both camera answers, which are read relative to
+ * player 1 — `docs/ui-revamp-guardrails.md` §4). A different player makes
+ * every one of them suspect. The match's own facts — event, round, format,
+ * scoring, date, court — describe the match whoever played it, and stay.
+ *
+ * The camera answers go back to `undefined`, never to a boolean: unanswered
+ * is not "no" (§3.1).
+ */
+const START_OVER_FIELDS = [
+  "playerName",
+  "playerHand",
+  "playerBackhand",
+  "playerStyleSource",
+  "opponentName",
+  "opponentSource",
+  "opponentPlayerId",
+  "opponentHand",
+  "opponentBackhand",
+  "opponentStyleSource",
+  "opponentProgramKey",
+  "opponentSchool",
+  "playerScores",
+  "opponentScores",
+  "playerTiebreaks",
+  "opponentTiebreaks",
+  "numberOfSets",
+  "result",
+  "retiredSide",
+  "videoStartSeconds",
+  "videoEndSeconds",
+  "fixedCamera",
+  "initialTopPlayerIsPlayer1",
+] as const satisfies readonly (keyof MatchFormData)[];
+
+/**
+ * What a PinnedLineBar line swap returns to `DEFAULT_FORM_DATA` — the answers
+ * given about line A's PEOPLE, which the new line's seed does not rewrite.
+ *
+ * A swap is not a start-over: the event facts, date and format come from the
+ * new line, and the trim window and `fixedCamera` describe the recording, not
+ * who is in it, so they stay. The top-player answer is camera-relative — "were
+ * YOU at the top" — and "you" just changed (`docs/ui-revamp-guardrails.md`
+ * §4); the styles and the opponent's roster id belong to line A's players; the
+ * tiebreaks belong to a score the new line may rewrite. The top-player answer
+ * goes back to `undefined`, never to a boolean (§3.1).
+ * See `docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md`.
+ */
+const LINE_SWAP_FIELDS = [
+  "initialTopPlayerIsPlayer1",
+  "playerHand",
+  "playerBackhand",
+  "playerStyleSource",
+  "opponentHand",
+  "opponentBackhand",
+  "opponentStyleSource",
+  "opponentPlayerId",
+  "playerTiebreaks",
+  "opponentTiebreaks",
+] as const satisfies readonly (keyof MatchFormData)[];
+
+/** Which line a preset fills — what tells a swap from a re-run of the seed. */
+function presetLineKey(preset: EventPreset): string | null {
+  return preset.entryId ?? preset.matchId;
+}
 
 /** Name, size and mtime — enough to tell one picked recording from another. */
 function videoSignature(file: File): string {
@@ -468,6 +539,24 @@ export interface UseUploadMatchWizardReturn {
    * answered, so it opens on the file step and Back there is Cancel.
    */
   firstStep: Step;
+  /**
+   * "Start over with a different player?" — back to step 1 with the subject
+   * cleared and everything that was set up FOR that player cleared with it:
+   * the trim window, both camera answers, the score and the players
+   * ({@link START_OVER_FIELDS}). The video file, its probe, the source and
+   * the match's own facts (event, date, format, court) are kept. It never
+   * installs a subject — only step 1's For field does that.
+   */
+  startOver: () => void;
+  /**
+   * "Not Marcus?" on an IMPORT (SwingVision) flow — straight back to step 1,
+   * no dialog. Clears only the player's own style (hand, backhand and where
+   * they came from) and the "is this player 1 in the export?" answer, which
+   * the next subject must give afresh. The subject itself is left for step
+   * 1's For field; the opponent, score, event and date — read from the kept
+   * file or typed by hand — are untouched.
+   */
+  resetImportPlayerAnswer: () => void;
 
   // The schedule offer on the details step (design 3d/7a)
   /** The lineup slot accepted with Attach, or null. */
@@ -914,8 +1003,13 @@ export function useUploadMatchWizard({
     setIdentityAnswer({ key: identityKey, confirmed: false });
   }, [identityKey, parsedImport]);
 
-  // A workspace/preset switch must not carry file results into a different
-  // event or revive a confirmation when the user switches back. Form values
+  // A workspace, event or draft switch must not carry file results into a
+  // different event or revive a confirmation when the user switches back.
+  // Keyed on the EVENT, not the line: a PinnedLineBar swap between lines of
+  // one event is a wrong-line fix, not a new video, so the picked file, its
+  // probe and parse, and the trim window stay (the seed effect drops the file
+  // only when the swap changes the source kind). The import identity answer
+  // is keyed on the athlete and resets through the effect below. Form values
   // remain under the existing event seeding rules.
   useEffect(() => {
     resetFileGeneration();
@@ -926,7 +1020,7 @@ export function useUploadMatchWizard({
     open,
     activeWorkspace.id,
     activeWorkspace.kind,
-    preset?.entryId,
+    preset?.eventId,
     draft?.id,
     resetFileGeneration,
   ]);
@@ -1134,6 +1228,13 @@ export function useUploadMatchWizard({
   const cachedUserIdRef = useRef<string | null>(null);
   /** Whether a preset has seeded the step yet — see the preset branch below. */
   const seededRef = useRef(false);
+  /** The line the last seed was for ({@link presetLineKey}) — a swap is a new one. */
+  const seededLineRef = useRef<string | null>(null);
+  /**
+   * The preset the last seed was for. A swap reads line A's recorded score
+   * from it (to tell a carried score from a typed one) and its source kind.
+   */
+  const seededPresetRef = useRef<EventPreset | null>(null);
 
   // The wizard autosaves as you answer (design 11c): every change lands in
   // localStorage a moment later, and the header says so. A draft ROW is
@@ -1213,38 +1314,101 @@ export function useUploadMatchWizard({
       // `wizardUploadEligibility()` (doubles is score-only), and the page
       // that builds a `?entry=` preset never hands one over.
       setSelectedProvider(DEFAULT_PROVIDER_ID);
-      setFormData((prev) => ({
-        ...prev,
-        ...(draft?.formData ?? {}),
-        eventName: preset.eventName ?? "",
-        eventKind: preset.eventKind ?? prev.eventKind,
-        round: preset.round ?? "",
-        playerName: preset.playerName,
-        opponentName: preset.opponentName,
-        opponentSource: preset.opponentName ? ("event" as const) : undefined,
-        date: preset.date,
-        dateSource: "event" as const,
-        courtType: preset.surface
-          ? surfaceToCourtType(preset.surface)
-          : prev.courtType,
-        bestOf: String(preset.bestOf),
-        adScoring: preset.adScoring ?? undefined,
-        matchType:
-          preset.eventKind === "dual"
-            ? "Dual Match"
-            : preset.eventKind === "tournament"
-              ? "Tournament"
-              : "Singles",
-        opponentProgramKey: preset.opponentProgramKey ?? undefined,
-        opponentSchool: preset.opponentSchool ?? undefined,
-        ...(preset.score
-          ? {
-              playerScores: preset.score.player1,
-              opponentScores: preset.score.player2,
-              numberOfSets: preset.score.player1.length,
-            }
-          : {}),
-      }));
+      // A PinnedLineBar swap re-runs this with a different line. The seed
+      // below rewrites the line's facts; the answers given about line A's
+      // players are cleared beside it (LINE_SWAP_FIELDS), and the top-player
+      // drift baseline and its stale hint with them — they described an answer
+      // that no longer exists. `cameraAnswerFileRef` stays: the recording did
+      // not change, and neither does the picked file or its trim window (the
+      // file-generation reset is keyed on the event, not the line).
+      //
+      // The score rule: a score that came from line A's RECORD is wrong for
+      // line B and is cleared — games, set count, and the `result` /
+      // `retiredSide` beside it — before line B's own score (if any) is
+      // seeded. A score typed in the wizard describes the recording and stays.
+      // Nothing in the form records provenance, so "came from the record"
+      // means "still equals the score line A seeded"; one that cannot be told
+      // apart from it is cleared. A re-run for the SAME line (another
+      // dependency moved) clears nothing.
+      const lineKey = presetLineKey(preset);
+      const swapped = seededRef.current && seededLineRef.current !== lineKey;
+      const previousPreset = seededPresetRef.current;
+      seededLineRef.current = lineKey;
+      seededPresetRef.current = preset;
+      const previousScore = swapped ? (previousPreset?.score ?? null) : null;
+      if (swapped) {
+        topPlayerAnswerStartRef.current = null;
+        // `start` is the live window start, which a swap does not move — and
+        // the sync effect above will not refresh it when neither of its
+        // inputs changes, so it is kept rather than blanked (a blank start
+        // would anchor the next answer at 0).
+        topPlayerAnswerRef.current = {
+          ...topPlayerAnswerRef.current,
+          answered: false,
+        };
+        setTopPlayerAnswerStale(false);
+      }
+      const swapCleared: Partial<MatchFormData> = {};
+      if (swapped) {
+        for (const field of LINE_SWAP_FIELDS) {
+          // Arrays are copied so the default's own arrays are never shared.
+          const value = DEFAULT_FORM_DATA[field];
+          (swapCleared as Record<string, unknown>)[field] = Array.isArray(value)
+            ? [...value]
+            : value;
+        }
+      }
+      setFormData((prev) => {
+        const base = { ...prev, ...(draft?.formData ?? {}) };
+        const scoreCleared: Partial<MatchFormData> =
+          // A score equal to line A's recorded one came from line A's record
+          // (or cannot be told apart from it) and is wrong for line B; a
+          // score that differs was typed in the wizard and stays.
+          previousScore && sameRecordedScore(base, previousScore)
+            ? {
+                playerScores: [...DEFAULT_FORM_DATA.playerScores],
+                opponentScores: [...DEFAULT_FORM_DATA.opponentScores],
+                numberOfSets: DEFAULT_FORM_DATA.numberOfSets,
+                result: DEFAULT_FORM_DATA.result,
+                retiredSide: DEFAULT_FORM_DATA.retiredSide,
+              }
+            : {};
+        return {
+          ...base,
+          // After the draft: a swap in a resumed flow re-spreads the draft,
+          // whose answers were given for its line's players too.
+          ...swapCleared,
+          ...scoreCleared,
+          eventName: preset.eventName ?? "",
+          eventKind: preset.eventKind ?? prev.eventKind,
+          round: preset.round ?? "",
+          playerName: preset.playerName,
+          opponentName: preset.opponentName,
+          opponentSource: preset.opponentName ? ("event" as const) : undefined,
+          date: preset.date,
+          dateSource: "event" as const,
+          courtType: preset.surface
+            ? surfaceToCourtType(preset.surface)
+            : prev.courtType,
+          bestOf: String(preset.bestOf),
+          adScoring: preset.adScoring ?? undefined,
+          matchType:
+            preset.eventKind === "dual"
+              ? "Dual Match"
+              : preset.eventKind === "tournament"
+                ? "Tournament"
+                : "Singles",
+          opponentProgramKey: preset.opponentProgramKey ?? undefined,
+          opponentSchool: preset.opponentSchool ?? undefined,
+          ...(preset.score
+            ? {
+                playerScores: preset.score.player1,
+                opponentScores: preset.score.player2,
+                numberOfSets: preset.score.player1.length,
+              }
+            : {}),
+        };
+      });
       // A line arrives with step 1 answered, so the flow opens on the file
       // (design 7b). Only on the first seed: switching lines from the pinned
       // bar re-runs this effect and must leave the step where it is.
@@ -1413,7 +1577,15 @@ export function useUploadMatchWizard({
     return () => {
       cancelled = true;
     };
-  }, [open, supabase, preset, draft, askWhoPlayed, seededPlayerName]);
+  }, [
+    open,
+    supabase,
+    preset,
+    draft,
+    askWhoPlayed,
+    seededPlayerName,
+    resetFileGeneration,
+  ]);
 
   /**
    * A fresher `programs.status` than `eligibilityWorkspace` carries — the
@@ -1840,10 +2012,31 @@ export function useUploadMatchWizard({
       return;
     }
     setError(null);
+    // A kept video with no window — what `startOver()` leaves, since the
+    // window was the old player's — gets the whole recording again, exactly
+    // as a fresh pick does. Without it the trim step would draw the full rail
+    // over an empty form and hold Continue until a handle was touched.
+    const probedEnd = videoProbe?.durationSeconds;
+    if (
+      isProcessingProvider &&
+      probedEnd !== undefined &&
+      formData.videoStartSeconds === undefined &&
+      formData.videoEndSeconds === undefined
+    ) {
+      setFormData((prev) => ({
+        ...prev,
+        videoStartSeconds: 0,
+        videoEndSeconds: probedEnd,
+        duration: Math.max(0, Math.round(probedEnd)) * 1000,
+      }));
+    }
     const index = stepOrder.indexOf("file");
     if (index >= 0 && index + 1 < stepOrder.length)
       setStep(stepOrder[index + 1]);
   }, [
+    videoProbe,
+    formData.videoStartSeconds,
+    formData.videoEndSeconds,
     stepOrder,
     selectedProvider,
     uploadedFile,
@@ -2124,6 +2317,75 @@ export function useUploadMatchWizard({
       setStep(stepOrder[index - 1]);
     }
   }, [step, stepOrder, firstStep]);
+
+  /**
+   * "Start over with a different player?" — confirmed from the subject bar on
+   * the trim and details steps. See `UseUploadMatchWizardReturn.startOver`.
+   *
+   * Writes the subject as null and nothing else: the next answer comes from
+   * step 1's For field through `chooseMatchSubject`, like the first one did.
+   *
+   * Storage is left to the autosave effect, which writes this emptier form on
+   * its own. `clearStorageData()` would also drop the kept file's entry and
+   * the selected source.
+   */
+  const startOver = useCallback(() => {
+    applyMatchSubject(null);
+    resetIdentityAnswer();
+    setError(null);
+    // The drift rule's baseline and the "why is this blank again" hint both
+    // describe answers that no longer exist. `cameraAnswerFileRef` stays: the
+    // file is kept, so answers given after this still belong to it.
+    topPlayerAnswerStartRef.current = null;
+    topPlayerAnswerRef.current = { start: undefined, answered: false };
+    setTopPlayerAnswerStale(false);
+    // A lineup slot accepted on the details step is the OLD player's line.
+    // Left attached, the next player's match would be filed under it — or
+    // would overwrite that line's existing match. Dropped without Detach's
+    // snapshot restore: the event, date, format and court it filled are
+    // match facts this reset keeps, and the opponent it filled is cleared
+    // below anyway.
+    attachedLineRef.current = null;
+    detachSnapshot.current = null;
+    setAttachedLine(null);
+    setFormData((prev) => {
+      const next = { ...prev };
+      for (const field of START_OVER_FIELDS) {
+        // Arrays are copied so the default's own arrays are never shared.
+        const value = DEFAULT_FORM_DATA[field];
+        (next as Record<string, unknown>)[field] = Array.isArray(value)
+          ? [...value]
+          : value;
+      }
+      return next;
+    });
+    setStep(firstStep);
+  }, [applyMatchSubject, resetIdentityAnswer, firstStep]);
+
+  /**
+   * "Not Marcus?" on an import flow. See
+   * `UseUploadMatchWizardReturn.resetImportPlayerAnswer`.
+   *
+   * Deliberately separate from `chooseMatchSubject`'s own style clear: this
+   * one runs on the click, before any new subject is picked. It never writes
+   * the subject. The player-1 confirmation re-asks by itself once the athlete
+   * changes (the identity effect above); clearing it here only stops the old
+   * answer standing while the same athlete is still selected.
+   */
+  const resetImportPlayerAnswer = useCallback(() => {
+    resetIdentityAnswer();
+    // `error` is one slot for the whole wizard and the file step renders it:
+    // a failed save left from the details step would reappear there as if the
+    // file were at fault — the same reason `handleBack` clears it.
+    setError(null);
+    setFormData((prev) => ({
+      ...prev,
+      playerHand: DEFAULT_FORM_DATA.playerHand,
+      playerBackhand: DEFAULT_FORM_DATA.playerBackhand,
+      playerStyleSource: DEFAULT_FORM_DATA.playerStyleSource,
+    }));
+    setStep(firstStep);
+  }, [resetIdentityAnswer, firstStep]);
 
   // Close keeps localStorage intact so an accidental ✕ doesn't destroy in-flight
   // typing. Storage is cleared only after a successful create (see handleCreateMatch)
@@ -3092,6 +3354,8 @@ export function useUploadMatchWizard({
     handleTrimContinue,
     handleBack,
     firstStep,
+    startOver,
+    resetImportPlayerAnswer,
 
     // The schedule offer
     attachedLine,

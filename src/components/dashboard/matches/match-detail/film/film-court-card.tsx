@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 
 import { OPP, OUT, YOU, readoutPlacement, type CourtMark } from "./film-court";
 import { UNMEASURED, shotLabel, shotRowCells } from "./film-shots";
+import type { CornerDrag } from "./use-corner-drag";
 
 /**
  * The mini court over the film (handoff H2 §C2, frame `C2-FilmCourt.html`).
@@ -36,10 +37,20 @@ import { UNMEASURED, shotLabel, shotRowCells } from "./film-shots";
  *
  * It is a READOUT, not a control. It is a sibling of the `<video>`, never a
  * child, so a click on a mark cannot reach the film underneath and no
- * `stopPropagation` is needed; the board is the only thing in the room that
- * moves, and the points drawer never displaces this card. Unlike the board it
- * carries no drag affordance at all. Every mark is a seek target and is
- * keyboard-reachable in shot order, which the DOM order of the buttons gives.
+ * `stopPropagation` is needed; the points drawer never displaces this card.
+ *
+ * It moves, though — "I should be able to move the court visual like the
+ * scorecard" (author, 2026-09-22), reversing R6's "the board is the only
+ * movable object". The mechanic is the board's own (`use-corner-drag.ts`) and
+ * the room owns the wrapper it moves; this file contributes only the handle.
+ * The WHOLE card is grabbable, the way the whole board is — "moving the court
+ * should be as easy as moving the scorecard" (author, 2026-09-22, after a
+ * first cut that grabbed by the 20px header row alone). Every mark and both
+ * header glyphs are buttons, and a press that starts on one of them is that
+ * button's, never a grab: pointer capture on the card would re-target the
+ * click away from the button, so the mark would stop seeking. Every mark is
+ * a seek target and is keyboard-reachable in shot order, which the DOM order
+ * of the buttons gives.
  *
  * Point mode is the rally as it happens — a donut where the ball was struck,
  * a filled dot where it landed, both fading out two shots later. Match mode
@@ -73,10 +84,11 @@ export interface FilmCourtProps {
   onSelectMark: (mark: FilmCourtMark) => void;
   /**
    * Anything that draws inside the court box on top of the lines and the
-   * marks, under the readout — today only `FilmCourtBall`. The card knows
-   * nothing about it: the slot takes an element already built, so this file
-   * gains no clock, no paths and no second geometry. Absent, the box's markup
-   * is exactly what it was.
+   * marks, under the readout. Nothing fills it today — the moving ball that
+   * did was removed (author decision, 2026-09-22) — and the slot is kept
+   * because the card knows nothing about what goes in it: it takes an element
+   * already built, so this file gains no clock, no paths and no second
+   * geometry. Absent, the box's markup is exactly what it was.
    */
   overlay?: React.ReactNode;
   /**
@@ -84,14 +96,37 @@ export interface FilmCourtProps {
    * moment, so it closes the instant the film moves to another one.
    */
   seekKey: number | string;
+  /**
+   * Which side of the room this card is docked on, straight through to
+   * {@link readoutPlacement}. Absent in point mode, where the card sits
+   * centred and the mark's own half decides the readout's side.
+   */
+  dock?: "left" | "right";
+  /**
+   * The pointer half of `useCornerDrag`, for the whole card. Absent wherever
+   * the card is not movable, and then it is an ordinary readout.
+   */
+  handleProps?: CornerDrag["handleProps"];
+  /** The card is under the pointer right now: it shows `cursor-grabbing`. */
+  grabbing?: boolean;
 }
 
 /**
- * The frame's own easing on the fade. `markOpacity` steps a mark's opacity in
- * 0.05s as the film time passes; this smooths those steps into the continuous
- * 2 s hold / 3 s fade the court is meant to read as.
+ * The frame's own easing on the fade OUT. `markOpacity` steps a mark's opacity
+ * in 0.05s as the film time passes; this smooths those steps into the
+ * continuous 2 s hold / 2.5 s fade the court is meant to read as.
  */
 const MARK_FADE_TRANSITION = "opacity 300ms cubic-bezier(.25,.46,.45,.94)";
+/**
+ * The fade IN, on the mark's own mount (author decision, 2026-09-22): marks
+ * used to pop into existence at full opacity. `film-mark-in` (`globals.css`)
+ * has no `to`, so it rises from 0 to the element's own inline opacity and then
+ * hands the element back to `MARK_FADE_TRANSITION`. Point mode only — in match
+ * mode the whole rally is drawn at once, where 150ms of per-mark entrance
+ * would read as a flicker rather than as a stroke landing.
+ */
+const MARK_IN_ANIMATION =
+  "film-mark-in var(--duration-fast) var(--ease-primary) both";
 /** The live bounce's ring. */
 const RING = "0 0 0 1px rgba(255,255,255,0.85)";
 
@@ -218,6 +253,9 @@ export function FilmCourt({
   onSelectMark,
   overlay,
   seekKey,
+  dock,
+  handleProps,
+  grabbing,
 }: FilmCourtProps) {
   // One readout at a time — and the open one remembers the seek it belongs
   // to. A seek moves the film to another moment, so whatever the readout was
@@ -243,12 +281,31 @@ export function FilmCourt({
   const openLines = open
     ? readoutLines(open, open.hitter === "you" ? youName : opponentName)
     : null;
-  const openAt = open ? readoutPlacement(open.x, open.y) : null;
+  const openAt = open ? readoutPlacement(open.x, open.y, dock) : null;
 
   return (
     <section
       aria-label="Shot placement"
-      className="box-border flex flex-col items-center"
+      {...handleProps}
+      data-film-court-handle={handleProps ? "" : undefined}
+      // A press that lands on a mark or on either header glyph is that
+      // button's. Capturing the pointer on the card would move the click off
+      // the button it started on, so a mark would stop seeking and "Hide the
+      // court" would stop hiding the court. Everything else on the card —
+      // the heading, the court drawing between the marks, the foot note,
+      // the padding — is a grab, the way the whole board is.
+      onPointerDown={(e) => {
+        if ((e.target as HTMLElement).closest("button")) return;
+        handleProps?.onPointerDown(e);
+      }}
+      className={cn(
+        "box-border flex flex-col items-center",
+        handleProps &&
+          cn(
+            "touch-none select-none",
+            grabbing ? "cursor-grabbing" : "cursor-grab",
+          ),
+      )}
       style={{
         width: FILM_COURT_SIZE.width,
         height: FILM_COURT_SIZE.height,
@@ -397,6 +454,7 @@ export function FilmCourt({
                 background: contact && !isMatch ? "transparent" : colour,
                 boxShadow: mark.live && !isMatch ? RING : undefined,
                 transition: MARK_FADE_TRANSITION,
+                animation: isMatch ? undefined : MARK_IN_ANIMATION,
               }}
             />
           );

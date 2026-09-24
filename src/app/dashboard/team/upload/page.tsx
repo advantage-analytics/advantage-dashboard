@@ -212,7 +212,14 @@ export default async function TeamUploadPage({
 
       const preset: EventPreset = {
         ...presetFor(group.event, entry, match, programs),
-        lineup: lineupChoices(group.event, siblings, programs),
+        // Doubles is score-only, so the pinned bar's Change menu lists a
+        // doubles line but cannot switch the upload onto it — the same answer
+        // the `discipline !== "singles"` redirect above gives a URL.
+        lineup: lineupChoices(group.event, siblings, programs).map((choice) =>
+          choice.preset?.discipline === "doubles"
+            ? { ...choice, preset: null }
+            : choice,
+        ),
       };
 
       // An upload aimed at a line sits under its event, like `/edit` and

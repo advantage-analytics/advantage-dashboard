@@ -8,6 +8,45 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
+/**
+ * Gemini's transient refusals — 429 rate limit, 500, 503 "high demand" — used
+ * to end the review for good: every caller swallows this function's failure and
+ * nothing asks again, so the match simply never got one. Two more tries with
+ * backoff ride out a spike. Any other status is the request's own fault and is
+ * returned at once.
+ *
+ * Kept short on purpose: `deriveAndPublish` caps its wait on this function, so
+ * backing off past that cap would only finish after nobody is waiting.
+ */
+const RETRY_STATUSES = new Set([429, 500, 503]);
+const RETRY_DELAYS_MS = [1500, 4000];
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const delay = RETRY_DELAYS_MS[attempt];
+    try {
+      const response = await fetch(url, init);
+      if (!RETRY_STATUSES.has(response.status) || delay === undefined) {
+        return response;
+      }
+      console.warn(
+        `Gemini returned ${response.status}; retrying (attempt ${attempt + 2})`,
+      );
+      await response.body?.cancel();
+    } catch (err) {
+      if (delay === undefined) throw err;
+      console.warn(
+        `Gemini request threw; retrying (attempt ${attempt + 2}):`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+    await new Promise((r) => setTimeout(r, delay + Math.random() * 500));
+  }
+}
+
 serve(async (req) => {
   try {
     // 1. We only need the matchId now
@@ -177,7 +216,7 @@ serve(async (req) => {
     `;
 
     // 6. Call the Gemini API via REST
-    const geminiResponse = await fetch(geminiUrl, {
+    const geminiResponse = await fetchWithRetry(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

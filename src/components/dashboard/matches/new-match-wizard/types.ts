@@ -259,9 +259,9 @@ export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
     },
     // Only a processing provider reaches this step, so there is no import copy.
     trim: {
-      title: "Trim to the first serve.",
+      title: "Keep every point.",
       description:
-        "Start at the first point, end at the last. The window has to match the score you enter next.",
+        "Cut the warm-up and the handshake, nothing in between. The window has to match the score you enter next.",
     },
     // The import copy; the video copy is the processing override below.
     match: {
@@ -283,7 +283,7 @@ export const STEP_CONFIG_PROCESSING: Partial<
   file: {
     title: "The file.",
     description:
-      "One full match from one camera. Leave the warm-up in — you'll trim to the first serve next.",
+      "One full match from one camera. Leave the warm-up in — you'll trim it off next.",
   },
   match: {
     title: "Score and context.",
@@ -490,8 +490,9 @@ export interface EventPreset {
   opponentSchool: string | null;
   /**
    * The event's other lines, for the pinned bar's Change menu — picking one
-   * rewrites the bar and nothing else, so the file already dropped stays.
-   * Only on a preset that came from an event.
+   * re-seeds the line and clears the answers about its players (see
+   * `PinnedLineBar`), but the file already dropped stays, with its trim
+   * window. Only on a preset that came from an event.
    */
   lineup?: LineChoice[];
 }
@@ -531,8 +532,9 @@ export interface MatchDraft {
 
 /**
  * A lineup slot the schedule OFFERS on the details step — the file's date
- * matched an open line for this player within two days (design 3d/7a).
- * Accepting fills opponent, date, court, format and scoring from the line and
+ * matched an open line for this player within two days (design 3d/7a), and
+ * the strip shows it only once the opponent name or the score also matches
+ * (`rankLineOffers`, `offer-match.ts`). Accepting fills opponent, date, court, format and scoring from the line and
  * the event; Detach empties them again.
  */
 export interface LineOffer {
@@ -553,4 +555,16 @@ export interface LineOffer {
   surface: string | null;
   bestOf: number;
   adScoring: boolean | null;
+  /**
+   * The line's recorded games, when its match was scored — `player1` is our
+   * side, games only (no tiebreak points, no `winner`). Null when the line has
+   * no match or no score. Optional: a draft saved before this field existed
+   * carries an `attachedLine` without it.
+   */
+  score?: { player1: number[]; player2: number[] } | null;
+  /**
+   * Whole days between the file's date and the event — 0 inside the event's
+   * dates. Optional for the same older drafts.
+   */
+  daysFromFile?: number;
 }

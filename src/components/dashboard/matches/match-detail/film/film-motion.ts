@@ -9,6 +9,15 @@
  * with the frame's 14px corners expressed in the room's unscaled pixels.
  * Because both the frame and the room letterbox the film with
  * `object-contain`, the crop shows the same picture the frame did.
+ *
+ * Every keyframe here assumes `transform-origin: 0 0`, and carries it: under
+ * the default `50% 50%`, `translate(x, y) scale(s)` puts the room's left edge
+ * at `rw/2 + x − s·rw/2`, not `x` — the ~`(rw − fw)/2` offset that shipped
+ * before T27 (2026-09-23), with the room growing from beside the player.
+ *
+ * A frame that is not on screen at all (the ⇧-click door, opened from a row
+ * with the player scrolled away) has nothing to grow from, so the room fades
+ * instead — `roomMotionPath`.
  */
 
 export interface Rect {
@@ -32,6 +41,8 @@ export const ROOM_EASE_EXIT = "cubic-bezier(0.4, 0, 0.2, 1)";
 export interface RoomKeyframe extends Keyframe {
   transform: string;
   clipPath: string;
+  /** Always `"0 0"`: the maths below is about the room's top-left corner. */
+  transformOrigin: "0 0";
 }
 
 /** The keyframe that makes the full-screen room look exactly like `frame`. */
@@ -49,13 +60,34 @@ export function collapsedRoomFrame(
   return {
     transform: `translate(${round(x)}px, ${round(y)}px) scale(${round(scale, 5)})`,
     clipPath: `inset(${round(insetY)}px ${round(insetX)}px round ${round(radius)}px)`,
+    transformOrigin: "0 0",
   };
 }
 
 export const OPEN_ROOM_FRAME: RoomKeyframe = {
   transform: "translate(0px, 0px) scale(1)",
   clipPath: "inset(0px 0px round 0px)",
+  transformOrigin: "0 0",
 };
+
+/**
+ * How the room travels between the report frame and the screen: `"frame"`
+ * grows from (or shrinks into) the frame, `"fade"` is an opacity change for a
+ * frame with no visible area inside the room — none at all, or one wholly off
+ * an edge — since a room that grew from off-screen would fly in from nowhere.
+ * A frame partly on screen still grows: the part that shows is where it is.
+ */
+export function roomMotionPath(
+  frame: Rect | null,
+  room: { width: number; height: number },
+): "frame" | "fade" {
+  if (!frame) return "fade";
+  const w =
+    Math.min(frame.left + frame.width, room.width) - Math.max(frame.left, 0);
+  const h =
+    Math.min(frame.top + frame.height, room.height) - Math.max(frame.top, 0);
+  return w > 0 && h > 0 ? "frame" : "fade";
+}
 
 function round(n: number, places = 2): number {
   const f = 10 ** places;

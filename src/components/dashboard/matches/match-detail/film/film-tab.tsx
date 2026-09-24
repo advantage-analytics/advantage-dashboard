@@ -31,7 +31,12 @@ import {
   type ShotStop,
 } from "./film-shots";
 import { FilmThisPoint } from "./film-this-point";
-import { activeStopAt } from "./film-timeline";
+import {
+  activeStopAt,
+  displayedPointId as displayedPointOf,
+  nowPlayingOf,
+  type PointFocus,
+} from "./film-timeline";
 import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
 import { useAttachmentPlayback } from "./use-attachment-playback";
 import {
@@ -46,6 +51,9 @@ import {
 const loadFilmFullscreen = () =>
   import("./film-fullscreen").then((m) => m.FilmFullscreen);
 const FilmFullscreen = dynamic(loadFilmFullscreen, { ssr: false });
+
+/** One frozen `follow`, so re-following while following changes no identity. */
+const FOLLOW: PointFocus = { mode: "follow" };
 
 /**
  * The Film room tab (artboard 46c with a video, 46d without), plus the
@@ -117,22 +125,19 @@ function FilmRoom({
   entry: MatchFilmEntry;
   unit: DistanceUnit;
 }) {
-  const { match, points: serverPoints } = useMatchData();
+  // The points and their saved flags come from `MatchDataProvider`, not from
+  // a `useState` here: `MatchReportWhen` UNMOUNTS this view when the viewer
+  // switches to Statistics or Shots, so state held here would be re-seeded
+  // from the page's original server render on the way back and every bookmark
+  // toggled since would disappear. `pointsRef` is the provider's
+  // always-current copy of the same array, for the write path below.
+  const { match, points, pointsRef, setPoints } = useMatchData();
   const sides = useMatchSides();
   const supabase = useMemo(() => createClient(), []);
   const playerRef = useRef<FilmPlayerHandle>(null);
   // `--film-t` is written here, so the player's bar and the list's playing
   // rule both move every frame.
   const clockRef = useRef<HTMLDivElement>(null);
-
-  const [points, setPoints] = useState<MatchPoint[]>(serverPoints);
-  // The authoritative copy for the write path. `setPoints`' updater runs
-  // during the NEXT render, so a handler that computed the new flag inside the
-  // updater would still be holding the old value when it built the UPDATE a
-  // line later. Reading and writing through the ref keeps the optimistic
-  // value, the value sent to Postgres, and the value reverted to identical
-  // even when somebody clicks two bookmarks in the same tick.
-  const pointsRef = useRef<MatchPoint[]>(serverPoints);
 
   // `useSearchParams()` can be null outside a Next router (the playback
   // harness mounts this with a bare createRoot); parseCut tolerates that.
@@ -169,6 +174,18 @@ function FilmRoom({
   const [room, setRoom] = useState<{ time: number; playing: boolean } | null>(
     null,
   );
+  // Follow the film, or hold the point being read (T17 design). Owned HERE,
+  // not by the room or the list: the room unmounts on exit and `PointList`
+  // is mounted twice (shell column and room drawer), while this view is what
+  // `MatchReportWhen` unmounts on tab-leave — so the state outlives the room
+  // opening and closing and resets to `follow` with no reset code. Never
+  // persisted: neither localStorage nor the URL.
+  const [pointFocus, setPointFocus] = useState<PointFocus>(FOLLOW);
+  const holdPoint = useCallback(
+    (pointId: string | null) => setPointFocus({ mode: "held", pointId }),
+    [],
+  );
+  const followPlayback = useCallback(() => setPointFocus(FOLLOW), []);
   // Fetch the room's code once the tab is idle, so the fullscreen glyph opens
   // it on the click rather than after a network round trip with nothing on
   // screen. Still off the page's first load.
@@ -255,6 +272,22 @@ function FilmRoom({
     [points, filters, youIsPlayer1],
   );
 
+  // A cut change that removes the held point leaves no row to hold: back to
+  // following. A cut that keeps it changes nothing. An effect, not a derived
+  // value: the hold is an event the viewer made, and the cut dropping its
+  // point is the one thing that undoes it besides the viewer — it runs once
+  // per cut change, never per frame.
+  //
+  // A null hold (a hand scroll with no point displayed, T25) survives every
+  // cut: it has no row for the cut to drop, and what it holds — the scroll
+  // position — is the viewer's, not the cut's.
+  useEffect(() => {
+    if (pointFocus.mode !== "held" || pointFocus.pointId === null) return;
+    if (filteredPoints.some((p) => p.id === pointFocus.pointId)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    followPlayback();
+  }, [filteredPoints, pointFocus, followPlayback]);
+
   const walkStops = useMemo(() => {
     const ids = new Set(filteredPoints.map((p) => p.id));
     return stops.filter((s) => ids.has(s.point.id));
@@ -285,6 +318,13 @@ function FilmRoom({
     [allShotStops, currentTime],
   );
   const activePoint = active?.stop.point ?? null;
+  // What the shell list's well shows: the held point while held, else the
+  // playing one. The card, the lit row, the board and the counters read
+  // `activePoint`.
+  const displayedPointId = displayedPointOf(
+    pointFocus,
+    activePoint?.id ?? null,
+  );
 
   // The rail scoreboard's live state reads the point under the head from here
   // — the same `activeStopAt` the list and This point read — so scrubbing
@@ -295,6 +335,9 @@ function FilmRoom({
     [activePoint, currentTime, columns],
   );
   usePublishFilmHead(filmHead);
+  // The card always shows the PLAYING point (T22 reverts T20's hold): like the
+  // scoreboard, court and transport counter beside it, it follows the film.
+  // Only the shell list and the room drawer keep follow-or-hold.
   const pointShots = useMemo(
     () =>
       activePoint
@@ -308,9 +351,15 @@ function FilmRoom({
   }, []);
 
   /** The transport's own step, handed to anything else that walks points. */
-  const handleStep = useCallback((direction: -1 | 1) => {
-    playerRef.current?.step(direction);
-  }, []);
+  const handleStep = useCallback(
+    (direction: -1 | 1) => {
+      // Stepping means "take me on": a step re-follows first, then walks
+      // from the playing point.
+      followPlayback();
+      playerRef.current?.step(direction);
+    },
+    [followPlayback],
+  );
 
   // "Point n / N" over the applied cut — the sequence prev/next walk.
   const position = useMemo(() => {
@@ -318,6 +367,13 @@ function FilmRoom({
     const index = walkStops.findIndex((s) => s.point.id === activePoint.id);
     return index === -1 ? null : { index: index + 1, total: walkStops.length };
   }, [walkStops, activePoint]);
+  // The same shape the room hands its drawer. The shell column's list takes
+  // it and draws the same "Now playing" pill (T23: the card's header line is
+  // gone, T22), shown whenever held and the lit row is out of view (T24).
+  const nowPlaying = useMemo(
+    () => nowPlayingOf(activePoint, position),
+    [activePoint, position],
+  );
 
   const handleSelect = useCallback(
     (point: MatchPoint) => {
@@ -359,7 +415,8 @@ function FilmRoom({
       const optimistic = pointsRef.current.map((p) =>
         p.id === pointId ? { ...p, saved: nextSaved } : p,
       );
-      pointsRef.current = optimistic;
+      // `setPoints` writes the provider's ref and its state together, so the
+      // next read below is already the optimistic array.
       setPoints(optimistic);
 
       const { error } = nextSaved
@@ -375,10 +432,9 @@ function FilmRoom({
       const reverted = pointsRef.current.map((p) =>
         p.id === pointId ? { ...p, saved: before.saved } : p,
       );
-      pointsRef.current = reverted;
       setPoints(reverted);
     },
-    [supabase],
+    [supabase, pointsRef, setPoints],
   );
 
   const activePointId = activePoint?.id ?? null;
@@ -591,9 +647,12 @@ function FilmRoom({
           onRetry={retry}
           onToggleSaved={toggleSavedActive}
           onEnterFullscreen={enterRoom}
+          // Every point step — the transport's two glyphs, the arrow keys
+          // above, the card's stepper — runs the player's own `step`, which
+          // calls this first: stepping re-follows the film.
+          onStep={followPlayback}
         />
         <FilmThisPoint
-          unit={unit}
           point={activePoint}
           shots={pointShots}
           position={position}
@@ -630,6 +689,15 @@ function FilmRoom({
             // Only this column gets the door; the room's own drawer renders
             // the same component without it.
             onOpenInRoom={openPointInRoom}
+            // The same hold as the drawer's: a row click holds and the
+            // keep-in-view stops while held. The same "Now playing" pill
+            // (T23) and the same hand-scroll hold sources (T24) — though an
+            // arrow on a focused row here is a scroll that holds, not a step.
+            pointFocus={pointFocus}
+            displayedPointId={displayedPointId}
+            onHoldPoint={holdPoint}
+            onFollow={followPlayback}
+            nowPlaying={nowPlaying}
           />
         </div>
       </div>
@@ -659,6 +727,12 @@ function FilmRoom({
           filters={filters}
           onFiltersChange={setFilters}
           onToggleSaved={handleToggleSaved}
+          // The room derives its own displayed point from its own playhead
+          // — `displayedPointId` here is the shell's, and the shell's clock
+          // does not move while the room is open.
+          pointFocus={pointFocus}
+          onHoldPoint={holdPoint}
+          onFollow={followPlayback}
           onExit={exitRoom}
           onHandoff={handoff}
           originRect={originRect}

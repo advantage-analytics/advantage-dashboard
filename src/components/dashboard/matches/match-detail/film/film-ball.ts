@@ -17,6 +17,14 @@ import type { FilmClock } from "./film-timeline";
  * against — `ShotStop.start`, `<video>.currentTime`, `markOpacity`'s
  * `filmTime` — is FILM seconds. The conversion happens once, in
  * {@link filmBallPaths}, and nothing downstream converts again.
+ *
+ * ── What is left of the ball (author decision, 2026-09-22) ───────────────────
+ *
+ * The white dot that travelled the court was removed, and with it `ballAt`,
+ * its `BallAt`/`BallPoint` types and the trail window they carried. The paths
+ * are still parsed and still put on the film clock, because the one thing they
+ * now feed is {@link bounceTimesByShot}: the vendor's measured landing behind
+ * each shot's bounce mark.
  */
 
 /**
@@ -115,135 +123,6 @@ export function filmBallPaths(
     });
   }
   return out;
-}
-
-/**
- * ── The moving ball (author decision, 2026-09-21) ───────────────────────────
- *
- * How far behind the ball its trail reaches, in film seconds. The vendor's
- * samples are roughly 10 Hz after decimation, so this is four or five points —
- * long enough to read as a direction, short enough to cost nothing per frame.
- */
-export const BALL_TAIL_SECONDS = 0.4;
-
-/** A point of the flight, court-frame metres. Height is not drawn yet. */
-export interface BallPoint {
-  x: number;
-  y: number;
-}
-
-/** Where the ball is at one instant, and the trail behind it. */
-export interface BallAt extends BallPoint {
-  /**
-   * The same path's samples inside the last {@link BALL_TAIL_SECONDS},
-   * OLDEST FIRST, with the head (the interpolated position above) last. Never
-   * a sample from another path, so a trail can never jump the net between two
-   * strokes.
-   */
-  tail: BallPoint[];
-}
-
-/** A path's own span: the first and last sample times, or null when empty. */
-function spanOf(path: FilmBallPath): { first: number; last: number } | null {
-  if (path.path.length === 0) return null;
-  return { first: path.path[0][0], last: path.path[path.path.length - 1][0] };
-}
-
-/**
- * The time a path is sorted by.
- *
- * ORDERING ASSUMED: `paths` is ascending by `contactTime`, which is what
- * {@link filmBallPaths} returns for a file the derivation wrote, and each
- * path's samples ascend in `t`. A stroke's first sample is its own contact
- * frame, so ordering by `contactTime` is also ordering by first sample — the
- * fallback to `contactTime` here only covers a path whose samples were all
- * dropped, which can hold no time anyway.
- */
-const sortKeyOf = (path: FilmBallPath): number =>
-  path.path.length > 0 ? path.path[0][0] : path.contactTime;
-
-/**
- * Where the ball is at `filmTime`, or null when no stroke is in flight.
- *
- * Pure, and cheap enough to call every animation frame over a whole match:
- * the containing path is found by BINARY SEARCH for the last path starting at
- * or before `filmTime` (never a scan over hundreds of strokes), and the
- * bracketing samples inside it by a second binary search.
- *
- * Paths can overlap by a few hundredths of a second at a contact, where the
- * outgoing stroke's first samples sit under the incoming one's last. The tie
- * is broken deterministically towards the LATER-STARTING path — the new
- * stroke, which is the one the eye is following — because that is the one the
- * search lands on first. An earlier path that is somehow still running at
- * `filmTime` is therefore not consulted: overlaps are slight by construction,
- * and preferring the newer flight is the intended reading, not a fallback.
- *
- * The position is linearly interpolated between the two samples that bracket
- * `filmTime`, and the result is null outside the path's own first-to-last
- * span — including in the dead time between two strokes, where the ball is
- * simply not drawn.
- */
-export function ballAt(
-  paths: readonly FilmBallPath[],
-  filmTime: number,
-): BallAt | null {
-  if (!finite(filmTime) || paths.length === 0) return null;
-
-  // The last path whose first sample is at or before `filmTime`.
-  let lo = 0;
-  let hi = paths.length - 1;
-  let found = -1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (sortKeyOf(paths[mid]) <= filmTime) {
-      found = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  if (found < 0) return null;
-
-  const path = paths[found];
-  const span = spanOf(path);
-  if (!span || filmTime < span.first || filmTime > span.last) return null;
-
-  const samples = path.path;
-  // The last sample at or before `filmTime`. `span.first <= filmTime` above,
-  // so this always finds one.
-  let slo = 0;
-  let shi = samples.length - 1;
-  let index = 0;
-  while (slo <= shi) {
-    const mid = (slo + shi) >> 1;
-    if (samples[mid][0] <= filmTime) {
-      index = mid;
-      slo = mid + 1;
-    } else {
-      shi = mid - 1;
-    }
-  }
-
-  const [t0, x0, y0] = samples[index];
-  const next = samples[index + 1];
-  let head: BallPoint;
-  if (!next || next[0] <= t0) {
-    head = { x: x0, y: y0 };
-  } else {
-    const share = (filmTime - t0) / (next[0] - t0);
-    head = { x: x0 + (next[1] - x0) * share, y: y0 + (next[2] - y0) * share };
-  }
-
-  const from = filmTime - BALL_TAIL_SECONDS;
-  const tail: BallPoint[] = [];
-  for (const sample of samples) {
-    if (sample[0] < from) continue;
-    if (sample[0] > filmTime) break;
-    tail.push({ x: sample[1], y: sample[2] });
-  }
-  tail.push(head);
-
-  return { ...head, tail };
 }
 
 /**

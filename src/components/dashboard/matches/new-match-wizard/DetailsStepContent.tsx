@@ -6,10 +6,12 @@
  * Four things, top to bottom, in the step-1 register:
  *
  *   The schedule's OFFER — in a team workspace the file's date may match an
- *   open line for this player within two days, so the schedule offers, in the
- *   note-strip register: "Looks like #2 Singles › Marcus Reid vs Jordan
- *   Alvarez", Attach and a quiet decline. Accept and six fields fill; Detach
- *   empties them again and touches nothing typed by hand.
+ *   open line for this player within two days, but a line is offered only
+ *   when the opponent name or the score typed here also matches it
+ *   (`rankLineOffers`: name, then score, then nearest date). Then the
+ *   schedule offers, in the note-strip register: "Looks like #2 Singles ›
+ *   Marcus Reid vs Jordan Alvarez", Attach and a quiet decline. Accept and six
+ *   fields fill; Detach empties them again and touches nothing typed by hand.
  *
  *   The SCORE — 40px cells with the set numbers as eyebrows, the format read
  *   back at the right as a fact, no set control: a dashed column after the
@@ -69,11 +71,12 @@ import { DateField } from "@/components/ui/date-field";
 import { YouPill } from "@/components/ui/you-pill";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { advField } from "@/lib/ui/adv-field";
 import { getInitials } from "@/lib/data/match-utils";
 import { normalizedPersonName } from "@/lib/data/person-name";
-import { siteLabel, todayISO } from "@/lib/schedule/format";
+import { siteLabel, siteTitle, todayISO } from "@/lib/schedule/format";
 import { saveOpponentPlayer } from "@/lib/schedule/actions";
 import {
   findLineOffers,
@@ -91,6 +94,7 @@ import {
 import { AttachLinePicker } from "@/components/dashboard/matches/match-actions/attach-line-picker";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
+import { rankLineOffers } from "./offer-match";
 import type { EventPreset, FormData, LineOffer, ValueSource } from "./types";
 import {
   floatMenuCls,
@@ -756,8 +760,8 @@ function ScheduleFooter({
         </>
       ) : (
         <span>
-          One-off · not on the schedule. A coach who runs the schedule can add
-          it to an event.
+          One-off for now. A coach who runs the schedule can add it to an event
+          later.
         </span>
       )}
     </span>
@@ -823,7 +827,7 @@ function OfferStrip({
           strokeWidth={1.5}
           aria-hidden="true"
         />
-        {siteLabel(offer.site)}
+        {siteTitle(offer.site)}
       </span>
       <span className="flex-1" />
       {attached ? (
@@ -866,12 +870,12 @@ function OfferStrip({
  * what actually blocks Save on it, this is only the control.
  */
 const HAND_OPTIONS: readonly { value: Hand; label: string }[] = [
-  { value: "right", label: "Right-handed" },
-  { value: "left", label: "Left-handed" },
+  { value: "right", label: "Right" },
+  { value: "left", label: "Left" },
 ];
 const BACKHAND_OPTIONS: readonly { value: Backhand; label: string }[] = [
-  { value: "two-handed", label: "Two-handed backhand" },
-  { value: "one-handed", label: "One-handed backhand" },
+  { value: "two-handed", label: "Two-handed" },
+  { value: "one-handed", label: "One-handed" },
 ];
 
 function provenanceFor(
@@ -1089,8 +1093,26 @@ function DetailsStepContentImpl({
     onInputChange,
   ]);
 
+  // The date query returns every candidate; the opponent name or the score
+  // must also match before one is offered. Filtered in memory so typing never
+  // re-asks the server. An attached line wins, so Detach stays reachable after
+  // the opponent or score is edited.
+  const rankedOffers = useMemo(
+    () =>
+      rankLineOffers(offers, {
+        opponentName: formData.opponentName,
+        playerScores: formData.playerScores,
+        opponentScores: formData.opponentScores,
+      }),
+    [
+      offers,
+      formData.opponentName,
+      formData.playerScores,
+      formData.opponentScores,
+    ],
+  );
   const offer =
-    attachedLine ?? offers.find((o) => !declined.has(o.entryId)) ?? null;
+    attachedLine ?? rankedOffers.find((o) => !declined.has(o.entryId)) ?? null;
 
   // ---- Players: editing state
 
@@ -1216,6 +1238,10 @@ function DetailsStepContentImpl({
     playedShown.some((p) => normalizedPersonName(p.name) === needle) ||
     rosterShown.some((p) => normalizedPersonName(p.name) === needle);
 
+  // The name is read-only here: in a team flow with no line pinned it was
+  // picked on step 1, and SubjectBar's "Not <name>?" is where it changes. Say
+  // so quietly rather than add a second control for the same start-over.
+  const pickedOnStepOne = workspaceKind === "team" && !preset;
   const playerProvenance = provenanceFor(formData.playerStyleSource, {
     isSelf: subject.isSelf,
     school: null,
@@ -1372,7 +1398,7 @@ function DetailsStepContentImpl({
             once; a narrow column stacks each row and brings its labels back.
             Anything a row says beyond its three answers lives under the name,
             never in a fourth column that would knock the grid out of line. */}
-        <div className="flex flex-col gap-6 sm:grid sm:grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-4">
+        <div className="flex flex-col gap-6 sm:grid sm:grid-cols-[260px_minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-4">
           <div aria-hidden="true" className="hidden sm:contents">
             <span />
             <FieldCaption label="Hand" required />
@@ -1385,9 +1411,11 @@ function DetailsStepContentImpl({
                 <span className="truncate">{subject.name}</span>
                 {subject.isSelf && <YouPill />}
               </span>
-              {playerProvenance && (
+              {(pickedOnStepOne || playerProvenance) && (
                 <span className="text-micro whitespace-nowrap">
-                  {playerProvenance}
+                  {[pickedOnStepOne && "Picked on step 1", playerProvenance]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </span>
               )}
             </span>
@@ -1422,7 +1450,6 @@ function DetailsStepContentImpl({
                   variant="underline"
                   value={playerBackhand}
                   placeholder="Backhand"
-                  width={220}
                   options={BACKHAND_OPTIONS}
                   onChange={(v) => {
                     onInputChange("playerBackhand", v);
@@ -1641,8 +1668,8 @@ function DetailsStepContentImpl({
                 </Popover>
                 {/* The selects beside it wait on the name; say so where the
                   eye already is, not in a column of its own. */}
-                <span className="text-micro">
-                  Hand and backhand after the name
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
+                  <Kbd size="sm">enter</Kbd> to add them
                 </span>
               </span>
             ) : (
@@ -1701,7 +1728,6 @@ function DetailsStepContentImpl({
                   variant="underline"
                   value={opponentBackhand}
                   placeholder="Backhand"
-                  width={220}
                   disabled={namingOpponent}
                   options={BACKHAND_OPTIONS}
                   onChange={(v) => {
@@ -1711,6 +1737,11 @@ function DetailsStepContentImpl({
                 />
               </Cell>
             </div>
+            {namingOpponent && (
+              <span className="text-[11px] text-[var(--ink-600)] sm:col-span-2 sm:col-start-2">
+                Hand and backhand open once the opponent is added.
+              </span>
+            )}
           </div>
         </div>
 
@@ -1753,6 +1784,7 @@ function DetailsStepContentImpl({
                   onAttach(picked.offer);
                 }}
                 onClose={() => setPickingLine(false)}
+                unsaved
               />
             </Cell>
           ) : (

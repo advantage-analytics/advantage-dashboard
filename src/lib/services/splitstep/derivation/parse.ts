@@ -24,6 +24,7 @@ import {
   MAX_PLAUSIBLE_X_M,
   MAX_PLAUSIBLE_Y_M,
 } from "./court";
+import { orderedBounceFrame } from "./frame-clock";
 import type {
   RawSplitStepStroke,
   SplitStepStroke,
@@ -47,6 +48,17 @@ export function num(value: unknown): number | null {
   // and float round-tripping through JSON has been observed to shift it.
   if (Math.abs(value - NUMERIC_SENTINEL) < 1) return null;
   return value;
+}
+
+/**
+ * The bounce frame, or null when it is missing, non-finite, the sentinel, or
+ * earlier than the contact frame — `orderedBounceFrame` in frame-clock.ts,
+ * the same rule the trajectories file applies in ball-paths.ts. A bounce with
+ * no contact frame to anchor it is nulled too: nothing can order it, and the
+ * fit in frame-clock.ts would skip that stroke's pair anyway.
+ */
+function bounceFrame(value: unknown, frame: number | null): number | null {
+  return orderedBounceFrame(num(value), frame);
 }
 
 /** A string field, or null if it carries the sentinel or is blank. */
@@ -147,11 +159,13 @@ export function normalizeStroke(
   const bounce = position(raw.bounce_x_m, raw.bounce_y_m);
   const player = position(raw.player_x_m, raw.player_y_m);
   const opponent = position(raw.opponent_x_m, raw.opponent_y_m);
+  const frame = num(raw.frame);
 
   return {
     eventId: num(raw.event_id) ?? -1,
     videoTime: time + startTimeSeconds,
-    trimmedFrame: num(raw.frame) ?? -1,
+    trimmedFrame: frame ?? -1,
+    bounceFrame: bounceFrame(raw.bounce_frame, frame),
 
     rallyId,
     strokeNumber,

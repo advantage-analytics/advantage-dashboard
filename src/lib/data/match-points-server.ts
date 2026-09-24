@@ -14,6 +14,12 @@ export interface MatchShot {
   /** Same clock as `MatchPoint.videoTime`; null when the source never timed it. */
   videoTime: number | null;
   /**
+   * When the ball bounced, on the same clock as `videoTime`. Only the
+   * Advantage Intelligence path fills it (the vendor's bounce frame fitted to
+   * seconds); SwingVision imports are null.
+   */
+  bounceVideoTime: number | null;
+  /**
    * Where the ball was struck and where it landed, in the database's court
    * frame: metres, x about the centre line, y 0 → 23.77 baseline to baseline.
    * The frame is fixed for the match and does NOT follow end changes — map it
@@ -101,6 +107,7 @@ interface DbShot {
   spin_type: string | null;
   speed_mph: number | null;
   video_time: number | null;
+  bounce_video_time: number | null;
   zone: string | null;
   result: string | null;
   contact_x: number | null;
@@ -277,7 +284,7 @@ export async function getMatchPointsFromSupabase(
     const { data: page, error: shotsError } = await supabase
       .from("shots")
       .select(
-        "id, point_id, shot_number, is_player1, shot_type, spin_type, speed_mph, video_time, zone, result, contact_x, contact_y, landing_x, landing_y",
+        "id, point_id, shot_number, is_player1, shot_type, spin_type, speed_mph, video_time, bounce_video_time, zone, result, contact_x, contact_y, landing_x, landing_y",
       )
       .in("point_id", pointIds)
       .order("point_id", { ascending: true })
@@ -363,6 +370,7 @@ export async function getMatchPointsFromSupabase(
         zone: shot.zone,
         result: shot.result,
         videoTime: shot.video_time,
+        bounceVideoTime: shot.bounce_video_time,
         contactX: shot.contact_x,
         contactY: shot.contact_y,
         landingX: shot.landing_x,

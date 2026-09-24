@@ -63,7 +63,15 @@
  * both answers are given (`docs/ui-revamp-guardrails.md` §3.1).
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   ArrowLeftToLine,
@@ -83,6 +91,7 @@ import { JUMP_STEP_SECONDS } from "../match-video-attachment/use-attachment-alig
 import type { VideoProbeSummary } from "./types";
 import { focusRingCls, noteIconCls, noteStripCls } from "./styles";
 import { Kbd } from "@/components/ui/kbd";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { isFormControl } from "./useWizardKeys";
 import { formatClipLength, formatClock, formatTimecode } from "./utils";
 import { FieldCaption } from "./FieldCaption";
@@ -181,6 +190,7 @@ function CutField({
   onJump,
   onSet,
   setDisabled,
+  rule,
 }: {
   side: Handle;
   label: string;
@@ -188,53 +198,82 @@ function CutField({
   onJump: () => void;
   onSet: () => void;
   setDisabled: boolean;
+  /** Where this cut belongs, printed under the field it applies to. */
+  rule: string;
 }) {
   const isStart = side === "start";
+  const ruleId = useId();
   const Glyph = isStart ? ArrowLeftToLine : ArrowRightToLine;
 
   const readout = (
-    <button
-      type="button"
-      onClick={onJump}
-      aria-label={`Jump to the trim ${isStart ? "start" : "end"}`}
-      // `items-center`, not `items-baseline`: the field is `items-stretch`, so
-      // a baseline-aligned label sits at the TOP of the stretched box while the
-      // glyph beside it centres, and the two read as misaligned. Centring also
-      // suits the pairing — a 9px letter-spaced label against a 12px mono
-      // number looks dropped on a shared baseline.
-      className={`inline-flex cursor-pointer items-center gap-1.5 px-2.5 py-2 ${
-        isStart ? "rounded-l-[5px]" : "rounded-r-[5px]"
-      } ${focusRingCls}`}
-    >
-      <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-        {label}
-      </span>
-      <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
-        {formatTimecode(time)}
-      </span>
-    </button>
+    <ChromeTooltip label={`Go to the ${isStart ? "start" : "end"}`}>
+      <button
+        type="button"
+        onClick={onJump}
+        aria-label={`Jump to the trim ${isStart ? "start" : "end"}`}
+        // `items-center`, not `items-baseline`: the field is `items-stretch`, so
+        // a baseline-aligned label sits at the TOP of the stretched box while the
+        // glyph beside it centres, and the two read as misaligned. Centring also
+        // suits the pairing — a 9px letter-spaced label against a 12px mono
+        // number looks dropped on a shared baseline. `min-w` + `justify-center`
+        // give Start and End one width with the pair centred in it. Centring
+        // line boxes is not centring letters: `text-box` trims each span to its
+        // cap height, so the 9px capitals and the 12px digits centre on the
+        // ink, and the label's negative margin takes back the trailing 2.5px of
+        // letter-spacing that pushed the pair off-centre.
+        className={`inline-flex min-w-[112px] cursor-pointer items-center justify-center gap-1.5 px-2.5 py-2 leading-none transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] ${
+          isStart ? "rounded-l-[5px]" : "rounded-r-[5px]"
+        } ${focusRingCls}`}
+      >
+        <span
+          className="eyebrow-sm mr-[-2.5px] [text-box:trim-both_cap_alphabetic]"
+          style={{ color: "var(--ink-400)" }}
+        >
+          {label}
+        </span>
+        <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)] [text-box:trim-both_cap_alphabetic]">
+          {formatTimecode(time)}
+        </span>
+      </button>
+    </ChromeTooltip>
   );
 
   const action = (
-    <button
-      type="button"
-      onClick={onSet}
-      disabled={setDisabled}
-      aria-label={`Set the trim ${isStart ? "start" : "end"} to the current position`}
-      className={`inline-flex w-8 cursor-pointer items-center justify-center text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-50 ${
-        isStart
-          ? "rounded-r-[5px] border-l border-[var(--border-field)]"
-          : "rounded-l-[5px] border-r border-[var(--border-field)]"
-      } ${focusRingCls}`}
+    <ChromeTooltip
+      label={`Set the ${isStart ? "start" : "end"} here`}
+      shortcut={isStart ? "I" : "O"}
     >
-      <Glyph className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-    </button>
+      <button
+        type="button"
+        onClick={onSet}
+        disabled={setDisabled}
+        aria-label={`Set the trim ${isStart ? "start" : "end"} to the current position`}
+        aria-describedby={ruleId}
+        className={`inline-flex w-8 cursor-pointer items-center justify-center text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-50 ${
+          isStart
+            ? "rounded-r-[5px] border-l border-[var(--border-field)]"
+            : "rounded-l-[5px] border-r border-[var(--border-field)]"
+        } ${focusRingCls}`}
+      >
+        <Glyph className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+      </button>
+    </ChromeTooltip>
   );
 
   return (
-    <div className="inline-flex items-stretch rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)]">
-      {isStart ? readout : action}
-      {isStart ? action : readout}
+    <div
+      className={`flex flex-col gap-1.5 ${isStart ? "items-start" : "items-end"}`}
+    >
+      <div className="inline-flex items-stretch rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)]">
+        {isStart ? readout : action}
+        {isStart ? action : readout}
+      </div>
+      <span
+        id={ruleId}
+        className="px-0.5 text-[11px] leading-[1.4] text-[var(--ink-600)]"
+      >
+        {rule}
+      </span>
     </div>
   );
 }
@@ -1154,9 +1193,9 @@ function TrimStepContentImpl({
       </div>
 
       {/* Trim */}
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2">
         <div className="flex items-baseline gap-2.5">
-          <span className="eyebrow whitespace-nowrap">Trim to the match</span>
+          <span className="eyebrow whitespace-nowrap">Window</span>
           <span className="flex-1" />
           {/* The window against the file. */}
           <span className="mono tabular text-[11px] text-[var(--ink-500)]">
@@ -1335,7 +1374,7 @@ function TrimStepContentImpl({
             that moves it in one field. The set half is disabled past the other
             cut: a start on or after the end is not a window, and the step
             refuses rather than clamping to a frame nobody chose. */}
-        <div className="flex items-center justify-between gap-3 px-0.5 pt-0.5">
+        <div className="flex items-start justify-between gap-3 px-0.5 pt-0.5">
           <CutField
             side="start"
             label="Start"
@@ -1343,6 +1382,7 @@ function TrimStepContentImpl({
             onJump={() => seekLatest(start)}
             onSet={() => setHandleToPlayhead("start")}
             setDisabled={!canSetStart}
+            rule="Just before the first point"
           />
           <CutField
             side="end"
@@ -1351,6 +1391,7 @@ function TrimStepContentImpl({
             onJump={() => seekLatest(end)}
             onSet={() => setHandleToPlayhead("end")}
             setDisabled={!canSetEnd}
+            rule="Just after the last point"
           />
         </div>
 
@@ -1358,7 +1399,7 @@ function TrimStepContentImpl({
             one keyboard chip; `sm` is its inline-hint size, and a combo is
             adjacent chips, never one chip holding both keys. Lowercase for
             word-named keys, as the roster's hint and Help write them. */}
-        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] leading-[1.5] text-[var(--ink-600)]">
+        <p className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] leading-[1.5] text-[var(--ink-600)]">
           <Kbd size="sm">space</Kbd>
           <span>play</span>
           <span aria-hidden="true" className="text-[var(--ink-300)]">
@@ -1391,7 +1432,7 @@ function TrimStepContentImpl({
             />
             <span>
               The window is under {formatClipLength(minTrimSeconds)} — widen it
-              to cover the match.
+              to cover every point.
             </span>
           </div>
         ) : null}

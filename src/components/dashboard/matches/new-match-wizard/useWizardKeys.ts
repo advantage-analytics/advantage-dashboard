@@ -157,10 +157,19 @@ export function useWizardKeys({
       // and Escape popped the wizard step as well as the menu it was aimed at.
       // Capturing means the question "is something open?" is asked while the
       // answer is still true, and the menu still gets its Escape afterwards.
+      // An open dialog owns it for the same reason, and has no expanded
+      // trigger to find: a confirm opened in code ("Start over with a different
+      // player?", "Remove entered set scores?") would otherwise lose Escape to
+      // Back — the step changing under a question still on screen — and Enter
+      // on its focused Cancel to Continue. Keyed on Radix's `data-state`:
+      // `MobileGate`'s `role="alertdialog"` is always in the DOM (hidden by CSS
+      // above `md`), and a bare role match would switch these keys off for good.
       const active = document.activeElement as HTMLElement | null;
       if (
         active?.tagName === "SELECT" ||
-        document.querySelector('[aria-expanded="true"]')
+        document.querySelector(
+          '[aria-expanded="true"], [role="alertdialog"][data-state="open"], [role="dialog"][data-state="open"]',
+        )
       ) {
         return;
       }

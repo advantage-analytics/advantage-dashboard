@@ -44,6 +44,7 @@ import {
   PendingBar,
   PendingRegion,
 } from "@/components/dashboard/loading/pending";
+import { useConfirmLeave } from "@/components/dashboard/leave-guard-context";
 
 interface MatchCrumb {
   tournamentName: string;
@@ -179,6 +180,13 @@ export function Header({
   const requestLogout = useRequestLogout();
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  // Breadcrumbs and the account menu ask first while an upload screen is busy.
+  const guardLeave = useConfirmLeave();
+  /** A menu link: when the guard takes the click, the menu gives way to it. */
+  const guardMenuLink =
+    (href: string, label: string) => (event: React.MouseEvent) => {
+      if (guardLeave(event, href, label)) setIsProfileOpen(false);
+    };
   const [matchCrumb, setMatchCrumb] = useState<MatchCrumb | null>(null);
   const [matchCrumbLoading, setMatchCrumbLoading] = useState(false);
   const [isMac, setIsMac] = useState<boolean | null>(null);
@@ -466,6 +474,9 @@ export function Header({
                     {crumb.href ? (
                       <Link
                         href={crumb.href}
+                        onClick={(event) =>
+                          guardLeave(event, crumb.href!, crumb.label)
+                        }
                         className="shrink-0 text-[#888888] transition-colors duration-200 hover:text-[#525252]"
                       >
                         {crumb.label}
@@ -633,6 +644,10 @@ export function Header({
 
                 <Link
                   href="/dashboard/settings/preferences"
+                  onClick={guardMenuLink(
+                    "/dashboard/settings/preferences",
+                    "Preferences",
+                  )}
                   className={MENU_ROW_CLASS}
                 >
                   <SlidersHorizontal
@@ -644,6 +659,7 @@ export function Header({
                 </Link>
                 <Link
                   href="/dashboard/settings/usage"
+                  onClick={guardMenuLink("/dashboard/settings/usage", "Usage")}
                   className={MENU_ROW_CLASS}
                 >
                   <Timer
@@ -653,7 +669,11 @@ export function Header({
                   />
                   Usage &amp; quota
                 </Link>
-                <Link href="/dashboard/help" className={MENU_ROW_CLASS}>
+                <Link
+                  href="/dashboard/help"
+                  onClick={guardMenuLink("/dashboard/help", "Help")}
+                  className={MENU_ROW_CLASS}
+                >
                   <CircleHelp
                     className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}

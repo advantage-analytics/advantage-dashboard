@@ -41,6 +41,7 @@ const shot = (
   zone: null,
   result,
   videoTime: null,
+  bounceVideoTime: null,
   contactX: contact?.[0] ?? null,
   contactY: contact?.[1] ?? null,
   landingX: landing?.[0] ?? null,
@@ -116,12 +117,11 @@ test("the chart literals are the frame's", () => {
   expect(OUT).toBe("#FF6478");
 });
 
-test("a mark holds two seconds at full, fades over three, and is gone at five", () => {
+test("a mark holds two seconds at full, fades over 2.5, and is gone at 4.5", () => {
   expect(markOpacity(10, 10)).toBe(1);
   expect(markOpacity(12, 10)).toBe(1);
-  expect(markOpacity(13.5, 10)).toBe(0.5);
-  expect(markOpacity(14.25, 10)).toBe(0.25);
-  expect(markOpacity(15, 10)).toBe(0);
+  expect(markOpacity(13.25, 10)).toBe(0.5);
+  expect(markOpacity(14.5, 10)).toBe(0);
   expect(markOpacity(20, 10)).toBe(0);
 });
 
@@ -194,6 +194,27 @@ test("the court draws the moment, not the shot count", () => {
   expect(landed.filter((m) => m.live)).toHaveLength(1);
 });
 
+test("a landing time stored on the row fires there, not at the 0.6 estimate", () => {
+  // s3 is struck at 12, so the estimate would land its ball at 12.6. The row
+  // carries a measured landing instead (`ShotStop.bounce`, off
+  // `shots.bounce_video_time`), 0.25s after the strike.
+  const stored = { s3: 12.25 };
+  expect(bounceOf(at(12.25, RALLY, stored), "s3")).toMatchObject({
+    opacity: 1,
+    live: true,
+  });
+  // 0.2s before that the ball is still in the air, so no bounce is drawn…
+  expect(bounceOf(at(12.05, RALLY, stored), "s3")).toBeUndefined();
+  // …and the estimate's own moment passes without an event: it already landed.
+  expect(bounceOf(at(12.6, RALLY, stored), "s3")).toMatchObject({ opacity: 1 });
+
+  // The strike is a separate event and still fires at the contact time.
+  expect(contactOf(at(12.05, RALLY, stored), "s3")).toMatchObject({
+    opacity: 1,
+  });
+  expect(contactOf(at(11.89, RALLY, stored), "s3")).toBeUndefined();
+});
+
 test("a measured landing time beats the estimate, in both directions", () => {
   // s3's ball is known to have landed at 12.2, before the 12.6 estimate.
   const early = at(12.3, RALLY, { s3: 12.2 });
@@ -206,7 +227,7 @@ test("a measured landing time beats the estimate, in both directions", () => {
   expect(drawn(nonsense)).toEqual(drawn(at(12.3)));
 });
 
-test("a mark is gone five seconds after its moment, and never drawn early", () => {
+test("a mark is gone 4.5 seconds after its moment, and never drawn early", () => {
   // s1's contact happened at 10.
   expect(contactOf(at(15), "s1")).toBeUndefined();
   // Before the first contact there is nothing to draw at all.
@@ -411,6 +432,18 @@ test("the readout hangs opposite the mark and stays in frame", () => {
   // …and is clamped at both ends so three lines always fit on the card.
   expect(readoutPlacement(17, 3).top).toBe(0);
   expect(readoutPlacement(83, 97).top).toBe(70);
+  // A card docked right sits with its right edge 24px from the room's edge
+  // (courtSlot's inset). A readout that hung right there would start 10px
+  // past the card (READOUT_GAP) and be 168px wide, ending 10 + 168 - 24 =
+  // 154px past the room's edge — so a right-docked card always reads left,
+  // even for a mark in the left half that would otherwise read right.
+  expect(readoutPlacement(17, 50, "right").side).toBe("left");
+  // Mirror: a card docked left always reads right, even for a mark in the
+  // right half that would otherwise read left.
+  expect(readoutPlacement(83, 50, "left").side).toBe("right");
+  // Where dock and the x rule already agree, dock changes nothing.
+  expect(readoutPlacement(83, 50, "right").side).toBe("left");
+  expect(readoutPlacement(17, 50, "left").side).toBe("right");
 });
 
 test("the camera view draws the frame as the film shows it, whoever is at which end", () => {
