@@ -12,12 +12,7 @@ import type { Chart } from "./viz-model";
 import { useVizState } from "./use-viz-state";
 import { CHART_LABEL, VizMenuTrigger } from "./viz-labels";
 
-/**
- * The "Chart" menu (P1e): Scatter, Heat, and Zones — Zones only renders when
- * the current cut is Serve, since it counts and scores service boxes and has
- * no meaning off serve (guardrails: Zones is Serve-only, enforced here
- * rather than trusted to the caller).
- */
+/** Chart type applies to every cut; Zones uses its existing bands. */
 export function ChartMenu({
   tone = "light",
   side = "bottom",
@@ -83,18 +78,19 @@ export function ChartMenu({
         }
         onSelect={() => selectChart("heat")}
       />
-      {state.cut === "serve" && (
-        <FloatMenuItem
-          label="Zones"
-          description="Count and points won per service box"
-          chosen={state.chart === "zones"}
-          onSelect={() => selectChart("zones")}
-        />
-      )}
+      <FloatMenuItem
+        label="Zones"
+        description={
+          state.cut === "serve"
+            ? "Count and points won per service box"
+            : "Count and points won per depth or contact band"
+        }
+        chosen={state.chart === "zones"}
+        onSelect={() => selectChart("zones")}
+      />
 
       <FloatMenuNote>
-        Zones is available on Serve placement only. The legend follows the
-        chart.
+        Zones follows the service boxes or the current depth and contact bands.
       </FloatMenuNote>
     </FloatMenu>
   );

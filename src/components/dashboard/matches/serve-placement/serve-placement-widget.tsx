@@ -1092,7 +1092,11 @@ function pointToReturnCourtDots(
 
 function getLandingSide(p: ServePointInput): "deuce" | "ad" | null {
   if (p.firstShotLandingX == null || p.firstShotLandingY == null) return null;
-  const { lx } = normalizeLanding(p.firstShotLandingX, p.firstShotLandingY);
+  const { lx } = normalizeLanding(
+    p.firstShotLandingX,
+    p.firstShotLandingY,
+    p.firstShotContactY,
+  );
   return lx < 0 ? "deuce" : "ad";
 }
 

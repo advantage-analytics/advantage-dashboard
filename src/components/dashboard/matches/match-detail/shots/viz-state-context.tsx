@@ -76,6 +76,10 @@ interface VizStateContextValue {
 
 const VizStateContext = createContext<VizStateContextValue | null>(null);
 
+// Below this, the pane reads as "not scrolled" — a few px of rubber-band
+// or rounding jitter shouldn't disqualify the court morph.
+const SCROLL_MORPH_THRESHOLD_PX = 8;
+
 /**
  * The Visualizations tab's client-side URL binding: `useSearchParams()` in,
  * `router.replace` out. Reads the ONE store `VizStateProvider` mounts —
@@ -346,7 +350,18 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
       targetKey: string | null;
       reducedMotion: boolean;
     }): void => {
-      if (reducedMotion || !sourceEl || !supportsViewTransitions()) {
+      // A gallery tile can be selected after scrolling deep into the pane.
+      // That selection scrolls the destination court to the top; morphing
+      // during the scroll makes the shared court appear to jump. In that
+      // position, make the state change directly and let the focused view
+      // perform its existing scroll/focus landing.
+      const pane = document.getElementById("match-report-pane");
+      if (
+        reducedMotion ||
+        !sourceEl ||
+        !supportsViewTransitions() ||
+        (pane !== null && pane.scrollTop > SCROLL_MORPH_THRESHOLD_PX)
+      ) {
         setState(next);
         return;
       }

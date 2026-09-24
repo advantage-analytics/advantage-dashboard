@@ -767,6 +767,25 @@ test("the Advantage Intelligence lineage asks for nothing at all", async ({
   expect((await state(page, REPORT))?.time).toBeCloseTo(0.3, 1);
 });
 
+test("Watch point opens the aligned point in the Video room", async ({
+  page,
+}) => {
+  await open(page, "provider-watch", {
+    lineage: "vendor-copy",
+    tab: "film",
+    point: "b",
+  });
+  await expect(page.getByRole("dialog", { name: "Film room" })).toBeVisible();
+  await expect(page).toHaveURL(/fullscreen=1/);
+  await expect(page).not.toHaveURL(/[?&]point=/);
+  await page.waitForFunction(() => {
+    const room = document.querySelector<HTMLVideoElement>(
+      '[data-testid="film-room-video"]',
+    );
+    return !!room && room.currentTime >= 0.3;
+  });
+});
+
 test("the provider lineage still answers a media error with Reload", async ({
   page,
 }) => {

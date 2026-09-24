@@ -141,11 +141,7 @@ export function validateVizInput(input: {
   const parsed = parseVizState(params);
 
   if (parsed.cut === null || parsed.cut !== input.cut) return null;
-  // A chart `chartAllowedOn` (`viz-model.ts`) rejects for this cut — "zones"
-  // off serve — silently downgrades to "scatter" in `parseVizState` rather
-  // than being rejected there (a URL must always resolve to something
-  // drawable). A stored or submitted row asking for the impossible pairing
-  // is invalid, not a scatter chart in disguise, so it's caught here instead.
+  // Stored chart types must survive URL normalization unchanged.
   if (input.chart !== parsed.chart) return null;
 
   return { cut: parsed.cut, chart: parsed.chart, filters: parsed.filters };

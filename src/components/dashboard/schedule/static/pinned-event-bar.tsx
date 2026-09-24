@@ -34,8 +34,8 @@ import type { EventFormat, EventSite } from "@/lib/schedule/types";
  * The bracket mark for a tournament, drawn the same way `BracketMark` in
  * `static-event-chooser.tsx` is — the design's own 15×15 path, because Lucide
  * has no draw/bracket glyph. Inlined a second time rather than exported from
- * that file: it is a static-event-chooser private the way `CourtGlyph` in
- * `event-page.tsx` is, and it inherits `currentColor` the same way.
+ * that file: it is a static-event-chooser private, and it inherits
+ * `currentColor` the same way.
  */
 function BracketMark({ className }: { className?: string }) {
   return (

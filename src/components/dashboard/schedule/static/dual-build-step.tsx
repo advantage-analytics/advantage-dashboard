@@ -1,10 +1,15 @@
 "use client";
 
+import { Info } from "lucide-react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { DOUBLES_SLOTS, SINGLES_SLOTS } from "@/lib/schedule/courts";
 import { DateField } from "@/components/ui/date-field";
 import { MenuSelect } from "@/components/ui/menu-select";
+import {
+  noteIconCls,
+  noteStripCls,
+} from "@/components/dashboard/matches/new-match-wizard/styles";
 import {
   DOUBLES_FORMATS,
   FORMATS,
@@ -50,6 +55,10 @@ import {
   applySinglesOrder,
   type SinglesOccupant,
 } from "@/lib/schedule/singles-order";
+import {
+  applyDoublesOrder,
+  type DoublesOccupant,
+} from "@/lib/schedule/doubles-order";
 import { courtIndex } from "@/lib/schedule/courts";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
@@ -695,6 +704,15 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     setLines((current) => applySinglesOrder(current, order, lockedByKey));
   }
 
+  /**
+   * A new doubles order from the lineup's drag — D1…D3's pairs, in order.
+   * The doubles half of `setSinglesOrder`: whole pairs move, opponents stay
+   * on their courts, and it is refused while any doubles line is settled.
+   */
+  function setDoublesOrder(order: DoublesOccupant[]) {
+    setLines((current) => applyDoublesOrder(current, order, lockedByKey));
+  }
+
   // A line counts once it is set — a player, a pair, or No player — and a
   // settled line counts whoever is on it. The dual saves at nine of nine: a
   // hole would read as unfinished and as forfeited at once, and `dualScore`
@@ -806,6 +824,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     setNoPlayer,
     setTheirNoPlayer,
     setSinglesOrder,
+    setDoublesOrder,
     lineCount,
     lineTotal,
     opponentName,
@@ -825,6 +844,10 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
  * the singles format, and college doubles is played as one set to 6 or an
  * 8-game pro-set rather than the singles best-of. Both rows are the same
  * three columns at the same gap, the format pair in the right two.
+ *
+ * A grey fact strip follows the format row as its footnote: doubles lines
+ * record a score only, no statistics or video — see the note strip below
+ * `DualFactsStep`'s JSX.
  *
  * ── What draws what ────────────────────────────────────────────────────────
  *   Date                `DateField variant="bare"` inside `FieldCell`'s ruled
@@ -948,6 +971,24 @@ export function DualFactsStep({
           />
         </FieldCell>
       </div>
+
+      {/* Grey, not the warning yellow: nothing here is wrong and nothing is
+          the coach's to fix — doubles just isn't measured yet, which is a
+          fact about the product, not a question the row above is asking.
+          See "Notice strips" in the design skill's primitives.md. */}
+      <div className={noteStripCls}>
+        <Info
+          className={`${noteIconCls} text-[var(--ink-400)]`}
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+        <span>
+          <b className="font-medium text-[var(--ink-900)]">
+            Doubles lines record a score only.
+          </b>{" "}
+          Statistics and video analysis are singles only for now.
+        </span>
+      </div>
     </div>
   );
 }
@@ -979,6 +1020,7 @@ export function DualLineupStep({
   onNoPlayer,
   onTheirNoPlayer,
   onSinglesOrder,
+  onDoublesOrder,
 }: {
   lines: LineupLine[];
   /**
@@ -1007,6 +1049,8 @@ export function DualLineupStep({
   onTheirNoPlayer: (key: string) => void;
   /** `useDualDraft().setSinglesOrder` — a drag's whole new singles order. */
   onSinglesOrder: (order: SinglesOccupant[]) => void;
+  /** `useDualDraft().setDoublesOrder` — a drag's whole new doubles order. */
+  onDoublesOrder: (order: DoublesOccupant[]) => void;
 }) {
   const singles = lines.filter((line) => line.discipline === "singles");
   const doubles = lines.filter((line) => line.discipline === "doubles");
@@ -1027,13 +1071,32 @@ export function DualLineupStep({
     [ladder, added],
   );
 
-  function onAddPlayer(key: string, player: LadderPlayer, value: string) {
+  function remember(player: LadderPlayer) {
     setAdded((current) =>
       current.some((entry) => entry.userId === player.userId)
         ? current
         : [...current, player],
     );
+  }
+
+  /** Singles: the picker names them by label — see `editOurLabels`. */
+  function onAddPlayer(key: string, player: LadderPlayer, value: string) {
+    remember(player);
     onOurLabels(key, value, player);
+  }
+
+  /**
+   * Doubles: the pair picker already holds ids, so the new player joins the
+   * pair by id beside any partner picked — never reparsed from a label. The
+   * same `added` list, so every other picker offers them too.
+   */
+  function onAddPairPlayer(
+    key: string,
+    player: LadderPlayer,
+    selection: { ids: string[]; labels: string[] },
+  ) {
+    remember(player);
+    onOurSelection(key, selection);
   }
 
   const shared = {
@@ -1043,6 +1106,7 @@ export function DualLineupStep({
     onOurLabels,
     onOurSelection,
     onAddPlayer,
+    onAddPairPlayer,
     onTheirLabels,
     onNoPlayer,
     onTheirNoPlayer,
@@ -1070,7 +1134,7 @@ export function DualLineupStep({
           set={setCount(doubles, locked, shared.clashes)}
           total={doubles.length}
         />
-        <DoublesLineup {...shared} lines={doubles} />
+        <DoublesLineup {...shared} lines={doubles} onOrder={onDoublesOrder} />
       </div>
     </>
   );

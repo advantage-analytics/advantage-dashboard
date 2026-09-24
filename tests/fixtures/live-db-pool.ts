@@ -6,6 +6,7 @@ import {
   ADMIN_RETRY_BUDGET_MS,
   SERVICE_ROLE_KEY,
   assertWritableTarget,
+  authErrorDetails,
   findUserByEmail,
   hookDeadline,
   isTransientAuthError,
@@ -175,7 +176,7 @@ async function createPoolUser(
   const { data, error } = outcome.result;
   if (error || !data.user) {
     throw new Error(
-      `createUser(${email}): ${error?.message}${retrySuffix(outcome)}`,
+      `createUser(${email}): ${authErrorDetails(error)}${retrySuffix(outcome)}`,
     );
   }
   return data.user.id;
@@ -303,14 +304,14 @@ export async function poolLogin(
     );
     if (repaired.result.error) {
       throw new Error(
-        `updateUserById(${email}): ${repaired.result.error.message}${retrySuffix(repaired)}`,
+        `updateUserById(${email}): ${authErrorDetails(repaired.result.error)}${retrySuffix(repaired)}`,
       );
     }
     attempt = await signIn(email, password);
   }
   if (attempt.error) {
     throw new Error(
-      `signIn(pool ${slot}): ${attempt.error.message}${attempt.suffix}`,
+      `signIn(pool ${slot}): ${authErrorDetails(attempt.error)}${attempt.suffix}`,
     );
   }
   return { client: attempt.client, userId };

@@ -363,61 +363,10 @@ test.describe("a PinnedLineBar line swap", () => {
     expect(h.current.formData.numberOfSets).toBe(3);
   });
 
-  test("an import-line swap keeps the parsed file and re-asks the player-1 check", async () => {
-    const importLine = (overrides: Partial<EventPreset> = {}) =>
-      line({ supportsVideo: false, ...overrides });
-    const h = uploadWizardHarness({
-      team: true,
-      props: { preset: importLine() },
-    });
-    await h.flush();
-    expect(h.current.step).toBe("file");
-
-    const pending = await h.pick("match.csv");
-    pending.resolve(parsedNames("M. Reid", "File Opponent"));
-    await h.flush();
-    expect(h.current.parsingState.parseSuccess).toBe(true);
-    expect(h.current.importIdentity.comparison?.requiresConfirmation).toBe(
-      true,
-    );
-    h.current.importIdentity.confirm();
-    h.render();
-    expect(h.current.importIdentity.confirmed).toBe(true);
-    const uploaded = h.current.uploadedFile;
-
-    await swapTo(
-      h,
-      importLine({
-        entryId: "entry-b",
-        round: "S2",
-        playerName: "Sam Ortiz",
-        playerUserId: "first",
-        opponentName: "Chris Lee",
-      }),
-    );
-
-    // The file and its parse stay…
-    expect(h.current.uploadedFile).toBe(uploaded);
-    expect(h.current.parsingState.parseSuccess).toBe(true);
-    expect(h.current.importIdentity.parsedNames).toEqual({
-      playerName: "M. Reid",
-      opponentName: "File Opponent",
-    });
-    // …but "player 1 is Marcus Reid" is no answer about Sam Ortiz: the
-    // athlete-keyed reset drops it, and the check asks again.
-    expect(h.current.importIdentity.confirmed).toBe(false);
-    expect(h.current.importIdentity.blocked).toBe(true);
-  });
-
-  test("a swap across source kinds still drops the file", async () => {
-    const h = await answeredOnLineA();
-    expect(h.current.uploadedFile?.name).toBe("court-one.mp4");
-
-    // A doubles line cannot take video; the picked recording cannot ride on.
-    await swapTo(h, { ...LINE_B, supportsVideo: false });
-
-    expect(h.current.uploadedFile).toBeNull();
-  });
+  // No import-line or cross-kind swap cases: doubles is score-only
+  // (decision 2026-09-22), so a preset is always a singles video line — the
+  // upload page lists doubles lines in the Change menu but never as a
+  // destination, and `wizardUploadEligibility()` refuses one outright.
 
   test("a draft-resumed line flow keeps the window the coach set after resuming", async () => {
     test.fail(

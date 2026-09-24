@@ -91,7 +91,7 @@ const pick = (playerId: string) => ({ kind: "roster" as const, playerId });
 
 function refused(
   result: UploadEligibility | WizardEligibility,
-): Extract<UploadEligibility, { ok: false }> {
+): Extract<UploadEligibility | WizardEligibility, { ok: false }> {
   expect(result.ok).toBe(false);
   if (result.ok) throw new Error("unreachable");
   return result;
@@ -857,6 +857,7 @@ import {
   identityAthleteFor,
   rosterSubjectOrNull,
   wizardAthleteChoice,
+  DOUBLES_UNSUPPORTED_REFUSAL,
   wizardUploadEligibility,
   type MatchSubject,
   type WizardEligibility,
@@ -1350,22 +1351,83 @@ test.describe("wizard: active, authorized paths still pass", () => {
     ).toBe(LINE_REQUIRES_STAFF_REFUSAL);
   });
 
-  test("a doubles line names no single player and is filed under none", () => {
-    // The one carve-out: two athletes on our side, `player1_id` names
-    // neither, exactly as the wizard wrote it before — and NOT the coach.
+  test("a doubles line is refused outright: doubles is score-only", () => {
+    // Decision 2026-09-22: no video analysis and no SwingVision statistics
+    // for doubles. The old carve-out filed the match under nobody; now the
+    // preset's discipline is refused before any attribution rule runs — so
+    // it is the wizard's own reason, with the exact sentence, never
+    // retryable, whatever else the input would have decided.
+    const result = wizardUploadEligibility({
+      workspace: team({ role: "coach" }),
+      viewerId: VIEWER,
+      preset: preset({
+        round: "D1",
+        discipline: "doubles",
+        playerUserId: null,
+        playerName: "Ava Lin / Ben Cho",
+        supportsVideo: false,
+      }),
+      subject: null,
+      roster: ROSTER,
+    });
+    expect(result).toEqual({
+      ok: false,
+      reason: "doubles-unsupported",
+      retryable: false,
+      message: DOUBLES_UNSUPPORTED_REFUSAL,
+    });
+    expect(refused(result).message).toBe(
+      "Doubles lines record a score only. Statistics are singles only for now.",
+    );
+  });
+
+  test("a doubles line is refused even when it names an athlete the roster has", () => {
+    // Before every other rule: an input that would pass as singles.
     expect(
+      refused(
+        wizardUploadEligibility({
+          workspace: team({ role: "coach" }),
+          viewerId: VIEWER,
+          preset: preset({ round: "D1", discipline: "doubles" }),
+          subject: null,
+          roster: ROSTER,
+        }),
+      ).reason,
+    ).toBe("doubles-unsupported");
+  });
+
+  test("a singles line with nobody assigned is still `athlete-required`", () => {
+    // Removing the carve-out did not widen anything: a singles preset that
+    // names no account is the contract's own refusal, as before, and is not
+    // filed under nobody.
+    const result = refused(
       wizardUploadEligibility({
         workspace: team({ role: "coach" }),
         viewerId: VIEWER,
-        preset: preset({
-          playerUserId: null,
-          playerName: "Ava Lin / Ben Cho",
-          supportsVideo: false,
-        }),
+        preset: preset({ discipline: "singles", playerUserId: null }),
         subject: null,
         roster: ROSTER,
       }),
-    ).toEqual({ ok: true, attribution: null });
+    );
+    expect(result.reason).toBe("athlete-required");
+    expect(result.retryable).toBe(false);
+  });
+
+  test("the doubles refusal is wizard-local, not one of the contract's reasons", () => {
+    // `uploadEligibility()` decides who may record for whom and knows
+    // nothing about presets; its reason table stays attribution-only.
+    const contractReasons: UploadIneligibilityReason[] = [
+      "workspace-unavailable",
+      "approval-unknown",
+      "pending-approval",
+      "role-restricted",
+      "line-requires-staff",
+      "roster-unknown",
+      "athlete-required",
+      "athlete-not-on-roster",
+      "athlete-not-personal",
+    ];
+    expect(contractReasons).not.toContain("doubles-unsupported");
   });
 });
 

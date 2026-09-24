@@ -8,6 +8,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import {
   ACE_STAR_FILL,
+  ACE_STAR_RADIUS_RATIO,
   APRON_FILL,
   COURT_FILL,
   HEAT_APRON_FILL,
@@ -162,10 +163,17 @@ export function VizFullscreenCourt({
   panning,
   activeId,
   focusedId,
+  selectedId,
   rovingId,
   onActivate,
   onDeactivate,
   onRove,
+  onSelect,
+  watchPointId = null,
+  canWatchPoint,
+  onWatchPoint,
+  onReadoutEnter,
+  onReadoutLeave,
   editing = false,
   editorLayer = null,
 }: {
@@ -200,11 +208,18 @@ export function VizFullscreenCourt({
    */
   activeId: string | null;
   focusedId: string | null;
+  selectedId: string | null;
   /** The marks' single tab stop — see `viz-mark-roving.ts`. */
   rovingId: string | null;
   onActivate: (id: string, keyboard: boolean) => void;
   onDeactivate: (id: string) => void;
   onRove: (id: string) => void;
+  onSelect: (id: string) => void;
+  watchPointId?: string | null;
+  canWatchPoint?: (pointId: string) => boolean;
+  onWatchPoint?: (pointId: string) => void;
+  onReadoutEnter?: () => void;
+  onReadoutLeave?: () => void;
   /**
    * Phase 2B, Task 4: the band editor is open. The marks and heat dim to 35%
    * and stop being interactive (no hover, no focus, no readout) — a hover
@@ -245,6 +260,8 @@ export function VizFullscreenCourt({
   const readout = activeMeta
     ? buildReadout(activeMeta, { subject: subjectName }, cut, unit)
     : null;
+  const watchablePointId =
+    watchPointId && canWatchPoint?.(watchPointId) ? watchPointId : null;
 
   let readoutStyle: React.CSSProperties | null = null;
   if (active !== null && readout !== null) {
@@ -291,7 +308,7 @@ export function VizFullscreenCourt({
         height={VIEWER_COURT.artPx.h * z}
         viewBox={`${vb.minX} ${vb.minY} ${vb.w} ${vb.h}`}
         preserveAspectRatio="xMidYMid meet"
-        role="img"
+        role="group"
         aria-label={`${subjectName} — full court, ${dots.length} mark${dots.length === 1 ? "" : "s"}`}
         className="absolute top-0 left-0 block"
       >
@@ -317,6 +334,7 @@ export function VizFullscreenCourt({
             return (
               <rect
                 key={`cell-${zone.key}`}
+                data-serve-zone-cell={zone.key}
                 x={cell.x1}
                 y={VIEWER_COURT.farServiceY}
                 width={cell.x2 - cell.x1}
@@ -353,9 +371,25 @@ export function VizFullscreenCourt({
             the landings sit on, and a wash drawn over a hairline would
             make the baseline itself look dimmed. Outside `MarkLayer` and
             memo'd on its own props, so a pan frame never re-renders it. */}
-        {bands !== null && <VizBandsOverlay {...bands} />}
+        {bands !== null && (
+          <VizBandsOverlay {...bands} zones={chart === "zones"} />
+        )}
 
         <CourtLines />
+        {chart === "zones" && cut !== "serve" && bands === null && (
+          <text
+            x={VIEWER_COURT.centreX}
+            y={VIEWER_COURT.farServiceY}
+            textAnchor="middle"
+            fill={LINE_COLOR}
+            fontFamily="var(--font-sans)"
+            fontSize={8}
+          >
+            {cut === "returnPlacement" || cut === "rallyPlacement"
+              ? "No depth bands selected"
+              : "No contact bands selected"}
+          </text>
+        )}
 
         {cut === "serve" && (
           <ServeBoxLabels zoneStats={zoneStats} subjectName={subjectName} />
@@ -384,11 +418,13 @@ export function VizFullscreenCourt({
               unit={unit}
               activeId={activeId}
               focusedId={focusedId}
+              selectedId={selectedId}
               rovingId={rovingId}
               interactive={!editing}
               onActivate={onActivate}
               onDeactivate={onDeactivate}
               onRove={onRove}
+              onSelect={onSelect}
             />
           )}
         </g>
@@ -398,8 +434,19 @@ export function VizFullscreenCourt({
 
       {readout !== null && readoutStyle !== null && (
         <div
-          aria-hidden="true"
-          className={`pointer-events-none absolute flex flex-col gap-1.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
+          aria-hidden={watchablePointId ? undefined : true}
+          className={`${watchablePointId ? "pointer-events-auto" : "pointer-events-none"} absolute flex flex-col gap-1.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerEnter={onReadoutEnter}
+          onPointerLeave={(event) => {
+            if (!event.currentTarget.contains(document.activeElement))
+              onReadoutLeave?.();
+          }}
+          onFocus={onReadoutEnter}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget))
+              onReadoutLeave?.();
+          }}
           style={readoutStyle}
         >
           <span className="text-[12px] font-medium text-white">
@@ -423,6 +470,16 @@ export function VizFullscreenCourt({
               {line}
             </span>
           ))}
+          {watchablePointId && onWatchPoint && (
+            <button
+              type="button"
+              data-viz-watch-point
+              onClick={() => onWatchPoint(watchablePointId)}
+              className="mt-1 cursor-pointer self-start text-[11px] font-medium text-white underline underline-offset-2 hover:text-white/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              Watch point
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -524,11 +581,13 @@ const MarkLayer = memo(function MarkLayer({
   unit,
   activeId,
   focusedId,
+  selectedId,
   rovingId,
   interactive,
   onActivate,
   onDeactivate,
   onRove,
+  onSelect,
 }: {
   cut: Cut;
   dots: VizDot[];
@@ -541,12 +600,14 @@ const MarkLayer = memo(function MarkLayer({
   interactive: boolean;
   activeId: string | null;
   focusedId: string | null;
+  selectedId: string | null;
   /** Final review #3: the ONE mark that is a tab stop. `null` means "the
    *  first one" — nobody has moved within the group yet. */
   rovingId: string | null;
   onActivate: (id: string, keyboard: boolean) => void;
   onDeactivate: (id: string) => void;
   onRove: (id: string) => void;
+  onSelect: (id: string) => void;
 }) {
   const placed = useMemo(
     () =>
@@ -582,6 +643,12 @@ const MarkLayer = memo(function MarkLayer({
     index: number,
   ): void {
     const next = nextMarkIndex(index, placed.length, e.key);
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelect(placed[index].dot.id);
+      return;
+    }
     if (next === null) {
       // Still swallow an arrow the group owns but cannot act on (the first
       // or last mark), so it doesn't fall through to the viewer's window
@@ -621,8 +688,9 @@ const MarkLayer = memo(function MarkLayer({
             // court, not one per mark. On `rallyPosition` that was 150-250
             // Tab presses before a keyboard user reached the View menu.
             tabIndex={interactive && index === rovingIndex ? 0 : -1}
-            role="img"
+            role="button"
             aria-label={label}
+            aria-pressed={dot.id === selectedId}
             className="cursor-pointer outline-none"
             onMouseEnter={() => onActivate(dot.id, false)}
             onMouseLeave={() => onDeactivate(dot.id)}
@@ -631,6 +699,22 @@ const MarkLayer = memo(function MarkLayer({
             }
             onBlur={() => onDeactivate(dot.id)}
             onKeyDown={(e) => handleKeyDown(e, index)}
+            onClick={(e) => {
+              e.stopPropagation();
+              // Two shots can land on the same coordinate. Repeated clicks
+              // cycle that stack, so the mark underneath is selectable too.
+              const stack = placed.filter(
+                (item) => Math.hypot(item.x - x, item.y - y) < 0.5,
+              );
+              const selectedIndex = stack.findIndex(
+                (item) => item.dot.id === selectedId,
+              );
+              const next =
+                selectedIndex < 0
+                  ? dot.id
+                  : stack[(selectedIndex + 1) % stack.length].dot.id;
+              onSelect(next);
+            }}
           >
             {isFocused && (
               // Fix round 1 #10: a keyboard-only ring OUTSIDE the hover halo.
@@ -659,6 +743,7 @@ const MarkLayer = memo(function MarkLayer({
                 vectorEffect="non-scaling-stroke"
               />
             )}
+            <circle cx={x} cy={y} r={9} fill="transparent" />
             <Mark dot={dot} x={x} y={y} fill={fill} active={isActive} />
           </g>
         );
@@ -683,6 +768,7 @@ const VIEWER_HEAT_PROJECTORS: Record<
   returnPlacement: (d) => toCxCy("returnPlacement", d),
   returnContact: (d) => toCxCy("returnContact", d),
   rallyPosition: (d) => toCxCy("rallyPosition", d),
+  rallyPlacement: (d) => toCxCy("rallyPlacement", d),
 };
 
 function toCxCy(cut: Cut, dot: VizDot): { cx: number; cy: number } {
@@ -714,7 +800,7 @@ function Mark({
   if (dot.shape === "star") {
     return (
       <polygon
-        points={starPoints(x, y, r * 1.68)}
+        points={starPoints(x, y, r * ACE_STAR_RADIUS_RATIO)}
         fill={fill}
         stroke={stroke}
         strokeWidth={strokeWidth}
@@ -809,8 +895,8 @@ function ServeBoxLabels({
             const cell = zoneCellX(index);
             const cx = (cell.x1 + cell.x2) / 2;
             return (
-              <g key={zone.key}>
-                <title>{`${subjectName} — ${zone.label}: ${stats.winPct}% of ${stats.count} points won`}</title>
+              <g key={zone.key} data-serve-zone={zone.key}>
+                <title>{`${subjectName} — ${zone.key.replace("-", " ")}: ${stats.winPct}% of ${stats.count} points won`}</title>
                 <text
                   x={cx}
                   y={ZONE_PCT_Y}

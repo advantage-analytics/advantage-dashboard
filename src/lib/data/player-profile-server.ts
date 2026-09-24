@@ -179,6 +179,7 @@ interface DbServeShotRow {
   shot_type: string | null;
   landing_x: number | null;
   landing_y: number | null;
+  contact_y: number | null;
   result: string | null;
   spin_type: string | null;
   zone: string | null;
@@ -256,7 +257,7 @@ async function serveMapFor(
   const { data } = await supabase
     .from("shots")
     .select(
-      "shot_number, shot_type, landing_x, landing_y, result, spin_type, zone, point_id, points!inner(id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1)",
+      "shot_number, shot_type, landing_x, landing_y, contact_y, result, spin_type, zone, point_id, points!inner(id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1)",
     )
     .in("points.match_id", [...sideByMatch.keys()])
     .in("shot_type", ["First Serve", "Second Serve"])
@@ -284,6 +285,7 @@ async function serveMapFor(
       serverIsPlayer1: point.server_is_player1,
       firstShotLandingX: serve?.landing_x ?? null,
       firstShotLandingY: serve?.landing_y ?? null,
+      firstShotContactY: serve?.contact_y ?? null,
       firstShotZone: serve?.zone ?? null,
       firstShotSpin: serve?.spin_type ?? null,
       firstShotType: serve?.shot_type ?? null,

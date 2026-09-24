@@ -9,6 +9,10 @@ import {
   filledDualLines,
   seedDualLines,
 } from "@/components/dashboard/schedule/static/dual-build-step";
+import {
+  ADD_NAME_REQUIRED,
+  ADD_ROW_LABEL,
+} from "@/components/dashboard/schedule/static/lineup-name-picker";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 
 const webpack = (
@@ -93,8 +97,8 @@ test.afterAll(async () => {
   );
 });
 
-async function openFixture(page: import("@playwright/test").Page) {
-  await page.goto(origin);
+async function openFixture(page: import("@playwright/test").Page, query = "") {
+  await page.goto(`${origin}/${query}`);
   await expect
     .poll(() => page.locator("html").getAttribute("data-hydrated"))
     .toBe("true");
@@ -542,4 +546,200 @@ test("a doubles-only opponent is added in place, and No pair is their forfeit", 
     theirLabels: [],
     theirNoPlayer: true,
   });
+});
+
+/* ── Adding our own player from a pair picker (T18) ─────────────────────── */
+
+const addCalls = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => window.__addProgramPlayerCalls ?? []);
+
+test("our pair picker offers the singles picker's add row, only while a seat is free", async ({
+  page,
+}) => {
+  await openFixture(page);
+
+  // D1 is empty: the row is offered, in the singles picker's own words.
+  await page.getByRole("button", { name: "Our pair at D1" }).click();
+  await expect(
+    page.getByRole("menuitem", { name: ADD_ROW_LABEL, exact: true }),
+  ).toBeVisible();
+  // One partner picked still leaves a seat.
+  await pick(page, "D1", RILEY);
+  await expect(
+    page.getByRole("menuitem", { name: ADD_ROW_LABEL, exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // D2 already has two: no seat, no row.
+  await page.getByRole("button", { name: "Our pair at D2" }).click();
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: CASEY }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: ADD_ROW_LABEL, exact: true }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  // D3 is settled: drawn read-only, with no picker to offer the row at all.
+  await expect(
+    page.getByRole("button", { name: "Our pair at D3" }),
+  ).toHaveCount(0);
+});
+
+test("a one-word name is refused before the server, and a refused add changes nothing", async ({
+  page,
+}) => {
+  await openFixture(page);
+  await pick(page, "D1", RILEY);
+  await page.getByRole("menuitem", { name: ADD_ROW_LABEL }).click();
+  const field = page.getByLabel("Add a player to our pair at D1");
+
+  await field.fill("Sam");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(ADD_NAME_REQUIRED)).toBeVisible();
+  expect(await addCalls(page)).toEqual([]);
+
+  await page.evaluate(() => {
+    window.__addProgramPlayer = { error: "That roster is full." };
+  });
+  await field.fill("Sam Hill");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("alert")).toHaveText("That roster is full.");
+  expect(await addCalls(page)).toEqual([
+    { firstName: "Sam", lastName: "Hill" },
+  ]);
+  await expect(page.getByLabel("D1 roster ids")).toHaveText("riley-chen");
+  await expect(page.getByLabel("D1 roster labels")).toHaveText("Riley Chen");
+});
+
+test("an added player joins the pair by id and every other picker offers them", async ({
+  page,
+}) => {
+  await openFixture(page);
+  await page.evaluate(() => {
+    window.__addProgramPlayer = { profileId: "sam-hill-id" };
+  });
+  await pick(page, "D1", RILEY);
+  await page.getByRole("menuitem", { name: ADD_ROW_LABEL }).click();
+  await page.getByLabel("Add a player to our pair at D1").fill("Sam  Hill");
+  await page.keyboard.press("Enter");
+
+  // Beside the partner already picked, by id — and the pair is complete.
+  await expect(page.getByLabel("D1 roster ids")).toHaveText(
+    "riley-chen|sam-hill-id",
+  );
+  await expect(page.getByLabel("D1 roster labels")).toHaveText(
+    "Riley Chen|Sam Hill",
+  );
+  await expect(
+    page.getByRole("button", { name: "Our pair at D1" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  expect(await page.evaluate(() => window.doublesSelections.at(-1))).toEqual({
+    key: "D1",
+    ids: ["riley-chen", "sam-hill-id"],
+    labels: ["Riley Chen", "Sam Hill"],
+  });
+
+  // Another doubles picker lists them — taken, and saying where.
+  await page.getByRole("button", { name: "Our pair at D2" }).click();
+  const row = page.getByRole("menuitemcheckbox", { name: /^Sam Hill/ });
+  await expect(row).toHaveAttribute("aria-disabled", "true");
+  await expect(row).toContainText("on D1");
+  await page.keyboard.press("Escape");
+
+  // And the singles picker offers them too.
+  await page.getByLabel("Our player at S1").fill("Sam");
+  await expect(
+    page
+      .getByRole("listbox", { name: "Players for S1" })
+      .getByRole("option", { name: /^Sam Hill/ }),
+  ).toHaveCount(1);
+});
+
+type StateLine = {
+  key: string;
+  discipline: string;
+  ourIds: string[];
+  ourLabels: string[];
+  theirLabels: string[];
+  theirNoPlayer: boolean;
+};
+
+async function lineupState(
+  page: import("@playwright/test").Page,
+): Promise<StateLine[]> {
+  return JSON.parse((await page.getByLabel("Lineup state").textContent())!);
+}
+
+test("a doubles pair moves between courts with the keyboard, opponents stay", async ({
+  page,
+}) => {
+  await openFixture(page, "?free=1");
+  const before = await lineupState(page);
+  const pairOn = (lines: StateLine[], key: string) =>
+    lines.find((line) => line.key === key)!.ourIds;
+
+  await expect(
+    page.getByRole("button", { name: "Move Alex Kim / Casey Lee, line D2" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Move Alex Kim / Jordan Lee, line D3" }),
+  ).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "Move Riley Chen / Drew Park, line D1" })
+    .focus();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Space");
+
+  await expect(
+    page.getByRole("button", { name: "Move Riley Chen / Drew Park, line D3" }),
+  ).toBeFocused();
+  const after = await lineupState(page);
+  // The singles gesture exactly: each ↓ swaps with the next line, so D1's
+  // pair travels to D3 and the two it passed each move up one court.
+  expect(pairOn(after, "D3")).toEqual(pairOn(before, "D1"));
+  expect(pairOn(after, "D2")).toEqual(pairOn(before, "D3"));
+  expect(pairOn(after, "D1")).toEqual(pairOn(before, "D2"));
+  // Every court keeps its opponent, and singles is untouched.
+  expect(after.map((line) => [line.key, line.theirLabels])).toEqual(
+    before.map((line) => [line.key, line.theirLabels]),
+  );
+  expect(after.filter((line) => line.discipline === "singles")).toEqual(
+    before.filter((line) => line.discipline === "singles"),
+  );
+});
+
+test("escape puts a lifted doubles pair back without changing the lineup", async ({
+  page,
+}) => {
+  await openFixture(page, "?free=1");
+  const original = await page.getByLabel("Lineup state").textContent();
+  await page
+    .getByRole("button", { name: "Move Riley Chen / Drew Park, line D1" })
+    .focus();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Escape");
+  await expect(page.getByLabel("Lineup state")).toHaveText(original!);
+  await expect(
+    page.getByRole("button", { name: "Move Riley Chen / Drew Park, line D1" }),
+  ).toBeFocused();
+});
+
+test("a settled doubles line leaves no doubles grip to drag", async ({
+  page,
+}) => {
+  // The default fixture has D3 played.
+  await openFixture(page);
+  await expect(
+    page.getByRole("button", { name: /^Move .*, line D\d$/ }),
+  ).toHaveCount(0);
+  // Singles are still reorderable — only the doubles block is frozen.
+  await expect(
+    page.getByRole("button", { name: /^Move .*, line 1$/ }),
+  ).toHaveCount(1);
 });

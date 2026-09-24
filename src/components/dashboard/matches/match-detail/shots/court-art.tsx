@@ -1,3 +1,4 @@
+import { CourtBandZones } from "./viz-bands-overlay";
 import { useId, useMemo, type ReactNode } from "react";
 import { ZONES, type ZoneKey, type ZoneStats } from "@/lib/data/serve-zones";
 import {
@@ -21,7 +22,8 @@ import {
   trianglePointsFor,
   starPoints,
 } from "./court-geometry";
-import type { Chart, Cut, VizDot } from "./viz-model";
+import type { Chart, Cut, VizDot, VizBandZones } from "./viz-model";
+import { nextMarkIndex } from "./viz-mark-roving";
 
 /**
  * The recoloured court SVG for one cut — the wall tile's art and the focused
@@ -102,11 +104,197 @@ const SERVE_DOT_R = 2.54;
 // legend's Ace glyph to the court's own fill exactly, instead of a second
 // `#F8C84F` literal the checker would flag again.
 export const ACE_STAR_FILL = "#F8C84F";
-// Chosen so the star's area is comparable to the SERVE_DOT_R=2.54 circle's:
-// a regular 10-point star with inner radius R/2 has area
-// 2.5·sin(36°)·R² ≈ 1.4695·R²; solving 1.4695·R² = π·2.54² gives R≈3.714 —
-// 3.7 is within ~0.7% of that exact match (see `tests/court-geometry.spec.ts`).
-const ACE_STAR_OUTER_R = 3.7;
+// Aces should read as a distinct shape without overpowering nearby dots.
+// Shared with the fullscreen court so both views use the same relative scale.
+export const ACE_STAR_RADIUS_RATIO = 1.4;
+const ACE_STAR_OUTER_R = SERVE_DOT_R * ACE_STAR_RADIUS_RATIO;
+
+export interface CourtMarkInteraction {
+  activeId: string | null;
+  focusedId: string | null;
+  selectedId: string | null;
+  rovingId: string | null;
+  labelFor: (dot: VizDot) => string;
+  onActivate: (
+    id: string,
+    mark: SVGGElement,
+    source: "hover" | "focus",
+    focusVisible?: boolean,
+  ) => void;
+  onDeactivate: (id: string, source: "hover" | "focus") => void;
+  onRove: (id: string) => void;
+  onSelect: (id: string, mark: SVGGElement) => void;
+}
+
+function CourtMark({
+  dot,
+  cut,
+  cx,
+  cy,
+  radius,
+  index,
+  count,
+  interaction,
+}: {
+  dot: VizDot;
+  cut: Cut;
+  cx: number;
+  cy: number;
+  radius: number;
+  index: number;
+  count: number;
+  interaction?: CourtMarkInteraction;
+}) {
+  const color = colorFor(dot.outcome);
+  const shape =
+    dot.shape === "star" ? (
+      <polygon
+        points={starPoints(cx, cy, ACE_STAR_OUTER_R)}
+        fill={ACE_STAR_FILL}
+        stroke={DOT_STROKE}
+        strokeWidth={DOT_STROKE_W}
+        vectorEffect="non-scaling-stroke"
+      />
+    ) : dot.shape === "triangle" ? (
+      <polygon
+        points={trianglePointsFor(
+          cut === "serve"
+            ? "serve"
+            : cut === "returnPlacement" || cut === "rallyPlacement"
+              ? "placement"
+              : "contact",
+          cx,
+          cy,
+          radius,
+        )}
+        fill={color}
+        stroke={DOT_STROKE}
+        strokeWidth={DOT_STROKE_W}
+        vectorEffect="non-scaling-stroke"
+      />
+    ) : (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={radius}
+        fill={color}
+        stroke={DOT_STROKE}
+        strokeWidth={DOT_STROKE_W}
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+
+  return (
+    <g
+      data-viz-mark={interaction ? dot.id : undefined}
+      role={interaction ? "button" : undefined}
+      tabIndex={
+        interaction
+          ? interaction.rovingId === dot.id ||
+            (interaction.rovingId === null && index === 0)
+            ? 0
+            : -1
+          : undefined
+      }
+      aria-label={interaction?.labelFor(dot)}
+      aria-pressed={interaction ? interaction.selectedId === dot.id : undefined}
+      className={interaction ? "cursor-pointer outline-none" : undefined}
+      onMouseEnter={
+        interaction
+          ? (event) =>
+              interaction.onActivate(dot.id, event.currentTarget, "hover")
+          : undefined
+      }
+      onMouseLeave={
+        interaction
+          ? () => interaction.onDeactivate(dot.id, "hover")
+          : undefined
+      }
+      onFocus={
+        interaction
+          ? (event) =>
+              interaction.onActivate(
+                dot.id,
+                event.currentTarget,
+                "focus",
+                event.currentTarget.matches(":focus-visible"),
+              )
+          : undefined
+      }
+      onBlur={
+        interaction
+          ? () => interaction.onDeactivate(dot.id, "focus")
+          : undefined
+      }
+      onClick={
+        interaction
+          ? (event) => {
+              event.stopPropagation();
+              interaction.onSelect(dot.id, event.currentTarget);
+            }
+          : undefined
+      }
+      onKeyDown={
+        interaction
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                event.stopPropagation();
+                interaction.onSelect(dot.id, event.currentTarget);
+                return;
+              }
+              const next = nextMarkIndex(index, count, event.key);
+              if (next === null) {
+                if (
+                  event.key.startsWith("Arrow") ||
+                  event.key === "Home" ||
+                  event.key === "End"
+                ) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              const target = event.currentTarget
+                .closest("svg")
+                ?.querySelectorAll<SVGGElement>("[data-viz-mark]")[next];
+              if (target) {
+                interaction.onRove(target.dataset.vizMark!);
+                target.focus();
+              }
+            }
+          : undefined
+      }
+    >
+      {interaction?.activeId === dot.id && (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={radius + 3}
+          fill="none"
+          stroke={LINE_COLOR}
+          strokeWidth={1.5}
+          pointerEvents="none"
+        />
+      )}
+      {interaction?.focusedId === dot.id && (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={radius + 5.5}
+          fill="none"
+          stroke={LINE_COLOR}
+          strokeWidth={1.5}
+          pointerEvents="none"
+        />
+      )}
+      {shape}
+      {interaction && <circle cx={cx} cy={cy} r={9} fill="transparent" />}
+    </g>
+  );
+}
 
 /**
  * The won/lost/neutral colour for a dot's outcome — the one piece this
@@ -154,6 +342,7 @@ const CUT_NOUN: Record<Cut, string> = {
   returnPlacement: "return placement",
   returnContact: "return contact",
   rallyPosition: "rally position",
+  rallyPlacement: "rally placement",
 };
 
 // Heat mode's aria-label reads "Serve placement heat map, 63 serves" — a
@@ -166,12 +355,14 @@ const HEAT_CUT_LABEL: Record<Cut, string> = {
   returnPlacement: "Return placement",
   returnContact: "Return contact",
   rallyPosition: "Rally position",
+  rallyPlacement: "Rally placement",
 };
 const HEAT_NOUN: Record<Cut, "serves" | "returns" | "shots"> = {
   serve: "serves",
   returnPlacement: "returns",
   returnContact: "returns",
   rallyPosition: "shots",
+  rallyPlacement: "shots",
 };
 
 /**
@@ -365,11 +556,13 @@ export function CourtArt({
   cut,
   dots,
   zones,
+  bandZones,
   chart = "scatter",
   className,
   fill,
   labels,
   draft = false,
+  markInteraction,
 }: {
   cut: Cut;
   dots: VizDot[];
@@ -377,9 +570,10 @@ export function CourtArt({
    * Serve · Zones overlay (Task 5): when present, draws the six service-box
    * cells shaded by each zone's share of serves and skips the dots — the
    * cells ARE the chart, per `computeViz`'s `zoneStats`. Ignored off the
-   * serve cut (Zones has no meaning there and the toolbar never offers it).
+   * serve cut; other cuts use their depth/contact bands.
    */
   zones?: Record<ZoneKey, ZoneStats>;
+  bandZones?: VizBandZones | null;
   /**
    * `"heat"` draws a density blob per dot (`heatDotCircle`/`HeatFilterDef`)
    * instead of the usual outcome-coloured marks, and desaturates the court.
@@ -412,10 +606,12 @@ export function CourtArt({
    * announced label to reflect the actual state.
    */
   draft?: boolean;
+  /** Focused scatter inspection. Preview courts omit it and remain static. */
+  markInteraction?: CourtMarkInteraction;
 }) {
   const clipId = useId();
   const showHeat = chart === "heat";
-  const showZones = !showHeat && cut === "serve" && zones != null;
+  const showZones = chart === "zones" && cut === "serve" && zones != null;
   const maxZonePct = zones
     ? Math.max(...ZONES.map((z) => zones[z.key].pct))
     : 0;
@@ -425,9 +621,11 @@ export function CourtArt({
     ? "Empty court — pick what to plot"
     : showHeat
       ? `${HEAT_CUT_LABEL[cut]} heat map, ${dots.length} ${HEAT_NOUN[cut]}`
-      : showZones
-        ? "Serve placement by zone: six service-box zones shaded by serve frequency"
-        : `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
+      : chart === "zones" && cut !== "serve"
+        ? `${CUT_NOUN[cut]} by ${bandZones?.kind ?? (cut === "returnPlacement" || cut === "rallyPlacement" ? "depth" : "contact")} bands${bandZones ? "" : " — no bands selected"}`
+        : showZones
+          ? "Serve placement by zone: six service-box zones shaded by serve frequency"
+          : `${CUT_NOUN[cut]} court, ${dots.length} ${cut === "rallyPosition" || cut === "rallyPlacement" ? `shot${dots.length === 1 ? "" : "s"}` : `point${dots.length === 1 ? "" : "s"}`} shown`;
   // Zero dots ⇒ drawing the filter would still paint the floor tint over
   // the whole view (every pixel of the filter region gets touched, dots or
   // not — see `HeatFilterDef`'s doc comment), which would wash an empty
@@ -442,7 +640,7 @@ export function CourtArt({
   const heatProject =
     cut === "serve"
       ? projectServeHeatDot
-      : cut === "returnPlacement"
+      : cut === "returnPlacement" || cut === "rallyPlacement"
         ? projectReturnPlacementHeatDot
         : projectReturnContactHeatDot;
 
@@ -453,7 +651,7 @@ export function CourtArt({
         {...(fill ? { height: "100%" } : {})}
         width="100%"
         preserveAspectRatio="xMidYMid meet"
-        role="img"
+        role={markInteraction ? "group" : "img"}
         aria-label={ariaLabel}
         className={className}
       >
@@ -495,7 +693,8 @@ export function CourtArt({
                 const cellCy =
                   (SERVE_COURT.zoneTop + SERVE_COURT.zoneBottom) / 2;
                 return (
-                  <g key={z.key}>
+                  <g key={z.key} data-serve-zone={z.key}>
+                    <title>{`${z.key.replace("-", " ")}: ${zs.count} serves, ${zs.winPct}% points won`}</title>
                     <rect
                       x={cell.x1}
                       y={SERVE_COURT.zoneTop}
@@ -627,7 +826,7 @@ export function CourtArt({
 
             {!showHeat &&
               !showZones &&
-              dots.map((d) => {
+              dots.map((d, index) => {
                 const projected = projectServeMetricDot({
                   lateralM: d.lateralM,
                   depthPastNetM: d.depthM,
@@ -639,41 +838,17 @@ export function CourtArt({
                 // every other dot uses (an ordinary miss-coloured circle —
                 // an ace is always "in", so `d.shape` is never "star" here).
                 const { cx, cy } = atNetPosition(d.atNet, "serve", projected);
-                // G2b: an ace draws as a star, regardless of outcome colour —
-                // it's always "won" already, but the shape carries the "ace"
-                // read before the colour would.
-                if (d.shape === "star") {
-                  return (
-                    <polygon
-                      key={d.id}
-                      points={starPoints(cx, cy, ACE_STAR_OUTER_R)}
-                      fill={ACE_STAR_FILL}
-                      stroke={DOT_STROKE}
-                      strokeWidth={DOT_STROKE_W}
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  );
-                }
-                const color = colorFor(d.outcome);
-                return d.shape === "triangle" ? (
-                  <polygon
+                return (
+                  <CourtMark
                     key={d.id}
-                    points={trianglePointsFor("serve", cx, cy, SERVE_DOT_R)}
-                    fill={color}
-                    stroke={DOT_STROKE}
-                    strokeWidth={DOT_STROKE_W}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                ) : (
-                  <circle
-                    key={d.id}
+                    dot={d}
+                    cut={cut}
                     cx={cx}
                     cy={cy}
-                    r={SERVE_DOT_R}
-                    fill={color}
-                    stroke={DOT_STROKE}
-                    strokeWidth={DOT_STROKE_W}
-                    vectorEffect="non-scaling-stroke"
+                    radius={SERVE_DOT_R}
+                    index={index}
+                    count={dots.length}
+                    interaction={markInteraction}
                   />
                 );
               })}
@@ -687,14 +862,17 @@ export function CourtArt({
   // sets the design's own `rotate(180deg)` on the svg; `returnContact` does
   // not. `projectReturnDot` accounts for that extra flip in the lateral
   // sign it uses for each kind — see its own doc comment.
-  const kind = cut === "returnPlacement" ? "placement" : "contact";
+  const kind =
+    cut === "returnPlacement" || cut === "rallyPlacement"
+      ? "placement"
+      : "contact";
   return (
     <svg
       viewBox={`${RETURN_COURT.viewBox.minX} ${RETURN_COURT.viewBox.minY} ${RETURN_COURT.viewBox.w} ${RETURN_COURT.viewBox.h}`}
       {...(fill ? { height: "100%" } : {})}
       width="100%"
       preserveAspectRatio="xMidYMid meet"
-      role="img"
+      role={markInteraction ? "group" : "img"}
       aria-label={ariaLabel}
       className={className}
       style={kind === "placement" ? { transform: "rotate(180deg)" } : undefined}
@@ -720,6 +898,9 @@ export function CourtArt({
               height={RETURN_COURT.singlesBottom - RETURN_COURT.singlesTop}
               fill={courtFillColor}
             />
+            {chart === "zones" && !draft && bandZones && (
+              <CourtBandZones zones={bandZones} labels={labels} />
+            )}
             <line
               x1={RETURN_COURT.farBaselineX}
               y1={RETURN_COURT.doublesTop}
@@ -809,9 +990,8 @@ export function CourtArt({
               <HeatLayer cut={cut} dots={dots} project={heatProject} />
             )}
 
-            {!showHeat &&
-              dots.map((d) => {
-                const color = colorFor(d.outcome);
+            {chart === "scatter" &&
+              dots.map((d, index) => {
                 const projected = projectReturnDot(kind, {
                   lateralM: d.lateralM ?? 0,
                   depthM: d.depthM ?? 0,
@@ -823,31 +1003,42 @@ export function CourtArt({
                 // POSITION only: it draws through the same forehand-circle/
                 // backhand-triangle glyph path every other dot uses.
                 const { cx, cy } = atNetPosition(d.atNet, cut, projected);
-                return d.shape === "triangle" ? (
-                  <polygon
+                return (
+                  <CourtMark
                     key={d.id}
-                    points={trianglePointsFor(kind, cx, cy, RETURN_DOT_R)}
-                    fill={color}
-                    stroke={DOT_STROKE}
-                    strokeWidth={DOT_STROKE_W}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                ) : (
-                  <circle
-                    key={d.id}
+                    dot={d}
+                    cut={cut}
                     cx={cx}
                     cy={cy}
-                    r={RETURN_DOT_R}
-                    fill={color}
-                    stroke={DOT_STROKE}
-                    strokeWidth={DOT_STROKE_W}
-                    vectorEffect="non-scaling-stroke"
+                    radius={RETURN_DOT_R}
+                    index={index}
+                    count={dots.length}
+                    interaction={markInteraction}
                   />
                 );
               })}
           </g>
         </g>
       </g>
+      {chart === "zones" && !draft && !bandZones && labels && (
+        <text
+          x={RETURN_COURT.viewBox.minX + RETURN_COURT.viewBox.w / 2}
+          y={RETURN_COURT.viewBox.minY + RETURN_COURT.viewBox.h / 2}
+          transform={
+            kind === "placement"
+              ? `rotate(180 ${RETURN_COURT.viewBox.minX + RETURN_COURT.viewBox.w / 2} ${RETURN_COURT.viewBox.minY + RETURN_COURT.viewBox.h / 2})`
+              : undefined
+          }
+          textAnchor="middle"
+          fill={LINE_COLOR}
+          fontFamily="var(--font-sans)"
+          fontSize={10}
+        >
+          {kind === "placement"
+            ? "No depth bands selected"
+            : "No contact bands selected"}
+        </text>
+      )}
     </svg>
   );
 }

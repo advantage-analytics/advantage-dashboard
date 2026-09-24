@@ -13,6 +13,7 @@ import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { PlayerMark } from "@/components/ui/player-mark";
+import { StatePill } from "@/components/ui/state-pill";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { RowLifecycle } from "./row-state";
 import { profileHref } from "@/components/dashboard/team/roster-table";
@@ -81,6 +82,12 @@ interface MatchCardListProps {
   isNew?: boolean;
   /** Never opened on this device — draws the unread dot after the opponent's name. */
   unseen?: boolean;
+  /**
+   * A saved upload fills this match (a draft folded onto it by `foldDrafts`) —
+   * draws the outlined Draft pill beside the row's name, `DraftRow`'s variant.
+   * Its "Continue upload" lives in the drawer, not the row.
+   */
+  hasDraft?: boolean;
   scope?: "personal" | "team";
   /** The team table beside the open drawer, with its Event track dropped. */
   compact?: boolean;
@@ -99,6 +106,7 @@ export function MatchCardList({
   match,
   isNew,
   unseen,
+  hasDraft = false,
   scope = "personal",
   compact = false,
   selected = false,
@@ -114,6 +122,13 @@ export function MatchCardList({
   const isViewerRow =
     playerId !== null &&
     (playerId === viewer.id || playerId === active.myPlayerId);
+  // Beside the row's primary name — the player on a team table, the opponent
+  // on a personal one — and never truncated (tables.md rule 4).
+  const draftPill = hasDraft ? (
+    <StatePill outline className="shrink-0">
+      Draft
+    </StatePill>
+  ) : null;
 
   return (
     <div
@@ -177,6 +192,7 @@ export function MatchCardList({
               {match.player1.name}
             </span>
           )}
+          {draftPill}
         </span>
       )}
 
@@ -205,6 +221,7 @@ export function MatchCardList({
             <span className="sr-only">Unread</span>
           </>
         )}
+        {!isTeam && draftPill}
       </span>
 
       {/* Result — the outcome glyph, flush left under its heading, ahead of

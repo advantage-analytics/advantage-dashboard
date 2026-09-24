@@ -347,6 +347,19 @@ export function retrySuffix(outcome: RetryOutcome<unknown>): string {
     : "";
 }
 
+/** Keep opaque gateway failures diagnosable without serializing request data. */
+export function authErrorDetails(error: unknown): string {
+  if (!(error instanceof Error)) return "unknown Auth error";
+  const metadata = [error.name];
+  if ("status" in error && typeof error.status === "number") {
+    metadata.push(`status=${error.status}`);
+  }
+  if ("code" in error && typeof error.code === "string") {
+    metadata.push(`code=${error.code}`);
+  }
+  return `${error.message} [${metadata.join(", ")}]`;
+}
+
 // ---------------------------------------------------------------------------
 // Sessions.
 // ---------------------------------------------------------------------------
@@ -439,7 +452,7 @@ async function signIn(
   const attempt = await passwordSignIn(email, password, deadline);
   if (attempt.error) {
     throw new Error(
-      `signIn(${label}): ${attempt.error.message}${attempt.suffix}`,
+      `signIn(${label}): ${authErrorDetails(attempt.error)}${attempt.suffix}`,
     );
   }
   return attempt.client;
@@ -492,7 +505,7 @@ export async function createLogin(
   const { data, error } = outcome.result;
   if (error || !data.user) {
     throw new Error(
-      `createUser(${label}): ${error?.message}${retrySuffix(outcome)}`,
+      `createUser(${label}): ${authErrorDetails(error)}${retrySuffix(outcome)}`,
     );
   }
   opts.authUserIds.push(data.user.id);

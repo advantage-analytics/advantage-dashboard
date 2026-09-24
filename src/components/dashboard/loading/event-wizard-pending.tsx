@@ -8,6 +8,7 @@ import { COPY as CHOOSER_COPY } from "@/components/dashboard/schedule/static/sta
 import { COPY as DUAL_COPY } from "@/components/dashboard/schedule/static/new-dual-flow";
 import { COPY as TOURNAMENT_COPY } from "@/components/dashboard/schedule/static/new-tournament-flow";
 import { cn } from "@/lib/utils";
+import { PendingBar } from "@/components/dashboard/loading/pending";
 
 /**
  * The create-event wizard's loading states — one per screen, not one for all.
@@ -32,18 +33,6 @@ import { cn } from "@/lib/utils";
  * control that lies about the page. The frame carries `role="status"` and a
  * label; the shapes are `aria-hidden`.
  */
-
-/** One pulsing placeholder. Only these animate — known text stays still. */
-function Bar({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn(
-        "block max-w-full rounded-[3px] bg-[var(--surface-skeleton)] motion-safe:animate-pulse",
-        className,
-      )}
-    />
-  );
-}
 
 function Status({
   label,
@@ -77,7 +66,7 @@ function WizardChrome({
   stepCount,
   title,
   lede,
-  footerStart = <Bar className="h-3 w-12" />,
+  footerStart = <PendingBar className="h-3 w-12" />,
   children,
 }: {
   label: string;
@@ -107,7 +96,7 @@ function WizardChrome({
                 {title}
               </h1>
             ) : (
-              <Bar className="my-[5px] h-7 w-80" />
+              <PendingBar className="my-[5px] h-7 w-80" />
             )}
             {lede ? (
               <p
@@ -118,8 +107,8 @@ function WizardChrome({
               </p>
             ) : (
               <span className="flex flex-col gap-2 py-1">
-                <Bar className="h-3 w-[440px]" />
-                <Bar className="h-3 w-72" />
+                <PendingBar className="h-3 w-[440px]" />
+                <PendingBar className="h-3 w-72" />
               </span>
             )}
           </div>
@@ -131,7 +120,7 @@ function WizardChrome({
           <div className={`${CONTENT_CLS} flex h-16 items-center gap-4`}>
             {footerStart}
             <div className="flex-1" />
-            <Bar className="h-9 w-[92px] rounded-[6px]" />
+            <PendingBar className="h-9 w-[92px] rounded-[6px]" />
           </div>
         </div>
       </div>
@@ -156,9 +145,9 @@ export function EventChooserPending() {
       lede={CHOOSER_COPY.lede}
       footerStart={
         <>
-          <Bar className="h-3 w-8" />
-          <Bar className="h-3 w-11" />
-          <Bar className="h-2.5 w-20" />
+          <PendingBar className="h-3 w-8" />
+          <PendingBar className="h-3 w-11" />
+          <PendingBar className="h-2.5 w-20" />
         </>
       }
     >
@@ -169,24 +158,24 @@ export function EventChooserPending() {
             className="flex flex-col gap-3.5 rounded-[var(--radius-card)] border border-[var(--border-field)] px-[26px] pt-7 pb-[22px]"
           >
             <span className="flex items-center justify-between">
-              <Bar className="size-[22px] rounded-[5px]" />
+              <PendingBar className="size-[22px] rounded-[5px]" />
               <span className="size-3.5 rounded-full border border-[var(--ink-200)]" />
             </span>
             <span className="flex flex-col gap-2.5">
-              <Bar className="h-4 w-28" />
-              <Bar className="h-3 w-[88%]" />
-              <Bar className="h-3 w-[62%]" />
+              <PendingBar className="h-4 w-28" />
+              <PendingBar className="h-3 w-[88%]" />
+              <PendingBar className="h-3 w-[62%]" />
             </span>
             <span className="mt-auto block border-t border-[var(--border-hairline)] pt-3.5">
-              <Bar className="h-2.5 w-44" />
+              <PendingBar className="h-2.5 w-44" />
             </span>
           </div>
         ))}
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <Bar className="h-2.5 w-96" />
-        <Bar className="h-2.5 w-24" />
+        <PendingBar className="h-2.5 w-96" />
+        <PendingBar className="h-2.5 w-24" />
       </div>
     </WizardChrome>
   );
@@ -196,8 +185,8 @@ export function EventChooserPending() {
  *  chooser's own two widths, so the words do not jump when the page lands. */
 const BACK_AND_CANCEL = (
   <>
-    <Bar className="h-3 w-8" />
-    <Bar className="h-3 w-11" />
+    <PendingBar className="h-3 w-8" />
+    <PendingBar className="h-3 w-11" />
   </>
 );
 
@@ -229,16 +218,16 @@ export function NewDualPending() {
         <span className="flex-1 text-[16px] text-[var(--ink-300)]">
           Search programs, or type any opponent
         </span>
-        <Bar className="h-2.5 w-16" />
+        <PendingBar className="h-2.5 w-16" />
       </div>
 
       <div className="mt-5 flex items-center gap-2">
-        <Bar className="h-[30px] w-[104px] rounded-[6px]" />
-        <Bar className="h-[30px] w-[196px] rounded-[6px]" />
+        <PendingBar className="h-[30px] w-[104px] rounded-[6px]" />
+        <PendingBar className="h-[30px] w-[196px] rounded-[6px]" />
       </div>
 
       <div className="pt-[22px] pb-2.5">
-        <Bar className="h-2 w-24" />
+        <PendingBar className="h-2 w-24" />
       </div>
       <div className="flex flex-col">
         {["w-40", "w-32", "w-36", "w-44", "w-28", "w-36"].map((width, i) => (
@@ -246,12 +235,12 @@ export function NewDualPending() {
             key={i}
             className="grid grid-cols-[32px_minmax(0,1fr)_96px_13px] items-center gap-4 py-2.5"
           >
-            <Bar className="size-8 rounded-[6px]" />
+            <PendingBar className="size-8 rounded-[6px]" />
             <span className="flex min-w-0 flex-col gap-2">
-              <Bar className={cn("h-3", width)} />
-              <Bar className="h-2.5 w-56" />
+              <PendingBar className={cn("h-3", width)} />
+              <PendingBar className="h-2.5 w-56" />
             </span>
-            <Bar className="h-2.5 w-10 justify-self-end" />
+            <PendingBar className="h-2.5 w-10 justify-self-end" />
             <span />
           </div>
         ))}
@@ -280,7 +269,7 @@ export function NewTournamentPending() {
     >
       <span className="eyebrow">Tournament · name</span>
       <span className="mt-1 flex h-[46px] items-center border-b-2 border-[var(--border-medium)] pt-1.5 pb-2">
-        <Bar className="h-6 w-72" />
+        <PendingBar className="h-6 w-72" />
       </span>
     </WizardChrome>
   );
@@ -305,34 +294,31 @@ export function EditEventPending() {
       <div aria-hidden="true" className="flex flex-1 flex-col">
         <div className="flex gap-[3px]">
           {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              className="h-[2px] flex-1 bg-[var(--surface-skeleton)] motion-safe:animate-pulse"
-            />
+            <PendingBar key={i} className="h-[2px] flex-1 rounded-none" />
           ))}
         </div>
         {/* The pinned bar's 36px strip, as the dual edit draws it. */}
         <div className="flex h-9 items-center gap-2 border-b border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px]">
-          <Bar className="h-3 w-40 bg-[var(--ink-200)]" />
-          <Bar className="ml-4 h-2.5 w-56 bg-[var(--ink-200)]" />
+          <PendingBar className="h-3 w-40 bg-[var(--ink-200)]" />
+          <PendingBar className="ml-4 h-2.5 w-56 bg-[var(--ink-200)]" />
         </div>
 
         <div className={`${CONTENT_CLS} pt-16 pb-24`}>
           <div className="flex flex-col gap-3">
-            <Bar className="h-2 w-20" />
-            <Bar className="my-[5px] h-7 w-80" />
+            <PendingBar className="h-2 w-20" />
+            <PendingBar className="my-[5px] h-7 w-80" />
             <span className="flex flex-col gap-2 py-1">
-              <Bar className="h-3 w-[440px]" />
-              <Bar className="h-3 w-64" />
+              <PendingBar className="h-3 w-[440px]" />
+              <PendingBar className="h-3 w-64" />
             </span>
           </div>
 
           <div className="mt-9 grid grid-cols-4 gap-6">
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className="flex flex-col gap-2">
-                <Bar className="h-2 w-14" />
+                <PendingBar className="h-2 w-14" />
                 <span className="flex h-[34px] items-center border-b border-[var(--border-field)]">
-                  <Bar className="h-3 w-24" />
+                  <PendingBar className="h-3 w-24" />
                 </span>
               </div>
             ))}
@@ -341,9 +327,9 @@ export function EditEventPending() {
 
         <div className="sticky bottom-0 z-10 mt-auto border-t border-[var(--border-hairline)] bg-white">
           <div className={`${CONTENT_CLS} flex h-16 items-center gap-4`}>
-            <Bar className="h-3 w-12" />
+            <PendingBar className="h-3 w-12" />
             <div className="flex-1" />
-            <Bar className="h-9 w-[112px] rounded-[6px]" />
+            <PendingBar className="h-9 w-[112px] rounded-[6px]" />
           </div>
         </div>
       </div>

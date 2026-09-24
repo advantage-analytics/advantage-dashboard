@@ -134,7 +134,7 @@ export function DualSheet({ dual }: { dual: WeekendDual }) {
                 <span className="tabular">{dual.lines.length}</span> ·{" "}
               </>
             ) : null}
-            doubles arrive via SwingVision
+            doubles are score only
           </>
         }
         right={

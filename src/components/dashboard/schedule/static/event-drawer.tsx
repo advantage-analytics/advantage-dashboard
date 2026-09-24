@@ -236,6 +236,8 @@ export function EventDrawer({
               <EventActionsMenu
                 eventId={event.id}
                 eventName={event.name}
+                isDual={isDual}
+                entries={entries}
                 canDelete={capabilities.canDelete}
                 onDeleted={onDeleted}
               />

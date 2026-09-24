@@ -1,8 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
 import { useMounted } from "@/lib/ui/use-mounted";
-import { VizWall } from "@/components/dashboard/matches/match-detail/shots/viz-wall";
+import {
+  VizWall,
+  type WallCollection,
+} from "@/components/dashboard/matches/match-detail/shots/viz-wall";
 import { VizFocused } from "@/components/dashboard/matches/match-detail/shots/viz-focused";
 import {
   useVizState,
@@ -101,9 +105,24 @@ export function ShotsTab() {
 
 function ShotsTabBody() {
   const { state } = useVizState();
-  const { meta } = useMatchReport();
+  const [wallCollection, setWallCollection] =
+    useState<WallCollection>("default");
+  const { meta, actions } = useMatchReport();
   const { points } = useMatchData();
   const mounted = useMounted();
+
+  // Keep the gallery selection across the wall/focused mount switch. A saved
+  // view must return to a visible saved tile for the court morph and keyboard
+  // focus target; a default view returns to Default. Drafting keeps the
+  // collection that opened the create tile.
+  useEffect(() => {
+    if (state.cut !== null && !state.draft) {
+      // The URL-owned focused identity changes the collection that must be
+      // visible when the wall remounts; there is no wall child to update then.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setWallCollection(state.viewId ? "saved" : "default");
+    }
+  }, [state.cut, state.draft, state.viewId]);
 
   // ONE gated value. Anything that ever needs to know "is the viewer up" while
   // RENDERING — an `inert`/`aria-hidden`/class toggle on the court behind it,
@@ -142,13 +161,19 @@ function ShotsTabBody() {
           part of the server HTML and absent from the first client render. */}
       <div inert={viewerOpen || undefined}>
         {state.cut === null ? (
-          <VizWall savedViewsBand={savedViewsBand} />
+          <VizWall
+            savedViewsBand={savedViewsBand}
+            collection={wallCollection}
+            onCollectionChange={setWallCollection}
+          />
         ) : (
           <VizFocused
             savedViews={meta.savedViews}
             savedViewsBand={savedViewsBand}
             workspaceKind={meta.workspaceKind}
             workspaceName={meta.workspaceName}
+            hasPlayableVideo={meta.hasPlayableVideo}
+            onWatchPoint={actions.watchPoint}
           />
         )}
       </div>

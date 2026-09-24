@@ -363,7 +363,7 @@ export function reconcileVizState({
 
 /**
  * URLSearchParams → VizState. Garbage values read as defaults.
- * `chart=zones` with a non-serve cut parses as `scatter`.
+ * Every supported cut preserves Zones.
  */
 export function parseVizState(params: URLSearchParams): VizState {
   const cutParam = params.get("cut");
@@ -372,15 +372,14 @@ export function parseVizState(params: URLSearchParams): VizState {
     cutParam === "serve" ||
     cutParam === "returnPlacement" ||
     cutParam === "returnContact" ||
-    cutParam === "rallyPosition"
+    cutParam === "rallyPosition" ||
+    cutParam === "rallyPlacement"
   ) {
     cut = cutParam;
   }
 
   // Stays "scatter" — the default — when the requested chart is unknown, the
-  // cut is null (the wall), or `chartAllowedOn` rejects the pairing (zones
-  // off serve reads as scatter rather than being rejected outright: a URL
-  // must always resolve to something drawable).
+  // cut is null (the wall), or `chartAllowedOn` rejects the pairing.
   let chart: Chart = "scatter";
   const chartParam = params.get("chart");
   if (

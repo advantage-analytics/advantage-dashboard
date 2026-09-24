@@ -1,1 +1,1 @@
-export { WizardPageSkeleton as default } from "@/components/dashboard/loading/page-skeletons";
+export { ScoreFlowPending as default } from "@/components/dashboard/loading/score-flow-pending";

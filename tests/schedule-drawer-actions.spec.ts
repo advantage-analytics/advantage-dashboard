@@ -94,11 +94,20 @@ async function openSchedule(
     .toBe("true");
 }
 
+/**
+ * A schedule row by its event's name. The row is a focusable container, not a
+ * button — its name is a link, and a link can't sit inside a button — so it
+ * is found by its id prefix rather than by role.
+ */
+function scheduleRow(page: import("@playwright/test").Page, name: string) {
+  return page.locator('[id^="schedule-row-"]', { hasText: name });
+}
+
 async function openEventWithKeyboard(
   page: import("@playwright/test").Page,
   name: string,
 ) {
-  const row = page.getByRole("button", { name: new RegExp(name) });
+  const row = scheduleRow(page, name);
   await row.focus();
   await row.press("Enter");
   await expect(page.getByRole("dialog")).toBeFocused();
@@ -117,7 +126,7 @@ test("an upload-entitled player gets one noun-specific footer through the full k
   await expect(page.getByRole("button", { name: "Event actions" })).toHaveCount(
     0,
   );
-  const dualLink = page.getByRole("link", { name: "Open dual" });
+  const dualLink = page.getByRole("link", { name: "Open dual", exact: true });
   await expect(dualLink).toHaveCount(1);
   await expect(dualLink).toHaveAttribute(
     "href",
@@ -131,7 +140,9 @@ test("an upload-entitled player gets one noun-specific footer through the full k
   await expect(
     page.getByRole("dialog", { name: "Browser Invitational" }),
   ).toBeFocused();
-  await expect(page.getByRole("link", { name: "Open dual" })).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Open dual", exact: true }),
+  ).toHaveCount(0);
   const tournamentLink = page.getByRole("link", {
     name: "Open tournament",
   });
@@ -158,9 +169,54 @@ test("an upload-entitled player gets one noun-specific footer through the full k
 
   await page.getByRole("dialog").press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(scheduleRow(page, "Browser Invitational")).toBeFocused();
+});
+
+test("the event name links to the event page while the row still peeks", async ({
+  page,
+}) => {
+  await openSchedule(page, "coach");
+  // Hold every anchor navigation in place without stopping propagation, so
+  // the row's own click handler still sees whatever the link lets through.
+  await page.evaluate(() => {
+    window.addEventListener(
+      "click",
+      (event) => {
+        if ((event.target as Element).closest("a")) event.preventDefault();
+      },
+      true,
+    );
+  });
+
+  const row = scheduleRow(page, "Long Open Dual");
+  const nameLink = row.getByRole("link", { name: "Long Open Dual" });
+  await expect(nameLink).toHaveAttribute(
+    "href",
+    "/dashboard/team/schedule/dual-open",
+  );
+  await expect(row).not.toHaveAttribute("aria-pressed", /.*/);
+
+  // The name is a shortcut: clicking it never opens the peek.
+  await nameLink.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(row).not.toHaveAttribute("aria-current", "true");
+  expect(new URL(page.url()).pathname).toBe("/");
+
+  // Anywhere else on the row still peeks — the date cell here.
+  await row.locator("span").first().click();
   await expect(
-    page.getByRole("button", { name: /Browser Invitational/ }),
-  ).toBeFocused();
+    page.locator('[data-schedule-drawer] [role="dialog"]'),
+  ).toHaveAttribute("aria-label", "vs Long Open Dual");
+  await expect(row).toHaveAttribute("aria-current", "true");
+
+  // ⌘/Ctrl on the row travels where the name does, as on Roster.
+  await row
+    .locator("span")
+    .first()
+    .click({ modifiers: ["ControlOrMeta"] });
+  await expect
+    .poll(() => page.evaluate(() => window.routerPushes.at(-1)))
+    .toBe("/dashboard/team/schedule/dual-open");
 });
 
 test("owner, coach, and staff get the ghost open link with the primary under it", async ({
@@ -177,7 +233,9 @@ test("owner, coach, and staff get the ghost open link with the primary under it"
     await expect(
       page.getByRole("button", { name: "Event actions" }),
     ).toHaveCount(1);
-    await expect(page.getByRole("link", { name: "Open dual" })).toHaveCount(1);
+    await expect(
+      page.getByRole("link", { name: "Open dual", exact: true }),
+    ).toHaveCount(1);
 
     await page.getByRole("dialog").press("ArrowDown");
     await expect(
@@ -204,7 +262,9 @@ test("a settled dual keeps only the ghost open link for staff-capable viewers", 
   await expect(page.getByRole("link", { name: "Enter results" })).toHaveCount(
     0,
   );
-  await expect(page.getByRole("link", { name: "Open dual" })).toHaveCount(1);
+  await expect(
+    page.getByRole("link", { name: "Open dual", exact: true }),
+  ).toHaveCount(1);
 });
 
 test("staff can open both existing edit-route branches while players see no write menu", async ({
@@ -268,6 +328,9 @@ test("only owners and coaches are offered deletion, with named confirmation and 
     await expect(confirmation).toContainText(
       "Removes the event and its empty lines from the team schedule",
     );
+    // No match or outcome under this dual, so nothing is counted.
+    await expect(confirmation).not.toContainText(/\bmatch(es)? stays?\b/);
+    await expect(confirmation).not.toContainText("team result");
     await expect(
       confirmation.getByRole("button", { name: "Cancel" }),
     ).toBeFocused();
@@ -284,8 +347,7 @@ test("server refusal stays in the open confirmation and leaves drawer and list u
   await openSchedule(page, "owner");
   await openEventWithKeyboard(page, "Long Open Dual");
   await page.evaluate(() => {
-    window.failNextDelete =
-      "This event has recorded matches or outcomes and cannot be deleted.";
+    window.failNextDelete = "Couldn't delete this event. Try again.";
   });
 
   await page.getByRole("button", { name: "Event actions" }).press("Enter");
@@ -300,7 +362,7 @@ test("server refusal stays in the open confirmation and leaves drawer and list u
 
   await expect(confirmation).toBeVisible();
   await expect(confirmation.getByRole("alert")).toHaveText(
-    "This event has recorded matches or outcomes and cannot be deleted.",
+    "Couldn't delete this event. Try again.",
   );
   await expect(
     page.locator('[data-schedule-drawer] [role="dialog"]'),
@@ -336,13 +398,44 @@ test("successful deletion closes the selection, removes the row, and refreshes s
     .press("Enter");
 
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: /Long Open Dual/ }),
-  ).toHaveCount(0);
+  await expect(scheduleRow(page, "Long Open Dual")).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.locator("#schedule-row-tournament-open")).toBeFocused();
   await expect.poll(() => page.evaluate(() => window.routerRefreshes)).toBe(1);
   await expect
     .poll(() => page.evaluate(() => window.actionCalls))
     .toEqual([{ action: "deleteEvent", input: "dual-open" }]);
+});
+
+test("deleting a dual with recorded matches names what stays and what goes", async ({
+  page,
+}) => {
+  await openSchedule(page, "owner");
+  await openEventWithKeyboard(page, "Settled Dual");
+  await page.getByRole("button", { name: "Event actions" }).press("Enter");
+  await page
+    .getByRole("menu", { name: "Event actions" })
+    .getByRole("menuitem", { name: /Delete event/ })
+    .press("Enter");
+
+  const confirmation = page.getByRole("alertdialog");
+  await expect(
+    confirmation.getByRole("heading", { name: "Delete Settled Dual?" }),
+  ).toBeVisible();
+  await expect(confirmation).toContainText("9 matches");
+  // Nine won lines score 7–0 under ITA rules (six singles points and one
+  // doubles point) — `dualScore()`, the figure the drawer's score row draws.
+  // The fixture's list-row `teamScore` of 9–0 is not what the dialog reads.
+  await expect(confirmation).toContainText("7–0");
+  await expect(confirmation).toContainText("There is no undo.");
+  await expect(confirmation).not.toContainText("can't be deleted");
+
+  await confirmation
+    .getByRole("button", { name: "Delete event" })
+    .press("Enter");
+
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => window.actionCalls))
+    .toEqual([{ action: "deleteEvent", input: "dual-settled" }]);
 });

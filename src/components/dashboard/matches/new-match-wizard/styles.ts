@@ -120,3 +120,13 @@ export const floatMenuRowCls =
   "flex h-[38px] w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 text-left transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:bg-[var(--surface-subtle)]";
 
 export const floatMenuDividerCls = "my-[5px] h-px bg-[var(--border-hairline)]";
+
+/**
+ * The wizard's content column: 720px of content inside 56px gutters.
+ *
+ * `WizardShell` draws with it and re-exports it; it lives here, in a module
+ * with no `"use client"`, so the route skeleton that mirrors the shell
+ * (`loading/upload-wizard-pending.tsx`, a Server Component) reads the real
+ * string rather than a client reference.
+ */
+export const CONTENT_CLS = "mx-auto w-full max-w-[832px] px-14";

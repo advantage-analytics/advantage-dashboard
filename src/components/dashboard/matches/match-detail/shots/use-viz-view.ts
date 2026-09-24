@@ -12,6 +12,8 @@ import type { DistanceUnit } from "@/lib/format/distance";
 import { useVizState } from "./use-viz-state";
 import { useVizBands } from "./viz-bands-context";
 import {
+  bandZonesFor,
+  type VizBandZones,
   computeViz,
   computeVizStats,
   subjectFor,
@@ -53,6 +55,7 @@ export interface VizView {
   /** `computeViz(points, cut, filters, subjectIsPlayer1, chart)`. */
   result: VizResult | null;
   stats: VizStats | null;
+  bandZones: VizBandZones | null;
   /** The resolved `subjectIsPlayer1` — pass this down, never re-derive it. */
   subjectIsPlayer1: boolean;
   /** The subject's display name (the `player` filter applied to you/opp). */
@@ -76,7 +79,7 @@ export function useVizView(): VizView {
   const { points } = useMatchData();
   const { you, opp } = useMatchSides();
   const { state } = useVizState();
-  const { bands, unit } = useVizBands();
+  const { bands, unit, contactHidden } = useVizBands();
 
   const cut = state.cut;
   const subjectIsPlayer1 = subjectFor(state.filters, you.isPlayer1);
@@ -104,10 +107,16 @@ export function useVizView(): VizView {
     [points, cut, state.filters, subjectIsPlayer1, result, bands, unit],
   );
 
+  const bandZones = useMemo(
+    () => (cut ? bandZonesFor(cut, bands, unit, stats, contactHidden) : null),
+    [cut, bands, unit, stats, contactHidden],
+  );
+
   return {
     cut,
     result,
     stats,
+    bandZones,
     subjectIsPlayer1,
     subjectName: state.filters.player === "you" ? you.name : opp.name,
     you,

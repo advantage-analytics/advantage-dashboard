@@ -25,7 +25,7 @@ QF · SF · F`).
   from Schedule, never inside the wizard.
 - **No duplicates:** video for a scored line attaches to that match; a player
   uploading their own dual video is offered their open slot. Whoever fills a
-  slot is credited. Doubles are SwingVision-only for now.
+  slot is credited. Doubles are score only for now.
 - **Opponents are scoped to what names them:** personal = a private label
   from your own history; team in a dual = a program-scoped player under the
   opposing school (`opponent_player_id`, name only), reused by every later

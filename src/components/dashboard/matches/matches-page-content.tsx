@@ -17,7 +17,7 @@ import { Filter as FilterIcon, GalleryHorizontalEnd } from "lucide-react";
 import { EmptyMatches } from "./empty-matches";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
-import type { DraftRowData } from "./draft-row";
+import { draftHref, type DraftRowData } from "./draft-row";
 import {
   isAnalysisFailed,
   isAnalysisReady,
@@ -47,6 +47,7 @@ import { LifecycleChips, type LifecycleValue } from "./lifecycle-chips";
 import { MATCHES_PAGE_SIZE, matchesListShape } from "./match-list-layout";
 import { rememberMatchesShape } from "./matches-shape-memory";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { foldDrafts } from "@/lib/wizard/draft-target";
 
 function providerName(id: string): string {
   return providers.find((p) => p.id === id)?.name ?? id;
@@ -404,6 +405,9 @@ function emptyCutCopy({
   };
 }
 
+/** A stable "no drafts", so the default does not bust every memo keyed on it. */
+const NO_DRAFTS: DraftRowData[] = [];
+
 /** The slot never changes once mounted, so there is nothing to subscribe to. */
 function noopSubscribe(): () => void {
   return () => {};
@@ -412,13 +416,27 @@ function noopSubscribe(): () => void {
 /* ─── Main content ─── */
 export function MatchesPageContent({
   matches: serverMatches,
-  drafts = [],
+  drafts: allDrafts = NO_DRAFTS,
   userId,
   scope = "personal",
 }: MatchesPageContentProps): React.JSX.Element {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const workspaceId = useWorkspace().active.id;
+
+  // A draft that fills a listed match (an "Add video" started from a scored
+  // line) is more work on that match, not a second one: it folds onto the
+  // match's row — a Draft pill there, "Continue upload" in its drawer — and
+  // only the rest list as draft rows. Everything below that says `drafts`
+  // means the standalone ones: the rows, the stepping order, the deep link.
+  const { standalone: drafts, byMatchId: foldedDrafts } = useMemo(
+    () =>
+      foldDrafts(
+        allDrafts,
+        serverMatches.map((m) => m.id),
+      ),
+    [allDrafts, serverMatches],
+  );
 
   // Teach the route's loading boundary this workspace's first page, so the next
   // client-side visit draws its skeleton at the size the rows will arrive at.
@@ -650,7 +668,13 @@ export function MatchesPageContent({
     const matchId = searchParams.get("match");
     if (matchId && serverMatches.some((m) => m.id === matchId)) return matchId;
     const draftId = searchParams.get("draft");
-    return draftId && drafts.some((d) => d.id === draftId) ? draftId : null;
+    if (!draftId) return null;
+    if (drafts.some((d) => d.id === draftId)) return draftId;
+    // A link to a draft that folded lands on the match it fills.
+    for (const [foldedMatchId, draft] of foldedDrafts) {
+      if (draft.id === draftId) return foldedMatchId;
+    }
+    return null;
   });
   const [drawerId, setDrawerId] = useState<string | null>(selectedId);
   const [closing, setClosing] = useState(false);
@@ -663,6 +687,12 @@ export function MatchesPageContent({
   const drawerIndex =
     drawerId && !drawerDraft ? sorted.findIndex((m) => m.id === drawerId) : -1;
   const drawerMatch = drawerIndex >= 0 ? sorted[drawerIndex] : null;
+  // The drawer's "Continue upload": where the draft folded onto this match
+  // resumes, when one is.
+  const drawerFolded = drawerMatch ? foldedDrafts.get(drawerMatch.id) : null;
+  const drawerContinueHref = drawerFolded
+    ? draftHref(drawerFolded.id, scope)
+    : null;
   // Stepping order: drafts, then matches. A row's place in it decides whether
   // ↑ and ↓ have anywhere to go.
   const drawerPosition = drawerDraft
@@ -1043,6 +1073,7 @@ export function MatchesPageContent({
       <MatchesGrid
         matches={paginatedMatches}
         drafts={drafts}
+        foldedDrafts={foldedDrafts}
         scope={scope}
         newMatchId={newMatchId}
         unseenIds={unseenIds}
@@ -1095,6 +1126,7 @@ export function MatchesPageContent({
         createPortal(
           <MatchDrawer
             match={drawerMatch}
+            continueHref={drawerContinueHref}
             scope={scope}
             index={drawerIndex}
             total={sorted.length}

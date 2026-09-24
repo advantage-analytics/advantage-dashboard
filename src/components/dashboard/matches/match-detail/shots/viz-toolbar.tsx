@@ -43,23 +43,32 @@ export function VizToolbar({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-center gap-3", className)}>
-      <CutMenu
-        savedViews={savedViews}
-        onSaveRequest={onSaveRequest}
-        triggerRef={cutMenuTriggerRef}
-      />
-      <ChartMenu />
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-x-3 gap-y-2 @min-[560px]:flex-nowrap",
+        className,
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <CutMenu
+          savedViews={savedViews}
+          onSaveRequest={onSaveRequest}
+          triggerRef={cutMenuTriggerRef}
+        />
+        <ChartMenu />
+      </div>
       {stripSlot != null && (
         <>
           <div
             aria-hidden="true"
-            className="h-4 w-px shrink-0 bg-[var(--border-hairline)]"
+            className="hidden h-4 w-px shrink-0 bg-[var(--border-hairline)] @min-[560px]:block"
           />
-          {stripSlot}
+          <div className="order-last w-full min-w-0 @min-[560px]:order-none @min-[560px]:w-auto">
+            {stripSlot}
+          </div>
         </>
       )}
-      <div className="flex-1" />
+      <div className="hidden flex-1 @min-[560px]:block" />
       {filtersSlot}
     </div>
   );

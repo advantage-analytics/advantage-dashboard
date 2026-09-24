@@ -686,4 +686,32 @@ test.describe("saved_views RLS (live)", () => {
     expect(select.error).toBeNull();
     expect(select.data).toHaveLength(1);
   });
+
+  for (const chart of ["scatter", "heat"] as const) {
+    test(`rally placement ${chart} persists and reloads with its subject and filters`, async () => {
+      const state = {
+        cut: "rallyPlacement",
+        chart,
+        filters: { player: "opponent", set: [2], result: ["won"] },
+      };
+      const insert = await userA.client
+        .from("saved_views")
+        .insert({
+          account_id: userA.userId,
+          name: `Rally Placement ${chart}`,
+          ...state,
+        })
+        .select("id")
+        .single();
+      expect(insert.error).toBeNull();
+
+      const reload = await userA.client
+        .from("saved_views")
+        .select("cut, chart, filters")
+        .eq("id", insert.data!.id as string)
+        .single();
+      expect(reload.error).toBeNull();
+      expect(reload.data).toEqual(state);
+    });
+  }
 });

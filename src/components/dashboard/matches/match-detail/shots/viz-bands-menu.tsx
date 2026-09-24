@@ -86,7 +86,7 @@ function contactDividersLabel(
 
 /** Which half a cut's bands describe — `null` for Serve, which has none. */
 export function bandKindFor(cut: Cut): "depth" | "contact" | null {
-  if (cut === "returnPlacement") return "depth";
+  if (cut === "returnPlacement" || cut === "rallyPlacement") return "depth";
   if (cut === "returnContact" || cut === "rallyPosition") return "contact";
   return null;
 }

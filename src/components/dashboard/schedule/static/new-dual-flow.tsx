@@ -430,6 +430,7 @@ function DualDraftFlow({
     setNoPlayer,
     setTheirNoPlayer,
     setSinglesOrder,
+    setDoublesOrder,
     lineCount,
     lineTotal,
     opponentName,
@@ -593,6 +594,7 @@ function DualDraftFlow({
           onNoPlayer={setNoPlayer}
           onTheirNoPlayer={setTheirNoPlayer}
           onSinglesOrder={setSinglesOrder}
+          onDoublesOrder={setDoublesOrder}
         />
       )}
     </WizardShell>

@@ -6,11 +6,35 @@
 
 ### Loading Skeleton
 
-```
-bg-[#F0F0F0] rounded animate-pulse
-// Various heights: h-2.5, h-3, h-4, h-5
-// Proportional widths: w-24, w-32, w-40
-```
+Build every skeleton from the three primitives in
+`src/components/dashboard/loading/pending.tsx`; never hand-write a bar.
+
+- **`PendingBar`** — one bar: `--surface-skeleton`, `rounded-[3px]`,
+  `motion-safe:animate-pulse`, `aria-hidden`. Size it with classes (`h-2`–`h-9`,
+  proportional widths such as `w-24`, `w-32`, `w-40`).
+- **`PendingRegion`** — a card or region: the one `role="status"`, labelled
+  "Loading <region>", with every bar under an `aria-hidden` wrapper.
+- **`PendingFrame`** — a route's `loading.tsx`: the same status on the page's
+  white ground. It pulses as one by default; `pulse={false}` when it holds real
+  text, so the text renders still and only the bars pulse.
+
+The colour is the `--surface-skeleton` token, never a hex, and the pulse is
+always `motion-safe:animate-pulse`. `tests/skeleton-primitives.spec.ts` fails
+any file outside `pending.tsx` that writes either by hand.
+
+**Carbon and this system.** The
+[Carbon loading pattern](https://carbondesignsystem.com/patterns/loading-pattern/)
+is the reference; where it differs, this system wins.
+
+- Skeletons for container and page loads, mirroring the loaded layout, so
+  nothing jumps when the data lands.
+- Chrome the page already knows (titles, eyebrows, column labels, step names)
+  renders as real text; only what is arriving is a bar.
+- The spinner only for blocking actions and inline button states — never a
+  page load, never inside a card.
+- Pulse, where Carbon shimmers.
+- A token, never a hex.
+- One `role="status"` per region, never one per bar.
 
 **A skeleton is a promise that something is arriving.** It belongs to a
 request that will resolve — a fetch in flight, a page mounting. It never

@@ -428,16 +428,14 @@ test.describe("the links into the upload wizard", () => {
     await expect(uploadInstead(page)).toHaveCount(0);
   });
 
-  test("a line the pipeline refuses asks for the SwingVision file", async ({
-    page,
-  }) => {
+  test("a doubles line offers no upload", async ({ page }) => {
     await openFlow(page);
     await changeLine(page, /S2Morgan Reed/);
-    await expect(page.getByText("Have the SwingVision file?")).toBeVisible();
-    await expect(uploadInstead(page)).toHaveAttribute(
-      "href",
-      "/dashboard/team/upload?entry=entry-s2",
-    );
+    await expect(
+      page.getByLabel("Morgan Reed / Drew Park, set 1"),
+    ).toBeVisible();
+    await expect(uploadInstead(page)).toHaveCount(0);
+    await expect(page.getByText(/^Have the .* (file|video)\?$/)).toHaveCount(0);
   });
 
   test("not offered on a saved outcome, a tournament, or to a viewer who cannot upload", async ({
@@ -473,17 +471,20 @@ test.describe("the links into the upload wizard", () => {
       "/dashboard/team/upload?entry=entry-s1&match=match-browser",
     );
 
-    // The next save replaces it: S2 stands in for a doubles line.
+    // The next save clears it: S2 stands in for a doubles line, which is
+    // score-only and offers nothing to upload.
     await page.getByLabel("Morgan Reed / Drew Park, set 1").fill("6");
     await page.getByLabel("Taylor Park / Sam Ortiz, set 1").fill("2");
     await page.getByRole("button", { name: "Save and next line" }).click();
-    await expect(page.getByText("S2 saved", { exact: true })).toBeVisible();
+    await expect(page.getByText("Line 3 of 3", { exact: true })).toBeVisible();
+    await expect(page.getByText("S1 saved", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("S2 saved", { exact: true })).toHaveCount(0);
     await expect(
       page.getByRole("link", { name: "Add file", exact: true }),
-    ).toHaveAttribute(
-      "href",
-      "/dashboard/team/upload?entry=entry-s2&match=match-browser",
-    );
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Add video", exact: true }),
+    ).toHaveCount(0);
   });
 
   test("an outcome saved next clears the offer, and a viewer who cannot upload never gets one", async ({

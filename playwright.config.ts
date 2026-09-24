@@ -20,6 +20,11 @@ const liveSpecGlobs = LIVE_DB_SPECS.map((file) => `**/${file}`);
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
+  // Live specs share one Supabase project and Auth IP bucket. The CPU-based
+  // default overlaps their already-concurrent fixture logins and database
+  // writes, causing statement timeouts and exhausted auth retries. Run one
+  // suite at a time; explicit race tests still issue concurrent operations.
+  workers: 1,
   reporter: process.env.CI ? "dot" : "list",
   globalSetup: "./tests/fixtures/live-db-lock.ts",
   projects: [

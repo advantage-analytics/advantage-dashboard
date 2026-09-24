@@ -37,24 +37,23 @@ import {
   restoreSavedView,
   setSavedViewShared,
 } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
+import { useVizBands } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
 import { CourtTile, TileFullscreenGlyph } from "./court-tile";
 import { ManageableSavedViewTile } from "./manageable-saved-view-tile";
 import { savedViewNamePool } from "./save-view-dialog";
 import { useVizState } from "./use-viz-state";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import type { VizState } from "./viz-url";
-import { activeFilterEntries, sameView } from "./viz-url";
+import { activeFilterEntries, viewIdentityKey } from "./viz-url";
 import {
   computeViz,
+  computeVizStats,
+  bandZonesFor,
   subjectFor,
   tileCountLabel,
   EMPTY_VIZ_FILTERS,
 } from "./viz-model";
-import {
-  truncatePillLabels,
-  VIZ_TILE_GRID_CLASS,
-  VIZ_TILE_GRID_STYLE,
-} from "./viz-labels";
+import { truncatePillLabels, VIZ_TILE_GRID_CLASS } from "./viz-labels";
 import { buildDefaultTiles, type DefaultTile } from "./default-tiles";
 
 // M3: `variant="wall"` never renders a default tile (`viz-wall.tsx` builds
@@ -71,12 +70,9 @@ const EMPTY_DEFAULT_TILES: readonly DefaultTile[] = Object.freeze([]);
  * its `savedViewsBand` slot) and `VizFocused` (ditto), so it is the SAME
  * band on both surfaces — one component, two mount points.
  *
- * Revised P1b: the `"wall"` band is ALWAYS mounted, even with zero saved
- * views and nothing pending — the dashed "Create view" tile must stay
- * reachable from the wall. At zero views the heading's count is replaced by
- * the micro line "Save a court you want to come back to", there is no
- * "Manage views" link (nothing to manage — `canManageAny` is already false
- * on an empty list), and the grid holds only the "Create view" tile. The one
+ * The `"wall"` band stays mounted under the Saved collection, even with zero
+ * saved views. It has no separate section heading or divider; at zero views
+ * the dashed "Create view" tile is the only item. The one
  * exception is transient: if deleting the LAST view leaves a status message
  * (the Undo window, or an error) on screen, the band renders status-only
  * (heading + status line, no tiles, no "Create view" tile either) until that
@@ -103,7 +99,7 @@ export function SavedViewsBand({
    * F4: `"wall"` (default) is the pre-existing grid — saved views only,
    * absent with zero of them. `"focused"` is the focused view's "Views"
    * grid — the SAME 3-column wrapping grid the wall draws
-   * (`VIZ_TILE_GRID_CLASS`/`VIZ_TILE_GRID_STYLE`, `viz-labels.tsx`), never a
+   * (`VIZ_TILE_GRID_CLASS`, `viz-labels.tsx`), never a
    * horizontally scrolling row (that shape shipped once in this file's
    * history and was corrected: the design frame's "5 views" with three
    * tiles visible meant a second grid ROW below the fold, not a scroll
@@ -119,6 +115,7 @@ export function SavedViewsBand({
 }) {
   const router = useRouter();
   const { points } = useMatchData();
+  const { bands, unit, contactHidden } = useVizBands();
   const { you, opp } = useMatchSides();
   const { state, hrefFor } = useVizState();
   const [, startTransition] = useTransition();
@@ -224,6 +221,25 @@ export function SavedViewsBand({
       pills,
       countLabel,
       dots: result.dots,
+      zones: result.zoneStats ?? undefined,
+      bandZones:
+        view.chart === "zones"
+          ? bandZonesFor(
+              view.cut,
+              bands,
+              unit,
+              computeVizStats(
+                points,
+                view.cut,
+                view.filters,
+                subjectIsPlayer1,
+                result,
+                bands,
+                unit,
+              ),
+              contactHidden,
+            )
+          : null,
       chart: view.chart,
       href,
     };
@@ -260,7 +276,17 @@ export function SavedViewsBand({
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `viewsKey` already captures every view's id/cut/filters, order-independent; including `optimisticViews`/`tileDataFor` directly would recompute on every reorder, defeating the memo
-  }, [points, you.isPlayer1, you.name, opp.name, hrefFor, viewsKey]);
+  }, [
+    points,
+    you.isPlayer1,
+    you.name,
+    opp.name,
+    hrefFor,
+    viewsKey,
+    bands,
+    unit,
+    contactHidden,
+  ]);
 
   // F4 (`variant="focused"` only, but computed unconditionally — hooks can't
   // run conditionally): the same six default tiles the wall draws
@@ -764,17 +790,8 @@ export function SavedViewsBand({
     }
   }
 
-  /**
-   * One saved-view tile — the Manage-mode/plain branch shared by the wall's
-   * grid and the focused view's grid, so the two can never draw it
-   * differently. `current` rings the tile Signal Blue (F4) — omitted
-   * (defaults to `false`) by the wall's own call, which never has a
-   * "current" tile to mark.
-   */
-  function renderSavedTile(
-    view: SavedViewRow,
-    opts: { current?: boolean } = {},
-  ) {
+  /** One saved-view tile shared by the wall and focused grids. */
+  function renderSavedTile(view: SavedViewRow) {
     const manageable = canManageSavedView(view, workspaceRole);
     const data = tileDataById.get(view.id) ?? tileDataFor(view);
 
@@ -791,7 +808,6 @@ export function SavedViewsBand({
           renameValue={renameValue}
           renameDuplicate={renameDuplicate}
           menuOpen={openMenuId === view.id}
-          current={opts.current}
           onMenuOpenChange={(open) => handleMenuOpenChange(view.id, open)}
           onRegisterTileEl={(el) => registerTileEl(view.id, el)}
           onRegisterMenuTriggerEl={(el) => registerMenuTriggerEl(view.id, el)}
@@ -823,9 +839,10 @@ export function SavedViewsBand({
         countLabel={data.countLabel}
         cut={view.cut}
         dots={data.dots}
+        zones={data.zones}
+        bandZones={data.bandZones}
         chart={data.chart}
         href={data.href}
-        current={opts.current}
         navigateState={{
           cut: view.cut,
           chart: view.chart,
@@ -847,92 +864,84 @@ export function SavedViewsBand({
     );
   }
 
-  const totalRowViews = visibleDefaultTiles.length + optimisticViews.length;
+  // A focused court already presents the selected view at full size. Match
+  // the tile's navigation identity, so a saved view with the same cut/player
+  // as a default (or another saved view) remains available in the gallery.
+  // Filter edits keep the same tile selected; the URL's view id distinguishes
+  // saved records without changing their data or order.
+  const selectedKey = variant === "focused" ? viewIdentityKey(state) : null;
+  const galleryDefaultTiles = visibleDefaultTiles.filter(
+    (tile) => viewIdentityKey(tile.state) !== selectedKey,
+  );
+  const gallerySavedViews = optimisticViews.filter(
+    (view) =>
+      viewIdentityKey({
+        cut: view.cut,
+        chart: view.chart,
+        filters: view.filters,
+        viewId: view.id,
+      }) !== selectedKey,
+  );
+  const totalRowViews = galleryDefaultTiles.length + gallerySavedViews.length;
 
   return (
     <div
-      className="flex flex-col gap-4"
-      style={{
-        marginTop: 8,
-        paddingTop: 24,
-        borderTop: "1px solid var(--border-hairline)",
-      }}
+      className={
+        variant === "wall"
+          ? "flex flex-col gap-4"
+          : "mt-2 flex flex-col gap-4 border-t border-[var(--border-hairline)] pt-6"
+      }
     >
-      <div className="flex items-center justify-between gap-3">
-        {variant === "focused" ? (
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <h2
-              style={{
-                fontSize: 24,
-                fontWeight: 300,
-                letterSpacing: "-0.3px",
-                color: "var(--ink-900)",
-              }}
-            >
-              Views
-            </h2>
-            <span className="text-micro truncate">
-              {totalRowViews} view{totalRowViews === 1 ? "" : "s"} · {you.name}{" "}
-              vs {opp.name}
-            </span>
-          </div>
-        ) : (
-          <div className="flex items-baseline gap-2">
-            <h2
-              style={{
-                fontSize: 24,
-                fontWeight: 300,
-                letterSpacing: "-0.3px",
-                color: "var(--ink-900)",
-              }}
-            >
-              Saved views
-            </h2>
-            {visibility === "full" && (
-              <span className="text-micro">
-                {optimisticViews.length} saved view
-                {optimisticViews.length === 1 ? "" : "s"}
+      {(variant === "focused" || manageMode || canManageAny) && (
+        <div
+          className={`flex items-center gap-3 ${variant === "wall" ? "justify-end" : "justify-between"}`}
+        >
+          {variant === "focused" ? (
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <h2
+                style={{
+                  fontSize: 24,
+                  fontWeight: 300,
+                  letterSpacing: "-0.3px",
+                  color: "var(--ink-900)",
+                }}
+              >
+                Views
+              </h2>
+              <span className="text-micro truncate">
+                {totalRowViews} view{totalRowViews === 1 ? "" : "s"} ·{" "}
+                {you.name} vs {opp.name}
               </span>
-            )}
-            {visibility === "hidden" && (
-              // Zero views, nothing pending: the count has nothing to count,
-              // so this invites the first save instead — never "0 saved
-              // views". Absent in `status-only` (mid-delete-of-last-view):
-              // the status line below already carries the Undo affordance,
-              // and this line would just flash between the two.
-              <span className="text-micro">
-                Save a court you want to come back to
+            </div>
+          ) : null}
+          {manageMode ? (
+            <div className="flex shrink-0 items-center gap-3">
+              <span id={manageHintId} className="text-micro whitespace-nowrap">
+                Drag a view to reorder, or focus it and press ⌥← / ⌥→ · ⋯ to
+                rename or delete
               </span>
-            )}
-          </div>
-        )}
-        {manageMode ? (
-          <div className="flex shrink-0 items-center gap-3">
-            <span id={manageHintId} className="text-micro whitespace-nowrap">
-              Drag a view to reorder, or focus it and press ⌥← / ⌥→ · ⋯ to
-              rename or delete
-            </span>
-            <button
-              type="button"
-              ref={doneButtonRef}
-              onClick={toggleManageMode}
-              className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
-            >
-              Done
-            </button>
-          </div>
-        ) : (
-          canManageAny && (
-            <button
-              type="button"
-              onClick={toggleManageMode}
-              className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
-            >
-              Manage views
-            </button>
-          )
-        )}
-      </div>
+              <button
+                type="button"
+                ref={doneButtonRef}
+                onClick={toggleManageMode}
+                className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            canManageAny && (
+              <button
+                type="button"
+                onClick={toggleManageMode}
+                className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
+              >
+                Manage views
+              </button>
+            )
+          )}
+        </div>
+      )}
 
       {/* Gated on `status !== null` alone, never `manageMode`: pressing Done
           only toggles Manage mode off (`toggleManageMode` doesn't touch
@@ -979,14 +988,8 @@ export function SavedViewsBand({
           // `globals.css`'s `::view-transition-new(.viz-vt-views-grid)
           // :only-child` rule.
           className={`${VIZ_TILE_GRID_CLASS} viz-vt-views-grid`}
-          style={VIZ_TILE_GRID_STYLE}
         >
-          {visibleDefaultTiles.map((tile) => {
-            const isCurrent = sameView(state, {
-              cut: tile.cut,
-              chart: tile.state.chart,
-              filters: tile.state.filters,
-            });
+          {galleryDefaultTiles.map((tile) => {
             return (
               <div key={tile.key} role="listitem">
                 <CourtTile
@@ -998,7 +1001,6 @@ export function SavedViewsBand({
                   dots={tile.dots}
                   chart={tile.chart}
                   href={tile.href}
-                  current={isCurrent}
                   navigateState={tile.state}
                   actionSlot={
                     <TileFullscreenGlyph
@@ -1011,16 +1013,10 @@ export function SavedViewsBand({
             );
           })}
 
-          {optimisticViews.map((view) => {
-            const isCurrent = sameView(state, {
-              cut: view.cut,
-              chart: view.chart,
-              filters: view.filters,
-              id: view.id,
-            });
+          {gallerySavedViews.map((view) => {
             return (
               <div key={view.id} role="listitem">
-                {renderSavedTile(view, { current: isCurrent })}
+                {renderSavedTile(view)}
               </div>
             );
           })}
@@ -1040,7 +1036,6 @@ export function SavedViewsBand({
             role="list"
             aria-label="Saved views"
             className={VIZ_TILE_GRID_CLASS}
-            style={VIZ_TILE_GRID_STYLE}
           >
             {optimisticViews.map((view) => (
               <div key={view.id} role="listitem">
@@ -1094,19 +1089,23 @@ function NewViewTile({
   return (
     <Link
       href={href}
-      className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-[var(--border-medium)] transition-colors duration-200 ease-[var(--ease-primary)] hover:border-[var(--blue)] motion-reduce:transition-none"
+      className="relative block h-full overflow-hidden rounded-[var(--radius-card)] border border-dashed border-[var(--border-medium)] bg-[var(--surface-card)] transition-colors duration-200 ease-[var(--ease-primary)] hover:border-[var(--blue)] motion-reduce:transition-none"
     >
-      <Plus
-        className="size-4 shrink-0"
-        strokeWidth={1.5}
-        style={{ color: "var(--ink-500)" }}
-        aria-hidden="true"
-      />
-      <span
-        className="text-[12px] font-medium"
-        style={{ color: "var(--ink-500)" }}
-      >
-        Create view
+      <span aria-hidden="true" className="block aspect-[334/216] w-full" />
+      <span aria-hidden="true" className="block h-[77px]" />
+      <span className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+        <Plus
+          className="size-4 shrink-0"
+          strokeWidth={1.5}
+          style={{ color: "var(--ink-500)" }}
+          aria-hidden="true"
+        />
+        <span
+          className="text-[12px] font-medium"
+          style={{ color: "var(--ink-700)" }}
+        >
+          Create view
+        </span>
       </span>
     </Link>
   );

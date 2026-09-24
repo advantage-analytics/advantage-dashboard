@@ -1,4 +1,8 @@
 import { MatchesToolbarPending } from "@/components/dashboard/loading/list-toolbar-pending";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { cn } from "@/lib/utils";
 import {
   DATE_COL,
@@ -17,14 +21,6 @@ const UNKNOWN_SHAPE: MatchesListShape = {
   needsYear: false,
   paged: false,
 };
-
-function Bar({ className }: { className: string }): React.JSX.Element {
-  return (
-    <div
-      className={`max-w-full rounded bg-[var(--surface-skeleton)] motion-safe:animate-pulse ${className}`}
-    />
-  );
-}
 
 /**
  * The populated page's frame with the data blanked — same toolbar, same card,
@@ -46,13 +42,7 @@ export function MatchesSkeleton({
     "--date-col": shape.needsYear ? DATE_COL_WITH_YEAR : DATE_COL,
   } as React.CSSProperties;
   return (
-    <div
-      className="flex flex-col gap-[18px]"
-      role="status"
-      aria-busy="true"
-      aria-label="Loading matches"
-    >
-      <span className="sr-only">Loading matches</span>
+    <PendingRegion label="matches" innerClassName="flex flex-col gap-[18px]">
       {/* Toolbar skeleton — four view pills left, Filters and the sort right. */}
       <MatchesToolbarPending />
 
@@ -86,17 +76,17 @@ export function MatchesSkeleton({
                 className={cn(LIST_ROW_FRAME, "h-[52px]")}
                 style={cols}
               >
-                <Bar className="h-3 w-11" />
+                <PendingBar className="h-3 w-11" />
                 {isTeam && (
                   <span className="flex min-w-0 items-center gap-2.5">
-                    <Bar className="size-[26px] shrink-0 rounded-full" />
-                    <Bar className="h-3 w-24" />
+                    <PendingBar className="size-[26px] shrink-0 rounded-full" />
+                    <PendingBar className="h-3 w-24" />
                   </span>
                 )}
-                <Bar className={isTeam ? "h-3 w-20" : "h-3 w-28"} />
-                <Bar className="size-3.5 rounded-full" />
-                <Bar className="h-3 w-20" />
-                <Bar className="h-3 w-36" />
+                <PendingBar className={isTeam ? "h-3 w-20" : "h-3 w-28"} />
+                <PendingBar className="size-3.5 rounded-full" />
+                <PendingBar className="h-3 w-20" />
+                <PendingBar className="h-3 w-36" />
                 <span />
               </div>
             ))}
@@ -111,8 +101,8 @@ export function MatchesSkeleton({
         {Array.from({ length: shape.rows }, (_, i) => (
           <div key={i} className="surface-card p-5">
             <div className="mb-3 flex justify-between">
-              <Bar className="h-3 w-32" />
-              <Bar className="h-3 w-16" />
+              <PendingBar className="h-3 w-32" />
+              <PendingBar className="h-3 w-16" />
             </div>
             <div className="mb-1 h-3" />
             {[0, 1].map((row) => (
@@ -120,12 +110,12 @@ export function MatchesSkeleton({
                 key={row}
                 className="flex items-center justify-between px-3 py-2.5"
               >
-                <Bar className="h-4 w-28" />
-                <Bar className="h-4 w-20" />
+                <PendingBar className="h-4 w-28" />
+                <PendingBar className="h-4 w-20" />
               </div>
             ))}
             <div className="mt-3 border-t border-[var(--border-hairline)] pt-3">
-              <Bar className="h-3 w-36" />
+              <PendingBar className="h-3 w-36" />
             </div>
           </div>
         ))}
@@ -140,14 +130,14 @@ export function MatchesSkeleton({
           shape.paged ? "h-[17px]" : "h-[15px]",
         )}
       >
-        <Bar className="h-2.5 w-11" />
+        <PendingBar className="h-2.5 w-11" />
         {shape.paged && (
           <>
             <div className="flex-1" />
-            <Bar className="h-2.5 w-[72px]" />
+            <PendingBar className="h-2.5 w-[72px]" />
           </>
         )}
       </div>
-    </div>
+    </PendingRegion>
   );
 }

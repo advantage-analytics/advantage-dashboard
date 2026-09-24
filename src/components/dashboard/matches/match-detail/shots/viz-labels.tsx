@@ -24,6 +24,7 @@ export const CUT_LABEL: Record<Cut, string> = {
   returnPlacement: "Return placement",
   returnContact: "Return contact",
   rallyPosition: "Rally position",
+  rallyPlacement: "Rally placement",
 };
 
 export const CHART_LABEL: Record<Chart, string> = {
@@ -133,7 +134,7 @@ const RAMP_ITEM: LegendItem = {
  */
 export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
   if (chart === "heat") return [RAMP_ITEM];
-  if (chart === "zones") return OUTCOME_ITEMS;
+  if (chart === "zones") return cut === "serve" ? OUTCOME_ITEMS : [];
   if (cut === "rallyPosition") {
     return [WON_ITEM, LOST_ITEM, FOREHAND_ITEM, BACKHAND_ITEM];
   }
@@ -149,21 +150,16 @@ export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
 export const VIZ_PILL_RADIUS = "rounded-full";
 
 /**
- * F4 fix round 2: the one 3-column tile grid — the wall's default-cuts rows,
+ * The shared responsive tile grid — the wall's default-cuts rows,
  * the wall-variant `SavedViewsBand`'s saved-views grid, and the focused
  * view's "Views" grid (which replaced an earlier horizontally-scrolling row
  * design, corrected after live review: the frame's "5 views" with three
  * tiles visible meant a second GRID ROW below the fold, not a scroll axis).
- * Pulled out here, once, so the three call sites (`viz-wall.tsx`,
- * `saved-views-band.tsx` twice) can never draw a different column count or
- * gap — `className` for the grid + gap, `style` for the column template
- * (Tailwind has no arbitrary-value shorthand for `repeat(3, minmax(0,1fr))`
- * that stays this readable).
+ * Pulled out here so the three call sites share one, two, or three columns
+ * according to their container width, with the same gap.
  */
-export const VIZ_TILE_GRID_CLASS = "grid gap-4";
-export const VIZ_TILE_GRID_STYLE = {
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-} as const;
+export const VIZ_TILE_GRID_CLASS =
+  "grid grid-cols-1 gap-4 @min-[420px]:grid-cols-2 @min-[720px]:grid-cols-3";
 
 /**
  * At most `max` pill labels, with a trailing `"+n"` standing in for the

@@ -7,13 +7,23 @@ import type { WorkspaceKind } from "@/lib/workspace/types";
 import { overlayIsOpen } from "@/lib/ui/overlay-is-open";
 import { isTextEntry } from "@/lib/ui/is-text-entry";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
-import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
+import {
+  APRON_FILL,
+  HEAT_APRON_FILL,
+  CourtArt,
+  type CourtMarkInteraction,
+} from "./court-art";
+import {
+  DARK_READOUT_CLASS,
+  DARK_READOUT_STYLE,
+} from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import {
   trianglePointsFor,
   starPoints,
   heatFloorTintRgba,
 } from "./court-geometry";
 import { StatsCard } from "./stats-card";
+import { buildReadout } from "./viz-readout";
 import { VizToolbar } from "./viz-toolbar";
 import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
@@ -29,6 +39,7 @@ import {
 import { AppliedStrip } from "./applied-strip";
 import { FiltersPopover } from "./filters-popover";
 import { SaveViewDialog } from "./save-view-dialog";
+import type { VizDot } from "./viz-model";
 import {
   VIZ_COURT_TRANSITION_NAME,
   VIZ_FOCUSED_COURT_MORPH_TARGET,
@@ -47,11 +58,11 @@ import {
  * `player` filter into the boolean `computeViz` needs, and nothing below this
  * reads player1/player2 off the match.
  *
- * F5: the big court's art box carries this view's `view-transition-name`
+ * The complete court card carries this view's `view-transition-name`
  * whenever it's the morph's destination (`morphTargetKey` matching this
  * view's own `viewIdentityKey`) — the wall/Views-grid tile that was clicked
  * grows into it. "Back to wall" runs the reverse through the same
- * `runCourtMorph`, using this court itself (`courtArtRef`) as the morph's
+ * `runCourtMorph`, using the complete card (`courtCardRef`) as the morph's
  * source. The eyebrow (`VIZ_FOCUSED_HEADING_ID`, `tabIndex={-1}`) is
  * `runCourtMorph`'s focus-landing target for every morph that arrives here.
  */
@@ -59,10 +70,20 @@ import {
 const LEGEND_CAPTION: Record<Cut, string> = {
   serve: "Half court · landing point",
   returnPlacement: "Far half · landing point",
+  rallyPlacement: "Far half · landing point",
   returnContact: "Near half · contact point",
   // rallyPosition renders through the returnContact frame — same caption,
   // since it's the same half.
   rallyPosition: "Near half · contact point",
+};
+
+type MarkAnchor = {
+  id: string;
+  viewKey: string;
+  x: number;
+  y: number;
+  width: number;
+  focusVisible?: boolean;
 };
 
 export function VizFocused({
@@ -70,6 +91,8 @@ export function VizFocused({
   savedViewsBand,
   workspaceKind,
   workspaceName,
+  hasPlayableVideo = false,
+  onWatchPoint,
 }: {
   savedViews: SavedViewRow[];
   savedViewsBand?: ReactNode;
@@ -77,13 +100,25 @@ export function VizFocused({
    * workspace, and its micro copy names the workspace it shares into. */
   workspaceKind: WorkspaceKind;
   workspaceName: string;
+  hasPlayableVideo?: boolean;
+  onWatchPoint?: (pointId: string) => void;
 }) {
   // The ONE data path, shared with the fullscreen viewer (`use-viz-view.ts`)
   // — including where "you" is resolved (guardrails §4). Extracted from here
   // rather than copied into the viewer, so the two courts can never draw a
   // different mark count for the same URL.
-  const { result, stats, subjectName, you, opp, points, hasFilters, isDraft } =
-    useVizView();
+  const {
+    result,
+    stats,
+    bandZones,
+    subjectName,
+    you,
+    opp,
+    points,
+    hasFilters,
+    isDraft,
+    unit,
+  } = useVizView();
   const { state, setState, runCourtMorph, morphTargetKey } = useVizState();
   const reducedMotion = usePrefersReducedMotion();
   // `availableSets` is an O(points) scan; this component re-renders on every
@@ -97,9 +132,28 @@ export function VizFocused({
   const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const courtArtRef = useRef<HTMLDivElement>(null);
+  const courtCardRef = useRef<HTMLDivElement>(null);
+  const [hoveredMark, setHoveredMark] = useState<MarkAnchor | null>(null);
+  const [focusedMark, setFocusedMark] = useState<MarkAnchor | null>(null);
+  const [selectedMark, setSelectedMark] = useState<MarkAnchor | null>(null);
+  const [rovingId, setRovingId] = useState<string | null>(null);
+  const readoutLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+    },
+    [],
+  );
 
   const cut = state.cut;
   const ownKey = viewIdentityKey(state);
+  const inspectionKey = JSON.stringify([
+    cut,
+    state.chart,
+    state.filters,
+    state.viewId,
+  ]);
 
   // F4 fix round 2, F5 fix: land on the court, not wherever the viewer
   // scrolled the "Views" grid to click a tile. Keyed on `viewIdentityKey`
@@ -192,6 +246,104 @@ export function VizFocused({
   // dots ⇒ no wash, plain colour.
   const heatHasDots = showHeat && result.dots.length > 0;
   const artBoxFill = showHeat ? HEAT_APRON_FILL : APRON_FILL;
+  const scatterDots = state.chart === "scatter" && !isDraft ? result.dots : [];
+  const inCurrentView = (mark: MarkAnchor | null) =>
+    mark?.viewKey === inspectionKey &&
+    scatterDots.some((dot) => dot.id === mark.id)
+      ? mark
+      : null;
+  const selected = inCurrentView(selectedMark);
+  const focused = inCurrentView(focusedMark);
+  const hovered = inCurrentView(hoveredMark);
+  const activeMark = focused ?? hovered ?? selected;
+  const activeDot = scatterDots.find((dot) => dot.id === activeMark?.id);
+  const readout =
+    activeDot?.meta && cut
+      ? buildReadout(activeDot.meta, { subject: subjectName }, cut, unit)
+      : null;
+  const watchPointId =
+    hasPlayableVideo &&
+    activeDot?.meta?.pointId &&
+    points.some(
+      (point) =>
+        point.id === activeDot.meta?.pointId &&
+        point.videoTime !== null &&
+        Number.isFinite(point.videoTime),
+    )
+      ? activeDot.meta.pointId
+      : null;
+
+  function anchorFor(id: string, mark: SVGGElement): MarkAnchor | null {
+    const art = courtArtRef.current?.getBoundingClientRect();
+    if (!art) return null;
+    const box = mark.getBoundingClientRect();
+    return {
+      id,
+      viewKey: inspectionKey,
+      x: box.left + box.width / 2 - art.left,
+      y: box.top + box.height / 2 - art.top,
+      width: art.width,
+    };
+  }
+
+  function labelForMark(dot: VizDot): string {
+    if (!dot.meta || !cut) return `${subjectName} — point`;
+    const detail = buildReadout(dot.meta, { subject: subjectName }, cut, unit);
+    return [detail.title, ...detail.lines].join(" — ");
+  }
+
+  const markInteraction: CourtMarkInteraction | undefined =
+    scatterDots.length > 0
+      ? {
+          activeId: activeMark?.id ?? null,
+          focusedId: focused?.focusVisible ? focused.id : null,
+          selectedId: selected?.id ?? null,
+          rovingId: scatterDots.some((dot) => dot.id === rovingId)
+            ? rovingId
+            : null,
+          labelFor: labelForMark,
+          onActivate: (id, mark, source, focusVisible) => {
+            if (readoutLeaveTimer.current)
+              clearTimeout(readoutLeaveTimer.current);
+            const anchor = anchorFor(id, mark);
+            if (!anchor) return;
+            if (source === "focus") setFocusedMark({ ...anchor, focusVisible });
+            else setHoveredMark(anchor);
+          },
+          onDeactivate: (id, source) => {
+            if (readoutLeaveTimer.current)
+              clearTimeout(readoutLeaveTimer.current);
+            readoutLeaveTimer.current = setTimeout(() => {
+              if (source === "focus")
+                setFocusedMark((current) =>
+                  current?.id === id ? null : current,
+                );
+              else
+                setHoveredMark((current) =>
+                  current?.id === id ? null : current,
+                );
+            }, 220);
+          },
+          onRove: setRovingId,
+          onSelect: (id, mark) => {
+            const anchor = anchorFor(id, mark);
+            if (!anchor) return;
+            setSelectedMark(anchor);
+          },
+        }
+      : undefined;
+
+  const readoutWidth = Math.min(
+    220,
+    Math.max(0, (activeMark?.width ?? 0) - 16),
+  );
+  const readoutX = activeMark
+    ? Math.max(
+        readoutWidth / 2 + 8,
+        Math.min(activeMark.x, activeMark.width - readoutWidth / 2 - 8),
+      )
+    : 0;
+  const readoutBelow = (activeMark?.y ?? 0) < 90;
 
   function backToWall() {
     // F5: the reverse morph. `targetKey` is the WALL TILE's dom id for
@@ -202,7 +354,7 @@ export function VizFocused({
     // `viewIdentityKey`, for the reason `VIZ_FOCUSED_COURT_MORPH_TARGET`'s
     // doc comment explains.
     runCourtMorph({
-      sourceEl: courtArtRef.current,
+      sourceEl: courtCardRef.current,
       next: {
         cut: null,
         chart: "scatter",
@@ -247,8 +399,8 @@ export function VizFocused({
     <div
       className={
         fallbackFadeIn
-          ? "viz-crossfade-in flex flex-col gap-4"
-          : "flex flex-col gap-4"
+          ? "viz-crossfade-in @container flex flex-col gap-4"
+          : "@container flex flex-col gap-4"
       }
     >
       <VizToolbar
@@ -269,16 +421,21 @@ export function VizFocused({
         stripSlot={hasFilters ? <AppliedStrip /> : undefined}
       />
 
-      <div className="flex items-start gap-4">
+      <div className="flex min-w-0 flex-col gap-4 @min-[720px]:flex-row @min-[720px]:items-stretch">
         <div
-          className="flex min-w-[360px] flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] border"
+          ref={courtCardRef}
+          data-viz-focused-card
+          className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] border"
           style={{
             borderColor: "var(--border-hairline)",
             backgroundColor: "var(--surface-card)",
             boxShadow: "var(--shadow-card)",
+            viewTransitionName: isMorphTarget
+              ? VIZ_COURT_TRANSITION_NAME
+              : undefined,
           }}
         >
-          <div className="flex items-center justify-between gap-3 px-4 pt-[14px] pb-3">
+          <div className="flex items-center justify-between gap-3 px-[var(--pad-card)] pt-[14px] pb-3">
             <span
               id={VIZ_FOCUSED_HEADING_ID}
               tabIndex={-1}
@@ -298,12 +455,25 @@ export function VizFocused({
 
           <div
             ref={courtArtRef}
-            className="relative w-full"
+            data-viz-focused-art
+            className={`relative w-full ${cut === "returnPlacement" || cut === "rallyPlacement" ? "pb-[var(--space-4)]" : ""}`}
+            onClick={(event) => {
+              if (!(event.target as Element).closest("[data-viz-mark]")) {
+                if (readoutLeaveTimer.current)
+                  clearTimeout(readoutLeaveTimer.current);
+                setHoveredMark(null);
+                setFocusedMark(null);
+                setSelectedMark(null);
+                if (
+                  document.activeElement instanceof SVGElement &&
+                  courtArtRef.current?.contains(document.activeElement)
+                ) {
+                  document.activeElement.blur();
+                }
+              }
+            }}
             style={{
               backgroundColor: artBoxFill,
-              viewTransitionName: isMorphTarget
-                ? VIZ_COURT_TRANSITION_NAME
-                : undefined,
             }}
           >
             <CourtArt
@@ -315,6 +485,7 @@ export function VizFocused({
               // withheld here.
               dots={isDraft ? [] : result.dots}
               chart={state.chart}
+              bandZones={bandZones}
               draft={isDraft}
               zones={
                 !isDraft && state.chart === "zones" && cut === "serve"
@@ -322,21 +493,79 @@ export function VizFocused({
                   : undefined
               }
               labels
-              // The court area spans the card's full width, capped at 400px
-              // tall, with the apron green painted behind it — so any
-              // letterboxing `preserveAspectRatio` (`xMidYMid meet`) leaves is
-              // green, never the white the card background used to show
-              // through. The cap lives on the SVG itself (`max-h-[400px]
-              // w-full`, no `fill`): `width` is definite (100%) and `height`
-              // is auto, so the replaced-element sizing algorithm derives a
-              // height from the viewBox's intrinsic ratio and only THEN
-              // clamps it to 400px — capping height on the wrapper instead
-              // (an indefinite-height box) resolves the svg's `height:100%`
-              // to `auto`, which lays it out at its full intrinsic height and
-              // lets the wrapper's `overflow-hidden` crop it top and bottom
-              // (round 1's regression).
-              className="block max-h-[400px] w-full"
+              markInteraction={markInteraction}
+              // The plotted court is capped in both dimensions, centred in
+              // the card, with the apron filling the remaining width. Size
+              // the SVG itself rather than its wrapper: its intrinsic ratio
+              // then resolves before the height cap, avoiding the older
+              // top-and-bottom cropping regression.
+              className="mx-auto block max-h-[340px] w-[88%] max-w-[520px]"
             />
+            {readout && activeMark && (
+              <div
+                data-viz-focused-readout
+                aria-hidden={watchPointId ? undefined : true}
+                className={`${watchPointId ? "pointer-events-auto" : "pointer-events-none"} absolute z-[2] flex flex-col gap-1.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
+                onPointerEnter={() => {
+                  if (readoutLeaveTimer.current)
+                    clearTimeout(readoutLeaveTimer.current);
+                }}
+                onPointerLeave={(event) => {
+                  if (event.currentTarget.contains(document.activeElement))
+                    return;
+                  setHoveredMark(null);
+                  setFocusedMark(null);
+                }}
+                onFocus={() => {
+                  if (readoutLeaveTimer.current)
+                    clearTimeout(readoutLeaveTimer.current);
+                }}
+                onBlur={(event) => {
+                  if (event.currentTarget.contains(event.relatedTarget)) return;
+                  setHoveredMark(null);
+                  setFocusedMark(null);
+                }}
+                style={{
+                  ...DARK_READOUT_STYLE,
+                  left: readoutX,
+                  top: activeMark.y + (readoutBelow ? 10 : -10),
+                  width: readoutWidth,
+                  transform: `translate(-50%, ${readoutBelow ? "0" : "-100%"})`,
+                }}
+              >
+                <span className="text-[12px] font-medium text-white">
+                  {readout.title}
+                </span>
+                {readout.lines.map((line, index) => (
+                  <span
+                    key={index}
+                    className={
+                      index === readout.monoLine
+                        ? "mono tabular text-[11px]"
+                        : "text-[11px]"
+                    }
+                    style={{
+                      color:
+                        index === readout.monoLine
+                          ? "rgba(255,255,255,0.45)"
+                          : "rgba(255,255,255,0.64)",
+                    }}
+                  >
+                    {line}
+                  </span>
+                ))}
+                {watchPointId && onWatchPoint && (
+                  <button
+                    type="button"
+                    data-viz-watch-point
+                    onClick={() => onWatchPoint(watchPointId)}
+                    className="mt-1 cursor-pointer self-start text-[11px] font-medium text-white underline underline-offset-2 hover:text-white/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                  >
+                    Watch point
+                  </button>
+                )}
+              </div>
+            )}
             {heatHasDots && (
               <div
                 aria-hidden="true"
@@ -414,7 +643,15 @@ export function VizFocused({
           </div>
 
           {!isDraft && (
-            <div className="flex items-center gap-3 px-4 pt-[14px] pb-4">
+            <div className="flex items-center gap-3 px-[var(--pad-card)] pt-[14px] pb-4">
+              {state.chart === "zones" && cut !== "serve" && (
+                <span
+                  className="text-micro"
+                  style={{ color: "var(--ink-600)" }}
+                >
+                  Count · points won
+                </span>
+              )}
               {legendItemsFor(cut, state.chart).map((item) =>
                 item.glyph === "ramp" ? (
                   <HeatRampLegend key={item.key} />
@@ -430,7 +667,15 @@ export function VizFocused({
           )}
         </div>
 
-        {!isDraft && <StatsCard stats={stats} className="viz-vt-stats-card" />}
+        {!isDraft && (
+          <div className="relative w-full min-w-0 shrink-0 @min-[720px]:w-[292px]">
+            <StatsCard
+              stats={stats}
+              cut={cut}
+              className="viz-vt-stats-card @min-[720px]:absolute @min-[720px]:inset-0"
+            />
+          </div>
+        )}
       </div>
 
       {savedViewsBand}
@@ -525,14 +770,10 @@ function HeatRampLegend() {
   );
 }
 
-// Sized to fill the same 8x8 box the old plain circle used, roughly matching
-// its visual weight: r=3.6 for the circle, and outer radii picked so the
-// triangle/star glyphs read at a comparable size (not area-matched to the
-// circle the way `court-art.tsx`'s real marks are — this is just a legend
-// key, not a measurement).
+// The ace remains distinct without dominating the 8px ordinary legend keys.
 const LEGEND_GLYPH_R = 3.6;
 const LEGEND_TRIANGLE_SIZE = 2.2;
-const LEGEND_STAR_OUTER_R = 3.6;
+const LEGEND_STAR_OUTER_R = 4.2;
 
 /**
  * One legend key — circle, triangle or star, reusing `court-art.tsx`'s own
@@ -546,19 +787,22 @@ function LegendMark({ item }: { item: LegendItem }) {
   const fill = item.outline ? "none" : item.color;
   const stroke = item.outline ? item.color : "#000";
   const strokeWidth = item.outline ? 1 : 0.4;
+  const isStar = item.glyph === "star";
+  const glyphSize = isStar ? 10 : 8;
+  const glyphCenter = glyphSize / 2;
   return (
     <span className="inline-flex items-center gap-[6px]">
       <svg
         aria-hidden="true"
-        width={8}
-        height={8}
-        viewBox="0 0 8 8"
+        width={glyphSize}
+        height={glyphSize}
+        viewBox={`0 0 ${glyphSize} ${glyphSize}`}
         className="shrink-0"
       >
         {item.glyph === "circle" && (
           <circle
-            cx={4}
-            cy={4}
+            cx={glyphCenter}
+            cy={glyphCenter}
             r={LEGEND_GLYPH_R}
             fill={fill}
             stroke={stroke}
@@ -567,7 +811,12 @@ function LegendMark({ item }: { item: LegendItem }) {
         )}
         {item.glyph === "triangle" && (
           <polygon
-            points={trianglePointsFor("serve", 4, 4, LEGEND_TRIANGLE_SIZE)}
+            points={trianglePointsFor(
+              "serve",
+              glyphCenter,
+              glyphCenter,
+              LEGEND_TRIANGLE_SIZE,
+            )}
             fill={fill}
             stroke={stroke}
             strokeWidth={strokeWidth}
@@ -575,7 +824,7 @@ function LegendMark({ item }: { item: LegendItem }) {
         )}
         {item.glyph === "star" && (
           <polygon
-            points={starPoints(4, 4, LEGEND_STAR_OUTER_R)}
+            points={starPoints(glyphCenter, glyphCenter, LEGEND_STAR_OUTER_R)}
             fill={item.color}
             stroke="#000"
             strokeWidth={0.4}

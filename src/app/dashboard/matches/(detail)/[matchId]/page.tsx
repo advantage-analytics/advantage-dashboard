@@ -256,6 +256,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         canCompare={false}
         isDerived={isDerived}
         statsPublished={false}
+        hasPlayableVideo={false}
         // No view switcher on this branch — ShotsTab never renders — so an
         // empty list here costs nothing and skips fetching saved views before
         // the match even has anything to visualize.
@@ -297,6 +298,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         canCompare={hasComparisonBaseline(kpiHistory)}
         isDerived={isDerived}
         statsPublished={statsPublished}
+        hasPlayableVideo={Boolean(video)}
         savedViews={savedViews}
         workspaceRole={workspaceRole}
         workspaceKind={workspaceKind}

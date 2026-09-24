@@ -19,10 +19,7 @@ import {
   VIEW_ICONS,
   viewRowClass,
 } from "@/components/dashboard/matches/match-detail/report-view-switcher";
-import {
-  VIZ_TILE_GRID_CLASS,
-  VIZ_TILE_GRID_STYLE,
-} from "@/components/dashboard/matches/match-detail/shots/viz-labels";
+import { VIZ_TILE_GRID_CLASS } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 import { InsightMark } from "@/components/dashboard/matches/match-detail/insight-mark";
 import { INSIGHT_SURFACE } from "@/components/dashboard/matches/match-detail/report-insight-card";
 import { cn } from "@/lib/utils";
@@ -346,10 +343,9 @@ export function StatisticsPanePending() {
 function TilePending() {
   return (
     <div className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div
-        className="w-full bg-[var(--surface-skeleton)] motion-safe:animate-pulse"
-        style={{ aspectRatio: "334 / 216" }}
-      />
+      <div className="w-full" style={{ aspectRatio: "334 / 216" }}>
+        <PendingBar className="h-full w-full rounded-none" />
+      </div>
       <div className="flex flex-col gap-2 px-4 pt-[14px] pb-[15px]">
         <div className="flex h-5 items-center">
           <PendingBar className="h-3.5 w-40" />
@@ -377,7 +373,10 @@ export function VisualizationsPanePending({
   focused?: boolean;
 }) {
   return (
-    <PendingRegion label="visualizations" innerClassName="flex flex-col gap-6">
+    <PendingRegion
+      label="visualizations"
+      innerClassName="@container flex flex-col gap-6"
+    >
       {focused ? (
         <>
           <div className="flex h-8 items-center gap-2">
@@ -392,10 +391,9 @@ export function VisualizationsPanePending({
                 <div className="flex-1" />
                 <PendingBar className="size-7 rounded-[8px]" />
               </div>
-              <div
-                className="mx-4 bg-[var(--surface-skeleton)] motion-safe:animate-pulse"
-                style={{ aspectRatio: "334 / 216" }}
-              />
+              <div className="mx-4" style={{ aspectRatio: "334 / 216" }}>
+                <PendingBar className="h-full w-full rounded-none" />
+              </div>
               <div className="flex h-[46px] items-center gap-3 px-4">
                 <PendingBar className="h-2.5 w-16" />
                 <PendingBar className="h-2.5 w-16" />
@@ -415,11 +413,7 @@ export function VisualizationsPanePending({
         </>
       ) : (
         [0, 1].map((row) => (
-          <div
-            key={row}
-            className={VIZ_TILE_GRID_CLASS}
-            style={VIZ_TILE_GRID_STYLE}
-          >
+          <div key={row} className={VIZ_TILE_GRID_CLASS}>
             <TilePending />
             <TilePending />
             <TilePending />
