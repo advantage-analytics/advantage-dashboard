@@ -38,12 +38,18 @@ export type AttachLinesResult<L extends AttachLine> =
  *
  * Shared by Edit Match (an existing match) and the upload wizard (a match not
  * yet saved) — each passes its own reader; the menu is the same.
+ *
+ * `unsaved` is the wizard: leaving the tab there loses the picked video, so the
+ * way out of an empty search is "save it as a one-off, add it from Edit match
+ * later" rather than "make the event first", and the schedule links open in a
+ * new tab.
  */
 export function AttachLinePicker<L extends AttachLine>({
   load,
   loadKey,
   onPick,
   onClose,
+  unsaved = false,
 }: {
   /** Reads the groups for a search term. */
   load: (query: string) => Promise<AttachLinesResult<L>>;
@@ -52,7 +58,14 @@ export function AttachLinePicker<L extends AttachLine>({
   onPick: (line: L) => void;
   /** Closed without choosing. */
   onClose: () => void;
+  /** The match isn't saved yet (the upload wizard): see the doc above. */
+  unsaved?: boolean;
 }) {
+  // Same-tab in Edit Match; a new tab in the wizard, where leaving loses the
+  // picked video.
+  const scheduleLinkProps = unsaved
+    ? ({ target: "_blank", rel: "noopener noreferrer" } as const)
+    : {};
   const loadRef = useRef(load);
   useEffect(() => {
     loadRef.current = load;
@@ -195,8 +208,9 @@ export function AttachLinePicker<L extends AttachLine>({
                   Nothing on the schedule for {dayLabel(groups.matchDate)}
                 </span>
                 <span className="text-[11px] leading-[1.5] text-[var(--ink-500)]">
-                  Search for an event on another day, or add the dual to the
-                  schedule first.
+                  {unsaved
+                    ? "Search another day, or save this as a one-off. Once the event is on the schedule, add the match to it from Edit match."
+                    : "Search for an event on another day, or add the dual to the schedule first."}
                 </span>
               </div>
             )}
@@ -226,6 +240,8 @@ export function AttachLinePicker<L extends AttachLine>({
               groups.search.length === 0 && (
                 <p className="px-2.5 py-3 text-[12px] text-[var(--ink-500)]">
                   No events match “{query.trim()}”.
+                  {unsaved &&
+                    " Save it as a one-off for now and add it from Edit match later."}
                 </p>
               )}
 
@@ -234,6 +250,7 @@ export function AttachLinePicker<L extends AttachLine>({
               {nothingThatDay && query === "" ? (
                 <Link
                   href="/dashboard/team/schedule/new/dual"
+                  {...scheduleLinkProps}
                   className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
                 >
                   <Plus className="size-3" strokeWidth={2} aria-hidden />
@@ -241,11 +258,14 @@ export function AttachLinePicker<L extends AttachLine>({
                 </Link>
               ) : (
                 <span className="text-[11px] text-[var(--ink-500)]">
-                  Can&apos;t find it?
+                  {unsaved
+                    ? "Not on the schedule yet? Add it later from Edit match."
+                    : "Can't find it?"}
                 </span>
               )}
               <Link
                 href="/dashboard/team/schedule"
+                {...scheduleLinkProps}
                 className="inline-flex items-center gap-0.5 text-[12px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
               >
                 Open Schedule

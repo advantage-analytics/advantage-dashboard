@@ -19,7 +19,10 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderId } from "@/lib/services/upload";
 import type { EventPreset, MatchDraft } from "./types";
 import type { RosterSubject, VideoUploadEvent } from "./useUploadMatchWizard";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { PinnedLineBar } from "./PinnedLineBar";
+import { StartOverDialog } from "./StartOverDialog";
+import { SubjectBar } from "./SubjectBar";
 import { UploadMatchSuccess } from "./UploadMatchSuccess";
 import {
   UploadWizardProvider,
@@ -227,11 +230,50 @@ const UploadMatchWizard = memo(function UploadMatchWizard(
 /** The shell, with the step body and footer pieces composed into its slots. */
 function UploadWizardPage() {
   const {
-    wizard: { step, stepOrder, progressTotalSteps, firstStep, handleBack },
-    view: { title, description, continueLabel, continueDisabled },
+    wizard: {
+      step,
+      stepOrder,
+      progressTotalSteps,
+      firstStep,
+      handleBack,
+      whoPlayed,
+      isProcessingProvider,
+      startOver,
+      resetImportPlayerAnswer,
+    },
+    view: {
+      title,
+      description,
+      continueLabel,
+      continueDisabled,
+      subjectFirstName,
+    },
     actions,
-    meta: { contentRef, exitHref, preset, onSwitchPreset },
+    meta: { contentRef, exitHref, preset, onSwitchPreset, workspaceKind },
   } = useUploadWizard();
+  const { active: workspace } = useWorkspace();
+
+  // "Not Marcus?" on step 2 (stepOrder[1]) goes straight back to step 1, where
+  // the For field is — no dialog, nothing was set up for the player yet. On the
+  // trim and details steps of a video upload it asks first: the video check
+  // (and the score) were answered for that player, and starting over clears
+  // them (`wizard.startOver()`).
+  //
+  // An import never asks: its score and names were READ from the kept file,
+  // and the approved copy ("the video check…") does not describe that flow.
+  // It goes straight to step 1 from any step, clearing only the player's
+  // style and the "player 1 in the export?" answer — the opponent and score
+  // stay (`wizard.resetImportPlayerAnswer()`).
+  const [startOverOpen, setStartOverOpen] = useState(false);
+  const startOverStep =
+    isProcessingProvider && (step === "trim" || step === "match") ? step : null;
+  const onNotSubject = !isProcessingProvider
+    ? resetImportPlayerAnswer
+    : startOverStep
+      ? () => setStartOverOpen(true)
+      : handleBack;
+  const subjectName =
+    whoPlayed.subject?.kind === "roster" ? whoPlayed.subject.name : null;
 
   return (
     <WizardShell
@@ -241,13 +283,20 @@ function UploadWizardPage() {
       description={description}
       pinned={
         /* Step 1, already answered: the line this flow is filling, pinned. */
-        preset && (
+        preset ? (
           <PinnedLineBar
             preset={preset}
             onSwitch={onSwitchPreset}
             outsideHref="/dashboard/matches/new"
           />
-        )
+        ) : workspaceKind === "team" && step !== firstStep ? (
+          /* No line to pin: keep step 1's For answer on screen instead. */
+          <SubjectBar
+            subject={whoPlayed.subject}
+            workspace={workspace}
+            onNotSubject={onNotSubject}
+          />
+        ) : null
       }
       contentRef={contentRef}
       contentKey={step}
@@ -267,6 +316,21 @@ function UploadWizardPage() {
       {step === "file" && <FileStep />}
       {step === "trim" && <TrimStep />}
       {step === "match" && <MatchStep />}
+      {startOverStep && subjectName && (
+        <StartOverDialog
+          open={startOverOpen}
+          onOpenChange={setStartOverOpen}
+          step={startOverStep}
+          subjectName={subjectName}
+          firstName={subjectFirstName}
+          onConfirm={() => {
+            startOver();
+            // The early-end question belongs to the score just cleared; the
+            // next score is asked about afresh at its own Save.
+            actions.dismissScoreCheck();
+          }}
+        />
+      )}
     </WizardShell>
   );
 }

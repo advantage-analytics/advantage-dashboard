@@ -99,6 +99,12 @@ export interface FilmTransportProps {
   canStep: boolean;
   /** Whether the mini court is drawn over the film. */
   courtOn: boolean;
+  /**
+   * The room's own credential for the lane's frame preview (handoff T4): the
+   * same `url` and `generation` the room's video plays, so a credential swap
+   * moves the preview with it. The lane draws the 256×144 room size.
+   */
+  previewSource: { url: string | null; generation: number };
   onSeek: (seconds: number) => void;
   onTogglePlay: () => void;
   onStep: (direction: -1 | 1) => void;
@@ -131,7 +137,10 @@ export interface FilmTransportProps {
 export function FilmTransport(p: FilmTransportProps) {
   // Nothing on the bar is disabled, so the controls that need something to
   // act on carry the check themselves: with no walkable sequence a chevron
-  // is a no-op, and with no point playing the bookmark has nothing to save.
+  // is a no-op, and before the playhead has reached its first point the
+  // bookmark has nothing to save (`saved` is null only there — after that it
+  // tracks the last point REACHED, so the control still works in the dead
+  // time after a rally, which is when it is reached for).
   const stepBack = () => {
     if (p.canStep) p.onStep(-1);
   };
@@ -206,6 +215,7 @@ export function FilmTransport(p: FilmTransportProps) {
         duration={p.duration}
         currentTime={p.currentTime}
         onSeek={p.onSeek}
+        preview={{ ...p.previewSource, size: "room" }}
       />
 
       <div className="flex h-10 items-center gap-[18px]">

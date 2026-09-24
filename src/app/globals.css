@@ -736,6 +736,20 @@
   }
 }
 
+/* The film room's court marks (film-court-card.tsx) entering. A mark's
+   steady-state opacity is a pure function of film time (markOpacity), so it
+   is written INLINE on the element and changes as the playhead moves - which
+   is exactly why this keyframe has no `to`: it animates from 0 up to whatever
+   that inline opacity currently is, instead of pinning a mark that is already
+   half-faded back to 1. 150ms, so a mark arrives with the stroke rather than
+   popping. No reduced-motion opt-out on purpose: DS foundations keep
+   opacity-only fades under reduced motion, and this is opacity only. */
+@keyframes film-mark-in {
+  from {
+    opacity: 0;
+  }
+}
+
 /* Supporting blocks appear together, without a staggered assembly. */
 ::view-transition-new(viz-vt-toolbar):only-child,
 ::view-transition-new(viz-vt-stats-card):only-child,
@@ -776,5 +790,134 @@
 @media (prefers-reduced-motion: reduce) {
   .viz-crossfade-in {
     animation: none;
+  }
+}
+
+/* Shot rows arriving when a point opens — `ShotWellRow` in the room's drawer
+   (point-list.tsx) and `ShotRow` in "This point" (film-this-point.tsx). One
+   keyframe for both, because it is one event on one tab: the rally you are
+   watching becoming readable.
+
+   4px, not the viz family's 8px: these rows are 34–40px tall and sit shoulder
+   to shoulder, so a rise the height of a fifth of the row reads as arrival
+   without the column looking like it dropped. 200ms is `--duration-hover`,
+   the routine-state-change duration, on `--ease-primary`; the per-row
+   `animationDelay` is written inline by each component at 25ms × (order − 1),
+   capped at eight steps, so a 30-shot rally is fully revealed inside 400ms
+   instead of trickling. `both` holds the from-state through the delay, so row
+   nine does not flash in at full opacity before its turn.
+
+   Mount-driven only: the rows are keyed by `shot.id`, so stepping to another
+   point mounts fresh rows and fires this, while the four-times-a-second
+   `timeupdate` re-render bails out of the memoized rows and replays nothing. */
+@keyframes film-shot-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.film-shot-row-in {
+  animation: film-shot-row-in 200ms var(--ease-primary) both;
+}
+/* No transform under reduced motion, and no staggered fade either: the
+   `.viz-crossfade-in` precedent above drops the whole animation, and an
+   opacity-only version of a 25ms-stepped list would still read as movement
+   down the column. The rows simply are there. */
+@media (prefers-reduced-motion: reduce) {
+  .film-shot-row-in {
+    animation: none;
+  }
+}
+
+/* The well itself opening under the clicked point — `ShotWell` in the room's
+   drawer (point-list.tsx). The rows above arrive as a list; this is the thing
+   they arrive INTO. `grid-template-rows: 0fr → 1fr` is the one way to unfold
+   an auto-height block without animating `height` (layout-driving, and the
+   drawer would re-lay every row below on every frame anyway): the outer grid
+   grows its single track and the inner `min-h-0 overflow-hidden` child is
+   clipped to it, so the rows below the well slide down with it instead of
+   jumping the moment the well mounts.
+
+   250ms on `--ease-primary`, settled by eye (author, 2026-09-22): 300ms on
+   `--ease-out-expo` read a tad slow — expo finishes its visible travel early
+   and the rest is waiting — and 200ms read too fast. 250ms is on the DS
+   duration scale (foundations: "0.2s–0.25s"), and the primary curve moves
+   evenly across the whole span, which is what reads as smooth rather than
+   snapped. No opacity on the well: at 0fr the clip shows nothing, and the
+   rows fade in on their own inside it, so a second fade on the container
+   only muddied the one motion. */
+@keyframes film-shot-well-open {
+  from {
+    grid-template-rows: 0fr;
+  }
+  to {
+    grid-template-rows: 1fr;
+  }
+}
+.film-shot-well-open {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: film-shot-well-open 250ms var(--ease-primary) both;
+}
+/* Reduced motion keeps the acknowledgement and drops the unfold: the well is
+   at full height from the first frame and only fades in, 150ms, so a click
+   on a point still visibly answers. Opacity-only, which DS foundations keep
+   under reduced motion; the rows inside are already `animation: none`. */
+@keyframes film-shot-well-fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .film-shot-well-open {
+    animation: film-shot-well-fade var(--duration-fast) var(--ease-primary) both;
+  }
+}
+
+/* The drawer's "Now playing" pill arriving (point-list.tsx `FollowPill`,
+   T17 design frame B1): 150ms (`--duration-fast`) opacity 0 → 1 with the
+   same 4px rise as `film-shot-row-in`, so the two things that appear in the
+   list arrive the same way. The pill is centred with Tailwind's
+   `-translate-x-1/2`, which is the `translate` property, not `transform`, so
+   this keyframe's `transform` composes with it rather than undoing it.
+
+   The rise moves away from the edge the pill is pinned to (T21): pinned
+   bottom it comes up from 4px below; pinned top the pill sets
+   `--film-pill-rise: -4px` and drops in from 4px above. The header line in
+   the shell card sets nothing and rises as before.
+
+   Reduced motion keeps the fade and drops the rise ("skip transforms, keep
+   opacity") on both edges. Unlike the shot rows' `animation: none`, the
+   pill carries state — the film has moved on without you — so it must still
+   visibly arrive. */
+@keyframes film-follow-pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--film-pill-rise, 4px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.film-follow-pill-in {
+  animation: film-follow-pill-in var(--duration-fast) var(--ease-primary) both;
+}
+@keyframes film-follow-pill-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .film-follow-pill-in {
+    animation: film-follow-pill-fade var(--duration-fast) var(--ease-primary)
+      both;
   }
 }

@@ -21,6 +21,7 @@ import {
   TEAM_BOTTOM,
 } from "@/lib/dashboard/nav";
 import { PersonAvatar } from "@/components/ui/person-avatar";
+import { useConfirmLeave } from "@/components/dashboard/leave-guard-context";
 
 /**
  * Two committed widths: a 64px icon rail and a 232px panel.
@@ -39,6 +40,8 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { active } = useWorkspace();
   const { expanded, toggle } = useSidebarState();
+  // Every link here asks first while an upload screen is busy.
+  const guardLeave = useConfirmLeave();
 
   const isTeam = active.kind === "team";
   const mainLinks = isTeam ? TEAM_NAV : PERSONAL_NAV;
@@ -83,6 +86,7 @@ export function AppSidebar() {
             active={current === link.href}
             expanded={expanded}
             comingSoon={link.comingSoon}
+            onClick={(event) => guardLeave(event, link.href, link.name)}
           />
         ))}
       </div>
@@ -98,6 +102,7 @@ export function AppSidebar() {
             icon={link.icon}
             active={current === link.href}
             expanded={expanded}
+            onClick={(event) => guardLeave(event, link.href, link.name)}
           />
         ))}
 
@@ -154,11 +159,13 @@ function ViewerFooter({
   active: boolean;
 }) {
   const { viewer } = useWorkspace();
+  const guardLeave = useConfirmLeave();
 
   return (
     <div className="mt-2 flex items-center overflow-hidden border-t border-[var(--border-hairline)] pt-2.5">
       <Link
         href={href}
+        onClick={(event) => guardLeave(event, href, "your profile")}
         aria-label={viewer.name}
         aria-current={isActive ? "page" : undefined}
         className="flex h-10 min-w-0 flex-1 items-center rounded-[8px] transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none"

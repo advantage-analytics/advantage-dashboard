@@ -107,15 +107,20 @@ sample points. ↑↓ do nothing rather than wrapping to a hidden point.
 | Saved only, nothing saved | Saved only · `0 / 174` | You haven’t saved a point yet        | Hover a point and press the bookmark, or press S while it plays.                                                  | Show all points                                                       |
 | Film has no point data    | All points · `0 / 0`   | No points were detected in this film | The recording plays, but nothing in it could be broken into points. Camera placement is the usual reason.         | "Recording requirements" only if a help destination exists; else none |
 
-## B — Current point (`film-this-point.tsx`)
+## B — This point (`film-this-point.tsx`)
 
-Card `padding:10px 8px 8px`. Head = "Current point" eyebrow with the 28px point stepper
+Card `padding:10px 8px 8px`. Head = "This point" eyebrow with the 28px point stepper
 right-aligned (`‹ 96 / 174 ›`), no rule under it. Header row of 10px ink-400 labels over a
 hairline; 40px rows at 8px radius; hairline footer `5 shots · 14s · Unforced error`. Column gap
-20px throughout. Placement takes the one fluid track; Mph is tabular and right-aligned.
+20px throughout. Placement takes the one fluid track.
+
+> Author decision, 2026-09-21: renamed "Current point" → "This point" to agree with the room's
+> point-mode heading (`film-fullscreen.tsx`, T12), and dropped the Mph column and cell — the
+> widget no longer reads shot speed. `shotRowCells.mph` stays; only this card's own read of it
+> was removed.
 
 - Rail open: `# · Player · Stroke · Placement · Result`.
-- Rail collapsed (⌘\, 168px returned): `# · Player · Spin · Stroke · Type · Placement · Mph ·
+- Rail collapsed (⌘\, 168px returned): `# · Player · Spin · Stroke · Type · Placement ·
 Result`. Columns are **added and removed, never re-sorted**; the five shared columns hold the
   same x in both states.
 - Drive the switch with a container query on the report pane (`@container` on

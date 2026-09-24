@@ -132,8 +132,22 @@ scope.onmessage = async (event: MessageEvent<TrimWorkerRequest>) => {
     });
 
     const output = new Output({
-      // Metadata at the end: the cheapest write, and browsers range-request
-      // the tail for it. Nothing held in memory until finalization.
+      // The moov stays at the END — so every fresh <video> must range-request
+      // the tail before it can seek, and the frame is black meanwhile. That
+      // cost is accepted because neither faststart mode fits a copy-only
+      // Conversion (Mediabunny 1.56.2):
+      // - 'reserve' needs `maximumPacketCount` on every track
+      //   (mediabunny/dist/modules/src/output-format.d.ts:92, field at
+      //   output.d.ts:130), but Conversion adds the tracks itself and never
+      //   passes it; there is no option to supply it. Measured on
+      //   tests/fixtures/match-video/h264-tail.mp4: execute() throws "All
+      //   tracks must specify maximumPacketCount … when using fastStart:
+      //   'reserve'", which here would fall back to uploading the original.
+      // - 'in-memory' (output-format.d.ts:86) holds every media chunk in
+      //   memory until finalization — the whole multi-GB cut, which is exactly
+      //   what writing to OPFS exists to avoid.
+      // Not 'fragmented' either: an fMP4 with no sidx seeks worse over plain
+      // HTTP ranges. `false` streams positioned writes with nothing buffered.
       format: new Mp4OutputFormat({ fastStart: false }),
       target: new StreamTarget(writable, { chunked: true }),
     });

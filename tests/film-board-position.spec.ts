@@ -5,6 +5,7 @@ import {
   BOARD_EDGE_MARGIN,
   anchorPosition,
   clampBoardPosition,
+  courtRest,
   courtSlot,
   nearestAnchor,
   nudgeBoard,
@@ -100,4 +101,57 @@ test("courtSlot sits above a bottom corner's board and shares its right edge", (
     left: 1000 + 236 - 152,
     top: 400 - 28 - 227,
   });
+});
+
+test("courtRest stacks with the board when there is no stored corner or it matches the board's", () => {
+  const boardPosition = { left: 24, top: 24 };
+  const boardSize = { width: 236, height: 146 };
+  const courtSize = { width: 168, height: 296 };
+  const stacked = courtSlot("top-left", boardPosition, boardSize, courtSize);
+
+  expect(
+    courtRest(
+      null,
+      { anchor: "top-left", position: boardPosition, size: boardSize },
+      courtSize,
+      room,
+      insets,
+    ),
+  ).toEqual(stacked);
+
+  expect(
+    courtRest(
+      "top-left",
+      { anchor: "top-left", position: boardPosition, size: boardSize },
+      courtSize,
+      room,
+      insets,
+    ),
+  ).toEqual(stacked);
+});
+
+test("courtRest takes its own corner, with the board's insets, when dropped elsewhere", () => {
+  const boardPosition = { left: 24, top: 24 };
+  const boardSize = { width: 236, height: 146 };
+  const courtSize = { width: 168, height: 296 };
+
+  expect(
+    courtRest(
+      "bottom-right",
+      { anchor: "top-left", position: boardPosition, size: boardSize },
+      courtSize,
+      room,
+      BASE_BOARD_INSETS,
+    ),
+  ).toEqual(anchorPosition("bottom-right", courtSize, room, BASE_BOARD_INSETS));
+
+  expect(
+    courtRest(
+      "top-right",
+      { anchor: "top-left", position: boardPosition, size: boardSize },
+      courtSize,
+      room,
+      insets,
+    ).top,
+  ).toBe(58);
 });

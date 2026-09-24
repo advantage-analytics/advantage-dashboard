@@ -64,6 +64,7 @@ export function servePoint({
         zone: "Body",
         result,
         videoTime: null,
+        bounceVideoTime: null,
         contactX: (lateral < 0 ? 1 : -1) * (highEnd ? -1 : 1),
         contactY: highEnd ? 24.5 : -0.8,
         landingX,

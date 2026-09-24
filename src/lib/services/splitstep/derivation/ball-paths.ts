@@ -12,8 +12,9 @@
  *   - Time. Rows carry only frame indices in the TRIMMED video, and
  *     types.ts warns never to seek against a frame. The strokes carry both a
  *     `trimmedFrame` and a `videoTime` that already includes the trim offset,
- *     so a least-squares line through those pairs turns any frame into seconds
- *     on the same clock as `shots.video_time`, with no framerate assumed.
+ *     so a least-squares line through those pairs (`fitFrameToTime` in
+ *     frame-clock.ts) turns any frame into seconds on the same clock as
+ *     `shots.video_time`, with no framerate assumed.
  *   - Identity. A path is keyed by its stroke's `contactTime`, which is the
  *     stroke's own `videoTime` untouched — NOT the fitted value — so it equals
  *     `shots.video_time` exactly. Never a shot id: re-derivation rewrites shot
@@ -27,6 +28,7 @@
  */
 
 import { isPlausibleCourtPosition, metersToCourtFrame } from "./court";
+import { fitFrameToTime, orderedBounceFrame } from "./frame-clock";
 import { num } from "./parse";
 import type { SplitStepStroke } from "./types";
 
@@ -62,37 +64,6 @@ interface TrajectoryRow {
 /** Round to 2 dp, never returning -0. */
 function round2(value: number): number {
   return Math.round(value * 100) / 100 + 0;
-}
-
-/**
- * Least-squares line frame → seconds, or null when fewer than two distinct
- * frames are available to fit through.
- */
-function fitFrameToTime(
-  strokes: readonly Pick<SplitStepStroke, "trimmedFrame" | "videoTime">[],
-): ((frame: number) => number) | null {
-  const pairs = strokes.filter(
-    (s) =>
-      Number.isFinite(s.trimmedFrame) &&
-      Number.isFinite(s.videoTime) &&
-      s.trimmedFrame >= 0,
-  );
-  if (new Set(pairs.map((s) => s.trimmedFrame)).size < 2) return null;
-
-  const n = pairs.length;
-  const meanFrame = pairs.reduce((sum, s) => sum + s.trimmedFrame, 0) / n;
-  const meanTime = pairs.reduce((sum, s) => sum + s.videoTime, 0) / n;
-
-  let covariance = 0;
-  let variance = 0;
-  for (const s of pairs) {
-    const df = s.trimmedFrame - meanFrame;
-    covariance += df * (s.videoTime - meanTime);
-    variance += df * df;
-  }
-  const slope = covariance / variance;
-
-  return (frame) => meanTime + slope * (frame - meanFrame);
 }
 
 export function deriveBallPaths(
@@ -142,7 +113,7 @@ export function deriveBallPaths(
         break;
       }
     }
-    if (bounceFrame !== null && bounceFrame < strokeFrame) bounceFrame = null;
+    bounceFrame = orderedBounceFrame(bounceFrame, strokeFrame);
 
     const samples: { frame: number; sample: BallPathSample }[] = [];
     for (const row of rows) {

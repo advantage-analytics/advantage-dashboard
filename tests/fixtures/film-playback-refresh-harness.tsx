@@ -1,9 +1,11 @@
+import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-tab";
-import type { MatchPoint } from "@/lib/data/match-points-server";
+import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
 import type { Match } from "@/lib/data/types";
 import type { WorkspaceContextValue } from "@/lib/workspace/types";
@@ -124,15 +126,120 @@ const WORKSPACE: WorkspaceContextValue = {
   },
 };
 
+/**
+ * Two timed shots per point, so the drawer has a well to hold (T18). On the
+ * same clock as `videoTime`, 40ms apart, inside the last half-second of the
+ * clip beside the point's own serve; every other field is what the source
+ * never measured.
+ */
+function shots(pointId: string, first: number): MatchShot[] {
+  return [first, first + 0.04].map((videoTime, i) => ({
+    id: `${pointId}-shot-${i + 1}`,
+    shotNumber: i + 1,
+    isPlayer1: i % 2 === 0,
+    shotType: i === 0 ? "Serve" : "Forehand",
+    spinType: null,
+    speedMph: null,
+    zone: null,
+    result: null,
+    videoTime: Number(videoTime.toFixed(2)),
+    bounceVideoTime: null,
+    contactX: null,
+    contactY: null,
+    landingX: null,
+    landingY: null,
+  }));
+}
+
+/**
+ * `?pad=N` appends N untimed points after the four below, so the drawer's
+ * list is taller than a 720px viewport and really scrolls. Untimed rows are
+ * not seekable and have no stop, so the pad never touches the walk.
+ */
+const PAD = Number(new URLSearchParams(location.search).get("pad") ?? "0");
+
 const POINTS: MatchPoint[] = [
   // Saved from the start so a spec can drive the unsave path — a delete
   // that matches zero rows (the mock's default shape) without first having
   // to land a save through the same mock.
-  point("a", 1.7, { saved: true }),
-  point("b", 1.85, { pointNumber: 2, resultType: "Ace" }),
-  point("c", 1.95, { pointNumber: 3, resultType: "Backhand Winner" }),
+  point("a", 1.7, { saved: true, shots: shots("a", 1.7) }),
+  point("b", 1.85, {
+    pointNumber: 2,
+    resultType: "Ace",
+    shots: shots("b", 1.85),
+  }),
+  point("c", 1.95, {
+    pointNumber: 3,
+    resultType: "Backhand Winner",
+    shots: shots("c", 1.95),
+  }),
   point("untimed", null, { pointNumber: 4, resultType: "Double Fault" }),
+  ...Array.from({ length: PAD }, (_, i) =>
+    point(`pad-${i + 1}`, null, {
+      pointNumber: 5 + i,
+      gameNumber: 2,
+      resultType: "Unforced Error",
+    }),
+  ),
 ];
+
+/**
+ * The `FilmTab` behind the harness's remount seam.
+ *
+ * `MatchReportWhen` unmounts an inactive view, so a switch to Statistics and
+ * back destroys and rebuilds exactly this subtree while the providers above it
+ * stay put. Two synchronous flushes are the shortest honest imitation: the
+ * first really unmounts (the `<video>` and the playback hook go with it), the
+ * second builds a fresh tree.
+ */
+function FilmTabSlot({ video }: { video: MatchVideo }) {
+  const [mounted, setMounted] = useState(true);
+  useEffect(() => {
+    harness.remountFilmTab = () => {
+      flushSync(() => setMounted(false));
+      flushSync(() => setMounted(true));
+    };
+  }, []);
+  // Feet: the shot rows' speeds read in mph, which is what these specs assert.
+  return mounted ? <FilmTab video={video} unit="ft" /> : null;
+}
+
+/**
+ * The provider behind the harness's re-seed seam.
+ *
+ * `router.refresh()` re-renders the match layout with a FRESH points array
+ * while the provider instance (keyed on the match id) stays mounted. The
+ * seam hands the provider a new array built from the same fixture with the
+ * given saved flags overridden — the shape a refresh produces when the
+ * server's copy differs from what the tab toggled meanwhile.
+ */
+function ProviderSlot({
+  matchId,
+  video,
+}: {
+  matchId: string;
+  video: MatchVideo;
+}) {
+  const [points, setPoints] = useState<MatchPoint[]>(POINTS);
+  useEffect(() => {
+    harness.reseedPoints = (saved) => {
+      flushSync(() =>
+        setPoints(
+          POINTS.map((p) => (p.id in saved ? { ...p, saved: saved[p.id] } : p)),
+        ),
+      );
+    };
+  }, []);
+  return (
+    <MatchDataProvider
+      match={match(matchId)}
+      statsResult={null}
+      points={points}
+    >
+      <FilmTabSlot video={video} />
+    </MatchDataProvider>
+  );
+}
 
 function match(id: string): Match {
   return {
@@ -191,15 +298,7 @@ function boot() {
 
   root.render(
     <WorkspaceProvider value={WORKSPACE}>
-      <MatchDataProvider
-        match={match(matchId)}
-        statsResult={null}
-        points={POINTS}
-      >
-        {/* Feet: the shot rows' speeds read in mph, which is what these
-            specs assert. */}
-        <FilmTab video={video} unit="ft" />
-      </MatchDataProvider>
+      <ProviderSlot matchId={matchId} video={video} />
     </WorkspaceProvider>,
   );
 

@@ -5,14 +5,19 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
-import { formatSpeedValue, type DistanceUnit } from "@/lib/format/distance";
 import { cn } from "@/lib/utils";
 
 import { lastNameOf } from "./film-filters";
-import { shotRowCells, UNMEASURED, type ShotStop } from "./film-shots";
+import {
+  pointReturnShotId,
+  shotRowCells,
+  shotRowRevealDelay,
+  UNMEASURED,
+  type ShotStop,
+} from "./film-shots";
 
 /**
- * "Current point" (handoff H1 §B, frame `E-route-P1-P2.html`): the card under
+ * "This point" (handoff H1 §B, frame `E-route-P1-P2.html`): the card under
  * the player that follows the playhead. Its head is an eyebrow and the point
  * stepper; under it the point's shots in rally order, one grid row per stroke,
  * each a seek to that stroke; under those a footer that says how the point
@@ -34,13 +39,13 @@ import { shotRowCells, UNMEASURED, type ShotStop } from "./film-shots";
  * (the rail returns 168px), so 880px is the midpoint that separates the two
  * shell states without anything here reading sidebar state.
  *
- * Columns are ADDED, never re-sorted: Spin, Type and Mph appear between the
+ * Columns are ADDED, never re-sorted: Spin and Type appear between the
  * five shared ones, which hold the same order in both states.
  */
 const NARROW_COLUMNS = "grid-cols-[16px_104px_88px_minmax(0,1fr)_48px]";
 const WIDE_COLUMNS =
-  "@min-[880px]:grid-cols-[16px_104px_60px_76px_74px_minmax(0,1fr)_44px_48px]";
-/** Spin, Type and Mph: drawn only in the wide set. */
+  "@min-[880px]:grid-cols-[16px_104px_60px_76px_74px_minmax(0,1fr)_48px]";
+/** Spin and Type: drawn only in the wide set. */
 const WIDE_ONLY = "hidden @min-[880px]:block";
 
 export const FilmThisPoint = memo(function FilmThisPoint({
@@ -48,7 +53,6 @@ export const FilmThisPoint = memo(function FilmThisPoint({
   shots,
   position,
   activeShotId,
-  unit,
   onSelectShot,
   onStep,
 }: {
@@ -60,10 +64,6 @@ export const FilmThisPoint = memo(function FilmThisPoint({
   position: { index: number; total: number } | null;
   activeShotId: string | null;
   onSelectShot: (stop: ShotStop) => void;
-  /** The viewer's Units preference, threaded from the match page (the film
-   *  subtree deliberately depends on no report context). Shot speeds are the
-   *  one film value it changes. */
-  unit: DistanceUnit;
   /** Walk the applied cut — the same step the transport takes. */
   onStep: (direction: -1 | 1) => void;
 }) {
@@ -72,15 +72,18 @@ export const FilmThisPoint = memo(function FilmThisPoint({
 
   const seconds = point?.duration != null ? Math.round(point.duration) : null;
   const ended = point ? point.resultType || "Point" : null;
+  // Over ALL the point's shots, timed or not: the return is a role in the
+  // rally, and an untimed serve row still decides which shot it is.
+  const returnShotId = pointReturnShotId(point?.shots);
 
   return (
     <section
-      aria-label="Current point"
+      aria-label="This point"
       className="surface-card flex min-h-0 flex-1 flex-col"
       style={{ padding: "10px 8px 8px" }}
     >
       <div className="flex shrink-0 items-center gap-2.5 pt-0.5 pr-[5px] pb-2.5 pl-3">
-        <span className="eyebrow">Current point</span>
+        <span className="eyebrow">This point</span>
         <div className="flex-1" />
         <div className="inline-flex shrink-0 items-center gap-0.5">
           <StepButton
@@ -119,9 +122,6 @@ export const FilmThisPoint = memo(function FilmThisPoint({
         <HeadCell>Stroke</HeadCell>
         <HeadCell className={WIDE_ONLY}>Type</HeadCell>
         <HeadCell>Placement</HeadCell>
-        <HeadCell className={cn(WIDE_ONLY, "text-right")}>
-          {unit === "ft" ? "Mph" : "Km/h"}
-        </HeadCell>
         <HeadCell>Result</HeadCell>
       </div>
 
@@ -140,13 +140,13 @@ export const FilmThisPoint = memo(function FilmThisPoint({
               key={stop.shot.id}
               stop={stop}
               order={i + 1}
+              returnShotId={returnShotId}
               playerName={lastNameOf(
                 stop.shot.isPlayer1 === youIsPlayer1
                   ? sides.you.name
                   : sides.opp.name,
               )}
               isActive={stop.shot.id === activeShotId}
-              unit={unit}
               onSelect={onSelectShot}
             />
           ))
@@ -227,23 +227,21 @@ function StepButton({
 const ShotRow = memo(function ShotRow({
   stop,
   order,
+  returnShotId,
   playerName,
   isActive,
-  unit,
   onSelect,
 }: {
   stop: ShotStop;
   /** Position in the rally, 1-based. */
   order: number;
+  /** The point's return, from all its shots (timed or not), for Type. */
+  returnShotId: string | null;
   playerName: string;
   isActive: boolean;
-  /** The workspace's Units preference — a speed is the one film value it
-   *  changes ("118 mph" / "190 km/h"). Passed down rather than read here so
-   *  this row stays a pure function of its props. */
-  unit: DistanceUnit;
   onSelect: (stop: ShotStop) => void;
 }) {
-  const cells = shotRowCells(stop.shot, order, playerName);
+  const cells = shotRowCells(stop.shot, order, playerName, returnShotId);
 
   return (
     <button
@@ -252,8 +250,14 @@ const ShotRow = memo(function ShotRow({
       aria-current={isActive ? "true" : undefined}
       aria-label={`${cells.order}. ${cells.player} ${cells.stroke}, ${cells.placement}, ${cells.result} — jump to this shot`}
       onClick={() => onSelect(stop)}
+      // T9: the same reveal the room's shot well draws, on the shell's own
+      // row height. Mount-driven — rows are keyed by `shot.id`, so the card
+      // swapping points mounts a fresh set and replays this, while the
+      // four-times-a-second `timeupdate` re-render bails out of the memo
+      // above.
+      style={{ animationDelay: `${shotRowRevealDelay(order)}ms` }}
       className={cn(
-        "grid h-10 w-full shrink-0 cursor-pointer items-center gap-x-4 rounded-[var(--radius-element)] px-3 text-left transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        "film-shot-row-in grid h-10 w-full shrink-0 cursor-pointer items-center gap-x-4 rounded-[var(--radius-element)] px-3 text-left transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
         NARROW_COLUMNS,
         WIDE_COLUMNS,
         isActive && "bg-[var(--surface-subtle)]",
@@ -281,14 +285,6 @@ const ShotRow = memo(function ShotRow({
         }
       >
         {cells.placement}
-      </Cell>
-      <Cell
-        className={cn(WIDE_ONLY, "tabular text-right")}
-        ink={cells.mph === UNMEASURED ? "var(--ink-400)" : "var(--ink-700)"}
-      >
-        {stop.shot.speedMph == null
-          ? UNMEASURED
-          : formatSpeedValue(unit, stop.shot.speedMph)}
       </Cell>
       <Cell
         ink={cells.result === UNMEASURED ? "var(--ink-400)" : "var(--ink-700)"}

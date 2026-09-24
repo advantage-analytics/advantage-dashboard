@@ -19,6 +19,7 @@ export function rallyShot(
     zone: null,
     result: "In",
     videoTime: null,
+    bounceVideoTime: null,
     contactX: highEnd ? -1 : 1,
     contactY: highEnd ? 24 : -0.2,
     landingX: highEnd ? -lateral : lateral,
