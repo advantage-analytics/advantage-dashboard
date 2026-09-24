@@ -372,10 +372,17 @@ async function open(
     mode = "add",
     matchId,
     vanished = false,
-  }: { mode?: string; matchId: string; vanished?: boolean },
+    query = "",
+  }: {
+    mode?: string;
+    matchId: string;
+    vanished?: boolean;
+    /** Extra harness parameters, e.g. `&prepare=cut&pad=0.2`. */
+    query?: string;
+  },
 ) {
   await page.goto(
-    `${origin}/?mode=${mode}&matchId=${matchId}${vanished ? "&vanished=1" : ""}`,
+    `${origin}/?mode=${mode}&matchId=${matchId}${vanished ? "&vanished=1" : ""}${query}`,
   );
   await expect
     .poll(() => page.locator("html").getAttribute("data-hydrated"))
@@ -409,6 +416,13 @@ async function requests(page: Page, matchId: string) {
   }, matchId);
 }
 
+async function harnessState(page: Page) {
+  return page.evaluate(() => {
+    const w = window as unknown as AttachmentFlowHarnessWindow;
+    return { prepareCalls: w.prepareCalls, discardCalls: w.discardCalls };
+  });
+}
+
 async function savedEvents(page: Page) {
   return page.evaluate(
     () => (window as unknown as AttachmentFlowHarnessWindow).savedEvents,
@@ -416,8 +430,13 @@ async function savedEvents(page: Page) {
 }
 
 /** Pick a file, step forward, mark the first point. Leaves Save armed. */
-async function armAdd(page: Page, matchId: string, time = "00:00:00.500") {
-  await open(page, { matchId });
+async function armAdd(
+  page: Page,
+  matchId: string,
+  time = "00:00:00.500",
+  { mode = "add", query = "" }: { mode?: string; query?: string } = {},
+) {
+  await open(page, { mode, matchId, query });
   await pickFile(page);
   await continueButton(page).click();
   await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
@@ -653,6 +672,213 @@ test("a correction calls the alignment endpoint and nothing else", async ({
     confirmedVideoTimeSeconds: 0.9,
   });
   expect((await savedEvents(page))[0].version).toBe(4);
+  // A correction has no file, so there is nothing to cut.
+  expect(await harnessState(page)).toEqual({
+    prepareCalls: [],
+    discardCalls: [],
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * The cut before the upload
+ *
+ * `?pad=0.2` shortens the ten-second pad so a window fits inside the
+ * two-second clip. Marked at 0.500 with the harness timing (anchor 1.000,
+ * last required instant 1.600), the kept window is [0.300, 1.300] and the
+ * first serve sits at 0.200 in the cut — offset 1.000 − 0.200 = 0.800.
+ * ---------------------------------------------------------------------- */
+
+const CUT_QUERY = "&pad=0.2";
+const CLIP_BYTES = readFileSync(CLIP).length;
+
+function bodyOf(entries: RecordedRequest[], suffix: string) {
+  const entry = entries.find((candidate) => candidate.path.endsWith(suffix));
+  return entry ? (JSON.parse(entry.body) as Record<string, unknown>) : null;
+}
+
+test("add cuts the kept window before anything is reserved, then uploads the cut", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=hold`,
+  });
+  await continueButton(page).click();
+
+  // The trimming phase: the cut's own progress, and how much is kept —
+  // estimated from the window's share of the file while it runs.
+  const strip = page.getByTestId("attachment-saving");
+  await expect(strip).toHaveAttribute("data-phase", "trimming");
+  await expect(strip).toHaveAttribute("data-percent", "50");
+  await expect(strip).toContainText("Cutting the video to the match");
+  await expect(strip).toContainText("keeping");
+  const estimated = Number(await strip.getAttribute("data-kept-bytes"));
+  expect(estimated).toBeGreaterThan(CLIP_BYTES * 0.4);
+  expect(estimated).toBeLessThan(CLIP_BYTES * 0.6);
+  await expect(page.getByTestId("attachment-cancel-upload")).toBeVisible();
+
+  // Cutting is local work: nothing is reserved while it runs.
+  expect(await requests(page, matchId)).toEqual([]);
+  const { prepareCalls } = await harnessState(page);
+  expect(prepareCalls).toHaveLength(1);
+  expect(prepareCalls[0]).toMatchObject({
+    filename: "h264-faststart.mp4",
+    sizeBytes: CLIP_BYTES,
+    startSeconds: 0.3,
+    endSeconds: 1.3,
+  });
+
+  await page.evaluate(() =>
+    (window as unknown as AttachmentFlowHarnessWindow).releasePrepare(),
+  );
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const state = await harnessState(page);
+  const cut = state.prepareCalls[0].result!;
+  expect(cut.trimmed).toBe(true);
+  expect(cut.sizeBytes).toBe(Math.ceil(CLIP_BYTES / 2));
+
+  // The transfer carried the CUT and the serve's position IN the cut.
+  const sent = await requests(page, matchId);
+  expect(bodyOf(sent, "/video/uploads")).toMatchObject({
+    filename: "h264-faststart.trimmed.mp4",
+    sizeBytes: cut.sizeBytes,
+    contentType: "video/mp4",
+    expectedActive: null,
+  });
+  expect(bodyOf(sent, "/complete")!.confirmedVideoTimeSeconds).toBeCloseTo(
+    0.2,
+    6,
+  );
+  const events = await savedEvents(page);
+  expect(events).toHaveLength(1);
+  expect(events[0].offsetSeconds).toBeCloseTo(0.8, 6);
+
+  // The cut is gone from OPFS once the bytes are in.
+  expect(state.discardCalls).toEqual([cut.storageName]);
+});
+
+test("replace cuts too, and still claims the attachment it supersedes", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    mode: "replace",
+    query: `${CUT_QUERY}&prepare=cut`,
+  });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const state = await harnessState(page);
+  expect(state.prepareCalls).toHaveLength(1);
+  expect(state.prepareCalls[0]).toMatchObject({
+    startSeconds: 0.3,
+    endSeconds: 1.3,
+  });
+  const sent = await requests(page, matchId);
+  expect(bodyOf(sent, "/video/uploads")).toMatchObject({
+    sizeBytes: Math.ceil(CLIP_BYTES / 2),
+    expectedActive: { id: "6f1d4a7e-2c83-4a51-9f0e-1b7c5d3e9a42", version: 3 },
+  });
+  expect(bodyOf(sent, "/complete")!.confirmedVideoTimeSeconds).toBeCloseTo(
+    0.2,
+    6,
+  );
+  expect(state.discardCalls).toEqual([
+    state.prepareCalls[0].result!.storageName,
+  ]);
+});
+
+test("a cut that cannot be made uploads the original at the marked time", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=skip`,
+  });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const state = await harnessState(page);
+  // Asked with the window, answered "not trimmed".
+  expect(state.prepareCalls).toHaveLength(1);
+  expect(state.prepareCalls[0]).toMatchObject({
+    startSeconds: 0.3,
+    endSeconds: 1.3,
+    result: { trimmed: false, sizeBytes: CLIP_BYTES },
+  });
+
+  const sent = await requests(page, matchId);
+  expect(bodyOf(sent, "/video/uploads")).toMatchObject({
+    filename: "h264-faststart.mp4",
+    sizeBytes: CLIP_BYTES,
+  });
+  // The untrimmed file, so the untrimmed position.
+  expect(bodyOf(sent, "/complete")!.confirmedVideoTimeSeconds).toBeCloseTo(
+    0.5,
+    6,
+  );
+  expect((await savedEvents(page))[0].offsetSeconds).toBeCloseTo(0.5, 6);
+  expect(state.discardCalls).toEqual([]);
+});
+
+test("a refused completion still discards the cut", async ({ page }) => {
+  const matchId = matchIdFor("fail");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=cut`,
+  });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-save-error")).toBeVisible();
+
+  const state = await harnessState(page);
+  expect(state.prepareCalls).toHaveLength(1);
+  expect(state.discardCalls).toEqual([
+    state.prepareCalls[0].result!.storageName,
+  ]);
+});
+
+test("cancelling mid-upload discards the cut", async ({ page }) => {
+  const matchId = matchIdFor("held");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=cut`,
+  });
+  await startHeldUpload(page, matchId);
+  await page.getByTestId("attachment-cancel-upload").click();
+  await expect(page.getByTestId("attachment-saving")).toHaveCount(0);
+
+  await expect
+    .poll(async () => (await harnessState(page)).discardCalls.length)
+    .toBe(1);
+  const state = await harnessState(page);
+  expect(state.discardCalls).toEqual([
+    state.prepareCalls[0].result!.storageName,
+  ]);
+  expect(await savedEvents(page)).toEqual([]);
+});
+
+test("cancelling mid-cut stops the cut and reserves nothing", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=hold`,
+  });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saving")).toHaveAttribute(
+    "data-phase",
+    "trimming",
+  );
+
+  await page.getByTestId("attachment-cancel-upload").click();
+  await expect(page.getByTestId("attachment-saving")).toHaveCount(0);
+  await expect(page.getByTestId("attachment-save-error")).toHaveCount(0);
+  await expect(continueButton(page)).toBeEnabled();
+
+  const state = await harnessState(page);
+  expect(state.prepareCalls[0].cancelled).toBe(true);
+  // Nothing was cut, so there is nothing to discard.
+  expect(state.discardCalls).toEqual([]);
+  expect(await requests(page, matchId)).toEqual([]);
 });
 
 /* -------------------------------------------------------------------------

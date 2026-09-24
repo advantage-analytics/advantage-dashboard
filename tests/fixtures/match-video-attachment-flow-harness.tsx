@@ -1,9 +1,14 @@
 import { createRoot } from "react-dom/client";
 
 import { MatchVideoAttachmentFlow } from "@/components/dashboard/matches/match-video-attachment/MatchVideoAttachmentFlow";
+import type { AttachmentFlowDeps } from "@/components/dashboard/matches/match-video-attachment/use-attachment-flow";
 import type { SourcePoint, SourceShot } from "@/lib/match-video/alignment";
+import { defaultAttachmentTrimWindow } from "@/lib/match-video/trim-window";
 import type { ActiveAttachment, MatchVideoMode } from "@/lib/match-video/types";
-import type { AttachmentFlowHarnessWindow } from "./match-video-attachment-flow-window";
+import type {
+  AttachmentFlowHarnessWindow,
+  AttachmentFlowPrepareCall,
+} from "./match-video-attachment-flow-window";
 
 /**
  * Browser harness for the attachment orchestration flow.
@@ -26,7 +31,93 @@ import type { AttachmentFlowHarnessWindow } from "./match-video-attachment-flow-
  * so a confirmed first point at T gives offset `1 - T`, needs video from
  * `T - 0.1` to `T + 0.6`, and is covered by the clip for T in [0.1, 1.4].
  * 00:00:00.500 is the workhorse; 00:00:01.900 is past the end.
+ *
+ * ── The cut ──
+ *
+ * The real remux runs in a worker over OPFS and is covered by its own specs;
+ * here `prepare` is always a fake, chosen by `?prepare=`:
+ *
+ *   skip (default)  resolves `{ trimmed: false, reason: "whole-clip" }`
+ *   cut             resolves a cut: the first half of the picked file's bytes
+ *   hold            reports 50%, then waits for `releasePrepare()` to cut
+ *
+ * A ten-second pad would keep the whole two-second clip, so `?pad=` shortens
+ * it — through the flow's `trimWindow` seam, the real window maths otherwise.
  */
+
+/** Rejects once the signal aborts, the way `prepareVideoForUpload` does. */
+function abortable(signal: AbortSignal | undefined): Promise<never> {
+  return new Promise((_, reject) => {
+    signal?.addEventListener("abort", () => reject(new Error("cancelled")), {
+      once: true,
+    });
+  });
+}
+
+function fakeDeps(params: URLSearchParams): Partial<AttachmentFlowDeps> {
+  const kind = params.get("prepare") ?? "skip";
+  const padParam = params.get("pad");
+  const padSeconds = padParam === null ? undefined : Number(padParam);
+  let storageCounter = 0;
+  let release: () => void = () => {};
+  harness.releasePrepare = () => release();
+
+  const prepare: AttachmentFlowDeps["prepare"] = async (file, options) => {
+    const call: AttachmentFlowPrepareCall = {
+      filename: file.name,
+      sizeBytes: file.size,
+      startSeconds: options.startSeconds,
+      endSeconds: options.endSeconds,
+    };
+    harness.prepareCalls.push(call);
+
+    if (kind === "skip") {
+      call.result = { trimmed: false, sizeBytes: file.size };
+      return { trimmed: false, file, reason: "whole-clip" };
+    }
+
+    if (kind === "hold") {
+      options.onProgress?.(0.5);
+      try {
+        await Promise.race([
+          new Promise<void>((done) => (release = done)),
+          abortable(options.signal),
+        ]);
+      } catch (error) {
+        call.cancelled = true;
+        throw error;
+      }
+    }
+
+    options.onProgress?.(1);
+    storageCounter += 1;
+    const storageName = `prepared-video-fake-${storageCounter}.mp4`;
+    const cut = new File(
+      [file.slice(0, Math.ceil(file.size / 2))],
+      file.name.replace(/\.[^.]+$/, "") + ".trimmed.mp4",
+      { type: "video/mp4" },
+    );
+    call.result = { trimmed: true, sizeBytes: cut.size, storageName };
+    return {
+      trimmed: true,
+      file: cut,
+      durationSeconds: options.endSeconds - options.startSeconds,
+      storageName,
+    };
+  };
+
+  return {
+    prepare,
+    discardPrepared: async (storageName) => {
+      harness.discardCalls.push(storageName);
+    },
+    trimWindow: (input) =>
+      defaultAttachmentTrimWindow({
+        ...input,
+        padSeconds: padSeconds ?? input.padSeconds,
+      }),
+  };
+}
 
 const harness = window as unknown as AttachmentFlowHarnessWindow;
 
@@ -51,6 +142,8 @@ const ACTIVE: ActiveAttachment = {
 
 function boot() {
   harness.savedEvents = [];
+  harness.prepareCalls = [];
+  harness.discardCalls = [];
 
   const params = new URLSearchParams(location.search);
   const mode = (params.get("mode") ?? "add") as MatchVideoMode;
@@ -80,6 +173,7 @@ function boot() {
         mode === "align" ? "/fixtures/h264-faststart.mp4" : null
       }
       returnTarget={{ href: "/dashboard/matches/m1", label: "the match" }}
+      deps={fakeDeps(params)}
       onSaved={(attachment) => {
         harness.savedEvents.push({
           id: attachment.id,

@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Cut the attachment to its kept window before it uploads
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/lib/match-video/trim-window.ts` (new), `src/lib/match-video/limits.ts`, `src/components/dashboard/matches/match-video-attachment/use-attachment-flow.ts`, `src/lib/video/trim.ts` (reused, unchanged), `tests/match-video-trim-window.spec.ts` (new), `tests/match-video-attachment-flow.spec.ts`, `tests/fixtures/match-video-attachment-flow-harness.tsx`
 - **done when:**

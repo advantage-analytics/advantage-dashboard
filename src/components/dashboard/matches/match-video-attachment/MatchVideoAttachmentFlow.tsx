@@ -65,6 +65,7 @@ import {
 import {
   useAttachmentFlow,
   type AttachmentFlowApi,
+  type AttachmentSavePhase,
   type UseAttachmentFlowOptions,
 } from "./use-attachment-flow";
 
@@ -274,24 +275,34 @@ function AlignmentStage({
  * it is drawn. Once they are in, the publication is a server-side copy this
  * browser cannot observe, so the strip says what is happening and shows an
  * indeterminate mark instead of a percentage nobody measured.
+ *
+ * Before any of that, a local cut: the percentage is the remux's own progress
+ * and the byte line says how much of the recording is being kept.
  */
 function SavingStrip({
+  phase,
   label,
   percent,
   bytesTransferred,
   totalBytes,
+  keptBytes,
 }: {
+  phase: AttachmentSavePhase;
   label: string;
   percent: number | null;
   bytesTransferred: number;
   totalBytes: number;
+  keptBytes: number | null;
 }) {
+  const trimming = phase === "trimming";
   return (
     <div
       className={`${noteStripCls} flex-col gap-2.5`}
       role="status"
       data-testid="attachment-saving"
+      data-phase={phase}
       data-percent={percent === null ? undefined : String(percent)}
+      data-kept-bytes={keptBytes === null ? undefined : String(keptBytes)}
     >
       <span className="flex w-full items-center gap-2">
         <Loader2
@@ -301,7 +312,15 @@ function SavingStrip({
         />
         <span className="flex-1">
           <b className="font-medium text-[var(--ink-900)]">{label}</b>
-          {percent !== null && totalBytes > 0 && (
+          {trimming && keptBytes !== null && totalBytes > 0 && (
+            <>
+              {" — keeping "}
+              <span className="mono tabular">
+                {formatFileSize(keptBytes)} of {formatFileSize(totalBytes)}
+              </span>
+            </>
+          )}
+          {!trimming && percent !== null && totalBytes > 0 && (
             <>
               {" — "}
               <span className="mono tabular">
@@ -358,6 +377,8 @@ export function MatchVideoAttachmentFlow({
     matchId,
     mode,
     activeAttachment,
+    points,
+    shots,
     onSaved,
     deps,
   });
@@ -481,10 +502,12 @@ export function MatchVideoAttachmentFlow({
       >
         {save.status === "saving" && (
           <SavingStrip
+            phase={save.phase}
             label={save.label}
             percent={save.percent}
             bytesTransferred={save.bytesTransferred}
             totalBytes={save.totalBytes}
+            keptBytes={save.keptBytes}
           />
         )}
 

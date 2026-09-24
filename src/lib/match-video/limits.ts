@@ -49,6 +49,18 @@ export const CONFIRMED_TIME_DECIMALS = 3;
  */
 export const PLAYBACK_PADDING_SECONDS = 1.5;
 
+/**
+ * Lead-in and lead-out kept around the match when an attachment is cut before
+ * upload.
+ *
+ * The kept window runs from this many seconds before the marked first point to
+ * this many seconds after the last required source instant. Unlike
+ * `PLAYBACK_PADDING_SECONDS` it DOES decide what bytes exist on the server, so
+ * it is generous: ten seconds is a warm-up rally's worth of context either
+ * side, and costs a few megabytes on a recording that is otherwise hours long.
+ */
+export const ATTACHMENT_TRIM_PAD_SECONDS = 10;
+
 /** Seconds a client waits before re-sending a completion that returned 202. */
 export const COMPLETION_RETRY_SECONDS = 2;
 

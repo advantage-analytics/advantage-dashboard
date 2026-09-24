@@ -14,12 +14,27 @@
  *
  * It attaches a video to a match that ALREADY EXISTS. It creates no match, no
  * draft and no `processing_jobs` row; it invokes no analysis hook and reserves
- * no analysis quota. Nothing here imports `useUploadMatchWizard`,
- * `lib/services/splitstep/**` or the trim module, and a flow spec asserts the
- * only requests a whole add/replace/adjust ever makes are this feature's own
- * four endpoints. The 2-hour monthly cap belongs to the Advantage Intelligence
- * vendor path next door; an attachment is played back beside imported
+ * no analysis quota. Nothing here imports `useUploadMatchWizard` or
+ * `lib/services/splitstep/**`, and a flow spec asserts the only requests a
+ * whole add/replace/adjust ever makes are this feature's own four endpoints.
+ * The 2-hour monthly cap belongs to the Advantage Intelligence vendor path
+ * next door; an attachment is played back beside imported
  * SwingVision data and never reaches that vendor.
+ *
+ * ── The file is cut before it moves ─────────────────────────────────────
+ *
+ * Add and replace keep only the match: `defaultAttachmentTrimWindow` pads the
+ * marked first point and the last required source instant by ten seconds, and
+ * the upload wizard's own remux (`prepareVideoForUpload`, no re-encode) cuts
+ * that window out locally before a byte is reserved. The completion then
+ * carries the first point's position IN THE CUT (`marked − start`); the server
+ * derives the same offset from it and re-checks coverage against the cut's
+ * verified duration, so nothing server-side knows a cut happened. Any reason
+ * the cut cannot be made — no OPFS, no quota, a container the remuxer cannot
+ * copy, a window that is the whole clip — uploads the original with the
+ * original position, which is exactly the pre-trim behaviour. The cut lives in
+ * OPFS until the attempt ends, and is discarded however it ends. An adjust has
+ * no file and never cuts.
  *
  * ── One logical attempt, across retries ──────────────────────────────────
  *
@@ -53,7 +68,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { Alignment } from "@/lib/match-video/alignment";
+import type {
+  Alignment,
+  SourcePoint,
+  SourceShot,
+} from "@/lib/match-video/alignment";
+import {
+  defaultAttachmentTrimWindow,
+  planTrimmedAlignment,
+} from "@/lib/match-video/trim-window";
 import {
   matchVideoError,
   modeUploadsFile,
@@ -63,6 +86,7 @@ import {
   type UpdateAlignmentRequest,
   type UpdateAlignmentResult,
 } from "@/lib/match-video/types";
+import { discardPreparedVideo, prepareVideoForUpload } from "@/lib/video/trim";
 
 import {
   transferAttachment,
@@ -101,6 +125,16 @@ export function attachmentFlowSteps(
  * ---------------------------------------------------------------------- */
 
 /**
+ * Which part of the commit is running.
+ *
+ * `trimming` is local work — the window being cut out of the picked file —
+ * and happens before anything is reserved. The rest mirror the transport's own
+ * phases, plus `aligning` for an adjust's single PATCH.
+ */
+export type AttachmentSavePhase =
+  "trimming" | "reserving" | "uploading" | "committing" | "aligning";
+
+/**
  * What the footer and the content strip are saying about the commit.
  *
  * `saved` is a terminal state that the flow stays in while the caller
@@ -112,12 +146,23 @@ export type AttachmentSaveState =
   | { status: "idle" }
   | {
       status: "saving";
+      phase: AttachmentSavePhase;
       /** The sentence shown beside the meter. */
       label: string;
-      /** 0–100 while real bytes are moving, else null. Never invented. */
+      /**
+       * 0–100 while real work is measured — bytes moving, or the cut's own
+       * progress while trimming — else null. Never invented.
+       */
       percent: number | null;
       bytesTransferred: number;
+      /** The size of the file being moved; while trimming, the original's. */
       totalBytes: number;
+      /**
+       * While trimming: the bytes the cut keeps. Estimated from the window's
+       * share of the file while the cut runs, then the cut's measured size
+       * once it lands. Null in every other phase.
+       */
+      keptBytes: number | null;
       /** False once the bytes are in and only the publication is running. */
       canCancel: boolean;
     }
@@ -244,7 +289,16 @@ export async function updateAlignment(
  * Options
  * ---------------------------------------------------------------------- */
 
+/** `prepareVideoForUpload`'s shape, so a spec can stand in for the remux. */
+export type PrepareAttachmentVideo = typeof prepareVideoForUpload;
+
 export interface AttachmentFlowDeps {
+  /** Cuts the kept window out of the picked file. Never called by an adjust. */
+  prepare: PrepareAttachmentVideo;
+  /** Removes a cut from OPFS once its attempt has ended, however it ended. */
+  discardPrepared: (storageName: string) => Promise<void>;
+  /** The kept window for a marked first point. Seam for a shorter pad. */
+  trimWindow: typeof defaultAttachmentTrimWindow;
   transfer: typeof transferAttachment;
   updateAlignment: typeof updateAlignment;
   fetch: typeof fetch;
@@ -261,6 +315,12 @@ export interface UseAttachmentFlowOptions {
    * — an omitted field and an explicit null are not the same thing.
    */
   activeAttachment: ActiveAttachment | null;
+  /**
+   * The imported rows, so the kept window can be checked with the same
+   * coverage rule the server runs before anything is cut.
+   */
+  points: readonly SourcePoint[];
+  shots: readonly SourceShot[];
   /**
    * Called once the commit's result is KNOWN and committed, never before.
    *
@@ -306,6 +366,9 @@ function resolveDeps(
   overrides: Partial<AttachmentFlowDeps> | undefined,
 ): AttachmentFlowDeps {
   return {
+    prepare: overrides?.prepare ?? prepareVideoForUpload,
+    discardPrepared: overrides?.discardPrepared ?? discardPreparedVideo,
+    trimWindow: overrides?.trimWindow ?? defaultAttachmentTrimWindow,
     transfer: overrides?.transfer ?? transferAttachment,
     updateAlignment: overrides?.updateAlignment ?? updateAlignment,
     fetch: overrides?.fetch ?? ((...args) => globalThis.fetch(...args)),
@@ -320,7 +383,7 @@ function resolveDeps(
 export function useAttachmentFlow(
   options: UseAttachmentFlowOptions,
 ): AttachmentFlowApi {
-  const { matchId, mode, activeAttachment, onSaved } = options;
+  const { matchId, mode, activeAttachment, points, shots, onSaved } = options;
   const deps = useMemo(
     () => resolveDeps(options.deps),
     // The seam object is read on submit only; a caller passing a fresh literal
@@ -462,6 +525,7 @@ export function useAttachmentFlow(
     const uploading = progress.phase === "uploading";
     setSave({
       status: "saving",
+      phase: progress.phase,
       label:
         progress.phase === "reserving"
           ? "Preparing the upload…"
@@ -472,9 +536,38 @@ export function useAttachmentFlow(
       percent: uploading ? Math.round(percent * 10) / 10 : null,
       bytesTransferred: progress.bytesTransferred,
       totalBytes: progress.totalBytes,
+      keptBytes: null,
       canCancel: progress.phase !== "committing",
     });
   }, []);
+
+  /** The cut's progress, on the same 0.1-point throttle as the bytes. */
+  const reportTrim = useCallback(
+    (fraction: number, totalBytes: number, keptBytes: number) => {
+      const percent = Math.min(100, Math.max(0, fraction * 100));
+      const previous = lastReport.current;
+      if (
+        previous &&
+        previous.phase === "trimming" &&
+        percent < 100 &&
+        percent - previous.percent < PROGRESS_STEP_PERCENT
+      ) {
+        return;
+      }
+      lastReport.current = { phase: "trimming", percent };
+      setSave({
+        status: "saving",
+        phase: "trimming",
+        label: "Cutting the video to the match",
+        percent: Math.round(percent * 10) / 10,
+        bytesTransferred: 0,
+        totalBytes,
+        keptBytes,
+        canCancel: true,
+      });
+    },
+    [],
+  );
 
   const submit = useCallback(() => {
     // Duplicate submissions are held here rather than at the button, because
@@ -498,10 +591,12 @@ export function useAttachmentFlow(
           lastReport.current = null;
           settle({
             status: "saving",
+            phase: "aligning",
             label: "Saving the alignment",
             percent: null,
             bytesTransferred: 0,
             totalBytes: 0,
+            keptBytes: null,
             canCancel: false,
           });
           const controller = new AbortController();
@@ -534,18 +629,102 @@ export function useAttachmentFlow(
         abort.current = controller;
         clientRequestId.current ??= deps.randomUUID();
 
-        const result = await deps.transfer({
-          matchId,
-          selection: selection!,
-          confirmedVideoTimeSeconds: alignment.confirmedVideoTimeSeconds,
-          expectedActive,
-          clientRequestId: clientRequestId.current,
-          signal: controller.signal,
-          onProgress: reportProgress,
-          onReserved: (attachmentId) => {
-            pendingAttachmentId.current = attachmentId;
-          },
-        });
+        const picked = selection!;
+        let upload: AttachmentSelection = picked;
+        let confirmedVideoTimeSeconds = alignment.confirmedVideoTimeSeconds;
+        /** Set once a cut exists in OPFS; discarded however this attempt ends. */
+        let preparedStorageName: string | null = null;
+
+        let result: Awaited<ReturnType<typeof deps.transfer>>;
+        try {
+          const keep = deps.trimWindow({
+            markedSeconds: alignment.confirmedVideoTimeSeconds,
+            timing: alignment.timing,
+            videoDurationSeconds: picked.durationSeconds,
+          });
+          // The server's coverage rule, against the clip this window WOULD
+          // produce. The default window always passes; a window that does not
+          // is not cut, because the server would refuse the cut it produced.
+          const trimmed = planTrimmedAlignment({
+            points,
+            shots,
+            markedSeconds: alignment.confirmedVideoTimeSeconds,
+            window: keep,
+          });
+
+          if (trimmed.ok) {
+            const share =
+              picked.durationSeconds > 0
+                ? (keep.endSeconds - keep.startSeconds) / picked.durationSeconds
+                : 1;
+            const estimatedKept = Math.round(
+              picked.sizeBytes * Math.min(1, Math.max(0, share)),
+            );
+            reportTrim(0, picked.sizeBytes, estimatedKept);
+
+            let prepared: Awaited<ReturnType<typeof deps.prepare>> | null =
+              null;
+            try {
+              prepared = await deps.prepare(picked.file, {
+                startSeconds: keep.startSeconds,
+                endSeconds: keep.endSeconds,
+                signal: controller.signal,
+                onProgress: (fraction) =>
+                  reportTrim(fraction, picked.sizeBytes, estimatedKept),
+              });
+            } catch {
+              // `prepareVideoForUpload` rejects only on cancellation; anything
+              // else is a cut that could not be made, and a larger upload is
+              // always better than no upload.
+              if (controller.signal.aborted) {
+                settle({ status: "idle" });
+                return;
+              }
+            }
+
+            if (prepared?.trimmed) {
+              preparedStorageName = prepared.storageName;
+              if (controller.signal.aborted) {
+                settle({ status: "idle" });
+                return;
+              }
+              reportTrim(1, picked.sizeBytes, prepared.file.size);
+              upload = {
+                ...picked,
+                file: prepared.file,
+                filename: prepared.file.name,
+                sizeBytes: prepared.file.size,
+                // The cut is always an MP4 remux, whatever was picked.
+                contentType: "video/mp4",
+                durationSeconds: prepared.durationSeconds,
+              };
+              // The first serve's position in the CUT. The server derives the
+              // same offset from it: anchor − (marked − start).
+              confirmedVideoTimeSeconds =
+                trimmed.value.confirmedVideoTimeSeconds;
+            }
+          }
+
+          lastReport.current = null;
+          result = await deps.transfer({
+            matchId,
+            selection: upload,
+            confirmedVideoTimeSeconds,
+            expectedActive,
+            clientRequestId: clientRequestId.current,
+            signal: controller.signal,
+            onProgress: reportProgress,
+            onReserved: (attachmentId) => {
+              pendingAttachmentId.current = attachmentId;
+            },
+          });
+        } finally {
+          // Success, failure and cancel alike: the bytes are either in Azure
+          // or not going there from this copy. A retry cuts again.
+          if (preparedStorageName) {
+            void deps.discardPrepared(preparedStorageName).catch(() => {});
+          }
+        }
         pendingAttachmentId.current = null;
 
         if (result.ok) {
@@ -581,8 +760,11 @@ export function useAttachmentFlow(
     expectedActive,
     matchId,
     onSaved,
+    points,
     reportProgress,
+    reportTrim,
     selection,
+    shots,
     uploadsFile,
   ]);
 
