@@ -395,3 +395,18 @@ The title and content class moved into a new shared module, `schedule/score-flow
 **stash:** `4dd7cb9f1221f5ea66d0e57587175186f5d168c9`. It holds `settings-pending.tsx` on `PendingBar`/`PendingRegion`, `LEGACY` emptied, and the new `tests/settings-pending.spec.ts`.
 
 **to resume:** once the live DB is healthy, run `git stash apply 4dd7cb9f`, reset the status to `todo`, and re-run the gate. Visible change: a multi-line text placeholder is now one block instead of one band per line, because `PendingBar` has no children.
+
+## T34 · The dashboard root loading fallback becomes a skeleton, not a spinner — blocked
+
+**gate:** mechanical GATE FAIL (16.4m, 172 did not run). Every failure is a live-DB spec, because the shared Supabase is still degraded, as it was for T33. A follow-up probe of `saved-views-rls.spec.ts` alone took 4m17s and failed. The gate stops at the first failure, so the completion review was not run. The criterion's own command passed: lint, typecheck, and `dashboard-page-pending` + `skeleton-primitives` (9/9).
+
+**stash:** `be16e15c3e236f5c7fad8acc89bb5e9a4d9eb285`. Contents:
+
+- `src/app/dashboard/loading.tsx` exports `DashboardPagePending`, which lives in `page-skeletons.tsx`: ComingSoonPage's frame, one `PendingRegion` labelled "Loading page", and one `h-9 w-64` bar.
+- `SimplePageLoader` is deleted.
+- The spin exception is removed from `skeleton-primitives.spec.ts`.
+- New `tests/dashboard-page-pending.spec.ts`.
+
+`help/page.tsx` does not use ComingSoonPage's frame (it's 1032px, `px-6 py-8`), so Help won't pixel-align during the loading flash. The bar keeps the frame the criterion states.
+
+**to resume:** once the live DB is healthy, run `git stash apply be16e15c`, reset the status to `todo`, then re-run the gate and the completion review.

@@ -453,7 +453,7 @@ ready).
 
 ## T34 · The dashboard root loading fallback becomes a skeleton, not a spinner
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T25
 - **files:** src/app/dashboard/loading.tsx, src/components/dashboard/loading/page-skeletons.tsx (`SimplePageLoader` :223), tests/skeleton-primitives.spec.ts, tests/dashboard-page-pending.spec.ts (new)
