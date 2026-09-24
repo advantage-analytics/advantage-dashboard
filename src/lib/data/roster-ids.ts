@@ -81,3 +81,44 @@ export function rosterMatchIds(
 ): ReadonlySet<string> {
   return new Set(canonicalRosterIds(rows).keys());
 }
+
+/**
+ * Every raw id that resolves to one roster row — what a query names to find
+ * that person's matches in both eras.
+ *
+ * Never empty for a `playerId` that is a roster row's own `player_id`, since
+ * `canonicalRosterIds` maps it to itself. A caller that builds an `in.()`
+ * filter from this depends on that: PostgREST refuses an empty list.
+ */
+export function idsResolvingTo(
+  canonical: ReadonlyMap<string, string>,
+  playerId: string,
+): string[] {
+  return [...canonical.entries()]
+    .filter(([, canonicalId]) => canonicalId === playerId)
+    .map(([id]) => id);
+}
+
+/**
+ * Which side of a match row one roster row stood on: `true` for player one,
+ * `false` for player two, `null` for neither.
+ *
+ * Decided through the same fold as `idsResolvingTo`, so a row the fetch found
+ * by a claimed player's user id is sided by that id too. Comparing a side
+ * against `playerId` alone would find the row and then attribute it to the
+ * opponent — their stats row, their name, their serves — which is worse than
+ * not finding it.
+ */
+export function sideOf(
+  match: { player1_id: string | null; player2_id: string | null },
+  canonical: ReadonlyMap<string, string>,
+  playerId: string,
+): boolean | null {
+  if (match.player1_id && canonical.get(match.player1_id) === playerId) {
+    return true;
+  }
+  if (match.player2_id && canonical.get(match.player2_id) === playerId) {
+    return false;
+  }
+  return null;
+}

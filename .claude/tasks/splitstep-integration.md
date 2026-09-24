@@ -268,7 +268,7 @@ T32, T34 — see git history of the deleted
 
 ## T29 · A claimed player's pre-claim matches are missing from their own profile
 
-- **status:** todo
+- **status:** done
 - **files:** `src/lib/data/player-profile-server.ts` (~line 130); `src/lib/data/roster-ids.ts` (the helper T27 extracted)
 - **done when:**
   - [ ] The profile page finds a claimed player's matches whether the row carries their `program_players.id` or their `users.id`
