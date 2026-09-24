@@ -76,7 +76,7 @@ ready).
 
 ## T4 · Enforce the match-video cap on the server and expose workspace usage
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) `supabase/migrations/<ts>_match_video_attachment_cap.sql` (new), `src/lib/match-video/limits.ts`, `src/lib/match-video/types.ts`, `src/lib/services/match-video/rpc-errors.ts`, `src/lib/services/match-video/uploads.ts`, `src/lib/services/match-video/complete.ts`, `src/lib/data/match-video-usage-server.ts` (new), `tests/match-video-upload-handlers.spec.ts`, `tests/match-video-attachments-db.spec.ts`
 - **done when:**

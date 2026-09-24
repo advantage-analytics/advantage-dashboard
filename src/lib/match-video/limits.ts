@@ -6,6 +6,8 @@
  * No Azure, no Supabase, no Next.js.
  */
 
+import type { WorkspaceKind } from "@/lib/workspace/types";
+
 import { fail, type MatchVideoResult } from "./types";
 
 /**
@@ -60,6 +62,22 @@ export const PLAYBACK_PADDING_SECONDS = 1.5;
  * side, and costs a few megabytes on a recording that is otherwise hours long.
  */
 export const ATTACHMENT_TRIM_PAD_SECONDS = 10;
+
+/**
+ * How many ACTIVE match videos a workspace may hold at once, by workspace kind.
+ *
+ * The one place these numbers live. The SQL functions never hard-code them:
+ * `match_video_reserve_upload` and `match_video_activate_attachment` take the
+ * number for the caller's workspace kind as `p_active_limit`
+ * (`supabase/migrations/20260924120000_match_video_attachment_cap.sql`), and
+ * Settings › Usage reads its cap from here too, so the page and the refusal
+ * always name the same allowance. Only an ADD counts against it — a replace
+ * swaps one active video for another.
+ */
+export const MATCH_VIDEO_ACTIVE_LIMIT = {
+  personal: 1,
+  team: 25,
+} as const satisfies Record<WorkspaceKind, number>;
 
 /** Seconds a client waits before re-sending a completion that returned 202. */
 export const COMPLETION_RETRY_SECONDS = 2;

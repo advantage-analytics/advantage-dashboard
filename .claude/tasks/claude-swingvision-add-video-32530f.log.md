@@ -51,3 +51,17 @@ is the runner's. Newest entries at the bottom.
 **changed:** Applied stash 6295ddfc and fixed the two blockers: the status h1 uses the DS `text-title-lg` step instead of `text-[24px]` (design-drift back to seed), and `tests/match-film-entry.spec.ts` now asserts the new contract — `AttachmentWizardRoute` neither replaces nor refreshes, and `AttachmentUploadStatus` links "Watch the film" to `returnTarget.href`. The stash's work: new `AttachmentUploadStatus.tsx` ("Uploading your video" → "Video saved", three `VerticalStep`s, Cancel, "Keep this tab open until the upload finishes.", "Back to the match"; saved: "Watch the film" / "Back to matches"), leave guard armed while saving, `etaSeconds` + saved `sizeBytes` on the flow state, harness through a real `LeaveGuardProvider`, shared link/navigation mocks extended.
 
 **follow-ups:** see the blocked entry above (leave-dialog wording for attachments, "Won/Lost" in the subtitle, `trimmed` flag for "Video trimmed").
+
+## T4 · Enforce the match-video cap on the server and expose workspace usage — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass · ran on **opus** (routed fable; user override 2026-09-24 while fable was rate-limited)
+
+**changed:** New migration `20260924120000_match_video_attachment_cap.sql` — **written, NOT applied to live** (awaiting the user's approval). Recreates `match_video_reserve_upload` / `match_video_activate_attachment` from the live bodies (no drift found) with `p_active_limit integer default null`; adds refuse `attachment_limit_reached` at the limit (team = `program_id`, personal = `program_id is null` + `created_by`), replaces never counted; activate rechecks under a workspace advisory lock taken after the match lock. New service-role-only `match_video_workspace_usage(actor, kind, id)`. `MATCH_VIDEO_ACTIVE_LIMIT = { personal: 1, team: 25 }`; `attachment_limit_reached` 409 in `ERROR_SPECS` + `rpc-errors.ts`; prepare/complete pass the limit from the authorized workspace. New `getMatchVideoUsage(workspace)`. Specs: upload-handlers 91 pass, completion 73 pass, attachments-db new block written but skipped (live/prod).
+
+**follow-ups:**
+
+1. **Deploy order:** apply the migration BEFORE this code deploys — new code against the old functions 500s on prepare/complete. Old code after the migration keeps working (null limit = no cap).
+2. Run `match-video-attachments-db.spec.ts` against a non-prod project with the migration applied.
+3. Drop the `p_active_limit` null default once no deployed caller omits it.
+4. `match_video_begin_finalization` doesn't check the cap — a pending add can publish before activation refuses it (cleanup removes it); the wizard needs user-facing copy for the new code.
+5. Product review of the error copy ("You can still replace a match's existing video.").

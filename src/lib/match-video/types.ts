@@ -98,6 +98,7 @@ export type MatchVideoErrorCode =
   | "stale_attachment"
   | "pending_attempt_conflict"
   | "mode_conflict"
+  | "attachment_limit_reached"
   | "file_too_large"
   | "empty_file"
   | "unsupported_media"
@@ -165,6 +166,12 @@ const ERROR_SPECS: Record<
     message: "Another video upload for this match is already in progress.",
   },
   mode_conflict: { status: 409, message: STALE_MESSAGE },
+  // Only an add is ever refused for this — a replace keeps the count level.
+  attachment_limit_reached: {
+    status: 409,
+    message:
+      "This workspace has reached its match video limit. You can still replace a match's existing video.",
+  },
   file_too_large: {
     status: 413,
     message: "This video is too large. Choose a file under 8 GB.",

@@ -3268,3 +3268,590 @@ test.describe("match_video_attachments cleanup claim + fencing RPCs (live)", () 
     expect(Math.max(aIds.length, bIds.length)).toBe(50);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * SwingVision Add video T4 · the per-workspace cap + workspace usage
+ * `20260924120000_match_video_attachment_cap.sql`
+ *
+ *  1. Privilege boundary: anon and a signed-in session cannot execute
+ *     `match_video_workspace_usage`; nobody through the API — service role
+ *     included — can execute the two internal helpers.
+ *  2. Reserve: an ADD at the limit is attachment_limit_reached before any row
+ *     is written; a REPLACE is never counted; a team counts its program's
+ *     matches, a personal workspace its creator's program-less matches, and
+ *     neither counts the other's. The limit is a parameter — a null limit is
+ *     the pre-cap behaviour, a negative one is malformed.
+ *  3. Activate: rechecks adds under the workspace lock. Two pending adds that
+ *     both reserved while there was room cannot both go active — sequential
+ *     or concurrent, on different matches of one workspace.
+ *  4. Usage: one row per active attachment with its match's players and
+ *     date, visible to any member, refused to a non-member.
+ *
+ * The limits used here are small numbers chosen per case: what is under test
+ * is that SQL honours whatever `p_active_limit` it is handed, not the values
+ * in `MATCH_VIDEO_ACTIVE_LIMIT` (the handler specs pin those).
+ * ────────────────────────────────────────────────────────────────────────── */
+
+const { mark: CAP_MARK, password: CAP_PASSWORD } = runMarker("mvcap");
+
+test.describe("match_video_attachments workspace cap + usage RPCs (live)", () => {
+  test.describe.configure({ mode: "serial", timeout: 60_000 });
+  test.skip(!HAVE_ENV, SKIP_REASON);
+
+  let admin: SupabaseClient;
+  let owner: Session; // personal workspace; also belongs to the program
+  let coach: Session; // creates the team matches; program owner
+  let player: Session; // program member who uploads nothing
+  let outsider: Session; // signed in, member of nothing here
+
+  const authUserIds: string[] = [];
+  let programId: string;
+
+  // Personal matches (owner) and team matches (coach, in the program).
+  let personalA: string;
+  let personalB: string;
+  let ownerTeamMatch: string; // owner's upload in the team: never personal
+  const teamMatches: string[] = [];
+
+  const CONFIRMED = 10;
+  const DURATION = 200;
+
+  const hoursFromNow = (hours: number) =>
+    new Date(Date.now() + hours * 3_600_000).toISOString();
+
+  const rpc = (fn: string, args: Record<string, unknown>) =>
+    admin.rpc(fn, args) as unknown as Promise<RpcResult>;
+
+  type Scope = { actor: Session; kind: "personal" | "team"; id: string };
+  const personalOf = (actor: Session): Scope => ({
+    actor,
+    kind: "personal",
+    id: actor.userId,
+  });
+  const teamOf = (actor: Session): Scope => ({
+    actor,
+    kind: "team",
+    id: programId,
+  });
+
+  const who = (scope: Scope, matchId: string) => ({
+    p_actor_id: scope.actor.userId,
+    p_workspace_kind: scope.kind,
+    p_workspace_id: scope.id,
+    p_match_id: matchId,
+  });
+
+  const reserve = (
+    scope: Scope,
+    matchId: string,
+    limit: number | null | undefined,
+    expected: { id: string; version: number } | null = null,
+  ) =>
+    rpc("match_video_reserve_upload", {
+      ...who(scope, matchId),
+      p_filename: `${CAP_MARK}-v.mp4`,
+      p_declared_size_bytes: 2_000_000,
+      p_declared_content_type: "video/mp4",
+      p_client_request_id: randomUUID(),
+      p_expected_active_id: expected?.id ?? null,
+      p_expected_active_version: expected?.version ?? null,
+      p_upload_sas_expires_at: hoursFromNow(6),
+      // `undefined` leaves the parameter out entirely: the pre-cap caller.
+      ...(limit === undefined ? {} : { p_active_limit: limit }),
+    });
+
+  const begin = (
+    scope: Scope,
+    matchId: string,
+    attachmentId: string,
+    token: string,
+    expected: { id: string; version: number } | null = null,
+  ) =>
+    rpc("match_video_begin_finalization", {
+      ...who(scope, matchId),
+      p_attachment_id: attachmentId,
+      p_lease_token: token,
+      p_lease_seconds: 300,
+      p_confirmed_video_time_seconds: CONFIRMED,
+      p_expected_active_id: expected?.id ?? null,
+      p_expected_active_version: expected?.version ?? null,
+    });
+
+  const activate = (
+    scope: Scope,
+    matchId: string,
+    attachmentId: string,
+    token: string,
+    limit: number | null | undefined,
+  ) =>
+    rpc("match_video_activate_attachment", {
+      ...who(scope, matchId),
+      p_attachment_id: attachmentId,
+      p_lease_token: token,
+      p_confirmed_video_time_seconds: CONFIRMED,
+      p_verified_size_bytes: 1_999_000,
+      p_verified_content_type: "video/mp4",
+      p_verified_duration_seconds: DURATION,
+      ...(limit === undefined ? {} : { p_active_limit: limit }),
+    });
+
+  /** Reserve and lease an attempt, ready to activate. */
+  const prepared = async (
+    scope: Scope,
+    matchId: string,
+    limit: number | null | undefined,
+    expected: { id: string; version: number } | null = null,
+  ) => {
+    const id = firstRow(await reserve(scope, matchId, limit, expected))
+      .attachment_id as string;
+    const token = randomUUID();
+    firstRow(await begin(scope, matchId, id, token, expected));
+    return { id, token };
+  };
+
+  /** Reserve → lease → activate: the whole add (or replace). */
+  const publish = async (
+    scope: Scope,
+    matchId: string,
+    limit: number | null | undefined,
+    expected: { id: string; version: number } | null = null,
+  ) => {
+    const { id, token } = await prepared(scope, matchId, limit, expected);
+    firstRow(await activate(scope, matchId, id, token, limit));
+    return id;
+  };
+
+  const stateOf = async (id: string) => {
+    const result = await admin
+      .from(TABLE)
+      .select("state")
+      .eq("id", id)
+      .single();
+    expect(result.error).toBeNull();
+    return result.data!.state as string;
+  };
+
+  const rowsOn = async (matchId: string) => {
+    const result = await admin
+      .from(TABLE)
+      .select("id, state")
+      .eq("match_id", matchId);
+    expect(result.error).toBeNull();
+    return result.data!;
+  };
+
+  const usage = (actor: Session, kind: "personal" | "team", id: string) =>
+    rpc("match_video_workspace_usage", {
+      p_actor_id: actor.userId,
+      p_workspace_kind: kind,
+      p_workspace_id: id,
+    });
+
+  const usageRows = async (scope: Scope) => {
+    const result = await usage(scope.actor, scope.kind, scope.id);
+    expect(result.error).toBeNull();
+    return result.data as Record<string, unknown>[];
+  };
+
+  const insertMatch = async (
+    createdBy: string,
+    label: string,
+    extra: Record<string, unknown> = {},
+  ) => {
+    const match = await admin
+      .from("matches")
+      .insert({
+        created_by: createdBy,
+        player1_id: createdBy,
+        player1_name: `Cap Player ${label}`,
+        player2_name: `Cap Opponent ${label}`,
+        date: new Date(Date.UTC(2026, 8, 1 + teamMatches.length)).toISOString(),
+        tournament_name: `${CAP_MARK}-${label}`,
+        source_provider: "swing-vision",
+        ...extra,
+      })
+      .select("id")
+      .single();
+    if (match.error) throw new Error(`match: ${match.error.message}`);
+    const id = match.data.id as string;
+
+    // A minimal alignable timeline, so activation's plan_alignment passes.
+    const points = await admin.from("points").insert([
+      {
+        match_id: id,
+        point_number: 1,
+        set_number: 1,
+        game_number: 1,
+        server_is_player1: true,
+        won_by_player1: true,
+        video_time: 12.345,
+        duration: 8.5,
+      },
+      {
+        match_id: id,
+        point_number: 2,
+        set_number: 1,
+        game_number: 1,
+        server_is_player1: true,
+        won_by_player1: false,
+        video_time: 20,
+        duration: 5,
+      },
+    ]);
+    if (points.error) throw new Error(`points: ${points.error.message}`);
+    return id;
+  };
+
+  test.beforeAll(async () => {
+    test.setTimeout(120_000);
+    admin = createAdminClient();
+
+    [owner, coach, player, outsider] = await createLogins(
+      admin,
+      ["owner", "coach", "player", "outsider"],
+      { mark: CAP_MARK, password: CAP_PASSWORD, authUserIds },
+    );
+
+    const program = await admin
+      .from("programs")
+      .insert({
+        org_type: "club",
+        school_name: `${CAP_MARK} Club`,
+        status: "active",
+        owner_user_id: coach.userId,
+      })
+      .select("id")
+      .single();
+    if (program.error) throw new Error(`program: ${program.error.message}`);
+    programId = program.data.id;
+
+    const members = await admin.from("program_members").insert([
+      { program_id: programId, user_id: coach.userId, role: "owner" },
+      { program_id: programId, user_id: player.userId, role: "player" },
+      { program_id: programId, user_id: owner.userId, role: "player" },
+    ]);
+    if (members.error) throw new Error(`members: ${members.error.message}`);
+
+    personalA = await insertMatch(owner.userId, "personal-a");
+    personalB = await insertMatch(owner.userId, "personal-b");
+    ownerTeamMatch = await insertMatch(owner.userId, "owner-team", {
+      program_id: programId,
+    });
+    for (let i = 0; i < 4; i++) {
+      teamMatches.push(
+        await insertMatch(coach.userId, `team-${i}`, {
+          program_id: programId,
+        }),
+      );
+    }
+  });
+
+  test.afterAll(async () => {
+    if (!admin) return;
+    await admin.from(TABLE).delete().like("filename", `${CAP_MARK}%`);
+    // points cascade from the match.
+    await admin
+      .from("matches")
+      .delete()
+      .like("tournament_name", `${CAP_MARK}%`);
+    if (programId) {
+      await admin.from("program_members").delete().eq("program_id", programId);
+      await admin.from("programs").delete().eq("id", programId);
+    }
+    await deleteAuthUsers(admin, authUserIds);
+  });
+
+  // ── 1. Privilege boundary ─────────────────────────────────────────────────
+
+  test("usage is service-role only, and the internal helpers are executable by no API role", async () => {
+    const anon = createClient(SUPABASE_URL!, ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const usageArgs = {
+      p_actor_id: owner.userId,
+      p_workspace_kind: "personal",
+      p_workspace_id: owner.userId,
+    };
+    for (const [label, client] of [
+      ["anon", anon],
+      ["authenticated (owner)", owner.client],
+      ["authenticated (outsider)", outsider.client],
+    ] as const) {
+      const result = (await client.rpc(
+        "match_video_workspace_usage",
+        usageArgs,
+      )) as unknown as RpcResult;
+      expect(result.error?.code, `${label} usage`).toBe(INSUFFICIENT_PRIVILEGE);
+    }
+
+    const helpers: [string, Record<string, unknown>][] = [
+      [
+        "match_video_workspace_active_attachments",
+        { p_workspace_kind: "personal", p_workspace_id: owner.userId },
+      ],
+      [
+        "match_video_enforce_active_limit",
+        {
+          p_workspace_kind: "personal",
+          p_workspace_id: owner.userId,
+          p_active_limit: 1,
+          p_lock: false,
+        },
+      ],
+    ];
+    for (const [label, client] of [
+      ["anon", anon],
+      ["authenticated (owner)", owner.client],
+      ["service role", admin],
+    ] as const) {
+      for (const [fn, args] of helpers) {
+        const result = (await client.rpc(fn, args)) as unknown as RpcResult;
+        expect(result.error?.code, `${label} ${fn}`).toBe(
+          INSUFFICIENT_PRIVILEGE,
+        );
+      }
+    }
+  });
+
+  // ── 2. Reserve ────────────────────────────────────────────────────────────
+
+  let personalActive: string;
+
+  test("personal: an add at the limit is refused before any row is written; a replace is never counted", async () => {
+    const me = personalOf(owner);
+    personalActive = await publish(me, personalA, 1);
+
+    expectRefused(
+      await reserve(me, personalB, 1),
+      RPC_STATE_CONFLICT,
+      "attachment_limit_reached",
+      "workspace_at_limit",
+    );
+    expect(await rowsOn(personalB)).toEqual([]);
+
+    // A limit of 2 is a different answer from the same SQL — nothing in it
+    // hard-codes the number.
+    const roomy = firstRow(await reserve(me, personalB, 2));
+    expect(roomy.reused).toBe(false);
+    firstRow(
+      await rpc("match_video_cancel_upload", {
+        ...who(me, personalB),
+        p_attachment_id: roomy.attachment_id,
+      }),
+    );
+
+    // Replace on the match that holds the one video: reserve, lease and
+    // activate all pass at limit 1, and the count stays 1.
+    const replaced = await publish(me, personalA, 1, {
+      id: personalActive,
+      version: 0,
+    });
+    expect(await stateOf(personalActive)).toBe("retired");
+    expect(await stateOf(replaced)).toBe("active");
+    personalActive = replaced;
+    expect(await usageRows(me)).toHaveLength(1);
+  });
+
+  test("a team counts its program's matches, a personal workspace its creator's program-less ones — never each other's", async () => {
+    // The owner's upload inside the team counts for the TEAM only: with it
+    // active, the owner's personal workspace still holds exactly one video
+    // (from above) and the team holds one.
+    const ownerInTeam = teamOf(owner);
+    await publish(ownerInTeam, ownerTeamMatch, 5);
+    expect(await usageRows(personalOf(owner))).toHaveLength(1);
+    expect(await usageRows(teamOf(coach))).toHaveLength(1);
+
+    // The coach's personal workspace is empty however full the team gets,
+    // and the owner's personal video does not count against the team.
+    expect(await usageRows(personalOf(coach))).toEqual([]);
+
+    // Team at 1 with limit 1: a coach add is refused; limit 2 lets it in.
+    const team = teamOf(coach);
+    expectRefused(
+      await reserve(team, teamMatches[0], 1),
+      RPC_STATE_CONFLICT,
+      "attachment_limit_reached",
+      "workspace_at_limit",
+    );
+    expect(await rowsOn(teamMatches[0])).toEqual([]);
+    await publish(team, teamMatches[0], 2);
+    expect(await usageRows(team)).toHaveLength(2);
+  });
+
+  test("a null or omitted limit is the pre-cap behaviour; a negative one is malformed", async () => {
+    const team = teamOf(coach);
+    // Team is at 2. An omitted parameter (a caller deployed before the cap)
+    // and an explicit null both reserve.
+    const omitted = firstRow(await reserve(team, teamMatches[1], undefined));
+    firstRow(
+      await rpc("match_video_cancel_upload", {
+        ...who(team, teamMatches[1]),
+        p_attachment_id: omitted.attachment_id,
+      }),
+    );
+    const explicitNull = firstRow(await reserve(team, teamMatches[1], null));
+    firstRow(
+      await rpc("match_video_cancel_upload", {
+        ...who(team, teamMatches[1]),
+        p_attachment_id: explicitNull.attachment_id,
+      }),
+    );
+
+    expectRefused(
+      await reserve(team, teamMatches[1], -1),
+      INVALID_PARAMETER,
+      "active limit must not be negative",
+      "bad_active_limit",
+    );
+  });
+
+  // ── 3. Activate rechecks under the workspace lock ─────────────────────────
+
+  test("two pending adds that both reserved with room cannot both go active — sequentially", async () => {
+    const team = teamOf(coach);
+    // Team at 2, limit 3: both adds reserve (the soft gate sees 2 < 3).
+    const first = await prepared(team, teamMatches[1], 3);
+    const second = await prepared(team, teamMatches[2], 3);
+
+    firstRow(await activate(team, teamMatches[1], first.id, first.token, 3));
+    expectRefused(
+      await activate(team, teamMatches[2], second.id, second.token, 3),
+      RPC_STATE_CONFLICT,
+      "attachment_limit_reached",
+      "workspace_at_limit",
+    );
+    expect(await stateOf(second.id)).toBe("pending");
+    expect(await usageRows(team)).toHaveLength(3);
+
+    // A replay of the committed add is never counted, even at the limit.
+    const replay = firstRow(
+      await activate(team, teamMatches[1], first.id, first.token, 3),
+    );
+    expect(replay.reused).toBe(true);
+
+    // The refused add still holds its lease; let it go, then cancel.
+    firstRow(
+      await rpc("match_video_release_finalization", {
+        ...who(team, teamMatches[2]),
+        p_attachment_id: second.id,
+        p_lease_token: second.token,
+      }),
+    );
+    firstRow(
+      await rpc("match_video_cancel_upload", {
+        ...who(team, teamMatches[2]),
+        p_attachment_id: second.id,
+      }),
+    );
+  });
+
+  test("two pending adds on different matches activating at once: exactly one wins", async () => {
+    const team = teamOf(coach);
+    // Team at 3, limit 4: one seat left, two contenders on different matches
+    // — the match lock alone would let both through.
+    const a = await prepared(team, teamMatches[2], 4);
+    const b = await prepared(team, teamMatches[3], 4);
+
+    const [ra, rb] = await Promise.all([
+      activate(team, teamMatches[2], a.id, a.token, 4),
+      activate(team, teamMatches[3], b.id, b.token, 4),
+    ]);
+    const outcomes = [ra, rb];
+    expect(outcomes.filter((r) => r.error === null)).toHaveLength(1);
+    const loser = outcomes.find((r) => r.error !== null)!;
+    expectRefused(
+      loser,
+      RPC_STATE_CONFLICT,
+      "attachment_limit_reached",
+      "workspace_at_limit",
+      "concurrent loser",
+    );
+    const states = [await stateOf(a.id), await stateOf(b.id)].sort();
+    expect(states).toEqual(["active", "pending"]);
+    expect(await usageRows(team)).toHaveLength(4);
+
+    // Replacing at the limit is still allowed.
+    const winnerId = ra.error === null ? a.id : b.id;
+    const winnerMatch = ra.error === null ? teamMatches[2] : teamMatches[3];
+    await publish(team, winnerMatch, 4, { id: winnerId, version: 0 });
+    expect(await stateOf(winnerId)).toBe("retired");
+    expect(await usageRows(team)).toHaveLength(4);
+  });
+
+  // ── 4. Usage ──────────────────────────────────────────────────────────────
+
+  test("usage lists every active attachment with its match's players and date, for any member and no one else", async () => {
+    const personal = await usageRows(personalOf(owner));
+    expect(personal).toHaveLength(1);
+    const match = await admin
+      .from("matches")
+      .select("player1_name, player2_name, date")
+      .eq("id", personalA)
+      .single();
+    expect(match.error).toBeNull();
+    expect(personal[0]).toMatchObject({
+      attachment_id: personalActive,
+      match_id: personalA,
+      uploaded_by: owner.userId,
+      verified_size_bytes: 1_999_000,
+      player1_name: match.data!.player1_name,
+      player2_name: match.data!.player2_name,
+    });
+    expect(new Date(personal[0].match_date as string).getTime()).toBe(
+      new Date(match.data!.date as string).getTime(),
+    );
+    expect(personal[0].activated_at).not.toBeNull();
+    expect(Object.keys(personal[0]).sort()).toEqual([
+      "activated_at",
+      "attachment_id",
+      "match_date",
+      "match_id",
+      "player1_name",
+      "player2_name",
+      "uploaded_by",
+      "verified_size_bytes",
+    ]);
+
+    // Every member sees the same team list — a player who uploaded nothing
+    // included — newest activation first.
+    const byCoach = await usageRows(teamOf(coach));
+    const byPlayer = await usageRows(teamOf(player));
+    expect(byPlayer).toEqual(byCoach);
+    expect(byCoach).toHaveLength(4);
+    const activatedAt = byCoach.map((r) =>
+      new Date(r.activated_at as string).getTime(),
+    );
+    expect(activatedAt).toEqual([...activatedAt].sort((x, y) => y - x));
+    expect(new Set(byCoach.map((r) => r.uploaded_by))).toEqual(
+      new Set([coach.userId, owner.userId]),
+    );
+
+    expectRefused(
+      await usage(outsider, "team", programId),
+      INSUFFICIENT_PRIVILEGE,
+      "workspace_mismatch",
+      "not_a_member",
+    );
+    expectRefused(
+      await usage(outsider, "personal", owner.userId),
+      INSUFFICIENT_PRIVILEGE,
+      "workspace_mismatch",
+      "personal_workspace_not_actor",
+    );
+
+    // Membership is the program_members row: remove it and the same call is
+    // refused.
+    const removed = await admin
+      .from("program_members")
+      .delete()
+      .eq("program_id", programId)
+      .eq("user_id", player.userId);
+    expect(removed.error).toBeNull();
+    expectRefused(
+      await usage(player, "team", programId),
+      INSUFFICIENT_PRIVILEGE,
+      "workspace_mismatch",
+      "not_a_member",
+    );
+  });
+});
