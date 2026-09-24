@@ -166,6 +166,11 @@ export interface FilmFullscreenProps {
   onPlaybackPlaying: (playing: boolean) => void;
   onLoadFailure: () => void;
   onPlayRejected: () => void;
+  /**
+   * The first `play` event of each loaded source (`generation`) in this room
+   * — a view of the video (SwingVision Add video T8). See `film-player.tsx`.
+   */
+  onFirstPlay?: (generation: number) => void;
   onRetry: () => void;
   /**
    * The film clock `stops` were built from — passed in rather than rebuilt
@@ -470,6 +475,8 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
    * was actually seeded with — which is the more recent of the two.
    */
   const appliedRef = useRef(p.generation);
+  /** The generation whose first `play` has already been reported (T8). */
+  const firstPlayRef = useRef<number | null>(null);
 
   /* ── Derived ─────────────────────────────────────────────────────────── */
 
@@ -1468,6 +1475,10 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 playingRef.current = true;
                 landingRef.current.playing = true;
                 p.onPlaybackPlaying(true);
+                if (firstPlayRef.current !== p.generation) {
+                  firstPlayRef.current = p.generation;
+                  p.onFirstPlay?.(p.generation);
+                }
               }}
               onPause={() => {
                 setPlaying(false);

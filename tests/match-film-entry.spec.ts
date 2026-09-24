@@ -123,6 +123,7 @@ const HOLDER_ROW: MatchVideoUsageRow = {
   uploadedBy: CREATOR,
   verifiedSizeBytes: 1_000_000,
   activatedAt: "2026-09-01T10:00:00Z",
+  lastViewedAt: null,
   player1Name: "Marcus Reid",
   player2Name: "Daniel Cho",
   matchDate: "2026-08-30",

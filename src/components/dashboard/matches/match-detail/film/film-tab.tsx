@@ -39,6 +39,7 @@ import {
 } from "./film-timeline";
 import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
 import { useAttachmentPlayback } from "./use-attachment-playback";
+import { recordMatchVideoView } from "./record-video-view";
 import {
   DEFAULT_FILM_FILTERS,
   applyFilmFilters,
@@ -234,6 +235,25 @@ function FilmRoom({
     reportPlayRejected,
     retry,
   } = playback;
+
+  /**
+   * A view (SwingVision Add video T8): the first `play` of each loaded
+   * source, from whichever surface fired it. Both players report their own
+   * first play per generation; this ref makes it once per generation across
+   * the two, so opening the room on a film that is already playing does not
+   * count it twice. The Advantage Intelligence lineage has no attachment to
+   * stamp. Rendering and credential refreshes send nothing — only a `play`.
+   */
+  const viewedGenerationRef = useRef<number | null>(null);
+  const passthrough = playback.passthrough;
+  const recordFirstPlay = useCallback(
+    (played: number) => {
+      if (passthrough || viewedGenerationRef.current === played) return;
+      viewedGenerationRef.current = played;
+      recordMatchVideoView(match.id);
+    },
+    [passthrough, match.id],
+  );
 
   /**
    * The resume intent: handed to the players, then given back to the hook.
@@ -665,6 +685,7 @@ function FilmRoom({
           onPlaybackPlaying={reportPlaying}
           onLoadFailure={reportLoadFailure}
           onPlayRejected={reportPlayRejected}
+          onFirstPlay={recordFirstPlay}
           onRetry={retry}
           onToggleSaved={toggleSavedActive}
           onEnterFullscreen={enterRoom}
@@ -734,6 +755,7 @@ function FilmRoom({
           onPlaybackPlaying={reportPlaying}
           onLoadFailure={reportLoadFailure}
           onPlayRejected={reportPlayRejected}
+          onFirstPlay={recordFirstPlay}
           onRetry={retry}
           clock={clock}
           initial={room}

@@ -152,7 +152,7 @@ ready).
 
 ## T8 · Record when a match video was last watched
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T4
 - **files:** (guess) `supabase/migrations/<ts>_match_video_last_viewed.sql` (new), `src/lib/match-video/expiry.ts` (new), `src/lib/services/match-video/views.ts` (new), `src/app/api/matches/[matchId]/video/viewed/route.ts` (new), `src/components/dashboard/matches/match-detail/film/film-player.tsx`, `film-fullscreen.tsx`, `tests/match-video-expiry.spec.ts` (new), `tests/match-video-access-handlers.spec.ts`

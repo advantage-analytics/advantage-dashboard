@@ -26,6 +26,12 @@ export interface MatchVideoUsageRow {
   verifiedSizeBytes: number | null;
   /** ISO 8601. */
   activatedAt: string | null;
+  /**
+   * ISO 8601, or null when nobody has played it since view tracking began.
+   * The retention clock is `lastViewedAt ?? activatedAt` — see
+   * `lib/match-video/expiry.ts`.
+   */
+  lastViewedAt: string | null;
   player1Name: string | null;
   player2Name: string | null;
   /** ISO 8601 — `matches.date`. */
@@ -45,6 +51,8 @@ interface UsageRpcRow {
   uploaded_by: string | null;
   verified_size_bytes: number | string | null;
   activated_at: string | null;
+  /** Absent until `20260924140000_match_video_last_viewed` is applied. */
+  last_viewed_at?: string | null;
   player1_name: string | null;
   player2_name: string | null;
   match_date: string | null;
@@ -102,6 +110,7 @@ export async function getMatchVideoUsage(
           ? null
           : Number(row.verified_size_bytes),
       activatedAt: row.activated_at,
+      lastViewedAt: row.last_viewed_at ?? null,
       player1Name: row.player1_name,
       player2Name: row.player2_name,
       matchDate: row.match_date,

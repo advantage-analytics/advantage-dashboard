@@ -90,3 +90,16 @@ is the runner's. Newest entries at the bottom.
 
 1. Nobody sees the at-cap states until T4's migration is applied (usage reads return 0 until then).
 2. "More with Pro" goes on the micro line when pricing tiers land.
+
+## T8 · Record when a match video was last watched — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass · ran on **opus** (routed fable; user override)
+
+**changed:** New migration `20260924140000_match_video_last_viewed.sql` — **written, NOT applied to live**, never executed (no local DB): adds `last_viewed_at` / `expiry_warned_at` (no backfill), service-role-only `match_video_record_view(p_match_id)` (stamps the active row, clears the warning; no active row → no write), drops/recreates `match_video_workspace_usage` + its helper to return `last_viewed_at`. New `src/lib/match-video/expiry.ts` (`MATCH_VIDEO_EXPIRY_DAYS=365`, `…_WARN_DAYS=30`, pure `matchVideoExpiry`), `views.ts` handler, `POST /api/matches/[matchId]/video/viewed` (same-origin → visibility → RPC; `{view:null}` when no active video). Film player + fullscreen call `onFirstPlay` once per loaded source; `film-tab.tsx` de-dups across both surfaces and fires `record-video-view.ts` (fire-and-forget, AI videos excluded). `GET /video` / `handleGetPlayback` unchanged and asserted write-free. MAP.md, bundle-boundary list, usage loader updated.
+
+**follow-ups:**
+
+1. **Deploy order:** apply 20260924120000 → 20260924130000 → 20260924140000, then deploy. The POST 500s silently until then.
+2. A credential refresh mid-playback counts as a new source → ~one extra POST per refresh; key on attachment id instead if it matters.
+3. "11 months" copy can read 10 months in a leap-year edge — decide before T9's copy.
+4. `remove.ts` (T5) still missing from `tests/client-bundle-boundary.spec.ts`'s server-only list.

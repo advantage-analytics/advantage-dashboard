@@ -177,6 +177,13 @@ interface FilmPlayerProps {
   onLoadFailure: () => void;
   /** A rejected `play()` — autoplay policy, never an expired credential. */
   onPlayRejected: () => void;
+  /**
+   * The first `play` event of each loaded source (`generation`) on this
+   * surface — what counts as a view of the video (SwingVision Add video T8).
+   * Never on render, never on a credential mint: only a `play` the element
+   * actually fired. Suppressed while `background`.
+   */
+  onFirstPlay?: (generation: number) => void;
   /** The terminal state's button, where the hook says one could help. */
   onRetry: () => void;
   /** Bookmark or un-bookmark the playing point. */
@@ -281,6 +288,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       onPlaybackPlaying,
       onLoadFailure,
       onPlayRejected,
+      onFirstPlay,
       onRetry,
       onToggleSaved,
       onEnterFullscreen,
@@ -291,6 +299,8 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
   ) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const frameRef = useRef<HTMLDivElement>(null);
+    /** The generation whose first `play` has already been reported. */
+    const firstPlayRef = useRef<number | null>(null);
 
     const [playing, setPlaying] = useState(false);
     const [muted, setMuted] = useState(false);
@@ -690,6 +700,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               setPlaying(true);
               landingRef.current.playing = true;
               if (!background) onPlaybackPlaying(true);
+              if (!background && firstPlayRef.current !== generation) {
+                firstPlayRef.current = generation;
+                onFirstPlay?.(generation);
+              }
             }}
             onPause={() => {
               setPlaying(false);
