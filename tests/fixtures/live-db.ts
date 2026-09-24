@@ -62,11 +62,103 @@ const env = (key: string): string | undefined =>
 export const SUPABASE_URL = env("NEXT_PUBLIC_SUPABASE_URL");
 export const ANON_KEY = env("NEXT_PUBLIC_SUPABASE_ANON_KEY");
 export const SERVICE_ROLE_KEY = env("SUPABASE_SERVICE_ROLE_KEY");
-export const HAVE_ENV = Boolean(SUPABASE_URL && ANON_KEY && SERVICE_ROLE_KEY);
 
-/** For `test.skip(!HAVE_ENV, SKIP_REASON)` — the suite passes in a keyless checkout. */
-export const SKIP_REASON =
+// ---------------------------------------------------------------------------
+// Production guard — the live specs write throwaway auth users, and prod is
+// not where they belong unless someone asks for it by name.
+// ---------------------------------------------------------------------------
+
+/** The production Supabase project's ref. */
+export const PRODUCTION_REF = "pouxujkhtbvkdwbzfvka";
+
+/** The opt-in that lets the write specs run against production anyway. */
+export const ALLOW_PROD_VAR = "LIVE_DB_ALLOW_PROD";
+
+/**
+ * The `ref` claim of a legacy JWT API key, or null for anything else. The new
+ * `sb_publishable_…` / `sb_secret_…` keys are opaque and carry no ref, and a
+ * malformed key is simply not a JWT — neither throws. No signature check: this
+ * only reads which project a key was minted for.
+ */
+function jwtRef(key: string | undefined): string | null {
+  if (!key) return null;
+  const parts = key.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const payload: unknown = JSON.parse(
+      Buffer.from(parts[1], "base64url").toString("utf8"),
+    );
+    if (payload && typeof payload === "object" && "ref" in payload) {
+      const ref = (payload as { ref: unknown }).ref;
+      return typeof ref === "string" ? ref : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when a target is — or is half-wired to — the production project.
+ *
+ * The URL alone is not enough: `env()` falls back per key to `.env.local`, so
+ * exporting only a branch URL pairs it with the production keys from the file.
+ * Either the hostname or any key minted for the prod ref counts.
+ */
+export function isProductionTarget(
+  url: string | undefined,
+  ...keys: (string | undefined)[]
+): boolean {
+  if (url) {
+    let host: string;
+    try {
+      host = new URL(url).hostname;
+    } catch {
+      host = url;
+    }
+    if (host.includes(PRODUCTION_REF)) return true;
+  }
+  return keys.some((key) => jwtRef(key) === PRODUCTION_REF);
+}
+
+const PRODUCTION_TARGET = isProductionTarget(
+  SUPABASE_URL,
+  ANON_KEY,
+  SERVICE_ROLE_KEY,
+);
+// Read from the process only, never `.env.local`: the opt-in is per run.
+const PROD_ALLOWED = process.env[ALLOW_PROD_VAR] === "1";
+const PROD_REFUSED = PRODUCTION_TARGET && !PROD_ALLOWED;
+
+const PROD_REFUSAL = `target is the production project (${PRODUCTION_REF}); set ${ALLOW_PROD_VAR}=1 to run write specs against it`;
+
+const MISSING_ENV =
   "NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY not set";
+
+/**
+ * For read-only specs, which create and delete nothing: credentials present is
+ * enough, production included. Pair with `READ_SKIP_REASON`.
+ */
+export const HAVE_READ_ENV = Boolean(
+  SUPABASE_URL && ANON_KEY && SERVICE_ROLE_KEY,
+);
+export const READ_SKIP_REASON = MISSING_ENV;
+
+/** For specs that write — false against production without the opt-in. */
+export const HAVE_ENV = HAVE_READ_ENV && !PROD_REFUSED;
+
+/** For `test.skip(!HAVE_ENV, SKIP_REASON)` — the suite passes in a keyless
+ *  checkout, and skips rather than fails against production. */
+export const SKIP_REASON = !HAVE_READ_ENV ? MISSING_ENV : PROD_REFUSAL;
+
+/**
+ * Backstop for a spec whose gate is something other than `HAVE_ENV` (e.g.
+ * `admin-routes.spec.ts`): the auth helpers below refuse production before
+ * any call leaves the process.
+ */
+function assertWritableTarget(caller: string): void {
+  if (PROD_REFUSED) throw new Error(`${caller}: ${PROD_REFUSAL}`);
+}
 
 /**
  * One value from the same `.env.local`-or-process lookup the Supabase keys use.
@@ -334,6 +426,7 @@ export async function createLogin(
   opts: { mark: string; password: string; authUserIds: string[] },
   deadline: HookDeadline = hookDeadline(),
 ): Promise<Session> {
+  assertWritableTarget(`createLogin(${label})`);
   const email = `${opts.mark}-${label}@example.com`;
 
   let failedForLoad = false;
@@ -390,6 +483,7 @@ export async function createLogins(
   labels: string[],
   opts: { mark: string; password: string; authUserIds: string[] },
 ): Promise<Session[]> {
+  assertWritableTarget("createLogins");
   const deadline = hookDeadline();
   const results = await Promise.allSettled(
     labels.map((label) => createLogin(admin, label, opts, deadline)),
@@ -407,6 +501,7 @@ export async function deleteAuthUsers(
   admin: SupabaseClient,
   ids: string[],
 ): Promise<void> {
+  assertWritableTarget("deleteAuthUsers");
   const deadline = hookDeadline();
   await Promise.allSettled(
     ids.map((id) =>

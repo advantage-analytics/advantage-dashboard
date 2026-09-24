@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Refuse the production project in the live-DB fixture unless opted in
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** guess: `tests/fixtures/live-db.ts`, `tests/live-db-target-guard.spec.ts` (new), `tests/claim-eyebrow-width.spec.ts`
 - **done when:**
