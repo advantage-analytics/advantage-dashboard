@@ -21,3 +21,11 @@ is the runner's. Newest entries at the bottom.
 
 1. `globalSetup` can't see CLI file filters, so a single offline spec run with writes allowed (non-prod target or `LIVE_DB_ALLOW_PROD=1`) still waits on another worktree's live lock — consider an env opt-out or a `live-db` setup project.
 2. A reused pid reads as alive, so a stale lock after a pid wrap costs one bounded 20-min wait and a clear error rather than a takeover.
+
+## T3 · Document the live-DB testing rule — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** `AGENTS.md` gets a paragraph under the Commands block: live-DB specs skip against `pouxujkhtbvkdwbzfvka` unless `LIVE_DB_ALLOW_PROD=1`, run serially under the machine-wide lock, never set the opt-in in a gate or loop, never raise the auth rate limit (citing the 2026-09-23 incident), and how to point them at another project via the three shell-exported Supabase vars. `.env.example` gains a commented, empty `LIVE_DB_ALLOW_PROD=` section. `ci.yml`'s header comment no longer states a spec count.
+**follow-ups:**
+
+1. `ci.yml` still says the Playwright config "declares no `projects`" — stale since T2 added `live-db`/`offline`.

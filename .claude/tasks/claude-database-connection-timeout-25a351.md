@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Document the live-DB testing rule
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1, T2
 - **files:** guess: `AGENTS.md`, `.env.example`, `.github/workflows/ci.yml`
