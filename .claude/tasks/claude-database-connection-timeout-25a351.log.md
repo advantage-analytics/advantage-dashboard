@@ -12,3 +12,12 @@ is the runner's. Newest entries at the bottom.
 1. `scripts/*.ts` (e.g. `seed-programs.ts`, `cleanup-orphan-storage.ts`) use the service role with no production guard.
 2. Against prod without the opt-in, `admin-routes.spec.ts`'s `afterAll` cleanup now throws from the `deleteAuthUsers` backstop even though nothing was created — make its cleanup a no-op when `READY` is false.
 3. Only one spec besides the fixture calls `auth.admin.createUser` directly (`upload-write-eligibility`, loopback-only) — T2's live-spec list criterion should be read with that in mind.
+
+## T2 · Run live-DB specs one at a time under a lock shared across worktrees — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** `playwright.config.ts` splits into a `live-db` project (`LIVE_DB_SPECS`, `workers: 1`, `fullyParallel: false`) and an `offline` project that ignores that list and keeps the parallel default. `tests/fixtures/live-db-specs.ts` holds the hand-kept list plus the `LIVE_DB_CALL` regex; a drift test in `live-db-target-guard.spec.ts` asserts it equals the files that call `createLogin(`/`createLogins(`/`auth.admin.createUser(` (and requires ≥10 matches). `tests/fixtures/live-db-lock.ts` is the `globalSetup`: a machine-wide hard-link lock at `os.tmpdir()/advantage-dashboard-live-db.lock`, polled every 5 s for up to 20 min, then an error naming the path, holder pid and cwd; dead-pid or unreadable locks are taken over; release removes only its own record. Taken only when `HAVE_ENV` is true, so keyless and refused-prod runs never wait. Offline lock tests use a fake clock and fake `isAlive`.
+**follow-ups:**
+
+1. `globalSetup` can't see CLI file filters, so a single offline spec run with writes allowed (non-prod target or `LIVE_DB_ALLOW_PROD=1`) still waits on another worktree's live lock — consider an env opt-out or a `live-db` setup project.
+2. A reused pid reads as alive, so a stale lock after a pid wrap costs one bounded 20-min wait and a clear error rather than a takeover.

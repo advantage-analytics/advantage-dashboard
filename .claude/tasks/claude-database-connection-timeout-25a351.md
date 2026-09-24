@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Run live-DB specs one at a time under a lock shared across worktrees
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** guess: `playwright.config.ts`, `tests/fixtures/live-db-specs.ts` (new), `tests/fixtures/live-db-lock.ts` (new), `tests/live-db-target-guard.spec.ts`
