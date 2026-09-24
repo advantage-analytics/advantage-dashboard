@@ -401,7 +401,7 @@ ready).
 
 ## T30 · In-component loading states: the edit-match dialog and the search palette
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T25
 - **files:** src/components/dashboard/matches/match-actions/edit-match-dialog.tsx (:756), src/components/dashboard/loading/edit-match-pending.tsx (new), src/components/dashboard/search/search-command-palette.tsx (:922-927), tests/edit-match-pending.spec.ts (new), tests/skeleton-primitives.spec.ts (guess)

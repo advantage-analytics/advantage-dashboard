@@ -339,3 +339,22 @@ The title and content class moved into a new shared module, `schedule/score-flow
 
 1. The skeleton copies the dual's grid string instead of importing it. Export `GRID` from `dual-detail.tsx` (or move it next to `EventTable`); for now the spec catches drift.
 2. `SingleMatchPending` draws both the score bar (only present once scored) and the Score/Video rows (only present before scoring), a combination no real page state shows. Decide whether one state should win.
+
+## T30 · In-component loading states: the edit-match dialog and the search palette — done
+
+**gate:** mechanical GATE PASS (first run) · completion `VERDICT: pass`
+
+**changed:**
+
+- `EditMatchDialog`'s first load now renders `EditMatchPending` in place of the spinner and "Reading the match…". It is a `PendingRegion` labelled "Loading match" with one bar row for each entry in `EDIT_MATCH_FIELD_ROWS`.
+- `EDIT_MATCH_FIELD_ROWS` is a new non-client module, `edit-match-rows.ts`. It lists the 7 always-present rows: 2 score, 2 players, 3 details.
+- Conditional rows (Round, and Format/Scoring/Lets) are left out, so the skeleton doesn't promise rows that may not appear.
+- The Save button's inline spinner stays.
+- The search palette's three loading rows are one `PendingRegion` labelled "Loading results", built from `PendingBar`s, and the palette is off `LEGACY`.
+- New `tests/edit-match-pending.spec.ts` checks the skeleton contract, and checks the row count and order against the constant and the form's own source.
+
+**follow-ups:**
+
+1. A match already linked to a schedule line shows its event's sentence instead of the three Details rows, so the dialog shrinks when that match loads.
+2. The palette's loading status sits inside `role="listbox"`. Move it out, or put `aria-busy` on the listbox, in an accessibility pass.
+3. The form doesn't render from `EDIT_MATCH_FIELD_ROWS`, so only the spec's source checks guard it against drift.
