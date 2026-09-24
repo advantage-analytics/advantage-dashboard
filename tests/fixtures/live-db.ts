@@ -7,6 +7,7 @@ import {
   createClient,
   isAuthApiError,
   isAuthRetryableFetchError,
+  type AuthError,
   type SupabaseClient,
   type User,
 } from "@supabase/supabase-js";
@@ -154,9 +155,9 @@ export const SKIP_REASON = !HAVE_READ_ENV ? MISSING_ENV : PROD_REFUSAL;
 /**
  * Backstop for a spec whose gate is something other than `HAVE_ENV` (e.g.
  * `admin-routes.spec.ts`): the auth helpers below refuse production before
- * any call leaves the process.
+ * any call leaves the process. `./live-db-pool.ts` calls it too.
  */
-function assertWritableTarget(caller: string): void {
+export function assertWritableTarget(caller: string): void {
   if (PROD_REFUSED) throw new Error(`${caller}: ${PROD_REFUSAL}`);
 }
 
@@ -268,7 +269,7 @@ export interface HookDeadline {
   extendedTo: number;
 }
 
-function hookDeadline(): HookDeadline {
+export function hookDeadline(): HookDeadline {
   return { start: Date.now(), extendedTo: 0 };
 }
 
@@ -340,7 +341,7 @@ export async function retryAuthCall<R extends { error: unknown }>(
 }
 
 /** "(after 4 attempts over 23s)", or nothing when the first attempt settled it. */
-function retrySuffix(outcome: RetryOutcome<unknown>): string {
+export function retrySuffix(outcome: RetryOutcome<unknown>): string {
   return outcome.attempts > 1
     ? ` (after ${outcome.attempts} attempts over ${Math.round(outcome.waitedMs / 1000)}s)`
     : "";
@@ -378,7 +379,7 @@ export function createAdminClient(): SupabaseClient {
  * 500 or 504 can land after the user was written, and without this the retry
  * would fail on a user this run created and orphan it on the live project.
  */
-async function findUserByEmail(
+export async function findUserByEmail(
   admin: SupabaseClient,
   email: string,
   deadline: HookDeadline,
@@ -397,12 +398,24 @@ async function findUserByEmail(
   }
 }
 
-async function signIn(
-  label: string,
+/** A password sign-in's client, and the answer it settled on after load retries. */
+export interface SignInAttempt {
+  client: SupabaseClient;
+  error: AuthError | null;
+  /** `retrySuffix` of the attempt, for the caller's error message. */
+  suffix: string;
+}
+
+/**
+ * Sign in with the anon key, retrying load, and hand back whatever answer
+ * came — the pool needs to see an invalid-credentials answer rather than a
+ * throw, so it can repair a stale password once.
+ */
+export async function passwordSignIn(
   email: string,
   password: string,
   deadline: HookDeadline,
-): Promise<SupabaseClient> {
+): Promise<SignInAttempt> {
   const client = createClient(SUPABASE_URL!, ANON_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -410,16 +423,37 @@ async function signIn(
     () => client.auth.signInWithPassword({ email, password }),
     { budgetMs: SIGN_IN_RETRY_BUDGET_MS, deadline },
   );
-  if (outcome.result.error) {
-    throw new Error(
-      `signIn(${label}): ${outcome.result.error.message}${retrySuffix(outcome)}`,
-    );
-  }
-  return client;
+  return {
+    client,
+    error: outcome.result.error,
+    suffix: retrySuffix(outcome),
+  };
 }
 
-/** Create an auth user and sign it in with the anon key — a real RLS-scoped
- *  session. The new user's id is pushed onto `authUserIds` for cleanup. */
+async function signIn(
+  label: string,
+  email: string,
+  password: string,
+  deadline: HookDeadline,
+): Promise<SupabaseClient> {
+  const attempt = await passwordSignIn(email, password, deadline);
+  if (attempt.error) {
+    throw new Error(
+      `signIn(${label}): ${attempt.error.message}${attempt.suffix}`,
+    );
+  }
+  return attempt.client;
+}
+
+/**
+ * Create an auth user and sign it in with the anon key — a real RLS-scoped
+ * session. The new user's id is pushed onto `authUserIds` for cleanup.
+ *
+ * Use this only when a spec must delete the auth user it creates — account
+ * deletion, say, or a cascade from `auth.users`. Every other spec takes a
+ * reused user from `poolLogin` in `./live-db-pool.ts`, which creates each
+ * pool user once and never deletes one.
+ */
 export async function createLogin(
   admin: SupabaseClient,
   label: string,
@@ -468,6 +502,9 @@ export async function createLogin(
 }
 
 /**
+ * Use this only when a spec must delete the auth users it creates; otherwise
+ * `poolLogins` in `./live-db-pool.ts`.
+ *
  * Create several logins concurrently, letting every underlying `createUser`
  * settle before a failure surfaces. Under a bare `Promise.all` a rejected
  * login makes `beforeAll` throw while a sibling's `createUser` is still in

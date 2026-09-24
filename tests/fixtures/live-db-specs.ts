@@ -6,8 +6,9 @@
  * instead of a burst — see `isTransientAuthError` in `./live-db.ts` for the
  * rate limits that burst used to hit. Every other spec stays fully parallel.
  *
- * A spec belongs here when it calls `createLogin(`, `createLogins(` or
- * `auth.admin.createUser(`. `tests/live-db-target-guard.spec.ts` fails when
+ * A spec belongs here when it calls `createLogin(`, `createLogins(`,
+ * `poolLogin(`, `poolLogins(` or `auth.admin.createUser(` — the pool helpers
+ * create a user on first use and sign in every time, so they count. `tests/live-db-target-guard.spec.ts` fails when
  * this list and the files disagree, so a new live spec cannot land outside
  * the serial project.
  */
@@ -35,8 +36,9 @@ export const LIVE_DB_SPECS = [
   "viz-bands-rls.spec.ts",
 ] as const;
 
-/** What makes a spec a live one — the calls that create auth users. */
-export const LIVE_DB_CALL = /createLogins?\(|auth\.admin\.createUser\(/;
+/** What makes a spec a live one — the calls that create or sign in auth users. */
+export const LIVE_DB_CALL =
+  /createLogins?\(|poolLogins?\(|auth\.admin\.createUser\(/;
 
 /** The name of the Playwright project that runs `LIVE_DB_SPECS`. */
 export const LIVE_DB_PROJECT = "live-db";

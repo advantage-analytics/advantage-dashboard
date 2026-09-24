@@ -29,3 +29,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `ci.yml` still says the Playwright config "declares no `projects`" — stale since T2 added `live-db`/`offline`.
+
+## T4 · Add a pool of reused test users to the live-DB fixture — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** New `tests/fixtures/live-db-pool.ts`: `poolLogin`/`poolLogins` hand out fixed `live-pool-<slot>@example.com` users — found via `public.users` then auth, created only when absent, never deleted, behind `assertWritableTarget`. Passwords are HMAC-SHA256 of the slot keyed by the service-role key; one `updateUserById` + retry only on `invalid_credentials` (key rotation). Each hand-out first fails, naming the table, on leftover `program_members` (`user_id`, `invited_by`) or `programs` (`owner_user_id`) rows, then resets `POOL_USER_DEFAULTS` (`is_admin`, `plan`, `first_name`, `last_name`, `avatar_path`, each commented with its mutating spec) or inserts a missing row. `live-db.ts` exports the helpers the pool needs and splits `passwordSignIn` out of `signIn` (behaviour unchanged); `createLogin(s)` get use-only-when-deleting doc comments. `LIVE_DB_CALL` now also matches `poolLogin(s)(`. Offline `tests/live-db-pool.spec.ts` (13 tests, stubbed admin) imports the helpers under aliases so it stays in the parallel project. Reset columns chosen from the live `public.users` schema.
+**follow-ups:**
+
+1. The pool has never run against a real database — the first live run creates the `live-pool-*` users on whichever project is targeted.
+2. `poolLogin` carries test-only `secret`/`signIn`/`guard` options for the offline spec; the real guard runs when they are omitted.

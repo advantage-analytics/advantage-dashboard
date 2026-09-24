@@ -58,7 +58,7 @@ ready).
 
 ## T4 · Add a pool of reused test users to the live-DB fixture
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** guess: `tests/fixtures/live-db.ts`, `tests/fixtures/live-db-pool.ts` (new), `tests/live-db-pool.spec.ts` (new)
