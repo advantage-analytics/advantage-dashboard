@@ -43,3 +43,11 @@ is the runner's. Newest entries at the bottom.
 1. The shared leave dialog says the upload continues if you leave — false for attachments; needs attachment wording.
 2. Subtitle shows the server-formatted score without "Won"/"Lost".
 3. "Video trimmed" shows even when the cut failed and the original uploaded — add a `trimmed` flag to the save state.
+
+## T3 · Show the "Uploading your video" and "Video saved" screens for attachments — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass (re-run after the block above, at the user's go)
+
+**changed:** Applied stash 6295ddfc and fixed the two blockers: the status h1 uses the DS `text-title-lg` step instead of `text-[24px]` (design-drift back to seed), and `tests/match-film-entry.spec.ts` now asserts the new contract — `AttachmentWizardRoute` neither replaces nor refreshes, and `AttachmentUploadStatus` links "Watch the film" to `returnTarget.href`. The stash's work: new `AttachmentUploadStatus.tsx` ("Uploading your video" → "Video saved", three `VerticalStep`s, Cancel, "Keep this tab open until the upload finishes.", "Back to the match"; saved: "Watch the film" / "Back to matches"), leave guard armed while saving, `etaSeconds` + saved `sizeBytes` on the flow state, harness through a real `LeaveGuardProvider`, shared link/navigation mocks extended.
+
+**follow-ups:** see the blocked entry above (leave-dialog wording for attachments, "Won/Lost" in the subtitle, `trimmed` flag for "Video trimmed").

@@ -353,23 +353,29 @@ test("a successful save returns to the same match with Video selected", () => {
   expect(url.pathname).toBe(`/dashboard/matches/${MATCH}`);
   expect(parseReportView(url.searchParams.get("tab"))).toBe("film");
 
-  // The route component navigates to `returnTarget.href` — the value the
-  // server already built with `matchFilmHref` and the footer's Cancel already
-  // uses — and constructs no URL of its own. A second spelling of the Video
-  // view is how these two drift apart.
+  // The route no longer navigates on save: the flow settles on its "Video
+  // saved" screen, and that screen's "Watch the film" goes to
+  // `returnTarget.href` — the value the server already built with
+  // `matchFilmHref` and the footer's Cancel already uses. Neither file
+  // constructs a Video URL of its own; a second spelling of the Video view is
+  // how these two drift apart.
   const ROUTE = readFileSync(
     "src/components/dashboard/matches/match-video-attachment/AttachmentWizardRoute.tsx",
     "utf8",
   );
   const route = code(ROUTE);
-  expect(route).toContain("props.returnTarget.href");
-  expect(route).toContain("router.replace(href)");
-  expect(route).toContain("router.refresh()");
+  expect(route).not.toContain("router.replace");
+  expect(route).not.toContain("router.refresh");
   expect(route).not.toContain("?tab=");
   expect(route).not.toContain("/dashboard/matches");
-  // Fired once: the flow is already inert once saved, and the latch makes a
-  // double navigation impossible rather than merely unlikely.
-  expect(route).toContain("returned.current");
+
+  const STATUS = readFileSync(
+    "src/components/dashboard/matches/match-video-attachment/AttachmentUploadStatus.tsx",
+    "utf8",
+  );
+  const status = code(STATUS);
+  expect(status).toContain("href={returnTarget.href}");
+  expect(status).not.toContain("?tab=");
 });
 
 /* -------------------------------------------------------------------------

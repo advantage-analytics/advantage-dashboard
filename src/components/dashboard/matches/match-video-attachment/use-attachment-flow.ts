@@ -164,10 +164,20 @@ export type AttachmentSaveState =
        * once it lands. Null in every other phase.
        */
       keptBytes: number | null;
+      /**
+       * Seconds of transfer left at the upload's average rate so far, or null
+       * until there is a rate worth dividing by. Only ever set while uploading.
+       */
+      etaSeconds: number | null;
       /** False once the bytes are in and only the publication is running. */
       canCancel: boolean;
     }
-  | { status: "saved"; attachment: ActiveAttachment }
+  | {
+      status: "saved";
+      attachment: ActiveAttachment;
+      /** The bytes that were uploaded — the cut's size. Null for an adjust. */
+      sizeBytes: number | null;
+    }
   | { status: "failed"; error: AttachmentTransferError };
 
 /** Emitted progress is rounded to this many percentage points. */
@@ -304,6 +314,8 @@ export interface AttachmentFlowDeps {
   updateAlignment: typeof updateAlignment;
   fetch: typeof fetch;
   randomUUID: () => string;
+  /** Milliseconds, for the upload's rate. Seam so a spec can fake an ETA. */
+  now: () => number;
 }
 
 export interface UseAttachmentFlowOptions {
@@ -383,6 +395,7 @@ function resolveDeps(
     updateAlignment: overrides?.updateAlignment ?? updateAlignment,
     fetch: overrides?.fetch ?? ((...args) => globalThis.fetch(...args)),
     randomUUID: overrides?.randomUUID ?? (() => globalThis.crypto.randomUUID()),
+    now: overrides?.now ?? (() => Date.now()),
   };
 }
 
@@ -429,6 +442,8 @@ export function useAttachmentFlow(
   const pendingAttachmentId = useRef<string | null>(null);
   /** The last progress this hook actually pushed into React. */
   const lastReport = useRef<{ phase: string; percent: number } | null>(null);
+  /** The first uploading report of this transfer — the ETA's baseline. */
+  const rateStart = useRef<{ at: number; bytes: number } | null>(null);
 
   /* ---------------------------------------------------------------------
    * File selection
@@ -517,41 +532,68 @@ export function useAttachmentFlow(
    * Inventing a percentage for it would be a fake progress bar, which the
    * design system bans by name.
    */
-  const reportProgress = useCallback((progress: AttachmentTransferProgress) => {
-    const percent =
-      progress.totalBytes > 0
-        ? Math.min(100, (progress.bytesTransferred / progress.totalBytes) * 100)
-        : 0;
-    const previous = lastReport.current;
-    const finished = progress.bytesTransferred >= progress.totalBytes;
-    if (
-      previous &&
-      previous.phase === progress.phase &&
-      !finished &&
-      percent - previous.percent < PROGRESS_STEP_PERCENT
-    ) {
-      return;
-    }
-    lastReport.current = { phase: progress.phase, percent };
+  const reportProgress = useCallback(
+    (progress: AttachmentTransferProgress) => {
+      const uploading = progress.phase === "uploading";
+      // The rate is an average from the first byte report, not the last two:
+      // four sockets finish blocks in bursts, and an instantaneous rate would
+      // swing the estimate by minutes between reports.
+      let etaSeconds: number | null = null;
+      if (uploading) {
+        const now = deps.now();
+        const start = (rateStart.current ??= {
+          at: now,
+          bytes: progress.bytesTransferred,
+        });
+        const elapsed = (now - start.at) / 1000;
+        const moved = progress.bytesTransferred - start.bytes;
+        if (elapsed >= 1 && moved > 0) {
+          etaSeconds = Math.max(
+            0,
+            (progress.totalBytes - progress.bytesTransferred) /
+              (moved / elapsed),
+          );
+        }
+      }
+      const percent =
+        progress.totalBytes > 0
+          ? Math.min(
+              100,
+              (progress.bytesTransferred / progress.totalBytes) * 100,
+            )
+          : 0;
+      const previous = lastReport.current;
+      const finished = progress.bytesTransferred >= progress.totalBytes;
+      if (
+        previous &&
+        previous.phase === progress.phase &&
+        !finished &&
+        percent - previous.percent < PROGRESS_STEP_PERCENT
+      ) {
+        return;
+      }
+      lastReport.current = { phase: progress.phase, percent };
 
-    const uploading = progress.phase === "uploading";
-    setSave({
-      status: "saving",
-      phase: progress.phase,
-      label:
-        progress.phase === "reserving"
-          ? "Preparing the upload…"
-          : uploading
-            ? "Uploading the video"
-            : // Bytes are in; what is left is the publication.
-              "Saving video",
-      percent: uploading ? Math.round(percent * 10) / 10 : null,
-      bytesTransferred: progress.bytesTransferred,
-      totalBytes: progress.totalBytes,
-      keptBytes: null,
-      canCancel: progress.phase !== "committing",
-    });
-  }, []);
+      setSave({
+        status: "saving",
+        phase: progress.phase,
+        label:
+          progress.phase === "reserving"
+            ? "Preparing the upload…"
+            : uploading
+              ? "Uploading the video"
+              : // Bytes are in; what is left is the publication.
+                "Saving video",
+        percent: uploading ? Math.round(percent * 10) / 10 : null,
+        bytesTransferred: progress.bytesTransferred,
+        totalBytes: progress.totalBytes,
+        keptBytes: null,
+        etaSeconds,
+        canCancel: progress.phase !== "committing",
+      });
+    },
+    [deps],
+  );
 
   /** The cut's progress, on the same 0.1-point throttle as the bytes. */
   const reportTrim = useCallback(
@@ -575,6 +617,7 @@ export function useAttachmentFlow(
         bytesTransferred: 0,
         totalBytes,
         keptBytes,
+        etaSeconds: null,
         canCancel: true,
       });
     },
@@ -609,6 +652,7 @@ export function useAttachmentFlow(
             bytesTransferred: 0,
             totalBytes: 0,
             keptBytes: null,
+            etaSeconds: null,
             canCancel: false,
           });
           const controller = new AbortController();
@@ -622,7 +666,13 @@ export function useAttachmentFlow(
             fetch: deps.fetch,
           });
           if (result.ok) {
-            if (settle({ status: "saved", attachment: result.attachment })) {
+            if (
+              settle({
+                status: "saved",
+                attachment: result.attachment,
+                sizeBytes: null,
+              })
+            ) {
               onSaved?.(result.attachment);
             }
             return;
@@ -725,6 +775,7 @@ export function useAttachmentFlow(
           }
 
           lastReport.current = null;
+          rateStart.current = null;
           result = await deps.transfer({
             matchId,
             selection: upload,
@@ -750,7 +801,13 @@ export function useAttachmentFlow(
           // The attempt ended in a publication, so the id that identified it
           // has nothing left to find.
           clientRequestId.current = null;
-          if (settle({ status: "saved", attachment: result.attachment })) {
+          if (
+            settle({
+              status: "saved",
+              attachment: result.attachment,
+              sizeBytes: upload.sizeBytes,
+            })
+          ) {
             onSaved?.(result.attachment);
           }
           return;

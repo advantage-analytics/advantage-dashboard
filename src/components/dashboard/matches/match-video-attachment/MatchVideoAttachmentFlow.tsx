@@ -29,19 +29,26 @@
  * hard-coded here would be wrong the day it lands.
  *
  * **Widget states.** The two steps own their own four states and draw in all of
- * them. This component adds the commit's states: `saving` is a determinate bar
- * over real bytes (never an invented percentage for the publication, which this
- * browser cannot see), `failed` is a `role="alert"` strip whose retry is the
- * footer's own primary, and `saved` is a settled `role="status"` line that
- * keeps the button asleep while the caller navigates. There is no data loader,
- * no Suspense region and no `return null` anywhere: a mode opened without the
- * attachment it requires draws the shell and says so.
+ * them. This component adds the commit's states. An upload that is running, and
+ * one that has been published, leave the wizard altogether for
+ * `AttachmentUploadStatus` ("Uploading your video" → "Video saved"), the same
+ * screen shape the new-match wizard finishes on; an adjust's single PATCH stays
+ * in the shell as an indeterminate strip, then settles on the same "saved"
+ * screen. `failed` is a `role="alert"` strip whose retry is the footer's own
+ * primary, and a cancel returns to the step exactly as it was. There is no data
+ * loader, no Suspense region and no `return null` anywhere: a mode opened
+ * without the attachment it requires draws the shell and says so.
+ *
+ * **Leaving cancels.** The transfer belongs to this component — unmounting it
+ * mid-upload aborts the attempt — so the leave guard is armed for as long as a
+ * commit is running (trimming, uploading, publishing) and released the moment
+ * it is saved, failed or cancelled.
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { TriangleAlert, Check, Info, Loader2, XCircle } from "lucide-react";
+import { TriangleAlert, Info, Loader2, XCircle } from "lucide-react";
 
-import { advButton } from "@/lib/ui/adv-button";
+import { useLeaveGuard } from "@/components/dashboard/leave-guard-context";
 import type { SourcePoint, SourceShot } from "@/lib/match-video/alignment";
 import {
   modeUploadsFile,
@@ -53,10 +60,10 @@ import {
   noteStripCls,
   warningStripCls,
 } from "../new-match-wizard/styles";
-import { formatFileSize } from "../new-match-wizard/utils";
 import { useWizardKeys } from "../new-match-wizard/useWizardKeys";
 import { WizardShell } from "../new-match-wizard/WizardShell";
 import { AttachmentAlignmentStep } from "./AttachmentAlignmentStep";
+import { AttachmentUploadStatus } from "./AttachmentUploadStatus";
 import { AttachmentFileStep } from "./AttachmentFileStep";
 import {
   useAttachmentAlignment,
@@ -65,7 +72,6 @@ import {
 import {
   useAttachmentFlow,
   type AttachmentFlowApi,
-  type AttachmentSavePhase,
   type UseAttachmentFlowOptions,
 } from "./use-attachment-flow";
 
@@ -104,11 +110,15 @@ export interface MatchVideoAttachmentFlowProps {
    */
   savedPlaybackUrl?: string | null;
   /**
-   * Where Cancel goes, and the label for it. Injected rather than derived: this
-   * component is standalone until T21 routes it.
+   * The match's Film view: where Cancel and "Back to the match" go, and where
+   * "Watch the film" goes once the video is saved. Injected rather than
+   * derived — built once on the server by `matchFilmHref()`.
    */
   returnTarget: { href: string; label?: string };
-  /** Fired once, with a published attachment. The caller owns the navigation. */
+  /**
+   * Fired once, with a published attachment. Navigates nowhere: the saved
+   * screen offers the way out, and the person takes it.
+   */
   onSaved?: (attachment: ActiveAttachment) => void;
   /** Test seam. Production passes nothing. */
   deps?: UseAttachmentFlowOptions["deps"];
@@ -287,40 +297,18 @@ function AlignmentStage({
  * ---------------------------------------------------------------------- */
 
 /**
- * The bar, over real bytes only.
+ * An adjust's save: one PATCH, nothing measurable, so no number.
  *
- * While blocks are moving the number is the sum of what Azure has accepted, so
- * it is drawn. Once they are in, the publication is a server-side copy this
- * browser cannot observe, so the strip says what is happening and shows an
- * indeterminate mark instead of a percentage nobody measured.
- *
- * Before any of that, a local cut: the percentage is the remux's own progress
- * and the byte line says how much of the recording is being kept.
+ * Uploads never draw this — they leave the shell for `AttachmentUploadStatus`
+ * the moment the commit starts.
  */
-function SavingStrip({
-  phase,
-  label,
-  percent,
-  bytesTransferred,
-  totalBytes,
-  keptBytes,
-}: {
-  phase: AttachmentSavePhase;
-  label: string;
-  percent: number | null;
-  bytesTransferred: number;
-  totalBytes: number;
-  keptBytes: number | null;
-}) {
-  const trimming = phase === "trimming";
+function SavingStrip({ label }: { label: string }) {
   return (
     <div
       className={`${noteStripCls} flex-col gap-2.5`}
       role="status"
       data-testid="attachment-saving"
-      data-phase={phase}
-      data-percent={percent === null ? undefined : String(percent)}
-      data-kept-bytes={keptBytes === null ? undefined : String(keptBytes)}
+      data-phase="aligning"
     >
       <span className="flex w-full items-center gap-2">
         <Loader2
@@ -330,46 +318,13 @@ function SavingStrip({
         />
         <span className="flex-1">
           <b className="font-medium text-[var(--ink-900)]">{label}</b>
-          {trimming && keptBytes !== null && totalBytes > 0 && (
-            <>
-              {" — keeping "}
-              <span className="mono tabular">
-                {formatFileSize(keptBytes)} of {formatFileSize(totalBytes)}
-              </span>
-            </>
-          )}
-          {!trimming && percent !== null && totalBytes > 0 && (
-            <>
-              {" — "}
-              <span className="mono tabular">
-                {formatFileSize(bytesTransferred)} of{" "}
-                {formatFileSize(totalBytes)}
-              </span>
-            </>
-          )}
-          {percent === null && (
-            <>
-              {" — "}this can take a moment on a long recording. Keep this tab
-              open.
-            </>
-          )}
         </span>
-        {percent !== null && (
-          <span className="mono tabular shrink-0 text-[var(--ink-900)]">
-            {percent.toFixed(1)}%
-          </span>
-        )}
       </span>
       <span
         className="h-[3px] w-full overflow-hidden rounded-full bg-[var(--ink-100)]"
         aria-hidden="true"
       >
-        <span
-          className={`block h-full rounded-full bg-[var(--blue)] ${
-            percent === null ? "motion-safe:animate-pulse" : ""
-          }`}
-          style={{ width: percent === null ? "100%" : `${percent}%` }}
-        />
+        <span className="block h-full w-full rounded-full bg-[var(--blue)] motion-safe:animate-pulse" />
       </span>
     </div>
   );
@@ -402,6 +357,10 @@ export function MatchVideoAttachmentFlow({
   });
   const { step, steps, save, isBusy } = flow;
   const uploadsFile = modeUploadsFile(mode);
+
+  // Armed from the moment the commit starts until it is saved, failed or
+  // cancelled — each of which returns `save` to a non-saving status.
+  useLeaveGuard(save.status === "saving");
 
   const contentRef = useRef<HTMLDivElement | null>(null);
 
@@ -454,22 +413,27 @@ export function MatchVideoAttachmentFlow({
 
   const status: ReactNode =
     save.status === "saving" ? (
-      <span className="text-[11px] text-[var(--ink-500)]">
-        {save.label}
-        {save.percent !== null && (
-          <>
-            {" "}
-            <span className="mono tabular text-[var(--ink-900)]">
-              {save.percent.toFixed(1)}%
-            </span>
-          </>
-        )}
-      </span>
-    ) : save.status === "saved" ? (
-      <span className="text-[11px] text-[var(--ink-500)]">Video saved</span>
+      <span className="text-[11px] text-[var(--ink-500)]">{save.label}</span>
     ) : save.status === "failed" ? (
       <span className="text-[11px] text-[var(--error)]">Not saved</span>
     ) : null;
+
+  // A running upload, and any saved commit, leave the wizard: the steps are
+  // answered, and what is left is progress and a way out.
+  if (
+    save.status === "saved" ||
+    (save.status === "saving" && save.phase !== "aligning")
+  ) {
+    return (
+      <AttachmentUploadStatus
+        match={match}
+        save={save}
+        uploadsFile={uploadsFile}
+        returnTarget={returnTarget}
+        onCancel={flow.cancel}
+      />
+    );
+  }
 
   return (
     <WizardShell
@@ -484,11 +448,7 @@ export function MatchVideoAttachmentFlow({
       back={canGoBack ? flow.goBack : undefined}
       /* While the bytes are moving, the footer's exits are gone on purpose:
          leaving is cancelling, and cancelling has its own named button. */
-      cancelHref={
-        !canGoBack && !isBusy && save.status !== "saved"
-          ? returnTarget.href
-          : undefined
-      }
+      cancelHref={!canGoBack && !isBusy ? returnTarget.href : undefined}
       status={status}
       secondary={
         step === "align" &&
@@ -505,15 +465,6 @@ export function MatchVideoAttachmentFlow({
           >
             Only the kept part is uploaded
           </span>
-        ) : isBusy && save.status === "saving" && save.canCancel ? (
-          <button
-            type="button"
-            onClick={flow.cancel}
-            data-testid="attachment-cancel-upload"
-            className="shrink-0 cursor-pointer text-[11px] whitespace-nowrap text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)]"
-          >
-            Cancel upload
-          </button>
         ) : undefined
       }
       continueLabel={continueLabel}
@@ -524,40 +475,11 @@ export function MatchVideoAttachmentFlow({
           alone would not be enough: swapping the file, or re-typing the time,
           mid-upload would change what the request in flight is for. */}
       <div
-        inert={isBusy || save.status === "saved"}
+        inert={isBusy}
         aria-busy={isBusy || undefined}
         className="flex flex-col gap-7"
       >
-        {save.status === "saving" && (
-          <SavingStrip
-            phase={save.phase}
-            label={save.label}
-            percent={save.percent}
-            bytesTransferred={save.bytesTransferred}
-            totalBytes={save.totalBytes}
-            keptBytes={save.keptBytes}
-          />
-        )}
-
-        {save.status === "saved" && (
-          <div
-            className={noteStripCls}
-            role="status"
-            data-testid="attachment-saved"
-          >
-            <Check
-              className={`${noteIconCls} text-[var(--success)]`}
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-            <span>
-              <b className="font-medium text-[var(--ink-900)]">
-                {uploadsFile ? "Video saved" : "Alignment saved"}
-              </b>
-              {" — taking you back to the match."}
-            </span>
-          </div>
-        )}
+        {save.status === "saving" && <SavingStrip label={save.label} />}
 
         {save.status === "failed" && (
           <div

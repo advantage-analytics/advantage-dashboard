@@ -29,6 +29,23 @@ export interface AttachmentFlowHarnessWindow {
    * 50% progress and is waiting, so the trimming phase can be observed.
    */
   releasePrepare: () => void;
+  /**
+   * Resolves a `transfer=fake` upload with a published attachment. Before it
+   * is called the fake has reported 1.30 GB of 3.10 GB over a faked 200 s —
+   * a mid-transfer reading with a real ETA — and is waiting.
+   */
+  finishTransfer: () => void;
+  /** The faked clock `transfer=fake` drives the flow's `now` seam with. */
+  clock: number;
+  /**
+   * Every click on the harness's stand-in chrome link: true when the leave
+   * guard took the click over and asked, false when it let it through.
+   */
+  guardAsks: boolean[];
+  /** `router.replace` calls, from the `next/navigation` mock. */
+  routerReplaces?: string[];
+  routerPushes: string[];
+  routerRefreshes: number;
 }
 
 export interface AttachmentFlowPrepareCall {

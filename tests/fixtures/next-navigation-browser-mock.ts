@@ -22,3 +22,8 @@ export function useRouter() {
 export function useSearchParams() {
   return new URLSearchParams(window.location.search);
 }
+
+/** The real address bar's path, for the leave guard's same-page check. */
+export function usePathname() {
+  return window.location.pathname;
+}

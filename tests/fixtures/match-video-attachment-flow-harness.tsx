@@ -1,10 +1,19 @@
 import { createRoot } from "react-dom/client";
+import Link from "next/link";
 
-import { MatchVideoAttachmentFlow } from "@/components/dashboard/matches/match-video-attachment/MatchVideoAttachmentFlow";
+import {
+  LeaveGuardProvider,
+  useConfirmLeave,
+} from "@/components/dashboard/leave-guard-context";
+import { AttachmentWizardRoute } from "@/components/dashboard/matches/match-video-attachment/AttachmentWizardRoute";
 import type { AttachmentFlowDeps } from "@/components/dashboard/matches/match-video-attachment/use-attachment-flow";
 import type { SourcePoint, SourceShot } from "@/lib/match-video/alignment";
 import { defaultAttachmentTrimWindow } from "@/lib/match-video/trim-window";
-import type { ActiveAttachment, MatchVideoMode } from "@/lib/match-video/types";
+import {
+  matchVideoError,
+  type ActiveAttachment,
+  type MatchVideoMode,
+} from "@/lib/match-video/types";
 import type {
   AttachmentFlowHarnessWindow,
   AttachmentFlowPrepareCall,
@@ -43,6 +52,22 @@ import type {
  *
  * A ten-second pad would keep the whole two-second clip, so `?pad=` shortens
  * it — through the flow's `trimWindow` seam, the real window maths otherwise.
+ *
+ * ── A faked transfer ──
+ *
+ * `?transfer=fake` replaces the real transport with one that reports a
+ * mid-transfer reading at gigabyte scale — 1.30 GB of 3.10 GB, 200 s after
+ * 0.10 GB, on a clock it also fakes — and then waits for `finishTransfer()`
+ * or the flow's abort. It is the only way to see the upload screen's sizes and
+ * ETA as a person with a real match recording would.
+ *
+ * ── The route and the leave guard ──
+ *
+ * The flow is rendered the way the page renders it — through
+ * `AttachmentWizardRoute` — inside a real `LeaveGuardProvider`, beside a
+ * stand-in chrome link that goes through `useConfirmLeave` exactly as the
+ * sidebar's do. Each click records whether the guard asked
+ * (`guardAsks`) and never navigates the harness away.
  */
 
 /** Rejects once the signal aborts, the way `prepareVideoForUpload` does. */
@@ -54,8 +79,65 @@ function abortable(signal: AbortSignal | undefined): Promise<never> {
   });
 }
 
+const GIB = 1024 * 1024 * 1024;
+
+/** See "A faked transfer" above. Answers an abort the way the real one does. */
+function fakeTransfer(): AttachmentFlowDeps["transfer"] {
+  let finish: () => void = () => {};
+  harness.finishTransfer = () => finish();
+  return async (input) => {
+    input.onReserved?.("0b9e3c1a-7d4f-4e2b-8a6c-5f1e2d3c4b5a");
+    const totalBytes = Math.round(3.1 * GIB);
+    harness.clock = 0;
+    input.onProgress?.({
+      phase: "uploading",
+      bytesTransferred: Math.round(0.1 * GIB),
+      totalBytes,
+    });
+    harness.clock = 200_000;
+    input.onProgress?.({
+      phase: "uploading",
+      bytesTransferred: Math.round(1.302 * GIB),
+      totalBytes,
+    });
+    try {
+      await Promise.race([
+        new Promise<void>((done) => (finish = done)),
+        abortable(input.signal),
+      ]);
+    } catch {
+      return {
+        ok: false,
+        aborted: true,
+        error: matchVideoError("storage_unavailable", "aborted"),
+      };
+    }
+    input.onProgress?.({
+      phase: "committing",
+      bytesTransferred: totalBytes,
+      totalBytes,
+    });
+    return {
+      ok: true,
+      attachment: {
+        id: "0b9e3c1a-7d4f-4e2b-8a6c-5f1e2d3c4b5a",
+        version: 4,
+        offsetSeconds: 0.5,
+        confirmedVideoTimeSeconds: input.confirmedVideoTimeSeconds,
+        durationSeconds: 2,
+        contentType: "video/mp4",
+        filename: input.selection.filename,
+      },
+    };
+  };
+}
+
 function fakeDeps(params: URLSearchParams): Partial<AttachmentFlowDeps> {
   const kind = params.get("prepare") ?? "skip";
+  const faked =
+    params.get("transfer") === "fake"
+      ? { transfer: fakeTransfer(), now: () => harness.clock }
+      : {};
   const padParam = params.get("pad");
   const padSeconds = padParam === null ? undefined : Number(padParam);
   let storageCounter = 0;
@@ -107,6 +189,7 @@ function fakeDeps(params: URLSearchParams): Partial<AttachmentFlowDeps> {
   };
 
   return {
+    ...faked,
     prepare,
     discardPrepared: async (storageName) => {
       harness.discardCalls.push(storageName);
@@ -140,10 +223,35 @@ const ACTIVE: ActiveAttachment = {
   filename: "roland-garros-r1.mp4",
 };
 
+/** A dashboard chrome link, as the sidebar wires one to the leave guard. */
+function ChromeLinkStandIn() {
+  const confirmLeave = useConfirmLeave();
+  return (
+    <Link
+      href="/dashboard/matches"
+      data-testid="chrome-link"
+      style={{ position: "fixed", top: 0, right: 0, zIndex: 60, fontSize: 10 }}
+      onClick={(event) => {
+        const asked = confirmLeave(event, "/dashboard/matches", "Matches");
+        // Let through or not, the harness itself never leaves.
+        if (!asked) event.preventDefault();
+        harness.guardAsks.push(asked);
+      }}
+    >
+      Matches
+    </Link>
+  );
+}
+
 function boot() {
   harness.savedEvents = [];
   harness.prepareCalls = [];
   harness.discardCalls = [];
+  harness.guardAsks = [];
+  harness.clock = 0;
+  harness.routerPushes = [];
+  harness.routerRefreshes = 0;
+  harness.routerReplaces = [];
 
   const params = new URLSearchParams(location.search);
   const mode = (params.get("mode") ?? "add") as MatchVideoMode;
@@ -156,33 +264,36 @@ function boot() {
   harness.unmount = () => root.unmount();
 
   root.render(
-    <MatchVideoAttachmentFlow
-      matchId={matchId}
-      mode={mode}
-      match={{
-        playerName: "Marcus Reid",
-        opponentName: "Jordan Alvarez",
-        date: "2026-04-18",
-        eventName: "Spring Invitational",
-        score: "6-4, 7-5",
-      }}
-      points={POINTS}
-      shots={SHOTS}
-      activeAttachment={mode === "add" || vanished ? null : ACTIVE}
-      savedPlaybackUrl={
-        mode === "align" ? "/fixtures/h264-faststart.mp4" : null
-      }
-      returnTarget={{ href: "/dashboard/matches/m1", label: "the match" }}
-      deps={fakeDeps(params)}
-      onSaved={(attachment) => {
-        harness.savedEvents.push({
-          id: attachment.id,
-          version: attachment.version,
-          confirmedVideoTimeSeconds: attachment.confirmedVideoTimeSeconds,
-          offsetSeconds: attachment.offsetSeconds,
-        });
-      }}
-    />,
+    <LeaveGuardProvider>
+      <ChromeLinkStandIn />
+      <AttachmentWizardRoute
+        matchId={matchId}
+        mode={mode}
+        match={{
+          playerName: "Marcus Reid",
+          opponentName: "Jordan Alvarez",
+          date: "2026-04-18",
+          eventName: "Spring Invitational",
+          score: "6-4, 7-5",
+        }}
+        points={POINTS}
+        shots={SHOTS}
+        activeAttachment={mode === "add" || vanished ? null : ACTIVE}
+        savedPlaybackUrl={
+          mode === "align" ? "/fixtures/h264-faststart.mp4" : null
+        }
+        returnTarget={{ href: "/dashboard/matches/m1", label: "the match" }}
+        deps={fakeDeps(params)}
+        onSaved={(attachment) => {
+          harness.savedEvents.push({
+            id: attachment.id,
+            version: attachment.version,
+            confirmedVideoTimeSeconds: attachment.confirmedVideoTimeSeconds,
+            offsetSeconds: attachment.offsetSeconds,
+          });
+        }}
+      />
+    </LeaveGuardProvider>,
   );
 
   document.documentElement.dataset.hydrated = "true";

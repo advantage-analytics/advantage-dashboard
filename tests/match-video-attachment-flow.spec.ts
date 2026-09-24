@@ -134,6 +134,11 @@ test.beforeAll(async () => {
             // The shell's Cancel is a `next/link`; the browser only needs an
             // anchor, and the real module drags the router in.
             "next/link": resolve("tests/fixtures/next-link-browser-mock.tsx"),
+            // The leave guard's provider reads the pathname and pushes on a
+            // confirmed leave; the mock records instead of routing.
+            "next/navigation": resolve(
+              "tests/fixtures/next-navigation-browser-mock.ts",
+            ),
           },
         },
       },
@@ -761,8 +766,9 @@ test("add cuts the kept window before anything is reserved, then uploads the cut
   const strip = page.getByTestId("attachment-saving");
   await expect(strip).toHaveAttribute("data-phase", "trimming");
   await expect(strip).toHaveAttribute("data-percent", "50");
-  await expect(strip).toContainText("Cutting the video to the match");
-  await expect(strip).toContainText("keeping");
+  await expect(strip).toContainText("Trimming video");
+  await expect(strip).toContainText("50%");
+  await expect(strip).toContainText("Keeping");
   const estimated = Number(await strip.getAttribute("data-kept-bytes"));
   expect(estimated).toBeGreaterThan(CLIP_BYTES * 0.4);
   expect(estimated).toBeLessThan(CLIP_BYTES * 0.6);
@@ -1125,9 +1131,11 @@ test("a second confirmation while one is in flight is held", async ({
 
   const button = continueButton(page);
   await button.click();
-  // The footer's primary is asleep the instant the commit starts, and the
-  // guard behind it is what catches Enter and a double tap as well.
-  await expect(button).toBeDisabled();
+  // The footer's primary is gone the instant the commit starts — the upload
+  // screen replaces the wizard — and the guard behind it is what catches
+  // Enter and a queued click as well.
+  await expect(page.getByTestId("attachment-saving")).toBeVisible();
+  await expect(button).toHaveCount(0);
   await page.keyboard.press("Enter");
   await page.evaluate(() => {
     document
@@ -1159,17 +1167,246 @@ test("progress reads real bytes and then names the publication", async ({
 
   const strip = page.getByTestId("attachment-saving");
   await expect(strip).toBeVisible();
-  await expect(strip).toContainText("Uploading the video");
+  await expect(strip).toHaveAttribute("data-phase", "uploading");
+  await expect(strip).toContainText("Uploading video");
   // A percentage exists only while bytes are actually moving.
   await expect(strip).toHaveAttribute("data-percent", /\d/);
 
   // Once the blocks are in, the publication is an Azure server-side copy this
   // browser cannot observe. It is named, never given an invented percentage.
-  await expect(strip).toContainText("Saving video", { timeout: 15_000 });
+  await expect(strip).toContainText("Saving to the Film tab", {
+    timeout: 15_000,
+  });
   await expect(strip).not.toHaveAttribute("data-percent", /\d/);
   await expect(page.getByTestId("attachment-saved")).toBeVisible({
     timeout: 15_000,
   });
+});
+
+/* -------------------------------------------------------------------------
+ * The upload screen, and the saved screen (T3)
+ *
+ * `?transfer=fake` holds the transfer at 1.30 GB of 3.10 GB, 200 s after
+ * 0.10 GB on a faked clock: 42%, and 1.80 GB left at 6 MB/s — five minutes.
+ * ---------------------------------------------------------------------- */
+
+const FAKE_TRANSFER = "&transfer=fake";
+
+async function finishTransfer(page: Page) {
+  await page.evaluate(() =>
+    (window as unknown as AttachmentFlowHarnessWindow).finishTransfer(),
+  );
+}
+
+async function guardAsks(page: Page) {
+  return page.evaluate(
+    () => (window as unknown as AttachmentFlowHarnessWindow).guardAsks,
+  );
+}
+
+/** Clicks the stand-in chrome link; answers "Stay here" when it asks. */
+async function clickChromeLink(page: Page): Promise<boolean> {
+  const before = (await guardAsks(page)).length;
+  await page.getByTestId("chrome-link").click();
+  await expect
+    .poll(async () => (await guardAsks(page)).length)
+    .toBe(before + 1);
+  const asked = (await guardAsks(page)).at(-1)!;
+  if (asked) {
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toContainText("Leave while your video uploads?");
+    await dialog.getByRole("button", { name: "Stay here" }).click();
+    await expect(dialog).toHaveCount(0);
+  }
+  return asked;
+}
+
+test("Trim and upload replaces the wizard with the upload screen", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", { query: FAKE_TRANSFER });
+  await continueButton(page).click();
+
+  const screen = page.getByTestId("attachment-saving");
+  await expect(screen).toHaveAttribute("data-phase", "uploading");
+  // The wizard is gone, not greyed out underneath.
+  await expect(continueButton(page)).toHaveCount(0);
+  await expect(page.getByTestId("attachment-pinned-match")).toHaveCount(0);
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Uploading your video" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("attachment-status-match")).toHaveText(
+    "Marcus Reid vs Jordan Alvarez · Apr 18 · 6-4, 7-5",
+  );
+
+  const steps = screen
+    .getByRole("list", { name: "Progress" })
+    .locator(":scope > li");
+  await expect(steps).toHaveCount(3);
+
+  await expect(steps.nth(0)).toContainText("Done:");
+  await expect(steps.nth(0)).toContainText("Video trimmed");
+  await expect(steps.nth(0)).toContainText("3.10 GB kept");
+
+  await expect(steps.nth(1)).toHaveAttribute("aria-current", "step");
+  await expect(steps.nth(1)).toContainText("Uploading video");
+  await expect(steps.nth(1)).toContainText("42%");
+  await expect(
+    steps.nth(1).getByRole("progressbar", { name: "Video upload" }),
+  ).toHaveAttribute("aria-valuenow", "42");
+  await expect(page.getByTestId("attachment-upload-detail")).toHaveText(
+    "1.30 GB of 3.10 GB · about 5 min left",
+  );
+  await expect(
+    steps.nth(1).getByRole("button", { name: "Cancel", exact: true }),
+  ).toBeVisible();
+
+  await expect(steps.nth(2)).toContainText("Not started:");
+  await expect(steps.nth(2)).toContainText("Ready on the Film tab");
+
+  // One instruction, and no reassurance: leaving this screen cancels.
+  await expect(
+    page.getByText("Keep this tab open until the upload finishes."),
+  ).toHaveCount(1);
+  await expect(page.getByText("You can keep using the dashboard.")).toHaveCount(
+    0,
+  );
+
+  await expect(
+    page.getByRole("link", { name: "Back to the match" }),
+  ).toHaveAttribute("href", "/dashboard/matches/m1");
+  await expect(page.getByRole("link", { name: "Watch the film" })).toHaveCount(
+    0,
+  );
+  expect(await savedEvents(page)).toEqual([]);
+
+  // Cancelled from here, the upload screen hands back the step as it was.
+  await page.getByTestId("attachment-cancel-upload").click();
+  await expect(page.getByTestId("attachment-saving")).toHaveCount(0);
+  await expect(page.getByTestId("attachment-save-error")).toHaveCount(0);
+  await expect(page.getByText("Step 2 of 2")).toBeVisible();
+  await expect(timeField(page)).toHaveValue("00:00:00.500");
+  await expect(continueButton(page)).toBeEnabled();
+});
+
+test("a published upload settles on Video saved and does not navigate", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", { query: FAKE_TRANSFER });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saving")).toHaveAttribute(
+    "data-phase",
+    "uploading",
+  );
+  await finishTransfer(page);
+
+  const screen = page.getByTestId("attachment-saved");
+  await expect(screen).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Video saved" }),
+  ).toBeVisible();
+
+  const steps = screen
+    .getByRole("list", { name: "Progress" })
+    .locator(":scope > li");
+  await expect(steps).toHaveCount(3);
+  for (const index of [0, 1, 2]) {
+    await expect(steps.nth(index)).toContainText("Done:");
+  }
+  await expect(steps.nth(0)).toContainText("Video trimmed");
+  await expect(steps.nth(0)).toContainText("kept");
+  await expect(steps.nth(1)).toContainText("Video uploaded");
+  await expect(steps.nth(2)).toContainText("Ready on the Film tab");
+  await expect(screen.getByRole("progressbar")).toHaveCount(0);
+  await expect(screen.getByRole("button", { name: "Cancel" })).toHaveCount(0);
+
+  // The one blue thing is the film; the quiet exit is the list. Both replace
+  // the finished wizard in history rather than stacking on it.
+  const watch = page.getByRole("link", { name: "Watch the film" });
+  await expect(watch).toHaveAttribute("href", "/dashboard/matches/m1");
+  await expect(watch).toHaveAttribute("data-replace", "");
+  const back = page.getByRole("link", { name: "Back to matches" });
+  await expect(back).toHaveAttribute("href", "/dashboard/matches");
+  await expect(back).toHaveAttribute("data-replace", "");
+  await expect(
+    page.getByRole("link", { name: "Back to the match" }),
+  ).toHaveCount(0);
+
+  // The route was told once, and went nowhere on its own: the person reads
+  // "Video saved" and chooses.
+  expect(await savedEvents(page)).toHaveLength(1);
+  await page.waitForTimeout(300);
+  expect(
+    await page.evaluate(() => {
+      const w = window as unknown as AttachmentFlowHarnessWindow;
+      return {
+        replaces: w.routerReplaces ?? [],
+        pushes: w.routerPushes,
+        refreshes: w.routerRefreshes,
+      };
+    }),
+  ).toEqual({ replaces: [], pushes: [], refreshes: 0 });
+  await expect(screen).toBeVisible();
+});
+
+test("the leave guard is armed while trimming and uploading, and released on saved", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=hold${FAKE_TRANSFER}`,
+  });
+
+  // Nothing is running yet.
+  expect(await clickChromeLink(page)).toBe(false);
+
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saving")).toHaveAttribute(
+    "data-phase",
+    "trimming",
+  );
+  expect(await clickChromeLink(page)).toBe(true);
+
+  await page.evaluate(() =>
+    (window as unknown as AttachmentFlowHarnessWindow).releasePrepare(),
+  );
+  await expect(page.getByTestId("attachment-saving")).toHaveAttribute(
+    "data-phase",
+    "uploading",
+  );
+  expect(await clickChromeLink(page)).toBe(true);
+
+  await finishTransfer(page);
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+  expect(await clickChromeLink(page)).toBe(false);
+});
+
+test("the leave guard is released when the upload is cancelled", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", { query: FAKE_TRANSFER });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saving")).toHaveAttribute(
+    "data-phase",
+    "uploading",
+  );
+  expect(await clickChromeLink(page)).toBe(true);
+
+  await page.getByTestId("attachment-cancel-upload").click();
+  await expect(continueButton(page)).toBeEnabled();
+  expect(await clickChromeLink(page)).toBe(false);
+});
+
+test("the leave guard is released when the save fails", async ({ page }) => {
+  const matchId = matchIdFor("fail");
+  await armAdd(page, matchId);
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-save-error")).toBeVisible();
+  expect(await clickChromeLink(page)).toBe(false);
 });
 
 /* -------------------------------------------------------------------------
@@ -1190,8 +1427,9 @@ async function startHeldUpload(page: Page, matchId: string) {
       (seen.get(matchId) ?? []).some((entry) => entry.path === "/azure/block"),
     )
     .toBe(true);
-  await expect(page.getByTestId("attachment-saving")).toContainText(
-    "Uploading the video",
+  await expect(page.getByTestId("attachment-saving")).toHaveAttribute(
+    "data-phase",
+    "uploading",
   );
 }
 
