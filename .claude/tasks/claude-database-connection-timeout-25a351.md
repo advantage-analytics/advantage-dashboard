@@ -72,7 +72,7 @@ ready).
 
 ## T5 · Move the RLS and workspace live specs onto the user pool
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4
 - **files:** guess: `tests/saved-views-rls.spec.ts`, `tests/viz-bands-rls.spec.ts`, `tests/rls-workspace-isolation.spec.ts`, `tests/personal-home-scope.spec.ts`, `tests/point-bookmarks-db.spec.ts`, `tests/program-member-avatars.spec.ts`, `tests/seats-count-players.spec.ts`, `tests/pending-invites.spec.ts`

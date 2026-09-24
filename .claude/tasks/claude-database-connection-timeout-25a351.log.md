@@ -38,3 +38,12 @@ is the runner's. Newest entries at the bottom.
 
 1. The pool has never run against a real database — the first live run creates the `live-pool-*` users on whichever project is targeted.
 2. `poolLogin` carries test-only `secret`/`signIn`/`guard` options for the offline spec; the real guard runs when they are omitted.
+
+## T5 · Move the RLS and workspace live specs onto the user pool — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** All eight specs (`saved-views-rls`, `viz-bands-rls`, `rls-workspace-isolation`, `personal-home-scope`, `point-bookmarks-db`, `program-member-avatars`, `seats-count-players`, `pending-invites`) now take sessions from `poolLogins(admin, SLOTS)` with file-prefixed slots; none needed to stay on `createLogin`. Each `beforeAll` runs `clearPoolLeftovers` then sweeps its own leftover domain rows (saved views, band settings, matches, jobs, bookmarks, invites, notifications) so a crashed run can't break exact-count assertions; each `afterAll` deletes by id/program/pool-user id, children before parents, without relying on an auth-user cascade. `live-db-pool.ts` gains `poolUserId` and `clearPoolLeftovers` (guarded; deletes owned programs' members and programs plus memberships where a pool user is member or inviter). `live-db-target-guard.spec.ts` adds an offline "pool slots" check: every pool spec has slots, no slot is shared across files, each is prefixed with its file stem. Specs skip against prod, so none of this has executed against a live database yet.
+**follow-ups:**
+
+1. A crashed run's owner-less program rows are left orphaned by `clearPoolLeftovers` (they no longer block the slot) — a periodic sweep of `programs` with no owner created by pool users may be worth it.
+2. First real verification needs a non-prod target (Supabase branch or dev project) per the AGENTS.md note — until then the migrated specs only prove they compile and list.

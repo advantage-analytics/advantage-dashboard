@@ -103,6 +103,97 @@ test.describe("the live-DB spec list", () => {
   });
 });
 
+/**
+ * The text between the bracket at `open` and its match — enough of a parser
+ * for a call's argument list or an array literal in a spec file.
+ */
+function balanced(source: string, open: number): string {
+  const pair: Record<string, string> = { "(": ")", "[": "]" };
+  const close = pair[source[open]];
+  let depth = 0;
+  for (let i = open; i < source.length; i += 1) {
+    if (source[i] === source[open]) depth += 1;
+    else if (source[i] === close && --depth === 0) {
+      return source.slice(open + 1, i);
+    }
+  }
+  return source.slice(open + 1);
+}
+
+/**
+ * Every pool slot a spec names: the string literals inside a pool login call
+ * or a `clearPoolLeftovers` call, and inside a `const …SLOTS = [...]` the
+ * specs pass to those calls.
+ */
+function poolSlotsIn(source: string): string[] {
+  const regions: string[] = [];
+  for (const m of source.matchAll(/\b(?:poolLogins?|clearPoolLeftovers)\(/g)) {
+    regions.push(balanced(source, m.index! + m[0].length - 1));
+  }
+  for (const m of source.matchAll(/\bconst\s+\w*SLOTS\w*\s*=\s*\[/g)) {
+    regions.push(balanced(source, m.index! + m[0].length - 1));
+  }
+  const slots = new Set<string>();
+  for (const region of regions) {
+    for (const lit of region.matchAll(/["'`]([a-z0-9][a-z0-9-]*)["'`]/g)) {
+      slots.add(lit[1]);
+    }
+  }
+  return [...slots];
+}
+
+test.describe("pool slots", () => {
+  test("no two spec files draw the same slot, and each slot carries its file's name", () => {
+    const testsDir = path.resolve(__dirname);
+    const owners = new Map<string, string>();
+    const duplicates: string[] = [];
+    const unprefixed: string[] = [];
+    let pooledFiles = 0;
+
+    for (const file of readdirSync(testsDir).filter((f) =>
+      f.endsWith(".spec.ts"),
+    )) {
+      const source = readFileSync(path.join(testsDir, file), "utf8");
+      if (!/\bpoolLogins?\(/.test(source)) continue;
+      pooledFiles += 1;
+      const slots = poolSlotsIn(source);
+      // A spec that builds its slots some other way would pass vacuously.
+      expect(slots, `${file}: no slot literal found`).not.toEqual([]);
+
+      const stem = file.replace(/\.spec\.ts$/, "");
+      for (const slot of slots) {
+        if (!slot.startsWith(`${stem}-`)) unprefixed.push(`${file}: ${slot}`);
+        const owner = owners.get(slot);
+        if (owner && owner !== file) {
+          duplicates.push(`${slot} in ${owner} and ${file}`);
+        }
+        owners.set(slot, file);
+      }
+    }
+
+    expect(pooledFiles).toBeGreaterThanOrEqual(1);
+    expect(duplicates).toEqual([]);
+    expect(unprefixed).toEqual([]);
+  });
+
+  test("the scan finds literals in a call and in a SLOTS array", () => {
+    // Spelled in pieces: written whole, this file would read as a live spec
+    // to the drift test above and as a slot owner to the test before this one.
+    const login = ["pool", "Login"].join("");
+    const source = [
+      `const SLOTS = ["a-spec-one", "a-spec-two"];`,
+      `await clearPoolLeftovers(admin, SLOTS);`,
+      `await ${login}(admin, "a-spec-three", { deadline: f("x y") });`,
+      `const other = ["not-a-slot"];`,
+    ].join("\n");
+    expect(poolSlotsIn(source).sort()).toEqual([
+      "a-spec-one",
+      "a-spec-three",
+      "a-spec-two",
+    ]);
+  });
+});
+
 test.describe("the live-DB lock", () => {
   let dir: string;
   let lockPath: string;

@@ -9,10 +9,9 @@ import {
   SUPABASE_URL,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
 import { updateThenInsert } from "@/lib/data/viz-bands-write";
 
 /**
@@ -39,8 +38,19 @@ import { updateThenInsert } from "@/lib/data/viz-bands-write";
 
 const CHECK_VIOLATION = "23514";
 
-const { mark: MARK, password: PASSWORD } = runMarker("viz-bands-rls");
+const { mark: MARK } = runMarker("viz-bands-rls");
 const PROGRAM_NAME = `ZZ RLS viz_band_settings ${MARK}`;
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = [
+  "viz-bands-rls-personal-owner",
+  "viz-bands-rls-stranger",
+  "viz-bands-rls-team-owner",
+  "viz-bands-rls-team-coach",
+  "viz-bands-rls-team-staff",
+  "viz-bands-rls-team-player",
+  "viz-bands-rls-non-member",
+];
 
 /**
  * The action's EXACT write path (`@/lib/data/viz-bands-write`, imported —
@@ -74,8 +84,8 @@ test.describe("viz_band_settings RLS (live)", () => {
   let teamPlayer: Session; // team role: player
   let nonMember: Session; // signed in, no membership on the team
 
-  const authUserIds: string[] = [];
-  const accountIdsToClean: string[] = []; // personal (auth uid) rows
+  /** The pool users' ids — each is also a personal `account_id` the tests may write. */
+  let poolUserIds: string[] = [];
   let programId: string | null = null;
   /** The throwaway solo program the player-insert-probe test creates, if it
    *  gets that far — cleaned up in `afterAll` regardless of pass/fail. */
@@ -85,6 +95,21 @@ test.describe("viz_band_settings RLS (live)", () => {
     test.setTimeout(180_000);
     admin = createAdminClient();
 
+    // Pool users outlive the run, and so would a crashed run's personal rows:
+    // the owner's first write below must be a plain INSERT, and the
+    // stranger's "fresh personal account" must be fresh.
+    const leftoverIds = await clearPoolLeftovers(admin, SLOTS);
+    if (leftoverIds.length > 0) {
+      const swept = await admin
+        .from("viz_band_settings")
+        .delete()
+        .in("account_id", leftoverIds);
+      if (swept.error) {
+        throw new Error(`viz_band_settings sweep: ${swept.error.message}`);
+      }
+    }
+
+    const sessions = await poolLogins(admin, SLOTS);
     [
       personalOwner,
       stranger,
@@ -93,19 +118,8 @@ test.describe("viz_band_settings RLS (live)", () => {
       teamStaff,
       teamPlayer,
       nonMember,
-    ] = await createLogins(
-      admin,
-      [
-        "personalOwner",
-        "stranger",
-        "teamOwner",
-        "teamCoach",
-        "teamStaff",
-        "teamPlayer",
-        "nonMember",
-      ],
-      { mark: MARK, password: PASSWORD, authUserIds },
-    );
+    ] = sessions;
+    poolUserIds = sessions.map((s) => s.userId);
 
     const program = await admin
       .from("programs")
@@ -140,7 +154,7 @@ test.describe("viz_band_settings RLS (live)", () => {
       .from("viz_band_settings")
       .delete()
       .in("account_id", [
-        ...accountIdsToClean,
+        ...poolUserIds,
         ...(programId ? [programId] : []),
         ...(otherProgramId ? [otherProgramId] : []),
       ]);
@@ -155,14 +169,11 @@ test.describe("viz_band_settings RLS (live)", () => {
       await admin.from("program_members").delete().eq("program_id", programId);
       await admin.from("programs").delete().eq("id", programId);
     }
-    await deleteAuthUsers(admin, authUserIds);
   });
 
   // ── personal workspace ─────────────────────────────────────────────────
 
   test("a personal owner can insert and update their own band settings", async () => {
-    accountIdsToClean.push(personalOwner.userId);
-
     const insert = await personalOwner.client
       .from("viz_band_settings")
       .insert({ account_id: personalOwner.userId, depth_scheme: "thirds" })
@@ -329,8 +340,6 @@ test.describe("viz_band_settings RLS (live)", () => {
     // UPDATE branch. `.upsert()` failed exactly the second call with 42501
     // (`account_id = EXCLUDED.account_id` has no column grant); this proves
     // the replacement doesn't.
-    accountIdsToClean.push(stranger.userId);
-
     const first = await writeScheme(stranger.client, stranger.userId, "thirds");
     expect(first.error).toBeNull();
     expect((first.data as { depth_scheme: string } | null)?.depth_scheme).toBe(

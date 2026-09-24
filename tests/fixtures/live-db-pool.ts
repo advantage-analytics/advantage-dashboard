@@ -224,7 +224,8 @@ async function assertNoLeftovers(
       throw new Error(
         `pool user ${email} (${userId}) still has ${count} ${table} row(s) ` +
           `referencing it via ${columns.join("/")} — a spec's cleanup missed ` +
-          `them. Delete them by id; the pool never deletes the user.`,
+          `them. Delete them by id (\`clearPoolLeftovers\` sweeps a crashed ` +
+          `run's); the pool never deletes the user.`,
       );
     }
   }
@@ -308,4 +309,83 @@ export async function poolLogins(
   const failed = results.find((r) => r.status === "rejected");
   if (failed) throw (failed as PromiseRejectedResult).reason;
   return (results as PromiseFulfilledResult<Session>[]).map((r) => r.value);
+}
+
+/**
+ * The pool user's id for `slot`, or null when the slot has never been handed
+ * out. Never creates the user and never signs in, so a spec can find what a
+ * crashed run left behind before it asks `poolLogin` for a session.
+ */
+export async function poolUserId(
+  admin: SupabaseClient,
+  slot: string,
+  deadline: HookDeadline = hookDeadline(),
+): Promise<string | null> {
+  return findPoolUser(admin, poolEmail(slot), deadline);
+}
+
+/**
+ * Delete the `LEFTOVER_REFERENCES` rows a crashed run left pointing at this
+ * spec's own slots, and return the ids of the slots that exist.
+ *
+ * `poolLogin` refuses a slot while those rows remain, so without this one
+ * interrupted run wedges its spec for good. A spec calls it first thing in
+ * `beforeAll`, before `poolLogins`, with the same slot list — slots are
+ * prefixed with the spec's name, so what it deletes can only be that spec's.
+ * The returned ids are for the spec's own sweep of its domain rows (matches,
+ * saved views, invitations …), which only it knows the shape of.
+ *
+ * Programs the users own go whole: their memberships first, then the
+ * program. Everything else is memberships where the user is the member or
+ * the inviter.
+ */
+export async function clearPoolLeftovers(
+  admin: SupabaseClient,
+  slots: readonly string[],
+): Promise<string[]> {
+  assertWritableTarget("clearPoolLeftovers");
+  const deadline = hookDeadline();
+  const found = await Promise.all(
+    slots.map((slot) => poolUserId(admin, slot, deadline)),
+  );
+  const ids = found.filter((id): id is string => id !== null);
+  if (ids.length === 0) return ids;
+
+  const owned = await admin
+    .from("programs")
+    .select("id")
+    .in("owner_user_id", ids);
+  if (owned.error) {
+    throw new Error(`clearPoolLeftovers programs: ${owned.error.message}`);
+  }
+  const ownedIds = ((owned.data ?? []) as { id: string }[]).map((p) => p.id);
+
+  const inList = `(${ids.join(",")})`;
+  const steps: [
+    string,
+    () => PromiseLike<{ error: { message: string } | null }>,
+  ][] = [
+    [
+      "owned programs' members",
+      () => admin.from("program_members").delete().in("program_id", ownedIds),
+    ],
+    [
+      "memberships",
+      () =>
+        admin
+          .from("program_members")
+          .delete()
+          .or(`user_id.in.${inList},invited_by.in.${inList}`),
+    ],
+    [
+      "owned programs",
+      () => admin.from("programs").delete().in("id", ownedIds),
+    ],
+  ];
+  for (const [label, run] of steps) {
+    if (label.startsWith("owned") && ownedIds.length === 0) continue;
+    const { error } = await run();
+    if (error) throw new Error(`clearPoolLeftovers ${label}: ${error.message}`);
+  }
+  return ids;
 }
