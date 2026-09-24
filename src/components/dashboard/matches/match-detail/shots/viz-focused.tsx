@@ -136,6 +136,14 @@ export function VizFocused({
   const [focusedMark, setFocusedMark] = useState<MarkAnchor | null>(null);
   const [selectedMark, setSelectedMark] = useState<MarkAnchor | null>(null);
   const [rovingId, setRovingId] = useState<string | null>(null);
+  const readoutLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+    },
+    [],
+  );
 
   const cut = state.cut;
   const ownKey = viewIdentityKey(state);
@@ -253,7 +261,6 @@ export function VizFocused({
       ? buildReadout(activeDot.meta, { subject: subjectName }, cut, unit)
       : null;
   const watchPointId =
-    selected?.id === activeDot?.id &&
     hasPlayableVideo &&
     activeDot?.meta?.pointId &&
     points.some(
@@ -295,20 +302,26 @@ export function VizFocused({
             : null,
           labelFor: labelForMark,
           onActivate: (id, mark, source, focusVisible) => {
+            if (readoutLeaveTimer.current)
+              clearTimeout(readoutLeaveTimer.current);
             const anchor = anchorFor(id, mark);
             if (!anchor) return;
             if (source === "focus") setFocusedMark({ ...anchor, focusVisible });
             else setHoveredMark(anchor);
           },
           onDeactivate: (id, source) => {
-            if (source === "focus")
-              setFocusedMark((current) =>
-                current?.id === id ? null : current,
-              );
-            else
-              setHoveredMark((current) =>
-                current?.id === id ? null : current,
-              );
+            if (readoutLeaveTimer.current)
+              clearTimeout(readoutLeaveTimer.current);
+            readoutLeaveTimer.current = setTimeout(() => {
+              if (source === "focus")
+                setFocusedMark((current) =>
+                  current?.id === id ? null : current,
+                );
+              else
+                setHoveredMark((current) =>
+                  current?.id === id ? null : current,
+                );
+            }, 220);
           },
           onRove: setRovingId,
           onSelect: (id, mark) => {
@@ -440,6 +453,10 @@ export function VizFocused({
             className={`relative w-full ${cut === "returnPlacement" || cut === "rallyPlacement" ? "pb-[var(--space-4)]" : ""}`}
             onClick={(event) => {
               if (!(event.target as Element).closest("[data-viz-mark]")) {
+                if (readoutLeaveTimer.current)
+                  clearTimeout(readoutLeaveTimer.current);
+                setHoveredMark(null);
+                setFocusedMark(null);
                 setSelectedMark(null);
                 if (
                   document.activeElement instanceof SVGElement &&
@@ -486,6 +503,25 @@ export function VizFocused({
                 data-viz-focused-readout
                 aria-hidden={watchPointId ? undefined : true}
                 className={`${watchPointId ? "pointer-events-auto" : "pointer-events-none"} absolute z-[2] flex flex-col gap-1.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
+                onPointerEnter={() => {
+                  if (readoutLeaveTimer.current)
+                    clearTimeout(readoutLeaveTimer.current);
+                }}
+                onPointerLeave={(event) => {
+                  if (event.currentTarget.contains(document.activeElement))
+                    return;
+                  setHoveredMark(null);
+                  setFocusedMark(null);
+                }}
+                onFocus={() => {
+                  if (readoutLeaveTimer.current)
+                    clearTimeout(readoutLeaveTimer.current);
+                }}
+                onBlur={(event) => {
+                  if (event.currentTarget.contains(event.relatedTarget)) return;
+                  setHoveredMark(null);
+                  setFocusedMark(null);
+                }}
                 style={{
                   ...DARK_READOUT_STYLE,
                   left: readoutX,

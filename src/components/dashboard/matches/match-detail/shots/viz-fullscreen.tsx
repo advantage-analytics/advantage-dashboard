@@ -144,22 +144,41 @@ export function VizFullscreen() {
   // Final review #3: the marks' single tab stop. `null` = "the first mark" —
   // nobody has moved within the group yet.
   const [rovingMarkId, setRovingMarkId] = useState<string | null>(null);
+  const readoutLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+    },
+    [],
+  );
 
   const activateMark = useCallback((id: string, keyboard: boolean) => {
+    if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
     setActiveMarkId(id);
     if (keyboard) setFocusedMarkId(id);
   }, []);
   const deactivateMark = useCallback((id: string) => {
-    setActiveMarkId((prev) => (prev === id ? null : prev));
-    setFocusedMarkId((prev) => (prev === id ? null : prev));
+    if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+    readoutLeaveTimer.current = setTimeout(() => {
+      setActiveMarkId((prev) => (prev === id ? null : prev));
+      setFocusedMarkId((prev) => (prev === id ? null : prev));
+    }, 220);
   }, []);
   const roveMark = useCallback((id: string) => {
     setRovingMarkId(id);
   }, []);
   const dropActiveMark = useCallback(() => {
+    if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
     setActiveMarkId(null);
     setFocusedMarkId(null);
     setSelectedMarkId(null);
+  }, []);
+  const holdReadout = useCallback(() => {
+    if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+  }, []);
+  const releaseReadout = useCallback(() => {
+    setActiveMarkId(null);
+    setFocusedMarkId(null);
   }, []);
   const selectMark = useCallback((id: string) => {
     setActiveMarkId(null);
@@ -539,9 +558,10 @@ export function VizFullscreen() {
             onRove={roveMark}
             onSelect={selectMark}
             watchPointId={
-              meta.hasPlayableVideo && visibleSelectedMarkId
-                ? (result.dots.find((dot) => dot.id === visibleSelectedMarkId)
-                    ?.meta?.pointId ?? null)
+              meta.hasPlayableVideo && (activeMarkId ?? visibleSelectedMarkId)
+                ? (result.dots.find(
+                    (dot) => dot.id === (activeMarkId ?? visibleSelectedMarkId),
+                  )?.meta?.pointId ?? null)
                 : null
             }
             canWatchPoint={(pointId) =>
@@ -553,6 +573,8 @@ export function VizFullscreen() {
               )
             }
             onWatchPoint={actions.watchPoint}
+            onReadoutEnter={holdReadout}
+            onReadoutLeave={releaseReadout}
             editing={editing}
             editorLayer={
               activeEditor !== null ? (

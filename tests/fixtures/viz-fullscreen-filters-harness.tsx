@@ -47,8 +47,8 @@ createRoot(document.getElementById("root")!).render(
     statsResult={null}
     points={
       window.location.search.includes("fixture=watch")
-        ? ASYMMETRIC_SERVES.map((point, index) =>
-            index === 0 ? { ...point, videoTime: 42 } : point,
+        ? ASYMMETRIC_SERVES.map((point) =>
+            point.id === "p1-high-0-0" ? { ...point, videoTime: 42 } : point,
           )
         : ASYMMETRIC_SERVES
     }

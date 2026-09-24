@@ -172,6 +172,8 @@ export function VizFullscreenCourt({
   watchPointId = null,
   canWatchPoint,
   onWatchPoint,
+  onReadoutEnter,
+  onReadoutLeave,
   editing = false,
   editorLayer = null,
 }: {
@@ -216,6 +218,8 @@ export function VizFullscreenCourt({
   watchPointId?: string | null;
   canWatchPoint?: (pointId: string) => boolean;
   onWatchPoint?: (pointId: string) => void;
+  onReadoutEnter?: () => void;
+  onReadoutLeave?: () => void;
   /**
    * Phase 2B, Task 4: the band editor is open. The marks and heat dim to 35%
    * and stop being interactive (no hover, no focus, no readout) — a hover
@@ -257,9 +261,7 @@ export function VizFullscreenCourt({
     ? buildReadout(activeMeta, { subject: subjectName }, cut, unit)
     : null;
   const watchablePointId =
-    selectedId === activeId && watchPointId && canWatchPoint?.(watchPointId)
-      ? watchPointId
-      : null;
+    watchPointId && canWatchPoint?.(watchPointId) ? watchPointId : null;
 
   let readoutStyle: React.CSSProperties | null = null;
   if (active !== null && readout !== null) {
@@ -435,6 +437,16 @@ export function VizFullscreenCourt({
           aria-hidden={watchablePointId ? undefined : true}
           className={`${watchablePointId ? "pointer-events-auto" : "pointer-events-none"} absolute flex flex-col gap-1.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
           onPointerDown={(event) => event.stopPropagation()}
+          onPointerEnter={onReadoutEnter}
+          onPointerLeave={(event) => {
+            if (!event.currentTarget.contains(document.activeElement))
+              onReadoutLeave?.();
+          }}
+          onFocus={onReadoutEnter}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget))
+              onReadoutLeave?.();
+          }}
           style={readoutStyle}
         >
           <span className="text-[12px] font-medium text-white">

@@ -102,12 +102,11 @@ test("fullscreen selected points can open their timed video", async ({
 }) => {
   await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watch`);
   await page.getByRole("button", { name: "Open fullscreen" }).click();
-  await page.locator('[data-viz-mark="p1-low-0-0"]').focus();
-  await page.keyboard.press("Enter");
+  await page.locator('[data-viz-mark="p1-high-0-0"]').hover();
   const watch = page.getByRole("button", { name: "Watch point" });
   await expect(watch).toBeVisible();
   await watch.click();
-  await expect(page).toHaveURL(/tab=film.*point=p1-low-0-0/);
+  await expect(page).toHaveURL(/tab=film.*point=p1-high-0-0/);
   await expect(page).not.toHaveURL(/fullscreen=1/);
 });
 
