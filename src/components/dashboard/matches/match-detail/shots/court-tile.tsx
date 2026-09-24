@@ -6,7 +6,7 @@ import { Maximize2 } from "lucide-react";
 import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
 import { heatFloorTintRgba } from "./court-geometry";
 import { VIZ_PILL_RADIUS } from "./viz-labels";
-import type { Chart, Cut, VizDot } from "./viz-model";
+import type { Chart, Cut, VizDot, VizBandZones, VizResult } from "./viz-model";
 import type { VizState } from "./viz-url";
 import { viewIdentityKey } from "./viz-url";
 import { useVizState } from "./use-viz-state";
@@ -43,7 +43,7 @@ import {
  * navigation (`e.preventDefault()`; Next's `<Link>` skips its own handling
  * once the passed `onClick` does this — see `node_modules/next/dist/
  * client/link.js`) and instead hands `runCourtMorph`
- * (`viz-state-context.tsx`) this tile's own art box as the transition's
+ * (`viz-state-context.tsx`) this tile's complete card as the transition's
  * source element. A modified click (⌘/ctrl/shift/alt/middle-button) is left
  * alone, so opening a tile in a new tab still works exactly like any other
  * link — the one reason these tiles are real `<Link>`s and not buttons.
@@ -113,6 +113,8 @@ export function CourtTile({
   countLabel,
   cut,
   dots,
+  zones,
+  bandZones,
   chart = "scatter",
   href,
   overlay,
@@ -139,6 +141,8 @@ export function CourtTile({
   countLabel: string;
   cut: Cut;
   dots: VizDot[];
+  zones?: NonNullable<VizResult["zoneStats"]>;
+  bandZones?: VizBandZones | null;
   /** G3b: forwarded straight to `CourtArt` — a saved-view tile can be a heat
    * chart same as the focused view; the six default tiles never are
    * (`DEFAULT_CUTS` is scatter-only), so they simply omit it and get the
@@ -211,9 +215,7 @@ export function CourtTile({
   function handleClick(e: MouseEvent<HTMLAnchorElement>): void {
     if (!navigateState || !isPlainLeftClick(e)) return;
     e.preventDefault();
-    const sourceEl = e.currentTarget.querySelector<HTMLElement>(
-      "[data-viz-court-art]",
-    );
+    const sourceEl = e.currentTarget;
     runCourtMorph({
       sourceEl,
       next: navigateState,
@@ -247,14 +249,13 @@ export function CourtTile({
         style={{
           aspectRatio: "334 / 216",
           backgroundColor: showHeat ? HEAT_APRON_FILL : APRON_FILL,
-          viewTransitionName: isMorphTarget
-            ? VIZ_COURT_TRANSITION_NAME
-            : undefined,
         }}
       >
         <CourtArt
           cut={cut}
           dots={dots}
+          zones={zones}
+          bandZones={bandZones}
           chart={chart}
           fill
           className="block h-full w-full"
@@ -347,7 +348,12 @@ export function CourtTile({
         id={domId}
         onClick={handleClick}
         className={CARD_CLASS}
-        style={ringStyle}
+        style={{
+          ...ringStyle,
+          viewTransitionName: isMorphTarget
+            ? VIZ_COURT_TRANSITION_NAME
+            : undefined,
+        }}
         aria-current={current ? "true" : undefined}
       >
         {body}

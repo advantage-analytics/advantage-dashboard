@@ -2,7 +2,7 @@ import type { Cut, VizDotMeta } from "./viz-model";
 import { formatSpeed, type DistanceUnit } from "@/lib/format/distance";
 
 /**
- * The fullscreen viewer's hover/focus readout, as a PURE function of one
+ * The focused and fullscreen courts' hover/focus readout, as a PURE function of one
  * dot's `VizDotMeta` — no React, no DOM, so
  * `tests/viz-readout.spec.ts` can pin the one rule that matters here:
  * **only what the data says**.

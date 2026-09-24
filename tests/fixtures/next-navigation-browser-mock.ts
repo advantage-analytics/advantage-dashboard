@@ -18,7 +18,7 @@ export function useRouter() {
   };
 }
 
-/** No Next router in these harnesses; consumers must tolerate null. */
+/** The harness uses the real address bar for one-shot Video point links. */
 export function useSearchParams() {
-  return null;
+  return new URLSearchParams(window.location.search);
 }

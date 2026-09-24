@@ -39,6 +39,8 @@ export interface MatchReportState {
 export interface MatchReportActions {
   /** One history entry per view, exactly as `match-tabs.tsx`'s `select`. */
   selectView(view: ReportView): void;
+  /** Open a timed point in the Video view. */
+  watchPoint(pointId: string): void;
   collapseInsight(): void;
   expandInsight(): void;
 }
@@ -53,6 +55,8 @@ export interface MatchReportMeta {
   isDerived: boolean;
   /** Both `match_stats` rows present. */
   statsPublished: boolean;
+  /** A playable match video was resolved on the server. */
+  hasPlayableVideo: boolean;
   /**
    * Visualizations-tab saved views (Task 8), loaded once in `page.tsx` via
    * `getSavedViews(activeWorkspace.id)` and threaded down here rather than
@@ -128,6 +132,7 @@ export function MatchReportProvider({
   canCompare,
   isDerived,
   statsPublished,
+  hasPlayableVideo,
   savedViews,
   workspaceRole,
   workspaceKind,
@@ -161,6 +166,13 @@ export function MatchReportProvider({
           query ? `${pathname}?${query}` : pathname,
         );
       },
+      watchPoint(pointId) {
+        const query = new URLSearchParams(window.location.search);
+        query.set("tab", "film");
+        query.set("point", pointId);
+        query.delete("fullscreen");
+        window.history.pushState(null, "", `${pathname}?${query.toString()}`);
+      },
       collapseInsight() {
         setInsight("collapsed");
       },
@@ -178,6 +190,7 @@ export function MatchReportProvider({
       canCompare,
       isDerived,
       statsPublished,
+      hasPlayableVideo,
       savedViews,
       workspaceRole,
       workspaceKind,
@@ -192,6 +205,7 @@ export function MatchReportProvider({
       canCompare,
       isDerived,
       statsPublished,
+      hasPlayableVideo,
       savedViews,
       workspaceRole,
       workspaceKind,

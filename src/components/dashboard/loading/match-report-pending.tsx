@@ -19,10 +19,7 @@ import {
   VIEW_ICONS,
   viewRowClass,
 } from "@/components/dashboard/matches/match-detail/report-view-switcher";
-import {
-  VIZ_TILE_GRID_CLASS,
-  VIZ_TILE_GRID_STYLE,
-} from "@/components/dashboard/matches/match-detail/shots/viz-labels";
+import { VIZ_TILE_GRID_CLASS } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 import { InsightMark } from "@/components/dashboard/matches/match-detail/insight-mark";
 import { INSIGHT_SURFACE } from "@/components/dashboard/matches/match-detail/report-insight-card";
 import { cn } from "@/lib/utils";
@@ -377,7 +374,10 @@ export function VisualizationsPanePending({
   focused?: boolean;
 }) {
   return (
-    <PendingRegion label="visualizations" innerClassName="flex flex-col gap-6">
+    <PendingRegion
+      label="visualizations"
+      innerClassName="@container flex flex-col gap-6"
+    >
       {focused ? (
         <>
           <div className="flex h-8 items-center gap-2">
@@ -415,11 +415,7 @@ export function VisualizationsPanePending({
         </>
       ) : (
         [0, 1].map((row) => (
-          <div
-            key={row}
-            className={VIZ_TILE_GRID_CLASS}
-            style={VIZ_TILE_GRID_STYLE}
-          >
+          <div key={row} className={VIZ_TILE_GRID_CLASS}>
             <TilePending />
             <TilePending />
             <TilePending />

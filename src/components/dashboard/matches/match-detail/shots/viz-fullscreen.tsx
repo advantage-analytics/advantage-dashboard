@@ -24,11 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  contactBandRows,
-  depthBandRows,
-  resolveDepthDividersFt,
-} from "@/lib/data/viz-bands";
+import { contactBandRows, depthBandRows } from "@/lib/data/viz-bands";
 import { formatScoreboardStatus } from "@/lib/data/match-utils";
 import { playedSets } from "@/lib/ui/score-format";
 import { overlayIsOpen } from "@/lib/ui/overlay-is-open";
@@ -47,6 +43,7 @@ import {
 } from "./band-editor-state";
 import { ChartMenu } from "./chart-menu";
 import { APRON_FILL, HEAT_APRON_FILL } from "./court-art";
+import { starPoints } from "./court-geometry";
 import { CutMenu } from "./cut-menu";
 import { FiltersPopover } from "./filters-popover";
 import { KEY_PAN_PX, zoomPercentLabel } from "./pan-zoom";
@@ -75,6 +72,7 @@ import {
 import { availableSets } from "./viz-model";
 import { activeFilterEntries, clearedFilters } from "./viz-url";
 import { VIZ_FOCUSED_HEADING_ID } from "./viz-court-transition";
+import { useFullscreenReveal } from "./use-fullscreen-reveal";
 
 /**
  * The fullscreen court viewer (Phase 2A, Task 4; spec A5, f4b-report
@@ -107,20 +105,22 @@ const ZOOM_READOUT_W = 38;
 
 export function VizFullscreen() {
   const { state, setState } = useVizState();
-  const { meta } = useMatchReport();
+  const { meta, actions } = useMatchReport();
   const {
     cut,
     result,
     stats,
     subjectName,
+    subjectIsPlayer1,
     you,
     opp,
     points,
     hasFilters,
     bands,
+    bandZones: savedBandZones,
     unit,
   } = useVizView();
-  const { contactHidden, receipt, canEdit, applyBands } = useVizBands();
+  const { receipt, canEdit, applyBands } = useVizBands();
   // `availableSets` is an O(points) scan; this viewer re-renders on every
   // pan/zoom frame (see the `VizBandsOverlay`/`MarkLayer` memoization below),
   // so it's memoized on `points` alone rather than re-scanning on every one
@@ -128,6 +128,7 @@ export function VizFullscreen() {
   const sets = useMemo(() => availableSets(points), [points]);
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const closeWithReveal = useFullscreenReveal(rootRef);
   const stageRef = useRef<HTMLDivElement>(null);
   const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -141,25 +142,56 @@ export function VizFullscreen() {
   // the court's `MarkLayer` memo survive a pan frame.
   const [activeMarkId, setActiveMarkId] = useState<string | null>(null);
   const [focusedMarkId, setFocusedMarkId] = useState<string | null>(null);
+  const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
   // Final review #3: the marks' single tab stop. `null` = "the first mark" —
   // nobody has moved within the group yet.
   const [rovingMarkId, setRovingMarkId] = useState<string | null>(null);
+  const readoutLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+    },
+    [],
+  );
 
   const activateMark = useCallback((id: string, keyboard: boolean) => {
+    if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
     setActiveMarkId(id);
     if (keyboard) setFocusedMarkId(id);
   }, []);
   const deactivateMark = useCallback((id: string) => {
-    setActiveMarkId((prev) => (prev === id ? null : prev));
-    setFocusedMarkId((prev) => (prev === id ? null : prev));
+    if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+    readoutLeaveTimer.current = setTimeout(() => {
+      setActiveMarkId((prev) => (prev === id ? null : prev));
+      setFocusedMarkId((prev) => (prev === id ? null : prev));
+    }, 220);
   }, []);
   const roveMark = useCallback((id: string) => {
     setRovingMarkId(id);
   }, []);
   const dropActiveMark = useCallback(() => {
+    if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+    setActiveMarkId(null);
+    setFocusedMarkId(null);
+    setSelectedMarkId(null);
+  }, []);
+  const holdReadout = useCallback(() => {
+    if (readoutLeaveTimer.current) clearTimeout(readoutLeaveTimer.current);
+  }, []);
+  const releaseReadout = useCallback(() => {
     setActiveMarkId(null);
     setFocusedMarkId(null);
   }, []);
+  const selectMark = useCallback((id: string) => {
+    setActiveMarkId(null);
+    setSelectedMarkId((prev) => (prev === id ? null : id));
+  }, []);
+
+  const visibleSelectedMarkId =
+    selectedMarkId !== null &&
+    result?.dots.some((dot) => dot.id === selectedMarkId)
+      ? selectedMarkId
+      : null;
 
   /* ── Band editor (Phase 2B, Task 4) ───────────────────────────────────── */
 
@@ -319,37 +351,19 @@ export function VizFullscreen() {
         editing: true,
       };
     }
-    const kind = cut === null ? null : bandKindFor(cut);
-    if (kind === null) return null;
-    if (kind === "depth" && bands.depthScheme === "none") return null;
-    if (kind === "contact" && contactHidden) return null;
-
-    const rows =
-      kind === "depth"
-        ? depthBandRows(bands, unit)
-        : contactBandRows(bands, unit);
-    if (rows.length === 0) return null;
-    const dividersFt =
-      kind === "depth"
-        ? resolveDepthDividersFt(bands)
-        : [...bands.contactDividersFt];
-
-    return {
-      kind,
-      dividersFt,
-      rows,
-      statRows: stats?.groups.find((g) => g.key === "depth")?.rows ?? null,
-    };
-  }, [cut, bands, unit, contactHidden, stats, activeEditor]);
+    return savedBandZones;
+  }, [unit, savedBandZones, activeEditor]);
 
   /* ── Exit ─────────────────────────────────────────────────────────────── */
 
   // Drops the key rather than setting `false` — `applyVizUpdate` and the URL
   // round-trip both treat "absent" as the only off state.
   function exit() {
-    setState((prev) => {
-      const { fullscreen: _fullscreen, ...rest } = prev;
-      return rest;
+    closeWithReveal(() => {
+      setState((prev) => {
+        const { fullscreen: _fullscreen, ...rest } = prev;
+        return rest;
+      });
     });
   }
 
@@ -539,12 +553,32 @@ export function VizFullscreen() {
             transform={pz.t}
             stage={pz.stage}
             panning={pz.panning}
-            activeId={activeMarkId}
+            activeId={activeMarkId ?? visibleSelectedMarkId}
             focusedId={focusedMarkId}
+            selectedId={visibleSelectedMarkId}
             rovingId={rovingMarkId}
             onActivate={activateMark}
             onDeactivate={deactivateMark}
             onRove={roveMark}
+            onSelect={selectMark}
+            watchPointId={
+              meta.hasPlayableVideo && (activeMarkId ?? visibleSelectedMarkId)
+                ? (result.dots.find(
+                    (dot) => dot.id === (activeMarkId ?? visibleSelectedMarkId),
+                  )?.meta?.pointId ?? null)
+                : null
+            }
+            canWatchPoint={(pointId) =>
+              points.some(
+                (point) =>
+                  point.id === pointId &&
+                  point.videoTime !== null &&
+                  Number.isFinite(point.videoTime),
+              )
+            }
+            onWatchPoint={actions.watchPoint}
+            onReadoutEnter={holdReadout}
+            onReadoutLeave={releaseReadout}
             editing={editing}
             editorLayer={
               activeEditor !== null ? (
@@ -596,14 +630,15 @@ export function VizFullscreen() {
           {/* ── Top chrome ─────────────────────────────────────────────── */}
           <div
             data-chrome=""
-            className="absolute top-[14px] right-[18px] left-[18px] flex items-start gap-3"
+            className="absolute top-[14px] right-[18px] left-[18px] flex flex-wrap items-start justify-end gap-3"
           >
             <ViewerScoreboard
               cutLabel={CUT_LABEL[cut]}
               count={result.count}
               noun={result.noun}
+              subjectIsPlayer1={subjectIsPlayer1}
             />
-            <div className="flex-1" />
+            <div className="hidden flex-1 sm:block" />
             {/* P2n: the bands receipt takes the filter pill's slot for four
                 seconds — no toast, no green tick. The pill is the one piece
                 of chrome a coach is already looking at when they pick a
@@ -714,7 +749,7 @@ export function VizFullscreen() {
               inert={editing}
               aria-hidden={editing || undefined}
               className={cn(
-                "flex h-full min-w-0 items-center gap-2 px-3 transition-opacity duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none",
+                "flex h-full min-w-0 items-center gap-2 overflow-x-auto px-3 transition-opacity duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none",
                 editing && "opacity-0",
               )}
             >
@@ -733,8 +768,29 @@ export function VizFullscreen() {
                   <SlabDivider />
                   {/* The tokens are the one item allowed to give up width when
                     the slab runs out; everything else is fixed-size chrome. */}
-                  <div className="flex min-w-0 shrink overflow-hidden">
-                    <AppliedStrip tone="dark" readOnly={viewIsPristine} />
+                  <div
+                    aria-label="Applied filters, scroll horizontally"
+                    tabIndex={0}
+                    className="min-w-[72px] shrink overflow-x-auto overscroll-x-contain whitespace-nowrap"
+                    onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget) return;
+                      if (
+                        event.key !== "ArrowLeft" &&
+                        event.key !== "ArrowRight"
+                      )
+                        return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      event.currentTarget.scrollBy({
+                        left: event.key === "ArrowRight" ? 80 : -80,
+                      });
+                    }}
+                  >
+                    <AppliedStrip
+                      tone="dark"
+                      readOnly={viewIsPristine}
+                      fullscreen
+                    />
                   </div>
                 </>
               )}
@@ -897,8 +953,8 @@ function ZoomButton({
 
 /**
  * The bottom slab's legend — the SAME `legendItemsFor(cut, chart)` the
- * focused court's legend reads, drawn on the dark surface (8px dots ringed in
- * black so a white-ish swatch still separates from the slab, 11px labels at
+ * focused court's legend reads, drawn on the dark surface (8px dots and a
+ * modest ace star, ringed in black, with 11px labels at
  * 70% white). Heat returns its one ramp item, and the ramp replaces the
  * outcome keys entirely.
  */
@@ -924,18 +980,33 @@ function DarkLegend({ items }: { items: LegendItem[] }) {
     <div className="hidden shrink-0 items-center gap-3 pr-1 xl:flex">
       {items.map((item) => (
         <span key={item.key} className="inline-flex items-center gap-1.5">
-          <span
-            aria-hidden="true"
-            className="size-2 shrink-0 rounded-full"
-            style={{
-              backgroundColor: item.outline ? "transparent" : item.color,
-              boxShadow: item.outline
-                ? `inset 0 0 0 1px ${item.color}`
-                : // The handoff writes `#000000`; `--ink-900` is the design system's own
-                  // black and is indistinguishable at a 0.75px ring.
-                  "0 0 0 0.75px var(--ink-900)",
-            }}
-          />
+          {item.glyph === "star" ? (
+            <svg
+              aria-hidden="true"
+              className="size-2.5 shrink-0"
+              viewBox="0 0 10 10"
+            >
+              <polygon
+                points={starPoints(5, 5, 4.2)}
+                fill={item.color}
+                stroke="var(--ink-900)"
+                strokeWidth={0.5}
+              />
+            </svg>
+          ) : (
+            <span
+              aria-hidden="true"
+              className="size-2 shrink-0 rounded-full"
+              style={{
+                backgroundColor: item.outline ? "transparent" : item.color,
+                boxShadow: item.outline
+                  ? `inset 0 0 0 1px ${item.color}`
+                  : // The handoff writes `#000000`; `--ink-900` is the design system's own
+                    // black and is indistinguishable at a 0.75px ring.
+                    "0 0 0 0.75px var(--ink-900)",
+              }}
+            />
+          )}
           <span className="text-[11px] text-white/70">{item.label}</span>
         </span>
       ))}
@@ -959,14 +1030,18 @@ function ViewerScoreboard({
   cutLabel,
   count,
   noun,
+  subjectIsPlayer1,
 }: {
   cutLabel: string;
   count: number;
   noun: string;
+  subjectIsPlayer1: boolean;
 }) {
   const { match } = useMatchData();
   const sides = useMatchSides();
   const sets = playedSets(sides.sets);
+  const subject =
+    subjectIsPlayer1 === sides.you.isPlayer1 ? sides.you : sides.opp;
   const status = formatScoreboardStatus(match.matchContext);
   const clock =
     typeof match.durationSec === "number" && match.durationSec > 0
@@ -975,7 +1050,8 @@ function ViewerScoreboard({
 
   return (
     <div
-      className="flex min-w-[236px] flex-col gap-[14px] rounded-[12px] backdrop-blur-[8px]"
+      data-testid="fullscreen-scoreboard"
+      className="mr-auto flex w-full min-w-[236px] flex-col gap-[14px] rounded-[12px] backdrop-blur-[8px] sm:w-auto"
       style={{ background: "rgba(13,13,13,0.74)", padding: "14px 15px 12px" }}
     >
       <div className="flex items-baseline gap-2">
@@ -998,10 +1074,11 @@ function ViewerScoreboard({
       <div className="flex items-center gap-2 border-t border-white/[0.14] pt-[9px]">
         <span
           aria-hidden="true"
+          data-testid="fullscreen-subject-avatar"
           className="flex size-[22px] shrink-0 items-center justify-center rounded-full text-[10px] font-medium text-white"
           style={{ background: "rgba(255,255,255,0.14)" }}
         >
-          {sides.you.initials}
+          {subject.initials}
         </span>
         <span className="truncate text-[11px] text-white/55">{cutLabel}</span>
         <div className="flex-1" />

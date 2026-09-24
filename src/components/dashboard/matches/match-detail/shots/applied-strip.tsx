@@ -32,9 +32,11 @@ import { EMPTY_VIZ_FILTERS, type VizFilters } from "./viz-model";
 export function AppliedStrip({
   tone = "light",
   readOnly = false,
+  fullscreen = false,
 }: {
   tone?: FloatMenuTone;
   readOnly?: boolean;
+  fullscreen?: boolean;
 } = {}) {
   const { state, setState } = useVizState();
   const entries = activeFilterEntries(state);
@@ -71,7 +73,10 @@ export function AppliedStrip({
     <div
       role="group"
       aria-label="Applied filters"
-      className="flex min-w-0 flex-wrap items-center gap-1.5"
+      className={cn(
+        "flex min-w-0 items-center gap-1.5",
+        fullscreen ? "w-max flex-nowrap" : "flex-wrap",
+      )}
     >
       {entries.map((entry) => (
         <span

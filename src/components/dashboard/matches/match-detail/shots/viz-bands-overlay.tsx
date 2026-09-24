@@ -4,8 +4,15 @@ import { memo } from "react";
 
 import type { BandRow } from "@/lib/data/viz-bands";
 import { LINE_COLOR } from "./court-art";
-import { VIEWER_COURT, viewerBandEdges } from "./court-geometry";
-import type { StatRow } from "./viz-model";
+import {
+  VIEWER_COURT,
+  viewerBandEdges,
+  RETURN_COURT,
+  projectReturnDot,
+  heatBoundsFor,
+  zoneOpacity,
+} from "./court-geometry";
+import type { StatRow, VizBandZones } from "./viz-model";
 
 /**
  * The depth/contact band overlay inside the fullscreen viewer's court
@@ -116,6 +123,7 @@ export interface VizBandsOverlayProps {
    * the court nobody has counted.
    */
   editing?: boolean;
+  zones?: boolean;
 }
 
 export const VizBandsOverlay = memo(function VizBandsOverlay({
@@ -124,6 +132,7 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
   rows,
   statRows,
   editing = false,
+  zones = false,
 }: VizBandsOverlayProps) {
   const edges = viewerBandEdges(kind, dividersFt);
   // One rect per row, between consecutive edges. A mismatch means a caller
@@ -131,6 +140,7 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
   // nothing rather than a band whose label belongs to a different slice.
   if (rows.length !== edges.length - 1) return null;
 
+  const maxCount = Math.max(0, ...(statRows ?? []).map((row) => row.count));
   const left = VIEWER_COURT.viewBox.minX;
   const width = VIEWER_COURT.viewBox.w;
 
@@ -157,14 +167,23 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
         const caps = editing ? bandEditingLabel(row) : bandCaps(row);
 
         return (
-          <g key={row.key}>
+          <g
+            key={row.key}
+            data-viz-band={row.key}
+            data-count={stat?.count ?? 0}
+            data-win-pct={stat?.winPct ?? ""}
+          >
             <rect
               x={left}
               y={top}
               width={width}
               height={height}
               fill={LINE_COLOR}
-              fillOpacity={bandOpacity(index)}
+              fillOpacity={
+                zones && !editing
+                  ? zoneOpacity(stat?.count ?? 0, maxCount)
+                  : bandOpacity(index)
+              }
             />
             <text
               x={BAND_LABEL_X}
@@ -203,3 +222,89 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
     </g>
   );
 });
+
+/** The same bands in the compact court's logical depth-x coordinates.
+ * Labels counter-rotate the court so both placement and contact stay upright. */
+export function CourtBandZones({
+  zones,
+  labels = false,
+}: {
+  zones: VizBandZones;
+  labels?: boolean;
+}) {
+  const placement = zones.kind === "depth";
+  const bounds = heatBoundsFor(placement ? "returnPlacement" : "returnContact");
+  const origin = RETURN_COURT.nearBaselineX;
+  const end = placement ? RETURN_COURT.netX : bounds.xMax;
+  const start = placement ? origin : RETURN_COURT.serviceLineNearX;
+  const edges = [
+    start,
+    ...zones.dividersFt.map(
+      (ft) =>
+        projectReturnDot("contact", {
+          lateralM: 0,
+          depthM: ft * 0.3048 * (placement ? -1 : 1),
+        }).cx,
+    ),
+    end,
+  ];
+  const maxCount = Math.max(
+    0,
+    ...(zones.statRows ?? []).map((row) => row.count),
+  );
+  return (
+    <g
+      data-viz-bands={zones.kind}
+      aria-hidden="true"
+      style={{ pointerEvents: "none" }}
+    >
+      {zones.rows.map((row, index) => {
+        const a = Math.max(
+          Math.min(start, end),
+          Math.min(Math.max(start, end), edges[index]),
+        );
+        const b = Math.max(
+          Math.min(start, end),
+          Math.min(Math.max(start, end), edges[index + 1]),
+        );
+        const stat = zones.statRows?.find((r) => r.key === row.key);
+        const cx = (a + b) / 2;
+        const cy = RETURN_COURT.centerY;
+        return (
+          <g
+            key={row.key}
+            data-viz-band={row.key}
+            data-count={stat?.count ?? 0}
+            data-win-pct={stat?.winPct ?? ""}
+          >
+            <rect
+              x={Math.min(a, b)}
+              y={bounds.yMin}
+              width={Math.abs(b - a)}
+              height={bounds.yMax - bounds.yMin}
+              fill={LINE_COLOR}
+              fillOpacity={zoneOpacity(stat?.count ?? 0, maxCount)}
+            />
+            {labels && Math.abs(b - a) > 8 && (
+              <g transform={`rotate(${placement ? 90 : -90} ${cx} ${cy})`}>
+                <text
+                  x={cx}
+                  y={cy + 2.5}
+                  textAnchor="middle"
+                  fill={LINE_COLOR}
+                  fontFamily="var(--font-sans)"
+                  fontSize={8}
+                >
+                  {row.label}
+                  {stat && stat.count > 0
+                    ? ` · ${stat.count} · ${stat.winPct}% won`
+                    : ""}
+                </text>
+              </g>
+            )}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
