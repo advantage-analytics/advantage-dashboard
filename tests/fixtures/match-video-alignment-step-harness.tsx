@@ -5,6 +5,7 @@ import { AttachmentAlignmentStep } from "@/components/dashboard/matches/match-vi
 import {
   useAttachmentAlignment,
   type AlignmentSource,
+  type AttachmentTrimSelection,
 } from "@/components/dashboard/matches/match-video-attachment/use-attachment-alignment";
 import type {
   Alignment,
@@ -82,6 +83,25 @@ const SCENARIOS: Record<string, Scenario> = {
     declaredDurationSeconds: 100,
   },
 
+  /**
+   * The canvas's numbers, for the trim readouts. Anchor at 10s and the last
+   * required instant at 5780s — a 5770s match — in a 1:52:10 (6730s) file.
+   * Marked at 0:04:32.400, the default cut is [262.4, 6052.4]:
+   *
+   *   Start 0:04:22 · End 1:40:52 · Keeps 1:36:30 of 1:52:10
+   *
+   * The fixture clip is two seconds long, so the playhead can only ever sit
+   * well before the marked serve — which is exactly what a moved cut needs.
+   */
+  long: {
+    points: [
+      { pointNumber: 1, videoTime: 10, duration: 1 },
+      { pointNumber: 2, videoTime: 5760, duration: 20 },
+    ],
+    shots: [{ videoTime: 5 }],
+    declaredDurationSeconds: 6730,
+  },
+
   /** The first point has no timestamp at all — nothing to align against. */
   missing: {
     points: [{ pointNumber: 1, videoTime: null, duration: null }],
@@ -118,8 +138,25 @@ function Harness({
         );
         force((n) => n + 1);
       },
+      // Add and replace cut the file; an adjust never does.
+      trim:
+        mode === "align"
+          ? undefined
+          : {
+              onChange: (selection: AttachmentTrimSelection | null) => {
+                harness.trimEvents.push(
+                  selection
+                    ? {
+                        markedSeconds: selection.markedSeconds,
+                        startSeconds: selection.window.startSeconds,
+                        endSeconds: selection.window.endSeconds,
+                      }
+                    : null,
+                );
+              },
+            },
     }),
-    [scenario, source],
+    [mode, scenario, source],
   );
 
   const api = useAttachmentAlignment(options);
@@ -134,6 +171,7 @@ function Harness({
 
 async function boot() {
   harness.alignmentEvents = [];
+  harness.trimEvents = [];
 
   const realPlay = HTMLMediaElement.prototype.play;
   harness.rejectPlay = (name) => {

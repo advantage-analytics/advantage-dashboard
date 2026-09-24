@@ -38,7 +38,7 @@
  * attachment it requires draws the shell and says so.
  */
 
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { TriangleAlert, Check, Info, Loader2, XCircle } from "lucide-react";
 
 import { advButton } from "@/lib/ui/adv-button";
@@ -118,6 +118,10 @@ export interface MatchVideoAttachmentFlowProps {
  * Copy
  * ---------------------------------------------------------------------- */
 
+/** The one-step trim screen's body, shared by add and replace. */
+const TRIM_DESCRIPTION =
+  "Scrub to the serve of the first point. The cut is set around the match for you: from just before that serve to just after SwingVision's last point. Adjust either end if you need to.";
+
 const TITLES: Record<MatchVideoMode, { file: string; align: string }> = {
   add: {
     file: "Add the match video",
@@ -136,13 +140,11 @@ const TITLES: Record<MatchVideoMode, { file: string; align: string }> = {
 const DESCRIPTIONS: Record<MatchVideoMode, { file: string; align: string }> = {
   add: {
     file: "Your own recording of this match, played back beside the statistics SwingVision already imported. It is not sent for analysis and costs none of your video hours.",
-    align:
-      "One position lines the whole match up: where the first point's serve contact happens in this file. The upload starts when you confirm.",
+    align: TRIM_DESCRIPTION,
   },
   replace: {
     file: "The video on this match stays exactly as it is until the new one is published. Nothing is deleted first.",
-    align:
-      "The new recording needs its own first point — the old one was measured against a different file. The upload starts when you confirm.",
+    align: TRIM_DESCRIPTION,
   },
   align: {
     file: "",
@@ -220,7 +222,9 @@ function PinnedMatchBar({ match }: { match: AttachmentMatchSummary }) {
  * state would go with it. The confirmed text therefore lives one level up and
  * is restored here on mount: stepping back to check a filename must not throw
  * away a position somebody scrubbed for, and the hook's own reset — which fires
- * when the SOURCE changes — is the case where losing it is correct.
+ * when the SOURCE changes — is the case where losing it is correct. The kept
+ * window is restored the same way, and only for add and replace: an adjust
+ * has no file to cut, so it is never handed the trim options at all.
  */
 function AlignmentStage({
   flow,
@@ -239,7 +243,20 @@ function AlignmentStage({
   declaredDurationSeconds?: number;
   savedConfirmedSeconds: number | null;
 }) {
-  const { setAlignment, setConfirmedText } = flow;
+  const { setAlignment, setConfirmedText, setTrim, trimWindowFor } = flow;
+  // Read once, on mount — the hook owns the window from then on.
+  const [initialTrim] = useState(() => flow.trim);
+  const trim = useMemo(
+    () =>
+      modeUploadsFile(mode)
+        ? {
+            defaultWindow: trimWindowFor,
+            initial: initialTrim,
+            onChange: setTrim,
+          }
+        : undefined,
+    [initialTrim, mode, setTrim, trimWindowFor],
+  );
   const api = useAttachmentAlignment({
     source,
     points,
@@ -247,6 +264,7 @@ function AlignmentStage({
     declaredDurationSeconds,
     savedConfirmedSeconds,
     onAlignmentChange: setAlignment,
+    trim,
   });
 
   const restore = useRef(flow.confirmedText);
@@ -431,7 +449,7 @@ export function MatchVideoAttachmentFlow({
       : save.status === "failed"
         ? "Try again"
         : uploadsFile
-          ? "Upload and save"
+          ? "Trim and upload"
           : "Save the alignment";
 
   const status: ReactNode =
@@ -451,10 +469,6 @@ export function MatchVideoAttachmentFlow({
       <span className="text-[11px] text-[var(--ink-500)]">Video saved</span>
     ) : save.status === "failed" ? (
       <span className="text-[11px] text-[var(--error)]">Not saved</span>
-    ) : step === "align" && uploadsFile && !blocked ? (
-      <span className="text-[11px] text-[var(--ink-500)]">
-        Uploads when you confirm
-      </span>
     ) : null;
 
   return (
@@ -477,7 +491,21 @@ export function MatchVideoAttachmentFlow({
       }
       status={status}
       secondary={
-        isBusy && save.status === "saving" && save.canCancel ? (
+        step === "align" &&
+        uploadsFile &&
+        !blocked &&
+        (save.status === "idle" || save.status === "failed") ? (
+          /* Beside the primary it qualifies, as the canvas draws it: the
+             button says "trim", this says what that costs. A phone's footer
+             has no room for it beside Back and the primary, and the step's
+             own "Keeps … of …" already says the same thing there. */
+          <span
+            data-testid="attachment-kept-note"
+            className="hidden shrink-0 text-[12px] whitespace-nowrap text-[var(--ink-500)] sm:inline"
+          >
+            Only the kept part is uploaded
+          </span>
+        ) : isBusy && save.status === "saving" && save.canCancel ? (
           <button
             type="button"
             onClick={flow.cancel}

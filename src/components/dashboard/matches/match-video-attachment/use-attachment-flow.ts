@@ -93,6 +93,7 @@ import {
   type AttachmentTransferError,
   type AttachmentTransferProgress,
 } from "./attachment-upload";
+import type { AttachmentTrimSelection } from "./use-attachment-alignment";
 import {
   useAttachmentFile,
   type AttachmentFileApi,
@@ -351,6 +352,15 @@ export interface AttachmentFlowApi {
    */
   confirmedText: string;
   setConfirmedText: (text: string) => void;
+  /**
+   * The kept window the alignment step is showing, with the mark it was set
+   * around — held here for the same reason as the text, and because it is
+   * what submit cuts. Null until a submittable window exists.
+   */
+  trim: AttachmentTrimSelection | null;
+  setTrim: (trim: AttachmentTrimSelection | null) => void;
+  /** The default-window function submit falls back to; the step draws with it. */
+  trimWindowFor: AttachmentFlowDeps["trimWindow"];
   expectedActive: ExpectedActiveAttachment | null;
   save: AttachmentSaveState;
   /** True while a commit is in flight — the whole step is held, not just the button. */
@@ -399,6 +409,7 @@ export function useAttachmentFlow(
   const [save, setSave] = useState<AttachmentSaveState>({ status: "idle" });
   const [alignment, setAlignment] = useState<Alignment | null>(null);
   const [confirmedText, setConfirmedText] = useState("");
+  const [trim, setTrim] = useState<AttachmentTrimSelection | null>(null);
 
   /* ---------------------------------------------------------------------
    * Commit machinery
@@ -435,6 +446,7 @@ export function useAttachmentFlow(
   const onSelectionChange = useCallback(() => {
     setAlignment(null);
     setConfirmedText("");
+    setTrim(null);
     clientRequestId.current = null;
     setSave((previous) =>
       previous.status === "failed" ? { status: "idle" } : previous,
@@ -637,14 +649,21 @@ export function useAttachmentFlow(
 
         let result: Awaited<ReturnType<typeof deps.transfer>>;
         try {
-          const keep = deps.trimWindow({
-            markedSeconds: alignment.confirmedVideoTimeSeconds,
-            timing: alignment.timing,
-            videoDurationSeconds: picked.durationSeconds,
-          });
+          // The window on screen when it belongs to this mark — the person
+          // may have moved either cut — else the default the step would draw.
+          const keep =
+            trim !== null &&
+            trim.markedSeconds === alignment.confirmedVideoTimeSeconds
+              ? trim.window
+              : deps.trimWindow({
+                  markedSeconds: alignment.confirmedVideoTimeSeconds,
+                  timing: alignment.timing,
+                  videoDurationSeconds: picked.durationSeconds,
+                });
           // The server's coverage rule, against the clip this window WOULD
-          // produce. The default window always passes; a window that does not
-          // is not cut, because the server would refuse the cut it produced.
+          // produce. The default window always passes, and the step holds
+          // the alignment back while an adjusted one fails; a window that
+          // still does not is not cut, because the server would refuse it.
           const trimmed = planTrimmedAlignment({
             points,
             shots,
@@ -765,6 +784,7 @@ export function useAttachmentFlow(
     reportTrim,
     selection,
     shots,
+    trim,
     uploadsFile,
   ]);
 
@@ -810,6 +830,9 @@ export function useAttachmentFlow(
     setAlignment,
     confirmedText,
     setConfirmedText,
+    trim,
+    setTrim,
+    trimWindowFor: deps.trimWindow,
     expectedActive,
     save,
     isBusy,

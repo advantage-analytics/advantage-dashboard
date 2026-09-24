@@ -474,8 +474,59 @@ test("add runs two steps inside the wizard shell, with the match pinned", async 
   await continueButton(page).click();
 
   await expect(page.getByText("Step 2 of 2")).toBeVisible();
-  await expect(continueButton(page)).toHaveText("Upload and save");
+  await expect(continueButton(page)).toHaveText("Trim and upload");
 });
+
+/**
+ * Step 2 of add and replace is one screen that marks the first point AND sets
+ * the cut — the approved canvas "Main". Same copy in both modes: a replace
+ * needs its own first point, and its own cut, exactly as an add does.
+ */
+const TRIM_BODY =
+  "Scrub to the serve of the first point. The cut is set around the match for you: from just before that serve to just after SwingVision's last point. Adjust either end if you need to.";
+
+for (const mode of ["add", "replace"] as const) {
+  test(`${mode}: step 2 is the one-step "Mark the first point" trim screen`, async ({
+    page,
+  }) => {
+    const matchId = matchIdFor("ok");
+    await open(page, { mode, matchId });
+    await pickFile(page);
+    await continueButton(page).click();
+    await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
+
+    await expect(page.getByText("Step 2 of 2", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Mark the first point" }),
+    ).toBeVisible();
+    await expect(page.getByText(TRIM_BODY, { exact: true })).toBeVisible();
+
+    // Footer: Back on the left; the note beside the primary it qualifies.
+    await expect(
+      page.getByRole("button", { name: "Back", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("attachment-kept-note")).toHaveText(
+      "Only the kept part is uploaded",
+    );
+    await expect(continueButton(page)).toHaveText("Trim and upload");
+    await expect(continueButton(page)).toBeDisabled();
+
+    // The rail and both readouts are drawn before anything is marked, and
+    // wake once it is. The Advantage Intelligence camera questions never
+    // appear: an attachment is not a vendor job.
+    await expect(page.getByTestId("alignment-trim")).toBeVisible();
+    await expect(page.getByRole("radiogroup")).toHaveCount(0);
+    await expect(page.getByText("Top of frame")).toHaveCount(0);
+    await expect(page.getByText("Moved or panned")).toHaveCount(0);
+
+    await timeField(page).fill("00:00:00.500");
+    await expect(page.getByTestId("alignment-marked-badge")).toHaveText(
+      "First point marked",
+    );
+    await expect(continueButton(page)).toBeEnabled();
+    expect(await requests(page, matchId)).toEqual([]);
+  });
+}
 
 test("adjust is one step and never offers a file", async ({ page }) => {
   const matchId = matchIdFor("ok");
@@ -756,6 +807,76 @@ test("add cuts the kept window before anything is reserved, then uploads the cut
 
   // The cut is gone from OPFS once the bytes are in.
   expect(state.discardCalls).toEqual([cut.storageName]);
+});
+
+test("the window the person adjusts is the window that is cut", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=cut`,
+  });
+  // Default [0.300, 1.300]; pull the start back to frame zero.
+  await expect(page.getByTestId("alignment-trim-start")).toHaveAttribute(
+    "data-seconds",
+    "0.3",
+  );
+  await page.getByTestId("alignment-scrub").focus();
+  await page.keyboard.press("Home");
+  await page.getByRole("button", { name: "Set the start here" }).click();
+  await expect(page.getByTestId("alignment-trim-start")).toHaveAttribute(
+    "data-seconds",
+    "0",
+  );
+
+  // Stepping back to check the file keeps the adjusted cut, as it keeps the
+  // marked time.
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await continueButton(page).click();
+  await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
+  await expect(page.getByTestId("alignment-trim-start")).toHaveAttribute(
+    "data-seconds",
+    "0",
+  );
+
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const state = await harnessState(page);
+  expect(state.prepareCalls).toHaveLength(1);
+  expect(state.prepareCalls[0]).toMatchObject({
+    startSeconds: 0,
+    endSeconds: 1.3,
+  });
+  // The serve sits at `marked − start` = 0.500 in a cut that starts at zero.
+  const sent = await requests(page, matchId);
+  expect(bodyOf(sent, "/complete")!.confirmedVideoTimeSeconds).toBeCloseTo(
+    0.5,
+    6,
+  );
+});
+
+test("a window that no longer covers the match is refused and Trim and upload sleeps", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500");
+  await expect(continueButton(page)).toBeEnabled();
+
+  // The end dragged to frame zero, before the marked serve.
+  await page.getByTestId("alignment-scrub").focus();
+  await page.keyboard.press("Home");
+  await page.getByRole("button", { name: "Set the end here" }).click();
+
+  const refusal = page.getByTestId("alignment-error");
+  await expect(refusal).toHaveAttribute(
+    "data-error-code",
+    "insufficient_coverage",
+  );
+  await expect(refusal).toContainText("This video is not long enough.");
+  await expect(continueButton(page)).toBeDisabled();
+  expect(await requests(page, matchId)).toEqual([]);
+  expect((await harnessState(page)).prepareCalls).toEqual([]);
 });
 
 test("replace cuts too, and still claims the attachment it supersedes", async ({

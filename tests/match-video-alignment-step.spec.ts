@@ -536,6 +536,161 @@ test("a saved attachment plays from its URL with the same labelled controls", as
 });
 
 /* -------------------------------------------------------------------------
+ * The kept window (add and replace)
+ *
+ * Scenario `long` carries the canvas's own numbers: a 5770s match in a
+ * 1:52:10 file, marked at 0:04:32.400, gives the default cut
+ * [262.4, 6052.4] — Start 0:04:22, End 1:40:52, Keeps 1:36:30 of 1:52:10.
+ * ---------------------------------------------------------------------- */
+
+async function trimEvents(page: Page) {
+  return page.evaluate(
+    () => (window as unknown as AlignmentHarnessWindow).trimEvents,
+  );
+}
+
+function readout(page: Page, side: "start" | "end") {
+  return page.getByTestId(`alignment-trim-${side}`);
+}
+
+function caption(page: Page, side: "start" | "end") {
+  return page.getByTestId(`alignment-trim-${side}-caption`);
+}
+
+async function playheadTo(page: Page, keys: string[]) {
+  await page.getByTestId("alignment-scrub").focus();
+  for (const key of keys) await page.keyboard.press(key);
+}
+
+test("marking the first point sets both cuts to the default window", async ({
+  page,
+}) => {
+  await open(page, { scenario: "long" });
+
+  // Nothing is marked, so nothing is cut and nothing claims to be.
+  await expect(page.getByTestId("alignment-marked-badge")).toHaveCount(0);
+  await expect(page.getByTestId("alignment-trim-keeps")).toHaveText(
+    "Nothing is cut until you mark the first point",
+  );
+  await expect(
+    page.getByRole("button", { name: "Set the start here" }),
+  ).toBeDisabled();
+
+  await enter(page, "00:04:32.400");
+
+  await expect(page.getByTestId("alignment-marked-badge")).toHaveText(
+    "First point marked",
+  );
+  await expect(readout(page, "start")).toHaveText("0:04:22");
+  await expect(readout(page, "end")).toHaveText("1:40:52");
+  await expect(readout(page, "start")).toHaveAttribute("data-seconds", "262.4");
+  await expect(readout(page, "end")).toHaveAttribute("data-seconds", "6052.4");
+  await expect(page.getByTestId("alignment-trim-keeps")).toHaveText(
+    "Keeps 1:36:30 of 1:52:10",
+  );
+  await expect(caption(page, "start")).toHaveText(
+    "10 s before the first point you marked",
+  );
+  await expect(caption(page, "end")).toHaveText(
+    "10 s after SwingVision's last point",
+  );
+  await expect(page.getByTestId("alignment-trim")).toHaveAttribute(
+    "data-at-defaults",
+    "true",
+  );
+
+  const labels = page.getByTestId("alignment-trim-labels");
+  await expect(labels).toContainText("▲ first point");
+  await expect(labels).toContainText("last point ▲");
+
+  // The window reported upward is the one on screen.
+  await expect(ready(page)).toBeVisible();
+  expect((await trimEvents(page)).at(-1)).toEqual({
+    markedSeconds: 272.4,
+    startSeconds: 262.4,
+    endSeconds: 6052.4,
+  });
+});
+
+test("Set the start here and Set the end here move each cut to the playhead", async ({
+  page,
+}) => {
+  await open(page, { scenario: "long" });
+  await enter(page, "00:04:32.400");
+  await expect(readout(page, "start")).toHaveText("0:04:22");
+
+  // Playhead on frame zero, well before the marked serve: a longer lead-in.
+  await playheadTo(page, ["Home"]);
+  await page.getByRole("button", { name: "Set the start here" }).click();
+
+  await expect(readout(page, "start")).toHaveAttribute("data-seconds", "0");
+  await expect(readout(page, "start")).toHaveText("0:00:00");
+  // The moved cut says where it now sits; the untouched one keeps its default.
+  await expect(caption(page, "start")).toHaveText(
+    "4:32 before the first point you marked",
+  );
+  await expect(caption(page, "end")).toHaveText(
+    "10 s after SwingVision's last point",
+  );
+  await expect(page.getByTestId("alignment-trim-keeps")).toHaveText(
+    "Keeps 1:40:52 of 1:52:10",
+  );
+  await expect(page.getByTestId("alignment-trim")).toHaveAttribute(
+    "data-at-defaults",
+    "false",
+  );
+  await expect(ready(page)).toBeVisible();
+  expect((await trimEvents(page)).at(-1)).toEqual({
+    markedSeconds: 272.4,
+    startSeconds: 0,
+    endSeconds: 6052.4,
+  });
+
+  // One second in: an end before the match has even started. The window no
+  // longer covers it, so the coverage refusal shows and nothing is submittable.
+  await playheadTo(page, ["Shift+ArrowRight"]);
+  await page.getByRole("button", { name: "Set the end here" }).click();
+
+  await expect(readout(page, "end")).toHaveAttribute("data-seconds", "1");
+  await expect(caption(page, "end")).toHaveText(
+    "1:40:41 before SwingVision's last point",
+  );
+  await expect(errorStrip(page)).toHaveAttribute(
+    "data-error-code",
+    "insufficient_coverage",
+  );
+  await expect(errorStrip(page)).toHaveAttribute("data-trim", "true");
+  await expect(errorStrip(page)).toContainText("not long enough");
+  await expect(ready(page)).toHaveCount(0);
+  expect((await events(page)).at(-1)).toBeNull();
+  expect((await trimEvents(page)).at(-1)).toBeNull();
+
+  // Marking a different first point puts both cuts back on their defaults.
+  await enter(page, "00:04:33.000");
+  await expect(readout(page, "start")).toHaveText("0:04:23");
+  await expect(caption(page, "start")).toHaveText(
+    "10 s before the first point you marked",
+  );
+  await expect(caption(page, "end")).toHaveText(
+    "10 s after SwingVision's last point",
+  );
+  await expect(errorStrip(page)).toHaveCount(0);
+  await expect(ready(page)).toBeVisible();
+});
+
+test("an adjust has no window to cut", async ({ page }) => {
+  await open(page, { scenario: "correction", mode: "align", source: "saved" });
+
+  await expect(page.getByTestId("alignment-video")).toBeVisible();
+  await expect(page.getByTestId("alignment-trim")).toHaveCount(0);
+  await expect(page.getByTestId("alignment-marked-badge")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Set the start here" }),
+  ).toHaveCount(0);
+  expect(await trimEvents(page)).toEqual([]);
+});
+
+/* -------------------------------------------------------------------------
  * Network
  * ---------------------------------------------------------------------- */
 

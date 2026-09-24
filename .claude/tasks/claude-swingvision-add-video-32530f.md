@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Draw the one-step "Mark the first point" trim screen
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess) `src/components/dashboard/matches/match-video-attachment/AttachmentAlignmentStep.tsx`, `use-attachment-alignment.ts`, `MatchVideoAttachmentFlow.tsx` (TITLES / DESCRIPTIONS / continueLabel / status), possibly a rail pulled out of `src/components/dashboard/matches/new-match-wizard/TrimStepContent.tsx`, `tests/match-video-alignment-step.spec.ts`, `tests/match-video-attachment-flow.spec.ts`
