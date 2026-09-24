@@ -387,3 +387,11 @@ The title and content class moved into a new shared module, `schedule/score-flow
 - `EditEventPending`'s raw progress rule is now `PendingBar rounded-none`.
 - The header's three match-crumb bars sit in one `PendingRegion` labelled "Loading breadcrumb", off `--ink-100`.
 - All five files are off `LEGACY`. `home-empty-loading` and `team-loading` pass unedited.
+
+## T33 · Settings skeletons on the shared primitives — blocked
+
+**gate:** mechanical GATE FAIL on all six runs. Every failure was a live-DB spec, plus the known `match-video-attachment-flow.spec.ts:848` flake. Failures per run: 1, 1, 1, 1, then 22, then 21. On the sixth run, `createUser` itself failed ("fetch failed after 20 attempts over 170s"), because the shared Supabase is degraded. None of the failures touch the task's files. The criterion's own command passed: lint, typecheck and `settings-pending` + `skeleton-primitives` (27/27). · completion `VERDICT: pass`, not reached as a gate verdict because the mechanical gate failed first.
+
+**stash:** `4dd7cb9f1221f5ea66d0e57587175186f5d168c9`. It holds `settings-pending.tsx` on `PendingBar`/`PendingRegion`, `LEGACY` emptied, and the new `tests/settings-pending.spec.ts`.
+
+**to resume:** once the live DB is healthy, run `git stash apply 4dd7cb9f`, reset the status to `todo`, and re-run the gate. Visible change: a multi-line text placeholder is now one block instead of one band per line, because `PendingBar` has no children.

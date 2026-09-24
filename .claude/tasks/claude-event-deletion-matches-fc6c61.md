@@ -440,7 +440,7 @@ ready).
 
 ## T33 · Settings skeletons on the shared primitives
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T25
 - **files:** src/components/dashboard/loading/settings-pending.tsx, tests/settings-pending.spec.ts (new), tests/skeleton-primitives.spec.ts
