@@ -49,11 +49,7 @@ import {
 import { WizardShell } from "./WizardShell";
 import { sweepPreparedVideos } from "@/lib/video/trim";
 import posthog from "posthog-js";
-
-const isPostHogConfigured = Boolean(
-  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
-  process.env.NEXT_PUBLIC_POSTHOG_HOST,
-);
+import { isPostHogConfigured } from "@/lib/posthog-client";
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";

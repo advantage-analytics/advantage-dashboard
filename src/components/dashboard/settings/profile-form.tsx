@@ -17,11 +17,7 @@ import { MenuSelect } from "@/components/ui/menu-select";
 import { DateField } from "@/components/ui/date-field";
 import { todayISO } from "@/lib/schedule/format";
 import posthog from "posthog-js";
-
-const isPostHogConfigured = Boolean(
-  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
-  process.env.NEXT_PUBLIC_POSTHOG_HOST,
-);
+import { isPostHogConfigured } from "@/lib/posthog-client";
 
 /**
  * Settings › Profile.

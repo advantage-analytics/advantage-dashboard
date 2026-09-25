@@ -17,11 +17,7 @@ import {
 } from "@/components/dashboard/team/dialog-shell";
 import { advButton } from "@/lib/ui/adv-button";
 import posthog from "posthog-js";
-
-const isPostHogConfigured = Boolean(
-  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
-  process.env.NEXT_PUBLIC_POSTHOG_HOST,
-);
+import { isPostHogConfigured } from "@/lib/posthog-client";
 
 type StaffRole = "staff" | "coach";
 

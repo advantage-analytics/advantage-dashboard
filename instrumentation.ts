@@ -6,6 +6,7 @@ import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import type { Instrumentation } from "next";
 import type { PostHog } from "posthog-node";
+import { getPostHogServerConfig } from "@/lib/posthog-logs";
 
 // Next compiles this file as its own entry, so a module-level export here is a
 // different instance from the one a route handler would import — register()
@@ -55,9 +56,9 @@ export const onRequestError: Instrumentation.onRequestError = async (
   context,
 ) => {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  const token = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
-  if (!token || !host) return;
+  const config = getPostHogServerConfig();
+  if (!config) return;
+  const { token, host } = config;
 
   try {
     const { PostHog } = await import("posthog-node");
@@ -89,9 +90,8 @@ export function register() {
 
   // Optional, like every analytics key in .env.example: a checkout without it
   // boots with PostHog off. Only the Supabase keys are needed to start.
-  const token = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
-  if (!token || !host) {
+  const config = getPostHogServerConfig();
+  if (!config) {
     if (process.env.NODE_ENV !== "production") {
       console.warn(
         "[posthog] PostHog is off: set NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN and NEXT_PUBLIC_POSTHOG_HOST to enable it (see .env.example).",
@@ -99,6 +99,7 @@ export function register() {
     }
     return;
   }
+  const { token, host } = config;
 
   globalThis.__posthogLogProvider = new LoggerProvider({
     resource: resourceFromAttributes({

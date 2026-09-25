@@ -20,11 +20,7 @@ import {
 } from "@/lib/auth/auth-next-cookie";
 import { safeNext } from "@/lib/auth/safe-next";
 import posthog from "posthog-js";
-
-const isPostHogConfigured = Boolean(
-  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
-  process.env.NEXT_PUBLIC_POSTHOG_HOST,
-);
+import { isPostHogConfigured } from "@/lib/posthog-client";
 
 /**
  * Google's brand mark. Hoisted out of the component because it is static and

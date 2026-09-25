@@ -1,9 +1,5 @@
 import { after, NextRequest } from "next/server";
-import {
-  flushPostHogLogs,
-  logPostHogError,
-  logPostHogInfo,
-} from "@/lib/posthog-logs";
+import { flushPostHogLogs, logPostHog } from "@/lib/posthog-logs";
 import { createClient } from "@/lib/supabase/server";
 import {
   createLLMObservabilityContext,
@@ -36,6 +32,8 @@ interface ChatRequestBody {
   messages: ChatMessage[];
   matchContext: MatchContext;
 }
+
+const ROUTE = "/api/chat";
 
 function buildSystemPrompt(ctx: MatchContext): string {
   const courtLine = ctx.courtType ? ` · ${ctx.courtType}` : "";
@@ -145,8 +143,8 @@ export async function POST(request: NextRequest) {
     return new Response("LLM error", { status: 500 });
   }
 
-  logPostHogInfo("ai_chat_stream_started", {
-    route: "/api/chat",
+  logPostHog("info", "ai_chat_stream_started", {
+    route: ROUTE,
     provider_configured: Boolean(process.env.LLM_PROVIDER),
   });
 
@@ -158,13 +156,13 @@ export async function POST(request: NextRequest) {
         for await (const chunk of iterable) {
           controller.enqueue(encoder.encode(chunk));
         }
-        logPostHogInfo("ai_chat_stream_completed", {
-          route: "/api/chat",
+        logPostHog("info", "ai_chat_stream_completed", {
+          route: ROUTE,
         });
       } catch (err) {
         console.error("Stream error:", err);
-        logPostHogError("ai_chat_stream_failed", {
-          route: "/api/chat",
+        logPostHog("error", "ai_chat_stream_failed", {
+          route: ROUTE,
         });
         controller.error(err);
       } finally {

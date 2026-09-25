@@ -3,6 +3,7 @@ import { OpenAI } from "@posthog/ai/openai";
 import { after } from "next/server";
 import { PostHog } from "posthog-node";
 import { randomUUID } from "node:crypto";
+import { getPostHogServerConfig } from "@/lib/posthog-logs";
 
 /**
  * LLM Adapter — provider-switching stream module.
@@ -52,9 +53,9 @@ declare global {
  */
 function getPostHogClient(): PostHog | null {
   // Missing keys mean no observability, never a failed insight.
-  const token = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
-  if (!token || !host) return null;
+  const config = getPostHogServerConfig();
+  if (!config) return null;
+  const { token, host } = config;
 
   globalThis.__posthogLLMClient ??= new PostHog(token, {
     host,

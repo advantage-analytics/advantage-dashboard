@@ -9,11 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useUnsavedChanges } from "@/components/dashboard/settings/unsaved-changes-context";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import posthog from "posthog-js";
-
-const isPostHogConfigured = Boolean(
-  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
-  process.env.NEXT_PUBLIC_POSTHOG_HOST,
-);
+import { isPostHogConfigured } from "@/lib/posthog-client";
 
 /**
  * The single sign-out confirmation for the dashboard.

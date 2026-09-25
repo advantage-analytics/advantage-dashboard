@@ -12,11 +12,7 @@ import {
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { createClient } from "@/lib/supabase/client";
 import posthog from "posthog-js";
-
-const isPostHogConfigured = Boolean(
-  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
-  process.env.NEXT_PUBLIC_POSTHOG_HOST,
-);
+import { isPostHogConfigured } from "@/lib/posthog-client";
 
 /**
  * The admin shell's account control — the chrome's one circle, and the only

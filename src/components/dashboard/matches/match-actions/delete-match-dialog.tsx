@@ -4,11 +4,7 @@ import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { ConfirmDialog, Em } from "@/components/ui/confirm-dialog";
 import posthog from "posthog-js";
-
-const isPostHogConfigured = Boolean(
-  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
-  process.env.NEXT_PUBLIC_POSTHOG_HOST,
-);
+import { isPostHogConfigured } from "@/lib/posthog-client";
 
 interface DeleteMatchDialogProps {
   matchId: string;

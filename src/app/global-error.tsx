@@ -3,6 +3,7 @@
 import NextError from "next/error";
 import posthog from "posthog-js";
 import { useEffect } from "react";
+import { isPostHogConfigured } from "@/lib/posthog-client";
 
 export default function GlobalError({
   error,
@@ -11,10 +12,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    if (
-      process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
-      process.env.NEXT_PUBLIC_POSTHOG_HOST
-    ) {
+    if (isPostHogConfigured) {
       posthog.captureException(error);
     }
   }, [error]);

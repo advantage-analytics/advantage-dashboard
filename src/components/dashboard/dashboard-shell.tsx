@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import posthog from "posthog-js";
+import { isPostHogConfigured } from "@/lib/posthog-client";
 import { Header } from "@/app/dashboard/header";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { MobileGate } from "@/components/dashboard/mobile-gate";
@@ -20,11 +21,6 @@ import {
   STORAGE_KEYS,
   clearStorageData,
 } from "@/components/dashboard/matches/new-match-wizard/utils";
-
-const isPostHogConfigured = Boolean(
-  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
-  process.env.NEXT_PUBLIC_POSTHOG_HOST,
-);
 
 /**
  * The client half of the dashboard layout.
