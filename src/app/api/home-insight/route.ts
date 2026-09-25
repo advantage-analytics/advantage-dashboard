@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getLLMStream } from "@/lib/llm/adapter";
+import { createLLMObservabilityContext, getLLMStream } from "@/lib/llm/adapter";
 import { formatChange, textStreamResponse } from "@/lib/llm/stream-response";
 import {
   getOverallPerformance,
@@ -110,9 +110,11 @@ export async function POST() {
 
   let iterable: AsyncIterable<string>;
   try {
-    iterable = await getLLMStream(systemPrompt, [
-      { role: "user", content: "Generate my performance insight." },
-    ]);
+    iterable = await getLLMStream(
+      systemPrompt,
+      [{ role: "user", content: "Generate my performance insight." }],
+      createLLMObservabilityContext(user.id),
+    );
   } catch (err) {
     console.error("LLM adapter error:", err);
     return new Response("LLM error", { status: 500 });

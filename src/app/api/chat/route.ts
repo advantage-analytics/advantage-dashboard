@@ -1,6 +1,15 @@
-import { NextRequest } from "next/server";
+import { after, NextRequest } from "next/server";
+import {
+  flushPostHogLogs,
+  logPostHogError,
+  logPostHogInfo,
+} from "@/lib/posthog-logs";
 import { createClient } from "@/lib/supabase/server";
-import { getLLMStream, type ChatMessage } from "@/lib/llm/adapter";
+import {
+  createLLMObservabilityContext,
+  getLLMStream,
+  type ChatMessage,
+} from "@/lib/llm/adapter";
 
 interface MatchContext {
   player1Name: string;
@@ -126,11 +135,20 @@ export async function POST(request: NextRequest) {
   // 4. Get LLM stream
   let iterable: AsyncIterable<string>;
   try {
-    iterable = await getLLMStream(systemPrompt, messages);
+    iterable = await getLLMStream(
+      systemPrompt,
+      messages,
+      createLLMObservabilityContext(user.id),
+    );
   } catch (err) {
     console.error("LLM adapter error:", err);
     return new Response("LLM error", { status: 500 });
   }
+
+  logPostHogInfo("ai_chat_stream_started", {
+    route: "/api/chat",
+    provider_configured: Boolean(process.env.LLM_PROVIDER),
+  });
 
   // 5. Pipe async iterable into a ReadableStream response
   const stream = new ReadableStream({
@@ -140,13 +158,23 @@ export async function POST(request: NextRequest) {
         for await (const chunk of iterable) {
           controller.enqueue(encoder.encode(chunk));
         }
+        logPostHogInfo("ai_chat_stream_completed", {
+          route: "/api/chat",
+        });
       } catch (err) {
         console.error("Stream error:", err);
+        logPostHogError("ai_chat_stream_failed", {
+          route: "/api/chat",
+        });
         controller.error(err);
       } finally {
         controller.close();
       }
     },
+  });
+
+  after(async () => {
+    await flushPostHogLogs();
   });
 
   return new Response(stream, {
