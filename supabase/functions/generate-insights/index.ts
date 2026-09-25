@@ -101,8 +101,8 @@ async function captureGeminiGeneration({
 
 serve(async (req) => {
   try {
-    // 1. The caller provides the match and authenticated uploader IDs.
-    const { matchId, userId } = await req.json();
+    // 1. We only need the matchId now
+    const { matchId } = await req.json();
 
     if (!matchId) {
       return new Response(JSON.stringify({ error: "matchId is required" }), {
@@ -130,13 +130,20 @@ serve(async (req) => {
     // the player's career averages over PRIOR matches + their immediately previous match,
     // so the LLM can frame this match against them. Best-effort — any failure just omits it.
     let comparisonContext = "";
+    // Who PostHog attributes the generation to: the account that filed the
+    // match, read from the row rather than taken from the request body — any
+    // caller can reach this function, and a body field would let one attribute
+    // a generation to someone else. `player1_id` is not a substitute; it may be
+    // a program_players id rather than an account.
+    let uploaderId: string | undefined;
     try {
       const { data: matchRow } = await supabase
         .from("matches")
-        .select("player1_id, date, program_id")
+        .select("player1_id, date, program_id, created_by")
         .eq("id", matchId)
         .single();
 
+      uploaderId = matchRow?.created_by ?? undefined;
       const userId = matchRow?.player1_id;
       const matchDate = matchRow?.date;
 
@@ -306,7 +313,7 @@ serve(async (req) => {
 
     const generatedInsights = geminiData.candidates[0].content.parts[0].text;
     await captureGeminiGeneration({
-      userId,
+      userId: uploaderId,
       prompt,
       output: generatedInsights,
       latency: (Date.now() - generationStartedAt) / 1000,

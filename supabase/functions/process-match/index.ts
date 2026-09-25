@@ -323,7 +323,7 @@ async function processMatchToDb({
   const { error: insightsError } = await supabase.functions.invoke(
     "generate-insights",
     {
-      body: { matchId: matchId, userId: userId },
+      body: { matchId: matchId },
     },
   );
 
