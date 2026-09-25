@@ -68,11 +68,29 @@ export function DesignPreview() {
         video hours left. Click it to reopen the dialog.
       </p>
       <div className="mt-5 max-w-[960px]">
-        <HeaderPreview
-          usedSeconds={variant.usedHours * 3600}
-          capSeconds={variant.terms.hours * 3600}
-          onOpenBeta={() => setOpen(true)}
-        />
+        <div className="flex flex-col gap-4">
+          <HeaderPreview
+            hours={{
+              remainingSeconds:
+                (variant.terms.hours - variant.usedHours) * 3600,
+              capSeconds: variant.terms.hours * 3600,
+              bandFull: false,
+            }}
+            onOpenBeta={() => setOpen(true)}
+          />
+          {/* An individual whose own hours are untouched, after the shared
+              open-beta ceiling has run out for the month. */}
+          {!variant.terms.programName && (
+            <HeaderPreview
+              hours={{
+                remainingSeconds: 0,
+                capSeconds: variant.terms.hours * 3600,
+                bandFull: true,
+              }}
+              onOpenBeta={() => setOpen(true)}
+            />
+          )}
+        </div>
       </div>
 
       <BetaWelcomeDialog

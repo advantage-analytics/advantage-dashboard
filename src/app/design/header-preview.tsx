@@ -10,12 +10,10 @@ import { BetaMeterPill } from "@/components/dashboard/beta-header-meter";
  * draws the bar so `/design` can show the pill in place.
  */
 export function HeaderPreview({
-  usedSeconds,
-  capSeconds,
+  hours,
   onOpenBeta,
 }: {
-  usedSeconds: number | null;
-  capSeconds: number;
+  hours: React.ComponentProps<typeof BetaMeterPill>["hours"];
   onOpenBeta: () => void;
 }) {
   return (
@@ -25,11 +23,7 @@ export function HeaderPreview({
           Matches
         </span>
         <div className="flex shrink-0 items-center gap-1.5">
-          <BetaMeterPill
-            usedSeconds={usedSeconds}
-            capSeconds={capSeconds}
-            onClick={onOpenBeta}
-          />
+          <BetaMeterPill hours={hours} onClick={onOpenBeta} />
           <span className="flex h-7 items-center gap-[7px] rounded-[8px] px-2 text-[var(--ink-500)]">
             <Search className="size-[14px]" strokeWidth={1.5} aria-hidden />
             <span className="text-[12px] text-[var(--ink-600)]">Search</span>

@@ -19,12 +19,39 @@
  * service role lives in `roles.ts`, which a client file must never import.
  */
 
+import { teamLabel, type Viewer, type Workspace } from "@/lib/workspace/types";
+
 /** `users.plan` value for a paid account. Constrained to 'free' | 'pro' in SQL. */
 export const PRO_PLAN = "pro";
 
 /** Whether a `users.plan` value entitles the account to Pro features. */
 export function isProPlan(plan: string | null | undefined): boolean {
   return plan === PRO_PLAN;
+}
+
+/**
+ * The Plan strip's facts — Plan / Squad (team only) / Member since — built
+ * once so Settings › Plan and its loading skeleton (`SettingsPlanPending`)
+ * cannot say two different things while a request is still in flight. The
+ * strip names the tier as a person would say it: Beta, Lifetime (an early
+ * one-time Pro purchase) or Pilot (a program).
+ */
+export function planFacts(
+  active: Pick<Workspace, "kind" | "team">,
+  viewer: Pick<Viewer, "plan" | "memberSince">,
+): { label: string; value: string }[] {
+  const isTeam = active.kind === "team";
+  const facts = [
+    {
+      label: "Plan",
+      value: isTeam ? "Pilot" : isProPlan(viewer.plan) ? "Lifetime" : "Beta",
+    },
+    isTeam ? { label: "Squad", value: teamLabel(active.team) ?? "—" } : null,
+    { label: "Member since", value: viewer.memberSince ?? "—" },
+  ];
+  return facts.filter(
+    (fact): fact is NonNullable<typeof fact> => fact !== null,
+  );
 }
 
 /**

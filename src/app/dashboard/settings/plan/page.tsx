@@ -8,9 +8,13 @@ import {
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { BETA_PLAN_ROWS, PAID_PLANS_BEGIN, isProPlan } from "@/lib/user/plan";
+import {
+  BETA_PLAN_ROWS,
+  PAID_PLANS_BEGIN,
+  isProPlan,
+  planFacts,
+} from "@/lib/user/plan";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
-import { teamLabel } from "@/lib/workspace/types";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 
 /**
@@ -35,14 +39,7 @@ function PlanContent() {
 
   const isPro = isProPlan(viewer.plan);
   const isTeam = active.kind === "team";
-
-  // The strip names the tier as a person would say it: Beta, Lifetime (an
-  // early one-time Pro purchase) or Pilot (a program).
-  const facts = [
-    { label: "Plan", value: isTeam ? "Pilot" : isPro ? "Lifetime" : "Beta" },
-    isTeam ? { label: "Squad", value: teamLabel(active.team) ?? "—" } : null,
-    { label: "Member since", value: viewer.memberSince ?? "—" },
-  ].filter((fact): fact is NonNullable<typeof fact> => fact !== null);
+  const facts = planFacts(active, viewer);
   return (
     <div className="flex max-w-[640px] flex-col gap-5">
       {/* The facts card: hairline-separated columns, one large light value

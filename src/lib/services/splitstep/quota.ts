@@ -437,6 +437,20 @@ export interface QuotaPeek {
 }
 
 /**
+ * `/api/splitstep/hours-left`'s answer, for the header's Beta pill: a peek cut
+ * down to what the pill draws. `workspaceId` lets the pill drop an answer for
+ * a workspace it has since left.
+ */
+export interface HoursLeft {
+  workspaceId: string;
+  remainingSeconds: number;
+  /** The workspace's own monthly figure — the ring's denominator. */
+  capSeconds: number;
+  /** True when the shared beta band, not the account, is what ran out. */
+  bandFull: boolean;
+}
+
+/**
  * The refusal an upload that needs `neededSeconds` gets from a peek, or null
  * when it fits. The same words `reserveQuota()` would say.
  */

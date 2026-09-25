@@ -16,7 +16,7 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { MATCH_VIDEOS_FOOTNOTE } from "@/components/dashboard/settings/match-videos-usage-card";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 import { MATCH_VIDEO_ACTIVE_LIMIT } from "@/lib/match-video/limits";
-import { BETA_PLAN_ROWS, PAID_PLANS_BEGIN } from "@/lib/user/plan";
+import { BETA_PLAN_ROWS, PAID_PLANS_BEGIN, planFacts } from "@/lib/user/plan";
 import { capitalize, cn } from "@/lib/utils";
 import { teamLabel, uploadPolicyLabel } from "@/lib/workspace/types";
 
@@ -450,13 +450,7 @@ function SessionRow({
 export function SettingsPlanPending() {
   const { active, viewer } = useWorkspace();
   const isTeam = active.kind === "team";
-  const isPro = viewer.plan === "pro";
-
-  const facts = [
-    { label: "Plan", value: isTeam ? "Pilot" : isPro ? "Lifetime" : "Beta" },
-    isTeam ? { label: "Squad", value: teamLabel(active.team) ?? "—" } : null,
-    { label: "Member since", value: viewer.memberSince ?? "—" },
-  ].filter((fact): fact is NonNullable<typeof fact> => fact !== null);
+  const facts = planFacts(active, viewer);
 
   return (
     <Column label="plan">
