@@ -11,7 +11,7 @@ import {
 /**
  * The individual tier's shared pool, without a database: which limit a peek
  * reports and what the refusal says. The atomic half is
- * `reserve_individual_pool_quota` (20260924193000_individual_pool_quota.sql).
+ * `reserve_individual_pool_quota` (20260925024406_individual_pool_quota.sql).
  */
 
 const HOUR = 3600;

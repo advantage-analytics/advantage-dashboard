@@ -1,3 +1,5 @@
+-- Applied live 2026-09-25 as version 20260925024406.
+--
 -- The individual tier's SHARED allowance with the vendor, through December:
 -- at most 20 players on the individual figure, sending under 10 hours a month
 -- between them. The 2h/user cap `reserve_processing_quota` enforces is per
