@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -10,6 +10,14 @@ import {
 } from "@/components/ui/dialog";
 import type { SeatUsage } from "@/lib/data/team-roster-server";
 import { useDescribedBody } from "@/hooks/use-described-body";
+
+/**
+ * Deliberately loose. The database and the mail server are the real checks.
+ *
+ * Shared by the Roster's invite dialog and the staff invite in Settings ›
+ * Teams so the two don't drift on what counts as "looks like an email".
+ */
+export const LOOKS_LIKE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /**
  * The shell the roster's dialogs share.
@@ -251,5 +259,91 @@ export function SeatNote({
         {footnote && <span className="text-[var(--ink-500)]">{footnote}</span>}
       </span>
     </div>
+  );
+}
+
+/**
+ * The role choice in an invite dialog: a labelled radiogroup whose options
+ * sit side by side as tiles. Stacked full-width, three cards made the dialog
+ * the height of a form page for what is one pick among a few words; a row
+ * reads as the set it is, and on a phone it falls back to a stack.
+ *
+ * Shared by the Roster's invite dialog and the staff invite in Settings ›
+ * Teams, so both surfaces offer a role the same way.
+ */
+export function RoleChoice({
+  columns,
+  children,
+}: {
+  /** One per option drawn, so the tiles share the row evenly. */
+  columns: 2 | 3;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-[11px] text-[var(--ink-600)]">Role</span>
+      <div
+        role="radiogroup"
+        aria-label="Role"
+        className={cn(
+          "grid grid-cols-1 gap-1.5",
+          columns === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+        )}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One role option inside `RoleChoice` — the DS `Radio` in its card variant:
+ * the check-dot beside the title, a short line on what the role can do under
+ * it, and selection shown as a `--blue` border on the `--blue-tint-08` wash.
+ */
+export function RoleCard({
+  checked,
+  onSelect,
+  title,
+  detail,
+}: {
+  checked: boolean;
+  onSelect: () => void;
+  title: string;
+  detail: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={checked}
+      onClick={onSelect}
+      className={cn(
+        "flex h-full cursor-pointer flex-col gap-1 rounded-[var(--radius-element)] border px-3 py-2.5 text-left transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        checked
+          ? "border-[var(--blue)] bg-[var(--blue-tint-08)]"
+          : "border-[var(--border-field)] hover:bg-[var(--surface-subtle)]",
+      )}
+    >
+      <span className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className={cn(
+            "flex size-3.5 shrink-0 items-center justify-center rounded-full",
+            checked ? "bg-[var(--blue)]" : "border border-[var(--ink-300)]",
+          )}
+        >
+          {checked && (
+            <Check className="size-2 text-white" strokeWidth={3} aria-hidden />
+          )}
+        </span>
+        <span className="text-[12px] font-medium text-[var(--ink-900)]">
+          {title}
+        </span>
+      </span>
+      <span className="text-[11px] leading-[1.5] text-[var(--ink-600)]">
+        {detail}
+      </span>
+    </button>
   );
 }
