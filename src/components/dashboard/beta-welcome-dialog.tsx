@@ -40,8 +40,8 @@ export interface BetaWelcomeTerms {
  * Radix `Dialog`, not `AlertDialog`: it asks nothing, so the scrim and Esc
  * both dismiss it, and the primary takes the initial focus rather than the X.
  *
- * The court outline in the band is the product's own subject drawn at 14%
- * white, not decoration from elsewhere: a singles court, baseline to net.
+ * The court in the band is the product's own subject drawn at 22% white,
+ * not decoration from elsewhere: a regulation court, lines to scale.
  */
 export function BetaWelcomeDialog({
   open,
@@ -111,7 +111,9 @@ export function BetaWelcomeDialog({
             </DialogPrimitive.Description>
 
             <div className="relative mt-7 flex items-end gap-3 border-t border-white/25 pt-5">
-              <span className="tabular text-[64px] leading-[0.85] font-light tracking-[-2px]">
+              {/* Two figures wide whatever the number, so the player's "2"
+                  sits in the same block as a program's "75". */}
+              <span className="tabular min-w-[1.15em] text-[64px] leading-[0.85] font-light tracking-[-2px]">
                 {terms.hours}
               </span>
               <span className="pb-1 text-[13px] leading-[1.35] text-white/85">
@@ -187,21 +189,36 @@ export function BetaWelcomeDialog({
   );
 }
 
-/** A singles court from above, baseline to net, in thin white lines. */
+/**
+ * A full tennis court from above, drawn to scale (10 units to the foot):
+ * doubles and singles sidelines, both baselines with their center marks,
+ * service lines, the center service line and a heavier net.
+ */
 function CourtOutline() {
   return (
     <svg
       aria-hidden="true"
-      viewBox="0 0 270 390"
+      viewBox="-2 -2 364 784"
       fill="none"
       stroke="white"
-      strokeWidth="1.5"
-      className="pointer-events-none absolute -top-10 -right-8 h-[340px] w-auto rotate-[-18deg] opacity-[0.14]"
+      strokeWidth="1.25"
+      className="pointer-events-none absolute top-9 right-9 h-[320px] w-auto rotate-[28deg] opacity-[0.24]"
     >
-      <rect x="1" y="1" width="268" height="388" />
-      <line x1="1" y1="210" x2="269" y2="210" />
-      <line x1="135" y1="210" x2="135" y2="389" />
-      <line x1="135" y1="1" x2="135" y2="12" />
+      {/* Doubles court, 36ft by 78ft */}
+      <rect x="0" y="0" width="360" height="780" />
+      {/* Singles sidelines, 4.5ft in */}
+      <line x1="45" y1="0" x2="45" y2="780" />
+      <line x1="315" y1="0" x2="315" y2="780" />
+      {/* Service lines, 21ft either side of the net */}
+      <line x1="45" y1="180" x2="315" y2="180" />
+      <line x1="45" y1="600" x2="315" y2="600" />
+      {/* Center service line */}
+      <line x1="180" y1="180" x2="180" y2="600" />
+      {/* Center marks on each baseline */}
+      <line x1="180" y1="0" x2="180" y2="10" />
+      <line x1="180" y1="770" x2="180" y2="780" />
+      {/* Net, overhanging the doubles sidelines */}
+      <line x1="-2" y1="390" x2="362" y2="390" strokeWidth="2.5" />
     </svg>
   );
 }
