@@ -565,6 +565,14 @@ function cronHarness(...configured: [] | [string | undefined]) {
       calls.push("run");
       return runMatchVideoCleanup(h.deps, { reason: CLEANUP_CRON_REASON });
     },
+    expire: async () => {
+      calls.push("expire");
+      return { expired: 0 };
+    },
+    warn: async () => {
+      calls.push("warn");
+      return { warned: 0, emailed: 0, skipped: 0, failed: 0 };
+    },
   };
   return { ...h, cron, calls };
 }
@@ -674,7 +682,7 @@ test("the matching bearer sweeps, and the scheme is matched case-insensitively",
   );
 
   expect(response.status).toBe(200);
-  expect(h.calls).toEqual(["run"]);
+  expect(h.calls).toEqual(["expire", "warn", "run"]);
   const body = await bodyOf(response);
   expect(body.ok).toBe(true);
   expect(body.reason).toBe(CLEANUP_CRON_REASON);
@@ -699,7 +707,7 @@ test("an authorized sweep uses the bounded worker — one batch, not the backlog
   expect(response.status).toBe(200);
   const body = await bodyOf(response);
   expect(body.claimed).toBe(CLEANUP_BATCH_LIMIT);
-  expect(h.calls).toEqual(["run"]);
+  expect(h.calls).toEqual(["expire", "warn", "run"]);
   // One claim, and the rest of the backlog untouched until tomorrow.
   expect(h.db.events.filter((e) => e.fn === "claim")).toHaveLength(1);
   expect(
@@ -719,7 +727,7 @@ test("a worker that throws is this route's own 500, and says nothing about why",
   );
 
   expect(response.status).toBe(500);
-  expect(h.calls).toEqual(["run"]);
+  expect(h.calls).toEqual(["expire", "warn", "run"]);
   expect(await bodyOf(response)).toEqual({
     ok: false,
     error: "cleanup_failed",
@@ -815,6 +823,92 @@ test("rows the database refused at settle are counted apart from storage failure
 });
 
 /* -------------------------------------------------------------------------
+ * Add video T9 — retention runs before the sweep
+ * ---------------------------------------------------------------------- */
+
+test("an authorized run expires, then warns, then sweeps — and reports the expired and warned counts", async () => {
+  const h = cronHarness();
+  const row = h.seed();
+  // Each step records the order it ran in AND what the table looked like:
+  // expire must see nothing swept yet, and the sweep must come last.
+  const seen: string[] = [];
+  const response = await handleCleanupCron(
+    cronRequest(bearer(CRON_SECRET_VALUE)),
+    {
+      ...h.cron,
+      expire: async () => {
+        seen.push(`expire:${h.db.get(row.id).cleaned_up_at === null}`);
+        return { expired: 3 };
+      },
+      warn: async () => {
+        seen.push(`warn:${h.db.get(row.id).cleaned_up_at === null}`);
+        return { warned: 2, emailed: 1, skipped: 1, failed: 0 };
+      },
+      runCleanup: async () => {
+        seen.push("run");
+        return runMatchVideoCleanup(h.deps, { reason: CLEANUP_CRON_REASON });
+      },
+    },
+  );
+
+  expect(response.status).toBe(200);
+  expect(seen).toEqual(["expire:true", "warn:true", "run"]);
+  const body = await bodyOf(response);
+  expect(body).toMatchObject({
+    ok: true,
+    expired: 3,
+    warned: 2,
+    emailed: 1,
+    claimed: 1,
+  });
+  expect(h.db.get(row.id).cleaned_up_at).not.toBeNull();
+});
+
+test("a refused request calls none of expire, warn or the sweep", async () => {
+  const h = cronHarness();
+  h.seed();
+
+  const response = await handleCleanupCron(
+    cronRequest(bearer("not-it")),
+    h.cron,
+  );
+
+  expect(response.status).toBe(401);
+  expect(h.calls).toEqual([]);
+  expect(h.db.events).toEqual([]);
+});
+
+for (const failing of ["expire", "warn"] as const) {
+  test(`a ${failing} step that throws is a 500, and the sweep still runs`, async () => {
+    const h = cronHarness();
+    const row = h.seed();
+
+    const response = await handleCleanupCron(
+      cronRequest(bearer(CRON_SECRET_VALUE)),
+      {
+        ...h.cron,
+        [failing]: async () => {
+          h.calls.push(failing);
+          throw new Error("rpc 57014 with a secret-looking detail");
+        },
+      },
+    );
+
+    expect(response.status).toBe(500);
+    expect(h.calls).toEqual(["expire", "warn", "run"]);
+    const body = await bodyOf(response);
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe(
+      failing === "expire" ? "expiry_failed" : "warning_failed",
+    );
+    expect(body[failing === "expire" ? "expired" : "warned"]).toBe(0);
+    expect(JSON.stringify(body)).not.toContain("secret-looking");
+    // Abandoned uploads are not held hostage by the retention job.
+    expect(h.db.get(row.id).cleaned_up_at).not.toBeNull();
+  });
+}
+
+/* -------------------------------------------------------------------------
  * Configuration — the schedule, the secret, the proxy
  * ---------------------------------------------------------------------- */
 
@@ -860,11 +954,18 @@ test("the route file delegates the gate and builds nothing before it", async () 
   // No second copy of the comparison, and no secret read outside the handler.
   expect(source).not.toContain("process.env");
   expect(source).not.toContain("timingSafeEqual");
-  // The admin client is constructed inside the callback the handler invokes
-  // only after the bearer matched — never at module load or before the gate.
-  const callback = source.slice(source.indexOf("runCleanup:"));
-  expect(callback).toContain("createAdminClient()");
-  expect(source.slice(0, source.indexOf("runCleanup:"))).not.toContain(
-    "createAdminClient()",
-  );
+  // The admin client is constructed inside the callbacks the handler
+  // invokes only after the bearer matched — never at module load or before
+  // the gate.
+  const starts = ["runCleanup:", "expire:", "warn:"]
+    .map((key) => {
+      expect(source).toContain(key);
+      return source.indexOf(key);
+    })
+    .sort((a, b) => a - b);
+  expect(source.slice(0, starts[0])).not.toContain("createAdminClient()");
+  starts.forEach((from, i) => {
+    const to = starts[i + 1] ?? source.indexOf("});", from);
+    expect(source.slice(from, to)).toContain("createAdminClient()");
+  });
 });

@@ -17,6 +17,8 @@ import {
 import { matchFilmHref } from "@/lib/data/match-video-attachment-server";
 import { parseReportView } from "@/components/dashboard/matches/match-detail/report-view";
 import { matchVideoError } from "@/lib/match-video/types";
+import { MATCH_VIDEO_ACTIVE_LIMIT } from "@/lib/match-video/limits";
+import type { MatchVideoUsageRow } from "@/lib/data/match-video-usage-server";
 import { transportError } from "@/lib/services/match-video/http";
 import type { VisibleMatchRow } from "@/lib/services/match-video/access";
 import type { PlaybackAttachmentRow } from "@/lib/services/match-video/playback";
@@ -103,7 +105,34 @@ interface Scenario {
   attachmentThrows?: boolean;
   storageUnreachable?: boolean;
   objectMissing?: boolean;
+  /** Active match videos in the workspace; defaults to none. */
+  usageRows?: MatchVideoUsageRow[];
+  usageThrows?: boolean;
+  /** What `loadExpiredAt` answers (T10); `"throw"` makes it throw. */
+  expiredAt?: string | null | "throw";
 }
+
+/** Workspaces `loadUsage` was asked about, in order. */
+let usageCalls: { id: string; kind: string }[] = [];
+/** How many times `loadExpiredAt` was asked. */
+let expiredCalls = 0;
+test.beforeEach(() => {
+  usageCalls = [];
+  expiredCalls = 0;
+});
+
+const HOLDER_MATCH = randomUUID();
+const HOLDER_ROW: MatchVideoUsageRow = {
+  attachmentId: randomUUID(),
+  matchId: HOLDER_MATCH,
+  uploadedBy: CREATOR,
+  verifiedSizeBytes: 1_000_000,
+  activatedAt: "2026-09-01T10:00:00Z",
+  lastViewedAt: null,
+  player1Name: "Marcus Reid",
+  player2Name: "Daniel Cho",
+  matchDate: "2026-08-30",
+};
 
 function deps(scenario: Scenario = {}): FilmEntryDeps {
   const userId = scenario.userId === undefined ? CREATOR : scenario.userId;
@@ -145,6 +174,21 @@ function deps(scenario: Scenario = {}): FilmEntryDeps {
       }
       return { ok: true, value: !scenario.objectMissing };
     },
+    async loadUsage(workspace) {
+      usageCalls.push({ id: workspace.id, kind: workspace.kind });
+      if (scenario.usageThrows) throw new Error("rpc missing");
+      const rows = scenario.usageRows ?? [];
+      return {
+        used: rows.length,
+        cap: MATCH_VIDEO_ACTIVE_LIMIT[workspace.kind],
+        rows,
+      };
+    },
+    async loadExpiredAt() {
+      expiredCalls += 1;
+      if (scenario.expiredAt === "throw") throw new Error("column missing");
+      return scenario.expiredAt ?? null;
+    },
   };
 }
 
@@ -158,6 +202,8 @@ test("a creator with no video is offered exactly one entry: add", async () => {
     attachment: "absent",
     actions: ["add"],
     problem: null,
+    quota: { used: 0, cap: 1, holder: null },
+    expiredAt: null,
   });
   expect(filmEntryView(entry)).toBe("empty");
 });
@@ -246,7 +292,13 @@ test("nothing is offered before the attachment state has actually been read", as
     if (canTakeFilmAction(entry, "add")) offeringAdd.push(entry);
   }
   expect(offeringAdd).toEqual([
-    { attachment: "absent", actions: ["add"], problem: null },
+    {
+      attachment: "absent",
+      actions: ["add"],
+      problem: null,
+      quota: { used: 0, cap: 1, holder: null },
+      expiredAt: null,
+    },
   ]);
 });
 
@@ -278,6 +330,8 @@ test("a failed match read is an error rather than an invitation", async () => {
     attachment: null,
     actions: [],
     problem: "storage_unavailable",
+    quota: null,
+    expiredAt: null,
   });
   expect(filmEntryView(entry)).toBe("unavailable");
 });
@@ -310,23 +364,218 @@ test("a vanished final object is stale, which is not a state a retry fixes", asy
 
 test("only a demonstrated absence reaches the empty state", () => {
   const cases: MatchFilmEntry[] = [
-    { attachment: null, actions: [], problem: null },
-    { attachment: null, actions: [], problem: "storage_unavailable" },
-    { attachment: "present", actions: [], problem: null },
-    { attachment: "present", actions: [], problem: "storage_unavailable" },
-    { attachment: "present", actions: [], problem: "stale_attachment" },
-    { attachment: "absent", actions: [], problem: "storage_unavailable" },
-    { attachment: "absent", actions: [], problem: "stale_attachment" },
+    {
+      attachment: null,
+      actions: [],
+      problem: null,
+      quota: null,
+      expiredAt: null,
+    },
+    {
+      attachment: null,
+      actions: [],
+      problem: "storage_unavailable",
+      quota: null,
+      expiredAt: null,
+    },
+    {
+      attachment: "present",
+      actions: [],
+      problem: null,
+      quota: null,
+      expiredAt: null,
+    },
+    {
+      attachment: "present",
+      actions: [],
+      problem: "storage_unavailable",
+      quota: null,
+      expiredAt: null,
+    },
+    {
+      attachment: "present",
+      actions: [],
+      problem: "stale_attachment",
+      quota: null,
+      expiredAt: null,
+    },
+    {
+      attachment: "absent",
+      actions: [],
+      problem: "storage_unavailable",
+      quota: null,
+      expiredAt: null,
+    },
+    {
+      attachment: "absent",
+      actions: [],
+      problem: "stale_attachment",
+      quota: null,
+      expiredAt: null,
+    },
   ];
   for (const entry of cases) {
     expect(filmEntryView(entry), JSON.stringify(entry)).not.toBe("empty");
   }
   expect(
-    filmEntryView({ attachment: "absent", actions: [], problem: null }),
+    filmEntryView({
+      attachment: "absent",
+      actions: [],
+      problem: null,
+      quota: null,
+      expiredAt: null,
+    }),
   ).toBe("empty");
   // And the safe default offers nothing and claims nothing.
   expect(NO_FILM_ENTRY.actions).toEqual([]);
   expect(filmEntryView(NO_FILM_ENTRY)).toBe("unavailable");
+});
+
+/* -------------------------------------------------------------------------
+ * 3b. The match-video allowance (T6)
+ * ---------------------------------------------------------------------- */
+
+test("only a viewer offered add has their workspace's usage read", async () => {
+  // Teammate, vendor match, wrong workspace, a present video, a failed read:
+  // none of them is offered add, so none of them costs a usage read or
+  // carries a quota.
+  for (const [label, matchId, scenario] of [
+    ["teammate", MATCH, { userId: TEAMMATE }],
+    ["vendor", VENDOR_MATCH, {}],
+    [
+      "wrong workspace",
+      TEAM_MATCH,
+      { workspace: { id: CREATOR, kind: "personal" } },
+    ],
+    ["present", MATCH, { row: ACTIVE_ROW }],
+    ["unreadable", MATCH, { attachmentError: true }],
+  ] as [string, string, Scenario][]) {
+    const entry = await resolveMatchFilmEntry(matchId, deps(scenario));
+    expect(entry.quota, label).toBeNull();
+  }
+  expect(usageCalls).toEqual([]);
+  expect(NO_FILM_ENTRY.quota).toBeNull();
+});
+
+test("a personal workspace at its cap names the match holding the video", async () => {
+  const entry = await resolveMatchFilmEntry(
+    MATCH,
+    deps({ usageRows: [HOLDER_ROW] }),
+  );
+  expect(entry.actions).toEqual(["add"]);
+  expect(entry.quota).toEqual({
+    used: 1,
+    cap: 1,
+    holder: {
+      matchId: HOLDER_MATCH,
+      playerName: "Marcus Reid",
+      opponentName: "Daniel Cho",
+      date: "2026-08-30",
+    },
+  });
+  expect(usageCalls).toEqual([{ id: CREATOR, kind: "personal" }]);
+});
+
+test("a team is counted in the validated program workspace, with no holder", async () => {
+  const rows = Array.from({ length: 25 }, () => ({
+    ...HOLDER_ROW,
+    attachmentId: randomUUID(),
+    matchId: randomUUID(),
+  }));
+  const entry = await resolveMatchFilmEntry(
+    TEAM_MATCH,
+    deps({ workspace: { id: PROGRAM, kind: "team" }, usageRows: rows }),
+  );
+  expect(entry.quota).toEqual({ used: 25, cap: 25, holder: null });
+  expect(usageCalls).toEqual([{ id: PROGRAM, kind: "team" }]);
+});
+
+test("a usage read that throws drops the quota, never the add", async () => {
+  const entry = await resolveMatchFilmEntry(MATCH, deps({ usageThrows: true }));
+  expect(entry).toEqual({
+    attachment: "absent",
+    actions: ["add"],
+    problem: null,
+    quota: null,
+    expiredAt: null,
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * 3b. Expired (SwingVision Add video T10)
+ * ---------------------------------------------------------------------- */
+
+const EXPIRED_AT = "2026-10-23T09:00:00.000Z";
+
+test("an expired video with nothing active is the expired state, offer kept", async () => {
+  const entry = await resolveMatchFilmEntry(
+    MATCH,
+    deps({ expiredAt: EXPIRED_AT }),
+  );
+  expect(entry).toEqual({
+    attachment: "absent",
+    actions: ["add"],
+    problem: null,
+    quota: { used: 0, cap: 1, holder: null },
+    expiredAt: EXPIRED_AT,
+  });
+  expect(filmEntryView(entry)).toBe("expired");
+});
+
+test("a teammate is told the video expired, and offered nothing", async () => {
+  const entry = await resolveMatchFilmEntry(
+    MATCH,
+    deps({ userId: TEAMMATE, expiredAt: EXPIRED_AT }),
+  );
+  expect(entry.expiredAt).toBe(EXPIRED_AT);
+  expect(entry.actions).toEqual([]);
+  expect(filmEntryView(entry)).toBe("expired");
+});
+
+test("expiry is never read while a video is active, or before the row is", async () => {
+  for (const scenario of [
+    { row: ACTIVE_ROW },
+    { row: ACTIVE_ROW, objectMissing: true },
+    { row: ACTIVE_ROW, storageUnreachable: true },
+    { attachmentError: true },
+    { attachmentThrows: true },
+  ] as Scenario[]) {
+    const entry = await resolveMatchFilmEntry(
+      MATCH,
+      deps({ ...scenario, expiredAt: EXPIRED_AT }),
+    );
+    expect(entry.expiredAt, JSON.stringify(scenario)).toBeNull();
+    expect(filmEntryView(entry)).not.toBe("expired");
+  }
+  expect(expiredCalls).toBe(0);
+});
+
+test("an expiry read that throws is the plain empty state, never an error", async () => {
+  const entry = await resolveMatchFilmEntry(
+    MATCH,
+    deps({ expiredAt: "throw" }),
+  );
+  expect(entry.expiredAt).toBeNull();
+  expect(entry.problem).toBeNull();
+  expect(filmEntryView(entry)).toBe("empty");
+});
+
+test("a storage problem takes precedence over expired", () => {
+  const base: MatchFilmEntry = {
+    attachment: "absent",
+    actions: ["add"],
+    problem: null,
+    quota: null,
+    expiredAt: EXPIRED_AT,
+  };
+  expect(filmEntryView(base)).toBe("expired");
+  expect(filmEntryView({ ...base, problem: "storage_unavailable" })).toBe(
+    "unavailable",
+  );
+  expect(filmEntryView({ ...base, problem: "stale_attachment" })).toBe("stale");
+  // An unknown attachment state is not an established absence either.
+  expect(filmEntryView({ ...base, attachment: null })).toBe("unavailable");
+  expect(filmEntryView({ ...base, attachment: "present" })).toBe("unavailable");
 });
 
 /* -------------------------------------------------------------------------
@@ -353,23 +602,29 @@ test("a successful save returns to the same match with Video selected", () => {
   expect(url.pathname).toBe(`/dashboard/matches/${MATCH}`);
   expect(parseReportView(url.searchParams.get("tab"))).toBe("film");
 
-  // The route component navigates to `returnTarget.href` — the value the
-  // server already built with `matchFilmHref` and the footer's Cancel already
-  // uses — and constructs no URL of its own. A second spelling of the Video
-  // view is how these two drift apart.
+  // The route no longer navigates on save: the flow settles on its "Video
+  // saved" screen, and that screen's "Watch the film" goes to
+  // `returnTarget.href` — the value the server already built with
+  // `matchFilmHref` and the footer's Cancel already uses. Neither file
+  // constructs a Video URL of its own; a second spelling of the Video view is
+  // how these two drift apart.
   const ROUTE = readFileSync(
     "src/components/dashboard/matches/match-video-attachment/AttachmentWizardRoute.tsx",
     "utf8",
   );
   const route = code(ROUTE);
-  expect(route).toContain("props.returnTarget.href");
-  expect(route).toContain("router.replace(href)");
-  expect(route).toContain("router.refresh()");
+  expect(route).not.toContain("router.replace");
+  expect(route).not.toContain("router.refresh");
   expect(route).not.toContain("?tab=");
   expect(route).not.toContain("/dashboard/matches");
-  // Fired once: the flow is already inert once saved, and the latch makes a
-  // double navigation impossible rather than merely unlikely.
-  expect(route).toContain("returned.current");
+
+  const STATUS = readFileSync(
+    "src/components/dashboard/matches/match-video-attachment/AttachmentUploadStatus.tsx",
+    "utf8",
+  );
+  const status = code(STATUS);
+  expect(status).toContain("href={returnTarget.href}");
+  expect(status).not.toContain("?tab=");
 });
 
 /* -------------------------------------------------------------------------
@@ -401,6 +656,14 @@ const ACTIONS = readFileSync(
   "src/components/dashboard/matches/match-detail/film/film-entry-actions.tsx",
   "utf8",
 );
+const EXPIRED = readFileSync(
+  "src/components/dashboard/matches/match-detail/film/film-expired-state.tsx",
+  "utf8",
+);
+const EXPIRY_NOTICE = readFileSync(
+  "src/components/dashboard/matches/match-detail/film/film-expiry-notice.tsx",
+  "utf8",
+);
 const UNAVAILABLE = readFileSync(
   "src/components/dashboard/matches/match-detail/film/film-unavailable-state.tsx",
   "utf8",
@@ -412,6 +675,10 @@ test("the Film view routes its no-video case through the shared rule", () => {
   expect(code(FILM_TAB)).toContain("filmEntryView(entry)");
   expect(code(FILM_TAB)).toMatch(/view === "empty"[\s\S]{0,80}FilmEmptyState/);
   expect(code(FILM_TAB)).toContain("FilmUnavailableState");
+  // T10: expired is its own state, reached only through the same rule.
+  expect(code(FILM_TAB)).toMatch(
+    /view === "expired"[\s\S]{0,80}FilmExpiredState/,
+  );
 });
 
 test("no component decides for itself who may act", () => {
@@ -420,6 +687,8 @@ test("no component decides for itself who may act", () => {
     ["film-empty-state", EMPTY],
     ["film-entry-actions", ACTIONS],
     ["film-unavailable-state", UNAVAILABLE],
+    ["film-expired-state", EXPIRED],
+    ["film-expiry-notice", EXPIRY_NOTICE],
   ] as const) {
     // The capability arrives as a prop. A component that read `createdBy`,
     // the workspace or the provider to decide would be answering a question
@@ -435,6 +704,7 @@ test("no component decides for itself who may act", () => {
   expect(code(ACTIONS)).toContain('canTakeFilmAction(entry, "replace")');
   expect(code(ACTIONS)).toContain('canTakeFilmAction(entry, "align")');
   expect(code(EMPTY)).toContain('canTakeFilmAction(entry, "add")');
+  expect(code(EXPIRED)).toContain('canTakeFilmAction(entry, "add")');
 });
 
 test("the actions row is absent, never disabled, for a viewer with none", () => {

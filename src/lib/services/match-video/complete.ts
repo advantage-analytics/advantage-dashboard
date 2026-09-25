@@ -76,7 +76,10 @@ import type { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { parseConfirmedVideoTime } from "@/lib/match-video/alignment";
-import { COMPLETION_RETRY_SECONDS } from "@/lib/match-video/limits";
+import {
+  COMPLETION_RETRY_SECONDS,
+  MATCH_VIDEO_ACTIVE_LIMIT,
+} from "@/lib/match-video/limits";
 import {
   matchVideoError,
   ok,
@@ -254,6 +257,12 @@ export interface ActivateAttachmentInput {
    * by SQL as `empty_file`, which is the right answer for a bug.
    */
   readonly verified: VerifiedMedia | null;
+  /**
+   * `MATCH_VIDEO_ACTIVE_LIMIT` for the access value's workspace kind. SQL
+   * rechecks it for an add under the workspace lock, so two pending adds
+   * cannot both go active; a replace or a replay is never counted.
+   */
+  readonly activeLimit: number;
 }
 
 /** T4's `match_video_activate_attachment` row. */
@@ -456,6 +465,7 @@ async function finalize(
         leaseToken,
         confirmedVideoTimeSeconds: body.confirmedVideoTimeSeconds,
         verified: null,
+        activeLimit: MATCH_VIDEO_ACTIVE_LIMIT[access.workspace.kind],
       }),
       context,
     );
@@ -666,6 +676,7 @@ async function finalizeUnderLease(
       contentType: final.value.contentType,
       durationSeconds: final.value.durationSeconds,
     },
+    activeLimit: MATCH_VIDEO_ACTIVE_LIMIT[access.workspace.kind],
   });
   const response = respondToActivation(activated, context);
   return { response, committed: activated.ok };
@@ -937,6 +948,7 @@ export function rpcCompletionDeps(
           p_verified_size_bytes: input.verified?.sizeBytes ?? null,
           p_verified_content_type: input.verified?.contentType ?? null,
           p_verified_duration_seconds: input.verified?.durationSeconds ?? null,
+          p_active_limit: input.activeLimit,
         },
         { matchId: access.match.id, attachmentId: input.attachmentId },
       );

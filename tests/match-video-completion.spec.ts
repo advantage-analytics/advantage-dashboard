@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { RestError } from "@azure/storage-blob";
 
 import { planAlignment, type SourcePoint } from "@/lib/match-video/alignment";
+import { MATCH_VIDEO_ACTIVE_LIMIT } from "@/lib/match-video/limits";
 import {
   matchVideoError,
   type MatchVideoErrorCode,
@@ -2221,6 +2222,29 @@ test("a successful commit does not release: activation already cleared the lease
   expect(response.status).toBe(200);
   expect(h.events).not.toContain("release");
   expect(h.store.rows.get(id)!.leaseToken).toBeNull();
+});
+
+test("activation is handed the cap for the ACCESS workspace kind, and its refusal is a 409 that commits nothing", async () => {
+  for (const [workspace, matchId, limit] of [
+    [team(PROGRAM), TEAM_MATCH, MATCH_VIDEO_ACTIVE_LIMIT.team],
+    [personal(CREATOR), PERSONAL_MATCH, MATCH_VIDEO_ACTIVE_LIMIT.personal],
+  ] as const) {
+    const h = harness({ workspace });
+    h.container.copyMode = "instant";
+    const id = readyAttempt(h, matchId);
+    const limits: number[] = [];
+    h.deps.activate = (input) => {
+      limits.push(input.activeLimit);
+      return Promise.resolve(
+        rpcRefusal("attachment_limit_reached", "workspace_at_limit"),
+      );
+    };
+    const { response, json } = await complete(h, matchId, id);
+    expect(limits).toEqual([limit]);
+    expect(response.status).toBe(409);
+    expect(json.code).toBe("attachment_limit_reached");
+    expect(h.store.rows.get(id)!.state).toBe("pending");
+  }
 });
 
 test("the actor and workspace every RPC receives are the session's", async () => {

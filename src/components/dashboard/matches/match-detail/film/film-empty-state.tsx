@@ -8,9 +8,14 @@ import { MAX_VIDEO_SIZE_BYTES } from "@/lib/services/splitstep/config";
 import { advButton } from "@/lib/ui/adv-button";
 import { addVideoHref } from "@/lib/matches/add-video-href";
 import {
+  atMatchVideoCap,
   canTakeFilmAction,
+  MATCH_VIDEO_USAGE_HREF,
+  matchFilmHref,
+  matchVideoCountLabel,
   matchVideoWizardHref,
   NO_FILM_ENTRY,
+  quotaHolderLabels,
   type MatchFilmEntry,
 } from "@/lib/match-video/film-entry";
 
@@ -51,6 +56,14 @@ import {
  * the sentence above changes with it: an invitation nobody in the room can
  * accept is worse than a plain statement of fact.
  *
+ * ── The allowance ───────────────────────────────────────────────────────────
+ * `entry.quota` (server-read, T4's usage) only changes the body, the button
+ * and the micro line; the icon, rule and heading stay. Under the cap the micro
+ * line swaps "we index the points…" for the count. At the cap there is no
+ * "Add video": a personal workspace is sent to the one match holding its
+ * video, a team to Settings › Usage. A null quota keeps today's copy. The
+ * micro line is where "More with Pro" will go later.
+ *
  * This component never decides the question itself. `match.createdBy` is right
  * here in the provider and reading it would be a second, quieter answer to a
  * question the server already answered — and the one that drew the button.
@@ -69,6 +82,27 @@ export function FilmEmptyState({
   // An import offers the attachment wizard or nothing at all; every other
   // match keeps the analysis wizard it has always had.
   const offered = fromSwingVision ? mayAttach : true;
+  // The allowance only ever rides an attachment offer.
+  const quota = fromSwingVision && mayAttach ? entry.quota : null;
+  const atCap = atMatchVideoCap(quota);
+  const holder = atCap ? (quota?.holder ?? null) : null;
+  const holderLabels = holder ? quotaHolderLabels(holder) : null;
+
+  const body = !fromSwingVision
+    ? "There is no film on file for this match. Add it and every point becomes a clip you can jump to."
+    : !offered
+      ? "The statistics came from a SwingVision export. Nobody has added the film for this match yet."
+      : !atCap
+        ? "The statistics came from a SwingVision export. Add the film and every point below becomes a clip you can jump to."
+        : holderLabels
+          ? `The statistics came from a SwingVision export. Your one match video is on ${holderLabels.full}. Remove it there to add the film here; the statistics on both matches stay.`
+          : `The statistics came from a SwingVision export. Your team has used all ${quota?.cap} match videos. Remove one, usually from a match nobody watches any more, to add the film here.`;
+
+  const micro = !quota
+    ? `MP4 up to ${MAX_VIDEO_GB} GB · we index the points, you keep the file`
+    : atCap
+      ? matchVideoCountLabel(quota)
+      : `MP4 up to ${MAX_VIDEO_GB} GB · ${matchVideoCountLabel(quota)}`;
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16 pb-[72px] text-center">
@@ -87,28 +121,40 @@ export function FilmEmptyState({
           className="text-body-sm [text-wrap:pretty]"
           style={{ color: "var(--ink-600)" }}
         >
-          {fromSwingVision
-            ? offered
-              ? "The statistics came from a SwingVision export. Add the film and every point below becomes a clip you can jump to."
-              : "The statistics came from a SwingVision export. Nobody has added the film for this match yet."
-            : "There is no film on file for this match. Add it and every point becomes a clip you can jump to."}
+          {body}
         </p>
       </div>
 
       {offered && (
         <>
           <div className="flex items-center gap-3.5 pt-1">
-            <Link
-              href={
-                fromSwingVision
-                  ? matchVideoWizardHref(match.id, "add")
-                  : addVideoHref(match.sourceProvider ? null : match.id)
-              }
-              className={advButton("primary", "md")}
-              data-testid="film-action-add"
-            >
-              Add video
-            </Link>
+            {atCap ? (
+              <Link
+                href={
+                  holder
+                    ? matchFilmHref(holder.matchId)
+                    : MATCH_VIDEO_USAGE_HREF
+                }
+                className={advButton("primary", "md")}
+                data-testid="film-action-at-cap"
+              >
+                {holderLabels
+                  ? `Open ${holderLabels.short}`
+                  : "Manage match videos"}
+              </Link>
+            ) : (
+              <Link
+                href={
+                  fromSwingVision
+                    ? matchVideoWizardHref(match.id, "add")
+                    : addVideoHref(match.sourceProvider ? null : match.id)
+                }
+                className={advButton("primary", "md")}
+                data-testid="film-action-add"
+              >
+                Add video
+              </Link>
+            )}
             {!fromSwingVision && (
               <Link
                 href="/dashboard/matches/new"
@@ -123,7 +169,7 @@ export function FilmEmptyState({
             className="text-micro pt-0.5"
             style={{ color: "var(--ink-400)" }}
           >
-            MP4 up to {MAX_VIDEO_GB} GB · we index the points, you keep the file
+            {micro}
           </span>
         </>
       )}

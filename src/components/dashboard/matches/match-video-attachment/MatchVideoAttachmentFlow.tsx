@@ -29,19 +29,26 @@
  * hard-coded here would be wrong the day it lands.
  *
  * **Widget states.** The two steps own their own four states and draw in all of
- * them. This component adds the commit's states: `saving` is a determinate bar
- * over real bytes (never an invented percentage for the publication, which this
- * browser cannot see), `failed` is a `role="alert"` strip whose retry is the
- * footer's own primary, and `saved` is a settled `role="status"` line that
- * keeps the button asleep while the caller navigates. There is no data loader,
- * no Suspense region and no `return null` anywhere: a mode opened without the
- * attachment it requires draws the shell and says so.
+ * them. This component adds the commit's states. An upload that is running, and
+ * one that has been published, leave the wizard altogether for
+ * `AttachmentUploadStatus` ("Uploading your video" → "Video saved"), the same
+ * screen shape the new-match wizard finishes on; an adjust's single PATCH stays
+ * in the shell as an indeterminate strip, then settles on the same "saved"
+ * screen. `failed` is a `role="alert"` strip whose retry is the footer's own
+ * primary, and a cancel returns to the step exactly as it was. There is no data
+ * loader, no Suspense region and no `return null` anywhere: a mode opened
+ * without the attachment it requires draws the shell and says so.
+ *
+ * **Leaving cancels.** The transfer belongs to this component — unmounting it
+ * mid-upload aborts the attempt — so the leave guard is armed for as long as a
+ * commit is running (trimming, uploading, publishing) and released the moment
+ * it is saved, failed or cancelled.
  */
 
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
-import { TriangleAlert, Check, Info, Loader2, XCircle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { TriangleAlert, Info, Loader2, XCircle } from "lucide-react";
 
-import { advButton } from "@/lib/ui/adv-button";
+import { useLeaveGuard } from "@/components/dashboard/leave-guard-context";
 import type { SourcePoint, SourceShot } from "@/lib/match-video/alignment";
 import {
   modeUploadsFile,
@@ -53,10 +60,10 @@ import {
   noteStripCls,
   warningStripCls,
 } from "../new-match-wizard/styles";
-import { formatFileSize } from "../new-match-wizard/utils";
 import { useWizardKeys } from "../new-match-wizard/useWizardKeys";
 import { WizardShell } from "../new-match-wizard/WizardShell";
 import { AttachmentAlignmentStep } from "./AttachmentAlignmentStep";
+import { AttachmentUploadStatus } from "./AttachmentUploadStatus";
 import { AttachmentFileStep } from "./AttachmentFileStep";
 import {
   useAttachmentAlignment,
@@ -103,11 +110,15 @@ export interface MatchVideoAttachmentFlowProps {
    */
   savedPlaybackUrl?: string | null;
   /**
-   * Where Cancel goes, and the label for it. Injected rather than derived: this
-   * component is standalone until T21 routes it.
+   * The match's Film view: where Cancel and "Back to the match" go, and where
+   * "Watch the film" goes once the video is saved. Injected rather than
+   * derived — built once on the server by `matchFilmHref()`.
    */
   returnTarget: { href: string; label?: string };
-  /** Fired once, with a published attachment. The caller owns the navigation. */
+  /**
+   * Fired once, with a published attachment. Navigates nowhere: the saved
+   * screen offers the way out, and the person takes it.
+   */
   onSaved?: (attachment: ActiveAttachment) => void;
   /** Test seam. Production passes nothing. */
   deps?: UseAttachmentFlowOptions["deps"];
@@ -116,6 +127,10 @@ export interface MatchVideoAttachmentFlowProps {
 /* -------------------------------------------------------------------------
  * Copy
  * ---------------------------------------------------------------------- */
+
+/** The one-step trim screen's body, shared by add and replace. */
+const TRIM_DESCRIPTION =
+  "Scrub to the serve of the first point. The cut is set around the match for you: from just before that serve to just after SwingVision's last point. Adjust either end if you need to.";
 
 const TITLES: Record<MatchVideoMode, { file: string; align: string }> = {
   add: {
@@ -135,13 +150,11 @@ const TITLES: Record<MatchVideoMode, { file: string; align: string }> = {
 const DESCRIPTIONS: Record<MatchVideoMode, { file: string; align: string }> = {
   add: {
     file: "Your own recording of this match, played back beside the statistics SwingVision already imported. It is not sent for analysis and costs none of your video hours.",
-    align:
-      "One position lines the whole match up: where the first point's serve contact happens in this file. The upload starts when you confirm.",
+    align: TRIM_DESCRIPTION,
   },
   replace: {
     file: "The video on this match stays exactly as it is until the new one is published. Nothing is deleted first.",
-    align:
-      "The new recording needs its own first point — the old one was measured against a different file. The upload starts when you confirm.",
+    align: TRIM_DESCRIPTION,
   },
   align: {
     file: "",
@@ -219,7 +232,9 @@ function PinnedMatchBar({ match }: { match: AttachmentMatchSummary }) {
  * state would go with it. The confirmed text therefore lives one level up and
  * is restored here on mount: stepping back to check a filename must not throw
  * away a position somebody scrubbed for, and the hook's own reset — which fires
- * when the SOURCE changes — is the case where losing it is correct.
+ * when the SOURCE changes — is the case where losing it is correct. The kept
+ * window is restored the same way, and only for add and replace: an adjust
+ * has no file to cut, so it is never handed the trim options at all.
  */
 function AlignmentStage({
   flow,
@@ -238,7 +253,20 @@ function AlignmentStage({
   declaredDurationSeconds?: number;
   savedConfirmedSeconds: number | null;
 }) {
-  const { setAlignment, setConfirmedText } = flow;
+  const { setAlignment, setConfirmedText, setTrim, trimWindowFor } = flow;
+  // Read once, on mount — the hook owns the window from then on.
+  const [initialTrim] = useState(() => flow.trim);
+  const trim = useMemo(
+    () =>
+      modeUploadsFile(mode)
+        ? {
+            defaultWindow: trimWindowFor,
+            initial: initialTrim,
+            onChange: setTrim,
+          }
+        : undefined,
+    [initialTrim, mode, setTrim, trimWindowFor],
+  );
   const api = useAttachmentAlignment({
     source,
     points,
@@ -246,6 +274,7 @@ function AlignmentStage({
     declaredDurationSeconds,
     savedConfirmedSeconds,
     onAlignmentChange: setAlignment,
+    trim,
   });
 
   const restore = useRef(flow.confirmedText);
@@ -268,30 +297,18 @@ function AlignmentStage({
  * ---------------------------------------------------------------------- */
 
 /**
- * The bar, over real bytes only.
+ * An adjust's save: one PATCH, nothing measurable, so no number.
  *
- * While blocks are moving the number is the sum of what Azure has accepted, so
- * it is drawn. Once they are in, the publication is a server-side copy this
- * browser cannot observe, so the strip says what is happening and shows an
- * indeterminate mark instead of a percentage nobody measured.
+ * Uploads never draw this — they leave the shell for `AttachmentUploadStatus`
+ * the moment the commit starts.
  */
-function SavingStrip({
-  label,
-  percent,
-  bytesTransferred,
-  totalBytes,
-}: {
-  label: string;
-  percent: number | null;
-  bytesTransferred: number;
-  totalBytes: number;
-}) {
+function SavingStrip({ label }: { label: string }) {
   return (
     <div
       className={`${noteStripCls} flex-col gap-2.5`}
       role="status"
       data-testid="attachment-saving"
-      data-percent={percent === null ? undefined : String(percent)}
+      data-phase="aligning"
     >
       <span className="flex w-full items-center gap-2">
         <Loader2
@@ -301,38 +318,13 @@ function SavingStrip({
         />
         <span className="flex-1">
           <b className="font-medium text-[var(--ink-900)]">{label}</b>
-          {percent !== null && totalBytes > 0 && (
-            <>
-              {" — "}
-              <span className="mono tabular">
-                {formatFileSize(bytesTransferred)} of{" "}
-                {formatFileSize(totalBytes)}
-              </span>
-            </>
-          )}
-          {percent === null && (
-            <>
-              {" — "}this can take a moment on a long recording. Keep this tab
-              open.
-            </>
-          )}
         </span>
-        {percent !== null && (
-          <span className="mono tabular shrink-0 text-[var(--ink-900)]">
-            {percent.toFixed(1)}%
-          </span>
-        )}
       </span>
       <span
         className="h-[3px] w-full overflow-hidden rounded-full bg-[var(--ink-100)]"
         aria-hidden="true"
       >
-        <span
-          className={`block h-full rounded-full bg-[var(--blue)] ${
-            percent === null ? "motion-safe:animate-pulse" : ""
-          }`}
-          style={{ width: percent === null ? "100%" : `${percent}%` }}
-        />
+        <span className="block h-full w-full rounded-full bg-[var(--blue)] motion-safe:animate-pulse" />
       </span>
     </div>
   );
@@ -358,11 +350,17 @@ export function MatchVideoAttachmentFlow({
     matchId,
     mode,
     activeAttachment,
+    points,
+    shots,
     onSaved,
     deps,
   });
   const { step, steps, save, isBusy } = flow;
   const uploadsFile = modeUploadsFile(mode);
+
+  // Armed from the moment the commit starts until it is saved, failed or
+  // cancelled — each of which returns `save` to a non-saving status.
+  useLeaveGuard(save.status === "saving");
 
   const contentRef = useRef<HTMLDivElement | null>(null);
 
@@ -410,31 +408,32 @@ export function MatchVideoAttachmentFlow({
       : save.status === "failed"
         ? "Try again"
         : uploadsFile
-          ? "Upload and save"
+          ? "Trim and upload"
           : "Save the alignment";
 
   const status: ReactNode =
     save.status === "saving" ? (
-      <span className="text-[11px] text-[var(--ink-500)]">
-        {save.label}
-        {save.percent !== null && (
-          <>
-            {" "}
-            <span className="mono tabular text-[var(--ink-900)]">
-              {save.percent.toFixed(1)}%
-            </span>
-          </>
-        )}
-      </span>
-    ) : save.status === "saved" ? (
-      <span className="text-[11px] text-[var(--ink-500)]">Video saved</span>
+      <span className="text-[11px] text-[var(--ink-500)]">{save.label}</span>
     ) : save.status === "failed" ? (
       <span className="text-[11px] text-[var(--error)]">Not saved</span>
-    ) : step === "align" && uploadsFile && !blocked ? (
-      <span className="text-[11px] text-[var(--ink-500)]">
-        Uploads when you confirm
-      </span>
     ) : null;
+
+  // A running upload, and any saved commit, leave the wizard: the steps are
+  // answered, and what is left is progress and a way out.
+  if (
+    save.status === "saved" ||
+    (save.status === "saving" && save.phase !== "aligning")
+  ) {
+    return (
+      <AttachmentUploadStatus
+        match={match}
+        save={save}
+        uploadsFile={uploadsFile}
+        returnTarget={returnTarget}
+        onCancel={flow.cancel}
+      />
+    );
+  }
 
   return (
     <WizardShell
@@ -449,22 +448,23 @@ export function MatchVideoAttachmentFlow({
       back={canGoBack ? flow.goBack : undefined}
       /* While the bytes are moving, the footer's exits are gone on purpose:
          leaving is cancelling, and cancelling has its own named button. */
-      cancelHref={
-        !canGoBack && !isBusy && save.status !== "saved"
-          ? returnTarget.href
-          : undefined
-      }
+      cancelHref={!canGoBack && !isBusy ? returnTarget.href : undefined}
       status={status}
       secondary={
-        isBusy && save.status === "saving" && save.canCancel ? (
-          <button
-            type="button"
-            onClick={flow.cancel}
-            data-testid="attachment-cancel-upload"
-            className="shrink-0 cursor-pointer text-[11px] whitespace-nowrap text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)]"
+        step === "align" &&
+        uploadsFile &&
+        !blocked &&
+        (save.status === "idle" || save.status === "failed") ? (
+          /* Beside the primary it qualifies, as the canvas draws it: the
+             button says "trim", this says what that costs. A phone's footer
+             has no room for it beside Back and the primary, and the step's
+             own "Keeps … of …" already says the same thing there. */
+          <span
+            data-testid="attachment-kept-note"
+            className="hidden shrink-0 text-[12px] whitespace-nowrap text-[var(--ink-500)] sm:inline"
           >
-            Cancel upload
-          </button>
+            Only the kept part is uploaded
+          </span>
         ) : undefined
       }
       continueLabel={continueLabel}
@@ -475,38 +475,11 @@ export function MatchVideoAttachmentFlow({
           alone would not be enough: swapping the file, or re-typing the time,
           mid-upload would change what the request in flight is for. */}
       <div
-        inert={isBusy || save.status === "saved"}
+        inert={isBusy}
         aria-busy={isBusy || undefined}
         className="flex flex-col gap-7"
       >
-        {save.status === "saving" && (
-          <SavingStrip
-            label={save.label}
-            percent={save.percent}
-            bytesTransferred={save.bytesTransferred}
-            totalBytes={save.totalBytes}
-          />
-        )}
-
-        {save.status === "saved" && (
-          <div
-            className={noteStripCls}
-            role="status"
-            data-testid="attachment-saved"
-          >
-            <Check
-              className={`${noteIconCls} text-[var(--success)]`}
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-            <span>
-              <b className="font-medium text-[var(--ink-900)]">
-                {uploadsFile ? "Video saved" : "Alignment saved"}
-              </b>
-              {" — taking you back to the match."}
-            </span>
-          </div>
-        )}
+        {save.status === "saving" && <SavingStrip label={save.label} />}
 
         {save.status === "failed" && (
           <div

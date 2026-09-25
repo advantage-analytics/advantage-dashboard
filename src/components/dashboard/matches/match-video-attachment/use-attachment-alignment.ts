@@ -41,6 +41,16 @@
  * request (`AbortError`). Those set a quiet notice; only the element's own
  * `error` event sets `mediaError`. Collapsing the two tells an athlete their
  * recording is unusable because the tab was in the background.
+ *
+ * **Marking sets the cut (add and replace).** When `trim` is passed, a marked
+ * first point also places the kept window: `defaultAttachmentTrimWindow` pads
+ * it before the serve and after SwingVision's last point. Either end can then
+ * be moved to the playhead. An adjusted window is keyed to the mark it was
+ * adjusted against, so marking a different first point puts both cuts back on
+ * their defaults without an effect having to notice — and a window that no
+ * longer covers the match is refused with the server's own coverage rule
+ * (`planTrimmedAlignment`), which holds the alignment back from the parent.
+ * The window reported upward is the one on screen, and it is the one cut.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -54,6 +64,11 @@ import {
   type SourceShot,
   type SourceTimingSummary,
 } from "@/lib/match-video/alignment";
+import {
+  defaultAttachmentTrimWindow,
+  planTrimmedAlignment,
+  type AttachmentTrimWindow,
+} from "@/lib/match-video/trim-window";
 import type {
   MatchVideoError,
   MatchVideoResult,
@@ -108,6 +123,32 @@ export type AlignmentSource =
 
 export type AlignmentMediaStatus = "loading" | "ready" | "error";
 
+/**
+ * A kept window and the mark it belongs to.
+ *
+ * The mark travels with the window because a window is only meaningful
+ * against the first point it was placed around: the flow cuts `window` only
+ * while `markedSeconds` is still the alignment it is submitting.
+ */
+export interface AttachmentTrimSelection {
+  /** The marked first point, in the ORIGINAL file. */
+  markedSeconds: number;
+  window: AttachmentTrimWindow;
+}
+
+/** Turns the kept-window cut on. Add and replace pass it; adjust never does. */
+export interface AttachmentAlignmentTrimOptions {
+  /**
+   * The default window for a mark. The flow passes its own `trimWindow` dep so
+   * the window drawn here is computed exactly as the one it cuts.
+   */
+  defaultWindow?: typeof defaultAttachmentTrimWindow;
+  /** A window adjusted before the step last unmounted (Back, then forward). */
+  initial?: AttachmentTrimSelection | null;
+  /** The kept window while the step may submit, else null. */
+  onChange?: (selection: AttachmentTrimSelection | null) => void;
+}
+
 /* -------------------------------------------------------------------------
  * State
  * ---------------------------------------------------------------------- */
@@ -133,6 +174,8 @@ export interface UseAttachmentAlignmentOptions {
   savedConfirmedSeconds?: number | null;
   /** Fired with the validated alignment when it may be submitted, else null. */
   onAlignmentChange?: (alignment: Alignment | null) => void;
+  /** Add and replace: the marked first point also sets the kept window. */
+  trim?: AttachmentAlignmentTrimOptions;
 }
 
 export interface AttachmentAlignmentApi {
@@ -166,6 +209,24 @@ export interface AttachmentAlignmentApi {
   /** Everything checked out and the parent may act. */
   canSubmit: boolean;
 
+  /** Whether this step cuts the file (add and replace). */
+  trimEnabled: boolean;
+  /**
+   * The duration coverage is measured against: the parsed one when there is
+   * one, else the element's. "Keeps … of <this>".
+   */
+  coverageDurationSeconds: number;
+  /** The validated first point in the original file, else null. */
+  markedSeconds: number | null;
+  /** SwingVision's last required instant on this file's clock, else null. */
+  lastPointSeconds: number | null;
+  /** The kept window on screen, or null before a first point is marked. */
+  trimWindow: AttachmentTrimWindow | null;
+  /** The window marking alone would give, for the default captions. */
+  defaultTrimWindow: AttachmentTrimWindow | null;
+  /** `error` is about the window, not the recording or the time. */
+  trimRefused: boolean;
+
   setConfirmedTime: (text: string) => void;
   useCurrentTime: () => void;
   confirmZero: () => void;
@@ -173,6 +234,10 @@ export interface AttachmentAlignmentApi {
   seekBy: (deltaSeconds: number) => void;
   seekTo: (seconds: number) => void;
   previewLastPoint: () => void;
+  /** Move the start cut to the playhead. */
+  setTrimStartHere: () => void;
+  /** Move the end cut to the playhead. */
+  setTrimEndHere: () => void;
   onLoadedMetadata: (event: React.SyntheticEvent<HTMLVideoElement>) => void;
   onTimeUpdate: (event: React.SyntheticEvent<HTMLVideoElement>) => void;
   onSeeked: (event: React.SyntheticEvent<HTMLVideoElement>) => void;
@@ -191,7 +256,10 @@ export function useAttachmentAlignment(
     declaredDurationSeconds,
     savedConfirmedSeconds = null,
     onAlignmentChange,
+    trim,
   } = options;
+  const trimEnabled = trim !== undefined;
+  const windowFor = trim?.defaultWindow ?? defaultAttachmentTrimWindow;
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -208,6 +276,9 @@ export function useAttachmentAlignment(
       : formatConfirmedVideoTime(savedConfirmedSeconds),
   );
   const [zeroAcknowledged, setZeroAcknowledged] = useState(false);
+  /** An adjusted window, keyed to its mark. Null = the default for any mark. */
+  const [trimSelection, setTrimSelection] =
+    useState<AttachmentTrimSelection | null>(() => trim?.initial ?? null);
 
   const [mediaStatus, setMediaStatus] =
     useState<AlignmentMediaStatus>("loading");
@@ -273,6 +344,7 @@ export function useAttachmentAlignment(
         : formatConfirmedVideoTime(savedConfirmedSeconds),
     );
     setZeroAcknowledged(false);
+    setTrimSelection(null);
     setMediaStatus("loading");
     setPlaybackDurationSeconds(0);
     setCurrentTimeSeconds(0);
@@ -312,17 +384,64 @@ export function useAttachmentAlignment(
     });
   }, [confirmedTime, coverageDurationSeconds, points, shots]);
 
+  const confirmedSeconds = plan?.ok
+    ? plan.value.confirmedVideoTimeSeconds
+    : null;
+
+  /* ---------------------------------------------------------------------
+   * The kept window
+   * ------------------------------------------------------------------ */
+
+  const matchSpanSeconds = plan?.ok
+    ? plan.value.timing.requiredSourceEndSeconds -
+      plan.value.timing.anchorSourceSeconds
+    : null;
+  const lastPointSeconds =
+    confirmedSeconds !== null && matchSpanSeconds !== null
+      ? confirmedSeconds + matchSpanSeconds
+      : null;
+
+  const defaultTrimWindow = useMemo<AttachmentTrimWindow | null>(() => {
+    if (!trimEnabled || !plan?.ok) return null;
+    return windowFor({
+      markedSeconds: plan.value.confirmedVideoTimeSeconds,
+      timing: plan.value.timing,
+      videoDurationSeconds: coverageDurationSeconds,
+    });
+  }, [coverageDurationSeconds, plan, trimEnabled, windowFor]);
+
+  // An adjustment made against a different mark is not this mark's window:
+  // marking again puts both cuts back on their defaults.
+  const trimWindow: AttachmentTrimWindow | null =
+    defaultTrimWindow === null
+      ? null
+      : trimSelection !== null &&
+          trimSelection.markedSeconds === confirmedSeconds
+        ? trimSelection.window
+        : defaultTrimWindow;
+
+  const trimPlan = useMemo<MatchVideoResult<Alignment> | null>(() => {
+    if (!trimWindow || confirmedSeconds === null) return null;
+    return planTrimmedAlignment({
+      points,
+      shots,
+      markedSeconds: confirmedSeconds,
+      window: trimWindow,
+    });
+  }, [confirmedSeconds, points, shots, trimWindow]);
+
   // The timing refusal outranks anything about the entered time: a match that
   // cannot be aligned at all should say so rather than blame what was typed.
+  // The window is checked last — it only exists once the time is valid.
+  const trimRefused =
+    timing.ok && plan?.ok === true && trimPlan !== null && !trimPlan.ok;
   const error: MatchVideoError | null = !timing.ok
     ? timing.error
     : plan && !plan.ok
       ? plan.error
-      : null;
-
-  const confirmedSeconds = plan?.ok
-    ? plan.value.confirmedVideoTimeSeconds
-    : null;
+      : trimPlan && !trimPlan.ok
+        ? trimPlan.error
+        : null;
 
   const needsZeroConfirmation = confirmedSeconds === 0 && !zeroAcknowledged;
 
@@ -336,7 +455,8 @@ export function useAttachmentAlignment(
     plan !== null &&
     plan.ok &&
     !needsZeroConfirmation &&
-    !isNoOpCorrection;
+    !isNoOpCorrection &&
+    (!trimEnabled || trimPlan?.ok === true);
 
   /* ---------------------------------------------------------------------
    * Reporting upward
@@ -351,6 +471,26 @@ export function useAttachmentAlignment(
   useEffect(() => {
     notify.current?.(submittable);
   }, [submittable]);
+
+  const notifyTrim = useRef(trim?.onChange);
+  useEffect(() => {
+    notifyTrim.current = trim?.onChange;
+  }, [trim?.onChange]);
+
+  // Primitives, so a fresh window object with the same bounds is not news.
+  const keptMark = canSubmit && trimWindow ? confirmedSeconds : null;
+  const keptStart = keptMark !== null ? trimWindow!.startSeconds : null;
+  const keptEnd = keptMark !== null ? trimWindow!.endSeconds : null;
+  useEffect(() => {
+    notifyTrim.current?.(
+      keptMark !== null && keptStart !== null && keptEnd !== null
+        ? {
+            markedSeconds: keptMark,
+            window: { startSeconds: keptStart, endSeconds: keptEnd },
+          }
+        : null,
+    );
+  }, [keptMark, keptStart, keptEnd]);
 
   /* ---------------------------------------------------------------------
    * Entering a time
@@ -442,6 +582,38 @@ export function useAttachmentAlignment(
     seekTo(Math.max(0, end - PREVIEW_LEAD_SECONDS));
   }, [plan, seekTo]);
 
+  /**
+   * Move one cut to the playhead, to the millisecond the completion stores.
+   *
+   * Written against the CURRENT window, so moving the start keeps whatever the
+   * end already is — default or adjusted — and vice versa. No clamping to the
+   * mark: a start placed after the serve is shown and refused, not corrected
+   * behind the person's back.
+   */
+  const setTrimEdgeHere = useCallback(
+    (edge: "start" | "end") => {
+      const el = videoRef.current;
+      if (!el || !trimWindow || confirmedSeconds === null) return;
+      const here = Math.round(el.currentTime * 1000) / 1000;
+      setTrimSelection({
+        markedSeconds: confirmedSeconds,
+        window:
+          edge === "start"
+            ? { startSeconds: here, endSeconds: trimWindow.endSeconds }
+            : { startSeconds: trimWindow.startSeconds, endSeconds: here },
+      });
+    },
+    [confirmedSeconds, trimWindow],
+  );
+  const setTrimStartHere = useCallback(
+    () => setTrimEdgeHere("start"),
+    [setTrimEdgeHere],
+  );
+  const setTrimEndHere = useCallback(
+    () => setTrimEdgeHere("end"),
+    [setTrimEdgeHere],
+  );
+
   const onLoadedMetadata = useCallback(
     (event: React.SyntheticEvent<HTMLVideoElement>) => {
       const el = event.currentTarget;
@@ -498,6 +670,13 @@ export function useAttachmentAlignment(
     needsZeroConfirmation,
     isNoOpCorrection,
     canSubmit,
+    trimEnabled,
+    coverageDurationSeconds,
+    markedSeconds: confirmedSeconds,
+    lastPointSeconds,
+    trimWindow,
+    defaultTrimWindow,
+    trimRefused,
     setConfirmedTime,
     useCurrentTime,
     confirmZero,
@@ -505,6 +684,8 @@ export function useAttachmentAlignment(
     seekBy,
     seekTo,
     previewLastPoint,
+    setTrimStartHere,
+    setTrimEndHere,
     onLoadedMetadata,
     onTimeUpdate,
     onSeeked,

@@ -50,6 +50,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   checkAttachmentSize,
+  MATCH_VIDEO_ACTIVE_LIMIT,
   MATCH_VIDEO_EXTENSIONS,
 } from "@/lib/match-video/limits";
 import {
@@ -189,6 +190,12 @@ export interface ReserveUploadInput {
   readonly request: ReserveUploadRequest;
   /** Persisted by the RPC BEFORE any credential is minted against it. */
   readonly uploadSasExpiresAt: Date;
+  /**
+   * `MATCH_VIDEO_ACTIVE_LIMIT` for the ACCESS value's workspace kind — never
+   * the body's. The RPC refuses an add at this many active videos with
+   * `attachment_limit_reached`; a replace is never counted.
+   */
+  readonly activeLimit: number;
 }
 
 /** T3's `match_video_reserve_upload` row, as the storage adapter reads it. */
@@ -258,6 +265,7 @@ export async function handlePrepareUpload(
     access: access.value,
     request: body,
     uploadSasExpiresAt,
+    activeLimit: MATCH_VIDEO_ACTIVE_LIMIT[access.value.workspace.kind],
   });
   if (!reserved.ok) {
     console.log(`${LOG} reservation refused — ${reserved.error.detail}`, {
@@ -321,7 +329,7 @@ interface ReserveRpcRow {
 export function rpcReserveUpload(
   admin: SupabaseClient,
 ): PrepareUploadDeps["reserve"] {
-  return async ({ access, request, uploadSasExpiresAt }) => {
+  return async ({ access, request, uploadSasExpiresAt, activeLimit }) => {
     const { data, error } = await admin.rpc("match_video_reserve_upload", {
       p_actor_id: access.actor.id,
       p_workspace_kind: access.workspace.kind,
@@ -334,6 +342,7 @@ export function rpcReserveUpload(
       p_expected_active_id: request.expectedActive?.id ?? null,
       p_expected_active_version: request.expectedActive?.version ?? null,
       p_upload_sas_expires_at: uploadSasExpiresAt.toISOString(),
+      p_active_limit: activeLimit,
     });
 
     if (error) {

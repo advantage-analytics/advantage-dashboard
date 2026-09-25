@@ -283,6 +283,9 @@ function boot() {
             durationSeconds: DURATION,
             contentType: "video/mp4",
             filename: "spring-invitational-r1.mp4",
+            expiresAt: null,
+            monthsUnwatched: null,
+            expiryWarning: false,
           },
         }
       : {

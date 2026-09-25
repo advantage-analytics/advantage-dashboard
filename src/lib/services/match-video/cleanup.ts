@@ -395,6 +395,30 @@ export async function requestBestEffortCleanup(
   }
 }
 
+/**
+ * Runs `task` via `after()` from `next/server`, so it starts once the caller's
+ * route handler or server action has responded. Outside a request scope (a
+ * script driving a purge or removal by hand) `after` throws; the task then
+ * runs inline, which is harmless — it is the same bounded worker, and rows it
+ * cannot take yet wait for the next sweep. Shared by every caller that
+ * schedules a best-effort cleanup run after its own response: the removal
+ * route and the account/match deletion purge.
+ */
+export async function scheduleAfterResponse(
+  task: () => Promise<void>,
+  logPrefix: string = LOG,
+): Promise<void> {
+  try {
+    const { after } = await import("next/server");
+    after(task);
+  } catch (cause) {
+    console.warn(`${logPrefix} no request scope — running task inline`, {
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+    await task();
+  }
+}
+
 /* -------------------------------------------------------------------------
  * One row
  * ---------------------------------------------------------------------- */

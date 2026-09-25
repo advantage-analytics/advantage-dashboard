@@ -9,6 +9,8 @@
 export interface AlignmentHarnessWindow {
   /** Every `onAlignmentChange` call, in order. `null` means "not submittable". */
   alignmentEvents: (AlignmentHarnessEvent | null)[];
+  /** Every trim `onChange` call, in order. `null` means "no window to cut". */
+  trimEvents: (AlignmentHarnessTrimEvent | null)[];
   /**
    * Make the next `play()` reject, as a browser does for autoplay policy
    * (`NotAllowedError`) or for a load that superseded the request
@@ -27,4 +29,10 @@ export interface AlignmentHarnessWindow {
 export interface AlignmentHarnessEvent {
   offsetSeconds: number;
   confirmedVideoTimeSeconds: number;
+}
+
+export interface AlignmentHarnessTrimEvent {
+  markedSeconds: number;
+  startSeconds: number;
+  endSeconds: number;
 }

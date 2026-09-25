@@ -66,6 +66,16 @@ const SERVER_ONLY = [
   // `next/server`'s `after`. Deletion is asked for over HTTP or a server
   // action; no client ever holds this.
   "lib/services/match-video/purge.ts",
+  // Add video T8: counting a view reaches the service-role RPC through the
+  // visibility decision. The film player POSTs to it; it never imports it.
+  "lib/services/match-video/views.ts",
+  // Add video T5: removal reaches the service-role RPC and schedules the
+  // cleanup worker (and so `storage.ts`). The Film view asks it over HTTP.
+  "lib/services/match-video/remove.ts",
+  // Add video T9: the retention step of the cleanup cron — service-role
+  // RPCs that retire videos, and the mail sender. Nothing in a browser
+  // expires a video or sends its warning.
+  "lib/services/match-video/expiry-sweep.ts",
   // T22/T23: the two match-detail loaders. Both reach `playback.ts` (and so
   // `storage.ts`) and build a service-role client; `match-video-server.ts`
   // also signs the provider-job SAS. They were already server-only through

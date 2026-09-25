@@ -33,6 +33,7 @@
  * | Expired-invite nudge     | `requestFreshInvite()` — WIRED                  |
  * | Ownership transferred    | `transferProgramOwnership()`, to the new owner — WIRED |
  * | Member left              | `leaveProgram()`, to the owner · pref `notifyTeamActivity` — WIRED |
+ * | Match video expiry       | the daily cleanup cron (`/api/cron/cleanup-match-videos`), to the video's `uploaded_by`, once per retention clock via `claimSend("match_video_expiry:<attachment>:<clock date>")` — no pref, it is the only notice before a deletion — WIRED |
  * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row — to every `is_admin` user — WIRED |
  *
  * The claim and invite-request rows fire from
@@ -87,7 +88,7 @@
  * `getNotificationPrefs()` / `wantsNotification()` read the switch for a user
  * who may not be the caller, and `claimSend()` keys one-shot mail in
  * `notification_sends` so a retried webhook or a re-run derivation stays
- * silent. The digest is the one row still unwired (`docs/email-system.md` §8).
+ * silent. The digest is the one row still unwired (`docs/email-system.md` §9).
  */
 
 export { sendEmail, type EmailMessage, type EmailResult } from "./send";
@@ -98,6 +99,8 @@ export {
   type EmailContent,
   type EmailFact,
   type EmailRow,
+  type EmailSpan,
+  type EmailParagraph,
 } from "./shell";
 export { FROM_ADDRESS, SUPPORT_ADDRESS } from "./config";
 
@@ -170,3 +173,8 @@ export {
   adminReviewNeededEmail,
   type AdminReviewNeededInput,
 } from "./templates/admin";
+
+export {
+  matchVideoExpiryEmail,
+  type MatchVideoExpiryInput,
+} from "./templates/match-video-expiry";

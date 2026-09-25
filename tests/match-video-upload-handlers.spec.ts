@@ -32,7 +32,10 @@ import {
   matchVideoError,
   type MatchVideoErrorCode,
 } from "@/lib/match-video/types";
-import { MATCH_VIDEO_MAX_BYTES } from "@/lib/match-video/limits";
+import {
+  MATCH_VIDEO_ACTIVE_LIMIT,
+  MATCH_VIDEO_MAX_BYTES,
+} from "@/lib/match-video/limits";
 import type { Workspace } from "@/lib/workspace/types";
 
 /**
@@ -168,6 +171,47 @@ class FakeReservations {
     }
   >();
 
+  /**
+   * Matches that exist only to hold active videos for the cap specs: their
+   * scope is what the cap counts by, exactly as the SQL joins `matches`.
+   */
+  extraMatches = new Map<
+    string,
+    { programId: string | null; createdBy: string }
+  >();
+
+  private scopeOf(matchId: string) {
+    const fixture = MATCHES[matchId];
+    if (fixture) {
+      return { programId: fixture.program_id, createdBy: fixture.created_by };
+    }
+    return this.extraMatches.get(matchId) ?? null;
+  }
+
+  /** `count` active videos on fresh matches in the given scope. */
+  seedActiveIn(
+    scope: { programId: string | null; createdBy: string },
+    count: number,
+  ) {
+    for (let i = 0; i < count; i++) {
+      const matchId = randomUUID();
+      this.extraMatches.set(matchId, scope);
+      this.activate(matchId, randomUUID(), 0);
+    }
+  }
+
+  /** The cap's row set: team = program; personal = no program, the actor's own. */
+  activeInWorkspace(workspace: { kind: string; id: string }): number {
+    return [...this.rows.values()].filter((r) => {
+      if (r.state !== "active") return false;
+      const scope = this.scopeOf(r.matchId);
+      if (!scope) return false;
+      return workspace.kind === "team"
+        ? scope.programId === workspace.id
+        : scope.programId === null && scope.createdBy === workspace.id;
+    }).length;
+  }
+
   activate(matchId: string, id: string, version: number) {
     this.rows.set(id, {
       id,
@@ -295,7 +339,7 @@ class FakeReservations {
   }
 
   reserve(input: ReserveUploadInput): ReturnType<PrepareUploadDeps["reserve"]> {
-    const { access, request, uploadSasExpiresAt } = input;
+    const { access, request, uploadSasExpiresAt, activeLimit } = input;
     const matchId = access.match.id;
     const actorId = access.actor.id;
 
@@ -318,6 +362,17 @@ class FakeReservations {
             : "no_active_attachment",
         },
       });
+    }
+
+    // The cap, for an add only, before the request-id lookup — the
+    // migration's order.
+    if (
+      expected === null &&
+      this.activeInWorkspace(access.workspace) >= activeLimit
+    ) {
+      return Promise.resolve(
+        rpcRefusal("attachment_limit_reached", "workspace_at_limit"),
+      );
     }
 
     const existing = [...this.rows.values()].find(
@@ -1059,6 +1114,82 @@ test("two simultaneous first attempts: exactly one reserves, the other conflicts
   expect(a.mintCalls.length + b.mintCalls.length).toBe(1);
 });
 
+/* -------------------------------------------------------------------------
+ * The per-workspace cap — the limit comes from the ACCESS value's kind
+ * ---------------------------------------------------------------------- */
+
+test("the cap is one constant: personal 1, team 25", () => {
+  expect(MATCH_VIDEO_ACTIVE_LIMIT).toEqual({ personal: 1, team: 25 });
+});
+
+test("a personal workspace at its limit refuses an add with 409 attachment_limit_reached and mints nothing", async () => {
+  const store = new FakeReservations();
+  // The creator's other personal match already has the one video allowed.
+  store.seedActiveIn({ programId: null, createdBy: CREATOR }, 1);
+  const rowsBefore = store.rows.size;
+  const h = harness({ store });
+
+  const { response, json } = await run(h, PERSONAL_MATCH, validBody());
+  expect(response.status).toBe(409);
+  expectNoStore(response);
+  expect(json).toEqual({
+    error: matchVideoError("attachment_limit_reached", "workspace_at_limit")
+      .message,
+    code: "attachment_limit_reached",
+    detail: "workspace_at_limit",
+  });
+
+  // The RPC was asked with the personal limit, and no credential was cut.
+  expect(h.reserveCalls).toHaveLength(1);
+  expect(h.reserveCalls[0].activeLimit).toBe(MATCH_VIDEO_ACTIVE_LIMIT.personal);
+  expect(h.events).not.toContain("mint");
+  expect(h.mintCalls).toHaveLength(0);
+  expect(store.rows.size).toBe(rowsBefore);
+  expect(json).not.toHaveProperty("uploadUrl");
+});
+
+test("a replace is never refused for count, even in a workspace at its limit", async () => {
+  const store = new FakeReservations();
+  const activeId = randomUUID();
+  store.activate(PERSONAL_MATCH, activeId, 1); // the one allowed video
+  const h = harness({ store });
+
+  const { response } = await run(
+    h,
+    PERSONAL_MATCH,
+    validBody({ expectedActive: { id: activeId, version: 1 } }),
+  );
+  expect(response.status).toBe(201);
+  expect(h.mintCalls).toHaveLength(1);
+});
+
+test("a team workspace passes 25: an add at 24 reserves, at 25 it is refused", async () => {
+  const store = new FakeReservations();
+  // Videos in ANOTHER program and in the creator's personal workspace do not
+  // count against this team.
+  store.seedActiveIn({ programId: OTHER_PROGRAM, createdBy: CREATOR }, 30);
+  store.seedActiveIn({ programId: null, createdBy: CREATOR }, 1);
+  store.seedActiveIn(
+    { programId: PROGRAM, createdBy: OTHER_USER },
+    MATCH_VIDEO_ACTIVE_LIMIT.team - 1,
+  );
+
+  const under = harness({ store, workspace: team(PROGRAM) });
+  const first = await run(under, TEAM_MATCH, validBody());
+  expect(first.response.status).toBe(201);
+  expect(under.reserveCalls[0].activeLimit).toBe(MATCH_VIDEO_ACTIVE_LIMIT.team);
+
+  // Cancel that attempt and fill the last seat.
+  store.rows.delete(first.json.attachmentId as string);
+  store.seedActiveIn({ programId: PROGRAM, createdBy: OTHER_USER }, 1);
+
+  const at = harness({ store, workspace: team(PROGRAM) });
+  const second = await run(at, TEAM_MATCH, validBody());
+  expect(second.response.status).toBe(409);
+  expect(second.json.code).toBe("attachment_limit_reached");
+  expect(at.mintCalls).toHaveLength(0);
+});
+
 test("when the signer fails, the expiry was already persisted and the reservation stands", async () => {
   const h = harness({
     mint: () => ({
@@ -1149,6 +1280,19 @@ test("RPC refusals map to the status of the code they carry, whatever the SQLSTA
     [
       { code: "55000", message: "mode_conflict", details: "attempt_retired" },
       { code: "mode_conflict", status: 409, detail: "attempt_retired" },
+    ],
+    // The cap: same 55000 class as a stale belief, its own code by message.
+    [
+      {
+        code: "55000",
+        message: "attachment_limit_reached",
+        details: "workspace_at_limit",
+      },
+      {
+        code: "attachment_limit_reached",
+        status: 409,
+        detail: "workspace_at_limit",
+      },
     ],
     // T4's 22000 class: the code decides the status — 422 or 413.
     [

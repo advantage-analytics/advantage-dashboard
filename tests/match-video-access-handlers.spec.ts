@@ -19,12 +19,22 @@ import {
   type CorrectedAlignment,
   type UpdateAlignmentDeps,
 } from "@/lib/services/match-video/alignment";
+import type { CleanupDeps } from "@/lib/services/match-video/cleanup";
 import type { HttpResult } from "@/lib/services/match-video/http";
 import {
   handleGetPlayback,
   type PlaybackAttachmentRow,
   type PlaybackDeps,
 } from "@/lib/services/match-video/playback";
+import {
+  handleRemoveAttachment,
+  type RemoveAttachmentDeps,
+  type RemovedAttachment,
+} from "@/lib/services/match-video/remove";
+import {
+  handleRecordView,
+  type RecordViewDeps,
+} from "@/lib/services/match-video/views";
 import type { Workspace } from "@/lib/workspace/types";
 
 /**
@@ -1459,17 +1469,773 @@ test("the playback service module never reaches the upload signer", async () => 
   expect(source).not.toContain("row.staged_blob_key");
 });
 
-test("the playback route exposes GET and nothing that writes", async () => {
+test("the playback route exposes GET, the removal DELETE, and no creator write", async () => {
   const { readFile } = await import("node:fs/promises");
   const source = await readFile(
     "src/app/api/matches/[matchId]/video/route.ts",
     "utf8",
   );
   expect(source).toContain("export async function GET");
-  for (const verb of ["POST", "PUT", "PATCH", "DELETE"]) {
+  // T5: removal is the one write here, and it is not the creator gate.
+  expect(source).toContain("export async function DELETE");
+  for (const verb of ["POST", "PUT", "PATCH"]) {
     expect(source).not.toContain(`export async function ${verb}`);
   }
-  // Nothing on this route authorizes a write.
   expect(source).not.toContain("authorizeMatchVideoMutation");
   expect(source).toContain("matchVideoAccessDeps");
+  expect(source).toContain("matchVideoRemovalAccessDeps");
+  expect(source).toContain("handleRemoveAttachment");
+});
+
+/* =========================================================================
+ * DELETE /api/matches/[matchId]/video — removing an active video (T5)
+ *
+ * `FakeRemovals` is an in-memory twin of `match_video_remove_attachment`:
+ * rows found by `id AND match_id`, the uploader-or-program-lead rule against
+ * a `program_members` map, pending refused, retired returned as it stands,
+ * active retired with `retired_reason = 'removed'`. The access half reads the
+ * same map through `loadProgramRole`, so the two layers are asked the same
+ * question — and one test drifts them apart on purpose to prove the RPC's
+ * refusal still reaches the caller.
+ *
+ * Visibility is modelled the way RLS answers it: a team match is visible to
+ * members of ITS program; a personal match to its creator only.
+ * ====================================================================== */
+
+const R_PROGRAM = randomUUID();
+const R_OTHER_PROGRAM = randomUUID();
+const R_OWNER = randomUUID();
+const R_COACH = randomUUID();
+const R_STAFF = randomUUID();
+const R_PLAYER = randomUUID();
+const R_TEAMMATE = randomUUID();
+const R_OTHER_COACH = randomUUID();
+const R_STRANGER = randomUUID();
+/** Created (and uploaded to) by R_PLAYER. */
+const R_PLAYER_MATCH = randomUUID();
+/** Created (and uploaded to) by R_TEAMMATE. */
+const R_TEAMMATE_MATCH = randomUUID();
+/** Created (and uploaded to) by R_STAFF. */
+const R_STAFF_MATCH = randomUUID();
+/** R_PLAYER's personal match. */
+const R_PERSONAL_MATCH = randomUUID();
+
+const R_MATCHES: Record<string, VisibleMatchRow> = {
+  [R_PLAYER_MATCH]: {
+    id: R_PLAYER_MATCH,
+    created_by: R_PLAYER,
+    program_id: R_PROGRAM,
+    source_provider: "swing-vision",
+  },
+  [R_TEAMMATE_MATCH]: {
+    id: R_TEAMMATE_MATCH,
+    created_by: R_TEAMMATE,
+    program_id: R_PROGRAM,
+    source_provider: "swing-vision",
+  },
+  [R_STAFF_MATCH]: {
+    id: R_STAFF_MATCH,
+    created_by: R_STAFF,
+    program_id: R_PROGRAM,
+    source_provider: "swing-vision",
+  },
+  [R_PERSONAL_MATCH]: {
+    id: R_PERSONAL_MATCH,
+    created_by: R_PLAYER,
+    program_id: null,
+    source_provider: "swing-vision",
+  },
+};
+
+type MemberRole = "owner" | "coach" | "staff" | "player";
+
+interface RemovalRow {
+  id: string;
+  match_id: string;
+  uploaded_by: string | null;
+  state: "pending" | "active" | "retired";
+  retired_reason: string | null;
+  retired_at: string | null;
+}
+
+class FakeRemovals {
+  /** program id → user id → role. */
+  members = new Map<string, Map<string, MemberRole>>([
+    [
+      R_PROGRAM,
+      new Map<string, MemberRole>([
+        [R_OWNER, "owner"],
+        [R_COACH, "coach"],
+        [R_STAFF, "staff"],
+        [R_PLAYER, "player"],
+        [R_TEAMMATE, "player"],
+      ]),
+    ],
+    [R_OTHER_PROGRAM, new Map<string, MemberRole>([[R_OTHER_COACH, "coach"]])],
+  ]);
+  rows = new Map<string, RemovalRow>();
+  /** Every RPC call, by attachment id. */
+  calls: string[] = [];
+
+  seed(
+    matchId: string,
+    uploadedBy: string,
+    state: RemovalRow["state"] = "active",
+  ): RemovalRow {
+    const row: RemovalRow = {
+      id: randomUUID(),
+      match_id: matchId,
+      uploaded_by: uploadedBy,
+      state,
+      retired_reason: null,
+      retired_at: state === "retired" ? new Date().toISOString() : null,
+    };
+    this.rows.set(row.id, row);
+    return row;
+  }
+
+  roleOf(programId: string, userId: string): MemberRole | null {
+    return this.members.get(programId)?.get(userId) ?? null;
+  }
+
+  visibleTo(userId: string, matchId: string): boolean {
+    const match = R_MATCHES[matchId];
+    if (!match) return false;
+    if (match.created_by === userId) return true;
+    return (
+      match.program_id !== null &&
+      this.roleOf(match.program_id, userId) !== null
+    );
+  }
+
+  /** The SQL function, rule for rule. */
+  remove(
+    actorId: string,
+    matchId: string,
+    attachmentId: string,
+  ): HttpResult<RemovedAttachment> {
+    this.calls.push(attachmentId);
+    const match = R_MATCHES[matchId];
+    if (!match) return rpcRefusal("match_not_found", "no_such_match");
+    const row = this.rows.get(attachmentId);
+    if (!row || row.match_id !== matchId) {
+      return rpcRefusal("match_not_found", "no_such_attachment");
+    }
+    const role =
+      match.program_id === null ? null : this.roleOf(match.program_id, actorId);
+    if (row.uploaded_by !== actorId && role !== "owner" && role !== "coach") {
+      return rpcRefusal("forbidden", "not_uploader_or_program_lead");
+    }
+    if (row.state === "pending") {
+      return rpcRefusal("mode_conflict", "attachment_pending");
+    }
+    if (row.state === "active") {
+      row.state = "retired";
+      row.retired_reason = "removed";
+      row.retired_at = new Date().toISOString();
+    }
+    return {
+      ok: true,
+      value: {
+        id: row.id,
+        state: row.state,
+        retired_reason: row.retired_reason,
+      },
+    };
+  }
+}
+
+interface RemovalHarness {
+  deps: RemoveAttachmentDeps;
+  events: string[];
+  store: FakeRemovals;
+}
+
+function removalHarness(
+  userId: string | null,
+  options: {
+    store?: FakeRemovals;
+    /** Replaces the access layer's role read — to drift it from the RPC's. */
+    roleOverride?: MemberRole | null;
+    scheduleThrows?: boolean;
+  } = {},
+): RemovalHarness {
+  const events: string[] = [];
+  const store = options.store ?? new FakeRemovals();
+
+  // The worker's database seam: records that the run happened and claims
+  // nothing, so no storage call is ever made.
+  const cleanup: CleanupDeps = {
+    database: {
+      async claim() {
+        events.push("claim");
+        return { ok: true as const, value: [] };
+      },
+      async confirm() {
+        throw new Error("nothing was claimed");
+      },
+      async fail() {
+        throw new Error("nothing was claimed");
+      },
+    },
+    storage: {
+      pendingCopyAt: () => Promise.reject(new Error("no storage in a spec")),
+      abortPublication: () => Promise.reject(new Error("no storage in a spec")),
+      deleteStaged: () => Promise.reject(new Error("no storage in a spec")),
+      deleteFinal: () => Promise.reject(new Error("no storage in a spec")),
+    },
+  };
+
+  const deps: RemoveAttachmentDeps = {
+    allowedOrigins: [SITE],
+    async currentUserId() {
+      events.push("auth");
+      return userId;
+    },
+    async loadVisibleMatch(matchId) {
+      events.push(`read:${matchId}`);
+      const visible = userId !== null && store.visibleTo(userId, matchId);
+      return { match: visible ? R_MATCHES[matchId] : null, error: null };
+    },
+    async activeWorkspace() {
+      // Removal is not workspace-exact. The tests assert this never runs.
+      events.push("workspace");
+      return null;
+    },
+    async loadAttachmentUploader(matchId, attachmentId) {
+      events.push("attachment");
+      const row = store.rows.get(attachmentId);
+      return {
+        attachment:
+          row && row.match_id === matchId
+            ? { uploaded_by: row.uploaded_by }
+            : null,
+        error: null,
+      };
+    },
+    async loadProgramRole(programId, actorId) {
+      events.push("role");
+      expect(actorId).toBe(userId);
+      const role =
+        options.roleOverride !== undefined
+          ? options.roleOverride
+          : store.roleOf(programId, actorId);
+      return { role, error: null };
+    },
+    async remove(access) {
+      events.push("remove");
+      return store.remove(
+        access.actor.id,
+        access.match.id,
+        access.attachmentId,
+      );
+    },
+    cleanup,
+    async schedule(task) {
+      events.push("schedule");
+      if (options.scheduleThrows) throw new Error("no request scope");
+      await task();
+    },
+  };
+
+  return { deps, events, store };
+}
+
+async function removeVideo(
+  h: RemovalHarness,
+  matchId: string,
+  body: unknown,
+  init: { origin?: string | null; contentType?: string } = {},
+) {
+  const headers: Record<string, string> = {
+    "content-type": init.contentType ?? "application/json",
+  };
+  if (init.origin !== null) headers.origin = init.origin ?? SITE;
+  const request = new Request(`${SITE}/api/matches/${matchId}/video`, {
+    method: "DELETE",
+    headers,
+    body: JSON.stringify(body),
+  });
+  const response = await handleRemoveAttachment(request, matchId, h.deps);
+  return {
+    response,
+    json: (await response.json()) as Record<string, unknown>,
+  };
+}
+
+function expectNotRemoved(h: RemovalHarness) {
+  expect(h.events).not.toContain("remove");
+  expect(h.events).not.toContain("schedule");
+  expect(h.events).not.toContain("claim");
+  expect(h.store.calls).toEqual([]);
+}
+
+/* -------------------------------------------------------------------------
+ * Who may remove
+ * ---------------------------------------------------------------------- */
+
+test("removal: a player removes their own video — visibility, removal check, RPC, then cleanup", async () => {
+  const h = removalHarness(R_PLAYER);
+  const row = h.store.seed(R_PLAYER_MATCH, R_PLAYER);
+
+  const { response, json } = await removeVideo(h, R_PLAYER_MATCH, {
+    attachmentId: row.id,
+  });
+  expect(response.status).toBe(200);
+  expectNoStore(response);
+  expect(json).toEqual({
+    attachmentId: row.id,
+    state: "retired",
+    retiredReason: "removed",
+  });
+  expect(h.store.rows.get(row.id)!.state).toBe("retired");
+
+  // The four steps, in order. The uploader needs no role read. (The session
+  // is asked twice: once at the edge, before the body is read, and again by
+  // the visibility check, exactly as the cancel route does.)
+  expect(h.events).toEqual([
+    "auth",
+    "auth",
+    `read:${R_PLAYER_MATCH}`,
+    "attachment",
+    "remove",
+    "schedule",
+    "claim",
+  ]);
+});
+
+test("removal: a player removing someone else's video is a 403, and the RPC is never called", async () => {
+  const h = removalHarness(R_PLAYER);
+  const row = h.store.seed(R_TEAMMATE_MATCH, R_TEAMMATE);
+
+  const { response, json } = await removeVideo(h, R_TEAMMATE_MATCH, {
+    attachmentId: row.id,
+  });
+  expect(response.status).toBe(403);
+  expect(json.code).toBe("forbidden");
+  expect(json.detail).toBe("not_uploader_or_program_lead");
+  // Not the creator-only sentence: a coach COULD remove this.
+  expect(json.error).toBe(
+    "Only the person who uploaded this video, or a team owner or coach, can remove it.",
+  );
+  expectNotRemoved(h);
+  expect(h.store.rows.get(row.id)!.state).toBe("active");
+});
+
+test("removal: staff remove only their own videos", async () => {
+  const theirs = removalHarness(R_STAFF);
+  const other = theirs.store.seed(R_TEAMMATE_MATCH, R_TEAMMATE);
+  const refused = await removeVideo(theirs, R_TEAMMATE_MATCH, {
+    attachmentId: other.id,
+  });
+  expect(refused.response.status).toBe(403);
+  expect(refused.json.detail).toBe("not_uploader_or_program_lead");
+  expectNotRemoved(theirs);
+
+  const own = removalHarness(R_STAFF);
+  const mine = own.store.seed(R_STAFF_MATCH, R_STAFF);
+  const removed = await removeVideo(own, R_STAFF_MATCH, {
+    attachmentId: mine.id,
+  });
+  expect(removed.response.status).toBe(200);
+  expect(own.store.rows.get(mine.id)!.retired_reason).toBe("removed");
+});
+
+for (const [label, actor] of [
+  ["coach", R_COACH],
+  ["owner", R_OWNER],
+] as const) {
+  test(`removal: a team ${label} removes any video in the team`, async () => {
+    const h = removalHarness(actor);
+    const players = h.store.seed(R_PLAYER_MATCH, R_PLAYER);
+    const staffs = h.store.seed(R_STAFF_MATCH, R_STAFF);
+
+    for (const [matchId, row] of [
+      [R_PLAYER_MATCH, players],
+      [R_STAFF_MATCH, staffs],
+    ] as const) {
+      const { response, json } = await removeVideo(h, matchId, {
+        attachmentId: row.id,
+      });
+      expect(response.status, `${label} → ${matchId}`).toBe(200);
+      expect(json.retiredReason).toBe("removed");
+      expect(h.store.rows.get(row.id)!.state).toBe("retired");
+    }
+    // Not the uploader, so the role was asked — and the workspace never was.
+    expect(h.events).toContain("role");
+    expect(h.events).not.toContain("workspace");
+  });
+}
+
+test("removal: a coach of another program gets a 404 and learns nothing about the video", async () => {
+  const h = removalHarness(R_OTHER_COACH);
+  const row = h.store.seed(R_PLAYER_MATCH, R_PLAYER);
+  const { response, json } = await removeVideo(h, R_PLAYER_MATCH, {
+    attachmentId: row.id,
+  });
+  expect(response.status).toBe(404);
+  expect(json.code).toBe("match_not_found");
+  expect(json.detail).toBe("not_visible");
+  expect(h.events).not.toContain("attachment");
+  expect(h.events).not.toContain("role");
+  expectNotRemoved(h);
+});
+
+test("removal: a stranger gets a 404, for a team match and a personal one alike", async () => {
+  for (const matchId of [R_PLAYER_MATCH, R_PERSONAL_MATCH]) {
+    const h = removalHarness(R_STRANGER);
+    const row = h.store.seed(matchId, R_PLAYER);
+    const { response, json } = await removeVideo(h, matchId, {
+      attachmentId: row.id,
+    });
+    expect(response.status).toBe(404);
+    expect(json.detail).toBe("not_visible");
+    expect(h.events).not.toContain("attachment");
+    expectNotRemoved(h);
+  }
+});
+
+test("removal: a personal match has no program lead — only its uploader may remove", async () => {
+  const h = removalHarness(R_PLAYER);
+  const row = h.store.seed(R_PERSONAL_MATCH, R_PLAYER);
+  const { response } = await removeVideo(h, R_PERSONAL_MATCH, {
+    attachmentId: row.id,
+  });
+  expect(response.status).toBe(200);
+  expect(h.events).not.toContain("role");
+});
+
+test("removal: the RPC's own refusal reaches the caller when the role changed after the check", async () => {
+  // The access layer still believes R_PLAYER is a coach; the database does
+  // not. The RPC is the gate that holds.
+  const h = removalHarness(R_PLAYER, { roleOverride: "coach" });
+  const row = h.store.seed(R_TEAMMATE_MATCH, R_TEAMMATE);
+  const { response, json } = await removeVideo(h, R_TEAMMATE_MATCH, {
+    attachmentId: row.id,
+  });
+  expect(response.status).toBe(403);
+  expect(json.detail).toBe("not_uploader_or_program_lead");
+  expect(json.error).toContain("team owner or coach");
+  expect(h.events).toContain("remove");
+  expect(h.events).not.toContain("schedule");
+  expect(h.store.rows.get(row.id)!.state).toBe("active");
+});
+
+/* -------------------------------------------------------------------------
+ * Edge, body and state
+ * ---------------------------------------------------------------------- */
+
+test("removal: a cross-origin request and a missing session are refused before any read", async () => {
+  const cross = removalHarness(R_PLAYER);
+  const row = cross.store.seed(R_PLAYER_MATCH, R_PLAYER);
+  const refused = await removeVideo(
+    cross,
+    R_PLAYER_MATCH,
+    { attachmentId: row.id },
+    { origin: "https://evil.example" },
+  );
+  expect(refused.response.status).toBe(403);
+  expect(refused.json.code).toBe("cross_origin");
+  expect(cross.events).toEqual([]);
+
+  const anonymous = removalHarness(null);
+  const signedOut = await removeVideo(anonymous, R_PLAYER_MATCH, {
+    attachmentId: row.id,
+  });
+  expect(signedOut.response.status).toBe(401);
+  expect(anonymous.events).toEqual(["auth"]);
+});
+
+test("removal: the body is exactly { attachmentId } — other keys are refused by name", async () => {
+  const h = removalHarness(R_PLAYER);
+  const row = h.store.seed(R_PLAYER_MATCH, R_PLAYER);
+
+  const extra = await removeVideo(h, R_PLAYER_MATCH, {
+    attachmentId: row.id,
+    uploadedBy: R_PLAYER,
+  });
+  expect(extra.response.status).toBe(400);
+  expect(extra.json.detail).toBe("unexpected_field:uploadedBy");
+
+  const missing = await removeVideo(h, R_PLAYER_MATCH, {});
+  expect(missing.response.status).toBe(400);
+  expect(missing.json.detail).toBe("attachment_id_type");
+
+  const notJson = await removeVideo(
+    h,
+    R_PLAYER_MATCH,
+    { attachmentId: row.id },
+    { contentType: "text/plain" },
+  );
+  expect(notJson.response.status).toBe(400);
+
+  const malformed = await removeVideo(h, R_PLAYER_MATCH, {
+    attachmentId: "not-a-uuid",
+  });
+  expect(malformed.response.status).toBe(404);
+  expect(malformed.json.detail).toBe("malformed_attachment_id");
+
+  expectNotRemoved(h);
+});
+
+test("removal: an attachment filed under another match is a 404", async () => {
+  const h = removalHarness(R_COACH);
+  const row = h.store.seed(R_TEAMMATE_MATCH, R_TEAMMATE);
+  const { response, json } = await removeVideo(h, R_PLAYER_MATCH, {
+    attachmentId: row.id,
+  });
+  expect(response.status).toBe(404);
+  expect(json.detail).toBe("no_such_attachment");
+  expectNotRemoved(h);
+});
+
+test("removal: a second DELETE is harmless and answers the same", async () => {
+  const h = removalHarness(R_PLAYER);
+  const row = h.store.seed(R_PLAYER_MATCH, R_PLAYER);
+  const first = await removeVideo(h, R_PLAYER_MATCH, { attachmentId: row.id });
+  const retiredAt = h.store.rows.get(row.id)!.retired_at;
+  const second = await removeVideo(h, R_PLAYER_MATCH, { attachmentId: row.id });
+  expect(first.response.status).toBe(200);
+  expect(second.response.status).toBe(200);
+  expect(second.json).toEqual(first.json);
+  expect(h.store.rows.get(row.id)!.retired_at).toBe(retiredAt);
+});
+
+test("removal: a pending attempt is cancelled, not removed — 409", async () => {
+  const h = removalHarness(R_PLAYER);
+  const row = h.store.seed(R_PLAYER_MATCH, R_PLAYER, "pending");
+  const { response, json } = await removeVideo(h, R_PLAYER_MATCH, {
+    attachmentId: row.id,
+  });
+  expect(response.status).toBe(409);
+  expect(json.code).toBe("mode_conflict");
+  expect(json.detail).toBe("attachment_pending");
+  expect(h.events).not.toContain("schedule");
+  expect(h.store.rows.get(row.id)!.state).toBe("pending");
+});
+
+test("removal: a cleanup that cannot be scheduled never fails the removal", async () => {
+  const h = removalHarness(R_PLAYER, { scheduleThrows: true });
+  const row = h.store.seed(R_PLAYER_MATCH, R_PLAYER);
+  const { response } = await removeVideo(h, R_PLAYER_MATCH, {
+    attachmentId: row.id,
+  });
+  expect(response.status).toBe(200);
+  expect(h.store.rows.get(row.id)!.state).toBe("retired");
+  expect(h.events).not.toContain("claim");
+});
+
+/* =========================================================================
+ * POST /api/matches/[matchId]/video/viewed — counting a view (Add video T8)
+ *
+ * `FakeViews` is `match_video_record_view`: it stamps the match's ACTIVE row
+ * with last_viewed_at = now and expiry_warned_at = null, and returns no row
+ * (writing nothing) when there is no active attachment. Visibility is the
+ * removal section's model: members of the match's program, or its creator.
+ * ====================================================================== */
+
+interface ViewRow {
+  id: string;
+  match_id: string;
+  state: "pending" | "active" | "retired";
+  last_viewed_at: string | null;
+  expiry_warned_at: string | null;
+}
+
+class FakeViews {
+  rows = new Map<string, ViewRow>();
+  /** Every RPC call, by match id. */
+  calls: string[] = [];
+  /** Every row write, by attachment id. */
+  writes: string[] = [];
+  private visibility = new FakeRemovals();
+
+  seed(matchId: string, state: ViewRow["state"] = "active"): ViewRow {
+    const row: ViewRow = {
+      id: randomUUID(),
+      match_id: matchId,
+      state,
+      last_viewed_at: null,
+      expiry_warned_at: "2026-09-01T00:00:00.000Z",
+    };
+    this.rows.set(row.id, row);
+    return row;
+  }
+
+  visibleTo(userId: string, matchId: string): boolean {
+    return this.visibility.visibleTo(userId, matchId);
+  }
+
+  record(matchId: string) {
+    this.calls.push(matchId);
+    const row = [...this.rows.values()].find(
+      (r) => r.match_id === matchId && r.state === "active",
+    );
+    if (!row) return null;
+    row.last_viewed_at = new Date().toISOString();
+    row.expiry_warned_at = null;
+    this.writes.push(row.id);
+    return { attachmentId: row.id, lastViewedAt: row.last_viewed_at };
+  }
+}
+
+function viewHarness(userId: string | null, store = new FakeViews()) {
+  const events: string[] = [];
+  const deps: RecordViewDeps = {
+    allowedOrigins: [SITE],
+    async currentUserId() {
+      events.push("auth");
+      return userId;
+    },
+    async loadVisibleMatch(matchId) {
+      events.push(`read:${matchId}`);
+      const visible = userId !== null && store.visibleTo(userId, matchId);
+      return { match: visible ? R_MATCHES[matchId] : null, error: null };
+    },
+    async activeWorkspace() {
+      // Visibility only — never workspace-exact. Asserted below.
+      events.push("workspace");
+      return null;
+    },
+    async recordView(access) {
+      events.push("record");
+      return { ok: true as const, value: store.record(access.match.id) };
+    },
+  };
+  return { deps, events, store };
+}
+
+async function markViewed(
+  h: ReturnType<typeof viewHarness>,
+  matchId: string,
+  init: { origin?: string | null } = {},
+) {
+  const headers: Record<string, string> = {};
+  if (init.origin !== null) headers.origin = init.origin ?? SITE;
+  const request = new Request(`${SITE}/api/matches/${matchId}/video/viewed`, {
+    method: "POST",
+    headers,
+  });
+  const response = await handleRecordView(request, matchId, h.deps);
+  return {
+    response,
+    json: (await response.json()) as Record<string, unknown>,
+  };
+}
+
+test("view: a teammate who can see the match stamps its active video", async () => {
+  const h = viewHarness(R_TEAMMATE);
+  const row = h.store.seed(R_PLAYER_MATCH);
+
+  const { response, json } = await markViewed(h, R_PLAYER_MATCH);
+  expect(response.status).toBe(200);
+  expectNoStore(response);
+  const view = json.view as Record<string, unknown>;
+  expect(view.attachmentId).toBe(row.id);
+  expect(typeof view.lastViewedAt).toBe("string");
+  expect(row.last_viewed_at).toBe(view.lastViewedAt);
+  expect(row.expiry_warned_at).toBeNull();
+  expect(h.events).toEqual(["auth", `read:${R_PLAYER_MATCH}`, "record"]);
+  expect(h.events).not.toContain("workspace");
+});
+
+test("view: no session is 401 and nothing is written", async () => {
+  const h = viewHarness(null);
+  h.store.seed(R_PLAYER_MATCH);
+  const { response, json } = await markViewed(h, R_PLAYER_MATCH);
+  expect(response.status).toBe(401);
+  expect(json.code).toBe("unauthenticated");
+  expect(h.events).toEqual(["auth"]);
+  expect(h.store.calls).toEqual([]);
+  expect(h.store.writes).toEqual([]);
+});
+
+test("view: a match the caller cannot see is 404 and nothing is written", async () => {
+  const h = viewHarness(R_OTHER_COACH);
+  const row = h.store.seed(R_PLAYER_MATCH);
+  const { response, json } = await markViewed(h, R_PLAYER_MATCH);
+  expect(response.status).toBe(404);
+  expect(json.code).toBe("match_not_found");
+  expect(h.events).not.toContain("record");
+  expect(h.store.writes).toEqual([]);
+  expect(row.last_viewed_at).toBeNull();
+});
+
+test("view: a malformed match id is 404 before any read", async () => {
+  const h = viewHarness(R_PLAYER);
+  const { response } = await markViewed(h, "not-a-uuid");
+  expect(response.status).toBe(404);
+  expect(h.events).toEqual(["auth"]);
+  expect(h.store.calls).toEqual([]);
+});
+
+test("view: no active video answers {view: null} and writes nothing", async () => {
+  const h = viewHarness(R_PLAYER);
+  const pending = h.store.seed(R_PLAYER_MATCH, "pending");
+  const retired = h.store.seed(R_PLAYER_MATCH, "retired");
+
+  const { response, json } = await markViewed(h, R_PLAYER_MATCH);
+  expect(response.status).toBe(200);
+  expect(json).toEqual({ view: null });
+  expect(h.store.calls).toEqual([R_PLAYER_MATCH]);
+  expect(h.store.writes).toEqual([]);
+  expect(pending.last_viewed_at).toBeNull();
+  expect(retired.last_viewed_at).toBeNull();
+});
+
+test("view: a cross-site request touches nothing", async () => {
+  const h = viewHarness(R_PLAYER);
+  h.store.seed(R_PLAYER_MATCH);
+  const noOrigin = await markViewed(h, R_PLAYER_MATCH, { origin: null });
+  expect(noOrigin.response.status).toBe(403);
+  const foreign = await markViewed(h, R_PLAYER_MATCH, {
+    origin: "https://evil.example",
+  });
+  expect(foreign.response.status).toBe(403);
+  expect(foreign.json.code).toBe("cross_origin");
+  expect(h.events).toEqual([]);
+  expect(h.store.writes).toEqual([]);
+});
+
+test("view: playback stays write-free — GET /video never records a view", async () => {
+  const { readFile } = await import("node:fs/promises");
+  for (const file of [
+    "src/lib/services/match-video/playback.ts",
+    "src/app/api/matches/[matchId]/video/route.ts",
+  ]) {
+    const source = await readFile(file, "utf8");
+    expect(source, file).not.toContain("record_view");
+    expect(source, file).not.toContain("recordView");
+    expect(source, file).not.toContain("/views");
+  }
+  // PlaybackDeps has no write seam to call: the harness above is the whole
+  // surface, and a playback read leaves the fake's view store untouched.
+  const views = new FakeViews();
+  const row = views.seed(PERSONAL_MATCH);
+  const h = playbackHarness();
+  await watch(h, PERSONAL_MATCH);
+  expect(views.calls).toEqual([]);
+  expect(row.last_viewed_at).toBeNull();
+});
+
+test("view: both film surfaces report only from the element's play event", async () => {
+  const { readFile } = await import("node:fs/promises");
+  for (const file of [
+    "src/components/dashboard/matches/match-detail/film/film-player.tsx",
+    "src/components/dashboard/matches/match-detail/film/film-fullscreen.tsx",
+  ]) {
+    const source = await readFile(file, "utf8");
+    // Exactly one call site, inside the `onPlay` handler, gated per generation.
+    const calls = [...source.matchAll(/onFirstPlay\?\.\(/g)];
+    expect(calls, file).toHaveLength(1);
+    const handler = source.lastIndexOf("onPlay={", calls[0].index);
+    const nextHandler = source.indexOf("onPause={", handler);
+    expect(handler, file).toBeGreaterThan(-1);
+    expect(calls[0].index!, file).toBeLessThan(nextHandler);
+    expect(source.slice(handler, nextHandler), file).toMatch(
+      /firstPlayRef\.current !== (p\.)?generation/,
+    );
+    // The film subtree never fetches the view endpoint itself.
+    expect(source, file).not.toContain("/video/viewed");
+  }
 });

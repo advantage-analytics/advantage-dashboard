@@ -13,7 +13,9 @@ import {
   PendingRegion,
 } from "@/components/dashboard/loading/pending";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { MATCH_VIDEOS_FOOTNOTE } from "@/components/dashboard/settings/match-videos-usage-card";
 import { SUPPORT_EMAIL } from "@/lib/constants";
+import { MATCH_VIDEO_ACTIVE_LIMIT } from "@/lib/match-video/limits";
 import { capitalize, cn } from "@/lib/utils";
 import { teamLabel, uploadPolicyLabel } from "@/lib/workspace/types";
 
@@ -703,7 +705,64 @@ export function SettingsUsagePending() {
           </SettingsCard>
         );
       })}
+
+      <MatchVideosPendingCard />
     </Column>
+  );
+}
+
+/**
+ * The match-videos card, traced: it follows the ACTIVE workspace, so the
+ * title and cap are already known — only the count and the rows wait.
+ */
+function MatchVideosPendingCard() {
+  const { active } = useWorkspace();
+  const isTeam = active.kind === "team";
+  const squad = teamLabel(active.team);
+  const cap = MATCH_VIDEO_ACTIVE_LIMIT[active.kind];
+
+  return (
+    <SettingsCard className="gap-3">
+      <SettingsCardTitle>
+        {isTeam ? (
+          <span className="flex min-w-0 items-center gap-3">
+            <Box className="size-8 rounded-[8px]" />
+            <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
+              {squad
+                ? `${active.name} · ${squad} · match videos`
+                : `${active.name} · match videos`}
+            </span>
+          </span>
+        ) : (
+          "Your match videos"
+        )}
+      </SettingsCardTitle>
+
+      <div className="flex items-center gap-3">
+        <Box className="h-1.5 flex-1 rounded-[3px]" />
+        <Text className="mono text-[11px]">{`${cap} / ${cap}`}</Text>
+      </div>
+
+      <div className="mt-0.5 flex flex-col">
+        {(isTeam
+          ? [SAMPLE.personName, SAMPLE.shortName]
+          : [SAMPLE.personName]
+        ).map((name, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-2 border-b border-[var(--border-hairline)] py-2 last:border-b-0"
+          >
+            <Box className="size-3 rounded-[3px]" />
+            <Text className="text-[12px]">{name}</Text>
+            <Text className="text-[11px]">· 2 videos · 0.0 GB</Text>
+          </div>
+        ))}
+      </div>
+
+      <Text className="mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5]">
+        {MATCH_VIDEOS_FOOTNOTE}
+      </Text>
+    </SettingsCard>
   );
 }
 

@@ -200,6 +200,9 @@ test.describe("the refresh contract", () => {
         durationSeconds: 900,
         contentType: "video/mp4",
         filename: "match.mp4",
+        expiresAt: null,
+        monthsUnwatched: null,
+        expiryWarning: false,
       },
     };
     const provider: MatchVideo = {

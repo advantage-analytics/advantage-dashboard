@@ -149,9 +149,9 @@ export default async function NewMatchPage({
     // dashboard scroll container because nothing here wraps one and not the
     // other.
     //
-    // `AttachmentWizardRoute` is the flow plus one client-only behaviour a
-    // Server Component cannot supply: `onSaved`, which returns to this same
-    // match with the Video view selected (T22). It adds no markup of its own.
+    // `AttachmentWizardRoute` is the flow's client boundary. It adds no markup
+    // and no navigation of its own: the flow settles on a "Video saved" screen
+    // whose "Watch the film" returns to this match's Film view.
     return <AttachmentWizardRoute {...target.props} />;
   }
 
