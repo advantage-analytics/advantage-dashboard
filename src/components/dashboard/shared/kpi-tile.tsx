@@ -5,11 +5,6 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui/tooltip";
-import {
   Popover,
   PopoverAnchor,
   PopoverContent,
@@ -163,8 +158,6 @@ export interface KpiTileProps {
   trend?: KpiTileTrend;
   /** Fallback line shown in trend slot when `trend` is absent (e.g., "1 more match for trends"). */
   hintText?: string;
-  /** Description shown in a tooltip on the label. */
-  description?: string;
   /** Index used for entrance stagger delay. */
   index?: number;
   /** Skip entrance animation (e.g., already animated once). */
@@ -198,7 +191,6 @@ export function KpiTile({
   sparkline,
   trend,
   hintText,
-  description,
   index = 0,
   skipAnimation = false,
   subtext,
@@ -262,28 +254,16 @@ export function KpiTile({
 
   const content = (
     <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {/* One line, always, so the tile's height never changes with its
-              width — `KpiTileStrip` drops to four and then three tiles before
-              any default label would run out of room. `truncate` is the
-              backstop for a custom pick like "BREAK POINTS CONVERTED" in a
-              narrow tile: an ellipsis rather than the clip that used to cut
-              "SERVICE GAMES WON" to "SERVICE GAME", which read as a different
-              statistic. */}
-          <p
-            className={`max-w-full truncate rounded-sm text-[9px] font-normal tracking-[2.5px] text-[var(--color-text-dim)] uppercase focus-visible:outline-none ${description ? "cursor-help" : ""}`}
-            tabIndex={description ? 0 : undefined}
-          >
-            {label}
-          </p>
-        </TooltipTrigger>
-        {description && (
-          <TooltipContent side="bottom" sideOffset={4}>
-            {description}
-          </TooltipContent>
-        )}
-      </Tooltip>
+      {/* One line, always, so the tile's height never changes with its
+          width — `KpiTileStrip` drops to four and then three tiles before
+          any default label would run out of room. `truncate` is the
+          backstop for a custom pick like "BREAK POINTS CONVERTED" in a
+          narrow tile: an ellipsis rather than the clip that used to cut
+          "SERVICE GAMES WON" to "SERVICE GAME", which read as a different
+          statistic. */}
+      <p className="max-w-full truncate text-[9px] font-normal tracking-[2.5px] text-[var(--color-text-dim)] uppercase">
+        {label}
+      </p>
       <div className="flex items-end overflow-hidden">
         <ValueTransition
           valueKey={value}
