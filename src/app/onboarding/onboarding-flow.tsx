@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { Shield, User, Users } from "lucide-react";
 import AuthCheckbox from "@/components/auth/auth-checkbox";
 import {
@@ -20,6 +19,7 @@ import {
   PERSON_NAME_MAX,
   titleCaseTypedName,
 } from "@/lib/data/person-name-case";
+import { GUARDIAN_TERMS_URL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import {
   finishGuardianOnboarding,
@@ -522,16 +522,14 @@ export function OnboardingFlow() {
                   >
                     I&apos;m {playerPossessive} parent or legal guardian and I
                     agree to the above.{" "}
-                    {/* The same terms target the sign-up consent line uses —
-                        no guardian-specific terms page exists yet, and two
-                        legal destinations would be one more than the product
-                        has documents for. */}
-                    <Link
-                      href="/legal/terms-and-conditions"
+                    <a
+                      href={GUARDIAN_TERMS_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="rounded-sm text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
                     >
                       Read the guardian terms
-                    </Link>
+                    </a>
                     .
                   </span>
                 </div>
