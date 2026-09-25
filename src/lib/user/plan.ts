@@ -26,3 +26,26 @@ export const PRO_PLAN = "pro";
 export function isProPlan(plan: string | null | undefined): boolean {
   return plan === PRO_PLAN;
 }
+
+/**
+ * What a personal account gets during the beta — the rows of Settings › Plan
+ * and of its loading skeleton, so the two cannot drift. The video figure is
+ * the one `reserveQuota()` enforces for the individual tier; kept as a
+ * literal rather than imported so this file stays free of the quota module.
+ */
+export const BETA_PLAN_ROWS: readonly {
+  label: string;
+  value: string;
+  note?: string;
+}[] = [
+  {
+    label: "Video analysis",
+    value: "2 hours a month",
+    note: "About one full match. Resets on the 1st.",
+  },
+  { label: "SwingVision imports", value: "Unlimited" },
+  { label: "Match reports and stats", value: "Included" },
+];
+
+/** When the beta's free terms end, as the landing page and /claim say it. */
+export const PAID_PLANS_BEGIN = "January 2027";

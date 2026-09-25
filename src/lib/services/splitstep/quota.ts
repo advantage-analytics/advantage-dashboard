@@ -34,7 +34,7 @@ import {
   currentBillingMonth,
   getIndividualPoolCapSeconds,
   getMonthlyCapSeconds,
-  PROVIDER_DISPLAY_NAME,
+  getOpenBetaCeilingSeconds,
   type AccountType,
 } from "./config";
 
@@ -191,9 +191,9 @@ export async function reserveQuota(params: {
   // the program ledger but draws the individual figure. See quotaTierFor().
   const capSeconds = monthlyCapSecondsFor(workspace);
 
-  // The individual figure is also a SHARED one: every workspace on it draws
-  // from one monthly pool, for hand-picked players only (see config.ts). Collegiate
-  // programs keep the plain per-account function below.
+  // The individual figure also draws from a SHARED band: the pilot pool for
+  // hand-picked players, the open-beta ceiling for everyone else (see
+  // config.ts). Collegiate programs keep the plain per-account function below.
   if (quotaTierFor(workspace) === "individual") {
     return reservePooled({
       supabase,
@@ -255,8 +255,11 @@ export async function reserveQuota(params: {
   };
 }
 
-/** Which limit a pooled reservation or peek was stopped by. */
-export type QuotaLimit = "account" | "pool_hours" | "pool_players";
+/**
+ * Which limit a pooled reservation or peek was stopped by: the workspace's own
+ * cap, the pilot pool, or the open-beta ceiling.
+ */
+export type QuotaLimit = "account" | "pool_hours" | "open_hours";
 
 async function reservePooled(params: {
   supabase: SupabaseClient;
@@ -279,10 +282,10 @@ async function reservePooled(params: {
     now,
   } = params;
 
-  // Atomic, like reserve_processing_quota: the pool is a sum across accounts,
-  // so a read-then-insert here would let two players race past it.
+  // Atomic, like reserve_processing_quota: each band is a sum across
+  // accounts, so a read-then-insert here would let two players race past it.
   const { data, error } = await supabase
-    .rpc("reserve_individual_pool_quota", {
+    .rpc("reserve_individual_quota", {
       p_job_id: jobId,
       p_account_id: workspace.id,
       p_account_type: accountType,
@@ -291,6 +294,7 @@ async function reservePooled(params: {
       p_seconds: Math.ceil(seconds),
       p_cap_seconds: capSeconds,
       p_pool_cap_seconds: getIndividualPoolCapSeconds(),
+      p_open_cap_seconds: getOpenBetaCeilingSeconds(),
     })
     .single();
 
@@ -300,8 +304,8 @@ async function reservePooled(params: {
       refusal: QuotaLimit | null;
       used_seconds: number;
       cap_seconds: number;
-      pool_used_seconds: number;
-      pool_cap_seconds: number;
+      band_used_seconds: number;
+      band_cap_seconds: number;
     } | null,
     error,
     "reserve processing quota",
@@ -317,8 +321,8 @@ async function reservePooled(params: {
 
   const limit: QuotaLimit = row.refusal ?? "account";
   const pooled = limit !== "account";
-  const usedSeconds = pooled ? row.pool_used_seconds : row.used_seconds;
-  const refusedCap = pooled ? row.pool_cap_seconds : row.cap_seconds;
+  const usedSeconds = pooled ? row.band_used_seconds : row.used_seconds;
+  const refusedCap = pooled ? row.band_cap_seconds : row.cap_seconds;
 
   return {
     ok: false,
@@ -330,9 +334,6 @@ async function reservePooled(params: {
       remainingSeconds: secondsLeft(usedSeconds, refusedCap),
       capSeconds: refusedCap,
     }),
-    // Off the pilot list is about who is asking, like the upload switches:
-    // 403, not a 429 that says "wait for next month".
-    ...(limit === "pool_players" ? { permission: true } : {}),
   };
 }
 
@@ -366,11 +367,11 @@ export function quotaRefusalMessage(params: {
   capSeconds: number;
 }): string {
   const { limit, neededSeconds, remainingSeconds } = params;
-  if (limit === "pool_players") {
+  if (limit === "open_hours") {
     return (
-      `${PROVIDER_DISPLAY_NAME} video analysis is invite-only during the ` +
-      `pilot, and this account isn't on it. You can still import ` +
-      `SwingVision matches.`
+      `This month's free beta video analysis is fully booked. It reopens at ` +
+      `the start of next month, and you can still import SwingVision ` +
+      `matches in the meantime.`
     );
   }
   if (limit === "pool_hours") {
@@ -428,9 +429,9 @@ export interface QuotaPeek {
   remainingSeconds: number;
   /**
    * Which limit `remainingSeconds` comes from. For a workspace on the
-   * individual figure it is the tighter of its own cap and the shared pool
-   * (and 0 when the uploader is not on the pilot list); the three figures above belong to
-   * that limit.
+   * individual figure it is the tighter of its own cap and its shared band
+   * (the pilot pool or the open-beta ceiling); the three figures above belong
+   * to that limit.
    */
   limit: QuotaLimit;
 }
@@ -443,7 +444,7 @@ export function peekRefusalMessage(
   peek: QuotaPeek,
   neededSeconds: number,
 ): string | null {
-  if (peek.limit !== "pool_players" && neededSeconds <= peek.remainingSeconds) {
+  if (neededSeconds <= peek.remainingSeconds) {
     return null;
   }
   return quotaRefusalMessage({ ...peek, neededSeconds });
@@ -471,7 +472,7 @@ export function peekRefusalMessage(
 export async function peekQuota(
   supabase: SupabaseClient,
   workspace: Workspace,
-  /** Who is uploading — the pilot list is of people. */
+  /** Who is uploading — the pilot list, and so the band, is of people. */
   userId: string,
 ): Promise<QuotaPeek> {
   const capSeconds = monthlyCapSecondsFor(workspace);
@@ -499,7 +500,7 @@ export async function peekQuota(
   if (quotaTierFor(workspace) !== "individual") return own;
 
   const { data: pool, error: poolError } = await supabase
-    .rpc("individual_pool_usage", {
+    .rpc("individual_tier_usage", {
       p_billing_month: currentBillingMonth(),
       p_created_by: userId,
     })
@@ -510,36 +511,38 @@ export async function peekQuota(
     requireRpcRow(
       pool as PoolUsageRow | null,
       poolError,
-      "read individual pool usage",
+      "read individual tier usage",
     ),
   );
 }
 
-/** One row of `individual_pool_usage()`. */
+/** One row of `individual_tier_usage()`. */
 export interface PoolUsageRow {
-  pool_used_seconds: number;
+  pilot_used_seconds: number;
+  open_used_seconds: number;
   /** `users.individual_pilot`: on the hand-picked pilot list. */
   is_player: boolean;
 }
 
 /**
- * The tighter of a workspace's own figure and the shared pool, in the order
- * `reserve_individual_pool_quota` refuses: pilot list, own cap, pool hours.
- * Pure, so the ordering is testable without a database.
+ * The tighter of a workspace's own figure and the uploader's band, in the
+ * order `reserve_individual_quota` refuses: own cap, then band. Pure, so the
+ * ordering is testable without a database.
  */
 export function pickPeek(own: QuotaPeek, pool: PoolUsageRow): QuotaPeek {
-  const poolCap = getIndividualPoolCapSeconds();
-  const poolFigures = {
-    usedSeconds: pool.pool_used_seconds,
-    capSeconds: poolCap,
-    remainingSeconds: secondsLeft(pool.pool_used_seconds, poolCap),
-  };
+  const [bandUsed, bandCap, limit]: [number, number, QuotaLimit] =
+    pool.is_player
+      ? [pool.pilot_used_seconds, getIndividualPoolCapSeconds(), "pool_hours"]
+      : [pool.open_used_seconds, getOpenBetaCeilingSeconds(), "open_hours"];
+  const remainingSeconds = secondsLeft(bandUsed, bandCap);
 
-  if (!pool.is_player) {
-    return { ...poolFigures, remainingSeconds: 0, limit: "pool_players" };
-  }
-  if (poolFigures.remainingSeconds < own.remainingSeconds) {
-    return { ...poolFigures, limit: "pool_hours" };
+  if (remainingSeconds < own.remainingSeconds) {
+    return {
+      usedSeconds: bandUsed,
+      capSeconds: bandCap,
+      remainingSeconds,
+      limit,
+    };
   }
   return own;
 }

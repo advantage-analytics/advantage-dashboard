@@ -312,8 +312,7 @@ export async function handleUploadUrl(
             usedSeconds: peek.usedSeconds,
             capSeconds: peek.capSeconds,
           },
-          // Off the pilot list is a 403, as `/api/splitstep/jobs` answers it.
-          { status: peek.limit === "pool_players" ? 403 : 429 },
+          { status: 429 },
         );
       }
     }
