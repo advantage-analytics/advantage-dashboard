@@ -9,6 +9,7 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import type { KpiFormat } from "@/lib/data/performance-server";
 import { PlaceholderSparkline } from "./placeholder-sparkline";
 
@@ -407,7 +408,14 @@ export function KpiTileStrip({
     <div
       role={ariaLabel ? "group" : undefined}
       aria-label={ariaLabel}
-      className={`${collapse ? "adv-kpi-strip" : ""}bg-white overflow-hidden rounded-[14px] border border-[#F3F3F3] shadow-card`}
+      // `cn`, not a template literal with a trailing space: the Prettier
+      // Tailwind plugin trims class strings, and once ate the space that kept
+      // `adv-kpi-strip` and `bg-white` apart (82e7bf6a) — the strip lost its
+      // white card and never collapsed, with nothing looking broken in code.
+      className={cn(
+        collapse && "adv-kpi-strip",
+        "overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white shadow-card",
+      )}
     >
       <div className="flex flex-wrap sm:flex-nowrap">{children}</div>
     </div>
