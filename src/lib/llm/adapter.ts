@@ -1,5 +1,3 @@
-import { Anthropic } from "@posthog/ai/anthropic";
-import { OpenAI } from "@posthog/ai/openai";
 import { after } from "next/server";
 import { PostHog } from "posthog-node";
 import { randomUUID } from "node:crypto";
@@ -133,7 +131,6 @@ async function anthropicStream(
   apiKey: string,
 ): Promise<AsyncIterable<string>> {
   const posthog = getPostHogClient();
-  const { default: AnthropicSdk } = await import("@anthropic-ai/sdk");
   const request = {
     model: "claude-opus-4-6",
     max_tokens: 1024,
@@ -143,12 +140,21 @@ async function anthropicStream(
   };
   // `create({ stream: true })`, not `messages.stream()`: PostHog's wrapper
   // only instruments `create`, and `stream()` through it throws on first read.
+  // Imported inside each branch, not at module scope: `@posthog/ai/anthropic`
+  // pulls in the full `@anthropic-ai/sdk` itself, so loading both here
+  // unconditionally would double the SDK weight on every request regardless
+  // of whether PostHog is configured.
   const stream = posthog
-    ? await new Anthropic({ apiKey, posthog }).messages.create({
+    ? await new (await import("@posthog/ai/anthropic")).Anthropic({
+        apiKey,
+        posthog,
+      }).messages.create({
         ...request,
         ...posthogOptions(context),
       })
-    : await new AnthropicSdk({ apiKey }).messages.create(request);
+    : await new (await import("@anthropic-ai/sdk")).default({
+        apiKey,
+      }).messages.create(request);
   flushAfterResponse(posthog);
 
   async function* iterate(): AsyncIterable<string> {
@@ -174,7 +180,6 @@ async function openaiStream(
   apiKey: string,
 ): Promise<AsyncIterable<string>> {
   const posthog = getPostHogClient();
-  const { default: OpenAISdk } = await import("openai");
   const request = {
     model: "gemini-2.5-flash-lite",
     stream: true as const,
@@ -183,8 +188,12 @@ async function openaiStream(
       ...messages.map((m) => ({ role: m.role, content: m.content })),
     ],
   };
+  // Imported inside each branch, not at module scope: `@posthog/ai/openai`
+  // pulls in the full `openai` package itself, so loading both here
+  // unconditionally would double the SDK weight on every request regardless
+  // of whether PostHog is configured.
   const stream = posthog
-    ? await new OpenAI({
+    ? await new (await import("@posthog/ai/openai")).OpenAI({
         apiKey,
         baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
         posthog,
@@ -192,7 +201,7 @@ async function openaiStream(
         ...request,
         ...posthogOptions(context, "google"),
       })
-    : await new OpenAISdk({
+    : await new (await import("openai")).default({
         apiKey,
         baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
       }).chat.completions.create(request);
