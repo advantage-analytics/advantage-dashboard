@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { ConfirmAside } from "@/components/ui/confirm-dialog";
 import { advButton } from "@/lib/ui/adv-button";
+import { cn } from "@/lib/utils";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
 import { PAID_PLANS_BEGIN } from "@/lib/user/plan";
@@ -28,15 +30,18 @@ export interface BetaWelcomeTerms {
  * "Welcome to the Advantage beta" — the account's terms, once, on the first
  * dashboard visit.
  *
- * The Dialog (v3) geometry `ConfirmDialog` draws — 440px, `--radius-card`,
- * `--shadow-dropdown`, 24/24/20 padding, 18px gaps, a 16/500 title over a
- * 12px `--ink-600` contract sentence, the 28px chrome close — on Radix
- * `Dialog` rather than `AlertDialog`: it asks nothing, so the scrim and Esc
- * both dismiss it. One primary, no Cancel, because there is nothing to cancel;
- * "See your usage" is the footer's quiet left link.
+ * Deliberately louder than a settings dialog: it is the one moment the
+ * product introduces itself, so it opens on the brand band the auth pages use
+ * (`.brand-mesh-gradient`, white logo, light display type) with the allowance
+ * as its headline figure, then drops into the Dialog (v3) body — hairline
+ * fact rows, the aside, and the footer grammar (quiet link left, one primary
+ * right). 520px, the compare-dialog width, because the figure needs the room.
  *
- * The terms are three facts a person reads across, so they are label/value
- * rows on hairlines (the Settings › Plan card's shape), not prose.
+ * Radix `Dialog`, not `AlertDialog`: it asks nothing, so the scrim and Esc
+ * both dismiss it, and the primary takes the initial focus rather than the X.
+ *
+ * The court outline in the band is the product's own subject drawn at 14%
+ * white, not decoration from elsewhere: a singles court, baseline to net.
  */
 export function BetaWelcomeDialog({
   open,
@@ -47,15 +52,10 @@ export function BetaWelcomeDialog({
   onOpenChange: (open: boolean) => void;
   terms: BetaWelcomeTerms;
 }) {
+  const primaryRef = useRef<HTMLButtonElement>(null);
   const rows = [
-    {
-      label: "Video analysis",
-      value: `${terms.hours} hours a month`,
-      note: terms.programName
-        ? `Shared across ${terms.programName}. Resets on the 1st.`
-        : "About one full match. Resets on the 1st.",
-    },
     { label: "SwingVision imports", value: "Unlimited" },
+    { label: "Match reports and statistics", value: "Included" },
     { label: "Free through", value: formatPilotEnd() },
   ];
 
@@ -64,51 +64,86 @@ export function BetaWelcomeDialog({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgba(13,13,13,0.4)] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
         <DialogPrimitive.Content
-          className="fixed top-24 left-1/2 z-50 -translate-x-1/2 bg-[var(--surface-card)] outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            primaryRef.current?.focus();
+          }}
+          className="fixed top-20 left-1/2 z-50 -translate-x-1/2 overflow-hidden bg-[var(--surface-card)] outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-2 motion-reduce:data-[state=open]:slide-in-from-top-0"
           style={{
-            width: "440px",
+            width: "520px",
             maxWidth: "calc(100vw - 32px)",
             borderRadius: "var(--radius-card)",
-            boxShadow: "var(--shadow-dropdown)",
+            boxShadow: "var(--shadow-floating)",
           }}
         >
-          <div className="flex flex-col gap-[18px] p-6 pb-5">
-            <div className="flex items-start gap-2.5">
-              <div className="min-w-0 flex-1">
-                <DialogPrimitive.Title className="text-[16px] font-medium text-[var(--ink-900)]">
-                  Welcome to the Advantage beta
-                </DialogPrimitive.Title>
-                <DialogPrimitive.Description className="mt-1 text-[12px] leading-[1.55] text-pretty text-[var(--ink-600)]">
-                  Everything is free while we build. Here is what{" "}
-                  {terms.programName ? "your program" : "your account"}{" "}
-                  includes.
-                </DialogPrimitive.Description>
-              </div>
+          <div className="brand-mesh-gradient relative overflow-hidden px-7 pt-6 pb-7 text-white">
+            <CourtOutline />
+
+            <div className="relative flex items-center gap-2.5">
+              <Image
+                src="/logos/logo.svg"
+                alt="Advantage"
+                width={320}
+                height={57}
+                className="h-[18px] w-auto brightness-0 invert"
+              />
+              <span className="inline-flex h-[20px] items-center rounded-full bg-white/20 px-2 text-[10px] font-medium tracking-[0.08em] text-white uppercase">
+                Beta
+              </span>
+              <span className="flex-1" />
               <DialogPrimitive.Close
                 aria-label="Close"
-                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/75 transition-colors hover:bg-white/15 hover:text-white focus-visible:shadow-[0_0_0_2px_rgba(255,255,255,0.7)] focus-visible:outline-none"
               >
                 <X className="size-3.5" strokeWidth={1.5} aria-hidden />
               </DialogPrimitive.Close>
             </div>
 
+            <DialogPrimitive.Title className="relative mt-9 text-[40px] leading-[1.02] font-light tracking-[-1px]">
+              Free while
+              <br />
+              we build.
+            </DialogPrimitive.Title>
+            <DialogPrimitive.Description className="relative mt-3 max-w-[40ch] text-[13px] leading-[1.6] text-white/90">
+              Welcome to the Advantage beta. Here is what{" "}
+              {terms.programName ? terms.programName : "your account"} gets
+              every month.
+            </DialogPrimitive.Description>
+
+            <div className="relative mt-7 flex items-end gap-3 border-t border-white/25 pt-5">
+              <span className="tabular text-[64px] leading-[0.85] font-light tracking-[-2px]">
+                {terms.hours}
+              </span>
+              <span className="pb-1 text-[13px] leading-[1.35] text-white/85">
+                hours of match video
+                <br />
+                analysis, every month
+              </span>
+              <span className="flex-1" />
+              <span className="pb-1 text-right text-[11px] leading-[1.45] text-white/90">
+                {terms.programName
+                  ? "Shared by the program"
+                  : "About one full match"}
+                <br />
+                Resets on the 1st
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-[18px] px-7 pt-5 pb-6">
             <dl className="flex flex-col">
-              {rows.map((row) => (
+              {rows.map((row, i) => (
                 <div
                   key={row.label}
-                  className="flex items-start gap-6 border-t border-[var(--border-hairline)] py-3 last:border-b"
+                  className={cn(
+                    "flex items-baseline gap-6 py-2.5",
+                    i > 0 && "border-t border-[var(--border-hairline)]",
+                  )}
                 >
-                  <dt className="min-w-0 flex-1">
-                    <span className="block text-[12px] text-[var(--ink-900)]">
-                      {row.label}
-                    </span>
-                    {row.note && (
-                      <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
-                        {row.note}
-                      </span>
-                    )}
+                  <dt className="min-w-0 flex-1 text-[12px] text-[var(--ink-700)]">
+                    {row.label}
                   </dt>
-                  <dd className="tabular shrink-0 text-[13px] text-[var(--ink-900)]">
+                  <dd className="tabular shrink-0 text-[13px] font-medium text-[var(--ink-900)]">
                     {row.value}
                   </dd>
                 </div>
@@ -116,11 +151,11 @@ export function BetaWelcomeDialog({
             </dl>
 
             <ConfirmAside>
-              Paid plans begin in {PAID_PLANS_BEGIN}, and we&apos;ll tell you
+              Paid plans begin in {PAID_PLANS_BEGIN}. We&apos;ll tell you well
               before anything changes.
             </ConfirmAside>
 
-            <div className="flex items-center gap-2.5 pt-0.5">
+            <div className="flex items-center gap-2.5">
               <Link
                 href="/dashboard/settings/usage"
                 onClick={() => onOpenChange(false)}
@@ -129,14 +164,41 @@ export function BetaWelcomeDialog({
                 See your usage
               </Link>
               <span className="flex-1" />
-              <DialogPrimitive.Close className={advButton("primary", "sm")}>
-                Got it
+              <DialogPrimitive.Close
+                ref={primaryRef}
+                className={advButton("primary", "md")}
+              >
+                Start analyzing
+                <ArrowRight
+                  className="size-3.5"
+                  strokeWidth={1.5}
+                  aria-hidden
+                />
               </DialogPrimitive.Close>
             </div>
           </div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+  );
+}
+
+/** A singles court from above, baseline to net, in thin white lines. */
+function CourtOutline() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 270 390"
+      fill="none"
+      stroke="white"
+      strokeWidth="1.5"
+      className="pointer-events-none absolute -top-10 -right-8 h-[340px] w-auto rotate-[-18deg] opacity-[0.14]"
+    >
+      <rect x="1" y="1" width="268" height="388" />
+      <line x1="1" y1="210" x2="269" y2="210" />
+      <line x1="135" y1="210" x2="135" y2="389" />
+      <line x1="135" y1="1" x2="135" y2="12" />
+    </svg>
   );
 }
 
