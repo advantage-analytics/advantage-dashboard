@@ -39,9 +39,6 @@ export interface BetaWelcomeTerms {
  *
  * Radix `Dialog`, not `AlertDialog`: it asks nothing, so the scrim and Esc
  * both dismiss it, and the primary takes the initial focus rather than the X.
- *
- * The court in the band is the product's own subject drawn at 22% white,
- * not decoration from elsewhere: a regulation court, lines to scale.
  */
 export function BetaWelcomeDialog({
   open,
@@ -77,8 +74,6 @@ export function BetaWelcomeDialog({
           }}
         >
           <div className="brand-mesh-gradient relative overflow-hidden px-7 pt-6 pb-7 text-white">
-            <CourtOutline />
-
             <div className="relative flex items-center gap-2.5">
               <Image
                 src="/logos/logo.svg"
@@ -186,40 +181,6 @@ export function BetaWelcomeDialog({
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
-  );
-}
-
-/**
- * A full tennis court from above, drawn to scale (10 units to the foot):
- * doubles and singles sidelines, both baselines with their center marks,
- * service lines, the center service line and a heavier net.
- */
-function CourtOutline() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="-2 -2 364 784"
-      fill="none"
-      stroke="white"
-      strokeWidth="1.25"
-      className="pointer-events-none absolute top-9 right-9 h-[320px] w-auto rotate-[28deg] opacity-[0.24]"
-    >
-      {/* Doubles court, 36ft by 78ft */}
-      <rect x="0" y="0" width="360" height="780" />
-      {/* Singles sidelines, 4.5ft in */}
-      <line x1="45" y1="0" x2="45" y2="780" />
-      <line x1="315" y1="0" x2="315" y2="780" />
-      {/* Service lines, 21ft either side of the net */}
-      <line x1="45" y1="180" x2="315" y2="180" />
-      <line x1="45" y1="600" x2="315" y2="600" />
-      {/* Center service line */}
-      <line x1="180" y1="180" x2="180" y2="600" />
-      {/* Center marks on each baseline */}
-      <line x1="180" y1="0" x2="180" y2="10" />
-      <line x1="180" y1="770" x2="180" y2="780" />
-      {/* Net, overhanging the doubles sidelines */}
-      <line x1="-2" y1="390" x2="362" y2="390" strokeWidth="2.5" />
-    </svg>
   );
 }
 
