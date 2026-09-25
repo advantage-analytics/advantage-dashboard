@@ -16,6 +16,7 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { MATCH_VIDEOS_FOOTNOTE } from "@/components/dashboard/settings/match-videos-usage-card";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 import { MATCH_VIDEO_ACTIVE_LIMIT } from "@/lib/match-video/limits";
+import { BETA_PLAN_ROWS, PAID_PLANS_BEGIN, planFacts } from "@/lib/user/plan";
 import { capitalize, cn } from "@/lib/utils";
 import { teamLabel, uploadPolicyLabel } from "@/lib/workspace/types";
 
@@ -445,34 +446,11 @@ function SessionRow({
   );
 }
 
-const PLANS = [
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    summary:
-      "SwingVision imports · 5 uploads · one report per match · core stats",
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "$4.99 once",
-    summary:
-      "Unlimited uploads and reports · shot-by-shot analysis · trends · Ask",
-  },
-] as const;
-
-/** Plan: the facts strip, then Free/Pro and Stripe — or the program note. */
+/** Plan: the facts strip, then the beta terms — or the program note. */
 export function SettingsPlanPending() {
   const { active, viewer } = useWorkspace();
   const isTeam = active.kind === "team";
-  const isPro = viewer.plan === "pro";
-
-  const facts = [
-    { label: "Plan", value: isTeam ? "Pilot" : isPro ? "Lifetime" : "Free" },
-    isTeam ? { label: "Squad", value: teamLabel(active.team) ?? "—" } : null,
-    { label: "Member since", value: viewer.memberSince ?? "—" },
-  ].filter((fact): fact is NonNullable<typeof fact> => fact !== null);
+  const facts = planFacts(active, viewer);
 
   return (
     <Column label="plan">
@@ -505,54 +483,36 @@ export function SettingsPlanPending() {
           <Text className="text-[11px] leading-[1.6]">
             Seats, shared analysis hours and billing for {active.name} are set
             up with support rather than bought here — {SUPPORT_EMAIL}. Your own
-            Free or Pro plan is separate and unaffected; switch to your personal
-            workspace to change it.
+            plan is separate and unaffected; switch to your personal workspace
+            to see it.
           </Text>
         </SettingsCard>
       ) : (
-        <>
-          <SettingsCard>
-            <SettingsCardTitle className="pb-2">
-              Choose your plan
-            </SettingsCardTitle>
-            {PLANS.map((plan) => (
-              <div
-                key={plan.id}
-                className="flex items-start gap-6 border-t border-[var(--border-hairline)] py-3"
-              >
-                <Box className="mt-0.5 size-[13px] rounded-full" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <Text className="text-[12px]">{plan.name}</Text>
-                    {plan.id === (isPro ? "pro" : "free") && (
-                      <Pill>Current</Pill>
-                    )}
-                  </div>
+        <SettingsCard>
+          <SettingsCardTitle className="pb-2">
+            Free during the beta
+          </SettingsCardTitle>
+          {BETA_PLAN_ROWS.map((row) => (
+            <div
+              key={row.label}
+              className="flex items-start gap-6 border-t border-[var(--border-hairline)] py-3"
+            >
+              <div className="min-w-0 flex-1">
+                <Text className="text-[12px]">{row.label}</Text>
+                {row.note && (
                   <Text className="mt-0.5 text-[11px] leading-[1.5]">
-                    {plan.summary}
+                    {row.note}
                   </Text>
-                </div>
-                <Text className="shrink-0 text-[13px]">{plan.price}</Text>
+                )}
               </div>
-            ))}
-            <Text className="mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5]">
-              Changing plan never changes your role. Pro is a one-time payment —
-              there is no subscription to cancel.
-            </Text>
-          </SettingsCard>
-
-          <SettingsCard className="flex-row items-center gap-4">
-            <div className="min-w-0 flex-1">
-              <Text className="text-[12px]">Billing is handled by Stripe.</Text>
-              <Text className="mt-0.5 text-[11px]">
-                Receipts and card details live there. Questions about billing?
-              </Text>
+              <Text className="shrink-0 text-[13px]">{row.value}</Text>
             </div>
-            <Button size="md">
-              {isPro ? "You're on Pro" : "Upgrade to Pro"}
-            </Button>
-          </SettingsCard>
-        </>
+          ))}
+          <Text className="mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5]">
+            Free through the end of the year. Paid plans begin in{" "}
+            {PAID_PLANS_BEGIN}.
+          </Text>
+        </SettingsCard>
       )}
     </Column>
   );

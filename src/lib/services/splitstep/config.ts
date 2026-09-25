@@ -189,17 +189,34 @@ export function getMonthlyCapHours(accountType: AccountType): number {
 }
 
 /**
- * The individual tier's SHARED allocation with the vendor, through December:
- * 20 hand-picked players, under 10 hours a month between them. Every
- * workspace `quotaTierFor()` puts on the individual figure (personal
- * workspaces and self-serve custom orgs) draws from it, on top of its own 2h —
- * see `reserveQuota()` and 20260925024406_individual_pool_quota.sql, which
- * holds the player flag (`users.individual_pilot`) and its limit of 20.
+ * The individual tier's allocation with the vendor, through December, in two
+ * bands. Every workspace `quotaTierFor()` puts on the individual figure
+ * (personal workspaces and self-serve custom orgs) has its own 2h, and ALSO
+ * draws from one of these, by who is uploading:
+ *
+ * - the PILOT pool: 20 hand-picked players (`users.individual_pilot`, see
+ *   20260925024406_individual_pool_quota.sql), under 10 hours between them;
+ * - the OPEN-BETA ceiling: everyone else, 2h each, under a house-wide monthly
+ *   ceiling so a rush of signups cannot outspend it
+ *   (20260925053330_individual_open_tier.sql).
+ *
+ * See `reserveQuota()`.
  */
 export const INDIVIDUAL_POOL_MONTHLY_CAP_HOURS = 10;
 
 export function getIndividualPoolCapSeconds(): number {
   return INDIVIDUAL_POOL_MONTHLY_CAP_HOURS * 60 * 60;
+}
+
+/**
+ * The open-beta band's monthly ceiling, across every non-pilot individual.
+ * 20h is a starting figure pending the vendor's confirmation of a total for
+ * this band. Set it to 0 to pause open video; the pilot pool is unaffected.
+ */
+export const OPEN_BETA_MONTHLY_CEILING_HOURS = 20;
+
+export function getOpenBetaCeilingSeconds(): number {
+  return OPEN_BETA_MONTHLY_CEILING_HOURS * 60 * 60;
 }
 
 /** First of the current month, UTC — the `processing_usage.billing_month` key. */

@@ -38,6 +38,7 @@ import { workspaceTitle } from "@/lib/workspace/types";
 import { WorkspaceOptionList } from "@/components/dashboard/workspace-switcher";
 import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 import { HeaderGreeting } from "@/components/dashboard/header-greeting";
+import { BetaHeaderMeter } from "@/components/dashboard/beta-header-meter";
 import { MENU_ROW_CLASS, MENU_RULE_CLASS } from "@/lib/ui/menu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import {
@@ -499,7 +500,7 @@ export function Header({
             )}
         </div>
 
-        {/* Right: page status + search + activity + profile.
+        {/* Right: page status + beta + search + activity + profile.
 
             One TooltipProvider around the cluster rather than one per control:
             it owns the skip-delay timer, so moving from Search to Activity
@@ -513,6 +514,10 @@ export function Header({
                 {headerStatus}
               </span>
             )}
+            {/* The way back to the beta terms, with this month's video hours
+                left. Leads the controls because it is the account's standing,
+                not a tool. */}
+            <BetaHeaderMeter />
             {/* Named, not just an icon — a bare magnifier does not say what it
                 searches, and the palette covers matches, players and help.
 

@@ -81,6 +81,7 @@ markers is hand-written — edit it as things move.
 | `/dashboard/team/settings` | [`src/app/dashboard/team/settings/page.tsx`](src/app/dashboard/team/settings/page.tsx) |
 | `/dashboard/team/statistics` | [`src/app/dashboard/team/statistics/page.tsx`](src/app/dashboard/team/statistics/page.tsx) |
 | `/dashboard/team/upload` | [`src/app/dashboard/team/upload/page.tsx`](src/app/dashboard/team/upload/page.tsx) |
+| `/design` | [`src/app/design/page.tsx`](src/app/design/page.tsx) |
 | `/invitations/[inviteId]` | [`src/app/invitations/[inviteId]/page.tsx`](src/app/invitations/[inviteId]/page.tsx) |
 | `/join/[token]` | [`src/app/join/[token]/page.tsx`](src/app/join/[token]/page.tsx) |
 | `/onboarding` | [`src/app/onboarding/page.tsx`](src/app/onboarding/page.tsx) |

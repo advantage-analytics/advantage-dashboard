@@ -1,21 +1,21 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
-import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import {
   SETTINGS_FACT_FIGURE,
   SettingsCard,
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { isProPlan } from "@/lib/user/plan";
-import { teamLabel } from "@/lib/workspace/types";
+import {
+  BETA_PLAN_ROWS,
+  PAID_PLANS_BEGIN,
+  isProPlan,
+  planFacts,
+} from "@/lib/user/plan";
+import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import { SUPPORT_EMAIL } from "@/lib/constants";
-import { SettingsPlanPending } from "@/components/dashboard/loading/settings-pending";
 
 /**
  * Settings › Plan — what the account is entitled to.
@@ -26,145 +26,20 @@ import { SettingsPlanPending } from "@/components/dashboard/loading/settings-pen
  * stopped being the same question when a program's 75 shared hours arrived
  * alongside a personal 2, on the same account.
  *
- * Entitlement is read from `viewer.plan`, never from `users.role`. The old
- * subscription page read `role === 'founder'`, which the Profile page in this
- * same area overwrites with a persona — so saving your profile downgraded you
- * on screen. See `lib/user/plan.ts`.
+ * Entitlement is read from `viewer.plan`, never from `users.role`. See
+ * `lib/user/plan.ts`.
  *
- * Still a client page because the Stripe round trip lands back on it with
- * `?success=true` and has to poll for the webhook.
+ * Nothing is sold here during the beta. The $4.99 one-time Pro promised
+ * "unlimited uploads", which no video allowance can honour, so its checkout
+ * was retired (2026-09-25) and this page states the free beta terms instead.
+ * An account that already bought Pro keeps it and is told so.
  */
-
-type Banner = { type: "success" | "error" | "info"; text: string };
-
-const PLANS: readonly {
-  id: "free" | "pro";
-  name: string;
-  price: string;
-  note?: string;
-  summary: string;
-}[] = [
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    summary:
-      "SwingVision imports · 5 uploads · one report per match · core stats",
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "$4.99",
-    note: "once",
-    summary:
-      "Unlimited uploads and reports · shot-by-shot analysis · trends · Ask",
-  },
-];
-
 function PlanContent() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
   const { active, viewer } = useWorkspace();
 
   const isPro = isProPlan(viewer.plan);
   const isTeam = active.kind === "team";
-
-  const [selectedPlan, setSelectedPlan] = useState<"free" | "pro">("pro");
-  const [isLoading, setIsLoading] = useState(false);
-  /** Something the person just did. Outranks whatever the URL implies. */
-  const [override, setOverride] = useState<Banner | null>(null);
-  const [dismissed, setDismissed] = useState(false);
-
-  const returnedFromCheckout = searchParams.get("success") === "true";
-  const awaitingWebhook = returnedFromCheckout && !isPro;
-
-  /**
-   * Stripe's return is eventually consistent: the webhook flips `users.plan`,
-   * and the page it redirects to often renders first.
-   *
-   * `router.refresh()` rather than polling `users` from the browser. The plan
-   * this page renders comes from the server's workspace context, so re-reading
-   * the row client-side would leave the two disagreeing until a reload — the
-   * old page did exactly that and had to keep a second copy of "current plan"
-   * in state to paper over it. Refreshing asks the same resolver again, and
-   * `isPro` below simply becomes true.
-   */
-  useEffect(() => {
-    if (!awaitingWebhook) return;
-    let attempts = 0;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-
-    const tick = () => {
-      if (cancelled) return;
-      attempts += 1;
-      router.refresh();
-      if (attempts < 8) {
-        timer = setTimeout(tick, Math.min(500 * attempts, 3000));
-      } else {
-        setOverride({
-          type: "success",
-          text: "Payment received. Your account will update shortly — reload if it hasn't.",
-        });
-      }
-    };
-
-    timer = setTimeout(tick, 700);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [awaitingWebhook, router]);
-
-  // Derived, not mirrored into state: `isPro` changes underneath this as the
-  // refresh above lands, and a value copied in an effect would not follow it.
-  const redirectBanner: Banner | null =
-    searchParams.get("canceled") === "true"
-      ? {
-          type: "info",
-          text: "Checkout canceled. You can upgrade to Pro anytime.",
-        }
-      : returnedFromCheckout
-        ? isPro
-          ? { type: "success", text: "You're on Pro." }
-          : { type: "info", text: "Confirming your payment…" }
-        : null;
-
-  const banner = override ?? (dismissed ? null : redirectBanner);
-
-  const handleUpgrade = useCallback(async () => {
-    if (isPro) return;
-    setIsLoading(true);
-    setOverride({ type: "info", text: "Preparing checkout…" });
-    try {
-      const response = await fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await response.json();
-      if (data.url) {
-        window.location.href = data.url;
-        return;
-      }
-      throw new Error(data.error ?? "No checkout URL returned");
-    } catch {
-      setOverride({
-        type: "error",
-        text: "Couldn't start checkout. Try again or contact support.",
-      });
-      setIsLoading(false);
-    }
-  }, [isPro]);
-
-  // The strip names the tier as a person would say it: Free, Lifetime (the
-  // one-time Pro purchase) or Pilot (a program). That already answers "how
-  // long does this last", so there is no separate Access column to repeat it.
-  const facts = [
-    { label: "Plan", value: isTeam ? "Pilot" : isPro ? "Lifetime" : "Free" },
-    isTeam ? { label: "Squad", value: teamLabel(active.team) ?? "—" } : null,
-    { label: "Member since", value: viewer.memberSince ?? "—" },
-  ].filter((fact): fact is NonNullable<typeof fact> => fact !== null);
-
+  const facts = planFacts(active, viewer);
   return (
     <div className="flex max-w-[640px] flex-col gap-5">
       {/* The facts card: hairline-separated columns, one large light value
@@ -197,17 +72,6 @@ function PlanContent() {
         </dl>
       </SettingsCard>
 
-      {banner && (
-        <SettingsAlert
-          type={banner.type}
-          message={banner.text}
-          onDismiss={() => {
-            setOverride(null);
-            setDismissed(true);
-          }}
-        />
-      )}
-
       {/* A program is a workspace, not something bought from this screen.
           Showing the personal Free/Pro rows here put two answers to "what plan
           am I on?" side by side — the strip saying Pilot, a card below saying
@@ -228,113 +92,56 @@ function PlanContent() {
             >
               {SUPPORT_EMAIL}
             </a>
-            . Your own Free or Pro plan is separate and unaffected; switch to
-            your personal workspace to change it.
+            . Your own plan is separate and unaffected; switch to your personal
+            workspace to see it.
           </div>
         </SettingsCard>
       ) : (
-        <>
-          {/* Free and Pro as two rows in one card, not two cards — a card
-              inside a card is not a shape the design system has. */}
-          <SettingsCard>
-            <SettingsCardTitle className="pb-2">
-              Choose your plan
-            </SettingsCardTitle>
+        <SettingsCard>
+          <SettingsCardTitle className="pb-2">
+            Free during the beta
+          </SettingsCardTitle>
 
-            {PLANS.map((plan) => {
-              const isCurrent = plan.id === (isPro ? "pro" : "free");
-              const isSelected = plan.id === selectedPlan;
-              return (
-                <button
-                  key={plan.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={isSelected}
-                  onClick={() => setSelectedPlan(plan.id)}
-                  className="flex w-full cursor-pointer items-start gap-6 border-t border-[var(--border-hairline)] py-3 text-left focus-visible:outline-none"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "mt-0.5 flex size-[13px] shrink-0 items-center justify-center rounded-full border transition-colors duration-150",
-                      isSelected
-                        ? "border-[var(--blue)]"
-                        : "border-[var(--ink-300)]",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "size-[6px] rounded-full transition-colors duration-150",
-                        isSelected ? "bg-[var(--blue)]" : "bg-transparent",
-                      )}
-                    />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="text-[12px] text-[var(--ink-900)]">
-                        {plan.name}
-                      </span>
-                      {isCurrent && (
-                        <span className="inline-flex h-[18px] items-center rounded-full bg-[var(--surface-subtle)] px-[7px] text-[10px] font-medium whitespace-nowrap text-[var(--ink-700)]">
-                          Current
-                        </span>
-                      )}
-                    </span>
-                    <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
-                      {plan.summary}
-                    </span>
-                  </span>
-                  <span className="tabular shrink-0 text-[13px] text-[var(--ink-900)]">
-                    {plan.price}
-                    {plan.note && (
-                      <span className="ml-1 text-[11px] text-[var(--ink-500)]">
-                        {plan.note}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-
-            <span className="mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-              Changing plan never changes your role. Pro is a one-time payment —
-              there is no subscription to cancel.
-            </span>
-          </SettingsCard>
-
-          <SettingsCard className="flex-row items-center gap-4">
-            <div className="min-w-0 flex-1">
-              <div className="text-[12px] text-[var(--ink-900)]">
-                Billing is handled by Stripe.
-              </div>
-              <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
-                Receipts and card details live there.{" "}
-                <Link
-                  href="/dashboard/help#support"
-                  className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
-                >
-                  Questions about billing?
-                </Link>
-              </div>
-            </div>
-            <SettingsButton
-              onClick={handleUpgrade}
-              disabled={isPro || selectedPlan === "free"}
-              loading={isLoading}
+          {BETA_PLAN_ROWS.map((row) => (
+            <div
+              key={row.label}
+              className="flex items-start gap-6 border-t border-[var(--border-hairline)] py-3"
             >
-              {isPro ? "You're on Pro" : "Upgrade to Pro"}
-            </SettingsButton>
-          </SettingsCard>
-        </>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12px] text-[var(--ink-900)]">
+                  {row.label}
+                </span>
+                {row.note && (
+                  <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                    {row.note}
+                  </span>
+                )}
+              </span>
+              <span className="tabular shrink-0 text-[13px] text-[var(--ink-900)]">
+                {row.value}
+              </span>
+            </div>
+          ))}
+
+          <span className="mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
+            {isPro ? "Your early Pro purchase stays with your account. " : ""}
+            Free through {formatPilotEnd()}. Paid plans begin in{" "}
+            {PAID_PLANS_BEGIN}, and we&apos;ll tell you before anything changes.
+            This month&apos;s hours are on{" "}
+            <Link
+              href="/dashboard/settings/usage"
+              className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
+            >
+              Usage
+            </Link>
+            .
+          </span>
+        </SettingsCard>
       )}
     </div>
   );
 }
 
 export default function PlanPage() {
-  return (
-    <Suspense fallback={<SettingsPlanPending />}>
-      <PlanContent />
-    </Suspense>
-  );
+  return <PlanContent />;
 }

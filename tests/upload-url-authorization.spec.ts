@@ -487,15 +487,15 @@ test("a match longer than what is left this month → 429, nothing minted", asyn
   expect(r.json.capSeconds).toBe(CAP_SECONDS);
 });
 
-test("an uploader off the individual pilot list → 403, nothing minted", async () => {
+test("a spent open-beta ceiling → 429, nothing minted", async () => {
   const h = harness({
     billableSeconds: 600,
     remainingSeconds: 0,
-    limit: "pool_players",
+    limit: "open_hours",
   });
   const r = await call(h);
-  expectDenied(h, 403, r);
-  expect(r.json.error).toMatch(/invite-only during the pilot/);
+  expectDenied(h, 429, r);
+  expect(r.json.error).toMatch(/fully booked/);
 });
 
 test("a match that exactly fits what is left → 200", async () => {
