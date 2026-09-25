@@ -33,10 +33,11 @@ import {
  * five shown; the default five are the frame's (Platform Audit `Te`).
  *
  * Every tile is interactive in the way the personal strip has always been:
- * the label carries a tooltip saying what the statistic counts, and hovering
- * a tile whose figure is a per-match rate opens the season's chart for it.
- * Record has no chart, deliberately — it is not a per-match rate, and the
- * hover would have nothing truthful to plot.
+ * hovering a tile whose figure is a per-match rate opens the season's chart
+ * for it. Record has no chart, deliberately — it is not a per-match rate,
+ * and the hover would have nothing truthful to plot. The label is plain
+ * text, no tooltip: the dark tooltip names icon-only controls and nothing
+ * else.
  *
  * Before any match has statistics the strip is still here, labelled and
  * empty (`KpiStripEmpty`), for the same reason Home keeps its own: the page
@@ -256,7 +257,6 @@ export function SeasonKpiStrip({
             trend={kpi.trend}
             subtext={kpi.subtext}
             hintText={kpi.hintText}
-            description={kpi.description}
             detail={kpi.points}
             format={kpi.format}
             ghostSparkline
