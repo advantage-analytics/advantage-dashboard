@@ -609,7 +609,7 @@ export function SettingsPreferencesPending() {
         />
         <CardRow
           label="Match report opens at"
-          control={<PillSelect>The story</PillSelect>}
+          control={<PillSelect>Statistics</PillSelect>}
         />
         <CardRow
           label="Stat definitions on hover"
@@ -989,9 +989,11 @@ export function SettingsTeamDetailPending() {
         <Text className="mt-3.5 text-[11px] leading-[1.5]">
           {isOwner
             ? "A role change takes effect at once. Inviting and removals happen on the Roster, where an invitation can attach to a player already listed; ownership moves by transfer from a member's row."
-            : isStaff
+            : role === "coach"
               ? "You can move people between staff and player; coaches and the owner are the owner's to change. Inviting and removals happen on the Roster."
-              : "Only the coaching staff can invite people or change roles on this team."}
+              : isStaff
+                ? "Role changes are for the owner and coaches. Inviting and removing players happens on the Roster."
+                : "Only the coaching staff can invite people or change roles on this team."}
         </Text>
       </SettingsCard>
 

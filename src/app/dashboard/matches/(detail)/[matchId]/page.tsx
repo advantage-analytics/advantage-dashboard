@@ -38,6 +38,7 @@ import {
   MatchReportSpacer,
   MatchReportWhen,
 } from "@/components/dashboard/matches/match-detail/match-report";
+import { resolveDefaultView } from "@/components/dashboard/matches/match-detail/report-view";
 import { MatchReportScoreboard } from "@/components/dashboard/matches/match-detail/report-scoreboard";
 import { MatchReportViewSwitcher } from "@/components/dashboard/matches/match-detail/report-view-switcher";
 import {
@@ -299,6 +300,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
         isDerived={isDerived}
         statsPublished={statsPublished}
         hasPlayableVideo={Boolean(video)}
+        // "Match report opens at" (Settings › Preferences), clamped to an
+        // available view.
+        defaultView={resolveDefaultView(
+          preferences.matchReportOpensAt,
+          Boolean(video),
+        )}
         savedViews={savedViews}
         workspaceRole={workspaceRole}
         workspaceKind={workspaceKind}
