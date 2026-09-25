@@ -198,7 +198,7 @@ export function getMonthlyCapHours(accountType: AccountType): number {
  *   20260925024406_individual_pool_quota.sql), under 10 hours between them;
  * - the OPEN-BETA ceiling: everyone else, 2h each, under a house-wide monthly
  *   ceiling so a rush of signups cannot outspend it
- *   (20260925043000_individual_open_tier.sql).
+ *   (20260925053330_individual_open_tier.sql).
  *
  * See `reserveQuota()`.
  */

@@ -13,7 +13,7 @@ import { LeaveGuardProvider } from "@/components/dashboard/leave-guard-context";
 import { HeaderStatusProvider } from "@/components/dashboard/header-status";
 import { HeaderSlotProvider } from "@/components/dashboard/header-slot";
 import { WorkspaceSync } from "@/components/dashboard/workspace-sync";
-import { BetaNotice } from "@/components/dashboard/beta-notice";
+import { BetaWelcome } from "@/components/dashboard/beta-welcome-dialog";
 import {
   STORAGE_KEYS,
   clearStorageData,
@@ -101,10 +101,11 @@ export function DashboardShell({
                     cannot shrink a flex item below its min-content height, so
                     tall pages keep scrolling in normal flow. */}
                     <main className="flex flex-1 flex-col">
-                      {/* Not in the upload wizard: a task you're inside keeps
-                        its own notices, and this one is about the account. */}
+                      {/* Once per browser, and never over the upload wizard:
+                        a task you're inside is not interrupted by news about
+                        the account. */}
                       {!pathname.startsWith("/dashboard/matches/new") && (
-                        <BetaNotice />
+                        <BetaWelcome />
                       )}
                       <PageTransition>{children}</PageTransition>
                     </main>

@@ -1,3 +1,5 @@
+-- Applied live 2026-09-25 as version 20260925053330.
+--
 -- The individual tier's THIRD band: open beta.
 --
 -- The vendor terms as of 2026-09-25 (owner): collegiate programs 75h/month

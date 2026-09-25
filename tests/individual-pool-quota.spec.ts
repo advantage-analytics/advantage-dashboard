@@ -14,7 +14,7 @@ import {
 /**
  * The individual tier's shared bands, without a database: which limit a peek
  * reports and what the refusal says. The atomic half is
- * `reserve_individual_quota` (20260925043000_individual_open_tier.sql).
+ * `reserve_individual_quota` (20260925053330_individual_open_tier.sql).
  */
 
 const HOUR = 3600;
