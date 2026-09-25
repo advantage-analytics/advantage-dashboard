@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import {
   AlertCircle,
-  Check,
   Link as LinkIcon,
   Link2,
   Loader2,
@@ -25,6 +24,9 @@ import {
   DialogInfoRow,
   SeatNote,
   DialogProblem,
+  LOOKS_LIKE_EMAIL,
+  RoleCard,
+  RoleChoice,
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
 import {
@@ -89,9 +91,6 @@ import type { SeatUsage } from "@/lib/data/team-roster-server";
 
 /** Whitespace, commas and semicolons all separate addresses in a pasted list. */
 const SEPARATORS = /[\s,;]+/;
-
-/** Deliberately loose. The database and the mail server are the real checks. */
-const LOOKS_LIKE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export function RosterInviteDialog({
   open,
@@ -162,7 +161,7 @@ export function RosterInviteDialog({
    */
   const [emails, setEmails] = useState<string[]>([]);
   const [emailEdited, setEmailEdited] = useState(false);
-  const [role, setRole] = useState<"player" | "staff">("player");
+  const [role, setRole] = useState<"player" | "staff" | "coach">("player");
   const [canUpload, setCanUpload] = useState(playersCanUpload);
   /**
    * The address the coach said to leave alone. Suppresses the tripwire for
@@ -191,8 +190,11 @@ export function RosterInviteDialog({
    * a team workspace, so `active.name` is the school.
    */
   const { active } = useWorkspace();
-  // The upload rule is the owner's to change; see the switch below.
-  const canChangeUploadPolicy = active.role === "owner";
+  // The upload rule is the owner's to change; see the switch below. Inviting a
+  // coach is the owner's too — `create_program_invite` refuses anyone else — so
+  // the Coach card is drawn for the owner only rather than offered and refused.
+  const isOwner = active.role === "owner";
+  const canChangeUploadPolicy = isOwner;
 
   const linked = target !== null;
 
@@ -429,7 +431,7 @@ export function RosterInviteDialog({
   // a resend to an address already holding a reservation takes nothing more.
   const held = new Set(openInviteEmails.map((e) => e.toLowerCase()));
   const newSeats =
-    linked || role === "staff"
+    linked || role !== "player"
       ? 0
       : addresses.filter((a) => !held.has(a.toLowerCase())).length;
   // A pasted list larger than what is free used to read "24 → 27 / 25" with no
@@ -663,27 +665,28 @@ export function RosterInviteDialog({
               </div>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              <span className="text-[11px] text-[var(--ink-600)]">Role</span>
-              <div
-                role="radiogroup"
-                aria-label="Role"
-                className="flex flex-col gap-1.5"
-              >
+            <RoleChoice columns={isOwner ? 3 : 2}>
+              <RoleCard
+                checked={role === "player"}
+                onSelect={() => setRole("player")}
+                title="Player"
+                detail="Joins the roster and sees their own matches"
+              />
+              <RoleCard
+                checked={role === "staff"}
+                onSelect={() => setRole("staff")}
+                title="Staff"
+                detail="Works the roster and uploads for any player"
+              />
+              {isOwner && (
                 <RoleCard
-                  checked={role === "player"}
-                  onSelect={() => setRole("player")}
-                  title="Player"
-                  detail="Joins the roster · sees their own reports and team pages"
+                  checked={role === "coach"}
+                  onSelect={() => setRole("coach")}
+                  title="Coach"
+                  detail="Staff access, plus the schedule and roles"
                 />
-                <RoleCard
-                  checked={role === "staff"}
-                  onSelect={() => setRole("staff")}
-                  title="Assistant coach"
-                  detail="Full roster access · uploads for any player · no playing stats"
-                />
-              </div>
-            </div>
+              )}
+            </RoleChoice>
           )}
 
           {/* The permission these invitations arrive under, stated at the
@@ -836,8 +839,8 @@ export function RosterInviteDialog({
               )}{" "}
               — the login binds to it when they accept.
             </SeatNote>
-          ) : role === "staff" ? (
-            /* Staff hold no seat: seats count players on the roster. */
+          ) : role !== "player" ? (
+            /* Staff and coaches hold no seat: seats count players on the roster. */
             <DialogInfoRow
               icon={
                 <Users className="size-3.5" strokeWidth={1.5} aria-hidden />
@@ -846,7 +849,8 @@ export function RosterInviteDialog({
               <strong className="font-medium text-[var(--ink-900)]">
                 No seat used.
               </strong>{" "}
-              Seats count players on the roster; staff don&rsquo;t take one.
+              Seats count players on the roster; staff and coaches don&rsquo;t
+              take one.
             </DialogInfoRow>
           ) : (
             <SeatNote
@@ -938,52 +942,6 @@ function CopyInviteLink() {
       <LinkIcon className="size-3.5" strokeWidth={1.5} aria-hidden />
       Copy invite link
       <span className="sr-only"> — unavailable. {reason}</span>
-    </button>
-  );
-}
-
-/** One of the two role options, drawn as a card so its explanation fits. */
-function RoleCard({
-  checked,
-  onSelect,
-  title,
-  detail,
-}: {
-  checked: boolean;
-  onSelect: () => void;
-  title: string;
-  detail: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={checked}
-      onClick={onSelect}
-      className={`flex cursor-pointer items-start gap-2.5 rounded-[var(--radius-element)] border px-3 py-2.5 text-left transition-colors focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none ${
-        checked
-          ? "border-[var(--blue)] bg-[var(--blue-tint-08)]"
-          : "border-[var(--border-field)] hover:bg-[var(--surface-subtle)]"
-      }`}
-    >
-      <span
-        aria-hidden
-        className={`mt-px flex size-3.5 shrink-0 items-center justify-center rounded-full ${
-          checked ? "bg-[var(--blue)]" : "border border-[var(--ink-300)]"
-        }`}
-      >
-        {checked && (
-          <Check className="size-2 text-white" strokeWidth={3} aria-hidden />
-        )}
-      </span>
-      <span>
-        <span className="block text-[12px] font-medium text-[var(--ink-900)]">
-          {title}
-        </span>
-        <span className="mt-px block text-[11px] leading-[1.5] text-[var(--ink-600)]">
-          {detail}
-        </span>
-      </span>
     </button>
   );
 }

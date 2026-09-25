@@ -152,14 +152,24 @@ note closes a figure, a meter, or a paragraph.
 
 ### One action, one surface
 
-A settings card must not grow its own copy of an action another page owns. The
-Members card carries no invite field: the roster's dialog can bind an
-invitation to a player already listed — so their matches and video stay put —
-and a second, thinner control produces orphan logins beside existing rows.
-Summarize, then hand off. The split is by _what the act is_, not by page:
-adding and removing people is roster admin and lives on the Roster; what a
+A settings card must not grow its own copy of an action another page owns.
+Inviting a **player** belongs to the Roster: its dialog can bind an invitation
+to a player already listed — so their matches and video stay put — and a
+second, thinner control produces orphan logins beside existing rows. Staff and
+coaches are never roster rows and hold no seat, so the Members card may invite
+them (`StaffInviteDialog`, 2026-09-24, design owner's call): the same
+`RosterDialog` shell and `RoleChoice` tiles, Staff and — for the owner only —
+Coach, with no player option. The card's header carries that one button; the
+way to the Roster is an inline `Roster ↗` link in the card's note ("Players
+are invited and removed on the Roster ↗"), and an invitation row's meta names
+its role (`Staff · sent Sep 19`), since its pill says only `Invited`.
+Removing people stays on the Roster; what a
 person **is** — their role, and ownership — is decided on their row here,
 because that is where the person is.
+_Supersedes (2026-09-24): "The Members card carries no invite field: the
+roster's dialog can bind an invitation to a player already listed — so their
+matches and video stay put — and a second, thinner control produces orphan
+logins beside existing rows."_
 
 **A control that leaves the page wears `↗`, not `›`.** The chevron means
 _expands_ or _next step_ and is already spoken for by disclosures; on the same

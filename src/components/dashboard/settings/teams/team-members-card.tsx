@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Lock } from "lucide-react";
+import { ArrowUpRight, Lock, Plus } from "lucide-react";
 import { SettingsCard } from "@/components/dashboard/settings/settings-card";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { StatePill } from "@/components/ui/state-pill";
@@ -22,16 +23,24 @@ import { setActiveWorkspaceThen } from "@/lib/workspace/actions";
 import { capitalize } from "@/lib/utils";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { StaffInviteDialog } from "@/components/dashboard/settings/teams/staff-invite-dialog";
 
 const ROSTER_PATH = "/dashboard/team/roster";
+const ROSTER_LINK_CLASS =
+  "inline-flex cursor-pointer items-center gap-0.5 font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)] focus-visible:outline-none";
 
 /**
  * Who is on the program, and how many more there is room for.
  *
- * Deliberately without an invite box. The roster's dialog can bind an
- * invitation to a player already listed so their matches stay put; a thinner
- * control here would mint orphan logins beside those rows. So adding and
- * removing people happens there — but what someone IS is decided here, on
+ * One list, one action (design B, 2026-09-24): the header's only button
+ * invites staff, and the note under the list is the way to the Roster.
+ *
+ * Staff and coaches are invited from here; players are not. The roster's
+ * dialog can bind a player's invitation to a row already listed so their
+ * matches stay put, and a thinner control here would mint orphan logins beside
+ * those rows — but staff are never roster rows, so nothing is lost inviting
+ * them where their standing is managed. Players and removals stay on the
+ * Roster. What someone IS is decided here, on
  * their row: the role is a menu for the rows the viewer may change (an owner
  * sees three options, a coach two), a pill with a lock for staff who may not,
  * and a plain pill for a player, who may change nothing. Ownership starts from
@@ -45,6 +54,7 @@ const ROSTER_PATH = "/dashboard/team/roster";
  */
 export function TeamMembersCard({
   programId,
+  programName,
   isActiveWorkspace,
   members,
   invites,
@@ -55,6 +65,7 @@ export function TeamMembersCard({
   onError,
 }: {
   programId: string;
+  programName: string;
   isActiveWorkspace: boolean;
   members: readonly TeamMember[];
   invites: readonly TeamInvite[];
@@ -68,40 +79,39 @@ export function TeamMembersCard({
   const isOwner = viewerRole === "owner";
   const isStaff = viewerRole !== "player";
   const goToRoster = setActiveWorkspaceThen.bind(null, programId, ROSTER_PATH);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  // Players are invited and removed on the Roster; the note says so and is
+  // the way there. Outside the active workspace the link has to switch
+  // workspaces first, which only a server action can do.
+  const rosterLink = isActiveWorkspace ? (
+    <Link href={ROSTER_PATH} className={ROSTER_LINK_CLASS}>
+      Roster
+      <ArrowUpRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
+    </Link>
+  ) : (
+    <form action={goToRoster} className="inline">
+      <button type="submit" className={ROSTER_LINK_CLASS}>
+        Roster
+        <ArrowUpRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
+      </button>
+    </form>
+  );
 
   return (
     <SettingsCard>
       <div className="flex items-center gap-2.5">
-        <span className="text-[13px] font-medium text-[var(--ink-900)]">
+        <span className="flex-1 text-[13px] font-medium text-[var(--ink-900)]">
           Members
         </span>
         {isStaff && (
-          <div className="flex flex-1 items-center justify-end">
-            {isActiveWorkspace ? (
-              <Link
-                href={ROSTER_PATH}
-                className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-[6px] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 text-[12px] font-medium text-[var(--ink-700)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:outline-none"
-              >
-                Manage on Roster
-                <ArrowUpRight
-                  className="size-3"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              </Link>
-            ) : (
-              <form action={goToRoster}>
-                <SettingsButton type="submit" variant="outline" size="sm">
-                  Manage on Roster
-                  <ArrowUpRight
-                    className="size-3"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                </SettingsButton>
-              </form>
-            )}
-          </div>
+          <SettingsButton
+            variant="outline"
+            size="sm"
+            onClick={() => setInviteOpen(true)}
+          >
+            <Plus className="size-3" strokeWidth={1.75} aria-hidden="true" />
+            Invite staff
+          </SettingsButton>
         )}
       </div>
 
@@ -184,8 +194,11 @@ export function TeamMembersCard({
               {invite.email}
             </span>
             <span className="flex-1" />
-            <span className="text-[11px] text-[var(--ink-500)]">
-              Sent {formatInviteDate(invite.createdAt)}
+            {/* The role is the one thing an invitation row cannot show in
+                the pill column — that says Invited — so it leads the meta. */}
+            <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
+              {capitalize(invite.role)} · sent{" "}
+              {formatInviteDate(invite.createdAt)}
             </span>
             <StatePill outline>Invited</StatePill>
           </PersonRow>
@@ -199,15 +212,39 @@ export function TeamMembersCard({
       </div>
 
       {/* No rule above the note: the last row already drew one. */}
-      <span className="mt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-        {isOwner
-          ? "A role change takes effect at once. Inviting and removals happen on the Roster, where an invitation can attach to a player already listed; ownership moves by transfer from a member's row."
-          : viewerRole === "coach"
-            ? "You can move people between staff and player; coaches and the owner are the owner's to change. Inviting and removals happen on the Roster."
-            : isStaff
-              ? "Role changes are for the owner and coaches. Inviting and removing players happens on the Roster."
-              : "Only the coaching staff can invite people or change roles on this team."}
-      </span>
+      {/* A div, not a <p>: the Roster link can be a <form>. */}
+      <div className="mt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
+        {isOwner ? (
+          <>
+            A role change takes effect at once. Players are invited and removed
+            on the {rosterLink}. Ownership moves by transfer from a
+            member&rsquo;s row.
+          </>
+        ) : viewerRole === "coach" ? (
+          <>
+            You can move people between staff and player; coaches and the owner
+            are the owner&rsquo;s to change. Players are invited and removed on
+            the {rosterLink}.
+          </>
+        ) : isStaff ? (
+          <>
+            Role changes are for the owner and coaches. Players are invited and
+            removed on the {rosterLink}.
+          </>
+        ) : (
+          "Only the coaching staff can invite people or change roles on this team."
+        )}
+      </div>
+
+      {isStaff && (
+        <StaffInviteDialog
+          open={inviteOpen}
+          onOpenChange={setInviteOpen}
+          programId={programId}
+          programName={programName}
+          canInviteCoach={isOwner}
+        />
+      )}
     </SettingsCard>
   );
 }
@@ -227,7 +264,7 @@ function SeatPips({ seats }: { seats: SeatUsage }) {
         <SeatBoxes seats={seats} />
       </span>
       <span className="text-[11px] text-[var(--ink-500)]">
-        {seats.used} of {total} seats · players on the roster
+        {seats.used} of {total} player seats
         {held > 0 && ` · ${held} held`}
         {free === 0 && held === 0 && " · full"}
       </span>

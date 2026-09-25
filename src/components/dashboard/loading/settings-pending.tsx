@@ -885,8 +885,8 @@ export function SettingsTeamDetailPending() {
           {isStaff && (
             <div className="flex flex-1 items-center justify-end">
               <Button>
-                Manage on Roster
                 <span className="size-3" />
+                Invite staff
               </Button>
             </div>
           )}
@@ -897,7 +897,7 @@ export function SettingsTeamDetailPending() {
               <Box key={i} className="size-2 rounded-[2px]" />
             ))}
           </div>
-          <Text className="text-[11px]">4 of 8 seats</Text>
+          <Text className="text-[11px]">4 of 8 player seats</Text>
         </div>
         <div className="pt-2">
           {[
@@ -929,11 +929,11 @@ export function SettingsTeamDetailPending() {
         </div>
         <Text className="mt-3.5 text-[11px] leading-[1.5]">
           {isOwner
-            ? "A role change takes effect at once. Inviting and removals happen on the Roster, where an invitation can attach to a player already listed; ownership moves by transfer from a member's row."
+            ? "A role change takes effect at once. Players are invited and removed on the Roster. Ownership moves by transfer from a member's row."
             : role === "coach"
-              ? "You can move people between staff and player; coaches and the owner are the owner's to change. Inviting and removals happen on the Roster."
+              ? "You can move people between staff and player; coaches and the owner are the owner's to change. Players are invited and removed on the Roster."
               : isStaff
-                ? "Role changes are for the owner and coaches. Inviting and removing players happens on the Roster."
+                ? "Role changes are for the owner and coaches. Players are invited and removed on the Roster."
                 : "Only the coaching staff can invite people or change roles on this team."}
         </Text>
       </SettingsCard>
