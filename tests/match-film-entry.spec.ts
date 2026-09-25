@@ -108,12 +108,17 @@ interface Scenario {
   /** Active match videos in the workspace; defaults to none. */
   usageRows?: MatchVideoUsageRow[];
   usageThrows?: boolean;
+  /** What `loadExpiredAt` answers (T10); `"throw"` makes it throw. */
+  expiredAt?: string | null | "throw";
 }
 
 /** Workspaces `loadUsage` was asked about, in order. */
 let usageCalls: { id: string; kind: string }[] = [];
+/** How many times `loadExpiredAt` was asked. */
+let expiredCalls = 0;
 test.beforeEach(() => {
   usageCalls = [];
+  expiredCalls = 0;
 });
 
 const HOLDER_MATCH = randomUUID();
@@ -179,6 +184,11 @@ function deps(scenario: Scenario = {}): FilmEntryDeps {
         rows,
       };
     },
+    async loadExpiredAt() {
+      expiredCalls += 1;
+      if (scenario.expiredAt === "throw") throw new Error("column missing");
+      return scenario.expiredAt ?? null;
+    },
   };
 }
 
@@ -193,6 +203,7 @@ test("a creator with no video is offered exactly one entry: add", async () => {
     actions: ["add"],
     problem: null,
     quota: { used: 0, cap: 1, holder: null },
+    expiredAt: null,
   });
   expect(filmEntryView(entry)).toBe("empty");
 });
@@ -286,6 +297,7 @@ test("nothing is offered before the attachment state has actually been read", as
       actions: ["add"],
       problem: null,
       quota: { used: 0, cap: 1, holder: null },
+      expiredAt: null,
     },
   ]);
 });
@@ -319,6 +331,7 @@ test("a failed match read is an error rather than an invitation", async () => {
     actions: [],
     problem: "storage_unavailable",
     quota: null,
+    expiredAt: null,
   });
   expect(filmEntryView(entry)).toBe("unavailable");
 });
@@ -351,37 +364,54 @@ test("a vanished final object is stale, which is not a state a retry fixes", asy
 
 test("only a demonstrated absence reaches the empty state", () => {
   const cases: MatchFilmEntry[] = [
-    { attachment: null, actions: [], problem: null, quota: null },
+    {
+      attachment: null,
+      actions: [],
+      problem: null,
+      quota: null,
+      expiredAt: null,
+    },
     {
       attachment: null,
       actions: [],
       problem: "storage_unavailable",
       quota: null,
+      expiredAt: null,
     },
-    { attachment: "present", actions: [], problem: null, quota: null },
+    {
+      attachment: "present",
+      actions: [],
+      problem: null,
+      quota: null,
+      expiredAt: null,
+    },
     {
       attachment: "present",
       actions: [],
       problem: "storage_unavailable",
       quota: null,
+      expiredAt: null,
     },
     {
       attachment: "present",
       actions: [],
       problem: "stale_attachment",
       quota: null,
+      expiredAt: null,
     },
     {
       attachment: "absent",
       actions: [],
       problem: "storage_unavailable",
       quota: null,
+      expiredAt: null,
     },
     {
       attachment: "absent",
       actions: [],
       problem: "stale_attachment",
       quota: null,
+      expiredAt: null,
     },
   ];
   for (const entry of cases) {
@@ -393,6 +423,7 @@ test("only a demonstrated absence reaches the empty state", () => {
       actions: [],
       problem: null,
       quota: null,
+      expiredAt: null,
     }),
   ).toBe("empty");
   // And the safe default offers nothing and claims nothing.
@@ -466,7 +497,85 @@ test("a usage read that throws drops the quota, never the add", async () => {
     actions: ["add"],
     problem: null,
     quota: null,
+    expiredAt: null,
   });
+});
+
+/* -------------------------------------------------------------------------
+ * 3b. Expired (SwingVision Add video T10)
+ * ---------------------------------------------------------------------- */
+
+const EXPIRED_AT = "2026-10-23T09:00:00.000Z";
+
+test("an expired video with nothing active is the expired state, offer kept", async () => {
+  const entry = await resolveMatchFilmEntry(
+    MATCH,
+    deps({ expiredAt: EXPIRED_AT }),
+  );
+  expect(entry).toEqual({
+    attachment: "absent",
+    actions: ["add"],
+    problem: null,
+    quota: { used: 0, cap: 1, holder: null },
+    expiredAt: EXPIRED_AT,
+  });
+  expect(filmEntryView(entry)).toBe("expired");
+});
+
+test("a teammate is told the video expired, and offered nothing", async () => {
+  const entry = await resolveMatchFilmEntry(
+    MATCH,
+    deps({ userId: TEAMMATE, expiredAt: EXPIRED_AT }),
+  );
+  expect(entry.expiredAt).toBe(EXPIRED_AT);
+  expect(entry.actions).toEqual([]);
+  expect(filmEntryView(entry)).toBe("expired");
+});
+
+test("expiry is never read while a video is active, or before the row is", async () => {
+  for (const scenario of [
+    { row: ACTIVE_ROW },
+    { row: ACTIVE_ROW, objectMissing: true },
+    { row: ACTIVE_ROW, storageUnreachable: true },
+    { attachmentError: true },
+    { attachmentThrows: true },
+  ] as Scenario[]) {
+    const entry = await resolveMatchFilmEntry(
+      MATCH,
+      deps({ ...scenario, expiredAt: EXPIRED_AT }),
+    );
+    expect(entry.expiredAt, JSON.stringify(scenario)).toBeNull();
+    expect(filmEntryView(entry)).not.toBe("expired");
+  }
+  expect(expiredCalls).toBe(0);
+});
+
+test("an expiry read that throws is the plain empty state, never an error", async () => {
+  const entry = await resolveMatchFilmEntry(
+    MATCH,
+    deps({ expiredAt: "throw" }),
+  );
+  expect(entry.expiredAt).toBeNull();
+  expect(entry.problem).toBeNull();
+  expect(filmEntryView(entry)).toBe("empty");
+});
+
+test("a storage problem takes precedence over expired", () => {
+  const base: MatchFilmEntry = {
+    attachment: "absent",
+    actions: ["add"],
+    problem: null,
+    quota: null,
+    expiredAt: EXPIRED_AT,
+  };
+  expect(filmEntryView(base)).toBe("expired");
+  expect(filmEntryView({ ...base, problem: "storage_unavailable" })).toBe(
+    "unavailable",
+  );
+  expect(filmEntryView({ ...base, problem: "stale_attachment" })).toBe("stale");
+  // An unknown attachment state is not an established absence either.
+  expect(filmEntryView({ ...base, attachment: null })).toBe("unavailable");
+  expect(filmEntryView({ ...base, attachment: "present" })).toBe("unavailable");
 });
 
 /* -------------------------------------------------------------------------
@@ -547,6 +656,14 @@ const ACTIONS = readFileSync(
   "src/components/dashboard/matches/match-detail/film/film-entry-actions.tsx",
   "utf8",
 );
+const EXPIRED = readFileSync(
+  "src/components/dashboard/matches/match-detail/film/film-expired-state.tsx",
+  "utf8",
+);
+const EXPIRY_NOTICE = readFileSync(
+  "src/components/dashboard/matches/match-detail/film/film-expiry-notice.tsx",
+  "utf8",
+);
 const UNAVAILABLE = readFileSync(
   "src/components/dashboard/matches/match-detail/film/film-unavailable-state.tsx",
   "utf8",
@@ -558,6 +675,10 @@ test("the Film view routes its no-video case through the shared rule", () => {
   expect(code(FILM_TAB)).toContain("filmEntryView(entry)");
   expect(code(FILM_TAB)).toMatch(/view === "empty"[\s\S]{0,80}FilmEmptyState/);
   expect(code(FILM_TAB)).toContain("FilmUnavailableState");
+  // T10: expired is its own state, reached only through the same rule.
+  expect(code(FILM_TAB)).toMatch(
+    /view === "expired"[\s\S]{0,80}FilmExpiredState/,
+  );
 });
 
 test("no component decides for itself who may act", () => {
@@ -566,6 +687,8 @@ test("no component decides for itself who may act", () => {
     ["film-empty-state", EMPTY],
     ["film-entry-actions", ACTIONS],
     ["film-unavailable-state", UNAVAILABLE],
+    ["film-expired-state", EXPIRED],
+    ["film-expiry-notice", EXPIRY_NOTICE],
   ] as const) {
     // The capability arrives as a prop. A component that read `createdBy`,
     // the workspace or the provider to decide would be answering a question
@@ -581,6 +704,7 @@ test("no component decides for itself who may act", () => {
   expect(code(ACTIONS)).toContain('canTakeFilmAction(entry, "replace")');
   expect(code(ACTIONS)).toContain('canTakeFilmAction(entry, "align")');
   expect(code(EMPTY)).toContain('canTakeFilmAction(entry, "add")');
+  expect(code(EXPIRED)).toContain('canTakeFilmAction(entry, "add")');
 });
 
 test("the actions row is absent, never disabled, for a viewer with none", () => {

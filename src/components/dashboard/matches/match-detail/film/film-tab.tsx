@@ -19,6 +19,8 @@ import {
 
 import { FilmEmptyState } from "./film-empty-state";
 import { FilmEntryActions } from "./film-entry-actions";
+import { FilmExpiredState } from "./film-expired-state";
+import { FilmExpiryNotice } from "./film-expiry-notice";
 import { FilmUnavailableState } from "./film-unavailable-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
@@ -100,6 +102,7 @@ export function FilmTab({
   if (video) return <FilmRoom video={video} entry={entry} unit={unit} />;
   const view = filmEntryView(entry);
   if (view === "empty") return <FilmEmptyState entry={entry} />;
+  if (view === "expired") return <FilmExpiredState entry={entry} />;
   return <UnavailableFilm entry={entry} state={view} />;
 }
 
@@ -235,6 +238,23 @@ function FilmRoom({
     reportPlayRejected,
     retry,
   } = playback;
+
+  /**
+   * The expiry notice (T10) — the server's answer, read off the attachment
+   * as rendered. Only an attachment has a retention clock; the Advantage
+   * Intelligence lineage never warns.
+   */
+  const attachment = video.attachment;
+  const expiry =
+    attachment?.expiryWarning &&
+    attachment.expiresAt !== null &&
+    attachment.monthsUnwatched !== null
+      ? {
+          attachmentId: attachment.id,
+          expiresAt: attachment.expiresAt,
+          monthsUnwatched: attachment.monthsUnwatched,
+        }
+      : null;
 
   /**
    * A view (SwingVision Add video T8): the first `play` of each loaded
@@ -655,132 +675,147 @@ function FilmRoom({
     // it — so it inherits that height and its rows scroll within the card.
     // Under 720px of pane (the `@container` breakpoint `statistics-view.tsx`
     // stacks at) the columns stack and the list takes what is left.
-    <div
-      ref={clockRef}
-      className="flex min-h-0 flex-1 flex-col gap-4 @min-[720px]:flex-row"
-    >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-        {/* Above the player and right-aligned: maintenance for the person who
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      {/* SwingVision Add video T10 (canvas frame ExpiryNotice): full width,
+          above the player and the point list, in the last 30 days before an
+          unwatched attachment expires. Keyed on the attachment so a
+          replacement never inherits a notice the previous file had
+          dismissed. */}
+      {expiry && (
+        <FilmExpiryNotice
+          key={expiry.attachmentId}
+          matchId={match.id}
+          monthsUnwatched={expiry.monthsUnwatched}
+          expiresAt={expiry.expiresAt}
+        />
+      )}
+      <div
+        ref={clockRef}
+        className="flex min-h-0 flex-1 flex-col gap-4 @min-[720px]:flex-row"
+      >
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+          {/* Above the player and right-aligned: maintenance for the person who
             owns the file, out of the way of the person watching. Renders
             nothing at all for everyone else. */}
-        <FilmEntryActions matchId={match.id} entry={entry} />
+          <FilmEntryActions matchId={match.id} entry={entry} />
 
-        <FilmPlayer
-          ref={playerRef}
-          clockTargetRef={clockRef}
-          url={playback.url}
-          generation={generation}
-          resume={resume}
-          problem={playback.problem}
-          passthrough={playback.passthrough}
-          // While the room is up it is the surface being watched: this player
-          // keeps its playhead through a refresh but stays silent, and the room
-          // is what reports to the hook.
-          background={roomOpen}
-          stops={walkStops}
-          allStops={stops}
-          saved={activePoint ? activePoint.saved : null}
-          onTimeChange={setCurrentTime}
-          onPlaybackTime={reportTime}
-          onPlaybackPlaying={reportPlaying}
-          onLoadFailure={reportLoadFailure}
-          onPlayRejected={reportPlayRejected}
-          onFirstPlay={recordFirstPlay}
-          onRetry={retry}
-          onToggleSaved={toggleSavedActive}
-          onEnterFullscreen={enterRoom}
-          // Every point step — the transport's two glyphs, the arrow keys
-          // above, the card's stepper — runs the player's own `step`, which
-          // calls this first: stepping re-follows the film.
-          onStep={followPlayback}
-        />
-        <FilmThisPoint
-          point={activePoint}
-          shots={pointShots}
-          position={position}
-          activeShotId={activeShot?.stop.shot.id ?? null}
-          onSelectShot={handleSelectShot}
-          // The same step the transport takes, so the widget's stepper walks
-          // the applied cut rather than opening a second stepping path.
-          onStep={handleStep}
-        />
-      </div>
+          <FilmPlayer
+            ref={playerRef}
+            clockTargetRef={clockRef}
+            url={playback.url}
+            generation={generation}
+            resume={resume}
+            problem={playback.problem}
+            passthrough={playback.passthrough}
+            // While the room is up it is the surface being watched: this player
+            // keeps its playhead through a refresh but stays silent, and the room
+            // is what reports to the hook.
+            background={roomOpen}
+            stops={walkStops}
+            allStops={stops}
+            saved={activePoint ? activePoint.saved : null}
+            onTimeChange={setCurrentTime}
+            onPlaybackTime={reportTime}
+            onPlaybackPlaying={reportPlaying}
+            onLoadFailure={reportLoadFailure}
+            onPlayRejected={reportPlayRejected}
+            onFirstPlay={recordFirstPlay}
+            onRetry={retry}
+            onToggleSaved={toggleSavedActive}
+            onEnterFullscreen={enterRoom}
+            // Every point step — the transport's two glyphs, the arrow keys
+            // above, the card's stepper — runs the player's own `step`, which
+            // calls this first: stepping re-follows the film.
+            onStep={followPlayback}
+          />
+          <FilmThisPoint
+            point={activePoint}
+            shots={pointShots}
+            position={position}
+            activeShotId={activeShot?.stop.shot.id ?? null}
+            onSelectShot={handleSelectShot}
+            // The same step the transport takes, so the widget's stepper walks
+            // the applied cut rather than opening a second stepping path.
+            onStep={handleStep}
+          />
+        </div>
 
-      <div className="relative flex min-h-0 w-full shrink-0 flex-col @min-[720px]:w-[320px] @min-[720px]:self-stretch">
-        {/* Side by side this box is out of flow, so the column contributes
+        <div className="relative flex min-h-0 w-full shrink-0 flex-col @min-[720px]:w-[320px] @min-[720px]:self-stretch">
+          {/* Side by side this box is out of flow, so the column contributes
             no height and inherits the row's (see the note on the row). */}
-        <div className="flex min-h-0 flex-1 flex-col @min-[720px]:absolute @min-[720px]:inset-0">
-          <PointList
+          <div className="flex min-h-0 flex-1 flex-col @min-[720px]:absolute @min-[720px]:inset-0">
+            <PointList
+              allPoints={points}
+              // Neither list is split into Points/Saved tabs any more: "Saved
+              // only" is an axis of the cut itself (`filters.savedOnly`), so
+              // both render exactly what the filters admit — this column and
+              // the room's drawer off the very same array.
+              visiblePoints={filteredPoints}
+              filters={filters}
+              onFiltersChange={setFilters}
+              advancedOpen={advancedOpen}
+              onAdvancedOpenChange={setAdvancedOpen}
+              openSections={openSections}
+              onOpenSectionsChange={setOpenSections}
+              activePointId={active?.stop.point.id ?? null}
+              activeStart={active?.stop.start ?? 0}
+              activeEnd={active?.stop.end ?? 0}
+              onSelect={handleSelect}
+              onToggleSaved={handleToggleSaved}
+              // Only this column gets the door; the room's own drawer renders
+              // the same component without it.
+              onOpenInRoom={openPointInRoom}
+              // The same hold as the drawer's: a row click holds and the
+              // keep-in-view stops while held. The same "Now playing" pill
+              // (T23) and the same hand-scroll hold sources (T24) — though an
+              // arrow on a focused row here is a scroll that holds, not a step.
+              pointFocus={pointFocus}
+              displayedPointId={displayedPointId}
+              onHoldPoint={holdPoint}
+              onFollow={followPlayback}
+              nowPlaying={nowPlaying}
+            />
+          </div>
+        </div>
+
+        {room && (
+          <FilmFullscreen
+            url={playback.url}
+            generation={generation}
+            resume={resume}
+            problem={playback.problem}
+            passthrough={playback.passthrough}
+            onPlaybackTime={reportTime}
+            onPlaybackPlaying={reportPlaying}
+            onLoadFailure={reportLoadFailure}
+            onPlayRejected={reportPlayRejected}
+            onFirstPlay={recordFirstPlay}
+            onRetry={retry}
+            clock={clock}
+            initial={room}
+            stops={stops}
+            walkStops={walkStops}
+            columns={columns}
             allPoints={points}
-            // Neither list is split into Points/Saved tabs any more: "Saved
-            // only" is an axis of the cut itself (`filters.savedOnly`), so
-            // both render exactly what the filters admit — this column and
-            // the room's drawer off the very same array.
+            // One cut, one array: the room's drawer is the same list this
+            // column draws (`PointList tone="dark"`), so it is handed the same
+            // filter-applied points rather than a tab-scoped slice of its own.
             visiblePoints={filteredPoints}
             filters={filters}
             onFiltersChange={setFilters}
-            advancedOpen={advancedOpen}
-            onAdvancedOpenChange={setAdvancedOpen}
-            openSections={openSections}
-            onOpenSectionsChange={setOpenSections}
-            activePointId={active?.stop.point.id ?? null}
-            activeStart={active?.stop.start ?? 0}
-            activeEnd={active?.stop.end ?? 0}
-            onSelect={handleSelect}
             onToggleSaved={handleToggleSaved}
-            // Only this column gets the door; the room's own drawer renders
-            // the same component without it.
-            onOpenInRoom={openPointInRoom}
-            // The same hold as the drawer's: a row click holds and the
-            // keep-in-view stops while held. The same "Now playing" pill
-            // (T23) and the same hand-scroll hold sources (T24) — though an
-            // arrow on a focused row here is a scroll that holds, not a step.
+            // The room derives its own displayed point from its own playhead
+            // — `displayedPointId` here is the shell's, and the shell's clock
+            // does not move while the room is open.
             pointFocus={pointFocus}
-            displayedPointId={displayedPointId}
             onHoldPoint={holdPoint}
             onFollow={followPlayback}
-            nowPlaying={nowPlaying}
+            onExit={exitRoom}
+            onHandoff={handoff}
+            originRect={originRect}
           />
-        </div>
+        )}
       </div>
-
-      {room && (
-        <FilmFullscreen
-          url={playback.url}
-          generation={generation}
-          resume={resume}
-          problem={playback.problem}
-          passthrough={playback.passthrough}
-          onPlaybackTime={reportTime}
-          onPlaybackPlaying={reportPlaying}
-          onLoadFailure={reportLoadFailure}
-          onPlayRejected={reportPlayRejected}
-          onFirstPlay={recordFirstPlay}
-          onRetry={retry}
-          clock={clock}
-          initial={room}
-          stops={stops}
-          walkStops={walkStops}
-          columns={columns}
-          allPoints={points}
-          // One cut, one array: the room's drawer is the same list this
-          // column draws (`PointList tone="dark"`), so it is handed the same
-          // filter-applied points rather than a tab-scoped slice of its own.
-          visiblePoints={filteredPoints}
-          filters={filters}
-          onFiltersChange={setFilters}
-          onToggleSaved={handleToggleSaved}
-          // The room derives its own displayed point from its own playhead
-          // — `displayedPointId` here is the shell's, and the shell's clock
-          // does not move while the room is open.
-          pointFocus={pointFocus}
-          onHoldPoint={holdPoint}
-          onFollow={followPlayback}
-          onExit={exitRoom}
-          onHandoff={handoff}
-          originRect={originRect}
-        />
-      )}
     </div>
   );
 }

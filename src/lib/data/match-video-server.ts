@@ -1,5 +1,6 @@
 import { cache } from "react";
 
+import { matchVideoExpiry } from "@/lib/match-video/expiry";
 import type { MatchVideoResult } from "@/lib/match-video/types";
 import {
   authorizeMatchVisibility,
@@ -109,6 +110,30 @@ export interface MatchVideoAttachment {
   durationSeconds: number;
   contentType: string;
   filename: string;
+  /**
+   * Retention (SwingVision Add video T10), from `matchVideoExpiry` at the
+   * moment of this render: ISO 8601 when the video will be removed if nobody
+   * watches it. Null when the clock could not be read — including before
+   * `20260924140000_match_video_last_viewed` is applied — and then the page
+   * warns about nothing rather than guessing.
+   */
+  expiresAt: string | null;
+  /** Whole months since the clock last started; null with `expiresAt`. */
+  monthsUnwatched: number | null;
+  /**
+   * Inside the warning window (30 days before `expiresAt`, and after). The
+   * Video view's "Keep this video" notice shows exactly when this is true.
+   */
+  expiryWarning: boolean;
+}
+
+/**
+ * The two retention timestamps of one attachment row — what
+ * `matchVideoExpiry` measures from.
+ */
+export interface AttachmentRetention {
+  activatedAt: string | null;
+  lastViewedAt: string | null;
 }
 
 export interface MatchVideo {
@@ -167,6 +192,61 @@ export interface MatchVideoDeps extends MatchVideoAccessDeps {
     row: PlaybackAttachmentRow,
   ): MatchVideoResult<AttachmentPlaybackCredential>;
   loadProviderVideo(matchId: string): Promise<MatchVideo | null>;
+  /**
+   * The row's retention clock (T10). A read, like every seam here. Optional,
+   * and allowed to fail: a null or a throw only means no expiry notice — the
+   * video still plays.
+   */
+  loadRetention?(
+    row: PlaybackAttachmentRow,
+  ): Promise<AttachmentRetention | null>;
+  /** The clock `matchVideoExpiry` is asked at. Defaults to the real one. */
+  now?(): Date;
+}
+
+/** What the attachment carries when its retention could not be read. */
+const NO_EXPIRY = {
+  expiresAt: null,
+  monthsUnwatched: null,
+  expiryWarning: false,
+} as const satisfies Pick<
+  MatchVideoAttachment,
+  "expiresAt" | "monthsUnwatched" | "expiryWarning"
+>;
+
+/**
+ * The attachment's retention at `now`, or {@link NO_EXPIRY}. Never throws:
+ * the expiry notice is an aside to a video that plays either way.
+ */
+async function readExpiry(
+  row: PlaybackAttachmentRow,
+  deps: MatchVideoDeps,
+): Promise<
+  Pick<MatchVideoAttachment, "expiresAt" | "monthsUnwatched" | "expiryWarning">
+> {
+  if (!deps.loadRetention) return NO_EXPIRY;
+  try {
+    const retention = await deps.loadRetention(row);
+    if (!retention?.activatedAt) return NO_EXPIRY;
+    const expiry = matchVideoExpiry(
+      {
+        activatedAt: retention.activatedAt,
+        lastViewedAt: retention.lastViewedAt,
+      },
+      deps.now?.() ?? new Date(),
+    );
+    return {
+      expiresAt: expiry.expiresAt.toISOString(),
+      monthsUnwatched: expiry.monthsUnwatched,
+      expiryWarning: expiry.warning,
+    };
+  } catch (cause) {
+    console.error(`${LOG} could not read the attachment's retention`, {
+      attachmentId: row.id,
+      cause,
+    });
+    return NO_EXPIRY;
+  }
 }
 
 const LOG = "[match-video]";
@@ -259,6 +339,8 @@ export async function resolveMatchVideo(
     return null;
   }
 
+  const expiry = await readExpiry(row, deps);
+
   return {
     url: credential.value.playbackUrl,
     expiresAt: credential.value.expiresAt.toISOString(),
@@ -272,6 +354,7 @@ export async function resolveMatchVideo(
       durationSeconds: row.verified_duration_seconds,
       contentType: row.verified_content_type,
       filename: row.filename,
+      ...expiry,
     },
   };
 }
@@ -341,6 +424,45 @@ function supabaseProviderVideo(
  * Production wiring
  * ---------------------------------------------------------------------- */
 
+/**
+ * {@link MatchVideoDeps.loadRetention} over the real table, service role,
+ * called only below the visibility check.
+ *
+ * A separate read rather than two more columns on `supabaseActiveAttachment`
+ * on purpose: `last_viewed_at` arrives with a migration that may not be
+ * applied yet, and naming a missing column there would fail the attachment
+ * read — and with it playback — for every match. Here PostgREST's refusal
+ * costs only the notice.
+ */
+function supabaseRetention(
+  admin: AdminClient,
+): NonNullable<MatchVideoDeps["loadRetention"]> {
+  return async (row) => {
+    const { data, error } = await admin
+      .from("match_video_attachments")
+      .select("activated_at, last_viewed_at")
+      .eq("id", row.id)
+      .maybeSingle();
+    if (error) {
+      console.error(`${LOG} could not read the retention clock`, {
+        attachmentId: row.id,
+        sqlstate: error.code,
+        message: error.message,
+      });
+      return null;
+    }
+    const found = data as {
+      activated_at: string | null;
+      last_viewed_at?: string | null;
+    } | null;
+    if (!found) return null;
+    return {
+      activatedAt: found.activated_at,
+      lastViewedAt: found.last_viewed_at ?? null,
+    };
+  };
+}
+
 export const getMatchVideo = cache(async function getMatchVideo(
   matchId: string,
 ): Promise<MatchVideo | null> {
@@ -368,5 +490,6 @@ export const getMatchVideo = cache(async function getMatchVideo(
     finalObjectExists,
     mintPlayback: azurePlaybackStorage().mintPlayback,
     loadProviderVideo: supabaseProviderVideo(adminProxy),
+    loadRetention: supabaseRetention(adminProxy),
   });
 });

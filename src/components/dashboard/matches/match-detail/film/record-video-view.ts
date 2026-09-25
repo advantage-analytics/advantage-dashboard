@@ -24,3 +24,27 @@ export function recordMatchVideoView(matchId: string): void {
     // `fetch` itself unavailable (a non-browser render). Nothing to do.
   }
 }
+
+/**
+ * "Keep this video" (T10): the same POST as a play, awaited this time,
+ * because the notice hides only once the clock has actually restarted — a
+ * notice that vanished on a failed request would come back on the next visit
+ * with a month less to go.
+ *
+ * Resolves `true` on a 2xx and `false` on anything else, a network failure
+ * included; it never throws. `fetchImpl` is the spec's seam.
+ */
+export async function keepMatchVideo(
+  matchId: string,
+  fetchImpl?: typeof fetch,
+): Promise<boolean> {
+  try {
+    const response = await (fetchImpl ?? fetch)(
+      `/api/matches/${encodeURIComponent(matchId)}/video/viewed`,
+      { method: "POST", credentials: "same-origin" },
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+}

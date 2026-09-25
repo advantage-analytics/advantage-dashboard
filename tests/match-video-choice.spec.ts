@@ -290,10 +290,76 @@ test("an active attachment answers, carrying its identity, duration and offset",
       durationSeconds: 5400,
       contentType: "video/mp4",
       filename: "match.mp4",
+      // No retention seam in this harness: no clock, no notice.
+      expiresAt: null,
+      monthsUnwatched: null,
+      expiryWarning: false,
     },
   });
   // The job query is never reached for a match that has an attachment.
   expect(calls).not.toContain("loadProviderVideo");
+});
+
+/* SwingVision Add video T10 — the attachment's retention clock. */
+
+const NOW = new Date("2026-09-23T12:00:00.000Z");
+
+test("the attachment carries its expiry from matchVideoExpiry", async () => {
+  const { deps } = harness({ row: ACTIVE_ROW });
+  const video = await resolveMatchVideo(MATCH_ID, {
+    ...deps,
+    now: () => NOW,
+    // Watched Oct 23 2025, activated long before: the view is the clock.
+    loadRetention: async () => ({
+      activatedAt: "2025-01-01T00:00:00.000Z",
+      lastViewedAt: "2025-10-23T12:00:00.000Z",
+    }),
+  });
+  expect(video?.attachment).toMatchObject({
+    expiresAt: "2026-10-23T12:00:00.000Z",
+    monthsUnwatched: 11,
+    expiryWarning: true,
+  });
+});
+
+test("outside the window the clock is carried, and no warning", async () => {
+  const { deps } = harness({ row: ACTIVE_ROW });
+  const video = await resolveMatchVideo(MATCH_ID, {
+    ...deps,
+    now: () => NOW,
+    loadRetention: async () => ({
+      activatedAt: "2026-06-01T00:00:00.000Z",
+      lastViewedAt: null,
+    }),
+  });
+  expect(video?.attachment).toMatchObject({
+    expiresAt: "2027-06-01T00:00:00.000Z",
+    monthsUnwatched: 3,
+    expiryWarning: false,
+  });
+});
+
+test("an unreadable retention clock costs the notice, never the video", async () => {
+  for (const loadRetention of [
+    async () => null,
+    async () => ({ activatedAt: null, lastViewedAt: null }),
+    async () => {
+      throw new Error("column last_viewed_at does not exist");
+    },
+  ]) {
+    const { deps } = harness({ row: ACTIVE_ROW });
+    const video = await resolveMatchVideo(MATCH_ID, {
+      ...deps,
+      now: () => NOW,
+      loadRetention,
+    });
+    expect(video?.url).toBe("https://blob.example/match-video/final.mp4?sig=y");
+    expect(video?.attachment).toMatchObject({
+      expiresAt: null,
+      monthsUnwatched: null,
+      expiryWarning: false,
+    });
+  }
 });
 
 test("visibility is asked BEFORE the privileged read and before anything is signed", async () => {

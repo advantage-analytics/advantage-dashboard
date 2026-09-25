@@ -74,6 +74,15 @@ export interface MatchFilmEntry {
    * empty state then keeps its plain copy rather than guessing a number.
    */
   quota: FilmEntryQuota | null;
+  /**
+   * ISO 8601 — when the match's video was removed for going a year unwatched
+   * (SwingVision Add video T10): the `retired_at` of the match's LATEST
+   * retired row, when that row's `retired_reason` is `'expired'`. Read only
+   * when no video is active, so it is null whenever `attachment` is not
+   * `"absent"`; null too when the read failed or the column is not there yet —
+   * the page then falls back to the plain empty state, which is still true.
+   */
+  expiredAt: string | null;
 }
 
 /**
@@ -110,6 +119,7 @@ export const NO_FILM_ENTRY: MatchFilmEntry = {
   actions: [],
   problem: null,
   quota: null,
+  expiredAt: null,
 };
 
 /* -------------------------------------------------------------------------
@@ -125,6 +135,9 @@ export const NO_FILM_ENTRY: MatchFilmEntry = {
  *                retryable error
  *   stale        something is attached and its file is gone; an error, and
  *                not one a retry fixes
+ *   expired      there is demonstrably no video, and the last one was removed
+ *                for going a year unwatched (T10). Carries the same "Add
+ *                video" offer as `empty`, under different copy
  *
  * Note what does NOT reach `empty`: a `problem` of either kind, and an
  * attachment that is `present` or unknown. A match whose attachment state
@@ -134,10 +147,13 @@ export const NO_FILM_ENTRY: MatchFilmEntry = {
  */
 export function filmEntryView(
   entry: MatchFilmEntry,
-): "empty" | "unavailable" | "stale" {
+): "empty" | "expired" | "unavailable" | "stale" {
   if (entry.problem === "stale_attachment") return "stale";
   if (entry.problem === "storage_unavailable") return "unavailable";
-  return entry.attachment === "absent" ? "empty" : "unavailable";
+  if (entry.attachment !== "absent") return "unavailable";
+  // Only an established absence can be "expired" — the same guard `empty`
+  // has, so a failed read can never tell anyone their video was removed.
+  return entry.expiredAt ? "expired" : "empty";
 }
 
 /** Whether the viewer may take a given entry. Never computed from match data. */
@@ -199,6 +215,48 @@ export function quotaHolderLabels(holder: FilmEntryQuotaHolder): {
     full: `${a} vs ${b}${date ? ` (${date})` : ""}`,
     short: `${surname(a)} vs ${surname(b)}`,
   };
+}
+
+/* -------------------------------------------------------------------------
+ * Expiry copy (T10)
+ * ---------------------------------------------------------------------- */
+
+/**
+ * "Oct 23" / "Oct 23, 2026" from an ISO timestamp, in UTC — the zone the
+ * warning email (`templates/match-video-expiry.ts`) prints the same date in,
+ * so the notice and the email never name two different days. Null for a
+ * value that does not parse, so no copy ever says "Invalid Date".
+ */
+function expiryDate(iso: string, withYear: boolean): string | null {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(withYear ? { year: "numeric" } : {}),
+    timeZone: "UTC",
+  });
+}
+
+/**
+ * The Video view's expiry notice: "Not watched in 11 months, so this video
+ * will be removed on Oct 23. The statistics stay."
+ */
+export function expiryNoticeCopy(
+  monthsUnwatched: number,
+  expiresAt: string,
+): string {
+  const months = `${monthsUnwatched} ${monthsUnwatched === 1 ? "month" : "months"}`;
+  const date = expiryDate(expiresAt, false);
+  const when = date ? `on ${date}` : "soon";
+  return `Not watched in ${months}, so this video will be removed ${when}. The statistics stay.`;
+}
+
+/** The expired state's body, dated with the year the removal happened in. */
+export function expiredBodyCopy(expiredAt: string): string {
+  const date = expiryDate(expiredAt, true);
+  const when = date ? ` on ${date}` : "";
+  return `Nobody watched it for a year, so it was removed${when}. The statistics and the point list are unchanged. Add the film again to get the clips back.`;
 }
 
 /* -------------------------------------------------------------------------

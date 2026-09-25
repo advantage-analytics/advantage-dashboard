@@ -49,6 +49,7 @@ import {
 } from "@/lib/services/match-video/access";
 import type { HttpResult } from "@/lib/services/match-video/http";
 import type { PlaybackAttachmentRow } from "@/lib/services/match-video/playback";
+import { lazyAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import type { Workspace } from "@/lib/workspace/types";
@@ -60,6 +61,41 @@ import {
 import { activeAttachment, finalObjectExists } from "./match-video-seams";
 
 const LOG = "[match-film-entry]";
+
+/**
+ * {@link FilmEntryDeps.loadExpiredAt} over the real table. Service role —
+ * `match_video_attachments` has no client-role policy — and reached only
+ * below the visibility check in {@link resolveMatchFilmEntry}.
+ *
+ * The LATEST retired row decides, not the latest expired one: a video that
+ * expired, was added again and then removed by hand was removed, not expired,
+ * and "Nobody watched it for a year" would be false. Before
+ * `20260924130000_match_video_remove_attachment` is applied the select names
+ * a column that does not exist; PostgREST refuses it and this answers null.
+ */
+async function latestExpiredAt(matchId: string): Promise<string | null> {
+  const { data, error } = await lazyAdminClient()
+    .from("match_video_attachments")
+    .select("retired_reason, retired_at")
+    .eq("match_id", matchId)
+    .eq("state", "retired")
+    .order("retired_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error(`${LOG} could not read the latest retired attachment`, {
+      matchId,
+      sqlstate: error.code,
+      message: error.message,
+    });
+    return null;
+  }
+  const row = data as {
+    retired_reason: string | null;
+    retired_at: string | null;
+  } | null;
+  return row?.retired_reason === "expired" ? row.retired_at : null;
+}
 
 /* -------------------------------------------------------------------------
  * Seams
@@ -86,6 +122,16 @@ export interface FilmEntryDeps extends MatchVideoAccessDeps {
   loadUsage(
     workspace: Pick<Workspace, "id" | "kind">,
   ): Promise<MatchVideoUsage>;
+  /**
+   * When the match's video expired (T10), or null: the `retired_at` of its
+   * latest retired row when that row's `retired_reason` is `'expired'`.
+   * Asked only once the attachment read has said there is no active video.
+   * Must not throw for a missing column — `retired_reason` arrives with a
+   * migration that may not be applied yet — and a failure is null, never an
+   * error: the plain empty state is the truthful fallback. Optional so a
+   * harness that does not care about expiry need not supply it.
+   */
+  loadExpiredAt?(matchId: string): Promise<string | null>;
 }
 
 /** Storage could not be asked. Never `absent`, and never an `add`. */
@@ -94,6 +140,7 @@ const UNREADABLE: MatchFilmEntry = {
   actions: [],
   problem: "storage_unavailable",
   quota: null,
+  expiredAt: null,
 };
 
 /**
@@ -130,6 +177,26 @@ async function readQuota(
         }
       : null;
   return { used: usage.used, cap: usage.cap, holder };
+}
+
+/**
+ * {@link FilmEntryDeps.loadExpiredAt}, guarded: a throw or a missing seam is
+ * null, so the expiry read can never take the Video view down with it.
+ */
+async function readExpiredAt(
+  matchId: string,
+  deps: FilmEntryDeps,
+): Promise<string | null> {
+  if (!deps.loadExpiredAt) return null;
+  try {
+    return await deps.loadExpiredAt(matchId);
+  } catch (cause) {
+    console.error(`${LOG} could not read the expired attachment`, {
+      matchId,
+      cause,
+    });
+    return null;
+  }
 }
 
 /* -------------------------------------------------------------------------
@@ -189,12 +256,24 @@ export async function resolveMatchFilmEntry(
   if (!row) {
     // The one branch that may offer an add, and it is reached only by having
     // actually read the state and been told there is nothing attached.
+    // Whether the last video expired is not privileged either: a teammate
+    // is told the truth about it too, without the offer.
     if (!access.ok) {
-      return { attachment: "absent", actions: [], problem: null, quota: null };
+      const expiredAt = await readExpiredAt(id, deps);
+      return {
+        attachment: "absent",
+        actions: [],
+        problem: null,
+        quota: null,
+        expiredAt,
+      };
     }
     const actions: FilmEntryAction[] = ["add"];
-    const quota = await readQuota(access.value.workspace, deps);
-    return { attachment: "absent", actions, problem: null, quota };
+    const [quota, expiredAt] = await Promise.all([
+      readQuota(access.value.workspace, deps),
+      readExpiredAt(id, deps),
+    ]);
+    return { attachment: "absent", actions, problem: null, quota, expiredAt };
   }
 
   // Replace and adjust are the repairs for everything below, so they survive a
@@ -206,6 +285,7 @@ export async function resolveMatchFilmEntry(
     actions,
     problem,
     quota: null,
+    expiredAt: null,
   });
 
   let exists: MatchVideoResult<boolean>;
@@ -263,5 +343,6 @@ export const getMatchFilmEntry = cache(async function getMatchFilmEntry(
     loadActiveAttachment: activeAttachment,
     finalObjectExists,
     loadUsage: getMatchVideoUsage,
+    loadExpiredAt: latestExpiredAt,
   });
 });

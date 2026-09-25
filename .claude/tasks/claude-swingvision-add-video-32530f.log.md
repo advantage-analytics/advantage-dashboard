@@ -134,3 +134,15 @@ is the runner's. Newest entries at the bottom.
 **changed:** Applied stash 89ade804 and fixed the one blocker per the user's decision (2026-09-24): the email body always reads "in 11 months" — fixed `UNWATCHED` constant in `match-video-expiry.ts`, `monthsUnwatched` removed from the template input and `expiry-sweep.ts`, spec asserts it never says 10 months. Rest as in the blocked entry; migration `20260924150000_match_video_expiry_sweep.sql` still NOT applied to live.
 
 **follow-ups:** see the blocked entry above. **Deploy order:** apply 20260924120000 → 130000 → 140000 → 150000, then deploy; until then the cron's expire/warn steps 500 daily (the sweep still runs).
+
+## T10 · Show the expiry notice, "Keep this video" and the expired state on the Film tab — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** `MatchVideo.attachment` gains `expiresAt` / `monthsUnwatched` / `expiryWarning` from `matchVideoExpiry`, via a separate read of `activated_at` + `last_viewed_at` so an unapplied migration only hides the notice and never breaks playback. `MatchFilmEntry.expiredAt` from the latest retired row when its reason is `expired` (read only after absence is confirmed). `filmEntryView` → `"expired"` below both storage problems. New `film-expiry-notice.tsx` (amber `warningStripCls` strip above player + point list, underlined text action "Keep this video" → `keepMatchVideo` POST `/video/viewed`, hides on success, "That didn't go through." + "Try again" on failure) and `film-expired-state.tsx` (FilmEmptyState anatomy, "Add video" with `add` only, T6 micro line; at the cap shows T6's at-cap link instead). Dates in UTC to match the email. New `tests/film-expiry-states.spec.ts`; fixtures updated in four film specs.
+
+**follow-ups:**
+
+1. The in-app notice says "Not watched in <n> months" (10 or 11 at day 335) while the email always says 11 — make it a fixed "11 months" too for consistency (one line in `expiryNoticeCopy`)?
+2. Playing the video resets the clock server-side but the notice stays until reload — hide it on first play?
+3. Both new reads return nothing until the T5/T8 migrations are applied. Eyes-on in a browser still to do.

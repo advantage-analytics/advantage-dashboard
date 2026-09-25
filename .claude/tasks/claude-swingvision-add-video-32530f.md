@@ -189,7 +189,7 @@ ready).
 
 ## T10 · Show the expiry notice, "Keep this video" and the expired state on the Film tab
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6, T8
 - **files:** (guess) `src/lib/data/match-video-server.ts`, `src/lib/data/match-film-entry-server.ts`, `src/lib/match-video/film-entry.ts`, `src/components/dashboard/matches/match-detail/film/film-tab.tsx`, `film-expiry-notice.tsx` (new), `film-expired-state.tsx` (new), `tests/film-expiry-states.spec.ts` (new, `createLoader()`), `tests/match-film-entry.spec.ts`

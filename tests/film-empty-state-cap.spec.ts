@@ -42,6 +42,7 @@ function render(quota: MatchFilmEntry["quota"]): string {
     actions: ["add"],
     problem: null,
     quota,
+    expiredAt: null,
   };
   return renderToStaticMarkup(React.createElement(FilmEmptyState, { entry }));
 }
