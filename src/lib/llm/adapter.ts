@@ -59,6 +59,12 @@ function getPostHogClient(): PostHog | null {
     host,
     flushAt: 1,
     flushInterval: 0,
+    // Deliberate (decided 2026-09-25): prompts and replies are recorded in
+    // full so a bad insight can be debugged from its trace. They carry player
+    // first names and match stats, which makes this the one place those reach
+    // PostHog — replays mask all text and the warehouse role sees neither.
+    // The privacy policy must say so; flip to true to keep only model, cost,
+    // tokens and latency.
     privacyMode: false,
   });
   return globalThis.__posthogLLMClient;

@@ -1,11 +1,16 @@
 -- Read-only access for PostHog's data warehouse, and nothing else.
 --
 -- PostHog charts video-analysis volume, failures and minutes used per program.
--- It does not need, and must not get, athletes' names, emails, match stats, or
--- the signed video/result URLs processing_jobs carries (sas_url,
--- trimmed_video_url, players_url, trajectories_url, video_access_token,
--- raw_webhook_payload). So it reads three views of hand-picked columns in a
--- schema of their own, through a role that can see only that schema.
+-- Through this connection it does not need, and must not get, athletes' names,
+-- emails, match stats, or the signed video/result URLs processing_jobs
+-- carries (sas_url, trimmed_video_url, players_url, trajectories_url,
+-- video_access_token, raw_webhook_payload). So it reads three views of
+-- hand-picked columns in a schema of their own, through a role that can see
+-- only that schema.
+--
+-- (Separately, and by decision, AI observability records LLM prompts that
+-- include player first names and stats — see privacyMode in
+-- src/lib/llm/adapter.ts. This file governs only the warehouse connection.)
 --
 -- Why views rather than grants on the tables: a column list is the only way to
 -- keep those URLs out, and PostHog's sync selects whole tables. The views run
