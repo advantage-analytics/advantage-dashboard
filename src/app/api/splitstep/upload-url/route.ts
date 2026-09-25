@@ -101,9 +101,9 @@ export async function POST(request: NextRequest) {
       return typeof seconds === "number" ? seconds : null;
     },
 
-    async remainingQuotaSeconds(workspace) {
+    async remainingQuotaSeconds(workspace, userId) {
       // Throws on a failed read; the handler logs it and fails open.
-      return peekQuota(adminClient(), workspace);
+      return peekQuota(adminClient(), workspace, userId);
     },
 
     mintUploadSas,

@@ -188,6 +188,20 @@ export function getMonthlyCapHours(accountType: AccountType): number {
   return getMonthlyCapSeconds(accountType) / 3600;
 }
 
+/**
+ * The individual tier's SHARED allocation with the vendor, through December:
+ * 20 hand-picked players, under 10 hours a month between them. Every
+ * workspace `quotaTierFor()` puts on the individual figure (personal
+ * workspaces and self-serve custom orgs) draws from it, on top of its own 2h —
+ * see `reserveQuota()` and 20260925024406_individual_pool_quota.sql, which
+ * holds the player flag (`users.individual_pilot`) and its limit of 20.
+ */
+export const INDIVIDUAL_POOL_MONTHLY_CAP_HOURS = 10;
+
+export function getIndividualPoolCapSeconds(): number {
+  return INDIVIDUAL_POOL_MONTHLY_CAP_HOURS * 60 * 60;
+}
+
 /** First of the current month, UTC — the `processing_usage.billing_month` key. */
 export function currentBillingMonth(now: Date = new Date()): string {
   const year = now.getUTCFullYear();
