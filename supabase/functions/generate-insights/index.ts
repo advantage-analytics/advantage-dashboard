@@ -49,24 +49,28 @@ async function fetchWithRetry(
   }
 }
 
+/**
+ * Analytics only — nothing here may fail or stall the review. Every step,
+ * trace id included, sits inside the try, and PostHog gets three seconds.
+ */
 async function captureGeminiGeneration({
   userId,
   prompt,
   output,
-  traceId,
   latency,
 }: {
   userId?: string;
   prompt: string;
   output: string;
-  traceId: string;
   latency: number;
 }): Promise<void> {
   if (!POSTHOG_PROJECT_TOKEN || !POSTHOG_HOST || !userId) return;
 
   try {
+    const traceId = crypto.randomUUID();
     const response = await fetch(new URL("/i/v0/e/", POSTHOG_HOST).toString(), {
       method: "POST",
+      signal: AbortSignal.timeout(3000),
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         api_key: POSTHOG_PROJECT_TOKEN,
@@ -264,7 +268,6 @@ serve(async (req) => {
     `;
 
     // 6. Call the Gemini API via REST
-    const traceId = crypto.randomUUID();
     const generationStartedAt = Date.now();
     const geminiResponse = await fetchWithRetry(geminiUrl, {
       method: "POST",
@@ -306,7 +309,6 @@ serve(async (req) => {
       userId,
       prompt,
       output: generatedInsights,
-      traceId,
       latency: (Date.now() - generationStartedAt) / 1000,
     });
     const insightsJSON = JSON.parse(generatedInsights);
