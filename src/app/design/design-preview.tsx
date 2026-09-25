@@ -6,6 +6,7 @@ import {
   type BetaWelcomeTerms,
 } from "@/components/dashboard/beta-welcome-dialog";
 import { advButton } from "@/lib/ui/adv-button";
+import { SidebarPreview } from "./sidebar-preview";
 
 const VARIANTS: readonly {
   id: string;
@@ -52,6 +53,24 @@ export function DesignPreview() {
           </button>
         ))}
       </div>
+
+      <h2 className="mt-12 text-[16px] font-medium text-[var(--ink-900)]">
+        Reopening it from the sidebar
+      </h2>
+      <p className="mt-1 max-w-[60ch] text-[12px] leading-[1.6] text-[var(--ink-600)]">
+        A Beta row above Settings, expanded and collapsed. Click it to reopen
+        the dialog.
+      </p>
+      <div className="mt-5 flex items-start gap-8">
+        {[true, false].map((expanded) => (
+          <SidebarPreview
+            key={String(expanded)}
+            expanded={expanded}
+            onOpenBeta={() => setOpen(true)}
+          />
+        ))}
+      </div>
+
       <BetaWelcomeDialog
         open={open}
         onOpenChange={setOpen}
