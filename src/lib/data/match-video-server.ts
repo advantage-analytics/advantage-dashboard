@@ -114,7 +114,7 @@ export interface MatchVideoAttachment {
    * Retention (SwingVision Add video T10), from `matchVideoExpiry` at the
    * moment of this render: ISO 8601 when the video will be removed if nobody
    * watches it. Null when the clock could not be read — including before
-   * `20260924140000_match_video_last_viewed` is applied — and then the page
+   * `20260925023109_match_video_last_viewed` is applied — and then the page
    * warns about nothing rather than guessing.
    */
   expiresAt: string | null;

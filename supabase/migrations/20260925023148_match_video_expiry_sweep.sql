@@ -1,8 +1,8 @@
 -- SwingVision Add video T9 · warn at 11 months, expire at a year. Builds on:
 --   20260919045208_create_match_video_attachments  (table, before-update trigger)
 --   20260919080217_match_video_attachment_cleanup   (claim / confirm)
---   20260924130000_match_video_remove_attachment    (retired_reason)
---   20260924140000_match_video_last_viewed          (last_viewed_at, expiry_warned_at)
+--   20260925023035_match_video_remove_attachment    (retired_reason)
+--   20260925023109_match_video_last_viewed          (last_viewed_at, expiry_warned_at)
 -- Checked against the LIVE definitions (2026-09-24): match_video_attachments
 -- has retired_at, cleanup_next_attempt_at and the retired_at_check
 -- ((state = 'retired') = (retired_at is not null)); none of the three
@@ -12,7 +12,7 @@
 -- cleanup_next_attempt_at is due, with collect_final = true.
 --
 -- THE CLOCK is coalesce(last_viewed_at, activated_at), exactly as
--- 20260924140000 and src/lib/match-video/expiry.ts define it.
+-- 20260925023109 and src/lib/match-video/expiry.ts define it.
 --
 -- WHO HOLDS THE POLICY. The day counts are PARAMETERS, not literals: the
 -- one source is MATCH_VIDEO_EXPIRY_DAYS (365) and MATCH_VIDEO_EXPIRY_WARN_DAYS
@@ -289,7 +289,7 @@ begin
        and table_name = 'match_video_attachments'
        and column_name = 'expiry_warned_at'
   ) then
-    raise exception 'match_video_attachments.expiry_warned_at missing — apply 20260924140000 first';
+    raise exception 'match_video_attachments.expiry_warned_at missing — apply 20260925023109 first';
   end if;
 end
 $$;

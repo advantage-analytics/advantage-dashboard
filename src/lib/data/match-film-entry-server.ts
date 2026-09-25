@@ -70,7 +70,7 @@ const LOG = "[match-film-entry]";
  * The LATEST retired row decides, not the latest expired one: a video that
  * expired, was added again and then removed by hand was removed, not expired,
  * and "Nobody watched it for a year" would be false. Before
- * `20260924130000_match_video_remove_attachment` is applied the select names
+ * `20260925023035_match_video_remove_attachment` is applied the select names
  * a column that does not exist; PostgREST refuses it and this answers null.
  */
 async function latestExpiredAt(matchId: string): Promise<string | null> {

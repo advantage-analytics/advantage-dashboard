@@ -1,7 +1,7 @@
 -- SwingVision Add video T8 · when a match video was last watched. Builds on:
 --   20260919045208_create_match_video_attachments  (table, before-update trigger)
---   20260924120000_match_video_attachment_cap       (active set + usage read)
---   20260924130000_match_video_remove_attachment    (retired_reason)
+--   20260925023004_match_video_attachment_cap       (active set + usage read)
+--   20260925023035_match_video_remove_attachment    (retired_reason)
 -- Checked against the LIVE database (2026-09-24): match_video_attachments has
 -- activated_at but neither column below; its only trigger,
 -- match_video_attachments_before_update, guards the lifecycle and the blob
@@ -104,7 +104,7 @@ comment on function public.match_video_record_view(uuid) is
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. The active row set and the usage read, with last_viewed_at
 -- ─────────────────────────────────────────────────────────────────────────────
--- Bodies as in 20260924120000_match_video_attachment_cap; the only change is
+-- Bodies as in 20260925023004_match_video_attachment_cap; the only change is
 -- the extra column.
 
 drop function if exists public.match_video_workspace_usage(uuid, text, uuid);

@@ -1,7 +1,7 @@
 -- SwingVision Add video T5 · removing an ACTIVE match video. Builds on:
 --   20260919045208_create_match_video_attachments  (table, state trigger)
 --   20260919080217_match_video_attachment_cleanup   (claim / confirm)
---   20260924120000_match_video_attachment_cap       (cap + usage)
+--   20260925023004_match_video_attachment_cap       (cap + usage)
 -- Checked against the LIVE definitions (2026-09-24): match_video_attachments
 -- has retired_at and cleanup_next_attempt_at but no retired_reason; the
 -- before-update trigger forbids retired → anything and active → pending, and

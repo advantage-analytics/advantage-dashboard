@@ -9,7 +9,7 @@ import type { Workspace } from "@/lib/workspace/types";
  *
  * "Used" is defined in exactly one place: the row set
  * `match_video_workspace_active_attachments` returns in SQL
- * (`supabase/migrations/20260924120000_match_video_attachment_cap.sql`), which
+ * (`supabase/migrations/20260925023004_match_video_attachment_cap.sql`), which
  * is also what `match_video_reserve_upload` and
  * `match_video_activate_attachment` count before refusing an add with
  * `attachment_limit_reached`. This reads it through
@@ -51,7 +51,7 @@ interface UsageRpcRow {
   uploaded_by: string | null;
   verified_size_bytes: number | string | null;
   activated_at: string | null;
-  /** Absent until `20260924140000_match_video_last_viewed` is applied. */
+  /** Absent until `20260925023109_match_video_last_viewed` is applied. */
   last_viewed_at?: string | null;
   player1_name: string | null;
   player2_name: string | null;

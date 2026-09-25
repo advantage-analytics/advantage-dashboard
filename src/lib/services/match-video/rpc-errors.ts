@@ -9,7 +9,7 @@
  * `missing_source_timing`, `invalid_alignment`, `insufficient_coverage`,
  * `unsupported_media`, `empty_file` and `file_too_large`, and each lands on
  * the status its code already names (422 or 413) without this module knowing
- * which function raised it. The cap (`20260924120000_*`) works the same way:
+ * which function raised it. The cap (`20260925023004_*`) works the same way:
  * `attachment_limit_reached` arrives as the message under SQLSTATE 55000 —
  * the class `stale_attachment` also uses — and lands on its own 409 because
  * the message, not the SQLSTATE, picks the code.

@@ -3275,7 +3275,7 @@ test.describe("match_video_attachments cleanup claim + fencing RPCs (live)", () 
 
 /* ────────────────────────────────────────────────────────────────────────────
  * SwingVision Add video T4 · the per-workspace cap + workspace usage
- * `20260924120000_match_video_attachment_cap.sql`
+ * `20260925023004_match_video_attachment_cap.sql`
  *
  *  1. Privilege boundary: anon and a signed-in session cannot execute
  *     `match_video_workspace_usage`; nobody through the API — service role
@@ -3862,7 +3862,7 @@ test.describe("match_video_attachments workspace cap + usage RPCs (live)", () =>
 
 /* ────────────────────────────────────────────────────────────────────────────
  * SwingVision Add video T5 · removing an active video
- * `20260924130000_match_video_remove_attachment.sql`
+ * `20260925023035_match_video_remove_attachment.sql`
  *
  *  1. Privilege boundary: anon and a signed-in session cannot execute
  *     `match_video_remove_attachment`; `retired_reason` is checked.
@@ -4452,7 +4452,7 @@ test.describe("match_video_attachments removal RPC (live)", () => {
 
 /* ────────────────────────────────────────────────────────────────────────────
  * SwingVision Add video T9 · warn at 11 months, expire at a year
- * `20260924150000_match_video_expiry_sweep.sql`
+ * `20260925023148_match_video_expiry_sweep.sql`
  *
  *  1. Privilege boundary: anon and a signed-in session cannot execute
  *     `match_video_expire_unwatched` or `match_video_claim_expiry_warnings`;

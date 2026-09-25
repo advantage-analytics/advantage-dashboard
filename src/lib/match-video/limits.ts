@@ -69,7 +69,7 @@ export const ATTACHMENT_TRIM_PAD_SECONDS = 10;
  * The one place these numbers live. The SQL functions never hard-code them:
  * `match_video_reserve_upload` and `match_video_activate_attachment` take the
  * number for the caller's workspace kind as `p_active_limit`
- * (`supabase/migrations/20260924120000_match_video_attachment_cap.sql`), and
+ * (`supabase/migrations/20260925023004_match_video_attachment_cap.sql`), and
  * Settings › Usage reads its cap from here too, so the page and the refusal
  * always name the same allowance. Only an ADD counts against it — a replace
  * swaps one active video for another.

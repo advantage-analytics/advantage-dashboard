@@ -2,7 +2,7 @@
  * When an unwatched match video expires (SwingVision Add video T8).
  *
  * The clock is `coalesce(last_viewed_at, activated_at)` — exactly the
- * expression `supabase/migrations/20260924140000_match_video_last_viewed.sql`
+ * expression `supabase/migrations/20260925023109_match_video_last_viewed.sql`
  * documents. A view (the player's first `play` of a loaded source, POSTed to
  * `/api/matches/[matchId]/video/viewed`) restarts it; nothing else does.
  * `last_viewed_at` was never backfilled, so a video nobody has played since
