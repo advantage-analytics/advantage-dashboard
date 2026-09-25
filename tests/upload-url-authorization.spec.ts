@@ -6,7 +6,10 @@ import {
   type UploadUrlDeps,
   type UploadUrlMatch,
 } from "@/app/api/splitstep/upload-url/handler";
-import { capRefusalMessage } from "@/lib/services/splitstep/quota";
+import {
+  capRefusalMessage,
+  type QuotaLimit,
+} from "@/lib/services/splitstep/quota";
 import type { RosterIdentity } from "@/lib/workspace/upload-eligibility";
 import { PENDING_APPROVAL_NOTICE } from "@/lib/workspace/upload-eligibility";
 import {
@@ -116,6 +119,8 @@ function harness(input: {
   billableSeconds?: number | null;
   /** Seconds left this month; defaults to plenty. `"throws"` = read failed. */
   remainingSeconds?: number | "throws";
+  /** Which limit the peek reports; "account" unless a test says otherwise. */
+  limit?: QuotaLimit;
 }): Harness {
   const minted: string[] = [];
   const recorded: Array<{ matchId: string; blobName: string }> = [];
@@ -147,7 +152,7 @@ function harness(input: {
         remainingSeconds,
         usedSeconds: CAP_SECONDS - remainingSeconds,
         capSeconds: CAP_SECONDS,
-        limit: "account" as const,
+        limit: input.limit ?? "account",
       };
     },
     mintUploadSas: ({ blobName }) => {
@@ -480,6 +485,17 @@ test("a match longer than what is left this month → 429, nothing minted", asyn
   );
   expect(r.json.usedSeconds).toBe(CAP_SECONDS - 1799);
   expect(r.json.capSeconds).toBe(CAP_SECONDS);
+});
+
+test("an uploader off the individual pilot list → 403, nothing minted", async () => {
+  const h = harness({
+    billableSeconds: 600,
+    remainingSeconds: 0,
+    limit: "pool_players",
+  });
+  const r = await call(h);
+  expectDenied(h, 403, r);
+  expect(r.json.error).toMatch(/invite-only during the pilot/);
 });
 
 test("a match that exactly fits what is left → 200", async () => {

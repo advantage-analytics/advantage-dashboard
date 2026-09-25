@@ -268,8 +268,16 @@ async function reservePooled(params: {
   seconds: number;
   now?: Date;
 }): Promise<QuotaReservation> {
-  const { supabase, jobId, userId, workspace, accountType, capSeconds } =
-    params;
+  const {
+    supabase,
+    jobId,
+    userId,
+    workspace,
+    accountType,
+    capSeconds,
+    seconds,
+    now,
+  } = params;
 
   // Atomic, like reserve_processing_quota: the pool is a sum across accounts,
   // so a read-then-insert here would let two players race past it.
@@ -279,27 +287,25 @@ async function reservePooled(params: {
       p_account_id: workspace.id,
       p_account_type: accountType,
       p_created_by: userId,
-      p_billing_month: currentBillingMonth(params.now),
-      p_seconds: Math.ceil(params.seconds),
+      p_billing_month: currentBillingMonth(now),
+      p_seconds: Math.ceil(seconds),
       p_cap_seconds: capSeconds,
       p_pool_cap_seconds: getIndividualPoolCapSeconds(),
     })
     .single();
 
-  if (error || !data) {
-    throw new Error(
-      `Could not reserve processing quota: ${error?.message ?? "no row returned"}`,
-    );
-  }
-
-  const row = data as {
-    ok: boolean;
-    refusal: QuotaLimit | null;
-    used_seconds: number;
-    cap_seconds: number;
-    pool_used_seconds: number;
-    pool_cap_seconds: number;
-  };
+  const row = requireRpcRow(
+    data as {
+      ok: boolean;
+      refusal: QuotaLimit | null;
+      used_seconds: number;
+      cap_seconds: number;
+      pool_used_seconds: number;
+      pool_cap_seconds: number;
+    } | null,
+    error,
+    "reserve processing quota",
+  );
 
   if (row.ok) {
     return {
@@ -320,11 +326,32 @@ async function reservePooled(params: {
     capSeconds: refusedCap,
     message: quotaRefusalMessage({
       limit,
-      neededSeconds: params.seconds,
+      neededSeconds: seconds,
       remainingSeconds: secondsLeft(usedSeconds, refusedCap),
       capSeconds: refusedCap,
     }),
+    // Off the pilot list is about who is asking, like the upload switches:
+    // 403, not a 429 that says "wait for next month".
+    ...(limit === "pool_players" ? { permission: true } : {}),
   };
+}
+
+/**
+ * Unwraps a single-row RPC result the way every quota RPC here returns one,
+ * or throws the uniform message the callers all threw by hand before this
+ * was pulled out.
+ */
+function requireRpcRow<T>(
+  data: T | null,
+  error: { message: string } | null,
+  what: string,
+): T {
+  if (error || !data) {
+    throw new Error(
+      `Could not ${what}: ${error?.message ?? "no row returned"}`,
+    );
+  }
+  return data;
 }
 
 /**
@@ -478,13 +505,14 @@ export async function peekQuota(
     })
     .single();
 
-  if (poolError || !pool) {
-    throw new Error(
-      `Could not read individual pool usage: ${poolError?.message ?? "no row returned"}`,
-    );
-  }
-
-  return pickPeek(own, pool as PoolUsageRow);
+  return pickPeek(
+    own,
+    requireRpcRow(
+      pool as PoolUsageRow | null,
+      poolError,
+      "read individual pool usage",
+    ),
+  );
 }
 
 /** One row of `individual_pool_usage()`. */

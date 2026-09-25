@@ -286,35 +286,36 @@ export async function handleUploadUrl(
       deps.loadBillableSeconds(matchId),
       deps.remainingQuotaSeconds(billingWorkspace, userId),
     ]);
-    const overAllowance =
-      billable === null || peek === null
-        ? null
-        : peekRefusalMessage(peek, billable);
     if (billable === null || peek === null) {
       console.error(`${LOG} allowance not checked — figure unavailable`, {
         matchId,
         workspaceId: billingWorkspace.id,
         missing: billable === null ? "billable_seconds" : "usage",
       });
-    } else if (overAllowance !== null) {
-      console.log(`${LOG} refused — over allowance`, {
-        matchId,
-        workspaceId: billingWorkspace.id,
-        billable,
-        limit: peek.limit,
-        usedSeconds: peek.usedSeconds,
-        capSeconds: peek.capSeconds,
-      });
-      // 429, as `/api/splitstep/jobs` answers the same refusal. `error` rides
-      // the path described above; the two figures are for whoever reads them.
-      return NextResponse.json(
-        {
-          error: overAllowance,
+    } else {
+      const overAllowance = peekRefusalMessage(peek, billable);
+      if (overAllowance !== null) {
+        console.log(`${LOG} refused — over allowance`, {
+          matchId,
+          workspaceId: billingWorkspace.id,
+          billable,
+          limit: peek.limit,
           usedSeconds: peek.usedSeconds,
           capSeconds: peek.capSeconds,
-        },
-        { status: 429 },
-      );
+        });
+        // 429, as `/api/splitstep/jobs` answers the same refusal. `error`
+        // rides the path described above; the two figures are for whoever
+        // reads them.
+        return NextResponse.json(
+          {
+            error: overAllowance,
+            usedSeconds: peek.usedSeconds,
+            capSeconds: peek.capSeconds,
+          },
+          // Off the pilot list is a 403, as `/api/splitstep/jobs` answers it.
+          { status: peek.limit === "pool_players" ? 403 : 429 },
+        );
+      }
     }
   } catch (err) {
     console.error(`${LOG} allowance not checked — read threw`, {
