@@ -490,7 +490,7 @@ export async function peekQuota(
 /** One row of `individual_pool_usage()`. */
 export interface PoolUsageRow {
   pool_used_seconds: number;
-  /** On the hand-picked pilot list (`individual_pilot_players`). */
+  /** `users.individual_pilot`: on the hand-picked pilot list. */
   is_player: boolean;
 }
 

@@ -5,14 +5,13 @@
 -- 40h against a 10h allocation.
 --
 -- The 20 are HAND-PICKED (owner decision, 2026-09-25): a person may send video
--- on the individual figure only while they are in `individual_pilot_players`.
--- The table holds at most 20 rows; nothing in the app writes it. Add or remove
--- someone from the SQL editor:
+-- on the individual figure only while `users.individual_pilot` is true. At
+-- most 20 users may have it. Nothing in the app writes it: tick or untick it
+-- in the Supabase Table Editor, or from the SQL editor:
 --
---   select public.add_individual_pilot_player('player@example.com');
---   delete from public.individual_pilot_players
---    where user_id = (select id from auth.users where email = 'player@example.com');
---
+--   update public.users set individual_pilot = true
+--    where email = 'player@example.com';
+
 -- ADDITIVE ON PURPOSE. `reserve_processing_quota` is untouched and collegiate
 -- programs keep calling it, so applying this before the code that calls it
 -- changes nothing live. The code (`splitstep/quota.ts`) must NOT deploy before
@@ -24,57 +23,55 @@
 -- files under the program ledger but draws the individual figure. In SQL that
 -- is "not a college program's ledger", read from `programs.org_type`.
 
--- ── The pilot list ───────────────────────────────────────────────────────────
+-- ── The pilot flag ───────────────────────────────────────────────────────────
 
-create table if not exists public.individual_pilot_players (
-  user_id  uuid primary key references auth.users (id) on delete cascade,
-  added_at timestamptz not null default now()
-);
+alter table public.users
+  add column if not exists individual_pilot boolean not null default false;
 
--- Service role and the SQL editor only: no policy, so RLS refuses everyone else.
-alter table public.individual_pilot_players enable row level security;
+comment on column public.users.individual_pilot is
+  'On the hand-picked individual video pilot (at most 20). Written only by operators; users_individual_pilot_guard blocks client writes and the 21st.';
 
-create or replace function public.individual_pilot_players_limit()
+-- Operator-owned, like is_admin and plan: `authenticated` holds column-scoped
+-- UPDATE on public.users that does not name this column
+-- (20260914100000_users_block_admin_self_update.sql), and this trigger blocks
+-- a client write even if a future grant widens. It also holds the limit of 20,
+-- serialized so two ticks at once cannot both see 19.
+create or replace function public.users_individual_pilot_guard()
 returns trigger
 language plpgsql
 set search_path = ''
 as $$
 begin
-  -- Serialize adds so two at once cannot both see 19.
-  perform pg_advisory_xact_lock(hashtext('individual_pilot_players'));
-  if not exists (select 1 from public.individual_pilot_players
-                  where user_id = new.user_id)
-     and (select count(*) from public.individual_pilot_players) >= 20 then
-    raise exception 'the individual pilot is full: at most 20 players'
-      using errcode = '54000';
+  if not (
+       (tg_op = 'INSERT' and new.individual_pilot is true)
+       or (tg_op = 'UPDATE' and new.individual_pilot is distinct from old.individual_pilot)
+     ) then
+    return new;
   end if;
+
+  if coalesce(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '')
+       in ('authenticated', 'anon') then
+    raise exception 'individual_pilot is managed by operators and cannot be changed by clients'
+      using errcode = '42501';
+  end if;
+
+  if new.individual_pilot is true then
+    perform pg_advisory_xact_lock(hashtext('users.individual_pilot'));
+    if (select count(*) from public.users
+         where individual_pilot and id <> new.id) >= 20 then
+      raise exception 'the individual pilot is full: at most 20 players'
+        using errcode = '54000';
+    end if;
+  end if;
+
   return new;
 end;
 $$;
 
-drop trigger if exists individual_pilot_players_limit on public.individual_pilot_players;
-create trigger individual_pilot_players_limit
-  before insert on public.individual_pilot_players
-  for each row execute function public.individual_pilot_players_limit();
-
-create or replace function public.add_individual_pilot_player(p_email text)
-returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  v_id uuid;
-begin
-  select id into v_id from auth.users where lower(email) = lower(btrim(p_email));
-  if v_id is null then
-    raise exception 'no account with email %', p_email using errcode = 'P0002';
-  end if;
-  insert into public.individual_pilot_players (user_id) values (v_id)
-  on conflict (user_id) do nothing;
-  return v_id;
-end;
-$$;
+drop trigger if exists users_individual_pilot_guard on public.users;
+create trigger users_individual_pilot_guard
+  before insert or update of individual_pilot on public.users
+  for each row execute function public.users_individual_pilot_guard();
 
 -- ── Pool usage ───────────────────────────────────────────────────────────────
 
@@ -99,9 +96,9 @@ as $$
                                         from public.programs p
                                        where p.id = u.account_id
                                          and p.org_type <> 'college')))), 0)::integer,
-    exists (select 1
-              from public.individual_pilot_players pp
-             where pp.user_id = p_created_by);
+    coalesce((select usr.individual_pilot
+                from public.users usr
+               where usr.id = p_created_by), false);
 $$;
 
 -- Same contract as reserve_processing_quota, plus the pool. `refusal` names
@@ -184,6 +181,5 @@ end;
 $$;
 
 -- Service role only, like reserve_processing_quota: the pool is everyone's rows.
-revoke all on function public.add_individual_pilot_player(text) from public, anon, authenticated;
 revoke all on function public.individual_pool_usage(date, uuid) from public, anon, authenticated;
 revoke all on function public.reserve_individual_pool_quota(uuid, uuid, text, uuid, date, integer, integer, integer) from public, anon, authenticated;

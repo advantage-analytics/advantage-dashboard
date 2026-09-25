@@ -194,7 +194,7 @@ export function getMonthlyCapHours(accountType: AccountType): number {
  * workspace `quotaTierFor()` puts on the individual figure (personal
  * workspaces and self-serve custom orgs) draws from it, on top of its own 2h —
  * see `reserveQuota()` and 20260924193000_individual_pool_quota.sql, which
- * holds the player list (`individual_pilot_players`) and its limit of 20.
+ * holds the player flag (`users.individual_pilot`) and its limit of 20.
  */
 export const INDIVIDUAL_POOL_MONTHLY_CAP_HOURS = 10;
 
