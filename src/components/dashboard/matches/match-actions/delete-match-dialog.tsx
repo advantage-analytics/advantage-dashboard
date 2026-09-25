@@ -3,6 +3,12 @@
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { ConfirmDialog, Em } from "@/components/ui/confirm-dialog";
+import posthog from "posthog-js";
+
+const isPostHogConfigured = Boolean(
+  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
+  process.env.NEXT_PUBLIC_POSTHOG_HOST,
+);
 
 interface DeleteMatchDialogProps {
   matchId: string;
@@ -33,6 +39,7 @@ export function DeleteMatchDialog({
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.error ?? "Failed to delete match");
       }
+      if (isPostHogConfigured) posthog.capture("match_deleted");
       onOpenChange(false);
       if (onDeleted) {
         onDeleted();

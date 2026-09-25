@@ -11,6 +11,12 @@ import {
 } from "@/components/ui/float-menu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { createClient } from "@/lib/supabase/client";
+import posthog from "posthog-js";
+
+const isPostHogConfigured = Boolean(
+  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
+  process.env.NEXT_PUBLIC_POSTHOG_HOST,
+);
 
 /**
  * The admin shell's account control — the chrome's one circle, and the only
@@ -53,6 +59,7 @@ export function AdminAccountMenu({
     try {
       const { error } = await createClient().auth.signOut({ scope: "local" });
       if (error) throw error;
+      if (isPostHogConfigured) posthog.reset();
       router.push("/login");
     } catch {
       setIsSigningOut(false);

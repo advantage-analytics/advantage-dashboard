@@ -16,6 +16,12 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { DateField } from "@/components/ui/date-field";
 import { todayISO } from "@/lib/schedule/format";
+import posthog from "posthog-js";
+
+const isPostHogConfigured = Boolean(
+  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
+  process.env.NEXT_PUBLIC_POSTHOG_HOST,
+);
 
 /**
  * Settings › Profile.
@@ -134,10 +140,18 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
     setError(null);
     startSaving(async () => {
       const result = await saveProfile(draft);
-      if (result.ok) setSaved(draft);
-      else setError(result.error);
+      if (result.ok) {
+        if (isPostHogConfigured) {
+          posthog.capture("profile_updated", {
+            changed_fields: FIELDS.filter(
+              (field) => draft[field] !== saved[field],
+            ),
+          });
+        }
+        setSaved(draft);
+      } else setError(result.error);
     });
-  }, [draft]);
+  }, [draft, saved]);
 
   const displayName =
     `${draft.firstName} ${draft.lastName}`.trim() || viewer.name;

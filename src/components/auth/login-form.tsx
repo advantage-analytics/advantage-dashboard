@@ -19,6 +19,12 @@ import {
   AUTH_NEXT_MAX_AGE_SECONDS,
 } from "@/lib/auth/auth-next-cookie";
 import { safeNext } from "@/lib/auth/safe-next";
+import posthog from "posthog-js";
+
+const isPostHogConfigured = Boolean(
+  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
+  process.env.NEXT_PUBLIC_POSTHOG_HOST,
+);
 
 /**
  * Google's brand mark. Hoisted out of the component because it is static and
@@ -82,11 +88,18 @@ export function LoginForm({ next }: { next?: string }) {
     setIsLoading(true);
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const {
+        data: { user },
+        error: signInError,
+      } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       if (signInError) throw signInError;
+      if (user && isPostHogConfigured) {
+        posthog.identify(user.id);
+        posthog.capture("login_completed", { method: "password" });
+      }
       // The requested destination if there was one — an invite link parks
       // `/join/<token>` here so the accept page is what opens after sign-in —
       // otherwise the home dashboard, even if the profile is incomplete.

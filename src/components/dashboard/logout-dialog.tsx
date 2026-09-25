@@ -8,6 +8,12 @@ import { PersonAvatar } from "@/components/ui/person-avatar";
 import { createClient } from "@/lib/supabase/client";
 import { useUnsavedChanges } from "@/components/dashboard/settings/unsaved-changes-context";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import posthog from "posthog-js";
+
+const isPostHogConfigured = Boolean(
+  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
+  process.env.NEXT_PUBLIC_POSTHOG_HOST,
+);
 
 /**
  * The single sign-out confirmation for the dashboard.
@@ -74,6 +80,7 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
       // that; only the step that says "every device" in its title does.
       const { error } = await createClient().auth.signOut({ scope });
       if (error) throw error;
+      if (isPostHogConfigured) posthog.reset();
       if (scope === "global") {
         // A full load, as Settings › Account did: every cached route belongs
         // to a session that no longer exists anywhere. The discard was

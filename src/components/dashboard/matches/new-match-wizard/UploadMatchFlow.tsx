@@ -48,6 +48,12 @@ import {
 } from "./upload-progress";
 import { WizardShell } from "./WizardShell";
 import { sweepPreparedVideos } from "@/lib/video/trim";
+import posthog from "posthog-js";
+
+const isPostHogConfigured = Boolean(
+  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
+  process.env.NEXT_PUBLIC_POSTHOG_HOST,
+);
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";
@@ -89,6 +95,7 @@ export function UploadMatchFlow({
   const createdRef = useRef<CreatedMatch | null>(null);
   const handleCreated = useCallback((match: CreatedMatch) => {
     createdRef.current = match;
+    if (isPostHogConfigured) posthog.capture("match_created");
     setCreated(match);
   }, []);
   /**
