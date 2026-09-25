@@ -1,9 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import {
-  getIndividualPoolCapSeconds,
-  INDIVIDUAL_POOL_PLAYER_LIMIT,
-} from "@/lib/services/splitstep/config";
+import { getIndividualPoolCapSeconds } from "@/lib/services/splitstep/config";
 import {
   peekRefusalMessage,
   pickPeek,
@@ -29,9 +26,8 @@ function own(usedSeconds: number, capSeconds = 2 * HOUR): QuotaPeek {
   };
 }
 
-test("the pool is 10 hours for 20 players", () => {
+test("the pool is 10 hours", () => {
   expect(POOL_CAP).toBe(10 * HOUR);
-  expect(INDIVIDUAL_POOL_PLAYER_LIMIT).toBe(20);
 });
 
 test("personal workspaces and custom orgs draw from the pool; colleges do not", () => {
@@ -43,7 +39,6 @@ test("personal workspaces and custom orgs draw from the pool; colleges do not", 
 test("with room in the pool, a player's own cap is the limit", () => {
   const peek = pickPeek(own(HOUR), {
     pool_used_seconds: 2 * HOUR,
-    player_count: 5,
     is_player: true,
   });
   expect(peek.limit).toBe("account");
@@ -53,7 +48,6 @@ test("with room in the pool, a player's own cap is the limit", () => {
 test("a nearly spent pool caps a player who still has their own hours", () => {
   const peek = pickPeek(own(0), {
     pool_used_seconds: POOL_CAP - 30 * 60,
-    player_count: 12,
     is_player: true,
   });
   expect(peek.limit).toBe("pool_hours");
@@ -66,25 +60,15 @@ test("a nearly spent pool caps a player who still has their own hours", () => {
   expect(peekRefusalMessage(peek, 30 * 60)).toBeNull();
 });
 
-test("a 21st player is refused however much time is left", () => {
+test("someone off the pilot list is refused however much time is left", () => {
   const peek = pickPeek(own(0), {
     pool_used_seconds: 0,
-    player_count: 20,
     is_player: false,
   });
   expect(peek.limit).toBe("pool_players");
   expect(peekRefusalMessage(peek, 60)).toContain(
-    "limited to 20 individual players",
+    "invite-only during the pilot",
   );
-});
-
-test("one of the 20 keeps their place when the limit is full", () => {
-  const peek = pickPeek(own(0), {
-    pool_used_seconds: 0,
-    player_count: 20,
-    is_player: true,
-  });
-  expect(peek.limit).toBe("account");
 });
 
 test("no pool refusal mentions splitstep", () => {

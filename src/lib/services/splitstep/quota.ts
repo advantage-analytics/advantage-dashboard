@@ -34,8 +34,6 @@ import {
   currentBillingMonth,
   getIndividualPoolCapSeconds,
   getMonthlyCapSeconds,
-  INDIVIDUAL_POOL_PLAYER_LIMIT,
-  INDIVIDUAL_POOL_PLAYERS_SINCE,
   PROVIDER_DISPLAY_NAME,
   type AccountType,
 } from "./config";
@@ -194,7 +192,7 @@ export async function reserveQuota(params: {
   const capSeconds = monthlyCapSecondsFor(workspace);
 
   // The individual figure is also a SHARED one: every workspace on it draws
-  // from one monthly pool with a player limit (see config.ts). Collegiate
+  // from one monthly pool, for hand-picked players only (see config.ts). Collegiate
   // programs keep the plain per-account function below.
   if (quotaTierFor(workspace) === "individual") {
     return reservePooled({
@@ -285,8 +283,6 @@ async function reservePooled(params: {
       p_seconds: Math.ceil(params.seconds),
       p_cap_seconds: capSeconds,
       p_pool_cap_seconds: getIndividualPoolCapSeconds(),
-      p_pool_player_limit: INDIVIDUAL_POOL_PLAYER_LIMIT,
-      p_players_since: INDIVIDUAL_POOL_PLAYERS_SINCE,
     })
     .single();
 
@@ -345,9 +341,9 @@ export function quotaRefusalMessage(params: {
   const { limit, neededSeconds, remainingSeconds } = params;
   if (limit === "pool_players") {
     return (
-      `${PROVIDER_DISPLAY_NAME} video analysis is limited to ` +
-      `${INDIVIDUAL_POOL_PLAYER_LIMIT} individual players during the pilot, ` +
-      `and every place is taken. You can still import SwingVision matches.`
+      `${PROVIDER_DISPLAY_NAME} video analysis is invite-only during the ` +
+      `pilot, and this account isn't on it. You can still import ` +
+      `SwingVision matches.`
     );
   }
   if (limit === "pool_hours") {
@@ -406,7 +402,7 @@ export interface QuotaPeek {
   /**
    * Which limit `remainingSeconds` comes from. For a workspace on the
    * individual figure it is the tighter of its own cap and the shared pool
-   * (and 0 when the player limit is full); the three figures above belong to
+   * (and 0 when the uploader is not on the pilot list); the three figures above belong to
    * that limit.
    */
   limit: QuotaLimit;
@@ -448,7 +444,7 @@ export function peekRefusalMessage(
 export async function peekQuota(
   supabase: SupabaseClient,
   workspace: Workspace,
-  /** Who is uploading — the player limit is per person. */
+  /** Who is uploading — the pilot list is of people. */
   userId: string,
 ): Promise<QuotaPeek> {
   const capSeconds = monthlyCapSecondsFor(workspace);
@@ -478,7 +474,6 @@ export async function peekQuota(
   const { data: pool, error: poolError } = await supabase
     .rpc("individual_pool_usage", {
       p_billing_month: currentBillingMonth(),
-      p_players_since: INDIVIDUAL_POOL_PLAYERS_SINCE,
       p_created_by: userId,
     })
     .single();
@@ -495,13 +490,13 @@ export async function peekQuota(
 /** One row of `individual_pool_usage()`. */
 export interface PoolUsageRow {
   pool_used_seconds: number;
-  player_count: number;
+  /** On the hand-picked pilot list (`individual_pilot_players`). */
   is_player: boolean;
 }
 
 /**
  * The tighter of a workspace's own figure and the shared pool, in the order
- * `reserve_individual_pool_quota` refuses: player limit, own cap, pool hours.
+ * `reserve_individual_pool_quota` refuses: pilot list, own cap, pool hours.
  * Pure, so the ordering is testable without a database.
  */
 export function pickPeek(own: QuotaPeek, pool: PoolUsageRow): QuotaPeek {
@@ -512,7 +507,7 @@ export function pickPeek(own: QuotaPeek, pool: PoolUsageRow): QuotaPeek {
     remainingSeconds: secondsLeft(pool.pool_used_seconds, poolCap),
   };
 
-  if (!pool.is_player && pool.player_count >= INDIVIDUAL_POOL_PLAYER_LIMIT) {
+  if (!pool.is_player) {
     return { ...poolFigures, remainingSeconds: 0, limit: "pool_players" };
   }
   if (poolFigures.remainingSeconds < own.remainingSeconds) {
