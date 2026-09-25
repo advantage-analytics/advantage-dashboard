@@ -48,6 +48,19 @@ export interface EmailRow {
   trailing?: string;
 }
 
+/**
+ * A run of body text, optionally emphasised. Emphasis is the one inline style
+ * a template may ask for — a match or program name the paragraph turns on —
+ * and it is still escaped: a span is text, never markup.
+ */
+export interface EmailSpan {
+  text: string;
+  strong?: boolean;
+}
+
+/** A body paragraph: plain text, or spans when part of it is emphasised. */
+export type EmailParagraph = string | EmailSpan[];
+
 export interface EmailContent {
   /**
    * The grey line an inbox shows beside the subject. Set it, always — left
@@ -58,8 +71,8 @@ export interface EmailContent {
   /** Small tracked-out label above the heading. Rendered upper case. */
   eyebrow: string;
   heading: string;
-  /** Body paragraphs, plain text. Escaped on the way in. */
-  body: string[];
+  /** Body paragraphs, plain text or emphasised spans. Escaped on the way in. */
+  body: EmailParagraph[];
   /** A quiet panel of label/value rows, between the body and the button. */
   facts?: EmailFact[];
   /** A repeating list, rendered after the facts panel. */
@@ -69,6 +82,13 @@ export interface EmailContent {
   cta?: { label: string; url: string };
   /** Small print under the link — expiry, and what to do if unexpected. */
   note?: string;
+  /**
+   * Who this was sent to and why, under the divider and above the support
+   * line. For mail that goes to one person because of something THEY did
+   * ("because you added this video"), where the reason is the whole defence
+   * against it reading as unsolicited.
+   */
+  footer?: string;
 }
 
 /**
@@ -102,11 +122,34 @@ function vmlButtonWidth(label: string): number {
   return Math.max(180, Math.round(label.length * 8.2) + 60);
 }
 
-function paragraph(text: string): string {
+/** The plain-text form of a paragraph — spans joined, emphasis dropped. */
+function paragraphText(paragraph: EmailParagraph): string {
+  return typeof paragraph === "string"
+    ? paragraph
+    : paragraph.map((span) => span.text).join("");
+}
+
+/**
+ * Escaped HTML for a paragraph. Emphasis is `<b>` at weight 500 and the
+ * heading's ink: Inter ships 300/400/500 only (§6), so a default bold would
+ * be synthesised, and in dark mode the `.ink` class lifts it with the heading.
+ */
+function paragraphHtml(paragraph: EmailParagraph): string {
+  if (typeof paragraph === "string") return esc(paragraph);
+  return paragraph
+    .map((span) =>
+      span.strong
+        ? `<b class="ink" style="font-weight:500; color:#0D0D0D;">${esc(span.text)}</b>`
+        : esc(span.text),
+    )
+    .join("");
+}
+
+function paragraph(text: EmailParagraph): string {
   return `
                 <tr>
                   <td class="px" style="padding:20px 44px 0 44px;">
-                    <p class="ink2" style="margin:0; font-family:${FONT}; font-size:15px; line-height:26px; color:#525252;">${esc(text)}</p>
+                    <p class="ink2" style="margin:0; font-family:${FONT}; font-size:15px; line-height:26px; color:#525252;">${paragraphHtml(text)}</p>
                   </td>
                 </tr>`;
 }
@@ -254,6 +297,7 @@ export function renderEmail(content: EmailContent): string {
     listTitle,
     cta,
     note,
+    footer,
   } = content;
 
   return `<!DOCTYPE html>
@@ -354,7 +398,12 @@ ${body.map(paragraph).join("")}${facts && facts.length > 0 ? factsPanel(facts) :
   }
                 <tr>
                   <td class="px" style="padding:36px 44px 44px 44px;">
-                    <div class="rule" style="border-top:1px solid #F3F3F3; padding-top:24px;">
+                    <div class="rule" style="border-top:1px solid #F3F3F3; padding-top:24px;">${
+                      footer
+                        ? `
+                      <p class="ink3" style="margin:0 0 8px 0; font-family:${FONT}; font-size:12px; line-height:20px; color:#71717A;">${esc(footer)}</p>`
+                        : ""
+                    }
                       <p class="ink3" style="margin:0; font-family:${FONT}; font-size:12px; line-height:20px; color:#71717A;">Need help? Reach us at <a class="accent" href="mailto:${SUPPORT_ADDRESS}" style="color:#3B82F6;">${SUPPORT_ADDRESS}</a>.</p>
                     </div>
                   </td>
@@ -388,7 +437,7 @@ ${body.map(paragraph).join("")}${facts && facts.length > 0 ? factsPanel(facts) :
  * sent — which is the failure this whole module exists to fix.
  */
 export function renderText(content: EmailContent): string {
-  const lines = [content.heading, "", ...content.body];
+  const lines = [content.heading, "", ...content.body.map(paragraphText)];
 
   if (content.facts?.length) {
     lines.push("");
@@ -413,6 +462,8 @@ export function renderText(content: EmailContent): string {
   }
 
   if (content.note) lines.push("", content.note);
+
+  if (content.footer) lines.push("", content.footer);
 
   lines.push("", `Need help? Reach us at ${SUPPORT_ADDRESS}.`);
 

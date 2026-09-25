@@ -126,3 +126,11 @@ is the runner's. Newest entries at the bottom.
 **stash:** 89ade8047a63fb9ea2b987f08e1001a6ae7f337c — recover with `git stash apply 89ade804`. Fix: make the body say "in 11 months" (drop `monthsUnwatched` from the template input or ignore it) and update `tests/match-video-expiry-email.spec.ts` accordingly — or amend the criterion if the user prefers the computed count.
 
 **follow-ups:** warnings capped at 25/run within a 15 s budget (stamped before send; a failed send is not retried); the removal date is clock + 365 d UTC but the sweep runs 05:00 UTC so it can land a day later; "Keep this video" in the email only links to the Film tab — playing counts as a view (T10 adds the explicit Keep).
+
+## T9 · Warn at 11 months and expire at 1 year in the cleanup cron, with the email — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass (re-run after the block above, at the user's go) · ran on **opus** (routed fable; user override)
+
+**changed:** Applied stash 89ade804 and fixed the one blocker per the user's decision (2026-09-24): the email body always reads "in 11 months" — fixed `UNWATCHED` constant in `match-video-expiry.ts`, `monthsUnwatched` removed from the template input and `expiry-sweep.ts`, spec asserts it never says 10 months. Rest as in the blocked entry; migration `20260924150000_match_video_expiry_sweep.sql` still NOT applied to live.
+
+**follow-ups:** see the blocked entry above. **Deploy order:** apply 20260924120000 → 130000 → 140000 → 150000, then deploy; until then the cron's expire/warn steps 500 daily (the sweep still runs).

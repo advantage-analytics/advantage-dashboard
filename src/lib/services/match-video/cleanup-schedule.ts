@@ -7,10 +7,11 @@
  * bearer check is the ONLY thing standing between the open internet and a
  * service-role worker that deletes blobs. Three rules follow from that:
  *
- *   1. The check runs FIRST. `deps.runCleanup` is not called, and the route
- *      does not even build the admin client, until the secret has matched.
- *      `tests/match-video-cleanup.spec.ts` asserts the worker was never
- *      invoked for every refusal, not merely that the status was 401.
+ *   1. The check runs FIRST. None of `deps.expire`, `deps.warn` or
+ *      `deps.runCleanup` is called, and the route does not even build the
+ *      admin client, until the secret has matched.
+ *      `tests/match-video-cleanup.spec.ts` asserts none of them was invoked
+ *      for every refusal, not merely that the status was 401.
  *   2. It fails CLOSED. An unset, blank or whitespace-only `CRON_SECRET`
  *      refuses every request — including one presenting an empty bearer —
  *      rather than turning the endpoint into an open sweep trigger. The
@@ -32,6 +33,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
 import type { CleanupRunSummary } from "./cleanup";
+import type { ExpireResult, WarnResult } from "./expiry-sweep";
 import { jsonResponse } from "./http";
 
 const LOG = "[match-video-cleanup-cron]";
@@ -101,6 +103,16 @@ export function authorizeCronRequest(
 
 export interface CleanupCronDeps {
   /**
+   * Retention, step one (Add video T9): retire videos a year unwatched, so
+   * the sweep below collects them the same morning. Runs first.
+   */
+  expire: () => Promise<ExpireResult>;
+  /**
+   * Retention, step two: stamp and email the videos 30 days from expiry.
+   * Runs after expire, so nothing already removed is warned about.
+   */
+  warn: () => Promise<WarnResult>;
+  /**
    * The sweep. Injected so a refused request can be PROVEN never to reach the
    * worker, the database or storage — the spec counts invocations of this.
    */
@@ -113,6 +125,11 @@ export interface CleanupCronDeps {
 export interface CleanupCronBody {
   ok: boolean;
   reason: string;
+  /** Videos retired as `expired` this run (T9). */
+  expired: number;
+  /** Videos stamped as warned this run (T9); `emailed` of them were sent. */
+  warned: number;
+  emailed: number;
   claimed: number;
   outcomes: CleanupRunSummary["outcomes"];
   /**
@@ -126,13 +143,18 @@ export interface CleanupCronBody {
 }
 
 /**
- * Authorize, then sweep.
+ * Authorize, then expire → warn → sweep.
  *
  * Statuses: 401 for any refusal (one body for all of them — which rule was
  * broken is a server-side log line, not something to hand an attacker), 500
  * when the worker rejects or the claim itself failed, 200 otherwise. A 200
  * can still report rows that failed and were backed off; that is the worker
  * working, not the schedule failing.
+ *
+ * The three steps are independent: an expire or warn step that throws is
+ * logged, counted as zero and reported as a 500 (`expiry_failed` /
+ * `warning_failed`) — but the sweep still runs, because abandoned uploads
+ * must not wait on the retention job.
  */
 export async function handleCleanupCron(
   request: Request,
@@ -157,6 +179,32 @@ export async function handleCleanupCron(
   }
 
   const startedAt = Date.now();
+
+  let expired = 0;
+  let expiryFailed = false;
+  try {
+    expired = (await deps.expire()).expired;
+  } catch (cause) {
+    expiryFailed = true;
+    console.error(`${LOG} expire threw`, {
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
+
+  let warned = 0;
+  let emailed = 0;
+  let warningFailed = false;
+  try {
+    const warning = await deps.warn();
+    warned = warning.warned;
+    emailed = warning.emailed;
+  } catch (cause) {
+    warningFailed = true;
+    console.error(`${LOG} warn threw`, {
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
+
   let summary: CleanupRunSummary;
   try {
     summary = await deps.runCleanup();
@@ -171,8 +219,11 @@ export async function handleCleanupCron(
   }
 
   const body: CleanupCronBody = {
-    ok: summary.claimError === undefined,
+    ok: summary.claimError === undefined && !expiryFailed && !warningFailed,
     reason: CLEANUP_CRON_REASON,
+    expired,
+    warned,
+    emailed,
     claimed: summary.claimed,
     outcomes: summary.outcomes,
     rpcFailures: summary.rows.filter((row) => row.detail?.startsWith("rpc_"))
@@ -188,6 +239,13 @@ export async function handleCleanupCron(
       detail: summary.claimError.detail,
     });
     return jsonResponse({ ...body, error: "claim_failed" }, 500);
+  }
+
+  if (expiryFailed || warningFailed) {
+    return jsonResponse(
+      { ...body, error: expiryFailed ? "expiry_failed" : "warning_failed" },
+      500,
+    );
   }
 
   return jsonResponse(body, 200);

@@ -1,5 +1,7 @@
 /**
- * `GET /api/cron/cleanup-match-videos` — the daily attachment cleanup sweep.
+ * `GET /api/cron/cleanup-match-videos` — the daily attachment cleanup sweep,
+ * preceded by the retention steps (Add video T9): expire videos a year
+ * unwatched, then warn the ones 30 days from it.
  *
  * Scheduled by `vercel.json` at 05:00 UTC and called with
  * `Authorization: Bearer $CRON_SECRET`. This file is the wiring only: the
@@ -7,7 +9,7 @@
  * `lib/services/match-video/cleanup-schedule.ts`, so they are tested without
  * Supabase or Azure anywhere near them.
  *
- * The service-role client is built INSIDE the callback, which the handler
+ * The service-role client is built INSIDE each callback, which the handler
  * invokes only after the secret has matched. An unauthorized request
  * therefore never constructs it, never opens a connection and never reaches
  * storage.
@@ -27,6 +29,11 @@ import {
   productionCleanupDeps,
   runMatchVideoCleanup,
 } from "@/lib/services/match-video/cleanup";
+import {
+  expireUnwatchedMatchVideos,
+  productionExpiryWarningDeps,
+  warnExpiringMatchVideos,
+} from "@/lib/services/match-video/expiry-sweep";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -47,5 +54,8 @@ export async function GET(request: Request) {
       runMatchVideoCleanup(productionCleanupDeps(createAdminClient()), {
         reason: CLEANUP_CRON_REASON,
       }),
+    expire: () => expireUnwatchedMatchVideos(createAdminClient()),
+    warn: () =>
+      warnExpiringMatchVideos(productionExpiryWarningDeps(createAdminClient())),
   });
 }

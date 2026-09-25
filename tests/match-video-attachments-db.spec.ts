@@ -9,6 +9,10 @@ import {
   type SourcePoint,
   type SourceShot,
 } from "@/lib/match-video/alignment";
+import {
+  MATCH_VIDEO_EXPIRY_DAYS,
+  MATCH_VIDEO_EXPIRY_WARN_DAYS,
+} from "@/lib/match-video/expiry";
 
 import {
   ANON_KEY,
@@ -4443,5 +4447,427 @@ test.describe("match_video_attachments removal RPC (live)", () => {
     for (const removed of [playerVideo, teammateVideo, staffVideo]) {
       expect(ids).not.toContain(removed);
     }
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * SwingVision Add video T9 · warn at 11 months, expire at a year
+ * `20260924150000_match_video_expiry_sweep.sql`
+ *
+ *  1. Privilege boundary: anon and a signed-in session cannot execute
+ *     `match_video_expire_unwatched` or `match_video_claim_expiry_warnings`;
+ *     out-of-range limits and day counts are refused.
+ *  2. Expire: ACTIVE rows whose clock coalesce(last_viewed_at, activated_at)
+ *     is MATCH_VIDEO_EXPIRY_DAYS (365) or more days old are retired with
+ *     retired_reason = 'expired', retired_at = cleanup_next_attempt_at =
+ *     now(); a recent view, a younger clock and a retired row are left alone;
+ *     the match row is untouched and the keys stay for the worker.
+ *  3. Warn: ACTIVE rows at least 335 days old (expiry − warn), not yet due,
+ *     with expiry_warned_at null are stamped and returned once, with the
+ *     match, program and uploader fields the email needs; a null uploader is
+ *     still returned (the caller skips it); two concurrent claims never share
+ *     a row.
+ *
+ * Both functions act on the WHOLE table, so every call passes a limit equal
+ * to the rows this block expects and every fixture clock sits further in the
+ * past than any real row — the oldest-first order hands this run's rows out
+ * before anybody else's.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+const { mark: EXP_MARK, password: EXP_PASSWORD } = runMarker("mvexp");
+
+test.describe("match_video_attachments expiry sweep RPCs (live)", () => {
+  test.describe.configure({ mode: "serial", timeout: 60_000 });
+  test.skip(!HAVE_ENV, SKIP_REASON);
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const MINUTE_MS = 60 * 1000;
+  const EXPIRY = MATCH_VIDEO_EXPIRY_DAYS;
+  const WARN = MATCH_VIDEO_EXPIRY_WARN_DAYS;
+
+  let admin: SupabaseClient;
+  let uploader: Session;
+  let owner: Session;
+  const authUserIds: string[] = [];
+  let programId: string;
+
+  const rpc = (fn: string, args: Record<string, unknown>) =>
+    admin.rpc(fn, args) as unknown as Promise<RpcResult>;
+  const expire = (limit: number) =>
+    rpc("match_video_expire_unwatched", {
+      p_limit: limit,
+      p_expiry_days: EXPIRY,
+    });
+  const claimWarnings = (limit: number) =>
+    rpc("match_video_claim_expiry_warnings", {
+      p_limit: limit,
+      p_expiry_days: EXPIRY,
+      p_warn_days: WARN,
+    });
+
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+
+  /** An active row on its own new match, its clock set directly. */
+  const activeVideo = async (
+    label: string,
+    clock: { activatedAt: string; lastViewedAt?: string | null },
+    extra: Record<string, unknown> = {},
+    matchExtra: Record<string, unknown> = {},
+  ) => {
+    const match = await admin
+      .from("matches")
+      .insert({
+        created_by: uploader.userId,
+        player1_id: uploader.userId,
+        player1_name: `Expiry Player ${label}`,
+        player2_name: `Expiry Opponent ${label}`,
+        date: "2025-09-12T00:00:00Z",
+        tournament_name: `${EXP_MARK}-${label}`,
+        source_provider: "swing-vision",
+        ...matchExtra,
+      })
+      .select("id")
+      .single();
+    if (match.error) throw new Error(`match: ${match.error.message}`);
+    const id = randomUUID();
+    const row = await admin
+      .from(TABLE)
+      .insert({
+        match_id: match.data.id,
+        uploaded_by: uploader.userId,
+        state: "active",
+        filename: `${EXP_MARK}-${label}.mp4`,
+        declared_size_bytes: 1_000_000,
+        declared_content_type: "video/mp4",
+        staged_blob_key: `${EXP_MARK}/staged/${id}.mp4`,
+        final_blob_key: `${EXP_MARK}/final/${id}.mp4`,
+        client_request_id: randomUUID(),
+        verified_size_bytes: 1_000_000,
+        verified_content_type: "video/mp4",
+        verified_duration_seconds: 5400.5,
+        confirmed_video_time_seconds: 12.345,
+        offset_seconds: -12.345,
+        activated_at: clock.activatedAt,
+        last_viewed_at: clock.lastViewedAt ?? null,
+        ...extra,
+      })
+      .select("id")
+      .single();
+    if (row.error) throw new Error(`attachment: ${row.error.message}`);
+    return { id: row.data.id as string, matchId: match.data.id as string };
+  };
+
+  const rowOf = async (id: string) => {
+    const result = await admin
+      .from(TABLE)
+      .select(
+        "state, retired_reason, retired_at, cleanup_next_attempt_at, cleaned_up_at, expiry_warned_at, final_blob_key, staged_blob_key",
+      )
+      .eq("id", id)
+      .single();
+    expect(result.error).toBeNull();
+    return result.data!;
+  };
+
+  const idsOf = (result: RpcResult) => {
+    expect(result.error).toBeNull();
+    return (result.data as { attachment_id: string }[])
+      .map((r) => r.attachment_id)
+      .sort();
+  };
+
+  type Video = { id: string; matchId: string };
+  let stale: Video; // activated three years ago, never viewed
+  let viewedLongAgo: Video; // viewed 400 days ago
+  let justExpired: Video; // clock one minute past a year
+  let viewedRecently: Video; // activated years ago, viewed 10 days ago
+  let dueWarn: Video; // one minute short of a year — warn, never expire
+  let justDue: Video; // one minute past the warning line, team video
+  let noUploader: Video; // due a warning, uploader account gone
+  let alreadyWarned: Video; // due, but already stamped for this clock
+  let quiet: Video; // one minute short of the warning line
+  let retiredOld: Video; // retired long ago; neither function touches it
+
+  test.beforeAll(async () => {
+    test.setTimeout(120_000);
+    admin = createAdminClient();
+    [uploader, owner] = await createLogins(admin, ["uploader", "owner"], {
+      mark: EXP_MARK,
+      password: EXP_PASSWORD,
+      authUserIds,
+    });
+    await admin
+      .from("users")
+      .update({ first_name: "marcus", last_name: "reid" })
+      .eq("id", uploader.userId);
+
+    const program = await admin
+      .from("programs")
+      .insert({
+        org_type: "club",
+        school_name: `${EXP_MARK} Cardinal`,
+        team: "mens",
+        status: "active",
+        owner_user_id: owner.userId,
+      })
+      .select("id")
+      .single();
+    if (program.error) throw new Error(`program: ${program.error.message}`);
+    programId = program.data.id as string;
+
+    const years = (n: number) => ago(n * 365 * DAY_MS);
+    stale = await activeVideo("stale", { activatedAt: years(3) });
+    viewedLongAgo = await activeVideo("viewed-long-ago", {
+      activatedAt: years(3),
+      lastViewedAt: ago(400 * DAY_MS),
+    });
+    justExpired = await activeVideo("just-expired", {
+      activatedAt: ago(EXPIRY * DAY_MS + MINUTE_MS),
+    });
+    viewedRecently = await activeVideo("viewed-recently", {
+      activatedAt: years(3),
+      lastViewedAt: ago(10 * DAY_MS),
+    });
+    dueWarn = await activeVideo("due-warn", {
+      activatedAt: ago(EXPIRY * DAY_MS - MINUTE_MS),
+    });
+    justDue = await activeVideo(
+      "just-due",
+      {
+        activatedAt: years(2),
+        lastViewedAt: ago((EXPIRY - WARN) * DAY_MS + MINUTE_MS),
+      },
+      {},
+      { program_id: programId },
+    );
+    noUploader = await activeVideo(
+      "no-uploader",
+      { activatedAt: ago(360 * DAY_MS) },
+      { uploaded_by: null },
+    );
+    alreadyWarned = await activeVideo(
+      "already-warned",
+      { activatedAt: ago(350 * DAY_MS) },
+      { expiry_warned_at: ago(10 * DAY_MS) },
+    );
+    quiet = await activeVideo("quiet", {
+      activatedAt: ago((EXPIRY - WARN) * DAY_MS - MINUTE_MS),
+    });
+    retiredOld = await activeVideo(
+      "retired-old",
+      { activatedAt: years(4) },
+      { state: "retired", retired_at: years(3) },
+    );
+  });
+
+  test.afterAll(async () => {
+    if (!admin) return;
+    await admin.from(TABLE).delete().like("filename", `${EXP_MARK}%`);
+    await admin
+      .from("matches")
+      .delete()
+      .like("tournament_name", `${EXP_MARK}%`);
+    if (programId) {
+      await admin.from("program_members").delete().eq("program_id", programId);
+      await admin.from("programs").delete().eq("id", programId);
+    }
+    await deleteAuthUsers(admin, authUserIds);
+  });
+
+  // ── 1. Privilege boundary ─────────────────────────────────────────────────
+
+  test("anon and authenticated sessions cannot execute either function; bad arguments are refused", async () => {
+    const anon = createClient(SUPABASE_URL!, ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    for (const [label, client] of [
+      ["anon", anon],
+      ["authenticated", uploader.client],
+    ] as const) {
+      const expired = (await client.rpc("match_video_expire_unwatched", {
+        p_limit: 1,
+        p_expiry_days: EXPIRY,
+      })) as unknown as RpcResult;
+      expect(expired.error?.code, `${label} expire`).toBe(
+        INSUFFICIENT_PRIVILEGE,
+      );
+      const warned = (await client.rpc("match_video_claim_expiry_warnings", {
+        p_limit: 1,
+        p_expiry_days: EXPIRY,
+        p_warn_days: WARN,
+      })) as unknown as RpcResult;
+      expect(warned.error?.code, `${label} warn`).toBe(INSUFFICIENT_PRIVILEGE);
+    }
+
+    for (const limit of [0, 101, null]) {
+      expectRefused(
+        await rpc("match_video_expire_unwatched", {
+          p_limit: limit,
+          p_expiry_days: EXPIRY,
+        }),
+        INVALID_PARAMETER,
+        "limit must be 1–100",
+        "bad_limit",
+        `expire limit ${limit}`,
+      );
+    }
+    // A typo cannot turn the sweep into "retire everything now".
+    expectRefused(
+      await rpc("match_video_expire_unwatched", {
+        p_limit: 1,
+        p_expiry_days: 0,
+      }),
+      INVALID_PARAMETER,
+      "expiry must be 30–3650 days",
+      "bad_expiry_days",
+    );
+    expectRefused(
+      await rpc("match_video_claim_expiry_warnings", {
+        p_limit: 1,
+        p_expiry_days: EXPIRY,
+        p_warn_days: EXPIRY,
+      }),
+      INVALID_PARAMETER,
+      "warning must be 1 day up to one day short of expiry",
+      "bad_warn_days",
+    );
+
+    // Nothing moved.
+    expect((await rowOf(stale.id)).state).toBe("active");
+    expect((await rowOf(dueWarn.id)).expiry_warned_at).toBeNull();
+  });
+
+  // ── 2. Expire ─────────────────────────────────────────────────────────────
+
+  test("expire retires every active row a year or more unwatched as 'expired', due for cleanup now, and nothing else", async () => {
+    const matchBefore = await admin
+      .from("matches")
+      .select("*")
+      .eq("id", stale.matchId)
+      .single();
+    const keysBefore = await rowOf(stale.id);
+    const startedAt = Date.now();
+
+    const expired = await expire(3);
+    expect(idsOf(expired)).toEqual(
+      [stale.id, viewedLongAgo.id, justExpired.id].sort(),
+    );
+
+    for (const video of [stale, viewedLongAgo, justExpired]) {
+      const row = await rowOf(video.id);
+      expect(row.state).toBe("retired");
+      expect(row.retired_reason).toBe("expired");
+      expect(row.retired_at).not.toBeNull();
+      expect(row.cleanup_next_attempt_at).toBe(row.retired_at);
+      expect(
+        Math.abs(new Date(row.retired_at as string).getTime() - startedAt),
+      ).toBeLessThan(60_000);
+      expect(row.cleaned_up_at).toBeNull();
+    }
+    // The row stays, and so do its keys, for the cleanup worker.
+    const after = await rowOf(stale.id);
+    expect(after.final_blob_key).toBe(keysBefore.final_blob_key);
+    expect(after.staged_blob_key).toBe(keysBefore.staged_blob_key);
+    // The statistics' parent row is byte-for-byte what it was.
+    const matchAfter = await admin
+      .from("matches")
+      .select("*")
+      .eq("id", stale.matchId)
+      .single();
+    expect(matchAfter.data).toEqual(matchBefore.data);
+
+    // A recent view restarted the clock; a year-less-a-minute clock is not
+    // due; a retired row is not active.
+    for (const video of [viewedRecently, dueWarn, quiet]) {
+      expect((await rowOf(video.id)).state).toBe("active");
+    }
+    const retired = await rowOf(retiredOld.id);
+    expect(retired.retired_reason).toBeNull();
+  });
+
+  test("running expire again finds none of this run's rows", async () => {
+    const again = await expire(1);
+    expect(again.error).toBeNull();
+    const ours = [stale, viewedLongAgo, justExpired, retiredOld].map(
+      (v) => v.id,
+    );
+    for (const id of idsOf(again)) expect(ours).not.toContain(id);
+  });
+
+  // ── 3. Warn ───────────────────────────────────────────────────────────────
+
+  test("warn stamps and returns active rows 335+ days old, not yet due, never warned — with what the email needs", async () => {
+    const startedAt = Date.now();
+    const claimed = await claimWarnings(3);
+    expect(idsOf(claimed)).toEqual(
+      [dueWarn.id, noUploader.id, justDue.id].sort(),
+    );
+
+    const rows = claimed.data as Record<string, unknown>[];
+    for (const row of rows) {
+      expect(row.expiry_warned_at).not.toBeNull();
+      expect(
+        Math.abs(
+          new Date(row.expiry_warned_at as string).getTime() - startedAt,
+        ),
+      ).toBeLessThan(60_000);
+      expect((await rowOf(row.attachment_id as string)).expiry_warned_at).toBe(
+        row.expiry_warned_at,
+      );
+    }
+
+    const team = rows.find((r) => r.attachment_id === justDue.id)!;
+    expect(team).toMatchObject({
+      match_id: justDue.matchId,
+      uploaded_by: uploader.userId,
+      player1_name: "Expiry Player just-due",
+      player2_name: "Expiry Opponent just-due",
+      program_id: programId,
+      program_school_name: `${EXP_MARK} Cardinal`,
+      program_team: "mens",
+      uploader_first_name: "marcus",
+      uploader_last_name: "reid",
+    });
+    expect(typeof team.uploader_email).toBe("string");
+    expect(new Date(team.match_date as string).toISOString()).toBe(
+      "2025-09-12T00:00:00.000Z",
+    );
+    expect(team.last_viewed_at).not.toBeNull();
+
+    const personal = rows.find((r) => r.attachment_id === dueWarn.id)!;
+    expect(personal.program_id).toBeNull();
+    expect(personal.program_team).toBeNull();
+    expect(personal.last_viewed_at).toBeNull();
+
+    // Returned so the caller can skip it; stamped so it is not offered again.
+    const orphaned = rows.find((r) => r.attachment_id === noUploader.id)!;
+    expect(orphaned.uploaded_by).toBeNull();
+    expect(orphaned.uploader_email).toBeNull();
+
+    // Already warned for this clock, and short of the warning line: untouched.
+    expect((await rowOf(quiet.id)).expiry_warned_at).toBeNull();
+    expect((await rowOf(alreadyWarned.id)).expiry_warned_at).not.toBeNull();
+    // Warning never retires anything.
+    for (const video of [dueWarn, justDue, noUploader]) {
+      expect((await rowOf(video.id)).state).toBe("active");
+    }
+  });
+
+  test("a stamped row is not returned again; two concurrent claims never share a row", async () => {
+    const again = await claimWarnings(1);
+    expect(again.error).toBeNull();
+    for (const id of idsOf(again)) {
+      expect([dueWarn.id, noUploader.id, justDue.id]).not.toContain(id);
+    }
+
+    // Two more rows due, claimed by two sweeps at once.
+    const a = await activeVideo("race-a", { activatedAt: ago(362 * DAY_MS) });
+    const b = await activeVideo("race-b", { activatedAt: ago(362 * DAY_MS) });
+    const [first, second] = await Promise.all([
+      claimWarnings(1),
+      claimWarnings(1),
+    ]);
+    const both = [...idsOf(first), ...idsOf(second)].sort();
+    expect(both).toEqual([a.id, b.id].sort());
   });
 });

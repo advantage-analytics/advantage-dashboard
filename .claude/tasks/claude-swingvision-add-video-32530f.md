@@ -168,7 +168,7 @@ ready).
 
 ## T9 · Warn at 11 months and expire at 1 year in the cleanup cron, with the email
 
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **needs:** T5, T8
 - **files:** (guess) `supabase/migrations/<ts>_match_video_expiry_sweep.sql` (new), `src/lib/services/match-video/cleanup-schedule.ts`, `src/app/api/cron/cleanup-match-videos/route.ts`, `src/lib/services/email/templates/match-video-expiry.ts` (new), `src/lib/services/email/index.ts`, `docs/email-system.md`, `tests/match-video-cleanup.spec.ts`, `tests/match-video-expiry-email.spec.ts` (new), `tests/match-video-attachments-db.spec.ts`
