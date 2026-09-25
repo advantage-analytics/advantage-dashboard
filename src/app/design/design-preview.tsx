@@ -6,29 +6,35 @@ import {
   type BetaWelcomeTerms,
 } from "@/components/dashboard/beta-welcome-dialog";
 import { advButton } from "@/lib/ui/adv-button";
-import { SidebarPreview } from "./sidebar-preview";
+import { HeaderPreview } from "./header-preview";
 
 const VARIANTS: readonly {
   id: string;
   label: string;
   terms: BetaWelcomeTerms;
+  /** Hours already spent this month, for the header pill. */
+  usedHours: number;
 }[] = [
-  { id: "player", label: "Player", terms: { hours: 2 } },
+  { id: "player", label: "Player", terms: { hours: 2 }, usedHours: 0.5 },
   {
     id: "program",
     label: "College program",
     terms: { hours: 75, programName: "Northfield University" },
+    usedHours: 31,
   },
 ];
 
-/** The beta welcome dialog, open, in each variant the dashboard can show. */
+/**
+ * The beta welcome dialog, open, in each variant the dashboard can show, and
+ * the header pill that reopens it.
+ */
 export function DesignPreview() {
   const [variant, setVariant] = useState(VARIANTS[0]);
   const [open, setOpen] = useState(true);
 
   return (
     <main className="min-h-screen bg-[var(--surface-page)] px-14 py-10">
-      <h1 className="text-[20px] font-medium text-[var(--ink-900)]">
+      <h1 className="text-[16px] font-medium text-[var(--ink-900)]">
         Beta welcome dialog
       </h1>
       <p className="mt-1 max-w-[60ch] text-[12px] leading-[1.6] text-[var(--ink-600)]">
@@ -54,21 +60,19 @@ export function DesignPreview() {
         ))}
       </div>
 
-      <h2 className="mt-12 text-[16px] font-medium text-[var(--ink-900)]">
-        Reopening it from the sidebar
+      <h2 className="mt-12 text-[14px] font-medium text-[var(--ink-900)]">
+        Reopening it from the header
       </h2>
       <p className="mt-1 max-w-[60ch] text-[12px] leading-[1.6] text-[var(--ink-600)]">
-        A Beta row above Settings, expanded and collapsed. Click it to reopen
-        the dialog.
+        The Beta pill leads the header&apos;s controls with this month&apos;s
+        video hours left. Click it to reopen the dialog.
       </p>
-      <div className="mt-5 flex items-start gap-8">
-        {[true, false].map((expanded) => (
-          <SidebarPreview
-            key={String(expanded)}
-            expanded={expanded}
-            onOpenBeta={() => setOpen(true)}
-          />
-        ))}
+      <div className="mt-5 max-w-[960px]">
+        <HeaderPreview
+          usedSeconds={variant.usedHours * 3600}
+          capSeconds={variant.terms.hours * 3600}
+          onOpenBeta={() => setOpen(true)}
+        />
       </div>
 
       <BetaWelcomeDialog
