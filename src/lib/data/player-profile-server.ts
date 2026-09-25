@@ -9,7 +9,11 @@ import {
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { statKey } from "@/lib/data/aggregate";
-import { canonicalRosterIds } from "@/lib/data/roster-ids";
+import {
+  canonicalRosterIds,
+  idsResolvingTo,
+  sideOf,
+} from "@/lib/data/roster-ids";
 import { pickServeShot } from "@/lib/data/serve-return-shots";
 import {
   computeZoneStats,
@@ -337,9 +341,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
   // maps every roster row's `player_id` to itself, and this player's row was
   // found above — so their own id is always in here. An empty `in.()` is not
   // a filter PostgREST accepts.
-  const ownIds = [...canonical.entries()]
-    .filter(([, canonicalId]) => canonicalId === playerId)
-    .map(([id]) => id);
+  const ownIds = idsResolvingTo(canonical, playerId);
 
   const { data: matchRows } = await supabase
     .from("matches")
@@ -360,13 +362,8 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
   // of the two ids is theirs; this decides which, and that answer picks their
   // statistics row, their opponent's name and their half of the insight.
   const own = matches.flatMap((match) => {
-    if (match.player1_id && canonical.get(match.player1_id) === playerId) {
-      return [{ match, isPlayer1: true }];
-    }
-    if (match.player2_id && canonical.get(match.player2_id) === playerId) {
-      return [{ match, isPlayer1: false }];
-    }
-    return [];
+    const isPlayer1 = sideOf(match, canonical, playerId);
+    return isPlayer1 === null ? [] : [{ match, isPlayer1 }];
   });
 
   const statsPromise = (async () => {
