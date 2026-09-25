@@ -11,6 +11,7 @@
  * Advisory, like every peek: `reserveQuota()` at submit time still decides.
  */
 
+import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -48,7 +49,7 @@ export async function GET() {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
-    console.error("[splitstep-hours-left] could not read usage", {
+    pipelineLog.error("[splitstep-hours-left] could not read usage", {
       error: error instanceof Error ? error.message : String(error),
     });
     return NextResponse.json(

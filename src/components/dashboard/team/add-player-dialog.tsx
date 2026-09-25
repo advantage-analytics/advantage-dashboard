@@ -40,6 +40,8 @@ import {
   spotHeldNote,
   spotHolders,
 } from "@/components/dashboard/team/player-fields";
+import posthog from "posthog-js";
+import { isPostHogConfigured } from "@/lib/posthog-client";
 
 /**
  * Design 6c — put a player on the roster now.
@@ -522,6 +524,12 @@ export function AddPlayerDialog({
       }
 
       setCreated({ profileId: result.profileId, form: formKey });
+      if (isPostHogConfigured) {
+        posthog.capture("roster_player_added", {
+          invitation_requested: alsoInvite,
+          lineup_spot_assigned: lineupSpot !== "",
+        });
+      }
 
       if (alsoInvite && result.profileId) {
         const inviteError = await sendOptionalInvite({
@@ -579,6 +587,11 @@ export function AddPlayerDialog({
           return;
         }
         setCreated({ profileId: person.profileId, form: formKey });
+        if (isPostHogConfigured) {
+          posthog.capture("roster_player_restored", {
+            invitation_requested: alsoInvite,
+          });
+        }
       }
 
       const address = email.trim();

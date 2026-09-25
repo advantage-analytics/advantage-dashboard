@@ -20,6 +20,7 @@
  * are in the handler's header.
  */
 
+import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { after, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -197,7 +198,7 @@ export async function POST(request: NextRequest) {
 
           if (result.adopted === 0) return;
 
-          console.log(
+          pipelineLog.info(
             `${LOG} adopted ${result.adopted} early delivery/deliveries`,
             {
               jobId,
@@ -211,7 +212,7 @@ export async function POST(request: NextRequest) {
           // to show for it. releaseQuota() is idempotent via `released = false`.
           if (result.jobStatus === "failed") {
             await releaseQuota(admin, jobId);
-            console.log(`${LOG} quota released for adopted failure`, {
+            pipelineLog.info(`${LOG} quota released for adopted failure`, {
               jobId,
             });
 
@@ -225,7 +226,7 @@ export async function POST(request: NextRequest) {
                 auto: true,
               });
               if (retry.ok) {
-                console.log(
+                pipelineLog.info(
                   `${LOG} auto-resubmitted an orphan-adopted failure`,
                   {
                     jobId,
@@ -233,7 +234,7 @@ export async function POST(request: NextRequest) {
                   },
                 );
               } else {
-                console.warn(
+                pipelineLog.warn(
                   `${LOG} auto-resubmit of adopted failure declined`,
                   {
                     jobId,
@@ -245,7 +246,7 @@ export async function POST(request: NextRequest) {
           }
 
           if (result.owedResultsDownload) {
-            console.error(
+            pipelineLog.error(
               `${LOG} an adopted delivery carried a results URL that was never ` +
                 `downloaded — fetch strokes_url from splitstep_webhook_deliveries by ` +
                 `hand; it stays valid about a week`,
@@ -253,7 +254,7 @@ export async function POST(request: NextRequest) {
             );
           }
         } catch (err) {
-          console.error(`${LOG} could not adopt early deliveries`, {
+          pipelineLog.error(`${LOG} could not adopt early deliveries`, {
             jobId,
             externalJobId,
             error: err instanceof Error ? err.message : String(err),

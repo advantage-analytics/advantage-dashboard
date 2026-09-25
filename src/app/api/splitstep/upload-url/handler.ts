@@ -21,6 +21,7 @@
  * and pushes gigabytes for tens of minutes. A refusal here spends nothing.
  */
 
+import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { NextResponse } from "next/server";
 
 import { athleteOnRow } from "@/lib/services/splitstep/match-athlete";
@@ -152,7 +153,7 @@ export async function handleUploadUrl(
   const { match, error: matchError } = await deps.loadMatch(matchId);
 
   if (matchError) {
-    console.error(`${LOG} could not load match`, {
+    pipelineLog.error(`${LOG} could not load match`, {
       matchId,
       error: matchError,
     });
@@ -229,7 +230,7 @@ export async function handleUploadUrl(
   });
 
   if (!eligibility.ok) {
-    console.log(`${LOG} refused — ${eligibility.reason}`, {
+    pipelineLog.info(`${LOG} refused — ${eligibility.reason}`, {
       matchId,
       workspaceId: billingWorkspace.id,
       role: billingWorkspace.role,
@@ -253,7 +254,7 @@ export async function handleUploadUrl(
   // here is exactly what would refuse at the spend.
   const refusal = explainVideoRefusal(billingWorkspace);
   if (refusal) {
-    console.log(`${LOG} refused — not permitted`, {
+    pipelineLog.info(`${LOG} refused — not permitted`, {
       matchId,
       workspaceId: billingWorkspace.id,
       role: billingWorkspace.role,
@@ -287,7 +288,7 @@ export async function handleUploadUrl(
       deps.remainingQuotaSeconds(billingWorkspace, userId),
     ]);
     if (billable === null || peek === null) {
-      console.error(`${LOG} allowance not checked — figure unavailable`, {
+      pipelineLog.error(`${LOG} allowance not checked — figure unavailable`, {
         matchId,
         workspaceId: billingWorkspace.id,
         missing: billable === null ? "billable_seconds" : "usage",
@@ -295,7 +296,7 @@ export async function handleUploadUrl(
     } else {
       const overAllowance = peekRefusalMessage(peek, billable);
       if (overAllowance !== null) {
-        console.log(`${LOG} refused — over allowance`, {
+        pipelineLog.info(`${LOG} refused — over allowance`, {
           matchId,
           workspaceId: billingWorkspace.id,
           billable,
@@ -317,7 +318,7 @@ export async function handleUploadUrl(
       }
     }
   } catch (err) {
-    console.error(`${LOG} allowance not checked — read threw`, {
+    pipelineLog.error(`${LOG} allowance not checked — read threw`, {
       matchId,
       workspaceId: billingWorkspace.id,
       error: err instanceof Error ? err.message : String(err),
@@ -343,7 +344,7 @@ export async function handleUploadUrl(
   } catch (err) {
     // Missing storage config. 503, not 500: the deployment is misconfigured,
     // the request was fine.
-    console.error(`${LOG} storage is not configured`, {
+    pipelineLog.error(`${LOG} storage is not configured`, {
       error: err instanceof Error ? err.message : String(err),
     });
     return NextResponse.json(
@@ -370,14 +371,17 @@ export async function handleUploadUrl(
     // Not fatal. A blob we cannot name is recoverable via the sweeper; refusing
     // the upload is not recoverable for the user. Loud, because this is the only
     // moment the name is known for free.
-    console.error(`${LOG} could not record the blob name — video may strand`, {
-      matchId,
-      blobName,
-      error: recordError,
-    });
+    pipelineLog.error(
+      `${LOG} could not record the blob name — video may strand`,
+      {
+        matchId,
+        blobName,
+        error: recordError,
+      },
+    );
   }
 
-  console.log(`${LOG} issued`, {
+  pipelineLog.info(`${LOG} issued`, {
     matchId,
     blobName,
     expiresAt: minted.expiresAt.toISOString(),

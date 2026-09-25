@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import posthog from "posthog-js";
+import { isPostHogConfigured } from "@/lib/posthog-client";
 import { Header } from "@/app/dashboard/header";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { MobileGate } from "@/components/dashboard/mobile-gate";
@@ -14,6 +16,7 @@ import { HeaderStatusProvider } from "@/components/dashboard/header-status";
 import { HeaderSlotProvider } from "@/components/dashboard/header-slot";
 import { WorkspaceSync } from "@/components/dashboard/workspace-sync";
 import { BetaWelcome } from "@/components/dashboard/beta-welcome-dialog";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
   STORAGE_KEYS,
   clearStorageData,
@@ -51,6 +54,43 @@ export function DashboardShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { viewer, active } = useWorkspace();
+
+  // The layout only renders with an authenticated workspace context. Identifying
+  // here persists the Supabase UUID across dashboard page loads and attributes
+  // automatic exception capture and future events to the signed-in person.
+  // The id only: an email would be a second copy of personal data in PostHog,
+  // and the id resolves to it in Supabase whenever it is needed.
+  useEffect(() => {
+    if (isPostHogConfigured && posthog.get_distinct_id() !== viewer.id) {
+      posthog.identify(viewer.id);
+    }
+  }, [viewer.id]);
+
+  // Stamp the active workspace on every event that follows, so any insight can
+  // be broken down by team — "which programs uploaded video this month" — and
+  // personal use told apart from team use. Super properties rather than
+  // posthog.group(): group analytics is a paid PostHog add-on and this project
+  // is on the free plan. Re-registered on every switch; logout's
+  // posthog.reset() clears them.
+  useEffect(() => {
+    if (!isPostHogConfigured) return;
+    posthog.register({
+      workspace_id: active.id,
+      workspace_kind: active.kind,
+      workspace_name: active.name,
+      workspace_role: active.role,
+      workspace_org_type: active.orgType,
+      workspace_team: active.team,
+    });
+  }, [
+    active.id,
+    active.kind,
+    active.name,
+    active.role,
+    active.orgType,
+    active.team,
+  ]);
 
   /**
    * Clear upload data when leaving the upload flow, so returning to the wizard

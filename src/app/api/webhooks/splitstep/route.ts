@@ -44,6 +44,7 @@
  * is recording the envelope, which is what makes everything else recoverable.
  */
 
+import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { NextRequest, NextResponse, after } from "next/server";
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -154,7 +155,7 @@ function verifyWebhookAuth(request: NextRequest, rawBody: string): AuthOutcome {
   const secret = process.env.SPLITSTEP_WEBHOOK_SECRET;
 
   if (!secret) {
-    console.warn(
+    pipelineLog.warn(
       `${LOG} UNSIGNED — SPLITSTEP_WEBHOOK_SECRET is not set. Accepting without ` +
         `authentication. This must not remain true once real match video is processed.`,
     );
@@ -195,7 +196,7 @@ function verifyWebhookAuth(request: NextRequest, rawBody: string): AuthOutcome {
     // secret, which is worth accepting, but it is not a signature — it says
     // nothing about whether the body was modified in transit.
     if (matches(presented, secret)) {
-      console.warn(
+      pipelineLog.warn(
         `${LOG} ${header} carried the raw shared secret, not an HMAC of the body. ` +
           `Accepted, but recorded unverified — ask the vendor to send ` +
           `base64(HMAC-SHA256(secret, raw_body)).`,
@@ -217,7 +218,7 @@ function verifyWebhookAuth(request: NextRequest, rawBody: string): AuthOutcome {
   const requireSignature =
     process.env.SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE === "true";
 
-  console.warn(
+  pipelineLog.warn(
     `${LOG} no signature header found${requireSignature ? " — REJECTING" : " — accepting unverified"}`,
     {
       searched: SIGNATURE_HEADERS,
@@ -263,11 +264,11 @@ export async function POST(request: NextRequest) {
   try {
     rawBody = await request.text();
   } catch (err) {
-    console.error(`${LOG} could not read request body`, err);
+    pipelineLog.error(`${LOG} could not read request body`, err);
     return NextResponse.json({ error: "Unreadable body" }, { status: 400 });
   }
 
-  console.log(`${LOG} received`, {
+  pipelineLog.info(`${LOG} received`, {
     bytes: rawBody.length,
     contentType: request.headers.get("content-type"),
     body: rawBody.slice(0, 4000),
@@ -277,7 +278,7 @@ export async function POST(request: NextRequest) {
   //    over the raw body, so re-serializing would break it.
   const auth = verifyWebhookAuth(request, rawBody);
   if (!auth.ok) {
-    console.error(`${LOG} rejected — ${auth.reason}`);
+    pipelineLog.error(`${LOG} rejected — ${auth.reason}`);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const verified = auth.verified;
@@ -287,11 +288,11 @@ export async function POST(request: NextRequest) {
   try {
     parsedJson = rawBody.trim() === "" ? null : JSON.parse(rawBody);
   } catch {
-    console.warn(`${LOG} body is not valid JSON — recording raw only`);
+    pipelineLog.warn(`${LOG} body is not valid JSON — recording raw only`);
   }
 
   const payload = parseWebhookPayload(parsedJson);
-  console.log(`${LOG} interpreted`, {
+  pipelineLog.info(`${LOG} interpreted`, {
     externalJobId: payload.externalJobId,
     event: payload.event,
     nextStatus: payload.nextStatus,
@@ -333,10 +334,13 @@ export async function POST(request: NextRequest) {
   if (error || !data) {
     // 500 on purpose: a retry is the only path back to this payload, and the
     // record call is idempotent, so being retried costs nothing.
-    console.error(`${LOG} FAILED TO RECORD — returning 500 to invite a retry`, {
-      error: error?.message,
-      fingerprint,
-    });
+    pipelineLog.error(
+      `${LOG} FAILED TO RECORD — returning 500 to invite a retry`,
+      {
+        error: error?.message,
+        fingerprint,
+      },
+    );
     return NextResponse.json(
       { error: "Failed to record delivery" },
       { status: 500 },
@@ -361,7 +365,7 @@ export async function POST(request: NextRequest) {
     // retry would orphan identically, so 200 is honest. Loud because during the
     // pilot this most likely means the vendor's job-id field is not named what
     // the docs say.
-    console.warn(
+    pipelineLog.warn(
       `${LOG} ORPHAN — no processing_jobs row matched this delivery`,
       {
         deliveryId: record.delivery_id,
@@ -457,7 +461,7 @@ export async function POST(request: NextRequest) {
           if (stored.ok) {
             resultsBody = stored.body;
             storedKey = stored.objectKey;
-            console.log(`${LOG} results stored`, {
+            pipelineLog.info(`${LOG} results stored`, {
               jobId,
               objectKey: stored.objectKey,
               bytes: stored.bytes,
@@ -465,7 +469,7 @@ export async function POST(request: NextRequest) {
           } else {
             // Loud, because nothing retries this. The url is on the job row
             // (`sas_url`) and stays valid for days — it can be fetched by hand.
-            console.error(
+            pipelineLog.error(
               `${LOG} results download FAILED — recover from the stored strokes url (processing_jobs.sas_url)`,
               { deliveryId, jobId, error: stored.error },
             );
@@ -536,18 +540,18 @@ export async function POST(request: NextRequest) {
               jobId,
             });
             if (ballPaths.status === "failed") {
-              console.error(
+              pipelineLog.error(
                 `${LOG} ball paths FAILED — re-run scripts/splitstep-ball-paths.ts --job ${jobId}`,
                 { jobId, error: ballPaths.error },
               );
             } else {
-              console.log(`${LOG} ball paths ${ballPaths.status}`, {
+              pipelineLog.info(`${LOG} ball paths ${ballPaths.status}`, {
                 jobId,
                 ...ballPaths,
               });
             }
           } catch (err) {
-            console.error(`${LOG} ball paths threw`, {
+            pipelineLog.error(`${LOG} ball paths threw`, {
               jobId,
               error: err instanceof Error ? err.message : String(err),
             });
@@ -585,7 +589,7 @@ export async function POST(request: NextRequest) {
       // the same budget, and holding both at once could refuse a retry the
       // budget actually has room for.
       await releaseQuota(supabase, failedJobId);
-      console.log(`${LOG} quota released for failed job`, {
+      pipelineLog.info(`${LOG} quota released for failed job`, {
         jobId: failedJobId,
       });
 
@@ -620,17 +624,20 @@ export async function POST(request: NextRequest) {
       });
 
       if (result.ok) {
-        console.log(`${LOG} auto-resubmitted after download failure`, {
+        pipelineLog.info(`${LOG} auto-resubmitted after download failure`, {
           failedJobId,
           newJobId: result.jobId,
           externalJobId: result.externalJobId,
         });
       } else {
-        console.warn(`${LOG} auto-resubmit declined — surfacing to the user`, {
-          failedJobId,
-          reason: result.reason,
-          message: result.message,
-        });
+        pipelineLog.warn(
+          `${LOG} auto-resubmit declined — surfacing to the user`,
+          {
+            failedJobId,
+            reason: result.reason,
+            message: result.message,
+          },
+        );
         await notifyAnalysisOutcome({
           supabase,
           jobId: failedJobId,
@@ -768,7 +775,7 @@ async function storeFrameData(params: {
         });
 
         if (!stored.ok) {
-          console.error(
+          pipelineLog.error(
             `${LOG} ${kind} download FAILED — recover from processing_jobs.${kind}_url, ` +
               `valid about a week`,
             { jobId, objectKey, error: stored.error },
@@ -776,7 +783,7 @@ async function storeFrameData(params: {
           return;
         }
 
-        console.log(`${LOG} ${kind} stored`, {
+        pipelineLog.info(`${LOG} ${kind} stored`, {
           jobId,
           objectKey,
           bytes: stored.bytes,
@@ -796,7 +803,7 @@ async function storeFrameData(params: {
         if (error) {
           // The bytes are stored under a key nothing points at. Loud, because
           // the only way back is reading this line.
-          console.error(
+          pipelineLog.error(
             `${LOG} ${kind} stored but ${column} was NOT recorded — a redelivery will fetch it again`,
             { jobId, objectKey, error: error.message },
           );

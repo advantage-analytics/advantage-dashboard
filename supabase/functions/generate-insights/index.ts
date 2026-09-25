@@ -7,6 +7,8 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const POSTHOG_PROJECT_TOKEN = Deno.env.get("POSTHOG_PROJECT_TOKEN");
+const POSTHOG_HOST = Deno.env.get("POSTHOG_HOST");
 
 /**
  * Gemini's transient refusals — 429 rate limit, 500, 503 "high demand" — used
@@ -47,6 +49,56 @@ async function fetchWithRetry(
   }
 }
 
+/**
+ * Analytics only — nothing here may fail or stall the review. Every step,
+ * trace id included, sits inside the try, and PostHog gets three seconds.
+ */
+async function captureGeminiGeneration({
+  userId,
+  prompt,
+  output,
+  latency,
+}: {
+  userId?: string;
+  prompt: string;
+  output: string;
+  latency: number;
+}): Promise<void> {
+  if (!POSTHOG_PROJECT_TOKEN || !POSTHOG_HOST || !userId) return;
+
+  try {
+    const traceId = crypto.randomUUID();
+    const response = await fetch(new URL("/i/v0/e/", POSTHOG_HOST).toString(), {
+      method: "POST",
+      signal: AbortSignal.timeout(3000),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: POSTHOG_PROJECT_TOKEN,
+        event: "$ai_generation",
+        properties: {
+          distinct_id: userId,
+          $ai_trace_id: traceId,
+          $ai_session_id: null,
+          $ai_span_name: "generate_match_insights",
+          $ai_model: "gemini-2.5-flash",
+          $ai_provider: "gemini",
+          $ai_input: [{ role: "user", content: prompt }],
+          $ai_output_choices: [{ role: "assistant", content: output }],
+          $ai_latency: latency,
+          $ai_temperature: 0.4,
+          $ai_http_status: 200,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn("PostHog AI generation capture failed:", response.status);
+    }
+  } catch (error) {
+    console.warn("PostHog AI generation capture threw:", error);
+  }
+}
+
 serve(async (req) => {
   try {
     // 1. We only need the matchId now
@@ -78,13 +130,20 @@ serve(async (req) => {
     // the player's career averages over PRIOR matches + their immediately previous match,
     // so the LLM can frame this match against them. Best-effort — any failure just omits it.
     let comparisonContext = "";
+    // Who PostHog attributes the generation to: the account that filed the
+    // match, read from the row rather than taken from the request body — any
+    // caller can reach this function, and a body field would let one attribute
+    // a generation to someone else. `player1_id` is not a substitute; it may be
+    // a program_players id rather than an account.
+    let uploaderId: string | undefined;
     try {
       const { data: matchRow } = await supabase
         .from("matches")
-        .select("player1_id, date, program_id")
+        .select("player1_id, date, program_id, created_by")
         .eq("id", matchId)
         .single();
 
+      uploaderId = matchRow?.created_by ?? undefined;
       const userId = matchRow?.player1_id;
       const matchDate = matchRow?.date;
 
@@ -216,6 +275,7 @@ serve(async (req) => {
     `;
 
     // 6. Call the Gemini API via REST
+    const generationStartedAt = Date.now();
     const geminiResponse = await fetchWithRetry(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -252,6 +312,12 @@ serve(async (req) => {
     }
 
     const generatedInsights = geminiData.candidates[0].content.parts[0].text;
+    await captureGeminiGeneration({
+      userId: uploaderId,
+      prompt,
+      output: generatedInsights,
+      latency: (Date.now() - generationStartedAt) / 1000,
+    });
     const insightsJSON = JSON.parse(generatedInsights);
 
     // 7. Update the 'matches' table directly

@@ -16,6 +16,8 @@ import {
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
 import { advButton } from "@/lib/ui/adv-button";
+import posthog from "posthog-js";
+import { isPostHogConfigured } from "@/lib/posthog-client";
 
 type StaffRole = "staff" | "coach";
 
@@ -72,6 +74,9 @@ export function StaffInviteDialog({
       if (!result.ok) {
         setError(result.error);
         return;
+      }
+      if (isPostHogConfigured) {
+        posthog.capture("staff_invite_sent", { role });
       }
       setSent({ address, warning: result.warning });
       // The Invited row belongs in the Members list behind the dialog now.
