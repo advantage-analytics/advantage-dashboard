@@ -413,8 +413,8 @@ export function KpiTileStrip({
       // `adv-kpi-strip` and `bg-white` apart (82e7bf6a) — the strip lost its
       // white card and never collapsed, with nothing looking broken in code.
       className={cn(
-        collapse && "adv-kpi-strip",
         "overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white shadow-card",
+        collapse && "adv-kpi-strip",
       )}
     >
       <div className="flex flex-wrap sm:flex-nowrap">{children}</div>
