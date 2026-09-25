@@ -1,5 +1,6 @@
 import { Anthropic } from "@posthog/ai/anthropic";
 import { OpenAI } from "@posthog/ai/openai";
+import { after } from "next/server";
 import { PostHog } from "posthog-node";
 import { randomUUID } from "node:crypto";
 
@@ -39,19 +40,43 @@ export function createLLMObservabilityContext(
   };
 }
 
-function createPostHogClient(): PostHog | null {
+declare global {
+  var __posthogLLMClient: PostHog | undefined;
+}
+
+/**
+ * One client per server instance, not per request: posthog-node cannot be
+ * torn down cleanly, so a client per call leaks. No exception autocapture —
+ * it registers process-wide handlers, and server errors already reach PostHog
+ * through onRequestError in instrumentation.ts.
+ */
+function getPostHogClient(): PostHog | null {
   // Missing keys mean no observability, never a failed insight.
   const token = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
   const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
   if (!token || !host) return null;
 
-  return new PostHog(token, {
+  globalThis.__posthogLLMClient ??= new PostHog(token, {
     host,
-    enableExceptionAutocapture: true,
     flushAt: 1,
     flushInterval: 0,
     privacyMode: false,
   });
+  return globalThis.__posthogLLMClient;
+}
+
+/**
+ * Flush after the response has finished, never inside the stream: awaiting
+ * PostHog in the generator's `finally` held the text stream open until the
+ * send completed — up to half a minute of retries if PostHog was slow.
+ */
+function flushAfterResponse(posthog: PostHog | null) {
+  if (!posthog) return;
+  try {
+    after(() => posthog.flush());
+  } catch {
+    // Outside a request (a script): flushAt 1 has already sent each event.
+  }
 }
 
 function posthogOptions(context: LLMObservabilityContext, provider?: "google") {
@@ -106,33 +131,33 @@ async function anthropicStream(
   context: LLMObservabilityContext,
   apiKey: string,
 ): Promise<AsyncIterable<string>> {
-  const posthog = createPostHogClient();
+  const posthog = getPostHogClient();
   const { default: AnthropicSdk } = await import("@anthropic-ai/sdk");
   const request = {
     model: "claude-opus-4-6",
     max_tokens: 1024,
+    stream: true as const,
     system: systemPrompt,
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
   };
+  // `create({ stream: true })`, not `messages.stream()`: PostHog's wrapper
+  // only instruments `create`, and `stream()` through it throws on first read.
   const stream = posthog
-    ? new Anthropic({
-        apiKey,
-        posthog,
-      }).messages.stream({ ...request, ...posthogOptions(context) })
-    : new AnthropicSdk({ apiKey }).messages.stream(request);
+    ? await new Anthropic({ apiKey, posthog }).messages.create({
+        ...request,
+        ...posthogOptions(context),
+      })
+    : await new AnthropicSdk({ apiKey }).messages.create(request);
+  flushAfterResponse(posthog);
 
   async function* iterate(): AsyncIterable<string> {
-    try {
-      for await (const event of stream) {
-        if (
-          event.type === "content_block_delta" &&
-          event.delta.type === "text_delta"
-        ) {
-          yield event.delta.text;
-        }
+    for await (const event of stream) {
+      if (
+        event.type === "content_block_delta" &&
+        event.delta.type === "text_delta"
+      ) {
+        yield event.delta.text;
       }
-    } finally {
-      await posthog?.shutdown();
     }
   }
 
@@ -147,7 +172,7 @@ async function openaiStream(
   context: LLMObservabilityContext,
   apiKey: string,
 ): Promise<AsyncIterable<string>> {
-  const posthog = createPostHogClient();
+  const posthog = getPostHogClient();
   const { default: OpenAISdk } = await import("openai");
   const request = {
     model: "gemini-2.5-flash-lite",
@@ -170,15 +195,12 @@ async function openaiStream(
         apiKey,
         baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
       }).chat.completions.create(request);
+  flushAfterResponse(posthog);
 
   async function* iterate(): AsyncIterable<string> {
-    try {
-      for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta?.content;
-        if (delta) yield delta;
-      }
-    } finally {
-      await posthog?.shutdown();
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) yield delta;
     }
   }
 
