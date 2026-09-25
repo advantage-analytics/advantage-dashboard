@@ -6,6 +6,7 @@ import Link from "next/link";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { ArrowRight, X } from "lucide-react";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { ConfirmAside } from "@/components/ui/confirm-dialog";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
@@ -54,7 +55,7 @@ export function BetaWelcomeDialog({
   const primaryRef = useRef<HTMLAnchorElement>(null);
   const rows = [
     { label: "SwingVision imports", value: "Unlimited" },
-    { label: "Reports and stats", value: "Included" },
+    { label: "Match reports and stats", value: "Included" },
     { label: "Free through", value: formatPilotEnd() },
   ];
 
@@ -109,49 +110,50 @@ export function BetaWelcomeDialog({
               every month.
             </DialogPrimitive.Description>
 
-            {/* The allowance as one cluster: the figure, what it is, and
-                what it means, read left to right on a shared baseline. */}
-            <div className="relative mt-7 flex items-center gap-4 border-t border-white/25 pt-5">
-              <span className="tabular text-[64px] leading-[0.8] font-light tracking-[-2px]">
+            <div className="relative mt-7 flex items-end gap-3 border-t border-white/25 pt-5">
+              <span className="tabular text-[64px] leading-[0.85] font-light tracking-[-2px]">
                 {terms.hours}
               </span>
-              <span className="flex flex-col gap-1">
-                <span className="text-[15px] leading-[1.2] font-medium">
-                  hours of video analysis a month
-                </span>
-                <span className="text-[12px] leading-[1.3] text-white/85">
-                  {terms.programName
-                    ? "Shared across your roster"
-                    : "About one full match"}{" "}
-                  · Resets on the 1st
-                </span>
+              <span className="pb-1 text-[13px] leading-[1.35] text-white/85">
+                hours of match video
+                <br />
+                analysis, every month
+              </span>
+              <span className="flex-1" />
+              <span className="pb-1 text-right text-[11px] leading-[1.45] text-white/90">
+                {terms.programName
+                  ? "Shared by the program"
+                  : "About one full match"}
+                <br />
+                Resets on the 1st
               </span>
             </div>
           </div>
 
-          <div className="flex flex-col gap-5 px-7 pt-5 pb-6">
-            {/* Three short facts read across, not down: a strip of
-                label-over-value cells split by hairlines. */}
-            <dl className="grid grid-cols-3 divide-x divide-[var(--border-hairline)]">
+          <div className="flex flex-col gap-6 px-7 pt-6 pb-7">
+            <dl className="flex flex-col">
               {rows.map((row, i) => (
                 <div
                   key={row.label}
-                  className={cn("flex flex-col gap-1", i > 0 && "pl-4")}
+                  className={cn(
+                    "flex items-baseline gap-6 py-3.5",
+                    i > 0 && "border-t border-[var(--border-hairline)]",
+                  )}
                 >
-                  <dt className="text-[11px] text-[var(--ink-500)]">
+                  <dt className="min-w-0 flex-1 text-[12px] text-[var(--ink-700)]">
                     {row.label}
                   </dt>
-                  <dd className="tabular text-[14px] font-medium text-[var(--ink-900)]">
+                  <dd className="tabular shrink-0 text-[13px] font-medium text-[var(--ink-900)]">
                     {row.value}
                   </dd>
                 </div>
               ))}
             </dl>
 
-            <p className="border-t border-[var(--border-hairline)] pt-4 text-[12px] leading-[1.6] text-[var(--ink-500)]">
+            <ConfirmAside>
               Paid plans start in {PAID_PLANS_BEGIN}. We&apos;ll give you plenty
               of notice before anything changes.
-            </p>
+            </ConfirmAside>
 
             <div className="flex items-center gap-2.5">
               <Link
