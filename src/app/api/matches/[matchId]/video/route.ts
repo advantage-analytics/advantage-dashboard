@@ -33,6 +33,7 @@ import {
 } from "@/lib/services/match-video/access";
 import {
   productionCleanupDeps,
+  scheduleAfterResponse,
   type CleanupDeps,
 } from "@/lib/services/match-video/cleanup";
 import {
@@ -43,7 +44,6 @@ import {
 import {
   handleRemoveAttachment,
   rpcRemoveAttachment,
-  scheduleAfterResponse,
 } from "@/lib/services/match-video/remove";
 import { siteUrl } from "@/lib/site-url";
 import { lazyAdminClient } from "@/lib/supabase/admin";
@@ -95,6 +95,6 @@ export async function DELETE(
     get cleanup(): CleanupDeps {
       return (cleanup ??= productionCleanupDeps(admin));
     },
-    schedule: scheduleAfterResponse,
+    schedule: (task) => scheduleAfterResponse(task, "[match-video-remove]"),
   });
 }

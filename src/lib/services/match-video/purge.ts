@@ -62,6 +62,7 @@ import {
   CLEANUP_BATCH_LIMIT,
   productionCleanupDeps,
   requestBestEffortCleanup,
+  scheduleAfterResponse,
   type CleanupDeps,
   type CleanupRunSummary,
 } from "./cleanup";
@@ -205,28 +206,6 @@ export function describeRun(
  * Production deps
  * ---------------------------------------------------------------------- */
 
-/**
- * `after()` from `next/server`, so the run starts once the route handler or
- * server action has answered — after its match delete. Outside a request
- * scope (a script driving `purgeMatchStorage` by hand) `after` throws; the
- * task then runs inline, which is harmless: it is the same bounded worker,
- * and the rows it cannot take yet wait for the schedule.
- */
-async function scheduleAfterResponse(task: () => Promise<void>): Promise<void> {
-  try {
-    const { after } = await import("next/server");
-    after(task);
-  } catch (cause) {
-    console.warn(
-      `${LOG} no request scope — running the post-delete task inline`,
-      {
-        message: cause instanceof Error ? cause.message : String(cause),
-      },
-    );
-    await task();
-  }
-}
-
 /** The service-role client, T14's production seams and Next's `after`. */
 export function productionAttachmentPurgeDeps(
   admin: SupabaseClient = lazyAdminClient(),
@@ -252,6 +231,6 @@ export function productionAttachmentPurgeDeps(
     get cleanup(): CleanupDeps {
       return (cleanup ??= productionCleanupDeps(admin));
     },
-    schedule: scheduleAfterResponse,
+    schedule: (task) => scheduleAfterResponse(task, LOG),
   };
 }

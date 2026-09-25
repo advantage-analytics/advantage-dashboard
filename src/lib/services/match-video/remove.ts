@@ -53,6 +53,7 @@ import {
 } from "./access";
 import {
   requestBestEffortCleanup,
+  scheduleAfterResponse,
   type CleanupDeps,
   type CleanupRunSummary,
 } from "./cleanup";
@@ -312,23 +313,4 @@ export function rpcRemoveAttachment(
       retired_reason: row.retired_reason,
     });
   };
-}
-
-/**
- * `after()` from `next/server`, so the worker runs once the response is sent.
- * Outside a request scope `after` throws and the task runs inline — the same
- * bounded worker, harmless either way.
- */
-export async function scheduleAfterResponse(
-  task: () => Promise<void>,
-): Promise<void> {
-  try {
-    const { after } = await import("next/server");
-    after(task);
-  } catch (cause) {
-    console.warn(`${LOG} no request scope — running cleanup inline`, {
-      message: cause instanceof Error ? cause.message : String(cause),
-    });
-    await task();
-  }
 }
