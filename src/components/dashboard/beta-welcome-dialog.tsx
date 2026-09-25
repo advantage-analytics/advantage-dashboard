@@ -106,9 +106,7 @@ export function BetaWelcomeDialog({
             </DialogPrimitive.Description>
 
             <div className="relative mt-7 flex items-end gap-3 border-t border-white/25 pt-5">
-              {/* Two figures wide whatever the number, so the player's "2"
-                  sits in the same block as a program's "75". */}
-              <span className="tabular min-w-[1.15em] text-[64px] leading-[0.85] font-light tracking-[-2px]">
+              <span className="tabular text-[64px] leading-[0.85] font-light tracking-[-2px]">
                 {terms.hours}
               </span>
               <span className="pb-1 text-[13px] leading-[1.35] text-white/85">
