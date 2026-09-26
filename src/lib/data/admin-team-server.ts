@@ -1038,10 +1038,16 @@ async function readRoster(
 
   // Never an empty list here — every player contributes its own id — but the
   // guard above is what makes that true, and PostgREST refuses `in.()`.
+  //
+  // Scoped to this program, as the team's own loaders scope matches
+  // (`player-profile-server.ts`, `schedule-server.ts`). A linked player's
+  // auth uid also owns their PERSONAL matches and any from another program,
+  // and without the filter those inflated this roster's counts.
   const ownerIds = rosterMatchOwnerIds(players);
   const { data: matchRows, error: matchError } = await admin
     .from("matches")
     .select("id, player1_id, player2_name, result, score, date")
+    .eq("program_id", programId)
     .in("player1_id", ownerIds);
 
   if (matchError) {

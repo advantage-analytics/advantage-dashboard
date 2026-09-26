@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "./admin-guard";
+import { memberRoleForClaimRole } from "./claim-roles";
 import { resolveRequest } from "./admin-actions";
 import { generateToken, hashToken, INVITE_TTL_HOURS } from "./tokens";
 import {
@@ -516,11 +517,13 @@ export async function adminRevokeInvite(
  * invitation behind it vanishes from the one list that still says they are
  * waiting.
  *
- * The role is hard-coded to `player`, exactly as `approveJoinRequest` does.
- * `program_requests.role` holds a CLAIM role (`head_coach`, `assistant`…),
- * which is not the same vocabulary as `program_members.role`; letting it
- * through would bind a coach's login to an athlete's match history on a
- * mismatch.
+ * The role comes from `memberRoleForClaimRole()`, never straight from the row.
+ * `program_requests.role` holds a CLAIM role (`head_coach`, `assistant_coach`…),
+ * which is not the same vocabulary as `program_members.role`, so it is
+ * translated: the three coach answers become `coach`, and `player`, `other`
+ * or no answer stay `player`. Hard-coding `player` here (as the first version
+ * did) invited every coach who asked to join as an athlete, with nothing on
+ * screen to say so.
  *
  * The address is read from the request's own row with the service-role client
  * and never taken from the caller, and `resolveRequest` — which already
@@ -545,7 +548,7 @@ export async function adminResolveJoinRequest(
   const db = createAdminClient();
   const { data: request } = await db
     .from("program_requests")
-    .select("id, email, program_id, kind, status")
+    .select("id, email, program_id, kind, status, role")
     .eq("id", requestId)
     .maybeSingle();
 
@@ -563,7 +566,7 @@ export async function adminResolveJoinRequest(
   const invite = await adminInviteMember({
     programId: request.program_id as string,
     email: request.email as string,
-    role: "player",
+    role: memberRoleForClaimRole(request.role as string | null),
   });
   if (!invite.ok) return invite;
 

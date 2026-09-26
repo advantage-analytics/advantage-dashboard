@@ -133,7 +133,8 @@ export function AdminRequestsCard({
                 Decline
               </SettingsButton>
               {/* "Send invite" rather than "Approve": membership is only ever
-                  self-created, so this sends a player invitation that reserves
+                  self-created, so this sends an invitation (coach for a coach
+                  request, player otherwise) that reserves
                   a seat now and mints the membership on acceptance, then
                   closes the request. */}
               <SettingsButton

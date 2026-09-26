@@ -81,6 +81,11 @@ export function PilotUsageCard({
   const left = secondsLeft(usage.usedSeconds, usage.capSeconds);
 
   const ended = pilot.endedAt !== null;
+  // A program that never had a pilot — no end date, never approved, never
+  // ended by hand (an unclaimed program, a custom org). There is nothing to
+  // end, so `End pilot` would be a no-op that still looks consequential, and
+  // the date control starts one rather than changing one.
+  const noPilot = !pilot.endsOn && !pilot.approvedAt && !ended;
 
   return (
     <SettingsCard className="gap-0 bg-[var(--surface-card)] py-6">
@@ -89,7 +94,9 @@ export function PilotUsageCard({
           <span className="text-[11px] text-[var(--ink-500)]">
             {pilot.endsOn
               ? `Through ${formatDay(pilot.endsOn)}`
-              : "No end date set"}
+              : noPilot
+                ? "No pilot"
+                : "No end date set"}
           </span>
         }
       >
@@ -155,11 +162,13 @@ export function PilotUsageCard({
           programId={programId}
           endsOn={pilot.endsOn}
           ended={ended}
+          noPilot={noPilot}
           onSaved={() => router.refresh()}
         />
-        {/* An ended pilot has nothing left to end — the RPC is idempotent, so
-            the button would be a no-op that still looks consequential. */}
-        {!ended && (
+        {/* An ended pilot — or one that never existed — has nothing left to
+            end; the RPC is idempotent, so the button would be a no-op that
+            still looks consequential. */}
+        {!ended && !noPilot && (
           <EndPilot
             programId={programId}
             programName={programName}
@@ -282,11 +291,14 @@ function ChangeEndDate({
   programId,
   endsOn,
   ended,
+  noPilot,
   onSaved,
 }: {
   programId: string;
   endsOn: string | null;
   ended: boolean;
+  /** No pilot yet: the trigger reads `Set end date`, since saving starts one. */
+  noPilot: boolean;
   onSaved: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -332,7 +344,7 @@ function ChangeEndDate({
       }}
     >
       <PopoverTrigger className={`${advButton("outline", "sm")} grow`}>
-        Change end date
+        {noPilot ? "Set end date" : "Change end date"}
       </PopoverTrigger>
       <PopoverContent
         align="start"
