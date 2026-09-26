@@ -41,7 +41,7 @@ export function AdminDetailsCard({ program }: { program: AdminTeamProgram }) {
   const [editing, setEditing] = useState(false);
 
   return (
-    <SettingsCard className="gap-0 bg-[var(--surface-card)]">
+    <SettingsCard className="gap-0 bg-[var(--surface-card)] py-6">
       <SettingsCardTitle
         trailing={
           <button

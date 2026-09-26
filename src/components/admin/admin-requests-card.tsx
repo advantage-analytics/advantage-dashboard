@@ -84,7 +84,7 @@ export function AdminRequestsCard({
   const strip = claimStrip(claim);
 
   return (
-    <SettingsCard className="bg-[var(--surface-card)]">
+    <SettingsCard className="bg-[var(--surface-card)] pt-6">
       <SettingsCardTitle
         trailing={
           joinRequests.length > 0 ? (

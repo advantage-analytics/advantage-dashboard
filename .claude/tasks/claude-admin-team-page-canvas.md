@@ -295,7 +295,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T20 · Fidelity pass against the canvas at 1440
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19
 - **files:** (guess) new `docs/superpowers/specs/2026-09-18-admin-team-page/fidelity.md`, small fixes across `src/components/admin/*` and `src/app/admin/teams/[programId]/page.tsx`

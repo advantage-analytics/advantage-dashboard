@@ -83,7 +83,7 @@ export function PilotUsageCard({
   const ended = pilot.endedAt !== null;
 
   return (
-    <SettingsCard className="gap-0 bg-[var(--surface-card)]">
+    <SettingsCard className="gap-0 bg-[var(--surface-card)] py-6">
       <SettingsCardTitle
         trailing={
           <span className="text-[11px] text-[var(--ink-500)]">
@@ -175,7 +175,7 @@ export function PilotUsageCard({
 /** One fact line — label left at ink-500, value right at ink-900. */
 function Kv({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 py-[5px]">
+    <div className="flex min-h-9 items-center justify-between gap-4 py-1.5">
       <dt className="text-[12px] text-[var(--ink-500)]">{label}</dt>
       <dd className="text-[12px] text-[var(--ink-900)] tabular-nums">
         {value}
@@ -331,7 +331,7 @@ function ChangeEndDate({
         setOpen(next);
       }}
     >
-      <PopoverTrigger className={`${advButton("outline", "sm")} flex-1`}>
+      <PopoverTrigger className={`${advButton("outline", "sm")} grow`}>
         Change end date
       </PopoverTrigger>
       <PopoverContent
@@ -442,7 +442,7 @@ function EndPilot({
     <>
       <button
         type="button"
-        className={`${advButton("danger", "sm")} flex-1`}
+        className={`${advButton("danger", "sm")} grow`}
         onClick={() => setOpen(true)}
       >
         End pilot

@@ -186,7 +186,7 @@ export function AdminRosterCard({
   }));
 
   return (
-    <SettingsCard className="bg-[var(--surface-card)]">
+    <SettingsCard className="bg-[var(--surface-card)] pt-6 pb-3.5">
       <SettingsCardTitle
         trailing={
           <>

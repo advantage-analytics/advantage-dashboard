@@ -30,8 +30,15 @@ import { viewPillProps } from "@/components/admin/view-pills";
  * first one in `TEAM_SECTION_PILLS` order, which is the row's own reading
  * order — so People beats Usage while both are up, and the row never
  * flickers between a main-column section and a rail one. When nothing is in
- * the band the row holds whatever it last showed, except at the very top of
- * the page, where it falls back to Overview.
+ * the band the row holds whatever it last showed.
+ *
+ * **The top of the page is Overview, whatever the band holds.** At scroll 0
+ * the People card already sits inside the band, so band-first logic lit
+ * `People` on load (T20 fidelity row "Active pill at scroll 0"). The top
+ * check therefore runs first, and a passive scroll listener re-runs the same
+ * pick — it reads only `scrollY` and the observer's cached set, never a box —
+ * because scrolling back up to 0 need not change what intersects the band,
+ * so the observer alone would stay silent.
  */
 
 const OBSERVER_ROOT_MARGIN = "-64px 0px -55% 0px";
@@ -46,6 +53,17 @@ export function TeamSectionPills() {
   useEffect(() => {
     const targets = TEAM_SECTION_PILLS.filter((pill) => pill.target !== null);
 
+    const pick = () => {
+      if (window.scrollY <= OVERVIEW_SCROLL_EPSILON) {
+        setActiveId("overview");
+        return;
+      }
+      const inBand = targets.find((pill) =>
+        visible.current.has(pill.target as string),
+      );
+      if (inBand) setActiveId(inBand.id);
+    };
+
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -55,16 +73,7 @@ export function TeamSectionPills() {
             visible.current.delete(entry.target.id);
           }
         }
-
-        const inBand = targets.find((pill) =>
-          visible.current.has(pill.target as string),
-        );
-
-        if (inBand) {
-          setActiveId(inBand.id);
-        } else if (window.scrollY <= OVERVIEW_SCROLL_EPSILON) {
-          setActiveId("overview");
-        }
+        pick();
       },
       { rootMargin: OBSERVER_ROOT_MARGIN },
     );
@@ -74,7 +83,12 @@ export function TeamSectionPills() {
       if (element) observer.observe(element);
     }
 
-    return () => observer.disconnect();
+    window.addEventListener("scroll", pick, { passive: true });
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", pick);
+    };
   }, []);
 
   return (

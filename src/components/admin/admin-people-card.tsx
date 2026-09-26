@@ -246,7 +246,7 @@ export function AdminPeopleCard({
   };
 
   return (
-    <SettingsCard className="bg-[var(--surface-card)]">
+    <SettingsCard className="bg-[var(--surface-card)] pt-6 pb-4">
       <SettingsCardTitle
         trailing={
           <>

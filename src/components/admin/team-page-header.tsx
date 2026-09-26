@@ -92,14 +92,14 @@ export function TeamPageHeader({
   ].filter((fact) => fact.text !== "");
 
   return (
-    <div className="flex items-center gap-5 pb-6">
+    <div className="flex items-center gap-5">
       <AdminTeamCrestControl
         programId={program.id}
         name={program.name}
         crestUrl={program.crestUrl}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           <h1 className="text-display truncate">{program.name}</h1>
           <StatePill>{programStatusLabel(program.status)}</StatePill>
           {plan === "pilot" ? (

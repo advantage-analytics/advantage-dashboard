@@ -888,3 +888,14 @@ thing an admin meets.
 2. The Pilot card shows `End pilot` and "No end date set" on a program that never had a pilot.
 3. Schedule rows and the Pilot pill don't render on ZZ (no events, unclaimed); their fidelity rows were checked from source constants, not measured.
 4. The harness script names `t20-harness.mjs`/`t20-flows.mjs` remain in the worktree's `info/exclude` (files deleted).
+
+## T20 · Fidelity pass against the canvas at 1440 — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** Restored the blocked work from stash c2125259 at the user's request and settled its three open rows per the user's decision (2026-09-26): fixed the active pill at scroll 0 — `team-section-pills.tsx` now checks the top of the page before the observer band and re-runs the pick on a passive scroll listener (verified in the running app at 1440: `Overview` at load, a later section when scrolled, `Overview` again at top); recorded the 13px shared `SettingsCardTitle` and the one-line DS person row as deliberate deviations. `fidelity.md` now reads 52 rows — 30 match, 10 fixed-in-this-diff, 12 deliberate deviation — plus the six flows with their audit actions and the label table. The other fixes are as logged under the blocked entry (header gaps, card padding on all nine cards, Pilot kv rows and buttons, 40px conference mark radius).
+
+**follow-ups:**
+
+1. Crest upload/remove, invite revoke and the uploads toggle write no audit row (carried from the blocked entry).
+2. The Pilot card shows `End pilot` / "No end date set" on a program that never had a pilot.

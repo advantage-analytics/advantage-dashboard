@@ -93,7 +93,7 @@ export function AdminConferenceCard({
   const actionLabel = conference ? "Change" : "Set conference";
 
   return (
-    <SettingsCard className="gap-0 bg-[var(--surface-card)]">
+    <SettingsCard className="gap-0 bg-[var(--surface-card)] py-6">
       <SettingsCardTitle
         trailing={
           <MenuSelect

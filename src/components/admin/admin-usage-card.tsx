@@ -53,7 +53,7 @@ export function AdminUsageCard({
   const note = poolRuleNote(orgType);
 
   return (
-    <SettingsCard className="gap-0 bg-[var(--surface-card)]">
+    <SettingsCard className="gap-0 bg-[var(--surface-card)] py-6">
       <SettingsCardTitle
         trailing={
           <span className="text-[11px] text-[var(--ink-500)] tabular-nums">
