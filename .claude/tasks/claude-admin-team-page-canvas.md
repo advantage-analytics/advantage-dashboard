@@ -120,7 +120,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T7 · Add admin member-upload + add-player actions with gate specs
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** (guess) `src/lib/services/programs/admin-team-actions.ts`, new `tests/admin-team-member-roster-actions.spec.ts`

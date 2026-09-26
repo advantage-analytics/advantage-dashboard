@@ -326,3 +326,55 @@ the action signatures stay clean.
    columns editable, but nothing server-side gates video submission on them, so an admin
    who ends a pilot today still sees uploads work. The gate belongs in `reserveQuota()` /
    `explainVideoRefusal()`.
+
+## T7 · Add admin member-upload + add-player actions with gate specs — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all four criteria met.
+
+**changed:** Two actions appended to `admin-team-actions.ts`, same shape as T6's three:
+
+- `adminSetMemberUploadEnabled({ programId, userId, enabled }): AdminTeamOutcome`
+- `adminAddProgramPlayer({ programId, firstName, lastName, classYear?, lineupSpot?,
+email? }): AddPlayerResult`
+
+Both `requireAdmin()` first, both use the **session** client (verified by grep that
+neither touches `createAdminClient`), both pass an explicit `p_program_id` — which is the
+whole point, since an admin has no membership to infer a program from — and both place
+`revalidatePath` after the error return, so a failed call revalidates nothing. The spec
+asserts that last part too.
+
+**`adminAddProgramPlayer` returns `AddPlayerResult`, not `AdminTeamOutcome`, on purpose.**
+The dialog reads `result.profileId` and hands it to `inviteMember({ playerId })` when
+"also invite" is ticked; `AdminTeamOutcome` carries no id, so returning it would have
+forced a second result shape or a roster re-read to guess the row just written. Criterion 1
+names no return type for these two (unlike T6's), and `AddPlayerResult`'s failure arm is
+already `{ ok: false; error: string }`, so criterion 4 is unaffected. The type is imported
+type-only rather than re-declared, so the admin and member actions cannot drift while the
+dialog treats them as one prop.
+
+**A correction to the task's own wording, worth knowing before T13 runs.** Criterion 3 says
+the dialog "can take it as an action prop unchanged" — but `add-player-dialog.tsx` has **no
+action prop today**; it imports `addProgramPlayer` directly at `:23`. The shapes are
+compatible — its `submit()` builds exactly the five keys, so
+`(input) => adminAddProgramPlayer({ programId, ...input })` binds cleanly — but **T13 has
+to add the prop seam itself**, in an 847-line file shared with the dashboard roster. That
+is more work than T13's wording implies. The reviewer agreed shape-compatibility is the
+correct reading of criterion 3, since T7's `files:` deliberately excludes the dialog.
+
+Spec `tests/admin-team-member-roster-actions.spec.ts` (6 tests) uses T6's `node:vm`
+pattern: the real module transpiled, only `next/cache`, `@/lib/supabase/server` and
+`./admin-guard` stubbed, asserting the recorded `rpc()` array is empty — a genuine
+negative, not merely an error result. No database; correctly not in `live-db-specs.ts`.
+
+**follow-ups:**
+
+1. **`set_member_upload_enabled` still writes no audit row** (third recording). An admin
+   flipping another program's per-member upload switch leaves no trace, and T11 puts that
+   switch on the page while T19's Activity card is meant to show what admins did. The fix
+   belongs in the **RPC**, not the action — adding it in the action would give the
+   coach-facing path a different history for the same switch. A `member.upload_changed`
+   row with `details.by_admin` would match `add_program_player`'s convention. The gap is
+   documented in the action's doc comment so the next reader does not assume a trace.
+2. The member-facing action special-cases `P0002` ("no membership row") with friendlier
+   wording; the admin one passes the RPC's own raise text through. Fine, since that text
+   is person-readable, but T11 may want the friendlier branch lifted.

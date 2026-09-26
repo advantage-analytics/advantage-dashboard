@@ -15,6 +15,10 @@ import { programDisplayName } from "@/lib/data/programs-server";
 import { displayName } from "./invite-acceptance";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import type { MemberRole } from "@/lib/data/team-settings-server";
+// The dialog-facing result shape, imported rather than re-declared so
+// `adminAddProgramPlayer` and `addProgramPlayer` cannot drift apart while
+// `add-player-dialog.tsx` takes either one as the same action prop.
+import type { AddPlayerResult } from "@/components/dashboard/team/roster-actions";
 import type { EventsPolicy, UploadPolicy } from "@/lib/workspace/types";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
 import { emptyProgramUsage, type ProgramUsage } from "@/lib/data/usage-server";
@@ -839,4 +843,113 @@ export async function adminEndPilot(
 
   revalidatePath(ADMIN_PATH, "layout");
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Member upload switch and roster players (T7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Let one member of somebody else's program spend its analysis budget, or stop
+ * them — the admin console's copy of the Roster page's per-person switch
+ * (`components/dashboard/team/roster-actions.ts`'s `setMemberUploadEnabled`).
+ *
+ * The one difference is `programId`, and it is not an optional convenience: the
+ * member-facing action reads the program out of `getWorkspaceContext()` because
+ * a coach is *in* the program they are editing. An admin is not, so there is no
+ * membership to infer from and the id has to be passed. T3 is what makes that
+ * safe — it widened the RPC's gate to `is_program_staff(p_program_id) or
+ * is_admin()`, so the id is authorised against `users.is_admin` rather than
+ * against a membership the caller does not have.
+ *
+ * SESSION client, like every other write in this module: the RPC is
+ * `security definer`, and a service-role call would be an unidentified actor.
+ *
+ * KNOWN GAP, deliberately not fixed here: `set_member_upload_enabled` writes no
+ * `program_audit_log` row at all, so an admin flipping another program's switch
+ * leaves no trace. That is an open follow-up against the RPC, not something an
+ * action can paper over — a second write from here would be an audit row the
+ * coach-facing path does not produce, i.e. two different histories for one
+ * switch.
+ *
+ * The RPC's two raises carry the same meanings the member action documents —
+ * `42501` for an unauthorised caller, `P0002` for a write that matched no
+ * `program_members` row — and both messages are written for a person, so
+ * `toMessage` passes them straight through.
+ */
+export async function adminSetMemberUploadEnabled(input: {
+  programId: string;
+  userId: string;
+  enabled: boolean;
+}): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_member_upload_enabled", {
+    p_program_id: input.programId,
+    p_user_id: input.userId,
+    p_enabled: input.enabled,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't change that permission."),
+    };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
+}
+
+/**
+ * Add a coach-managed player row to somebody else's roster, as an admin.
+ *
+ * ── Why this returns `AddPlayerResult` and not `AdminTeamOutcome` ───────────
+ *
+ * Because `add-player-dialog.tsx` is going to be handed this function as an
+ * action prop unchanged (T13), and the dialog does not merely check `ok`: on
+ * success it stores `result.profileId` and, when "also invite" is ticked,
+ * invites against that id in the same breath. `AdminTeamOutcome` has no id to
+ * give it, so the dialog would need a second shape — or a re-read of the roster
+ * to guess which row it just wrote. `AddPlayerResult`'s failure arm is already
+ * `{ ok: false; error: string }`, so nothing about the refusal contract changes;
+ * `{ ok: false }` for a non-admin is exactly what `AdminTeamOutcome` would give.
+ *
+ * The input is `addProgramPlayer`'s five player fields, spelled identically,
+ * plus the `programId` an admin has no workspace to infer. The dialog's caller
+ * binds that one id and passes the rest through verbatim.
+ *
+ * Every rule stays in `add_program_player`: staff-or-admin, both names
+ * required, the email shape, the seat count (`54000`, in prose) and the two
+ * duplicate checks. Its messages are written for people and pass through.
+ */
+export async function adminAddProgramPlayer(input: {
+  programId: string;
+  firstName: string;
+  lastName: string;
+  classYear?: string | null;
+  lineupSpot?: number | null;
+  email?: string | null;
+}): Promise<AddPlayerResult> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("add_program_player", {
+    p_program_id: input.programId,
+    p_first_name: input.firstName,
+    p_last_name: input.lastName,
+    p_class_year: input.classYear ?? null,
+    p_lineup_spot: input.lineupSpot ?? null,
+    p_email: input.email ?? null,
+  });
+
+  if (error) {
+    return { ok: false, error: toMessage(error, "Couldn't add that player.") };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true, profileId: typeof data === "string" ? data : null };
 }
