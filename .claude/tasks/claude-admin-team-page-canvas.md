@@ -308,7 +308,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T21 · Release checks
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T20
 - **files:** (guess) whatever the checks flag; `MAP.md`

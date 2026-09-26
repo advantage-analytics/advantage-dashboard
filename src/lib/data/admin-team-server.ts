@@ -283,7 +283,7 @@ export interface AdminTeamActivityEntry {
  * both make — so calling a finished bracket "won" would be a claim the
  * database does not hold.
  */
-export type AdminTeamEventResult =
+type AdminTeamEventResult =
   "scheduled" | "playing" | "won" | "lost" | "level" | "played";
 
 /**
@@ -314,7 +314,7 @@ export interface AdminTeamEvent {
   result: AdminTeamEventResult;
 }
 
-export interface AdminTeamData {
+interface AdminTeamData {
   program: AdminTeamProgram;
   /** The most recent claim, or null for a program nobody has ever claimed. */
   claim: AdminTeamClaim | null;

@@ -65,12 +65,12 @@ import type { EventsPolicy, UploadPolicy } from "@/lib/workspace/types";
 /** Everything under the admin console re-renders after any of these. */
 const ADMIN_PATH = "/admin";
 
-export type AdminTeamOutcome = { ok: true } | { ok: false; error: string };
+type AdminTeamOutcome = { ok: true } | { ok: false; error: string };
 
-export type AdminTransferResult =
+type AdminTransferResult =
   { ok: true; warning?: string } | { ok: false; error: string };
 
-export type AdminInviteResult =
+type AdminInviteResult =
   | { ok: true; warning?: string }
   | { ok: false; error: string; linkTo?: { profileId: string } };
 

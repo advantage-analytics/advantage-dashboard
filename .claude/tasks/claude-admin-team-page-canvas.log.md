@@ -899,3 +899,18 @@ thing an admin meets.
 
 1. Crest upload/remove, invite revoke and the uploads toggle write no audit row (carried from the blocked entry).
 2. The Pilot card shows `End pilot` / "No end date set" on a program that never had a pilot.
+
+## T21 · Release checks — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass (criterion 1's `test:database` judged not-applicable — see below)
+
+**changed:** Release checks on the finished branch:
+
+- `npm run lint` exit 0 — 0 errors, 36 pre-existing warnings in untouched files.
+- `npm run typecheck` exit 0.
+- `npm run format:check` exit 0.
+- `npm test` exit 0 — 3331 passed, 301 skipped (live-DB specs skip against prod by design); `upload-line-swap.spec.ts:371` passed on retry (known full-suite flake).
+- `npm run test:database` — **not run: the script does not exist on this base.** No `test:database` in `package.json` and no `tests/database/`; both arrive with the unmerged admin-uploads work (e.g. `2b0ae1b5`), which this branch was detached away from. The three migrations T1–T3 were verified against the live DB when applied instead.
+- `npm run map` — "68 routes, already current", no diff.
+- `grep -rn "team-tabs\|ComingSoonPage" src/app/admin/teams src/components/admin` — empty; no `@/lib/supabase/admin` import under `src/components/admin/`; `client-bundle-boundary` passes within `npm test`.
+- Dropped `export` from five types with no importer: `AdminTeamOutcome`, `AdminTransferResult`, `AdminInviteResult` (`admin-team-actions.ts`) and `AdminTeamEventResult`, `AdminTeamData` (`admin-team-server.ts`).
