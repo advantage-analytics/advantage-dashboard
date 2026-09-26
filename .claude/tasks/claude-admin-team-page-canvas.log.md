@@ -536,3 +536,61 @@ row-targeting param would be a promise the list does not keep. Verified before l
    and the `⋯`. `TeamHeaderActions` has the slot; T22 fills it once admin-uploads lands.
 3. No eyes-on: the dialog has never been opened in a browser against a real program. The
    header now has three interactive controls that nothing has exercised.
+
+## T11 · People card: transfer label, Uploads on switch, invited rows — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all five criteria met.
+
+**changed:** `Make owner` → `Transfer ownership` (grep count 0 for the old string). Each
+non-owner row gains an `AdvSwitch` labelled `Uploads on` bound to `member.uploadEnabled`,
+calling `adminSetMemberUploadEnabled`. Pending invites now render in this card with the
+canvas's meta line, an `Invited` pill and `Resend` / `Revoke`, reusing
+`roster-vocabulary.tsx`'s labels and the Requests card's guard rationale rather than
+reinventing them. Empty state is a text line on the card's hairline.
+
+**The switch uses `useOptimistic`, not a `useState` copy** — and that distinction is the
+whole of criterion 2. Every action here calls `revalidatePath`, so a `useState` copy
+seeded once from the prop would fight the server value on every write. The override is
+dispatched inside the transition, holds through the refresh, and is dropped when the
+transition settles; on failure nothing was written, so dropping it _is_ the revert, with
+the message in `AdminCardProblem`.
+
+**It fixed a seat re-derivation that was already shipped.** The card computed
+`total = Math.max(seats.seats, seats.used + seats.pending)`, which inflates the
+denominator whenever used+pending exceeds the sold seat count — so this page would print
+a different capacity than `program_seat_usage` and than Settings › Teams. That is exactly
+what the note's "print the loader's figure, never re-derive it" was guarding against, and
+the reviewer judged replacing it required by criterion 1 rather than scope creep. Now
+prints `seats.seats`.
+
+**Two files outside the `files:` guess, and criterion 3 was unbuildable without them.**
+`TeamInvite` carries neither `expires_at` nor the inviter's name, so the meta line the
+criterion specifies could not be built. The loader gained
+`AdminTeamInvite extends TeamInvite { expiresAt; invitedByName }` with an `inviter:users`
+join, and `page.tsx` passes `invites={data.invites}`. Additive: `AdminRequestsCard` still
+takes `readonly TeamInvite[]` and has **no diff** — the overlap is T12's to resolve, as
+the note intended.
+
+**A canvas deviation taken deliberately.** The canvas puts `Transfer ownership` on the
+owner's row; the code puts it on each coach/staff row — the rows that can _receive_
+ownership, since the dialog takes a target. The label was renamed as criterion 1 asks but
+the control was not moved, because the canvas placement would need a recipient picker no
+task specifies. Consequence the reviewer flagged: a coach/staff row now shows both
+`Transfer ownership` and `Uploads on` together, which the canvas never depicts. T20's
+fidelity pass will meet this.
+
+**follow-ups:**
+
+1. **Expired invites now render as `Invited`.** `readSeatUsage` filters invites on
+   `expires_at > now()` but `AdminTeamData.invites` does not, so an expired invitation
+   shows with `expires <past date>` and an `Invited` pill while holding no seat. The
+   asymmetry is pre-existing and documented in the loader — this task's meta line just
+   made it visible for the first time. An `Expired` pill variant would read better than
+   silently mislabelling it.
+2. **The `Uploads on` switch is silent.** `set_member_upload_enabled` writes no
+   `program_audit_log` row, so T19's Activity card will never show an admin flipping it.
+   No audit write was added from the action or the component, deliberately — it belongs
+   in the RPC, where both the admin and coach paths would get one entry. This is the
+   fourth recording of this gap and the affordance now exists on the page.
+3. `AdminRequestsCard` can drop to join requests only and be retitled once T12 lands; its
+   `roster-vocabulary` imports would then shrink to nothing.

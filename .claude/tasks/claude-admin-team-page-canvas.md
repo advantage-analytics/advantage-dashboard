@@ -174,7 +174,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T11 · People card: transfer label, Uploads on switch, invited rows
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T7, T8
 - **files:** (guess) `src/components/admin/admin-people-card.tsx`

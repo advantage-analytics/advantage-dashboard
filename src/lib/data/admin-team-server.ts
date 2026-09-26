@@ -199,6 +199,25 @@ export interface AdminTeamMember extends TeamMember {
   uploadEnabled: boolean;
 }
 
+/**
+ * An outstanding invitation, plus the two facts the console's People card
+ * prints that `TeamInvite` has no field for.
+ *
+ * Extends rather than replaces it, so `AdminRequestsCard` — which is typed
+ * against the shared shape — keeps taking these rows unchanged.
+ */
+export interface AdminTeamInvite extends TeamInvite {
+  /** `program_invites.expires_at` — `not null`, so never undefined. */
+  expiresAt: string;
+  /**
+   * Who sent it, by name. Null when `invited_by` is null (the column is
+   * `on delete set null`, and an admin-sent invitation from before the RPC
+   * wrote it has none), and the row then simply omits the "by" clause rather
+   * than inventing a sender.
+   */
+  invitedByName: string | null;
+}
+
 /** One other program in the same conference. */
 export interface AdminTeamConferenceTeam {
   id: string;
@@ -309,7 +328,7 @@ export interface AdminTeamData {
   /** Every event on the program, newest first — `ProgramSchedule`'s order. */
   schedule: AdminTeamEvent[];
   /** Outstanding invites only — accepted ones are members now. */
-  invites: TeamInvite[];
+  invites: AdminTeamInvite[];
   joinRequests: AdminTeamJoinRequest[];
   seats: SeatUsage;
   /** Never null — see `AdminTeamPilot`. */
@@ -422,6 +441,13 @@ interface RawMember {
   upload_enabled: boolean;
   joined_at: string;
   user: RawMemberUser | RawMemberUser[] | null;
+}
+
+/** The embedded `users` row on an invitation's `invited_by`. */
+interface RawInviter {
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
 }
 
 /** `program_roster`'s own name expression, character for character. */
@@ -1196,7 +1222,12 @@ export const getAdminTeam = cache(
       // No expiry filter, matching `getTeamSettings`. See `readSeatUsage`.
       admin
         .from("program_invites")
-        .select("id, email, role, created_at, invited_by")
+        // The embedded sender is what the People card's "by <name>" clause
+        // reads; `invited_by` is a `users.id` and the person may be an admin
+        // who holds no membership row, so it cannot be resolved from `members`.
+        .select(
+          "id, email, role, created_at, invited_by, expires_at, inviter:users!program_invites_invited_by_fkey(first_name, last_name, email)",
+        )
         .eq("program_id", programId)
         .is("accepted_at", null)
         .order("created_at", { ascending: false }),
@@ -1295,20 +1326,34 @@ export const getAdminTeam = cache(
       roster,
       schedule,
       invites: (
-        (invitesResult.data ?? []) as {
+        (invitesResult.data ?? []) as unknown as {
           id: string;
           email: string;
           role: string;
           created_at: string;
           invited_by: string | null;
+          expires_at: string;
+          inviter: RawInviter | RawInviter[] | null;
         }[]
-      ).map((invite) => ({
-        id: invite.id,
-        email: invite.email,
-        role: invite.role as MemberRole,
-        createdAt: invite.created_at,
-        invitedBy: invite.invited_by,
-      })) satisfies TeamInvite[],
+      ).map((invite) => {
+        const inviter = oneOf(invite.inviter);
+        return {
+          id: invite.id,
+          email: invite.email,
+          role: invite.role as MemberRole,
+          createdAt: invite.created_at,
+          invitedBy: invite.invited_by,
+          expiresAt: invite.expires_at,
+          // The same fallback ladder every other name on this page uses: a
+          // profile with no name still has an address, and a sender whose
+          // account is gone has neither, so the clause is dropped.
+          invitedByName: inviter
+            ? (rosterDisplayName(inviter.first_name, inviter.last_name) ??
+              inviter.email ??
+              null)
+            : null,
+        };
+      }) satisfies AdminTeamInvite[],
       joinRequests: (
         (requestsResult.data ?? []) as {
           id: string;

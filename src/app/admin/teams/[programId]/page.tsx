@@ -71,6 +71,7 @@ export default async function AdminTeamPage({
         programId={programId}
         programName={data.program.schoolName}
         members={data.members}
+        invites={data.invites}
         seats={data.seats}
       />
     ),
