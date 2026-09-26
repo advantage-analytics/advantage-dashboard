@@ -62,3 +62,48 @@ Two deviations, both deliberate and recorded rather than papered over:
    the ledger's stored SQL for version `20260926075216` lacks that `where` clause. Net
    live state matches the repo file; only the recorded text differs. No corrective
    migration needed — but anyone diffing migration history against live should know.
+
+## T2 · Add admin_update_program_details RPC — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all four criteria met.
+
+**changed:** New `supabase/migrations/20260926082507_admin_update_program_details.sql`
+adds `admin_update_program_details(p_program_id uuid, p_patch jsonb)` — a new function
+rather than a widened `update_program_settings`, because the live body covers only 8 of
+the 12 columns, extra params would create a second PostgREST overload, its owner-only
+gates are member semantics an admin does not share, and its null-means-keep convention
+cannot clear a nullable field. Reasoning is in the header, as the criterion required.
+`security definer`, `set search_path = ''`, `is_admin()` gate raising `42501`, revoked
+from `public`/`anon`, granted to `authenticated`. Patch semantics: key present = write
+(null clears a nullable column), key absent = keep, unknown key = `22023`; a 12-key
+whitelist means no dynamic SQL. Enum-like inputs are validated against the live check
+constraints (team, college fields, default_surface, time_zone via `is_iana_time_zone`,
+upload_policy, events_policy). One audit row per successful call, action
+`program.details_changed`, added to `program_audit_log_action_check` rebuilt from the
+live 25-value definition → 26 values, every prior action preserved. Tests:
+`tests/admin-program-details-rpc.spec.ts` (6 passed), registered in
+`tests/fixtures/live-db-specs.ts`.
+
+Applied to live as ledger version `20260926082507`, and — unlike T1 — the reviewer ran
+BEFORE the apply, so the applied SQL is byte-identical to the committed file:
+`sha256(statements[1])` = `shasum -a 256` of the repo file = `42a836a3…f63ad1`. Verified
+independently, along with the function's `prosecdef`/`proconfig` and all 26 constraint
+values.
+
+One deviation, same as T1 and for the same reason: the criterion named
+`tests/database/admin-program-details.test.mjs`, a PGlite harness that does not exist on
+this branch. The four assertions were written against this repo's real live-DB spec
+convention instead.
+
+**follow-ups:**
+
+1. **T3's criteria repeat the `tests/database/` mistake** (`tests/database/admin-member-roster-writes.test.mjs`).
+   Two of three DB tasks have now had to substitute the harness. Worth correcting T3's
+   criterion via `/task-add` before it runs — the runner cannot edit criteria.
+2. `apply_migration` ignores a caller-supplied timestamp and stamps its own ledger
+   version, so both T1 and T2 had to rename the file afterwards to match. Worth a line
+   in `AGENTS.md`'s migration notes so later tasks expect it.
+3. `primary_domain_inferred` is forced to `false` when an admin patches
+   `primary_domain`; a future "re-infer" affordance would need its own path.
+4. Regenerate the Supabase TypeScript types so `p_patch` is typed before T6 calls this
+   RPC from a server action.

@@ -54,7 +54,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T2 · Add admin_update_program_details RPC
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** (guess) new `supabase/migrations/<ts>_admin_update_program_details.sql`, new `tests/database/admin-program-details.test.mjs`
