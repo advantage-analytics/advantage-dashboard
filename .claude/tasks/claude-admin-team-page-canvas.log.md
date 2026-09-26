@@ -107,3 +107,56 @@ convention instead.
    `primary_domain`; a future "re-infer" affordance would need its own path.
 4. Regenerate the Supabase TypeScript types so `p_patch` is typed before T6 calls this
    RPC from a server action.
+
+## T3 · Widen member-upload and add-player RPCs for admins — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all five criteria met.
+
+**changed:** New `supabase/migrations/20260926084422_admin_member_and_roster_writes.sql`
+widens the authorisation clause of `set_member_upload_enabled(p_program_id, p_user_id,
+p_enabled)` and `add_program_player(p_program_id, …)` to
+`is_program_staff(p_program_id) or is_admin()`. Both keep `security definer` and
+`set search_path = ''`, revoke from `public`/`anon`, grant to `authenticated`.
+`add_program_player`'s audit row gains a `by_admin` key inside `details` — the action
+stays `player.added`, so `program_audit_log_action_check` is untouched at 26 values and
+no 27th value was invented. Tests: `tests/admin-member-roster-writes.spec.ts`
+(5 passed), registered in `tests/fixtures/live-db-specs.ts`.
+
+**The task's premise was wrong, and this reshaped the task.** T3 assumed both functions
+inferred the program from the caller's workspace and needed an explicit `p_program_id`
+added. Live `pg_get_function_arguments` shows both _already_ took `p_program_id` as their
+first parameter, and both dashboard call sites already passed
+`workspace.active.id`. So no signature moved and no caller changed — only the gate
+widened. Criterion 3's "pass the program id if the signature changed" never fired, and
+criterion 2 had no superseded overload to drop; instead the migration carries a `do $$`
+guard that raises at apply time if either function ever has more than one overload.
+Live confirms `overloads = 1` for both, so no ungated signature survives.
+
+Cross-tenant closure (the blocking criterion) is real, not argued:
+`is_program_staff(p_program_id)` resolves through `user_program_role` keyed on
+`pm.program_id = p_program_id and pm.user_id = auth.uid()`, so a coach of program A
+evaluating program B gets false, `is_admin()` is false for them, and the `42501` raise
+stands. The spec proves it live — a coach of A is refused on B's id and B's row, roster
+and audit rows are verified unchanged, while the same coach still succeeds on A.
+
+Applied to live as ledger version `20260926084422`; reviewer ran before the apply, so the
+applied SQL is byte-identical to the committed file (`sha256` `1dfa2ffd…5034f` on both
+sides). Verified independently, along with both functions' args, `prosecdef`, `proconfig`,
+ACL, overload count, and that each gates on the _passed_ id.
+
+Same harness substitution as T1 and T2, third time, for the same verified reason.
+
+**follow-ups:**
+
+1. `set_member_upload_enabled` writes **no** audit row at all, so an admin flipping a
+   member's upload switch leaves no trace — and T11 puts exactly that switch in the
+   admin People card, where T19's Activity card is meant to show what admins did. Adding
+   one needs a new action value or reuse of an existing `member.*` one.
+2. **Three of three database tasks have now been dispatched with a corrected test-harness
+   criterion.** No further DB tasks remain, so the cost stops here — but the same
+   wrong-premise risk applies to the code tasks: T3's premise about these two RPCs was
+   simply false, so later tasks may likewise assume work that is already done. Check the
+   live/current state before building, as T4 onward are told to.
+3. `is_admin()`, `is_program_staff()` and `user_program_role()` are anon-executable
+   security-definer helpers. Harmless (they return false when `auth.uid()` is null) but a
+   `revoke ... from anon` round would quiet the advisor lint.

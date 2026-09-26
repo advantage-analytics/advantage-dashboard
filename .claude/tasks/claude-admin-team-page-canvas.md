@@ -67,7 +67,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T3 · Widen member-upload and add-player RPCs for admins
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) new `supabase/migrations/<ts>_admin_member_and_roster_writes.sql`, new `tests/database/admin-member-roster-writes.test.mjs`
 - **done when:**
