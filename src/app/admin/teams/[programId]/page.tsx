@@ -88,7 +88,14 @@ export default async function AdminTeamPage({
       />
     ),
     schedule: <AdminScheduleCard schedule={data.schedule} />,
-    pilot: <PilotUsageCard usage={data.usage} />,
+    pilot: (
+      <PilotUsageCard
+        programId={programId}
+        programName={data.program.schoolName}
+        usage={data.usage}
+        pilot={data.pilot}
+      />
+    ),
   };
 
   const column = (ids: readonly TeamSectionId[]) => (

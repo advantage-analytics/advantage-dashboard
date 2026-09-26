@@ -758,3 +758,59 @@ the canvas, with geometry left to the canvas.
    currently holds only the meta line.
 3. `entryCount`/`playedCount` are unused by this card — the data is already on the prop if
    a later round wants the Schedule page's `Lines n / 9` column back.
+
+## T15 · Pilot card: canvas layout, Change end date, End pilot — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all five criteria met.
+
+**changed:** `pilot-usage-card.tsx` rewritten (118 → 434 lines). Title `Pilot`, sub-line
+`Through <Mon D, YYYY>` from `pilot.endsOn`; no `PILOT_ENDS_AT`/`formatPilotEnd` import and
+no `Analysis hours` (both verified by grep). The month readout, bar, hours-left and the
+four kv rows, with `Each member` derived from `getMonthlyCapSeconds("individual")` rather
+than a literal. `Change end date` is `DateField` in a popover calling `adminSetPilotEnd`;
+`End pilot` is `ConfirmDialog` calling `adminEndPilot`; both surface `{ ok: false }`.
+`page.tsx` passes `programId`, `programName` and `pilot`.
+
+**This was the task most likely to ship a lie, and it did not.** T1's migration header
+records that `admin_end_pilot` writes two columns, never touches `programs.status`, and
+that **nothing server-side gates on the pilot columns** — so the obvious confirm copy
+("they will no longer be able to upload video") would have been false. What it says
+instead: the team keeps its matches, members and monthly pool; "Nothing the team can do
+today changes"; and outright, "Ending a pilot is a **record, not a gate** — video is still
+limited only by that monthly pool." Every clause traces to the header. The dialog reads
+undersized on purpose, because that is the feature's real state.
+
+**The reopen case, which no criterion covers.** `admin_set_pilot_end` clears
+`pilot_ended_at`, so saving a date on an ended pilot restarts it. `End pilot` hides when
+ended (criterion 5) but `Change end date` stays, and the popover discloses before the press
+— "This pilot was ended by hand. Saving a date starts it again." — rather than adding a
+second confirm for a reversible act.
+
+**A declared deviation on criterion 4, and the reviewer flagged the literal mismatch.**
+The criterion asks for an `advButton("danger")` confirm; `ConfirmDialog` owns its footer
+and renders `tone="danger"` as `danger-solid`, per the DS rule that `danger` proposes and
+`danger-solid` is the confirmed destruction. So `danger` sits on the card's trigger and the
+dialog commits in solid, rather than hand-rolling a button inside the shared shell. Both
+the implementer and the reviewer judged this the intent; a reader applying the criterion's
+literal text would need to accept that reading.
+
+Extra states rendered rather than left blank: ran out on its own → `<date> · Ran out`
+(the header's own word); no end date → `No end date set` and `—`; missing approver → `—`.
+
+The date picker's lower bound is `utcToday()`, byte-identical to the `today` T6's action
+compares against, so the refusal string is the backstop T6 asked for rather than the first
+thing an admin meets.
+
+**follow-ups:**
+
+1. **The real one, third recording:** `reserveQuota()` / `explainVideoRefusal()` and
+   `/api/splitstep/upload-url` still ignore `pilot_ended_at` / `pilot_ends_on`. Until they
+   read them, this confirm has to keep saying video does not stop — and when the gate
+   lands, the dialog's second paragraph is the thing to rewrite.
+2. **`approve-pilot-popover` promises a _global_ end date** at the moment an admin starts a
+   _per-program_ pilot. It and this card will disagree the first time anyone moves a date.
+   That sharpens the standing "on pilot means two things" item: it is now three surfaces.
+3. There is **no `pilot.ended` / `pilot.end_changed` label** in the activity vocabulary yet,
+   so those rows would surface unlabelled in T19's card. T19 should add them.
+4. A `Kv`-style fact row is now hand-written in three admin files. Worth one exported
+   primitive before a fourth appears — T17 and T18 are both about to want it.

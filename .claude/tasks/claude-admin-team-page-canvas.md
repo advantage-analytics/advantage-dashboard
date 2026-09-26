@@ -228,7 +228,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T15 · Pilot card: canvas layout, Change end date, End pilot
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T6, T8
 - **files:** (guess) `src/components/admin/pilot-usage-card.tsx`
