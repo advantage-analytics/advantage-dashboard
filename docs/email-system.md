@@ -169,7 +169,11 @@ Each of these exists because of a specific failure:
   Never derive an email link's origin from the request's `Host` header — an
   attacker who can set `Host` gets invitation links pointing at their own host,
   and the recipient hands over a valid token by clicking something that looks
-  legitimate. Email links come from configuration.
+  legitimate. Email links come from configuration. The other resolver,
+  `requestOrigin()` from `@/lib/request-origin`, is for what the requester
+  themselves sees or follows — a link printed on screen, a redirect, a Supabase
+  `redirectTo` — and is the reason a dev server on port 3002 says 3002. It is
+  never the right base for a mail body.
 
 ---
 

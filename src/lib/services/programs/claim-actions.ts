@@ -18,7 +18,7 @@ import { nextClaimStatus, reviewReason, type ClaimStatus } from "./claim-state";
 import { getProgramOwner } from "./program-owner";
 import { wantsNotification } from "@/lib/services/notifications/should-notify";
 import { notifyAdminsReviewNeeded } from "@/lib/services/notifications/admin-review-mail";
-import { siteUrl } from "@/lib/site-url";
+import { requestOrigin } from "@/lib/request-origin";
 
 export type ActionOutcome = { ok: true } | { ok: false; error: string };
 
@@ -82,8 +82,12 @@ async function sendClaimOtp(
       // The claimant becomes the owner, so they need the account either way.
       shouldCreateUser: true,
       // `/confirm` already exchanges the code and creates the `users` profile
-      // row; this rides that rather than adding a second callback.
-      emailRedirectTo: `${siteUrl()}/confirm?next=/claim/verify`,
+      // row; this rides that rather than adding a second callback. The origin
+      // is the request's, like every other `redirectTo` in the app: Supabase
+      // only honours allow-listed redirect URLs, so this is the person's own
+      // server — a dev worktree on :3002 included — not a `Host` an attacker
+      // could point somebody else at.
+      emailRedirectTo: `${await requestOrigin()}/confirm?next=/claim/verify`,
     },
   });
 }

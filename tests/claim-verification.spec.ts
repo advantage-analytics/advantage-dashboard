@@ -9,6 +9,7 @@ import {
   verificationExpiresAt,
   verificationIsUsable,
   verificationMatches,
+  verifyIdentityPath,
   verifyIdentityUrl,
 } from "../src/lib/services/programs/claim-verification";
 
@@ -66,10 +67,17 @@ test.describe("claim verification — mint, hash, match", () => {
     expect(tokens.size).toBe(200);
   });
 
-  test("the URL carries the raw token, percent-encoded", () => {
+  test("the URL carries the raw token, percent-encoded, over an origin-less path", () => {
+    // The admin's "Copy link" prefixes `verifyIdentityPath` with the request's
+    // origin; the email prefixes it with `siteUrl()`. One token, one path, two
+    // origins — so the path must carry nothing that presumes either.
+    const path = verifyIdentityPath("a+b/c=d");
     const url = verifyIdentityUrl("a+b/c=d");
-    expect(url).toContain("/claim/verify-identity?token=");
-    expect(url).toContain(encodeURIComponent("a+b/c=d"));
+
+    expect(path).toContain("/claim/verify-identity?token=");
+    expect(path).toContain(encodeURIComponent("a+b/c=d"));
+    expect(path).not.toContain("://");
+    expect(url.endsWith(path)).toBe(true);
   });
 });
 

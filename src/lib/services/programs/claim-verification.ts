@@ -125,9 +125,21 @@ export function verificationIsUsable(
   return expires.getTime() > now.getTime();
 }
 
-/** Where the emailed button and the admin's "Copy link" both point. */
+/**
+ * The path the emailed button and the admin's "Copy link" both point at —
+ * origin-less, because the two prefix it differently. The email takes
+ * `verifyIdentityUrl()` below (configured origin, never the request's — the
+ * rule in `docs/email-system.md` §5); the admin's clipboard takes
+ * `requestOrigin()` from the action that returns it, so a dev worktree on
+ * :3002 copies :3002. Same token either way.
+ */
+export function verifyIdentityPath(token: string): string {
+  return `/claim/verify-identity?token=${encodeURIComponent(token)}`;
+}
+
+/** Where the emailed button points. */
 export function verifyIdentityUrl(token: string): string {
-  return `${siteUrl()}/claim/verify-identity?token=${encodeURIComponent(token)}`;
+  return `${siteUrl()}${verifyIdentityPath(token)}`;
 }
 
 export type VoucherNote =
