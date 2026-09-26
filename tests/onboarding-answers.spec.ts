@@ -153,4 +153,34 @@ test.describe("acquisition source labels", () => {
     expect(entry?.playerLabel).toBe("Somewhere else");
     expect(entry?.coachLabel).toBe("Somewhere else");
   });
+
+  test("reddit and linkedin read their own name for both roles", () => {
+    const reddit = ACQUISITION_SOURCES.find(
+      (source) => source.value === "reddit",
+    );
+    expect(reddit?.playerLabel).toBe("Reddit");
+    expect(reddit?.coachLabel).toBe("Reddit");
+
+    const linkedin = ACQUISITION_SOURCES.find(
+      (source) => source.value === "linkedin",
+    );
+    expect(linkedin?.playerLabel).toBe("LinkedIn");
+    expect(linkedin?.coachLabel).toBe("LinkedIn");
+  });
+});
+
+test.describe("ACQUISITION_SOURCES order", () => {
+  test("values are in the exact expected order", () => {
+    expect(ACQUISITION_SOURCES.map((source) => source.value)).toEqual([
+      "coach_or_teammate",
+      "swingvision_community",
+      "social",
+      "google",
+      "college_event",
+      "utr",
+      "reddit",
+      "linkedin",
+      "other",
+    ]);
+  });
 });

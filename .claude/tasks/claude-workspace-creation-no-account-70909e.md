@@ -112,7 +112,7 @@ ready).
 
 ## T8 · Add `reddit` and `linkedin` to `ACQUISITION_SOURCES` with an exact-order offline assertion
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T7
 - **files:** src/app/onboarding/answers.ts, tests/onboarding-answers.spec.ts (guess)

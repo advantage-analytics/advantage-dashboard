@@ -42,3 +42,8 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical GATE PASS · completion VERDICT: pass
 **changed:** `supabase/migrations/20260926202555_acquisition_source_reddit_linkedin_null_detail.sql`, applied live (version 20260926202555): `users_acquisition_source_values` now allows `reddit` and `linkedin` (nine values); `users_acquisition_source_detail_only_other` is `acquisition_source is not distinct from 'other'`, closing the NULL-source hole from T6. Pre-checks found no violating rows; advisors identical before/after. Live spec gains "a detail with no acquisition_source is refused with 23514" (9 tests listed); doc comment updated. Live spec still not run by hand.
+
+## T8 · Add `reddit` and `linkedin` to `ACQUISITION_SOURCES` with an exact-order offline assertion — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `answers.ts` — `reddit` ("Reddit") and `linkedin` ("LinkedIn") entries after `utr`, `other` still last. `onboarding-answers.spec.ts` — exact-order assertion over the nine values and a label test for the two entries (26 tests). The 1.7 grid and the 5.2 select render from the array, so both surfaces now offer the answers; the live constraint already accepts them (T7).

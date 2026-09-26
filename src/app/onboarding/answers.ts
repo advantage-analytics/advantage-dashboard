@@ -80,6 +80,16 @@ export const ACQUISITION_SOURCES = [
     coachLabel: "UTR",
   },
   {
+    value: "reddit",
+    playerLabel: "Reddit",
+    coachLabel: "Reddit",
+  },
+  {
+    value: "linkedin",
+    playerLabel: "LinkedIn",
+    coachLabel: "LinkedIn",
+  },
+  {
     value: "other",
     playerLabel: "Somewhere else",
     coachLabel: "Somewhere else",
