@@ -189,7 +189,9 @@ function transformDbMatchToMatch(
     verificationStatus: row.verified ? "Verified Result" : undefined,
     sourceProvider: row.source_provider ?? undefined,
     round: row.round ?? undefined,
-    matchContext: row.result ?? "Final Score",
+    // `||`, not `??`: video uploads and the wizard's default have stored an
+    // empty caption, and `??` let it through as a blank line over the score.
+    matchContext: row.result?.trim() || "Final Score",
     duration: formatDuration(row.duration ?? undefined),
     durationSec: row.duration != null ? Math.round(row.duration / 1000) : null,
     player1: {

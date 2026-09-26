@@ -119,7 +119,9 @@ export function transformDbMatch(
     courtType: row.court_type ?? undefined,
     verificationStatus: row.verified ? "Verified Result" : undefined,
     round: row.round ?? undefined,
-    matchContext: row.result ?? "Final Score",
+    // `||`, not `??`: video uploads and the wizard's default have stored an
+    // empty caption, and `??` let it through as a blank line over the score.
+    matchContext: row.result?.trim() || "Final Score",
     duration: formatDuration(row.duration ?? undefined),
     sourceProvider: row.source_provider ?? undefined,
     player1: { name: row.player1_name, id: row.player1_id },
