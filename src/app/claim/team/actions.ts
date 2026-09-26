@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -7,9 +8,111 @@ import {
   type CreateCustomProgramResult,
   type CustomOrgType,
 } from "@/lib/services/programs/create-actions";
+import {
+  hasAcceptedCurrentPilotTerms,
+  recordPilotTermsAcceptance,
+  type AcceptPilotTermsResult,
+} from "@/lib/services/programs/pilot-terms-actions";
+import {
+  PENDING_TEAM_COOKIE,
+  PENDING_TEAM_COOKIE_OPTIONS,
+  readPendingTeam,
+  toPendingTeam,
+} from "./pending-team";
+import {
+  CUSTOM_ORG_NAME_MAX as NAME_MAX,
+  CUSTOM_ORG_NAME_MIN as NAME_MIN,
+  OWNER_NAME_MAX,
+} from "@/lib/services/programs/custom-org";
 
 /**
- * The setup screen's submit (Onboarding & Team Setup, 7.2).
+ * The setup screen's submit (7.2), which no longer creates the team itself.
+ *
+ * The pilot terms stand between naming a team and owning it. So this checks
+ * the values early (the name error belongs on the form the name was typed
+ * into, not on the terms screen) and then:
+ *
+ *   * no current-version acceptance: park the values in the pending-team
+ *     cookie and go to `/claim/team/terms`. `createCustomTeam` runs only from
+ *     that screen's accept, after the acceptance row exists.
+ *   * already accepted (a coach creating their second team): there is nothing
+ *     new to agree to, so create straight away, as before. Should the RPC
+ *     still refuse with `terms-not-accepted`, fall through to the screen.
+ *
+ * Success in either branch is a redirect; a returned value is a refusal.
+ */
+export async function continueToPilotTerms(input: {
+  name: string;
+  orgType: CustomOrgType;
+  ownerName: string;
+}): Promise<
+  CreateCustomProgramResult | { ok: false; reason: "invalid-owner-name" }
+> {
+  const name = (input?.name ?? "").trim();
+  const ownerName = (input?.ownerName ?? "").trim();
+  // Length first, each against its own field: `toPendingTeam` also refuses
+  // over-long text, and letting it answer would report a long name as a bad
+  // team type, on a screen whose type the coach cannot change.
+  if (name.length < NAME_MIN || name.length > NAME_MAX) {
+    return { ok: false, reason: "invalid-name" };
+  }
+  if (ownerName.length > OWNER_NAME_MAX) {
+    return { ok: false, reason: "invalid-owner-name" };
+  }
+  const pending = toPendingTeam({ name, orgType: input?.orgType, ownerName });
+  if (!pending) return { ok: false, reason: "invalid-org-type" };
+
+  if (await hasAcceptedCurrentPilotTerms()) {
+    const result = await createCustomTeam(pending);
+    if (result.ok) redirect("/claim/team/about");
+    // The database disagrees that the acceptance is current (enforcement
+    // live, versions out of step): the terms screen is where that is fixed.
+    if (result.reason !== "terms-not-accepted") return result;
+  }
+
+  (await cookies()).set(
+    PENDING_TEAM_COOKIE,
+    JSON.stringify(pending),
+    PENDING_TEAM_COOKIE_OPTIONS,
+  );
+  redirect("/claim/team/terms");
+}
+
+/**
+ * The custom terms screen's submit (frame B): accept, then create the team
+ * from the parked setup values.
+ *
+ * The acceptance is written first, through the session client, and the team
+ * only after it, so there is no path that creates a team the coach has not
+ * accepted terms for. A refused create (`limit-reached`, or
+ * `terms-not-accepted` once enforcement is live) comes back to the screen
+ * with the parked values intact.
+ */
+export async function acceptPilotTermsAndCreateTeam(input: {
+  version: string;
+}): Promise<CreateCustomProgramResult | AcceptPilotTermsResult> {
+  const pending = await readPendingTeam();
+  if (!pending) redirect("/claim/team/type");
+
+  const accepted = await recordPilotTermsAcceptance(input?.version ?? "");
+  if (!accepted.ok) return accepted;
+
+  const result = await createCustomTeam(pending);
+  if (!result.ok) return result;
+
+  (await cookies()).delete({
+    name: PENDING_TEAM_COOKIE,
+    path: PENDING_TEAM_COOKIE_OPTIONS.path,
+  });
+  redirect("/claim/team/about");
+}
+
+/**
+ * Create the team from setup values (Onboarding & Team Setup, 7.2). Not an
+ * action of its own any more: it runs only behind `continueToPilotTerms` (an
+ * acceptance already on file) or `acceptPilotTermsAndCreateTeam` (one just
+ * recorded), and returns rather than redirects so each caller decides what
+ * follows, including clearing the parked values.
  *
  * T2's `createCustomProgram({ name, orgType })` is the whole creation contract:
  * it writes the program and the owner membership atomically, derives the owner
@@ -30,13 +133,13 @@ import {
  * per-owner title column to hold "Head coach". It stays a confirmatory field —
  * see the note in `team-setup-form.tsx`.
  *
- * On success `createCustomProgram` has already set the cookie, so navigation
- * is a plain redirect — to the coach intake (5.2, `/claim/team/about`), which
- * reads that cookie to know which program it is asking about and hands off to
- * the team dashboard itself; the `{ ok: false }` reasons
- * (including `limit-reached`) flow back to the form untouched.
+ * On success `createCustomProgram` has already set the workspace cookie, so
+ * the callers' navigation is a plain redirect — to the coach intake (5.2,
+ * `/claim/team/about`), which reads that cookie to know which program it is
+ * asking about and hands off to the team dashboard itself; the `{ ok: false }`
+ * reasons (including `limit-reached`) flow back untouched.
  */
-export async function createCustomTeam(input: {
+async function createCustomTeam(input: {
   name: string;
   orgType: CustomOrgType;
   ownerName: string;
@@ -72,14 +175,11 @@ export async function createCustomTeam(input: {
     }
   }
 
-  const result = await createCustomProgram({
+  // The workspace cookie and layout revalidation happen inside
+  // createCustomProgram, so the callers' redirect to the intake screen
+  // resolves the new program and its exit opens inside it.
+  return createCustomProgram({
     name: input.name,
     orgType: input.orgType,
   });
-
-  if (!result.ok) return result;
-
-  // The cookie and layout revalidation happened inside createCustomProgram, so
-  // the intake screen resolves the new program and its exit opens inside it.
-  redirect("/claim/team/about");
 }

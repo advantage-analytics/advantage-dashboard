@@ -38,7 +38,7 @@ export function DesignPreview() {
         Beta welcome dialog
       </h1>
       <p className="mt-1 max-w-[60ch] text-[12px] leading-[1.6] text-[var(--ink-600)]">
-        Shown once per browser on the first dashboard visit. Pick a variant to
+        Shown once per account on its first dashboard visit. Pick a variant to
         open it.
       </p>
       <div className="mt-5 flex gap-2.5">

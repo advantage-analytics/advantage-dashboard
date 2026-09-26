@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
@@ -13,7 +13,20 @@ import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
 import { PAID_PLANS_BEGIN } from "@/lib/user/plan";
 
-const SEEN_KEY = "adv:beta-welcome-seen";
+/**
+ * One flag per account, not per browser. A single browser-wide key meant a
+ * second account signed in on the same machine (a coach testing a claim, a
+ * parent and a player sharing a laptop) never saw its own welcome.
+ */
+const seenKey = (userId: string) => `adv:beta-welcome-seen:${userId}`;
+
+/**
+ * The browser-wide key the dialog used before it was per account. Read once:
+ * the first account to load the dashboard afterwards inherits it (in practice
+ * the person who dismissed it), so nobody who already closed the dialog sees
+ * it again, and every other account then gets its own.
+ */
+const LEGACY_SEEN_KEY = "adv:beta-welcome-seen";
 
 /**
  * What the dialog says, decided by the caller so `/design` can show every
@@ -199,9 +212,15 @@ function subscribe(onChange: () => void) {
   return () => window.removeEventListener("storage", onChange);
 }
 
-function readSeen(): boolean {
+function readSeen(key: string): boolean {
   try {
-    return localStorage.getItem(SEEN_KEY) === "1";
+    if (localStorage.getItem(key) === "1") return true;
+    if (localStorage.getItem(LEGACY_SEEN_KEY) === "1") {
+      localStorage.setItem(key, "1");
+      localStorage.removeItem(LEGACY_SEEN_KEY);
+      return true;
+    }
+    return false;
   } catch {
     // Storage unavailable: show it; closing it lasts the visit.
     return false;
@@ -209,12 +228,14 @@ function readSeen(): boolean {
 }
 
 /**
- * The dialog, opened once per browser on the first dashboard visit. The server
+ * The dialog, opened once per account on its first dashboard visit. The server
  * snapshot says "seen", so it never renders before storage has been read.
  */
 export function BetaWelcome() {
   const terms = useBetaWelcomeTerms();
-  const seen = useSyncExternalStore(subscribe, readSeen, () => true);
+  const key = seenKey(useWorkspace().viewer.id);
+  const getSeen = useCallback(() => readSeen(key), [key]);
+  const seen = useSyncExternalStore(subscribe, getSeen, () => true);
   const [closed, setClosed] = useState(false);
 
   return (
@@ -224,7 +245,7 @@ export function BetaWelcome() {
         if (open) return;
         setClosed(true);
         try {
-          localStorage.setItem(SEEN_KEY, "1");
+          localStorage.setItem(key, "1");
         } catch {
           // Lasts the visit only.
         }

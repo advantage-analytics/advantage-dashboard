@@ -31,6 +31,7 @@ markers is hand-written — edit it as things move.
 | `/claim/[programKey]` | [`src/app/claim/[programKey]/page.tsx`](src/app/claim/[programKey]/page.tsx) |
 | `/claim/[programKey]/request` | [`src/app/claim/[programKey]/request/page.tsx`](src/app/claim/[programKey]/request/page.tsx) |
 | `/claim/[programKey]/setup` | [`src/app/claim/[programKey]/setup/page.tsx`](src/app/claim/[programKey]/setup/page.tsx) |
+| `/claim/[programKey]/terms` | [`src/app/claim/[programKey]/terms/page.tsx`](src/app/claim/[programKey]/terms/page.tsx) |
 | `/claim/check-email` | [`src/app/claim/check-email/page.tsx`](src/app/claim/check-email/page.tsx) |
 | `/claim` | [`src/app/claim/page.tsx`](src/app/claim/page.tsx) |
 | `/claim/program/new` | [`src/app/claim/program/new/page.tsx`](src/app/claim/program/new/page.tsx) |
@@ -41,6 +42,7 @@ markers is hand-written — edit it as things move.
 | `/claim/team/about` | [`src/app/claim/team/about/page.tsx`](src/app/claim/team/about/page.tsx) |
 | `/claim/team` | [`src/app/claim/team/page.tsx`](src/app/claim/team/page.tsx) |
 | `/claim/team/setup` | [`src/app/claim/team/setup/page.tsx`](src/app/claim/team/setup/page.tsx) |
+| `/claim/team/terms` | [`src/app/claim/team/terms/page.tsx`](src/app/claim/team/terms/page.tsx) |
 | `/claim/team/type` | [`src/app/claim/team/type/page.tsx`](src/app/claim/team/type/page.tsx) |
 | `/claim/verify-identity` | [`src/app/claim/verify-identity/page.tsx`](src/app/claim/verify-identity/page.tsx) |
 | `/claim/verify/failed` | [`src/app/claim/verify/failed/page.tsx`](src/app/claim/verify/failed/page.tsx) |

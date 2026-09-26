@@ -1,9 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import {
+  CUSTOM_ORG_NAME_MAX as NAME_MAX,
+  CUSTOM_ORG_NAME_MIN as NAME_MIN,
+  CUSTOM_ORG_TYPES,
+  type CustomOrgType,
+} from "./custom-org";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
+import { TERMS_NOT_ACCEPTED_SQLSTATE } from "./pilot-terms";
 
 /**
  * Self-serve creation of a non-collegiate program — a club, a high school, an
@@ -30,13 +37,7 @@ import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
  * public program search for good.
  */
 
-const CUSTOM_ORG_TYPES = ["club", "high_school", "academy", "other"] as const;
-
-export type CustomOrgType = (typeof CUSTOM_ORG_TYPES)[number];
-
-/** Mirrors the SQL bounds; the RPC is the enforcement, this is the fast no. */
-const NAME_MIN = 2;
-const NAME_MAX = 120;
+export type { CustomOrgType } from "./custom-org";
 
 export type CreateCustomProgramResult =
   | { ok: true; programId: string }
@@ -54,6 +55,13 @@ export type CreateCustomProgramResult =
          * "something failed" only has a retry.
          */
         | "limit-reached"
+        /**
+         * No `pilot_terms_acceptances` row for the current
+         * `PILOT_TERMS_VERSION` (`./pilot-terms.ts`). Raised by the RPC as
+         * `TERMS_NOT_ACCEPTED_SQLSTATE` once the enforcement migration is
+         * applied; the caller sends the coach to the terms screen.
+         */
+        | "terms-not-accepted"
         | "failed";
     };
 
@@ -104,6 +112,9 @@ export async function createCustomProgram(input: {
   if (error) {
     if (error.code === LIMIT_REACHED_SQLSTATE) {
       return { ok: false, reason: "limit-reached" };
+    }
+    if (error.code === TERMS_NOT_ACCEPTED_SQLSTATE) {
+      return { ok: false, reason: "terms-not-accepted" };
     }
     console.error("[programs] custom org creation failed", {
       error: error.message,

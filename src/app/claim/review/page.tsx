@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Check, Mail } from "lucide-react";
 import { teamLabel } from "@/lib/data/programs-server";
+import { openWorkspace } from "@/lib/workspace/actions";
 import {
   ClaimShell,
   ClaimHeading,
@@ -31,9 +32,14 @@ export const metadata = { title: "Claim under review" };
 export default async function ClaimUnderReviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ school?: string; team?: string; email?: string }>;
+  searchParams: Promise<{
+    school?: string;
+    team?: string;
+    email?: string;
+    program?: string;
+  }>;
 }) {
-  const { school, team, email } = await searchParams;
+  const { school, team, email, program } = await searchParams;
   const schoolName = school?.trim() || "your school";
   const eyebrow = [school?.trim(), team ? teamLabel(team) : null]
     .filter(Boolean)
@@ -98,9 +104,23 @@ export default async function ClaimUnderReviewPage({
       </ul>
 
       <ClaimActions>
-        <Link href="/dashboard" className={CLAIM_BUTTON}>
-          Go to the program
-        </Link>
+        {/* Switches into the program, then lands on its home. A plain
+            `/dashboard` link opened in whatever workspace was last active,
+            usually Personal. `openWorkspace` checks membership: signed in as
+            another account (or after a reset) it still goes to `/dashboard`
+            rather than leaving a dead button. The link is
+            the fallback for a URL from before `program` was passed. */}
+        {program ? (
+          <form action={openWorkspace.bind(null, program)}>
+            <button type="submit" className={CLAIM_BUTTON}>
+              Go to the program
+            </button>
+          </form>
+        ) : (
+          <Link href="/dashboard" className={CLAIM_BUTTON}>
+            Go to the program
+          </Link>
+        )}
         <span className={CLAIM_MICRO}>
           {email ? (
             <>

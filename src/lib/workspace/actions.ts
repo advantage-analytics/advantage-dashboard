@@ -43,6 +43,18 @@ export async function setActiveWorkspace(workspaceId: string): Promise<void> {
 }
 
 /**
+ * `setActiveWorkspace`, but never a dead click: when the id is not one of the
+ * session's workspaces (a link opened while signed in as another account, a
+ * claim that was reset), it still navigates, to `/dashboard` in whatever
+ * workspace is already active. For buttons outside the dashboard whose label
+ * promises a destination — the claim review screen's "Go to the program".
+ */
+export async function openWorkspace(workspaceId: string): Promise<void> {
+  const target = await writeActiveWorkspace(workspaceId);
+  redirect(target ? workspaceHome(target) : "/dashboard", RedirectType.replace);
+}
+
+/**
  * Switch the active workspace and STAY on the current page.
  *
  * The exception to the rule above, for the one route both kinds of workspace
