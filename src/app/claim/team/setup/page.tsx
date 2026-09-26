@@ -2,20 +2,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ClaimShell, AsidePanel } from "@/components/claim/claim-shell";
 import { TeamSetupForm } from "@/components/claim/team-setup-form";
-import type { CustomOrgType } from "@/lib/services/programs/create-actions";
+import { isCustomOrgType, readPendingTeam } from "../pending-team";
 
 export const metadata = { title: "Set up your team" };
-
-/**
- * The org types `create_custom_program` accepts — the source of truth is
- * `CUSTOM_ORG_TYPES` in `create-actions.ts`. Mirrored here (not imported: that
- * const isn't exported) only to reject a tampered `?type=` before rendering.
- */
-const VALID_TYPES = ["club", "high_school", "academy", "other"] as const;
-
-function isCustomOrgType(value: string | undefined): value is CustomOrgType {
-  return (VALID_TYPES as readonly string[]).includes(value ?? "");
-}
 
 /**
  * Screen 7.2 — you name it, you own it, no confirmation step.
@@ -23,7 +12,10 @@ function isCustomOrgType(value: string | undefined): value is CustomOrgType {
  * The org type arrives from 7.1 as `?type=`; a missing or tampered value falls
  * back to the type screen rather than guessing one. "Your name" is pre-filled
  * from the coach's profile so the field starts true and a correction persists
- * (see `createCustomTeam`).
+ * (see `createCustomTeam`). Submitting goes on to the pilot terms
+ * (`/claim/team/terms`) before the team exists; Back from there returns here
+ * with the parked values (`pending-team.ts`) typed back in, when they are for
+ * this same type.
  *
  * The "How this differs from a college team" aside rides in `ClaimShell`'s
  * right column. Its budget line is deliberately absent: `quotaTierFor()` gives
@@ -51,10 +43,13 @@ export default async function TeamSetupPage({
     .eq("id", user.id)
     .maybeSingle();
 
-  const defaultOwnerName = [profile?.first_name, profile?.last_name]
+  const profileName = [profile?.first_name, profile?.last_name]
     .filter(Boolean)
     .join(" ")
     .trim();
+
+  const pending = await readPendingTeam();
+  const parked = pending?.orgType === type ? pending : null;
 
   return (
     <ClaimShell
@@ -74,7 +69,11 @@ export default async function TeamSetupPage({
         />
       }
     >
-      <TeamSetupForm orgType={type} defaultOwnerName={defaultOwnerName} />
+      <TeamSetupForm
+        orgType={type}
+        defaultOwnerName={parked?.ownerName || profileName}
+        defaultTeamName={parked?.name ?? ""}
+      />
     </ClaimShell>
   );
 }

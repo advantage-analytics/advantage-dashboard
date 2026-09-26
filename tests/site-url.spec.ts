@@ -1,10 +1,13 @@
 import { expect, test } from "@playwright/test";
 
 import { siteUrl } from "@/lib/site-url";
+import { withEnv } from "./fixtures/with-env";
 
 /**
- * `siteUrl()` — the one resolver every email template, `claim-actions.ts`,
- * `layout.tsx`'s `metadataBase` and the checkout route's redirect base call.
+ * `siteUrl()` — the configured resolver every email template, the vendor
+ * webhook URL and `layout.tsx`'s `metadataBase` call. On-screen links,
+ * redirects and Supabase `redirectTo`s use `requestOrigin()` instead
+ * (`tests/request-origin.spec.ts`).
  *
  * Pure, so no browser and no dev server, the same as `tests/date-value.spec.ts`.
  * What this pins: a deployed build (Vercel sets `VERCEL_ENV`) never falls
@@ -27,37 +30,10 @@ const ENV_KEYS = [
   "NODE_ENV",
 ] as const;
 
-async function withEnv<T>(
-  vars: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>,
-  fn: () => Promise<T>,
-): Promise<T> {
-  // `NODE_ENV` is typed read-only on `process.env`; go through a loosely
-  // typed alias so this helper can still set and restore it like any other var.
-  const env = process.env as Record<string, string | undefined>;
-
-  const original: Record<string, string | undefined> = {};
-  for (const key of ENV_KEYS) {
-    original[key] = env[key];
-    delete env[key];
-  }
-  for (const [key, value] of Object.entries(vars)) {
-    if (value !== undefined) env[key] = value;
-  }
-  try {
-    // Re-import fresh each time isn't necessary — siteUrl() reads
-    // process.env live on every call, not at module load.
-    return await fn();
-  } finally {
-    for (const key of ENV_KEYS) {
-      if (original[key] === undefined) delete env[key];
-      else env[key] = original[key];
-    }
-  }
-}
-
 test.describe("siteUrl · Vercel env resolution", () => {
   test("production: uses VERCEL_PROJECT_PRODUCTION_URL", async () => {
     await withEnv(
+      ENV_KEYS,
       {
         VERCEL_ENV: "production",
         VERCEL_PROJECT_PRODUCTION_URL: "app.advantage-analytics.com",
@@ -70,6 +46,7 @@ test.describe("siteUrl · Vercel env resolution", () => {
 
   test("preview: uses VERCEL_URL", async () => {
     await withEnv(
+      ENV_KEYS,
       {
         VERCEL_ENV: "preview",
         VERCEL_URL: "advantage-dashboard-git-foo.vercel.app",
@@ -83,7 +60,7 @@ test.describe("siteUrl · Vercel env resolution", () => {
   });
 
   test("no Vercel env at all: falls back to localhost, silently in dev", async () => {
-    await withEnv({ NODE_ENV: "development" }, async () => {
+    await withEnv(ENV_KEYS, { NODE_ENV: "development" }, async () => {
       const warnings: unknown[] = [];
       const spy = (...args: unknown[]) => warnings.push(args);
       const original = console.warn;
@@ -98,7 +75,7 @@ test.describe("siteUrl · Vercel env resolution", () => {
   });
 
   test("localhost fallback under NODE_ENV=production warns once, naming the fix", async () => {
-    await withEnv({ NODE_ENV: "production" }, async () => {
+    await withEnv(ENV_KEYS, { NODE_ENV: "production" }, async () => {
       const warnings: unknown[][] = [];
       const original = console.warn;
       console.warn = (...args: unknown[]) => warnings.push(args);
@@ -114,6 +91,7 @@ test.describe("siteUrl · Vercel env resolution", () => {
 
   test("NEXT_PUBLIC_SITE_URL wins over any Vercel env, trailing slash stripped", async () => {
     await withEnv(
+      ENV_KEYS,
       {
         NEXT_PUBLIC_SITE_URL: "https://custom.example.com/",
         VERCEL_ENV: "production",
@@ -127,6 +105,7 @@ test.describe("siteUrl · Vercel env resolution", () => {
 
   test("NEXT_PUBLIC_SITE_URL with no trailing slash is unchanged", async () => {
     await withEnv(
+      ENV_KEYS,
       { NEXT_PUBLIC_SITE_URL: "https://custom.example.com" },
       async () => {
         expect(siteUrl()).toBe("https://custom.example.com");

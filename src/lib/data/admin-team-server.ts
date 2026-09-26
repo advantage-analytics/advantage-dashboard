@@ -2,10 +2,24 @@ import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
+import { loadConferenceTeams } from "@/lib/services/programs/admin-conference-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
 import { crestUrl, type SeatUsage } from "@/lib/data/teams-server";
 import { programDisplayName } from "@/lib/data/programs-server";
+import {
+  rosterMatchOwnerIds,
+  rosterWithMatchCounts,
+  type AdminRosterMatchRow,
+  type AdminRosterPlayerRow,
+  type AdminTeamRosterPlayer,
+} from "@/lib/data/admin-team-roster";
+import {
+  readScheduleWithClient,
+  scheduleRowsFrom,
+} from "@/lib/data/schedule-server";
+import { dualScore } from "@/lib/schedule/entry-state";
+import type { EventKind, EventSite } from "@/lib/schedule/types";
 import type {
   MemberRole,
   TeamIdentity,
@@ -56,9 +70,28 @@ import type {
  * Settings › Team already renders — plus the five directory/lifecycle fields
  * that only an admin sees.
  */
-export interface AdminTeamProgram extends TeamIdentity {
+export interface AdminTeamProgram extends Omit<TeamIdentity, "team"> {
+  /**
+   * Null when the program has no squad on record (a high school, a custom
+   * org). `TeamIdentity` is Settings' member-facing shape and keeps its
+   * non-null squad; the console prints what the row actually holds.
+   */
+  team: "mens" | "womens" | null;
   /** "Stanford (Men's)" — the directory's own display spelling. */
   name: string;
+  /**
+   * `programs.program_key` — the directory's own stable slug for this squad,
+   * printed verbatim in the Details card. Nullable: a program created by hand
+   * through `create_custom_program` has never had one.
+   */
+  programKey: string | null;
+  /** Directory address; either half can be missing on a custom org. */
+  city: string | null;
+  state: string | null;
+  /** The athletics staff directory the claim reviewer checks a name against. */
+  staffPageUrl: string | null;
+  /** `programs.roster_public` — whether the roster is visible off the team. */
+  rosterPublic: boolean;
   /** `programs.status` — `unclaimed` | `claim_pending` | `active` | … */
   status: string;
   /**
@@ -129,28 +162,196 @@ export interface AdminTeamJoinRequest {
   createdAt: string;
 }
 
-export interface AdminTeamData {
+/**
+ * The program's pilot, as the four `programs.pilot_*` columns record it.
+ *
+ * Always present, with nullable fields, rather than `AdminTeamPilot | null`:
+ * "this program has no pilot" and "this program's pilot has no end date yet"
+ * are the same card with different text, and a null object would push that
+ * branch into every reader.
+ *
+ * The global pilot-date constant in `src/lib/services/splitstep/config.ts` is
+ * deliberately NOT read here, or anywhere else in this file. It is the UI's old
+ * single site-wide pilot date and only ever a display string; the per-program
+ * columns are the fact, and falling back to the constant would print a date the
+ * database does not hold. T1's migration used it once, as its backfill default,
+ * and that is the end of its involvement on the server.
+ */
+export interface AdminTeamPilot {
+  /** `pilot_ends_on` — last free day, inclusive. A `date`: `YYYY-MM-DD`. */
+  endsOn: string | null;
+  /** When the pilot was approved, or null when no reviewer could be sourced. */
+  approvedAt: string | null;
+  /** The approver's display name; null for an unknown or deleted account. */
+  approvedByName: string | null;
+  /** True when the admin reading this page is the one who approved it. */
+  approvedByIsViewer: boolean;
+  /**
+   * Set only by `admin_end_pilot` — the pilot was stopped early by hand. Null
+   * when it simply runs out on `endsOn`.
+   */
+  endedAt: string | null;
+}
+
+/**
+ * A member row, plus the one column the console can toggle that Settings ›
+ * Team's `TeamMember` has no field for.
+ *
+ * Extends rather than replaces `TeamMember`, so every component already typed
+ * against the shared shape keeps taking these rows unchanged.
+ */
+export interface AdminTeamMember extends TeamMember {
+  /** `program_members.upload_enabled` — `not null`, so never undefined. */
+  uploadEnabled: boolean;
+}
+
+/**
+ * An outstanding invitation, plus the two facts the console's People card
+ * prints that `TeamInvite` has no field for.
+ *
+ * Extends rather than replaces it, so every component already typed against
+ * the shared shape keeps taking these rows unchanged.
+ */
+export interface AdminTeamInvite extends TeamInvite {
+  /** `program_invites.expires_at` — `not null`, so never undefined. */
+  expiresAt: string;
+  /**
+   * True once `expiresAt` has passed. Decided here, on the server, rather than
+   * in the card: a client `Date.now()` in render would disagree with the
+   * server's around the boundary and fail hydration. An expired invitation's
+   * link no longer works, so the row must not read `Invited`.
+   */
+  expired: boolean;
+  /**
+   * Who sent it, by name. Null when `invited_by` is null (the column is
+   * `on delete set null`, and an admin-sent invitation from before the RPC
+   * wrote it has none), and the row then simply omits the "by" clause rather
+   * than inventing a sender.
+   */
+  invitedByName: string | null;
+}
+
+/** One other program in the same conference. */
+export interface AdminTeamConferenceTeam {
+  id: string;
+  /** "Stanford Women's Tennis". */
+  name: string;
+  crestUrl: string | null;
+  status: string;
+  /**
+   * `status in ('active', 'claim_pending')` — the same predicate
+   * `admin_list_conferences()` counts as `on_advantage`, so this page's
+   * "n on Advantage" and Admin › Conferences' column cannot disagree.
+   */
+  claimed: boolean;
+}
+
+/**
+ * The conference this program sits in, or null when `conference_id` is null.
+ *
+ * The counts are derived from the sibling list rather than counted separately:
+ * `loadConferenceTeams` already returns every program on the conference, so a
+ * `count(*)` beside it would be a second round trip that could disagree with
+ * the list drawn underneath it.
+ */
+export interface AdminTeamConference {
+  id: string;
+  name: string;
+  /** `conferences.short_name` — the mark, when the conference has one. */
+  shortName: string | null;
+  division: string | null;
+  /** Every program on the conference, this one included. */
+  teamCount: number;
+  /** How many of those are claimed — see `AdminTeamConferenceTeam.claimed`. */
+  onAdvantageCount: number;
+  /** The other programs, school then squad; this program is excluded. */
+  teams: AdminTeamConferenceTeam[];
+}
+
+/** One `program_audit_log` row, with its actor resolved to a name. */
+export interface AdminTeamActivityEntry {
+  /** `program_audit_log.id` — a bigint, carried as a string for React keys. */
+  id: string;
+  /** The raw action value, e.g. `pilot.ended`. Labelling belongs to the card. */
+  action: string;
+  createdAt: string;
+  /** `actor_user_id`, or null for a system write. */
+  actorUserId: string | null;
+  /** Null for a system write, or an account with no name on it. */
+  actorName: string | null;
+}
+
+/**
+ * How one scheduled event turned out, as the Schedule card marks it.
+ *
+ * Six states rather than a nullable `"won" | "lost"`, because "nobody has
+ * played yet", "half the lines are in" and "every line is in and the teams
+ * split level" are three different rows and a null would collapse them. A
+ * decided dual that finished level is `"level"`, not `"played"`: the same
+ * reading `seasonSummaryFrom`'s `dualRecord` takes, where a level dual is
+ * decided and takes neither column.
+ *
+ * `"played"` is the non-dual terminal state. A tournament has no team-vs-team
+ * result to report — the skip `seasonSummaryFrom` and `opponentDualHistory`
+ * both make — so calling a finished bracket "won" would be a claim the
+ * database does not hold.
+ */
+type AdminTeamEventResult =
+  "scheduled" | "playing" | "won" | "lost" | "level" | "played";
+
+/**
+ * One row of the program's schedule.
+ *
+ * Every field but `result` is `ScheduleRow` — `scheduleRowsFrom`'s own
+ * projection over the schedule this page already read — rather than a second
+ * mapping of `program_events`: the console and the program's own schedule page
+ * print the same events, and two spellings of "what is a dual's score" are two
+ * chances for them to disagree about a season.
+ */
+export interface AdminTeamEvent {
+  id: string;
+  /** `dual` | `tournament` | … */
+  kind: EventKind;
+  /** The opponent school for a dual; the tournament's own name otherwise. */
+  name: string;
+  /** YYYY-MM-DD. Equal to `startsOn` for a dual. */
+  startsOn: string;
+  endsOn: string;
+  /** `home` | `away` | `neutral`. */
+  site: EventSite;
+  /** Lines on the event, and how many have a decided match. */
+  entryCount: number;
+  playedCount: number;
+  /** Only for a dual, and only once every line is in — see `ScheduleRow`. */
+  teamScore: { us: number; them: number } | null;
+  result: AdminTeamEventResult;
+}
+
+interface AdminTeamData {
   program: AdminTeamProgram;
   /** The most recent claim, or null for a program nobody has ever claimed. */
   claim: AdminTeamClaim | null;
-  members: TeamMember[];
+  members: AdminTeamMember[];
+  /**
+   * The live `program_players` roster — lineup order, null spots last — with
+   * each row's match count and last match. See `admin-team-roster.ts`, which
+   * owns the two-id-space attribution.
+   */
+  roster: AdminTeamRosterPlayer[];
+  /** Every event on the program, newest first — `ProgramSchedule`'s order. */
+  schedule: AdminTeamEvent[];
   /** Outstanding invites only — accepted ones are members now. */
-  invites: TeamInvite[];
+  invites: AdminTeamInvite[];
   joinRequests: AdminTeamJoinRequest[];
   seats: SeatUsage;
+  /** Never null — see `AdminTeamPilot`. */
+  pilot: AdminTeamPilot;
+  /** Null when `programs.conference_id` is null. */
+  conference: AdminTeamConference | null;
+  /** The latest 20 audit rows, newest first. */
+  activity: AdminTeamActivityEntry[];
   /** The current billing month's ledger. */
   usage: ProgramUsage;
-  /**
-   * The same ledger for any other month. Takes a `processing_usage.
-   * billing_month` key — `YYYY-MM-01`, the format `currentBillingMonth()`
-   * returns — not `YYYY-MM`: it is compared against a `date` column, and a
-   * two-part string would either error or silently match nothing.
-   *
-   * A function rather than a prefetched range because the month picker is a
-   * user action on a page that has already rendered; loading twelve months
-   * nobody asked for would pay for eleven of them every time.
-   */
-  usageByMonth: (billingMonth: string) => Promise<ProgramUsage>;
 }
 
 // ---------------------------------------------------------------------------
@@ -158,9 +359,11 @@ export interface AdminTeamData {
 // ---------------------------------------------------------------------------
 
 const PROGRAM_SELECT = `
-  id, school_name, team, conference, division, home_venue, default_surface,
+  id, program_key, school_name, team, conference, conference_id, division,
+  city, state, staff_page_url, home_venue, default_surface, roster_public,
   players_can_upload, upload_policy, events_policy, time_zone, crest_path,
-  status, org_type, primary_domain, seats, created_at, claimed_at
+  status, org_type, primary_domain, seats, created_at, claimed_at,
+  pilot_ends_on, pilot_approved_by, pilot_approved_at, pilot_ended_at
 `;
 
 const CLAIM_SELECT = `
@@ -173,12 +376,18 @@ const CLAIM_SELECT = `
 
 interface RawProgram {
   id: string;
+  program_key: string | null;
   school_name: string;
   team: string | null;
   conference: string | null;
+  conference_id: string | null;
   division: string | null;
+  city: string | null;
+  state: string | null;
+  staff_page_url: string | null;
   home_venue: string | null;
   default_surface: string | null;
+  roster_public: boolean;
   players_can_upload: boolean;
   upload_policy: string | null;
   events_policy: string | null;
@@ -190,6 +399,10 @@ interface RawProgram {
   seats: number | null;
   created_at: string;
   claimed_at: string | null;
+  pilot_ends_on: string | null;
+  pilot_approved_by: string | null;
+  pilot_approved_at: string | null;
+  pilot_ended_at: string | null;
 }
 
 interface RawClaim {
@@ -227,8 +440,16 @@ interface RawMemberUser {
 interface RawMember {
   user_id: string;
   role: string;
+  upload_enabled: boolean;
   joined_at: string;
   user: RawMemberUser | RawMemberUser[] | null;
+}
+
+/** The embedded `users` row on an invitation's `invited_by`. */
+interface RawInviter {
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
 }
 
 /** `program_roster`'s own name expression, character for character. */
@@ -277,12 +498,12 @@ function oneOf<T>(raw: T | T[] | null): T | null {
 async function readMembers(
   admin: SupabaseClient,
   programId: string,
-): Promise<TeamMember[]> {
+): Promise<AdminTeamMember[]> {
   const [membersResult, avatars] = await Promise.all([
     admin
       .from("program_members")
       .select(
-        "user_id, role, joined_at, user:users!program_members_user_id_fkey(id, first_name, last_name, email, avatar_path)",
+        "user_id, role, upload_enabled, joined_at, user:users!program_members_user_id_fkey(id, first_name, last_name, email, avatar_path)",
       )
       .eq("program_id", programId),
     getMemberAvatarUrls(admin, programId),
@@ -319,7 +540,8 @@ async function readMembers(
           email,
           role: row.role as MemberRole,
           avatarUrl: avatars.get(row.user_id) ?? fallbackAvatar,
-        } satisfies TeamMember,
+          uploadEnabled: row.upload_enabled,
+        } satisfies AdminTeamMember,
         rank: roleRank(row.role),
         joinedAt: row.joined_at,
       };
@@ -543,6 +765,400 @@ async function readUsage(
 }
 
 // ---------------------------------------------------------------------------
+// Pilot — the four `programs.pilot_*` columns, with the approver named
+// ---------------------------------------------------------------------------
+
+/**
+ * The pilot block, resolving `pilot_approved_by` to a name.
+ *
+ * One conditional round trip: a program with no approver on it skips the
+ * `users` read entirely rather than querying for a null id. The name uses
+ * `rosterDisplayName` — the same trim-or-null expression every other name on
+ * this page goes through — so an account with no profile reads as null and the
+ * card prints its own em dash, instead of the loader inventing "Unnamed".
+ */
+async function readPilot(
+  admin: SupabaseClient,
+  row: RawProgram,
+  viewerId: string,
+): Promise<AdminTeamPilot> {
+  const approvedBy = row.pilot_approved_by;
+
+  let approvedByName: string | null = null;
+  if (approvedBy) {
+    const { data, error } = await admin
+      .from("users")
+      .select("first_name, last_name")
+      .eq("id", approvedBy)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[admin team] could not read pilot approver", {
+        programId: row.id,
+        error: error.message,
+      });
+    }
+
+    const user = data as {
+      first_name: string | null;
+      last_name: string | null;
+    } | null;
+    approvedByName = user
+      ? rosterDisplayName(user.first_name, user.last_name)
+      : null;
+  }
+
+  return {
+    endsOn: row.pilot_ends_on,
+    approvedAt: row.pilot_approved_at,
+    approvedByName,
+    approvedByIsViewer: approvedBy !== null && approvedBy === viewerId,
+    endedAt: row.pilot_ended_at,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Conference — the row, plus its teams via `loadConferenceTeams`
+// ---------------------------------------------------------------------------
+
+/** `admin_list_conferences()`'s own `on_advantage` predicate, character for character. */
+function isClaimedStatus(status: string): boolean {
+  return status === "active" || status === "claim_pending";
+}
+
+/**
+ * The conference this program belongs to, or null when it belongs to none.
+ *
+ * The team list is `loadConferenceTeams` — the Admin › Conferences drawer's own
+ * server action — rather than a second `programs` read here. It runs its own
+ * `requireAdmin()` (this loader has already passed the same gate) and returns
+ * `{ ok: false }` on failure, which is treated the way every other read in this
+ * file treats an error: log it and hand back the degraded shape. That costs a
+ * duplicate session check, and buys one definition of "the teams in a
+ * conference" — including its crest-URL construction and its school-then-squad
+ * ordering — instead of a copy that drifts.
+ *
+ * `conferences` itself is read with the service role: it has no membership
+ * path at all, and `admin_list_conferences()` would return all 137 rows to
+ * answer a question about one.
+ */
+async function readConference(
+  admin: SupabaseClient,
+  programId: string,
+  conferenceId: string | null,
+): Promise<AdminTeamConference | null> {
+  if (!conferenceId) return null;
+
+  const [conferenceResult, teamsResult] = await Promise.all([
+    admin
+      .from("conferences")
+      .select("id, name, short_name, division")
+      .eq("id", conferenceId)
+      .maybeSingle(),
+    loadConferenceTeams(conferenceId),
+  ]);
+
+  if (conferenceResult.error) {
+    console.error("[admin team] could not read conference", {
+      programId,
+      conferenceId,
+      error: conferenceResult.error.message,
+    });
+  }
+
+  const conference = conferenceResult.data as {
+    id: string;
+    name: string;
+    short_name: string | null;
+    division: string | null;
+  } | null;
+
+  // A `conference_id` pointing at a row that is gone is a broken FK, not an
+  // empty state — say so rather than drawing a nameless card.
+  if (!conference) return null;
+
+  if (!teamsResult.ok) {
+    console.error("[admin team] could not read conference teams", {
+      programId,
+      conferenceId,
+      error: teamsResult.error,
+    });
+  }
+
+  const all = (teamsResult.ok ? teamsResult.teams : []).map((team) => ({
+    id: team.id,
+    name: team.name,
+    crestUrl: team.crestUrl,
+    status: team.status,
+    claimed: isClaimedStatus(team.status),
+  }));
+
+  return {
+    id: conference.id,
+    name: conference.name,
+    shortName: conference.short_name,
+    division: conference.division,
+    // Counted over the whole conference, this program included — "12 teams"
+    // means the conference has twelve, not that it has twelve others.
+    teamCount: all.length,
+    onAdvantageCount: all.filter((team) => team.claimed).length,
+    teams: all.filter((team) => team.id !== programId),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Activity — the latest `program_audit_log` rows, with actors named
+// ---------------------------------------------------------------------------
+
+/** How many rows the Activity log card shows. */
+const ACTIVITY_LIMIT = 20;
+
+/**
+ * The program's last twenty audit rows, newest first.
+ *
+ * `details` is deliberately not selected: it is free-form `jsonb` written by
+ * whichever RPC logged the row, and the card labels from `action` alone. Adding
+ * it would put unvalidated shapes on a type nobody can narrow.
+ *
+ * Actor names come from one batched `users` read over the distinct ids, not an
+ * embed: `actor_user_id` is nullable and carries no FK to `users` that
+ * PostgREST could follow, so a to-one embed is the shape that would quietly
+ * drop system rows. A row whose actor cannot be named keeps `actorName: null`
+ * and still appears — an audit log that hides entries is worse than one with a
+ * dash in it.
+ */
+async function readActivity(
+  admin: SupabaseClient,
+  programId: string,
+): Promise<AdminTeamActivityEntry[]> {
+  const { data, error } = await admin
+    .from("program_audit_log")
+    .select("id, action, actor_user_id, created_at")
+    .eq("program_id", programId)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(ACTIVITY_LIMIT);
+
+  if (error) {
+    console.error("[admin team] could not read activity", {
+      programId,
+      error: error.message,
+    });
+    return [];
+  }
+
+  const rows = (data ?? []) as {
+    id: number | string;
+    action: string;
+    actor_user_id: string | null;
+    created_at: string;
+  }[];
+  if (rows.length === 0) return [];
+
+  const actorIds = [
+    ...new Set(rows.map((row) => row.actor_user_id).filter(Boolean)),
+  ] as string[];
+
+  const nameById = new Map<string, string | null>();
+  if (actorIds.length > 0) {
+    const { data: users, error: usersError } = await admin
+      .from("users")
+      .select("id, first_name, last_name")
+      .in("id", actorIds);
+
+    if (usersError) {
+      console.error("[admin team] could not read activity actor names", {
+        programId,
+        error: usersError.message,
+      });
+    }
+
+    for (const user of (users ?? []) as {
+      id: string;
+      first_name: string | null;
+      last_name: string | null;
+    }[]) {
+      nameById.set(user.id, rosterDisplayName(user.first_name, user.last_name));
+    }
+  }
+
+  return rows.map((row) => ({
+    // A bigint: PostgREST hands back a JS number, which would lose precision
+    // long before this table does. Stringified once, here, so no reader has to
+    // remember that.
+    id: String(row.id),
+    action: row.action,
+    createdAt: row.created_at,
+    actorUserId: row.actor_user_id,
+    actorName: row.actor_user_id
+      ? (nameById.get(row.actor_user_id) ?? null)
+      : null,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Roster — `program_players`, with matches attributed across both id spaces
+// ---------------------------------------------------------------------------
+
+const ROSTER_SELECT =
+  "id, first_name, last_name, class_year, lineup_spot, email, claimed_by_user_id";
+
+/**
+ * The program's live players, each with a match count and a last match.
+ *
+ * Read straight off `program_players` rather than through `program_roster_full`
+ * for this file's founding reason: every function on this schema gates on
+ * `user_program_ids()`, and under the service role `auth.uid()` is null, so the
+ * RPC would answer with an empty roster and no error. The row filter is the
+ * same one `readSeatUsage` above and the rest of the repo use —
+ * `archived_at is null and merged_into_id is null` — so the console's roster and
+ * its seat figure are about the same set of people.
+ *
+ * Two round trips, never one per player: the roster, then every match keyed to
+ * any of its ids in a single `in()`. Chained rather than parallel because the
+ * second read's filter is built from the first's rows — the ids come out of
+ * `rosterMatchOwnerIds`, which is `rosterIdIndex`'s key set, so the rows fetched
+ * and the rows attributed cannot be about different sets.
+ *
+ * **Scoped to `matches.program_id`, by decision (2026-09-26).** The count is
+ * "matches uploaded for this player under this team's workspace" — the wizard
+ * stamps `program_id` with the active team's id on every team upload and leaves
+ * it null in a personal workspace. A claimed player's auth uid also owns their
+ * PERSONAL matches and any filed under another program, and without the
+ * filter those inflated this roster. Matches a player uploaded from their own
+ * workspace before the team existed are deliberately not counted. The
+ * `player1_id` fold across both id spaces still applies within the program.
+ */
+async function readRoster(
+  admin: SupabaseClient,
+  programId: string,
+): Promise<AdminTeamRosterPlayer[]> {
+  const { data, error } = await admin
+    .from("program_players")
+    .select(ROSTER_SELECT)
+    .eq("program_id", programId)
+    .is("archived_at", null)
+    .is("merged_into_id", null);
+
+  if (error) {
+    console.error("[admin team] could not read roster players", {
+      programId,
+      error: error.message,
+    });
+    return [];
+  }
+
+  const players = (data ?? []) as unknown as AdminRosterPlayerRow[];
+  if (players.length === 0) return [];
+
+  // Never an empty list here — every player contributes its own id — but the
+  // guard above is what makes that true, and PostgREST refuses `in.()`.
+  //
+  const ownerIds = rosterMatchOwnerIds(players);
+  const { data: matchRows, error: matchError } = await admin
+    .from("matches")
+    .select("id, player1_id, player2_name, result, score, date")
+    .eq("program_id", programId)
+    .in("player1_id", ownerIds);
+
+  if (matchError) {
+    console.error("[admin team] could not read roster matches", {
+      programId,
+      error: matchError.message,
+    });
+    // Still return the roster: a page listing the squad with zeroed counts is
+    // usable, and hiding the squad because a second read failed is not.
+    return rosterWithMatchCounts(players, []);
+  }
+
+  return rosterWithMatchCounts(
+    players,
+    (matchRows ?? []) as unknown as AdminRosterMatchRow[],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Schedule — `readScheduleWithClient`, under the service role
+// ---------------------------------------------------------------------------
+
+/**
+ * How one event turned out — the one thing `ScheduleRow` does not carry.
+ *
+ * Derived from `dualScore`, the same function the schedule page and
+ * `seasonSummaryFrom` use, rather than from the row's `teamScore`: that field is
+ * null both for an undecided dual and for a tournament, and this has to tell
+ * those apart.
+ */
+function eventResult(
+  kind: EventKind,
+  entries: Parameters<typeof dualScore>[0],
+  playedCount: number,
+): AdminTeamEventResult {
+  if (entries.length === 0 || playedCount === 0) return "scheduled";
+
+  if (kind === "dual") {
+    const score = dualScore(entries);
+    if (!score.decided) return "playing";
+    if (score.us > score.them) return "won";
+    if (score.them > score.us) return "lost";
+    return "level";
+  }
+
+  return playedCount < entries.length ? "playing" : "played";
+}
+
+/**
+ * Every event on the program, newest first, with its result state.
+ *
+ * `readScheduleWithClient` is called with the ADMIN client for the same reason
+ * every other read in this file is: its cached cousins (`getProgramSchedule`,
+ * `getEventDetail`) build their own cookie-bound client, and `program_events`,
+ * `program_event_entries` and `matches` are all RLS-scoped to program
+ * membership — an admin looking at a program they do not belong to would get an
+ * empty schedule with no error. That is the failure mode the module comment at
+ * the top of this file exists to prevent, and it is also why `dualScore`'s own
+ * warning about narrowed reads is satisfied here: the service role sees every
+ * line, so the score it computes is the whole score.
+ *
+ * `readScheduleWithClient` throws on a failed read rather than degrading, so
+ * this wraps it: a broken schedule should cost the Schedule card, not the page.
+ */
+async function readSchedule(
+  admin: SupabaseClient,
+  programId: string,
+): Promise<AdminTeamEvent[]> {
+  try {
+    const schedule = await readScheduleWithClient(admin, programId);
+    // The row projection the program's own schedule page reads, so the two
+    // cannot print different scores for one dual.
+    const rows = scheduleRowsFrom(schedule);
+
+    return rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      startsOn: row.startsOn,
+      endsOn: row.endsOn,
+      site: row.site,
+      entryCount: row.entryCount,
+      playedCount: row.playedCount,
+      teamScore: row.teamScore,
+      result: eventResult(
+        row.kind,
+        schedule.entriesByEvent.get(row.id) ?? [],
+        row.playedCount,
+      ),
+    }));
+  } catch (error) {
+    console.error("[admin team] could not read schedule", {
+      programId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
 // The loader
 // ---------------------------------------------------------------------------
 
@@ -555,7 +1171,10 @@ async function readUsage(
  */
 export const getAdminTeam = cache(
   async (programId: string): Promise<AdminTeamData | null> => {
-    await requireAdminOrNotFound();
+    // The viewer's own id, not just the gate: `pilot.approvedByIsViewer` needs
+    // to know whether this admin is the one who approved the pilot, and
+    // `requireAdminOrNotFound` is `cache()`d, so asking for it is free.
+    const viewer = await requireAdminOrNotFound();
     const admin = createAdminClient();
 
     const { data: programRow, error: programError } = await admin
@@ -582,10 +1201,15 @@ export const getAdminTeam = cache(
       crest,
       claimResult,
       members,
+      roster,
+      schedule,
       invitesResult,
       requestsResult,
       seats,
       usage,
+      pilot,
+      conference,
+      activity,
     ] = await Promise.all([
       crestUrl(row.crest_path),
       admin
@@ -599,10 +1223,17 @@ export const getAdminTeam = cache(
         .limit(1)
         .maybeSingle(),
       readMembers(admin, programId),
+      readRoster(admin, programId),
+      readSchedule(admin, programId),
       // No expiry filter, matching `getTeamSettings`. See `readSeatUsage`.
       admin
         .from("program_invites")
-        .select("id, email, role, created_at, invited_by")
+        // The embedded sender is what the People card's "by <name>" clause
+        // reads; `invited_by` is a `users.id` and the person may be an admin
+        // who holds no membership row, so it cannot be resolved from `members`.
+        .select(
+          "id, email, role, created_at, invited_by, expires_at, inviter:users!program_invites_invited_by_fkey(first_name, last_name, email)",
+        )
         .eq("program_id", programId)
         .is("accepted_at", null)
         .order("created_at", { ascending: false }),
@@ -617,6 +1248,9 @@ export const getAdminTeam = cache(
         .order("created_at", { ascending: true }),
       readSeatUsage(admin, programId, row.seats ?? 0),
       readUsage(admin, programId, billingMonth, orgType),
+      readPilot(admin, row, viewer.id),
+      readConference(admin, programId, row.conference_id),
+      readActivity(admin, programId),
     ]);
 
     if (claimResult.error) {
@@ -643,10 +1277,18 @@ export const getAdminTeam = cache(
     const program: AdminTeamProgram = {
       id: row.id,
       name: programDisplayName(row.school_name, row.team),
+      programKey: row.program_key,
       schoolName: row.school_name,
-      team: row.team === "womens" ? "womens" : "mens",
+      // A program with no squad on record (a high school, a custom org) stays
+      // null — coercing it to "mens" printed "Men's tennis" in Edit details
+      // for a team that never said so.
+      team: row.team === "mens" || row.team === "womens" ? row.team : null,
       conference: row.conference,
       division: row.division ?? null,
+      city: row.city,
+      state: row.state,
+      staffPageUrl: row.staff_page_url,
+      rosterPublic: row.roster_public,
       homeVenue: row.home_venue,
       defaultSurface: row.default_surface,
       playersCanUpload: row.players_can_upload,
@@ -690,21 +1332,38 @@ export const getAdminTeam = cache(
           }
         : null,
       members,
+      roster,
+      schedule,
       invites: (
-        (invitesResult.data ?? []) as {
+        (invitesResult.data ?? []) as unknown as {
           id: string;
           email: string;
           role: string;
           created_at: string;
           invited_by: string | null;
+          expires_at: string;
+          inviter: RawInviter | RawInviter[] | null;
         }[]
-      ).map((invite) => ({
-        id: invite.id,
-        email: invite.email,
-        role: invite.role as MemberRole,
-        createdAt: invite.created_at,
-        invitedBy: invite.invited_by,
-      })) satisfies TeamInvite[],
+      ).map((invite) => {
+        const inviter = oneOf(invite.inviter);
+        return {
+          id: invite.id,
+          email: invite.email,
+          role: invite.role as MemberRole,
+          createdAt: invite.created_at,
+          invitedBy: invite.invited_by,
+          expiresAt: invite.expires_at,
+          expired: Date.parse(invite.expires_at) <= Date.now(),
+          // The same fallback ladder every other name on this page uses: a
+          // profile with no name still has an address, and a sender whose
+          // account is gone has neither, so the clause is dropped.
+          invitedByName: inviter
+            ? (rosterDisplayName(inviter.first_name, inviter.last_name) ??
+              inviter.email ??
+              null)
+            : null,
+        };
+      }) satisfies AdminTeamInvite[],
       joinRequests: (
         (requestsResult.data ?? []) as {
           id: string;
@@ -723,9 +1382,10 @@ export const getAdminTeam = cache(
         createdAt: request.created_at,
       })),
       seats,
+      pilot,
+      conference,
+      activity,
       usage,
-      usageByMonth: (month: string) =>
-        readUsage(admin, programId, month, orgType),
     };
   },
 );

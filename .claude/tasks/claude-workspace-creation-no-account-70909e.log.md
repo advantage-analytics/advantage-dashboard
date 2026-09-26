@@ -1,0 +1,60 @@
+# Run log — claude/workspace-creation-no-account-70909e
+
+Written by `/task-next`. Do not hand-edit — the queue file is yours, this one
+is the runner's. Newest entries at the bottom.
+
+## T2 · Create the shared onboarding answer vocabulary with an offline spec — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New pure module `src/app/onboarding/answers.ts` — `RECORDING_SOURCES`, `ACQUISITION_SOURCES` (player/coach labels from the canvas), `ROSTER_SIZE_BANDS`, `WEEKLY_FILM_BANDS`, `ACQUISITION_DETAIL_MAX`, derived types, four guards, `providerForRecordingSource()`. New offline spec `tests/onboarding-answers.spec.ts` (24 tests) covering the provider mapping, guard rejection and the coach-vs-player label rule.
+
+## T1 · Add onboarding intake columns, `set_program_intake` RPC and `Viewer.recordingSource` — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `supabase/migrations/20260926182506_onboarding_intake_answers.sql` — applied live as `onboarding_intake_answers` (version 20260926182506): `users.recording_source / acquisition_source / acquisition_source_detail`, `programs.roster_size_band / weekly_film_band`, six null-allowing check constraints, column comments, and owner-gated `set_program_intake(uuid,text,text)` (security definer, `search_path = ''` mirroring `update_program_settings` rather than the task's literal `public`; anon revoked). Advisors before/after: only delta is the new function in the expected authenticated-SECURITY-DEFINER lint class. `Viewer.recordingSource` added and mapped through `isRecordingSource`; six `Viewer` fixture literals gained `recordingSource: null` for typecheck.
+**follow-ups:** 1. T4's action should surface the RPC's 42501 as "only the owner can answer this" and validate bands with the `answers.ts` guards before calling. 2. A shared `viewerFixture()` under `tests/fixtures` would make the next `Viewer` column one edit instead of six.
+
+## T3 · Add onboarding steps 1.5 and 1.7 and persist the answers — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `onboarding-flow.tsx` — `Step` 1–6; eyebrows "Step 1"/"Step 2"/"Step 3–5 of 5"; step 3 Continue and Skip advance to step 5; step 5 = three recording-source cards from `RECORDING_SOURCES` (FileSpreadsheet/Video/Smartphone, 840px); step 6 = two-column heard-about rows with the "Somewhere else" reveal ("Where?", 120 max), "Go to my dashboard", Skip stores nulls; PostHog `setPersonProperties` + `onboarding_completed` before the action; 1.3/1.4 "allowance" copy. `actions.ts` — `parseIntake` validates the enums and detail rule with plain errors; the three columns are written in the same update as `onboarded_at`.
+**follow-ups:** 1. `src/components/claim/role-choice.tsx:39` still says "one shared budget" — same card copy as 1.3, outside this task's files. 2. On the college path the last button reads "Go to my dashboard" but lands on `/claim/program?intent=join`; consider "Continue" or "Find my program" for `college === "yes"`. 3. The coach exit sends no `onboarding_completed` event (path kept unchanged by spec).
+
+## T4 · Build the coach intake screen at `/claim/team/about` — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New route `/claim/team/about` (page resolves the program from `WORKSPACE_COOKIE`, requires the owner row, else `/dashboard/team`; `ClaimShell` with exit → team, eyebrow `school_name · teamLabel(team)`), `program-intake-form.tsx` (two 4-across `RadioDot` band rows, `ClaimSelect` heard-about with `coachLabel`, "Go to my team", Skip link), `saveProgramIntake` (guards → `set_program_intake` RPC → own-row `acquisition_source` → revalidate → redirect; 42501 surfaces as "Only the program owner can answer this."). `createCustomTeam` and `/claim/ready` now land on the new screen; `MAP.md` regenerated. Runner fixed two invented question labels to the canvas wording ("Players on your roster", "Matches you film in a typical week") before gating.
+**follow-ups:** 1. If the `users` write fails after the RPC succeeded the action returns an error although the bands are saved; a retry re-writes them (idempotent) — decide whether to swallow it instead.
+
+## T5 · Preselect the upload wizard source from `Viewer.recordingSource` — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New pure `resolve-starting-provider.ts` (`resolveStartingProvider({linked, stored, preferred})` ranking linked > stored > preferred > `DEFAULT_PROVIDER_ID`; the constant moved here from the hook so the offline spec can import it). `page.tsx` computes `preferredProvider` from `viewer.recordingSource` (now always resolves `getWorkspaceContext()`), threaded through `UploadMatchFlow` → `UploadWizardProvider` → `useUploadMatchWizard`, which uses the resolver in both the progress-bar initialiser and the provider effect; only the stored tier counts as a resume; nothing new is written to localStorage. New spec `upload-provider-preference.spec.ts` (7 tests); `upload-wizard-hook.ts` fixture stub + two existing specs' source-text assertions updated for the move. Step order, `STEP_ORDER_BY_KIND`, attribution inputs and the job insert untouched. widget-states: the two touched wizard `.tsx` files change props only (no Suspense/fallback/empty-state hunks) — receipt marked.
+**follow-ups:** 1. `/dashboard/team/upload` and the `?match=` attach branch don't pass `preferredProvider` (defaults to null) — decide whether a coach's own preference should apply there. 2. `upload-line-swap.spec.ts:371` flaked once in the full parallel run and passed 70/70 alone — the known full-suite flake.
+
+## T6 · Cover the intake constraints and RPC with a live-db spec — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `tests/onboarding-intake-live.spec.ts` (8 tests, three pool users owner/coach/stranger): every allowed `recording_source`/`acquisition_source` value accepted on the own row, detail accepted with `other`, unknown source and detail-beside-non-other refused with 23514, stranger update = 0 rows, `set_program_intake` 42501 for coach and stranger, both bands written for the owner of a `create_custom_program` program; `afterAll` always removes the program and nulls the intake columns on the pool users. Registered in `LIVE_DB_SPECS`; target-guard 16/16; `--list` shows the 8 tests; never run against prod and nothing sets `LIVE_DB_ALLOW_PROD`.
+**follow-ups:** 1. Constraint gap found in passing: `users_acquisition_source_detail_only_other` is `detail is null or acquisition_source = 'other'`, which evaluates to NULL (passes) when `acquisition_source` is NULL — a detail can be stored with no source at the DB level. The app layer already forces detail null unless source is `other`, so nothing writes that shape today; tighten to `acquisition_source is not distinct from 'other'` in a follow-up migration. 2. `tests/fixtures/live-db-pool.ts` `POOL_USER_DEFAULTS` doesn't reset the three intake columns (this spec resets them itself); adding them there would break every live spec against a project without the migration, so it was left alone. 3. The live spec has not yet been run by hand against the DB — do that once before the PR.
+
+## T7 · Widen `users_acquisition_source_values` (reddit, linkedin) and tighten `users_acquisition_source_detail_only_other`, with a live-spec null-source case — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `supabase/migrations/20260926202555_acquisition_source_reddit_linkedin_null_detail.sql`, applied live (version 20260926202555): `users_acquisition_source_values` now allows `reddit` and `linkedin` (nine values); `users_acquisition_source_detail_only_other` is `acquisition_source is not distinct from 'other'`, closing the NULL-source hole from T6. Pre-checks found no violating rows; advisors identical before/after. Live spec gains "a detail with no acquisition_source is refused with 23514" (9 tests listed); doc comment updated. Live spec still not run by hand.
+
+## T8 · Add `reddit` and `linkedin` to `ACQUISITION_SOURCES` with an exact-order offline assertion — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `answers.ts` — `reddit` ("Reddit") and `linkedin` ("LinkedIn") entries after `utr`, `other` still last. `onboarding-answers.spec.ts` — exact-order assertion over the nine values and a label test for the two entries (26 tests). The 1.7 grid and the 5.2 select render from the array, so both surfaces now offer the answers; the live constraint already accepts them (T7).
+
+## T9 · Fix the "shared budget" role-choice copy and make the 1.7 finish button honest on the college path — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `role-choice.tsx` coach card sub → "A roster of players, one shared allowance."; `onboarding-flow.tsx` step-6 button label → `college === "yes" ? "Find my program" : "Go to my dashboard"` with a comment pointing at `RESOLUTION`'s `/claim/program?intent=join` destination. Button props and Skip untouched.
+
+## T10 · Add a browser spec that walks the player onboarding flow end to end against a local dev server — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `tests/onboarding-flow-browser.spec.ts` (live-db, serial, one `createLogin` user, one browser sign-in through `/login`): test 1 walks 1.2 → I play → No → SwingVision → Somewhere else + "Reddit thread" → "Go to my dashboard" and reads the `users` row back via the admin client; test 2 resets the row and walks the same path with Skip on both intake steps. `afterAll` always deletes the user. Registered in `LIVE_DB_SPECS`; `--list` shows 2 tests; target-guard 16/16. Env-driven base URL (`ONBOARDING_BROWSER_BASE_URL`), no config change, no port hardcoded. Not yet run by hand.
+**follow-ups:** 1. Run once by hand against the dev server: `ONBOARDING_BROWSER_BASE_URL=http://localhost:3002 npx playwright test --project=live-db tests/onboarding-flow-browser.spec.ts` (skips against prod unless opted in — deliberate). 2. Same for `tests/onboarding-intake-live.spec.ts` (9 tests) before the PR.

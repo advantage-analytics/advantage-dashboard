@@ -11,7 +11,7 @@ import { ContactOwnerForm } from "@/components/claim/contact-owner-form";
 import { ReferralRequestForm } from "@/components/claim/referral-request-form";
 import { JoinSharingRows } from "@/components/claim/sharing-rows";
 import { advButton } from "@/lib/ui/adv-button";
-import { siteUrl } from "@/lib/site-url";
+import { requestOrigin } from "@/lib/request-origin";
 
 export const metadata = { title: "Request an invite" };
 
@@ -97,6 +97,12 @@ export default async function RequestInvitePage({
     .join(" · ");
 
   if (program.status === "unclaimed") {
+    // The origin this visitor is on, not `NEXT_PUBLIC_SITE_URL`: the link is
+    // read off the screen and pasted, so it has to name the server that drew
+    // it — a dev worktree on :3002, a preview deployment, production. Read
+    // only in this branch: the other two outcomes below never build a link.
+    const origin = await requestOrigin();
+
     return (
       <ClaimShell width={720} gap={20} back={`/claim/${programKey}`}>
         {/* The title owns the school name, so the eyebrow carries only the
@@ -115,7 +121,7 @@ export default async function RequestInvitePage({
           // The program's own status page — one click from "Set up this
           // program" for whoever receives it. A program key, not 4.3's
           // campaign slug: this program exists.
-          referralUrl={`${siteUrl()}/claim/${encodeURIComponent(programKey)}`}
+          referralUrl={`${origin}/claim/${encodeURIComponent(programKey)}`}
           defaultName={profileName}
           // The persona picks the role, where it maps onto one. A coach who is
           // here is by definition not the owner, so "coach" chooses nothing.

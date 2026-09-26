@@ -497,11 +497,18 @@ test("every default source is resolved by kind, so the order cannot change one",
     "utf8",
   );
 
-  // The one default is found by kind — never by index, never by name.
-  expect(hook).toMatch(
+  // The one default is found by kind — never by index, never by name. It
+  // lives beside the starting-source resolver (T5), which the hook imports.
+  const resolver = readFileSync(
+    resolve(`${WIZARD}/resolve-starting-provider.ts`),
+    "utf8",
+  );
+  expect(hook).toContain('from "./resolve-starting-provider"');
+  expect(resolver).toMatch(
     /DEFAULT_PROVIDER_ID[^=]*=\s*providers\.find\(\s*\(p\) =>\s*p\.available !== false && providerKindOrNull\(p\.id\) === "processing",/,
   );
   expect(hook).not.toMatch(/providers\[\d+\]/);
+  expect(resolver).not.toMatch(/providers\[\d+\]/);
 
   // What that expression resolves to, on the list as it is ordered now.
   const byKind = (kind: string) =>
@@ -522,12 +529,14 @@ test("every default source is resolved by kind, so the order cannot change one",
   const importOrder = /import:\s*\[([^\]]*)\]/.exec(order)?.[1] ?? "";
   expect(importOrder).not.toContain("video");
 
-  // An explicit answer still outranks the default: a link that named a source,
-  // a stored choice, and a resumed draft each set the provider themselves.
-  expect(hook).toContain("setSelectedProvider(initialProvider);");
-  expect(hook).toContain(
-    "setSelectedProvider(existingProvider as ProviderId);",
+  // An explicit answer still outranks the default: a resumed draft sets the
+  // provider itself, and a link and a stored choice are ranked above it by
+  // `resolveStartingProvider()` — whose order `upload-provider-preference.spec.ts`
+  // pins behaviourally.
+  expect(hook).toMatch(
+    /resolveStartingProvider\(\{\s*linked: initialProvider \?\? null,\s*stored: existingProvider,/,
   );
+  expect(hook).toContain("setSelectedProvider(startingProvider);");
   expect(hook).toContain("setSelectedProvider(draftProvider);");
 });
 

@@ -11,8 +11,10 @@ import {
   claimVerifyIdentityEmail,
   inviteRequestDeclinedEmail,
 } from "@/lib/services/email";
+import { notifyProgramWentLive } from "@/lib/services/notifications/program-live-mail";
 import { claimRoleLabel } from "./claim-roles";
-import { mintVerification, verifyIdentityUrl } from "./claim-verification";
+import { mintVerification, verifyIdentityPath } from "./claim-verification";
+import { requestOrigin } from "@/lib/request-origin";
 import {
   addHours,
   nextClaimStatus,
@@ -65,7 +67,11 @@ function formatWindowClose(date: Date): string {
  * to somebody else, the objection notice, was cut before launch.
  */
 async function notifyClaimant(
-  db: AdminDb,
+  program: {
+    school_name: string;
+    team: string | null;
+    program_key: string | null;
+  } | null,
   claim: {
     claimId: string;
     programId: string;
@@ -82,12 +88,6 @@ async function notifyClaimant(
     windowEndsAt: Date | null;
   },
 ): Promise<void> {
-  const { data: program } = await db
-    .from("programs")
-    .select("school_name, team, program_key")
-    .eq("id", claim.programId)
-    .maybeSingle();
-
   if (!program) return;
 
   const programName = programDisplayName(
@@ -167,7 +167,7 @@ async function transition(
   const { data: claim } = await db
     .from("program_claims")
     .select(
-      "id, status, program_id, claimant_user_id, claimed_email, claimant_role",
+      "id, status, program_id, claimant_user_id, claimed_email, claimant_name, claimant_role",
     )
     .eq("id", claimId)
     .maybeSingle();
@@ -239,17 +239,51 @@ async function transition(
 
   revalidatePath("/admin", "layout");
 
+  // One fetch, reused below for both the claimant's outcome email and the
+  // went-live FYI — `notifyClaimant` and the went-live check used to each
+  // fetch the same `programs` row for `claim.program_id` on their own.
+  const { data: program } = await db
+    .from("programs")
+    .select("school_name, team, program_key")
+    .eq("id", claim.program_id)
+    .maybeSingle();
+
   // Last, and unconditionally ok: see `notifyClaimant`. Every write above is
   // already committed, so there is nothing left for a send to invalidate.
-  await notifyClaimant(db, {
-    claimId: claim.id as string,
-    programId: claim.program_id as string,
-    to: claim.claimed_email as string,
-    claimantRole: claim.claimant_role as string,
-    outcome: next,
-    claimantMessage: fields.claimantMessage,
-    windowEndsAt,
-  });
+  await notifyClaimant(
+    program as {
+      school_name: string;
+      team: string | null;
+      program_key: string | null;
+    } | null,
+    {
+      claimId: claim.id as string,
+      programId: claim.program_id as string,
+      to: claim.claimed_email as string,
+      claimantRole: claim.claimant_role as string,
+      outcome: next,
+      claimantMessage: fields.claimantMessage,
+      windowEndsAt,
+    },
+  );
+
+  // An approval that opens the objection window is the reviewed door to a
+  // live program — the internal FYI's other trigger, after the claimant has
+  // been told. `approved` only arrives later via `settle`, so it is not here.
+  if (event.type === "approve" && next === "objection_window" && program) {
+    await notifyProgramWentLive({
+      programId: claim.program_id as string,
+      programName: programDisplayName(
+        program.school_name as string,
+        (program.team as string | null) ?? null,
+      ),
+      claimantName:
+        (claim.claimant_name as string | null) ??
+        (claim.claimed_email as string),
+      claimantEmail: claim.claimed_email as string,
+      path: "reviewed",
+    });
+  }
 
   return { ok: true };
 }
@@ -499,6 +533,10 @@ export async function reopenClaim(
  * ran first — and the link authorizes nothing on its own beyond answering a
  * question about a claim that admin can already see.
  *
+ * Built on the admin's own origin via `requestOrigin()`, not the configured
+ * one the email uses — `verifyIdentityPath()`'s doc comment says why the two
+ * must differ. Same path, same token.
+ *
  * **A failed send does not fail the call.** Same posture as `notifyClaimant`:
  * the token is already durable, so the admin still gets a working link to pass
  * on by hand. Reporting failure here would leave a live token behind a message
@@ -555,19 +593,25 @@ export async function sendClaimVerification(
     return { ok: false, error: "Could not issue a verification link." };
   }
 
-  const sent = await sendEmail(
-    claimVerifyIdentityEmail({
-      to,
-      programName: programDisplayName(
-        program.school_name as string,
-        (program.team as string | null) ?? null,
-      ),
-      // The label they picked, not the stored `head_coach`. The heading asks a
-      // question and "Are you X's head_coach?" is not one anybody answers.
-      claimantTitle: claimRoleLabel(claim.claimant_role as string),
-      token,
-    }),
-  );
+  // Neither depends on the other, so send the mail and read the admin's own
+  // origin concurrently rather than paying for both in sequence.
+  const [sent, origin] = await Promise.all([
+    sendEmail(
+      claimVerifyIdentityEmail({
+        to,
+        programName: programDisplayName(
+          program.school_name as string,
+          (program.team as string | null) ?? null,
+        ),
+        // The label they picked, not the stored `head_coach`. The heading
+        // asks a question and "Are you X's head_coach?" is not one anybody
+        // answers.
+        claimantTitle: claimRoleLabel(claim.claimant_role as string),
+        token,
+      }),
+    ),
+    requestOrigin(),
+  ]);
 
   if (!sent.ok) {
     console.warn("[admin] claim verification email not sent", {
@@ -576,7 +620,7 @@ export async function sendClaimVerification(
   }
 
   revalidatePath("/admin", "layout");
-  return { ok: true, url: verifyIdentityUrl(token) };
+  return { ok: true, url: `${origin}${verifyIdentityPath(token)}` };
 }
 
 /**

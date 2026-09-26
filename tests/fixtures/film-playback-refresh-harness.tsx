@@ -123,6 +123,7 @@ const WORKSPACE: WorkspaceContextValue = {
     role: null,
     memberSince: null,
     onboardedAt: null,
+    recordingSource: null,
   },
 };
 

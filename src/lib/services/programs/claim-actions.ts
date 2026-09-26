@@ -16,9 +16,14 @@ import { checkClaimEmail } from "./domain-match";
 import { toClaimRole, type ClaimRoleValue } from "./claim-roles";
 import { nextClaimStatus, reviewReason, type ClaimStatus } from "./claim-state";
 import { getProgramOwner } from "./program-owner";
+import { TERMS_NOT_ACCEPTED_SQLSTATE } from "./pilot-terms";
 import { wantsNotification } from "@/lib/services/notifications/should-notify";
 import { notifyAdminsReviewNeeded } from "@/lib/services/notifications/admin-review-mail";
-import { siteUrl } from "@/lib/site-url";
+import {
+  notifyProgramWentLive,
+  shouldAnnounceProgramLive,
+} from "@/lib/services/notifications/program-live-mail";
+import { requestOrigin } from "@/lib/request-origin";
 
 export type ActionOutcome = { ok: true } | { ok: false; error: string };
 
@@ -82,8 +87,12 @@ async function sendClaimOtp(
       // The claimant becomes the owner, so they need the account either way.
       shouldCreateUser: true,
       // `/confirm` already exchanges the code and creates the `users` profile
-      // row; this rides that rather than adding a second callback.
-      emailRedirectTo: `${siteUrl()}/confirm?next=/claim/verify`,
+      // row; this rides that rather than adding a second callback. The origin
+      // is the request's, like every other `redirectTo` in the app: Supabase
+      // only honours allow-listed redirect URLs, so this is the person's own
+      // server — a dev worktree on :3002 included — not a `Host` an attacker
+      // could point somebody else at.
+      emailRedirectTo: `${await requestOrigin()}/confirm?next=/claim/verify`,
     },
   });
 }
@@ -676,6 +685,13 @@ export type ClaimFailure =
   | "unknown-program"
   | "taken"
   | "failed"
+  /**
+   * No `pilot_terms_acceptances` row for the current `PILOT_TERMS_VERSION`
+   * (`./pilot-terms.ts`). Both completion RPCs raise
+   * `TERMS_NOT_ACCEPTED_SQLSTATE` once the enforcement migration is applied;
+   * the pending claim is left intact for a retry after the coach accepts.
+   */
+  | "terms-not-accepted"
   // The two endings only the signed-in token path can reach.
   | "sign-in-first"
   | "wrong-account";
@@ -757,6 +773,29 @@ async function notifyIfClaimNeedsReview(
       announcedRecipients: 1,
       status: "pending_review",
     }),
+  });
+}
+
+/**
+ * The other half of the fork after a claim completes: did it land live on its
+ * own? Decided on `status`, not `contact_matched` — see
+ * `shouldAnnounceProgramLive`. Shared by `completeClaim` and
+ * `completeClaimWithToken` so the two doors build the same event shape from
+ * one place instead of each re-deriving it.
+ */
+async function announceIfProgramWentLive(
+  rpc: Pick<ClaimRpcResult, "program_id" | "status" | "already_owned"> | null,
+  claimantName: string,
+  claimantEmail: string,
+  programName: string,
+): Promise<void> {
+  if (!rpc || !shouldAnnounceProgramLive(rpc)) return;
+  await notifyProgramWentLive({
+    programId: rpc.program_id,
+    programName,
+    claimantName,
+    claimantEmail,
+    path: "auto",
   });
 }
 
@@ -850,6 +889,9 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
     if (error.code === "23505") {
       return { ok: false, reason: "taken" };
     }
+    if (error.code === TERMS_NOT_ACCEPTED_SQLSTATE) {
+      return { ok: false, reason: "terms-not-accepted" };
+    }
     return { ok: false, reason: "failed" };
   }
 
@@ -898,15 +940,20 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
   // by the time this runs. `after()` so the redirect to `/claim/review` (or
   // `/claim/ready`) is not held up waiting on mail to every admin.
   after(async () => {
+    const programName = programDisplayName(
+      program.school_name as string,
+      program.team as string,
+    );
     await notifyIfClaimNeedsReview(
       db,
       rpc,
       user.id,
       pending.fullName,
       email,
-      programDisplayName(program.school_name as string, program.team as string),
+      programName,
       check.domainMatched,
     );
+    await announceIfProgramWentLive(rpc, pending.fullName, email, programName);
   });
 
   return {
@@ -1009,6 +1056,9 @@ export async function completeClaimWithToken(
     console.error("[claim] signed-in completion failed", {
       error: error.message,
     });
+    if (error.code === TERMS_NOT_ACCEPTED_SQLSTATE) {
+      return { ok: false, reason: "terms-not-accepted" };
+    }
     return { ok: false, reason: "failed" };
   }
 
@@ -1054,14 +1104,25 @@ export async function completeClaimWithToken(
   // above, and the same reason this is `after()`-deferred: the redirect that
   // follows must not wait on mail to every admin.
   after(async () => {
+    const result = rpc as ClaimRpcResult | null;
+    const programName = programDisplayName(
+      program.school_name as string,
+      program.team as string,
+    );
     await notifyIfClaimNeedsReview(
       db,
-      rpc as ClaimRpcResult | null,
+      result,
       user.id,
       row.full_name as string,
       email,
-      programDisplayName(program.school_name as string, program.team as string),
+      programName,
       check.domainMatched,
+    );
+    await announceIfProgramWentLive(
+      result,
+      row.full_name as string,
+      email,
+      programName,
     );
   });
 

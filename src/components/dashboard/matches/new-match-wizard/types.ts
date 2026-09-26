@@ -170,7 +170,8 @@ export interface MatchData {
     ad_scoring: boolean | null;
     play_on_lets: boolean;
   };
-  result: string;
+  /** The caption over the score; null when there is none (never ""). */
+  result: string | null;
   date: string;
   private: boolean;
   score: {
