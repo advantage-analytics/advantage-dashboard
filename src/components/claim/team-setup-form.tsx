@@ -185,10 +185,10 @@ export function TeamSetupForm({
             {pending ? (
               <span className="inline-flex items-center gap-1.5">
                 <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                Creating
+                Continue
               </span>
             ) : (
-              "Create team"
+              "Continue"
             )}
           </button>
         </div>

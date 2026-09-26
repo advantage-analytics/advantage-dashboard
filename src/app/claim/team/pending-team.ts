@@ -1,5 +1,10 @@
 import { cookies } from "next/headers";
-import type { CustomOrgType } from "@/lib/services/programs/create-actions";
+import {
+  isCustomOrgType,
+  type CustomOrgType,
+} from "@/lib/services/programs/custom-org";
+
+export { isCustomOrgType };
 
 /**
  * The custom-team setup values, parked between `/claim/team/setup` and the
@@ -30,14 +35,6 @@ export const PENDING_TEAM_COOKIE_OPTIONS = {
   maxAge: PENDING_TEAM_MAX_AGE,
 };
 
-/** The org types `create_custom_program` accepts. Mirrors `CUSTOM_ORG_TYPES`. */
-const ORG_TYPES: readonly CustomOrgType[] = [
-  "club",
-  "high_school",
-  "academy",
-  "other",
-];
-
 export interface PendingTeam {
   name: string;
   orgType: CustomOrgType;
@@ -46,13 +43,6 @@ export interface PendingTeam {
 
 /** Longest value either text field may carry through the cookie. */
 const MAX_TEXT = 200;
-
-export function isCustomOrgType(value: unknown): value is CustomOrgType {
-  return (
-    typeof value === "string" &&
-    (ORG_TYPES as readonly string[]).includes(value)
-  );
-}
 
 /** Shape-check an untrusted value into a `PendingTeam`, or null. */
 export function toPendingTeam(value: unknown): PendingTeam | null {

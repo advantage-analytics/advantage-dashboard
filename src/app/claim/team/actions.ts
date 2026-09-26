@@ -19,10 +19,10 @@ import {
   readPendingTeam,
   toPendingTeam,
 } from "./pending-team";
-
-/** Mirrors `NAME_MIN`/`NAME_MAX` in `create-actions.ts`, for an early answer. */
-const NAME_MIN = 2;
-const NAME_MAX = 120;
+import {
+  CUSTOM_ORG_NAME_MAX as NAME_MAX,
+  CUSTOM_ORG_NAME_MIN as NAME_MIN,
+} from "@/lib/services/programs/custom-org";
 
 /**
  * The setup screen's submit (7.2), which no longer creates the team itself.

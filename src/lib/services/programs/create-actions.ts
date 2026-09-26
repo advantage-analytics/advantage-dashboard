@@ -1,6 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import {
+  CUSTOM_ORG_NAME_MAX as NAME_MAX,
+  CUSTOM_ORG_NAME_MIN as NAME_MIN,
+  CUSTOM_ORG_TYPES,
+  type CustomOrgType,
+} from "./custom-org";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
@@ -31,13 +37,7 @@ import { TERMS_NOT_ACCEPTED_SQLSTATE } from "./pilot-terms";
  * public program search for good.
  */
 
-const CUSTOM_ORG_TYPES = ["club", "high_school", "academy", "other"] as const;
-
-export type CustomOrgType = (typeof CUSTOM_ORG_TYPES)[number];
-
-/** Mirrors the SQL bounds; the RPC is the enforcement, this is the fast no. */
-const NAME_MIN = 2;
-const NAME_MAX = 120;
+export type { CustomOrgType } from "./custom-org";
 
 export type CreateCustomProgramResult =
   | { ok: true; programId: string }
