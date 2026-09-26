@@ -59,13 +59,6 @@ function getPostHogClient(): PostHog | null {
     host,
     flushAt: 1,
     flushInterval: 0,
-    // Deliberate (decided 2026-09-25): prompts and replies are recorded in
-    // full so a bad insight can be debugged from its trace. They carry player
-    // first names and match stats, which makes this the one place those reach
-    // PostHog — replays mask all text and the warehouse role sees neither.
-    // The privacy policy must say so; flip to true to keep only model, cost,
-    // tokens and latency.
-    privacyMode: false,
   });
   return globalThis.__posthogLLMClient;
 }
@@ -87,6 +80,12 @@ function flushAfterResponse(posthog: PostHog | null) {
 function posthogOptions(context: LLMObservabilityContext, provider?: "google") {
   return {
     posthogDistinctId: context.distinctId,
+    // Prompts and replies carry player first names and match stats, and some
+    // players are minors. Decided 2026-09-26: keep only model, cost, tokens
+    // and latency. Set per call because posthog-node accepts a constructor
+    // `privacyMode` in its types but never applies it. Turning this off would
+    // need the privacy policy and Guardian Terms to name PostHog first.
+    posthogPrivacyMode: true,
     posthogTraceId: context.traceId,
     posthogProperties: {
       $ai_session_id: context.sessionId,
