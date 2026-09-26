@@ -15,6 +15,7 @@ import { programDisplayName } from "@/lib/data/programs-server";
 import { displayName } from "./invite-acceptance";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import type { MemberRole } from "@/lib/data/team-settings-server";
+import type { EventsPolicy, UploadPolicy } from "@/lib/workspace/types";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
 import { emptyProgramUsage, type ProgramUsage } from "@/lib/data/usage-server";
 
@@ -608,4 +609,234 @@ export async function adminLoadProgramUsage(
   if (!data) return emptyProgramUsage(month);
 
   return data.usageByMonth(month);
+}
+
+// ---------------------------------------------------------------------------
+// Details and pilot (T6)
+// ---------------------------------------------------------------------------
+
+/**
+ * The twelve editable columns of a program's Details card, in the console's own
+ * camelCase — the same spelling `AdminTeamProgram` reads them back in, so a
+ * form can round-trip a field without a second naming convention in between.
+ *
+ * A key that is PRESENT is written; `null` clears a nullable column. A key that
+ * is ABSENT is left alone. That distinction is the whole reason
+ * `admin_update_program_details` takes a jsonb patch rather than twelve
+ * nullable parameters, so it has to survive the trip from here: `undefined` is
+ * treated as absent (it is what an optional property reads as, and what
+ * `JSON.stringify` would drop anyway), and only own, defined keys are sent.
+ *
+ * The RPC still owns every rule — the trim, the `''` → null collapse, the
+ * squad/surface/zone/policy vocabularies, "a collegiate program must have a
+ * squad", the companion `players_can_upload` and `primary_domain_inferred`
+ * writes, and the audit diff. Re-validating any of it here would be a second
+ * copy to drift.
+ */
+export type AdminProgramDetailsPatch = {
+  schoolName?: string;
+  team?: "mens" | "womens" | null;
+  city?: string | null;
+  state?: string | null;
+  staffPageUrl?: string | null;
+  primaryDomain?: string | null;
+  homeVenue?: string | null;
+  defaultSurface?: string | null;
+  timeZone?: string;
+  uploadPolicy?: UploadPolicy;
+  eventsPolicy?: EventsPolicy;
+  rosterPublic?: boolean;
+};
+
+/** Patch key → the `programs` column `admin_update_program_details` whitelists. */
+const DETAILS_COLUMNS: Record<keyof AdminProgramDetailsPatch, string> = {
+  schoolName: "school_name",
+  team: "team",
+  city: "city",
+  state: "state",
+  staffPageUrl: "staff_page_url",
+  primaryDomain: "primary_domain",
+  homeVenue: "home_venue",
+  defaultSurface: "default_surface",
+  timeZone: "time_zone",
+  uploadPolicy: "upload_policy",
+  eventsPolicy: "events_policy",
+  rosterPublic: "roster_public",
+};
+
+/**
+ * Edit a program's own details, as an admin.
+ *
+ * Mirrors `adminSetProgramMemberRole`: `requireAdmin()`, then the RPC through
+ * the SESSION client so `program_audit_log.actor_user_id` names this admin —
+ * `admin_update_program_details` writes one `program.details_changed` row per
+ * successful call, and the whole point of routing a details edit through an RPC
+ * rather than an `update` is that the row says who did it.
+ *
+ * An empty patch is not short-circuited here: the RPC raises "Nothing to
+ * change." for it, and duplicating that sentence in TypeScript is a second
+ * place for the two to disagree.
+ */
+export async function adminUpdateProgramDetails(input: {
+  programId: string;
+  patch: AdminProgramDetailsPatch;
+}): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const patch: Record<string, unknown> = {};
+  for (const [key, column] of Object.entries(DETAILS_COLUMNS)) {
+    if (!Object.prototype.hasOwnProperty.call(input.patch, key)) continue;
+    const value = input.patch[key as keyof AdminProgramDetailsPatch];
+    if (value === undefined) continue;
+    patch[column] = value;
+  }
+
+  // SESSION client: `admin_update_program_details` stamps `auth.uid()` into
+  // `program_audit_log.actor_user_id`.
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_update_program_details", {
+    p_program_id: input.programId,
+    p_patch: patch,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't save those details."),
+    };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
+}
+
+/** A calendar date, zero-padded, exactly as `programs.pilot_ends_on` reads. */
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Is this string a real day on the calendar?
+ *
+ * The regex alone accepts `2026-02-30` and `2026-13-01`, which Postgres would
+ * refuse as a `22008` — a raw driver error where the admin deserves a sentence.
+ * Round-tripping through `Date.UTC` is the check: February 30th normalises to
+ * March 2nd and the fields no longer match what was typed.
+ */
+function isCalendarDate(value: string): boolean {
+  if (!ISO_DATE.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  return (
+    probe.getUTCFullYear() === year &&
+    probe.getUTCMonth() === month - 1 &&
+    probe.getUTCDate() === day
+  );
+}
+
+/**
+ * Move a program's pilot end date, as an admin.
+ *
+ * `endsOn` is the LAST FREE DAY, inclusive — a bare calendar date with no zone,
+ * because that is what the column is (T1: "same reasoning as `PILOT_ENDS_AT`").
+ *
+ * ── What this refuses before the RPC, and why here ──────────────────────────
+ *
+ * `admin_set_pilot_end` checks only that the date is not null; it will happily
+ * store a date in the past, and `admin_end_pilot` is the deliberate way to make
+ * a pilot over. So the two refusals are this action's:
+ *
+ *   * MALFORMED — anything that is not `YYYY-MM-DD` naming a real day. Left to
+ *     the driver it is a `22008` with Postgres's own wording, and `''` would
+ *     arrive as a null and read as "date is required".
+ *   * PAST — a date strictly before today. Back-dating an end date is
+ *     `adminEndPilot` spelled ambiguously: it would clear `pilot_ended_at` (the
+ *     RPC always does) while leaving the pilot expired, so the row would say
+ *     "ran out on its own" about a pilot an admin stopped by hand.
+ *
+ * TODAY IS NOT PAST. The date is the last *inclusive* free day, so today means
+ * "free through the end of today" — a real choice, not an expiry.
+ *
+ * ── How "past" is computed ─────────────────────────────────────────────────
+ *
+ * By comparing the two `YYYY-MM-DD` strings, `endsOn < today`. Zero-padded ISO
+ * dates sort lexicographically in calendar order, so no `Date` is parsed for
+ * the comparison at all — which is the point: `new Date("2026-09-26") <
+ * new Date()` parses the left side as midnight UTC and is therefore true for
+ * every hour of today, rejecting the current day as past. Only `today` itself
+ * comes from a clock, via `toISOString()`, which is already the zero-padded
+ * ISO spelling.
+ *
+ * `today` is UTC, not the program's zone. `AdminTeamProgram.timeZone` exists,
+ * but the action is handed only what its caller passes — reading the program row
+ * to validate a bound is a round trip for a one-day edge — and a zone-free
+ * column has no zone of its own to honour. The one consequence is that an admin
+ * west of UTC late in their evening cannot pick their local "today"; they pick
+ * the next day, which for an inclusive last-free-day is a day more of pilot,
+ * never a day less.
+ */
+export async function adminSetPilotEnd(input: {
+  programId: string;
+  /** `YYYY-MM-DD`, the last free day, inclusive. */
+  endsOn: string;
+}): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const endsOn = input.endsOn?.trim() ?? "";
+  if (!isCalendarDate(endsOn)) {
+    return { ok: false, error: "Use a date like 2026-12-31." };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (endsOn < today) {
+    return {
+      ok: false,
+      error: "That date has already passed — end the pilot instead.",
+    };
+  }
+
+  // SESSION client: the `pilot.end_changed` audit row's actor must be the admin.
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_set_pilot_end", {
+    p_program_id: input.programId,
+    p_ends_on: endsOn,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't change the pilot end date."),
+    };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
+}
+
+/**
+ * Stop a pilot now, as an admin.
+ *
+ * Nothing to validate: the RPC stamps `pilot_ended_at = now()`, clamps
+ * `pilot_ends_on` to `least(pilot_ends_on, current_date)` so it can only ever
+ * shorten, is idempotent on an already-ended pilot (no write, no audit row),
+ * and does not touch `programs.status`. This is the thin one — `requireAdmin()`,
+ * the SESSION client for the `pilot.ended` audit row, revalidate.
+ */
+export async function adminEndPilot(
+  programId: string,
+): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_end_pilot", {
+    p_program_id: programId,
+  });
+
+  if (error) {
+    return { ok: false, error: toMessage(error, "Couldn't end the pilot.") };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
 }

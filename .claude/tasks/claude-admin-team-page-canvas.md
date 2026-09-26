@@ -107,7 +107,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T6 · Add admin details + pilot server actions with gate specs
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T2
 - **files:** (guess) `src/lib/services/programs/admin-team-actions.ts`, new `tests/admin-team-details-pilot-actions.spec.ts`

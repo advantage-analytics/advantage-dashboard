@@ -271,3 +271,58 @@ not read as a team statistic.
 5. `matches.opponent_player_id` exists on the live table and is read nowhere in this
    loader — a future "who did they play" column could resolve a real opponent profile
    instead of the `player2_name` string.
+
+## T6 · Add admin details + pilot server actions with gate specs — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all four criteria met.
+
+**changed:** Three actions appended to `src/lib/services/programs/admin-team-actions.ts`,
+each mirroring `adminSetProgramMemberRole`: `requireAdmin()` → `NOT_AUTHORIZED` when null
+→ session (cookie) client → RPC → `toMessage` on error → `revalidatePath("/admin",
+"layout")`. Verified by grep that **none** of the three touches `createAdminClient`, so
+every audit row names the real admin.
+
+- `adminUpdateProgramDetails({ programId, patch })` — a camelCase
+  `AdminProgramDetailsPatch` plus a `DETAILS_COLUMNS` map converting it to T2's
+  snake_case jsonb patch, preserving present-vs-absent: only own keys whose value is not
+  `undefined` are sent, so `null` clears a nullable column and a missing key keeps it.
+- `adminSetPilotEnd({ programId, endsOn })`
+- `adminEndPilot(programId)` — the thin one; T1's RPC is already idempotent and clamps
+  `pilot_ends_on` so it can only shorten.
+
+**The date check is the part worth remembering.** Both refusals return before
+`createClient()`, so the RPC cannot be reached. Malformed is an ISO regex plus a `Date.UTC`
+round-trip, so `2026-02-30` is caught here rather than surfacing as a Postgres `22008`.
+"Past" is `endsOn < today` as a **lexicographic string comparison** of two `YYYY-MM-DD`
+values — zero-padded ISO dates sort in calendar order, so no `Date` is parsed and the
+midnight-UTC trap (`new Date("2026-09-26") < new Date()` is true all day) never arises.
+Strict `<` accepts today, matching the column's inclusive last-free-day meaning.
+
+Validation of the patch itself is **deliberately not duplicated** — the trim, the `''`→null
+collapse, the squad/surface/timezone/policy vocabularies and the "collegiate needs a squad"
+rule all live in T2's RPC, whose `RAISE` messages surface through `toMessage`. The spec
+proves that pass-through. The reviewer judged the delegation correct: one source of truth
+rather than a second copy that can drift.
+
+**The spec is a real negative proof.** `tests/admin-team-details-pilot-actions.spec.ts`
+transpiles the actual actions module and runs it under `node:vm` with only `next/cache`,
+`@/lib/supabase/server` and `./admin-guard` stubbed, then asserts the recorded `rpc()`
+call list is **empty** for each action — not merely that an error came back. 8 tests, no
+database, no network, and correctly **not** registered in `live-db-specs.ts`. It reuses
+`tests/schedule-outcome-actions.spec.ts`'s pattern, so no `deps` parameter was needed and
+the action signatures stay clean.
+
+**follow-ups:**
+
+1. `today` is UTC, not the program's `timeZone`. An admin west of UTC late in the evening
+   cannot pick their local "today" and must pick the next day — which, for an inclusive
+   last-free-day, grants one day more of pilot, never fewer. T15's date picker should use
+   the same UTC bound the action computes, so the refusal string is a backstop rather
+   than the first thing an admin meets.
+2. `admin_set_pilot_end` always clears `pilot_ended_at`, so offering "set end date" on an
+   already-ended pilot silently reopens it. T15 should either hide that control once
+   ended or give the reopen its own confirmation copy.
+3. Third recording of T1's open gap, now easier to hit: these actions make the pilot
+   columns editable, but nothing server-side gates video submission on them, so an admin
+   who ends a pilot today still sees uploads work. The gate belongs in `reserveQuota()` /
+   `explainVideoRefusal()`.
