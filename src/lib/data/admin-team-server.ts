@@ -1014,12 +1014,14 @@ const ROSTER_SELECT =
  * `rosterMatchOwnerIds`, which is `rosterIdIndex`'s key set, so the rows fetched
  * and the rows attributed cannot be about different sets.
  *
- * **No `program_id` filter on the matches read, deliberately.** The older half
- * of a claimed player's history was recorded under their auth uid, before this
- * program had a roster row for them and often before it had a program id on the
- * match at all; filtering by `matches.program_id` would drop exactly the rows
- * the two-id-space fold exists to find. `player1_id` is the attribution, and it
- * is specific enough: these ids belong to this program's players.
+ * **Scoped to `matches.program_id`, by decision (2026-09-26).** The count is
+ * "matches uploaded for this player under this team's workspace" — the wizard
+ * stamps `program_id` with the active team's id on every team upload and leaves
+ * it null in a personal workspace. A claimed player's auth uid also owns their
+ * PERSONAL matches and any filed under another program, and without the
+ * filter those inflated this roster. Matches a player uploaded from their own
+ * workspace before the team existed are deliberately not counted. The
+ * `player1_id` fold across both id spaces still applies within the program.
  */
 async function readRoster(
   admin: SupabaseClient,
@@ -1046,10 +1048,6 @@ async function readRoster(
   // Never an empty list here — every player contributes its own id — but the
   // guard above is what makes that true, and PostgREST refuses `in.()`.
   //
-  // Scoped to this program, as the team's own loaders scope matches
-  // (`player-profile-server.ts`, `schedule-server.ts`). A linked player's
-  // auth uid also owns their PERSONAL matches and any from another program,
-  // and without the filter those inflated this roster's counts.
   const ownerIds = rosterMatchOwnerIds(players);
   const { data: matchRows, error: matchError } = await admin
     .from("matches")
