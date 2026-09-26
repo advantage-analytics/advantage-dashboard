@@ -278,3 +278,49 @@ test.describe("Admin console route smoke test (live)", () => {
     }
   });
 });
+
+/**
+ * The Admin › Teams detail page's five old tab routes, now anchors.
+ *
+ * Gated on `ADMIN_SMOKE_BASE_URL` alone — no Supabase, no `ADMIN_SMOKE_CONFIRM`
+ * — because a `next.config.ts` redirect is decided in the routing layer before
+ * anything is rendered or authenticated (the `/admin/claims` case above proves
+ * that: it answers 307 with no cookie at all). So this needs a running server
+ * and nothing else, and the program id can be any string.
+ *
+ * **This is the proof that a redirect `destination` may carry a `#hash`.**
+ * The bundled App Router docs
+ * (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/redirects.md`)
+ * do not mention fragments at all — they neither permit nor forbid one — so
+ * the question is settled empirically, here, by reading the raw `Location`
+ * header rather than its pathname. A browser never *sends* a fragment to the
+ * server, but it honours one it is given back, which is the whole mechanism
+ * these five redirects rely on.
+ */
+const SECTION_REDIRECTS = [
+  "people",
+  "roster",
+  "schedule",
+  "usage",
+  "activity",
+] as const;
+
+test.describe("Admin team sub-routes redirect to the anchored page", () => {
+  test.skip(
+    !BASE_URL,
+    "ADMIN_SMOKE_BASE_URL not set — point it at a running `npm run build && npm run start` server",
+  );
+
+  for (const slug of SECTION_REDIRECTS) {
+    test(`GET /admin/teams/<id>/${slug} redirects 307 to #${slug}`, async ({
+      request,
+    }) => {
+      const response = await get(request, `/admin/teams/p1/${slug}`);
+
+      expect(response.status()).toBe(307);
+      // The raw header, hash included — not `locationPathname()`, which would
+      // drop exactly the part under test.
+      expect(response.headers()["location"]).toBe(`/admin/teams/p1#${slug}`);
+    });
+  }
+});

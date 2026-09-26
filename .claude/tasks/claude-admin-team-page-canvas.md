@@ -133,7 +133,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T8 · Collapse team sub-routes into one anchored page
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/app/admin/teams/[programId]/{page,layout}.tsx`, delete `…/{people,roster,schedule,usage,activity}/page.tsx` and `src/components/admin/team-tabs.tsx`, new `src/components/admin/team-section-pills.tsx` + `team-sections.ts`, `next.config.ts`, `tests/admin-routes.spec.ts`, `MAP.md`
 - **done when:**

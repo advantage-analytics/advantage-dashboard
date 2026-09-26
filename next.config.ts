@@ -1,6 +1,31 @@
 import type { NextConfig } from "next";
 import { REQUEST_ACCESS_URL } from "./src/lib/constants";
 
+/**
+ * The Admin › Teams detail page's old tab routes.
+ *
+ * Each was a `page.tsx` under `/admin/teams/[programId]/`; they are now
+ * anchored sections of the one page (`src/components/admin/team-sections.ts`),
+ * so the sub-route URL keeps working by turning into the fragment that scrolls
+ * to the same content. The browser never sends the fragment back to the
+ * server, but it honours one on a redirect's `Location` header — which is
+ * what `tests/admin-routes.spec.ts` asserts on, since the bundled Next docs
+ * (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/redirects.md`)
+ * neither permit nor forbid a hash in `destination`.
+ *
+ * 307, not 308, for the reason the rest of this list gives: these paths never
+ * shipped past `splitstep-integration`, so no browser out there holds one,
+ * and a permanent redirect would be cached indefinitely against a path this
+ * console may want back.
+ */
+export const ADMIN_TEAM_SECTION_SLUGS = [
+  "people",
+  "roster",
+  "schedule",
+  "usage",
+  "activity",
+] as const;
+
 const nextConfig: NextConfig = {
   // Mark exceljs as an external package for server components
   // This prevents it from being bundled in server-side code.
@@ -63,6 +88,11 @@ const nextConfig: NextConfig = {
         // that asks for its source is ever built here.
         permanent: false,
       },
+      ...ADMIN_TEAM_SECTION_SLUGS.map((slug) => ({
+        source: `/admin/teams/:programId/${slug}`,
+        destination: `/admin/teams/:programId#${slug}`,
+        permanent: false,
+      })),
     ];
   },
 };

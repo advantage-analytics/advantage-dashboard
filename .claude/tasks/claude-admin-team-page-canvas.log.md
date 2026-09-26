@@ -378,3 +378,61 @@ negative, not merely an error result. No database; correctly not in `live-db-spe
 2. The member-facing action special-cases `P0002` ("no membership row") with friendlier
    wording; the admin one passes the RPC's own raise text through. Fine, since that text
    is person-readable, but T11 may want the friendlier branch lifted.
+
+## T8 · Collapse team sub-routes into one anchored page — done
+
+**gate:** mechanical `GATE PASS` (including the full suite, which the implementer had not
+run itself); completion review `VERDICT: pass`, all six criteria met.
+
+**changed:** The five sub-route `page.tsx` files and `team-tabs.tsx` are deleted; nothing
+under the route renders `ComingSoonPage`. `next.config.ts` gains
+`ADMIN_TEAM_SECTION_SLUGS` and spreads five redirects to
+`/admin/teams/:programId#<slug>`. `page.tsx` renders `TeamSectionPills` over a
+`grid-cols-[minmax(0,1fr)_380px] gap-6 items-start` body with two `flex flex-col gap-6`
+columns, sections driven by `team-sections.ts` (`people, requests, roster, schedule,
+activity` main; `pilot, usage, conference, details` rail). The three existing cards mount
+in their sections. `MAP.md` regenerated — 68 routes, sub-routes gone.
+
+**The `#hash` redirect assumption is now settled, empirically.** It was the one unverified
+premise in the whole plan. The bundled Next docs never mention fragments in `destination`,
+so reading could not answer it; the implementer built the app, served it, and curled all
+five paths, getting `307` with `location: /admin/teams/p1#people` and equivalents. The
+spec asserts the **raw** `location` header, with an in-code comment explaining that a
+parsed pathname would drop the exact part under test — an assertion that would otherwise
+pass while proving nothing. Verified by reading it.
+
+**`ViewPills` was not reused wholesale, and that was the right call.** It is a
+`value`/`onChange` switcher whose contract is `<button aria-pressed>`; the canvas row is
+in-page navigation whose contract is `<a aria-current="location">`. Merging them would
+have meant a props union — two components under one name. Instead the visual rule was
+extracted into `viewPillProps(isActive)` and both consume it, so the 26px geometry lives
+in exactly one file. The note said "reuse it if it fits", a conditional; the reviewer
+agreed the intent (no duplicated geometry) is satisfied.
+
+**Empty sections render a real card** — `SettingsCard` with the section's true title and
+one muted "Not built yet." line — so each pill lands on something named instead of
+scrolling into nothing, without inventing a layout for cards T13–T19 have not designed.
+Six centred `ComingSoon` blocks down one scroll would be the page apologising to itself.
+
+Declared deviations: `scroll-mt-16` per section for the 44px sticky header (the canvas is
+a static frame with no opinion on anchor offset); `activity` exists as a placeholder
+though the canvas draws no Activity card, because the task places it in the main column;
+and the pill border keeps the shipped `--border-hairline` over the canvas's
+`--border-card` after verifying both resolve to `var(--ink-100)` in light and dark.
+
+**follow-ups:**
+
+1. **Nobody has viewed this page in a browser.** The build compiles, the redirects are
+   proven at the HTTP layer, and the classes are right in the source — but the grid and
+   the IntersectionObserver pill tracking are unverified by eye. T20 owns this, and it is
+   now several tasks downstream of the change that introduced them; an earlier look would
+   cost less than a late surprise.
+2. `adminLoadProgramUsage` and `ProgramUsageCard`'s `load` prop now have **no caller** —
+   the deleted `/usage` sub-route was the only one. T16 is scoped to that cleanup; the
+   dangling doc reference at `program-usage-card.tsx:48` should go with it.
+3. `page.tsx`'s `metadata = { title: "Overview" }` is a leftover tab name now that
+   Overview is a pill rather than a route. A `generateMetadata` returning the school name
+   would be more useful.
+4. The pill row is not sticky. An anchor nav that scrolls out of view cannot show the
+   reader where they are, which is half the point of the IntersectionObserver — but the
+   canvas does not call for it, so it was left alone deliberately.
