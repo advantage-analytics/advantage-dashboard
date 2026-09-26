@@ -109,8 +109,8 @@ export function AdminUsageCard({
  *
  * - A verified college draws the program figure, and every upload inside it
  *   files under the team pool. The individual figure is still worth naming,
- *   because Pilot's "Each member 2 h" row invites the reading that it is spent
- *   first; it covers a member's personal uploads only.
+ *   because it is easy to read as spent first; it covers a member's personal
+ *   uploads only (Pilot's "Personal uploads" row says the same).
  * - Every other org type (and an unset one) is on the individual figure for
  *   the whole team — one allowance on the program ledger, shared.
  *

@@ -67,12 +67,19 @@ export function PilotUsageCard({
   programName,
   usage,
   pilot,
+  teamPool,
 }: {
   programId: string;
   /** Named in the End pilot confirm, so the question has an object. */
   programName: string;
   usage: ProgramUsage;
   pilot: AdminTeamPilot;
+  /**
+   * True when the team draws the program pool (`quotaTierFor` → `"program"`),
+   * false when it shares the individual figure. Decided on the server: the
+   * quota module is not a client import.
+   */
+  teamPool: boolean;
 }) {
   const router = useRouter();
   // Computed once per render — `endsValue` and `ChangeEndDate`'s date floor
@@ -152,12 +159,18 @@ export function PilotUsageCard({
           label="Team pool"
           value={`${formatHoursShort(usage.capSeconds)} h every month`}
         />
-        {/* The individual tier's own figure, from the function
-            `reserveQuota()` asks — never a literal 2 beside a cap that moves. */}
-        <Kv
-          label="Each member"
-          value={`${formatHoursShort(getMonthlyCapSeconds("individual"))} h every month`}
-        />
+        {/* Only where the team draws its own pool. On the individual figure
+            the whole team shares one allowance (`quotaTierFor`), so a
+            per-member row would contradict the Usage card beside it; and even
+            on the program pool a member's own figure covers their personal
+            uploads, never this team's — hence the label. The figure is the
+            tier's own, never a literal 2 beside a cap that moves. */}
+        {teamPool && (
+          <Kv
+            label="Personal uploads"
+            value={`${formatHoursShort(getMonthlyCapSeconds("individual"))} h per member`}
+          />
+        )}
         <Kv label="Ends" value={endsValue(pilot, today)} />
         <Kv label="Approved" value={approvedValue(pilot)} />
       </dl>

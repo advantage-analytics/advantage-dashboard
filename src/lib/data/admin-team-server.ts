@@ -70,7 +70,13 @@ import type {
  * Settings › Team already renders — plus the five directory/lifecycle fields
  * that only an admin sees.
  */
-export interface AdminTeamProgram extends TeamIdentity {
+export interface AdminTeamProgram extends Omit<TeamIdentity, "team"> {
+  /**
+   * Null when the program has no squad on record (a high school, a custom
+   * org). `TeamIdentity` is Settings' member-facing shape and keeps its
+   * non-null squad; the console prints what the row actually holds.
+   */
+  team: "mens" | "womens" | null;
   /** "Stanford (Men's)" — the directory's own display spelling. */
   name: string;
   /**
@@ -1273,7 +1279,10 @@ export const getAdminTeam = cache(
       name: programDisplayName(row.school_name, row.team),
       programKey: row.program_key,
       schoolName: row.school_name,
-      team: row.team === "womens" ? "womens" : "mens",
+      // A program with no squad on record (a high school, a custom org) stays
+      // null — coercing it to "mens" printed "Men's tennis" in Edit details
+      // for a team that never said so.
+      team: row.team === "mens" || row.team === "womens" ? row.team : null,
       conference: row.conference,
       division: row.division ?? null,
       city: row.city,

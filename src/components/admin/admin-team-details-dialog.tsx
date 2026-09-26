@@ -98,7 +98,8 @@ const EVENTS_POLICY_OPTIONS = policyOptions(EVENTS_POLICIES);
  */
 interface DetailsDraft {
   schoolName: string;
-  team: "mens" | "womens";
+  /** Null when the program has no squad on record. */
+  team: "mens" | "womens" | null;
   city: string;
   state: string;
   staffPageUrl: string;
@@ -271,7 +272,8 @@ export function AdminTeamDetailsDialog({
               <MenuSelect
                 label="Team"
                 variant="underline"
-                value={draft.team}
+                value={draft.team ?? undefined}
+                placeholder="Not set"
                 options={SQUAD_OPTIONS}
                 onChange={(value) => set("team", value)}
               />

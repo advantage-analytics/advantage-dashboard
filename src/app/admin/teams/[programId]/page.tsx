@@ -9,6 +9,7 @@ import { AdminRosterCard } from "@/components/admin/admin-roster-card";
 import { AdminScheduleCard } from "@/components/admin/admin-schedule-card";
 import { AdminUsageCard } from "@/components/admin/admin-usage-card";
 import { PilotUsageCard } from "@/components/admin/pilot-usage-card";
+import { quotaTierFor } from "@/lib/services/splitstep/quota";
 import { TeamSectionPills } from "@/components/admin/team-section-pills";
 import {
   TEAM_MAIN_SECTIONS,
@@ -108,6 +109,10 @@ export default async function AdminTeamPage({
         programName={data.program.schoolName}
         usage={data.usage}
         pilot={data.pilot}
+        teamPool={
+          quotaTierFor({ kind: "team", orgType: data.program.orgType }) ===
+          "program"
+        }
       />
     ),
     usage: (
