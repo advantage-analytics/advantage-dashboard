@@ -73,7 +73,7 @@ ready).
 
 ## T5 · Preselect the upload wizard source from `Viewer.recordingSource`
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T2
 - **files:** src/app/dashboard/matches/new/page.tsx, src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx, src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts, src/components/dashboard/matches/new-match-wizard/resolve-starting-provider.ts (new), tests/upload-provider-preference.spec.ts (new) (guess)

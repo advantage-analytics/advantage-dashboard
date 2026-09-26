@@ -13,6 +13,7 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getRosterPlayerOptions } from "@/lib/data/roster-server";
 import { isProviderSupported, type ProviderId } from "@/lib/services/upload";
 import { isMatchVideoMode } from "@/lib/match-video/types";
+import { providerForRecordingSource } from "@/app/onboarding/answers";
 import {
   classifyNewMatchVisit,
   type NewMatchSearchParams,
@@ -167,14 +168,14 @@ export default async function NewMatchPage({
     return <UploadMatchFlow preset={target.preset} />;
   }
 
-  // Independent reads, so they overlap. The workspace is resolved for a
-  // `?player=` visit (to name a roster player) and for a `?draft=` one (to
-  // check the draft belongs here) — it is `cache()`d and the dashboard layout
-  // has already paid for it, but a page should not await a question it is not
-  // asking.
+  // Independent reads, so they overlap. The workspace is always resolved now:
+  // besides naming a `?player=` and checking a `?draft=` belongs here, it
+  // carries the viewer's onboarding answer that preselects Source. It is
+  // `cache()`d and the dashboard layout has already paid for it, so asking
+  // costs nothing.
   const [loadedDraft, workspace] = await Promise.all([
     draftId ? loadMatchDraft(draftId) : null,
-    player || draftId ? getWorkspaceContext() : null,
+    getWorkspaceContext(),
   ]);
 
   // A draft belongs to the workspace it was saved in, and resume is where that
@@ -199,6 +200,13 @@ export default async function NewMatchPage({
 
   const initialProvider: ProviderId | null =
     source && isProviderSupported(source) ? (source as ProviderId) : null;
+  // How the viewer said they record, asked once at onboarding. The weakest
+  // signal the wizard takes — below the link and below a choice already made
+  // in the picker (see `resolveStartingProvider`) — and, like `?source=`, it
+  // preselects Source without skipping step one.
+  const preferredProvider: ProviderId | null = providerForRecordingSource(
+    workspace?.viewer.recordingSource,
+  );
   // Only a team workspace has a roster to name, and only there does the wizard
   // ask For at all — in a personal one the uploader IS the player, so a
   // `?player=` has nowhere to land.
@@ -212,6 +220,7 @@ export default async function NewMatchPage({
       draft={draft}
       draftRefusal={draftRefusal}
       initialProvider={initialProvider}
+      preferredProvider={preferredProvider}
       initialSubject={initialSubject}
     />
   );

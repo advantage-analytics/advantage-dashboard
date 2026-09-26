@@ -59,6 +59,7 @@ export function UploadMatchFlow({
   draft,
   draftRefusal,
   initialProvider,
+  preferredProvider,
   initialSubject,
 }: {
   preset?: EventPreset | null;
@@ -73,6 +74,8 @@ export function UploadMatchFlow({
   draftRefusal?: string | null;
   /** A source named by the link that opened the wizard — see the hook. */
   initialProvider?: ProviderId | null;
+  /** The source the viewer's onboarding answer points at — see the hook. */
+  preferredProvider?: ProviderId | null;
   /** A roster player named by the link that opened the wizard — see the hook. */
   initialSubject?: RosterSubject | null;
 } = {}) {
@@ -206,6 +209,7 @@ export function UploadMatchFlow({
       draft={draft ?? null}
       draftRefusal={draftRefusal ?? null}
       initialProvider={initialProvider ?? null}
+      preferredProvider={preferredProvider ?? null}
       initialSubject={initialSubject ?? null}
     />
   );
