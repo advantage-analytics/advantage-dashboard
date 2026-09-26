@@ -814,3 +814,15 @@ thing an admin meets.
    so those rows would surface unlabelled in T19's card. T19 should add them.
 4. A `Kv`-style fact row is now hand-written in three admin files. Worth one exported
    primitive before a fourth appears — T17 and T18 are both about to want it.
+
+## T16 · Usage-in-month rail card — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** New server component `src/components/admin/admin-usage-card.tsx` fills the `#usage` rail slot: `Usage in <month>` with a summed `<n> videos` count, one row per member (avatar, name, `<x> h`), and an empty-state line with no usage. Canvas footer "Players use their own 2 h before the team pool" is false for every org type (`quota.ts`: every team-workspace upload files under the program ledger; a member's own 2 h covers personal uploads only), so `poolRuleNote()` prints corrected copy by `quotaTierFor()` with `<cap>` from `getMonthlyCapSeconds("individual")`; the `<x> of <cap> h` row form is unreachable and never rendered. Removed orphaned `usageByMonth`, `adminLoadProgramUsage` and `ProgramUsageCard`'s `load` prop (its only caller, Settings › Usage, never passed it). Offline spec `tests/admin-usage-card.spec.ts`.
+
+**follow-ups:**
+
+1. The Pilot card's "Each member 2 h every month" row (`pilot-usage-card.tsx:147`) invites the same false reading — reword to "Personal uploads" or drop.
+2. "Videos" sums distinct matches per member; a match analysed by two members counts twice — the loader could return an exact distinct count.
+3. `plan.md` §7 still quotes the canvas footer as copy to verify; note the outcome there.

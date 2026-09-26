@@ -339,17 +339,6 @@ export interface AdminTeamData {
   activity: AdminTeamActivityEntry[];
   /** The current billing month's ledger. */
   usage: ProgramUsage;
-  /**
-   * The same ledger for any other month. Takes a `processing_usage.
-   * billing_month` key — `YYYY-MM-01`, the format `currentBillingMonth()`
-   * returns — not `YYYY-MM`: it is compared against a `date` column, and a
-   * two-part string would either error or silently match nothing.
-   *
-   * A function rather than a prefetched range because the month picker is a
-   * user action on a page that has already rendered; loading twelve months
-   * nobody asked for would pay for eleven of them every time.
-   */
-  usageByMonth: (billingMonth: string) => Promise<ProgramUsage>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1376,8 +1365,6 @@ export const getAdminTeam = cache(
       conference,
       activity,
       usage,
-      usageByMonth: (month: string) =>
-        readUsage(admin, programId, month, orgType),
     };
   },
 );

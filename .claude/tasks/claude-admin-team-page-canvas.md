@@ -242,7 +242,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T16 · Usage-in-month rail card
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8
 - **files:** (guess) new `src/components/admin/admin-usage-card.tsx`, `src/app/admin/teams/[programId]/page.tsx`, `src/lib/data/admin-team-server.ts`, `src/lib/services/programs/admin-team-actions.ts`

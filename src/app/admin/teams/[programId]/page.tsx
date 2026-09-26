@@ -4,6 +4,7 @@ import { AdminPeopleCard } from "@/components/admin/admin-people-card";
 import { AdminRequestsCard } from "@/components/admin/admin-requests-card";
 import { AdminRosterCard } from "@/components/admin/admin-roster-card";
 import { AdminScheduleCard } from "@/components/admin/admin-schedule-card";
+import { AdminUsageCard } from "@/components/admin/admin-usage-card";
 import { PilotUsageCard } from "@/components/admin/pilot-usage-card";
 import { TeamSectionPills } from "@/components/admin/team-section-pills";
 import {
@@ -94,6 +95,13 @@ export default async function AdminTeamPage({
         programName={data.program.schoolName}
         usage={data.usage}
         pilot={data.pilot}
+      />
+    ),
+    usage: (
+      <AdminUsageCard
+        usage={data.usage}
+        orgType={data.program.orgType}
+        members={data.members}
       />
     ),
   };
