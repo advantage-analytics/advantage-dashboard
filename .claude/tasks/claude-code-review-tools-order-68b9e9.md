@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Add a fail-closed paged-read helper and use it for match shots
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/paged-query.ts (new), src/lib/data/match-points-server.ts, tests/paged-query.spec.ts (new) — guess
 - **done when:**

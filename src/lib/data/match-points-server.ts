@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPages } from "@/lib/data/paged-query";
 import { pickServeShot, pickReturnShot } from "@/lib/data/serve-return-shots";
 
 /** One shot inside a point, in rally order — the film room's shot feed. */
@@ -278,10 +279,13 @@ export async function getMatchPointsFromSupabase(
   // silently dropped the tail of the match, which the film room's shot feed
   // shows row by row. The order is total (point, shot number, id) so pages
   // never overlap or skip.
-  const SHOT_PAGE = 1000;
-  const shots: DbShot[] = [];
-  for (let from = 0; ; from += SHOT_PAGE) {
-    const { data: page, error: shotsError } = await supabase
+  //
+  // Fail-closed, like `supabaseAttachmentSourceRows`: an error on any page
+  // returns no points at all rather than points carrying half their shots.
+  // A point with its shots cut off reads as a short rally and relabels its
+  // serve, return and last shot — a wrong answer that looks like a right one.
+  const shots = await fetchAllPages<DbShot>(async (from, to) => {
+    const { data, error } = await supabase
       .from("shots")
       .select(
         "id, point_id, shot_number, is_player1, shot_type, spin_type, speed_mph, video_time, bounce_video_time, zone, result, contact_x, contact_y, landing_x, landing_y",
@@ -290,15 +294,12 @@ export async function getMatchPointsFromSupabase(
       .order("point_id", { ascending: true })
       .order("shot_number", { ascending: true })
       .order("id", { ascending: true })
-      .range(from, from + SHOT_PAGE - 1);
-
-    if (shotsError) {
-      console.error("Failed to fetch shots:", shotsError.message);
-      break;
-    }
-    shots.push(...((page ?? []) as DbShot[]));
-    if (!page || page.length < SHOT_PAGE) break;
-  }
+      .range(from, to);
+    // The helper stops at the first error, so this logs exactly once.
+    if (error) console.error("Failed to fetch shots:", error.message);
+    return { data: data as DbShot[] | null, error };
+  });
+  if (!shots) return [];
 
   // Who bookmarked each point, workspace-wide (see fetchSavedByPointId).
   const savedByPointId = await fetchSavedByPointId(supabase, matchId, pointIds);
