@@ -41,7 +41,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T1 · Add per-team pilot columns and admin pilot RPCs
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) new `supabase/migrations/<ts>_admin_program_pilot.sql`, new `tests/database/admin-program-pilot.test.mjs`
 - **done when:**
