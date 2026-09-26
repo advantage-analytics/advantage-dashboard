@@ -20,15 +20,7 @@ export default async function MatchLayout({
     notFound();
   }
 
-  const {
-    match,
-    statsResult,
-    points,
-    keyMoments,
-    insights,
-    playerAverages,
-    kpiHistory,
-  } = data;
+  const { match, statsResult, points, keyMoments, insights, kpiHistory } = data;
 
   return (
     // A self-contained fixed-height box, not a `flex-1`/`min-h-0` relay: the
@@ -59,7 +51,6 @@ export default async function MatchLayout({
         points={points}
         keyMoments={keyMoments}
         insights={insights}
-        playerAverages={playerAverages}
         kpiHistory={kpiHistory}
       >
         <ClearRetryOnSuccess matchId={matchId} />

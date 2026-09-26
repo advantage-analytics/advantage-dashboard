@@ -68,7 +68,7 @@ ready).
 
 ## T5 · Remove the unread playerAverages from the match page
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/data/match-detail-server.ts, src/app/dashboard/matches/(detail)/[matchId]/layout.tsx, src/components/dashboard/matches/match-data-provider.tsx
 - **done when:**
