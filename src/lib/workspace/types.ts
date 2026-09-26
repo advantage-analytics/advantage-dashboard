@@ -17,6 +17,7 @@
  */
 
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
+import type { RecordingSource } from "@/app/onboarding/answers";
 
 /** A member's standing inside a team workspace. Personal is always `owner`. */
 export type ProgramRole = "owner" | "coach" | "staff" | "player";
@@ -317,6 +318,15 @@ export interface Viewer {
    * re-onboards.
    */
   onboardedAt: string | null;
+  /**
+   * `users.recording_source` — how the player said they capture matches on
+   * onboarding screen 1.5 (`swing-vision` | `video` | `none`). Read by the
+   * upload wizard to pick a default provider via `providerForRecordingSource`;
+   * it gates nothing. Null for an account that never answered — and for any
+   * value outside the vocabulary, which the mapper drops rather than passes
+   * through, so a stale row can never select a provider that does not exist.
+   */
+  recordingSource: RecordingSource | null;
 }
 
 /**

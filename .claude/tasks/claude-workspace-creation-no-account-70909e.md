@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Add onboarding intake columns, `set_program_intake` RPC and `Viewer.recordingSource`
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T2
 - **files:** supabase/migrations/<timestamp>_onboarding_intake_answers.sql (new), src/lib/workspace/types.ts, src/lib/workspace/active-workspace-server.ts (guess)
