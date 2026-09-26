@@ -51,7 +51,16 @@ test("restoreTarget freezes the match before the RPC that would remove it from `
   // form, only once `formerPlayerMatch` (reading the live, possibly-stale
   // `former` prop) has nothing.
   expect(SOURCE).toMatch(
-    /const restorable =\s*formerPlayerMatch\(former, \{ firstName, lastName, email }\) \?\?\s*\(restoreTarget !== null && restoreTarget\.form === formKey\s*\? restoreTarget\.person\s*: null\);/,
+    /formerPlayerMatch\(former, \{ firstName, lastName, email }\) \?\?\s*\(restoreTarget !== null && restoreTarget\.form === formKey\s*\? restoreTarget\.person\s*: null\)/,
+  );
+
+  // And the whole offer is off on a surface that cannot restore — the admin
+  // console has no `restore_program_player` wrapper, so it passes
+  // `actions.restore: null` and the note and button must not mount at all
+  // rather than mount over a call that would refuse. Gated once, here, so a
+  // later reader adding a fourth read of `restorable` inherits it.
+  expect(SOURCE).toMatch(
+    /const restorable =\s*actions\.restore === null\s*\? null\s*:/,
   );
 
   // Cleared on every exit, same as `created` — a fresh open must not carry a

@@ -18,14 +18,16 @@ import {
   getProviderStrategy,
   getProviderKind,
   isProviderSupported,
-  providerKindOrNull,
   IProcessingProviderStrategy,
   ProviderId,
   ProviderKind,
   ValidationResult,
 } from "@/lib/services/upload";
 import { getParser, hasParser } from "@/lib/services/upload/parsers";
-import { providers } from "@/lib/providers";
+import {
+  DEFAULT_PROVIDER_ID,
+  resolveStartingProvider,
+} from "./resolve-starting-provider";
 import {
   createProcessingJob,
   uploadAndSubmitVideo,
@@ -336,17 +338,6 @@ async function rollbackAndAnnounceFailure(params: {
 }
 
 /**
- * The source a new match starts on.
- *
- * Resolved from the registry by KIND rather than named, so the wizard stays
- * written against "your own video" instead of against a particular vendor.
- */
-const DEFAULT_PROVIDER_ID: ProviderId | null =
-  providers.find(
-    (p) => p.available !== false && providerKindOrNull(p.id) === "processing",
-  )?.id ?? null;
-
-/**
  * The flow the progress bar starts on, before anyone has chosen anything.
  *
  * Read off DEFAULT_PROVIDER_ID's kind so the first paint draws the same number
@@ -406,6 +397,17 @@ export interface UseUploadMatchWizardProps {
    * link is not the same as having chosen in the picker.
    */
   initialProvider?: ProviderId | null;
+  /**
+   * The source the viewer's onboarding answer points at
+   * (`providerForRecordingSource(viewer.recordingSource)`), or null when they
+   * said "none" or never answered.
+   *
+   * Ranked BELOW the stored provider, not above it: the answer was given once,
+   * about recording in general, and a choice made in the picker since is the
+   * better evidence. Like `initialProvider` it only preselects Source — step
+   * one still opens — and it is never persisted. See `resolveStartingProvider`.
+   */
+  preferredProvider?: ProviderId | null;
   /**
    * A player named by the link that opened the wizard (`?player=`), already
    * checked against the active program's roster server-side.
@@ -708,6 +710,7 @@ export function useUploadMatchWizard({
   preset,
   draft,
   initialProvider,
+  preferredProvider,
   initialSubject,
 }: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
   const router = useRouter();
@@ -716,6 +719,18 @@ export function useUploadMatchWizard({
   // server-side once per request by the dashboard layout, so reading it here
   // costs nothing and cannot disagree with the sidebar's switcher.
   const { active: activeWorkspace, viewer } = useWorkspace();
+
+  /**
+   * The source the wizard opens on before localStorage can be read — the
+   * first paint is server-rendered, so `stored` is unknown and passed as null.
+   * The mount effect re-resolves with the stored value; when that one wins it
+   * is a resume, which sets the bar itself.
+   */
+  const firstPaintProvider = resolveStartingProvider({
+    linked: initialProvider ?? null,
+    stored: null,
+    preferred: preferredProvider ?? null,
+  });
 
   // State
   const [step, setStep] = useState<Step>("provider");
@@ -732,14 +747,17 @@ export function useUploadMatchWizard({
    * transition that leaves the provider step, which is the only place the kind
    * can still change.
    *
-   * A preset and a `?source=` link are the two exceptions, and they are the
-   * same exception: both decide the flow before the first paint, so the bar
-   * can be built at the right length instead of resizing into it.
+   * A preset, a `?source=` link and the onboarding preference are the
+   * exceptions, and they are the same exception: each decides the flow before
+   * the first paint, so the bar can be built at the right length instead of
+   * resizing into it. `firstPaintProvider` is that decision, taken by the same
+   * resolver the mount effect selects with.
    */
-  const [progressKind, setProgressKind] = useState<ProviderKind>(() => {
-    if (initialProvider) return getProviderKind(initialProvider);
-    return DEFAULT_PROVIDER_KIND;
-  });
+  const [progressKind, setProgressKind] = useState<ProviderKind>(() =>
+    firstPaintProvider
+      ? getProviderKind(firstPaintProvider)
+      : DEFAULT_PROVIDER_KIND,
+  );
   const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(
     null,
   );
@@ -1448,24 +1466,30 @@ export function useUploadMatchWizard({
     const existingProvider = localStorage.getItem(
       STORAGE_KEYS.SELECTED_PROVIDER,
     );
-    let resumedProvider = false;
-    if (initialProvider) {
-      // The link named a source. It outranks the stored one — that is a stale
-      // choice, this is the one just made — and the step still opens, because
-      // it carries two answers besides this one. The progress bar was already
-      // built at this kind's length in the initialiser above, so nothing here
-      // resizes it.
-      setSelectedProvider(initialProvider);
-    } else if (existingProvider && isProviderSupported(existingProvider)) {
-      setSelectedProvider(existingProvider as ProviderId);
-      resumedProvider = true;
-    } else if (DEFAULT_PROVIDER_ID) {
-      // Your own video is the default source — it is what most people came to
-      // do, and the alternative is an import from somewhere else. Deliberately
-      // NOT written to storage: a default is not a choice, and persisting it
-      // would make the next visit resume past the step that offers it.
-      setSelectedProvider(DEFAULT_PROVIDER_ID);
-    }
+    // `resolveStartingProvider` ranks link > stored > onboarding preference >
+    // default. The link outranks the stored one — that is a stale choice, this
+    // is the one just made — and the step still opens, because it carries two
+    // answers besides this one. The progress bar was already built at the
+    // link's kind in the initialiser above, so nothing here resizes it.
+    //
+    // Only the stored tier is a resume. The onboarding preference and the
+    // default land here the same way: selected, and deliberately NOT written
+    // to storage. A default is not a choice, and neither is a preference
+    // answered once at sign-up — persisting either would make the next visit
+    // resume past the step that offers it, and would turn a guess into the
+    // stored choice that outranks the preference forever after. Your own video
+    // is the default source: it is what most people came to do, and the
+    // alternative is an import from somewhere else.
+    const startingProvider = resolveStartingProvider({
+      linked: initialProvider ?? null,
+      stored: existingProvider,
+      preferred: preferredProvider ?? null,
+    });
+    const resumedProvider =
+      !initialProvider &&
+      startingProvider !== null &&
+      startingProvider === existingProvider;
+    if (startingProvider) setSelectedProvider(startingProvider);
 
     const storedFormData = loadFormDataFromStorage();
     if (storedFormData || seededPlayerName) {
@@ -1502,13 +1526,13 @@ export function useUploadMatchWizard({
       setProgressKind(resumedKind);
       setStep(STEP_ORDER_BY_KIND[resumedKind][1]);
     } else {
-      // A `?source=` link keeps the kind the initialiser already built the bar
-      // at; everything else starts on the default flow. Writing the default
-      // unconditionally here was what made a linked import wizard count four
-      // steps and then drop to three on the first Continue.
+      // Keep the kind the initialiser already built the bar at — a `?source=`
+      // link's, the onboarding preference's, or the default's. Writing the
+      // default unconditionally here was what made a linked import wizard
+      // count four steps and then drop to three on the first Continue.
       setProgressKind(
-        initialProvider
-          ? getProviderKind(initialProvider)
+        firstPaintProvider
+          ? getProviderKind(firstPaintProvider)
           : DEFAULT_PROVIDER_KIND,
       );
       setStep("provider");

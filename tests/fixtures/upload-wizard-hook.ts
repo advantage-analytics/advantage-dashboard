@@ -316,6 +316,22 @@ export function uploadWizardHarness(
       }),
     },
     "@/lib/providers": { providers: [{ id: "video" }, { id: "swing-vision" }] },
+    // The real resolver's ranking over this fixture's registry, where every id
+    // is supported and "video" is the processing default. Stubbed rather than
+    // loaded because the real module reads the real registry, whose default
+    // is "splitstep" — `upload-provider-preference.spec.ts` pins that one.
+    "./resolve-starting-provider": {
+      DEFAULT_PROVIDER_ID: "video",
+      resolveStartingProvider: ({
+        linked,
+        stored,
+        preferred,
+      }: {
+        linked: string | null;
+        stored: string | null;
+        preferred: string | null;
+      }) => linked || stored || preferred || "video",
+    },
     "@/lib/services/splitstep/submit-match-video": {},
     "@/lib/services/splitstep/config": { currentBillingMonth: () => "2026-09" },
     "@/lib/services/splitstep/quota": {

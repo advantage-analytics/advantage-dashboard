@@ -22,7 +22,8 @@ export const metadata = { title: "Your program is set up" };
  * reviewer.
  *
  * The workspace cookie is already set by the time this renders, so "Go to your
- * program" opens the dashboard in the program rather than in Personal.
+ * program" (and ✕) lead to the coach intake (5.2, `/claim/team/about`), which
+ * reads that cookie to find the program and then opens the team dashboard.
  */
 export default async function ClaimReadyPage({
   searchParams,
@@ -39,7 +40,7 @@ export default async function ClaimReadyPage({
     <ClaimShell
       width={840}
       gap={16}
-      exitHref="/dashboard"
+      exitHref="/claim/team/about"
       exitLabel="Go to the program"
       aside={
         <AsidePanel
@@ -66,7 +67,7 @@ export default async function ClaimReadyPage({
       </p>
       <div className="pt-1">
         <ClaimActions>
-          <Link href="/dashboard" className={CLAIM_BUTTON}>
+          <Link href="/claim/team/about" className={CLAIM_BUTTON}>
             Go to your program
           </Link>
         </ClaimActions>

@@ -1,5 +1,9 @@
 import { siteUrl } from "@/lib/site-url";
-import { sendEmail, adminReviewNeededEmail } from "@/lib/services/email";
+import {
+  sendEmail,
+  adminReviewNeededEmail,
+  INTERNAL_ALERTS_ADDRESS,
+} from "@/lib/services/email";
 import { claimSend } from "./should-notify";
 import type { createAdminClient } from "@/lib/supabase/admin";
 
@@ -60,15 +64,45 @@ export type AdminReviewNeededEvent =
     };
 
 /**
- * Notify every admin that one event needs a decision.
+ * The final recipient list for one review-needed event: every admin address,
+ * plus the internal alerts inbox, deduped case-insensitively.
  *
- * Gated once per event, not once per admin: `claimSend("admin_review:<kind>:<id>")`
+ * Pure so the dedupe rule is testable without a database or a mocked
+ * `sendEmail` — `notifyAdminsReviewNeeded` is the only caller. An admin whose
+ * row happens to carry `team@advantage-analytics.com` (case-insensitively)
+ * yields one email, not two: address casing is not a meaningful distinction
+ * for a mail provider, and a second copy in the same inbox reads as a bug.
+ */
+export function reviewNeededRecipients(
+  adminEmails: readonly string[],
+  internal: string,
+): string[] {
+  const seen = new Set<string>();
+  const recipients: string[] = [];
+  for (const email of [...adminEmails, internal]) {
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    recipients.push(email);
+  }
+  return recipients;
+}
+
+/**
+ * Notify every admin, plus `INTERNAL_ALERTS_ADDRESS`, that one event needs a
+ * decision.
+ *
+ * Gated once per event, not once per recipient: `claimSend("admin_review:<kind>:<id>")`
  * is claimed before any admin is even looked up, so a caller that fires this
  * twice for the SAME row — a double-submitted form landing on the unique
  * index's existing row, a retried server action — finds the key already spent
- * and does nothing, rather than mailing every admin a second time. Losing the
+ * and does nothing, rather than mailing everyone a second time. Losing the
  * whole notification on the rare crash between the claim and the sends is the
  * cheaper failure; the row is still sitting in the queue either way.
+ *
+ * The internal address always gets a copy, even when no `is_admin` user has
+ * an email on file — that used to mean the notice went nowhere and nobody
+ * noticed, which is exactly the failure mode this alert exists to prevent.
  *
  * Reads `users` where `is_admin = true` — the partial index added in T1
  * (`users_admins_idx`, `ON users (id) WHERE is_admin`) makes this a
@@ -99,16 +133,14 @@ export async function notifyAdminsReviewNeeded(
     return;
   }
 
-  const admins = (data ?? []).filter(
-    (row: {
-      id: string;
-      email: string | null;
-    }): row is {
-      id: string;
-      email: string;
-    } => Boolean(row.email),
+  const adminEmails = (data ?? [])
+    .map((row: { id: string; email: string | null }) => row.email)
+    .filter((email): email is string => Boolean(email));
+
+  const recipients = reviewNeededRecipients(
+    adminEmails,
+    INTERNAL_ALERTS_ADDRESS,
   );
-  if (admins.length === 0) return;
 
   const requestsUrl = `${siteUrl()}/admin/requests?id=${encodeURIComponent(event.id)}`;
   const claimantName =
@@ -116,10 +148,10 @@ export async function notifyAdminsReviewNeeded(
   const claimedEmail =
     event.kind === "claim" ? event.claimantEmail : event.requesterEmail;
 
-  for (const admin of admins) {
+  for (const to of recipients) {
     const sent = await sendEmail(
       adminReviewNeededEmail({
-        to: admin.email,
+        to,
         programName: event.programName,
         claimantName,
         claimedEmail,
@@ -133,7 +165,7 @@ export async function notifyAdminsReviewNeeded(
       // admin who opens /admin/requests still finds it. `sendEmail` already
       // logged the technical cause; this names which notification went out.
       console.warn("[admin-review] notification not sent", {
-        adminId: admin.id,
+        to,
         kind: event.kind,
         id: event.id,
       });

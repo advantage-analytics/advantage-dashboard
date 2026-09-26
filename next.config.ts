@@ -1,6 +1,27 @@
 import type { NextConfig } from "next";
 import { REQUEST_ACCESS_URL } from "./src/lib/constants";
 
+/**
+ * The Admin › Teams detail page's old tab routes.
+ *
+ * Each was a `page.tsx` under `/admin/teams/[programId]/`; they are now views
+ * of the one page, chosen by `?view=` (`src/components/admin/team-sections.ts`),
+ * so the sub-route URL keeps working by turning into the same view.
+ * `tests/admin-routes.spec.ts` asserts the raw `Location` header.
+ *
+ * 307, not 308, for the reason the rest of this list gives: these paths never
+ * shipped past `splitstep-integration`, so no browser out there holds one,
+ * and a permanent redirect would be cached indefinitely against a path this
+ * console may want back.
+ */
+export const ADMIN_TEAM_SECTION_SLUGS = [
+  "people",
+  "roster",
+  "schedule",
+  "usage",
+  "activity",
+] as const;
+
 const nextConfig: NextConfig = {
   // Mark exceljs as an external package for server components
   // This prevents it from being bundled in server-side code.
@@ -63,6 +84,11 @@ const nextConfig: NextConfig = {
         // that asks for its source is ever built here.
         permanent: false,
       },
+      ...ADMIN_TEAM_SECTION_SLUGS.map((slug) => ({
+        source: `/admin/teams/:programId/${slug}`,
+        destination: `/admin/teams/:programId?view=${slug}`,
+        permanent: false,
+      })),
     ];
   },
 };

@@ -64,7 +64,7 @@ export async function continueToPilotTerms(input: {
 
   if (await hasAcceptedCurrentPilotTerms()) {
     const result = await createCustomTeam(pending);
-    if (result.ok) redirect("/dashboard/team");
+    if (result.ok) redirect("/claim/team/about");
     // The database disagrees that the acceptance is current (enforcement
     // live, versions out of step): the terms screen is where that is fixed.
     if (result.reason !== "terms-not-accepted") return result;
@@ -104,7 +104,7 @@ export async function acceptPilotTermsAndCreateTeam(input: {
     name: PENDING_TEAM_COOKIE,
     path: PENDING_TEAM_COOKIE_OPTIONS.path,
   });
-  redirect("/dashboard/team");
+  redirect("/claim/team/about");
 }
 
 /**
@@ -134,8 +134,10 @@ export async function acceptPilotTermsAndCreateTeam(input: {
  * see the note in `team-setup-form.tsx`.
  *
  * On success `createCustomProgram` has already set the workspace cookie, so
- * the callers' navigation into the new workspace is a plain redirect; the
- * `{ ok: false }` reasons (including `limit-reached`) flow back untouched.
+ * the callers' navigation is a plain redirect — to the coach intake (5.2,
+ * `/claim/team/about`), which reads that cookie to know which program it is
+ * asking about and hands off to the team dashboard itself; the `{ ok: false }`
+ * reasons (including `limit-reached`) flow back untouched.
  */
 async function createCustomTeam(input: {
   name: string;
@@ -174,7 +176,8 @@ async function createCustomTeam(input: {
   }
 
   // The workspace cookie and layout revalidation happen inside
-  // createCustomProgram, so the callers' redirect opens the new workspace.
+  // createCustomProgram, so the callers' redirect to the intake screen
+  // resolves the new program and its exit opens inside it.
   return createCustomProgram({
     name: input.name,
     orgType: input.orgType,

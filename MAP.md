@@ -24,12 +24,7 @@ markers is hand-written — edit it as things move.
 | `/admin/conferences` | [`src/app/admin/conferences/page.tsx`](src/app/admin/conferences/page.tsx) |
 | `/admin` | [`src/app/admin/page.tsx`](src/app/admin/page.tsx) |
 | `/admin/requests` | [`src/app/admin/requests/page.tsx`](src/app/admin/requests/page.tsx) |
-| `/admin/teams/[programId]/activity` | [`src/app/admin/teams/[programId]/activity/page.tsx`](src/app/admin/teams/[programId]/activity/page.tsx) |
 | `/admin/teams/[programId]` | [`src/app/admin/teams/[programId]/page.tsx`](src/app/admin/teams/[programId]/page.tsx) |
-| `/admin/teams/[programId]/people` | [`src/app/admin/teams/[programId]/people/page.tsx`](src/app/admin/teams/[programId]/people/page.tsx) |
-| `/admin/teams/[programId]/roster` | [`src/app/admin/teams/[programId]/roster/page.tsx`](src/app/admin/teams/[programId]/roster/page.tsx) |
-| `/admin/teams/[programId]/schedule` | [`src/app/admin/teams/[programId]/schedule/page.tsx`](src/app/admin/teams/[programId]/schedule/page.tsx) |
-| `/admin/teams/[programId]/usage` | [`src/app/admin/teams/[programId]/usage/page.tsx`](src/app/admin/teams/[programId]/usage/page.tsx) |
 | `/admin/teams` | [`src/app/admin/teams/page.tsx`](src/app/admin/teams/page.tsx) |
 | `/admin/uploads` | [`src/app/admin/uploads/page.tsx`](src/app/admin/uploads/page.tsx) |
 | `/claim/[programKey]/object` | [`src/app/claim/[programKey]/object/page.tsx`](src/app/claim/[programKey]/object/page.tsx) |
@@ -44,6 +39,7 @@ markers is hand-written — edit it as things move.
 | `/claim/program/referral` | [`src/app/claim/program/referral/page.tsx`](src/app/claim/program/referral/page.tsx) |
 | `/claim/ready` | [`src/app/claim/ready/page.tsx`](src/app/claim/ready/page.tsx) |
 | `/claim/review` | [`src/app/claim/review/page.tsx`](src/app/claim/review/page.tsx) |
+| `/claim/team/about` | [`src/app/claim/team/about/page.tsx`](src/app/claim/team/about/page.tsx) |
 | `/claim/team` | [`src/app/claim/team/page.tsx`](src/app/claim/team/page.tsx) |
 | `/claim/team/setup` | [`src/app/claim/team/setup/page.tsx`](src/app/claim/team/setup/page.tsx) |
 | `/claim/team/terms` | [`src/app/claim/team/terms/page.tsx`](src/app/claim/team/terms/page.tsx) |

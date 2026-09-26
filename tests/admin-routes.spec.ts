@@ -278,3 +278,42 @@ test.describe("Admin console route smoke test (live)", () => {
     }
   });
 });
+
+/**
+ * The Admin › Teams detail page's five old tab routes, now `?view=` views.
+ *
+ * Gated on `ADMIN_SMOKE_BASE_URL` alone — no Supabase, no `ADMIN_SMOKE_CONFIRM`
+ * — because a `next.config.ts` redirect is decided in the routing layer before
+ * anything is rendered or authenticated (the `/admin/claims` case above proves
+ * that: it answers 307 with no cookie at all). So this needs a running server
+ * and nothing else, and the program id can be any string.
+ */
+const SECTION_REDIRECTS = [
+  "people",
+  "roster",
+  "schedule",
+  "usage",
+  "activity",
+] as const;
+
+test.describe("Admin team sub-routes redirect to their view", () => {
+  test.skip(
+    !BASE_URL,
+    "ADMIN_SMOKE_BASE_URL not set — point it at a running `npm run build && npm run start` server",
+  );
+
+  for (const slug of SECTION_REDIRECTS) {
+    test(`GET /admin/teams/<id>/${slug} redirects 307 to ?view=${slug}`, async ({
+      request,
+    }) => {
+      const response = await get(request, `/admin/teams/p1/${slug}`);
+
+      expect(response.status()).toBe(307);
+      // The raw header, query included — not `locationPathname()`, which would
+      // drop exactly the part under test.
+      expect(response.headers()["location"]).toBe(
+        `/admin/teams/p1?view=${slug}`,
+      );
+    });
+  }
+});

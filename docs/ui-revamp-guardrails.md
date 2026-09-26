@@ -124,6 +124,21 @@ be. Doubles teams and existing users depend on it.
 > line with a saved outcome. Migration:
 > `supabase/migrations/20260913120000_attach_match_to_event_line.sql`.
 
+> **A one-off data repair, 2026-09-26: two `matches.result` captions.**
+>
+> Not a code path — a single hand-run `UPDATE`, approved by the owner in
+> session, recorded here so the rule's history stays complete. `matches.result`
+> is the caption over the score, not an outcome (`patch-match.ts` explains
+> why). An earlier version of the score-edit endpoint overwrote it with `win`,
+> and two SwingVision rows (`5b882f87-…`, `e4b2e025-…`) still carried that word,
+> which the matches gallery printed as "WIN" above the score. Their `result`
+> was reset to `player1_name || ' Wins'` — "Scott Watson Wins", the caption
+> SwingVision itself writes — guarded on `result = 'win'` and
+> `score.winner = 'player1'`, which both rows had. **Only** `result` changed;
+> never `score`, attribution, `program_id`, or anything under `match_stats`,
+> `points` or `shots`. Blank captions (`""`) were fixed in the read path
+> instead, not by rewriting rows. This is not a precedent for backfills.
+
 **These files are the integration, not UI.** Changing them to suit a layout is
 almost always the wrong fix:
 
