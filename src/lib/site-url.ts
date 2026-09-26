@@ -1,10 +1,24 @@
 /**
- * Where this deployment is publicly reachable.
+ * Where this deployment is publicly reachable — by configuration.
  *
  * There were two private copies of this before the email module needed a third
  * — one in `services/programs/claim-actions.ts`, one inside
  * `splitstep/config.ts`'s `resolveWebhookUrl()`. Same environment variable,
  * same trailing-slash strip, no way for a reader to know they agreed.
+ *
+ * ── Which resolver ──────────────────────────────────────────────────────────
+ * Two, on purpose, split by who ends up holding the link:
+ *
+ * - `siteUrl()` (this) — configured, never the request. For anything that
+ *   lands in an email, and anything with no request at all (cron sweeps, the
+ *   vendor's webhook, `metadataBase`). A `Host` header an attacker can set
+ *   must never become the origin of a link somebody else is asked to click —
+ *   `docs/email-system.md` §5.
+ * - `requestOrigin()` (`request-origin.ts`, over `originFromHeaders()` below)
+ *   — the origin the person is actually on. For links they read on screen, for
+ *   redirects, and for Supabase `redirectTo`s. A worktree's dev server on port
+ *   3002 says 3002, whatever `.env.local` was copied with; a preview deployment
+ *   says itself.
  *
  * Note what this deliberately does NOT do: it does not reject localhost.
  * `resolveWebhookUrl()` returns null for a loopback origin because the vendor
@@ -49,4 +63,38 @@ export function siteUrl(): string {
   }
 
   return "http://localhost:3000";
+}
+
+/**
+ * The leading value of a header proxies may have joined with commas
+ * (`x-forwarded-host: app.example.com, edge.internal`), trimmed; `undefined`
+ * for absent or blank so callers can `??` through to the next candidate.
+ */
+function first(value: string | null): string | undefined {
+  return value?.split(",")[0]?.trim() || undefined;
+}
+
+const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+
+/**
+ * The origin of the request these headers arrived with.
+ *
+ * Pure — takes anything with `.get()`, so a Route Handler passes
+ * `request.headers` and `requestOrigin()` passes Next's `headers()`. The
+ * forwarded host wins over `host`, because behind Vercel's proxy `host` is
+ * the internal one; the forwarded protocol wins over the guess, and the guess
+ * is `http` only for a loopback host. No host at all — which HTTP/1.1 forbids
+ * but the type permits — falls back to `siteUrl()` rather than throwing or
+ * returning `undefined://`.
+ */
+export function originFromHeaders(headers: {
+  get(name: string): string | null;
+}): string {
+  const host =
+    first(headers.get("x-forwarded-host")) ?? first(headers.get("host"));
+  if (!host) return siteUrl();
+  const proto =
+    first(headers.get("x-forwarded-proto")) ??
+    (LOOPBACK_HOST.test(host) ? "http" : "https");
+  return `${proto}://${host}`;
 }

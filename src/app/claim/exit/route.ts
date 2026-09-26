@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { siteUrl } from "@/lib/site-url";
+import { originFromHeaders } from "@/lib/site-url";
 
 /**
  * Where the claim flow's ✕ leads.
@@ -19,14 +19,17 @@ import { siteUrl } from "@/lib/site-url";
  * else (`ready`, `review`, which end inside the product) still pass their own
  * `exitHref` and never reach this.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Absolute, because NextResponse.redirect requires it. `siteUrl()` is the
-  // same origin the rest of the app builds links from, so a preview deployment
-  // exits to itself rather than to production.
-  return NextResponse.redirect(new URL(user ? "/dashboard" : "/", siteUrl()));
+  // Absolute, because NextResponse.redirect requires it. The request's own
+  // origin, not `siteUrl()`: a preview deployment exits to itself rather than
+  // to production, and a dev server on :3002 stays on :3002 instead of hopping
+  // to whatever port `.env.local` names.
+  return NextResponse.redirect(
+    new URL(user ? "/dashboard" : "/", originFromHeaders(request.headers)),
+  );
 }

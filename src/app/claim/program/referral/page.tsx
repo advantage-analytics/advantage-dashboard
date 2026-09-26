@@ -7,7 +7,7 @@ import {
 } from "@/components/claim/claim-shell";
 import { ReferralLink } from "@/components/claim/referral-link";
 import { advButton } from "@/lib/ui/adv-button";
-import { siteUrl } from "@/lib/site-url";
+import { requestOrigin } from "@/lib/request-origin";
 
 export const metadata = { title: "Not on Advantage yet" };
 
@@ -65,8 +65,9 @@ export default async function ProgramReferralPage({
 
   // No school in the URL is a reachable state — somebody can open this screen
   // without having typed anything — so the link degrades to the bare claim
-  // entry rather than carrying an empty `ref=`.
-  const url = `${siteUrl()}/claim${slug ? `?ref=${slug}` : ""}`;
+  // entry rather than carrying an empty `ref=`. Built on the origin the
+  // player is on, not `NEXT_PUBLIC_SITE_URL`: they read it off the screen.
+  const url = `${await requestOrigin()}/claim${slug ? `?ref=${slug}` : ""}`;
 
   return (
     <ClaimShell width={720} gap={20} back="/claim/program?intent=join">

@@ -13,7 +13,8 @@ import {
 } from "@/lib/services/email";
 import { notifyProgramWentLive } from "@/lib/services/notifications/program-live-mail";
 import { claimRoleLabel } from "./claim-roles";
-import { mintVerification, verifyIdentityUrl } from "./claim-verification";
+import { mintVerification, verifyIdentityPath } from "./claim-verification";
+import { requestOrigin } from "@/lib/request-origin";
 import {
   addHours,
   nextClaimStatus,
@@ -532,6 +533,10 @@ export async function reopenClaim(
  * ran first — and the link authorizes nothing on its own beyond answering a
  * question about a claim that admin can already see.
  *
+ * Built on the admin's own origin via `requestOrigin()`, not the configured
+ * one the email uses — `verifyIdentityPath()`'s doc comment says why the two
+ * must differ. Same path, same token.
+ *
  * **A failed send does not fail the call.** Same posture as `notifyClaimant`:
  * the token is already durable, so the admin still gets a working link to pass
  * on by hand. Reporting failure here would leave a live token behind a message
@@ -588,19 +593,25 @@ export async function sendClaimVerification(
     return { ok: false, error: "Could not issue a verification link." };
   }
 
-  const sent = await sendEmail(
-    claimVerifyIdentityEmail({
-      to,
-      programName: programDisplayName(
-        program.school_name as string,
-        (program.team as string | null) ?? null,
-      ),
-      // The label they picked, not the stored `head_coach`. The heading asks a
-      // question and "Are you X's head_coach?" is not one anybody answers.
-      claimantTitle: claimRoleLabel(claim.claimant_role as string),
-      token,
-    }),
-  );
+  // Neither depends on the other, so send the mail and read the admin's own
+  // origin concurrently rather than paying for both in sequence.
+  const [sent, origin] = await Promise.all([
+    sendEmail(
+      claimVerifyIdentityEmail({
+        to,
+        programName: programDisplayName(
+          program.school_name as string,
+          (program.team as string | null) ?? null,
+        ),
+        // The label they picked, not the stored `head_coach`. The heading
+        // asks a question and "Are you X's head_coach?" is not one anybody
+        // answers.
+        claimantTitle: claimRoleLabel(claim.claimant_role as string),
+        token,
+      }),
+    ),
+    requestOrigin(),
+  ]);
 
   if (!sent.ok) {
     console.warn("[admin] claim verification email not sent", {
@@ -609,7 +620,7 @@ export async function sendClaimVerification(
   }
 
   revalidatePath("/admin", "layout");
-  return { ok: true, url: verifyIdentityUrl(token) };
+  return { ok: true, url: `${origin}${verifyIdentityPath(token)}` };
 }
 
 /**
