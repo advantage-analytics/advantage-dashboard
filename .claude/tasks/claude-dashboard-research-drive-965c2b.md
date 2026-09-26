@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Seed script prunes departed scrape contacts, with a tested pure diff
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** `scripts/seed-programs.ts`, `scripts/lib/contact-prune.ts` (new), `tests/seed-contact-prune.spec.ts` (new) — guess
