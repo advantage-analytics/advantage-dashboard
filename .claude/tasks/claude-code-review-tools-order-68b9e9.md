@@ -90,7 +90,7 @@ ready).
 
 ## T7 · Migration: pin key_moments search_path and lock the regraft trigger function
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<live-timestamp>_key_moments_search_path_regraft_grants.sql (new; timestamp from the live apply)
 - **done when:**
