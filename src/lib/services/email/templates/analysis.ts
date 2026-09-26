@@ -190,11 +190,9 @@ export function analysisFailedInternalEmail(
   } = input;
 
   const uploader =
-    uploaderName || uploaderEmail
-      ? uploaderName && uploaderEmail
-        ? `${uploaderName} (${uploaderEmail})`
-        : (uploaderName ?? uploaderEmail ?? "")
-      : "Unknown — account deleted";
+    [uploaderName, uploaderEmail && `(${uploaderEmail})`]
+      .filter(Boolean)
+      .join(" ") || "Unknown — account deleted";
 
   const content: EmailContent = {
     preheader: `${matchTitle} stopped at ${stage}.`,

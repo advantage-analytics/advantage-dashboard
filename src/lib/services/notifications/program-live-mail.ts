@@ -9,7 +9,6 @@ import {
   type ClaimStatus,
 } from "@/lib/services/programs/claim-state";
 import { claimSend } from "./should-notify";
-import type { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * "A program just went live" — one FYI to the internal alerts inbox.
@@ -63,18 +62,12 @@ export function shouldAnnounceProgramLive(
  * never alerts again, which was accepted as the trade for a key both doors
  * can build.
  *
- * `db` is taken for parity with `notifyAdminsReviewNeeded` — every caller
- * already holds an admin client — though nothing here reads with it today.
- *
  * Never throws and never returns a failure: the program is live whether or not
  * this arrives, and `sendEmail` has already logged the technical cause.
  */
 export async function notifyProgramWentLive(
-  db: ReturnType<typeof createAdminClient>,
   event: ProgramWentLiveEvent,
 ): Promise<void> {
-  void db;
-
   const claimed = await claimSend(`program_live:${event.programId}`);
   if (!claimed) return;
 

@@ -199,8 +199,10 @@ async function notifyInternalFailure(
     ]);
 
     const uploaderName =
-      [user?.first_name, user?.last_name]
-        .map((part) => (part as string | null)?.trim())
+      [
+        (user?.first_name as string | null)?.trim(),
+        (user?.last_name as string | null)?.trim(),
+      ]
         .filter(Boolean)
         .join(" ") || null;
 

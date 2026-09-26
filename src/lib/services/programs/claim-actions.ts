@@ -765,6 +765,29 @@ async function notifyIfClaimNeedsReview(
 }
 
 /**
+ * The other half of the fork after a claim completes: did it land live on its
+ * own? Decided on `status`, not `contact_matched` — see
+ * `shouldAnnounceProgramLive`. Shared by `completeClaim` and
+ * `completeClaimWithToken` so the two doors build the same event shape from
+ * one place instead of each re-deriving it.
+ */
+async function announceIfProgramWentLive(
+  rpc: Pick<ClaimRpcResult, "program_id" | "status" | "already_owned"> | null,
+  claimantName: string,
+  claimantEmail: string,
+  programName: string,
+): Promise<void> {
+  if (!rpc || !shouldAnnounceProgramLive(rpc)) return;
+  await notifyProgramWentLive({
+    programId: rpc.program_id,
+    programName,
+    claimantName,
+    claimantEmail,
+    path: "auto",
+  });
+}
+
+/**
  * Finish a claim after the emailed link is clicked.
  *
  * The domain check runs HERE, against the program row read from the database —
@@ -915,17 +938,7 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
       programName,
       check.domainMatched,
     );
-    // The other half of the fork: a claim that landed live on its own. Decided
-    // on `status`, not `contact_matched` — see `shouldAnnounceProgramLive`.
-    if (rpc && shouldAnnounceProgramLive(rpc)) {
-      await notifyProgramWentLive(db, {
-        programId: rpc.program_id,
-        programName,
-        claimantName: pending.fullName,
-        claimantEmail: email,
-        path: "auto",
-      });
-    }
+    await announceIfProgramWentLive(rpc, pending.fullName, email, programName);
   });
 
   return {
@@ -1087,16 +1100,12 @@ export async function completeClaimWithToken(
       programName,
       check.domainMatched,
     );
-    // Same fork as `completeClaim`: announce a claim that landed live.
-    if (result && shouldAnnounceProgramLive(result)) {
-      await notifyProgramWentLive(db, {
-        programId: result.program_id,
-        programName,
-        claimantName: row.full_name as string,
-        claimantEmail: email,
-        path: "auto",
-      });
-    }
+    await announceIfProgramWentLive(
+      result,
+      row.full_name as string,
+      email,
+      programName,
+    );
   });
 
   return {
