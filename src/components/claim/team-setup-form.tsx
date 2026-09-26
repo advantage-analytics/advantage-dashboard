@@ -63,6 +63,8 @@ function reasonMessage(reason: string): string {
         "You can own up to 2 club, high school or academy teams. To add " +
         "another, remove one first or ask its owner to add you instead."
       );
+    case "terms-not-accepted":
+      return "Accept the current pilot terms before creating the team.";
     case "invalid-name":
       return "Give the team a name between 2 and 120 characters.";
     case "invalid-org-type":

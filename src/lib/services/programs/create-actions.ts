@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
+import { TERMS_NOT_ACCEPTED_SQLSTATE } from "./pilot-terms";
 
 /**
  * Self-serve creation of a non-collegiate program — a club, a high school, an
@@ -54,6 +55,13 @@ export type CreateCustomProgramResult =
          * "something failed" only has a retry.
          */
         | "limit-reached"
+        /**
+         * No `pilot_terms_acceptances` row for the current
+         * `PILOT_TERMS_VERSION` (`./pilot-terms.ts`). Raised by the RPC as
+         * `TERMS_NOT_ACCEPTED_SQLSTATE` once the enforcement migration is
+         * applied; the caller sends the coach to the terms screen.
+         */
+        | "terms-not-accepted"
         | "failed";
     };
 
@@ -104,6 +112,9 @@ export async function createCustomProgram(input: {
   if (error) {
     if (error.code === LIMIT_REACHED_SQLSTATE) {
       return { ok: false, reason: "limit-reached" };
+    }
+    if (error.code === TERMS_NOT_ACCEPTED_SQLSTATE) {
+      return { ok: false, reason: "terms-not-accepted" };
     }
     console.error("[programs] custom org creation failed", {
       error: error.message,

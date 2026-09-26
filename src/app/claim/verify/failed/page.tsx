@@ -64,6 +64,14 @@ const COPY: Record<
     sub: "Something went wrong on our side. Nothing was created — opening the link again is safe.",
     action: "exit",
   },
+  // Raised by the completion RPCs once pilot-terms enforcement is applied
+  // (`TERMS_NOT_ACCEPTED_SQLSTATE`). The pending claim is left intact, so the
+  // terms screen (T4) can send the coach back through the same link.
+  "terms-not-accepted": {
+    heading: "Accept the pilot terms first",
+    sub: "This program needs the current pilot terms accepted before it can be set up. Nothing was created — accept the terms, then open the link again.",
+    action: "restart",
+  },
   // The two endings only the signed-in link can reach. That link finishes a
   // setup started from an existing account, so it works solely in a session
   // belonging to that account — the email says so, and these two screens are

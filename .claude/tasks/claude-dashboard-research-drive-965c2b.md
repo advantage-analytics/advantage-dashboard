@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Pilot terms acceptances table + RPC enforcement
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** `supabase/migrations/<stamp>_pilot_terms_acceptances.sql` (new), `src/lib/services/programs/pilot-terms.ts` (new: `PILOT_TERMS_VERSION`), `src/lib/services/programs/create-actions.ts`, `src/lib/services/programs/claim-actions.ts` (`completeClaim` ~838, `completeClaimWithToken` ~1000), `tests/pilot-terms-rls.spec.ts` (new, live-db) — guess
 - **done when:**

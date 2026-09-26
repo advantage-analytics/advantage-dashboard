@@ -21,3 +21,14 @@ is the runner's. Newest entries at the bottom.
 
 1. The contacts upsert on `(program_id, email)` would overwrite an `admin` row whose email is also in the scrape CSV, flipping it to `scrape` (and a later scrape that drops it would prune it). Skip or merge scrape rows whose `(program_id, email)` already exists as `admin`.
 2. The unique index is on `(program_id, lower(email))` but the upsert's `onConflict` names raw `email`; a mixed-case admin row could collide on the index without the upsert matching it. Check alongside follow-up 1.
+
+## T3 · Pilot terms acceptances table + RPC enforcement — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Author decision: split the live apply. `20260926181544_pilot_terms_acceptances.sql` is APPLIED LIVE (table, RLS insert/select own, authenticated column-level insert on `user_id`/`terms_version` only, anon revoked, `current_pilot_terms_version()` = `2026-fall-pilot-1`). `20260926181600_pilot_terms_enforcement.sql` is NOT APPLIED (boxed header says so): re-creates `create_custom_program`, `complete_program_claim`, `complete_program_claim_with_token` from their live bodies with an acceptance gate raising `TA001` and a `program_id` stamp; `admin_create_program` untouched. New `pilot-terms.ts` (`PILOT_TERMS_VERSION`, `TERMS_NOT_ACCEPTED_SQLSTATE`); `"terms-not-accepted"` mapped in `createCustomProgram`, `completeClaim`, `completeClaimWithToken`, with placeholder copy in `claim/verify/failed/page.tsx` and `team-setup-form.tsx` (exhaustive maps). New live-db spec `tests/pilot-terms-rls.spec.ts` (registered in `live-db-specs.ts`; skips against prod; enforcement assertions skip until enforcement is live). get_advisors: nothing new.
+**follow-ups:**
+
+1. At deploy, together with T4: apply `20260926181600_pilot_terms_enforcement.sql`, rename it to the live version, run the spec against a non-prod target first.
+2. T4: replace the placeholder `"terms-not-accepted"` copy in `claim/verify/failed/page.tsx` and `team-setup-form.tsx` and route to the terms screen instead of `restart`.
+3. T4: the screen inserts only `{ user_id, terms_version }`; `program_id` is blocked by the column grant by design.
+4. Add a `Db*` row type for `pilot_terms_acceptances` when app code first reads it.

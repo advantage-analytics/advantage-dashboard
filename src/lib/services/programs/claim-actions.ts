@@ -16,6 +16,7 @@ import { checkClaimEmail } from "./domain-match";
 import { toClaimRole, type ClaimRoleValue } from "./claim-roles";
 import { nextClaimStatus, reviewReason, type ClaimStatus } from "./claim-state";
 import { getProgramOwner } from "./program-owner";
+import { TERMS_NOT_ACCEPTED_SQLSTATE } from "./pilot-terms";
 import { wantsNotification } from "@/lib/services/notifications/should-notify";
 import { notifyAdminsReviewNeeded } from "@/lib/services/notifications/admin-review-mail";
 import { siteUrl } from "@/lib/site-url";
@@ -676,6 +677,13 @@ export type ClaimFailure =
   | "unknown-program"
   | "taken"
   | "failed"
+  /**
+   * No `pilot_terms_acceptances` row for the current `PILOT_TERMS_VERSION`
+   * (`./pilot-terms.ts`). Both completion RPCs raise
+   * `TERMS_NOT_ACCEPTED_SQLSTATE` once the enforcement migration is applied;
+   * the pending claim is left intact for a retry after the coach accepts.
+   */
+  | "terms-not-accepted"
   // The two endings only the signed-in token path can reach.
   | "sign-in-first"
   | "wrong-account";
@@ -850,6 +858,9 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
     if (error.code === "23505") {
       return { ok: false, reason: "taken" };
     }
+    if (error.code === TERMS_NOT_ACCEPTED_SQLSTATE) {
+      return { ok: false, reason: "terms-not-accepted" };
+    }
     return { ok: false, reason: "failed" };
   }
 
@@ -1009,6 +1020,9 @@ export async function completeClaimWithToken(
     console.error("[claim] signed-in completion failed", {
       error: error.message,
     });
+    if (error.code === TERMS_NOT_ACCEPTED_SQLSTATE) {
+      return { ok: false, reason: "terms-not-accepted" };
+    }
     return { ok: false, reason: "failed" };
   }
 
