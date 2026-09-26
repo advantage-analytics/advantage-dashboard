@@ -86,7 +86,7 @@ ready).
 
 ## T6 · Cover the intake constraints and RPC with a live-db spec
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** tests/onboarding-intake-live.spec.ts (new), tests/fixtures/live-db-specs.ts (guess)
