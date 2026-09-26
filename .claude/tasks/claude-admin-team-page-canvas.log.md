@@ -862,3 +862,14 @@ thing an admin meets.
 
 1. The loader deliberately omits `program_audit_log.details`; richer lines ("role changed from coach to staff") need a loader change first.
 2. Nothing keeps the label map in step with the constraint — a new audit action shows its raw string until someone adds a label.
+
+## T18 · Details rail card — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** Restored the blocked work from stash 7643fbfd at the user's request and fixed the link-safety finding: `hostnameOf()` in `admin-details-card.tsx` now matches only `^https?://` (case-insensitive, trimmed), so `javascript:`/`data:` and bare-domain values print as plain text, never a link; spec case added in `tests/admin-details-card.spec.ts`. The rest is as logged under the blocked entry: `Details` card with the six canvas rows in order, policy rows via `uploadPolicyLabel()`, a local IANA→label map for Time zone (the dialog's field is free text), `—` for a null key or URL, and `Edit` opening `AdminTeamDetailsDialog`.
+
+**follow-ups:**
+
+1. Home venue shows nowhere on the page: `team-page-header.tsx:40` says the Details card prints it, but T18's rows do not include it (standing decision 6).
+2. The T10 dialog accepts any string as the staff page URL — validating to `http(s)` at write time would stop bad values at the source.

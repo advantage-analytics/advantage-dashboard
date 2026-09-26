@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { AdminActivityCard } from "@/components/admin/admin-activity-card";
 import { AdminConferenceCard } from "@/components/admin/admin-conference-card";
+import { AdminDetailsCard } from "@/components/admin/admin-details-card";
 import { AdminPeopleCard } from "@/components/admin/admin-people-card";
 import { AdminRequestsCard } from "@/components/admin/admin-requests-card";
 import { AdminRosterCard } from "@/components/admin/admin-roster-card";
@@ -124,6 +125,7 @@ export default async function AdminTeamPage({
         options={conferenceOptions}
       />
     ),
+    details: <AdminDetailsCard program={data.program} />,
   };
 
   const column = (ids: readonly TeamSectionId[]) => (
