@@ -50,7 +50,7 @@ Verdicts: **match** · **fixed-in-this-diff** (backed by a hunk in this diff) ·
 | Pill font                         | 12px, 400 rest / 500 active    | 12px, 400 rest / 500 active    | match                                                                                                                    |
 | Pill padding / row gap            | 11px / 8px                     | 11px / 8px                     | match                                                                                                                    |
 | Pill border                       | 1px `#f3f3f3` rest, `#e5e5ea` active | 1px `#f3f3f3` rest, `#e5e5ea` active | match (T8 kept `--border-hairline`; both resolve to ink-100)                                                     |
-| Active pill at scroll 0           | `Overview`                     | `Overview` (was `People`)      | fixed-in-this-diff — `team-section-pills.tsx` checks the top of the page before the observer band (which holds `#people` at load), and a passive scroll listener re-runs that pick so scrolling back to 0 restores Overview |
+| Active pill on load                 | `Overview`                     | `Overview`                     | fixed-in-this-diff — originally a scroll-anchor bug (`People` lit at scroll 0); since 2026-09-26 the pills filter the main column by `?view=` and Overview is simply the default view |
 
 ### Cards
 

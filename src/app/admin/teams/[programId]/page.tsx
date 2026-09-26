@@ -10,21 +10,41 @@ import { AdminScheduleCard } from "@/components/admin/admin-schedule-card";
 import { AdminUsageCard } from "@/components/admin/admin-usage-card";
 import { PilotUsageCard } from "@/components/admin/pilot-usage-card";
 import { quotaTierFor } from "@/lib/services/splitstep/quota";
-import { TeamSectionPills } from "@/components/admin/team-section-pills";
+import { TeamSectionView } from "@/components/admin/team-section-pills";
 import {
-  TEAM_MAIN_SECTIONS,
-  TEAM_RAIL_SECTIONS,
-  TEAM_SECTION_TITLES,
+  teamViewFrom,
+  teamViewTitle,
   type TeamSectionId,
 } from "@/components/admin/team-sections";
-import { SettingsCard } from "@/components/dashboard/settings/settings-card";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
 import { conferenceOptionsFor } from "@/lib/services/programs/admin-program-actions";
 
-export const metadata = { title: "Overview" };
+/**
+ * "Centennial High School · Roster" — the program, then the view when it is
+ * not Overview. The layout's `getAdminTeam` call is the same `cache()`d call,
+ * so this costs no extra read. `TeamSectionView` keeps the title in step
+ * after a client-side switch.
+ */
+export async function generateMetadata({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ programId: string }>;
+  searchParams: Promise<{ view?: string | string[] }>;
+}) {
+  const [{ programId }, { view }] = await Promise.all([params, searchParams]);
+  const data = await getAdminTeam(programId);
+  if (!data) return {};
+  return {
+    title: teamViewTitle(
+      data.program.schoolName,
+      teamViewFrom(typeof view === "string" ? view : null),
+    ),
+  };
+}
 
 /**
- * The Admin › Teams detail page — one program, on one scroll.
+ * The Admin › Teams detail page — one program, on one page.
  *
  * It used to be six routes: an Overview with three cards and five sibling
  * tabs, four of which rendered `ComingSoon`. The canvas
@@ -32,11 +52,12 @@ export const metadata = { title: "Overview" };
  * draws them as one page instead, and it is right to: an admin opening this
  * console is investigating a support case, and every tab boundary was a
  * round trip between two facts that only mean something next to each other —
- * who owns the program, and what it has spent. The tabs became the anchored
- * pill row at the top, and the old sub-route URLs redirect to the matching
- * `#hash` (`next.config.ts`).
+ * who owns the program, and what it has spent. The tabs became the pill row
+ * at the top, which filters the main column in place (`?view=`, decision
+ * 2026-09-26) while the rail stays, and the old sub-route URLs redirect to
+ * the matching view (`next.config.ts`).
  *
- * **The grid is settled here and nowhere else.** `minmax(0,1fr) 380px`, 24px
+ * **The grid is settled in `TeamSectionView`.** `minmax(0,1fr) 380px`, 24px
  * gap, `items-start`, each column a 24px stack — the canvas' `.cols`/`.col`.
  * Tasks that fill the empty sections put a card inside the `<section>` that
  * is already there; none of them re-cuts this.
@@ -77,11 +98,10 @@ export default async function AdminTeamPage({
   );
 
   /**
-   * The cards that exist today. Everything else in the section map gets the
-   * placeholder below — see its note for why an empty section still draws
-   * something.
+   * Every section's card, rendered here on the server. `TeamSectionView`
+   * picks which of them each view shows (`team-sections.ts`).
    */
-  const cards: Partial<Record<TeamSectionId, React.ReactNode>> = {
+  const cards: Record<TeamSectionId, React.ReactNode> = {
     people: (
       <AdminPeopleCard
         programId={programId}
@@ -133,53 +153,7 @@ export default async function AdminTeamPage({
     details: <AdminDetailsCard program={data.program} />,
   };
 
-  const column = (ids: readonly TeamSectionId[]) => (
-    <div className="flex flex-col gap-6">
-      {ids.map((id) => (
-        <section key={id} id={id} className="scroll-mt-16">
-          {cards[id] ?? <TeamSectionPlaceholder id={id} />}
-        </section>
-      ))}
-    </div>
-  );
-
   return (
-    <>
-      <TeamSectionPills />
-      <div className="grid grid-cols-[minmax(0,1fr)_380px] items-start gap-6">
-        {column(TEAM_MAIN_SECTIONS)}
-        {column(TEAM_RAIL_SECTIONS)}
-      </div>
-    </>
-  );
-}
-
-/**
- * A section whose card is not built yet.
- *
- * The design system's rule for "not built yet" is Coming soon — one
- * statement, one way onward, no shape at all — and that is still what this
- * is; it is just scoped to a card rather than a page, because the page
- * around it is built and full of real data. Six centred `ComingSoon` blocks
- * down one scroll would be the page apologising to itself, and a dimmed
- * mock-up of a card nobody has designed would invent a layout that may never
- * ship, which is the fabrication those rules exist to prevent.
- *
- * So: the section's own title, which is real chrome the page already knows,
- * and one muted line. That is the least that keeps the pill row honest — a
- * pill that scrolls to a bare `<section>` scrolls to nothing, and a reader
- * who lands on nothing concludes the page is broken rather than unfinished.
- * Each of these disappears as its card lands.
- */
-function TeamSectionPlaceholder({ id }: { id: TeamSectionId }) {
-  return (
-    <SettingsCard>
-      <span className="text-[13px] font-medium text-[var(--ink-900)]">
-        {TEAM_SECTION_TITLES[id]}
-      </span>
-      <span className="mt-1.5 text-[12px] leading-[1.5] text-[var(--ink-500)]">
-        Not built yet.
-      </span>
-    </SettingsCard>
+    <TeamSectionView programName={data.program.schoolName} cards={cards} />
   );
 }

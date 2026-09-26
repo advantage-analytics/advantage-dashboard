@@ -1,18 +1,19 @@
 /**
  * The Admin › Teams detail page's section map — the one place that knows
- * which anchors exist, what each is called, and which column it sits in.
+ * which cards exist, what each is called, which column it sits in, and which
+ * view shows it.
  *
- * The page used to be six routes behind a tab bar. It is now one scroll with
- * nine `<section id>` wrappers, so two things have to agree: the pill row's
- * anchors and the sections they scroll to. Keeping both off this module means
- * a section can never be added to the page without the pill row learning
- * about it, and a pill can never point at an id nothing renders.
+ * The pill row FILTERS the main column (decision 2026-09-26, replacing the
+ * scroll anchors T8 built): `Overview` shows every main card, each other pill
+ * shows only its own. The rail stays on every view — it is the program's
+ * standing facts (pilot, usage, conference, details), and an admin reading
+ * the roster still wants the pilot beside it. The one rail card with a pill of
+ * its own, Usage, moves into the main column on its view rather than showing
+ * twice.
  *
- * Nine sections, six pills: `Requests`, `Pilot`, `Conference` and `Details`
- * are short cards a reader reaches by scrolling past the thing above them,
- * and the canvas' toolbar names only the six destinations worth a jump.
- * `Overview` is the sixth — the top of the page, which is not a section at
- * all, hence `target: null`.
+ * The view lives in `?view=` so a link lands on it; `Overview` is the absence
+ * of the parameter. Every `<section id>` wrapper still renders, so an anchor
+ * such as the header's `⋯ › Change conference` (`#conference`) still lands.
  */
 
 export type TeamSectionId =
@@ -59,25 +60,42 @@ export const TEAM_SECTION_TITLES: Record<TeamSectionId, string> = {
   details: "Details",
 };
 
-/**
- * The toolbar, in the canvas' order:
- * `Overview · People · Roster · Schedule & results · Usage · Activity log`.
- *
- * Order is load-bearing twice over — it is the row's reading order, and it is
- * the tie-break `TeamSectionPills` uses when two sections are on screen at
- * once, which they routinely are because the rail runs alongside the main
- * column rather than below it.
- */
-export const TEAM_SECTION_PILLS: readonly {
-  readonly id: string;
+/** One pill: its label, and the main-column cards its view shows. */
+export interface TeamView {
+  readonly id: TeamViewId;
   readonly label: string;
-  /** The `<section id>` to scroll to, or `null` for the top of the page. */
-  readonly target: TeamSectionId | null;
-}[] = [
-  { id: "overview", label: "Overview", target: null },
-  { id: "people", label: "People", target: "people" },
-  { id: "roster", label: "Roster", target: "roster" },
-  { id: "schedule", label: "Schedule & results", target: "schedule" },
-  { id: "usage", label: "Usage", target: "usage" },
-  { id: "activity", label: "Activity log", target: "activity" },
+  readonly main: readonly TeamSectionId[];
+}
+
+export type TeamViewId =
+  "overview" | "people" | "roster" | "schedule" | "usage" | "activity";
+
+/**
+ * The canvas' six pills, in its order. People carries Requests with it: a
+ * join request is a person waiting to be on that list.
+ */
+export const TEAM_VIEWS: readonly TeamView[] = [
+  { id: "overview", label: "Overview", main: TEAM_MAIN_SECTIONS },
+  { id: "people", label: "People", main: ["people", "requests"] },
+  { id: "roster", label: "Roster", main: ["roster"] },
+  { id: "schedule", label: "Schedule & results", main: ["schedule"] },
+  { id: "usage", label: "Usage", main: ["usage"] },
+  { id: "activity", label: "Activity log", main: ["activity"] },
 ];
+
+/** `?view=` → a known view, or Overview for anything missing or unknown. */
+export function teamViewFrom(value: string | null | undefined): TeamView {
+  return TEAM_VIEWS.find((view) => view.id === value) ?? TEAM_VIEWS[0];
+}
+
+/** The rail for a view: every rail card the main column is not already showing. */
+export function teamRailFor(view: TeamView): TeamSectionId[] {
+  return TEAM_RAIL_SECTIONS.filter((id) => !view.main.includes(id));
+}
+
+/** "Centennial High School · Roster" — the program alone on Overview. */
+export function teamViewTitle(programName: string, view: TeamView): string {
+  return view.id === "overview"
+    ? programName
+    : `${programName} · ${view.label}`;
+}

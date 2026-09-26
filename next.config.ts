@@ -4,14 +4,10 @@ import { REQUEST_ACCESS_URL } from "./src/lib/constants";
 /**
  * The Admin › Teams detail page's old tab routes.
  *
- * Each was a `page.tsx` under `/admin/teams/[programId]/`; they are now
- * anchored sections of the one page (`src/components/admin/team-sections.ts`),
- * so the sub-route URL keeps working by turning into the fragment that scrolls
- * to the same content. The browser never sends the fragment back to the
- * server, but it honours one on a redirect's `Location` header — which is
- * what `tests/admin-routes.spec.ts` asserts on, since the bundled Next docs
- * (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/redirects.md`)
- * neither permit nor forbid a hash in `destination`.
+ * Each was a `page.tsx` under `/admin/teams/[programId]/`; they are now views
+ * of the one page, chosen by `?view=` (`src/components/admin/team-sections.ts`),
+ * so the sub-route URL keeps working by turning into the same view.
+ * `tests/admin-routes.spec.ts` asserts the raw `Location` header.
  *
  * 307, not 308, for the reason the rest of this list gives: these paths never
  * shipped past `splitstep-integration`, so no browser out there holds one,
@@ -90,7 +86,7 @@ const nextConfig: NextConfig = {
       },
       ...ADMIN_TEAM_SECTION_SLUGS.map((slug) => ({
         source: `/admin/teams/:programId/${slug}`,
-        destination: `/admin/teams/:programId#${slug}`,
+        destination: `/admin/teams/:programId?view=${slug}`,
         permanent: false,
       })),
     ];

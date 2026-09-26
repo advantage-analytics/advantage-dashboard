@@ -1,111 +1,115 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
-import { TEAM_SECTION_PILLS } from "@/components/admin/team-sections";
+import {
+  TEAM_VIEWS,
+  teamRailFor,
+  teamViewFrom,
+  teamViewTitle,
+  type TeamSectionId,
+} from "@/components/admin/team-sections";
 import { viewPillProps } from "@/components/admin/view-pills";
 
 /**
- * The Admin › Teams detail page's section row —
+ * The Admin › Teams detail page's pill row and the two columns it filters —
  * `Overview · People · Roster · Schedule & results · Usage · Activity log`.
  *
- * These are **anchors, not tabs**. The page behind them is one scroll, so
- * there is no choice being made among siblings and none of the tab grammar
- * applies: no 2px blue underline, no `layoutId` slide, no route change. They
- * wear the canvas' `.vp` pill — the same one `ViewPills` paints, taken from
- * `viewPillProps()` so the geometry lives in one file — and mark the reader's
- * position with `aria-current="location"`, which is what a link to a place on
- * the page you are already on means.
+ * **Views, not anchors** (decision 2026-09-26). Each pill shows only its own
+ * cards in the main column; `Overview` shows them all; the rail stays. See
+ * `team-sections.ts` for which view shows what.
  *
- * **Why an IntersectionObserver and not a scroll handler.** The active pill
- * has to answer "which section am I in", which is a question about element
- * boxes, not about `scrollY`; computing it from scroll means calling
- * `getBoundingClientRect()` on nine elements on every frame of a scroll. The
- * observer is told the band once — from 64px below the viewport top (clear of
- * the 44px sticky header, `--header-h`) down to 55% of the way through it —
- * and then only speaks when a section enters or leaves it.
+ * The cards are rendered on the server and handed in whole, so switching a
+ * view is a client-side choice among nodes that already exist — no fetch, no
+ * loading state. The view is written to `?view=` with
+ * `window.history.replaceState`, which the App Router syncs into
+ * `useSearchParams` without a navigation (`linking-and-navigating.md`), so a
+ * copied URL lands on the same view and the server render agrees with it.
+ * Replace, not push: flipping between views is looking, not going somewhere,
+ * and a Back that walked through every pill would be a trap.
  *
- * **The tie-break.** The rail runs *alongside* the main column, so two, three
- * or four sections are inside that band at any moment. The winner is the
- * first one in `TEAM_SECTION_PILLS` order, which is the row's own reading
- * order — so People beats Usage while both are up, and the row never
- * flickers between a main-column section and a rail one. When nothing is in
- * the band the row holds whatever it last showed.
- *
- * **The top of the page is Overview, whatever the band holds.** At scroll 0
- * the People card already sits inside the band, so band-first logic lit
- * `People` on load (T20 fidelity row "Active pill at scroll 0"). The top
- * check therefore runs first, and a passive scroll listener re-runs the same
- * pick — it reads only `scrollY` and the observer's cached set, never a box —
- * because scrolling back up to 0 need not change what intersects the band,
- * so the observer alone would stay silent.
+ * The pills stay links (`?view=…`) so a middle-click opens the view in a new
+ * tab; a plain click is intercepted and swaps in place. `aria-current="page"`
+ * marks the active one — it names the view being shown, which is what a pill
+ * that switches the page's contents means.
  */
+export function TeamSectionView({
+  programName,
+  cards,
+}: {
+  /** For the tab title — "Centennial High School · Roster". */
+  programName: string;
+  /** Every section's rendered card, keyed by id. */
+  cards: Record<TeamSectionId, React.ReactNode>;
+}) {
+  const view = teamViewFrom(useSearchParams().get("view"));
 
-const OBSERVER_ROOT_MARGIN = "-64px 0px -55% 0px";
-
-/** How near the top counts as "the top of the page", in px. */
-const OVERVIEW_SCROLL_EPSILON = 48;
-
-export function TeamSectionPills() {
-  const [activeId, setActiveId] = useState("overview");
-  const visible = useRef(new Set<string>());
-
+  // The server set the title for the view it rendered; this keeps it in step
+  // after a client-side switch, which fetches no new metadata.
   useEffect(() => {
-    const targets = TEAM_SECTION_PILLS.filter((pill) => pill.target !== null);
+    document.title = teamViewTitle(programName, view);
+  }, [programName, view]);
 
-    const pick = () => {
-      if (window.scrollY <= OVERVIEW_SCROLL_EPSILON) {
-        setActiveId("overview");
-        return;
-      }
-      const inBand = targets.find((pill) =>
-        visible.current.has(pill.target as string),
-      );
-      if (inBand) setActiveId(inBand.id);
-    };
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            visible.current.add(entry.target.id);
-          } else {
-            visible.current.delete(entry.target.id);
-          }
-        }
-        pick();
-      },
-      { rootMargin: OBSERVER_ROOT_MARGIN },
+  const select = (id: string) => (event: React.MouseEvent) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0)
+      return;
+    event.preventDefault();
+    const params = new URLSearchParams(window.location.search);
+    if (id === "overview") params.delete("view");
+    else params.set("view", id);
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}`,
     );
-
-    for (const pill of targets) {
-      const element = document.getElementById(pill.target as string);
-      if (element) observer.observe(element);
-    }
-
-    window.addEventListener("scroll", pick, { passive: true });
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("scroll", pick);
-    };
-  }, []);
+  };
 
   return (
-    <nav className="flex items-center gap-2" aria-label="Sections on this page">
-      {TEAM_SECTION_PILLS.map((pill) => {
-        const isActive = activeId === pill.id;
-        return (
-          <a
-            key={pill.id}
-            href={pill.target ? `#${pill.target}` : "#top"}
-            aria-current={isActive ? "location" : undefined}
-            {...viewPillProps(isActive)}
-          >
-            {pill.label}
-          </a>
-        );
-      })}
-    </nav>
+    <>
+      <nav className="flex items-center gap-2" aria-label="Views of this team">
+        {TEAM_VIEWS.map((pill) => {
+          const isActive = pill.id === view.id;
+          return (
+            <a
+              key={pill.id}
+              href={pill.id === "overview" ? "?" : `?view=${pill.id}`}
+              onClick={select(pill.id)}
+              aria-current={isActive ? "page" : undefined}
+              {...viewPillProps(isActive)}
+            >
+              {pill.label}
+            </a>
+          );
+        })}
+      </nav>
+      <div className="grid grid-cols-[minmax(0,1fr)_380px] items-start gap-6">
+        <Column ids={view.main} cards={cards} />
+        <Column ids={teamRailFor(view)} cards={cards} />
+      </div>
+    </>
+  );
+}
+
+/**
+ * One column: a 24px stack of `<section id>` wrappers — the canvas'
+ * `.col`. The ids stay on every render so `#conference` and friends land.
+ */
+function Column({
+  ids,
+  cards,
+}: {
+  ids: readonly TeamSectionId[];
+  cards: Record<TeamSectionId, React.ReactNode>;
+}) {
+  return (
+    <div className="flex flex-col gap-6">
+      {ids.map((id) => (
+        <section key={id} id={id} className="scroll-mt-16">
+          {cards[id]}
+        </section>
+      ))}
+    </div>
   );
 }
