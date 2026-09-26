@@ -11,6 +11,7 @@ import {
   claimVerifyIdentityEmail,
   inviteRequestDeclinedEmail,
 } from "@/lib/services/email";
+import { notifyProgramWentLive } from "@/lib/services/notifications/program-live-mail";
 import { claimRoleLabel } from "./claim-roles";
 import { mintVerification, verifyIdentityUrl } from "./claim-verification";
 import {
@@ -167,7 +168,7 @@ async function transition(
   const { data: claim } = await db
     .from("program_claims")
     .select(
-      "id, status, program_id, claimant_user_id, claimed_email, claimant_role",
+      "id, status, program_id, claimant_user_id, claimed_email, claimant_name, claimant_role",
     )
     .eq("id", claimId)
     .maybeSingle();
@@ -250,6 +251,31 @@ async function transition(
     claimantMessage: fields.claimantMessage,
     windowEndsAt,
   });
+
+  // An approval that opens the objection window is the reviewed door to a
+  // live program — the internal FYI's other trigger, after the claimant has
+  // been told. `approved` only arrives later via `settle`, so it is not here.
+  if (event.type === "approve" && next === "objection_window") {
+    const { data: program } = await db
+      .from("programs")
+      .select("school_name, team")
+      .eq("id", claim.program_id)
+      .maybeSingle();
+    if (program) {
+      await notifyProgramWentLive(db, {
+        programId: claim.program_id as string,
+        programName: programDisplayName(
+          program.school_name as string,
+          (program.team as string | null) ?? null,
+        ),
+        claimantName:
+          (claim.claimant_name as string | null) ??
+          (claim.claimed_email as string),
+        claimantEmail: claim.claimed_email as string,
+        path: "reviewed",
+      });
+    }
+  }
 
   return { ok: true };
 }

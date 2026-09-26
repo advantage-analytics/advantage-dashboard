@@ -32,7 +32,7 @@ ready).
 
 ## T2 · "Program went live" internal alert on both claim paths
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/lib/services/email/templates/admin.ts, src/lib/services/email/index.ts, src/lib/services/notifications/program-live-mail.ts (new), src/lib/services/programs/claim-actions.ts (`completeClaim` + `completeClaimWithToken` `after()` blocks), src/lib/services/programs/admin-actions.ts (`transition`), tests/program-live-email.spec.ts (new)

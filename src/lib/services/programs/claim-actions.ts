@@ -18,6 +18,10 @@ import { nextClaimStatus, reviewReason, type ClaimStatus } from "./claim-state";
 import { getProgramOwner } from "./program-owner";
 import { wantsNotification } from "@/lib/services/notifications/should-notify";
 import { notifyAdminsReviewNeeded } from "@/lib/services/notifications/admin-review-mail";
+import {
+  notifyProgramWentLive,
+  shouldAnnounceProgramLive,
+} from "@/lib/services/notifications/program-live-mail";
 import { siteUrl } from "@/lib/site-url";
 
 export type ActionOutcome = { ok: true } | { ok: false; error: string };
@@ -898,15 +902,30 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
   // by the time this runs. `after()` so the redirect to `/claim/review` (or
   // `/claim/ready`) is not held up waiting on mail to every admin.
   after(async () => {
+    const programName = programDisplayName(
+      program.school_name as string,
+      program.team as string,
+    );
     await notifyIfClaimNeedsReview(
       db,
       rpc,
       user.id,
       pending.fullName,
       email,
-      programDisplayName(program.school_name as string, program.team as string),
+      programName,
       check.domainMatched,
     );
+    // The other half of the fork: a claim that landed live on its own. Decided
+    // on `status`, not `contact_matched` — see `shouldAnnounceProgramLive`.
+    if (rpc && shouldAnnounceProgramLive(rpc)) {
+      await notifyProgramWentLive(db, {
+        programId: rpc.program_id,
+        programName,
+        claimantName: pending.fullName,
+        claimantEmail: email,
+        path: "auto",
+      });
+    }
   });
 
   return {
@@ -1054,15 +1073,30 @@ export async function completeClaimWithToken(
   // above, and the same reason this is `after()`-deferred: the redirect that
   // follows must not wait on mail to every admin.
   after(async () => {
+    const result = rpc as ClaimRpcResult | null;
+    const programName = programDisplayName(
+      program.school_name as string,
+      program.team as string,
+    );
     await notifyIfClaimNeedsReview(
       db,
-      rpc as ClaimRpcResult | null,
+      result,
       user.id,
       row.full_name as string,
       email,
-      programDisplayName(program.school_name as string, program.team as string),
+      programName,
       check.domainMatched,
     );
+    // Same fork as `completeClaim`: announce a claim that landed live.
+    if (result && shouldAnnounceProgramLive(result)) {
+      await notifyProgramWentLive(db, {
+        programId: result.program_id,
+        programName,
+        claimantName: row.full_name as string,
+        claimantEmail: email,
+        path: "auto",
+      });
+    }
   });
 
   return {
