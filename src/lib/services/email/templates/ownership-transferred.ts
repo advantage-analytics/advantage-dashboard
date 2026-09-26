@@ -46,8 +46,8 @@ export function ownershipTransferredEmail(
     heading: `You own ${programName}`,
     body: [
       hadPreviousOwner
-        ? `${previous} transferred ownership of ${programName} on Advantage Analytics to you.`
-        : `You were made the owner of ${programName} on Advantage Analytics.`,
+        ? `${previous} transferred ownership of ${programName} on Advantage to you.`
+        : `You were made the owner of ${programName} on Advantage.`,
       hadPreviousOwner
         ? "As the owner you decide who is on the roster and who may send video, and you are the one person who can change the program's name, squad and conference. The previous owner stays on as a coach."
         : "As the owner you decide who is on the roster and who may send video, and you are the one person who can change the program's name, squad and conference.",

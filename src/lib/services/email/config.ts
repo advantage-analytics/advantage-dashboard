@@ -24,8 +24,7 @@
  * address already printed in the footer of all six auth templates, so the
  * address a person sees is the address that works.
  */
-export const FROM_ADDRESS =
-  "Advantage Analytics <team@advantage-analytics.com>";
+export const FROM_ADDRESS = "Advantage <team@advantage-analytics.com>";
 
 /** Printed in the footer of every email, and where replies land. */
 export const SUPPORT_ADDRESS = "team@advantage-analytics.com";
