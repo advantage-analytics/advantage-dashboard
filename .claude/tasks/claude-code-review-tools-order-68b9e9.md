@@ -43,7 +43,7 @@ ready).
 
 ## T3 · Page the Home serve read and select serve rows only
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T2
 - **files:** src/lib/data/home-serve-data.ts, tests/home-serve-data.spec.ts (new) — guess
