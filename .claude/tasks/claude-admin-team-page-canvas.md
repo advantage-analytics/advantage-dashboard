@@ -94,7 +94,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T5 · Extend getAdminTeam: roster with match counts, schedule
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4
 - **files:** (guess) `src/lib/data/admin-team-server.ts`, maybe new `src/lib/data/admin-team-roster.ts`, new `tests/admin-team-roster.spec.ts`

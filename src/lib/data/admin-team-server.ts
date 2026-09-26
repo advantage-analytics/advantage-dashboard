@@ -7,6 +7,19 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
 import { crestUrl, type SeatUsage } from "@/lib/data/teams-server";
 import { programDisplayName } from "@/lib/data/programs-server";
+import {
+  rosterMatchOwnerIds,
+  rosterWithMatchCounts,
+  type AdminRosterMatchRow,
+  type AdminRosterPlayerRow,
+  type AdminTeamRosterPlayer,
+} from "@/lib/data/admin-team-roster";
+import {
+  readScheduleWithClient,
+  scheduleRowsFrom,
+} from "@/lib/data/schedule-server";
+import { dualScore } from "@/lib/schedule/entry-state";
+import type { EventKind, EventSite } from "@/lib/schedule/types";
 import type {
   MemberRole,
   TeamIdentity,
@@ -236,11 +249,65 @@ export interface AdminTeamActivityEntry {
   actorName: string | null;
 }
 
+/**
+ * How one scheduled event turned out, as the Schedule card marks it.
+ *
+ * Six states rather than a nullable `"won" | "lost"`, because "nobody has
+ * played yet", "half the lines are in" and "every line is in and the teams
+ * split level" are three different rows and a null would collapse them. A
+ * decided dual that finished level is `"level"`, not `"played"`: the same
+ * reading `seasonSummaryFrom`'s `dualRecord` takes, where a level dual is
+ * decided and takes neither column.
+ *
+ * `"played"` is the non-dual terminal state. A tournament has no team-vs-team
+ * result to report — the skip `seasonSummaryFrom` and `opponentDualHistory`
+ * both make — so calling a finished bracket "won" would be a claim the
+ * database does not hold.
+ */
+export type AdminTeamEventResult =
+  "scheduled" | "playing" | "won" | "lost" | "level" | "played";
+
+/**
+ * One row of the program's schedule.
+ *
+ * Every field but `result` is `ScheduleRow` — `scheduleRowsFrom`'s own
+ * projection over the schedule this page already read — rather than a second
+ * mapping of `program_events`: the console and the program's own schedule page
+ * print the same events, and two spellings of "what is a dual's score" are two
+ * chances for them to disagree about a season.
+ */
+export interface AdminTeamEvent {
+  id: string;
+  /** `dual` | `tournament` | … */
+  kind: EventKind;
+  /** The opponent school for a dual; the tournament's own name otherwise. */
+  name: string;
+  /** YYYY-MM-DD. Equal to `startsOn` for a dual. */
+  startsOn: string;
+  endsOn: string;
+  /** `home` | `away` | `neutral`. */
+  site: EventSite;
+  /** Lines on the event, and how many have a decided match. */
+  entryCount: number;
+  playedCount: number;
+  /** Only for a dual, and only once every line is in — see `ScheduleRow`. */
+  teamScore: { us: number; them: number } | null;
+  result: AdminTeamEventResult;
+}
+
 export interface AdminTeamData {
   program: AdminTeamProgram;
   /** The most recent claim, or null for a program nobody has ever claimed. */
   claim: AdminTeamClaim | null;
   members: AdminTeamMember[];
+  /**
+   * The live `program_players` roster — lineup order, null spots last — with
+   * each row's match count and last match. See `admin-team-roster.ts`, which
+   * owns the two-id-space attribution.
+   */
+  roster: AdminTeamRosterPlayer[];
+  /** Every event on the program, newest first — `ProgramSchedule`'s order. */
+  schedule: AdminTeamEvent[];
   /** Outstanding invites only — accepted ones are members now. */
   invites: TeamInvite[];
   joinRequests: AdminTeamJoinRequest[];
@@ -902,6 +969,164 @@ async function readActivity(
 }
 
 // ---------------------------------------------------------------------------
+// Roster — `program_players`, with matches attributed across both id spaces
+// ---------------------------------------------------------------------------
+
+const ROSTER_SELECT =
+  "id, first_name, last_name, class_year, lineup_spot, claimed_by_user_id";
+
+/**
+ * The program's live players, each with a match count and a last match.
+ *
+ * Read straight off `program_players` rather than through `program_roster_full`
+ * for this file's founding reason: every function on this schema gates on
+ * `user_program_ids()`, and under the service role `auth.uid()` is null, so the
+ * RPC would answer with an empty roster and no error. The row filter is the
+ * same one `readSeatUsage` above and the rest of the repo use —
+ * `archived_at is null and merged_into_id is null` — so the console's roster and
+ * its seat figure are about the same set of people.
+ *
+ * Two round trips, never one per player: the roster, then every match keyed to
+ * any of its ids in a single `in()`. Chained rather than parallel because the
+ * second read's filter is built from the first's rows — the ids come out of
+ * `rosterMatchOwnerIds`, which is `rosterIdIndex`'s key set, so the rows fetched
+ * and the rows attributed cannot be about different sets.
+ *
+ * **No `program_id` filter on the matches read, deliberately.** The older half
+ * of a claimed player's history was recorded under their auth uid, before this
+ * program had a roster row for them and often before it had a program id on the
+ * match at all; filtering by `matches.program_id` would drop exactly the rows
+ * the two-id-space fold exists to find. `player1_id` is the attribution, and it
+ * is specific enough: these ids belong to this program's players.
+ */
+async function readRoster(
+  admin: SupabaseClient,
+  programId: string,
+): Promise<AdminTeamRosterPlayer[]> {
+  const { data, error } = await admin
+    .from("program_players")
+    .select(ROSTER_SELECT)
+    .eq("program_id", programId)
+    .is("archived_at", null)
+    .is("merged_into_id", null);
+
+  if (error) {
+    console.error("[admin team] could not read roster players", {
+      programId,
+      error: error.message,
+    });
+    return [];
+  }
+
+  const players = (data ?? []) as unknown as AdminRosterPlayerRow[];
+  if (players.length === 0) return [];
+
+  // Never an empty list here — every player contributes its own id — but the
+  // guard above is what makes that true, and PostgREST refuses `in.()`.
+  const ownerIds = rosterMatchOwnerIds(players);
+  const { data: matchRows, error: matchError } = await admin
+    .from("matches")
+    .select("id, player1_id, player2_name, result, date")
+    .in("player1_id", ownerIds);
+
+  if (matchError) {
+    console.error("[admin team] could not read roster matches", {
+      programId,
+      error: matchError.message,
+    });
+    // Still return the roster: a page listing the squad with zeroed counts is
+    // usable, and hiding the squad because a second read failed is not.
+    return rosterWithMatchCounts(players, []);
+  }
+
+  return rosterWithMatchCounts(
+    players,
+    (matchRows ?? []) as unknown as AdminRosterMatchRow[],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Schedule — `readScheduleWithClient`, under the service role
+// ---------------------------------------------------------------------------
+
+/**
+ * How one event turned out — the one thing `ScheduleRow` does not carry.
+ *
+ * Derived from `dualScore`, the same function the schedule page and
+ * `seasonSummaryFrom` use, rather than from the row's `teamScore`: that field is
+ * null both for an undecided dual and for a tournament, and this has to tell
+ * those apart.
+ */
+function eventResult(
+  kind: EventKind,
+  entries: Parameters<typeof dualScore>[0],
+  playedCount: number,
+): AdminTeamEventResult {
+  if (entries.length === 0 || playedCount === 0) return "scheduled";
+
+  if (kind === "dual") {
+    const score = dualScore(entries);
+    if (!score.decided) return "playing";
+    if (score.us > score.them) return "won";
+    if (score.them > score.us) return "lost";
+    return "level";
+  }
+
+  return playedCount < entries.length ? "playing" : "played";
+}
+
+/**
+ * Every event on the program, newest first, with its result state.
+ *
+ * `readScheduleWithClient` is called with the ADMIN client for the same reason
+ * every other read in this file is: its cached cousins (`getProgramSchedule`,
+ * `getEventDetail`) build their own cookie-bound client, and `program_events`,
+ * `program_event_entries` and `matches` are all RLS-scoped to program
+ * membership — an admin looking at a program they do not belong to would get an
+ * empty schedule with no error. That is the failure mode the module comment at
+ * the top of this file exists to prevent, and it is also why `dualScore`'s own
+ * warning about narrowed reads is satisfied here: the service role sees every
+ * line, so the score it computes is the whole score.
+ *
+ * `readScheduleWithClient` throws on a failed read rather than degrading, so
+ * this wraps it: a broken schedule should cost the Schedule card, not the page.
+ */
+async function readSchedule(
+  admin: SupabaseClient,
+  programId: string,
+): Promise<AdminTeamEvent[]> {
+  try {
+    const schedule = await readScheduleWithClient(admin, programId);
+    // The row projection the program's own schedule page reads, so the two
+    // cannot print different scores for one dual.
+    const rows = scheduleRowsFrom(schedule);
+
+    return rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      startsOn: row.startsOn,
+      endsOn: row.endsOn,
+      site: row.site,
+      entryCount: row.entryCount,
+      playedCount: row.playedCount,
+      teamScore: row.teamScore,
+      result: eventResult(
+        row.kind,
+        schedule.entriesByEvent.get(row.id) ?? [],
+        row.playedCount,
+      ),
+    }));
+  } catch (error) {
+    console.error("[admin team] could not read schedule", {
+      programId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
 // The loader
 // ---------------------------------------------------------------------------
 
@@ -944,6 +1169,8 @@ export const getAdminTeam = cache(
       crest,
       claimResult,
       members,
+      roster,
+      schedule,
       invitesResult,
       requestsResult,
       seats,
@@ -964,6 +1191,8 @@ export const getAdminTeam = cache(
         .limit(1)
         .maybeSingle(),
       readMembers(admin, programId),
+      readRoster(admin, programId),
+      readSchedule(admin, programId),
       // No expiry filter, matching `getTeamSettings`. See `readSeatUsage`.
       admin
         .from("program_invites")
@@ -1063,6 +1292,8 @@ export const getAdminTeam = cache(
           }
         : null,
       members,
+      roster,
+      schedule,
       invites: (
         (invitesResult.data ?? []) as {
           id: string;

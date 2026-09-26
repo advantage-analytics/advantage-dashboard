@@ -214,3 +214,60 @@ attribution helper is the first thing in this file that will earn a spec.
 4. Still nothing server-side stops at pilot end (T1 follow-up 2, now one line away):
    with `pilot_ends_on` and `pilot_ended_at` on the row, the gate in `reserveQuota()` /
    `explainVideoRefusal()` is cheap. Until it exists, "End pilot" ends only a label.
+
+## T5 · Extend getAdminTeam: roster with match counts, schedule — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all four criteria
+met — but the reviewer attached a real finding that the criteria do not cover. See the
+warning below; it must be settled before T13 ships.
+
+**changed:** `AdminTeamData` gains `roster: AdminTeamRosterPlayer[]` and
+`schedule: AdminTeamEvent[]`. New pure module `src/lib/data/admin-team-roster.ts` — zero
+imports, so the spec needs no database and the client-bundle boundary stays clean —
+exporting `rosterWithMatchCounts`, `rosterIdIndex` and `rosterMatchOwnerIds`.
+`readRoster` reads `program_players` filtered `archived_at is null and merged_into_id is
+null`, ordered by lineup spot with nulls last (name as tiebreak). `readSchedule` calls
+`readScheduleWithClient(admin, programId)`; `ProgramSchedule` already supplied date,
+opponent, site, kind and score, so only the result state was derived (`eventResult`,
+reusing `dualScore` — the same function the program's own schedule page uses, so the
+console cannot print a different score for a dual). New spec
+`tests/admin-team-roster.spec.ts`, 12 tests, deliberately NOT registered in
+`live-db-specs.ts` because it touches no database. Both readers joined the loader's
+existing fan-out (10 → 12 entries); no second await round.
+
+`my_player_ids()` and `program_roster_full` are unusable here: both gate on
+`user_program_ids()` / `auth.uid()`, which is null under the service role, so they would
+answer with an empty roster and no error. The same two-id-space rule is therefore computed
+locally from data the page already holds.
+
+**⚠ CROSS-PROGRAM MATCH LEAK — decide before T13.** The matches read
+(`admin-team-server.ts:1027-1030`) has **no `program_id` filter and no row limit**. For a
+_claimed_ player, `ownerIds` contains their auth uid, and that uid is the same
+`player1_id` value on every match they own — so their personal matches, and matches from
+any other program they belong to, are folded into THIS program's roster row. That inflates
+`matchCount` and can surface an unrelated opponent as `lastMatch`. It is faithful to
+criterion 2 as written ("matches whose `player1_id` equals EITHER … OR …" — no program
+scope), which is why the gate passed, and the omission was deliberate: a claimed player's
+pre-claim matches do not carry this program's id, so a naive `.eq("program_id")` would drop
+exactly the rows the two-id-space fold exists to find. Both are true, which is the point —
+the criterion under-specified the case. T13 consumes `matchCount` and `lastMatch` directly,
+so whichever way this is resolved must land before that card renders. Options: scope to
+`program_id = this program OR program_id is null`, scope to this program only and accept
+losing pre-claim history, or keep the current behaviour and relabel the column so it does
+not read as a team statistic.
+
+**follow-ups:**
+
+1. The leak above. Not a follow-up so much as a decision owed before T13.
+2. The matches read has no upper bound — a long-history program pulls every row to count
+   them. A grouped `SECURITY DEFINER` RPC with no membership gate would be the real fix,
+   which is a deliberate decision rather than a refactor.
+3. `AdminTeamRosterMatch.result` is raw `matches.result`. T13's card should route it
+   through the existing `matchEndingFrom` / `endingMark` helpers the schedule surfaces
+   already use, not a new switch in the component.
+4. Only `player1_id` is counted, per the criterion. Doubles partners and matches where one
+   of ours was player two are not attributed; `sideOf()` in `roster-ids.ts` is the existing
+   rule if that is ever wanted.
+5. `matches.opponent_player_id` exists on the live table and is read nowhere in this
+   loader — a future "who did they play" column could resolve a real opponent profile
+   instead of the `player2_name` string.
