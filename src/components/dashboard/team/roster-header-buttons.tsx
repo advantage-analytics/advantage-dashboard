@@ -2,7 +2,16 @@
 
 import { useState } from "react";
 import { advButton } from "@/lib/ui/adv-button";
-import { AddPlayerDialog, type AddPlayerInitial } from "./add-player-dialog";
+import {
+  AddPlayerDialog,
+  type AddPlayerActions,
+  type AddPlayerInitial,
+} from "./add-player-dialog";
+import {
+  addProgramPlayer,
+  restoreProgramPlayer,
+} from "@/components/dashboard/team/roster-actions";
+import { inviteMember } from "@/components/dashboard/settings/team-actions";
 import { RosterInviteDialog } from "./roster-invite-dialog";
 import type { ManagedPlayer } from "./invite-target-picker";
 import { useClaimInvite } from "./roster-claim-invite";
@@ -11,6 +20,21 @@ import type {
   RosterMember,
   SeatUsage,
 } from "@/lib/data/team-roster-server";
+
+/**
+ * The coach's own three writes, which is what this dialog has always called.
+ *
+ * They became a prop when the admin console started opening the same dialog
+ * against somebody else's program (see `AddPlayerActions`); every one of them
+ * resolves the program from the caller's active workspace, which is exactly
+ * why an admin needs different ones and a coach needs these. Hoisted to module
+ * scope because it is a constant, not per-render state.
+ */
+const MEMBER_ACTIONS: AddPlayerActions = {
+  add: addProgramPlayer,
+  invite: inviteMember,
+  restore: restoreProgramPlayer,
+};
 
 /**
  * `RosterHeaderButtons` before the page has the seat count its dialogs open
@@ -176,6 +200,7 @@ export function RosterHeaderButtons({
         roster={roster}
         former={former}
         initial={addInitial}
+        actions={MEMBER_ACTIONS}
       />
     </>
   );

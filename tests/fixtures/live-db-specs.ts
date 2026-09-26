@@ -15,6 +15,9 @@
 export const LIVE_DB_SPECS = [
   "account-deletion-retention.spec.ts",
   "admin-conferences-rpcs.spec.ts",
+  "admin-member-roster-writes.spec.ts",
+  "admin-program-details-rpc.spec.ts",
+  "admin-program-pilot-rpcs.spec.ts",
   "admin-program-rpcs.spec.ts",
   "admin-routes.spec.ts",
   "admin-self-promotion.spec.ts",
