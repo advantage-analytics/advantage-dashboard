@@ -164,8 +164,12 @@ test.describe("draft workspace binding", () => {
     expect(page).toContain("draft={draft}");
     expect(page).not.toContain("draft={loadedDraft}");
     // The workspace has to be resolved for a `?draft=` visit, or the check
-    // has nothing to compare against.
-    expect(page).toContain("player || draftId ? getWorkspaceContext() : null");
+    // has nothing to compare against. It is resolved unconditionally now (the
+    // onboarding source preference reads the viewer from it), which covers a
+    // draft visit; what must not return is a condition that skips one.
+    expect(page).toMatch(
+      /Promise\.all\(\[\s*draftId \? loadMatchDraft\(draftId\) : null,\s*getWorkspaceContext\(\),/,
+    );
   });
 
   test("the team upload route refuses one too — both resume entries, one rule", () => {
