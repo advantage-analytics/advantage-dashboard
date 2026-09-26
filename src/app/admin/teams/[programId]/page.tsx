@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AdminPeopleCard } from "@/components/admin/admin-people-card";
 import { AdminRequestsCard } from "@/components/admin/admin-requests-card";
 import { AdminRosterCard } from "@/components/admin/admin-roster-card";
+import { AdminScheduleCard } from "@/components/admin/admin-schedule-card";
 import { PilotUsageCard } from "@/components/admin/pilot-usage-card";
 import { TeamSectionPills } from "@/components/admin/team-section-pills";
 import {
@@ -86,6 +87,7 @@ export default async function AdminTeamPage({
         seats={data.seats}
       />
     ),
+    schedule: <AdminScheduleCard schedule={data.schedule} />,
     pilot: <PilotUsageCard usage={data.usage} />,
   };
 

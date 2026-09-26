@@ -215,7 +215,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T14 · Schedule & results card
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5, T8
 - **files:** (guess) new `src/components/admin/admin-schedule-card.tsx` + `admin-schedule-table-layout.ts`, `src/app/admin/teams/[programId]/page.tsx`

@@ -702,3 +702,59 @@ canvas's centred `—`, and a bare opponent name matching the dashboard's cell.
    say so in the column — but not both in different places.
 4. No roster drawer: rows are inert by design. If an admin ever needs a per-player view
    here, the hover wash and the peek drawer arrive together.
+
+## T14 · Schedule & results card — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all four criteria met.
+(The reviewer's report quoted the card as wired through `column(TEAM_RAIL_SECTIONS)`,
+which would have crushed a five-column table into the 380px rail. Checked directly: it
+conflated the card lookup at `page.tsx:90` with the column call at `:108`. `schedule` is
+in `TEAM_MAIN_SECTIONS`; the layout is correct.)
+
+**changed:** New `admin-schedule-card.tsx` + `admin-schedule-table-layout.ts` fill the
+`#schedule` section — `Date · Event · Type · Score · Result`, header rendered from the
+constants array so labels cannot drift from the grid tracks. Empty schedule keeps the
+column labels and adds one honest line, with no action beside it, because the console
+cannot add an event to another program's season.
+
+**The criterion named three renderings; the loader emits six states.** That gap was the
+real substance of the task, and each was given an honest rendering rather than collapsed:
+
+- `level` keeps its score — a tied dual **is** decided, so `Awaiting results` would throw
+  a real result away.
+- `played` gets its own mark, "No team result — a tournament has no team score". Calling
+  it awaiting would send an admin hunting a number that cannot exist.
+- `playing` reads `In progress` with `—`, and deliberately invents **no** running score:
+  the loader withholds `teamScore` until every line is in, and this card is not given the
+  entries to compute one. A number here would disagree with the program's own schedule
+  page for the same event.
+- `scheduled` splits on the date — and on **`endsOn`, not `startsOn`**, so a multi-day
+  tournament is not told its results are late on its second morning. That one would have
+  been wrong by default.
+
+`neutral` reads `vs`, since `at` would claim the program travelled to the opponent's
+courts; a tournament prints its name bare with a tournament glyph, because
+`AdminTeamEvent.name` is the tournament's own name and "vs Ivy Invitational" would read
+as a team.
+
+**No second sort was added.** `readScheduleWithClient` already orders `starts_on`
+descending (`schedule-server.ts:189`), verified directly. Adding one here would be a
+second ordering to keep in step with the program's own schedule page reading the same
+functions.
+
+Declared deviations, noted in-file: the canvas's "Enter results for this team" header link
+is absent (T22 owns it once `adminUploadHref` exists); no row hover wash, since the card
+is read-only and Data Table law 5 ties the wash to a row action; and undecided words render
+at 11px `ink-500` where the canvas draws 12px `ink-600` — the design-system law taken over
+the canvas, with geometry left to the canvas.
+
+**follow-ups:**
+
+1. **A running dual score exists but is not plumbed.** `AdminTeamEvent` carries
+   `playedCount`/`entryCount` but not the entries, so a `playing` row shows `—` where the
+   program's own Schedule page shows a live score. Matching it is a loader change
+   (carry `dualScore(entries)` through as `runningScore`), not a card one.
+2. T22 should add the canvas's header link into `SettingsCardTitle`'s trailing slot, which
+   currently holds only the meta line.
+3. `entryCount`/`playedCount` are unused by this card — the data is already on the prop if
+   a later round wants the Schedule page's `Lines n / 9` column back.
