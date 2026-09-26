@@ -269,7 +269,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T18 · Details rail card
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T4, T10
 - **files:** (guess) new `src/components/admin/admin-details-card.tsx`, `src/app/admin/teams/[programId]/page.tsx`

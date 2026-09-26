@@ -838,3 +838,16 @@ thing an admin meets.
 1. Have `conferenceOptionsFor` return ids (or add a move-by-label action) to drop the extra lookup round trip.
 2. The menu loses the checkmark on the current conference because the trigger reads "Change" — a trigger-label option on `MenuSelect` would restore it.
 3. No action exists to remove a team from its conference (set to none).
+
+## T18 · Details rail card — blocked
+
+**gate:** mechanical GATE PASS · completion VERDICT: needs-work
+
+**reason:** Staff page link safety. `hostnameOf()` in the new `admin-details-card.tsx` accepts any `<scheme>://` value, so an admin-entered `staff_page_url` of `javascript://alert(1)` renders as `<a href="javascript://alert(1)">` — a clickable script link — instead of plain text. The T10 dialog does no URL validation, so the value is reachable. Fix: only link when the scheme is `http:`/`https:`, plain text otherwise, plus a spec case. All other criteria met (row order matches the canvas; policy rows via `uploadPolicyLabel()`; local IANA→label map accepted since the dialog's Time zone is free text; `—` for null key/URL; `Edit` opens `AdminTeamDetailsDialog`).
+
+**stash:** 7643fbfd6472a09791375da25c4f5c391d4124ad (`admin-details-card.tsx`, `tests/admin-details-card.spec.ts`, `page.tsx` wire-up)
+
+**follow-ups:**
+
+1. `team-page-header.tsx:40` says Home venue is omitted from the header because "the Details card below already prints" it — it does not (not in T18's rows). Either add a Home venue row or fix the comment (standing decision 6).
+2. The offline vm harness has no `URL` global, which is why the card used a regex — worth adding `URL` to `tests/fixtures/vm-modules.ts`.
