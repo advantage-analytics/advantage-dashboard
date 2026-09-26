@@ -66,11 +66,18 @@ export function PilotTermsForm({
     if (!confirmed) return;
     setProblem(null);
     startTransition(async () => {
-      // Success redirects on the server; a returned value is a refusal.
+      // The custom flow's success redirects on the server. The college one
+      // returns where to go: `/claim/verify` is a Route Handler, and only a
+      // full navigation lets its own redirect reach the address bar (see
+      // `acceptPilotTermsForClaim`). Anything else returned is a refusal.
       const result =
         flow === "college"
           ? await acceptPilotTermsForClaim({ version, token })
           : await acceptPilotTermsAndCreateTeam({ version });
+      if (result?.ok && "next" in result && result.next) {
+        window.location.assign(result.next);
+        return;
+      }
       if (!result || result.ok) return;
 
       if (

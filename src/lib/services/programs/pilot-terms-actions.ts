@@ -21,7 +21,15 @@ import { PILOT_TERMS_VERSION } from "./pilot-terms";
  */
 
 export type AcceptPilotTermsResult =
-  | { ok: true }
+  | {
+      ok: true;
+      /**
+       * Where the browser goes next, when the caller must navigate itself.
+       * Set by `acceptPilotTermsForClaim` only; see there for why it is not a
+       * server-side `redirect()`.
+       */
+      next?: string;
+    }
   | {
       ok: false;
       /**
@@ -106,6 +114,16 @@ export async function recordPilotTermsAcceptance(
  * into a query string on a fixed path, never used to build a URL of its own,
  * so a crafted value can at worst finish no claim (`completeClaimWithToken`
  * checks it by hash against the session that started the claim).
+ *
+ * Returns the verify URL rather than calling `redirect()`. `/claim/verify` is a
+ * Route Handler that itself redirects (to `/claim/review` or `/claim/ready`),
+ * and a server action's redirect is followed as a client-side navigation: the
+ * router fetched the handler, followed its redirect inside that fetch, and
+ * rendered the review screen while the address bar still read
+ * `/claim/verify?token=…`. A refresh there re-ran verify with a spent token.
+ * The form does a full `window.location` navigation to this URL instead, so
+ * the handler runs as an ordinary page load and its redirect lands in the
+ * address bar.
  */
 export async function acceptPilotTermsForClaim(input: {
   version: string;
@@ -115,7 +133,10 @@ export async function acceptPilotTermsForClaim(input: {
   if (!result.ok) return result;
 
   const token = typeof input?.token === "string" ? input.token : "";
-  redirect(
-    token ? `/claim/verify?${new URLSearchParams({ token })}` : "/claim/verify",
-  );
+  return {
+    ok: true,
+    next: token
+      ? `/claim/verify?${new URLSearchParams({ token })}`
+      : "/claim/verify",
+  };
 }
