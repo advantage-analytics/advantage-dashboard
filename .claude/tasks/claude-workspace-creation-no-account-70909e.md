@@ -99,7 +99,7 @@ ready).
 
 ## T7 · Widen `users_acquisition_source_values` (reddit, linkedin) and tighten `users_acquisition_source_detail_only_other`, with a live-spec null-source case
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<timestamp>_acquisition_source_reddit_linkedin_null_detail.sql (new), tests/onboarding-intake-live.spec.ts (guess)
 - **done when:**

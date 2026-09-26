@@ -31,7 +31,9 @@ import {
  *     from the SQL would make the onboarding step fail for real users on
  *     exactly the answer nobody tested.
  *  2. An unknown `recording_source`, and a free-text detail beside any source
- *     but `other`, are refused with `23514`.
+ *     but `other` — including no source at all, which the original
+ *     `acquisition_source = 'other'` let through because a NULL comparison
+ *     passes a CHECK — are refused with `23514`.
  *  3. The own-row `users` policy means another user's row is silently
  *     untouched (0 rows, no error) — never written.
  *  4. `set_program_intake` is owner-only (`42501` for a coach and for a
@@ -205,6 +207,18 @@ test.describe("Onboarding intake — constraints and set_program_intake (live)",
       expect(error, value).not.toBeNull();
       expect(error!.code, value).toBe(CHECK_VIOLATION);
     }
+  });
+
+  test("a detail with no acquisition_source is refused with 23514", async () => {
+    // `acquisition_source = 'other'` is NULL — and so passes — when the source
+    // is NULL; `is not distinct from` (T7) makes it false instead.
+    const { data, error } = await updateOwnRow(owner, {
+      acquisition_source: null,
+      acquisition_source_detail: "no source given",
+    });
+    expect(data).toBeNull();
+    expect(error).not.toBeNull();
+    expect(error!.code).toBe(CHECK_VIOLATION);
   });
 
   // ── users: own-row RLS ────────────────────────────────────────────────────
