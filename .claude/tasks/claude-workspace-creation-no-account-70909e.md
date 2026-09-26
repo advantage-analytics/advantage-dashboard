@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Build the coach intake screen at `/claim/team/about`
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T2
 - **files:** src/app/claim/team/about/page.tsx (new), src/app/claim/team/about/actions.ts (new), src/components/claim/program-intake-form.tsx (new), src/app/claim/team/actions.ts, src/app/claim/ready/page.tsx, MAP.md (guess)

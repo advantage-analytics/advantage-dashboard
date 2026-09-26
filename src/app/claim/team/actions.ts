@@ -31,7 +31,9 @@ import {
  * see the note in `team-setup-form.tsx`.
  *
  * On success `createCustomProgram` has already set the cookie, so navigation
- * into the new workspace is a plain redirect; the `{ ok: false }` reasons
+ * is a plain redirect — to the coach intake (5.2, `/claim/team/about`), which
+ * reads that cookie to know which program it is asking about and hands off to
+ * the team dashboard itself; the `{ ok: false }` reasons
  * (including `limit-reached`) flow back to the form untouched.
  */
 export async function createCustomTeam(input: {
@@ -78,6 +80,6 @@ export async function createCustomTeam(input: {
   if (!result.ok) return result;
 
   // The cookie and layout revalidation happened inside createCustomProgram, so
-  // the next render opens inside the new team workspace.
-  redirect("/dashboard/team");
+  // the intake screen resolves the new program and its exit opens inside it.
+  redirect("/claim/team/about");
 }
