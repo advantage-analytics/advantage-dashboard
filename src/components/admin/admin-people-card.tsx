@@ -77,8 +77,14 @@ const INVITE_ROLES = [
   { value: "coach" as const, label: "Coach" },
 ];
 
-/** A quiet blue word — the card's own text actions, at row scale. */
-const TEXT_ACTION =
+/**
+ * A quiet blue word — the card's own text actions, at row scale.
+ *
+ * Exported so every card on this page spells its header action the same way;
+ * the Roster card's "Add player" is the same affordance in the same slot, and
+ * the canvas' `.cact` is one rule, not one per card.
+ */
+export const TEXT_ACTION =
   "shrink-0 cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:outline-none disabled:opacity-50";
 
 /**

@@ -26,7 +26,12 @@
  * A roster row whose matches were only ever counted under its profile id looks
  * fine until the athlete claims it, at which point half their season silently
  * disappears from the console. That is the bug this module exists to not have.
+ *
+ * `match-utils` is the one import, and it is pure too (`lib/ui/score-format`
+ * and nothing else) — so the no-client, no-`next/*` rule above still holds.
  */
+
+import { matchOutcome, type MatchScore } from "@/lib/data/match-utils";
 
 /** A live `program_players` row, reduced to what the roster projection reads. */
 export interface AdminRosterPlayerRow {
@@ -36,6 +41,16 @@ export interface AdminRosterPlayerRow {
   last_name: string;
   class_year: string | null;
   lineup_spot: number | null;
+  /**
+   * `program_players.email` — the address on the profile, not on an account.
+   *
+   * Nothing in the roster table prints it. It is carried because the Add
+   * player dialog's duplicate note prints it: "Ana Ruiz is already on this
+   * roster — ana@…", and the one field that tells two same-named athletes
+   * apart cannot be supplied as `null` without the note asserting there is no
+   * address on file when there is.
+   */
+  email: string | null;
   /** The auth uid bound to this profile, or null for an unclaimed row. */
   claimed_by_user_id: string | null;
 }
@@ -52,8 +67,17 @@ export interface AdminRosterMatchRow {
   player1_id: string | null;
   /** `matches.player2_name` — who they played, as the row itself spells it. */
   player2_name: string | null;
-  /** `matches.result` verbatim: `won` | `lost` | `retired` | … or null. */
+  /**
+   * `matches.result` verbatim — and verbatim is the warning. The column is
+   * free text with three eras in it live today: a sentence naming the winner
+   * ("Scott Watson Wins"), a lowercase word ("win"), the score flow's context
+   * string ("Final Score", "Retired", "Unfinished"), and the empty string.
+   * Nothing reduces it to won/lost, which is why `won` below is read off the
+   * score instead.
+   */
   result: string | null;
+  /** `matches.score` — the jsonb the outcome is actually derived from. */
+  score: MatchScore | null;
   date: string | null;
 }
 
@@ -62,6 +86,20 @@ export interface AdminTeamRosterMatch {
   id: string;
   /** `matches.result` unchanged — labelling belongs to the card, not here. */
   result: string | null;
+  /**
+   * Won, lost, or `null` for a match whose score cannot say.
+   *
+   * `matchOutcome` is the product's one authority on this and it reads the
+   * SCORE, never `matches.result` — see `AdminRosterMatchRow.result` for the
+   * three incompatible spellings that column holds. `isUserPlayer1` is `true`
+   * by construction: every match here was found through `matches.player1_id`,
+   * so the roster row IS player one.
+   *
+   * Null is "unscored", never "not decided yet": the card draws the roster
+   * table's own score-unrecorded mark for it rather than a `ResultMark`, which
+   * would claim an outcome nobody recorded.
+   */
+  won: boolean | null;
   /** The opponent's label, or null when the row never carried one. */
   opponent: string | null;
   /** `matches.date`, raw ISO. Formatting is the component's business. */
@@ -77,6 +115,11 @@ export interface AdminTeamRosterPlayer {
   /** Their line in the lineup, or null where the program never set one. */
   lineupSpot: number | null;
   classYear: string | null;
+  /**
+   * `program_players.email`, passed straight through. The table does not print
+   * it; the Add player dialog's duplicate note does.
+   */
+  email: string | null;
   /** Whether a login is bound to this profile. */
   hasAccount: boolean;
   /** That login's id, or null — what the older half of their matches carry. */
@@ -187,6 +230,7 @@ export function rosterWithMatchCounts(
         name: displayName(player.first_name, player.last_name),
         lineupSpot: player.lineup_spot,
         classYear: player.class_year,
+        email: player.email,
         hasAccount: player.claimed_by_user_id !== null,
         claimedUserId: player.claimed_by_user_id,
         matchCount: counts.get(player.id) ?? 0,
@@ -194,6 +238,9 @@ export function rosterWithMatchCounts(
           ? {
               id: last.id,
               result: last.result,
+              // True by construction: `last` was found through
+              // `matches.player1_id`. See `AdminTeamRosterMatch.won`.
+              won: matchOutcome(last.score, true),
               opponent: last.player2_name,
               date: last.date,
             }

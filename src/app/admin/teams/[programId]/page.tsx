@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { AdminPeopleCard } from "@/components/admin/admin-people-card";
 import { AdminRequestsCard } from "@/components/admin/admin-requests-card";
+import { AdminRosterCard } from "@/components/admin/admin-roster-card";
 import { PilotUsageCard } from "@/components/admin/pilot-usage-card";
 import { TeamSectionPills } from "@/components/admin/team-section-pills";
 import {
@@ -77,6 +78,13 @@ export default async function AdminTeamPage({
     ),
     requests: (
       <AdminRequestsCard joinRequests={data.joinRequests} claim={data.claim} />
+    ),
+    roster: (
+      <AdminRosterCard
+        programId={programId}
+        roster={data.roster}
+        seats={data.seats}
+      />
     ),
     pilot: <PilotUsageCard usage={data.usage} />,
   };

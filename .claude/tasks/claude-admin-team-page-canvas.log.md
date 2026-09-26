@@ -643,3 +643,62 @@ Role handling is honest too: `program_requests.role` is null on 7 of 10 live row
    already uses, which would let that sentence match the canvas's register.
 4. `voucherNote` and `claimantMessage` are carried on `AdminTeamClaim` and used by the
    Requests drawer but shown nowhere on this page. A vouched claim may deserve a line.
+
+## T13 · Roster card: table and Add player — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all five criteria met.
+The largest task so far — 12 files.
+
+**changed:** New `admin-roster-card.tsx` + `admin-roster-table-layout.ts` fill the `#roster`
+section: title, `<n> players · <m> have accounts`, `Add player`, and the six columns
+(`# · Player · Class · Account · Matches · Last match`) rendered **from** the constants
+array so the header order cannot drift from the grid tracks. Empty roster gets a real row
+with copy and the `Add player` affordance — no `null`, no zeroed table.
+
+**The task said "an action prop"; the dialog needed three.** It imports `addProgramPlayer`,
+`restoreProgramPlayer` and `inviteMember`, and only the first two have admin equivalents —
+there is no `adminRestoreProgramPlayer`. Rather than mount a Restore button that would
+answer with a message about the caller's workspace, `restore` is typed nullable and the
+dialog suppresses the **whole** offer (note and button) when null. The admin sees the add
+path and nothing that cannot work. Re-enabling costs one wrapper plus a prop. Dashboard
+parity verified directly: `roster-header-buttons.tsx` passes `MEMBER_ACTIONS` holding the
+same three functions the dialog previously imported, so its behaviour is unchanged.
+
+**It checked the task's own suggestion and rejected it, correctly.** The note said to route
+`lastMatch.result` through `matchEndingFrom`/`endingMark`. Live query shows
+`matches.result` currently holds **four incompatible spellings** — `"Scott Watson Wins"`
+(18 rows), `"win"`, `""`, and the score flow's `Final Score`/`Retired`/`Unfinished` — so
+neither helper can yield won/lost. The outcome now comes from the score via
+`matchOutcome()`, the same authority the dashboard's own last-match cell uses, with `score`
+added to the projection and a derived `won: boolean | null`. `won === null` draws an
+en-dash rather than claiming an outcome nobody recorded.
+
+**The open scoping decision was respected.** Match counts are displayed exactly as T5's
+loader returns them; the card's docstring points at the loader's comment instead of putting
+a second answer on the page. `matchCount === 0` renders a mark, not `0` — a coach-made
+profile has not played nothing, it has not been uploaded.
+
+**Two specs were modified, and I checked the riskier one myself** rather than trusting the
+report, since editing a test to accommodate a change is how a regression hides. In
+`add-player-restore-retry.spec.ts` the original `formerPlayerMatch(...) ?? (restoreTarget
+…)` expression is **still pinned** — only the `const restorable =` prefix moved, because
+the expression now nests under the gate — and a **second** assertion pins the new
+`actions.restore === null ? null :` gate. Additive coverage, not a loosened check.
+
+Three declared canvas deviations, each commented in source: no row hover wash (rows are
+inert, and Data Table law 5 ties the wash to row actions), `EmptyMark` rather than the
+canvas's centred `—`, and a bare opponent name matching the dashboard's cell.
+
+**follow-ups:**
+
+1. **`adminRestoreProgramPlayer` is the one thing standing between the console and a
+   complete Add player dialog.** A thin wrapper over `restore_program_player` plus an admin
+   `former`-players read would light the offer back up with no dialog change — pass a
+   function instead of `null`.
+2. **`matches.result` is four incompatible spellings in one text column.** Worth a
+   normalising migration; until then every new reader has to rediscover that the outcome
+   lives in the score. The comment on `AdminRosterMatchRow.result` is the warning sign.
+3. Match-count scoping is still undecided and now **on screen**. Either scope the loader or
+   say so in the column — but not both in different places.
+4. No roster drawer: rows are inert by design. If an admin ever needs a per-player view
+   here, the hover wash and the peek drawer arrive together.

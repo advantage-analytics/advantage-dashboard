@@ -27,6 +27,7 @@ function player(
     last_name: "Ruiz",
     class_year: "2027",
     lineup_spot: 1,
+    email: null,
     claimed_by_user_id: null,
     ...overrides,
   };
@@ -40,6 +41,7 @@ function match(
     player1_id: "profile-1",
     player2_name: "Opponent",
     result: "won",
+    score: { player1: [6, 6], player2: [4, 3] },
     date: "2026-02-01T12:00:00Z",
     ...overrides,
   };
@@ -85,6 +87,9 @@ test("counts matches keyed by profile id and by claimed auth uid together", () =
   expect(roster[0].lastMatch).toEqual({
     id: "m2",
     result: "won",
+    // Read off the score, never off `result` — the column holds three
+    // incompatible spellings live. See `AdminTeamRosterMatch.won`.
+    won: true,
     opponent: "Opponent",
     date: "2026-02-08T12:00:00Z",
   });

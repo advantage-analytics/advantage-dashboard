@@ -999,7 +999,7 @@ async function readActivity(
 // ---------------------------------------------------------------------------
 
 const ROSTER_SELECT =
-  "id, first_name, last_name, class_year, lineup_spot, claimed_by_user_id";
+  "id, first_name, last_name, class_year, lineup_spot, email, claimed_by_user_id";
 
 /**
  * The program's live players, each with a match count and a last match.
@@ -1052,7 +1052,7 @@ async function readRoster(
   const ownerIds = rosterMatchOwnerIds(players);
   const { data: matchRows, error: matchError } = await admin
     .from("matches")
-    .select("id, player1_id, player2_name, result, date")
+    .select("id, player1_id, player2_name, result, score, date")
     .in("player1_id", ownerIds);
 
   if (matchError) {

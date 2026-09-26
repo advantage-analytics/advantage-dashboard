@@ -201,7 +201,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T13 · Roster card: table and Add player
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5, T7, T8
 - **files:** (guess) new `src/components/admin/admin-roster-card.tsx` + `admin-roster-table-layout.ts`, `src/components/dashboard/team/add-player-dialog.tsx`, `src/app/admin/teams/[programId]/page.tsx`

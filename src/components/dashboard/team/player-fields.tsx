@@ -190,6 +190,16 @@ export function nameList(names: string[]): string {
 }
 
 /**
+ * The three fields `spotHolders` reads, so a caller whose roster is not a
+ * `team-roster-server` projection can answer it without inventing the rest of
+ * `RosterMember`. `RosterMember` still satisfies it unchanged.
+ */
+export type SpotHolderRow = Pick<
+  RosterMember,
+  "profileId" | "name" | "lineupSpot"
+>;
+
+/**
  * Who else is on this line, for the note that says a shared spot is allowed.
  *
  * `exclude` is the profile the form is about — the row being edited, or the row
@@ -202,7 +212,7 @@ export function nameList(names: string[]): string {
  * covers the whole roster.
  */
 export function spotHolders(
-  roster: RosterMember[],
+  roster: readonly SpotHolderRow[],
   spot: string,
   exclude: string | null,
 ): string[] {
