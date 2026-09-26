@@ -33,7 +33,7 @@ ready).
 
 ## T2 · Create the shared onboarding answer vocabulary with an offline spec
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/app/onboarding/answers.ts (new), tests/onboarding-answers.spec.ts (new) (guess)
 - **done when:**
