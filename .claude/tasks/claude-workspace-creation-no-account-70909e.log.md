@@ -52,3 +52,9 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical GATE PASS · completion VERDICT: pass
 **changed:** `role-choice.tsx` coach card sub → "A roster of players, one shared allowance."; `onboarding-flow.tsx` step-6 button label → `college === "yes" ? "Find my program" : "Go to my dashboard"` with a comment pointing at `RESOLUTION`'s `/claim/program?intent=join` destination. Button props and Skip untouched.
+
+## T10 · Add a browser spec that walks the player onboarding flow end to end against a local dev server — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `tests/onboarding-flow-browser.spec.ts` (live-db, serial, one `createLogin` user, one browser sign-in through `/login`): test 1 walks 1.2 → I play → No → SwingVision → Somewhere else + "Reddit thread" → "Go to my dashboard" and reads the `users` row back via the admin client; test 2 resets the row and walks the same path with Skip on both intake steps. `afterAll` always deletes the user. Registered in `LIVE_DB_SPECS`; `--list` shows 2 tests; target-guard 16/16. Env-driven base URL (`ONBOARDING_BROWSER_BASE_URL`), no config change, no port hardcoded. Not yet run by hand.
+**follow-ups:** 1. Run once by hand against the dev server: `ONBOARDING_BROWSER_BASE_URL=http://localhost:3002 npx playwright test --project=live-db tests/onboarding-flow-browser.spec.ts` (skips against prod unless opted in — deliberate). 2. Same for `tests/onboarding-intake-live.spec.ts` (9 tests) before the PR.

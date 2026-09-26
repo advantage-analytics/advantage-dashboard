@@ -137,7 +137,7 @@ ready).
 
 ## T10 · Add a browser spec that walks the player onboarding flow end to end against a local dev server
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** tests/onboarding-flow-browser.spec.ts (new), tests/fixtures/live-db-specs.ts (guess)
 - **done when:**
