@@ -22,6 +22,7 @@ import {
   type ZoneKey,
   type ZoneStats,
 } from "@/lib/data/serve-zones";
+import { fetchAllPages } from "@/lib/data/paged-query";
 import {
   dualRecordFrom,
   lineHistoryFrom,
@@ -179,6 +180,7 @@ interface DbInsights {
 
 /** A serve row and the point it belongs to, as the map needs them. */
 interface DbServeShotRow {
+  id: string;
   shot_number: number | null;
   shot_type: string | null;
   landing_x: number | null;
@@ -247,8 +249,15 @@ function chipsFrom(stats: ProfileStatRow | null): ProfileChip[] {
  * the viewer is always player one of their own uploads; here the player may
  * be either side, and reading the wrong one would plot their opponents'
  * serves under their name.
+ *
+ * Paged through the fail-closed `fetchAllPages` (T2) — a season's serve rows
+ * across ten matches sit well past PostgREST's 1000-row cap, so a single
+ * request would silently plot a partial map while still reporting
+ * `matchCount` as if every match's serves had been read. The order is total
+ * (`point_id`, `shot_number`, `id`) so pages never overlap or skip; mirrors
+ * `loadHomeServes` in `home-serve-data.ts`.
  */
-async function serveMapFor(
+export async function serveMapFor(
   supabase: Awaited<ReturnType<typeof createClient>>,
   /** This player's matches, newest first, and which side of each they were. */
   sides: readonly { id: string; isPlayer1: boolean }[],
@@ -258,17 +267,31 @@ async function serveMapFor(
 
   const sideByMatch = new Map(recent.map((r) => [r.id, r.isPlayer1]));
 
-  const { data } = await supabase
-    .from("shots")
-    .select(
-      "shot_number, shot_type, landing_x, landing_y, contact_y, result, spin_type, zone, point_id, points!inner(id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1)",
-    )
-    .in("points.match_id", [...sideByMatch.keys()])
-    .in("shot_type", ["First Serve", "Second Serve"])
-    .order("shot_number", { ascending: true });
+  let shotsError: string | null = null;
+  const shots = await fetchAllPages<DbServeShotRow>(async (from, to) => {
+    const { data, error } = await supabase
+      .from("shots")
+      .select(
+        "id, shot_number, shot_type, landing_x, landing_y, contact_y, result, spin_type, zone, point_id, points!inner(id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1)",
+      )
+      .in("points.match_id", [...sideByMatch.keys()])
+      .in("shot_type", ["First Serve", "Second Serve"])
+      .order("point_id", { ascending: true })
+      .order("shot_number", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to);
+    // The helper stops at the first error, so this is set exactly once.
+    if (error) shotsError = error.message;
+    return { data: data as unknown as DbServeShotRow[] | null, error };
+  });
+
+  if (!shots) {
+    console.error("Failed to fetch serve map shots:", shotsError);
+    return { zoneStats: null, matchCount: 0, serves: 0 };
+  }
 
   const shotsByPoint = new Map<string, DbServeShotRow[]>();
-  for (const shot of (data ?? []) as unknown as DbServeShotRow[]) {
+  for (const shot of shots) {
     if (!shot.points) continue;
     const list = shotsByPoint.get(shot.point_id);
     if (list) list.push(shot);

@@ -56,7 +56,7 @@ ready).
 
 ## T4 · Page the player-profile serve map read
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T2
 - **files:** src/lib/data/player-profile-server.ts, tests/player-profile-serve-map.spec.ts (new) — guess
