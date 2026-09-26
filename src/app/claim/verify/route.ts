@@ -95,21 +95,28 @@ export async function GET(request: Request) {
     team: result.team,
     email: result.email,
   });
+  // The review screen's button switches into this program by id. Not trusted:
+  // `setActiveWorkspace` only accepts an id the session is a member of.
+  if (result.programId) params.set("program", result.programId);
 
-  if (result.autoApproved) {
-    // Open the dashboard already in the program rather than in Personal. Safe
-    // to write directly: `completeClaim` just created the membership this id
-    // refers to, and `getWorkspaceContext` validates the cookie against
-    // membership on every read regardless of who set it.
+  // Open the dashboard already in the program rather than in Personal, on BOTH
+  // endings. A claim under review is still a live workspace (the owner
+  // membership exists; only sending video waits), and F5.1's one button is
+  // "Go to the program" — which is a plain `/dashboard` link, so without this
+  // it opened in whatever workspace was last active. Safe to write directly:
+  // `completeClaim` just created the membership this id refers to, and
+  // `getWorkspaceContext` validates the cookie against membership on every
+  // read regardless of who set it.
+  if (result.programId) {
     const store = await cookies();
     store.set(WORKSPACE_COOKIE, result.programId, {
       path: "/",
       maxAge: 60 * 60 * 24 * 365,
       sameSite: "lax",
     });
-
-    redirect(`/claim/ready?${params}`);
   }
+
+  if (result.autoApproved) redirect(`/claim/ready?${params}`);
 
   // F5.1. Reached only when the address is not on the recorded staff list.
   redirect(`/claim/review?${params}`);
