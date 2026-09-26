@@ -125,7 +125,7 @@ ready).
 
 ## T9 · Fix the "shared budget" role-choice copy and make the 1.7 finish button honest on the college path
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/claim/role-choice.tsx, src/app/onboarding/onboarding-flow.tsx (guess)
 - **done when:**

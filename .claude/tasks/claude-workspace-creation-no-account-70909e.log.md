@@ -47,3 +47,8 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical GATE PASS · completion VERDICT: pass
 **changed:** `answers.ts` — `reddit` ("Reddit") and `linkedin` ("LinkedIn") entries after `utr`, `other` still last. `onboarding-answers.spec.ts` — exact-order assertion over the nine values and a label test for the two entries (26 tests). The 1.7 grid and the 5.2 select render from the array, so both surfaces now offer the answers; the live constraint already accepts them (T7).
+
+## T9 · Fix the "shared budget" role-choice copy and make the 1.7 finish button honest on the college path — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `role-choice.tsx` coach card sub → "A roster of players, one shared allowance."; `onboarding-flow.tsx` step-6 button label → `college === "yes" ? "Find my program" : "Go to my dashboard"` with a comment pointing at `RESOLUTION`'s `/claim/program?intent=join` destination. Button props and Skip untouched.

@@ -699,7 +699,10 @@ export function OnboardingFlow() {
                   onClick={finishFromHeardAbout}
                   className={CLAIM_BUTTON}
                 >
-                  Go to my dashboard
+                  {/* actions.ts's RESOLUTION sends the college answer to
+                      /claim/program?intent=join, not the dashboard — so this
+                      label has to branch too, or it lies on the college path. */}
+                  {college === "yes" ? "Find my program" : "Go to my dashboard"}
                 </button>
                 <button
                   type="button"
