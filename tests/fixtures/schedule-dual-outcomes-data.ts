@@ -1,0 +1,167 @@
+import type {
+  EntryMatch,
+  EventDetail,
+  EventEntry,
+  OutcomeKind,
+  OutcomeSide,
+} from "@/lib/schedule/types";
+
+function match(
+  id: string,
+  won: boolean,
+  overrides: Partial<EntryMatch> = {},
+): EntryMatch {
+  return {
+    id,
+    round: null,
+    status: "manual",
+    score: {
+      player1: won ? [6, 6] : [2, 2],
+      player2: won ? [2, 2] : [6, 6],
+    },
+    opponentLabels: [],
+    hasVideo: false,
+    ...overrides,
+  };
+}
+
+function entry(slot: string, overrides: Partial<EventEntry> = {}): EventEntry {
+  const built: EventEntry = {
+    id: `entry-${slot.toLowerCase()}`,
+    eventId: "dual-outcomes",
+    discipline: slot.startsWith("D") ? "doubles" : "singles",
+    slot,
+    position: Number(slot.slice(1)) - 1,
+    draw: null,
+    seed: null,
+    // A doubles line is a real pair, so the table's surname display
+    // ("Lee / Park") is exercised; singles keep one placeholder name.
+    playerUserIds: slot.startsWith("D")
+      ? [`player-${slot.toLowerCase()}-a`, `player-${slot.toLowerCase()}-b`]
+      : [`player-${slot.toLowerCase()}`],
+    playerLabels: slot.startsWith("D")
+      ? ["Ana Lee", "Bo Park"]
+      : [`Our ${slot}`],
+    opponentLabels: [`Opponent ${slot}`],
+    opponentSchool: "Meridian State",
+    forfeit: null,
+    matches: [],
+    outcomes: [],
+    ...overrides,
+  };
+  return {
+    ...built,
+    // A dual match is stored with its line's SLOT in `round` — what
+    // `recordResult` writes, what the upload wizard puts in its Round field,
+    // and what every dual match in the live database holds. This fixture used
+    // to default them to null, which is the OUTCOME grain, so a resolver that
+    // could never find a dual's match still passed the whole suite. Keep the
+    // real shape here: an outcome keys on null, a match keys on the slot.
+    matches: built.matches.map((item) =>
+      item.round === null ? { ...item, round: slot } : item,
+    ),
+  };
+}
+
+function outcomeEntry(
+  slot: string,
+  kind: OutcomeKind,
+  side: OutcomeSide,
+  overrides: Partial<EventEntry> = {},
+): EventEntry {
+  return entry(slot, {
+    outcomes: [
+      {
+        id: `outcome-${slot.toLowerCase()}`,
+        round: null,
+        kind,
+        side,
+        actorUserId: "coach",
+        recordedAt: "2026-09-10T00:00:00Z",
+      },
+    ],
+    ...overrides,
+  });
+}
+
+export const OUTCOME_ENTRIES: EventEntry[] = [
+  // The ready match is deliberately contradictory legacy input. The outcome
+  // must remain authoritative for rendering, coverage and team-total ids.
+  outcomeEntry("S1", "forfeit", "theirs", {
+    matches: [
+      match("ignored-ready-match", false, {
+        status: "imported",
+        hasVideo: true,
+      }),
+    ],
+  }),
+  outcomeEntry("S2", "forfeit", "ours"),
+  outcomeEntry("S3", "default", "theirs"),
+  outcomeEntry("S4", "default", "ours"),
+  outcomeEntry("S5", "withdrawal", "theirs"),
+  outcomeEntry("S6", "withdrawal", "ours"),
+  entry("D1", {
+    matches: [
+      match("ready-played-match", true, {
+        status: "imported",
+        hasVideo: true,
+      }),
+    ],
+  }),
+  entry("D2", { matches: [match("manual-win", true)] }),
+  entry("D3", { matches: [match("manual-loss", false)] }),
+];
+
+export const NORMAL_ENTRIES: EventEntry[] = [
+  entry("S1"),
+  entry("S2", {
+    matches: [
+      match("normal-ready-match", true, {
+        status: "imported",
+        hasVideo: true,
+        // T22: the match's own facts the drawer draws — `duration` arrives
+        // pre-formatted by the loader, `sourceProvider` is a `providers` id.
+        duration: "1H 42M",
+        sourceProvider: "swing-vision",
+      }),
+    ],
+  }),
+  // Scored by hand, nothing sent: the line the drawer offers "Add video" on.
+  entry("S3", { matches: [match("normal-manual-loss", false)] }),
+  // T23: a video whose analysis failed — the drawer shows the job's note in
+  // its alert and, for a coach, Retry as the footer's one primary.
+  entry("S4", {
+    matches: [
+      match("normal-failed-match", false, {
+        status: "failed",
+        hasVideo: true,
+        jobId: "job-s4",
+        failNote: "The video ended before the match did",
+      }),
+    ],
+  }),
+  // The rest of the card, unplayed — a dual saves with all nine lines.
+  entry("S5"),
+  entry("S6"),
+  entry("D1"),
+  entry("D2"),
+  entry("D3"),
+];
+
+export function detail(entries: EventEntry[]): EventDetail {
+  return {
+    event: {
+      id: "dual-outcomes",
+      programId: "program",
+      kind: "dual",
+      name: "Meridian State",
+      startsOn: "2026-09-10",
+      endsOn: "2026-09-10",
+      site: "home",
+      surface: "Hard",
+      host: null,
+      format: { bestOf: 3, adScoring: false },
+    },
+    entries,
+  };
+}

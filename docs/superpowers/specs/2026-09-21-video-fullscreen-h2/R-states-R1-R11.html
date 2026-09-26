@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="stylesheet" href="_ds/advantage-design-system-v3-abcb65f6-4e66-44bc-b9de-b3b47f4313c1/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/advantage-design-system-v3-abcb65f6-4e66-44bc-b9de-b3b47f4313c1/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/advantage-design-system-v3-abcb65f6-4e66-44bc-b9de-b3b47f4313c1/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/advantage-design-system-v3-abcb65f6-4e66-44bc-b9de-b3b47f4313c1/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/advantage-design-system-v3-abcb65f6-4e66-44bc-b9de-b3b47f4313c1/tokens/effects.css">
+  <link rel="stylesheet" href="_ds/advantage-design-system-v3-abcb65f6-4e66-44bc-b9de-b3b47f4313c1/tokens/base.css">
+  <link rel="stylesheet" href="_ds/advantage-design-system-v3-abcb65f6-4e66-44bc-b9de-b3b47f4313c1/styles.css">
+  <script src="_ds/advantage-design-system-v3-abcb65f6-4e66-44bc-b9de-b3b47f4313c1/_ds_bundle.js"></script>
+  <script src="https://unpkg.com/lucide@0.462.0/dist/umd/lucide.min.js"></script>
+  <style>
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { color: var(--blue-hover); }
+  .d-row{transition:background 200ms cubic-bezier(.25,.46,.45,.94)}
+  .d-row:hover{background:rgba(255,255,255,0.06)}
+  .d-row .d-save{position:absolute;right:14px;display:inline-flex;opacity:0;transition:opacity 200ms cubic-bezier(.25,.46,.45,.94)}
+  .d-row:hover .d-save,.d-row:focus-within .d-save{opacity:1}
+  .d-row .d-score{display:inline-block;transition:transform 200ms cubic-bezier(.25,.46,.45,.94)}
+  .d-shot{transition:background 200ms cubic-bezier(.25,.46,.45,.94)}
+  .d-shot:hover{background:rgba(255,255,255,0.05)}
+  .d-row:hover .d-score,.d-row:focus-within .d-score{transform:translateX(-26px)}
+  @media (prefers-reduced-motion: reduce){.d-row .d-score{transition:none}}
+  </style>
+</helmet>
+
+<div style="padding:48px 56px 96px;display:flex;flex-direction:column;align-items:flex-start;gap:96px;background:var(--surface-page);font-family:var(--font-sans)">
+
+<section style="display:flex;flex-direction:column;align-items:flex-start">
+  <span class="eyebrow">Handoff · Video fullscreen — phase 2 of 2</span>
+  <div class="text-display" style="margin-top:16px;max-width:900px">The room: a board, a court, a transport, and one list that comes when called.</div>
+  <div class="text-body" style="margin-top:8px;max-width:960px;text-wrap:pretty">The fullscreen half of the Video tab. It is a <b style="font-weight:500;color:var(--ink-900)">portal at document root</b>, not a route — it opens over the report from the transport's expand control or the feed's "Open fullscreen", carrying the current point and the applied cut with it. Everything on the dark scope is one of four objects: the <span class="mono" style="font-size:12px;color:var(--ink-700)">FilmBoard</span> (the rail's scoreboard, movable), the <span class="mono" style="font-size:12px;color:var(--ink-700)">FilmCourt</span> (a readout, never a control), the <span class="mono" style="font-size:12px;color:var(--ink-700)">FilmTransportBar</span>, and the points drawer — which is the phase-1 point list on a dark tone, not a second list. Source frames: <a href="13 Video tab - As built.dc.html#FS1">FS1</a>–<a href="13 Video tab - As built.dc.html#FS11">FS11</a>.</div>
+
+  <div style="display:flex;flex-direction:column;gap:12px;margin-top:38px;width:1180px">
+    <span class="eyebrow">Entry, exit, and what carries across</span>
+    <div style="border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card);background:var(--surface-card);padding:2px 24px 10px">
+      <div style="display:grid;grid-template-columns:200px 1fr 1.2fr;gap:20px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-hairline)">
+        <span class="eyebrow-sm">Door</span><span class="eyebrow-sm">Opens on</span><span class="eyebrow-sm">Carries</span>
+      </div>
+      <sc-for list="{{ doors }}" as="d" hint-placeholder-count="4">
+        <div style="display:grid;grid-template-columns:200px 1fr 1.2fr;gap:20px;align-items:center;min-height:50px;border-bottom:1px solid var(--border-hairline)">
+          <span style="font-size:12px;font-weight:500;color:var(--ink-900)">{{ d.door }}</span>
+          <span style="font-size:12px;color:var(--ink-600)">{{ d.opens }}</span>
+          <span style="font-size:12px;color:var(--ink-600)">{{ d.carries }}</span>
+        </div>
+      </sc-for>
+      <span style="display:block;padding:12px 0 4px;font-size:12px;line-height:1.6;color:var(--ink-600);max-width:96ch;text-wrap:pretty">The room has <b style="font-weight:500;color:var(--ink-900)">no URL of its own</b> beyond <span class="mono" style="font-size:11px;color:var(--ink-700)">&amp;fullscreen=1</span>, so a refresh lands back in the shell on the same point rather than inside a state nobody linked to. Precedent for the portal, the Esc handling and the scroll lock: <span class="mono" style="font-size:11px;color:var(--ink-700)">film/film-fullscreen.tsx</span>.</span>
+    </div>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;align-items:flex-start">
+  <span class="eyebrow">Phase 2 · A — The three objects</span>
+  <div class="text-display" style="margin-top:16px;max-width:900px">Built as components, specced as components.</div>
+  <div class="text-body" style="margin-top:8px;max-width:960px;text-wrap:pretty">Each is a real Design Component in this project — <span class="mono" style="font-size:12px;color:var(--ink-700)">FilmBoard.dc.html</span>, <span class="mono" style="font-size:12px;color:var(--ink-700)">FilmCourt.dc.html</span>, <span class="mono" style="font-size:12px;color:var(--ink-700)">FilmTransportBar.dc.html</span>. Their props are the prop list to build against; the notes below carry the geometry and the rules the props cannot state.</div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start;margin-top:32px;width:1180px">
+
+    <div id="C1" style="display:flex;flex-direction:column;gap:10px;width:372px">
+      <div style="display:flex;align-items:center;gap:8px"><a href="#C1" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">C1</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">FilmBoard</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">min 236</span></div>
+      <div style="display:flex;justify-content:center;padding:28px 16px;background:#141416;border-radius:var(--radius-card)">
+        <dc-import name="FilmBoard" point-name="Lee forehand error" hint-size="236px,140px"></dc-import>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:372px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Layout</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">The settled fullscreen slab, shared with the visualization viewer (<a href="F4b - Handoff - Visualizations - Phase 2.dc.html#P2b">P2b</a>): 236px fixed — the same slab width the visualization viewer uses, <span class="mono" style="font-size:10px">padding:14px 15px 12px</span>, <span class="mono" style="font-size:10px">--radius-dropdown</span>, <span class="mono" style="font-size:10px">rgba(13,13,13,.74)</span> + <span class="mono" style="font-size:10px">backdrop-filter:blur(8px)</span> — no drop shadow, the blur does the separating. Head: micro status left, mono clock right. Two score rows 11px apart: name (you 13/500 white, opponent 13/400 at 72%) · 6px blue serve dot · right-aligned mono group of two 11px set tracks (won full white, lost 42%) and a 22px game cell in full white. Hairline <span class="mono" style="font-size:10px">rgba(255,255,255,.14)</span> above the foot row, distilled to two things: a 22px pill mark for <b style="font-weight:500;color:var(--ink-900)">who won the point</b> (blue fill when it went to the player, 14% white when it went to the opponent) and the point named at 11px/55%, truncating. No point counter — the drawer already counts.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rule</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">This is <b style="font-weight:500;color:var(--ink-900)">the rail's scoreboard on the dark scope</b> — one component draws the number a player reads paused in the room and the number they read in the report. The point it names now lives <b style="font-weight:500;color:var(--ink-900)">inside</b> the slab, under the hairline, so nothing floats loose on the film. The set, the game and who serves are already in the cells and the dot, so they are never said twice.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Draggable anywhere in the frame (see <a href="#R6">R6</a>): pointer drag only, never HTML5 DnD; <span class="mono" style="font-size:10px">cursor:grab/grabbing</span>; position persists per user. Survives the chrome collapse at 82% opacity. <span class="mono" style="font-size:10px">tabindex=0</span>, arrow keys nudge 8px (⇧ 40px).</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Data</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Props as shipped: <span class="mono" style="font-size:10px">statusLabel · elapsed · youName · oppName · ys1/ys2 · os1/os2 · yGame · oGame · serving · pointWinner · winnerInitials · pointName · dim</span>. Between points <span class="mono" style="font-size:10px">pointName</span> falls back to the game state — never a placeholder sentence.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="C2" style="display:flex;flex-direction:column;gap:10px;width:372px">
+      <div style="display:flex;align-items:center;gap:8px"><a href="#C2" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">C2</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">FilmCourt</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">214 × 350</span></div>
+      <div style="display:flex;justify-content:center;gap:16px;padding:28px 16px;background:#141416;border-radius:var(--radius-card)">
+        <dc-import name="FilmCourt" mode="point" hint-size="168px,282px"></dc-import>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:372px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Layout</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">214px, 10px pad, 8px radius, <span class="mono" style="font-size:10px">rgba(13,13,13,.8)</span>. 22px header (11/500 title + two 22px glyph buttons), 178×266 court, then a legend row: two 7px key dots at 10px/60% white, mono count right. Court lines <span class="mono" style="font-size:10px">rgba(255,255,255,.24)</span>, outer <span class="mono" style="font-size:10px">.34</span>, net <span class="mono" style="font-size:10px">.6</span>, surface <span class="mono" style="font-size:10px">rgba(214,228,249,.07)</span> — full court, both halves, net across the middle.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rule</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Point mode is <b style="font-weight:500;color:var(--ink-900)">the rally as it happens</b>: a donut where the ball was struck, a filled dot where it landed, both fading at 1 → 0.5 → 0.22 and gone two shots later, so the court never accumulates into a chart. The live bounce carries an 0.85 white ring. Match mode plots bounces only, 5px, and follows the applied cut — 14 points under a cut, not 174.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">A readout, not a control: it sits in the left column under the board, is <b style="font-weight:500;color:var(--ink-900)">not draggable</b>, and the drawer never displaces it. Every mark is a seek target; hover opens the product's dark readout (<span class="mono" style="font-size:10px">chart-tooltip.tsx</span>, 168px, 12px radius). Survives the chrome collapse, losing only its two header glyphs (<span class="mono" style="font-size:10px">controls=false</span>). Off is a transport toggle, not a close button on the card.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Data</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Props: <span class="mono" style="font-size:10px">mode="point"|"match"|"none" · title · caption · activeShot · controls · readout</span>. Colors are chart-only literals: you <span class="mono" style="font-size:10px">#60A5FA</span>, opponent <span class="mono" style="font-size:10px">#94A3B8</span>, out <span class="mono" style="font-size:10px">#E5484D</span>. Coordinates are percentages of the court box, so one geometry serves every size.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="C3" style="display:flex;flex-direction:column;gap:10px;width:1180px">
+      <div style="display:flex;align-items:center;gap:8px"><a href="#C3" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">C3</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">FilmTransportBar</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">full width · 124 tall</span></div>
+      <div style="padding:28px 0 0;background:#141416;border-radius:var(--radius-card);overflow:hidden">
+        <dc-import name="FilmTransportBar" hint-size="100%,124px"></dc-import>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:1180px;padding:18px 20px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:16px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Layout</span>
+          <span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:110ch">Three stacked rows in <span class="mono" style="font-size:11px">padding:0 24px 14px</span>, 9px apart, over the frame's own bottom scrim (<span class="mono" style="font-size:11px">linear-gradient(to bottom, … rgba(13,13,13,.78) 100%)</span> — the bar draws no surface of its own). Row 1: 12/500 match title + 10px context left, mono position + two 14px point chevrons right. Row 2: the 16px seek lane. Row 3: 40px control row, 18px gaps — play · skip-back · skip-forward · mono time · flex · bookmark · dead-time · speed · loop · sound · court · exit · more.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Seek lane</span>
+          <span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:110ch">3px track, pill radius, <b style="font-weight:500;color:var(--ink-900)">segmented per set</b> with 5px gaps: played <span class="mono" style="font-size:11px">--blue</span>, unplayed <span class="mono" style="font-size:11px">rgba(255,255,255,.22)</span>, the in-progress set a gradient at the play head. 11px white knob. <span class="mono" style="font-size:11px">role="slider"</span>, keyboard-seekable; under a cut the lane still represents the whole film — the cut governs point stepping, never the timeline.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Controls</span>
+          <span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:110ch">15px Lucide at stroke 1.6, 85% white resting, white active. Every one gets an <span class="mono" style="font-size:11px">aria-label</span> and a dark tooltip naming it plus its key — no bare icon buttons. State lives in the label, not a second glyph: "Sound — on", "Loop this point — off", "Show the court — on". <b style="font-weight:500;color:var(--ink-900)">Bookmark is the one filled glyph</b> when a point is saved; the court glyph dims to 45% when the court is off. "More" is present at 45% and inert until it has a menu — it is the only disabled control allowed here.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:110ch">The whole bar is chrome: it collapses after <b style="font-weight:500;color:var(--ink-900)">3s of stillness</b> while playing and returns on any pointer move, key or focus (200ms opacity, no transform). It never collapses while paused, while a menu is open, or while focus is inside it. With the drawer open the bar's right edge stops at the drawer (<span class="mono" style="font-size:11px">right:320px</span>) rather than sliding under it. Opening state: no board, no court, position and duration read <span class="mono" style="font-size:11px">—</span>.</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;align-items:flex-start">
+  <span class="eyebrow">Phase 2 · B — Every state of the room</span>
+  <div class="text-display" style="margin-top:16px;max-width:900px">Eleven states, one composition.</div>
+  <div class="text-body" style="margin-top:8px;max-width:960px;text-wrap:pretty">Left column: board, then court beneath it. Right: the points drawer when called. Foot: the transport. Nothing else is ever on screen. Frames are at 1280 × 720; the composition is the same at any size because every slab is inset from an edge, not positioned on a grid.</div>
+
+  <div style="display:flex;flex-direction:column;gap:40px;margin-top:32px">
+
+    <div id="R1" style="display:flex;gap:24px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;width:1280px"><a href="#R1" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">R1</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">Chrome up — the resting room</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source FS1</span></div>
+        <div style="position:relative;width:1280px;height:720px;border-radius:var(--radius-card);overflow:hidden;background:#000000;box-shadow:var(--shadow-card)">
+          <img src="assets/match-video-still.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+          <span aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.42) 0%,rgba(0,0,0,0.1) 30%,rgba(0,0,0,0) 58%,rgba(13,13,13,0.78) 100%)"></span>
+          <div style="position:absolute;left:24px;top:24px"><dc-import name="FilmBoard" point-name="Lee forehand error" hint-size="236px,140px"></dc-import></div>
+          <div style="position:absolute;left:24px;top:198px"><dc-import name="FilmCourt" mode="point" hint-size="168px,282px"></dc-import></div>
+          <div role="button" tabindex="0" style="position:absolute;right:24px;top:18px;display:inline-flex;height:28px;align-items:center;gap:7px;padding:0 10px;border-radius:var(--radius-button);background:rgba(13,13,13,0.72);font:500 11px var(--font-sans);color:#FFFFFF;cursor:pointer" style-hover="background:rgba(13,13,13,0.9)"><i data-lucide="panel-right" stroke-width="1.6" style="width:13px;height:13px"></i>Points</div>
+          <div style="position:absolute;left:0;right:0;bottom:0"><dc-import name="FilmTransportBar" hint-size="100%,124px"></dc-import></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:340px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Layout</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Board inset 24/24; court at the same left, 198 from the top — 28px under the board slab. "Points" trigger inset 24/18 top-right, 28px, <span class="mono" style="font-size:10px">rgba(13,13,13,.72)</span>. Transport full width at the foot. Frame background is black, with the scrim gradient over the film.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Click the film to play/pause; double-click exits fullscreen. The board and court are not click-through — they stop the gesture. Scroll is locked while the portal is open, and focus is trapped inside it.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">No second scoreboard, no title bar, no back chevron · the "Points" trigger is labelled, not a bare glyph · the court never moves when the drawer opens.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="R2" style="display:flex;gap:24px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;width:1280px"><a href="#R2" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">R2</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">Chrome collapsed — three seconds of stillness</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source FS2</span></div>
+        <div style="position:relative;width:1280px;height:720px;border-radius:var(--radius-card);overflow:hidden;background:#000000;box-shadow:var(--shadow-card)">
+          <img src="assets/match-video-still.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+          <span aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.42) 0%,rgba(0,0,0,0.1) 30%,rgba(0,0,0,0) 62%,rgba(0,0,0,0) 100%)"></span>
+          <div style="position:absolute;left:24px;top:24px"><dc-import name="FilmBoard" point-name="Lee forehand error" dim="{{ yes }}" hint-size="236px,140px"></dc-import></div>
+          <div style="position:absolute;left:24px;top:198px"><dc-import name="FilmCourt" mode="point" controls="{{ no }}" hint-size="168px,282px"></dc-import></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:340px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rule</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Every <b style="font-weight:500;color:var(--ink-900)">operable</b> thing goes: transport, "Points" trigger, the court's two header glyphs. The board, the point it names and the court stay — they are what the screen is. The bottom scrim goes with the bar, since there is nothing left to make legible down there.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">3s idle while playing; any pointer move, key or focus restores in 200ms opacity — no transform, nothing slides. Never collapses while paused, while a menu or the drawer's menu is open, or while focus is inside the chrome. Cursor hides with the chrome and returns with it.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Nothing resizes or reflows on collapse — the court keeps its box, the board keeps its position · reduced motion keeps the fade, drops nothing else.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="R3" style="display:flex;gap:24px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;width:1280px"><a href="#R3" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">R3</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">Points drawer open — the playing point unfolds</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source FS3</span></div>
+        <div style="position:relative;width:1280px;height:720px;border-radius:var(--radius-card);overflow:hidden;background:#000000;box-shadow:var(--shadow-card)">
+          <img src="assets/match-video-still.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+          <span aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.42) 0%,rgba(0,0,0,0.1) 30%,rgba(0,0,0,0) 58%,rgba(13,13,13,0.78) 100%)"></span>
+          <div style="position:absolute;left:24px;top:24px"><dc-import name="FilmBoard" point-name="Lee forehand error" hint-size="236px,140px"></dc-import></div>
+          <div style="position:absolute;left:24px;top:198px"><dc-import name="FilmCourt" mode="point" hint-size="168px,282px"></dc-import></div>
+          <div style="position:absolute;left:0;right:320px;bottom:0"><dc-import name="FilmTransportBar" hint-size="100%,124px"></dc-import></div>
+          <aside aria-label="Point list" style="position:absolute;top:0;right:0;bottom:0;width:320px;display:flex;flex-direction:column;background:rgba(13,13,13,0.88);box-shadow:inset 1px 0 0 rgba(255,255,255,0.1),-24px 0 48px -12px rgba(0,0,0,0.45)">
+            <div style="display:flex;align-items:center;gap:8px;padding:13px 10px 10px;box-shadow:inset 0 -1px 0 rgba(255,255,255,0.08)">
+              <div role="button" tabindex="0" style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:var(--radius-element);cursor:pointer" style-hover="background:rgba(255,255,255,0.07)"><i data-lucide="sliders-horizontal" stroke-width="1.5" style="width:13px;height:13px;color:rgba(255,255,255,0.8)"></i><span style="font:500 12px var(--font-sans);color:#FFFFFF">All points</span><i data-lucide="chevron-down" stroke-width="1.5" style="width:12px;height:12px;color:rgba(255,255,255,0.45)"></i></div>
+              <div style="flex:1"></div>
+              <span class="mono tabular" style="white-space:nowrap;font-size:10px;color:rgba(255,255,255,0.45)">174 <span style="color:rgba(255,255,255,0.25)">/</span> 174</span>
+              <span role="button" tabindex="0" aria-label="Collapse point list" style="display:inline-flex;width:26px;height:26px;align-items:center;justify-content:center;border-radius:var(--radius-element);cursor:pointer" style-hover="background:rgba(255,255,255,0.08)"><i data-lucide="panel-right-close" stroke-width="1.6" style="width:14px;height:14px;color:rgba(255,255,255,0.7)"></i></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:13px 14px 5px">
+              <span class="mono" style="font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,0.45)">Set 2 · Game 7</span>
+              <div style="flex:1"></div>
+              <span class="mono tabular" style="white-space:nowrap;font-size:10px;color:rgba(255,255,255,0.4)">3-3 · Reid serves</span>
+            </div>
+            <sc-for list="{{ roomRows }}" as="r" hint-placeholder-count="5">
+              <div style="display:flex;flex-direction:column">
+                <div role="button" tabindex="0" class="d-row" style="position:relative;display:flex;min-height:52px;align-items:center;gap:12px;padding:6px 14px;cursor:pointer;background:{{ r.bg }}">
+                  <span aria-hidden="true" style="display:inline-flex;width:30px;height:30px;flex:0 0 30px;align-items:center;justify-content:center;border-radius:var(--radius-button);letter-spacing:0.3px;font:500 11px var(--font-sans);background:{{ r.markBg }};color:{{ r.markFg }}">{{ r.initials }}</span>
+                  <span style="display:flex;min-width:0;flex-direction:column;gap:2px">
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:500;color:#FFFFFF">{{ r.title }}</span>
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:rgba(255,255,255,0.45)">{{ r.detail }}</span>
+                  </span>
+                  <div style="flex:1"></div>
+                  <span class="d-score mono tabular" style="font-size:11px;color:rgba(255,255,255,0.85)">{{ r.score }}</span>
+                  <span class="d-save" role="button" aria-label="Save point" style="align-items:center;justify-content:center;padding:2px;border-radius:var(--radius-cell);cursor:pointer"><i data-lucide="bookmark" stroke-width="1.6" style="width:13px;height:13px;color:rgba(255,255,255,0.75)"></i></span>
+                  <span aria-hidden="true" style="position:absolute;left:0;bottom:0;height:2px;width:{{ r.barWidth }};background:var(--blue)"></span>
+                </div>
+                <sc-if value="{{ r.hasShots }}" hint-placeholder-val="{{ no }}">
+                  <div style="display:flex;flex-direction:column;background:rgba(0,0,0,0.28);box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),inset 0 -1px 0 rgba(255,255,255,0.06)">
+                    <sc-for list="{{ r.shots }}" as="sh" hint-placeholder-count="0">
+                      <div role="button" tabindex="0" class="d-shot" style="display:grid;grid-template-columns:12px 20px minmax(0,1fr) minmax(0,1fr) auto;column-gap:8px;align-items:center;height:34px;padding:0 14px;cursor:pointer;background:{{ sh.bg }}">
+                        <span class="mono tabular" style="font-size:10px;color:rgba(255,255,255,0.35)">{{ sh.n }}</span>
+                        <span aria-hidden="true" style="display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;border-radius:var(--radius-button);letter-spacing:0.3px;font:500 9px var(--font-sans);background:{{ sh.markBg }};color:{{ sh.markFg }}">{{ sh.initials }}</span>
+                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:500;color:{{ sh.strokeColor }}">{{ sh.stroke }}</span>
+                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:rgba(255,255,255,0.5)">{{ sh.place }}</span>
+                        <span style="text-align:right;white-space:nowrap;font-size:11px;color:{{ sh.resultColor }}">{{ sh.result }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </aside>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:340px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Layout</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">320px, full height, <span class="mono" style="font-size:10px">rgba(13,13,13,.88)</span>, left edge an inset 1px <span class="mono" style="font-size:10px">rgba(255,255,255,.1)</span> hairline plus <span class="mono" style="font-size:10px">-24px 0 48px -12px rgba(0,0,0,.45)</span>. Header 28px trigger + count + 26px collapse glyph over an inset hairline. Rows 52px, 14px side padding, 30px mark. Unfolded shots: a full-width recessed well — <span class="mono" style="font-size:10px">rgba(0,0,0,.28)</span> with 6% white inset hairlines top and bottom — holding 34px full-bleed grid rows on the row's own 14px side padding, so the shots read as sitting under the point rather than beside it.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rule</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">This is the <b style="font-weight:500;color:var(--ink-900)">phase-1 point list with <span class="mono" style="font-size:10px">tone="dark"</span></b> — same rows, same header, same menu. The playing point unfolds its shots in place: no second list, no Shots tab, no tabs of any kind. Shot rows are the phase-1 feed narrowed to stroke · placement · result.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Slides in 200ms; the transport's right edge stops at 320px rather than sliding under. The left column does not move. Row click seeks and selects; the playing row keeps the 2px blue progress rule. Only the playing point is unfolded — stepping refolds the last one. Inside the well <b style="font-weight:500;color:var(--ink-900)">exactly one shot is lit at a time</b> — the shot playing now, at <span class="mono" style="font-size:10px">rgba(255,255,255,.12)</span> with its stroke in full white; it advances with the film. Hover is a lighter 5% wash and never competes with it. Esc closes the drawer before it closes the room.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Open/closed persists per user across sessions · the drawer never opens on hover · the film keeps playing throughout.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="R4" style="display:flex;gap:24px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;width:1280px"><a href="#R4" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">R4</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">The cut menu, on the dark scope</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source FS4</span></div>
+        <div style="position:relative;width:1280px;height:720px;border-radius:var(--radius-card);overflow:hidden;background:#000000;box-shadow:var(--shadow-card)">
+          <img src="assets/match-video-still.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+          <span aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.42) 0%,rgba(0,0,0,0.1) 30%,rgba(0,0,0,0) 58%,rgba(13,13,13,0.78) 100%)"></span>
+          <div style="position:absolute;left:24px;top:24px"><dc-import name="FilmBoard" point-name="Lee forehand error" hint-size="236px,140px"></dc-import></div>
+          <div style="position:absolute;left:24px;top:198px"><dc-import name="FilmCourt" mode="point" hint-size="168px,282px"></dc-import></div>
+          <div style="position:absolute;left:0;right:320px;bottom:0"><dc-import name="FilmTransportBar" hint-size="100%,124px"></dc-import></div>
+          <aside aria-label="Point list" style="position:absolute;top:0;right:0;bottom:0;width:320px;display:flex;flex-direction:column;background:rgba(13,13,13,0.88);box-shadow:inset 1px 0 0 rgba(255,255,255,0.1),-24px 0 48px -12px rgba(0,0,0,0.45)">
+            <div style="display:flex;align-items:center;gap:8px;padding:13px 10px 10px;box-shadow:inset 0 -1px 0 rgba(255,255,255,0.08)">
+              <div role="button" tabindex="0" aria-expanded="true" style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:var(--radius-element);cursor:pointer;background:rgba(255,255,255,0.07)"><i data-lucide="sliders-horizontal" stroke-width="1.5" style="width:13px;height:13px;color:rgba(255,255,255,0.8)"></i><span style="font:500 12px var(--font-sans);color:#FFFFFF">All points</span><i data-lucide="chevron-up" stroke-width="1.5" style="width:12px;height:12px;color:rgba(255,255,255,0.45)"></i></div>
+              <div style="flex:1"></div>
+              <span class="mono tabular" style="white-space:nowrap;font-size:10px;color:rgba(255,255,255,0.45)">174 <span style="color:rgba(255,255,255,0.25)">/</span> 174</span>
+              <span role="button" tabindex="0" aria-label="Collapse point list" style="display:inline-flex;width:26px;height:26px;align-items:center;justify-content:center;border-radius:var(--radius-element);cursor:pointer"><i data-lucide="panel-right-close" stroke-width="1.6" style="width:14px;height:14px;color:rgba(255,255,255,0.7)"></i></span>
+            </div>
+            <div role="menu" style="position:absolute;top:44px;left:10px;width:268px;z-index:5;display:flex;flex-direction:column;padding:5px;border:1px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(20,20,22,0.97);box-shadow:var(--shadow-dropdown)">
+              <span style="padding:7px 9px 5px;font-size:11px;color:rgba(255,255,255,0.45)">Show points</span>
+              <sc-for list="{{ menuShow }}" as="m" hint-placeholder-count="3">
+                <div role="menuitemradio" tabindex="0" style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:6px;cursor:pointer;background:{{ m.bg }}" style-hover="background:rgba(255,255,255,0.07)">
+                  <span style="display:flex;flex-direction:column;gap:1px"><span style="font-size:12px;color:#FFFFFF">{{ m.label }}</span><span style="font-size:11px;color:rgba(255,255,255,0.45)">{{ m.sub }}</span></span>
+                  <div style="flex:1"></div>
+                  <sc-if value="{{ m.checked }}" hint-placeholder-val="{{ no }}"><i data-lucide="check" stroke-width="2" style="width:12px;height:12px;color:var(--blue)"></i></sc-if>
+                </div>
+              </sc-for>
+              <div style="height:1px;margin:5px 9px;background:rgba(255,255,255,0.1)"></div>
+              <span style="padding:7px 9px 5px;font-size:11px;color:rgba(255,255,255,0.45)">Serve</span>
+              <sc-for list="{{ menuServe }}" as="m" hint-placeholder-count="3">
+                <div role="menuitemradio" tabindex="0" style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:6px;cursor:pointer;background:{{ m.bg }}" style-hover="background:rgba(255,255,255,0.07)">
+                  <span style="font-size:12px;color:#FFFFFF">{{ m.label }}</span>
+                  <div style="flex:1"></div>
+                  <sc-if value="{{ m.checked }}" hint-placeholder-val="{{ no }}"><i data-lucide="check" stroke-width="2" style="width:12px;height:12px;color:var(--blue)"></i></sc-if>
+                </div>
+              </sc-for>
+              <div style="height:1px;margin:5px 9px;background:rgba(255,255,255,0.1)"></div>
+              <div role="menuitem" tabindex="0" style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:6px;cursor:pointer" style-hover="background:rgba(255,255,255,0.07)"><span style="font-size:12px;color:#FFFFFF">Advanced filters…</span><div style="flex:1"></div><i data-lucide="chevron-right" stroke-width="1.8" style="width:12px;height:12px;color:rgba(255,255,255,0.45)"></i></div>
+              <span style="padding:6px 9px 8px;font-size:11px;line-height:1.5;color:rgba(255,255,255,0.45)">Filters apply to ← → as well as the list.</span>
+            </div>
+          </aside>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:340px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Component</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">The same <span class="mono" style="font-size:10px">FloatMenu</span> as <a href="H1 - Handoff - Video tab in-shell.dc.html#P3">P3</a> with <span class="mono" style="font-size:10px">tone="dark"</span>: 268px, <span class="mono" style="font-size:10px">rgba(20,20,22,.97)</span>, 1px <span class="mono" style="font-size:10px">rgba(255,255,255,.1)</span>, 10px radius, 5px inset, float shadow. Rows hover and chosen at <span class="mono" style="font-size:10px">rgba(255,255,255,.07)</span>, second line 45% white, one 12px blue check. Same rows, same order, same note — only the scope changes.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Anchored 6px under the trigger inside the drawer, 10px from its left edge. The note says <span class="mono" style="font-size:10px">← →</span> here and <span class="mono" style="font-size:10px">↑↓</span> in the shell, because the keys differ by host — the only string that does. Chrome does not collapse while the menu is open.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Advanced opens in the drawer's own column, exactly as it does in the shell — never a modal over the film.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="R5" style="display:flex;gap:24px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;width:1280px"><a href="#R5" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">R5</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">A cut applied — and the court follows it</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source FS5</span></div>
+        <div style="position:relative;width:1280px;height:720px;border-radius:var(--radius-card);overflow:hidden;background:#000000;box-shadow:var(--shadow-card)">
+          <img src="assets/match-video-still.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+          <span aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.42) 0%,rgba(0,0,0,0.1) 30%,rgba(0,0,0,0) 58%,rgba(13,13,13,0.78) 100%)"></span>
+          <div style="position:absolute;left:24px;top:24px"><dc-import name="FilmBoard" point-name="Break point" hint-size="236px,140px"></dc-import></div>
+          <div style="position:absolute;left:24px;top:198px"><dc-import name="FilmCourt" mode="match" title="Break points" caption="14 points" hint-size="168px,282px"></dc-import></div>
+          <div style="position:absolute;left:0;right:320px;bottom:0"><dc-import name="FilmTransportBar" position="Point 4 / 14" hint-size="100%,124px"></dc-import></div>
+          <aside aria-label="Point list" style="position:absolute;top:0;right:0;bottom:0;width:320px;display:flex;flex-direction:column;background:rgba(13,13,13,0.88);box-shadow:inset 1px 0 0 rgba(255,255,255,0.1),-24px 0 48px -12px rgba(0,0,0,0.45)">
+            <div style="display:flex;align-items:center;gap:6px;padding:13px 10px 10px;box-shadow:inset 0 -1px 0 rgba(255,255,255,0.08)">
+              <div role="button" tabindex="0" style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:var(--radius-element);cursor:pointer" style-hover="background:rgba(255,255,255,0.07)"><i data-lucide="sliders-horizontal" stroke-width="1.5" style="width:13px;height:13px;color:var(--blue)"></i><span style="font:500 12px var(--font-sans);color:#FFFFFF">Break points</span><i data-lucide="chevron-down" stroke-width="1.5" style="width:12px;height:12px;color:rgba(255,255,255,0.45)"></i></div>
+              <span role="button" tabindex="0" aria-label="Clear the cut" style="display:inline-flex;width:22px;height:22px;flex:0 0 22px;align-items:center;justify-content:center;border-radius:var(--radius-cell);cursor:pointer" style-hover="background:rgba(255,255,255,0.08)"><i data-lucide="x" stroke-width="1.6" style="width:12px;height:12px;color:rgba(255,255,255,0.6)"></i></span>
+              <div style="flex:1"></div>
+              <span class="mono tabular" style="white-space:nowrap;font-size:10px;color:rgba(255,255,255,0.45)">14 <span style="color:rgba(255,255,255,0.25)">/</span> 174</span>
+              <span role="button" tabindex="0" aria-label="Collapse point list" style="display:inline-flex;width:26px;height:26px;flex:0 0 26px;align-items:center;justify-content:center;border-radius:var(--radius-element);cursor:pointer"><i data-lucide="panel-right-close" stroke-width="1.6" style="width:14px;height:14px;color:rgba(255,255,255,0.7)"></i></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:13px 14px 5px">
+              <span class="mono" style="font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,0.45)">Set 1 · Game 4</span>
+              <div style="flex:1"></div>
+              <span class="mono tabular" style="white-space:nowrap;font-size:10px;color:rgba(255,255,255,0.4)">30-40 · Lee serves</span>
+            </div>
+            <sc-for list="{{ roomCutRows }}" as="r" hint-placeholder-count="4">
+              <div role="button" tabindex="0" class="d-row" style="position:relative;display:flex;min-height:52px;align-items:center;gap:12px;padding:6px 14px;cursor:pointer;background:{{ r.bg }}">
+                <span aria-hidden="true" style="display:inline-flex;width:30px;height:30px;flex:0 0 30px;align-items:center;justify-content:center;border-radius:var(--radius-button);letter-spacing:0.3px;font:500 11px var(--font-sans);background:{{ r.markBg }};color:{{ r.markFg }}">{{ r.initials }}</span>
+                <span style="display:flex;min-width:0;flex-direction:column;gap:2px">
+                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:500;color:#FFFFFF">{{ r.title }}</span>
+                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:rgba(255,255,255,0.45)">{{ r.detail }}</span>
+                </span>
+                <div style="flex:1"></div>
+                <span class="d-score mono tabular" style="font-size:11px;color:rgba(255,255,255,0.85)">{{ r.score }}</span>
+                <span class="d-save" role="button" aria-label="Save point" style="align-items:center;justify-content:center;padding:2px;border-radius:var(--radius-cell);cursor:pointer"><i data-lucide="bookmark" stroke-width="1.6" style="width:13px;height:13px;color:rgba(255,255,255,0.75)"></i></span>
+                <span aria-hidden="true" style="position:absolute;left:0;bottom:0;height:2px;width:{{ r.barWidth }};background:var(--blue)"></span>
+              </div>
+            </sc-for>
+          </aside>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:340px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rule</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">A cut governs three things at once: the list, the point stepper (transport chevrons, <span class="mono" style="font-size:10px">← →</span>, position reads <span class="mono" style="font-size:10px">Point 4 / 14</span>), and <b style="font-weight:500;color:var(--ink-900)">the court's match mode</b>, which plots the 14 points in the cut rather than the 174 in the match. It does not govern the seek lane.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">The court's title takes the cut's name and its caption the matched count. Clearing via the header X returns all three to the whole match. The board's point line names the cut's reason for this point ("Break point · Lee serving at 30-40") — it is the same string the list row carries.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Cut survives the trip back to the shell and into the room again · the film never pauses on apply or clear.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="R6" style="display:flex;gap:24px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;width:1280px"><a href="#R6" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">R6</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">Moving the board</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source FS6</span></div>
+        <div style="position:relative;width:1280px;height:720px;border-radius:var(--radius-card);overflow:hidden;background:#000000;box-shadow:var(--shadow-card)">
+          <img src="assets/match-video-still.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+          <span aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.42) 0%,rgba(0,0,0,0.1) 30%,rgba(0,0,0,0) 58%,rgba(13,13,13,0.78) 100%)"></span>
+          <div aria-hidden="true" style="position:absolute;right:24px;top:58px;width:214px;height:107px;border-radius:var(--radius-element);background:rgba(255,255,255,0.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.28)"></div>
+          <div style="position:absolute;left:300px;top:250px;box-shadow:var(--focus-ring);border-radius:var(--radius-element)"><dc-import name="FilmBoard" point-name="Lee forehand error" hint-size="236px,140px"></dc-import></div>
+          <i data-lucide="mouse-pointer-2" stroke-width="1.5" style="position:absolute;left:420px;top:296px;width:18px;height:18px;color:#FFFFFF;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.7))"></i>
+          <div style="position:absolute;left:24px;top:198px"><dc-import name="FilmCourt" mode="point" hint-size="168px,282px"></dc-import></div>
+          <div style="position:absolute;left:0;right:0;bottom:0"><dc-import name="FilmTransportBar" hint-size="100%,124px"></dc-import></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:340px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">The board moves <b style="font-weight:500;color:var(--ink-900)">free under the pointer</b> with a ghost at the corner it will land in — <span class="mono" style="font-size:10px">rgba(255,255,255,.06)</span> fill, inset 1px 28% white outline, board-sized. Four corners, each inset 24px; nearest wins. Release snaps, no bounce.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rule</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">The board is the only movable object. The court keeps its own corner under wherever the board is <b style="font-weight:500;color:var(--ink-900)">not</b> — if the board lands top-right, the court follows to the right column, still 34px beneath it. Transport and drawer are fixed.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">A11y</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Focused board takes the system's <span class="mono" style="font-size:10px">--focus-ring</span>; held is the same outline at full weight. Arrows nudge, <span class="mono" style="font-size:10px">space</span> lifts and drops, <span class="mono" style="font-size:10px">esc</span> cancels back to where it started. Pointer events only, never HTML5 drag-and-drop. Each landing announced politely.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="R7" style="display:flex;gap:24px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;width:1280px"><a href="#R7" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">R7</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">Between points</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source FS7</span></div>
+        <div style="position:relative;width:1280px;height:720px;border-radius:var(--radius-card);overflow:hidden;background:#000000;box-shadow:var(--shadow-card)">
+          <img src="assets/match-video-still.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+          <span aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.42) 0%,rgba(0,0,0,0.1) 30%,rgba(0,0,0,0) 58%,rgba(13,13,13,0.78) 100%)"></span>
+          <div style="position:absolute;left:24px;top:24px"><dc-import name="FilmBoard" point-line="Set 2 · game 7 · Reid serving" point-name="" hint-size="236px,140px"></dc-import></div>
+          <div style="position:absolute;left:24px;top:198px"><dc-import name="FilmCourt" mode="none" title="Next point" caption="Not started" hint-size="168px,282px"></dc-import></div>
+          <div role="button" tabindex="0" style="position:absolute;right:24px;top:18px;display:inline-flex;height:28px;align-items:center;gap:7px;padding:0 10px;border-radius:var(--radius-button);background:rgba(13,13,13,0.72);font:500 11px var(--font-sans);color:#FFFFFF;cursor:pointer"><i data-lucide="panel-right" stroke-width="1.6" style="width:13px;height:13px"></i>Points</div>
+          <div style="position:absolute;left:0;right:0;bottom:0"><dc-import name="FilmTransportBar" position="" time="41:31 / 1:42:18" hint-size="100%,124px"></dc-import></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:340px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rule</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">The film is between rallies: <b style="font-weight:500;color:var(--ink-900)">no point name, no position counter</b>, and an empty court that keeps its lines — the shape stands, the dots have not happened yet. The board keeps the score and moves its game state into the point line.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">No row is selected in the drawer. The clock keeps running; the seek lane keeps moving. This is not an empty state and gets no words — the absence is the information. Next point's marks appear as it starts.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Nothing reads "—" except the position slot, which is blank rather than dashed · the court is not hidden, and does not animate out.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="R8" style="display:flex;gap:24px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;width:1280px"><a href="#R8" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">R8</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">Whole match, and a dot under the pointer</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source FS8</span></div>
+        <div style="position:relative;width:1280px;height:720px;border-radius:var(--radius-card);overflow:hidden;background:#000000;box-shadow:var(--shadow-card)">
+          <img src="assets/match-video-still.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+          <span aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.42) 0%,rgba(0,0,0,0.1) 30%,rgba(0,0,0,0) 58%,rgba(13,13,13,0.78) 100%)"></span>
+          <div style="position:absolute;left:24px;top:24px"><dc-import name="FilmBoard" point-name="Lee forehand error" hint-size="236px,140px"></dc-import></div>
+          <div style="position:absolute;left:24px;top:198px"><dc-import name="FilmCourt" mode="match" readout="{{ yes }}" hint-size="168px,282px"></dc-import></div>
+          <div role="button" tabindex="0" style="position:absolute;right:24px;top:18px;display:inline-flex;height:28px;align-items:center;gap:7px;padding:0 10px;border-radius:var(--radius-button);background:rgba(13,13,13,0.72);font:500 11px var(--font-sans);color:#FFFFFF;cursor:pointer"><i data-lucide="panel-right" stroke-width="1.6" style="width:13px;height:13px"></i>Points</div>
+          <div style="position:absolute;left:0;right:0;bottom:0"><dc-import name="FilmTransportBar" hint-size="100%,124px"></dc-import></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:340px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Layout</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Match mode: bounces only at 5px, no donuts, no trail fade; the legend's two keys become the player names. Readout is <span class="mono" style="font-size:10px">chart-tooltip.tsx</span> — 168px, <span class="mono" style="font-size:10px">--ink-900</span>, 12px radius, float shadow, <span class="mono" style="font-size:10px">padding:10px 12px</span>: 12/500 white title, then 11px lines at 64% white. Anchored to the mark, flipped to stay in frame.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Hover opens the readout, click seeks the film to that shot and returns the court to point mode for the point it belongs to. The <span class="mono" style="font-size:10px">layers</span> glyph in the court header swaps the two modes; its tooltip names the destination ("Show the whole match" / "Show this point only").</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">One readout at a time, hidden the moment the pointer leaves or the film seeks · keyboard reaches every mark in shot order, and the readout follows focus.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="R9" style="display:flex;gap:24px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;width:1280px"><a href="#R9" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">R9</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">Point saved · court turned off</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source FS9</span></div>
+        <div style="position:relative;width:1280px;height:720px;border-radius:var(--radius-card);overflow:hidden;background:#000000;box-shadow:var(--shadow-card)">
+          <img src="assets/match-video-still.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+          <span aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.42) 0%,rgba(0,0,0,0.1) 30%,rgba(0,0,0,0) 58%,rgba(13,13,13,0.78) 100%)"></span>
+          <div style="position:absolute;left:24px;top:24px"><dc-import name="FilmBoard" point-name="Lee forehand error" hint-size="236px,140px"></dc-import></div>
+          <div role="button" tabindex="0" style="position:absolute;right:24px;top:18px;display:inline-flex;height:28px;align-items:center;gap:7px;padding:0 10px;border-radius:var(--radius-button);background:rgba(13,13,13,0.72);font:500 11px var(--font-sans);color:#FFFFFF;cursor:pointer"><i data-lucide="panel-right" stroke-width="1.6" style="width:13px;height:13px"></i>Points</div>
+          <div style="position:absolute;left:0;right:0;bottom:0"><dc-import name="FilmTransportBar" saved="{{ yes }}" court-off="{{ yes }}" hint-size="100%,124px"></dc-import></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:340px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rule</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Saving is the <b style="font-weight:500;color:var(--ink-900)">one filled glyph</b> in the room — no toast, no green tick, no confirmation. The board's point line gains "· saved" and the drawer row's bookmark rests visible. Turning the court off dims the transport's court glyph to 45% and gives the left column back to the film; it is a per-user preference, not per match.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Save is optimistic and reversible from the same control; the label becomes "Saved — remove bookmark". <span class="mono" style="font-size:10px">S</span> toggles it. Saved points feed the shell's "Saved only" cut, so the two surfaces never disagree.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Court off survives exit and re-entry · the board never moves to fill the space the court left.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="R10" style="display:flex;gap:24px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;width:1280px"><a href="#R10" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">R10</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">The film cannot play</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source FS10</span></div>
+        <div style="position:relative;width:1280px;height:720px;border-radius:var(--radius-card);overflow:hidden;background:#000000;box-shadow:var(--shadow-card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+          <span style="font-size:16px;color:#FFFFFF">The video could not be reached</span>
+          <span style="max-width:380px;text-align:center;font-size:12px;line-height:1.55;color:rgba(255,255,255,0.6)">Storage did not answer. Nothing has been lost — the recording is still attached to this match.</span>
+          <div style="display:flex;gap:12px">
+            <span role="button" tabindex="0" style="display:inline-flex;height:36px;align-items:center;padding:0 16px;border:1px solid rgba(255,255,255,0.3);border-radius:var(--radius-button);font:500 13px var(--font-sans);color:#FFFFFF;cursor:pointer">Back to the report</span>
+            <span role="button" tabindex="0" style="display:inline-flex;height:36px;align-items:center;padding:0 16px;border-radius:var(--radius-button);background:var(--blue);font:500 13px var(--font-sans);color:#FFFFFF;cursor:pointer">Try again</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:340px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rule</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">No board, no court, no transport — the room holds one statement and the way back. Centred here, because the room has no page to be top-weighted in. Second button only where asking again could change the answer.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Copy</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">The same four headings the tab uses — "This video is no longer attached" · "You can no longer watch this video" · "The video could not be reached" · "The film stopped loading". One copy table, two hosts (see <a href="H1 - Handoff - Video tab in-shell.dc.html">phase 1 · C</a>).</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">If the film dies <b style="font-weight:500;color:var(--ink-900)">while</b> the room is open, the room stays open and shows this — it does not dump the user back to the shell. "Back to the report" closes the portal; Esc does the same.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="R11" style="display:flex;gap:24px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;width:1280px"><a href="#R11" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">R11</a><span style="font:500 12px var(--font-sans);color:var(--ink-900)">Opening — metadata not in yet</span><span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source FS11</span></div>
+        <div style="position:relative;width:1280px;height:720px;border-radius:var(--radius-card);overflow:hidden;background:#000000;box-shadow:var(--shadow-card)">
+          <span aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.42) 0%,rgba(0,0,0,0.1) 30%,rgba(0,0,0,0) 58%,rgba(13,13,13,0.78) 100%)"></span>
+          <div style="position:absolute;left:0;right:0;bottom:0"><dc-import name="FilmTransportBar" position="" time="—" playing="{{ no }}" hint-size="100%,124px"></dc-import></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:340px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+        <span class="eyebrow">Handoff notes</span>
+        <div style="display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rule</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">The film fades in when it can paint. Until the clock resolves, duration and position read <span class="mono" style="font-size:10px">—</span>, and <b style="font-weight:500;color:var(--ink-900)">no board is drawn for a point nobody is on</b>. Play is in its paused glyph; the seek lane is drawn but empty of progress.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">No spinner and no skeleton — the black frame with its chrome is the loading state, and it lasts as long as it lasts. Board, court and point name appear together the moment the first point resolves; they never appear half-populated.</span>
+          <span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+          <span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Chrome does not start its 3s collapse timer until the film is actually playing.</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;align-items:flex-start">
+  <span class="eyebrow">Phase 2 · C — Keys and tooltips</span>
+  <div class="text-display" style="margin-top:16px;max-width:900px">Every control has a name and a key.</div>
+  <div class="text-body" style="margin-top:8px;max-width:960px;text-wrap:pretty">The room is icon-only, so the dark tooltip is what gives each glyph its label back. Every entry below is the tooltip string and the key in one — never a native <span class="mono" style="font-size:12px;color:var(--ink-700)">title</span>, never a bare glyph.</div>
+  <div style="margin-top:32px;width:1180px;border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card);background:var(--surface-card);padding:2px 24px 10px">
+    <div style="display:grid;grid-template-columns:150px 76px 1fr;gap:20px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-hairline)">
+      <span class="eyebrow-sm">Control</span><span class="eyebrow-sm">Key</span><span class="eyebrow-sm">Tooltip and behavior</span>
+    </div>
+    <sc-for list="{{ keys }}" as="k" hint-placeholder-count="12">
+      <div style="display:grid;grid-template-columns:150px 76px 1fr;gap:20px;align-items:center;min-height:44px;border-bottom:1px solid var(--border-hairline)">
+        <span style="font-size:12px;font-weight:500;color:var(--ink-900)">{{ k.control }}</span>
+        <span class="mono" style="font-size:11px;color:var(--ink-700)">{{ k.key }}</span>
+        <span style="font-size:12px;color:var(--ink-600)">{{ k.note }}</span>
+      </div>
+    </sc-for>
+    <span style="display:block;padding:12px 0 4px;font-size:12px;line-height:1.6;color:var(--ink-600);max-width:96ch;text-wrap:pretty">Keys are live whenever the room is open and focus is not in a text field. <span class="mono" style="font-size:11px;color:var(--ink-700)">←</span> <span class="mono" style="font-size:11px;color:var(--ink-700)">→</span> step <b style="font-weight:500;color:var(--ink-900)">points</b> here, where the shell uses <span class="mono" style="font-size:11px;color:var(--ink-700)">↑↓</span> for the same job — the room has no vertical list to walk, and the horizontal pair matches the film. There is no keyboard-shortcut overlay: the tooltips carry the keys.</span>
+  </div>
+</section>
+
+</div>
+</x-dc>

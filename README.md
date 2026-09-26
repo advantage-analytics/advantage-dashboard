@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Advantage Analytics
+
+Advantage Analytics turns raw match data into actionable performance analytics. Players upload match **video** (processed by a third-party vendor) or **SwingVision `.xlsx`** exports and get statistical breakdowns, court visualizations, shot-by-shot analysis, and AI-powered match commentary.
+
+Built with Next.js (App Router), Supabase, and Tailwind CSS.
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies, then start the dev server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`npm install` is the only setup step. Its `prepare` script points git at this
+repo's hooks (`.githooks/`) and at `.git-blame-ignore-revs`, so formatting and
+commit checks work the same whether you use Claude Code, Codex, Gemini, an IDE,
+or plain `git`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Open [http://localhost:3000](http://localhost:3000) to see the result.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Build for production:
 
-## Learn More
+```bash
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Environment variables
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Required in `.env.local`:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+```
 
-## Deploy on Vercel
+`.env.example` is the source of truth — it documents every variable, which are
+optional, and what leaving one unset actually does.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Checks
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Command             | What it does                                                                    |
+| ------------------- | ------------------------------------------------------------------------------- |
+| `npm run format`    | Prettier, writing in place. `format:check` is what CI runs                      |
+| `npm run lint`      | ESLint (flat config)                                                            |
+| `npm run typecheck` | `tsc --noEmit`                                                                  |
+| `npm test`          | Playwright. Specs needing the live database skip themselves without credentials |
+
+Run automatically:
+
+- **pre-commit** — refuses staged secrets, formats staged files, regenerates
+  `MAP.md` when routes change
+- **pre-push** — typecheck, format check, lint
+- **CI** (`.github/workflows/ci.yml`) — all four, on every PR. No secrets needed
+
+Both git hooks can be bypassed with `--no-verify`; CI cannot. `git commit`
+inside a Claude Code agent worktree does not run them either — the harness pins
+`core.hooksPath` there — which is why CI is the real gate.
+
+### Optional tooling
+
+Neither is required; the things that use them degrade silently when absent.
+
+```bash
+brew install shfmt        # formats shell scripts (10 files)
+az login                  # for the azure-storage skill
+stripe login              # for the stripe-cli skill
+```
+
+Generic design-review skills (critique, polish, harden, distill, and friends)
+are not installed per-repo — use the user-level `impeccable` skill
+(`/impeccable <verb> <target>`) instead. This repo used to vendor its own copy
+via a committed `skills-lock.json`, but those copies drifted out of date
+against `impeccable`'s own updates, so the lockfile was removed. Run
+`npx skills add pbakaus/impeccable` at the user level if it is ever missing.
+
+## Where to go next
+
+- [`AGENTS.md`](AGENTS.md) — **how to work here** (architecture, conventions, commands).
+  The single source for every coding agent; `CLAUDE.md` and `GEMINI.md` both point at it.
+- [`MAP.md`](MAP.md) — where things are in this codebase (route table, source layout). Generated: run `npm run map` after adding a route.
+- [`docs/README.md`](docs/README.md) — index of deeper docs (pipeline, onboarding, LLM setup).

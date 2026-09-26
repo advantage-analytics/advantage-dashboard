@@ -21,7 +21,7 @@ export function FeaturedMatchCard({
       transition={{ duration: 0.4, ease: "easeOut" }}
       className="group relative"
     >
-      <div className="absolute top-4 right-4 z-10 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity duration-200">
+      <div className="absolute top-4 right-4 z-10 opacity-100 transition-opacity duration-200 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
         <MatchActionsMenu
           matchId={match.id}
           matchLabel={match.tournamentName}
@@ -29,7 +29,7 @@ export function FeaturedMatchCard({
       </div>
       <Link
         href={`/dashboard/matches/${match.id}`}
-        className="block bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] overflow-hidden transition-transform hover:scale-[1.01]"
+        className="block overflow-hidden rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-transform hover:scale-[1.01]"
       >
         <div className="p-6">
           <div className="flex flex-col gap-6">
@@ -39,7 +39,7 @@ export function FeaturedMatchCard({
                 <p className="text-xl font-medium text-[#0D0D0D]">
                   {match.tournamentName}
                 </p>
-                <span className="text-[10px] font-medium text-[#3B82F6] bg-[#EBF2FD] px-2.5 py-1 rounded-xl">
+                <span className="rounded-xl bg-[#EBF2FD] px-2.5 py-1 text-[10px] font-medium text-[#3B82F6]">
                   Latest Match
                 </span>
               </div>
@@ -55,9 +55,9 @@ export function FeaturedMatchCard({
           </div>
 
           {/* Hover CTA — expands into view */}
-          <div className="grid grid-rows-[0fr] group-hover:grid-rows-[1fr] transition-[grid-template-rows] duration-300">
+          <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 group-hover:grid-rows-[1fr]">
             <div className="overflow-hidden">
-              <p className="text-xs font-medium text-[#3B82F6] pt-6 pb-1">
+              <p className="pt-6 pb-1 text-xs font-medium text-[#3B82F6]">
                 View match details →
               </p>
             </div>

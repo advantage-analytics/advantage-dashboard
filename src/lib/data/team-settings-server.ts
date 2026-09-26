@@ -1,0 +1,221 @@
+import { createClient } from "@/lib/supabase/server";
+import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
+import { DIVISION_VALUES } from "@/lib/data/programs-server";
+import type {
+  EventsPolicy,
+  ProgramOrgType,
+  UploadPolicy,
+} from "@/lib/workspace/types";
+
+/**
+ * What Settings › Team reads.
+ *
+ * Three sources, none of them a plain select on `users`: the program row is
+ * publicly readable, the roster comes through `program_roster` because
+ * `users` RLS is own-row only, and invites have a staff-scoped policy of their
+ * own. A player who lands here gets the program row and their own line — the
+ * page still refuses to render, but that refusal is a redirect, not a leak.
+ */
+
+export type MemberRole = "owner" | "coach" | "staff" | "player";
+
+export interface TeamMember {
+  userId: string;
+  name: string;
+  email: string;
+  role: MemberRole;
+  /** Their profile photo, or null to draw initials. */
+  avatarUrl: string | null;
+}
+
+export interface TeamInvite {
+  id: string;
+  email: string;
+  role: MemberRole;
+  createdAt: string;
+  /** `program_invites.invited_by` — a `users.id`, or null once that account is gone. */
+  invitedBy: string | null;
+}
+
+export interface TeamIdentity {
+  id: string;
+  schoolName: string;
+  team: "mens" | "womens";
+  conference: string | null;
+  /** `programs.division` — D1, D2, D3, JUCO, NAIA; null for a custom org. */
+  division: string | null;
+  homeVenue: string | null;
+  defaultSurface: string | null;
+  playersCanUpload: boolean;
+  /** The ladder `playersCanUpload` is the bottom rung of — what the form edits. */
+  uploadPolicy: UploadPolicy;
+  /** Who may change the schedule — the second policy row. */
+  eventsPolicy: EventsPolicy;
+  /**
+   * Object key in the `program-crests` bucket, or null for the initials mark.
+   * A key, never a URL — see `crestUrl()` in `teams-server.ts`.
+   */
+  crestPath: string | null;
+  /**
+   * IANA zone name (`America/Los_Angeles`, `UTC`, …) the program's calendar
+   * arithmetic runs in — Team Home's weekend dual sheet, invite countdown and
+   * claimed-today roster pill. Never null: the `programs.time_zone` column is
+   * `not null default 'UTC'`, so a program that has never set one still reads
+   * as a real zone rather than a caller having to invent a fallback.
+   */
+  timeZone: string;
+}
+
+export interface TeamSettingsData {
+  program: TeamIdentity;
+  members: TeamMember[];
+  /** Outstanding only — accepted invites are members now. */
+  invites: TeamInvite[];
+  /**
+   * Who to ask about the fields only the owner may change. Derived from the
+   * roster rather than `programs.owner_user_id` because the roster row is the
+   * one that carries a name, and the two agree by the `programs_one_owner`
+   * index. Null only for a program with no owner row at all.
+   */
+  ownerName: string | null;
+}
+
+export async function getTeamSettings(
+  programId: string,
+): Promise<TeamSettingsData | null> {
+  const supabase = await createClient();
+
+  const [programResult, rosterResult, invitesResult, avatars] =
+    await Promise.all([
+      supabase
+        .from("programs")
+        .select(
+          "id, school_name, team, conference, division, home_venue, default_surface, players_can_upload, upload_policy, events_policy, time_zone, crest_path",
+        )
+        .eq("id", programId)
+        .maybeSingle(),
+      supabase.rpc("program_roster", { p_program_id: programId }),
+      supabase
+        .from("program_invites")
+        .select("id, email, role, created_at, invited_by")
+        .eq("program_id", programId)
+        .is("accepted_at", null)
+        .order("created_at", { ascending: false }),
+      getMemberAvatarUrls(supabase, programId),
+    ]);
+
+  if (programResult.error || !programResult.data) {
+    if (programResult.error) {
+      console.error("[team settings] could not read program", {
+        error: programResult.error.message,
+      });
+    }
+    return null;
+  }
+
+  const row = programResult.data;
+
+  const members = (
+    (rosterResult.data ?? []) as {
+      user_id: string;
+      display_name: string | null;
+      email: string;
+      role: string;
+    }[]
+  ).map((member) => ({
+    userId: member.user_id,
+    // Somebody who accepted an invite but never filled in a profile still has
+    // to be removable, so the row falls back to the address rather than
+    // disappearing.
+    name: member.display_name ?? member.email,
+    email: member.email,
+    role: member.role as MemberRole,
+    avatarUrl: avatars.get(member.user_id) ?? null,
+  }));
+
+  const invites = (
+    (invitesResult.data ?? []) as {
+      id: string;
+      email: string;
+      role: string;
+      created_at: string;
+      invited_by: string | null;
+    }[]
+  ).map((invite) => ({
+    id: invite.id,
+    email: invite.email,
+    role: invite.role as MemberRole,
+    createdAt: invite.created_at,
+    invitedBy: invite.invited_by,
+  }));
+
+  return {
+    program: {
+      id: row.id,
+      schoolName: row.school_name,
+      team: row.team === "womens" ? "womens" : "mens",
+      conference: row.conference,
+      division: row.division ?? null,
+      homeVenue: row.home_venue,
+      defaultSurface: row.default_surface,
+      playersCanUpload: row.players_can_upload,
+      uploadPolicy: (row.upload_policy as UploadPolicy | null) ?? "everyone",
+      eventsPolicy: (row.events_policy as EventsPolicy | null) ?? "staff",
+      crestPath: row.crest_path ?? null,
+      timeZone: row.time_zone,
+    },
+    members,
+    invites,
+    ownerName: members.find((member) => member.role === "owner")?.name ?? null,
+  };
+}
+
+/**
+ * The conferences of one division, read from the `conferences` table.
+ *
+ * Conference is a join key, not a label: `getConferenceTable` and the dual-meet
+ * wizard match other programs on the exact string, so a hand-typed "Pac 12"
+ * beside the directory's "Pac-12" empties Opponents without an error. Offering
+ * only existing `conferences.label`s is what keeps that match honest —
+ * `programs.conference` is a trigger-fed mirror of that label, so picking one
+ * here writes exactly the string every other program already carries.
+ *
+ * One small read (~140 rows) replaces the old page-through of the whole
+ * program directory. `conferences` grants select to `authenticated` only, so
+ * this needs a signed-in caller; both callers (Settings › Teams and the admin
+ * create dialog's action) are. Labels are returned whether or not any program
+ * currently belongs to them. A conference with no division is offered in every
+ * division — its row is a gap in the directory, not a claim that it belongs to
+ * none, and hiding it would leave a program unable to pick the conference it
+ * is actually in. Its own loader, not part of `getTeamSettings`,
+ * because only the owner's form reads it and the schedule pages share that one.
+ */
+export async function getConferenceOptions(
+  orgType: ProgramOrgType | null,
+  division: string | null,
+): Promise<string[]> {
+  // A club or high school has no directory to pick from, and the form keeps
+  // its free-text field.
+  if (orgType !== "college") return [];
+
+  const supabase = await createClient();
+  let query = supabase.from("conferences").select("label").order("label");
+  // A college with no division of its own picks from every division.
+  if (division) {
+    // The value is interpolated into PostgREST's `or=` grammar, and the admin
+    // dialog's action forwards it from the client — so only the fixed codes
+    // pass, and anything else matches nothing.
+    if (!(DIVISION_VALUES as readonly string[]).includes(division)) return [];
+    query = query.or(`division.eq.${division},division.is.null`);
+  }
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("[team settings] could not read conferences", {
+      error: error.message,
+    });
+    return [];
+  }
+
+  return ((data ?? []) as { label: string }[]).map(({ label }) => label);
+}

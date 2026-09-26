@@ -1,0 +1,1942 @@
+"use client";
+
+/**
+ * DetailsStepContent — the last step: score and context.
+ *
+ * Four things, top to bottom, in the step-1 register:
+ *
+ *   The schedule's OFFER — in a team workspace the file's date may match an
+ *   open line for this player within two days, but a line is offered only
+ *   when the opponent name or the score typed here also matches it
+ *   (`rankLineOffers`: name, then score, then nearest date). Then the
+ *   schedule offers, in the note-strip register: "Looks like #2 Singles ›
+ *   Marcus Reid vs Jordan Alvarez", Attach and a quiet decline. Accept and six
+ *   fields fill; Detach empties them again and touches nothing typed by hand.
+ *
+ *   The SCORE — 40px cells with the set numbers as eyebrows, the format read
+ *   back at the right as a fact, no set control: a dashed column after the
+ *   last set adds one, clearing a set's two cells removes it, a game digit
+ *   advances focus, and tiebreak cells appear on their own.
+ *
+ *   The PLAYERS — who played and which way. The opponent is named here and
+ *   nowhere else: an underline in the 200px column with everyone you've played
+ *   offered as you type (or, in a dual, the opponent program's roster), a
+ *   pencil marking the name as tappable once picked. Hand and backhand are two
+ *   REQUIRED, always-editable `MenuSelect` fields per player — never behind an
+ *   Add/Change toggle, never a guessed default: an unanswered one reads as
+ *   "Hand"/"Backhand" in the empty-field ink, and `collectMatchCompletionRequirements`
+ *   (`validation.ts`) blocks Save on it exactly like opponent, score and date.
+ *
+ *   The CONTEXT — a three-column grid on the underline vocabulary: Event (with
+ *   your own past events offered as you type), Date (already taken from the
+ *   file and labelled as such), Court, Format, Scoring, Lets, and Duration
+ *   where an export measured it. Required fields carry the form's red
+ *   asterisk; an unmarked label means optional.
+ *
+ * Design: Upload Wizard v5 — 3d · 5c · 6b · 7a · 7c · 11a · 11b · 11d.
+ *
+ * ── Attribution ─────────────────────────────────────────────────────────────
+ * An opponent picked from a roster carries `opponentPlayerId` — the id
+ * travels with the CLICK, never the text (`docs/ui-revamp-guardrails.md`).
+ * The player's own name is never re-asked here: it was settled on step 1.
+ */
+
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import {
+  Calendar,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  MapPin,
+  Pencil,
+  Plus,
+  XCircle,
+} from "lucide-react";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { DateField } from "@/components/ui/date-field";
+import { YouPill } from "@/components/ui/you-pill";
+import { MenuSelect } from "@/components/ui/menu-select";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Kbd } from "@/components/ui/kbd";
+import { cn } from "@/lib/utils";
+import { advField } from "@/lib/ui/adv-field";
+import { getInitials } from "@/lib/data/match-utils";
+import { normalizedPersonName } from "@/lib/data/person-name";
+import { siteLabel, siteTitle, todayISO } from "@/lib/schedule/format";
+import { saveOpponentPlayer } from "@/lib/schedule/actions";
+import {
+  findLineOffers,
+  findUploadLines,
+  opponentRosterForLine,
+  opponentsPlayed,
+  playerStyleFromMatches,
+  saveMyStyle,
+  yourEvents,
+  type OpponentPlayed,
+  type OpponentRosterRow,
+  type UploadLine,
+  type YourEvent,
+} from "@/lib/wizard/actions";
+import { AttachLinePicker } from "@/components/dashboard/matches/match-actions/attach-line-picker";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { canManageTeamSchedule } from "@/lib/workspace/types";
+import { rankLineOffers } from "./offer-match";
+import type { EventPreset, FormData, LineOffer, ValueSource } from "./types";
+import {
+  floatMenuCls,
+  floatMenuDividerCls,
+  floatMenuLabelCls,
+  floatMenuRowCls,
+  focusRingCls,
+  noteStripCls,
+} from "./styles";
+import { formatHoursMinutes, setHasData } from "./utils";
+import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
+import { FieldCaption } from "./FieldCaption";
+import {
+  ChosenCheck,
+  FloatMenu,
+  FloatMenuItem,
+} from "@/components/ui/float-menu";
+import { AnimatedHeight } from "./AnimatedHeight";
+import { ScoreCheckNotice } from "./ScoreCheckNotice";
+import { firstOpenSet, isStoppedResult, scoreGames } from "./score-state";
+
+export interface DetailsStepContentProps {
+  formData: FormData;
+  onInputChange: (
+    field: keyof FormData,
+    value: string | number | boolean | null | undefined,
+  ) => void;
+  /** Called only after a format reduction's score-loss choice is resolved. */
+  onFormatChange: (bestOf: string) => void;
+  onScoreChange: (
+    player: "player" | "opponent",
+    index: number,
+    value: string,
+  ) => void;
+  onTiebreakChange: (
+    player: "player" | "opponent",
+    index: number,
+    value: string,
+  ) => void;
+  isProcessingProvider: boolean;
+  workspaceKind: "personal" | "team";
+  /** Whose match this is — settled on step 1, read back here. */
+  subject: {
+    name: string;
+    isSelf: boolean;
+    playerId: string | null;
+    userId: string | null;
+  };
+  /** The event line this flow started from, when it did. */
+  preset: EventPreset | null;
+  /** The schedule offer accepted with Attach, when one was. */
+  attachedLine: LineOffer | null;
+  onAttach: (offer: LineOffer) => void;
+  onDetach: () => void;
+  /** Whether the export was read — decides the "from the export" tags. */
+  exportRead: boolean;
+  /** Why the last Save match failed, if it did. */
+  error: string | null;
+  /**
+   * Save met a score nobody has won, so "did it end early?" is on screen under
+   * the score. The answer is `formData.result`; the flow owns when it shows.
+   */
+  scoreCheckVisible: boolean;
+  /** "No, I'll finish the score" — the flow hides the question again. */
+  onScoreCheckDismiss: () => void;
+}
+
+type Hand = "right" | "left";
+type Backhand = "one-handed" | "two-handed";
+
+const COURT_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: "Outdoor Hard Court", label: "Hard" },
+  { value: "Indoor Hard Court", label: "Hard · indoor" },
+  { value: "Clay Court", label: "Clay" },
+  { value: "Grass Court", label: "Grass" },
+];
+
+const ROUND_OPTIONS: readonly {
+  value: string;
+  label: string;
+  short: string;
+}[] = [
+  { value: "Round of 128", label: "Round of 128", short: "R128" },
+  { value: "Round of 64", label: "Round of 64", short: "R64" },
+  { value: "Round of 32", label: "Round of 32", short: "R32" },
+  { value: "Round of 16", label: "Round of 16", short: "R16" },
+  { value: "Quarterfinals", label: "Quarterfinals", short: "QF" },
+  { value: "Semifinals", label: "Semifinals", short: "SF" },
+  { value: "Finals", label: "Finals", short: "F" },
+];
+
+// `useSyncExternalStore` needs a subscription; the clock has nothing to push,
+// so this one never fires. Both are module-level so their identity is stable
+// across renders. The snapshot is `todayISO` — the shared local-day helper,
+// whose own comment is the standing warning against reaching for the UTC
+// `toISOString()` form here. The server snapshot is `undefined` (no bound at
+// all) rather than a date, because a server-rendered "today" is the server's
+// day and would hydrate into a mismatch.
+const subscribeToNothing = () => () => {};
+const serverHasNoToday = () => undefined;
+
+/** "Sat Sep 5" for the offer strip. */
+function formatDayShort(date: string): string {
+  const [y, m, d] = date.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return date;
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/** "Aug 22" for a history row. */
+function formatMonthDay(date: string): string {
+  const [y, m, d] = date.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return date;
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/** The tournament mark from the design's assets, inline so it takes the ink colour. */
+function TournamentMark({ className }: { className?: string }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 15 15"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M1.875 1.875H5V5.625H1.875M5 3.75H9.375V11.25H5M9.375 7.5H13.75M1.875 9.375H5V13.125H1.875"
+        stroke="currentColor"
+        strokeWidth="1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** A section's eyebrow, its asterisk and its one-line micro. */
+function SectionHead({
+  label,
+  required = false,
+  micro,
+}: {
+  label: string;
+  required?: boolean;
+  micro: string;
+}) {
+  return (
+    <div className="flex flex-col gap-[5px]">
+      <span className="inline-flex items-center gap-1">
+        <span className="eyebrow">{label}</span>
+        {required && <Required />}
+      </span>
+      <span className="text-micro">{micro}</span>
+    </div>
+  );
+}
+
+/** The 22px avatar a menu row carries. */
+function Avatar({ name }: { name: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[10px] font-medium text-[var(--ink-700)]"
+    >
+      {getInitials(name)}
+    </span>
+  );
+}
+
+/** The dashed ring a "new" row wears — a place waiting for something real. */
+function NewRing() {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--ink-300)]"
+    >
+      <Plus className="size-[11px] text-[var(--ink-500)]" strokeWidth={1.5} />
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The underline cell vocabulary
+
+/**
+ * A field caption over a 13px value on a hairline — the Context grid's cell.
+ *
+ * `tag` is the value's provenance ("from the file"), set at the right of the
+ * caption row. Most cells carry it in the value row instead; the Date cell
+ * cannot, because its row is already two controls wide.
+ */
+function Cell({
+  label,
+  required = false,
+  tag,
+  children,
+  className,
+  labelClassName,
+}: {
+  label: string;
+  required?: boolean;
+  tag?: string;
+  children: React.ReactNode;
+  className?: string;
+  /** For cells under a shared column heading, which hide their own label. */
+  labelClassName?: string;
+}) {
+  return (
+    <div className={cn("flex flex-col gap-2", className)}>
+      <FieldCaption
+        label={label}
+        required={required}
+        tag={tag}
+        className={labelClassName}
+      />
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The wizard's hand-rolled underline cells. Their rule is `--border-field` —
+ * the same grey as `advField("underline")`, `MenuSelect` and `DateField` — so
+ * every underline on the step reads as one field family. (They drew the
+ * lighter `--border-hairline` once, and sat visibly paler than the date and
+ * the hand/backhand selects beside them.)
+ */
+const UNDERLINE_CLS =
+  "flex min-h-[34px] w-full items-center gap-2 border-b pb-2 pt-1.5 text-left text-[13px] transition-[border-color] duration-[var(--duration-hover)]";
+
+/**
+ * A cell whose value is chosen from a short list.
+ *
+ * Drawn as `MenuSelect variant="underline"` — the Roster and Edit match
+ * dialogs' select: a 34px trigger on the field rule, a 12px chevron, and the
+ * shared `FloatMenu` with its check at the right edge. Not `MenuSelect` itself, for
+ * three things it cannot carry: boolean values (Scoring, Lets), a `read`
+ * override for the trigger, and the `data-field` hook the footer's
+ * missing-fields pill uses to find the field.
+ */
+function SelectCell<T extends string | boolean>({
+  label,
+  required,
+  placeholder,
+  value,
+  options,
+  onChange,
+  read,
+  mono = false,
+}: {
+  label: string;
+  required?: boolean;
+  placeholder: string;
+  value: T | undefined;
+  options: readonly { value: T; label: string }[];
+  onChange: (value: T) => void;
+  /** Override for the read-back, e.g. "Hard · away". */
+  read?: string;
+  mono?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = options.find((o) => o.value === value);
+  return (
+    <Cell label={label} required={required}>
+      <FloatMenu
+        open={open}
+        onOpenChange={setOpen}
+        label={label}
+        align="start"
+        width="trigger"
+        trigger={
+          <button
+            type="button"
+            // The footer's missing-fields pill finds the field by this; not an
+            // aria-label, which would replace the chosen value as its name.
+            data-field={label}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            // The rule going 2px blue is this field's focus indicator, as it
+            // is for every underline control (`focus.css`).
+            data-focus-ring="none"
+            className={cn(
+              "flex h-[34px] w-full cursor-pointer items-center justify-between gap-2 border-b bg-transparent text-left text-[13px] transition-colors duration-150",
+              "focus-visible:border-b-2 focus-visible:border-[var(--blue)] focus-visible:outline-none",
+              open
+                ? "border-b-2 border-[var(--blue)]"
+                : "border-[var(--border-field)]",
+            )}
+          >
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate",
+                mono && "mono",
+                current ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]",
+              )}
+            >
+              {read ?? current?.label ?? placeholder}
+            </span>
+            <ChevronDown
+              className="size-3 shrink-0 text-[var(--ink-500)]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+          </button>
+        }
+      >
+        {options.map((option) => (
+          <FloatMenuItem
+            key={String(option.value)}
+            label={option.label}
+            chosen={option.value === value}
+            onSelect={() => {
+              setOpen(false);
+              if (option.value !== value) onChange(option.value);
+            }}
+          />
+        ))}
+      </FloatMenu>
+    </Cell>
+  );
+}
+
+/** A read-back cell: a value nobody edits here, with where it came from. */
+function ReadCell({
+  label,
+  required,
+  value,
+  placeholder,
+  tag,
+  mono = false,
+}: {
+  label: string;
+  required?: boolean;
+  value: string;
+  placeholder?: string;
+  tag?: string;
+  mono?: boolean;
+}) {
+  return (
+    <Cell label={label} required={required}>
+      <div className={cn(UNDERLINE_CLS, "border-[var(--border-field)]")}>
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate",
+            mono && "mono tabular text-[12px]",
+            value ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]",
+          )}
+        >
+          {value || placeholder}
+        </span>
+        {tag && (
+          <span className="text-micro shrink-0 whitespace-nowrap">{tag}</span>
+        )}
+      </div>
+    </Cell>
+  );
+}
+
+/**
+ * The date and the time, side by side under one label.
+ *
+ * `DateField` and a native `<input type="time">` sit directly in the cell —
+ * no popover. This was a Radix `Popover` reading the pair back as one line
+ * and editing both inside a panel; `DateField` carries react-aria's own
+ * popover for its calendar, and nesting that inside Radix's would have put
+ * two focus scopes and two dismiss layers on one control, where the second
+ * Escape does the wrong thing. The time stays native: it is restyled to the
+ * date field's 34px, 13px `tabular-nums` so the row reads level, but a time
+ * primitive is a separate decision.
+ *
+ * The time's rule goes 2px blue on focus exactly as the date field's does, so
+ * it takes the same `data-focus-ring="none"` — the change in the rule is its
+ * focus indicator (`styles/design-system/focus.css`).
+ */
+function DateCell({
+  date,
+  time,
+  tag,
+  onChange,
+}: {
+  date: string;
+  time: string;
+  tag?: string;
+  onChange: (date: string, time: string) => void;
+}) {
+  // Today is the latest pickable day — a match is uploaded after it was
+  // played. The server renders this step too, and its clock (UTC, possibly a
+  // different day) would disagree with the browser's — a hydration mismatch
+  // on the field's invalid state. So the bound is a client-only read: the
+  // server snapshot is "no bound", and React swaps in the browser's day on
+  // the first client render, before anyone can type.
+  const today = useSyncExternalStore(
+    subscribeToNothing,
+    todayISO,
+    serverHasNoToday,
+  );
+
+  return (
+    <Cell label="Date" required tag={tag}>
+      <div className="flex items-center gap-3">
+        <DateField
+          label="Date"
+          variant="underline"
+          value={date}
+          max={today}
+          onChange={(next) => onChange(next, time)}
+          className="min-w-0 flex-1"
+        />
+        <input
+          type="time"
+          aria-label="Time"
+          value={time}
+          onChange={(e) => onChange(date, e.target.value)}
+          data-focus-ring="none"
+          className={cn(
+            "h-[34px] shrink-0 border-b border-[var(--border-field)] bg-transparent px-0 text-[13px] text-[var(--ink-900)] tabular-nums transition-colors duration-150 outline-none",
+            "focus:border-b-2 focus:border-[var(--blue)]",
+          )}
+        />
+      </div>
+    </Cell>
+  );
+}
+
+/**
+ * Event, typed — with your own past events offered as you go, and a last row
+ * that creates the name you typed and asks what kind it is (design 6b).
+ */
+function EventCell({
+  value,
+  kind,
+  events,
+  onPick,
+  footer,
+}: {
+  value: string;
+  kind: FormData["eventKind"];
+  events: YourEvent[];
+  onPick: (name: string, kind: FormData["eventKind"]) => void;
+  /** The schedule's way in, under the field — the Edit Match dialog's line. */
+  footer?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [askKind, setAskKind] = useState(false);
+  const [term, setTerm] = useState(value);
+  const inputId = useId();
+
+  // The field shows what it holds; typing narrows the list.
+  const shown = useMemo(() => {
+    const needle = term.trim().toLowerCase();
+    return needle
+      ? events.filter((e) => e.name.toLowerCase().includes(needle))
+      : events;
+  }, [events, term]);
+  const exact = shown.some(
+    (e) => e.name.toLowerCase() === term.trim().toLowerCase(),
+  );
+
+  const commit = (name: string, nextKind: FormData["eventKind"]) => {
+    onPick(name, nextKind);
+    setTerm(name);
+    setOpen(false);
+    setAskKind(false);
+  };
+
+  return (
+    <Cell label="Event" className={cn(open && "col-span-2")}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) {
+            setAskKind(false);
+            // A typed name that was never chosen still counts: it is the event.
+            if (term.trim() !== value)
+              onPick(term.trim(), term.trim() ? (kind ?? "other") : undefined);
+          }
+        }}
+      >
+        <PopoverAnchor asChild>
+          <div
+            className={cn(
+              UNDERLINE_CLS,
+              // The rule answers focus by itself: hairline at rest, the blue
+              // 2px whenever the field holds focus. `open` alone was not
+              // enough — `commit()` closes the list while the input keeps
+              // focus, and in that window a ring-less field would have shown
+              // no focus indicator at all.
+              "focus-within:border-b-2 focus-within:border-[var(--blue)] focus-within:pb-[7px]",
+              open
+                ? "border-b-2 border-[var(--blue)] pb-[7px]"
+                : "border-[var(--border-field)]",
+            )}
+          >
+            <input
+              id={inputId}
+              value={term}
+              placeholder="None — one-off"
+              // The wrapper's rule thickens and recolours on focus, so the
+              // neutral field ring would sit inset inside a field that has
+              // already answered the question.
+              data-focus-ring="none"
+              autoComplete="off"
+              onFocus={() => setOpen(true)}
+              onChange={(e) => {
+                setTerm(e.target.value);
+                setAskKind(false);
+                if (!open) setOpen(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (exact) {
+                    const hit = shown.find(
+                      (x) => x.name.toLowerCase() === term.trim().toLowerCase(),
+                    )!;
+                    commit(hit.name, hit.kind);
+                  } else if (term.trim()) setAskKind(true);
+                }
+              }}
+              className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
+            />
+            {!open && (
+              <ChevronDown
+                className="size-3 shrink-0 text-[var(--ink-500)]"
+                strokeWidth={1.5}
+              />
+            )}
+          </div>
+        </PopoverAnchor>
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          className={cn(floatMenuCls, "w-[300px]")}
+        >
+          {askKind ? (
+            <>
+              <span className={floatMenuLabelCls}>
+                What kind of event is &ldquo;{term.trim()}&rdquo;?
+              </span>
+              <button
+                type="button"
+                onClick={() => commit(term.trim(), "tournament")}
+                className={floatMenuRowCls}
+              >
+                <TournamentMark className="text-[var(--ink-500)]" />
+                <span className="flex-1 text-[12px] font-medium text-[var(--ink-900)]">
+                  Tournament
+                </span>
+                <span className="text-[11px] text-[var(--ink-500)]">
+                  asks for the round
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => commit(term.trim(), "other")}
+                className={floatMenuRowCls}
+              >
+                <span className="w-[13px]" />
+                <span className="flex-1 text-[12px] font-medium text-[var(--ink-900)]">
+                  Other
+                </span>
+                <span className="text-[11px] text-[var(--ink-500)]">
+                  a league, a ladder, a trip
+                </span>
+              </button>
+            </>
+          ) : (
+            <>
+              {shown.length > 0 && (
+                <span className={floatMenuLabelCls}>Your events</span>
+              )}
+              {shown.slice(0, 6).map((event) => (
+                <button
+                  key={event.name}
+                  type="button"
+                  onClick={() => commit(event.name, event.kind)}
+                  className={cn(
+                    floatMenuRowCls,
+                    event.name === value && "hover:bg-transparent",
+                  )}
+                >
+                  <TournamentMark className="text-[var(--ink-500)] opacity-60" />
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--ink-900)]">
+                    {event.name}
+                  </span>
+                  <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
+                    {event.years}
+                    {event.matches > 1 ? ` · ${event.matches} matches` : ""}
+                  </span>
+                  <ChosenCheck chosen={event.name === value} />
+                </button>
+              ))}
+              {term.trim() && !exact && (
+                <>
+                  {shown.length > 0 && <span className={floatMenuDividerCls} />}
+                  <button
+                    type="button"
+                    onClick={() => setAskKind(true)}
+                    className={floatMenuRowCls}
+                  >
+                    <Plus
+                      className="size-[13px] shrink-0 text-[var(--ink-500)]"
+                      strokeWidth={1.5}
+                    />
+                    <span className="min-w-0 truncate text-[12px] text-[var(--ink-700)]">
+                      New event{" "}
+                      <span className="font-medium text-[var(--ink-900)]">
+                        &ldquo;{term.trim()}&rdquo;
+                      </span>
+                    </span>
+                  </button>
+                </>
+              )}
+              {shown.length === 0 && !term.trim() && (
+                <span className={cn(floatMenuLabelCls, "pb-2")}>
+                  Type a name — your past events will be offered here.
+                </span>
+              )}
+            </>
+          )}
+        </PopoverContent>
+      </Popover>
+      {!open && footer}
+    </Cell>
+  );
+}
+
+/**
+ * Under a one-off's Event field in a team workspace: where it stands and the
+ * way onto the schedule, worded as the Edit Match dialog words it.
+ */
+function ScheduleFooter({
+  canAttach,
+  onAdd,
+}: {
+  canAttach: boolean;
+  onAdd: () => void;
+}) {
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-[var(--ink-500)]">
+      {canAttach ? (
+        <>
+          <span>One-off · not on the schedule</span>
+          <span className="text-[var(--ink-300)]">·</span>
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex cursor-pointer items-center gap-[3px] text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
+          >
+            <Plus className="size-[11px]" strokeWidth={2} aria-hidden />
+            Add to an event
+          </button>
+        </>
+      ) : (
+        <span>
+          One-off for now. A coach who runs the schedule can add it to an event
+          later.
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The schedule's offer
+
+function OfferStrip({
+  offer,
+  attached,
+  onAttach,
+  onDetach,
+  onDecline,
+}: {
+  offer: LineOffer;
+  attached: boolean;
+  onAttach: () => void;
+  onDetach: () => void;
+  onDecline: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-[9px]">
+      {attached ? (
+        <Check
+          className="mr-0.5 size-[13px] shrink-0 text-[var(--ink-500)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+      ) : (
+        <span className="mr-0.5 text-[11px] whitespace-nowrap text-[var(--ink-500)]">
+          Looks like
+        </span>
+      )}
+      {offer.slot && (
+        <span className="text-[11px] text-[var(--ink-500)]">{offer.slot}</span>
+      )}
+      <ChevronRight
+        className="size-3 shrink-0 text-[var(--ink-300)]"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
+      <span className="min-w-0 truncate text-[12px] text-[var(--ink-900)]">
+        <span className="font-medium">{offer.playerName}</span> vs{" "}
+        {offer.opponentName || "—"}
+      </span>
+      <span
+        className="mx-2 h-3.5 w-px shrink-0 bg-[var(--border-medium)]"
+        aria-hidden="true"
+      />
+      <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] whitespace-nowrap text-[var(--ink-600)]">
+        <Calendar
+          className="size-[13px] text-[var(--ink-400)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+        {formatDayShort(offer.date)}
+      </span>
+      <span className="ml-3 inline-flex shrink-0 items-center gap-1.5 text-[11px] whitespace-nowrap text-[var(--ink-600)]">
+        <MapPin
+          className="size-[13px] text-[var(--ink-400)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+        {siteTitle(offer.site)}
+      </span>
+      <span className="flex-1" />
+      {attached ? (
+        <button
+          type="button"
+          onClick={onDetach}
+          className="shrink-0 cursor-pointer text-[11px] text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)]"
+        >
+          Detach
+        </button>
+      ) : (
+        <span className="inline-flex shrink-0 items-center gap-3.5">
+          <button
+            type="button"
+            onClick={onAttach}
+            className="cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-150 hover:text-[var(--blue-hover)]"
+          >
+            Attach
+          </button>
+          <button
+            type="button"
+            onClick={onDecline}
+            className="cursor-pointer text-[11px] text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)]"
+          >
+            Not this match
+          </button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The players
+
+/**
+ * Hand and backhand, as two required `MenuSelect` fields — never a guessed
+ * default, never an "Unknown" row. An unset value shows `placeholder` in the
+ * empty-field ink; `collectMatchCompletionRequirements` (`validation.ts`) is
+ * what actually blocks Save on it, this is only the control.
+ */
+const HAND_OPTIONS: readonly { value: Hand; label: string }[] = [
+  { value: "right", label: "Right" },
+  { value: "left", label: "Left" },
+];
+const BACKHAND_OPTIONS: readonly { value: Backhand; label: string }[] = [
+  { value: "two-handed", label: "Two-handed" },
+  { value: "one-handed", label: "One-handed" },
+];
+
+function provenanceFor(
+  source: ValueSource | undefined,
+  ctx: {
+    isSelf: boolean;
+    school: string | null;
+    saved: boolean;
+  },
+): string | null {
+  switch (source) {
+    case "profile":
+      return ctx.isSelf ? "from your profile" : "from their profile";
+    case "history":
+      return "from your last match";
+    case "export":
+      return "from the export";
+    case "event":
+      return "from the lineup";
+    case "roster":
+      return ctx.school ? `from ${ctx.school}'s roster` : "from their roster";
+    case "new":
+      return ctx.saved && ctx.school
+        ? `new · saved to ${ctx.school}`
+        : ctx.isSelf
+          ? null
+          : "only you see this name";
+    case "file":
+      return "from the file";
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+function DetailsStepContentImpl({
+  formData,
+  onInputChange,
+  onFormatChange,
+  onScoreChange,
+  onTiebreakChange,
+  isProcessingProvider,
+  workspaceKind,
+  subject,
+  preset,
+  attachedLine,
+  onAttach,
+  onDetach,
+  exportRead,
+  error,
+  scoreCheckVisible,
+  onScoreCheckDismiss,
+}: DetailsStepContentProps) {
+  const scoreRef = useRef<HTMLDivElement>(null);
+  // A preset IS the line it came from; the name is what reads at the use
+  // sites, several of which pair it with `attachedLine`.
+  const line = preset;
+  const lineSchool =
+    attachedLine?.opponentSchool ??
+    line?.opponentSchool ??
+    formData.opponentSchool ??
+    null;
+  const lineProgramKey =
+    attachedLine?.opponentProgramKey ??
+    line?.opponentProgramKey ??
+    formData.opponentProgramKey ??
+    null;
+  const lineSlot = attachedLine?.slot ?? line?.round ?? null;
+  const inDual =
+    (attachedLine?.eventKind ?? line?.eventKind) === "dual" &&
+    Boolean(lineProgramKey);
+  const fromLine = Boolean(attachedLine || line);
+  const [pendingFormat, setPendingFormat] = useState<string | null>(null);
+  const { active: activeWorkspace } = useWorkspace();
+  const canAttach =
+    workspaceKind === "team" &&
+    activeWorkspace.kind === "team" &&
+    canManageTeamSchedule(activeWorkspace);
+  const [pickingLine, setPickingLine] = useState(false);
+  const adScoringFact = formData.adScoring ?? null;
+  const bestOfFact = Number.parseInt(formData.bestOf, 10) || 3;
+  const roundFact = formData.round || null;
+  const loadUploadLines = useCallback(
+    (query: string) =>
+      findUploadLines({
+        date: formData.date,
+        round: roundFact,
+        player: { id: subject.playerId ?? subject.userId, name: subject.name },
+        bestOf: bestOfFact,
+        adScoring: adScoringFact,
+        query,
+      }),
+    [
+      formData.date,
+      roundFact,
+      subject.playerId,
+      subject.userId,
+      subject.name,
+      bestOfFact,
+      adScoringFact,
+    ],
+  );
+
+  const changeFormat = useCallback(
+    (nextBestOf: string) => {
+      const currentBestOf = Number.parseInt(formData.bestOf, 10);
+      const nextLimit = Number.parseInt(nextBestOf, 10);
+      const losesPopulatedSet =
+        Number.isFinite(currentBestOf) &&
+        nextLimit < currentBestOf &&
+        Array.from({ length: currentBestOf - nextLimit }, (_, offset) =>
+          setHasData(formData, nextLimit + offset),
+        ).some(Boolean);
+
+      if (losesPopulatedSet) {
+        setPendingFormat(nextBestOf);
+        return;
+      }
+
+      onFormatChange(nextBestOf);
+    },
+    [formData, onFormatChange],
+  );
+
+  // ---- Async: the offer, the people, the events, the styles
+
+  const [offers, setOffers] = useState<LineOffer[]>([]);
+  const [declined, setDeclined] = useState<Set<string>>(() => new Set());
+  const [played, setPlayed] = useState<OpponentPlayed[]>([]);
+  const [roster, setRoster] = useState<OpponentRosterRow[]>([]);
+  const [events, setEvents] = useState<YourEvent[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void opponentsPlayed().then((rows) => {
+      if (!cancelled) setPlayed(rows);
+    });
+    void yourEvents().then((rows) => {
+      if (!cancelled) setEvents(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // The schedule only offers in a team workspace, with no line pinned, for a
+  // date. Re-asked when the date or the subject changes.
+  useEffect(() => {
+    if (workspaceKind !== "team" || line || !formData.date) return;
+    let cancelled = false;
+    void findLineOffers({
+      date: formData.date,
+      playerUserId: subject.playerId ?? subject.userId,
+      playerName: subject.name,
+    }).then((rows) => {
+      if (!cancelled) setOffers(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    workspaceKind,
+    line,
+    formData.date,
+    subject.playerId,
+    subject.userId,
+    subject.name,
+  ]);
+
+  useEffect(() => {
+    if (!inDual || !lineProgramKey) return;
+    let cancelled = false;
+    void opponentRosterForLine({
+      opponentProgramKey: lineProgramKey,
+      slot: lineSlot,
+    }).then((rows) => {
+      if (!cancelled) setRoster(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [inDual, lineProgramKey, lineSlot]);
+
+  // A roster player has no profile to read; their last match is the record.
+  const styleAsked = useRef(false);
+  useEffect(() => {
+    if (styleAsked.current || subject.isSelf) return;
+    if (formData.playerHand || formData.playerBackhand) return;
+    styleAsked.current = true;
+    void playerStyleFromMatches({
+      playerId: subject.playerId,
+      playerName: subject.name,
+    }).then((style) => {
+      if (!style) return;
+      const hand =
+        style.hand === "right" || style.hand === "left"
+          ? style.hand
+          : undefined;
+      const backhand =
+        style.backhand === "one-handed" || style.backhand === "two-handed"
+          ? style.backhand
+          : undefined;
+      if (!hand && !backhand) return;
+      onInputChange("playerHand", hand);
+      onInputChange("playerBackhand", backhand);
+      onInputChange("playerStyleSource", "history");
+    });
+  }, [
+    subject.isSelf,
+    subject.playerId,
+    subject.name,
+    formData.playerHand,
+    formData.playerBackhand,
+    onInputChange,
+  ]);
+
+  // The date query returns every candidate; the opponent name or the score
+  // must also match before one is offered. Filtered in memory so typing never
+  // re-asks the server. An attached line wins, so Detach stays reachable after
+  // the opponent or score is edited.
+  const rankedOffers = useMemo(
+    () =>
+      rankLineOffers(offers, {
+        opponentName: formData.opponentName,
+        playerScores: formData.playerScores,
+        opponentScores: formData.opponentScores,
+      }),
+    [
+      offers,
+      formData.opponentName,
+      formData.playerScores,
+      formData.opponentScores,
+    ],
+  );
+  const offer =
+    attachedLine ?? rankedOffers.find((o) => !declined.has(o.entryId)) ?? null;
+
+  // ---- Players: editing state
+
+  const [savingProfile, setSavingProfile] = useState<
+    "idle" | "saving" | "saved"
+  >("idle");
+  const [savedSchool, setSavedSchool] = useState<string | null>(null);
+  const [nameOpen, setNameOpen] = useState(false);
+  const [nameTerm, setNameTerm] = useState("");
+  const [namingOpponent, setNamingOpponent] = useState(
+    !formData.opponentName.trim(),
+  );
+
+  const opponentHand = formData.opponentHand as Hand | undefined;
+  const opponentBackhand = formData.opponentBackhand as Backhand | undefined;
+  const playerHand = formData.playerHand as Hand | undefined;
+  const playerBackhand = formData.playerBackhand as Backhand | undefined;
+
+  const pickPlayed = useCallback(
+    (row: OpponentPlayed) => {
+      onInputChange("opponentName", row.name);
+      onInputChange("opponentSource", "history");
+      onInputChange("opponentPlayerId", row.playerId);
+      const hand =
+        row.hand === "right" || row.hand === "left" ? row.hand : undefined;
+      const backhand =
+        row.backhand === "one-handed" || row.backhand === "two-handed"
+          ? row.backhand
+          : undefined;
+      onInputChange("opponentHand", hand);
+      onInputChange("opponentBackhand", backhand);
+      onInputChange(
+        "opponentStyleSource",
+        hand || backhand ? "history" : undefined,
+      );
+      setNamingOpponent(false);
+      setNameOpen(false);
+    },
+    [onInputChange],
+  );
+
+  const pickRoster = useCallback(
+    (row: OpponentRosterRow) => {
+      onInputChange("opponentName", row.name);
+      onInputChange("opponentSource", "roster");
+      onInputChange("opponentPlayerId", row.playerId);
+      // What this program last recorded against them, if anything.
+      const seen = played.find(
+        (p) => normalizedPersonName(p.name) === normalizedPersonName(row.name),
+      );
+      const hand =
+        seen?.hand === "right" || seen?.hand === "left" ? seen.hand : undefined;
+      const backhand =
+        seen?.backhand === "one-handed" || seen?.backhand === "two-handed"
+          ? seen.backhand
+          : undefined;
+      onInputChange("opponentHand", hand);
+      onInputChange("opponentBackhand", backhand);
+      onInputChange(
+        "opponentStyleSource",
+        hand || backhand ? "history" : undefined,
+      );
+      setNamingOpponent(false);
+      setNameOpen(false);
+    },
+    [onInputChange, played],
+  );
+
+  const createOpponent = useCallback(
+    async (name: string) => {
+      onInputChange("opponentName", name);
+      onInputChange("opponentSource", "new");
+      onInputChange("opponentPlayerId", null);
+      onInputChange("opponentHand", undefined);
+      onInputChange("opponentBackhand", undefined);
+      onInputChange("opponentStyleSource", undefined);
+      setNamingOpponent(false);
+      setNameOpen(false);
+      setSavedSchool(null);
+      if (inDual && lineProgramKey) {
+        // A program-scoped player, saved to their roster — best-effort: the
+        // pool refuses where that program manages its own roster, and the
+        // typed name stands either way.
+        const result = await saveOpponentPlayer({
+          opponentProgramKey: lineProgramKey,
+          name,
+        });
+        if (result.saved) setSavedSchool(lineSchool);
+      }
+    },
+    [inDual, lineProgramKey, lineSchool, onInputChange],
+  );
+
+  const saveProfile = async () => {
+    setSavingProfile("saving");
+    const { saved } = await saveMyStyle({
+      hand: playerHand,
+      backhand: playerBackhand,
+    });
+    setSavingProfile(saved ? "saved" : "idle");
+    if (saved) onInputChange("playerStyleSource", "profile");
+  };
+
+  // ---- Names for the menus
+
+  const needle = normalizedPersonName(nameTerm);
+  const playedShown = useMemo(
+    () =>
+      (needle
+        ? played.filter((p) => normalizedPersonName(p.name).includes(needle))
+        : played
+      ).slice(0, 5),
+    [played, needle],
+  );
+  const rosterShown = useMemo(
+    () =>
+      needle
+        ? roster.filter((p) => normalizedPersonName(p.name).includes(needle))
+        : roster,
+    [roster, needle],
+  );
+  const exactKnown =
+    playedShown.some((p) => normalizedPersonName(p.name) === needle) ||
+    rosterShown.some((p) => normalizedPersonName(p.name) === needle);
+
+  // The name is read-only here: in a team flow with no line pinned it was
+  // picked on step 1, and SubjectBar's "Not <name>?" is where it changes. Say
+  // so quietly rather than add a second control for the same start-over.
+  const pickedOnStepOne = workspaceKind === "team" && !preset;
+  const playerProvenance = provenanceFor(formData.playerStyleSource, {
+    isSelf: subject.isSelf,
+    school: null,
+    saved: false,
+  });
+  const opponentProvenance =
+    formData.opponentSource === "new"
+      ? savedSchool
+        ? `new · saved to ${savedSchool}`
+        : workspaceKind === "personal"
+          ? "only you see this name"
+          : "new"
+      : (provenanceFor(formData.opponentSource, {
+          isSelf: false,
+          school: lineSchool,
+          saved: false,
+        }) ??
+        (formData.opponentStyleSource === "history"
+          ? "from your last match"
+          : null));
+
+  // ---- Context
+
+  const contextMicro = line
+    ? "from the lineup · change any of them here"
+    : isProcessingProvider
+      ? workspaceKind === "team"
+        ? "type what the schedule can't fill"
+        : "the day, the surface, how the match was played"
+      : "what the export measured, the event it belongs to, then how the match was played";
+
+  const dateTag =
+    formData.dateSource === "file"
+      ? "from the file"
+      : formData.dateSource === "export"
+        ? "from the export"
+        : undefined;
+
+  const courtRead = (() => {
+    const current = COURT_OPTIONS.find((o) => o.value === formData.courtType);
+    if (!current) return undefined;
+    const site = attachedLine?.site ?? line?.site ?? null;
+    return site
+      ? `${current.label} · ${siteLabel(site).toLowerCase()}`
+      : current.label;
+  })();
+
+  const eventRead = fromLine
+    ? `${attachedLine?.eventName ?? line?.eventName ?? ""}${
+        (attachedLine?.eventKind ?? line?.eventKind) === "dual" ? " dual" : ""
+      }`
+    : "";
+
+  return (
+    <div className="flex flex-col gap-8">
+      {error && (
+        <div className={noteStripCls}>
+          <XCircle
+            className="mt-0.5 size-[13px] shrink-0 text-[var(--error)]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+          <span>
+            <b className="font-medium text-[var(--ink-900)]">
+              Couldn&apos;t save this match
+            </b>
+            {" — "}
+            {error}
+          </span>
+        </div>
+      )}
+
+      {offer && !line && (
+        <OfferStrip
+          offer={offer}
+          attached={Boolean(attachedLine)}
+          onAttach={() => onAttach(offer)}
+          onDetach={onDetach}
+          onDecline={() =>
+            setDeclined((prev) => new Set(prev).add(offer.entryId))
+          }
+        />
+      )}
+
+      <div ref={scoreRef} className="flex flex-col">
+        <ScoreBlock
+          formData={formData}
+          playerName={subject.name}
+          opponentName={formData.opponentName}
+          fromLine={fromLine}
+          onScoreChange={onScoreChange}
+          onTiebreakChange={onTiebreakChange}
+          onSetsChange={(count) => onInputChange("numberOfSets", count)}
+        />
+        {/* Always mounted, so the question arriving, collapsing to its settled
+            line, and going away on "No" all move the page below smoothly. The
+            gap lives inside (`pt-4`) so an empty wrapper takes no space. */}
+        <AnimatedHeight>
+          {scoreCheckVisible && (
+            <div className="pt-4">
+              <ScoreCheckNotice
+                answer={
+                  isStoppedResult(formData.result) ? formData.result : null
+                }
+                retiredSide={formData.retiredSide}
+                playerName={subject.name}
+                opponentName={formData.opponentName}
+                onAnswer={(result) => {
+                  onInputChange("result", result);
+                  onInputChange("retiredSide", undefined);
+                }}
+                onRetiredSide={(side) => onInputChange("retiredSide", side)}
+                onChange={() => {
+                  onInputChange("result", "");
+                  onInputChange("retiredSide", undefined);
+                }}
+                onFinishScore={() => {
+                  onScoreCheckDismiss();
+                  // Into the set nobody has won — its first empty cell, else
+                  // its first. Not simply the first empty cell on the card: an
+                  // earlier 7-6's optional tiebreak box and the dashed "add a
+                  // set" cell are both empty and neither is what's unfinished.
+                  const open = firstOpenSet(scoreGames(formData));
+                  const cells = Array.from(
+                    scoreRef.current?.querySelectorAll<HTMLInputElement>(
+                      `input[data-set="${open}"]`,
+                    ) ?? [],
+                  );
+                  (
+                    cells.find((cell) => cell.value === "") ?? cells[0]
+                  )?.focus();
+                }}
+              />
+            </div>
+          )}
+        </AnimatedHeight>
+      </div>
+
+      {/* Players */}
+      <div className="flex flex-col gap-3.5 border-t border-[var(--border-hairline)] pt-6">
+        <SectionHead
+          label="Players"
+          required
+          micro="who played, and which way — the opponent is named here and nowhere else"
+        />
+
+        {/* The workspace's own player — settled on step 1, read back here.
+            Name is never editable in this step; hand and backhand always
+            are, as two required fields — never behind an Add/Change toggle,
+            since a missing answer has to read as missing, not as one tap
+            away from looking answered. */}
+        {/* One grid for both rows — name, hand, backhand — so the opponent's
+            selects sit exactly under the player's. The headings are printed
+            once; a narrow column stacks each row and brings its labels back.
+            Anything a row says beyond its three answers lives under the name,
+            never in a fourth column that would knock the grid out of line. */}
+        <div className="flex flex-col gap-6 sm:grid sm:grid-cols-[260px_minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-4">
+          <div aria-hidden="true" className="hidden sm:contents">
+            <span />
+            <FieldCaption label="Hand" required />
+            <FieldCaption label="Backhand" required />
+          </div>
+
+          <div className="flex flex-col gap-3 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-start sm:gap-y-2">
+            <span className="flex min-w-0 flex-col gap-0.5 sm:pt-1.5">
+              <span className="inline-flex items-center gap-2 text-[13px] text-[var(--ink-900)]">
+                <span className="truncate">{subject.name}</span>
+                {subject.isSelf && <YouPill />}
+              </span>
+              {(pickedOnStepOne || playerProvenance) && (
+                <span className="text-micro whitespace-nowrap">
+                  {[pickedOnStepOne && "Picked on step 1", playerProvenance]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              )}
+            </span>
+            <div className="flex flex-col gap-3 sm:contents">
+              <Cell
+                label="Hand"
+                required
+                className="min-w-0"
+                labelClassName="sm:hidden"
+              >
+                <MenuSelect
+                  label="Player hand"
+                  variant="underline"
+                  value={playerHand}
+                  placeholder="Hand"
+                  options={HAND_OPTIONS}
+                  onChange={(v) => {
+                    onInputChange("playerHand", v);
+                    onInputChange("playerStyleSource", undefined);
+                    setSavingProfile("idle");
+                  }}
+                />
+              </Cell>
+              <Cell
+                label="Backhand"
+                required
+                className="min-w-0"
+                labelClassName="sm:hidden"
+              >
+                <MenuSelect
+                  label="Player backhand"
+                  variant="underline"
+                  value={playerBackhand}
+                  placeholder="Backhand"
+                  options={BACKHAND_OPTIONS}
+                  onChange={(v) => {
+                    onInputChange("playerBackhand", v);
+                    onInputChange("playerStyleSource", undefined);
+                    setSavingProfile("idle");
+                  }}
+                />
+              </Cell>
+            </div>
+            {/* Directly under the two answers it saves, in the one quiet blue a
+                text action carries — it read as a caption under the name. */}
+            {subject.isSelf &&
+              (playerHand || playerBackhand) &&
+              formData.playerStyleSource !== "profile" && (
+                <button
+                  type="button"
+                  onClick={saveProfile}
+                  disabled={savingProfile !== "idle"}
+                  className={cn(
+                    "cursor-pointer self-start text-[12px] whitespace-nowrap transition-colors duration-[var(--duration-hover)] disabled:cursor-default sm:col-span-2 sm:col-start-2 sm:justify-self-start",
+                    savingProfile === "idle"
+                      ? "text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                      : "text-[var(--ink-500)]",
+                  )}
+                >
+                  {savingProfile === "saving"
+                    ? "Saving…"
+                    : savingProfile === "saved"
+                      ? "Saved to your profile"
+                      : "Save to your profile"}
+                </button>
+              )}
+          </div>
+
+          {/* The opponent — named here, then read back like the row above. */}
+          <div className="flex flex-col gap-3 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-start">
+            {namingOpponent ? (
+              <span className="flex min-w-0 flex-col gap-1.5">
+                <Popover open={nameOpen} onOpenChange={setNameOpen}>
+                  <PopoverAnchor asChild>
+                    <input
+                      autoFocus
+                      value={nameTerm}
+                      placeholder="Opponent"
+                      aria-label="Opponent"
+                      // The DS underline field — the same 34px hairline as the
+                      // Hand and Backhand selects beside it. Its rule going 2px
+                      // blue on focus is the focus mark, so the ring would be a
+                      // second one; see `advField()` and `focus.css`.
+                      data-focus-ring="none"
+                      autoComplete="off"
+                      onFocus={() => setNameOpen(true)}
+                      onChange={(e) => {
+                        setNameTerm(e.target.value);
+                        if (!nameOpen) setNameOpen(true);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        const term = nameTerm.trim();
+                        if (!term) return;
+                        const hitRoster = rosterShown.find(
+                          (p) => normalizedPersonName(p.name) === needle,
+                        );
+                        const hitPlayed = playedShown.find(
+                          (p) => normalizedPersonName(p.name) === needle,
+                        );
+                        if (hitRoster) pickRoster(hitRoster);
+                        else if (hitPlayed) pickPlayed(hitPlayed);
+                        else void createOpponent(term);
+                      }}
+                      className={cn(
+                        advField("underline"),
+                        "w-full outline-none",
+                      )}
+                    />
+                  </PopoverAnchor>
+                  <PopoverContent
+                    align="start"
+                    sideOffset={6}
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    className={cn(
+                      floatMenuCls,
+                      inDual ? "w-[360px]" : "w-[320px]",
+                    )}
+                  >
+                    {inDual ? (
+                      <>
+                        {rosterShown.some((p) => p.heldThisLine) && (
+                          <span className={floatMenuLabelCls}>
+                            {lineSchool}
+                            {lineSlot ? ` · ${lineSlot} last season` : ""}
+                          </span>
+                        )}
+                        {rosterShown
+                          .filter((p) => p.heldThisLine)
+                          .map((p) => (
+                            <button
+                              key={p.playerId}
+                              type="button"
+                              onClick={() => pickRoster(p)}
+                              className={floatMenuRowCls}
+                            >
+                              <Avatar name={p.name} />
+                              <span className="text-[12px] font-medium text-[var(--ink-900)]">
+                                {p.name}
+                              </span>
+                              <span className="text-[11px] text-[var(--ink-500)]">
+                                {p.classYear ? `${p.classYear} · ` : ""}
+                                {p.meetings === 0
+                                  ? "no matches vs us"
+                                  : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
+                              </span>
+                            </button>
+                          ))}
+                        {rosterShown.some((p) => !p.heldThisLine) && (
+                          <span className={floatMenuLabelCls}>
+                            {rosterShown.some((p) => p.heldThisLine)
+                              ? "Rest of their roster"
+                              : `${lineSchool}'s roster`}
+                          </span>
+                        )}
+                        {rosterShown
+                          .filter((p) => !p.heldThisLine)
+                          .slice(0, 8)
+                          .map((p) => (
+                            <button
+                              key={p.playerId}
+                              type="button"
+                              onClick={() => pickRoster(p)}
+                              className={floatMenuRowCls}
+                            >
+                              <Avatar name={p.name} />
+                              <span className="text-[12px] font-medium text-[var(--ink-900)]">
+                                {p.name}
+                              </span>
+                              <span className="text-[11px] text-[var(--ink-500)]">
+                                {p.classYear ? `${p.classYear} · ` : ""}
+                                {p.meetings === 0
+                                  ? "no matches vs us"
+                                  : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
+                              </span>
+                            </button>
+                          ))}
+                      </>
+                    ) : (
+                      <>
+                        {playedShown.length > 0 && (
+                          <span className={floatMenuLabelCls}>
+                            People you&apos;ve played
+                          </span>
+                        )}
+                        {playedShown.map((p) => (
+                          <button
+                            key={p.name}
+                            type="button"
+                            onClick={() => pickPlayed(p)}
+                            className={floatMenuRowCls}
+                          >
+                            <Avatar name={p.name} />
+                            <span className="text-[12px] font-medium text-[var(--ink-900)]">
+                              {p.name}
+                            </span>
+                            <span className="text-[11px] text-[var(--ink-500)]">
+                              {p.matches}{" "}
+                              {p.matches === 1 ? "match" : "matches"} · last{" "}
+                              {formatMonthDay(p.lastDate)}
+                            </span>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {nameTerm.trim() && !exactKnown && (
+                      <>
+                        {(playedShown.length > 0 || rosterShown.length > 0) && (
+                          <span className={floatMenuDividerCls} />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void createOpponent(nameTerm.trim())}
+                          className={floatMenuRowCls}
+                        >
+                          <NewRing />
+                          <span className="min-w-0 truncate text-[12px] text-[var(--ink-700)]">
+                            {inDual ? (
+                              <>
+                                New player for{" "}
+                                <span className="font-medium text-[var(--ink-900)]">
+                                  {lineSchool}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                New opponent{" "}
+                                <span className="font-medium text-[var(--ink-900)]">
+                                  &ldquo;{nameTerm.trim()}&rdquo;
+                                </span>
+                              </>
+                            )}
+                          </span>
+                          <span className="flex-1" />
+                          <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
+                            {inDual ? "name only" : "only you see this name"}
+                          </span>
+                        </button>
+                      </>
+                    )}
+                    {!nameTerm.trim() &&
+                      playedShown.length === 0 &&
+                      rosterShown.length === 0 && (
+                        <span className={cn(floatMenuLabelCls, "pb-2")}>
+                          Type their name.
+                        </span>
+                      )}
+                  </PopoverContent>
+                </Popover>
+                {/* The selects beside it wait on the name; say so where the
+                  eye already is, not in a column of its own. */}
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
+                  <Kbd size="sm">enter</Kbd> to add them
+                </span>
+              </span>
+            ) : (
+              <span className="flex min-w-0 flex-col gap-0.5 sm:pt-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNameTerm(formData.opponentName);
+                    setNamingOpponent(true);
+                  }}
+                  aria-label={`Change the opponent, ${formData.opponentName}`}
+                  className="group inline-flex cursor-pointer items-center gap-1.5 text-left text-[13px] text-[var(--ink-900)]"
+                >
+                  <span className="truncate">{formData.opponentName}</span>
+                  <Pencil
+                    className="size-3 shrink-0 text-[var(--ink-400)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-700)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </button>
+                {opponentProvenance && (
+                  <span className="text-micro whitespace-nowrap">
+                    {opponentProvenance}
+                  </span>
+                )}
+              </span>
+            )}
+            <div className="flex flex-col gap-3 sm:contents">
+              <Cell
+                label="Hand"
+                required
+                className="min-w-0"
+                labelClassName="sm:hidden"
+              >
+                <MenuSelect
+                  label="Opponent hand"
+                  variant="underline"
+                  value={opponentHand}
+                  placeholder="Hand"
+                  disabled={namingOpponent}
+                  options={HAND_OPTIONS}
+                  onChange={(v) => {
+                    onInputChange("opponentHand", v);
+                    onInputChange("opponentStyleSource", undefined);
+                  }}
+                />
+              </Cell>
+              <Cell
+                label="Backhand"
+                required
+                className="min-w-0"
+                labelClassName="sm:hidden"
+              >
+                <MenuSelect
+                  label="Opponent backhand"
+                  variant="underline"
+                  value={opponentBackhand}
+                  placeholder="Backhand"
+                  disabled={namingOpponent}
+                  options={BACKHAND_OPTIONS}
+                  onChange={(v) => {
+                    onInputChange("opponentBackhand", v);
+                    onInputChange("opponentStyleSource", undefined);
+                  }}
+                />
+              </Cell>
+            </div>
+            {namingOpponent && (
+              <span className="text-[11px] text-[var(--ink-600)] sm:col-span-2 sm:col-start-2">
+                Hand and backhand open once the opponent is added.
+              </span>
+            )}
+          </div>
+        </div>
+
+        {inDual && namingOpponent && (
+          <div className={noteStripCls}>
+            <span>
+              A player added here belongs to {lineSchool}, not to this match —
+              every match against them reuses the same person, so head-to-heads
+              and their scouting profile add up. Name only; class and line
+              arrive with their next dual.
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Context */}
+      <div className="flex flex-col gap-[18px] border-t border-[var(--border-hairline)] pt-6">
+        <SectionHead label="Context" micro={contextMicro} />
+        <div className="grid grid-cols-3 gap-x-6 gap-y-5">
+          {fromLine ? (
+            <ReadCell
+              label="Event"
+              value={eventRead}
+              tag={lineSlot ? `· ${lineSlot}` : undefined}
+            />
+          ) : pickingLine ? (
+            <Cell label="Event" className="col-span-2">
+              <AttachLinePicker<UploadLine>
+                load={loadUploadLines}
+                loadKey={JSON.stringify([
+                  formData.date,
+                  roundFact,
+                  subject.playerId ?? subject.userId,
+                  subject.name,
+                  bestOfFact,
+                  adScoringFact,
+                ])}
+                onPick={(picked) => {
+                  setPickingLine(false);
+                  onAttach(picked.offer);
+                }}
+                onClose={() => setPickingLine(false)}
+                unsaved
+              />
+            </Cell>
+          ) : (
+            <EventCell
+              value={formData.eventName}
+              kind={formData.eventKind}
+              events={events}
+              footer={
+                workspaceKind === "team" ? (
+                  <ScheduleFooter
+                    canAttach={canAttach}
+                    onAdd={() => setPickingLine(true)}
+                  />
+                ) : undefined
+              }
+              onPick={(name, kind) => {
+                onInputChange("eventName", name);
+                onInputChange("eventKind", kind);
+                onInputChange(
+                  "matchType",
+                  kind === "tournament"
+                    ? "Tournament"
+                    : kind === "dual"
+                      ? "Dual Match"
+                      : (formData.matchType ?? ""),
+                );
+                if (kind !== "tournament") onInputChange("round", "");
+              }}
+            />
+          )}
+          {!fromLine && formData.eventKind === "tournament" && (
+            <SelectCell
+              label="Round"
+              placeholder="R32 · R16 · QF · SF · F"
+              mono
+              value={formData.round || undefined}
+              options={ROUND_OPTIONS}
+              onChange={(v) => onInputChange("round", v)}
+            />
+          )}
+          <DateCell
+            date={formData.date}
+            time={formData.time}
+            tag={dateTag}
+            onChange={(date, time) => {
+              onInputChange("date", date);
+              onInputChange("time", time);
+              onInputChange("dateSource", undefined);
+            }}
+          />
+          <SelectCell
+            label="Court"
+            placeholder="Surface"
+            value={formData.courtType || undefined}
+            options={COURT_OPTIONS}
+            read={courtRead}
+            onChange={(v) => onInputChange("courtType", v)}
+          />
+          {fromLine ? (
+            <ReadCell
+              label="Format"
+              required
+              value={
+                FORMAT_OPTIONS.find(
+                  (option) => option.value === formData.bestOf,
+                )?.label ?? "Not set"
+              }
+              tag="from the event"
+            />
+          ) : (
+            <SelectCell
+              label="Format"
+              required
+              placeholder="Choose"
+              value={formData.bestOf || undefined}
+              options={FORMAT_OPTIONS}
+              onChange={changeFormat}
+            />
+          )}
+          {fromLine ? (
+            <ReadCell
+              label="Scoring"
+              required
+              value={
+                formData.adScoring === undefined
+                  ? "Not set"
+                  : formData.adScoring
+                    ? "Ad"
+                    : "No-Ad"
+              }
+              tag="from the event"
+            />
+          ) : (
+            <SelectCell
+              label="Scoring"
+              required
+              placeholder="Choose"
+              value={formData.adScoring}
+              options={[
+                { value: true, label: "Ad" },
+                { value: false, label: "No-Ad" },
+              ]}
+              onChange={(v) => onInputChange("adScoring", v)}
+            />
+          )}
+          {!isProcessingProvider && (
+            <ReadCell
+              label="Duration"
+              value={
+                formData.duration
+                  ? formatHoursMinutes(formData.duration / 1000)
+                  : ""
+              }
+              placeholder="Not set"
+              tag={
+                exportRead && formData.duration ? "from the export" : undefined
+              }
+              mono
+            />
+          )}
+          <SelectCell
+            label="Lets"
+            required
+            placeholder="Choose"
+            value={formData.playOnLets}
+            options={[
+              { value: true, label: "Play on" },
+              { value: false, label: "Replay" },
+            ]}
+            onChange={(v) => onInputChange("playOnLets", v)}
+          />
+        </div>
+      </div>
+      {/* Red: the scores entered for the dropped sets are gone once this runs,
+          and the stock dialog's blue button said otherwise. */}
+      <ConfirmDialog
+        open={pendingFormat !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingFormat(null);
+        }}
+        title="Remove entered set scores?"
+        description="This format has fewer sets, so the scores entered for the extra sets are removed."
+        tone="danger"
+        cancelLabel="Keep current format"
+        confirmLabel="Remove set scores"
+        onConfirm={() => {
+          if (pendingFormat) onFormatChange(pendingFormat);
+          setPendingFormat(null);
+        }}
+      />
+    </div>
+  );
+}
+
+export const DetailsStepContent = memo(DetailsStepContentImpl);

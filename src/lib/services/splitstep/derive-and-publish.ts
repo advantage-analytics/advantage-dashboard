@@ -1,0 +1,199 @@
+/**
+ * The full derivation step: transcript, statistics, suppression.
+ *
+ * Called from the webhook's `after()` once results are stored and graded, and
+ * from the CLI. One implementation, because a derivation that exists in two
+ * places produces two different transcripts of the same match, both persisted,
+ * with nothing announcing which is live.
+ *
+ * No Edge Function. Measured: parse and grade is ~3 ms, the whole write is well
+ * under two seconds against a route that already declares `maxDuration = 60` and
+ * returns its 200 before any of this runs. The spec asked for one against an
+ * unmeasured workload; the workload turned out not to need it, and a Deno copy
+ * of this logic would be the more expensive mistake.
+ */
+
+import type { createAdminClient } from "@/lib/supabase/admin";
+import { persistTranscript } from "./persist-transcript";
+import {
+  insightsWaitMs,
+  requestMatchInsights,
+  waitForInsights,
+} from "./request-insights";
+import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
+import type { Transcript } from "./derivation";
+
+const LOG = "[splitstep:derive]";
+
+export type DeriveOutcome =
+  | {
+      ok: true;
+      matchId: string;
+      pointsWritten: number;
+      shotsWritten: number;
+      transcript: Transcript;
+    }
+  | { ok: false; reason: string };
+
+/**
+ * Derive a job's match and publish what can be trusted.
+ *
+ * Never throws, mirroring gradeResults(). An exception inside `after()` aborts
+ * every step queued behind it, and this runs last precisely because it is the
+ * one that can be retried by hand from stored results.
+ *
+ * Status is moved to `deriving` first and settled afterwards. That matters for
+ * more than display: `splitstep_status_rank()` ranks `deriving` above anything a
+ * webhook can carry, so a late vendor redelivery arriving mid-write cannot drag
+ * the row backwards to `queued`.
+ */
+export async function deriveAndPublish(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  jobId: string;
+  /**
+   * Epoch ms by which the caller must be finished — the webhook's
+   * `maxDuration`, less headroom. Bounds the wait on the review so the job is
+   * always settled before the platform kills the invocation; a job frozen at
+   * `deriving` would read as analysing forever. Omitted by the CLI, which has
+   * no ceiling.
+   */
+  deadline?: number;
+}): Promise<DeriveOutcome> {
+  const { supabase, jobId, deadline } = params;
+
+  try {
+    await supabase
+      .from("processing_jobs")
+      .update({ status: "deriving" })
+      .eq("id", jobId);
+
+    const written = await persistTranscript({ supabase, jobId });
+
+    if (!written.ok) {
+      // A refusal is the system working. The transcript is reconciled against
+      // the score the player entered and rejected outright when it disagrees,
+      // because these rows are the point-by-point timeline and the video seek
+      // targets — a wrong point is a specific false claim on a screen.
+      await supabase
+        .from("processing_jobs")
+        .update({ status: "derivation_failed", error_message: written.reason })
+        .eq("id", jobId);
+      console.error(`${LOG} refused`, { jobId, reason: written.reason });
+      await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
+      return { ok: false, reason: written.reason };
+    }
+
+    const { matchId } = written;
+
+    // Order is load-bearing. backfill_returns_in_and_net_points rewrites
+    // first_returns_in and second_returns_in with NO provider guard, so running
+    // it after the suppression would silently un-suppress two columns built
+    // entirely on phantom return strokes.
+    //
+    // SUPPRESSION SKIPPED (2026-09-02, product decision — "accept the data as
+    // truth for now"). `suppress_derived_match_stats` nulls aces, double
+    // faults, service winners, rally length and the whole return family for
+    // every Advantage Intelligence match, so they render as em dashes. With
+    // it commented out those families publish as computed. The RPC and its
+    // migration are untouched; restore by uncommenting the line and re-running
+    // deriveAndPublish (or the RPC by hand) for every match published since.
+    // docs/splitstep-derivation.md §4 explains what those numbers are worth.
+    const steps: [string, Record<string, string>][] = [
+      ["calculate_match_stats", { p_match_id: matchId }],
+      ["backfill_returns_in_and_net_points", { p_match_id: matchId }],
+      // ['suppress_derived_match_stats', { p_match_id: matchId }],
+    ];
+
+    for (const [fn, args] of steps) {
+      const { error } = await supabase.rpc(fn, args);
+      if (!error) continue;
+
+      // Rows are written and correct; only the aggregates are missing or
+      // unsuppressed. Leaving the job `completed` here would publish statistics
+      // that were never suppressed, so this is a failure even though the
+      // transcript survived.
+      await supabase
+        .from("processing_jobs")
+        .update({
+          status: "derivation_failed",
+          error_message: `${fn} failed: ${error.message}`,
+        })
+        .eq("id", jobId);
+      console.error(`${LOG} ${fn} failed`, {
+        jobId,
+        matchId,
+        error: error.message,
+      });
+      await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
+      return { ok: false, reason: `${fn} failed: ${error.message}` };
+    }
+
+    // The Advantage Intelligence review the report's insight card shows, as
+    // `process-match` requests it for a SwingVision import. BEFORE `completed`
+    // and the mail: those are what tell the player the analysis is done, and
+    // announcing it first sent people to a report whose review had not been
+    // written yet — the page draws no stand-in and never re-reads it, so the
+    // card simply was not there. Measured at 15–25s (one model call, retried
+    // on Gemini's transient refusals). Capped, because it is the only optional
+    // step: a model outage must delay the statistics by seconds, never withhold
+    // them. `requestMatchInsights` never throws; a review that misses the cap
+    // is not cancelled.
+    const reviewSettled = await waitForInsights(
+      requestMatchInsights({ supabase, matchId }),
+      insightsWaitMs(deadline),
+    );
+    if (!reviewSettled) {
+      console.warn(`${LOG} review not written in time; publishing`, {
+        jobId,
+        matchId,
+      });
+    }
+
+    await supabase
+      .from("processing_jobs")
+      .update({ status: "completed", error_message: null })
+      .eq("id", jobId);
+
+    // The uploader's "Email me when analysis is ready". Here and not in the
+    // webhook's completed branch, because this write is what makes the report
+    // page readable — and here rather than in each caller so a re-run from the
+    // CLI announces itself the same way. Deduped per job; never throws.
+    await notifyAnalysisOutcome({ supabase, jobId, outcome: "ready" });
+
+    // `unreconciled` is reachable now (ACCEPT_UNRECONCILED_FOLD): the fold did
+    // not reproduce the entered score and the rows were written anyway, with
+    // player1 named by `player1Source`. Logged at warn so it is greppable.
+    const rec = written.transcript.reconciliation;
+    const log = rec.ok ? console.log : console.warn;
+    log(`${LOG} published`, {
+      jobId,
+      matchId,
+      points: written.pointsWritten,
+      shots: written.shotsWritten,
+      grade: rec.ok ? "reconciled" : "unreconciled",
+      player1Source: rec.player1Source,
+      reason: rec.ok ? undefined : rec.reason,
+    });
+
+    return {
+      ok: true,
+      matchId,
+      pointsWritten: written.pointsWritten,
+      shotsWritten: written.shotsWritten,
+      transcript: written.transcript,
+    };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    await supabase
+      .from("processing_jobs")
+      .update({ status: "derivation_failed", error_message: reason })
+      .eq("id", jobId)
+      .then(
+        () => undefined,
+        () => undefined,
+      );
+    console.error(`${LOG} threw`, { jobId, reason });
+    await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
+    return { ok: false, reason };
+  }
+}

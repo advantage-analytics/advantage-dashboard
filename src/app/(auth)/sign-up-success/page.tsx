@@ -33,7 +33,7 @@ export default function Page() {
 
       {/* Header */}
       <div className="flex w-full flex-col gap-[12px]">
-        <h2 className="text-[28px] font-light leading-[1.1] tracking-[-0.5px] text-[var(--color-text-primary)]">
+        <h2 className="text-[28px] leading-[1.1] font-light tracking-[-0.5px] text-[var(--color-text-primary)]">
           You&apos;ve Joined the Team.
         </h2>
         <p className="text-[12px] leading-[1.5] text-[var(--color-text-muted)]">

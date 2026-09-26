@@ -1,117 +1,189 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import type { DisplayMatch } from "@/lib/data/matches-list-types";
-import type { MatchView } from "./view-toggle";
-import { MatchCardGallery } from "./match-card-gallery";
-import { MatchCardList, LIST_GRID_COLS } from "./match-card-list";
-import { ArrowUp, ArrowDown } from "lucide-react";
+import { useMemo } from "react";
 
-type SortField = "date" | "opponent" | "event" | "result";
-type SortDir = "asc" | "desc";
+import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import { DraftRow, type DraftRowData } from "./draft-row";
+import { MatchCardGallery } from "./match-card-gallery";
+import { MatchCardList } from "./match-card-list";
+import {
+  DATE_COL,
+  DATE_COL_WITH_YEAR,
+  LIST_ROW_FRAME,
+  listColumnLabels,
+  listGridCols,
+  LIST_MIN_WIDTH,
+  LIST_TRACK_TRANSITION,
+  TEAM_LIST_MIN_WIDTH,
+  TEAM_LIST_MIN_WIDTH_COMPACT,
+  eventCellFade,
+} from "./match-list-layout";
+import { cn } from "@/lib/utils";
+
+export type SortField = "date" | "opponent" | "event" | "result";
+export type SortDir = "asc" | "desc";
 
 interface MatchesGridProps {
   matches: DisplayMatch[];
-  view: MatchView;
-  sortField: SortField;
-  sortDir: SortDir;
-  onSort: (field: SortField) => void;
+  /** Half-finished uploads, listed at the top (design 11c). */
+  drafts?: DraftRowData[];
+  /**
+   * Drafts that fill a listed match, keyed by that match's id — drawn as the
+   * match row's Draft pill instead of rows of their own (`foldDrafts`).
+   */
+  foldedDrafts?: ReadonlyMap<string, DraftRowData>;
   newMatchId?: string | null;
-}
-
-const STAGGER_CAP = 5;
-const STAGGER_DELAY = 0.03;
-
-const COLUMNS: { label: string; field?: SortField }[] = [
-  { label: "Event", field: "event" },
-  { label: "Result", field: "result" },
-  { label: "Score" },
-  { label: "Opponent", field: "opponent" },
-  { label: "Type" },
-  { label: "Date", field: "date" },
-];
-
-function SortIcon({ field, sortField, sortDir }: { field?: SortField; sortField: SortField; sortDir: SortDir }) {
-  if (!field || field !== sortField) return null;
-  const Icon = sortDir === "asc" ? ArrowUp : ArrowDown;
-  return <Icon className="w-2.5 h-2.5 ml-0.5" />;
+  /** Match ids never opened on this device — draws the blue "New" pill. */
+  unseenIds?: Set<string>;
+  /** Which wizard a draft resumes in. */
+  scope?: "personal" | "team";
+  /** The match or draft open in the drawer, or null. */
+  selectedId?: string | null;
+  /** Row click and Enter/Space: open, switch or close the drawer. */
+  onToggle?: (id: string, viaKeyboard: boolean) => void;
+  /** The drawer is open (or closing) beside the table. */
+  drawerOpen?: boolean;
+  /** Drawn in the table body (and in place of the cards) when `matches` is empty. */
+  empty?: React.ReactNode;
 }
 
 export function MatchesGrid({
   matches,
-  view,
-  sortField,
-  sortDir,
-  onSort,
+  drafts = [],
+  foldedDrafts,
   newMatchId,
+  unseenIds,
+  scope = "personal",
+  selectedId = null,
+  onToggle,
+  drawerOpen = false,
+  empty,
 }: MatchesGridProps): React.JSX.Element {
-  const shouldReduceMotion = useReducedMotion();
+  // Only the team table gives a track up beside the drawer; the personal one
+  // fits at 1440 with every column.
+  const compact = scope === "team" && drawerOpen;
+  /* Which layout shows is a width question, so Tailwind answers it rather than
+     React. Held in state it could only be read after mount, so the server — which
+     has no viewport — always emitted the wide table and a phone painted
+     that squeezed table for a frame before an effect swapped in the cards.
+     Deciding in CSS renders the right layout the first time, and pins the
+     breakpoint to `lg` instead of a 1023px literal with nothing tying it there.
+
+     Both layouts sit in the tree. `hidden` is display:none, so the inactive one
+     costs no paint and stays out of both the accessibility tree and the tab
+     order; pagination caps the duplication at ten rows. */
+  // The Date track widens for the whole card, not per row, so the columns keep
+  // one x across the list — see `DATE_COL_WITH_YEAR`. A date needs the year
+  // whenever it is not from the current year, which is the exact rule
+  // `formatShortDate` applies — decided here by comparing years directly rather
+  // than formatting every date twice (once to detect, once to render), and
+  // memoized so a re-render that does not change the rows does not re-scan them.
+  const needsYear = useMemo(() => {
+    const thisYear = new Date().getFullYear();
+    return [
+      ...drafts.map((d) => d.updatedAt),
+      ...matches.map((m) => m.date),
+    ].some((date) => new Date(date).getFullYear() !== thisYear);
+  }, [drafts, matches]);
+  const cardStyle = {
+    padding: "2px 24px 6px",
+    "--date-col": needsYear ? DATE_COL_WITH_YEAR : DATE_COL,
+  } as React.CSSProperties;
 
   return (
-    <AnimatePresence mode="wait">
-      {view === "gallery" ? (
-        <motion.div
-          key="gallery"
-          initial={shouldReduceMotion ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {matches.map((match, i) => (
-              <motion.div
-                key={match.id}
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, delay: Math.min(i, STAGGER_CAP) * STAGGER_DELAY, ease: [0.25, 0.46, 0.45, 0.94] }}
-              >
-                <MatchCardGallery match={match} isNew={match.id === newMatchId} />
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-      ) : (
-        <motion.div
-          key="list"
-          initial={shouldReduceMotion ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
-        >
-          {/* Column headers */}
-          <div className="grid gap-x-4 items-center px-4 py-2.5 border-b border-[#F0F0F0] mb-4" style={LIST_GRID_COLS} role="row">
-            {COLUMNS.map((col) => (
-              <div key={col.label} className="min-w-0" role="columnheader" aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}>
-                {col.field ? (
-                  <button
-                    onClick={() => onSort(col.field!)}
-                    className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] hover:text-[#525252] hover:underline underline-offset-2 cursor-pointer transition-[color] duration-200"
-                  >
-                    {col.label}
-                    <SortIcon field={col.field} sortField={sortField} sortDir={sortDir} />
-                  </button>
-                ) : (
-                  <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
-                    {col.label}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
+    <>
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:hidden">
+        {matches.map((match) => (
+          <MatchCardGallery
+            key={match.id}
+            match={match}
+            scope={scope}
+            isNew={match.id === newMatchId}
+          />
+        ))}
+        {matches.length === 0 ? (
+          <div className="surface-card md:col-span-2">{empty}</div>
+        ) : null}
+      </div>
 
-          {/* Rows */}
-          {matches.map((match, i) => (
-            <motion.div
-              key={match.id}
-              initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, delay: Math.min(i, STAGGER_CAP) * STAGGER_DELAY, ease: [0.25, 0.46, 0.45, 0.94] }}
+      <div className="hidden lg:block">
+        {/* The whole table lives in one card (Platform Audit Pb2): surface-card,
+            the Roster's 2px 24px 6px chrome — the 52px row is the vertical
+            rhythm and the card should not add a second one — a hairline under
+            the header only, and rows that carry a rounded inset hover instead
+            of dividers (SKILL 8a). */}
+        <div className="surface-card overflow-x-auto" style={cardStyle}>
+          <div
+            className={cn(
+              LIST_TRACK_TRANSITION,
+              scope === "personal"
+                ? LIST_MIN_WIDTH
+                : compact
+                  ? TEAM_LIST_MIN_WIDTH_COMPACT
+                  : TEAM_LIST_MIN_WIDTH,
+            )}
+          >
+            {/* Column headers — flush at the card inset, hairline underneath. */}
+            <div
+              className={cn(
+                LIST_ROW_FRAME,
+                LIST_TRACK_TRANSITION,
+                "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+              )}
+              style={listGridCols(scope, compact)}
+              role="row"
             >
-              <MatchCardList match={match} isNew={match.id === newMatchId} />
-            </motion.div>
-          ))}
-        </motion.div>
-      )}
-    </AnimatePresence>
+              {listColumnLabels(scope).map((label, i) => (
+                <span
+                  key={label || `col-${i}`}
+                  aria-hidden={
+                    (label === "Event" && scope === "team" && compact) ||
+                    undefined
+                  }
+                  className={cn(
+                    "eyebrow-sm min-w-0 truncate",
+                    label === "Event" &&
+                      scope === "team" &&
+                      eventCellFade(compact),
+                  )}
+                  role="columnheader"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+            {/* Rows — no per-item entrance tween. Content must never depend on an
+              animation frame to become visible; PageTransition already carries
+              the route-level entrance. */}
+            <div>
+              {drafts.map((draft) => (
+                <DraftRow
+                  key={draft.id}
+                  draft={draft}
+                  scope={scope}
+                  compact={compact}
+                  selected={draft.id === selectedId}
+                  onToggle={onToggle}
+                />
+              ))}
+              {matches.map((match) => (
+                <MatchCardList
+                  key={match.id}
+                  match={match}
+                  scope={scope}
+                  isNew={match.id === newMatchId}
+                  unseen={unseenIds?.has(match.id)}
+                  hasDraft={foldedDrafts?.has(match.id) ?? false}
+                  compact={compact}
+                  selected={match.id === selectedId}
+                  onToggle={onToggle}
+                />
+              ))}
+              {matches.length === 0 ? empty : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

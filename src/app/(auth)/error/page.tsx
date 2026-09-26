@@ -36,7 +36,7 @@ function ErrorContent() {
 
       {/* Header */}
       <div className="flex flex-col gap-[8px]">
-        <h2 className="text-[28px] font-light leading-[1.1] tracking-[-0.5px] text-[var(--color-text-primary)]">
+        <h2 className="text-[28px] leading-[1.1] font-light tracking-[-0.5px] text-[var(--color-text-primary)]">
           Something Went Wrong.
         </h2>
         {error ? (
@@ -48,8 +48,8 @@ function ErrorContent() {
           </p>
         ) : (
           <p className="text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
-            An unspecified error occurred. Please try again or contact support if
-            the problem persists.
+            An unspecified error occurred. Please try again or contact support
+            if the problem persists.
           </p>
         )}
       </div>

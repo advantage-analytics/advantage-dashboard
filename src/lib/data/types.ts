@@ -8,7 +8,6 @@ export interface Player {
 export interface SetScore {
   player1: number;
   player2: number;
-  tiebreak?: boolean;
   player1Tiebreak?: number | null;
   player2Tiebreak?: number | null;
 }
@@ -26,10 +25,33 @@ export interface Match {
   matchType: string;
   courtType?: string;
   verificationStatus?: string;
+  /** `matches.source_provider` — which pipeline produced this match's data. */
+  sourceProvider?: string;
   round?: string;
   matchContext?: string;
   duration?: string;
   durationSec?: number | null;
+  /**
+   * The schedule event this match was played in, when it came from one.
+   *
+   * Only the id: the event's NAME is already `tournamentName`, because
+   * `recordResult` copies it there when it mints the row. Carrying it twice
+   * would give the page two spellings of one fact and no rule for which wins.
+   * Null for every personal match and for a program's challenge or practice
+   * matches, which are deliberately minted with no `event_entry_id`.
+   */
+  eventId?: string | null;
+  /**
+   * Who filed this match, when that is not the player it is attributed to.
+   *
+   * Null for every personal match — there the uploader IS the player — and
+   * null for a team match somebody filed for themselves. It is set only when
+   * `matches.created_by` is a different person from `player1_id`, which inside
+   * a program is routine: a coach files for their squad, and a player may file
+   * for a teammate. Resolved in `match-detail-server.ts`; see the note there
+   * for why the two columns cannot be compared directly.
+   */
+  uploadedBy?: string | null;
   player1: Player;
   player2: Player;
   score: MatchScore;
@@ -85,11 +107,11 @@ export interface MatchSummaryStats {
 }
 
 export interface PlayerStatistics {
-  aces: number;
-  doubleFaults: number;
+  aces: number | null;
+  doubleFaults: number | null;
   firstServeInPct: number;
   firstServeWinPct: number;
-  secondServeWinPct: number;
+  secondServeWinPct: number | null;
   breakpointsWon: number;
   tiebreaksWon: number;
   servicePointsWon: number;
@@ -99,8 +121,8 @@ export interface PlayerStatistics {
   firstReturnPointsWon: number;
   secondReturnPointsWon: number;
   returnGamesWon: number;
-  firstReturnInPct: number;
-  secondReturnInPct: number;
+  firstReturnInPct: number | null;
+  secondReturnInPct: number | null;
   firstReturnWonPct: number;
   secondReturnWonPct: number;
   returnGamesWonPct: number;

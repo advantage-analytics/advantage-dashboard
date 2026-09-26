@@ -1,3 +1,5 @@
+import { formatScoreText, scoreSetsFrom } from "@/lib/ui/score-format";
+
 /**
  * Extract initials from a player name
  * Handles both single names and "Name & Partner" formats
@@ -49,12 +51,78 @@ export function shortName(name: string, maxLen = 14): string {
   return [`${parts[0][0]}.`, ...midInitials, last].join(" ");
 }
 
+/** Generational suffixes that are never the surname ("Marcus Reid Jr."). */
+const NAME_SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv"]);
+
+/** A name's words, with trailing suffixes and the comma before them removed. */
+function nameWords(name: string): string[] {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  while (
+    words.length > 1 &&
+    NAME_SUFFIXES.has(
+      words[words.length - 1].toLowerCase().replace(/[.,]/g, ""),
+    )
+  ) {
+    words.pop();
+  }
+  if (words.length > 0) {
+    words[words.length - 1] = words[words.length - 1].replace(/,$/, "");
+  }
+  return words;
+}
+
+/** Doubles sides are stored as "Name & Partner" (see `getInitials`). */
+const PARTNER_SEPARATOR = /\s+[&/]\s+/;
+
+/**
+ * "Reid" out of "Marcus Reid". The settled match report's cards (design 04
+ * F1) label players by surname only, where `shortName()` still returns a full
+ * "Marcus Reid" at 11 characters. A generational suffix is skipped ("Marcus
+ * Reid Jr." → "Reid"), a doubles side keeps both partners ("Marcus Reid &
+ * Tom Okafor" → "Reid & Okafor"), and a single-word name comes back as-is.
+ */
+export function surname(name: string): string {
+  if (PARTNER_SEPARATOR.test(name)) {
+    return name.split(PARTNER_SEPARATOR).map(surname).join(" & ");
+  }
+  const words = nameWords(name);
+  return words.length > 0 ? words[words.length - 1] : name.trim();
+}
+
+/**
+ * The two labels a card prints for one match, `[you, opp]` in the order given.
+ * Surnames, unless both players share one — then each gains a first initial
+ * ("M. Reid" / "D. Reid"), and if that still matches, the full names come
+ * back. Two identical labels would make every readout unattributable.
+ */
+export function surnameLabels(you: string, opp: string): [string, string] {
+  const youSurname = surname(you);
+  const oppSurname = surname(opp);
+  if (youSurname.toLowerCase() !== oppSurname.toLowerCase()) {
+    return [youSurname, oppSurname];
+  }
+
+  const initialled = (name: string, last: string): string => {
+    const words = nameWords(name);
+    return words.length > 1 && !PARTNER_SEPARATOR.test(name)
+      ? `${words[0][0]}. ${last}`
+      : name.trim();
+  };
+  const youInitialled = initialled(you, youSurname);
+  const oppInitialled = initialled(opp, oppSurname);
+  if (youInitialled.toLowerCase() !== oppInitialled.toLowerCase()) {
+    return [youInitialled, oppInitialled];
+  }
+  return [you.trim(), opp.trim()];
+}
+
 /**
  * Format duration in minutes to "XHR YMIN" format
  */
-export function formatDuration(
-  minutes: number
-): { hours: number; mins: number } {
+export function formatDuration(minutes: number): {
+  hours: number;
+  mins: number;
+} {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return { hours, mins };
@@ -79,9 +147,19 @@ export function formatPlayerStyle(
   }
 
   const b = backhand?.trim().toLowerCase();
-  if (b === "one-handed" || b === "one handed" || b === "1-handed" || b === "1 handed") {
+  if (
+    b === "one-handed" ||
+    b === "one handed" ||
+    b === "1-handed" ||
+    b === "1 handed"
+  ) {
     parts.push("1-HANDED BACKHAND");
-  } else if (b === "two-handed" || b === "two handed" || b === "2-handed" || b === "2 handed") {
+  } else if (
+    b === "two-handed" ||
+    b === "two handed" ||
+    b === "2-handed" ||
+    b === "2 handed"
+  ) {
     parts.push("2-HANDED BACKHAND");
   }
 
@@ -92,10 +170,13 @@ export function formatPlayerStyle(
  * Map a match's raw `result` / `matchContext` string into the uppercase eyebrow
  * label shown in the scoreboard rail ("FINAL", "UNFINISHED", etc.).
  */
-export function formatScoreboardStatus(matchContext: string | undefined): string {
+export function formatScoreboardStatus(
+  matchContext: string | undefined,
+): string {
   if (!matchContext) return "FINAL";
   const c = matchContext.toLowerCase();
   if (c.includes("unfinished")) return "UNFINISHED";
+  if (c.includes("retired")) return "RETIRED";
   if (c.includes("withdrew") || c.includes("withdrawn")) return "WITHDREW";
   if (c.includes("default")) return "DEFAULTED";
   return "FINAL";
@@ -110,20 +191,102 @@ export interface MatchScore {
   player2: number[];
   player1_tiebreaks?: (number | null)[];
   player2_tiebreaks?: (number | null)[];
+  /**
+   * Who took a match the games do not decide — a retirement or a default,
+   * where the side that stopped can be ahead on sets. SwingVision imports
+   * write it too. When present it IS the answer; sets are the fallback.
+   */
+  winner?: "player1" | "player2";
 }
 
 /**
- * Build a per-set score string from the user's perspective, e.g. "6-4 3-6 7-5".
+ * A per-set score from the user's perspective, as plain text — "6-4, 3-6, 7-5".
  * Returns "" when the score is missing or malformed.
+ *
+ * The spelling is not this function's to decide: it is `formatScoreText`'s, in
+ * `@/lib/ui/score-format`, which is the one place the product's score notation
+ * lives. All this adds is the shape the loaders actually hold — a raw
+ * `matches.score` row plus "is the user player 1" — so that the
+ * perspective-flip is spelled `swap: !isUserPlayer1` once here rather than at
+ * every call site.
+ *
+ * Tiebreaks are deliberately absent. A superscript cannot survive a plain
+ * string, and `formatScoreText` drops it rather than inventing a second
+ * notation; render `<ScoreLine>` wherever markup is allowed.
+ *
+ * Until round 44 this returned a LEGACY space-joined form ("6-4 3-6 7-5") that
+ * two of its three callers patched back with `.replaceAll(" ", ", ")`, while
+ * the third rendered the old spacing on screen. Both the downgrade and the
+ * patches are gone — do not add either back.
  */
 export function buildScoreString(
   score: MatchScore | null,
   isUserPlayer1: boolean,
 ): string {
   if (!score?.player1?.length || !score?.player2?.length) return "";
-  const userScores = isUserPlayer1 ? score.player1 : score.player2;
-  const oppScores = isUserPlayer1 ? score.player2 : score.player1;
-  return userScores.map((s, i) => `${s}-${oppScores[i] ?? 0}`).join(" ");
+  return formatScoreText(scoreSetsFrom(score, { swap: !isUserPlayer1 }));
+}
+
+/**
+ * Sets taken by each side, from the game counts — or null where the score
+ * cannot say.
+ *
+ * Extracted from `matchOutcome` below, which now reads it, so that a surface
+ * needing the tally itself (Team Home's "sets won" tile) does not add a third
+ * spelling of "who took this set". Counting games rather than reading a column
+ * is not a shortcut: `matches.result` holds a CONTEXT string ("Final Score"),
+ * never an outcome.
+ *
+ * A set neither side took — level games, which the schema permits on an
+ * unfinished set — is counted for nobody, so the two halves need not add up to
+ * the number of sets played.
+ */
+export function setTally(
+  score: MatchScore | null,
+): { player1: number; player2: number } | null {
+  if (!score?.player1?.length || !score?.player2?.length) return null;
+  let p1Sets = 0;
+  let p2Sets = 0;
+  score.player1.forEach((s, i) => {
+    if (s > (score.player2[i] ?? 0)) p1Sets++;
+    else if ((score.player2[i] ?? 0) > s) p2Sets++;
+  });
+  return { player1: p1Sets, player2: p2Sets };
+}
+
+/**
+ * The side that took the match — THE rule, which every "who won" reader
+ * shares: the stored `winner` when a retirement or a default decided it (the
+ * side that stopped can lead on sets), otherwise the set count. Null where
+ * the score cannot say: no score, or level sets.
+ */
+export function scoreWinner(
+  score: MatchScore | null | undefined,
+): "player1" | "player2" | null {
+  if (score?.winner === "player1" || score?.winner === "player2") {
+    return score.winner;
+  }
+  const sets = setTally(score ?? null);
+  if (!sets || sets.player1 === sets.player2) return null;
+  return sets.player1 > sets.player2 ? "player1" : "player2";
+}
+
+/**
+ * Who took the match, from the viewer's seat — `scoreWinner` turned into a
+ * yes/no, or null where the score cannot say.
+ *
+ * Null and false are different answers and some callers need them apart. A
+ * scoreboard has already decided to show a result, so "no score" and "lost"
+ * both render as a loss and `didUserWin` below is the right shape for it. A
+ * strip of form ticks has not decided anything, and collapsing the two would
+ * draw a red tick for a match nobody scored.
+ */
+export function matchOutcome(
+  score: MatchScore | null,
+  isUserPlayer1: boolean,
+): boolean | null {
+  const winner = scoreWinner(score);
+  return winner === null ? null : (winner === "player1") === isUserPlayer1;
 }
 
 /**
@@ -134,14 +297,60 @@ export function didUserWin(
   score: MatchScore | null,
   isUserPlayer1: boolean,
 ): boolean {
-  if (!score?.player1?.length || !score?.player2?.length) return false;
-  let p1Sets = 0;
-  let p2Sets = 0;
-  score.player1.forEach((s, i) => {
-    if (s > (score.player2[i] ?? 0)) p1Sets++;
-    else if ((score.player2[i] ?? 0) > s) p2Sets++;
+  return matchOutcome(score, isUserPlayer1) === true;
+}
+
+/**
+ * A signed change, as the product draws it: an arrow, a magnitude and a colour.
+ *
+ * Colour is not decoration here. A bare "↓ 5" beside a percentage is a fact
+ * whose direction a reader has to parse from a glyph; green and red say it
+ * before they read anything. Green/red is reserved for outcome elsewhere in
+ * this app, and a trend IS an outcome — the rate got better or it got worse.
+ *
+ * Zero is neither, and gets the neutral ink rather than a colour it has not
+ * earned.
+ */
+export function formatDelta(delta: number): { label: string; color: string } {
+  const rounded = Math.round(delta);
+  if (rounded > 0) return { label: `↑ ${rounded}`, color: "var(--viz-good)" };
+  if (rounded < 0) {
+    return { label: `↓ ${Math.abs(rounded)}`, color: "var(--viz-bad)" };
+  }
+  return { label: "→ 0", color: "var(--ink-500)" };
+}
+
+/**
+ * The calendar day an instant falls on in `timeZone`, as YYYY-MM-DD.
+ *
+ * Shared by every caller that has to answer "what day is it" — or "is this
+ * today" — in a zone that is not necessarily the server's own. Reading a
+ * `Date`'s local getters (`getFullYear()`/`getMonth()`/`getDate()`) answers
+ * that in the SERVER's zone, which on Vercel is UTC regardless of whose
+ * "today" is actually being asked about. `team-home-server.ts` (`localDay`)
+ * and `team-roster-server.ts` (`isToday`) both compute through here rather
+ * than each keeping its own copy — two definitions of "today" is how a
+ * claimed-profile pill ends up showing on one page and not the other for the
+ * same person on the same afternoon.
+ */
+export function zonedDayString(now: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((piece) => piece.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+/** "2026-08-08T…" → "Aug 8". */
+export function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
   });
-  return isUserPlayer1 ? p1Sets > p2Sets : p2Sets > p1Sets;
 }
 
 /**

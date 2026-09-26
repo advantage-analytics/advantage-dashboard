@@ -4,15 +4,29 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import FormHeader from "./form-header";
 import FormField from "./form-field";
+import AuthButton from "./auth-button";
+import AuthFooter, { AUTH_LINK } from "./auth-footer";
+import FormError from "./form-error";
+import {
+  toAuthError,
+  validatePassword,
+  PASSWORD_RULE,
+  type AuthError,
+} from "@/lib/auth/error-messages";
 
-const PASSWORD_REGEX = /^(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/;
-
+/**
+ * Not one of the four pages in the v2 auth set, but it is the page the recovery
+ * link lands on and it shares the set's components. Left on the old header
+ * ladder and field vocabulary it would have been the one screen in the flow
+ * still speaking v1, so it follows the same spec here.
+ */
 export function UpdatePasswordForm() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AuthError | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
@@ -20,14 +34,13 @@ export function UpdatePasswordForm() {
     e.preventDefault();
     setError(null);
 
-    if (password !== confirm) {
-      setError("Passwords must match.");
+    const passwordProblem = validatePassword(password);
+    if (passwordProblem) {
+      setError({ field: "password", message: passwordProblem });
       return;
     }
-    if (!PASSWORD_REGEX.test(password)) {
-      setError(
-        "Password must be at least 8 characters, include a number and a special character.",
-      );
+    if (password !== confirm) {
+      setError({ field: "confirm", message: "Both passwords have to match." });
       return;
     }
 
@@ -41,7 +54,7 @@ export function UpdatePasswordForm() {
       if (updateError) throw updateError;
       router.push("/dashboard");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      setError(toAuthError(err));
     } finally {
       setIsLoading(false);
     }
@@ -54,15 +67,14 @@ export function UpdatePasswordForm() {
       style={{ animation: "fadeUp 0.5s ease-out" }}
     >
       <FormHeader
+        eyebrow="Account recovery"
         title="Set New Password."
-        description="Choose a strong password to secure your account."
-        subtitle="Your password must be at least 8 characters, include a number and a special character."
+        description="Choose one you haven't used on this account before."
       />
 
-      {/* Fields */}
       <div className="flex flex-col gap-[20px]">
         <FormField
-          label="NEW PASSWORD"
+          label="New password"
           id="new-password"
           type="password"
           placeholder="••••••••••••"
@@ -71,9 +83,10 @@ export function UpdatePasswordForm() {
           onChange={(e) => setPassword(e.target.value)}
           required
           autoComplete="new-password"
+          error={error?.field === "password" ? error.message : null}
         />
         <FormField
-          label="CONFIRM PASSWORD"
+          label="Confirm password"
           id="confirm-password"
           type="password"
           placeholder="••••••••••••"
@@ -82,65 +95,28 @@ export function UpdatePasswordForm() {
           onChange={(e) => setConfirm(e.target.value)}
           required
           autoComplete="new-password"
+          error={error?.field === "confirm" ? error.message : null}
         />
 
-        {/* Error message */}
-        {error ? (
-          <div
-            className="flex w-full items-center gap-[8px] rounded-[6px] bg-[var(--color-error-bg)] px-[12px] py-[10px]"
-            style={{ animation: "shake 0.4s ease-in-out" }}
-            role="alert"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--color-error)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="shrink-0"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            <span className="text-[12px] leading-[1.4] text-[var(--color-error)]">
-              {error}
-            </span>
-          </div>
-        ) : null}
+        <span className="text-body-sm">{PASSWORD_RULE}</span>
       </div>
 
-      {/* Actions */}
-      <div className="flex flex-col items-center gap-[18px]">
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="flex h-[44px] w-full items-center justify-center rounded-[6px] bg-[var(--color-accent-blue)] text-[13px] font-medium tracking-[1px] text-white transition-all duration-200 hover:bg-[var(--color-accent-blue-hover)] hover:shadow-[0_0_20px_var(--color-accent-blue-glow)] active:scale-[0.97] disabled:pointer-events-none disabled:opacity-60"
-        >
-          {isLoading ? "Saving..." : "Save New Password"}
-        </button>
+      <div className="flex flex-col gap-[16px]">
+        <FormError error={error} inlineFields={["password", "confirm"]} />
 
-        <Link href="/login" className="flex items-center gap-[6px]">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--color-text-dim)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        <AuthButton type="submit" disabled={isLoading}>
+          {isLoading ? "Saving..." : "Save New Password"}
+        </AuthButton>
+
+        <AuthFooter>
+          <Link
+            href="/login"
+            className={`inline-flex items-center gap-[6px] text-[12px] ${AUTH_LINK}`}
           >
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-          <span className="text-[12px] text-[var(--color-text-secondary)]">
-            Back to Sign In
-          </span>
-        </Link>
+            <ArrowLeft size={14} strokeWidth={1.5} aria-hidden="true" />
+            Back to sign in
+          </Link>
+        </AuthFooter>
       </div>
     </form>
   );

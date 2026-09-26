@@ -7,7 +7,9 @@ export function clearRetryCount(matchId: string) {
 
 export function readRetryCount(matchId: string): number {
   if (typeof window === "undefined") return 0;
-  const raw = window.sessionStorage.getItem(`${RETRY_STORAGE_PREFIX}${matchId}`);
+  const raw = window.sessionStorage.getItem(
+    `${RETRY_STORAGE_PREFIX}${matchId}`,
+  );
   return Number(raw) || 0;
 }
 

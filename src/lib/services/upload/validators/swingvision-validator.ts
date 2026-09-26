@@ -10,7 +10,7 @@
 
 // Dynamic import to prevent SSR bundling issues
 async function getExcelJS() {
-  const exceljs = await import('exceljs');
+  const exceljs = await import("exceljs");
   return exceljs;
 }
 
@@ -27,14 +27,23 @@ export interface ValidationResult {
   total_rows?: Record<string, number>;
 }
 
-const REQUIRED_SHEETS = ['Settings', 'Shots', 'Points', 'Games', 'Sets', 'Stats'];
+const REQUIRED_SHEETS = [
+  "Settings",
+  "Shots",
+  "Points",
+  "Games",
+  "Sets",
+  "Stats",
+];
 
 /**
  * Validate a SwingVision Excel file structure and data
  * @param file - The Excel file to validate
  * @returns Validation result with success status and any errors
  */
-export async function validateSwingVisionFile(file: File): Promise<ValidationResult> {
+export async function validateSwingVisionFile(
+  file: File,
+): Promise<ValidationResult> {
   try {
     // Load Excel file
     const exceljs = await getExcelJS();
@@ -43,7 +52,7 @@ export async function validateSwingVisionFile(file: File): Promise<ValidationRes
     await workbook.xlsx.load(arrayBuffer);
 
     // Get sheet names
-    const foundSheets = workbook.worksheets.map(ws => ws.name);
+    const foundSheets = workbook.worksheets.map((ws) => ws.name);
     const foundSheetsSet = new Set(foundSheets);
     const requiredSheetsSet = new Set(REQUIRED_SHEETS);
 
@@ -51,18 +60,20 @@ export async function validateSwingVisionFile(file: File): Promise<ValidationRes
     if (foundSheets.length !== 6) {
       return {
         success: false,
-        error: `File must have exactly 6 sheets. Found ${foundSheets.length} sheets: ${foundSheets.join(', ')}`,
+        error: `File must have exactly 6 sheets. Found ${foundSheets.length} sheets: ${foundSheets.join(", ")}`,
         found_sheets: foundSheets,
         required_sheets: REQUIRED_SHEETS,
       };
     }
 
     // Check 2: Verify all required sheets are present
-    const missingSheets = Array.from(requiredSheetsSet).filter(sheet => !foundSheetsSet.has(sheet));
+    const missingSheets = Array.from(requiredSheetsSet).filter(
+      (sheet) => !foundSheetsSet.has(sheet),
+    );
     if (missingSheets.length > 0) {
       return {
         success: false,
-        error: `Missing required sheets: ${missingSheets.join(', ')}`,
+        error: `Missing required sheets: ${missingSheets.join(", ")}`,
         found_sheets: foundSheets,
         required_sheets: REQUIRED_SHEETS,
         missing_sheets: missingSheets,
@@ -70,11 +81,13 @@ export async function validateSwingVisionFile(file: File): Promise<ValidationRes
     }
 
     // Check 3: Verify no extra sheets (should be exactly the 6 required ones)
-    const extraSheets = foundSheets.filter(sheet => !requiredSheetsSet.has(sheet));
+    const extraSheets = foundSheets.filter(
+      (sheet) => !requiredSheetsSet.has(sheet),
+    );
     if (extraSheets.length > 0) {
       return {
         success: false,
-        error: `File contains unexpected sheets: ${extraSheets.join(', ')}. Only the following 6 sheets are allowed: ${REQUIRED_SHEETS.join(', ')}`,
+        error: `File contains unexpected sheets: ${extraSheets.join(", ")}. Only the following 6 sheets are allowed: ${REQUIRED_SHEETS.join(", ")}`,
         found_sheets: foundSheets,
         required_sheets: REQUIRED_SHEETS,
         extra_sheets: extraSheets,
@@ -86,7 +99,7 @@ export async function validateSwingVisionFile(file: File): Promise<ValidationRes
     const totalRows: Record<string, number> = {};
 
     // These sheets require actual data rows (not just headers)
-    const sheetsRequiringData = ['Points', 'Games'];
+    const sheetsRequiringData = ["Points", "Games"];
     const minDataRowsRequired = 1; // At least 1 data row beyond header
 
     for (const sheetName of REQUIRED_SHEETS) {
@@ -110,18 +123,24 @@ export async function validateSwingVisionFile(file: File): Promise<ValidationRes
 
         // If no rows at all, sheet is empty
         if (rows.length === 0) {
-          validationErrors.push(`Sheet '${sheetName}' is empty (no rows or columns)`);
+          validationErrors.push(
+            `Sheet '${sheetName}' is empty (no rows or columns)`,
+          );
           continue;
         }
 
         // Remove completely empty rows (all cells null/undefined/empty string)
-        const nonEmptyRows = rows.filter(row =>
-          row.some(cell => cell !== null && cell !== undefined && cell !== '')
+        const nonEmptyRows = rows.filter((row) =>
+          row.some(
+            (cell) => cell !== null && cell !== undefined && cell !== "",
+          ),
         );
 
         // If no non-empty rows after cleaning, sheet has no actual data
         if (nonEmptyRows.length === 0) {
-          validationErrors.push(`Sheet '${sheetName}' contains no data (all rows or columns are empty)`);
+          validationErrors.push(
+            `Sheet '${sheetName}' contains no data (all rows or columns are empty)`,
+          );
           continue;
         }
 
@@ -140,7 +159,8 @@ export async function validateSwingVisionFile(file: File): Promise<ValidationRes
           totalRows[sheetName] = nonEmptyRows.length;
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
         validationErrors.push(`Error reading sheet '${sheetName}': ${message}`);
       }
     }
@@ -148,7 +168,7 @@ export async function validateSwingVisionFile(file: File): Promise<ValidationRes
     if (validationErrors.length > 0) {
       return {
         success: false,
-        error: 'Data validation failed',
+        error: "Data validation failed",
         validation_errors: validationErrors,
       };
     }
@@ -156,12 +176,12 @@ export async function validateSwingVisionFile(file: File): Promise<ValidationRes
     // All checks passed
     return {
       success: true,
-      message: 'File validation passed',
+      message: "File validation passed",
       sheets_validated: REQUIRED_SHEETS,
       total_rows: totalRows,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const message = error instanceof Error ? error.message : "Unknown error";
     return {
       success: false,
       error: `Validation error: ${message}`,
