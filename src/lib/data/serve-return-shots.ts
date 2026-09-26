@@ -29,6 +29,9 @@ export function isFeedShotType(shotType: string | null | undefined): boolean {
 
 /**
  * The serve that was actually played: second serve if present, else first.
+ * `undefined` when the point has no serve row at all (e.g. a shot list of
+ * just `Feed`/rally rows from a truncated read) — callers must not treat a
+ * Feed row's landing coordinates as a serve.
  * Accessor-taking form, the same pattern `pickRallyShots` below uses — the
  * Visualizations tab's serve cut (`viz-model.ts`, Task 2) needs to resolve a
  * point's serve shot from `MatchPoint.shots`' camelCase `MatchShot` rows
@@ -43,12 +46,14 @@ export function pickServeShotBy<T>(
   const serveRows = shots.filter((s) => isServeShotType(shotType(s)));
   return (
     serveRows.find((s) => shotType(s) === "Second Serve") ??
-    serveRows.find((s) => shotType(s) === "First Serve") ??
-    shots[0]
+    serveRows.find((s) => shotType(s) === "First Serve")
   );
 }
 
-/** The serve that was actually played: second serve if present, else first. */
+/**
+ * The serve that was actually played: second serve if present, else first.
+ * `undefined` when the point has no serve row at all.
+ */
 export function pickServeShot<T extends ShotLike>(shots: T[]): T | undefined {
   return pickServeShotBy(shots, (s) => s.shot_type);
 }

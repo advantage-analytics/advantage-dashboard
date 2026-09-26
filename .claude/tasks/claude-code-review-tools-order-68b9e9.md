@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Make pickServeShotBy return undefined when a point has no serve row
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/data/serve-return-shots.ts, tests/serve-return-shots.spec.ts (new) — guess
 - **done when:**
