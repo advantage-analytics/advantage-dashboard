@@ -55,13 +55,9 @@ async function fetchWithRetry(
  */
 async function captureGeminiGeneration({
   userId,
-  prompt,
-  output,
   latency,
 }: {
   userId?: string;
-  prompt: string;
-  output: string;
   latency: number;
 }): Promise<void> {
   if (!POSTHOG_PROJECT_TOKEN || !POSTHOG_HOST || !userId) return;
@@ -82,8 +78,9 @@ async function captureGeminiGeneration({
           $ai_span_name: "generate_match_insights",
           $ai_model: "gemini-2.5-flash",
           $ai_provider: "gemini",
-          $ai_input: [{ role: "user", content: prompt }],
-          $ai_output_choices: [{ role: "assistant", content: output }],
+          // No $ai_input / $ai_output_choices: the prompt and reply carry
+          // player first names and stats, so only usage is recorded — the
+          // same privacy mode the app's LLM adapter uses.
           $ai_latency: latency,
           $ai_temperature: 0.4,
           $ai_http_status: 200,
@@ -314,8 +311,6 @@ serve(async (req) => {
     const generatedInsights = geminiData.candidates[0].content.parts[0].text;
     await captureGeminiGeneration({
       userId: uploaderId,
-      prompt,
-      output: generatedInsights,
       latency: (Date.now() - generationStartedAt) / 1000,
     });
     const insightsJSON = JSON.parse(generatedInsights);
