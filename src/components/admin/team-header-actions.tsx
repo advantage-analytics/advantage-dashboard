@@ -9,6 +9,7 @@ import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { adminRemoveProgramCrest } from "@/lib/services/programs/admin-team-actions";
 import type { AdminTeamProgram } from "@/lib/data/admin-team-server";
 import { advButton } from "@/lib/ui/adv-button";
+import { cn } from "@/lib/utils";
 
 /**
  * The two controls at the right of the Admin › Teams detail header: the
@@ -77,7 +78,7 @@ export function TeamHeaderActions({ program }: { program: AdminTeamProgram }) {
             type="button"
             aria-label="More team actions"
             aria-expanded={menuOpen}
-            className="flex size-9 cursor-pointer items-center justify-center rounded-[var(--radius-button)] border border-[var(--border-field)] text-[var(--ink-700)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+            className={cn(advButton("outline", "md"), "size-9 p-0")}
           >
             <MoreHorizontal
               className="size-[15px]"

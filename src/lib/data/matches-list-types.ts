@@ -1,6 +1,6 @@
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
-import { scoreWinner } from "@/lib/data/match-utils";
+import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
 
 export interface DbMatch {
   id: string;
@@ -119,9 +119,7 @@ export function transformDbMatch(
     courtType: row.court_type ?? undefined,
     verificationStatus: row.verified ? "Verified Result" : undefined,
     round: row.round ?? undefined,
-    // `||`, not `??`: video uploads and the wizard's default have stored an
-    // empty caption, and `??` let it through as a blank line over the score.
-    matchContext: row.result?.trim() || "Final Score",
+    matchContext: matchContextCaption(row.result),
     duration: formatDuration(row.duration ?? undefined),
     sourceProvider: row.source_provider ?? undefined,
     player1: { name: row.player1_name, id: row.player1_id },

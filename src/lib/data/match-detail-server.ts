@@ -11,7 +11,7 @@ import {
 import { getMyPlayerIds, isMe } from "@/lib/data/player-identity-server";
 import { youSeat } from "@/lib/data/viewer-side";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
-import { scoreWinner } from "@/lib/data/match-utils";
+import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { Match, SetScore } from "@/lib/data/types";
 
@@ -189,9 +189,7 @@ function transformDbMatchToMatch(
     verificationStatus: row.verified ? "Verified Result" : undefined,
     sourceProvider: row.source_provider ?? undefined,
     round: row.round ?? undefined,
-    // `||`, not `??`: video uploads and the wizard's default have stored an
-    // empty caption, and `??` let it through as a blank line over the score.
-    matchContext: row.result?.trim() || "Final Score",
+    matchContext: matchContextCaption(row.result),
     duration: formatDuration(row.duration ?? undefined),
     durationSec: row.duration != null ? Math.round(row.duration / 1000) : null,
     player1: {

@@ -4,7 +4,7 @@ import {
 } from "@/components/dashboard/settings/settings-card";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { getInitials } from "@/lib/data/match-utils";
-import { formatHoursShort } from "@/lib/data/usage-format";
+import { formatHoursShort, monthName } from "@/lib/data/usage-format";
 import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
 import { quotaTierFor } from "@/lib/services/splitstep/quota";
 import type { AdminTeamMember } from "@/lib/data/admin-team-server";
@@ -123,12 +123,4 @@ export function poolRuleNote(orgType: ProgramOrgType | null): string {
     return `Uploads here draw on the team pool. A member’s own ${cap} h covers their personal uploads only.`;
   }
   return `This team is on the individual ${cap} h figure, shared by every member.`;
-}
-
-/** `2026-09-01` → `September`, in UTC — the key is a zone-free date. */
-function monthName(billingMonth: string): string {
-  return new Date(`${billingMonth}T00:00:00Z`).toLocaleDateString("en-US", {
-    month: "long",
-    timeZone: "UTC",
-  });
 }

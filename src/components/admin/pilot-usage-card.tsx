@@ -27,6 +27,7 @@ import {
   formatHoursShort,
   formatResetDate,
   hoursSeverity,
+  monthName,
   secondsLeft,
   usageFraction,
 } from "@/lib/data/usage-format";
@@ -74,6 +75,10 @@ export function PilotUsageCard({
   pilot: AdminTeamPilot;
 }) {
   const router = useRouter();
+  // Computed once per render — `endsValue` and `ChangeEndDate`'s date floor
+  // both want "today", and calling `utcToday()` a second time risks reading
+  // across a midnight UTC rollover between the two.
+  const today = utcToday();
 
   const fraction = usageFraction(usage.usedSeconds, usage.capSeconds);
   const severity = hoursSeverity(fraction);
@@ -153,7 +158,7 @@ export function PilotUsageCard({
           label="Each member"
           value={`${formatHoursShort(getMonthlyCapSeconds("individual"))} h every month`}
         />
-        <Kv label="Ends" value={endsValue(pilot)} />
+        <Kv label="Ends" value={endsValue(pilot, today)} />
         <Kv label="Approved" value={approvedValue(pilot)} />
       </dl>
 
@@ -163,6 +168,7 @@ export function PilotUsageCard({
           endsOn={pilot.endsOn}
           ended={ended}
           noPilot={noPilot}
+          today={today}
           onSaved={() => router.refresh()}
         />
         {/* An ended pilot — or one that never existed — has nothing left to
@@ -207,14 +213,6 @@ function formatDay(isoDate: string): string {
   });
 }
 
-/** `2026-09-01` → `September`. The year is already in the card's sub-line. */
-function monthName(billingMonth: string): string {
-  return new Date(`${billingMonth}T00:00:00Z`).toLocaleDateString("en-US", {
-    month: "long",
-    timeZone: "UTC",
-  });
-}
-
 /** Today in UTC, `YYYY-MM-DD` — the bound `adminSetPilotEnd` validates against. */
 function utcToday(): string {
   return new Date().toISOString().slice(0, 10);
@@ -241,13 +239,13 @@ function daysLeft(endsOn: string, today: string = utcToday()): number {
  * simply ran out on its own — which is the migration's own word for the null
  * `pilot_ended_at` case, not a coinage.
  */
-function endsValue(pilot: AdminTeamPilot): string {
+function endsValue(pilot: AdminTeamPilot, today: string): string {
   if (!pilot.endsOn) {
     return pilot.endedAt ? `Ended ${shortDate(pilot.endedAt)}` : "—";
   }
   const date = formatDay(pilot.endsOn);
   if (pilot.endedAt) return `${date} · Ended ${shortDate(pilot.endedAt)}`;
-  const days = daysLeft(pilot.endsOn);
+  const days = daysLeft(pilot.endsOn, today);
   if (days <= 0) return `${date} · Ran out`;
   return `${date} · ${days} ${days === 1 ? "day" : "days"} left`;
 }
@@ -292,6 +290,7 @@ function ChangeEndDate({
   endsOn,
   ended,
   noPilot,
+  today,
   onSaved,
 }: {
   programId: string;
@@ -299,6 +298,8 @@ function ChangeEndDate({
   ended: boolean;
   /** No pilot yet: the trigger reads `Set end date`, since saving starts one. */
   noPilot: boolean;
+  /** The card's own `utcToday()`, computed once per render and passed down. */
+  today: string;
   onSaved: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -375,7 +376,7 @@ function ChangeEndDate({
           value={value}
           onChange={setValue}
           onIncompleteChange={setIncomplete}
-          min={utcToday()}
+          min={today}
         />
 
         {ended && (

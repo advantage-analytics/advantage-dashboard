@@ -200,6 +200,16 @@ export interface MatchScore {
 }
 
 /**
+ * The caption over the score — `matches.result` — with its fallback.
+ *
+ * `||`, not `??`: video uploads and the wizard's default have stored an empty
+ * caption, and `??` let it through as a blank line over the score.
+ */
+export function matchContextCaption(result: string | null): string {
+  return result?.trim() || "Final Score";
+}
+
+/**
  * A per-set score from the user's perspective, as plain text — "6-4, 3-6, 7-5".
  * Returns "" when the score is missing or malformed.
  *

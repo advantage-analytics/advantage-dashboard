@@ -32,6 +32,14 @@ export function formatHoursShort(seconds: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
+/** `2026-09-01` → `September` — the month alone, for a sub-line that already carries the year. */
+export function monthName(billingMonth: string): string {
+  return new Date(`${billingMonth}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "long",
+    timeZone: "UTC",
+  });
+}
+
 /** `2026-08-01` → `Aug 2026`. */
 export function formatBillingMonth(billingMonth: string): string {
   return new Date(`${billingMonth}T00:00:00Z`).toLocaleDateString("en-US", {
