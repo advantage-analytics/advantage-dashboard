@@ -2,7 +2,7 @@
  * One sentence per `program_audit_log.action` value, for the Activity log
  * card (T19).
  *
- * The 26 values are `program_audit_log_action_check`'s own constraint list,
+ * The 28 values are `program_audit_log_action_check`'s own constraint list,
  * read live from the database via `pg_get_constraintdef` rather than
  * `supabase/migrations/`, which runs roughly 100 migrations behind. No label
  * map for this table existed anywhere else in `src` — this is the first one,
@@ -36,6 +36,7 @@ export const ADMIN_ACTIVITY_LABELS: Record<string, string> = {
   "member.role_changed": "Member role changed",
   "member.account_deleted": "Member account deleted",
   "member.left": "Member left",
+  "member.upload_changed": "Member upload access changed",
   "seats.changed": "Seat count changed",
   "lineup.set": "Lineup set",
   "ownership.transferred": "Ownership transferred",
@@ -43,6 +44,7 @@ export const ADMIN_ACTIVITY_LABELS: Record<string, string> = {
   "match.attached": "Match attached",
   "program.conference_changed": "Conference changed",
   "program.details_changed": "Program details changed",
+  "program.crest_changed": "Crest changed",
   "console.result_added": "Result entered from the admin console",
   "console.analysis_attached": "Analysis attached from the admin console",
   "join_request.approved": "Join request approved",

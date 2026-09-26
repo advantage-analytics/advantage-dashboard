@@ -132,7 +132,8 @@ export function AdminCardNote({ message }: { message: string | null }) {
  */
 function inviteMeta(invite: AdminTeamInvite): string {
   const by = invite.invitedByName ? ` by ${invite.invitedByName}` : "";
-  return `${capitalize(invite.role)} · invited ${shortDate(invite.createdAt)}${by} · expires ${shortDate(invite.expiresAt)}`;
+  const expiry = invite.expired ? "expired" : "expires";
+  return `${capitalize(invite.role)} · invited ${shortDate(invite.createdAt)}${by} · ${expiry} ${shortDate(invite.expiresAt)}`;
 }
 
 export function AdminPeopleCard({
@@ -376,7 +377,11 @@ export function AdminPeopleCard({
                 {inviteMeta(invite)}
               </span>
             </span>
-            <StatePill outline>Invited</StatePill>
+            {/* An expired link no longer works — `Invited` would promise a
+                seat that is not coming. Resend mints a fresh token. */}
+            <StatePill outline>
+              {invite.expired ? "Expired" : "Invited"}
+            </StatePill>
             <button
               type="button"
               disabled={isSaving}

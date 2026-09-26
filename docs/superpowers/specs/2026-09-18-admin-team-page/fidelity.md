@@ -153,8 +153,11 @@ listed here:
 
 ## Follow-ups (not fixed here — each needs more than a constant)
 
-1. **Three writes leave no audit row**: crest upload/remove (`set_program_crest`), invite
-   revoke (`revoke_program_invite` — its label `invite.revoked` exists but nothing
-   writes it), and the Uploads switch (`set_member_upload_enabled`, T11 follow-up 2).
+1. **Three writes left no audit row** at the time of this pass: crest upload/remove
+   (`set_program_crest`), invite revoke (`revoke_program_invite`) and the Uploads switch
+   (`set_member_upload_enabled`). **Fixed after the pass** by migration
+   `20260926192327_audit_crest_upload_toggle_revoke`: they now write
+   `program.crest_changed`, `invite.revoked` and `member.upload_changed`. The _Flows_
+   table above records what was observed on the day.
 2. The Pilot card renders `End pilot` and `No end date set` on a program that has never
    had a pilot (ZZ is `unclaimed`, no approval). Worth an explicit no-pilot state.

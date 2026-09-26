@@ -210,6 +210,13 @@ export interface AdminTeamInvite extends TeamInvite {
   /** `program_invites.expires_at` — `not null`, so never undefined. */
   expiresAt: string;
   /**
+   * True once `expiresAt` has passed. Decided here, on the server, rather than
+   * in the card: a client `Date.now()` in render would disagree with the
+   * server's around the boundary and fail hydration. An expired invitation's
+   * link no longer works, so the row must not read `Invited`.
+   */
+  expired: boolean;
+  /**
    * Who sent it, by name. Null when `invited_by` is null (the column is
    * `on delete set null`, and an admin-sent invitation from before the RPC
    * wrote it has none), and the row then simply omits the "by" clause rather
@@ -1339,6 +1346,7 @@ export const getAdminTeam = cache(
           createdAt: invite.created_at,
           invitedBy: invite.invited_by,
           expiresAt: invite.expires_at,
+          expired: Date.parse(invite.expires_at) <= Date.now(),
           // The same fallback ladder every other name on this page uses: a
           // profile with no name still has an address, and a sender whose
           // account is gone has neither, so the clause is dropped.
