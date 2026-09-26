@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Add onboarding steps 1.5 and 1.7 and persist the answers
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T2
 - **files:** src/app/onboarding/onboarding-flow.tsx, src/app/onboarding/actions.ts (guess)

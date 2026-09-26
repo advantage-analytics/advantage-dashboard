@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Shield, User, Users } from "lucide-react";
+import posthog from "posthog-js";
+import {
+  FileSpreadsheet,
+  Shield,
+  Smartphone,
+  User,
+  Users,
+  Video,
+} from "lucide-react";
 import AuthCheckbox from "@/components/auth/auth-checkbox";
 import {
   CLAIM_BUTTON,
@@ -20,22 +28,32 @@ import {
   titleCaseTypedName,
 } from "@/lib/data/person-name-case";
 import { GUARDIAN_TERMS_URL } from "@/lib/constants";
+import { isPostHogConfigured } from "@/lib/posthog-client";
 import { cn } from "@/lib/utils";
 import {
   finishGuardianOnboarding,
   finishOnboarding,
   type OnboardingChoice,
 } from "./actions";
+import {
+  ACQUISITION_DETAIL_MAX,
+  ACQUISITION_SOURCES,
+  RECORDING_SOURCES,
+  type AcquisitionSource,
+  type RecordingSource,
+} from "./answers";
 import { guardianClassYears } from "./guardian-options";
 
 /**
- * The first run — Onboarding & Team Setup screens 1.2 through 1.4, plus the
- * guardian branch's 3.1. Full-screen panes with no dashboard chrome and,
+ * The first run — Onboarding & Team Setup screens 1.2 through 1.5 and 1.7,
+ * plus the guardian branch's 3.1 (1.6, level and UTR, is held until something
+ * reads it, which is why the player's steps count to five). Full-screen panes with no dashboard chrome and,
  * unlike the claim flow's shell, no escape chrome either: there is no
  * account-intact "leave setup" here, because the account is already made and
- * these answers are the setup. The one soft exit the design gives is the
- * college question's Skip; the guardian step has none, because consent is the
- * one answer that can't be deferred.
+ * these answers are the setup. The soft exits the design gives are the Skips
+ * on 1.4, 1.5 and 1.7 — each stores null for its own question and nothing
+ * else; the guardian step has none, because consent is the one answer that
+ * can't be deferred.
  *
  * Step 1 (1.2) asks what to call the person. Both fields start empty even when
  * Google or Apple handed us a display name — the OAuth profile is often a
@@ -49,6 +67,13 @@ import { guardianClassYears } from "./guardian-options";
  * vocabulary product-wide (`claim/role-choice.tsx` carries the same copy).
  * The difference is what happens after: here the answer persists to
  * `users.role` and stamps `onboarded_at`, where /claim's copy only routes.
+ * A coach finishes right here; a player turns the page to 1.4.
+ *
+ * Steps 3, 5 and 6 (1.4, 1.5, 1.7) are the player's run. None of them writes
+ * on its own: the college answer, the recording source and the acquisition
+ * source ride along in state and land in one `finishOnboarding` call from
+ * 1.7, together with the name and the stamp — so a player who bails anywhere
+ * before that is still gated into onboarding next visit.
  *
  * The junior persona is the exception to "the answer persists": picking it
  * writes nothing and only turns the page to 3.1. Everything — the name, role,
@@ -62,9 +87,12 @@ type CollegeAnswer = "yes" | "no" | "not_yet";
 
 /**
  * 1 = name (1.2) · 2 = persona (1.3) · 3 = college question (1.4) ·
- * 4 = guardian step (3.1)
+ * 4 = guardian step (3.1) · 5 = recording source (1.5) · 6 = heard about (1.7)
+ *
+ * 4 keeps its number so the guardian branch is untouched; the player's run is
+ * 1 → 2 → 3 → 5 → 6.
  */
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
 const PERSONAS: {
   id: Persona;
@@ -82,7 +110,7 @@ const PERSONAS: {
     id: "coach",
     icon: Users,
     label: "I coach",
-    sub: "A roster of players, one shared budget.",
+    sub: "A roster of players, one shared allowance.",
   },
   {
     id: "junior",
@@ -102,7 +130,7 @@ const COLLEGE_OPTIONS: { id: CollegeAnswer; label: string; sub: string }[] = [
   {
     id: "no",
     label: "No — I play club, tournaments or juniors",
-    sub: "Your own account, your own analysis budget.",
+    sub: "Your own account, your own allowance.",
   },
   {
     id: "not_yet",
@@ -110,6 +138,17 @@ const COLLEGE_OPTIONS: { id: CollegeAnswer; label: string; sub: string }[] = [
     sub: "Start on your own account; add a college team whenever you commit.",
   },
 ];
+
+/**
+ * Screen 1.5's card icons, keyed by answer. Copy comes from `RECORDING_SOURCES`
+ * in `answers.ts` — the one vocabulary the server's allow-list checks against —
+ * so only the glyph is decided here.
+ */
+const RECORDING_ICONS: Record<RecordingSource, typeof User> = {
+  "swing-vision": FileSpreadsheet,
+  video: Video,
+  none: Smartphone,
+};
 
 /**
  * Screen 3.1's three under-18 acknowledgment rows, verbatim. Everything the
@@ -132,6 +171,11 @@ export function OnboardingFlow() {
   const [playerName, setPlayerName] = useState("");
   const [classYear, setClassYear] = useState("");
   const [consent, setConsent] = useState(false);
+  const [recordingSource, setRecordingSource] =
+    useState<RecordingSource | null>(null);
+  const [acquisitionSource, setAcquisitionSource] =
+    useState<AcquisitionSource | null>(null);
+  const [acquisitionDetail, setAcquisitionDetail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -172,9 +216,84 @@ export function OnboardingFlow() {
     submit("coach");
   };
 
+  // 1.4 no longer finishes: both exits turn the page to 1.5, and the college
+  // answer is read when 1.7 submits. Skip clears it, so an answer tapped and
+  // then skipped is not stored.
   const continueFromCollege = () => {
     if (!college) return;
-    submit(college === "yes" ? "college" : "solo");
+    setError(null);
+    setStep(5);
+  };
+
+  const skipCollege = () => {
+    setCollege(null);
+    setError(null);
+    setStep(5);
+  };
+
+  const continueFromRecording = (source: RecordingSource | null) => {
+    setRecordingSource(source);
+    setError(null);
+    setStep(6);
+  };
+
+  /**
+   * The player's finish, from 1.7 — Continue with the answers on screen, Skip
+   * with all three acquisition/recording answers null. (Skip on 1.7 nulls 1.5
+   * too: the design's Skip is "stop asking me", and the server treats every
+   * answer as optional.)
+   *
+   * PostHog runs before the action, not after: a successful action redirects
+   * on the server and nothing after the await is guaranteed to run. Enum
+   * values only — the free-text "Where?" detail is never sent, and neither is
+   * any name or email.
+   */
+  const finishPlayer = (answers: {
+    recordingSource: RecordingSource | null;
+    acquisitionSource: AcquisitionSource | null;
+    acquisitionSourceDetail: string | null;
+  }) => {
+    setError(null);
+    if (isPostHogConfigured) {
+      posthog.setPersonProperties({
+        recording_source: answers.recordingSource,
+        acquisition_source: answers.acquisitionSource,
+      });
+      posthog.capture("onboarding_completed", {
+        persona,
+        college,
+        recording_source: answers.recordingSource,
+        acquisition_source: answers.acquisitionSource,
+      });
+    }
+    const choice: OnboardingChoice = college === "yes" ? "college" : "solo";
+    startTransition(async () => {
+      const result = await finishOnboarding({
+        choice,
+        firstName,
+        lastName,
+        ...answers,
+      });
+      if (result && !result.ok) setError(result.error);
+    });
+  };
+
+  const finishFromHeardAbout = () => {
+    if (!acquisitionSource) return;
+    finishPlayer({
+      recordingSource,
+      acquisitionSource,
+      acquisitionSourceDetail:
+        acquisitionSource === "other" ? acquisitionDetail : null,
+    });
+  };
+
+  const skipHeardAbout = () => {
+    finishPlayer({
+      recordingSource: null,
+      acquisitionSource: null,
+      acquisitionSourceDetail: null,
+    });
   };
 
   // The checkbox gates Continue, and so do the two fields the row above it
@@ -212,9 +331,15 @@ export function OnboardingFlow() {
         // The name step shares the persona step's 840 frame rather than the
         // design's 560: two fields side by side at 560 read as a sliver, and
         // one width across the first two screens keeps the eyebrow, title and
-        // Continue from shifting between them.
+        // Continue from shifting between them. 1.5 takes the same 840 because
+        // it is the same three-card row as 1.3.
         style={{
-          maxWidth: step === 1 || step === 2 ? 840 : step === 4 ? 584 : 560,
+          maxWidth:
+            step === 1 || step === 2 || step === 5
+              ? 840
+              : step === 4
+                ? 584
+                : 560,
         }}
       >
         <div
@@ -234,7 +359,7 @@ export function OnboardingFlow() {
             >
               <ClaimHeading
                 gap={8}
-                step="Step 1 of 3"
+                step="Step 1"
                 title="What should we call you?"
                 body="Coaches and teammates see this name on every match you send. Type it the way you want it read."
                 bodyMax="52ch"
@@ -298,7 +423,7 @@ export function OnboardingFlow() {
             <>
               <ClaimHeading
                 gap={8}
-                step="Step 2 of 3"
+                step="Step 2"
                 title="How do you use Advantage?"
                 body="This sets what your dashboard opens on. You can change it in settings."
                 bodyMax="60ch"
@@ -362,7 +487,7 @@ export function OnboardingFlow() {
             <>
               <ClaimHeading
                 gap={8}
-                step="Step 3 of 3"
+                step="Step 3 of 5"
                 title="Do you play for a college program?"
                 body="This decides where your first matches go — and whether your coach is part of it."
                 bodyMax="52ch"
@@ -413,13 +538,173 @@ export function OnboardingFlow() {
                 >
                   Continue
                 </button>
-                {/* Skip finishes as an individual player — the persona from
+                {/* Skip moves on as an individual player — the persona from
                     the step before still counts, only this question goes
-                    unanswered. */}
+                    unanswered (`college` stays null, which resolves to
+                    `solo` when 1.7 submits). */}
                 <button
                   type="button"
                   disabled={isPending}
-                  onClick={() => submit("solo")}
+                  onClick={skipCollege}
+                  className={CLAIM_LINK}
+                >
+                  Skip
+                </button>
+              </ClaimActions>
+            </>
+          ) : step === 5 ? (
+            <>
+              {/* Screen 1.5 — how the player records. The step-2 persona
+                  cards, re-used: the answer preselects the upload wizard's
+                  source, it doesn't lock one out. */}
+              <ClaimHeading
+                gap={8}
+                step="Step 4 of 5"
+                title="How do you record your matches?"
+                body="Your first upload is set up for this. You can use either later."
+                bodyMax="60ch"
+              />
+              <div
+                role="radiogroup"
+                aria-label="How do you record your matches?"
+                className="grid gap-3 sm:grid-cols-3"
+              >
+                {RECORDING_SOURCES.map((option) => {
+                  const selected = recordingSource === option.value;
+                  const Icon = RECORDING_ICONS[option.value];
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setRecordingSource(option.value)}
+                      className={cn(
+                        "flex cursor-pointer flex-col gap-2 rounded-[var(--radius-element)] border p-5 text-left transition-colors duration-[var(--duration-fast)]",
+                        "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                        selected
+                          ? "border-[var(--blue)] bg-[var(--blue-soft)]"
+                          : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
+                      )}
+                    >
+                      <Icon
+                        className={cn(
+                          "size-5",
+                          selected
+                            ? "text-[var(--blue)]"
+                            : "text-[var(--ink-600)]",
+                        )}
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                      <span className="text-[14px] text-[var(--ink-900)]">
+                        {option.label}
+                      </span>
+                      <span className="text-body-sm">{option.sub}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <ClaimActions gap={16}>
+                <button
+                  type="button"
+                  disabled={!recordingSource || isPending}
+                  onClick={() => continueFromRecording(recordingSource)}
+                  className={CLAIM_BUTTON}
+                >
+                  Continue
+                </button>
+                {/* Skip stores null — the wizard then opens with no source
+                    preselected, exactly as it does today. */}
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => continueFromRecording(null)}
+                  className={CLAIM_LINK}
+                >
+                  Skip
+                </button>
+              </ClaimActions>
+            </>
+          ) : step === 6 ? (
+            <>
+              {/* Screen 1.7 — where the player heard about Advantage, and the
+                  step that finishes the player's run. The 1.4 radio rows in
+                  two columns; "Somewhere else" spans both and opens a short
+                  free-text "Where?" under it, which is stored on the user row
+                  only and never sent to analytics. */}
+              <ClaimHeading
+                gap={8}
+                step="Step 5 of 5"
+                title="How did you hear about Advantage?"
+              />
+              <div className="flex flex-col gap-4">
+                <div
+                  role="radiogroup"
+                  aria-label="How did you hear about Advantage?"
+                  className="grid gap-2 sm:grid-cols-2"
+                >
+                  {ACQUISITION_SOURCES.map((option) => {
+                    const selected = acquisitionSource === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => setAcquisitionSource(option.value)}
+                        className={cn(
+                          "flex cursor-pointer items-start gap-2.5 rounded-[var(--radius-element)] border px-5 py-4 text-left transition-colors duration-[var(--duration-fast)]",
+                          "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                          option.value === "other" && "sm:col-span-2",
+                          selected
+                            ? "border-[var(--blue)] bg-[var(--blue-tint-08)]"
+                            : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
+                        )}
+                      >
+                        {/* Same `leading-5` / `mt-[3px]` pairing as 1.4's
+                            rows — see the note there. */}
+                        <RadioDot selected={selected} align="mt-[3px]" />
+                        <span className="text-[14px] leading-5 text-[var(--ink-900)]">
+                          {option.playerLabel}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {acquisitionSource === "other" && (
+                  <div>
+                    <label
+                      htmlFor="onboarding-acquisition-detail"
+                      className={CLAIM_LABEL}
+                    >
+                      Where?
+                    </label>
+                    <input
+                      id="onboarding-acquisition-detail"
+                      value={acquisitionDetail}
+                      onChange={(e) => setAcquisitionDetail(e.target.value)}
+                      placeholder="A podcast, a newsletter, a clinic"
+                      maxLength={ACQUISITION_DETAIL_MAX}
+                      autoComplete="off"
+                      className={CLAIM_FIELD}
+                    />
+                  </div>
+                )}
+              </div>
+              <ClaimActions gap={16}>
+                <button
+                  type="button"
+                  disabled={!acquisitionSource || isPending}
+                  onClick={finishFromHeardAbout}
+                  className={CLAIM_BUTTON}
+                >
+                  Go to my dashboard
+                </button>
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={skipHeardAbout}
                   className={CLAIM_LINK}
                 >
                   Skip
