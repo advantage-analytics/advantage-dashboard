@@ -1,0 +1,138 @@
+{
+  "projectId": "235baf04-01f4-4821-b6e2-0431ecb68846",
+  "pkg": "advantage-analytics-ds",
+  "globalName": "AdvantageDS",
+  "shape": "package",
+  "buildCmd": "node .design-sync/build-pkg.mjs",
+  "entry": ".design-sync/.cache/pkg/index.tsx",
+  "tsconfig": "tsconfig.paths.json",
+  "srcDir": "../../../src/components",
+  "cssEntry": "styles/app.css",
+  "extraFonts": ["../../fonts.css"],
+  "guidelinesGlob": [
+    "../../../.skills/advantage-analytics-design/SKILL.md",
+    "../../../.skills/advantage-analytics-design/reference/*.md",
+    "../../../DESIGN.md"
+  ],
+  "componentSrcMap": {
+    "ChosenCheck": "../../../src/components/ui/float-menu.tsx",
+    "FloatMenuItem": "../../../src/components/ui/float-menu.tsx",
+    "FloatMenuNote": "../../../src/components/ui/float-menu.tsx",
+    "FloatMenuDivider": "../../../src/components/ui/float-menu.tsx",
+    "FloatMenuLabel": "../../../src/components/ui/float-menu.tsx",
+    "FloatMenuCaption": "../../../src/components/ui/float-menu.tsx",
+    "ConfirmProse": "../../../src/components/ui/confirm-dialog.tsx",
+    "ConfirmAside": "../../../src/components/ui/confirm-dialog.tsx",
+    "ConfirmNote": "../../../src/components/ui/confirm-dialog.tsx",
+    "Em": "../../../src/components/ui/confirm-dialog.tsx",
+    "DialogTrigger": "../../../src/components/ui/dialog.tsx",
+    "DialogContent": "../../../src/components/ui/dialog.tsx",
+    "DialogHeader": "../../../src/components/ui/dialog.tsx",
+    "DialogFooter": "../../../src/components/ui/dialog.tsx",
+    "DialogTitle": "../../../src/components/ui/dialog.tsx",
+    "DialogDescription": "../../../src/components/ui/dialog.tsx",
+    "DialogClose": "../../../src/components/ui/dialog.tsx",
+    "DialogPortal": null,
+    "DialogOverlay": null,
+    "AlertDialogTrigger": "../../../src/components/ui/alert-dialog.tsx",
+    "AlertDialogContent": "../../../src/components/ui/alert-dialog.tsx",
+    "AlertDialogHeader": "../../../src/components/ui/alert-dialog.tsx",
+    "AlertDialogFooter": "../../../src/components/ui/alert-dialog.tsx",
+    "AlertDialogTitle": "../../../src/components/ui/alert-dialog.tsx",
+    "AlertDialogDescription": "../../../src/components/ui/alert-dialog.tsx",
+    "AlertDialogAction": "../../../src/components/ui/alert-dialog.tsx",
+    "AlertDialogCancel": "../../../src/components/ui/alert-dialog.tsx",
+    "AlertDialogPortal": null,
+    "AlertDialogOverlay": null,
+    "PopoverTrigger": "../../../src/components/ui/popover.tsx",
+    "PopoverContent": "../../../src/components/ui/popover.tsx",
+    "PopoverAnchor": null,
+    "TooltipTrigger": "../../../src/components/ui/tooltip.tsx",
+    "TooltipContent": "../../../src/components/ui/tooltip.tsx",
+    "TooltipProvider": "../../../src/components/ui/tooltip.tsx",
+    "PendingBar": "../../../src/components/dashboard/loading/pending.tsx",
+    "PendingRegion": "../../../src/components/dashboard/loading/pending.tsx",
+    "PendingFrame": "../../../src/components/dashboard/loading/pending.tsx",
+    "SettingsIconButton": "../../../src/components/dashboard/settings/settings-button.tsx",
+    "SettingsCardTitle": "../../../src/components/dashboard/settings/settings-card.tsx",
+    "SettingsCardRow": "../../../src/components/dashboard/settings/settings-card.tsx",
+    "SettingsCardFootnote": "../../../src/components/dashboard/settings/settings-card.tsx",
+    "SettingsSectionHeading": "../../../src/components/dashboard/settings/settings-card.tsx",
+    "SettingsField": "../../../src/components/dashboard/settings/settings-card.tsx",
+    "SettingsUnderlineInput": "../../../src/components/dashboard/settings/settings-card.tsx",
+    "VerticalStep": "../../../src/components/dashboard/shared/vertical-steps.tsx",
+    "StepMark": "../../../src/components/dashboard/shared/vertical-steps.tsx",
+    "GhostRows": "../../../src/components/dashboard/shared/card-empty.tsx"
+  },
+  "docsDir": "docs",
+  "overrides": {
+    "FloatMenu": {
+      "cardMode": "single",
+      "viewport": "440x420"
+    },
+    "SettingsCard": {
+      "cardMode": "column"
+    },
+    "ConfirmDialog": {
+      "cardMode": "single",
+      "viewport": "600x420",
+      "primaryStory": "DeleteMatch"
+    },
+    "Dialog": {
+      "cardMode": "single",
+      "viewport": "720x440"
+    },
+    "AlertDialog": {
+      "cardMode": "single",
+      "viewport": "720x360"
+    },
+    "Popover": {
+      "cardMode": "single",
+      "viewport": "440x300"
+    },
+    "Tooltip": {
+      "cardMode": "single",
+      "viewport": "360x180"
+    },
+    "CardEmpty": {
+      "cardMode": "column"
+    },
+    "WidgetCard": {
+      "cardMode": "column"
+    },
+    "PendingFrame": {
+      "cardMode": "column"
+    },
+    "PendingRegion": {
+      "cardMode": "column"
+    },
+    "VerticalStep": {
+      "cardMode": "column"
+    },
+    "SettingsCardRow": {
+      "cardMode": "column"
+    },
+    "EmptyMark": {
+      "cardMode": "column"
+    },
+    "InsightStatChip": {
+      "cardMode": "column"
+    },
+    "MenuSelect": {
+      "cardMode": "column"
+    },
+    "DateField": {
+      "cardMode": "column"
+    }
+  },
+  "dtsPropsFor": {
+    "ResultMark": "  /** `true` won \u00b7 `false` lost \u00b7 `null` level \u2014 a dual that finished level on lines. An undecided cell draws `EmptyMark` instead. */\n  won: boolean | null;\n  className?: string;",
+    "PlayerMark": "  name: string;\n  /** Pass only on the viewer's own row; `null` on everyone else's. */\n  viewer: { initials: string; avatarUrl: string | null } | null;\n  /** A teammate's photo; ignored on the viewer's own row. */\n  photoUrl?: string | null;",
+    "ScoreLine": "  /** Resolved, pre-oriented sets: `player1` is the side the row is about. Tiebreak values are POINTS, not games. */\n  sets: { player1: number; player2: number; player1Tiebreak?: number | null; player2Tiebreak?: number | null }[];\n  className?: string;\n  style?: React.CSSProperties;",
+    "WorkspaceMark": "  /** `kind` picks the letter's ground (team = ink, personal = blue); `iconUrl` draws a crest or photo instead of `mark`. */\n  workspace: { kind: \"personal\" | \"team\"; mark: string; iconUrl?: string | null };\n  /** Size, radius and letter type, e.g. `size-[26px] rounded-[6px] text-[11px]`. */\n  className?: string;",
+    "CardEmpty": "  /** Screen-reader sentence for the dimmed ghost block. */\n  description: string;\n  /** The band under the hairline: a title, one sentence, at most one outline action. */\n  band: { title: string; body: string; action?: { label: string; href: string } };\n  className?: string;\n  /** The card's own shape, drawn grey \u2014 ghost rows, an empty court. */\n  children: React.ReactNode;",
+    "MenuSelect": "  /** Accessible name \u2014 the visible caption or row label sits beside it. */\n  label: string;\n  /** `undefined` is a real state (an unanswered field): no row is chosen and `placeholder` shows. */\n  value: string | undefined;\n  options: readonly { value: string; label: string; description?: string }[];\n  onChange: (next: string) => void;\n  /** `pill` (30px bordered, default) \u00b7 `underline` (a form field) \u00b7 `text` (a value inside a table row). */\n  variant?: \"pill\" | \"underline\" | \"text\";\n  /** Sentence under a hairline at the menu's foot. */\n  note?: string;\n  disabled?: boolean;\n  className?: string;\n  /** Menu width. Defaults to the trigger's width for `underline`, 232px for `pill`. */\n  width?: number | \"trigger\";\n  placeholder?: string;\n  align?: \"start\" | \"end\";\n  /** Caps the menu at 360px and scrolls the rest. */\n  scroll?: boolean;",
+    "DateField": "  /** Accessible name \u2014 the visible eyebrow or row label sits outside. */\n  label: string;\n  /** `YYYY-MM-DD`, or `\"\"` for empty. Never `null`. */\n  value: string;\n  /** Receives `YYYY-MM-DD`, or `\"\"` when the field is cleared. */\n  onChange: (next: string) => void;\n  /** `underline` (34px form field, default) \u00b7 `boxed` (30px bordered) \u00b7 `bare` (parent row owns the rule). */\n  variant?: \"boxed\" | \"underline\" | \"bare\";\n  /** `YYYY-MM-DD`; earlier days are unpickable. */\n  min?: string;\n  /** `YYYY-MM-DD`; later days are unpickable. */\n  max?: string;\n  disabled?: boolean;\n  required?: boolean;\n  className?: string;\n  /** Filled with `{ focus() }` so a dialog can send focus here as the first invalid field. */\n  handleRef?: React.RefObject<{ focus: () => void } | null>;\n  /** Fires when the field starts or stops showing a blank segment; refuse the submit while true. */\n  onIncompleteChange?: (incomplete: boolean) => void;"
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}

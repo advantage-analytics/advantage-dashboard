@@ -1,0 +1,29 @@
+/* Brand fonts for /design-sync. The app loads Inter and Roboto Mono through
+   next/font (self-hosted at build time, no @font-face in any stylesheet), so
+   the design-system bundle has to carry its own faces. These are the Google
+   Fonts latin variable subsets (Inter v20 wght 300–700, Roboto Mono v31 wght
+   400–700), the same files next/font would download. Referenced from
+   .design-sync/config.json → extraFonts; the converter copies the woff2s into
+   fonts/ and rewrites the urls. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url(./fonts/inter-latin-var.woff2) format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url(./fonts/roboto-mono-latin-var.woff2) format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}

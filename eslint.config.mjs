@@ -45,6 +45,16 @@ const eslintConfig = [
       // with no import of React in scope — 337 `no-undef` errors from one file
       // nobody wrote or ships. Same category as `.agents/**` above.
       "work/**",
+      // /design-sync (claude.ai/design) working state. `.ds-sync/` is the
+      // staged converter with its own node_modules, `ds-bundle/` is the built
+      // upload (a 1 MB compiled React bundle among 300+ generated files) and
+      // `.design-sync/.cache/` holds generated previews and grades. All three
+      // are gitignored and regenerated on every sync; only
+      // `.design-sync/{config.json,NOTES.md,conventions.md,previews,shims,…}`
+      // is authored, and that stays linted. Same category as `.agents/**`.
+      ".ds-sync/**",
+      "ds-bundle/**",
+      ".design-sync/.cache/**",
     ],
   },
 
