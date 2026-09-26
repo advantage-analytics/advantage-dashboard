@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
@@ -8,7 +7,8 @@ import {
   completeClaim,
   completeClaimWithToken,
 } from "@/lib/services/programs/claim-actions";
-import { hasAcceptedCurrentPilotTerms } from "@/lib/services/programs/pilot-terms-actions";
+import { hasAcceptedCurrentPilotTermsForUser } from "@/lib/services/programs/pilot-terms-actions";
+import { hashToken } from "@/lib/services/programs/tokens";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
 
 /**
@@ -73,7 +73,7 @@ export async function GET(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user && !(await hasAcceptedCurrentPilotTerms())) {
+  if (user && !(await hasAcceptedCurrentPilotTermsForUser(user.id))) {
     const programKey = await pendingProgramKey(user, token);
     if (programKey) redirect(termsHref(programKey, token));
   }
@@ -163,7 +163,7 @@ async function pendingProgramKey(
 
   if (token) {
     if (!/^[A-Za-z0-9_-]{20,100}$/.test(token)) return null;
-    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const tokenHash = hashToken(token);
     const { data: row } = await db
       .from("pending_claims")
       .select("program_key, claimant_user_id, expires_at")

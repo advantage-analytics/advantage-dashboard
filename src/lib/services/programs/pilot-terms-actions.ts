@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { PILOT_TERMS_VERSION } from "./pilot-terms";
+import { PILOT_TERMS_VERSION, verifyHref } from "./pilot-terms";
 
 /**
  * Reading and recording a coach's pilot-terms acceptance.
@@ -47,11 +47,23 @@ export async function hasAcceptedCurrentPilotTerms(): Promise<boolean> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return false;
+  return hasAcceptedCurrentPilotTermsForUser(user.id);
+}
 
+/**
+ * Same check, for a caller that has already resolved the session (a page or
+ * route handler that called `auth.getUser()` for its own purposes moments
+ * earlier). Skips the redundant `getUser()` round trip `hasAcceptedCurrentPilotTerms`
+ * would otherwise repeat.
+ */
+export async function hasAcceptedCurrentPilotTermsForUser(
+  userId: string,
+): Promise<boolean> {
+  const supabase = await createClient();
   const { data, error } = await supabase
     .from("pilot_terms_acceptances")
     .select("id")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .eq("terms_version", PILOT_TERMS_VERSION)
     .limit(1);
 
@@ -90,7 +102,7 @@ export async function recordPilotTermsAcceptance(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, reason: "no-session" };
 
-  if (await hasAcceptedCurrentPilotTerms()) return { ok: true };
+  if (await hasAcceptedCurrentPilotTermsForUser(user.id)) return { ok: true };
 
   const { error } = await supabase
     .from("pilot_terms_acceptances")
@@ -133,10 +145,5 @@ export async function acceptPilotTermsForClaim(input: {
   if (!result.ok) return result;
 
   const token = typeof input?.token === "string" ? input.token : "";
-  return {
-    ok: true,
-    next: token
-      ? `/claim/verify?${new URLSearchParams({ token })}`
-      : "/claim/verify",
-  };
+  return { ok: true, next: verifyHref(token) };
 }

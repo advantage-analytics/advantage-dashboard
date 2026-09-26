@@ -10,8 +10,9 @@ import { PilotTermsForm } from "@/components/claim/pilot-terms-form";
 import {
   PILOT_TERMS_VERSION,
   pilotTermsCopy,
+  verifyHref,
 } from "@/lib/services/programs/pilot-terms";
-import { hasAcceptedCurrentPilotTerms } from "@/lib/services/programs/pilot-terms-actions";
+import { hasAcceptedCurrentPilotTermsForUser } from "@/lib/services/programs/pilot-terms-actions";
 import { quotaTierFor } from "@/lib/services/splitstep/quota";
 
 export const metadata = { title: "Pilot terms" };
@@ -51,16 +52,15 @@ export default async function ClaimPilotTermsPage({
   // acceptance (frame C). The app may think the coach has accepted, so this
   // screen must not bounce straight back, or the two redirect each other.
   const refused = query.refused === "1";
-  const verify = token
-    ? `/claim/verify?${new URLSearchParams({ token })}`
-    : "/claim/verify";
+  const verify = verifyHref(token);
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect(verify);
-  if (!refused && (await hasAcceptedCurrentPilotTerms())) redirect(verify);
+  if (!refused && (await hasAcceptedCurrentPilotTermsForUser(user.id)))
+    redirect(verify);
 
   const program = await getProgramPublicStatus(supabase, programKey);
   if (!program) notFound();

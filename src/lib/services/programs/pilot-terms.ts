@@ -36,6 +36,20 @@ export const PILOT_TERMS_VERSION = "2026-fall-pilot-1";
  */
 export const TERMS_NOT_ACCEPTED_SQLSTATE = "TA001";
 
+/**
+ * `/claim/verify`, carrying the signed-in link's token when there is one.
+ * Shared by the terms page (its no-session/no-refusal redirects) and
+ * `acceptPilotTermsForClaim`'s `next` result, which return to the same
+ * Route Handler by two different paths. Lives here rather than in
+ * `pilot-terms-actions.ts` because that file's `"use server"` directive
+ * limits it to exporting async functions only.
+ */
+export function verifyHref(token?: string | null): string {
+  return token
+    ? `/claim/verify?${new URLSearchParams({ token })}`
+    : "/claim/verify";
+}
+
 // ── The copy ────────────────────────────────────────────────────────────────
 //
 // Approved 2026-09-26 in `docs/superpowers/specs/2026-09-26-pilot-terms-design.html`
