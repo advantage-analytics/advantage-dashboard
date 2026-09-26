@@ -18,6 +18,7 @@
  * | Program invite           | `inviteMember()` — WIRED                        |
  * | Analysis ready           | `deriveAndPublish()` sets `completed` · pref `notifyAnalysisReady` — WIRED |
  * | Analysis failed          | final `failed` (webhook, poll) / `derivation_failed` · pref `notifyAnalysisFailed` — WIRED |
+ * | Analysis failed (internal) | `notifyAnalysisOutcome({ outcome: "failed" })`, same final failures as above, to `INTERNAL_ALERTS_ADDRESS` only — no pref, `claimSend("analysis_failed_internal:<job_id>")` — WIRED |
  * | Usage alert (80% / spent) | `reserveQuota()` crosses a line, to owner + coaches · pref `notifyUsageAlerts` — WIRED |
  * | Weekly team digest       | Monday schedule · pref `weeklyTeamDigest` — NOT WIRED, row hidden |
  * | Claim verify address     | signed-in `startClaim()` / `resendClaim()` — WIRED |
@@ -118,8 +119,10 @@ export {
 export {
   analysisReadyEmail,
   analysisFailedEmail,
+  analysisFailedInternalEmail,
   type AnalysisReadyInput,
   type AnalysisFailedInput,
+  type AnalysisFailedInternalInput,
 } from "./templates/analysis";
 
 export {

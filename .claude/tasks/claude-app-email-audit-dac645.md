@@ -46,7 +46,7 @@ ready).
 
 ## T3 · "Analysis failed" internal alert inside notifyAnalysisOutcome
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/lib/services/email/templates/analysis.ts, src/lib/services/email/index.ts, src/lib/services/notifications/analysis-mail.ts, tests/analysis-failed-internal-email.spec.ts (new)

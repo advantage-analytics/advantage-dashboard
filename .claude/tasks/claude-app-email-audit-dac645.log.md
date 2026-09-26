@@ -20,3 +20,13 @@ is the runner's. Newest entries at the bottom.
 
 1. Reviewed path reads the program row twice (once in `notifyClaimant`, once for the alert); `notifyClaimant` could return the display name.
 2. `docs/email-system.md` doesn't mention the new internal alerts — update it once T3 lands.
+
+## T3 · "Analysis failed" internal alert inside notifyAnalysisOutcome — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `analysisFailedInternalEmail` template (`templates/analysis.ts`, tags `analysis_failed_internal`) exported with an index table row. `notifyAnalysisOutcome` now selects `status, error_code, error_step` and, on a final failure, sends the internal alert to `INTERNAL_ALERTS_ADDRESS` before the uploader guard and the preference read, keyed `claimSend("analysis_failed_internal:<job_id>")` and wrapped so a crash cannot block the athlete mail. Pure `analysisFailureStage` exported. No call sites touched. New offline spec `tests/analysis-failed-internal-email.spec.ts`.
+**follow-ups:**
+
+1. The internal key is claimed before the send, so a failed send is never retried for that job (same trade as `program-live-mail.ts`).
+2. `error_category` isn't shown; add it as a fact if it helps triage.
+3. `docs/email-system.md` should gain the three internal alerts (T1–T3).
