@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { AdminActivityCard } from "@/components/admin/admin-activity-card";
 import { AdminConferenceCard } from "@/components/admin/admin-conference-card";
 import { AdminPeopleCard } from "@/components/admin/admin-people-card";
 import { AdminRequestsCard } from "@/components/admin/admin-requests-card";
@@ -99,6 +100,7 @@ export default async function AdminTeamPage({
       />
     ),
     schedule: <AdminScheduleCard schedule={data.schedule} />,
+    activity: <AdminActivityCard activity={data.activity} />,
     pilot: (
       <PilotUsageCard
         programId={programId}

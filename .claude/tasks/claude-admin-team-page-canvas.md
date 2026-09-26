@@ -282,7 +282,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T19 · Activity log card
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T4, T8
 - **files:** (guess) new `src/components/admin/admin-activity-card.tsx` + `admin-activity-labels.ts`, `src/app/admin/teams/[programId]/page.tsx`

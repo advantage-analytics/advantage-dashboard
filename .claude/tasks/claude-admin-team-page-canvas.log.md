@@ -851,3 +851,14 @@ thing an admin meets.
 
 1. `team-page-header.tsx:40` says Home venue is omitted from the header because "the Details card below already prints" it — it does not (not in T18's rows). Either add a Home venue row or fix the comment (standing decision 6).
 2. The offline vm harness has no `URL` global, which is why the card used a regex — worth adding `URL` to `tests/fixtures/vm-modules.ts`.
+
+## T19 · Activity log card — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** New `src/components/admin/admin-activity-card.tsx` fills the `#activity` main-column slot: `Activity log`, rows of sentence label · actor (`—` when null) · `shortDate()`, in the loader's `created_at desc, id desc` order, with an empty-state line. New `admin-activity-labels.ts` maps all 26 live `program_audit_log_action_check` actions (read via `pg_get_constraintdef` 2026-09-26) and falls back to the raw string. The two `console.*` actions are labelled as admin-console events ("Result entered from the admin console", "Analysis attached from the admin console") — the first pass called them Advantage Intelligence events, corrected before the gate after tracing their only writer (`persist_admin_upload_submissions`, `details.origin = 'admin_console'`). Offline spec `tests/admin-activity-card.spec.ts` checks every action has a label.
+
+**follow-ups:**
+
+1. The loader deliberately omits `program_audit_log.details`; richer lines ("role changed from coach to staff") need a loader change first.
+2. Nothing keeps the label map in step with the constraint — a new audit action shows its raw string until someone adds a label.
