@@ -34,7 +34,7 @@
  * | Ownership transferred    | `transferProgramOwnership()`, to the new owner — WIRED |
  * | Member left              | `leaveProgram()`, to the owner · pref `notifyTeamActivity` — WIRED |
  * | Match video expiry       | the daily cleanup cron (`/api/cron/cleanup-match-videos`), to the video's `uploaded_by`, once per retention clock via `claimSend("match_video_expiry:<attachment>:<clock date>")` — no pref, it is the only notice before a deletion — WIRED |
- * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row — to every `is_admin` user — WIRED |
+ * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row — to every `is_admin` user plus `INTERNAL_ALERTS_ADDRESS` — WIRED |
  *
  * The claim and invite-request rows fire from
  * `services/programs/{admin-actions,claim-actions}.ts`. None of them can fail
@@ -102,7 +102,11 @@ export {
   type EmailSpan,
   type EmailParagraph,
 } from "./shell";
-export { FROM_ADDRESS, SUPPORT_ADDRESS } from "./config";
+export {
+  FROM_ADDRESS,
+  SUPPORT_ADDRESS,
+  INTERNAL_ALERTS_ADDRESS,
+} from "./config";
 
 export {
   programInviteEmail,

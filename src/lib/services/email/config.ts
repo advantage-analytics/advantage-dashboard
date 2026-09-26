@@ -31,6 +31,17 @@ export const FROM_ADDRESS =
 export const SUPPORT_ADDRESS = "team@advantage-analytics.com";
 
 /**
+ * Where internal alerts land — a copy of "a human has to look at this" mail
+ * that would otherwise depend entirely on some user having `is_admin` set
+ * and a working inbox. Defaults to the team inbox so the alert always has
+ * somewhere to go even when no env var is configured; override with
+ * `INTERNAL_ALERTS_ADDRESS` to route it elsewhere (a shared alerting inbox,
+ * a distribution list) without touching code.
+ */
+export const INTERNAL_ALERTS_ADDRESS =
+  process.env.INTERNAL_ALERTS_ADDRESS?.trim() || "team@advantage-analytics.com";
+
+/**
  * Resend's send endpoint.
  *
  * Called with `fetch` rather than the `resend` SDK. The entire surface this

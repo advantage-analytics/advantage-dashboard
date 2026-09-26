@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Add INTERNAL_ALERTS_ADDRESS and copy admin-review mail to it
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/services/email/config.ts, src/lib/services/email/index.ts, src/lib/services/notifications/admin-review-mail.ts, .env.example, tests/admin-review-recipients.spec.ts (new; names are guesses)
 - **done when:**
