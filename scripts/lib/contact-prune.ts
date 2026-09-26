@@ -12,9 +12,11 @@ export type ExistingContact = {
 };
 
 /**
- * `program_contacts` is unique on `(program_id, lower(email))`, so that is the
- * identity the diff compares on. Trimmed as well: the seed trims before it
- * writes, and a stray space in either side must not read as a departure.
+ * `program_contacts` is unique on the raw `(program_id, email)`, and both of
+ * its writers store the email lowercased (the seed here, the admin console's
+ * `inviteToClaim` from a lowercased address). Comparing lowercased and trimmed
+ * keeps the diff honest if a row ever arrives otherwise: a stray space or a
+ * capital must not read as a departure.
  */
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -45,4 +47,27 @@ export function staleScrapeContacts(
       return !emails.has(normalizeEmail(row.email));
     })
     .map((row) => row.id);
+}
+
+/**
+ * The scraped rows the seed may upsert: every one except those landing on an
+ * existing `admin` row for the same program and email.
+ *
+ * The upsert conflicts on `(program_id, email)` and overwrites the row it hits,
+ * `source` included. Letting a scraped row hit an admin one would relabel it
+ * `scrape`, replace the name and role an admin typed, and hand it to the next
+ * prune whose scrape no longer lists it. Skipping the row leaves the admin's
+ * record exactly as it was; the address is on the staff list either way.
+ */
+export function withoutAdminCollisions<
+  T extends { program_id: string; email: string },
+>(rows: readonly T[], existing: readonly ExistingContact[]): T[] {
+  const adminKeys = new Set(
+    existing
+      .filter((row) => row.source === "admin")
+      .map((row) => `${row.program_id} ${normalizeEmail(row.email)}`),
+  );
+  return rows.filter(
+    (row) => !adminKeys.has(`${row.program_id} ${normalizeEmail(row.email)}`),
+  );
 }

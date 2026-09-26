@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   type ExistingContact,
   staleScrapeContacts,
+  withoutAdminCollisions,
 } from "../scripts/lib/contact-prune";
 
 /**
@@ -66,5 +67,42 @@ test.describe("staleScrapeContacts", () => {
     ];
 
     expect(staleScrapeContacts(existing, new Map())).toEqual([]);
+  });
+});
+
+test.describe("withoutAdminCollisions", () => {
+  const scraped = (program_id: string, email: string) => ({
+    program_id,
+    email,
+    source: "scrape" as const,
+  });
+
+  test("a scraped row landing on an admin row is skipped, not upserted over it", () => {
+    const existing = [row("admin", PROGRAM_A, "coach@school.edu", "admin")];
+    const rows = [
+      scraped(PROGRAM_A, "coach@school.edu"),
+      scraped(PROGRAM_A, "assistant@school.edu"),
+    ];
+
+    expect(withoutAdminCollisions(rows, existing)).toEqual([
+      scraped(PROGRAM_A, "assistant@school.edu"),
+    ]);
+  });
+
+  test("the collision compares lowercased, trimmed email", () => {
+    const existing = [row("admin", PROGRAM_A, " Coach@School.edu", "admin")];
+    const rows = [scraped(PROGRAM_A, "coach@school.edu")];
+
+    expect(withoutAdminCollisions(rows, existing)).toEqual([]);
+  });
+
+  test("the same email on another program, or a scraped existing row, is kept", () => {
+    const existing = [
+      row("admin", PROGRAM_B, "coach@school.edu", "admin"),
+      row("scraped", PROGRAM_A, "coach@school.edu"),
+    ];
+    const rows = [scraped(PROGRAM_A, "coach@school.edu")];
+
+    expect(withoutAdminCollisions(rows, existing)).toEqual(rows);
   });
 });

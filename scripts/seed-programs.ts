@@ -14,7 +14,9 @@
  * contacts of a dataset program whose email the refreshed scrape no longer
  * lists (the diff is `staleScrapeContacts` in `lib/contact-prune.ts`). Admin
  * rows (`source = 'admin'`, typed in by the admin console) and every row of a
- * program absent from the dataset are never touched. So re-running against a
+ * program absent from the dataset are never touched: a scraped row that would
+ * land on an admin row is skipped rather than upserted over it
+ * (`withoutAdminCollisions`). So re-running against a
  * refreshed scrape converges rather than duplicating. It never touches
  * `status`, `owner_user_id` or `claimed_at` on a program that already exists —
  * those are claim state, and a re-seed must not un-claim somebody's workspace.
@@ -31,6 +33,7 @@ import {
   type ExistingContact,
   normalizeEmail,
   staleScrapeContacts,
+  withoutAdminCollisions,
 } from "./lib/contact-prune";
 
 // argv[0] is the node binary and argv[1] this script — both are paths, so the
@@ -223,25 +226,10 @@ async function main() {
       source: "scrape" as const,
     }));
 
-  if (APPLY) {
-    console.log("  domains");
-    await chunked(domainRows, async (batch) => {
-      const { error } = await db
-        .from("program_domains")
-        .upsert(batch, { onConflict: "program_id,domain" });
-      if (error) throw new Error(`program_domains: ${error.message}`);
-    });
-
-    console.log("  contacts");
-    await chunked(contactRows, async (batch) => {
-      const { error } = await db
-        .from("program_contacts")
-        .upsert(batch, { onConflict: "program_id,email" });
-      if (error) throw new Error(`program_contacts: ${error.message}`);
-    });
-  }
-
-  // ── Prune ────────────────────────────────────────────────────────────────
+  // ── Existing contacts ────────────────────────────────────────────────────
+  // Read before any write: the upsert must skip rows that would land on an
+  // admin row, and the prune below diffs against the same read.
+  //
   // Every mapped dataset program gets a key, including one with no contacts in
   // the CSV: its whole scraped staff departed. Programs outside the dataset
   // get no key, so `staleScrapeContacts` never looks at their rows.
@@ -269,6 +257,31 @@ async function main() {
     }
   }
 
+  const toUpsert = withoutAdminCollisions(contactRows, existing);
+  const kept = contactRows.length - toUpsert.length;
+  if (kept > 0) {
+    console.log(`  skip (admin row)     ${kept} scrape contacts`);
+  }
+
+  if (APPLY) {
+    console.log("  domains");
+    await chunked(domainRows, async (batch) => {
+      const { error } = await db
+        .from("program_domains")
+        .upsert(batch, { onConflict: "program_id,domain" });
+      if (error) throw new Error(`program_domains: ${error.message}`);
+    });
+
+    console.log("  contacts");
+    await chunked(toUpsert, async (batch) => {
+      const { error } = await db
+        .from("program_contacts")
+        .upsert(batch, { onConflict: "program_id,email" });
+      if (error) throw new Error(`program_contacts: ${error.message}`);
+    });
+  }
+
+  // ── Prune ────────────────────────────────────────────────────────────────
   const stale = staleScrapeContacts(existing, dataset);
   const bySource = existing.reduce<Record<string, number>>((acc, r) => {
     acc[r.source] = (acc[r.source] ?? 0) + 1;
