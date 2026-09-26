@@ -873,3 +873,18 @@ thing an admin meets.
 
 1. Home venue shows nowhere on the page: `team-page-header.tsx:40` says the Details card prints it, but T18's rows do not include it (standing decision 6).
 2. The T10 dialog accepts any string as the staff page URL — validating to `http(s)` at write time would stop bad values at the source.
+
+## T20 · Fidelity pass against the canvas at 1440 — blocked
+
+**gate:** mechanical GATE PASS · completion VERDICT: needs-work
+
+**reason:** Criterion 2 — `fidelity.md` has 52 rows (30 match, 9 fixed-in-this-diff each backed by a hunk, 10 deliberate deviations) but 3 rows are left as "unfixed mismatch": (1) at scroll 0 the section pills highlight `People`, not `Overview` — needs a scroll-listener fix, not a constant; (2) card titles are 13px vs the canvas 14px, hard-coded in the shared `SettingsCardTitle` every Settings card uses; (3) People/Requests rows are one line (47px, 22px avatar) vs the canvas two-line 52px — `AdminPersonRow` follows the DS Settings person row, a restructure. Each needs a decision (fix, or record as a deliberate deviation) before T20 can pass. Criteria 1, 3, 4 met; all six flows exercised on ZZ Test Program with their audit actions; ZZ state restored and verified by SQL (crest/city/state/conference/pilot columns null, 0 members, 0 invites); both throwaway admin users deleted (0 `t20%@example.com` rows). Fixes in the stash: header→pills gap and h1 row gap, card padding to canvas on all nine cards, Pilot kv row height and button widths, conference mark 40px radius 6→8 (also affects the conference drawer's mark).
+
+**stash:** c2125259d6513d2d62b1dde6bdc63eae0a5a8f4d (`fidelity.md` + class fixes across 10 `src/components/admin/*` files)
+
+**follow-ups:**
+
+1. Crest upload/remove (`set_program_crest`), invite revoke (`revoke_program_invite`) and the uploads toggle write no audit row, though an `invite.revoked` label exists.
+2. The Pilot card shows `End pilot` and "No end date set" on a program that never had a pilot.
+3. Schedule rows and the Pilot pill don't render on ZZ (no events, unclaimed); their fidelity rows were checked from source constants, not measured.
+4. The harness script names `t20-harness.mjs`/`t20-flows.mjs` remain in the worktree's `info/exclude` (files deleted).
