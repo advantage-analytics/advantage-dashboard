@@ -22,6 +22,7 @@ import {
 import {
   CUSTOM_ORG_NAME_MAX as NAME_MAX,
   CUSTOM_ORG_NAME_MIN as NAME_MIN,
+  OWNER_NAME_MAX,
 } from "@/lib/services/programs/custom-org";
 
 /**
@@ -44,16 +45,22 @@ export async function continueToPilotTerms(input: {
   name: string;
   orgType: CustomOrgType;
   ownerName: string;
-}): Promise<CreateCustomProgramResult> {
-  const pending = toPendingTeam({
-    name: (input?.name ?? "").trim(),
-    orgType: input?.orgType,
-    ownerName: (input?.ownerName ?? "").trim(),
-  });
-  if (!pending) return { ok: false, reason: "invalid-org-type" };
-  if (pending.name.length < NAME_MIN || pending.name.length > NAME_MAX) {
+}): Promise<
+  CreateCustomProgramResult | { ok: false; reason: "invalid-owner-name" }
+> {
+  const name = (input?.name ?? "").trim();
+  const ownerName = (input?.ownerName ?? "").trim();
+  // Length first, each against its own field: `toPendingTeam` also refuses
+  // over-long text, and letting it answer would report a long name as a bad
+  // team type, on a screen whose type the coach cannot change.
+  if (name.length < NAME_MIN || name.length > NAME_MAX) {
     return { ok: false, reason: "invalid-name" };
   }
+  if (ownerName.length > OWNER_NAME_MAX) {
+    return { ok: false, reason: "invalid-owner-name" };
+  }
+  const pending = toPendingTeam({ name, orgType: input?.orgType, ownerName });
+  if (!pending) return { ok: false, reason: "invalid-org-type" };
 
   if (await hasAcceptedCurrentPilotTerms()) {
     const result = await createCustomTeam(pending);

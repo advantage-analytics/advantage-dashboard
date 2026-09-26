@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { continueToPilotTerms } from "@/app/claim/team/actions";
 import { CLAIM_ROLES } from "@/lib/services/programs/claim-roles";
 import type { CustomOrgType } from "@/lib/services/programs/create-actions";
+import { OWNER_NAME_MAX } from "@/lib/services/programs/custom-org";
 import {
   CLAIM_BUTTON,
   CLAIM_FIELD,
@@ -69,6 +70,8 @@ function reasonMessage(reason: string): string {
       return "Something changed with the pilot terms. Try again to see them.";
     case "invalid-name":
       return "Give the team a name between 2 and 120 characters.";
+    case "invalid-owner-name":
+      return `Keep your name to ${OWNER_NAME_MAX} characters.`;
     case "invalid-org-type":
       return "Something's off with the team type — go back a step and pick one.";
     case "no-session":
@@ -148,6 +151,7 @@ export function TeamSetupForm({
               value={ownerName}
               onChange={(e) => setOwnerName(e.target.value)}
               autoComplete="name"
+              maxLength={OWNER_NAME_MAX}
               className={CLAIM_FIELD}
             />
           </div>

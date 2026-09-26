@@ -24,6 +24,13 @@ export type CustomOrgType = (typeof CUSTOM_ORG_TYPES)[number];
 export const CUSTOM_ORG_NAME_MIN = 2;
 export const CUSTOM_ORG_NAME_MAX = 120;
 
+/**
+ * The coach's own name on the setup form. Not a column bound: it goes to
+ * `users.first_name`/`last_name`. Capped so the field and the setup action
+ * agree, and so an over-long name is reported as a name, not as something else.
+ */
+export const OWNER_NAME_MAX = 120;
+
 export function isCustomOrgType(value: unknown): value is CustomOrgType {
   return (
     typeof value === "string" &&
