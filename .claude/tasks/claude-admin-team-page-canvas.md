@@ -147,7 +147,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T9 · Header: 64px crest upload and facts line
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T8
 - **files:** (guess) `src/components/admin/team-page-header.tsx`, `src/components/dashboard/settings/teams/crest-control.tsx`

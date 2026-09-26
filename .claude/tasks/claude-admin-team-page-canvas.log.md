@@ -436,3 +436,51 @@ and the pill border keeps the shipped `--border-hairline` over the canvas's
 4. The pill row is not sticky. An anchor nav that scrolls out of view cannot show the
    reader where they are, which is half the point of the IntersectionObserver — but the
    canvas does not call for it, so it was left alone deliberately.
+
+## T9 · Header: 64px crest upload and facts line — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all four criteria met.
+
+**changed:** `team-page-header.tsx` swaps the read-only 52px `ProgramCrest` for a new
+client wrapper `team-crest-control.tsx` (needed because a Server Component cannot pass
+`onError` down) rendering `CrestControl variant="header"` wired to
+`adminUploadProgramCrest` / `adminRemoveProgramCrest`. The facts line becomes a
+four-entry array — `Landmark` Division · Conference, `MapPin` City, ST, `Globe` primary
+domain, `Calendar` Claimed Mon D — filtered on non-empty text, so a missing fact is
+dropped rather than printed empty and an unclaimed program shows no claimed fact.
+`program-crest.tsx` gained `64` in its size union.
+
+**Criterion 1 was already satisfied on arrival** — `CrestControl`'s `upload`/`remove`
+props with member-action defaults came from `9eba5415`, already merged; the Settings
+caller passes neither and so uses them. Reported as such rather than redone. That is the
+third task this queue has dispatched against a partly-stale premise.
+
+**The shared component was modified, and I checked the blast radius rather than trusting
+"byte-for-byte".** `crest-control.tsx` gained `variant?: "card" | "header"` (default
+`"card"`) and hoisted the file input plus `ImageAdjustDialog` into a `machinery` fragment.
+Verified: the Settings caller still passes the same four props; `machinery` is rendered by
+**both** branches (defined `:103`, header `:151`, card `:217`), so Settings keeps its
+upload and adjust flow. This shares rather than forks, which is what the notes required.
+
+**Two judgment calls worth keeping.** The canvas asks for 18px/600 initials, but 18px is
+off this repo's type scale and `check-design-drift.mjs` check 2 fails on it — so 16px
+semibold, commented in place. And criterion 4's "every button comes from `advButton()`"
+is satisfied vacuously: the header's only control is the 26px icon-only crest badge,
+which the DS's own chrome rule says must carry `aria-label` + `ChromeTooltip` rather than
+be an `advButton()`. The reviewer read the criterion as "no advButton-eligible button was
+hand-rolled", which is right — the buttons that _would_ qualify belong to T10 and T22.
+
+**follow-ups:**
+
+1. **Home venue was dropped from the facts line**, on the grounds that the canvas omits it
+   and T18's Details card will carry it. The reviewer flagged this as real information
+   loss: an admin scanning the header no longer sees the venue, and that UX now silently
+   depends on T18 landing. If T18 slips or changes shape, this regression ships alone.
+2. The header crest badge is upload-only — `adminRemoveProgramCrest` is passed but only
+   reachable through the card variant. If admins need to clear a crest from this page,
+   the badge should become a small FloatMenu (Replace / Adjust / Remove) when one exists.
+3. `--radius-float` (12px) is in the canvas token set but not in
+   `src/styles/design-system/spacing.css`, where the same value is `--radius-dropdown`.
+   Worth aliasing once so future canvas transcriptions do not each redo the mapping.
+4. Still nobody has viewed this page in a browser (T8's follow-up 1). The header is now
+   the second layer built on an unverified layout.

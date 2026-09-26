@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { Camera } from "lucide-react";
+import { Camera, Upload } from "lucide-react";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { ImageAdjustDialog } from "@/components/dashboard/settings/image-adjust-dialog";
 import { fetchImageFile } from "@/lib/ui/image-adjust";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
@@ -40,6 +41,7 @@ export function CrestControl({
   onError,
   upload = uploadProgramCrest,
   remove: removeAction = removeProgramCrest,
+  variant = "card",
 }: {
   programId: string;
   name: string;
@@ -47,6 +49,16 @@ export function CrestControl({
   onError: (message: string | null) => void;
   upload?: typeof uploadProgramCrest;
   remove?: typeof removeProgramCrest;
+  /**
+   * `card` is the Settings identity card: a 52px mark beside the words that
+   * say what to upload. `header` is the admin team page's `.bigcrest` — the
+   * 64px mark alone, with the 26px upload badge pinned to its corner, because
+   * a page header has no room for a paragraph and the crest is identity
+   * there, not a field. Both share this component rather than forking it:
+   * the file input, the bake-then-post sequence and `ImageAdjustDialog` live
+   * here once.
+   */
+  variant?: "card" | "header";
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
@@ -86,6 +98,60 @@ export function CrestControl({
       onError("Couldn't load the current crest. Upload it again instead.");
     }
   };
+
+  /** The one hidden input and the one dialog, shared by both variants. */
+  const machinery = (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPT}
+        className="sr-only"
+        tabIndex={-1}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          // Reset so choosing the same file again still fires a change.
+          event.target.value = "";
+          if (file) {
+            onError(null);
+            setAdjusting(file);
+          }
+        }}
+      />
+
+      <ImageAdjustDialog
+        open={adjusting !== null}
+        file={adjusting}
+        shape="square"
+        outputEdge={CREST_EDGE_PX}
+        saving={isPending}
+        onSave={submit}
+        onCancel={() => setAdjusting(null)}
+        onChooseAnother={() => inputRef.current?.click()}
+      />
+    </>
+  );
+
+  if (variant === "header") {
+    const label = crestUrl ? "Replace the crest" : "Upload a crest";
+    return (
+      <div className="relative shrink-0">
+        <ProgramCrest name={name} crestUrl={crestUrl} size={64} />
+        <ChromeTooltip label={label}>
+          <button
+            type="button"
+            aria-label={label}
+            disabled={isPending}
+            onClick={() => inputRef.current?.click()}
+            className="absolute right-[-6px] bottom-[-6px] flex size-[26px] cursor-pointer items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-card)] text-[var(--ink-700)] shadow-[var(--shadow-card),inset_0_0_0_1px_var(--border-medium)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-wait disabled:opacity-60"
+          >
+            <Upload className="size-[13px]" strokeWidth={1.5} />
+          </button>
+        </ChromeTooltip>
+        {machinery}
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-4">
@@ -148,33 +214,7 @@ export function CrestControl({
         </div>
       </div>
 
-      <input
-        ref={inputRef}
-        type="file"
-        accept={ACCEPT}
-        className="sr-only"
-        tabIndex={-1}
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          // Reset so choosing the same file again still fires a change.
-          event.target.value = "";
-          if (file) {
-            onError(null);
-            setAdjusting(file);
-          }
-        }}
-      />
-
-      <ImageAdjustDialog
-        open={adjusting !== null}
-        file={adjusting}
-        shape="square"
-        outputEdge={CREST_EDGE_PX}
-        saving={isPending}
-        onSave={submit}
-        onCancel={() => setAdjusting(null)}
-        onChooseAnother={() => inputRef.current?.click()}
-      />
+      {machinery}
     </div>
   );
 }
