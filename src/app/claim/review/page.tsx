@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Check, Mail } from "lucide-react";
 import { teamLabel } from "@/lib/data/programs-server";
-import { setActiveWorkspace } from "@/lib/workspace/actions";
+import { openWorkspace } from "@/lib/workspace/actions";
 import {
   ClaimShell,
   ClaimHeading,
@@ -106,11 +106,12 @@ export default async function ClaimUnderReviewPage({
       <ClaimActions>
         {/* Switches into the program, then lands on its home. A plain
             `/dashboard` link opened in whatever workspace was last active,
-            usually Personal. `setActiveWorkspace` checks membership, so a
-            hand-edited `program` just falls through to no switch. The link is
+            usually Personal. `openWorkspace` checks membership: signed in as
+            another account (or after a reset) it still goes to `/dashboard`
+            rather than leaving a dead button. The link is
             the fallback for a URL from before `program` was passed. */}
         {program ? (
-          <form action={setActiveWorkspace.bind(null, program)}>
+          <form action={openWorkspace.bind(null, program)}>
             <button type="submit" className={CLAIM_BUTTON}>
               Go to the program
             </button>
