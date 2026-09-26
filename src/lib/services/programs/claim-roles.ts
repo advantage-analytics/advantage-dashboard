@@ -45,3 +45,22 @@ export function claimRoleLabel(value: string): string {
   const match = CLAIM_ROLES.find((role) => role.value === value);
   return match ? match.label : value.replace(/_/g, " ");
 }
+
+/**
+ * The membership role an invitation carries for a join request's claim role.
+ * The two vocabularies differ — `program_members.role` has no head/associate/
+ * assistant split — so the three coach answers become `coach`, and `player`,
+ * `other` or no answer stay `player`.
+ */
+export function memberRoleForClaimRole(
+  claimRole: string | null | undefined,
+): "coach" | "player" {
+  switch (claimRole) {
+    case "head_coach":
+    case "associate_coach":
+    case "assistant_coach":
+      return "coach";
+    default:
+      return "player";
+  }
+}

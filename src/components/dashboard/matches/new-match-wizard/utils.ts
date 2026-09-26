@@ -166,7 +166,9 @@ export function buildMatchData(
       ad_scoring: formData.adScoring ?? null,
       play_on_lets: formData.playOnLets,
     },
-    result: formData.result,
+    // The caption over the score ("X Wins", "Retired"), not an outcome. No
+    // caption is stored as null, never "": readers fall back to "Final Score".
+    result: formData.result || null,
     // Store the picked local date as the leading YYYY-MM-DD so it survives the
     // timestamptz round-trip (PostgREST returns timestamptz normalized to UTC, and the
     // heatmap buckets by date.slice(0,10)). getCurrentDate() already defaults this to

@@ -18,6 +18,10 @@ import { nextClaimStatus, reviewReason, type ClaimStatus } from "./claim-state";
 import { getProgramOwner } from "./program-owner";
 import { wantsNotification } from "@/lib/services/notifications/should-notify";
 import { notifyAdminsReviewNeeded } from "@/lib/services/notifications/admin-review-mail";
+import {
+  notifyProgramWentLive,
+  shouldAnnounceProgramLive,
+} from "@/lib/services/notifications/program-live-mail";
 import { requestOrigin } from "@/lib/request-origin";
 
 export type ActionOutcome = { ok: true } | { ok: false; error: string };
@@ -765,6 +769,29 @@ async function notifyIfClaimNeedsReview(
 }
 
 /**
+ * The other half of the fork after a claim completes: did it land live on its
+ * own? Decided on `status`, not `contact_matched` — see
+ * `shouldAnnounceProgramLive`. Shared by `completeClaim` and
+ * `completeClaimWithToken` so the two doors build the same event shape from
+ * one place instead of each re-deriving it.
+ */
+async function announceIfProgramWentLive(
+  rpc: Pick<ClaimRpcResult, "program_id" | "status" | "already_owned"> | null,
+  claimantName: string,
+  claimantEmail: string,
+  programName: string,
+): Promise<void> {
+  if (!rpc || !shouldAnnounceProgramLive(rpc)) return;
+  await notifyProgramWentLive({
+    programId: rpc.program_id,
+    programName,
+    claimantName,
+    claimantEmail,
+    path: "auto",
+  });
+}
+
+/**
  * Finish a claim after the emailed link is clicked.
  *
  * The domain check runs HERE, against the program row read from the database —
@@ -902,15 +929,20 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
   // by the time this runs. `after()` so the redirect to `/claim/review` (or
   // `/claim/ready`) is not held up waiting on mail to every admin.
   after(async () => {
+    const programName = programDisplayName(
+      program.school_name as string,
+      program.team as string,
+    );
     await notifyIfClaimNeedsReview(
       db,
       rpc,
       user.id,
       pending.fullName,
       email,
-      programDisplayName(program.school_name as string, program.team as string),
+      programName,
       check.domainMatched,
     );
+    await announceIfProgramWentLive(rpc, pending.fullName, email, programName);
   });
 
   return {
@@ -1058,14 +1090,25 @@ export async function completeClaimWithToken(
   // above, and the same reason this is `after()`-deferred: the redirect that
   // follows must not wait on mail to every admin.
   after(async () => {
+    const result = rpc as ClaimRpcResult | null;
+    const programName = programDisplayName(
+      program.school_name as string,
+      program.team as string,
+    );
     await notifyIfClaimNeedsReview(
       db,
-      rpc as ClaimRpcResult | null,
+      result,
       user.id,
       row.full_name as string,
       email,
-      programDisplayName(program.school_name as string, program.team as string),
+      programName,
       check.domainMatched,
+    );
+    await announceIfProgramWentLive(
+      result,
+      row.full_name as string,
+      email,
+      programName,
     );
   });
 

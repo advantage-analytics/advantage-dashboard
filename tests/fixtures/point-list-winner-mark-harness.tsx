@@ -51,6 +51,7 @@ const WORKSPACE: WorkspaceContextValue = {
     role: null,
     memberSince: null,
     onboardedAt: "2026-01-01",
+    recordingSource: null,
   },
 };
 

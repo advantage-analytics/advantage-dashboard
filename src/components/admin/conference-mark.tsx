@@ -28,17 +28,18 @@ export function ConferenceMark({
 }) {
   const box =
     size === 40
-      ? "size-[40px] text-[12px]"
+      ? // The canvas' `.crest.lg`: 40px squares step up to the 8px element radius.
+        "size-[40px] rounded-[var(--radius-element)] text-[12px]"
       : size === 28
-        ? "size-[28px] text-[11px]"
-        : "size-[24px] text-[11px]";
+        ? "size-[28px] rounded-[var(--radius-button)] text-[11px]"
+        : "size-[24px] rounded-[var(--radius-button)] text-[11px]";
 
   return (
     <span
       aria-hidden="true"
       className={cn(
         box,
-        "flex shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] leading-none font-semibold text-[var(--ink-700)]",
+        "flex shrink-0 items-center justify-center bg-[var(--surface-subtle)] leading-none font-semibold text-[var(--ink-700)]",
         className,
       )}
     >

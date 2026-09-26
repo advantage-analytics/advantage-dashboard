@@ -19,11 +19,7 @@ import {
 } from "@/components/dashboard/settings/settings-card";
 import { advButton } from "@/lib/ui/adv-button";
 import { normalizedPersonName } from "@/lib/data/person-name";
-import {
-  addProgramPlayer,
-  restoreProgramPlayer,
-} from "@/components/dashboard/team/roster-actions";
-import { inviteMember } from "@/components/dashboard/settings/team-actions";
+import type { AddPlayerResult } from "@/components/dashboard/team/roster-actions";
 import {
   DialogInfoRow,
   SeatBoxes,
@@ -121,7 +117,7 @@ import { isPostHogConfigured } from "@/lib/posthog-client";
  */
 
 /** The field that tells two same-named rows apart, or the absence of it. */
-function emailNote(person: RosterMember): string {
+function emailNote(person: { email: string | null }): string {
   return person.email?.trim() || "no email on file";
 }
 
@@ -133,7 +129,9 @@ function emailNote(person: RosterMember): string {
  * that can drift. Its lineup-spot counterpart is `spotHeldNote`, shared with
  * Edit player from `player-fields.tsx`.
  */
-function duplicateNameNote(matches: RosterMember[]): string {
+function duplicateNameNote(
+  matches: readonly { name: string; email: string | null }[],
+): string {
   const who =
     matches.length === 1
       ? `${matches[0].name} is already on this roster`
@@ -196,6 +194,69 @@ function formerPlayerNote(person: FormerPlayer): string {
 }
 
 /**
+ * The three writes this dialog can make, supplied by the caller.
+ *
+ * ── Why they are props and not imports ──────────────────────────────────────
+ * Two surfaces open this dialog now: a coach on `/dashboard/team/roster`, and
+ * a platform admin on `/admin/teams/[programId]`. The coach's actions resolve
+ * the program from the caller's ACTIVE WORKSPACE — an admin has none, so
+ * `addProgramPlayer` answers "Switch to your team workspace to add players"
+ * to the one person who cannot. The admin console has its own RPC-backed
+ * equivalents that take the program id explicitly, and the difference between
+ * the two is entirely which function is called: every field, note, tripwire
+ * and seat rule above is identical. So the functions move to the call site and
+ * nothing else about the dialog changes.
+ *
+ * All three, not just `add`. The optional invite and the restore offer are
+ * writes too, and a seam that covered only the first would leave a dialog
+ * whose "Restore Ana Ruiz" button fails for an admin with a message about
+ * their workspace — a control that looks available and is not.
+ *
+ * `restore` is nullable precisely so that can be said out loud rather than
+ * left to a runtime refusal: there is no admin `restore_program_player`
+ * wrapper today, so the admin caller passes `null` and `restorable` below is
+ * forced to null with it. The offer is then not drawn at all — no note, no
+ * button — which is the honest reading of "this surface cannot do that",
+ * and the dialog's other path (Add to roster, which admins do have) is
+ * untouched. Give it a function and the offer returns wherever `former` has a
+ * match; that is the whole of what re-enabling it costs.
+ */
+export type AddPlayerActions = {
+  /** `addProgramPlayer`, or an admin equivalent with the program id bound. */
+  add: (fields: {
+    firstName: string;
+    lastName: string;
+    classYear: string | null;
+    lineupSpot: number | null;
+    email: string | null;
+  }) => Promise<AddPlayerResult>;
+  /** `inviteMember`, narrowed to the one call this dialog makes. */
+  invite: (input: {
+    email: string;
+    role: "player";
+    playerId: string;
+  }) => Promise<{ ok: true; warning?: string } | { ok: false; error: string }>;
+  /**
+   * `restoreProgramPlayer`, or `null` on a surface that has no way to restore
+   * an archived profile. Null suppresses the whole offer; see above.
+   */
+  restore: ((profileId: string) => Promise<AddPlayerResult>) | null;
+};
+
+/**
+ * The roster rows this dialog reads, and only those.
+ *
+ * Narrower than `RosterMember` so a caller whose roster is not a
+ * `team-roster-server` projection can supply one honestly rather than
+ * fabricating an avatar url, a join date and a `claimedToday` flag nothing
+ * here looks at. `RosterMember[]` still satisfies it unchanged.
+ */
+export type AddPlayerRosterRow = Pick<
+  RosterMember,
+  "profileId" | "name" | "email" | "role" | "lineupSpot"
+>;
+
+/**
  * What a caller already knows about the person being added.
  *
  * The receiving end of a hand-off: a coach who has typed an address into
@@ -216,13 +277,14 @@ export function AddPlayerDialog({
   roster,
   former,
   initial,
+  actions,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The program's seat ledger — adding a player takes one. */
   seats: SeatUsage;
   /** Who is on the roster already, so a repeat can say who it would repeat. */
-  roster: RosterMember[];
+  roster: AddPlayerRosterRow[];
   /**
    * Everyone archived off this roster, so the form can recognize a name that
    * has already been here and offer to restore it instead of quietly
@@ -236,6 +298,8 @@ export function AddPlayerDialog({
    * and a later change to this prop does not reach back into them.
    */
   initial?: AddPlayerInitial;
+  /** Which program's roster this writes to. See `AddPlayerActions`. */
+  actions: AddPlayerActions;
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -462,11 +526,17 @@ export function AddPlayerDialog({
    * button out from under a coach mid-retry, with only "Add to roster" left
    * to click.
    */
+  // `actions.restore === null` is a surface with no way to un-archive a
+  // profile, so there is nothing to offer and the note and button below never
+  // mount — see `AddPlayerActions`. Gated here rather than at each of the
+  // three places `restorable` is read, so no future reader can add a fourth.
   const restorable =
-    formerPlayerMatch(former, { firstName, lastName, email }) ??
-    (restoreTarget !== null && restoreTarget.form === formKey
-      ? restoreTarget.person
-      : null);
+    actions.restore === null
+      ? null
+      : (formerPlayerMatch(former, { firstName, lastName, email }) ??
+        (restoreTarget !== null && restoreTarget.form === formKey
+          ? restoreTarget.person
+          : null));
 
   const nameNote = sameName.length === 0 ? null : duplicateNameNote(sameName);
   const restoreNote = restorable === null ? null : formerPlayerNote(restorable);
@@ -493,7 +563,7 @@ export function AddPlayerDialog({
     failureName: string;
     warningName: string;
   }): Promise<string | null> {
-    const invited = await inviteMember({
+    const invited = await actions.invite({
       email: input.email,
       role: "player",
       playerId: input.profileId,
@@ -510,7 +580,7 @@ export function AddPlayerDialog({
   function submit() {
     setError(null);
     start(async () => {
-      const result = await addProgramPlayer({
+      const result = await actions.add({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         classYear: classYear || null,
@@ -573,6 +643,11 @@ export function AddPlayerDialog({
    * to guess at it.
    */
   function restore(person: FormerPlayer) {
+    // Unreachable in practice: the only caller is the button `restorable`
+    // gates, and `restorable` is null whenever this is. Narrowed rather than
+    // asserted so the nullable action cannot be called by a later edit.
+    const restoreProfile = actions.restore;
+    if (restoreProfile === null) return;
     setError(null);
     // Frozen now, before the RPC that will make `former` stop matching this
     // person — see `restoreTarget` above for why. Set unconditionally, not
@@ -581,7 +656,7 @@ export function AddPlayerDialog({
     setRestoreTarget({ form: formKey, person });
     startRestore(async () => {
       if (createdProfileId !== person.profileId) {
-        const result = await restoreProgramPlayer(person.profileId);
+        const result = await restoreProfile(person.profileId);
         if (!result.ok) {
           setError(result.error);
           return;

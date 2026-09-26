@@ -11,6 +11,7 @@ import {
   claimVerifyIdentityEmail,
   inviteRequestDeclinedEmail,
 } from "@/lib/services/email";
+import { notifyProgramWentLive } from "@/lib/services/notifications/program-live-mail";
 import { claimRoleLabel } from "./claim-roles";
 import { mintVerification, verifyIdentityPath } from "./claim-verification";
 import { requestOrigin } from "@/lib/request-origin";
@@ -66,7 +67,11 @@ function formatWindowClose(date: Date): string {
  * to somebody else, the objection notice, was cut before launch.
  */
 async function notifyClaimant(
-  db: AdminDb,
+  program: {
+    school_name: string;
+    team: string | null;
+    program_key: string | null;
+  } | null,
   claim: {
     claimId: string;
     programId: string;
@@ -83,12 +88,6 @@ async function notifyClaimant(
     windowEndsAt: Date | null;
   },
 ): Promise<void> {
-  const { data: program } = await db
-    .from("programs")
-    .select("school_name, team, program_key")
-    .eq("id", claim.programId)
-    .maybeSingle();
-
   if (!program) return;
 
   const programName = programDisplayName(
@@ -168,7 +167,7 @@ async function transition(
   const { data: claim } = await db
     .from("program_claims")
     .select(
-      "id, status, program_id, claimant_user_id, claimed_email, claimant_role",
+      "id, status, program_id, claimant_user_id, claimed_email, claimant_name, claimant_role",
     )
     .eq("id", claimId)
     .maybeSingle();
@@ -240,17 +239,51 @@ async function transition(
 
   revalidatePath("/admin", "layout");
 
+  // One fetch, reused below for both the claimant's outcome email and the
+  // went-live FYI — `notifyClaimant` and the went-live check used to each
+  // fetch the same `programs` row for `claim.program_id` on their own.
+  const { data: program } = await db
+    .from("programs")
+    .select("school_name, team, program_key")
+    .eq("id", claim.program_id)
+    .maybeSingle();
+
   // Last, and unconditionally ok: see `notifyClaimant`. Every write above is
   // already committed, so there is nothing left for a send to invalidate.
-  await notifyClaimant(db, {
-    claimId: claim.id as string,
-    programId: claim.program_id as string,
-    to: claim.claimed_email as string,
-    claimantRole: claim.claimant_role as string,
-    outcome: next,
-    claimantMessage: fields.claimantMessage,
-    windowEndsAt,
-  });
+  await notifyClaimant(
+    program as {
+      school_name: string;
+      team: string | null;
+      program_key: string | null;
+    } | null,
+    {
+      claimId: claim.id as string,
+      programId: claim.program_id as string,
+      to: claim.claimed_email as string,
+      claimantRole: claim.claimant_role as string,
+      outcome: next,
+      claimantMessage: fields.claimantMessage,
+      windowEndsAt,
+    },
+  );
+
+  // An approval that opens the objection window is the reviewed door to a
+  // live program — the internal FYI's other trigger, after the claimant has
+  // been told. `approved` only arrives later via `settle`, so it is not here.
+  if (event.type === "approve" && next === "objection_window" && program) {
+    await notifyProgramWentLive({
+      programId: claim.program_id as string,
+      programName: programDisplayName(
+        program.school_name as string,
+        (program.team as string | null) ?? null,
+      ),
+      claimantName:
+        (claim.claimant_name as string | null) ??
+        (claim.claimed_email as string),
+      claimantEmail: claim.claimed_email as string,
+      path: "reviewed",
+    });
+  }
 
   return { ok: true };
 }
