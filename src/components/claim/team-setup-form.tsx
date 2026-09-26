@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { createCustomTeam } from "@/app/claim/team/actions";
+import { continueToPilotTerms } from "@/app/claim/team/actions";
 import { CLAIM_ROLES } from "@/lib/services/programs/claim-roles";
 import type { CustomOrgType } from "@/lib/services/programs/create-actions";
 import {
@@ -63,8 +63,10 @@ function reasonMessage(reason: string): string {
         "You can own up to 2 club, high school or academy teams. To add " +
         "another, remove one first or ask its owner to add you instead."
       );
+    // `continueToPilotTerms` routes this one to the terms screen itself, so
+    // it only reaches the form if that navigation failed.
     case "terms-not-accepted":
-      return "Accept the current pilot terms before creating the team.";
+      return "Something changed with the pilot terms. Try again to see them.";
     case "invalid-name":
       return "Give the team a name between 2 and 120 characters.";
     case "invalid-org-type":
@@ -79,12 +81,15 @@ function reasonMessage(reason: string): string {
 export function TeamSetupForm({
   orgType,
   defaultOwnerName,
+  defaultTeamName = "",
 }: {
   orgType: CustomOrgType;
   defaultOwnerName: string;
+  /** What the coach typed before going on to the terms and coming back. */
+  defaultTeamName?: string;
 }) {
   const copy = TYPE_LABEL[orgType];
-  const [teamName, setTeamName] = useState("");
+  const [teamName, setTeamName] = useState(defaultTeamName);
   const [ownerName, setOwnerName] = useState(defaultOwnerName);
   const [role, setRole] = useState<string>(CLAIM_ROLES[0].value);
   const [error, setError] = useState<string | null>(null);
@@ -96,8 +101,10 @@ export function TeamSetupForm({
     event.preventDefault();
     setError(null);
     startTransition(async () => {
-      // Success redirects on the server; a returned value is always a refusal.
-      const result = await createCustomTeam({
+      // Success redirects on the server (to the pilot terms, or straight into
+      // the new team when they are already accepted); a returned value is
+      // always a refusal.
+      const result = await continueToPilotTerms({
         name: teamName,
         orgType,
         ownerName,

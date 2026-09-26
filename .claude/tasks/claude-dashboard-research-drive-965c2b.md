@@ -58,7 +58,7 @@ ready).
 
 ## T4 · Pilot terms screen in both team-creation flows
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** `src/lib/services/programs/pilot-terms.ts` (copy beside the version), `src/lib/services/programs/pilot-terms-actions.ts` (new server action), `src/components/claim/pilot-terms-form.tsx` (new), `src/app/claim/[programKey]/terms/page.tsx` (new), `src/app/claim/team/terms/page.tsx` (new), `src/app/claim/verify/route.ts`, `src/app/claim/team/setup/page.tsx` + `src/app/claim/team/actions.ts`, `tests/pilot-terms-copy.spec.ts` (new, offline), `MAP.md` (regenerated) — guess

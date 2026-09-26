@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -7,9 +8,104 @@ import {
   type CreateCustomProgramResult,
   type CustomOrgType,
 } from "@/lib/services/programs/create-actions";
+import {
+  hasAcceptedCurrentPilotTerms,
+  recordPilotTermsAcceptance,
+  type AcceptPilotTermsResult,
+} from "@/lib/services/programs/pilot-terms-actions";
+import {
+  PENDING_TEAM_COOKIE,
+  PENDING_TEAM_COOKIE_OPTIONS,
+  readPendingTeam,
+  toPendingTeam,
+} from "./pending-team";
+
+/** Mirrors `NAME_MIN`/`NAME_MAX` in `create-actions.ts`, for an early answer. */
+const NAME_MIN = 2;
+const NAME_MAX = 120;
 
 /**
- * The setup screen's submit (Onboarding & Team Setup, 7.2).
+ * The setup screen's submit (7.2), which no longer creates the team itself.
+ *
+ * The pilot terms stand between naming a team and owning it. So this checks
+ * the values early (the name error belongs on the form the name was typed
+ * into, not on the terms screen) and then:
+ *
+ *   * no current-version acceptance: park the values in the pending-team
+ *     cookie and go to `/claim/team/terms`. `createCustomTeam` runs only from
+ *     that screen's accept, after the acceptance row exists.
+ *   * already accepted (a coach creating their second team): there is nothing
+ *     new to agree to, so create straight away, as before. Should the RPC
+ *     still refuse with `terms-not-accepted`, fall through to the screen.
+ *
+ * Success in either branch is a redirect; a returned value is a refusal.
+ */
+export async function continueToPilotTerms(input: {
+  name: string;
+  orgType: CustomOrgType;
+  ownerName: string;
+}): Promise<CreateCustomProgramResult> {
+  const pending = toPendingTeam({
+    name: (input?.name ?? "").trim(),
+    orgType: input?.orgType,
+    ownerName: (input?.ownerName ?? "").trim(),
+  });
+  if (!pending) return { ok: false, reason: "invalid-org-type" };
+  if (pending.name.length < NAME_MIN || pending.name.length > NAME_MAX) {
+    return { ok: false, reason: "invalid-name" };
+  }
+
+  if (await hasAcceptedCurrentPilotTerms()) {
+    const result = await createCustomTeam(pending);
+    if (result.ok) redirect("/dashboard/team");
+    // The database disagrees that the acceptance is current (enforcement
+    // live, versions out of step): the terms screen is where that is fixed.
+    if (result.reason !== "terms-not-accepted") return result;
+  }
+
+  (await cookies()).set(
+    PENDING_TEAM_COOKIE,
+    JSON.stringify(pending),
+    PENDING_TEAM_COOKIE_OPTIONS,
+  );
+  redirect("/claim/team/terms");
+}
+
+/**
+ * The custom terms screen's submit (frame B): accept, then create the team
+ * from the parked setup values.
+ *
+ * The acceptance is written first, through the session client, and the team
+ * only after it, so there is no path that creates a team the coach has not
+ * accepted terms for. A refused create (`limit-reached`, or
+ * `terms-not-accepted` once enforcement is live) comes back to the screen
+ * with the parked values intact.
+ */
+export async function acceptPilotTermsAndCreateTeam(input: {
+  version: string;
+}): Promise<CreateCustomProgramResult | AcceptPilotTermsResult> {
+  const pending = await readPendingTeam();
+  if (!pending) redirect("/claim/team/type");
+
+  const accepted = await recordPilotTermsAcceptance(input?.version ?? "");
+  if (!accepted.ok) return accepted;
+
+  const result = await createCustomTeam(pending);
+  if (!result.ok) return result;
+
+  (await cookies()).delete({
+    name: PENDING_TEAM_COOKIE,
+    path: PENDING_TEAM_COOKIE_OPTIONS.path,
+  });
+  redirect("/dashboard/team");
+}
+
+/**
+ * Create the team from setup values (Onboarding & Team Setup, 7.2). Not an
+ * action of its own any more: it runs only behind `continueToPilotTerms` (an
+ * acceptance already on file) or `acceptPilotTermsAndCreateTeam` (one just
+ * recorded), and returns rather than redirects so each caller decides what
+ * follows, including clearing the parked values.
  *
  * T2's `createCustomProgram({ name, orgType })` is the whole creation contract:
  * it writes the program and the owner membership atomically, derives the owner
@@ -30,11 +126,11 @@ import {
  * per-owner title column to hold "Head coach". It stays a confirmatory field —
  * see the note in `team-setup-form.tsx`.
  *
- * On success `createCustomProgram` has already set the cookie, so navigation
- * into the new workspace is a plain redirect; the `{ ok: false }` reasons
- * (including `limit-reached`) flow back to the form untouched.
+ * On success `createCustomProgram` has already set the workspace cookie, so
+ * the callers' navigation into the new workspace is a plain redirect; the
+ * `{ ok: false }` reasons (including `limit-reached`) flow back untouched.
  */
-export async function createCustomTeam(input: {
+async function createCustomTeam(input: {
   name: string;
   orgType: CustomOrgType;
   ownerName: string;
@@ -70,14 +166,10 @@ export async function createCustomTeam(input: {
     }
   }
 
-  const result = await createCustomProgram({
+  // The workspace cookie and layout revalidation happen inside
+  // createCustomProgram, so the callers' redirect opens the new workspace.
+  return createCustomProgram({
     name: input.name,
     orgType: input.orgType,
   });
-
-  if (!result.ok) return result;
-
-  // The cookie and layout revalidation happened inside createCustomProgram, so
-  // the next render opens inside the new team workspace.
-  redirect("/dashboard/team");
 }

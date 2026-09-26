@@ -65,12 +65,14 @@ const COPY: Record<
     action: "exit",
   },
   // Raised by the completion RPCs once pilot-terms enforcement is applied
-  // (`TERMS_NOT_ACCEPTED_SQLSTATE`). The pending claim is left intact, so the
-  // terms screen (T4) can send the coach back through the same link.
+  // (`TERMS_NOT_ACCEPTED_SQLSTATE`). `/claim/verify` sends that refusal to the
+  // terms screen, not here; this entry is only the fallback for a claim it
+  // could not find again in between. The pending claim is left intact, so
+  // opening the link again leads through the terms and finishes it.
   "terms-not-accepted": {
     heading: "Accept the pilot terms first",
-    sub: "This program needs the current pilot terms accepted before it can be set up. Nothing was created — accept the terms, then open the link again.",
-    action: "restart",
+    sub: "Setting up this program waits on the pilot terms. Nothing was created. Open the link from your email again and the terms come up before setup finishes.",
+    action: "exit",
   },
   // The two endings only the signed-in link can reach. That link finishes a
   // setup started from an existing account, so it works solely in a session

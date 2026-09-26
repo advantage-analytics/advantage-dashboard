@@ -32,3 +32,15 @@ is the runner's. Newest entries at the bottom.
 2. T4: replace the placeholder `"terms-not-accepted"` copy in `claim/verify/failed/page.tsx` and `team-setup-form.tsx` and route to the terms screen instead of `restart`.
 3. T4: the screen inserts only `{ user_id, terms_version }`; `program_id` is blocked by the column grant by design.
 4. Add a `Db*` row type for `pilot_terms_acceptances` when app code first reads it.
+
+## T4 · Pilot terms screen in both team-creation flows — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `pilotTermsCopy({ flow, accountType })` in `pilot-terms.ts` builds every string on the screen from `formatPilotEnd()`, `getMonthlyCapHours()` and `PILOT_ENDS_AT` (75h college, 2h custom). New `pilot-terms-form.tsx` (ClaimHeading, blue/ink `TermMark`, `AuthCheckbox` well, `Problem`, `advButton("primary")` disabled until ticked) and routes `/claim/[programKey]/terms` and `/claim/team/terms`. New session-client actions in `pilot-terms-actions.ts` (read own acceptance, insert `{ user_id, terms_version }`, reject a stale rendered version). `/claim/verify` checks acceptance first and bounces to the terms screen with `?token=` carried, completing only on return; `refused=1` shows frame C and prevents a loop. Custom flow: setup submits to `continueToPilotTerms`, which parks `{ name, orgType, ownerName }` in an httpOnly `/claim/team`-scoped 30-minute cookie (`pending-team.ts`) and redirects to the terms screen; accept records the acceptance, then creates the team. T3's placeholder `"terms-not-accepted"` copy replaced. Offline spec `tests/pilot-terms-copy.spec.ts` (28 pass). MAP.md regenerated. No migration applied.
+**follow-ups:**
+
+1. The college terms screen has no back arrow (mockup frame A shows one); only the email link sits behind it.
+2. The setup form's button still reads "Create team" though it now leads to the terms screen; consider "Continue".
+3. Export `CUSTOM_ORG_TYPES`, `NAME_MIN`, `NAME_MAX` from `create-actions.ts` so `pending-team.ts` and `team/actions.ts` stop copying them.
+4. The college terms page doesn't check the URL's program key against the live claim; a hand-edited key only changes the eyebrow.
+5. At deploy: apply `20260926181600_pilot_terms_enforcement.sql` (see T3 follow-up 1).
