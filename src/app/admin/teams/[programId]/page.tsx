@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { AdminConferenceCard } from "@/components/admin/admin-conference-card";
 import { AdminPeopleCard } from "@/components/admin/admin-people-card";
 import { AdminRequestsCard } from "@/components/admin/admin-requests-card";
 import { AdminRosterCard } from "@/components/admin/admin-roster-card";
@@ -15,6 +16,7 @@ import {
 } from "@/components/admin/team-sections";
 import { SettingsCard } from "@/components/dashboard/settings/settings-card";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
+import { conferenceOptionsFor } from "@/lib/services/programs/admin-program-actions";
 
 export const metadata = { title: "Overview" };
 
@@ -63,6 +65,14 @@ export default async function AdminTeamPage({
     notFound();
   }
 
+  // The Conference card's `Change` menu — the create dialog's own list, for
+  // the program's division (or the conference's, when the program row has
+  // none). Read here rather than on open so the menu is never empty for a
+  // beat while it loads.
+  const conferenceOptions = await conferenceOptionsFor(
+    data.program.division ?? data.conference?.division ?? null,
+  );
+
   /**
    * The cards that exist today. Everything else in the section map gets the
    * placeholder below — see its note for why an empty section still draws
@@ -102,6 +112,14 @@ export default async function AdminTeamPage({
         usage={data.usage}
         orgType={data.program.orgType}
         members={data.members}
+      />
+    ),
+    conference: (
+      <AdminConferenceCard
+        programId={programId}
+        conference={data.conference}
+        currentLabel={data.program.conference}
+        options={conferenceOptions}
       />
     ),
   };

@@ -256,7 +256,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T17 · Conference rail card with Change and sibling teams
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T8
 - **files:** (guess) new `src/components/admin/admin-conference-card.tsx`, `src/app/admin/teams/[programId]/page.tsx`

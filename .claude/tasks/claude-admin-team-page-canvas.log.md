@@ -826,3 +826,15 @@ thing an admin meets.
 1. The Pilot card's "Each member 2 h every month" row (`pilot-usage-card.tsx:147`) invites the same false reading — reword to "Personal uploads" or drop.
 2. "Videos" sums distinct matches per member; a match analysed by two members counts twice — the loader could return an exact distinct count.
 3. `plan.md` §7 still quotes the canvas footer as copy to verify; note the outcome there.
+
+## T17 · Conference rail card with Change and sibling teams — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+
+**changed:** New client component `src/components/admin/admin-conference-card.tsx` fills the `#conference` rail slot: `ConferenceMark`, name, `<Division> · <n> teams · <m> on Advantage` (n = whole conference incl. this program; m = `active` + `claim_pending`, the Admin › Conferences rule), up to 3 sibling teams linking to `/admin/teams/<id>` with a grey `StatePill` (Unclaimed / Claimed / Claim pending) and `N more · View conference` past the cap. `Change` (or `Set conference` under `No conference yet`) is a `MenuSelect` over `conferenceOptionsFor()` loaded server-side in `page.tsx`; picking resolves the label via a new admin-gated `conferenceIdForLabel()` in `admin-conference-actions.ts` (outside `files:` — options are labels, `addTeamToConference` takes an id), then calls `addTeamToConference`; either `{ ok: false }` shows in `DialogProblem`. Offline spec `tests/admin-conference-card.spec.ts`.
+
+**follow-ups:**
+
+1. Have `conferenceOptionsFor` return ids (or add a move-by-label action) to drop the extra lookup round trip.
+2. The menu loses the checkmark on the current conference because the trigger reads "Change" — a trigger-label option on `MenuSelect` would restore it.
+3. No action exists to remove a team from its conference (set to none).
