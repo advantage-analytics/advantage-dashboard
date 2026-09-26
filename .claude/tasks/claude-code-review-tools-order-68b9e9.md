@@ -79,7 +79,7 @@ ready).
 
 ## T6 · Say what the Home KPI change is: "vs previous match"
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/data/performance-server.ts
 - **done when:**

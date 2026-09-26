@@ -696,7 +696,7 @@ function calculateKpiCards(
       label: spec.label,
       value: hasData ? formatKpiValue(measured[0].value, spec.format) : "—",
       change,
-      changeLabel: "last 30 days",
+      changeLabel: "vs previous match",
       sparkline,
       points,
       format: spec.format,
