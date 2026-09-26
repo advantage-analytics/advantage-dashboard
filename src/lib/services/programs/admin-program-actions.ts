@@ -401,6 +401,7 @@ async function inviteToClaim(args: {
       email: args.email,
       is_freemail: false,
       role: "Head coach",
+      source: "admin",
     });
     // Downgrade rather than fail: the claim still works, it just waits for a
     // human. Promising the pilot in the email would be the real error.

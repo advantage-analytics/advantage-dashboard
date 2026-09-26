@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Add `source` column to program_contacts and stamp admin rows
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** `supabase/migrations/<stamp>_program_contacts_source.sql` (new; stamp from `date -u +%Y%m%d%H%M%S`, must sort after `20260925194929_posthog_analytics_reader.sql`), `src/lib/services/programs/admin-program-actions.ts` (`inviteToClaim`, insert at ~line 399) — guess
 - **done when:**
