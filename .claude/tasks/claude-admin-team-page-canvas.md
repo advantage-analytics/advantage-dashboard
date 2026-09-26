@@ -80,7 +80,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T4 · Extend getAdminTeam: details, pilot, uploads flag, conference, activity
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess) `src/lib/data/admin-team-server.ts`

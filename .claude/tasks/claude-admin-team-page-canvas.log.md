@@ -160,3 +160,57 @@ Same harness substitution as T1 and T2, third time, for the same verified reason
 3. `is_admin()`, `is_program_staff()` and `user_program_role()` are anon-executable
    security-definer helpers. Harmless (they return false when `auth.uid()` is null) but a
    `revoke ... from anon` round would quiet the advisor lint.
+
+## T4 · Extend getAdminTeam: details, pilot, uploads flag, conference, activity — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all five criteria met.
+
+**changed:** `src/lib/data/admin-team-server.ts` (+390). `PROGRAM_SELECT` and
+`AdminTeamProgram` gain `programKey`, `city`, `state`, `staffPageUrl`, `rosterPublic`;
+`homeVenue`, `defaultSurface`, `timeZone`, `uploadPolicy` and `eventsPolicy` were already
+inherited from `TeamIdentity` and already selected, so nothing was added for them — the
+reviewer accepted inheritance-plus-five as satisfying criterion 1. Four new shapes on
+`AdminTeamData`: `pilot` (`AdminTeamPilot` — `endsOn`, `approvedAt`, `approvedByName`,
+`approvedByIsViewer`, `endedAt`, read from T1's columns), `conference`
+(`AdminTeamConference | null` — name, short mark, division, team count, on-Advantage
+count, plus siblings with a `claimed` flag), `activity` (`AdminTeamActivityEntry[]` — 20
+newest `program_audit_log` rows, `created_at desc, id desc` so rows sharing a timestamp
+stay ordered, actor names batched over distinct ids), and `members` widened to
+`AdminTeamMember[]` carrying `uploadEnabled` from `program_members.upload_enabled`.
+
+`loadConferenceTeams` reused as the notes required. All three new readers were appended
+to the loader's **existing** fan-out array (7 → 10 entries), verified by reading the
+destructuring, so no second await round was introduced; the loader now issues one wave of
+13–17 queries per render, up from 9–11. `PILOT_ENDS_AT` is not referenced in this file —
+`grep -c` is 0, and it was already 0 before the change. No consumer needed updating: every
+change is additive and `AdminTeamMember extends TeamMember`, confirmed by a clean
+full-repo `tsc --noEmit`.
+
+Two judgment calls recorded for the eventual PR reviewer rather than buried: `pilot` is
+non-null with nullable fields (T15 reads as one card with varying text, not an absent
+card), and `claimed` is `status in ('active','claim_pending')` copied verbatim from live
+`admin_list_conferences()`'s `on_advantage` predicate so this page cannot disagree with
+the Admin › Conferences column.
+
+No test added. T4's criteria do not ask for one, there is no PGlite harness on this
+branch, and every line is a column mapping or a query; the reviewer agreed. T5's pure
+attribution helper is the first thing in this file that will earn a spec.
+
+**follow-ups:**
+
+1. `readConference` pays a duplicate `requireAdmin()` (two extra round trips per render)
+   purely because `loadConferenceTeams` is a server action. The unguarded service-role
+   read it actually wants is `readConferenceTeams`
+   (`src/lib/data/admin-conferences-server.ts:173`), and `getAdminTeam`'s own
+   `requireAdminOrNotFound()` is already the gate. The task's notes named the action
+   explicitly, so this was followed rather than silently substituted — an author's call.
+2. `AdminTeamActivityEntry` drops `details` and `subject_id`. Fine while T19 labels from
+   `action` alone, but a label like "Removed X from the roster" needs `subject_id`
+   resolved. Decide when T19 writes `admin-activity-labels.ts`.
+3. `admin-teams-server.ts` still derives `plan: "pilot"` from `status === "active"`, and
+   `team-page-header.tsx:53` reads that. So the Teams **list** badge and this page's Pilot
+   card now disagree about what "on pilot" means. T15 covers the card; no current task
+   covers the list badge.
+4. Still nothing server-side stops at pilot end (T1 follow-up 2, now one line away):
+   with `pilot_ends_on` and `pilot_ended_at` on the row, the gate in `reserveQuota()` /
+   `explainVideoRefusal()` is cheap. Until it exists, "End pilot" ends only a label.
