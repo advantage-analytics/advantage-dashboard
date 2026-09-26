@@ -594,3 +594,52 @@ fidelity pass will meet this.
    fourth recording of this gap and the affordance now exists on the page.
 3. `AdminRequestsCard` can drop to join requests only and be retitled once T12 lands; its
    `roster-vocabulary` imports would then shrink to nothing.
+
+## T12 · Requests card: Decline / Send invite and claim note strip — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all four criteria met.
+
+**changed:** Card is now `Requests` with an `<n> open` count (suppressed rather than
+printing `0 open`); `Invites & requests`, `Dismiss` and bare `Invite` are gone (grep 0),
+and the invite rows are deleted — resolving the overlap T11 deliberately left. Request
+rows read `<Name> asked to join as a <role> · <Mon D>` with the quoted note and email,
+`Decline` → `adminResolveJoinRequest(id, "dismiss")` and `Send invite` → `(id, "invite")`.
+Dropping the `invites` and `programId` props forced `page.tsx` to change, and a loader doc
+comment that named `AdminRequestsCard` as an `AdminTeamInvite` consumer was reworded
+rather than left false.
+
+**It researched the claim taxonomy instead of guessing it.** The notes warned against
+reusing the canvas sentence for every case. It queried live `program_claims`, read
+`complete_program_claim` and `domain-match.ts`, and found `skips_manual_review` false on
+every row plus a header stating those fields stopped routing anything — so the real
+discriminator is `contactMatched` → `reviewedBy`, not `skipsManualReview`. Four sentences:
+the canvas's verbatim for a staff-list match; "approved by an admin … after review" for a
+reviewer; a domain sentence that says outright the domain is "recorded evidence and not an
+approval on its own"; and, for a claim whose reviewer row was nulled by a deleted account,
+"Nothing on the record says who approved it." That fourth case is reachable and has no
+honest attribution, so it says so rather than inventing one.
+
+Role handling is honest too: `program_requests.role` is null on 7 of 10 live rows and
+`other` on one, so the clause is dropped for both rather than rendering "as a other".
+
+**follow-ups:**
+
+1. **`Send invite` invites the wrong role — a real bug, now visible.**
+   `adminResolveJoinRequest` hardcodes `role: "player"`
+   (`admin-team-actions.ts:568`) and its select at `:550` does not even fetch the
+   request's `role`. I verified both lines directly. It is pre-existing, but T12 puts
+   `asked to join as a coach` immediately beside a `Send invite` button that will invite
+   that person as a player. Before this task the card said only "Asked to join", so the
+   mismatch was invisible; now it is on screen and still wrong. Nobody would notice until
+   someone held the wrong permissions. **This is the most actionable finding in the queue
+   so far and does not belong to any task.**
+2. **The claim strip renders on nothing today.** I confirmed live: zero `approved` claims
+   (6 rejected, 4 objected), and nothing in the codebase emits the `settle` event, so
+   `status = 'approved'` is currently unreachable. The strip is correct code conditioned
+   on a state the pipeline cannot reach — worth deciding whether the objection window is
+   meant to settle on a cron or on read.
+3. `AdminTeamClaim.reviewedBy` is a bare user id, so the admin sentence cannot name the
+   reviewer. `getAdminTeam` could add the same `users` join `AdminTeamInvite.invitedByName`
+   already uses, which would let that sentence match the canvas's register.
+4. `voucherNote` and `claimantMessage` are carried on `AdminTeamClaim` and used by the
+   Requests drawer but shown nowhere on this page. A vouched claim may deserve a line.

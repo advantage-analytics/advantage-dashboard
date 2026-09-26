@@ -203,8 +203,8 @@ export interface AdminTeamMember extends TeamMember {
  * An outstanding invitation, plus the two facts the console's People card
  * prints that `TeamInvite` has no field for.
  *
- * Extends rather than replaces it, so `AdminRequestsCard` — which is typed
- * against the shared shape — keeps taking these rows unchanged.
+ * Extends rather than replaces it, so every component already typed against
+ * the shared shape keeps taking these rows unchanged.
  */
 export interface AdminTeamInvite extends TeamInvite {
   /** `program_invites.expires_at` — `not null`, so never undefined. */

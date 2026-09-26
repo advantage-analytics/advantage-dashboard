@@ -76,11 +76,7 @@ export default async function AdminTeamPage({
       />
     ),
     requests: (
-      <AdminRequestsCard
-        programId={programId}
-        invites={data.invites}
-        joinRequests={data.joinRequests}
-      />
+      <AdminRequestsCard joinRequests={data.joinRequests} claim={data.claim} />
     ),
     pilot: <PilotUsageCard usage={data.usage} />,
   };

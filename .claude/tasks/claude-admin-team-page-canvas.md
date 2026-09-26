@@ -188,7 +188,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T12 · Requests card: Decline / Send invite and claim note strip
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8, T11
 - **files:** (guess) `src/components/admin/admin-requests-card.tsx`
