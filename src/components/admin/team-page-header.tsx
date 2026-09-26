@@ -1,6 +1,7 @@
 import { Calendar, Globe, Landmark, MapPin } from "lucide-react";
 
 import { AdminTeamCrestControl } from "@/components/admin/team-crest-control";
+import { TeamHeaderActions } from "@/components/admin/team-header-actions";
 import { StatePill } from "@/components/ui/state-pill";
 import { PilotPill, ApprovePill } from "@/components/admin/plan-pills";
 import { programSubtitle } from "@/lib/data/programs-server";
@@ -32,7 +33,9 @@ function programStatusLabel(status: string): string {
 /**
  * The Admin › Teams detail page's header: the crest — uploadable here, unlike
  * every other place the console draws one — the name, the state and plan
- * pills, and the four-fact line under them.
+ * pills, the four-fact line under them, and the actions at the right edge
+ * (`TeamHeaderActions`, a client component: this one is a Server Component
+ * and reads `programSubtitle` from a `*-server.ts` module).
  *
  * Home venue is deliberately not one of those facts: the canvas' line is the
  * four an admin triages on (what the program is, where it is, the domain a
@@ -95,7 +98,7 @@ export function TeamPageHeader({
         name={program.name}
         crestUrl={program.crestUrl}
       />
-      <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-display truncate">{program.name}</h1>
           <StatePill>{programStatusLabel(program.status)}</StatePill>
@@ -120,6 +123,7 @@ export function TeamPageHeader({
           </div>
         )}
       </div>
+      <TeamHeaderActions program={program} />
     </div>
   );
 }

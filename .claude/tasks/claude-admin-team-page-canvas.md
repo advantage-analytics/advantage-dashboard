@@ -160,7 +160,7 @@ label against it, not against `plan.md`'s prose.
 
 ## T10 · Header: Edit details dialog and more-actions menu
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6, T9
 - **files:** (guess) new `src/components/admin/admin-team-details-dialog.tsx`, `src/components/admin/team-page-header.tsx`

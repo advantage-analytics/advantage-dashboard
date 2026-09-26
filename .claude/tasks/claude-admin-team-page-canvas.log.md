@@ -484,3 +484,55 @@ hand-rolled", which is right — the buttons that _would_ qualify belong to T10 
    Worth aliasing once so future canvas transcriptions do not each redo the mapping.
 4. Still nobody has viewed this page in a browser (T8's follow-up 1). The header is now
    the second layer built on an unverified layout.
+
+## T10 · Header: Edit details dialog and more-actions menu — done
+
+**gate:** mechanical `GATE PASS`; completion review `VERDICT: pass`, all five criteria met.
+
+**changed:** New `admin-team-details-dialog.tsx` — twelve fields matching
+`AdminProgramDetailsPatch` exactly, reusing `SettingsField`, `advField("underline")` and
+`SQUAD_OPTIONS`/`SURFACE_OPTIONS`; Save calls `adminUpdateProgramDetails`, renders a
+`DialogProblem` inline on `{ ok: false }`, closes on success, and is
+`advButton("primary","md")` disabled until something differs. Exported as
+`{ program, open, onOpenChange }` so T18's Details card renders the same component.
+New `team-header-actions.tsx` carries the `Edit details` button
+(`advButton("outline","md")`) and the `⋯` `FloatMenu` with exactly three rows —
+`Remove crest` (hidden, not disabled, when there is no crest), `Change conference`
+(scrolls to `#conference`; T17 owns the control), `View in Teams list`.
+
+**A third file beyond the task's guess, and it is justified.** `team-page-header.tsx` is
+a Server Component — it imports `programSubtitle` from a `*-server.ts` module — so it
+cannot hold the `useState`/`useTransition` the button, popover and dialog need. Splitting
+the interactive controls into their own client component is the minimal fix; the header
+gained only the import, `flex-1` on the text column, and the mount. The reviewer agreed
+this is not creep.
+
+**Only changed keys are sent, and the reason is concurrency, not tidiness.** A full
+twelve-key patch would re-assert every column on every save, so a field another admin
+edited while this dialog sat open would be silently clobbered — last-write-wins on data
+the editor never saw. `changedPatch()` (exported, so a spec can hold the arithmetic
+without rendering) assigns each key only when it differs. The matching subtlety: the
+dialog re-seeds on the closed→open edge only, not on `program` prop change, because the
+action revalidates the whole layout and re-seeding there would wipe an in-progress edit
+whenever any other control on the page wrote something.
+
+The RPC's validation vocabulary is **not** duplicated client-side — no trim, no `''`→null
+collapse, no squad/surface/timezone/policy rules, no "collegiate needs a squad". Time zone
+is free text with a hint, because `is_iana_time_zone()` owns that vocabulary and the repo
+has no list to reuse. The policy ladders come from `UPLOAD_POLICIES`/`EVENTS_POLICIES` +
+`uploadPolicyLabel()` in `src/lib/workspace/types.ts`, since `team-policies-card.tsx`
+exports no option arrays — the defining module rather than retyped labels.
+
+`View in Teams list` is a plain `/admin/teams` link: the list reads `view`, `sort`,
+`after`, `division`, `conference`, `state` and has **no** highlight parameter, so a
+row-targeting param would be a promise the list does not keep. Verified before linking.
+
+**follow-ups:**
+
+1. `changedPatch()` is exported specifically to be testable and has **no spec**. An offline
+   spec would be cheap and would pin the one piece of real arithmetic in this dialog —
+   including the clobber-avoidance behaviour, which is otherwise invisible.
+2. The canvas also draws a primary `Upload for this team` button between `Edit details`
+   and the `⋯`. `TeamHeaderActions` has the slot; T22 fills it once admin-uploads lands.
+3. No eyes-on: the dialog has never been opened in a browser against a real program. The
+   header now has three interactive controls that nothing has exercised.
