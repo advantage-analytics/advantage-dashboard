@@ -39,21 +39,24 @@ export default async function ProgramIntakePage() {
   const programId = (await cookies()).get(WORKSPACE_COOKIE)?.value;
   if (!programId) redirect("/dashboard/team");
 
-  const { data: membership } = await supabase
-    .from("program_members")
-    .select("role")
-    .eq("program_id", programId)
-    .eq("user_id", user.id)
-    .eq("role", "owner")
-    .maybeSingle();
-  if (!membership) redirect("/dashboard/team");
-
-  const { data: program } = await supabase
-    .from("programs")
-    .select("school_name, team")
-    .eq("id", programId)
-    .maybeSingle();
-  if (!program) redirect("/dashboard/team");
+  // Independent reads keyed on the same programId — the owner check doesn't
+  // need the program row, and the program row doesn't need the membership
+  // check — so they overlap rather than paying for two round-trips in series.
+  const [{ data: membership }, { data: program }] = await Promise.all([
+    supabase
+      .from("program_members")
+      .select("role")
+      .eq("program_id", programId)
+      .eq("user_id", user.id)
+      .eq("role", "owner")
+      .maybeSingle(),
+    supabase
+      .from("programs")
+      .select("school_name, team")
+      .eq("id", programId)
+      .maybeSingle(),
+  ]);
+  if (!membership || !program) redirect("/dashboard/team");
 
   // A custom team has no squad, so its eyebrow is the name alone.
   const eyebrow = [

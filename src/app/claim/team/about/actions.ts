@@ -24,11 +24,14 @@ export type SaveProgramIntakeResult = { ok: false; error: string };
  * than by a check constraint with a Postgres error.
  *
  * Order is deliberate. `set_program_intake` is SECURITY DEFINER and refuses
- * anyone but the program's owner (42501), so it runs first and is the gate:
- * the acquisition source lands on the caller's OWN user row only after the RPC
- * has proven they own the program the screen is about. A refused RPC returns a
- * plain error and writes nothing to `users`, so a non-owner who reached the
- * form by a stale cookie leaves no half-saved answer behind.
+ * anyone but the program's owner (42501), so when a band was chosen it runs
+ * first and is the gate: the acquisition source lands on the caller's OWN user
+ * row only after the RPC has proven they own the program the screen is about.
+ * A refused RPC returns a plain error and writes nothing to `users`, so a
+ * non-owner who reached the form by a stale cookie leaves no half-saved answer
+ * behind. With no band chosen the RPC is skipped rather than called with two
+ * nulls (which would erase earlier answers); the own-row write needs no owner
+ * proof, since it touches nothing but the caller's row.
  *
  * The acquisition write is own-row (`auth.uid() = id`) and touches only
  * `acquisition_source`; a null answer writes nothing rather than clearing a
@@ -66,11 +69,17 @@ export async function saveProgramIntake(input: {
     return { ok: false, error: "Your session expired. Sign in again." };
   }
 
-  const { error: rpcError } = await supabase.rpc("set_program_intake", {
-    p_program_id: programId,
-    p_roster_size_band: rosterSizeBand,
-    p_weekly_film_band: weeklyFilmBand,
-  });
+  // Nothing chosen for the program means nothing to write: the RPC sets both
+  // columns outright, so calling it with two nulls would erase bands an owner
+  // saved on an earlier visit. A blank submit is Skip with extra steps.
+  const { error: rpcError } =
+    rosterSizeBand === null && weeklyFilmBand === null
+      ? { error: null }
+      : await supabase.rpc("set_program_intake", {
+          p_program_id: programId,
+          p_roster_size_band: rosterSizeBand,
+          p_weekly_film_band: weeklyFilmBand,
+        });
 
   if (rpcError) {
     if (rpcError.code === "42501") {

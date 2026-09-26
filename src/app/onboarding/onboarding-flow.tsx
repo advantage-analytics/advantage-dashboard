@@ -162,6 +162,54 @@ const GUARDIAN_ACKNOWLEDGMENTS: readonly string[] = [
   "Video of a minor is never used to train models or shown outside the people you share it with.",
 ];
 
+/**
+ * One card in the icon-card radiogroup shared by 1.3 (persona) and 1.5
+ * (recording source) — same markup, different options and selection state.
+ * Extracted once 1.5 needed a second copy of it.
+ */
+function IconCardOption<T extends string>({
+  value,
+  icon: Icon,
+  label,
+  sub,
+  selected,
+  onSelect,
+}: {
+  value: T;
+  icon: typeof User;
+  label: string;
+  sub: string;
+  selected: boolean;
+  onSelect: (value: T) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={() => onSelect(value)}
+      className={cn(
+        "flex cursor-pointer flex-col gap-2 rounded-[var(--radius-element)] border p-5 text-left transition-colors duration-[var(--duration-fast)]",
+        "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        selected
+          ? "border-[var(--blue)] bg-[var(--blue-soft)]"
+          : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
+      )}
+    >
+      <Icon
+        className={cn(
+          "size-5",
+          selected ? "text-[var(--blue)]" : "text-[var(--ink-600)]",
+        )}
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
+      <span className="text-[14px] text-[var(--ink-900)]">{label}</span>
+      <span className="text-body-sm">{sub}</span>
+    </button>
+  );
+}
+
 export function OnboardingFlow() {
   const [step, setStep] = useState<Step>(1);
   const [firstName, setFirstName] = useState("");
@@ -218,15 +266,10 @@ export function OnboardingFlow() {
 
   // 1.4 no longer finishes: both exits turn the page to 1.5, and the college
   // answer is read when 1.7 submits. Skip clears it, so an answer tapped and
-  // then skipped is not stored.
-  const continueFromCollege = () => {
-    if (!college) return;
-    setError(null);
-    setStep(5);
-  };
-
-  const skipCollege = () => {
-    setCollege(null);
+  // then skipped is not stored. Same shape as `continueFromRecording` below:
+  // Continue passes the chosen answer, Skip passes null.
+  const advanceFromCollege = (answer: CollegeAnswer | null) => {
+    setCollege(answer);
     setError(null);
     setStep(5);
   };
@@ -433,41 +476,17 @@ export function OnboardingFlow() {
                 aria-label="How do you use Advantage?"
                 className="grid gap-3 sm:grid-cols-3"
               >
-                {PERSONAS.map((option) => {
-                  const selected = persona === option.id;
-                  const Icon = option.icon;
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      onClick={() => setPersona(option.id)}
-                      className={cn(
-                        "flex cursor-pointer flex-col gap-2 rounded-[var(--radius-element)] border p-5 text-left transition-colors duration-[var(--duration-fast)]",
-                        "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                        selected
-                          ? "border-[var(--blue)] bg-[var(--blue-soft)]"
-                          : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          "size-5",
-                          selected
-                            ? "text-[var(--blue)]"
-                            : "text-[var(--ink-600)]",
-                        )}
-                        strokeWidth={1.5}
-                        aria-hidden="true"
-                      />
-                      <span className="text-[14px] text-[var(--ink-900)]">
-                        {option.label}
-                      </span>
-                      <span className="text-body-sm">{option.sub}</span>
-                    </button>
-                  );
-                })}
+                {PERSONAS.map((option) => (
+                  <IconCardOption
+                    key={option.id}
+                    value={option.id}
+                    icon={option.icon}
+                    label={option.label}
+                    sub={option.sub}
+                    selected={persona === option.id}
+                    onSelect={setPersona}
+                  />
+                ))}
               </div>
               <ClaimActions gap={16}>
                 <button
@@ -533,7 +552,7 @@ export function OnboardingFlow() {
                 <button
                   type="button"
                   disabled={!college || isPending}
-                  onClick={continueFromCollege}
+                  onClick={() => advanceFromCollege(college)}
                   className={CLAIM_BUTTON}
                 >
                   Continue
@@ -545,7 +564,7 @@ export function OnboardingFlow() {
                 <button
                   type="button"
                   disabled={isPending}
-                  onClick={skipCollege}
+                  onClick={() => advanceFromCollege(null)}
                   className={CLAIM_LINK}
                 >
                   Skip
@@ -569,41 +588,17 @@ export function OnboardingFlow() {
                 aria-label="How do you record your matches?"
                 className="grid gap-3 sm:grid-cols-3"
               >
-                {RECORDING_SOURCES.map((option) => {
-                  const selected = recordingSource === option.value;
-                  const Icon = RECORDING_ICONS[option.value];
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      onClick={() => setRecordingSource(option.value)}
-                      className={cn(
-                        "flex cursor-pointer flex-col gap-2 rounded-[var(--radius-element)] border p-5 text-left transition-colors duration-[var(--duration-fast)]",
-                        "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                        selected
-                          ? "border-[var(--blue)] bg-[var(--blue-soft)]"
-                          : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          "size-5",
-                          selected
-                            ? "text-[var(--blue)]"
-                            : "text-[var(--ink-600)]",
-                        )}
-                        strokeWidth={1.5}
-                        aria-hidden="true"
-                      />
-                      <span className="text-[14px] text-[var(--ink-900)]">
-                        {option.label}
-                      </span>
-                      <span className="text-body-sm">{option.sub}</span>
-                    </button>
-                  );
-                })}
+                {RECORDING_SOURCES.map((option) => (
+                  <IconCardOption
+                    key={option.value}
+                    value={option.value}
+                    icon={RECORDING_ICONS[option.value]}
+                    label={option.label}
+                    sub={option.sub}
+                    selected={recordingSource === option.value}
+                    onSelect={setRecordingSource}
+                  />
+                ))}
               </div>
               <ClaimActions gap={16}>
                 <button

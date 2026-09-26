@@ -101,7 +101,7 @@ export function ProgramIntakeForm({ programId }: { programId: string }) {
       </div>
 
       {error && (
-        <p className="rounded-[var(--radius-button)] bg-[rgba(229,24,55,0.08)] px-3 py-2 text-[12px] text-[#E51837]">
+        <p className="rounded-[var(--radius-button)] bg-[var(--danger-tint-15)] px-3 py-2 text-[12px] text-[var(--danger)]">
           {error}
         </p>
       )}
