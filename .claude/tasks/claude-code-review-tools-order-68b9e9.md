@@ -170,7 +170,7 @@ ready).
 
 ## T13 · SwingVision parser: host is always player1, even on the blank-Guest fallback
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/services/upload/parsers/swingvision-parser.ts, tests/swingvision-parser-fallback.spec.ts (new) — guess
 - **done when:**
