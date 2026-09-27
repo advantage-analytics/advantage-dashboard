@@ -66,12 +66,17 @@ export default async function AdminNewUploadPage({
       error = "We couldn’t search teams. Try again.";
     }
   }
-  let dualEvents: AdminDualOption[] = [];
-  let dualEventsError: string | null = null;
-  if (
-    context &&
-    (selection.kind === "dual" || selection.kind === "tournament")
-  ) {
+  // Both reads below depend only on the resolved context, not on each other,
+  // so they run together rather than one round trip after the other.
+  const loadEvents = async (): Promise<{
+    events: AdminDualOption[];
+    error: string | null;
+  }> => {
+    if (
+      !context ||
+      (selection.kind !== "dual" && selection.kind !== "tournament")
+    )
+      return { events: [], error: null };
     try {
       const result = await createAdminClient()
         .from("program_events")
@@ -82,20 +87,29 @@ export default async function AdminNewUploadPage({
         .order("id")
         .limit(100);
       if (result.error) throw result.error;
-      dualEvents = (result.data ?? []).map((event) => ({
-        id: event.id,
-        label: `${event.name} · ${event.starts_on}`,
-      }));
+      return {
+        events: (result.data ?? []).map((event) => ({
+          id: event.id,
+          label: `${event.name} · ${event.starts_on}`,
+        })),
+        error: null,
+      };
     } catch {
-      dualEventsError = `We couldn’t load existing ${selection.kind === "dual" ? "duals" : "tournaments"}. Refresh to try again.`;
+      return {
+        events: [],
+        error: `We couldn’t load existing ${selection.kind === "dual" ? "duals" : "tournaments"}. Refresh to try again.`,
+      };
     }
-  }
-  const initialTournament =
-    context &&
-    selection.kind === "tournament" &&
-    typeof params.event === "string"
-      ? await loadAdminTournamentAction(context.workspace.id, params.event)
-      : null;
+  };
+  const [{ events: dualEvents, error: dualEventsError }, initialTournament] =
+    await Promise.all([
+      loadEvents(),
+      context &&
+      selection.kind === "tournament" &&
+      typeof params.event === "string"
+        ? loadAdminTournamentAction(context.workspace.id, params.event)
+        : null,
+    ]);
   const picker = (
     <section aria-label="Choose a team" className="flex flex-col gap-3">
       <form

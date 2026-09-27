@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdmin } from "@/lib/services/programs/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -201,119 +202,128 @@ async function readRoster(
  * precedes service-client creation, including for malformed IDs. Read failures
  * refuse the whole context, never invent an empty roster or unused allowance.
  * The dependency seam exists only for focused keyless authorization tests.
+ *
+ * `cache()`d because `/admin/uploads/new` resolves this for the page and again
+ * inside `loadAdminTournamentAction` in the same request — without memoizing,
+ * that is a second `programs` read and roster/usage sweep for an identical
+ * answer. Keyed on the arguments, so the test seam's explicit `deps` never
+ * shares a result with the default call, and per-request: a server action that
+ * writes and then needs fresh roster or usage runs in a request of its own.
  */
-export async function getAdminUploadContext(
-  programId: string,
-  deps: Dependencies = {
-    requireAdmin,
-    createAdminClient,
-    getWorkspaceContext,
-    now: () => new Date(),
-  },
-): Promise<AdminUploadContextResult> {
-  const actor = await deps.requireAdmin();
-  if (!actor)
-    return {
-      ok: false,
-      reason: "admin-required",
-      message: "Administrator access is required.",
-    };
-  if (
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-      programId,
-    )
-  ) {
-    return {
-      ok: false,
-      reason: "invalid-program-id",
-      message: "Choose a valid program.",
-    };
-  }
-  try {
-    const session = await deps.getWorkspaceContext();
-    if (!session || session.viewer.id !== actor.id)
+export const getAdminUploadContext = cache(
+  async (
+    programId: string,
+    deps: Dependencies = {
+      requireAdmin,
+      createAdminClient,
+      getWorkspaceContext,
+      now: () => new Date(),
+    },
+  ): Promise<AdminUploadContextResult> => {
+    const actor = await deps.requireAdmin();
+    if (!actor)
       return {
         ok: false,
         reason: "admin-required",
         message: "Administrator access is required.",
       };
-    const admin = deps.createAdminClient();
-    const program = await admin
-      .from("programs")
-      .select(
-        "id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, time_zone",
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        programId,
       )
-      .eq("id", programId)
-      .maybeSingle();
-    if (program.error) throw new Error("program read failed");
-    if (!program.data)
+    ) {
       return {
         ok: false,
-        reason: "program-not-found",
-        message: "That program no longer exists.",
+        reason: "invalid-program-id",
+        message: "Choose a valid program.",
       };
-    const p = program.data;
-    const workspace: Workspace = {
-      id: p.id,
-      kind: "team",
-      name: p.school_name,
-      team: p.team,
-      orgType: p.org_type,
-      timeZone: p.time_zone,
-      programStatus: p.status,
-      canSubmitVideo: p.status === "active",
-      playersCanUpload: p.players_can_upload,
-      uploadPolicy: p.upload_policy,
-      eventsPolicy: p.events_policy,
-      role: "owner",
-      memberUploadEnabled: true,
-      myPlayerId: null,
-      mark: p.school_name.trim().charAt(0).toUpperCase(),
-      iconUrl: null,
-    };
-    const billingMonth = currentBillingMonth(deps.now());
-    const [roster, usage] = await Promise.all([
-      readRoster(admin, programId, actor.id),
-      readAll(
-        admin
-          .from("processing_usage")
-          .select("actual_seconds, reserved_seconds")
-          .eq("account_id", programId)
-          .eq("account_type", "program")
-          .eq("billing_month", billingMonth)
-          .eq("released", false)
-          .order("id"),
-      ),
-    ]);
-    const usedSeconds = usage.reduce(
-      (sum, row) =>
-        sum + Number(row.actual_seconds ?? row.reserved_seconds ?? 0),
-      0,
-    );
-    const capSeconds = monthlyCapSecondsFor(workspace);
-    return {
-      ok: true,
-      context: {
-        source: "admin",
-        actorId: actor.id,
-        viewer: session.viewer,
-        workspace,
-        roster,
-        videoAllowance: {
-          accountId: programId,
-          accountType: "program",
-          billingMonth,
-          usedSeconds,
-          capSeconds,
-          remainingSeconds: Math.max(0, capSeconds - usedSeconds),
+    }
+    try {
+      const session = await deps.getWorkspaceContext();
+      if (!session || session.viewer.id !== actor.id)
+        return {
+          ok: false,
+          reason: "admin-required",
+          message: "Administrator access is required.",
+        };
+      const admin = deps.createAdminClient();
+      const program = await admin
+        .from("programs")
+        .select(
+          "id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, time_zone",
+        )
+        .eq("id", programId)
+        .maybeSingle();
+      if (program.error) throw new Error("program read failed");
+      if (!program.data)
+        return {
+          ok: false,
+          reason: "program-not-found",
+          message: "That program no longer exists.",
+        };
+      const p = program.data;
+      const workspace: Workspace = {
+        id: p.id,
+        kind: "team",
+        name: p.school_name,
+        team: p.team,
+        orgType: p.org_type,
+        timeZone: p.time_zone,
+        programStatus: p.status,
+        canSubmitVideo: p.status === "active",
+        playersCanUpload: p.players_can_upload,
+        uploadPolicy: p.upload_policy,
+        eventsPolicy: p.events_policy,
+        role: "owner",
+        memberUploadEnabled: true,
+        myPlayerId: null,
+        mark: p.school_name.trim().charAt(0).toUpperCase(),
+        iconUrl: null,
+      };
+      const billingMonth = currentBillingMonth(deps.now());
+      const [roster, usage] = await Promise.all([
+        readRoster(admin, programId, actor.id),
+        readAll(
+          admin
+            .from("processing_usage")
+            .select("actual_seconds, reserved_seconds")
+            .eq("account_id", programId)
+            .eq("account_type", "program")
+            .eq("billing_month", billingMonth)
+            .eq("released", false)
+            .order("id"),
+        ),
+      ]);
+      const usedSeconds = usage.reduce(
+        (sum, row) =>
+          sum + Number(row.actual_seconds ?? row.reserved_seconds ?? 0),
+        0,
+      );
+      const capSeconds = monthlyCapSecondsFor(workspace);
+      return {
+        ok: true,
+        context: {
+          source: "admin",
+          actorId: actor.id,
+          viewer: session.viewer,
+          workspace,
+          roster,
+          videoAllowance: {
+            accountId: programId,
+            accountType: "program",
+            billingMonth,
+            usedSeconds,
+            capSeconds,
+            remainingSeconds: Math.max(0, capSeconds - usedSeconds),
+          },
         },
-      },
-    };
-  } catch {
-    return {
-      ok: false,
-      reason: "read-failed",
-      message: "We couldn't load this program's upload context. Try again.",
-    };
-  }
-}
+      };
+    } catch {
+      return {
+        ok: false,
+        reason: "read-failed",
+        message: "We couldn't load this program's upload context. Try again.",
+      };
+    }
+  },
+);

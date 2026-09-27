@@ -12,8 +12,14 @@ import { createClient } from "@/lib/supabase/server";
  *
  * `is_admin` is a real column on `users` with a `false` default; it is not
  * inferred from an email domain.
+ *
+ * `cache()`d because one request can reach this several times — the upload
+ * page's context read, then `loadAdminTournamentAction`, then the snapshot
+ * loader inside it — and nothing in a request writes `is_admin` between those
+ * reads, so the second and third are the same answer. The cache is
+ * per-request: every server action is its own request and still re-checks.
  */
-export async function requireAdmin(): Promise<{ id: string } | null> {
+export const requireAdmin = cache(async (): Promise<{ id: string } | null> => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -27,7 +33,7 @@ export async function requireAdmin(): Promise<{ id: string } | null> {
     .maybeSingle();
 
   return data?.is_admin ? { id: user.id } : null;
-}
+});
 
 /**
  * Same gate as `admin/layout.tsx`, for a server component or loader that is
