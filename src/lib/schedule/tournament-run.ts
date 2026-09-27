@@ -11,7 +11,7 @@
 
 import { matchWon } from "./entry-state";
 import { drawOfRound, ROUND_ORDER, roundLongLabel, roundRank } from "./format";
-import type { EventEntry } from "./types";
+import type { EntryMatch, EventEntry } from "./types";
 
 /**
  * The round after the last one recorded, so the common case is pre-picked.
@@ -98,4 +98,22 @@ export function runFinish(entry: EventEntry): string | null {
   if (won === false) return `out in ${label}`;
   if (won === true && last.round.toUpperCase() === "F") return "won the final";
   return `through ${label}`;
+}
+
+/**
+ * "3–1" for a run: decided matches only, so a default or a withdrawal on the
+ * entry's schedule outcome does not count as a match won or lost.
+ */
+export function runRecord(matches: EntryMatch[]): {
+  won: number;
+  lost: number;
+} {
+  let won = 0;
+  let lost = 0;
+  for (const match of matches) {
+    const result = matchWon(match);
+    if (result === true) won++;
+    else if (result === false) lost++;
+  }
+  return { won, lost };
 }

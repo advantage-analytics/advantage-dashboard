@@ -12,7 +12,7 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 
 /** The row ends at x=52 (12px padding + a 40px column). 22 more puts the
  *  tooltip 10px clear of the 64px rail. */
-const OFFSET = 22;
+export const RAIL_OFFSET = 22;
 
 export function RailTooltip({
   label,
@@ -36,7 +36,7 @@ export function RailTooltip({
       shortcut={shortcut}
       side="right"
       align={detail ? "start" : "center"}
-      sideOffset={OFFSET}
+      sideOffset={RAIL_OFFSET}
       hidden={hidden}
     >
       {children}

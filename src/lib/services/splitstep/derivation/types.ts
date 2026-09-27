@@ -93,6 +93,14 @@ export interface SplitStepStroke {
    * to the original if the framerate changed. Seconds survive re-encoding.
    */
   trimmedFrame: number;
+  /**
+   * Frame index of the ball's bounce in the TRIMMED video, on the same frame
+   * clock as `trimmedFrame`. Null when the vendor saw no bounce (the -9999
+   * sentinel), the value is unusable, or it precedes the contact frame.
+   * Seconds come from `bounceVideoTimes` in frame-clock.ts — never seek
+   * against the frame itself.
+   */
+  bounceFrame: number | null;
 
   rallyId: number;
   strokeNumber: number;

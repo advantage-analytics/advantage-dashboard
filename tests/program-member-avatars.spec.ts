@@ -6,10 +6,9 @@ import {
   SKIP_REASON,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
 
 /**
  * Teammates' photos — who may read an avatar key, proven against the live DB.
@@ -25,7 +24,15 @@ import {
 
 /** A crashed run is findable by hand:
  *  `select * from programs where program_key like 'avatars-%'`. */
-const { mark: MARK, password: PASSWORD } = runMarker("avatars");
+const { mark: MARK } = runMarker("avatars");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = [
+  "program-member-avatars-owner",
+  "program-member-avatars-player",
+  "program-member-avatars-no-photo",
+  "program-member-avatars-stranger",
+];
 
 test.describe("program_member_avatars (live DB)", () => {
   test.describe.configure({ mode: "serial", timeout: 60_000 });
@@ -37,18 +44,17 @@ test.describe("program_member_avatars (live DB)", () => {
   let noPhoto: Session;
   let stranger: Session;
 
-  const authUserIds: string[] = [];
   let programId: string;
 
   test.beforeAll(async () => {
     test.setTimeout(180_000);
     admin = createAdminClient();
 
-    [owner, player, noPhoto, stranger] = await createLogins(
-      admin,
-      ["owner", "player", "nophoto", "stranger"],
-      { mark: MARK, password: PASSWORD, authUserIds },
-    );
+    // An interrupted run's memberships would make the pool refuse the slots.
+    // `avatar_path` needs no sweep: `poolLogins` resets it on every hand-out,
+    // which is what keeps "no photo" true for `noPhoto`.
+    await clearPoolLeftovers(admin, SLOTS);
+    [owner, player, noPhoto, stranger] = await poolLogins(admin, SLOTS);
 
     // Keys only — the RPC never touches storage, so no object is uploaded.
     for (const session of [owner, player, stranger]) {
@@ -83,8 +89,12 @@ test.describe("program_member_avatars (live DB)", () => {
   test.afterAll(async () => {
     test.setTimeout(180_000);
     if (!admin) return;
-    if (programId) await admin.from("programs").delete().eq("id", programId);
-    await deleteAuthUsers(admin, authUserIds);
+    // Memberships, then the program. The pool users stay; the avatar keys
+    // written above are put back by the pool's reset on the next hand-out.
+    if (programId) {
+      await admin.from("program_members").delete().eq("program_id", programId);
+      await admin.from("programs").delete().eq("id", programId);
+    }
   });
 
   test("a player reads every photo on their program, their own included", async () => {

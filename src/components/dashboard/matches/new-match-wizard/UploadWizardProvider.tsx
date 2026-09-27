@@ -94,6 +94,7 @@ export interface UploadWizardProviderProps {
   draft: MatchDraft | null;
   draftRefusal: string | null;
   initialProvider: ProviderId | null;
+  preferredProvider: ProviderId | null;
   initialSubject: RosterSubject | null;
   children: ReactNode;
 }
@@ -107,6 +108,7 @@ export function UploadWizardProvider({
   draft,
   draftRefusal,
   initialProvider,
+  preferredProvider,
   initialSubject,
   children,
 }: UploadWizardProviderProps) {
@@ -141,6 +143,7 @@ export function UploadWizardProvider({
     preset,
     draft,
     initialProvider,
+    preferredProvider,
     initialSubject,
   });
   const { step } = wizard;

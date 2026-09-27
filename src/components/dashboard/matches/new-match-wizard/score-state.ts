@@ -245,3 +245,38 @@ export function scoreUndecided(input: ScoreGames): boolean {
   if (!anyGames) return false;
   return !progress(input).decided;
 }
+
+/**
+ * The games a score records, without the empty trailing sets the form pads
+ * with — so a seeded `[6, 6]` and a form's `[6, 6, null]` compare equal.
+ */
+function recordedGames(games: Cells): (number | null)[] {
+  const trimmed = games.map((v) => v ?? null);
+  while (trimmed.length > 0 && trimmed[trimmed.length - 1] == null)
+    trimmed.pop();
+  return trimmed;
+}
+
+/**
+ * Whether the form's games are exactly a stored score's, set for set — the
+ * one comparison for "this is that score". Trailing empty sets are ignored;
+ * tiebreak points and `winner` are not compared. `player1` is our side, the
+ * same orientation as the form's `playerScores`.
+ *
+ * Used by a line swap (is the form's score still the one line A seeded?) and
+ * by the schedule offer (does the typed score match a line's record?).
+ */
+export function sameRecordedScore(
+  form: Pick<FormData, "playerScores" | "opponentScores">,
+  score: { player1: readonly number[]; player2: readonly number[] },
+): boolean {
+  const same = (a: Cells, b: readonly number[]) => {
+    const x = recordedGames(a);
+    const y = recordedGames(b);
+    return x.length === y.length && x.every((v, i) => v === y[i]);
+  };
+  return (
+    same(form.playerScores, score.player1) &&
+    same(form.opponentScores, score.player2)
+  );
+}

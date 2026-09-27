@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pilot Terms Mockup</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Roboto+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink-900: #0d0d0d;
+        --ink-700: #525252;
+        --ink-600: #71717a;
+        --ink-500: #888888;
+        --ink-400: #aaaaaa;
+        --ink-300: #cccccc;
+        --ink-200: #e5e5ea;
+        --ink-100: #f3f3f3;
+        --surface-page: #fafafa;
+        --surface-card: #ffffff;
+        --surface-subtle: #f5f5f5;
+        --border-hairline: var(--ink-100);
+        --border-medium: #e5e5ea;
+        --nav-fg: #8a8a8e;
+        --blue: #3b82f6;
+        --blue-hover: #2563eb;
+        --danger: #e51837;
+        --radius-button: 6px;
+        --radius-element: 8px;
+        --radius-card: 12px;
+        --shadow-cta-glow: 0 1px 3px rgba(57, 134, 243, 0.25);
+        --canvas: #ededef;
+        --font-sans: Inter, system-ui, sans-serif;
+        --font-mono: "Roboto Mono", ui-monospace, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        font-family: var(--font-sans);
+        color: var(--ink-900);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ---------- canvas chrome (not product UI) ---------- */
+      .doc {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 40px 16px 80px;
+      }
+      .doc-head h1 {
+        font-size: 22px;
+        font-weight: 500;
+        margin: 0 0 6px;
+        letter-spacing: -0.3px;
+      }
+      .doc-head p {
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--ink-700);
+        margin: 0;
+        max-width: 78ch;
+      }
+      .section {
+        margin-top: 44px;
+      }
+      .section-label {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        margin-bottom: 12px;
+      }
+      .section-label .id {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--blue);
+        font-weight: 500;
+      }
+      .section-label .name {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .section-label .sub {
+        font-size: 12px;
+        color: var(--ink-500);
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 280px;
+        gap: 20px;
+        align-items: start;
+      }
+      @media (max-width: 980px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+      .notes {
+        background: #fff;
+        border: 1px solid var(--border-medium);
+        border-radius: 10px;
+        padding: 16px;
+        font-size: 12px;
+        line-height: 1.55;
+        color: var(--ink-700);
+      }
+      .notes h4 {
+        margin: 0 0 8px;
+        font-size: 10px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--ink-400);
+        font-weight: 500;
+      }
+      .notes ul {
+        margin: 0;
+        padding-left: 16px;
+      }
+      .notes li {
+        margin-bottom: 6px;
+      }
+      .notes .q {
+        color: #9a3412;
+      }
+
+      /* ---------- the product pane (ClaimShell) ---------- */
+      .pane {
+        position: relative;
+        background: var(--surface-card);
+        border-radius: 10px;
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.06),
+          0 0 0 1px rgba(0, 0, 0, 0.04);
+        min-height: 640px;
+        display: flex;
+        align-items: center;
+        padding: 88px 24px;
+        overflow: hidden;
+      }
+      .chrome {
+        position: absolute;
+        inset: 0 0 auto 0;
+        display: flex;
+        justify-content: space-between;
+        padding: 20px;
+      }
+      .icon-btn {
+        width: 32px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-element);
+        color: var(--nav-fg);
+      }
+      .col {
+        width: 100%;
+        max-width: 720px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .eyebrow {
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 2.5px;
+        text-transform: uppercase;
+        color: var(--ink-400);
+      }
+      .title-lg {
+        font-size: 24px;
+        font-weight: 300;
+        line-height: 1.2;
+        letter-spacing: -0.4px;
+        margin: 0;
+      }
+      .body {
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--ink-700);
+        margin: 0;
+        max-width: 60ch;
+      }
+      .body-sm {
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--ink-700);
+      }
+      .micro {
+        font-size: 11px;
+        line-height: 1.4;
+        color: var(--ink-500);
+      }
+      .mono {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+      .strong {
+        color: var(--ink-900);
+        font-weight: 500;
+      }
+
+      .terms {
+        border-top: 1px solid var(--border-hairline);
+        padding-top: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .term {
+        display: flex;
+        gap: 10px;
+      }
+      .term svg {
+        flex: none;
+        margin-top: 3px;
+      }
+
+      .confirm {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        background: var(--surface-subtle);
+        border-radius: var(--radius-element);
+        padding: 14px 16px;
+      }
+      .box {
+        flex: none;
+        width: 16px;
+        height: 16px;
+        margin-top: 1px;
+        border-radius: 4px;
+        border: 1px solid var(--ink-300);
+        background: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .box.on {
+        background: var(--blue);
+        border-color: var(--blue);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 14px;
+      }
+      .btn {
+        height: 36px;
+        padding: 0 16px;
+        border-radius: var(--radius-button);
+        font: 500 13px/1 var(--font-sans);
+        border: 0;
+        background: var(--blue);
+        color: #fff;
+        box-shadow: var(--shadow-cta-glow);
+      }
+      .btn.off {
+        opacity: 0.5;
+      }
+      .link {
+        font-size: 11px;
+        color: var(--blue);
+        text-decoration: none;
+      }
+      .problem {
+        font-size: 12px;
+        line-height: 18px;
+        color: var(--danger);
+        margin: 0;
+      }
+
+      /* ---------- flow strip ---------- */
+      .flow {
+        background: #fff;
+        border-radius: 10px;
+        padding: 18px 20px;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .flow-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+      .flow-row .lbl {
+        width: 120px;
+        flex: none;
+        font-size: 10px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--ink-400);
+        font-weight: 500;
+      }
+      .step {
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: var(--surface-subtle);
+        color: var(--ink-700);
+      }
+      .step.new {
+        background: #eff6ff;
+        color: var(--blue-hover);
+        box-shadow: inset 0 0 0 1px #bfdbfe;
+        font-weight: 500;
+      }
+      .arrow {
+        color: var(--ink-300);
+      }
+      @media (max-width: 640px) {
+        .flow-row .lbl {
+          width: 100%;
+        }
+        .pane {
+          padding: 72px 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="doc">
+      <header class="doc-head">
+        <h1>Pilot terms: T3 + T4 mockup</h1>
+        <p>
+          One screen a coach accepts once, before a team workspace is created.
+          Built from the real claim-flow shell (<span class="mono"
+            >ClaimShell</span
+          >, 720 column), the join flow's terms rows (<span class="mono"
+            >TermMark</span
+          >) and DS tokens. Hours and the end date come from config, so the
+          college and custom-team screens differ only where the tier does.
+        </p>
+      </header>
+
+      <!-- Flow placement -->
+      <section class="section">
+        <div class="section-label">
+          <span class="id">00</span><span class="name">Where it sits</span
+          ><span class="sub">T4 criteria 3 and 4</span>
+        </div>
+        <div class="flow">
+          <div class="flow-row">
+            <span class="lbl">College</span>
+            <span class="step">Find your school</span
+            ><span class="arrow">→</span> <span class="step">Your details</span
+            ><span class="arrow">→</span>
+            <span class="step">Check your email</span
+            ><span class="arrow">→</span>
+            <span class="step">Link clicked (/claim/verify)</span
+            ><span class="arrow">→</span>
+            <span class="step new">Pilot terms</span
+            ><span class="arrow">→</span>
+            <span class="step">Ready, or Under review</span>
+          </div>
+          <div class="flow-row">
+            <span class="lbl">Club / HS / Academy</span>
+            <span class="step">Team type</span><span class="arrow">→</span>
+            <span class="step">Set up your team</span
+            ><span class="arrow">→</span>
+            <span class="step new">Pilot terms</span
+            ><span class="arrow">→</span>
+            <span class="step">Workspace</span>
+          </div>
+          <p class="micro" style="margin: 0">
+            College: the terms come after the email link because that is the
+            first point the coach is signed in. Custom: after the team is named,
+            so the eyebrow can carry the name.
+          </p>
+        </div>
+      </section>
+
+      <!-- A: College -->
+      <section class="section">
+        <div class="section-label">
+          <span class="id">A</span><span class="name">College program</span
+          ><span class="sub">confirmation ticked, button live</span>
+        </div>
+        <div class="layout">
+          <div class="pane">
+            <div class="chrome">
+              <span class="icon-btn"
+                ><svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path d="M19 12H5M12 19l-7-7 7-7" /></svg
+              ></span>
+              <span class="icon-btn"
+                ><svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path d="M18 6 6 18M6 6l12 12" /></svg
+              ></span>
+            </div>
+            <div class="col">
+              <div style="display: flex; flex-direction: column; gap: 2px">
+                <span class="eyebrow">UCLA · Men's · D-I · Big Ten</span>
+                <h1 class="title-lg" style="padding-top: 8px">
+                  Fall Season Pilot terms
+                </h1>
+              </div>
+              <p class="body">
+                You accept these once for this program. Your staff and players
+                won't be asked.
+              </p>
+
+              <div class="terms">
+                <div class="term">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#3B82F6"
+                    stroke-width="1.5"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                  <span class="body-sm"
+                    >Free through <span class="strong">Dec 31, 2026</span>, with
+                    <span class="mono strong">75h</span> of Advantage
+                    Intelligence video analysis a month for the program. No card
+                    and no obligation to buy.</span
+                  >
+                </div>
+                <div class="term">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#3B82F6"
+                    stroke-width="1.5"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                  <span class="body-sm"
+                    >We'll share 2027 options before the pilot ends. Nothing
+                    charges automatically. Access ends Jan 1 unless the program
+                    chooses a paid plan or we extend the pilot.</span
+                  >
+                </div>
+                <div class="term">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#888"
+                    stroke-width="1.5"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                  <span class="body-sm"
+                    >We may use pilot usage and data to improve Advantage.</span
+                  >
+                </div>
+                <div class="term">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#888"
+                    stroke-width="1.5"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                  <span class="body-sm"
+                    >We may change the monthly hours or end the pilot, and we'll
+                    tell you first.</span
+                  >
+                </div>
+              </div>
+
+              <label class="confirm">
+                <span class="box on"
+                  ><svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#fff"
+                    stroke-width="3"
+                  >
+                    <path d="M20 6 9 17l-5-5" /></svg
+                ></span>
+                <span class="body-sm"
+                  >I can add players to this program and upload match video of
+                  them, and my players agree to be filmed and to have their
+                  stats analyzed.</span
+                >
+              </label>
+
+              <div class="actions">
+                <button class="btn">Accept and continue</button>
+                <span class="micro">Free. No card on file.</span>
+              </div>
+            </div>
+          </div>
+          <aside class="notes">
+            <h4>Decisions in this frame</h4>
+            <ul>
+              <li>
+                Term 3 is the only one that asks the coach to state something,
+                so it is a checkbox. The other four are facts to read, drawn
+                with the join flow's <span class="mono">TermMark</span>.
+              </li>
+              <li>
+                Blue marks = what the program gets (1, 2). Grey marks = what we
+                reserve (4, 5). Same pairing as the join terms.
+              </li>
+              <li>
+                The checkbox sits outside the mark list, so no blue checks stack
+                above a blue checkbox (the
+                <span class="mono">TermMark</span> rule).
+              </li>
+              <li>
+                <span class="mono">75h</span> and "Dec 31, 2026" come from
+                <span class="mono">getMonthlyCapHours</span> and
+                <span class="mono">formatPilotEnd</span>.
+              </li>
+              <li class="q">Term 3 wording is pending legal review.</li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+
+      <!-- A': College, unticked -->
+      <section class="section">
+        <div class="section-label">
+          <span class="id">A.1</span><span class="name">College program</span
+          ><span class="sub">first view: nothing ticked, button disabled</span>
+        </div>
+        <div class="layout">
+          <div
+            class="pane"
+            style="min-height: 0; padding-top: 48px; padding-bottom: 48px"
+          >
+            <div class="col">
+              <label class="confirm">
+                <span class="box"></span>
+                <span class="body-sm"
+                  >I can add players to this program and upload match video of
+                  them, and my players agree to be filmed and to have their
+                  stats analyzed.</span
+                >
+              </label>
+              <div class="actions">
+                <button class="btn off">Accept and continue</button>
+                <span class="micro">Free. No card on file.</span>
+              </div>
+            </div>
+          </div>
+          <aside class="notes">
+            <h4>Behaviour</h4>
+            <ul>
+              <li>
+                Disabled is <span class="mono">opacity .5</span>, never a
+                recolour (DS button rule).
+              </li>
+              <li>
+                No helper text telling them to tick the box. The disabled button
+                and the empty box already say it.
+              </li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+
+      <!-- B: Custom team -->
+      <section class="section">
+        <div class="section-label">
+          <span class="id">B</span
+          ><span class="name">Club, high school or academy</span
+          ><span class="sub">same screen, individual tier</span>
+        </div>
+        <div class="layout">
+          <div class="pane">
+            <div class="chrome">
+              <span class="icon-btn"
+                ><svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path d="M19 12H5M12 19l-7-7 7-7" /></svg
+              ></span>
+              <span class="icon-btn"
+                ><svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path d="M18 6 6 18M6 6l12 12" /></svg
+              ></span>
+            </div>
+            <div class="col">
+              <div style="display: flex; flex-direction: column; gap: 2px">
+                <span class="eyebrow">Westside Tennis Academy · Academy</span>
+                <h1 class="title-lg" style="padding-top: 8px">
+                  Fall Season Pilot terms
+                </h1>
+              </div>
+              <p class="body">
+                You accept these once for this team. Your staff and players
+                won't be asked.
+              </p>
+
+              <div class="terms">
+                <div class="term">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#3B82F6"
+                    stroke-width="1.5"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                  <span class="body-sm"
+                    >Free through <span class="strong">Dec 31, 2026</span>, with
+                    <span class="mono strong">2h</span> of Advantage
+                    Intelligence video analysis a month for the team.
+                    SwingVision imports are free and unlimited. No card and no
+                    obligation to buy.</span
+                  >
+                </div>
+                <div class="term">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#3B82F6"
+                    stroke-width="1.5"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                  <span class="body-sm"
+                    >We'll share 2027 options before the pilot ends. Nothing
+                    charges automatically. Access ends Jan 1 unless the team
+                    chooses a paid plan or we extend the pilot.</span
+                  >
+                </div>
+                <div class="term">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#888"
+                    stroke-width="1.5"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                  <span class="body-sm"
+                    >We may use pilot usage and data to improve Advantage.</span
+                  >
+                </div>
+                <div class="term">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#888"
+                    stroke-width="1.5"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                  <span class="body-sm"
+                    >We may change the monthly hours or end the pilot, and we'll
+                    tell you first.</span
+                  >
+                </div>
+              </div>
+
+              <label class="confirm">
+                <span class="box on"
+                  ><svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#fff"
+                    stroke-width="3"
+                  >
+                    <path d="M20 6 9 17l-5-5" /></svg
+                ></span>
+                <span class="body-sm"
+                  >I can add players to this team and upload match video of
+                  them, and my players (or their parents) agree to them being
+                  filmed and having their stats analyzed.</span
+                >
+              </label>
+
+              <div class="actions">
+                <button class="btn">Accept and create team</button>
+                <span class="micro">Free. No card on file.</span>
+              </div>
+            </div>
+          </div>
+          <aside class="notes">
+            <h4>Differences from A</h4>
+            <ul>
+              <li>
+                Hours read <span class="mono">2h</span>:
+                <span class="mono">quotaTierFor()</span> puts custom orgs on the
+                individual figure. One component; the number is a prop.
+              </li>
+              <li>
+                "program" becomes "team", and the button creates the team, since
+                this screen is the last step before
+                <span class="mono">create_custom_program</span>.
+              </li>
+              <li class="q">
+                Open: does "Access ends Jan 1" apply to custom teams too? The
+                plan only talks about college teams.
+              </li>
+              <li class="q">
+                Open: high school and academy players are often minors. "(or
+                their parents)" is a placeholder for legal review.
+              </li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+
+      <!-- C: refused -->
+      <section class="section">
+        <div class="section-label">
+          <span class="id">C</span><span class="name">Refused</span
+          ><span class="sub"
+            >server returned <span class="mono">terms-not-accepted</span></span
+          >
+        </div>
+        <div class="layout">
+          <div
+            class="pane"
+            style="min-height: 0; padding-top: 48px; padding-bottom: 48px"
+          >
+            <div class="col">
+              <label class="confirm">
+                <span class="box on"
+                  ><svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#fff"
+                    stroke-width="3"
+                  >
+                    <path d="M20 6 9 17l-5-5" /></svg
+                ></span>
+                <span class="body-sm"
+                  >I can add players to this program and upload match video of
+                  them, and my players agree to be filmed and to have their
+                  stats analyzed.</span
+                >
+              </label>
+              <p class="problem" role="alert">
+                These terms changed while you were reading. Accept the current
+                version to continue.
+              </p>
+              <div class="actions">
+                <button class="btn">Accept and continue</button>
+                <span class="micro">Free. No card on file.</span>
+              </div>
+            </div>
+          </div>
+          <aside class="notes">
+            <h4>When this shows</h4>
+            <ul>
+              <li>
+                The only real way to reach it:
+                <span class="mono">PILOT_TERMS_VERSION</span> changed between
+                page load and submit. The page re-renders the new text, so the
+                coach sees what they're accepting.
+              </li>
+              <li>
+                Uses the join flow's <span class="mono">Problem</span> line, the
+                one refused-action style in these flows.
+              </li>
+              <li>
+                A tampered request that skips the screen gets the same refusal
+                from the database (T3). There's nothing to design for that.
+              </li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

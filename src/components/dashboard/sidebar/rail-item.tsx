@@ -49,7 +49,8 @@ export function RailItem({
   expanded: boolean;
   shortcut?: string;
   ariaExpanded?: boolean;
-  onClick?: () => void;
+  /** Receives the click, so a link can `preventDefault` and ask first. */
+  onClick?: (event: React.MouseEvent<HTMLElement>) => void;
   as?: "link" | "button";
   comingSoon?: boolean;
 }) {

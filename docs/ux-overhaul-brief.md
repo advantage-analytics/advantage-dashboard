@@ -271,7 +271,7 @@ Every stat label everywhere gets a hover/tap definition from the existing help g
 | D5  | Team data ownership  | program-owned by default / player-owned, share per match / context-dependent (rec)                                             | **Context-dependent:** team-context uploads visible to program; personal uploads private with per-match share. |
 | D6  | Naming               | "Trends" vs "Statistics"; chat name ("Ask"?); does "Advantage Intelligence" brand the engine only or all AI (chat + insights)? | **Trends; Ask; Advantage Intelligence = the analysis engine**, chat is "Ask" powered by it.                    |
 | D7  | Pricing architecture | $4.99 lifetime Pro (current) vs subscription vs program licensing tiers                                                        | No rec — business call, but it gates quota/priority/seat UI, so decide before Phase 2 design.                  |
-| D8  | Doubles positioning  | Hide AI for doubles matches quietly vs explicit "singles only, import doubles via SwingVision" messaging                       | **Explicit** — college tennis is 3 doubles courts every dual; silence will read as a bug.                      |
+| D8  | Doubles positioning  | Hide AI for doubles matches quietly vs explicit "singles only, doubles score only" messaging                                   | **Explicit** — college tennis is 3 doubles courts every dual; silence will read as a bug.                      |
 
 ---
 

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
+import { DayZeroGrade } from "@/components/dashboard/home/day-zero-shape";
 
 /**
  * Home on the day the account holds no match: the offer, centred, over the
@@ -42,42 +43,19 @@ export function DayZeroHome({
     <div className="flex flex-1 flex-col gap-4">
       <DayZeroOffer />
 
-      <p className="sr-only">
-        Once your first match is analysed this page fills with your serve
-        numbers, your recent matches, one thing to work on, and a map of where
-        your serves land. Nothing below is real data yet.
-      </p>
-
       {/*
-       * One continuous grade, not two flat steps.
-       *
-       * The strip and the cards each carried a fixed opacity, which is a
-       * banding, not a fade: the page went 0.55, then a hard edge, then 0.32
-       * for everything below regardless of how far down it sat. Matches has
-       * always graded properly — its five ghost rows step 1 → 0.3 — and this
-       * is the same idea applied to a page whose regions are cards rather
-       * than rows.
-       *
-       * **It fades to 0.32, not to nothing.** That is the value the whole
-       * tail already sat at, so nothing at the foot of the page is fainter
-       * than it was. It matters most for the activity heatmap, which lives
-       * down there and whose empty cells are `#F2F2F2` — five per cent off
-       * white before any fade at all. A gradient running to transparent
-       * erased it once already.
+       * One continuous grade, not two flat steps — `DayZeroGrade` owns the
+       * mask, the `inert` and the sentence that pairs with it. The strip and
+       * the cards each used to carry a fixed opacity, which is a banding
+       * rather than a fade.
        */}
-      <div
-        inert
+      <DayZeroGrade
+        description="Once your first match is analysed this page fills with your serve numbers, your recent matches, one thing to work on, and a map of where your serves land. Nothing below is real data yet."
         className="flex flex-1 flex-col gap-4"
-        style={{
-          WebkitMaskImage:
-            "linear-gradient(180deg, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.46) 40%, rgba(0,0,0,0.32) 100%)",
-          maskImage:
-            "linear-gradient(180deg, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.46) 40%, rgba(0,0,0,0.32) 100%)",
-        }}
       >
         {kpiStrip}
         {children}
-      </div>
+      </DayZeroGrade>
     </div>
   );
 }

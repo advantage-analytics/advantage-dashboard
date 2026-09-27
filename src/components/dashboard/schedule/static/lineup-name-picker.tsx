@@ -46,8 +46,18 @@ export interface RosterSelection {
  * sharing ends. Rule of three: if a third roster typeahead appears, extract.
  */
 
-/** The escape row's words. One string so the row and its test cannot drift. */
-const ADD_ROW_LABEL = "Don't see your player? Add your player";
+/**
+ * The escape row's words. One string so the row and its test cannot drift —
+ * and exported so our doubles pair picker (`lineup-rows.tsx`) offers the same
+ * row in the same words rather than a retyped copy.
+ */
+export const ADD_ROW_LABEL = "Don't see your player? Add your player";
+
+/**
+ * What a one-word name is told. `add_program_player` requires both names, so
+ * both pickers refuse a single word before the server is asked.
+ */
+export const ADD_NAME_REQUIRED = "Type a first and last name to add a player.";
 
 /**
  * Said out loud rather than left silent.
@@ -299,7 +309,7 @@ function RosterTypeahead({
   function addTypedPlayer() {
     const words = activeSegment.split(/\s+/).filter(Boolean);
     if (words.length < 2) {
-      setError("Type a first and last name to add a player.");
+      setError(ADD_NAME_REQUIRED);
       inputRef.current?.focus();
       return;
     }

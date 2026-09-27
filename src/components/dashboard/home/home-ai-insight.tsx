@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import type { EvidencePart } from "@/lib/ui/insight-evidence";
 import { HOME_CLAIM_CLASS } from "@/lib/ui/home-claim";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 
 // Cached per session so navigating away and back doesn't re-trigger the LLM.
 // The key is suffixed with a signature of the underlying performance data (see
@@ -131,12 +135,9 @@ export default function HomeAiInsight({
           {claim}
         </span>
       ) : settled ? null : (
-        <div role="status" aria-label="Loading insight">
-          <div
-            className="h-[14px] w-[85%] rounded-[3px] bg-[var(--surface-skeleton)] motion-safe:animate-pulse"
-            aria-hidden="true"
-          />
-        </div>
+        <PendingRegion label="insight">
+          <PendingBar className="h-[14px] w-[85%]" />
+        </PendingRegion>
       )}
 
       {/* Evidence — computed, never invented. Present even when the claim

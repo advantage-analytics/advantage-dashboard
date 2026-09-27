@@ -9,7 +9,11 @@ import {
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { statKey } from "@/lib/data/aggregate";
-import { canonicalRosterIds } from "@/lib/data/roster-ids";
+import {
+  canonicalRosterIds,
+  idsResolvingTo,
+  sideOf,
+} from "@/lib/data/roster-ids";
 import { pickServeShot } from "@/lib/data/serve-return-shots";
 import {
   computeZoneStats,
@@ -179,6 +183,7 @@ interface DbServeShotRow {
   shot_type: string | null;
   landing_x: number | null;
   landing_y: number | null;
+  contact_y: number | null;
   result: string | null;
   spin_type: string | null;
   zone: string | null;
@@ -256,7 +261,7 @@ async function serveMapFor(
   const { data } = await supabase
     .from("shots")
     .select(
-      "shot_number, shot_type, landing_x, landing_y, result, spin_type, zone, point_id, points!inner(id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1)",
+      "shot_number, shot_type, landing_x, landing_y, contact_y, result, spin_type, zone, point_id, points!inner(id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1)",
     )
     .in("points.match_id", [...sideByMatch.keys()])
     .in("shot_type", ["First Serve", "Second Serve"])
@@ -284,6 +289,7 @@ async function serveMapFor(
       serverIsPlayer1: point.server_is_player1,
       firstShotLandingX: serve?.landing_x ?? null,
       firstShotLandingY: serve?.landing_y ?? null,
+      firstShotContactY: serve?.contact_y ?? null,
       firstShotZone: serve?.zone ?? null,
       firstShotSpin: serve?.spin_type ?? null,
       firstShotType: serve?.shot_type ?? null,
@@ -335,9 +341,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
   // maps every roster row's `player_id` to itself, and this player's row was
   // found above — so their own id is always in here. An empty `in.()` is not
   // a filter PostgREST accepts.
-  const ownIds = [...canonical.entries()]
-    .filter(([, canonicalId]) => canonicalId === playerId)
-    .map(([id]) => id);
+  const ownIds = idsResolvingTo(canonical, playerId);
 
   const { data: matchRows } = await supabase
     .from("matches")
@@ -358,13 +362,8 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
   // of the two ids is theirs; this decides which, and that answer picks their
   // statistics row, their opponent's name and their half of the insight.
   const own = matches.flatMap((match) => {
-    if (match.player1_id && canonical.get(match.player1_id) === playerId) {
-      return [{ match, isPlayer1: true }];
-    }
-    if (match.player2_id && canonical.get(match.player2_id) === playerId) {
-      return [{ match, isPlayer1: false }];
-    }
-    return [];
+    const isPlayer1 = sideOf(match, canonical, playerId);
+    return isPlayer1 === null ? [] : [{ match, isPlayer1 }];
   });
 
   const statsPromise = (async () => {

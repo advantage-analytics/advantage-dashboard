@@ -23,7 +23,7 @@ import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
  * grid shows the most recent `COURT_RECORD_WINDOW` duals with any singles
  * played, and the card's footer says so. The complete season belongs on Compare.
  *
- * **Singles only.** Doubles lines arrive via SwingVision and a doubles slot is
+ * **Singles only.** Doubles lines record a score only and a doubles slot is
  * a pair, not a court a coach fills; the six singles courts are what a lineup
  * decision is made of.
  */

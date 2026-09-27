@@ -7,10 +7,10 @@
  *   match-results     Supabase Storage   raw vendor results JSON (~1 MB)
  *   advantage-videos  Azure Blob         source video (1–8 GB) ← the expensive one
  *
- * All three key layouts put the match id in the THIRD path segment
- * (`.../{userId}/{matchId}/...`), which is what identifies an orphan. That held
- * across the move from R2 to Azure because the blob name is still whatever
- * videoObjectKey() produced — the store changed, the layout did not.
+ * Each store declares the key layouts it writes, and orphan-attribution.ts
+ * resolves a key to its match id through those. A key no layout explains is
+ * reported and left alone — see that file for why "I do not recognise this"
+ * has to be an answer rather than a guess.
  *
  * Run from repo root:
  *   npx tsx scripts/cleanup-orphan-storage.ts            # dry run
@@ -42,6 +42,13 @@ import {
   resolveAzureStorageConfig,
   videoContainerClient,
 } from "../src/lib/services/splitstep/video-url";
+import {
+  attributeKey,
+  MATCH_DATA_LAYOUTS,
+  RESULTS_LAYOUTS,
+  VIDEO_LAYOUTS,
+  type KeyLayout,
+} from "./orphan-attribution";
 
 // Minimal .env.local loader (no dotenv dependency).
 try {
@@ -75,11 +82,6 @@ if (!url || !key) {
 const supabase: SupabaseClient = createClient(url, key, {
   auth: { persistSession: false },
 });
-
-/** Match id is the third path segment in every layout we write. */
-function matchIdOf(path: string): string | undefined {
-  return path.split("/")[2];
-}
 
 async function listSupabaseObjects(bucket: string): Promise<string[]> {
   const paths: string[] = [];
@@ -155,6 +157,8 @@ interface Store {
   label: string;
   /** Every object key in the store. */
   list(): Promise<string[]>;
+  /** The key shapes this store writes. Anything else is never deleted. */
+  layouts: readonly KeyLayout[];
   /** Keys per delete call: Supabase Storage takes 100, Azure deletes one at a time. */
   batchSize: number;
   /** Deletes one batch, returning how many went. Throwing aborts this store only. */
@@ -173,16 +177,36 @@ async function sweep(
     return { orphans: 0, deleted: 0 };
   }
 
-  const orphans = all.filter((p) => {
-    const id = matchIdOf(p);
-    return id !== undefined && !validIds.has(id);
-  });
+  const orphans: string[] = [];
+  const unrecognised: string[] = [];
+
+  for (const p of all) {
+    const id = attributeKey(p, store.layouts);
+    if (id === null) {
+      unrecognised.push(p);
+    } else if (!validIds.has(id)) {
+      orphans.push(p);
+    }
+  }
 
   console.log(
     `[${store.label}] objects: ${all.length}, orphans: ${orphans.length}`,
   );
   for (const p of orphans.slice(0, 5)) console.log(`  - ${p}`);
   if (orphans.length > 5) console.log(`  … and ${orphans.length - 5} more`);
+
+  // Never deleted, always reported: a key shape this store does not declare is
+  // one this sweeper cannot attribute, and guessing deletes someone's video.
+  // If these are yours, add the layout to orphan-attribution.ts.
+  if (unrecognised.length > 0) {
+    console.log(
+      `[${store.label}] ${unrecognised.length} object(s) in an unrecognised layout — NOT touched:`,
+    );
+    for (const p of unrecognised.slice(0, 5)) console.log(`  ? ${p}`);
+    if (unrecognised.length > 5) {
+      console.log(`  … and ${unrecognised.length - 5} more`);
+    }
+  }
 
   let deleted = 0;
   if (APPLY && orphans.length > 0) {
@@ -231,6 +255,8 @@ async function main() {
   const stores: Store[] = SUPABASE_BUCKETS.map((bucket) => ({
     label: bucket,
     batchSize: 100,
+    layouts:
+      bucket === MATCH_DATA_BUCKET ? MATCH_DATA_LAYOUTS : RESULTS_LAYOUTS,
     list: () => listSupabaseObjects(bucket),
     removeBatch: async (keys) => {
       const { data, error } = await supabase.storage.from(bucket).remove(keys);
@@ -247,6 +273,7 @@ async function main() {
       // but caps at 256 subrequests and needs its own client. One call per blob
       // is honest and fast enough: orphaned videos are counted in dozens.
       batchSize: 1,
+      layouts: VIDEO_LAYOUTS,
       list: () => listBlobNames(videos.container),
       removeBatch: async (keys) => {
         let deleted = 0;

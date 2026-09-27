@@ -33,6 +33,7 @@ export interface ServePointInput {
   serverIsPlayer1: boolean;
   firstShotLandingX: number | null;
   firstShotLandingY: number | null;
+  firstShotContactY?: number | null;
   firstShotZone?: string | null;
   firstShotSpin?: string | null;
   firstShotType?: string | null;
@@ -75,24 +76,29 @@ export const ZONE_LINES_X = [
 ];
 
 export const REAL_HALF_DOUBLES = 5.485;
+export const REAL_HALF_SINGLES = 4.115;
 export const REAL_SERVICE_Y = 5.485;
 export const REAL_NET_Y = 11.885;
 export const REAL_COURT_LENGTH = 23.77;
 
 /**
- * SwingVision records landing coordinates in a fixed world frame. When the
- * server is at the far end (after end-changes on odd games), ly exceeds
- * REAL_NET_Y and lx is mirrored. Flip both so every serve plots in the same
- * canonical half-court [SERVICE_Y .. NET].
+ * SwingVision records coordinates in a fixed world frame. The serve's contact
+ * point determines which end the server occupied; landing coordinates cannot
+ * do that for a valid serve, because they are on the opposite side of the net.
+ * X follows the server's orientation, while Y always maps the receiving half
+ * into the service-box frame. Only older callers without a contact point fall
+ * back to the landing side.
  */
 export function normalizeLanding(
   lx: number,
   ly: number,
+  contactY?: number | null,
 ): { lx: number; ly: number } {
-  if (ly > REAL_NET_Y) {
-    return { lx: -lx, ly: REAL_COURT_LENGTH - ly };
-  }
-  return { lx, ly };
+  const farEnd =
+    contactY != null && Number.isFinite(contactY)
+      ? contactY > REAL_NET_Y
+      : ly < REAL_NET_Y;
+  return farEnd ? { lx: -lx, ly } : { lx, ly: REAL_COURT_LENGTH - ly };
 }
 
 export function mapRealCoordsToServeDot(
@@ -100,10 +106,13 @@ export function mapRealCoordsToServeDot(
   ly: number,
   isFirstServe: boolean,
   servedIn = false,
+  contactY?: number | null,
 ): ServeDot {
-  const n = normalizeLanding(lx, ly);
-  const DOUBLES_HALF_W = (DOUBLES_RIGHT - DOUBLES_LEFT) / 2;
-  const cx = CENTER_X + (n.lx / REAL_HALF_DOUBLES) * DOUBLES_HALF_W;
+  const n = normalizeLanding(lx, ly, contactY);
+  // Project the real singles half-width onto the drawn singles half-width,
+  // so each drawn service-box third is the same physical third as the
+  // match-detail zone calculation.
+  const cx = CENTER_X + (n.lx / REAL_HALF_SINGLES) * BOX_HALF;
   const yFrac = (n.ly - REAL_SERVICE_Y) / (REAL_NET_Y - REAL_SERVICE_Y);
   const cy = SERVICE_Y + yFrac * (BASELINE_Y - SERVICE_Y);
   // When SwingVision flags the serve as In, trust that ruling and keep the dot
@@ -183,9 +192,11 @@ export const ZONES: { key: ZoneKey; label: string; x1: number; x2: number }[] =
   ];
 
 export function classifyZone(x: number): ZoneKey {
-  const cx = SINGLES_LEFT + x * (SINGLES_RIGHT - SINGLES_LEFT);
-  for (const z of ZONES) if (cx >= z.x1 && cx < z.x2) return z.key;
-  return cx < CENTER_X ? "deuce-t" : "ad-t";
+  // Six equal thirds in normalized singles width. Snap floating-point noise
+  // at exact third boundaries before flooring; keep near-line faults in the
+  // outside Wide zones rather than falling through to T.
+  const index = Math.max(0, Math.min(5, Math.floor(x * 6 + 1e-12)));
+  return ZONES[index].key;
 }
 
 export interface ZoneStats {
@@ -255,7 +266,13 @@ const SERVE_TOL_X = SERVE_LINE_TOL_M / SERVE_BOX_W_M;
 const SERVE_TOL_Y = SERVE_LINE_TOL_M / SERVE_BOX_D_M;
 
 export function pointToServeDot(p: ServePointInput): ServeDot | null {
-  if (p.firstShotLandingX == null || p.firstShotLandingY == null) return null;
+  if (
+    p.firstShotLandingX == null ||
+    !Number.isFinite(p.firstShotLandingX) ||
+    p.firstShotLandingY == null ||
+    !Number.isFinite(p.firstShotLandingY)
+  )
+    return null;
   const servedIn = p.firstShotResult === "In";
   const result = classifyPointResult(p);
   const base = mapRealCoordsToServeDot(
@@ -263,6 +280,7 @@ export function pointToServeDot(p: ServePointInput): ServeDot | null {
     p.firstShotLandingY,
     isFirstServePoint(p),
     servedIn,
+    p.firstShotContactY,
   );
 
   // Data-quality gate for serves NOT flagged "In" (these would otherwise plot

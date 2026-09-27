@@ -29,7 +29,8 @@ export function subjectFirstNameOf({
   preset,
   playerName,
 }: {
-  whoPlayed: WhoPlayed;
+  /** Only the subject is read, so a caller holding just that can pass it. */
+  whoPlayed: Pick<WhoPlayed, "subject">;
   preset: EventPreset | null;
   playerName: string;
 }): string | null {

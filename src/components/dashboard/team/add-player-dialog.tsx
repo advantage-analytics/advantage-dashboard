@@ -1,21 +1,29 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { GitMerge, Loader2, RotateCcw, Upload, Users } from "lucide-react";
-import type { FormerPlayer, RosterMember } from "@/lib/data/team-roster-server";
+import {
+  AlertTriangle,
+  GitMerge,
+  Loader2,
+  RotateCcw,
+  Users,
+} from "lucide-react";
+import type {
+  FormerPlayer,
+  RosterMember,
+  SeatUsage,
+} from "@/lib/data/team-roster-server";
 import {
   SettingsField,
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
 import { advButton } from "@/lib/ui/adv-button";
 import { normalizedPersonName } from "@/lib/data/person-name";
-import {
-  addProgramPlayer,
-  restoreProgramPlayer,
-} from "@/components/dashboard/team/roster-actions";
-import { inviteMember } from "@/components/dashboard/settings/team-actions";
+import type { AddPlayerResult } from "@/components/dashboard/team/roster-actions";
 import {
   DialogInfoRow,
+  SeatBoxes,
+  SeatNote,
   DialogProblem,
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
@@ -28,6 +36,8 @@ import {
   spotHeldNote,
   spotHolders,
 } from "@/components/dashboard/team/player-fields";
+import posthog from "posthog-js";
+import { isPostHogConfigured } from "@/lib/posthog-client";
 
 /**
  * Design 6c — put a player on the roster now.
@@ -35,7 +45,9 @@ import {
  * The counterpart to inviting, and the reason it is the page's blue action:
  * this always works. An invite sends email and waits on somebody else; this
  * creates the row on submit, so a coach can record matches for a freshman who
- * will never open the app. No login, no seat.
+ * will never open the app. No login — but a seat: a seat is a player on the
+ * roster (decided 2026-09-20), so it is taken here and claiming later moves
+ * nothing. When none is free the form says so before anything is typed.
  *
  * ── Why the email is optional, and why it still matters ─────────────────────
  * A coach usually knows a player's address and often does not. Made required,
@@ -105,7 +117,7 @@ import {
  */
 
 /** The field that tells two same-named rows apart, or the absence of it. */
-function emailNote(person: RosterMember): string {
+function emailNote(person: { email: string | null }): string {
   return person.email?.trim() || "no email on file";
 }
 
@@ -117,7 +129,9 @@ function emailNote(person: RosterMember): string {
  * that can drift. Its lineup-spot counterpart is `spotHeldNote`, shared with
  * Edit player from `player-fields.tsx`.
  */
-function duplicateNameNote(matches: RosterMember[]): string {
+function duplicateNameNote(
+  matches: readonly { name: string; email: string | null }[],
+): string {
   const who =
     matches.length === 1
       ? `${matches[0].name} is already on this roster`
@@ -180,6 +194,69 @@ function formerPlayerNote(person: FormerPlayer): string {
 }
 
 /**
+ * The three writes this dialog can make, supplied by the caller.
+ *
+ * ── Why they are props and not imports ──────────────────────────────────────
+ * Two surfaces open this dialog now: a coach on `/dashboard/team/roster`, and
+ * a platform admin on `/admin/teams/[programId]`. The coach's actions resolve
+ * the program from the caller's ACTIVE WORKSPACE — an admin has none, so
+ * `addProgramPlayer` answers "Switch to your team workspace to add players"
+ * to the one person who cannot. The admin console has its own RPC-backed
+ * equivalents that take the program id explicitly, and the difference between
+ * the two is entirely which function is called: every field, note, tripwire
+ * and seat rule above is identical. So the functions move to the call site and
+ * nothing else about the dialog changes.
+ *
+ * All three, not just `add`. The optional invite and the restore offer are
+ * writes too, and a seam that covered only the first would leave a dialog
+ * whose "Restore Ana Ruiz" button fails for an admin with a message about
+ * their workspace — a control that looks available and is not.
+ *
+ * `restore` is nullable precisely so that can be said out loud rather than
+ * left to a runtime refusal: there is no admin `restore_program_player`
+ * wrapper today, so the admin caller passes `null` and `restorable` below is
+ * forced to null with it. The offer is then not drawn at all — no note, no
+ * button — which is the honest reading of "this surface cannot do that",
+ * and the dialog's other path (Add to roster, which admins do have) is
+ * untouched. Give it a function and the offer returns wherever `former` has a
+ * match; that is the whole of what re-enabling it costs.
+ */
+export type AddPlayerActions = {
+  /** `addProgramPlayer`, or an admin equivalent with the program id bound. */
+  add: (fields: {
+    firstName: string;
+    lastName: string;
+    classYear: string | null;
+    lineupSpot: number | null;
+    email: string | null;
+  }) => Promise<AddPlayerResult>;
+  /** `inviteMember`, narrowed to the one call this dialog makes. */
+  invite: (input: {
+    email: string;
+    role: "player";
+    playerId: string;
+  }) => Promise<{ ok: true; warning?: string } | { ok: false; error: string }>;
+  /**
+   * `restoreProgramPlayer`, or `null` on a surface that has no way to restore
+   * an archived profile. Null suppresses the whole offer; see above.
+   */
+  restore: ((profileId: string) => Promise<AddPlayerResult>) | null;
+};
+
+/**
+ * The roster rows this dialog reads, and only those.
+ *
+ * Narrower than `RosterMember` so a caller whose roster is not a
+ * `team-roster-server` projection can supply one honestly rather than
+ * fabricating an avatar url, a join date and a `claimedToday` flag nothing
+ * here looks at. `RosterMember[]` still satisfies it unchanged.
+ */
+export type AddPlayerRosterRow = Pick<
+  RosterMember,
+  "profileId" | "name" | "email" | "role" | "lineupSpot"
+>;
+
+/**
  * What a caller already knows about the person being added.
  *
  * The receiving end of a hand-off: a coach who has typed an address into
@@ -196,17 +273,18 @@ export type AddPlayerInitial = {
 export function AddPlayerDialog({
   open,
   onOpenChange,
-  seatNote,
+  seats,
   roster,
   former,
   initial,
+  actions,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** What the program's allowance looks like right now, stated by the caller. */
-  seatNote: string;
+  /** The program's seat ledger — adding a player takes one. */
+  seats: SeatUsage;
   /** Who is on the roster already, so a repeat can say who it would repeat. */
-  roster: RosterMember[];
+  roster: AddPlayerRosterRow[];
   /**
    * Everyone archived off this roster, so the form can recognize a name that
    * has already been here and offer to restore it instead of quietly
@@ -220,6 +298,8 @@ export function AddPlayerDialog({
    * and a later change to this prop does not reach back into them.
    */
   initial?: AddPlayerInitial;
+  /** Which program's roster this writes to. See `AddPlayerActions`. */
+  actions: AddPlayerActions;
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -405,7 +485,14 @@ export function AddPlayerDialog({
   // one place that decides what "somebody else" means.
   const spotTakenBy = spotHolders(roster, lineupSpot, createdProfileId);
 
+  // Players on the roster plus invitations holding a place for a new one.
+  // `add_program_player` re-checks under a lock; this only keeps a coach from
+  // filling in a form the database is going to refuse.
+  const taken = seats.used + seats.pending;
+  const full = taken >= seats.seats;
+
   const ready =
+    !full &&
     firstName.trim() !== "" &&
     lastName.trim() !== "" &&
     (spotTakenBy.length === 0 || spotAcknowledged);
@@ -439,11 +526,17 @@ export function AddPlayerDialog({
    * button out from under a coach mid-retry, with only "Add to roster" left
    * to click.
    */
+  // `actions.restore === null` is a surface with no way to un-archive a
+  // profile, so there is nothing to offer and the note and button below never
+  // mount — see `AddPlayerActions`. Gated here rather than at each of the
+  // three places `restorable` is read, so no future reader can add a fourth.
   const restorable =
-    formerPlayerMatch(former, { firstName, lastName, email }) ??
-    (restoreTarget !== null && restoreTarget.form === formKey
-      ? restoreTarget.person
-      : null);
+    actions.restore === null
+      ? null
+      : (formerPlayerMatch(former, { firstName, lastName, email }) ??
+        (restoreTarget !== null && restoreTarget.form === formKey
+          ? restoreTarget.person
+          : null));
 
   const nameNote = sameName.length === 0 ? null : duplicateNameNote(sameName);
   const restoreNote = restorable === null ? null : formerPlayerNote(restorable);
@@ -470,7 +563,7 @@ export function AddPlayerDialog({
     failureName: string;
     warningName: string;
   }): Promise<string | null> {
-    const invited = await inviteMember({
+    const invited = await actions.invite({
       email: input.email,
       role: "player",
       playerId: input.profileId,
@@ -487,7 +580,7 @@ export function AddPlayerDialog({
   function submit() {
     setError(null);
     start(async () => {
-      const result = await addProgramPlayer({
+      const result = await actions.add({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         classYear: classYear || null,
@@ -501,6 +594,12 @@ export function AddPlayerDialog({
       }
 
       setCreated({ profileId: result.profileId, form: formKey });
+      if (isPostHogConfigured) {
+        posthog.capture("roster_player_added", {
+          invitation_requested: alsoInvite,
+          lineup_spot_assigned: lineupSpot !== "",
+        });
+      }
 
       if (alsoInvite && result.profileId) {
         const inviteError = await sendOptionalInvite({
@@ -544,6 +643,11 @@ export function AddPlayerDialog({
    * to guess at it.
    */
   function restore(person: FormerPlayer) {
+    // Unreachable in practice: the only caller is the button `restorable`
+    // gates, and `restorable` is null whenever this is. Narrowed rather than
+    // asserted so the nullable action cannot be called by a later edit.
+    const restoreProfile = actions.restore;
+    if (restoreProfile === null) return;
     setError(null);
     // Frozen now, before the RPC that will make `former` stop matching this
     // person — see `restoreTarget` above for why. Set unconditionally, not
@@ -552,12 +656,17 @@ export function AddPlayerDialog({
     setRestoreTarget({ form: formKey, person });
     startRestore(async () => {
       if (createdProfileId !== person.profileId) {
-        const result = await restoreProgramPlayer(person.profileId);
+        const result = await restoreProfile(person.profileId);
         if (!result.ok) {
           setError(result.error);
           return;
         }
         setCreated({ profileId: person.profileId, form: formKey });
+        if (isPostHogConfigured) {
+          posthog.capture("roster_player_restored", {
+            invitation_requested: alsoInvite,
+          });
+        }
       }
 
       const address = email.trim();
@@ -757,12 +866,57 @@ export function AddPlayerDialog({
 
       <DialogProblem message={error} />
 
-      <DialogInfoRow
-        icon={<Upload className="size-3.5" strokeWidth={1.5} aria-hidden />}
-      >
-        No seat used until they claim it — {seatNote}. Matches you upload will
-        credit you as the person who added them.
-      </DialogInfoRow>
+      {full ? (
+        /* The one place the unit boxes appear outside Settings: here they ARE
+           the message. Severity rides a glyph and words as well as the colour,
+           and `--danger`, never the loss red — this is not a match outcome. */
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-2.5"
+        >
+          <AlertTriangle
+            className="mt-px size-3.5 shrink-0 text-[var(--danger)]"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+          <span className="flex flex-col gap-2 text-[11px] leading-[1.6] text-[var(--ink-700)]">
+            <span>
+              <strong className="font-medium text-[var(--danger)]">
+                All <span className="tabular">{seats.seats}</span> seats are
+                taken.
+              </strong>{" "}
+              <span className="tabular">{seats.used}</span>{" "}
+              {seats.used === 1 ? "player" : "players"}
+              {seats.pending > 0 && (
+                <>
+                  {" "}
+                  and <span className="tabular">{seats.pending}</span> open{" "}
+                  {seats.pending === 1 ? "invitation" : "invitations"}
+                </>
+              )}
+              . Remove a player or revoke an invitation to free one — their
+              matches stay.
+            </span>
+            <span className="flex items-center gap-2.5">
+              <SeatBoxes seats={seats} full />
+              <span className="font-mono text-[11px] whitespace-nowrap text-[var(--danger)]">
+                {taken} / {seats.seats}
+              </span>
+            </span>
+          </span>
+        </div>
+      ) : (
+        <SeatNote
+          icon={<Users className="size-3.5" strokeWidth={1.5} aria-hidden />}
+          lead="Uses a seat."
+          seats={seats}
+          adding={1}
+          footnote="Matches you upload will credit you as the person who added them."
+        >
+          Every player on the roster holds one, with or without a login.
+          Claiming later changes nothing.
+        </SeatNote>
+      )}
     </RosterDialog>
   );
 }

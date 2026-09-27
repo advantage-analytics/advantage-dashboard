@@ -20,7 +20,7 @@ import {
   type Workspace,
 } from "@/lib/workspace/types";
 import { PANEL_WIDTH } from "./sidebar-state";
-import { RailTooltip } from "./rail-tooltip";
+import { RAIL_OFFSET, RailTooltip } from "./rail-tooltip";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 
 /**
@@ -121,7 +121,7 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
       aria-expanded={open}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="flex h-[42px] w-full cursor-pointer items-center overflow-hidden rounded-[8px] transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none"
+      className="flex h-10 w-full cursor-pointer items-center overflow-hidden rounded-[8px] transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none"
     >
       {/* Same 40px column as every nav row, so the mark does not move. */}
       <span className="flex size-10 shrink-0 items-center justify-center">
@@ -149,7 +149,7 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
 
       <ChevronsUpDown
         className={cn(
-          "mr-1 size-[13px] shrink-0 transition-[color,opacity] duration-200",
+          "mr-2.5 size-[13px] shrink-0 transition-[color,opacity] duration-200",
           hovered || open ? "text-[var(--ink-700)]" : "text-[var(--ink-400)]",
           expanded ? "opacity-100" : "opacity-0",
         )}
@@ -174,10 +174,11 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
 
       <PopoverContent
         // Collapsed, a 232px menu anchored under a 40px row would cover the
-        // rail it was opened from; beside it, the icons stay visible.
+        // rail it was opened from; beside it, the icons stay visible. The
+        // offset clears the rail edge by the same gap as `RailTooltip`.
         side={expanded ? "bottom" : "right"}
         align="start"
-        sideOffset={expanded ? 6 : 8}
+        sideOffset={expanded ? 6 : RAIL_OFFSET}
         style={{ width: PANEL_WIDTH }}
         className="rounded-[12px] border-[var(--border-medium)] p-1.5"
         onOpenAutoFocus={focusActiveRow}

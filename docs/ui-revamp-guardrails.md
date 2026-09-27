@@ -46,7 +46,12 @@ browser now cuts the selected window out of the athlete's own file before upload
 (a remux — `src/lib/video/trim.ts`), the job is sent as `StartTime 0 / EndTime =
 cut length`, and that file is what the film room plays
 (`src/lib/data/match-video-choice.ts`). It is still the match video, never a
-highlight.
+highlight. The cut is **not** written faststart — its `moov` follows the `mdat`,
+because Mediabunny's `'reserve'` mode needs a per-track packet count that a copy-only
+`Conversion` cannot supply and `'in-memory'` would hold the whole cut in memory (see the
+comment on `fastStart` in `src/lib/video/trim.worker.ts`), so every trimmed file on Azure
+keeps its metadata at the tail; an untrimmed original keeps whatever layout the camera
+wrote.
 
 ---
 
@@ -119,6 +124,21 @@ be. Doubles teams and existing users depend on it.
 > line with a saved outcome. Migration:
 > `supabase/migrations/20260913120000_attach_match_to_event_line.sql`.
 
+> **A one-off data repair, 2026-09-26: two `matches.result` captions.**
+>
+> Not a code path — a single hand-run `UPDATE`, approved by the owner in
+> session, recorded here so the rule's history stays complete. `matches.result`
+> is the caption over the score, not an outcome (`patch-match.ts` explains
+> why). An earlier version of the score-edit endpoint overwrote it with `win`,
+> and two SwingVision rows (`5b882f87-…`, `e4b2e025-…`) still carried that word,
+> which the matches gallery printed as "WIN" above the score. Their `result`
+> was reset to `player1_name || ' Wins'` — "Scott Watson Wins", the caption
+> SwingVision itself writes — guarded on `result = 'win'` and
+> `score.winner = 'player1'`, which both rows had. **Only** `result` changed;
+> never `score`, attribution, `program_id`, or anything under `match_stats`,
+> `points` or `shots`. Blank captions (`""`) were fixed in the read path
+> instead, not by rewriting rows. This is not a precedent for backfills.
+
 **These files are the integration, not UI.** Changing them to suit a layout is
 almost always the wrong fix:
 
@@ -127,7 +147,7 @@ src/app/api/webhooks/splitstep/route.ts     receives vendor deliveries
 src/app/api/splitstep/jobs/route.ts        wiring: clients, deps, the after() block
 src/app/api/splitstep/jobs/handler.ts      the decision: eligibility, quota, vendor
 src/app/api/splitstep/upload-url/route.ts  wiring: clients, deps, the blob-name write
-src/app/api/splitstep/upload-url/handler.ts  the decision: eligibility, then the SAS
+src/app/api/splitstep/upload-url/handler.ts  the decision: eligibility, a read-only allowance peek, then the SAS
 src/lib/services/splitstep/**              payload build, keys, quota, Azure
 supabase/migrations/**                     never edit an applied migration
 ```
@@ -138,6 +158,19 @@ call and the quota reservation can be stubbed in a test. If you are looking for
 where a request is _refused_, it is the handler. The split exists because Next
 reserves a route file's exports to the HTTP methods, so there was nowhere else
 to put a testable seam.
+
+> **User-approved exception, 2026-09-19: `upload-url/handler.ts` now peeks the
+> allowance before minting.** After the `explainVideoRefusal` check and before
+> `videoObjectKey()` / `mintUploadSas`, the handler reads
+> `processing_jobs.billable_seconds` for the match and calls `peekQuota()`
+> (`src/lib/services/splitstep/quota.ts`) for the billing workspace. A window
+> that will not fit answers 429 with `{ error, usedSeconds, capSeconds }`
+> before a credential is ever signed, so a doomed upload does not push
+> gigabytes to Azure only to be refused at `reserveQuota()` afterward. The
+> peek is a plain read — no insert, no lock — and fails open: a failed or
+> unreadable figure is logged and the handler proceeds to mint, because
+> `reserveQuota()` at `/api/splitstep/jobs` remains the sole authority and
+> still refuses at the spend either way.
 
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
@@ -300,10 +333,25 @@ window as `StartTime`; the vendor's reading of that case remains unconfirmed.
   **Done, September 2026:** the source is kept, cut to the selected window before
   upload, and the vendor's copy is no longer downloaded (§1). The
   `trimmedCopyStatus()` bug that sat here went with the copy.
-- **The untrimmed cost warning keys off the handles, not the cost.**
-  `untrimmed = duration > 0 && start <= 0 && end >= duration - 1`, so trimming 15
-  seconds off an 87-minute video suppressed a warning about spending 86 of 120
-  monthly minutes. Should warn on the _share of remaining quota_.
+- ~~**The untrimmed cost warning keys off the handles, not the cost.**~~
+  **Done, 2026-09-19:** the wizard now gates on remaining allowance instead —
+  `quotaRefusal()` (`new-match-wizard/validation.ts`) refuses Advantage
+  Intelligence at step 1 when this month's allowance is entirely gone
+  (`providerQuotaRefusal`, asked with `neededSeconds: 0`), and re-asks the
+  trimmed window's real cost on Continue at the trim step and again in
+  `handleCreateMatch`, using the same `billableSeconds()` figure
+  `createProcessingJob` is handed. Continue stays clickable — the refusal is
+  raised on click, not by disabling the button — and `handleTrimChange` clears
+  it as soon as the window moves. The footer meter (`FooterMeter.tsx`) turns
+  the pending segment and readout `--error` and prints "Over by x h" once the
+  selection exceeds what is left. All of it is advisory: `reserveQuota()` at
+  `/api/splitstep/jobs` is still the only refusal that spends nothing by
+  accident, and `/api/splitstep/upload-url` now backs it with a read-only
+  `peekQuota()` 429 before the SAS is minted (§2). One known gap: the
+  trim-step refusal is set on `error` but that state is currently rendered
+  only on the match-details step (`DetailsStepContent.tsx`), so an
+  over-allowance click on trim's Continue does not yet show a visible message
+  there — tracked as a follow-up, not fixed by this change.
 - **Land `plan-role-split`.** Migration `20260806144035` is applied in
   production — `users.plan` exists, is backfilled, and is trigger-protected — but
   no deployed code reads it. Stripe and the subscription page still use

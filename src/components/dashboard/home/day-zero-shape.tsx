@@ -18,9 +18,11 @@
  * 0.32 is the same number on every page for the same reason: three day zeros
  * that dim to three different greys read as three products.
  *
- * Home is deliberately NOT built on this — it fades its shape under a mask
- * gradient rather than a flat opacity, which is a real difference in that
- * layout, not drift.
+ * Both fades live here. `DayZeroShape` is the flat 0.32 form a card or a
+ * table takes; `DayZeroGrade` is the continuous grade a whole page takes,
+ * brightest under the offer and fading with distance. Same pairing, same
+ * `inert` + sentence contract — only the falloff differs, and it differs
+ * because a page-length tail banded at one opacity reads as two flat steps.
  */
 
 /**
@@ -47,6 +49,60 @@ export function DayZeroShape({
     <>
       <p className="sr-only">{description}</p>
       <div inert className={className} style={{ opacity: 0.32 }}>
+        {children}
+      </div>
+    </>
+  );
+}
+
+/**
+ * The mask both ends of the page-length grade are cut from.
+ *
+ * **It fades to 0.32, not to nothing.** That is the value the flat
+ * `DayZeroShape` sits at, so nothing at the foot of a graded page is fainter
+ * than it would have been drawn flat. It matters most for a page ending in
+ * an activity heatmap, whose empty cells are `#F2F2F2` — five per cent off
+ * white before any fade at all. A gradient running to transparent erased it
+ * once already.
+ */
+const DAY_ZERO_GRADE =
+  "linear-gradient(180deg, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.46) 40%, rgba(0,0,0,0.32) 100%)";
+
+/**
+ * The page-length form of the same shape: one continuous grade, not two flat
+ * steps.
+ *
+ * Regions used to carry a fixed opacity each, which is a banding rather than
+ * a fade — a page went 0.55, then a hard edge, then 0.32 for everything below
+ * regardless of how far down it sat. Matches has always graded properly (its
+ * five ghost rows step 1 → 0.3); this is the same idea applied to a page
+ * whose regions are cards rather than rows.
+ */
+export function DayZeroGrade({
+  description,
+  className,
+  children,
+}: {
+  /**
+   * What this page holds once it holds anything, and that nothing below is
+   * real. Worded per page — the mechanism is shared, the sentence is not.
+   */
+  description: string;
+  /** Layout for the graded block itself; the pages stack their own gaps. */
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <p className="sr-only">{description}</p>
+      <div
+        inert
+        className={className}
+        style={{
+          WebkitMaskImage: DAY_ZERO_GRADE,
+          maskImage: DAY_ZERO_GRADE,
+        }}
+      >
         {children}
       </div>
     </>

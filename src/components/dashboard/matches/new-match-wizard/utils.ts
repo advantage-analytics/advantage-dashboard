@@ -166,7 +166,9 @@ export function buildMatchData(
       ad_scoring: formData.adScoring ?? null,
       play_on_lets: formData.playOnLets,
     },
-    result: formData.result,
+    // The caption over the score ("X Wins", "Retired"), not an outcome. No
+    // caption is stored as null, never "": readers fall back to "Final Score".
+    result: formData.result || null,
     // Store the picked local date as the leading YYYY-MM-DD so it survives the
     // timestamptz round-trip (PostgREST returns timestamptz normalized to UTC, and the
     // heatmap buckets by date.slice(0,10)). getCurrentDate() already defaults this to
@@ -525,6 +527,28 @@ export function clearStorageData(): void {
  */
 export function formatHoursTenths(seconds: number): string {
   return (Math.max(0, seconds) / 3600).toFixed(1);
+}
+
+/**
+ * A span of allowance, either side of the line — "2 min", "45 min", "1.3 h".
+ *
+ * Minutes under an hour, because tenths of an hour cannot say a small number:
+ * two minutes rounds to "0.0 h", and a refusal whose own figures read as
+ * nothing is a refusal nobody believes. Never less than one minute, for the
+ * same reason. `long` is the spoken form for an `aria-label`.
+ *
+ * Used for BOTH figures in the over-allowance refusal — how far over the trim
+ * is, and how much is left — because a sentence that says "5 min over the
+ * 0.0 h left" contradicts itself in its own second clause.
+ */
+export function formatAllowanceSpan(seconds: number, long = false): string {
+  if (seconds < 3600) {
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    return long
+      ? `${minutes} ${minutes === 1 ? "minute" : "minutes"}`
+      : `${minutes} min`;
+  }
+  return `${formatHoursTenths(seconds)} ${long ? "hours" : "h"}`;
 }
 
 /**

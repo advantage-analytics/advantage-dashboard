@@ -36,7 +36,7 @@ const OPTIONS: {
     id: "coach",
     icon: Users,
     label: "I coach",
-    sub: "A roster of players, one shared budget.",
+    sub: "A roster of players, one shared allowance.",
   },
   {
     id: "junior",

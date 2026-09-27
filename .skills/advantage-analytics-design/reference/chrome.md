@@ -101,7 +101,11 @@ what is waiting on you. Rows: invitations (Accept as a two-step text action,
 plus Details), in-flight work (3px progress track, live sheen only while
 something is actually running, no ETA line — the bar is the estimate),
 failures (loss-red circle-x, bordered "Start over" — `analysisAction`'s
-word; there is no retry). Settled successes are not rows; the footer
+word; there is no retry), and — staff of a team workspace only — "<name>
+joined the team" (ink-400 `Users` glyph, role subline, opens the Roster;
+news, so it trails the waiting rows behind a hairline and never lights the
+dot). An invitation that answers the viewer's own join request reads "Your
+request to join <program> was approved" on the same row. Settled successes are not rows; the footer
 "Everything that finished" opens the matches list. A grey workspace chip in
 the header (`WorkspaceScopeChip`, shared with the search palette) names the
 scope; a tail row per other workspace says "N uploads running in X" behind a
@@ -186,12 +190,34 @@ Focus → "The underline opt-out").
 **Every confirmation is `ConfirmDialog`** (`ui/confirm-dialog.tsx`, 2026-09-13,
 in-repo — design owner's pick, direction B of the sign-out mock). This geometry
 at 440px on Radix `AlertDialog`: a question for a title ("Delete this match?"),
-the contract sentence under it, an optional body (`ConfirmList` for what it
+the contract sentence under it, an optional body (`ConfirmProse` for what it
 costs, `ConfirmNote` for one icon-led line, or a row showing the subject), the
 shared `DialogProblem` line for a failure, and the footer grammar above. The
 action is a verb that names its object ("Delete match", never "OK"). While it
 is pending, the spinner rides inside the action and Cancel, the X and Esc are
 all held.
+
+- **What a confirm costs is prose, never bullets** (2026-09-22, in-repo —
+  design owner's pick, direction C of the dialog-list mock). `ConfirmProse`:
+  at most two paragraphs at 12px/1.6 `--ink-700` (body-sm — the contract
+  sentence's size, so the body never outranks it), no fill behind them, with
+  two or three load-bearing nouns in `Em` (`--ink-900`, 500) and any line that
+  carries no consequence — where you land afterwards, how to come back — in
+  `ConfirmAside` at `--ink-500`. A bulleted list promises items the reader
+  will compare or count, and nobody compares consequences; they read for the
+  gist and press the button. Three short nouns are a sentence and need no body
+  at all (Delete match now has none). The cost is that each dialog's copy has
+  to be written rather than assembled from an array, which is the point.
+  _Supersedes (v3): "an optional body (`ConfirmList` for what it costs,
+  `ConfirmNote` for one icon-led line, or a row showing the subject)" — where
+  `ConfirmList` was a `--surface-subtle` tub of 11px middot bullets, hand-
+  copied into Leave team, Make owner and Remove player beside its two real
+  callers._
+- **Past two paragraphs, group instead of writing longer.** Facts that are
+  genuinely unrelated — five of them, half losses and half reassurances —
+  want two labelled runs ("You give up" / "Stays put"), not a third paragraph.
+  Nothing ships in that shape yet; Remove player and Make owner are where it
+  would land first.
 
 - **Red only when something is lost.** `tone="danger"` (`danger-solid`) for a
   match, an event, entered scores, unsaved edits. Anything else — signing out,

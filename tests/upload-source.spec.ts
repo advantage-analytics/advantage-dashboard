@@ -187,6 +187,7 @@ const stepModule = (() => {
       exports: floatMenu,
       require: (dep: string) => {
         if (dep === "react/jsx-runtime") return jsx;
+        if (dep === "react") return React;
         if (dep === "lucide-react") return icons;
         if (dep === "@/lib/utils") return { cn };
         if (dep === "@/components/ui/popover") return popover;
@@ -496,16 +497,20 @@ test("every default source is resolved by kind, so the order cannot change one",
     "utf8",
   );
 
-  // The two defaults are found by kind — never by index, never by name.
-  expect(hook).toMatch(
+  // The one default is found by kind — never by index, never by name. It
+  // lives beside the starting-source resolver (T5), which the hook imports.
+  const resolver = readFileSync(
+    resolve(`${WIZARD}/resolve-starting-provider.ts`),
+    "utf8",
+  );
+  expect(hook).toContain('from "./resolve-starting-provider"');
+  expect(resolver).toMatch(
     /DEFAULT_PROVIDER_ID[^=]*=\s*providers\.find\(\s*\(p\) =>\s*p\.available !== false && providerKindOrNull\(p\.id\) === "processing",/,
   );
-  expect(hook).toMatch(
-    /DEFAULT_IMPORT_PROVIDER_ID[^=]*=\s*providers\.find\(\s*\(p\) =>\s*p\.available !== false && providerKindOrNull\(p\.id\) === "import",/,
-  );
   expect(hook).not.toMatch(/providers\[\d+\]/);
+  expect(resolver).not.toMatch(/providers\[\d+\]/);
 
-  // What those two expressions resolve to, on the list as it is ordered now.
+  // What that expression resolves to, on the list as it is ordered now.
   const byKind = (kind: string) =>
     providers.find(
       (p) => p.available !== false && providerKindOrNull(p.id) === kind,
@@ -513,22 +518,25 @@ test("every default source is resolved by kind, so the order cannot change one",
   expect(byKind("processing")).toBe("splitstep");
   expect(byKind("import")).toBe("swing-vision");
 
-  // An import-only preset is handed the IMPORT provider — whose step order
-  // skips the video step, so the wizard never offers video for a line that
-  // `job-request.ts` would refuse after the upload.
-  expect(hook).toContain(
-    "preset.supportsVideo\n        ? DEFAULT_PROVIDER_ID\n        : DEFAULT_IMPORT_PROVIDER_ID",
-  );
+  // There is no second, import default for a preset any more. Doubles is
+  // score-only (2026-09-22): a doubles line is refused by
+  // `wizardUploadEligibility()` and never routed onto the import provider,
+  // and every preset opens on the one default source.
+  expect(hook).not.toContain("DEFAULT_IMPORT_PROVIDER_ID");
+  expect(hook).not.toMatch(/preset\.supportsVideo/);
+  expect(hook).toContain("setSelectedProvider(DEFAULT_PROVIDER_ID);");
   const order = readFileSync(resolve(`${WIZARD}/types.ts`), "utf8");
   const importOrder = /import:\s*\[([^\]]*)\]/.exec(order)?.[1] ?? "";
   expect(importOrder).not.toContain("video");
 
-  // An explicit answer still outranks the default: a link that named a source,
-  // a stored choice, and a resumed draft each set the provider themselves.
-  expect(hook).toContain("setSelectedProvider(initialProvider);");
-  expect(hook).toContain(
-    "setSelectedProvider(existingProvider as ProviderId);",
+  // An explicit answer still outranks the default: a resumed draft sets the
+  // provider itself, and a link and a stored choice are ranked above it by
+  // `resolveStartingProvider()` — whose order `upload-provider-preference.spec.ts`
+  // pins behaviourally.
+  expect(hook).toMatch(
+    /resolveStartingProvider\(\{\s*linked: initialProvider \?\? null,\s*stored: existingProvider,/,
   );
+  expect(hook).toContain("setSelectedProvider(startingProvider);");
   expect(hook).toContain("setSelectedProvider(draftProvider);");
 });
 

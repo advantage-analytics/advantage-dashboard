@@ -94,6 +94,7 @@ export async function loadHomeServes(
       serverIsPlayer1: pt.server_is_player1,
       firstShotLandingX: serve?.landing_x ?? null,
       firstShotLandingY: serve?.landing_y ?? null,
+      firstShotContactY: serve?.contact_y ?? null,
       firstShotZone: serve?.zone ?? null,
       firstShotSpin: serve?.spin_type ?? null,
       firstShotType: serve?.shot_type ?? null,

@@ -6,10 +6,9 @@ import {
   SKIP_REASON,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
 
 /**
  * Personal-workspace scoping on the dashboard home, proven against the live
@@ -46,11 +45,13 @@ import {
  *
  * This spec talks to the real Supabase project named in `.env.local` — the live
  * DB is this repo's only schema source of truth. Session plumbing (env loading,
- * skip guard, logins, auth-user cleanup) comes from `fixtures/live-db`; every
- * fixture row is created by the service-role client in `beforeAll` under a
- * per-run unique prefix and deleted in `afterAll` (matches first —
- * `matches.created_by` has no cascade, and `processing_jobs` hangs off the
- * match — then the program, then the auth users).
+ * skip guard) comes from `fixtures/live-db` and the athlete is a reused pool
+ * user from `fixtures/live-db-pool`; every fixture row is created by the
+ * service-role client in `beforeAll` under a per-run unique prefix and deleted
+ * by id in `afterAll` (jobs, then matches — `matches.created_by` has no
+ * cascade — then the membership, then the program). The pool user outlives
+ * the run, and every read below expects exactly this run's rows, so
+ * `beforeAll` first sweeps whatever an interrupted run left on it.
  *
  * Run on demand:  npx playwright test tests/personal-home-scope.spec.ts
  * (or the full suite via `npm run test`).
@@ -58,7 +59,10 @@ import {
 
 /** A crashed run is findable by hand:
  *  `select * from programs where program_key like 'home-scope-%'`. */
-const { mark: MARK, password: PASSWORD } = runMarker("home-scope");
+const { mark: MARK } = runMarker("home-scope");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = ["personal-home-scope-athlete"];
 
 test.describe("personal home scoping (live DB)", () => {
   // One worker, in order: every test reads the beforeAll fixture.
@@ -70,7 +74,6 @@ test.describe("personal home scoping (live DB)", () => {
   /** The athlete: owns a personal match AND a match filed under their program. */
   let athlete: Session;
 
-  const authUserIds: string[] = [];
   const programIds: string[] = [];
 
   let programId: string;
@@ -82,11 +85,27 @@ test.describe("personal home scoping (live DB)", () => {
 
     admin = createAdminClient();
 
-    [athlete] = await createLogins(admin, ["athlete"], {
-      mark: MARK,
-      password: PASSWORD,
-      authUserIds,
-    });
+    // Every assertion below is an exact list of this user's matches and jobs,
+    // so the reused user must own none going in: an interrupted run's rows
+    // would otherwise read as a leak. Jobs first, then the matches they hang
+    // off (`matches.created_by` has no ON DELETE either way).
+    const leftoverIds = await clearPoolLeftovers(admin, SLOTS);
+    if (leftoverIds.length > 0) {
+      const jobs = await admin
+        .from("processing_jobs")
+        .delete()
+        .in("created_by", leftoverIds);
+      if (jobs.error) throw new Error(`jobs sweep: ${jobs.error.message}`);
+      const matches = await admin
+        .from("matches")
+        .delete()
+        .in("created_by", leftoverIds);
+      if (matches.error) {
+        throw new Error(`matches sweep: ${matches.error.message}`);
+      }
+    }
+
+    [athlete] = await poolLogins(admin, SLOTS);
 
     const program = await admin
       .from("programs")
@@ -159,15 +178,19 @@ test.describe("personal home scoping (live DB)", () => {
     test.setTimeout(180_000);
     if (!admin) return;
 
-    // Matches first: created_by has no ON DELETE. processing_jobs cascades off
-    // the match, so it goes with them. Then the program, then the auth users.
-    if (authUserIds.length > 0) {
-      await admin.from("matches").delete().in("created_by", authUserIds);
+    // Jobs, then matches: created_by has no ON DELETE. Then the membership and
+    // the program. The pool user stays, so nothing here may lean on its delete.
+    if (athlete) {
+      await admin
+        .from("processing_jobs")
+        .delete()
+        .eq("created_by", athlete.userId);
+      await admin.from("matches").delete().eq("created_by", athlete.userId);
     }
     if (programIds.length > 0) {
+      await admin.from("program_members").delete().in("program_id", programIds);
       await admin.from("programs").delete().in("id", programIds);
     }
-    await deleteAuthUsers(admin, authUserIds);
 
     // Prove the teardown actually emptied: nothing under this run's marker may
     // survive. `programs` is the marker-bearing table; matches and jobs are

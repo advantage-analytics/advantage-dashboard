@@ -1,0 +1,38 @@
+<!-- C-no-film: extracted 2026-09-20 from Claude Design project afde9116… file `H1 - Handoff - Video tab in-shell.dc.html`. Inline SVG stripped. {{ }} bindings resolve against render-vals.txt. Reference only, never shipped. -->
+<section style="display:flex;flex-direction:column;align-items:flex-start">
+<span class="eyebrow">Phase 1 · C — When there is no film to watch</span>
+<div class="text-display" style="margin-top:16px;max-width:900px">Four headings, one shape.</div>
+<div class="text-body" style="margin-top:8px;max-width:960px;text-wrap:pretty">The tab's own refusals, as the components draw them today (<a href="13 Video tab - As built.dc.html#1c">1c</a>). One statement, one way onward, and a second button only where asking again could change the answer. The player, the point list and This point are all absent — not empty.</div>
+<div style="display:flex;flex-direction:column;gap:12px;margin-top:32px;width:1060px">
+<sc-for list="{{ refusals }}" as="x" hint-placeholder-count="4">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:center;box-sizing:border-box;width:1060px;padding:20px 24px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<div style="display:flex;flex-direction:column;gap:9px">
+<span style="font-size:16px;letter-spacing:-0.2px;color:var(--ink-900)">{{ x.head }}</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-600);max-width:72ch">{{ x.body }}</span>
+<div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+<span role="button" tabindex="0" style="display:inline-flex;height:32px;align-items:center;padding:0 14px;border:1px solid var(--border-field);border-radius:var(--radius-button);font:500 12px var(--font-sans);color:var(--ink-900);cursor:pointer" style-hover="background:var(--surface-subtle)">{{ x.ghost }}</span>
+<sc-if value="{{ x.hasPrimary }}" hint-placeholder-val="{{ yes }}">
+<span role="button" tabindex="0" style="display:inline-flex;height:32px;align-items:center;padding:0 14px;border-radius:var(--radius-button);background:var(--blue);font:500 12px var(--font-sans);color:#FFFFFF;cursor:pointer" style-hover="background:var(--blue-hover)">{{ x.primary }}</span>
+</sc-if>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">{{ x.when }}</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-600)">{{ x.note }}</span>
+</div>
+</div>
+</sc-for>
+<div style="display:flex;flex-direction:column;gap:10px;width:1060px;box-sizing:border-box;padding:18px 20px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<span class="eyebrow">Handoff notes</span>
+<div style="display:grid;grid-template-columns:62px minmax(0,1fr);column-gap:16px;row-gap:9px;align-items:baseline">
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Layout</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:104ch">Left-aligned, top-weighted in the pane — not a centred column, no icon. 16px heading, 12px body on 56ch, 32px buttons 12px apart. These are page conditions inside the report frame: the rail, the header and the view switcher all stay.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:104ch">"Try again" only on the two conditions a retry could change. Permission and detachment get one way back and no retry. The Video row in the report's view switcher stays selectable — the refusal belongs to this view, and the other two views still work.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Data</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:104ch">Condition resolved server-side before the player mounts, so no flash of a broken video element. Same four headings the fullscreen room uses (<span class="mono" style="font-size:11px">FS10</span>) — one copy table, two hosts.</span>
+</div>
+</div>
+</div>
+</section>
+

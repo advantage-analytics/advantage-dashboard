@@ -547,13 +547,28 @@ export async function inviteMember(input: {
    * "someone new" — acceptance mints a profile instead of claiming one.
    */
   playerId?: string | null;
+  /**
+   * The program to invite into, when it is not necessarily the active one —
+   * Settings › Teams lists every program the viewer belongs to. Omitted, the
+   * active workspace is used, which is what the Roster wants. Either way the
+   * RPC is the authority on who may invite whom.
+   */
+  programId?: string;
 }): Promise<InviteResult> {
-  const workspace = await getWorkspaceContext();
-  if (!workspace || workspace.active.kind !== "team") {
-    return { ok: false, error: NOT_IN_PROGRAM };
+  let active: Workspace;
+  let viewer: Viewer;
+  if (input.programId) {
+    const member = await memberWorkspace(input.programId);
+    if (!member) return { ok: false, error: NOT_A_MEMBER };
+    ({ program: active, viewer } = member);
+  } else {
+    const workspace = await getWorkspaceContext();
+    if (!workspace || workspace.active.kind !== "team") {
+      return { ok: false, error: NOT_IN_PROGRAM };
+    }
+    ({ active, viewer } = workspace);
   }
 
-  const { active, viewer } = workspace;
   const supabase = await createClient();
   const expiresAt = new Date(Date.now() + INVITE_TTL_HOURS * 60 * 60 * 1000);
 

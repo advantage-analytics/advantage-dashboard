@@ -24,6 +24,7 @@ import {
   MAX_PLAUSIBLE_X_M,
   MAX_PLAUSIBLE_Y_M,
 } from "./court";
+import { orderedBounceFrame } from "./frame-clock";
 import type {
   RawSplitStepStroke,
   SplitStepStroke,
@@ -32,7 +33,7 @@ import type {
 } from "./types";
 
 /** Numeric sentinel the vendor uses for "not measured". */
-const NUMERIC_SENTINEL = -9999;
+export const NUMERIC_SENTINEL = -9999;
 /** String sentinel the vendor uses for "not provided". */
 const STRING_SENTINEL = "None";
 
@@ -40,13 +41,24 @@ const STROKE_TYPES: readonly string[] = ["serve", "groundstroke", "volley"];
 const STROKE_SIDES: readonly string[] = ["forehand", "backhand", "overhead"];
 
 /** A numeric field, or null if it carries the sentinel or isn't finite. */
-function num(value: unknown): number | null {
+export function num(value: unknown): number | null {
   if (typeof value !== "number") return null;
   if (!Number.isFinite(value)) return null;
   // Compare with a tolerance: the sentinel appears as both -9999 and -9999.0,
   // and float round-tripping through JSON has been observed to shift it.
   if (Math.abs(value - NUMERIC_SENTINEL) < 1) return null;
   return value;
+}
+
+/**
+ * The bounce frame, or null when it is missing, non-finite, the sentinel, or
+ * earlier than the contact frame — `orderedBounceFrame` in frame-clock.ts,
+ * the same rule the trajectories file applies in ball-paths.ts. A bounce with
+ * no contact frame to anchor it is nulled too: nothing can order it, and the
+ * fit in frame-clock.ts would skip that stroke's pair anyway.
+ */
+function bounceFrame(value: unknown, frame: number | null): number | null {
+  return orderedBounceFrame(num(value), frame);
 }
 
 /** A string field, or null if it carries the sentinel or is blank. */
@@ -147,11 +159,13 @@ export function normalizeStroke(
   const bounce = position(raw.bounce_x_m, raw.bounce_y_m);
   const player = position(raw.player_x_m, raw.player_y_m);
   const opponent = position(raw.opponent_x_m, raw.opponent_y_m);
+  const frame = num(raw.frame);
 
   return {
     eventId: num(raw.event_id) ?? -1,
     videoTime: time + startTimeSeconds,
-    trimmedFrame: num(raw.frame) ?? -1,
+    trimmedFrame: frame ?? -1,
+    bounceFrame: bounceFrame(raw.bounce_frame, frame),
 
     rallyId,
     strokeNumber,

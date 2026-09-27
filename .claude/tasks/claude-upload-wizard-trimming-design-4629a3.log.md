@@ -1,0 +1,122 @@
+# Run log — claude/upload-wizard-trimming-design-4629a3
+
+Written by `/task-next`. Do not hand-edit — the queue file is yours, this one
+is the runner's. Newest entries at the bottom.
+
+## T1 · Score grid: Tab follows the digit path, new hint copy — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `ScoreBlock.tsx` — a plain Tab in a score cell now follows the digit path (player → opponent same set → player TB when the set went to a tiebreak → next set's player cell or the dashed add-set cell); tiebreak cells share one target with Enter (player TB → opponent TB → next set); Tab with nowhere to go and Shift/modifier+Tab are left to the browser. Hint line is now "Each digit moves to the next box · [tab] or [enter] leaves a tiebreak box" with Kbd chips at 11px/--ink-600. `tests/upload-score-regression.spec.ts` gains a browser test of the Tab path and its shared `setFormat` helper now targets `menuitemradio`.
+**follow-ups:**
+
+1. Six older tests in `tests/upload-score-regression.spec.ts` fail on stale selectors (`Ad`, `Best of 1` as buttons → `menuitemradio`), and the preset-mode test finds Continue disabled after the xlsx upload. The file only runs with WIZARD_REPRODUCTION_BASE_URL set, so `npm test` does not see it.
+2. The schedule's score page also renders `ScoreBlock`, so it inherits the Tab behaviour and hint line — worth a look.
+
+## T2 · Score caption: "How to enter a tiebreak" popover — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `ScoreBlock.tsx` — a "How to enter a tiebreak" text button (HelpCircle, 11px, --ink-600 → --ink-900) after the Score caption opens a 360px `floatMenuCls` popover, "Entering a tiebreak", with the two author-approved worked examples; mini boxes are aria-hidden spans stacked player over opponent (games box, then a blue-outlined TB box: 7·[7] / 6·[4] and 1·[10] / 0·[8]). Hidden when `gamesTo === 8` (doubles pro-set on the schedule score page). New offline spec `tests/upload-score-help.spec.ts` (3 tests).
+**follow-ups:**
+
+1. An 8-game pro-set still opens a TB box on a 9–8 score via `isTiebreakSet` — whether a pro-set should have one at all is an open question.
+2. Edit Match (`edit-match-score.tsx`) uses `ScoreInput` directly and does not get the tiebreak help.
+
+## T3 · Opponent naming hints under the name input and the selects — done
+
+**gate:** mechanical GATE PASS (first run failed only on the live-DB `match-video-attachments-db.spec.ts` cleanup test, unrelated to this diff; the re-run passed) · completion VERDICT: pass
+**changed:** `DetailsStepContent.tsx` — while naming the opponent, the line under the name input is now a `enter` Kbd chip + "to add them" (11px, --ink-600), replacing "Hand and backhand after the name"; a new line under the two disabled selects (`sm:col-span-2 sm:col-start-2`) reads "Hand and backhand open once the opponent is added." and disappears once an opponent is set. `tests/upload-player-details.spec.ts` gains source assertions for both strings and the removed one.
+
+## T4 · Subject bar on steps 2–4 for non-preset flows — blocked
+
+**gate:** mechanical GATE FAIL (lint and typecheck clean; `npm test` failed) · completion not run
+**reason:** the failures are live-database specs timing out (`57014 canceling statement due to statement timeout`) — 11 failures on the first full run, a different set of live specs on a targeted re-run (admin-conferences-rpcs, match-video-attachments-db, point-bookmarks-db, program-owner-name-live, rls-workspace-isolation, saved-views-rls, teams-management, viz-bands-rls). None touch T4's files (SubjectBar.tsx, UploadMatchFlow.tsx, wizard-view.ts, tests/upload-subject-bar.spec.ts), and the new spec passed 3/3. Most likely the shared Supabase project was overloaded; blocked under the fail-closed rule rather than waved through.
+**stash:** 4227c33619216c24a5ed000287a24cf467f955be — to retry: `git stash apply 4227c336`, reset T4's status to `todo`, re-run the gate once the live specs are healthy.
+**implementer notes:** "For" is 11px `--ink-500` (canvas) rather than the 12px the criterion implies; `wizard-view.ts` changed type-only (`subjectFirstNameOf` takes `Pick<WhoPlayed, "subject">`); an empty roster name falls back to "Not them?".
+
+## T6 · Investigate what survives a PinnedLineBar line swap — blocked
+
+**gate:** not reached — the implementer subagent (model: fable) terminated before doing any work: API rate limit, "You've reached your Fable limit" (HTTP 429).
+**stash:** no stash — the task produced no changes
+**retry:** reset T6 to `todo` once Fable usage is available again; the task routing is unchanged. Pre-dispatch probe this run: the load-sensitive live spec `match-video-attachments-db.spec.ts:2708` failed under a multi-spec run but passed twice alone.
+
+## T4 · Subject bar on steps 2–4 for non-preset flows — done
+
+**gate:** mechanical GATE PASS (retry of the blocked run from stash 4227c336, applied by the author; first re-run failed only on live-DB specs `program-member-avatars.spec.ts:90` and `program-owner-name-live.spec.ts:176`, the second passed) · completion VERDICT: pass
+**changed:** New `SubjectBar.tsx` — a PinnedLineBar-shaped bar ("For <name> | <Users> <workspace label> … Not <first>?" / "Not you?") read from `whoPlayed.subject`, rendering nothing without a roster subject. `UploadMatchFlow.tsx` puts it in `WizardShell`'s `pinned` slot for team, non-preset flows past step 1; `onNotSubject` is wired to `handleBack` with a `// T5` note for the dialog swap. `wizard-view.ts`: `subjectFirstNameOf` takes `Pick<WhoPlayed, "subject">` (type-only). New offline spec `tests/upload-subject-bar.spec.ts` (3 tests).
+**follow-ups:**
+
+1. An empty roster name falls back to "Not them?" — cannot happen today, but the copy may want a design call.
+
+## T5 · "Start over with a different player?" dialog and the hook's start-over reset — blocked
+
+**gate:** mechanical GATE FAIL twice (lint and typecheck clean; `npm test` failed only on live-DB specs — 7 then 9, a different set each run: match-video-attachments-db, pending-invites, personal-home-scope, program-owner-name-live, rls-workspace-isolation, saved-views-rls, seats-count-players, claim-eyebrow-width). Everything outside the live specs passed: `npx playwright test --grep-invert "\(live"` → 2759 passed, 0 failed. Completion review not run.
+**model:** ran on opus at the author's explicit request (task is routed fable; Fable usage limit reached).
+**stash:** f66eb0deaf060c90e8f107b162fbffd08c6dc85f — to retry: `git stash apply f66eb0de`, reset T5's status, re-run the gate.
+**implementer notes:** pipeline-guardrails-reviewer returned PASS (report at docs/investigations/2026-09-23-start-over-guardrails-review.md, in the stash). Beyond `files:`: `useWizardKeys.ts` ignores Esc/Enter while an open dialog is on the page (also fixes the existing "Remove entered set scores?" dialog); `handleFileContinue` restores a whole-recording trim window for a kept video after a start-over; `startOver` also drops a lineup slot attached on the details step. SwingVision imports keep plain Back with no dialog — an author decision is pending on an import version. Cancel label is "Keep <first name>" even in the "Not you?" case.
+
+## T5 · "Start over with a different player?" dialog and the hook's start-over reset — done
+
+**gate:** mechanical GATE PASS (retry of the blocked run from stash f66eb0de, applied by the author) · completion VERDICT: pass
+**changed:** `useUploadMatchWizard.ts` — new `startOver()`: back to the first step, subject cleared (null only), identity answer, error and top-player staleness baseline reset, exactly the 23 `START_OVER_FIELDS` back to defaults (camera answers to `undefined`), the video file, provider and match facts kept, and an attached lineup slot dropped; `handleFileContinue` restores a whole-recording trim window for a kept file. New `StartOverDialog.tsx` (ConfirmDialog, tone danger, approved step-3/step-4 copy, "Keep <first name>" / "Start over"); `UploadMatchFlow.tsx` opens it from the subject bar on the trim and details steps of processing uploads, step 2 keeps plain Back. `useWizardKeys.ts` ignores Esc/Enter while an open dialog is on the page (also fixes "Remove entered set scores?"). New `tests/upload-start-over.spec.ts`, extended `tests/upload-subject-bar.spec.ts`, guardrails review (PASS) at `docs/investigations/2026-09-23-start-over-guardrails-review.md`. Ran on opus at the author's request.
+**follow-ups:**
+
+1. A browser check of the dialog — Esc, and focus returning to "Not Marcus?" after Cancel.
+2. The subject bar's "Not them?" fallback has no matching dialog wording (unreachable today).
+
+## T6 · Investigate what survives a PinnedLineBar line swap — blocked
+
+**gate:** mechanical GATE FAIL twice (lint and typecheck clean; `npm test` failed only on live-DB specs — 4, then 1: `claim-eyebrow-width.spec.ts:153`, which passes 3/3 run alone). Completion review not run. Ran on opus (author re-route).
+**stash:** bd6de1b365e49369c9e9726ce014b85562b081a8 — to retry: `git stash apply bd6de1b3`, reset T6's status, re-run the gate.
+**implementer notes:** carry-over confirmed and fix shipped in the stash: on a real line change (new `entryId ?? matchId`) the seed effect now clears `initialTopPlayerIsPlayer1` (to undefined), both players' hand/backhand/`*StyleSource`, `opponentPlayerId`, both tiebreak arrays, and re-arms the top-player baseline; `fixedCamera` and the trim window are kept; first seed and draft resume unchanged. Two residual defects documented with `test.fail()`: a courtside score from line A survives a swap to a line with none (product decision), and a draft-resumed flow re-applies the draft on every swap. Findings at docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md; new tests/upload-line-swap.spec.ts (11 tests).
+**follow-ups:**
+
+1. A line swap drops the picked video (an effect keyed on `preset?.entryId`, ~line 1020) although `UploadMatchFlow.tsx` and `types.ts` comments say the file stays — fix one or the other.
+2. A singles ↔ doubles line swap is untested; the progress step count is set only on the first seed.
+
+## T7 · SwingVision "Not <name>?" clears only player fields, no dialog, straight to step 1 — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `useUploadMatchWizard.ts` — new `resetImportPlayerAnswer()`: back to the first step, `playerHand`/`playerBackhand`/`playerStyleSource` to defaults, the import identity answer reset, and the shared `error` cleared (as `handleBack` and `startOver` do); no subject write, no other form field touched. `UploadMatchFlow.tsx` — `onNotSubject` calls it for import providers, video uploads keep T5's wiring. New `tests/upload-import-not-subject.spec.ts` (2 tests: the reset, and hand-typed opponent/score surviving it).
+**follow-ups:**
+
+1. Nothing tests the `UploadMatchFlow` wiring itself; a small render test with a SwingVision provider could click "Not <name>?" and assert no dialog opens.
+
+## T6 · Investigate what survives a PinnedLineBar line swap — done
+
+**gate:** mechanical GATE PASS (retry of the blocked run from stash bd6de1b3) · completion VERDICT: pass
+**changed:** `useUploadMatchWizard.ts` — the preset seed effect detects a real line change (new `entryId ?? matchId`) and then resets `LINE_SWAP_FIELDS`: `initialTopPlayerIsPlayer1` (to undefined), both players' hand/backhand/`*StyleSource`, `opponentPlayerId`, both tiebreak arrays, and re-arms the top-player baseline; `fixedCamera` and the trim window are kept; first seed and draft resume unchanged. `PinnedLineBar.tsx` header says what a swap clears and keeps (and that the picked file is currently dropped). New `tests/upload-line-swap.spec.ts` (11 tests, 2 `test.fail()` for documented residual defects) and findings at `docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md`.
+**follow-ups:**
+
+1. Keep the picked video on a line swap (author decision 2026-09-23: keep) — the effect keyed on `preset?.entryId` drops it today.
+2. Clear a line-A score on a swap unless it was typed in this wizard (author decision 2026-09-23).
+3. Draft-resumed flows re-apply the draft on every swap.
+4. A singles ↔ doubles line swap is untested.
+
+## T8 · Line swap keeps the picked video and clears line A's recorded score — done
+
+**gate:** mechanical GATE PASS (first run failed only on the load-sensitive live spec `match-video-attachments-db.spec.ts:2708`; the re-run passed) · completion VERDICT: pass
+**changed:** `useUploadMatchWizard.ts` — the file-reset effect is keyed on `preset?.eventId` instead of `entryId`, so a same-event line swap keeps the file, probe and trim window; a new `seededPresetRef` + `isSeededScore` clears the score, `numberOfSets`, `result` and `retiredSide` on a swap only when the form's games still equal line A's recorded score (a typed score stays); a swap across source kinds (`supportsVideo` changes, singles ↔ doubles) still drops the file. Comments in `PinnedLineBar.tsx` and `types.ts` updated; the investigation doc marks the file drop and "Not fixed" #1 resolved. `tests/upload-line-swap.spec.ts` now 16 tests (the draft-resume `test.fail` stays).
+**follow-ups:**
+
+1. The source-kind file drop was added beyond the task's scope note (singles↔doubles was out of scope) — the reviewer flagged it for `/pr-check`'s design/correctness pass.
+2. A draft-resumed flow still re-applies the draft on every swap ("Not fixed" #2).
+3. On a singles↔doubles swap the progress step count is set only on the first seed, and the dropped file leaves `videoProbe` and the trim window behind.
+
+## T9 · "Looks like" offer needs the opponent name or the score, not just the date — done
+
+**gate:** mechanical GATE PASS (first run) · completion VERDICT: pass
+**changed:** `LineOffer` gains optional `score` (games only) and `daysFromFile`, filled by `offerFor`/`findLineOffers` (window, inputs and filters unchanged). New pure `offer-match.ts` `rankLineOffers` keeps only opponent-name (`normalizedPersonName` equality, both non-blank) or score matches, ordered name > score > days; a scored line with no games never counts as a score match. The score comparison moved to `score-state.ts` `sameRecordedScore`, shared with the line-swap clear in `useUploadMatchWizard.ts`. `DetailsStepContent.tsx` memoizes the ranked offer on opponent name + scores with no new query; an attached line still wins. New `tests/upload-line-offers.spec.ts`.
+**follow-ups:**
+
+1. The strip could say why a line was offered (name or score), so a score-only offer is easier to trust.
+2. After Detach the strip may not return if the restored opponent name no longer matches (accepted by the author).
+
+## T10 · Leave-mid-upload dialog on dashboard chrome links — done
+
+**gate:** mechanical GATE PASS (first run) · completion VERDICT: pass
+**changed:** New pure `leave-guard.ts` (`shouldAskBeforeLeaving`, `leaveConfirmLabel`) and `leave-guard-context.tsx` (`LeaveGuardProvider` with an armed count, `useLeaveGuard`, `useConfirmLeave`, `LeaveUploadDialog`), mounted in `dashboard-shell.tsx` inside `UnsavedChangesProvider`. `UploadMatchSuccess` arms it with `view.busy`. Sidebar main/bottom links, the profile footer ("your profile"), header breadcrumbs and account-menu Preferences/Usage/Help route through it; `RailItem.onClick` now receives the event. New `tests/upload-leave-guard.spec.ts`.
+**follow-ups:**
+
+1. Nobody has seen the dialog in a real browser yet (sidebar click mid-upload, account menu closing behind it).
+2. The profile footer's button reads "Go to your profile"; the viewer's name is the alternative.
+3. Still unguarded by design: browser Back/Forward, search palette, activity tray, workspace switcher, "Claim a team", and a sidebar click on a Settings page with unsaved changes.

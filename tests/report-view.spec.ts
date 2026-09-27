@@ -4,6 +4,7 @@ import {
   REPORT_VIEWS,
   parseReportView,
   reportViewQuery,
+  resolveDefaultView,
 } from "@/components/dashboard/matches/match-detail/report-view";
 
 /**
@@ -64,5 +65,51 @@ test.describe("reportViewQuery", () => {
     const current = new URLSearchParams("set=2");
     reportViewQuery(current, "film");
     expect(current.toString()).toBe("set=2");
+  });
+});
+
+/**
+ * Settings › Preferences › "Match report opens at" supplies the default view.
+ * A URL without `?tab=` opens there; a URL that names a view still wins.
+ */
+test.describe("default view from the preference", () => {
+  test("an absent or unknown tab reads as the saved default", () => {
+    for (const raw of [null, "", "Shots", "stats", "story"]) {
+      expect(parseReportView(raw, "film")).toBe("film");
+    }
+  });
+
+  test("an explicit tab beats the default, statistics included", () => {
+    expect(parseReportView("statistics", "film")).toBe("statistics");
+    expect(parseReportView("shots", "film")).toBe("shots");
+  });
+
+  test("selecting the default view clears the tab parameter", () => {
+    expect(
+      reportViewQuery(
+        new URLSearchParams("tab=statistics&set=2"),
+        "shots",
+        "shots",
+      ),
+    ).toBe("set=2");
+  });
+
+  test("statistics is written out when it is not the default", () => {
+    // Otherwise a reload would drop the reader back on their saved view.
+    expect(
+      reportViewQuery(new URLSearchParams("tab=film"), "statistics", "film"),
+    ).toBe("tab=statistics");
+  });
+});
+
+test.describe("resolveDefaultView", () => {
+  test("a saved Video preference opens at Statistics when there is no video", () => {
+    expect(resolveDefaultView("film", false)).toBe("statistics");
+    expect(resolveDefaultView("film", true)).toBe("film");
+  });
+
+  test("the other views never depend on video", () => {
+    expect(resolveDefaultView("shots", false)).toBe("shots");
+    expect(resolveDefaultView("statistics", false)).toBe("statistics");
   });
 });

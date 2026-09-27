@@ -216,6 +216,39 @@ export async function addTeamToConference(
   return { ok: true };
 }
 
+export type ConferenceIdResult =
+  { ok: true; id: string } | ConferenceActionError;
+
+/**
+ * A conference's id from its `label` — the bridge between
+ * `conferenceOptionsFor()`, which lists labels (the string
+ * `programs.conference` mirrors), and `addTeamToConference()`, which takes an
+ * id. `conferences_label_key` is unique and case-sensitive, so an exact match
+ * resolves to exactly one row or none.
+ */
+export async function conferenceIdForLabel(
+  label: string,
+): Promise<ConferenceIdResult> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const missing = "That conference no longer exists.";
+  if (!label) return { ok: false, error: missing };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("conferences")
+    .select("id")
+    .eq("label", label)
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, error: "Couldn't look up that conference." };
+  }
+  const id = (data as { id: string } | null)?.id;
+  return id ? { ok: true, id } : { ok: false, error: missing };
+}
+
 /** The drawer's Teams section — a read, so no revalidation. */
 export async function loadConferenceTeams(
   conferenceId: string,

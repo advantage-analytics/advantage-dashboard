@@ -101,3 +101,37 @@ export async function getPendingInvites(
 ): Promise<PendingInvite[]> {
   return (await loadPendingInvites(supabase)) ?? [];
 }
+
+/**
+ * Which of these invitations answered the viewer's own join request.
+ *
+ * An approval is minted as an ordinary invitation, so `program_invites` cannot
+ * tell the two apart — `user_notifications` can: `resolve_program_join_request`
+ * relabels the notice when staff approve. RLS scopes the read to the caller's
+ * own notices, so the ids passed in narrow the answer and never widen it.
+ *
+ * Only the header tray reads this, which is why it is not a field on
+ * `PendingInvite`: every other reader of that type would carry it for nothing.
+ * Never fatal — on a failed read the row simply says "Invitation to".
+ */
+export async function getApprovedInviteIds(
+  supabase: SupabaseClient,
+  inviteIds: readonly string[],
+): Promise<string[]> {
+  if (inviteIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("user_notifications")
+    .select("invite_id")
+    .eq("kind", "join_request.approved")
+    .in("invite_id", inviteIds);
+
+  if (error) {
+    console.error("[invites] could not load approval notices", {
+      message: error.message,
+    });
+    return [];
+  }
+
+  return (data ?? []).map((row) => row.invite_id as string);
+}

@@ -38,8 +38,14 @@ import { workspaceTitle } from "@/lib/workspace/types";
 import { WorkspaceOptionList } from "@/components/dashboard/workspace-switcher";
 import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 import { HeaderGreeting } from "@/components/dashboard/header-greeting";
+import { BetaHeaderMeter } from "@/components/dashboard/beta-header-meter";
 import { MENU_ROW_CLASS, MENU_RULE_CLASS } from "@/lib/ui/menu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
+import { useConfirmLeave } from "@/components/dashboard/leave-guard-context";
 
 interface MatchCrumb {
   tournamentName: string;
@@ -175,6 +181,13 @@ export function Header({
   const requestLogout = useRequestLogout();
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  // Breadcrumbs and the account menu ask first while an upload screen is busy.
+  const guardLeave = useConfirmLeave();
+  /** A menu link: when the guard takes the click, the menu gives way to it. */
+  const guardMenuLink =
+    (href: string, label: string) => (event: React.MouseEvent) => {
+      if (guardLeave(event, href, label)) setIsProfileOpen(false);
+    };
   const [matchCrumb, setMatchCrumb] = useState<MatchCrumb | null>(null);
   const [matchCrumbLoading, setMatchCrumbLoading] = useState(false);
   const [isMac, setIsMac] = useState<boolean | null>(null);
@@ -424,21 +437,24 @@ export function Header({
           )}
 
           {isMatchDetailPage && matchCrumbLoading && !matchCrumb && (
-            <div className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-14 animate-pulse rounded bg-[var(--ink-100)]" />
+            <PendingRegion
+              label="breadcrumb"
+              innerClassName="flex items-center gap-1.5"
+            >
+              <PendingBar className="h-3 w-14 rounded" />
               <ChevronRight
                 className="h-3 w-3 shrink-0 text-[#CCCCCC]"
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
-              <span className="inline-block h-3 w-24 animate-pulse rounded bg-[var(--ink-100)]" />
+              <PendingBar className="h-3 w-24 rounded" />
               <ChevronRight
                 className="h-3 w-3 shrink-0 text-[#CCCCCC]"
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
-              <span className="inline-block h-3 w-32 animate-pulse rounded bg-[var(--ink-100)]" />
-            </div>
+              <PendingBar className="h-3 w-32 rounded" />
+            </PendingRegion>
           )}
 
           {breadcrumbs.length > 0 &&
@@ -459,6 +475,9 @@ export function Header({
                     {crumb.href ? (
                       <Link
                         href={crumb.href}
+                        onClick={(event) =>
+                          guardLeave(event, crumb.href!, crumb.label)
+                        }
                         className="shrink-0 text-[#888888] transition-colors duration-200 hover:text-[#525252]"
                       >
                         {crumb.label}
@@ -481,7 +500,7 @@ export function Header({
             )}
         </div>
 
-        {/* Right: page status + search + activity + profile.
+        {/* Right: page status + beta + search + activity + profile.
 
             One TooltipProvider around the cluster rather than one per control:
             it owns the skip-delay timer, so moving from Search to Activity
@@ -495,6 +514,10 @@ export function Header({
                 {headerStatus}
               </span>
             )}
+            {/* The way back to the beta terms, with this month's video hours
+                left. Leads the controls because it is the account's standing,
+                not a tool. */}
+            <BetaHeaderMeter />
             {/* Named, not just an icon — a bare magnifier does not say what it
                 searches, and the palette covers matches, players and help.
 
@@ -626,6 +649,10 @@ export function Header({
 
                 <Link
                   href="/dashboard/settings/preferences"
+                  onClick={guardMenuLink(
+                    "/dashboard/settings/preferences",
+                    "Preferences",
+                  )}
                   className={MENU_ROW_CLASS}
                 >
                   <SlidersHorizontal
@@ -637,6 +664,7 @@ export function Header({
                 </Link>
                 <Link
                   href="/dashboard/settings/usage"
+                  onClick={guardMenuLink("/dashboard/settings/usage", "Usage")}
                   className={MENU_ROW_CLASS}
                 >
                   <Timer
@@ -646,7 +674,11 @@ export function Header({
                   />
                   Usage &amp; quota
                 </Link>
-                <Link href="/dashboard/help" className={MENU_ROW_CLASS}>
+                <Link
+                  href="/dashboard/help"
+                  onClick={guardMenuLink("/dashboard/help", "Help")}
+                  className={MENU_ROW_CLASS}
+                >
                   <CircleHelp
                     className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}

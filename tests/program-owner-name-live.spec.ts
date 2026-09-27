@@ -8,10 +8,13 @@ import {
   SUPABASE_URL,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import {
+  POOL_USER_DEFAULTS,
+  clearPoolLeftovers,
+  poolLogins,
+} from "./fixtures/live-db-pool";
 
 /**
  * The claim flow's owner name, proven against the live database.
@@ -49,11 +52,12 @@ import {
  * `join-requests-staff-read.spec.ts` and `pending-invites.spec.ts` own the
  * projections that would leak them.
  *
- * Session plumbing (env loading, skip guard, logins, auth-user cleanup) comes
- * from `fixtures/live-db`: every row is created by the service-role client in
- * `beforeAll` under a per-run marker
+ * Session plumbing (env loading, skip guard) comes from `fixtures/live-db` and
+ * the login is a reused pool user from `fixtures/live-db-pool`: every row is
+ * created by the service-role client in `beforeAll` under a per-run marker
  * (`select * from programs where program_key like 'own-name-%'` finds a
- * crashed run) and deleted in `afterAll`. The two reads themselves go through
+ * crashed run) and deleted by id in `afterAll`, which also puts the user's
+ * name back — the user outlives the run. The two reads themselves go through
  * an anon client, never the service role — anonymous is the caller these
  * functions were granted to, and the one the claim flow actually has.
  *
@@ -65,7 +69,10 @@ import {
 // Fixture — one login, one claimed college program it owns.
 // ---------------------------------------------------------------------------
 
-const { mark: MARK, password: PASSWORD } = runMarker("own-name");
+const { mark: MARK } = runMarker("own-name");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = ["program-owner-name-live-owner"];
 
 // Deliberately not title case, and deliberately not derivable from an
 // abbreviation of itself.
@@ -82,7 +89,6 @@ test.describe("claim-flow owner name (live DB)", () => {
   let anon: SupabaseClient;
 
   let owner: Session;
-  const authUserIds: string[] = [];
   let programId: string;
 
   const programKey = `${MARK}-mens`;
@@ -99,14 +105,13 @@ test.describe("claim-flow owner name (live DB)", () => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    [owner] = await createLogins(admin, ["owner"], {
-      mark: MARK,
-      password: PASSWORD,
-      authUserIds,
-    });
+    // A crashed run's program is owned by the pool user, so the pool sweep
+    // takes it; the name it wrote is put back by the pool's reset.
+    await clearPoolLeftovers(admin, SLOTS);
+    [owner] = await poolLogins(admin, SLOTS);
 
-    // The `handle_new_user` trigger already inserted the `public.users` row on
-    // the auth insert, so the names are an update, not an insert.
+    // The pool user's `public.users` row already exists, so the names are an
+    // update, not an insert.
     const named = await admin
       .from("users")
       .update({ first_name: FIRST_NAME, last_name: LAST_NAME })
@@ -150,12 +155,22 @@ test.describe("claim-flow owner name (live DB)", () => {
     test.setTimeout(180_000);
     if (!admin) return;
 
-    // Program first: owner_user_id is ON DELETE SET NULL, so deleting the auth
-    // user would orphan the row rather than take it with it.
+    // By id: the owner is a pool user that outlives the run, so nothing
+    // would take the program with it.
     if (programId) {
       await admin.from("programs").delete().eq("id", programId);
     }
-    await deleteAuthUsers(admin, authUserIds);
+    // The name goes back too. The pool's reset would do it on the next
+    // hand-out, but the fixture name is this file's to clear.
+    if (owner) {
+      await admin
+        .from("users")
+        .update({
+          first_name: POOL_USER_DEFAULTS.first_name,
+          last_name: POOL_USER_DEFAULTS.last_name,
+        })
+        .eq("id", owner.userId);
+    }
   });
 
   test("program_public_status returns the owner's full name, not an initialled surname", async () => {

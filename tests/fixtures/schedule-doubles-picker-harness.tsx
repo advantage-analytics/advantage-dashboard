@@ -9,6 +9,7 @@ import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { LineupLine } from "@/lib/schedule/types";
 import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-choice";
 import { applySinglesOrder } from "@/lib/schedule/singles-order";
+import { applyDoublesOrder } from "@/lib/schedule/doubles-order";
 
 const ladder: LadderPlayer[] = [
   {
@@ -88,6 +89,30 @@ const initialLines: LineupLine[] = [
   },
 ];
 
+/**
+ * `?free=1` settles nothing on doubles — D3 is not played — and puts a pair on
+ * D1, so all three doubles pairs can be dragged. Without it D3 is settled (the
+ * `?locked` case), which freezes the doubles block into plain rows.
+ */
+const FREE = new URLSearchParams(window.location.search).get("free") !== null;
+
+function seededLines(): LineupLine[] {
+  const params = new URLSearchParams(window.location.search);
+  const lines = params.get("s2")
+    ? [initialLines[0], S2_LINE, ...initialLines.slice(1)]
+    : initialLines;
+  if (!FREE) return lines;
+  return lines.map((line) =>
+    line.key === "D1"
+      ? {
+          ...line,
+          ourIds: ["riley-chen", "drew-park"],
+          ourLabels: ["Riley Chen", "Drew Park"],
+        }
+      : line,
+  );
+}
+
 declare global {
   interface Window {
     doublesSelections: { key: string; ids: string[]; labels: string[] }[];
@@ -97,15 +122,11 @@ declare global {
 window.doublesSelections = [];
 
 function Harness() {
-  const [lines, setLines] = useState(() =>
-    new URLSearchParams(window.location.search).get("s2")
-      ? [initialLines[0], S2_LINE, ...initialLines.slice(1)]
-      : initialLines,
-  );
+  const [lines, setLines] = useState(seededLines);
   const scope = useRef<HTMLDivElement>(null);
   const outcome = new URLSearchParams(window.location.search).get("outcome");
   const locked = {
-    D3: "played" as const,
+    ...(FREE ? {} : { D3: "played" as const }),
     ...(outcome
       ? {
           S1: resultLabelFromOutcome({
@@ -215,6 +236,9 @@ function Harness() {
           }
           onSinglesOrder={(order) =>
             setLines((current) => applySinglesOrder(current, order, locked))
+          }
+          onDoublesOrder={(order) =>
+            setLines((current) => applyDoublesOrder(current, order, locked))
           }
         />
       </div>

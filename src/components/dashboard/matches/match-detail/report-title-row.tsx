@@ -29,9 +29,11 @@ export function MatchReportTitleRow({ children }: { children: ReactNode }) {
  * the active view — "Statistics", "Visualizations" or "Video" — from
  * `REPORT_VIEWS`, so it can never disagree with the rail switcher's row.
  *
- * `.text-display` is the frame's 30px / 300 / 36px line / −0.6px and already
- * paints ink-900, so nothing is restated here; the class is unlayered and
- * would beat a utility anyway.
+ * `.text-title-lg` is 24px / 300 and already paints ink-900 — the same size as
+ * Team Home's "Team season" title (`team-season-title.tsx`), so the two
+ * dashboards' page titles read alike. Team Home overrides the class's −0.4px
+ * tracking to −0.3px inline (the class is unlayered, so a utility would lose),
+ * and this does the same.
  */
 export function MatchReportTitle() {
   const { state } = useMatchReport();
@@ -39,7 +41,14 @@ export function MatchReportTitle() {
     REPORT_VIEWS.find((view) => view.value === state.view)?.label ??
     REPORT_VIEWS[0].label;
 
-  return <h1 className="text-display whitespace-nowrap">{label}</h1>;
+  return (
+    <h1
+      className="text-title-lg whitespace-nowrap"
+      style={{ letterSpacing: "-0.3px" }}
+    >
+      {label}
+    </h1>
+  );
 }
 
 /**

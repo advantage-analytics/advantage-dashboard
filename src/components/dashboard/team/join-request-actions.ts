@@ -30,8 +30,22 @@ import type { DbJoinRequestRow } from "@/lib/data/join-requests-server";
 
 const ROSTER_PATH = "/dashboard/team/roster";
 
+/** Decline — close the request with nothing sent. */
 export async function resolveJoinRequest(
   requestId: string,
+): Promise<ActionResult> {
+  return closeJoinRequest(requestId, false);
+}
+
+/**
+ * Not exported, so not a server action: whether a request was approved is
+ * decided by `approveJoinRequest` having minted the invite, never by an
+ * argument a browser can set. The database uses it to label the player's
+ * notice "approved" and to write the right audit row.
+ */
+async function closeJoinRequest(
+  requestId: string,
+  approved: boolean,
 ): Promise<ActionResult> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") {
@@ -44,6 +58,7 @@ export async function resolveJoinRequest(
   const supabase = await createClient();
   const { error } = await supabase.rpc("resolve_program_join_request", {
     p_request_id: requestId,
+    p_approved: approved,
   });
 
   if (error) {
@@ -123,7 +138,7 @@ export async function approveJoinRequest(
   // list that still says they are waiting.
   if (!invite.ok) return invite;
 
-  const resolved = await resolveJoinRequest(requestId);
+  const resolved = await closeJoinRequest(requestId, true);
   if (!resolved.ok) {
     // The invite is out and the seat is held; only closing the request failed.
     // Not a failure of the whole action — re-approving simply refreshes the same

@@ -4,10 +4,8 @@ import { cn } from "@/lib/utils";
  * A row's state, named — `Draft`, `Shared`, `Private`. Grey always, never blue:
  * blue is reserved for actions, and a state is not one. Max one per row.
  *
- * "New" is not one of these any more. An unread report is emphasis rather than
- * a neutral status, so it carries `NewPill`'s blue tint instead (Updated
- * Design System 19f) — the one exception to the grey rule, kept in its own
- * component so this one stays grey without a variant prop.
+ * "New" is not one of these. An unread match is marked by a small blue dot in
+ * the row's own left padding (`match-card-list.tsx`), not a pill at all.
  *
  * Transcription of v3's `StatePill` — 18px pill, `surface-subtle` fill,
  * `ink-700` text at 500 weight, no icon.

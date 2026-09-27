@@ -36,6 +36,11 @@ import type {
   LineOffer,
   MatchDraft,
 } from "@/components/dashboard/matches/new-match-wizard/types";
+import {
+  DRAFT_TARGET_SELECT,
+  draftTargetFromColumns,
+  type DraftTargetColumns,
+} from "@/lib/wizard/draft-target";
 
 /** Days either side of the file's date a line still counts as "this match". */
 const OFFER_WINDOW_DAYS = 2;
@@ -76,6 +81,8 @@ function offerFor(
   entry: EventEntry,
   match: EventEntry["matches"][number] | null,
   fallbackPlayerName: string,
+  /** Days from the file's date — known to `findLineOffers`, not the picker. */
+  daysFromFile?: number,
 ): LineOffer {
   return {
     entryId: entry.id,
@@ -94,6 +101,12 @@ function offerFor(
     surface: event.surface,
     bestOf: event.format.bestOf,
     adScoring: event.format.adScoring,
+    // Games only: the client compares them with the typed score, and tiebreak
+    // points and `winner` are not part of that comparison.
+    score: match?.score
+      ? { player1: [...match.score.player1], player2: [...match.score.player2] }
+      : null,
+    ...(daysFromFile === undefined ? {} : { daysFromFile }),
   };
 }
 
@@ -128,6 +141,12 @@ async function withProgramKeys<T extends LineOffer>(
  * for the named player within two days of the file's date, in the active
  * program. Empty for a personal workspace, for a player, and when nothing is
  * close enough — an offer that has to be declined is worse than none.
+ *
+ * This is the candidate list, not what the strip shows: the client filters it
+ * further (`rankLineOffers`), keeping only lines whose opponent name or score
+ * also matches what was typed. That filter runs in memory on every keystroke,
+ * so this query takes no opponent or score and is re-asked only when the date
+ * or the player changes.
  */
 export async function findLineOffers(input: {
   date: string;
@@ -141,7 +160,7 @@ export async function findLineOffers(input: {
 
   const schedule = await readWizardSchedule(scope);
   const wanted = normalizedPersonName(input.playerName);
-  const offers: (LineOffer & { distance: number })[] = [];
+  const offers: LineOffer[] = [];
 
   for (const event of schedule.events) {
     const distance = Math.min(
@@ -172,17 +191,16 @@ export async function findLineOffers(input: {
       const round = event.kind === "dual" ? null : (match?.round ?? null);
       if (resolveEntryResult(entry, round).kind === "non-played") continue;
 
-      offers.push({
-        ...offerFor(event, entry, match, input.playerName),
-        distance: inside ? 0 : distance,
-      });
+      offers.push(
+        offerFor(event, entry, match, input.playerName, inside ? 0 : distance),
+      );
     }
   }
 
   const supabase = await createClient();
-  const sorted = offers
-    .sort((a, b) => a.distance - b.distance)
-    .map(({ distance: _distance, ...offer }) => offer);
+  const sorted = offers.sort(
+    (a, b) => (a.daysFromFile ?? 0) - (b.daysFromFile ?? 0),
+  );
   return withProgramKeys(supabase, sorted);
 }
 
@@ -686,6 +704,13 @@ export interface DraftRow {
   stepCount: number;
   fileName: string | null;
   updatedAt: string;
+  /**
+   * The existing match this draft fills — `draftTargetMatchId()` over the
+   * stored payload — or null for a draft that will create one. The Matches
+   * table folds such a draft onto that match (`foldDrafts()`) instead of
+   * listing one court twice.
+   */
+  matchId: string | null;
 }
 
 export async function listMatchDrafts(scope: {
@@ -699,7 +724,9 @@ export async function listMatchDrafts(scope: {
   let query = supabase
     .from("match_drafts")
     .select(
-      "id, player_name, event_label, step_index, step_count, file_name, updated_at",
+      // Two JSON paths, not the whole payload: the list needs one id out of
+      // it, and the payload carries every answer the wizard holds.
+      `id, player_name, event_label, step_index, step_count, file_name, updated_at, ${DRAFT_TARGET_SELECT}`,
     )
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false });
@@ -708,7 +735,7 @@ export async function listMatchDrafts(scope: {
     : query.is("program_id", null);
   const { data } = await query;
   return (
-    (data ?? []) as {
+    (data ?? []) as unknown as ({
       id: string;
       player_name: string | null;
       event_label: string | null;
@@ -716,7 +743,7 @@ export async function listMatchDrafts(scope: {
       step_count: number;
       file_name: string | null;
       updated_at: string;
-    }[]
+    } & DraftTargetColumns)[]
   ).map((row) => ({
     id: row.id,
     playerName: row.player_name,
@@ -725,6 +752,7 @@ export async function listMatchDrafts(scope: {
     stepCount: row.step_count,
     fileName: row.file_name,
     updatedAt: row.updated_at,
+    matchId: draftTargetFromColumns(row),
   }));
 }
 

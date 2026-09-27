@@ -6,7 +6,7 @@ import {
 } from "@/lib/data/team-home-server";
 import { getTopKpiMovers } from "@/lib/data/performance-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
-import { getLLMStream } from "@/lib/llm/adapter";
+import { createLLMObservabilityContext, getLLMStream } from "@/lib/llm/adapter";
 import { formatChange, textStreamResponse } from "@/lib/llm/stream-response";
 
 /**
@@ -122,6 +122,7 @@ export async function POST() {
     iterable = await getLLMStream(
       buildTeamInsightSystemPrompt(data, active.name),
       [{ role: "user", content: "Generate the program's insight." }],
+      createLLMObservabilityContext(workspace.viewer.id),
     );
   } catch (err) {
     console.error("LLM adapter error:", err);

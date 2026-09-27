@@ -1,0 +1,1650 @@
+import { expect, test, type Page } from "@playwright/test";
+import { createServer, type Server } from "node:http";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import postcss from "postcss";
+import tailwind from "@tailwindcss/postcss";
+import * as nextWebpack from "next/dist/compiled/webpack/webpack";
+
+import type { AttachmentFlowHarnessWindow } from "./fixtures/match-video-attachment-flow-window";
+import { planAlignment } from "@/lib/match-video/alignment";
+
+/**
+ * The attachment wizard, composed, in a real browser.
+ *
+ * The two step harnesses next door prove that neither step touches the
+ * network. This one proves the opposite half: that the orchestration does,
+ * exactly once, exactly when a person confirmed, and to exactly four
+ * endpoints. Every test here runs the REAL transport over real
+ * `XMLHttpRequest` against a server that implements this feature's contract —
+ * nothing on the browser side is stubbed, because the claims worth making are
+ * about what leaves the tab.
+ *
+ * The four that could not be made any other way:
+ *
+ *   1. **No side effects.** The whole set of requests an add makes is
+ *      enumerated and compared. A match insert, a draft write, a processing
+ *      job or an analysis call would appear in it.
+ *   2. **One logical attempt.** A failed completion and a lost completion are
+ *      driven separately; neither may reserve twice, and a retry must carry the
+ *      id the first reservation carried.
+ *   3. **Commit navigation is held.** `onSaved` is recorded with a timestamp
+ *      against the completion response, so "saved" cannot precede saved.
+ *   4. **Leaving cancels.** Cancel, unmount and a closed tab each have to
+ *      retire the pending attempt, and the closed tab is the one the flow's own
+ *      cleanup cannot see.
+ *
+ * The scenario lives in the MATCH ID (`ok-…`, `slow-…`, `failonce-…`), so the
+ * server holds no state two parallel tests could share.
+ */
+
+let server: Server;
+let origin: string;
+
+const FIXTURES = resolve("tests/fixtures/match-video");
+const CLIP = join(FIXTURES, "h264-faststart.mp4");
+const OTHER_CLIP = join(FIXTURES, "h264.mov");
+
+/**
+ * The harness's source timing, restated here so the fake server's committed
+ * offset comes from the SAME planner the wizard ran — the server side of
+ * "browser and server agree", rather than a hard-coded `1 - T`. Both fixture
+ * clips run 2.000s; the harness comment spells out the geometry.
+ */
+const SOURCE_POINTS = [
+  { pointNumber: 1, videoTime: 1, duration: 0.2 },
+  { pointNumber: 2, videoTime: 1.4, duration: 0.2 },
+];
+const SOURCE_SHOTS = [{ videoTime: 0.9 }];
+const FIXTURE_DURATION_SECONDS = 2;
+
+function serverAlignment(confirmedVideoTime: unknown) {
+  return planAlignment({
+    points: SOURCE_POINTS,
+    shots: SOURCE_SHOTS,
+    confirmedVideoTime,
+    videoDurationSeconds: FIXTURE_DURATION_SECONDS,
+  });
+}
+
+/** Every request the server saw, per match. */
+const seen = new Map<string, RecordedRequest[]>();
+/** Completion polls per match, so "fail the first one" is expressible. */
+const polls = new Map<string, number>();
+/** One attachment id per match, so a retry finds the attempt it reserved. */
+const attachmentIds = new Map<string, string>();
+/** Cancellation scenarios control reservation and upload separately, so a
+ * visible preparing state can never stand in for an in-flight upload. */
+const heldReservations = new Map<string, () => void>();
+
+interface RecordedRequest {
+  method: string;
+  path: string;
+  body: string;
+  at: number;
+}
+
+function scenarioOf(matchId: string): string {
+  return matchId.split("-")[0];
+}
+
+function attachmentIdFor(matchId: string): string {
+  let id = attachmentIds.get(matchId);
+  if (!id) {
+    id = randomUUID();
+    attachmentIds.set(matchId, id);
+  }
+  return id;
+}
+
+function record(matchId: string, entry: RecordedRequest) {
+  const list = seen.get(matchId) ?? [];
+  list.push(entry);
+  seen.set(matchId, list);
+}
+
+test.beforeAll(async () => {
+  const outputPath = mkdtempSync(
+    join(tmpdir(), "match-video-attachment-flow-"),
+  );
+  const result = await new Promise<{ errors?: unknown[] }>((done, reject) => {
+    webpack(
+      {
+        mode: "development",
+        devtool: false,
+        entry: resolve(
+          "tests/fixtures/match-video-attachment-flow-harness.tsx",
+        ),
+        output: { path: outputPath, filename: "bundle.js" },
+        module: {
+          rules: [
+            {
+              test: /\.tsx?$/,
+              exclude: /node_modules/,
+              use: resolve("tests/fixtures/tsx-transpile-loader.js"),
+            },
+          ],
+        },
+        resolve: {
+          extensions: [".tsx", ".ts", ".jsx", ".js"],
+          alias: {
+            "@": resolve("src"),
+            // The shell's Cancel is a `next/link`; the browser only needs an
+            // anchor, and the real module drags the router in.
+            "next/link": resolve("tests/fixtures/next-link-browser-mock.tsx"),
+            // The leave guard's provider reads the pathname and pushes on a
+            // confirmed leave; the mock records instead of routing.
+            "next/navigation": resolve(
+              "tests/fixtures/next-navigation-browser-mock.ts",
+            ),
+          },
+        },
+      },
+      (error: Error | null, stats: WebpackStats) => {
+        if (error) reject(error);
+        else done(stats.toJson());
+      },
+    );
+  });
+  expect(result.errors ?? []).toEqual([]);
+  const bundle = readFileSync(join(outputPath, "bundle.js"));
+
+  // The real stylesheet, because two of these tests are about layout. Without
+  // it a 390px viewport proves nothing at all.
+  const styles = (
+    await postcss([tailwind()]).process(
+      readFileSync("src/app/globals.css", "utf8"),
+      { from: resolve("src/app/globals.css") },
+    )
+  ).css;
+
+  server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    const path = url.pathname;
+
+    if (path === "/bundle.js") {
+      response.setHeader("content-type", "text/javascript; charset=utf-8");
+      response.end(bundle);
+      return;
+    }
+    if (path === "/app.css") {
+      response.setHeader("content-type", "text/css; charset=utf-8");
+      response.end(styles);
+      return;
+    }
+    if (path === "/__requests") {
+      const matchId = url.searchParams.get("matchId") ?? "";
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(seen.get(matchId) ?? []));
+      return;
+    }
+    if (path.startsWith("/fixtures/")) {
+      const name = path.slice("/fixtures/".length);
+      try {
+        const bytes = readFileSync(join(FIXTURES, name));
+        response.setHeader("content-type", "video/mp4");
+        response.setHeader("accept-ranges", "bytes");
+        response.end(bytes);
+      } catch {
+        response.statusCode = 404;
+        response.end();
+      }
+      return;
+    }
+
+    // Azure's block endpoint. The query carries the (fake) credential, so only
+    // the path is ever recorded — the same rule the transport follows.
+    const blob = /^\/azure\/([^/]+)$/.exec(path);
+    if (blob) {
+      const matchId = decodeURIComponent(blob[1]);
+      const isCommit = url.searchParams.get("comp") === "blocklist";
+      record(matchId, {
+        method: request.method ?? "",
+        path: isCommit ? "/azure/blocklist" : "/azure/block",
+        body: "",
+        at: Date.now(),
+      });
+      request.resume();
+      request.on("end", () => {
+        // Keep the real XHR in flight until cancellation or page teardown
+        // closes its socket. An elapsed-time delay can finish before a busy
+        // browser reaches the action the cancellation test is exercising.
+        if (scenarioOf(matchId) === "held") return;
+        const finish = () => {
+          response.statusCode = 201;
+          response.end();
+        };
+        if (scenarioOf(matchId) === "slow") setTimeout(finish, 600);
+        else finish();
+      });
+      return;
+    }
+
+    const api = /^\/api\/matches\/([^/]+)\/video(\/.*)?$/.exec(path);
+    if (!api) {
+      response.setHeader("content-type", "text/html; charset=utf-8");
+      response.end(
+        '<!doctype html><html><head><link rel="stylesheet" href="/app.css"></head>' +
+          '<body><div id="root"></div><script src="/bundle.js"></script></body></html>',
+      );
+      return;
+    }
+
+    const matchId = decodeURIComponent(api[1]);
+    const rest = api[2] ?? "";
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      const body = Buffer.concat(chunks).toString("utf8");
+      const method = request.method ?? "";
+      record(matchId, { method, path: `/video${rest}`, body, at: Date.now() });
+
+      const json = (status: number, payload: unknown) => {
+        response.statusCode = status;
+        response.setHeader("content-type", "application/json");
+        response.end(JSON.stringify(payload));
+      };
+      const parsed: Record<string, unknown> = body ? JSON.parse(body) : {};
+
+      // Reserve
+      if (method === "POST" && rest === "/uploads") {
+        const reserve = () =>
+          json(200, {
+            attachmentId: attachmentIdFor(matchId),
+            uploadUrl: `${origin}/azure/${encodeURIComponent(matchId)}?sig=REDACTED`,
+            uploadExpiresAt: new Date(Date.now() + 6 * 3_600_000).toISOString(),
+          });
+        if (scenarioOf(matchId) === "held") {
+          heldReservations.set(matchId, reserve);
+          response.on("close", () => heldReservations.delete(matchId));
+        } else reserve();
+        return;
+      }
+
+      // Complete
+      if (method === "POST" && rest.endsWith("/complete")) {
+        const count = (polls.get(matchId) ?? 0) + 1;
+        polls.set(matchId, count);
+        const scenario = scenarioOf(matchId);
+        if (scenario === "fail" || (scenario === "failonce" && count === 1)) {
+          json(422, {
+            code: "invalid_alignment",
+            error: "Enter a time inside this video, as hh:mm:ss.sss.",
+            detail: "confirmed_after_duration",
+          });
+          return;
+        }
+        if (scenario === "lost" && count === 1) {
+          // The answer never arrives. The only recovery that is correct is to
+          // ask the SAME question again — never to reserve and re-upload.
+          response.destroy();
+          return;
+        }
+        // The server recomputes from the source rows, exactly as T4's SQL
+        // does; it never trusts an offset the browser could have sent.
+        const planned = serverAlignment(parsed.confirmedVideoTimeSeconds);
+        if (!planned.ok) {
+          json(planned.error.status, {
+            code: planned.error.code,
+            error: planned.error.message,
+            detail: planned.error.detail,
+          });
+          return;
+        }
+        json(200, {
+          status: "committed",
+          attachment: {
+            id: attachmentIdFor(matchId),
+            version: 4,
+            offsetSeconds: planned.value.offsetSeconds,
+            confirmedVideoTimeSeconds: planned.value.confirmedVideoTimeSeconds,
+            durationSeconds: FIXTURE_DURATION_SECONDS,
+            contentType: "video/mp4",
+            filename: "match.mp4",
+          },
+        });
+        return;
+      }
+
+      // Cancel
+      if (method === "DELETE" && rest.startsWith("/uploads/")) {
+        json(200, {
+          attachmentId: attachmentIdFor(matchId),
+          state: "retired",
+        });
+        return;
+      }
+
+      // Correct the alignment — the ONLY request an adjust may make.
+      if (method === "PATCH" && rest === "/alignment") {
+        if (scenarioOf(matchId) === "alignfail") {
+          json(409, {
+            code: "stale_attachment",
+            error: "The video changed. Reload and try again.",
+            detail: "version_mismatch",
+          });
+          return;
+        }
+        const confirmed = Number(parsed.confirmedVideoTimeSeconds ?? 0);
+        json(200, {
+          attachment: {
+            id: String(parsed.attachmentId ?? ""),
+            version: Number(parsed.expectedVersion ?? 0) + 1,
+            offsetSeconds: 1 - confirmed,
+            confirmedVideoTimeSeconds: confirmed,
+            durationSeconds: 100,
+            contentType: "video/mp4",
+            filename: "roland-garros-r1.mp4",
+          },
+        });
+        return;
+      }
+
+      json(404, { code: "match_not_found", error: "No such route" });
+    });
+  });
+
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("No test port");
+  origin = `http://127.0.0.1:${address.port}`;
+});
+
+test.afterAll(async () => {
+  if (!server) return;
+  await new Promise<void>((done, reject) =>
+    server.close((error) => (error ? reject(error) : done())),
+  );
+});
+
+/* -------------------------------------------------------------------------
+ * Helpers
+ * ---------------------------------------------------------------------- */
+
+let counter = 0;
+
+/** A match id nobody else in this run will use, carrying its scenario. */
+function matchIdFor(scenario: string): string {
+  counter += 1;
+  return `${scenario}-${process.pid}-${counter}`;
+}
+
+async function open(
+  page: Page,
+  {
+    mode = "add",
+    matchId,
+    vanished = false,
+    query = "",
+  }: {
+    mode?: string;
+    matchId: string;
+    vanished?: boolean;
+    /** Extra harness parameters, e.g. `&prepare=cut&pad=0.2`. */
+    query?: string;
+  },
+) {
+  await page.goto(
+    `${origin}/?mode=${mode}&matchId=${matchId}${vanished ? "&vanished=1" : ""}${query}`,
+  );
+  await expect
+    .poll(() => page.locator("html").getAttribute("data-hydrated"))
+    .toBe("true");
+}
+
+async function pickFile(page: Page, file = CLIP) {
+  await page.getByTestId("attachment-file-input").setInputFiles(file);
+  await expect(page.getByTestId("attachment-file-name")).toBeVisible();
+}
+
+function continueButton(page: Page) {
+  return page.locator("[data-wizard-continue]");
+}
+
+function timeField(page: Page) {
+  return page.getByTestId("alignment-time-input");
+}
+
+async function requests(page: Page, matchId: string) {
+  return page.evaluate(async (id: string) => {
+    const response = await fetch(
+      `/__requests?matchId=${encodeURIComponent(id)}`,
+    );
+    return (await response.json()) as {
+      method: string;
+      path: string;
+      body: string;
+      at: number;
+    }[];
+  }, matchId);
+}
+
+async function harnessState(page: Page) {
+  return page.evaluate(() => {
+    const w = window as unknown as AttachmentFlowHarnessWindow;
+    return { prepareCalls: w.prepareCalls, discardCalls: w.discardCalls };
+  });
+}
+
+async function savedEvents(page: Page) {
+  return page.evaluate(
+    () => (window as unknown as AttachmentFlowHarnessWindow).savedEvents,
+  );
+}
+
+/** Pick a file, step forward, mark the first point. Leaves Save armed. */
+async function armAdd(
+  page: Page,
+  matchId: string,
+  time = "00:00:00.500",
+  { mode = "add", query = "" }: { mode?: string; query?: string } = {},
+) {
+  await open(page, { mode, matchId, query });
+  await pickFile(page);
+  await continueButton(page).click();
+  await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
+  await timeField(page).fill(time);
+  await expect(page.getByTestId("alignment-ready")).toBeVisible();
+}
+
+/* -------------------------------------------------------------------------
+ * Shape
+ * ---------------------------------------------------------------------- */
+
+test("add runs two steps inside the wizard shell, with the match pinned", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await open(page, { matchId });
+
+  // The shell's own chrome, not a second one: the step eyebrow, the pinned
+  // subject, and a footer whose primary is the only blue object on the row.
+  await expect(page.getByText("Step 1 of 2")).toBeVisible();
+  await expect(page.getByTestId("attachment-pinned-match")).toContainText(
+    "Marcus Reid",
+  );
+  await expect(page.getByTestId("attachment-pinned-match")).toContainText(
+    "Jordan Alvarez",
+  );
+  await expect(continueButton(page)).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Cancel" })).toHaveAttribute(
+    "href",
+    "/dashboard/matches/m1",
+  );
+
+  await pickFile(page);
+  await expect(continueButton(page)).toBeEnabled();
+  await continueButton(page).click();
+
+  await expect(page.getByText("Step 2 of 2")).toBeVisible();
+  await expect(continueButton(page)).toHaveText("Trim and upload");
+});
+
+/**
+ * Step 2 of add and replace is one screen that marks the first point AND sets
+ * the cut — the approved canvas "Main". Same copy in both modes: a replace
+ * needs its own first point, and its own cut, exactly as an add does.
+ */
+const TRIM_BODY =
+  "Scrub to the serve of the first point. The cut is set around the match for you: from just before that serve to just after SwingVision's last point. Adjust either end if you need to.";
+
+for (const mode of ["add", "replace"] as const) {
+  test(`${mode}: step 2 is the one-step "Mark the first point" trim screen`, async ({
+    page,
+  }) => {
+    const matchId = matchIdFor("ok");
+    await open(page, { mode, matchId });
+    await pickFile(page);
+    await continueButton(page).click();
+    await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
+
+    await expect(page.getByText("Step 2 of 2", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Mark the first point" }),
+    ).toBeVisible();
+    await expect(page.getByText(TRIM_BODY, { exact: true })).toBeVisible();
+
+    // Footer: Back on the left; the note beside the primary it qualifies.
+    await expect(
+      page.getByRole("button", { name: "Back", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("attachment-kept-note")).toHaveText(
+      "Only the kept part is uploaded",
+    );
+    await expect(continueButton(page)).toHaveText("Trim and upload");
+    await expect(continueButton(page)).toBeDisabled();
+
+    // The rail and both readouts are drawn before anything is marked, and
+    // wake once it is. The Advantage Intelligence camera questions never
+    // appear: an attachment is not a vendor job.
+    await expect(page.getByTestId("alignment-trim")).toBeVisible();
+    await expect(page.getByRole("radiogroup")).toHaveCount(0);
+    await expect(page.getByText("Top of frame")).toHaveCount(0);
+    await expect(page.getByText("Moved or panned")).toHaveCount(0);
+
+    await timeField(page).fill("00:00:00.500");
+    await expect(page.getByTestId("alignment-marked-badge")).toHaveText(
+      "First point marked",
+    );
+    await expect(continueButton(page)).toBeEnabled();
+    expect(await requests(page, matchId)).toEqual([]);
+  });
+}
+
+test("adjust is one step and never offers a file", async ({ page }) => {
+  const matchId = matchIdFor("ok");
+  await open(page, { mode: "align", matchId });
+
+  await expect(page.getByText("Step 1 of 1")).toBeVisible();
+  await expect(page.getByTestId("attachment-drop-zone")).toHaveCount(0);
+  await expect(continueButton(page)).toHaveText("Save the alignment");
+  // Opened on the saved value, which is a no-op until it is moved.
+  await expect(timeField(page)).toHaveValue("00:00:00.500");
+  await expect(page.getByTestId("alignment-no-change")).toBeVisible();
+  await expect(continueButton(page)).toBeDisabled();
+});
+
+test("a mode opened without the attachment it needs says so and draws nothing else", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await open(page, { mode: "align", matchId, vanished: true });
+
+  // Never a blank column and never an invitation to add one: the worst
+  // outcome here is a second attachment created by accident.
+  await expect(page.getByTestId("attachment-blocked")).toBeVisible();
+  await expect(page.getByTestId("attachment-blocked")).toContainText(
+    "no video to adjust",
+  );
+  await expect(page.getByTestId("alignment-video")).toHaveCount(0);
+  await expect(page.getByTestId("attachment-drop-zone")).toHaveCount(0);
+  await expect(continueButton(page)).toBeDisabled();
+  expect(await requests(page, matchId)).toEqual([]);
+});
+
+/* -------------------------------------------------------------------------
+ * Only the final confirmation starts anything
+ * ---------------------------------------------------------------------- */
+
+test("nothing is uploaded until the final confirmation, and the result is awaited", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId);
+
+  // Everything up to here — a verified 15 KB file and a validated position —
+  // and not one byte has left the tab.
+  expect(await requests(page, matchId)).toEqual([]);
+
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const sent = await requests(page, matchId);
+  expect(
+    sent.map(
+      (entry) =>
+        `${entry.method} ${entry.path.replace(/\/uploads\/[^/]+\//, "/uploads/{id}/")}`,
+    ),
+  ).toEqual([
+    "POST /video/uploads",
+    "PUT /azure/block",
+    "PUT /azure/blocklist",
+    "POST /video/uploads/{id}/complete",
+  ]);
+
+  // The commit navigation waited for the answer: the caller is told once, with
+  // a published attachment, and never optimistically.
+  const events = await savedEvents(page);
+  expect(events).toHaveLength(1);
+  expect(events[0].confirmedVideoTimeSeconds).toBeCloseTo(0.5, 3);
+  expect(events[0].version).toBe(4);
+});
+
+test("add claims no attachment; replace claims the one it was given", async ({
+  page,
+}) => {
+  const addId = matchIdFor("ok");
+  await armAdd(page, addId);
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const addReserve = (await requests(page, addId)).find(
+    (entry) => entry.path === "/video/uploads",
+  )!;
+  // An explicit null, never an omitted key: a client that simply forgot the
+  // field must not be able to clobber a replacement another tab committed.
+  expect(JSON.parse(addReserve.body).expectedActive).toBeNull();
+
+  const replaceId = matchIdFor("ok");
+  await open(page, { mode: "replace", matchId: replaceId });
+  await pickFile(page);
+  await continueButton(page).click();
+  await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
+  await timeField(page).fill("00:00:00.500");
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const replaceReserve = (await requests(page, replaceId)).find(
+    (entry) => entry.path === "/video/uploads",
+  )!;
+  expect(JSON.parse(replaceReserve.body).expectedActive).toEqual({
+    id: "6f1d4a7e-2c83-4a51-9f0e-1b7c5d3e9a42",
+    version: 3,
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * Differently trimmed recordings (T27 acceptance 1 and 3)
+ * ---------------------------------------------------------------------- */
+
+test("two recordings trimmed differently anchor to opposite offsets, and a too-short one never leaves the tab", async ({
+  page,
+}) => {
+  // Recording A: the first serve is 0.5s into the file, so the camera started
+  // half a second AFTER the source clock — a positive offset.
+  const first = matchIdFor("ok");
+  await armAdd(page, first, "00:00:00.500");
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+  // The harness starts a fresh event log on every visit.
+  const firstEvents = await savedEvents(page);
+
+  // Recording B replaces it: a different container (`.mov`) with more
+  // lead-in, so the same serve sits at 1.2s — the camera started BEFORE the
+  // source clock, a negative offset. First a position the 2.000s file cannot
+  // cover (the final point would end at 1.9 + 0.6): refused in the tab, with
+  // the coverage sentence, and nothing is uploaded for it.
+  const second = matchIdFor("ok");
+  await open(page, { mode: "replace", matchId: second });
+  await pickFile(page, OTHER_CLIP);
+  await expect(page.getByTestId("attachment-file-name")).toHaveText("h264.mov");
+  await continueButton(page).click();
+  await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
+
+  await timeField(page).fill("00:00:01.900");
+  await expect(page.getByTestId("alignment-error")).toHaveAttribute(
+    "data-error-code",
+    "insufficient_coverage",
+  );
+  await expect(page.getByTestId("alignment-error")).toContainText(
+    "not long enough",
+  );
+  await expect(continueButton(page)).toBeDisabled();
+  expect(await requests(page, second)).toEqual([]);
+
+  // Nudged back inside the file, the same recording is accepted.
+  await timeField(page).fill("00:00:01.200");
+  await expect(page.getByTestId("alignment-error")).toHaveCount(0);
+  await expect(page.getByTestId("alignment-ready")).toBeVisible();
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const events = [...firstEvents, ...(await savedEvents(page))];
+  expect(events).toHaveLength(2);
+  // One anchor (source 1.000s), two files, two offsets of opposite sign —
+  // each `anchor − confirmed`, recomputed by the server from the source rows
+  // and never carried across from the other recording.
+  expect(events[0].confirmedVideoTimeSeconds).toBeCloseTo(0.5, 3);
+  expect(events[0].offsetSeconds).toBeCloseTo(0.5, 3);
+  expect(events[1].confirmedVideoTimeSeconds).toBeCloseTo(1.2, 3);
+  expect(events[1].offsetSeconds).toBeCloseTo(-0.2, 3);
+
+  // Both completions carried only the confirmed time: the browser proposes a
+  // position, never an offset, so a wrong client cannot misalign a match.
+  for (const matchId of [first, second]) {
+    const complete = (await requests(page, matchId)).find((entry) =>
+      entry.path.endsWith("/complete"),
+    )!;
+    const body = JSON.parse(complete.body) as Record<string, unknown>;
+    expect(body).not.toHaveProperty("offsetSeconds");
+    expect(typeof body.confirmedVideoTimeSeconds).toBe("number");
+  }
+});
+
+test("a correction calls the alignment endpoint and nothing else", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await open(page, { mode: "align", matchId });
+  await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
+
+  await timeField(page).fill("00:00:00.900");
+  await expect(continueButton(page)).toBeEnabled();
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const sent = await requests(page, matchId);
+  // No reservation, no block, no completion: a correction has no upload to
+  // authorize and must not create a pending attempt a second tab is refused
+  // against.
+  expect(sent.map((entry) => `${entry.method} ${entry.path}`)).toEqual([
+    "PATCH /video/alignment",
+  ]);
+  expect(JSON.parse(sent[0].body)).toEqual({
+    attachmentId: "6f1d4a7e-2c83-4a51-9f0e-1b7c5d3e9a42",
+    expectedVersion: 3,
+    confirmedVideoTimeSeconds: 0.9,
+  });
+  expect((await savedEvents(page))[0].version).toBe(4);
+  // A correction has no file, so there is nothing to cut.
+  expect(await harnessState(page)).toEqual({
+    prepareCalls: [],
+    discardCalls: [],
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * The cut before the upload
+ *
+ * `?pad=0.2` shortens the ten-second pad so a window fits inside the
+ * two-second clip. Marked at 0.500 with the harness timing (anchor 1.000,
+ * last required instant 1.600), the kept window is [0.300, 1.300] and the
+ * first serve sits at 0.200 in the cut — offset 1.000 − 0.200 = 0.800.
+ * ---------------------------------------------------------------------- */
+
+const CUT_QUERY = "&pad=0.2";
+const CLIP_BYTES = readFileSync(CLIP).length;
+
+function bodyOf(entries: RecordedRequest[], suffix: string) {
+  const entry = entries.find((candidate) => candidate.path.endsWith(suffix));
+  return entry ? (JSON.parse(entry.body) as Record<string, unknown>) : null;
+}
+
+test("add cuts the kept window before anything is reserved, then uploads the cut", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=hold`,
+  });
+  await continueButton(page).click();
+
+  // The trimming phase: the cut's own progress, and how much is kept —
+  // estimated from the window's share of the file while it runs.
+  const strip = page.getByTestId("attachment-saving");
+  await expect(strip).toHaveAttribute("data-phase", "trimming");
+  await expect(strip).toHaveAttribute("data-percent", "50");
+  await expect(strip).toContainText("Trimming video");
+  await expect(strip).toContainText("50%");
+  await expect(strip).toContainText("Keeping");
+  const estimated = Number(await strip.getAttribute("data-kept-bytes"));
+  expect(estimated).toBeGreaterThan(CLIP_BYTES * 0.4);
+  expect(estimated).toBeLessThan(CLIP_BYTES * 0.6);
+  await expect(page.getByTestId("attachment-cancel-upload")).toBeVisible();
+
+  // Cutting is local work: nothing is reserved while it runs.
+  expect(await requests(page, matchId)).toEqual([]);
+  const { prepareCalls } = await harnessState(page);
+  expect(prepareCalls).toHaveLength(1);
+  expect(prepareCalls[0]).toMatchObject({
+    filename: "h264-faststart.mp4",
+    sizeBytes: CLIP_BYTES,
+    startSeconds: 0.3,
+    endSeconds: 1.3,
+  });
+
+  await page.evaluate(() =>
+    (window as unknown as AttachmentFlowHarnessWindow).releasePrepare(),
+  );
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const state = await harnessState(page);
+  const cut = state.prepareCalls[0].result!;
+  expect(cut.trimmed).toBe(true);
+  expect(cut.sizeBytes).toBe(Math.ceil(CLIP_BYTES / 2));
+
+  // The transfer carried the CUT and the serve's position IN the cut.
+  const sent = await requests(page, matchId);
+  expect(bodyOf(sent, "/video/uploads")).toMatchObject({
+    filename: "h264-faststart.trimmed.mp4",
+    sizeBytes: cut.sizeBytes,
+    contentType: "video/mp4",
+    expectedActive: null,
+  });
+  expect(bodyOf(sent, "/complete")!.confirmedVideoTimeSeconds).toBeCloseTo(
+    0.2,
+    6,
+  );
+  const events = await savedEvents(page);
+  expect(events).toHaveLength(1);
+  expect(events[0].offsetSeconds).toBeCloseTo(0.8, 6);
+
+  // The cut is gone from OPFS once the bytes are in.
+  expect(state.discardCalls).toEqual([cut.storageName]);
+});
+
+test("the window the person adjusts is the window that is cut", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=cut`,
+  });
+  // Default [0.300, 1.300]; pull the start back to frame zero.
+  await expect(page.getByTestId("alignment-trim-start")).toHaveAttribute(
+    "data-seconds",
+    "0.3",
+  );
+  await page.getByTestId("alignment-scrub").focus();
+  await page.keyboard.press("Home");
+  await page.getByRole("button", { name: "Set the start here" }).click();
+  await expect(page.getByTestId("alignment-trim-start")).toHaveAttribute(
+    "data-seconds",
+    "0",
+  );
+
+  // Stepping back to check the file keeps the adjusted cut, as it keeps the
+  // marked time.
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await continueButton(page).click();
+  await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
+  await expect(page.getByTestId("alignment-trim-start")).toHaveAttribute(
+    "data-seconds",
+    "0",
+  );
+
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const state = await harnessState(page);
+  expect(state.prepareCalls).toHaveLength(1);
+  expect(state.prepareCalls[0]).toMatchObject({
+    startSeconds: 0,
+    endSeconds: 1.3,
+  });
+  // The serve sits at `marked − start` = 0.500 in a cut that starts at zero.
+  const sent = await requests(page, matchId);
+  expect(bodyOf(sent, "/complete")!.confirmedVideoTimeSeconds).toBeCloseTo(
+    0.5,
+    6,
+  );
+});
+
+test("a window that no longer covers the match is refused and Trim and upload sleeps", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500");
+  await expect(continueButton(page)).toBeEnabled();
+
+  // The end dragged to frame zero, before the marked serve.
+  await page.getByTestId("alignment-scrub").focus();
+  await page.keyboard.press("Home");
+  await page.getByRole("button", { name: "Set the end here" }).click();
+
+  const refusal = page.getByTestId("alignment-error");
+  await expect(refusal).toHaveAttribute(
+    "data-error-code",
+    "insufficient_coverage",
+  );
+  await expect(refusal).toContainText("This video is not long enough.");
+  await expect(continueButton(page)).toBeDisabled();
+  expect(await requests(page, matchId)).toEqual([]);
+  expect((await harnessState(page)).prepareCalls).toEqual([]);
+});
+
+test("replace cuts too, and still claims the attachment it supersedes", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    mode: "replace",
+    query: `${CUT_QUERY}&prepare=cut`,
+  });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const state = await harnessState(page);
+  expect(state.prepareCalls).toHaveLength(1);
+  expect(state.prepareCalls[0]).toMatchObject({
+    startSeconds: 0.3,
+    endSeconds: 1.3,
+  });
+  const sent = await requests(page, matchId);
+  expect(bodyOf(sent, "/video/uploads")).toMatchObject({
+    sizeBytes: Math.ceil(CLIP_BYTES / 2),
+    expectedActive: { id: "6f1d4a7e-2c83-4a51-9f0e-1b7c5d3e9a42", version: 3 },
+  });
+  expect(bodyOf(sent, "/complete")!.confirmedVideoTimeSeconds).toBeCloseTo(
+    0.2,
+    6,
+  );
+  expect(state.discardCalls).toEqual([
+    state.prepareCalls[0].result!.storageName,
+  ]);
+});
+
+test("a cut that cannot be made uploads the original at the marked time", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=skip`,
+  });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const state = await harnessState(page);
+  // Asked with the window, answered "not trimmed".
+  expect(state.prepareCalls).toHaveLength(1);
+  expect(state.prepareCalls[0]).toMatchObject({
+    startSeconds: 0.3,
+    endSeconds: 1.3,
+    result: { trimmed: false, sizeBytes: CLIP_BYTES },
+  });
+
+  const sent = await requests(page, matchId);
+  expect(bodyOf(sent, "/video/uploads")).toMatchObject({
+    filename: "h264-faststart.mp4",
+    sizeBytes: CLIP_BYTES,
+  });
+  // The untrimmed file, so the untrimmed position.
+  expect(bodyOf(sent, "/complete")!.confirmedVideoTimeSeconds).toBeCloseTo(
+    0.5,
+    6,
+  );
+  expect((await savedEvents(page))[0].offsetSeconds).toBeCloseTo(0.5, 6);
+  expect(state.discardCalls).toEqual([]);
+});
+
+test("a refused completion still discards the cut", async ({ page }) => {
+  const matchId = matchIdFor("fail");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=cut`,
+  });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-save-error")).toBeVisible();
+
+  const state = await harnessState(page);
+  expect(state.prepareCalls).toHaveLength(1);
+  expect(state.discardCalls).toEqual([
+    state.prepareCalls[0].result!.storageName,
+  ]);
+});
+
+test("cancelling mid-upload discards the cut", async ({ page }) => {
+  const matchId = matchIdFor("held");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=cut`,
+  });
+  await startHeldUpload(page, matchId);
+  await page.getByTestId("attachment-cancel-upload").click();
+  await expect(page.getByTestId("attachment-saving")).toHaveCount(0);
+
+  await expect
+    .poll(async () => (await harnessState(page)).discardCalls.length)
+    .toBe(1);
+  const state = await harnessState(page);
+  expect(state.discardCalls).toEqual([
+    state.prepareCalls[0].result!.storageName,
+  ]);
+  expect(await savedEvents(page)).toEqual([]);
+});
+
+test("cancelling mid-cut stops the cut and reserves nothing", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=hold`,
+  });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saving")).toHaveAttribute(
+    "data-phase",
+    "trimming",
+  );
+
+  await page.getByTestId("attachment-cancel-upload").click();
+  await expect(page.getByTestId("attachment-saving")).toHaveCount(0);
+  await expect(page.getByTestId("attachment-save-error")).toHaveCount(0);
+  await expect(continueButton(page)).toBeEnabled();
+
+  const state = await harnessState(page);
+  expect(state.prepareCalls[0].cancelled).toBe(true);
+  // Nothing was cut, so there is nothing to discard.
+  expect(state.discardCalls).toEqual([]);
+  expect(await requests(page, matchId)).toEqual([]);
+});
+
+/* -------------------------------------------------------------------------
+ * No draft, no match, no analysis
+ * ---------------------------------------------------------------------- */
+
+test("the flow creates no match, draft, job or analysis request", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+
+  const urls: string[] = [];
+  page.on("request", (request) => urls.push(request.url()));
+
+  await armAdd(page, matchId);
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const sameOrigin = urls
+    .filter((url) => url.startsWith(origin))
+    .map((url) => new URL(url).pathname)
+    .filter(
+      (path) =>
+        path !== "/" &&
+        path !== "/bundle.js" &&
+        path !== "/app.css" &&
+        path !== "/__requests" &&
+        !path.startsWith("/fixtures/"),
+    );
+
+  // Enumerated rather than pattern-matched: a `processing_jobs` insert, a
+  // draft write, a `/api/splitstep/*` call or a match creation would all have
+  // to appear in this list, and none of them can.
+  const shapes = new Set(
+    sameOrigin.map((path) =>
+      path
+        .replace(/^\/azure\/.*$/, "/azure/block")
+        .replace(/\/uploads\/[^/]+\/complete$/, "/uploads/{id}/complete"),
+    ),
+  );
+  expect([...shapes].sort()).toEqual(
+    [
+      "/azure/block",
+      `/api/matches/${matchId}/video/uploads`,
+      `/api/matches/${matchId}/video/uploads/{id}/complete`,
+    ].sort(),
+  );
+
+  expect(urls.some((url) => url.includes("splitstep"))).toBe(false);
+  // The new-match wizard's localStorage is the draft surface; an attachment
+  // must not touch it.
+  const storage = await page.evaluate(
+    () => Object.keys(window.localStorage).length,
+  );
+  expect(storage).toBe(0);
+});
+
+/* -------------------------------------------------------------------------
+ * Failure, lost responses, double submit
+ * ---------------------------------------------------------------------- */
+
+test("a refused completion keeps the file and the time, and Try again reuses the attempt", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("failonce");
+  await armAdd(page, matchId);
+  await continueButton(page).click();
+
+  await expect(page.getByTestId("attachment-save-error")).toHaveAttribute(
+    "data-error-code",
+    "invalid_alignment",
+  );
+  // The whole point of the state: nothing has to be found or typed again.
+  await expect(timeField(page)).toHaveValue("00:00:00.500");
+  await expect(continueButton(page)).toHaveText("Try again");
+  expect(await savedEvents(page)).toEqual([]);
+
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const reserves = (await requests(page, matchId)).filter(
+    (entry) => entry.path === "/video/uploads",
+  );
+  expect(reserves).toHaveLength(2);
+  // ONE logical attempt across the retry. A fresh id on the second reservation
+  // would collide with the pending attempt the first one created rather than
+  // finding it.
+  expect(JSON.parse(reserves[0].body).clientRequestId).toBe(
+    JSON.parse(reserves[1].body).clientRequestId,
+  );
+});
+
+test("a lost completion response is replayed, never re-uploaded", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("lost");
+  await armAdd(page, matchId);
+  await continueButton(page).click();
+
+  await expect(page.getByTestId("attachment-saved")).toBeVisible({
+    timeout: 15_000,
+  });
+
+  const sent = await requests(page, matchId);
+  expect(sent.filter((entry) => entry.path === "/video/uploads")).toHaveLength(
+    1,
+  );
+  expect(sent.filter((entry) => entry.path === "/azure/block")).toHaveLength(1);
+  // The recovery for a completion whose answer never arrived is the SAME
+  // question again — a second reservation would publish a second copy of a
+  // video that is already the match's.
+  expect(
+    sent.filter((entry) => entry.path.endsWith("/complete")).length,
+  ).toBeGreaterThanOrEqual(2);
+  expect(await savedEvents(page)).toHaveLength(1);
+});
+
+test("a second confirmation while one is in flight is held", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("slow");
+  await armAdd(page, matchId);
+
+  const button = continueButton(page);
+  await button.click();
+  // The footer's primary is gone the instant the commit starts — the upload
+  // screen replaces the wizard — and the guard behind it is what catches
+  // Enter and a queued click as well.
+  await expect(page.getByTestId("attachment-saving")).toBeVisible();
+  await expect(button).toHaveCount(0);
+  await page.keyboard.press("Enter");
+  await page.evaluate(() => {
+    document
+      .querySelector<HTMLElement>("[data-wizard-continue]")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  await expect(page.getByTestId("attachment-saved")).toBeVisible({
+    timeout: 15_000,
+  });
+  expect(
+    (await requests(page, matchId)).filter(
+      (entry) => entry.path === "/video/uploads",
+    ),
+  ).toHaveLength(1);
+  expect(await savedEvents(page)).toHaveLength(1);
+});
+
+/* -------------------------------------------------------------------------
+ * Progress
+ * ---------------------------------------------------------------------- */
+
+test("progress reads real bytes and then names the publication", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("slow");
+  await armAdd(page, matchId);
+  await continueButton(page).click();
+
+  const strip = page.getByTestId("attachment-saving");
+  await expect(strip).toBeVisible();
+  await expect(strip).toHaveAttribute("data-phase", "uploading");
+  await expect(strip).toContainText("Uploading video");
+  // A percentage exists only while bytes are actually moving.
+  await expect(strip).toHaveAttribute("data-percent", /\d/);
+
+  // Once the blocks are in, the publication is an Azure server-side copy this
+  // browser cannot observe. It is named, never given an invented percentage.
+  await expect(strip).toContainText("Saving to the Film tab", {
+    timeout: 15_000,
+  });
+  await expect(strip).not.toHaveAttribute("data-percent", /\d/);
+  await expect(page.getByTestId("attachment-saved")).toBeVisible({
+    timeout: 15_000,
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * The upload screen, and the saved screen (T3)
+ *
+ * `?transfer=fake` holds the transfer at 1.30 GB of 3.10 GB, 200 s after
+ * 0.10 GB on a faked clock: 42%, and 1.80 GB left at 6 MB/s — five minutes.
+ * ---------------------------------------------------------------------- */
+
+const FAKE_TRANSFER = "&transfer=fake";
+
+async function finishTransfer(page: Page) {
+  await page.evaluate(() =>
+    (window as unknown as AttachmentFlowHarnessWindow).finishTransfer(),
+  );
+}
+
+async function guardAsks(page: Page) {
+  return page.evaluate(
+    () => (window as unknown as AttachmentFlowHarnessWindow).guardAsks,
+  );
+}
+
+/** Clicks the stand-in chrome link; answers "Stay here" when it asks. */
+async function clickChromeLink(page: Page): Promise<boolean> {
+  const before = (await guardAsks(page)).length;
+  await page.getByTestId("chrome-link").click();
+  await expect
+    .poll(async () => (await guardAsks(page)).length)
+    .toBe(before + 1);
+  const asked = (await guardAsks(page)).at(-1)!;
+  if (asked) {
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toContainText("Leave while your video uploads?");
+    await dialog.getByRole("button", { name: "Stay here" }).click();
+    await expect(dialog).toHaveCount(0);
+  }
+  return asked;
+}
+
+test("Trim and upload replaces the wizard with the upload screen", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", { query: FAKE_TRANSFER });
+  await continueButton(page).click();
+
+  const screen = page.getByTestId("attachment-saving");
+  await expect(screen).toHaveAttribute("data-phase", "uploading");
+  // The wizard is gone, not greyed out underneath.
+  await expect(continueButton(page)).toHaveCount(0);
+  await expect(page.getByTestId("attachment-pinned-match")).toHaveCount(0);
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Uploading your video" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("attachment-status-match")).toHaveText(
+    "Marcus Reid vs Jordan Alvarez · Apr 18 · 6-4, 7-5",
+  );
+
+  const steps = screen
+    .getByRole("list", { name: "Progress" })
+    .locator(":scope > li");
+  await expect(steps).toHaveCount(3);
+
+  await expect(steps.nth(0)).toContainText("Done:");
+  await expect(steps.nth(0)).toContainText("Video trimmed");
+  await expect(steps.nth(0)).toContainText("3.10 GB kept");
+
+  await expect(steps.nth(1)).toHaveAttribute("aria-current", "step");
+  await expect(steps.nth(1)).toContainText("Uploading video");
+  await expect(steps.nth(1)).toContainText("42%");
+  await expect(
+    steps.nth(1).getByRole("progressbar", { name: "Video upload" }),
+  ).toHaveAttribute("aria-valuenow", "42");
+  await expect(page.getByTestId("attachment-upload-detail")).toHaveText(
+    "1.30 GB of 3.10 GB · about 5 min left",
+  );
+  await expect(
+    steps.nth(1).getByRole("button", { name: "Cancel", exact: true }),
+  ).toBeVisible();
+
+  await expect(steps.nth(2)).toContainText("Not started:");
+  await expect(steps.nth(2)).toContainText("Ready on the Film tab");
+
+  // One instruction, and no reassurance: leaving this screen cancels.
+  await expect(
+    page.getByText("Keep this tab open until the upload finishes."),
+  ).toHaveCount(1);
+  await expect(page.getByText("You can keep using the dashboard.")).toHaveCount(
+    0,
+  );
+
+  await expect(
+    page.getByRole("link", { name: "Back to the match" }),
+  ).toHaveAttribute("href", "/dashboard/matches/m1");
+  await expect(page.getByRole("link", { name: "Watch the film" })).toHaveCount(
+    0,
+  );
+  expect(await savedEvents(page)).toEqual([]);
+
+  // Cancelled from here, the upload screen hands back the step as it was.
+  await page.getByTestId("attachment-cancel-upload").click();
+  await expect(page.getByTestId("attachment-saving")).toHaveCount(0);
+  await expect(page.getByTestId("attachment-save-error")).toHaveCount(0);
+  await expect(page.getByText("Step 2 of 2")).toBeVisible();
+  await expect(timeField(page)).toHaveValue("00:00:00.500");
+  await expect(continueButton(page)).toBeEnabled();
+});
+
+test("a published upload settles on Video saved and does not navigate", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", { query: FAKE_TRANSFER });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saving")).toHaveAttribute(
+    "data-phase",
+    "uploading",
+  );
+  await finishTransfer(page);
+
+  const screen = page.getByTestId("attachment-saved");
+  await expect(screen).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Video saved" }),
+  ).toBeVisible();
+
+  const steps = screen
+    .getByRole("list", { name: "Progress" })
+    .locator(":scope > li");
+  await expect(steps).toHaveCount(3);
+  for (const index of [0, 1, 2]) {
+    await expect(steps.nth(index)).toContainText("Done:");
+  }
+  await expect(steps.nth(0)).toContainText("Video trimmed");
+  await expect(steps.nth(0)).toContainText("kept");
+  await expect(steps.nth(1)).toContainText("Video uploaded");
+  await expect(steps.nth(2)).toContainText("Ready on the Film tab");
+  await expect(screen.getByRole("progressbar")).toHaveCount(0);
+  await expect(screen.getByRole("button", { name: "Cancel" })).toHaveCount(0);
+
+  // The one blue thing is the film; the quiet exit is the list. Both replace
+  // the finished wizard in history rather than stacking on it.
+  const watch = page.getByRole("link", { name: "Watch the film" });
+  await expect(watch).toHaveAttribute("href", "/dashboard/matches/m1");
+  await expect(watch).toHaveAttribute("data-replace", "");
+  const back = page.getByRole("link", { name: "Back to matches" });
+  await expect(back).toHaveAttribute("href", "/dashboard/matches");
+  await expect(back).toHaveAttribute("data-replace", "");
+  await expect(
+    page.getByRole("link", { name: "Back to the match" }),
+  ).toHaveCount(0);
+
+  // The route was told once, and went nowhere on its own: the person reads
+  // "Video saved" and chooses.
+  expect(await savedEvents(page)).toHaveLength(1);
+  await page.waitForTimeout(300);
+  expect(
+    await page.evaluate(() => {
+      const w = window as unknown as AttachmentFlowHarnessWindow;
+      return {
+        replaces: w.routerReplaces ?? [],
+        pushes: w.routerPushes,
+        refreshes: w.routerRefreshes,
+      };
+    }),
+  ).toEqual({ replaces: [], pushes: [], refreshes: 0 });
+  await expect(screen).toBeVisible();
+});
+
+test("the leave guard is armed while trimming and uploading, and released on saved", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=hold${FAKE_TRANSFER}`,
+  });
+
+  // Nothing is running yet.
+  expect(await clickChromeLink(page)).toBe(false);
+
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saving")).toHaveAttribute(
+    "data-phase",
+    "trimming",
+  );
+  expect(await clickChromeLink(page)).toBe(true);
+
+  await page.evaluate(() =>
+    (window as unknown as AttachmentFlowHarnessWindow).releasePrepare(),
+  );
+  await expect(page.getByTestId("attachment-saving")).toHaveAttribute(
+    "data-phase",
+    "uploading",
+  );
+  expect(await clickChromeLink(page)).toBe(true);
+
+  await finishTransfer(page);
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+  expect(await clickChromeLink(page)).toBe(false);
+});
+
+test("the leave guard is released when the upload is cancelled", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", { query: FAKE_TRANSFER });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saving")).toHaveAttribute(
+    "data-phase",
+    "uploading",
+  );
+  expect(await clickChromeLink(page)).toBe(true);
+
+  await page.getByTestId("attachment-cancel-upload").click();
+  await expect(continueButton(page)).toBeEnabled();
+  expect(await clickChromeLink(page)).toBe(false);
+});
+
+test("the leave guard is released when the save fails", async ({ page }) => {
+  const matchId = matchIdFor("fail");
+  await armAdd(page, matchId);
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-save-error")).toBeVisible();
+  expect(await clickChromeLink(page)).toBe(false);
+});
+
+/* -------------------------------------------------------------------------
+ * Cancel, unmount, and a closed tab
+ * ---------------------------------------------------------------------- */
+
+async function startHeldUpload(page: Page, matchId: string) {
+  await continueButton(page).click();
+  // Saving is already visible BEFORE an attachment id has been returned.
+  // Prove this phase, then release the reservation and wait for real bytes.
+  await expect(page.getByTestId("attachment-saving")).toContainText(
+    "Preparing the upload",
+  );
+  await expect.poll(() => heldReservations.has(matchId)).toBe(true);
+  heldReservations.get(matchId)!();
+  await expect
+    .poll(() =>
+      (seen.get(matchId) ?? []).some((entry) => entry.path === "/azure/block"),
+    )
+    .toBe(true);
+  await expect(page.getByTestId("attachment-saving")).toHaveAttribute(
+    "data-phase",
+    "uploading",
+  );
+}
+
+test("cancelling aborts the upload, retires the attempt, and shows no error", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("held");
+  await armAdd(page, matchId);
+  await startHeldUpload(page, matchId);
+
+  await page.getByTestId("attachment-cancel-upload").click();
+
+  // `aborted` carries an error code only so the result shape stays uniform.
+  // Branching on it and rendering that message would be apologising for what
+  // the person just asked for.
+  await expect(page.getByTestId("attachment-save-error")).toHaveCount(0);
+  await expect(page.getByTestId("attachment-saving")).toHaveCount(0);
+  await expect(continueButton(page)).toBeEnabled();
+  await expect(timeField(page)).toHaveValue("00:00:00.500");
+
+  await expect
+    .poll(async () =>
+      (await requests(page, matchId)).some(
+        (entry) => entry.method === "DELETE",
+      ),
+    )
+    .toBe(true);
+  expect(await savedEvents(page)).toEqual([]);
+});
+
+test("unmounting mid-upload cancels the attempt", async ({ page }) => {
+  const matchId = matchIdFor("held");
+  await armAdd(page, matchId);
+  await startHeldUpload(page, matchId);
+
+  await page.evaluate(() =>
+    (window as unknown as AttachmentFlowHarnessWindow).unmount(),
+  );
+
+  await expect
+    .poll(async () =>
+      (await requests(page, matchId)).some(
+        (entry) => entry.method === "DELETE",
+      ),
+    )
+    .toBe(true);
+  expect(
+    (await requests(page, matchId)).some(
+      (entry) =>
+        entry.path === "/azure/blocklist" || entry.path.endsWith("/complete"),
+    ),
+  ).toBe(false);
+  expect(await savedEvents(page)).toEqual([]);
+});
+
+test("a tab closing mid-upload still retires the attempt", async ({ page }) => {
+  const matchId = matchIdFor("held");
+  await armAdd(page, matchId);
+  await startHeldUpload(page, matchId);
+
+  // No unmount, no `finally`, no cleanup of any kind runs when a document goes
+  // away — which is why this is a `keepalive` request fired from `pagehide`.
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+
+  await expect
+    .poll(async () =>
+      (await requests(page, matchId)).some(
+        (entry) => entry.method === "DELETE",
+      ),
+    )
+    .toBe(true);
+});
+
+/* -------------------------------------------------------------------------
+ * Back, file changes, reload
+ * ---------------------------------------------------------------------- */
+
+test("Back keeps the file and the time; a different file clears the confirmation", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId);
+
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByTestId("attachment-file-name")).toHaveText(
+    "h264-faststart.mp4",
+  );
+
+  await continueButton(page).click();
+  await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
+  // Stepping back to check a filename must not throw away a scrubbed position.
+  await expect(timeField(page)).toHaveValue("00:00:00.500");
+
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await pickFile(page, OTHER_CLIP);
+  await expect(page.getByTestId("attachment-file-name")).toHaveText("h264.mov");
+
+  await continueButton(page).click();
+  await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
+  // A time measured against a different recording is not a head start; it is a
+  // wrong answer already typed in.
+  await expect(timeField(page)).toHaveValue("");
+  await expect(page.getByTestId("alignment-ready")).toHaveCount(0);
+  await expect(continueButton(page)).toBeDisabled();
+  expect(await requests(page, matchId)).toEqual([]);
+});
+
+test("a reload returns to step one with nothing picked", async ({ page }) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId);
+
+  await page.reload();
+  await expect
+    .poll(() => page.locator("html").getAttribute("data-hydrated"))
+    .toBe("true");
+
+  // A browser cannot restore a `File`, and pretending otherwise would send a
+  // person to the alignment step with nothing behind the player.
+  await expect(page.getByText("Step 1 of 2")).toBeVisible();
+  await expect(page.getByTestId("attachment-drop-zone")).toBeVisible();
+  await expect(page.getByTestId("attachment-file-name")).toHaveCount(0);
+  expect(await requests(page, matchId)).toEqual([]);
+});
+
+/* -------------------------------------------------------------------------
+ * Keyboard and focus
+ * ---------------------------------------------------------------------- */
+
+test("the keyboard drives the flow without submitting out from under a field", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await open(page, { matchId });
+  await pickFile(page);
+
+  await page.locator("body").click({ position: { x: 4, y: 4 } });
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Step 2 of 2")).toBeVisible();
+
+  await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
+  await timeField(page).fill("00:00:00.500");
+  // Enter inside the time field belongs to the field; it must not commit.
+  await timeField(page).press("Enter");
+  await expect(page.getByTestId("attachment-saving")).toHaveCount(0);
+  expect(await requests(page, matchId)).toEqual([]);
+
+  // Esc is the step-back, exactly as it is in the new-match wizard.
+  await page.locator("body").click({ position: { x: 4, y: 4 } });
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("Step 1 of 2")).toBeVisible();
+
+  await continueButton(page).focus();
+  await expect(continueButton(page)).toBeFocused();
+});
+
+/* -------------------------------------------------------------------------
+ * Layout
+ * ---------------------------------------------------------------------- */
+
+for (const viewport of [
+  { name: "390px", width: 390, height: 844 },
+  { name: "desktop", width: 1440, height: 900 },
+]) {
+  test(`the flow lays out at ${viewport.name} without horizontal overflow`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({
+      width: viewport.width,
+      height: viewport.height,
+    });
+    const matchId = matchIdFor("ok");
+    await armAdd(page, matchId);
+
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+
+    // Nothing inside the column — the player, the note strips, the footer row
+    // — reaches past the viewport, so none of it needs a sideways scroll.
+    const widest = await page.evaluate(() =>
+      Math.max(
+        ...[...document.querySelectorAll<HTMLElement>("div, span, p, button")]
+          .map((node) => node.getBoundingClientRect().right)
+          .filter((right) => Number.isFinite(right)),
+      ),
+    );
+    expect(widest).toBeLessThanOrEqual(viewport.width + 1);
+
+    // The chrome the shell owns is all present and legible at this width: the
+    // pinned subject, the step eyebrow, the player and the footer's primary.
+    // (Whether the footer PINS is the host page's scroll container's business,
+    // not this flow's — the shell is used exactly as the new-match wizard uses
+    // it, and this harness has no dashboard chrome around it.)
+    await expect(page.getByTestId("attachment-pinned-match")).toBeVisible();
+    await expect(page.getByText(`Step 2 of 2`)).toBeVisible();
+    await expect(page.getByTestId("alignment-video")).toBeVisible();
+    await expect(continueButton(page)).toBeVisible();
+    await expect(continueButton(page)).toBeEnabled();
+  });
+}
+
+/* -------------------------------------------------------------------------
+ * webpack plumbing
+ * ---------------------------------------------------------------------- */
+
+const webpack = (
+  nextWebpack as unknown as {
+    webpack: (
+      config: unknown,
+      callback: (error: Error | null, stats: WebpackStats) => void,
+    ) => void;
+  }
+).webpack;
+
+type WebpackStats = { toJson(): { errors?: unknown[] } };

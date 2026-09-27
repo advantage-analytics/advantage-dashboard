@@ -23,6 +23,7 @@ export function pt(
     duration: null,
     videoTime: null,
     saved: false,
+    savedBy: [],
     ...overrides,
   };
 }

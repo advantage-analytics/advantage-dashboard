@@ -7,7 +7,9 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
 import { PerformanceTrackerChart } from "@/components/dashboard/matches/match-detail/performance-tracker-chart";
 import { PointEndingsCard } from "@/components/dashboard/matches/match-detail/point-endings-card";
 import { RallyLengthCard } from "@/components/dashboard/matches/match-detail/rally-length-card";
+import { StatisticsEmpty } from "@/components/dashboard/matches/match-detail/statistics-empty";
 import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-detail/unpublished-stats-notice";
+import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { cn } from "@/lib/utils";
 
 /**
@@ -41,19 +43,29 @@ import { cn } from "@/lib/utils";
  * None of the cards take a player name or a points array: each reads
  * `points` from `MatchDataProvider` and its you/opp orientation from
  * `useMatchSides()`, the only thing allowed to decide it (guardrails §4).
+ *
+ * A match with NO points at all gets one honest zero (`StatisticsEmpty`) in
+ * place of the row: every card in it is point-derived and each would
+ * otherwise return null, leaving a title over blank space — and the notice
+ * above, which promises "point-by-point analysis is ready", would be false.
+ * The insight card is withheld too: with points it draws its own empty when
+ * there is no summary, but a view with nothing says so once, not per card.
+ * A match still analysing never gets here: `page.tsx` shows progress instead.
  */
 export function StatisticsView() {
   const { meta } = useMatchReport();
+  const { points } = useMatchData();
+  const hasPoints = points.length > 0;
 
   return (
     <>
-      {!meta.statsPublished && (
+      {!meta.statsPublished && hasPoints && (
         <div className="shrink-0">
           <UnpublishedStatsNotice />
         </div>
       )}
 
-      <MatchReport.Insight />
+      {hasPoints ? <MatchReport.Insight /> : <StatisticsEmpty />}
 
       {/* F1: 436px + 416px in the 868px pane. The head-to-head's slot takes
           what the fixed column leaves. Under 720px of pane (the `@container`
@@ -61,26 +73,28 @@ export function StatisticsView() {
           charts under it, both full width — `items-start` only applies side
           by side, since in a column it would shrink each child to its
           content's width. */}
-      <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row @min-[720px]:items-start">
-        {meta.statsPublished && (
-          <div className="min-w-0 flex-1">
-            <HeadToHeadCard />
-          </div>
-        )}
-
-        <div
-          className={cn(
-            "flex flex-col gap-4",
-            meta.statsPublished
-              ? "w-full shrink-0 @min-[720px]:w-[416px]"
-              : "min-w-0 flex-1",
+      {hasPoints && (
+        <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row @min-[720px]:items-start">
+          {meta.statsPublished && (
+            <div className="min-w-0 flex-1">
+              <HeadToHeadCard />
+            </div>
           )}
-        >
-          <PerformanceTrackerChart />
-          <RallyLengthCard />
-          <PointEndingsCard isDerived={meta.isDerived} />
+
+          <div
+            className={cn(
+              "flex flex-col gap-4",
+              meta.statsPublished
+                ? "w-full shrink-0 @min-[720px]:w-[416px]"
+                : "min-w-0 flex-1",
+            )}
+          >
+            <PerformanceTrackerChart />
+            <RallyLengthCard />
+            <PointEndingsCard isDerived={meta.isDerived} />
+          </div>
         </div>
-      </div>
+      )}
 
       {meta.isDerived && meta.statsPublished && <MatchDataBlock />}
     </>

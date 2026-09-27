@@ -1,1 +1,1 @@
-export { EventPageSkeleton as default } from "@/components/dashboard/loading/page-skeletons";
+export { EventTableSkeleton as default } from "@/components/dashboard/loading/page-skeletons";

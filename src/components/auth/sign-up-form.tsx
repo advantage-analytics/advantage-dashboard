@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
+import { PRIVACY_URL, TERMS_URL } from "@/lib/constants";
 import FormHeader from "./form-header";
 import FormField from "./form-field";
 import AuthButton from "./auth-button";
@@ -143,13 +144,23 @@ export function SignUpForm() {
               style={{ color: "var(--ink-700)" }}
             >
               By signing up, you agree to our{" "}
-              <Link href="/legal/terms-and-conditions" className={AUTH_LINK}>
+              <a
+                href={TERMS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={AUTH_LINK}
+              >
                 Terms
-              </Link>{" "}
+              </a>{" "}
               and{" "}
-              <Link href="/legal/privacy-policy" className={AUTH_LINK}>
+              <a
+                href={PRIVACY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={AUTH_LINK}
+              >
                 Privacy Policy.
-              </Link>
+              </a>
             </span>
           </div>
           {error?.field === "consent" ? (

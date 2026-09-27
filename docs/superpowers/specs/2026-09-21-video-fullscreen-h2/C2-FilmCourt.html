@@ -1,0 +1,84 @@
+<!-- FilmCourt.dc.html — extracted 2026-09-21. Helmet omitted; markup and logic verbatim.
+     NOTE: the H2 notes text says 214px / 178×266. The component and every R-frame draw 168px / 152×227.
+     The component wins (user decision 2026-09-21). -->
+<section aria-label="Shot placement" style="display:flex;width:168px;box-sizing:border-box;flex-direction:column;align-items:center;gap:7px;padding:8px;border-radius:var(--radius-element);background:rgba(13,13,13,0.8);box-shadow:var(--shadow-dropdown);font-family:var(--font-sans)">
+
+  <div style="display:flex;width:100%;align-items:center;gap:4px;height:20px;padding-left:2px">
+    <span style="font-size:10.5px;font-weight:500;color:#FFFFFF;white-space:nowrap">{{ title }}</span>
+    <div style="flex:1"></div>
+    <span role="button" tabindex="0" aria-label="{{ swapLabel }}" style="display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;border-radius:var(--radius-cell);cursor:pointer;opacity:{{ ctrlOpacity }}" style-hover="background:rgba(255,255,255,0.08)"><i data-lucide="layers" stroke-width="1.6" style="width:11px;height:11px;color:rgba(255,255,255,0.7)"></i></span>
+    <span role="button" tabindex="0" aria-label="Hide the court" style="display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;border-radius:var(--radius-cell);cursor:pointer;opacity:{{ ctrlOpacity }}" style-hover="background:rgba(255,255,255,0.08)"><i data-lucide="x" stroke-width="1.6" style="width:11px;height:11px;color:rgba(255,255,255,0.7)"></i></span>
+  </div>
+
+  <div style="position:relative;width:152px;height:227px">
+    <div aria-hidden="true" style="position:absolute;left:6%;right:6%;top:3%;bottom:3%;border:1px solid rgba(255,255,255,0.34);background:rgba(214,228,249,0.07)"></div>
+    <div aria-hidden="true" style="position:absolute;left:17%;top:3%;bottom:3%;width:1px;background:rgba(255,255,255,0.24)"></div>
+    <div aria-hidden="true" style="position:absolute;left:83%;top:3%;bottom:3%;width:1px;background:rgba(255,255,255,0.24)"></div>
+    <div aria-hidden="true" style="position:absolute;left:17%;right:17%;top:24.7%;height:1px;background:rgba(255,255,255,0.24)"></div>
+    <div aria-hidden="true" style="position:absolute;left:17%;right:17%;top:75.3%;height:1px;background:rgba(255,255,255,0.24)"></div>
+    <div aria-hidden="true" style="position:absolute;left:50%;top:24.7%;height:50.6%;width:1px;background:rgba(255,255,255,0.24)"></div>
+    <div aria-hidden="true" style="position:absolute;left:2%;right:2%;top:50%;height:1px;background:rgba(255,255,255,0.6)"></div>
+
+    <sc-for list="{{ dots }}" as="d" hint-placeholder-count="5">
+      <span role="button" tabindex="0" aria-label="{{ d.label }}" style="position:absolute;box-sizing:border-box;left:{{ d.x }}%;top:{{ d.y }}%;width:{{ d.size }}px;height:{{ d.size }}px;opacity:{{ d.o }};transform:translate(-50%,-50%);border-radius:var(--radius-pill);border:{{ d.border }};background:{{ d.bg }};box-shadow:{{ d.ring }};transition:opacity 300ms cubic-bezier(.25,.46,.45,.94);cursor:pointer"></span>
+    </sc-for>
+
+    <sc-if value="{{ readout }}" hint-placeholder-val="{{ false }}">
+      <div role="tooltip" style="position:absolute;left:170px;top:16%;width:168px;display:flex;flex-direction:column;gap:3px;padding:10px 12px;border-radius:12px;background:var(--ink-900);box-shadow:var(--shadow-dropdown)">
+        <span style="font-size:12px;font-weight:500;color:#FFFFFF">Forehand · 74 mph</span>
+        <span style="font-size:11px;color:rgba(255,255,255,0.64)">Lee · shot 4 of 5</span>
+        <span style="font-size:11px;color:rgba(255,255,255,0.64)">Deep cross-court · in</span>
+      </div>
+    </sc-if>
+  </div>
+
+  <div style="display:flex;width:100%;align-items:center;gap:8px;padding:1px 2px 0">
+    <span style="display:inline-flex;align-items:center;gap:4px;font-size:9.5px;color:rgba(255,255,255,0.6)"><span style="box-sizing:border-box;width:6px;height:6px;border-radius:var(--radius-pill);border:{{ keyOneBorder }};background:{{ keyOneBg }}"></span>{{ keyOne }}</span>
+    <span style="display:inline-flex;align-items:center;gap:4px;font-size:9.5px;color:rgba(255,255,255,0.6)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:{{ keyTwoBg }}"></span>{{ keyTwo }}</span>
+    <div style="flex:1"></div>
+    <span class="mono tabular" style="font-size:9.5px;color:rgba(255,255,255,0.45)">{{ caption }}</span>
+  </div>
+</section>
+
+<!--
+Props (tsType): mode "point"|"match" (frames also pass "none") · title string · caption string ·
+activeShot number (1-based, 0 = none) · controls boolean · readout boolean
+
+Logic, verbatim:
+
+const YOU = "#60A5FA", OPP = "#94A3B8", OUT = "#E5484D";
+const RING = "0 0 0 1px rgba(255,255,255,0.85)";
+
+/** One entry per shot: where it was struck (contact, drawn as a donut) and where it landed
+ *  (bounce, drawn filled). Both fade out two shots later, so the court reads as the rally
+ *  happening rather than as a finished chart. Coordinates are % of the 152×227 box. */
+const POINT_SHOTS = [
+  { contact: [48, 6],  bounce: [30, 66],  c: OPP, label: "Reid serve, T deuce court, 108 mph" },
+  { contact: [26, 78], bounce: [62, 28],  c: YOU, label: "Lee backhand, deep centre, 61 mph" },
+  { contact: [66, 20], bounce: [72, 70],  c: OPP, label: "Reid forehand, cross-court, 68 mph" },
+  { contact: [76, 80], bounce: [28, 24],  c: YOU, label: "Lee forehand, cross-court, 74 mph" },
+  { contact: [24, 74], bounce: [52, 1.5], c: YOU, out: true, label: "Lee forehand, long — unforced error" },
+];
+
+/** 0 = the shot playing now. Older marks fade; nothing survives three shots. */
+const TRAIL = [1, 0.5, 0.22];
+
+point mode:
+  POINT_SHOTS.forEach((s, i) => {
+    const age = active - (i + 1);
+    if (age < 0 || age >= TRAIL.length) return;
+    const o = TRAIL[age];
+    const colour = s.out ? OUT : s.c;
+    contact → { size: 7, o, border: "1px solid " + colour, bg: "transparent", ring: "none", label: s.label + " — contact" }
+    bounce  → { size: 7, o, border: "none", bg: colour, ring: age === 0 ? RING : "none", label: s.label + " — bounce" }
+  });
+match mode: bounces only, size 4.5, o 1, no border, no ring; bg YOU / OPP by who hit it, OUT for out balls.
+mode "none": no dots; the lines stay.
+
+legend: point mode → keyOne "Contact" (transparent, border 1px solid rgba(255,255,255,0.65)), keyTwo "Bounce" (rgba(255,255,255,0.75))
+        match mode → keyOne = your name (bg YOU, no border), keyTwo = opponent name (bg OPP)
+title:   p.title ?? (match ? "Whole match" : "This point")      // under a cut: the cut's name
+caption: p.caption ?? (match ? "174 points" : "5 shots")        // under a cut: "14 points"; between points: "Not started", title "Next point"
+swapLabel: match ? "Show this point only" : "Show the whole match"
+ctrlOpacity: controls === false ? 0 : 1
+-->

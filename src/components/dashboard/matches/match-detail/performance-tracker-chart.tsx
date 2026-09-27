@@ -203,8 +203,45 @@ export function PerformanceTrackerChart() {
   );
 
   // Fewer than two points is not a momentum series; the card would draw a flat
-  // line that reads as "the match was level throughout".
-  if (!geometry) return null;
+  // line that reads as "the match was level throughout". The card stays —
+  // eyebrow, the midline alone, one sentence — so the column keeps its shape
+  // and the reader is told why there is no trend rather than shown none.
+  if (!geometry) {
+    return (
+      <section
+        aria-labelledby="performance-tracker-heading"
+        className="surface-card flex flex-col gap-2.5"
+        style={{ padding: "16px 20px 12px" }}
+        data-testid="performance-tracker-empty"
+      >
+        <div className="flex items-center gap-2.5">
+          <span id="performance-tracker-heading" className="eyebrow">
+            Performance tracker
+          </span>
+          <div className="flex-1" />
+        </div>
+        <svg
+          viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+          preserveAspectRatio="none"
+          className="block w-full"
+          style={{ height: 104 }}
+          aria-hidden="true"
+        >
+          <line
+            x1={0}
+            y1={MID}
+            x2={CHART_W}
+            y2={MID}
+            stroke="var(--ink-200)"
+            strokeWidth={1}
+          />
+        </svg>
+        <p className="text-micro" style={{ color: "var(--ink-500)" }}>
+          Momentum is drawn once at least two points are tagged.
+        </p>
+      </section>
+    );
+  }
 
   const hovered = hoverIndex === null ? null : scopedPoints[hoverIndex];
   const hoveredDiff = hoverIndex === null ? 0 : samples[hoverIndex].diff;

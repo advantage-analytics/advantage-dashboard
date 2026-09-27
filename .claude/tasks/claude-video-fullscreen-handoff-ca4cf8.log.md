@@ -1,0 +1,289 @@
+# Run log — claude/video-fullscreen-handoff-ca4cf8
+
+Written by `/task-next`. Do not hand-edit — the queue file is yours, this one
+is the runner's. Newest entries at the bottom.
+
+## T1 · Carry per-shot coordinates on MatchShot and add pure film-court.ts geometry — done
+
+**gate:** mechanical pass (second run — the first failed `tests/design-drift.spec.ts` on the off-palette `#E5484D`; the author's delegate changed `OUT` to the dark scope's `--danger` `#FF6478` in the code, the spec, the design doc and the criterion, then re-ran) · completion `VERDICT: pass`
+
+**changed:** `MatchShot` carries `contactX/Y` and `landingX/Y` from columns the select already fetched. New JSX-free `film/film-court.ts` maps the DB frame (metres, x about the centre line, y 0 → 23.77, confirmed identical for one Advantage Intelligence and one SwingVision match in the live DB) to percentages of the C2 court box, decides which end "you" are on per point by a vote of contacts, rotates the point so you are drawn at the bottom, takes the verdict from `result`, and keeps Net balls on the hitter's side. `tests/film-court.spec.ts` (13 cases) pins it.
+
+**follow-ups:**
+
+1. A Net ball keeps the hitter's colour — only "Out" maps to the out role. Decide in the FilmCourt UI whether netted balls also read red.
+2. Advantage Intelligence leaves about 17% of landings null, so point mode will sometimes show a contact donut with no bounce. Treat as normal.
+3. About 3% of Advantage Intelligence "In" shots land on the hitter's own side of the net (vendor noise); plotted as recorded.
+
+## T2 · Rework board-position.ts to four corners and add nudge and court-slot helpers — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `BOARD_ANCHORS` is the four corners; a stored six-spot value parses to null and falls back to the default. Top inset drops to 24, with `top-right` held at 58 to clear the "Points" trigger; the bottom corners keep the 144px transport clearance. New pure `nudgeBoard` (8px, 40px shifted, clamped) and `courtSlot` (28px gap, beneath a top-corner board, above a bottom-corner one — commented as the spec document's inference). `neighbourAnchor` keeps its signature so `film-scoreboard.tsx` stays out of the diff. Spec rewritten for a 236×146 board in a 1280×720 room.
+
+**follow-ups:**
+
+1. In T12, confirm `onRest` reports the measured board size, not a static 236×146 — the slab's height changes once T4 restyles it.
+
+## T3 · Move the board by free nudge and lift/drop, and stop the drawer displacing it — done
+
+**gate:** mechanical pass on re-run — the full suite had one failure, `tests/match-video-attachments-db.spec.ts:3225` ("two concurrent sweeps never share a row"), a live-database spec this diff does not touch; re-run alone it passed, and the whole file passed 42/42, so it was recorded as a shared-DB load flake, not waved through unchecked · completion `VERDICT: pass`
+
+**changed:** `FilmScoreboard` loses `rightInset` and the drawer-aware inset block, so the drawer no longer displaces the board; `film-fullscreen.tsx` changes by one deleted line. Arrows nudge through `nudgeBoard` (8px, 40px shifted), Space lifts and drops, Escape while held returns to where the move began without persisting. One `free` position drives the landing ghost for both a pointer drag and a keyboard hold. A polite live region announces each landing by corner. New optional `onRest(anchor, size)`. `neighbourAnchor`, the `0` reset and the double-click reset are deleted with their spec case. The system focus ring shows on plain `:focus`.
+
+**follow-ups:**
+
+1. `[data-film-own-keys]` makes the room ignore every key from the focused board, so Escape on a focused-but-not-held board cannot close the drawer or the room. Consider forwarding an unhandled Escape.
+2. A keyboard nudge moves instantly; a short glide might read better, but the spec gives no motion for it.
+
+## T4 · Restyle the scoreboard to the C1 FilmBoard slab — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** The scoreboard is the C1 slab: 236px, `14px 15px 12px`, `--radius-dropdown`, `rgba(13,13,13,0.74)` with an 8px blur and no surface shadow. Head carries "Playing"/"Paused" and a mono clock; rows use one set track per column toned by the new pure `setTrackTone`; the foot is a hairline, a 22px winner pill and a truncating line from the new pure `footLine` (point name, "· saved", or the game state). `Board` gains `gameNumber`. `dim` sets 82% opacity and the room passes `!chrome`. The slab is an inner element so the drag root T3 built stays byte-identical and no empty box paints before the first point resolves. The winner pill is omitted between points, with a comment.
+
+**follow-ups:**
+
+1. The landing ghost still uses `--radius-element` while the slab is `--radius-dropdown` — a one-line fix.
+2. `board.pointLine` is no longer read by the room; only the report rail uses it.
+3. The board clock re-renders at `timeupdate` cadence; it could read `--film-t` in CSS if that ever matters.
+
+## T5 · Bring FilmTransport to C3: court toggle, keyed tooltips, nothing disabled — done
+
+**gate:** mechanical pass on re-run — the full suite had one failure, `tests/match-video-attachment-flow.spec.ts:868` ("a tab closing mid-upload still retires the attempt"), in upload code this diff does not touch; the file re-run alone passed 20/20, so it was recorded as a timing flake under parallel load · completion `VERDICT: pass`
+
+**changed:** `FilmTransport` gains `courtOn` / `onToggleCourt` and a `Grid2x2` court control between sound and exit (white on, 45% off, `aria-pressed`, label carries the state). Every control's dark tooltip carries its key; the two title-row chevrons gain tooltips; speed reads `Playback speed, {rate}×`. All `disabled` attributes are gone — step and save guard inside their handlers — and "More" is the only `aria-disabled` control, with no handler. The time slot reads "—" before the duration is known. `FilmTrack`'s slider handles ←/→ (5s), Home and End and carries `data-film-own-keys`. The room holds a placeholder `useState(true)` for the court until T12.
+
+**follow-ups:**
+
+1. `data-film-own-keys` on the seek lane also swallows Space, S and Esc while it has focus. T15 should narrow the guard or have the lane pass them on.
+2. Speed's tooltip carries no key; the H2 table gives it `⇧.` / `⇧,`.
+3. The bar now mixes two conventions: slashed off-state glyphs (kept by decision) beside the court glyph that only dims.
+
+## T6 · Give PointList and PointRow a tone prop — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `PointList` and `PointRow` take `tone` (default light). Three module-level lookups — list, row, zero state — hold the shipped light strings verbatim beside the frame's dark literals; no dark branch reads an ink, surface or hairline token. Tone is threaded to `FilmQuickFilters`, every row and the zero states, whose copy is unchanged. Dark text on elements with a DS type class is set inline. An optional `onCollapse` adds a 26px "Collapse point list" button. Hooks, the blue progress rule and the 52px / 30px geometry are shared by both tones. One file in the diff.
+
+**follow-ups:**
+
+1. The dark header's spacing compensates for a `mb-[7px]` baked into `FilmQuickFilters`' dark trigger; moving that margin onto the hosts would be sturdier.
+
+## T7 · Unfold the playing point's shots in place in PointList — done
+
+**gate:** mechanical pass on re-run — the full suite's one failure was again `tests/match-video-attachments-db.spec.ts:3225` ("two concurrent sweeps never share a row"), a live-database spec this one-file UI diff cannot reach. Re-run alone it failed once and then passed; the test is intermittent against the shared database (see follow-up 1) · completion `VERDICT: pass`
+
+**changed:** `PointList` takes optional `shotStops`, `activeShotId` and `onSelectShot`. When given, the active point's row is followed by a sibling well holding that point's shots only, so stepping refolds the last one; without them the render is unchanged. Well rows are memoised 34px grid buttons (`# · player · stroke · placement · result`) with `data-shot-id` and `aria-current` on the lit one, strings from `shotRowCells`. One shot is lit at 12% white with a white stroke; hover is 5% and only on unlit rows. Keep-in-view follows the lit shot through the list's own `scrollTop`. Names come from `sides` via `lastNameOf`.
+
+**follow-ups:**
+
+1. `match-video-attachments-db.spec.ts:3225` has now failed in three gate runs on this branch (T3, T7) and once when run alone, while passing on the next attempt each time. It claims from a cleanup queue on the shared live database, so another session's sweep can take its rows. Worth isolating by marker or serialising.
+2. The R3 frame draws each shot's player as a 20px initials chip; the well prints the last name because the criterion required `shotRowCells` strings. Decide whether the chip is wanted.
+3. The well's slicing and one-lit rule have no spec of their own.
+
+## T8 · Give FilmAdvancedPanel a dark tone — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `FilmAdvancedPanel` takes `tone` (default light) and `PointList` passes its own through. Two module-level lookups, panel and pill, hold the shipped light strings verbatim beside R3/R4's dark literals; `var(--blue)` is the only colour token in a dark branch. On dark the selected pill's wash is 7% white rather than the blue tint, which is invisible over film — the blue border and label carry the state. Geometry, the section table, live counts, the Apply gate and `advButton()` are unchanged; `filters/types.ts` is not in the diff.
+
+**correction to the T7 entry above:** the intermittent `match-video-attachments-db.spec.ts:3225` failure had occurred in two gate runs (T3 and T7) plus one solo re-run, not three gate runs.
+
+**follow-ups:**
+
+1. This panel's docstring still names `film-advanced-filters-dialog.tsx`; T9 deletes that file and forbids the filename anywhere under `src/`, comments included.
+2. Dark zero-count pills (30% white on a 4% wash) are the lowest-contrast thing in the column.
+
+## T10 · Build the FilmCourt presentational component — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`. The component file is `film-court-card.tsx`, not the `film-court.tsx` the task first named: that basename collides with `film-court.ts`, which TypeScript resolves `.ts`-first and Next `.tsx`-first. The author's delegate amended the criterion and the design doc to the new name before the review.
+
+**changed:** New `film/film-court-card.tsx` exporting `FilmCourt`: a 168px card with a 152×227 court at the frame's line alphas, marks as buttons in the order given (7px donut for a contact, 7px dot for a bounce, the ring on the live bounce, 4.5px flat in match mode, 300ms opacity fade), one dark readout at a time that closes when the seek key changes, a destination-labelled `layers` button and a "Hide the court" button that go inert under `controls={false}`, and a designed `none` state. No loader, no `useMatchSides()`, nothing mounts it yet. `film-court.ts` gains pure `readoutPlacement` and four fields on `CourtMark` so a mark can describe itself; `pointMarks` / `matchMarks` signatures are unchanged. The end-change assertions compare through a projection that reduces the carried shot to its id.
+
+**follow-ups:**
+
+1. T12 must import from `./film-court-card`; its notes still say `film-court.tsx`.
+2. `pointMarks` wants the point's shots in rally order, the same array `activeShotAt` indexed into.
+3. The readout flips by which half of the court the mark is in; with the board in a right-hand corner it may need to flip by available room instead.
+
+## T11 · Add film-room-prefs.ts: localStorage preferences and the fullscreen param helper — done
+
+**gate:** mechanical pass on re-run — the full suite's one failure was again the intermittent live-database `tests/match-video-attachments-db.spec.ts:3225`; this task is two new files nothing imports, and the test passed when re-run alone · completion `VERDICT: pass`
+
+**changed:** New import-free `film/film-room-prefs.ts`: three `film-room:` storage keys (court on, court mode, drawer open), pure parsers that fall back to `true` / `"point"` / `false` on anything unrecognised, read/write helpers that wrap every `localStorage` access in try/catch, and `roomParam(params, open)`, which sets or deletes `fullscreen` on a fresh copy of the query string and tolerates null. Booleans are stored as `"1"` / `"0"`. `tests/film-room-prefs.spec.ts` covers defaults, one accepted and one rejected value per parser, and a round trip that keeps `tab=film&cut=break` intact.
+
+## T9 · Swap the room's drawer to PointList tone="dark" and delete the duplicates — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** New `film/film-room-drawer.tsx` holds the 320px `<aside>` shell moved out of the old panel — surface, hairline, shadow, the translate slide with its reduced-motion fade, `data-state`, `data-film-chrome`, `onTransitionEnd` → `onExited` — and renders only `PointList tone="dark"` with the collapse button and the shots well. Advanced opens in the drawer's own column; its open flag and section state live in the drawer. `film-point-panel.tsx` and `film-advanced-filters-dialog.tsx` are deleted (about 1,000 lines), and no reference to either survives under `src/` or `tests/`, comments included. `FilmFullscreenProps` drops `tab` / `onTabChange`; `film-tab.tsx` drops its tab state and hands the room the same filtered points the shell list gets. The drawer's open state initialises from `readDrawerOpen()` and is written on open and collapse; neither handler touches playback.
+
+**follow-ups:**
+
+1. A persisted-open drawer now slides in while the room is still growing; worth a look once the court shares that screen.
+2. The `aside` ("Points") and the `PointList` section inside it ("Point list") are two nested landmarks with near-identical names.
+3. `FilmFullscreenProps.visiblePoints` is now always the same array as the filtered points; it could collapse into one prop.
+
+## T12 · Mount the court in the room with its preferences and cut-driven match mode — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** The room mounts `FilmCourt` (from `film-court-card.tsx`) inside the playing branch only, while the court is on. Court on/off and mode are room state from `readCourtOn` / `readCourtMode`, written through T11's writers; T5's placeholder is gone and the transport and the card's `x` share one toggle, none of which touches playback. The court is placed by `courtSlot` from the corner and measured size the board reports through `onRest`; the drawer appears in neither position. Point mode feeds `pointMarks` from the playing point's timed shots in rally order with the 1-based playing index; with no active point the mode is `none`. Match mode feeds `matchMarks` from the filter-applied points, titled by `cutName` under a cut, captioned by that array's count. A mark click runs the existing `selectShot` and returns to point mode; `seek` bumps the key that closes the readout. The shot feed is built whenever the court is on or the drawer is open. `film-court-card.tsx` exports and pins `FILM_COURT_SIZE` (168×296) so the slot can be computed before the card renders.
+
+**follow-ups:**
+
+1. The card's height is a constant; if the legend row grows, `FILM_COURT_SIZE.height` must move with it.
+2. Match mode renders every filtered point's bounce as a DOM button — a few thousand on a full three-set match. Check on real data; cap or canvas-draw if it drags.
+
+## T13 · Room states R2, R7 and R11: collapse only while playing, between points, opening — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** New pure `playingStopAt` in `film-timeline.ts` reports containment only — null before the first point and in the gap after a stop's `end` — with four spec cases; `activeStopAt` is unchanged and still feeds Loop and dead-time skipping. In the room, the playing point now comes from `playingStopAt`, so between points the transport gets a null position, the drawer no selected row, the court `none` in point mode, and the board no point name while its score still reads the last reached stop. Board and court sit under one `firstPointReached` condition and the `stops[0]` fallback is gone. The 3s collapse is armed only while playing; pause clears it and brings the chrome up; `wake` re-arms only while playing. The root hides the cursor with the chrome. The bottom scrim is its own faded span, the Points trigger's translate fires only for the drawer, and the transport's opacity fade sits on the transport itself, so the collapse path adds no transform.
+
+**follow-ups:**
+
+1. The shell (`film-tab.tsx`) still lights its playing row from `activeStopAt`, so the report list keeps a row lit through dead time while the room does not.
+2. The court's "Next point" / "Not started" copy is now reachable between every pair of points, not only before the first — worth an eyeball in the running app.
+3. The chrome returns at the end of the film through `onPause`; a browser that fires `ended` without `pause` would need the same two lines on `onEnded`.
+
+## T14 · R10 from one copy table, plus aria-modal, focus trap and double-click exit — done
+
+**gate:** mechanical pass on re-run — the full suite's one failure was `tests/match-video-attachment-flow.spec.ts:848` ("unmounting mid-upload cancels the attempt"), in upload code this diff does not touch and that imports nothing it changed; the file re-run alone passed 20/20, the same file that flaked under load in T5 · completion `VERDICT: pass`
+
+**changed:** `FILM_REFUSAL_COPY` gains a `denied` heading row (no body — the hook's message stays the sentence). `ROOM_PROBLEM_TITLES` in the room and `PROBLEM_TITLES` in the shell player now hold no string literal; all four reasons, the room's button labels and the reload panel's heading resolve from the table. The room root is `role="dialog"` with `aria-modal` and `aria-label="Film room"`, and deliberately carries no `data-state`, so `overlayIsOpen()` never matches the room against itself. New pure `film/film-focus-trap.ts` (`nextFocusTarget`, wrapping both ends, null on an empty ring) with a five-case spec; the room handles Tab in its own effect, stands down while an overlay is open, and on unmount returns focus to whatever had it when the room opened. The `<video>` gains `onDoubleClick={exit}`; it is the only double-click handler under `film/`. The letter and arrow key switch is untouched.
+
+**follow-ups:**
+
+1. If the focused control unmounts when the chrome collapses, focus falls to `body` and the next Tab re-enters at the top of the ring. Re-focusing the root when focus leaves it would keep the viewer's place.
+2. The browser harness has no case for double-click exit or Tab wrapping in the live room.
+3. `match-video-attachment-flow.spec.ts` has now flaked twice under full-suite load on this branch (T5, T14) on two different mid-upload cases; both pass alone.
+
+## T15 · Remap the room's keys to the H2 table; shell untouched — done
+
+**gate:** mechanical pass on re-run — the full suite's one failure was `tests/match-video-attachment-flow.spec.ts:848` ("unmounting mid-upload cancels the attempt"), the same test that failed in T14's gate. Because it repeated, it was checked rather than assumed: repeated six times alone it passed 6/6, it polls for a DELETE on a 5s default timeout inside a 2,100-test parallel run, and its harness mounts no film-room code · completion `VERDICT: pass`
+
+**changed:** The room's keydown switch follows H2: `←`/`→` step points and seek 5s with Shift, `↑`/`↓` stay as aliases by author decision, `L` loops, `S` saves, `M` mutes, `C` toggles the court, `D` toggles dead-time skipping, `P` opens or collapses the drawer, `>` / `<` step the rate through `PLAYBACK_RATES` (`cycleRate` takes a direction), and the `J` seek is gone. Escape collapses an open drawer before it exits the room. Every letter key ignores meta, ctrl and alt; the three guards and the Tab effect are untouched; `film-tab.tsx` is not in the diff. The "Points" trigger sits in the dark tooltip with its key. The dark quick-filter note reads `← →`; the light one still reads `↑↓`.
+
+**follow-ups:**
+
+1. Still open from T5: the seek lane's `data-film-own-keys` swallows Space, S and Esc while it has focus. This task's criteria froze the guards, so it was not narrowed here.
+2. Speed's tooltip still carries no key, though `>` / `<` now work.
+3. `match-video-attachment-flow.spec.ts:848` is load-sensitive in the full suite; a longer poll timeout on its DELETE wait would likely settle it.
+
+## T16 · Doors: ⇧-click a shell point row, and the fullscreen=1 param — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `PointList` / `PointRow` take an optional `onOpenInRoom`. On a seekable row a Shift-held click calls it instead of the select, a Shift-held `mousedown` prevents the text selection, and a plain click is unchanged; the room's drawer does not pass it. `film-tab.tsx` gains a stable `openPointInRoom` that pauses the report player and opens the room at the point's start, playing — or falls back to the ordinary select when the point has no stop. Both doors write `fullscreen=1` through `roomParam` with `window.history.replaceState`, exit strips it, and a mount effect strips one found on load; nothing reads the param to open the room. No router call was added and the cut effect is unchanged.
+
+**follow-ups:**
+
+1. Neither door has an end-to-end case; the playback harness could ⇧-click a row and assert the room and the param.
+2. The ⇧-click door is undiscoverable — no hint in the row's label, no tooltip. A design call.
+3. Keyboard users have no equivalent door; ⇧+Enter on a focused row is the obvious mapping.
+
+## T17 · Time-based court marks: appear, hold 2s, fade 3s as a pure function of film time — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `film-court.ts` gains `markOpacity` (0 before the event bar a 0.1 s early admit, 1 through a 2 s hold, a linear 3 s fade, quantised to 0.05), `TimedShot` and `estimatedBounceTime`. `pointMarks` takes timed shots plus `filmTime`: a contact fades from its contact time, a bounce from its measured time when one is given and sane, otherwise from the estimate; zero-opacity marks are omitted; the ring sits on the returned bounce with the latest event time. `TRAIL`, `bounceRevealed` and the shot-age options are deleted. The room passes `currentTime` and each shot stop's start. The spec is rewritten onto contacts at 10–14 with the named time cases; geometry, end-change, verdict, net-ball, camera-view and readout cases kept and re-timed. One assertion changed by rule: on a point whose playing shot has no usable landing, the only bounce on show now carries the ring. The design doc's C2 paragraph records the new rule.
+
+**follow-ups:**
+
+1. `TRAIL_TRANSITION` in `film-court-card.tsx` is now a misnomer.
+2. The marks memo re-runs on every `currentTime` tick (~4 Hz); quantise the time for it if it ever shows in a profile.
+
+## T18 · Pure ball-paths.ts derivation: trajectory rows + strokes → per-stroke paths — done
+
+**gate:** mechanical pass on re-run — the full suite's one failure was the known intermittent live-database `tests/match-video-attachments-db.spec.ts:3225`; this task is a pure module nothing imports yet, and the test passed when re-run alone · completion `VERDICT: pass`
+
+**changed:** New pure `derivation/ball-paths.ts` (imports only `./court` and `./types`): `deriveBallPaths` fits frames to seconds by least squares over the strokes' frame/time pairs, groups trajectory rows by `stroke_frame`, joins each group to its stroke, drops non-finite and implausible rows in the vendor frame, converts with `metersToCourtFrame`, rounds to 2 dp and downsamples to about 10 Hz while always keeping the first, bounce and last rows. `contactTime` is the stroke's own `videoTime`, so it equals `shots.video_time`; `bounceTime` is the fitted time of `bounce_frame`, null on the `-9999` sentinel. Re-exported from the derivation index. Node spec pins every value, including 17 samples from a 47-row stroke.
+
+**follow-ups:**
+
+1. A residual check on the frame→time fit would catch a variable-framerate re-encode.
+2. The 0.1 s spacing can drop the row just before a bounce; whoever draws height may want it kept.
+
+## T19 · Store the derived ball-paths file: key, one store service, webhook call, backfill script — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `ballPathsObjectKey()` gives `results/{user}/{match}/{job}.ball-paths.json`. New `ball-paths-store.ts` exports `deriveAndStoreBallPaths({ supabase, jobId })`: it reads the job row, downloads the recorded results and trajectories objects from `RESULTS_BUCKET`, runs `parseStrokes` with the trim offset and then `deriveBallPaths`, and upserts the JSON; it returns `stored` / `skipped` (`no_trajectories`, `no_results`) / `failed` and never throws. A null `created_by` keys under `former-member`, as `delivery-storage-keys.ts` does; a null `match_id` is `failed`. The webhook calls it inside the existing `after()` callback after `storeFrameData`, only with a job id, in its own try/catch — no existing line changed. New `scripts/splitstep-ball-paths.ts` backfills every job with a trajectories key, or one `--job <uuid>`, and refuses a missing uuid. No migration, no new column. The backfill was NOT run against the live project.
+
+**follow-ups:**
+
+1. `purge-match-storage.ts` removes only `results_object_key` from the results bucket. A deleted match's `.players.json` and `.trajectories.json` already stayed behind, and the new `.ball-paths.json` will too. Purge by the match's key prefix, or add the three keys.
+2. T20 must build its key with the same `former-member` fallback, or it will miss files for jobs with no creator.
+3. `"former-member"` is now a literal in two modules; share a constant.
+
+## T20 · Serve ball paths: GET /api/matches/[matchId]/ball-paths behind the match-visibility check — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** New decision module `ball-paths-access.ts`: `handleGetBallPaths` runs `authorizeMatchVisibility` first and returns its refusal unchanged, so the loader — and the lazily built service-role client behind it — is never reached by a caller who cannot see the match. For a visible match the production loader takes the most recently completed job (`completed_at` descending, nulls last, then `created_at`), downloads its ball-paths object from `RESULTS_BUCKET`, and answers 200 with the stored text verbatim, or `{"version":1,"strokes":[]}` when there is no job or no object; both carry `private, no-store`. A loader that throws answers 500 rather than a false empty. New wiring-only route exporting `GET`. By runner instruction (T19's follow-up) the `former-member` user-segment fallback moved into a shared `ballPathsUserSegment()` used by both the store and this loader. `MAP.md`'s api row names the route; `npm run map` leaves it unchanged.
+
+**follow-ups:**
+
+1. `delivery-storage-keys.ts` still has its own `"former-member"` literal.
+2. The response is `no-store`, so a few hundred KB re-download each time the room opens; `private, max-age` or an ETag on the job id would avoid it.
+3. The production loader has not run against real storage yet; confirm a missing object answers empty without a warning.
+
+## T21 · Real bounce times in the room: fetch hook, contact-time matching, film-clock conversion — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** New pure `film/film-ball.ts`: `parseBallPathsFile`, `filmBallPaths` (moves contact, bounce and every sample from source-video seconds onto the film clock by an UNCLAMPED subtraction of `clock.offset`, with the reason recorded) and `bounceTimesByShot` (nearest path within 0.15 s, a path claimed by at most one shot, the nearer winning, null bounces ignored). New `film/use-ball-paths.ts` fetches `/api/matches/{id}/ball-paths` once per match while enabled, aborts on unmount, and answers an empty list on every failure with no throw, error state or console error. The room enables it for Advantage Intelligence matches with the court on and feeds the measured bounce time into `pointMarks`; with no match the estimate still applies. The pinned `{ id, start }` signature was kept and the room maps its shot stops at the call site. Node spec pins the offset-30 conversion, the 100.1 / 100.2 boundary, nearer-wins and the malformed-file cases.
+
+**follow-ups:**
+
+1. The hook never retries for the life of the room, so a file that lands after the room opened is not picked up until a remount.
+2. `ballAt` will scan the whole match's strokes per frame; a time-sorted index or binary search belongs in T22.
+3. A formatter hook in this worktree strips `// eslint-disable-next-line` comments from source files on write.
+
+## T22 · The moving ball: pure ballAt and a self-driving ball layer on the court — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`. The task's criteria contradicted each other on one pinned example (a tail reading at 10.95 on a path whose last sample is 10.9, against "null outside every path"). The runner was told not to edit tasks in this loop, so the text stood; the implementer built the null rule, proved the tail-window arithmetic on a path that really spans 10.95, separately pinned that 10.95 past a 10.9 last sample is null, and wrote the conflict into the spec. The reviewer was asked to judge exactly that and ruled it an honest satisfaction.
+
+**changed:** `film-ball.ts` gains `BALL_TAIL_SECONDS = 0.4` and pure `ballAt`: a binary search for the containing path (later-starting wins an overlap), a second one for the bracketing samples, linear interpolation, null outside the path's own span, and a tail of that path's samples from the last 0.4 s, never another path's. New `film/film-court-ball.tsx` runs one animation-frame loop while playing that reads the video's `currentTime` and writes position to refs — no React state per frame — cancels on cleanup, draws once when paused and again on `seeked`, and hides both elements when there is no position. The dot is 5px white, round, inert to the pointer; the tail is six fading SVG segments and is not rendered under reduced motion. `FilmCourt` takes one optional `overlay` slot between the marks and the readout. The room passes the ball only in point mode, in the camera view, with paths present, reusing T21's fetch.
+
+**follow-ups:**
+
+1. Ball height (`z`) is carried and still undrawn; a shadow or size ramp would make the bounce readable.
+2. The tail's segment count and alpha ramp are unpinned — check by eye on Caden Ace v Matt Goodman.
+3. `film-fullscreen.tsx`'s `prefersReducedMotion()` and this file's `usePrefersReducedMotion()` could be one shared hook.
+
+## T23 · Purge every results-bucket file of a deleted match: players, trajectories, ball paths — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `purgeMatchStorage`'s `processing_jobs` read also selects `id, match_id, created_by, players_object_key, trajectories_object_key`, and its results lane now removes a fixed, de-duplicated set in the same single `remove`: the three recorded keys verbatim, the ball-paths key computed through `ballPathsObjectKey` / `ballPathsUserSegment`, and — when the results key has exactly the shape `results/{segment}/{match_id}/{id}.json` for the row's own ids — the ball-paths sibling under that segment, which is how a file written before its uploader left is still found. Null recorded keys add nothing; a row with a missing, empty or slash-bearing id, or a `match_id` outside the requested set, adds no computed key. The module never lists a bucket and builds no prefix. Errors are still logged and never thrown; the video, `match_files` and attachment lanes and the existing purge spec are untouched. New 22-case spec, including seven near-miss key shapes. Nothing was run against the live bucket; past orphans were not backfilled.
+
+**follow-ups:**
+
+1. Files already orphaned by past deletions need a supervised run of `scripts/cleanup-orphan-storage.ts` (dry run first); confirm it attributes `.ball-paths.json`. Files under `orphaned/…` from an adopted delivery match no layout there.
+2. `ball-paths-access.ts` has the same uploader-left drift: it recomputes the key from the current `created_by`, so a retained team match whose uploader left reads empty. The sibling-of-results rule would fix it.
+3. `rollbackCreatedMatch` in the upload wizard deletes a match row from the browser without purging; probably before any delivery, unverified. `resubmit-job.ts` may strand a previous delivery's files.
+4. A recorded `ball_paths_object_key` column would retire the two-candidate guess.
+
+## T24 · Pin the orphan sweeper's coverage of every results-bucket file type — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** The sweeper already attributed players, trajectories and ball-paths files — `attributeKey` judges a key by segment count, prefix and the match-id segment, never the file name — so this was pinning, not a behaviour change. `RESULTS_LAYOUTS` in `scripts/orphan-attribution.ts` now derives one layout from each of the four real key builders, so a drifted builder fails loudly; the three new layouts have the same shape as the old one and cannot newly attribute anything. New spec cases pin `.ball-paths.json`, all four file types under the `former-member` segment, a five-segment key returning null, and the three `orphaned/…` fallback keys returning null — asserted through `selectDeliveryStorageKeys`, with the reason documented beside the layouts. `scripts/cleanup-orphan-storage.ts` has no diff and was not run.
+
+**follow-ups:**
+
+1. `orphaned/…` keys have no safe orphan rule: a delivery not yet adopted looks exactly like a dead one, and nothing in the repo bounds how long adoption may take. A retention rule needs a number from the author.
+
+## T25 · Read ball paths beside the recorded results key when the uploader has left — done
+
+**gate:** mechanical pass on re-run — the full suite's one failure was `tests/rls-workspace-isolation.spec.ts:183`, failing at line 102 inside its `beforeAll` fixture, the known parallel-load fixture flake on the live database; this diff touches no RLS or match code, and the file passed 6/6 alone · completion `VERDICT: pass`
+
+**changed:** New pure `resultsKeyUserSegment()` in `object-keys.ts` returns the user segment only for a results key of exactly `results/{segment}/{match_id}/{job_id}.json` for the given ids, and null otherwise; it returns a segment, never a finished key. `purge-match-storage.ts` drops its inline comparison for it with behaviour unchanged — its two specs have no diff and pass. `supabaseBallPathsBody` now also selects `id` and `results_object_key` and tries a fixed, de-duplicated ladder: the key under the job's current `created_by` segment first (the fresher file when both exist), then the sibling of the recorded results key; 400/404 moves on, all-missing answers the empty file with no warning. A non-missing error stops the ladder, logs one warning and answers empty, exactly as the single-candidate code did — it never serves an older copy as current. `handleGetBallPaths` is unchanged: visibility first, loader only for the authorised match id. New node spec for the helper; access spec gains the ladder and near-miss cases.
+
+**follow-ups:**
+
+1. `ball-paths-store.ts` could remove the stale uuid sibling when it re-derives under `former-member`, so two copies never coexist.
+2. A recorded `ball_paths_object_key` column would retire both the recomputation and this ladder.

@@ -33,9 +33,10 @@ whose primary output (named in its CONTEXT.md `## Outputs`) is missing from
 - Any `output/BLOCKED.md` in an earlier-or-current stage: **stop**, surface
   its contents, and go no further. The human resolves or deletes it.
 - Stages 01–06 all have their primary outputs: the current stage is 07
-  (land) — like 05 it is output-less by contract, so "output present" cannot
-  detect it; it is done when the workspace itself is gone from the branch. A
-  workspace that no longer exists is a landed pipeline, not an error.
+  (land), which by contract writes nothing to `output/` at all — so "output
+  present" cannot detect it; it is done when the workspace itself is gone from
+  the branch. A workspace that no longer exists is a landed pipeline, not an
+  error.
 - Special case, stage 05: its contract deliberately withholds the primary
   output while queue tasks remain. Re-running 05 until the queue drains is
   correct, not a stall.

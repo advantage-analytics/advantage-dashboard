@@ -7,10 +7,9 @@ import {
   SKIP_REASON,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
 
 /**
  * A player leaves one program — proven against the live database.
@@ -24,12 +23,24 @@ import {
  * personal match and the login itself are untouched. The owner is refused.
  * A second call is a no-op.
  *
+ * The three logins are reused pool users (`fixtures/live-db-pool`), never
+ * deleted — "the login itself is untouched" is literally true here. So the
+ * matches go by id and the programs by id with their members, profiles and
+ * audit rows, never by cascade from an auth delete.
+ *
  * Run on demand:  npx playwright test tests/leave-program.spec.ts
  */
 
 /** A crashed run is findable by hand:
  *  `select * from programs where program_key like 'leave-prog-%'`. */
-const { mark: MARK, password: PASSWORD } = runMarker("leave-prog");
+const { mark: MARK } = runMarker("leave-prog");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = [
+  "leave-program-owner",
+  "leave-program-player",
+  "leave-program-coach",
+];
 
 const RPC = "leave_program";
 
@@ -42,7 +53,6 @@ test.describe("leave_program (live DB)", () => {
   let player: Session;
   let coach: Session;
 
-  const authUserIds: string[] = [];
   const matchIds: string[] = [];
   const programIds: string[] = [];
   let leftProgram: string;
@@ -56,15 +66,29 @@ test.describe("leave_program (live DB)", () => {
     test.setTimeout(180_000);
     admin = createAdminClient();
 
-    [owner, player, coach] = await createLogins(
-      admin,
-      ["owner", "player", "coach"],
-      {
-        mark: MARK,
-        password: PASSWORD,
-        authUserIds,
-      },
-    );
+    // An interrupted run leaves memberships the pool would refuse, and — since
+    // the owner here is a member row, not `owner_user_id` — programs the pool
+    // sweep does not take, holding profiles claimed by the player. Its two
+    // matches are the player's own rows and outlive the programs (the team
+    // match's `program_id` only goes null). All three go by this file's
+    // marker; members, profiles and audit rows cascade with the programs.
+    await clearPoolLeftovers(admin, SLOTS);
+    const staleMatches = await admin
+      .from("matches")
+      .delete()
+      .like("tournament_name", "leave-prog-%");
+    if (staleMatches.error) {
+      throw new Error(`matches sweep: ${staleMatches.error.message}`);
+    }
+    const stalePrograms = await admin
+      .from("programs")
+      .delete()
+      .like("program_key", "leave-prog-%");
+    if (stalePrograms.error) {
+      throw new Error(`programs sweep: ${stalePrograms.error.message}`);
+    }
+
+    [owner, player, coach] = await poolLogins(admin, SLOTS);
 
     const programs = await admin
       .from("programs")
@@ -161,10 +185,17 @@ test.describe("leave_program (live DB)", () => {
     if (matchIds.length > 0) {
       await admin.from("matches").delete().in("id", matchIds);
     }
+    // Children before parents, by program: the users stay, so nothing
+    // cascades from them.
     if (programIds.length > 0) {
+      await admin
+        .from("program_audit_log")
+        .delete()
+        .in("program_id", programIds);
+      await admin.from("program_players").delete().in("program_id", programIds);
+      await admin.from("program_members").delete().in("program_id", programIds);
       await admin.from("programs").delete().in("id", programIds);
     }
-    await deleteAuthUsers(admin, authUserIds);
   });
 
   test("the owner is refused until ownership is transferred", async () => {

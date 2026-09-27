@@ -5,6 +5,13 @@ import { revalidatePath } from "next/cache";
 import { parseTypedName } from "@/lib/data/person-name-case";
 import { createClient } from "@/lib/supabase/server";
 import {
+  ACQUISITION_DETAIL_MAX,
+  isAcquisitionSource,
+  isRecordingSource,
+  type AcquisitionSource,
+  type RecordingSource,
+} from "./answers";
+import {
   GUARDIAN_PLAYER_NAME_MAX,
   isGuardianClassYear,
 } from "./guardian-options";
@@ -73,8 +80,68 @@ function parseNamePair(input: {
 const NAME_ERROR = "Enter your first and last name.";
 
 /**
- * Persist the name and the persona, stamp `onboarded_at`, and leave for the
- * destination.
+ * The player's intake answers from screens 1.5 and 1.7, re-typed for the write.
+ *
+ * Every answer is optional — Skip sends null, and the coach exit sends
+ * nothing — so a missing or null field is null. Anything else must be one of
+ * the allow-listed values in `answers.ts` (the same vocabulary the live check
+ * constraints enforce); an unknown string is refused with a sentence, not
+ * coerced to null, because a raw-RPC caller sending garbage should learn it
+ * wasn't saved. The detail only means something beside "Somewhere else": it
+ * is trimmed, forced to null for every other source, and a blank becomes null
+ * so a `""` never lands in the column.
+ */
+function parseIntake(input: {
+  recordingSource?: unknown;
+  acquisitionSource?: unknown;
+  acquisitionSourceDetail?: unknown;
+}):
+  | {
+      ok: true;
+      recording_source: RecordingSource | null;
+      acquisition_source: AcquisitionSource | null;
+      acquisition_source_detail: string | null;
+    }
+  | { ok: false; error: string } {
+  const recording = input?.recordingSource ?? null;
+  const acquisition = input?.acquisitionSource ?? null;
+  const rawDetail = input?.acquisitionSourceDetail ?? null;
+
+  if (recording !== null && !isRecordingSource(recording)) {
+    return { ok: false, error: "Pick how you record your matches." };
+  }
+  if (acquisition !== null && !isAcquisitionSource(acquisition)) {
+    return { ok: false, error: "Pick where you heard about Advantage." };
+  }
+  if (rawDetail !== null && typeof rawDetail !== "string") {
+    return { ok: false, error: "Tell us where, or pick another answer." };
+  }
+
+  const trimmed =
+    acquisition === "other" && rawDetail !== null ? rawDetail.trim() : "";
+  if (trimmed.length > ACQUISITION_DETAIL_MAX) {
+    return {
+      ok: false,
+      error: `Keep "Where?" to ${ACQUISITION_DETAIL_MAX} characters.`,
+    };
+  }
+
+  return {
+    ok: true,
+    recording_source: recording,
+    acquisition_source: acquisition,
+    acquisition_source_detail: trimmed === "" ? null : trimmed,
+  };
+}
+
+/**
+ * Persist the name, the persona and the player's intake answers (1.5, 1.7),
+ * stamp `onboarded_at`, and leave for the destination.
+ *
+ * The intake answers are write-once from here — nothing else edits them —
+ * and ride the same update as the stamp, so they are saved exactly when
+ * onboarding completes and never on a half-finished run. The coach exit sends
+ * none of them and writes nulls, which is what those columns already hold.
  *
  * Every path stamps — including `college`, which continues into the claim
  * flow: the questions are answered, and leaving the stamp for the claim to set
@@ -88,6 +155,9 @@ export async function finishOnboarding(input: {
   choice: OnboardingChoice;
   firstName: string;
   lastName: string;
+  recordingSource?: RecordingSource | null;
+  acquisitionSource?: AcquisitionSource | null;
+  acquisitionSourceDetail?: string | null;
 }): Promise<{ ok: false; error: string }> {
   // A Server Action is callable as a raw RPC no matter what the TS signature
   // says, so `choice` can arrive as any value — including `"__proto__"`,
@@ -109,6 +179,11 @@ export async function finishOnboarding(input: {
     return { ok: false, error: NAME_ERROR };
   }
 
+  const intake = parseIntake(input);
+  if (!intake.ok) {
+    return intake;
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -120,6 +195,9 @@ export async function finishOnboarding(input: {
     .update({
       ...name,
       role: resolution.role,
+      recording_source: intake.recording_source,
+      acquisition_source: intake.acquisition_source,
+      acquisition_source_detail: intake.acquisition_source_detail,
       onboarded_at: new Date().toISOString(),
     })
     .eq("id", user.id)

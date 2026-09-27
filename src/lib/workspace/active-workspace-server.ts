@@ -1,8 +1,11 @@
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+// Defined in a client-safe module so the shell can read the same cookie.
+import { WORKSPACE_COOKIE } from "./workspace-cookie";
 import { createClient } from "@/lib/supabase/server";
 import { getInitials } from "@/lib/data/match-utils";
+import { isRecordingSource } from "@/app/onboarding/answers";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
@@ -39,8 +42,6 @@ function publicUrlOrNull(
  * link resolves per-viewer. When sharing becomes a real workflow the upgrade is
  * `/dashboard/w/[workspaceId]/…`, and this function is where it starts.
  */
-
-const WORKSPACE_COOKIE = "advantage_workspace";
 
 /** A cookie naming a workspace the viewer no longer belongs to falls back here. */
 function personalWorkspace(viewer: Viewer): Workspace {
@@ -257,11 +258,13 @@ function toViewer(
     role: string | null;
     created_at: string | null;
     onboarded_at: string | null;
+    recording_source: string | null;
   } | null,
   avatarUrl: string | null,
 ): Viewer {
   const firstName = row?.first_name ?? null;
   const lastName = row?.last_name ?? null;
+  const recordingSource = row?.recording_source ?? null;
 
   const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
   const localPart = email.split("@")[0] ?? email;
@@ -294,6 +297,11 @@ function toViewer(
     // row — either way the dashboard layout sends them to /onboarding, which
     // is the screen that knows how to finish the setup.
     onboardedAt: row?.onboarded_at ?? null,
+    // Narrowed through the shared vocabulary, so an unknown value reads as
+    // "never answered" instead of leaking into the wizard's provider default.
+    recordingSource: isRecordingSource(recordingSource)
+      ? recordingSource
+      : null,
   };
 }
 
@@ -314,7 +322,7 @@ export const getWorkspaceContext = cache(
       supabase
         .from("users")
         .select(
-          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path",
+          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source",
         )
         .eq("id", user.id)
         .single(),

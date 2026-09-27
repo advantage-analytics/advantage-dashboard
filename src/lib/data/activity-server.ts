@@ -29,7 +29,12 @@ import {
 } from "./match-analysis";
 import { shortName } from "./match-utils";
 import { scopeToWorkspace } from "@/lib/workspace/scope";
-import type { Workspace } from "@/lib/workspace/types";
+import {
+  isProgramStaff,
+  PROGRAM_ROLE_LABEL,
+  type ProgramRole,
+  type Workspace,
+} from "@/lib/workspace/types";
 
 /**
  * The window the tray reads. It was 10 when the tray listed settled work too,
@@ -260,4 +265,88 @@ export async function getActivityFeed(
   }
 
   return { items };
+}
+
+/**
+ * How far back "joined the team" rows reach. Two weeks: long enough that a
+ * coach away for a week still sees who arrived, short enough that the tray
+ * stays a list of what is new rather than a roster.
+ */
+const JOIN_WINDOW_DAYS = 14;
+
+/** Enough to cover a signing day; the roster is the full answer. */
+const MAX_JOINS = 5;
+
+/** Someone who accepted an invitation to the active program. */
+export interface MemberJoin {
+  userId: string;
+  name: string;
+  /** Null for a role this copy has not learned; the row drops the word. */
+  role: ProgramRole | null;
+  /** Their invitation answered a join request staff approved. */
+  viaRequest: boolean;
+  at: string;
+}
+
+interface DbRecentJoinRow {
+  joined_at: string;
+  user_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  role: string | null;
+  via_request: boolean;
+}
+
+const KNOWN_ROLES: readonly string[] = Object.keys(PROGRAM_ROLE_LABEL);
+
+/**
+ * Recent joins, for staff of a team workspace only.
+ *
+ * Read from `program_audit_log` through `program_recent_joins()`: the log is
+ * where `accept_program_invite` already records the join, and the function
+ * adds the one thing staff cannot read themselves — the member's name. Staff
+ * only, because the log is (and a player's roster view is the roster); the
+ * function also answers a non-staff caller with no rows, so this check only
+ * saves the round trip.
+ *
+ * Informational: these rows never light the tray's dot. Nothing is waiting on
+ * the reader, and a dot that only an open-and-close could clear would be the
+ * "mark all read" the tray was designed not to have.
+ */
+export async function getRecentJoins(
+  supabase: SupabaseClient,
+  workspace: Workspace,
+): Promise<MemberJoin[]> {
+  if (!isProgramStaff(workspace)) return [];
+
+  const since = new Date(
+    Date.now() - JOIN_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  const { data, error } = await supabase.rpc("program_recent_joins", {
+    p_program_id: workspace.id,
+    p_since: since,
+    p_limit: MAX_JOINS,
+  });
+
+  if (error) {
+    // Chrome, so never fatal — same rule as the feed.
+    console.error("[activity] could not load recent joins", {
+      error: error.message,
+    });
+    return [];
+  }
+
+  return ((data ?? []) as DbRecentJoinRow[]).map((row) => ({
+    userId: row.user_id,
+    name:
+      [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
+      "A new member",
+    role:
+      row.role && KNOWN_ROLES.includes(row.role)
+        ? (row.role as ProgramRole)
+        : null,
+    viaRequest: row.via_request,
+    at: row.joined_at,
+  }));
 }

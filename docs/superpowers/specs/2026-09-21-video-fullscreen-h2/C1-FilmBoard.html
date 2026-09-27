@@ -1,0 +1,43 @@
+<!-- FilmBoard.dc.html — extracted 2026-09-21. Helmet (DS token links) omitted; markup and logic verbatim. -->
+<div role="group" aria-label="Scoreboard" tabindex="0" style="display:inline-flex;box-sizing:border-box;width:236px;box-sizing:border-box;flex-direction:column;gap:14px;padding:14px 15px 12px;border-radius:var(--radius-dropdown);background:rgba(13,13,13,0.74);backdrop-filter:blur(8px);font-family:var(--font-sans);cursor:grab;user-select:none;opacity:{{ boardOpacity }}">
+  <div style="display:flex;align-items:baseline;gap:8px">
+    <span class="text-micro" style="color:rgba(255,255,255,0.55)">{{ statusLabel }}</span>
+    <div style="flex:1"></div>
+    <span class="mono tabular" style="font-size:10px;color:rgba(255,255,255,0.45)">{{ elapsed }}</span>
+  </div>
+  <div role="table" aria-label="Score" style="display:flex;flex-direction:column;gap:11px">
+    <span role="row" style="display:flex;align-items:center;gap:7px;min-width:0">
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 13px var(--font-sans);color:#FFFFFF">{{ youName }}</span>
+      <span aria-hidden="true" style="width:6px;height:6px;flex:0 0 6px;border-radius:var(--radius-pill);background:{{ youDot }}"></span>
+      <div style="flex:1"></div>
+      <span class="mono tabular" style="display:inline-flex;align-items:center;gap:8px;flex:0 0 auto;font-size:13px;white-space:nowrap"><span style="width:11px;text-align:right;color:{{ ys1Color }}">{{ ys1 }}</span><span style="width:11px;text-align:right;color:{{ ys2Color }}">{{ ys2 }}</span><span style="width:22px;text-align:right;color:#FFFFFF">{{ yGame }}</span></span>
+    </span>
+    <span role="row" style="display:flex;align-items:center;gap:7px;min-width:0">
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 13px var(--font-sans);color:rgba(255,255,255,0.72)">{{ oppName }}</span>
+      <span aria-hidden="true" style="width:6px;height:6px;flex:0 0 6px;border-radius:var(--radius-pill);background:{{ oppDot }}"></span>
+      <div style="flex:1"></div>
+      <span class="mono tabular" style="display:inline-flex;align-items:center;gap:8px;flex:0 0 auto;font-size:13px;white-space:nowrap"><span style="width:11px;text-align:right;color:{{ os1Color }}">{{ os1 }}</span><span style="width:11px;text-align:right;color:{{ os2Color }}">{{ os2 }}</span><span style="width:22px;text-align:right;color:#FFFFFF">{{ oGame }}</span></span>
+    </span>
+  </div>
+  <div style="display:flex;align-items:center;gap:9px;padding-top:9px;border-top:1px solid rgba(255,255,255,0.14)">
+    <span aria-label="{{ winnerLabel }}" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex:0 0 22px;border-radius:var(--radius-pill);background:{{ winnerBg }};font:500 10px var(--font-sans);color:{{ winnerFg }}">{{ winnerInitials }}</span>
+    <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:rgba(255,255,255,0.55)">{{ pointName }}</span>
+  </div>
+</div>
+
+<!--
+Props (tsType): statusLabel string "Playing" · elapsed string "41:12" · youName · oppName ·
+ys1/ys2/os1/os2 string · yGame/oGame string · serving "you"|"opp"|"none" ·
+pointWinner "you"|"opp" · winnerInitials string · pointName string · dim boolean
+
+renderVals():
+  const won = "#FFFFFF", lost = "rgba(255,255,255,0.42)";
+  const cmp = (a, b) => (Number(a) > Number(b) ? won : lost);
+  ys1Color: cmp(ys1, os1), os1Color: cmp(os1, ys1), ys2Color: cmp(ys2, os2), os2Color: cmp(os2, ys2)
+  youDot: serving === "you" ? "var(--blue)" : "transparent"
+  oppDot: serving === "opp" ? "var(--blue)" : "transparent"
+  winnerBg: pointWinner === "you" ? "var(--blue)" : "rgba(255,255,255,0.14)"; winnerFg "#FFFFFF"
+  winnerLabel: (winner's name) + " won the point"
+  pointName: p.pointName || p.pointLine || "Set 2 · game 7 · Reid serving"   // between points: the game state
+  boardOpacity: p.dim ? 0.82 : 1                                             // chrome collapsed
+-->

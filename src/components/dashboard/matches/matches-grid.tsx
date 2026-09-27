@@ -27,6 +27,11 @@ interface MatchesGridProps {
   matches: DisplayMatch[];
   /** Half-finished uploads, listed at the top (design 11c). */
   drafts?: DraftRowData[];
+  /**
+   * Drafts that fill a listed match, keyed by that match's id — drawn as the
+   * match row's Draft pill instead of rows of their own (`foldDrafts`).
+   */
+  foldedDrafts?: ReadonlyMap<string, DraftRowData>;
   newMatchId?: string | null;
   /** Match ids never opened on this device — draws the blue "New" pill. */
   unseenIds?: Set<string>;
@@ -45,6 +50,7 @@ interface MatchesGridProps {
 export function MatchesGrid({
   matches,
   drafts = [],
+  foldedDrafts,
   newMatchId,
   unseenIds,
   scope = "personal",
@@ -167,6 +173,7 @@ export function MatchesGrid({
                   scope={scope}
                   isNew={match.id === newMatchId}
                   unseen={unseenIds?.has(match.id)}
+                  hasDraft={foldedDrafts?.has(match.id) ?? false}
                   compact={compact}
                   selected={match.id === selectedId}
                   onToggle={onToggle}

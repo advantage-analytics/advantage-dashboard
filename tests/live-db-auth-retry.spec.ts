@@ -12,10 +12,23 @@ import {
   ADMIN_RETRY_BUDGET_MS,
   LIVE_HOOK_BUDGET_FLOOR_MS,
   SIGN_IN_RETRY_BUDGET_MS,
+  authErrorDetails,
   isTransientAuthError,
   retryAuthCall,
   retryDelayMs,
 } from "./fixtures/live-db";
+
+test("Auth diagnostics retain opaque error status without request data", () => {
+  const error = Object.assign(new AuthRetryableFetchError("{}", 502), {
+    request: { authorization: "secret", password: "secret" },
+  });
+  expect(authErrorDetails(error)).toBe(
+    "{} [AuthRetryableFetchError, status=502]",
+  );
+  expect(authErrorDetails(new AuthApiError("denied", 403, "not_admin"))).toBe(
+    "denied [AuthApiError, status=403, code=not_admin]",
+  );
+});
 
 /**
  * The live-DB fixture's retry rules, offline.

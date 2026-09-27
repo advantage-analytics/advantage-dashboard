@@ -11,6 +11,11 @@ import {
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
 import { ProgramUsageCard } from "@/components/dashboard/settings/program-usage-card";
+import { MatchVideosUsageCard } from "@/components/dashboard/settings/match-videos-usage-card";
+import {
+  getMatchVideoUploaderNames,
+  getMatchVideoUsage,
+} from "@/lib/data/match-video-usage-server";
 
 /**
  * Settings › Usage & quota.
@@ -24,6 +29,9 @@ import { ProgramUsageCard } from "@/components/dashboard/settings/program-usage-
  * viewer belongs to — every team, not only the active workspace, so a coach
  * or player on two programs sees both ledgers without switching. The active
  * team leads; the rest keep the switcher's order.
+ *
+ * Match videos are the exception: that card follows the ACTIVE workspace
+ * only, because the video cap is per workspace and Remove acts on it.
  */
 export default async function UsagePage() {
   const billingMonth = currentBillingMonth();
@@ -41,12 +49,18 @@ export default async function UsagePage() {
   // Every read is independent of the others, so they go together rather than
   // one after the other; the workspace has to land first because it decides
   // which program cards exist at all.
-  const [personal, ...programs] = await Promise.all([
+  const [videos, personal, ...programs] = await Promise.all([
+    getMatchVideoUsage(workspace.active),
     getPersonalUsage(workspace.viewer.id, billingMonth),
     ...teams.map((team) =>
       getProgramUsage(team.id, billingMonth, team.orgType),
     ),
   ]);
+
+  // Needs the uploader ids the usage read returned, so it follows it.
+  const uploaderNames = await getMatchVideoUploaderNames(
+    videos.rows.flatMap((row) => (row.uploadedBy ? [row.uploadedBy] : [])),
+  );
 
   const personalFraction = usageFraction(
     personal.usedSeconds,
@@ -88,6 +102,15 @@ export default async function UsagePage() {
           currentMonth={billingMonth}
         />
       ))}
+
+      <MatchVideosUsageCard
+        key={workspace.active.id}
+        workspace={workspace.active}
+        viewerId={workspace.viewer.id}
+        initial={videos}
+        names={uploaderNames}
+        now={new Date().toISOString()}
+      />
     </div>
   );
 }

@@ -22,6 +22,7 @@ import { getTeamSingleMatch } from "@/lib/data/single-match-server";
 import { supportsVideo } from "@/lib/schedule/entry-state";
 import { formatEventSpan, siteLabel } from "@/lib/schedule/format";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard";
+import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-slot";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
 
 /**
@@ -173,6 +174,14 @@ export default async function TeamUploadPage({
       const entry = group.entries.find((candidate) => candidate.id === entryId);
       if (!entry) continue;
 
+      // Doubles is score-only (decision 2026-09-22): no video analysis, no
+      // SwingVision statistics. No link on the site sends a doubles line here
+      // any more, but a hand-built URL or a stale bookmark still can, and the
+      // wizard would otherwise open with a preset `wizardUploadEligibility()`
+      // refuses on sight. Same style as the `entryId && !staff` redirect
+      // above: the URL is not honoured, the picker is.
+      if (entry.discipline !== "singles") redirect("/dashboard/team/upload");
+
       // The row that was clicked, not just the entry's first match. A
       // tournament entry is a whole run, so `?match=` is what says which round
       // this video belongs to.
@@ -203,10 +212,33 @@ export default async function TeamUploadPage({
 
       const preset: EventPreset = {
         ...presetFor(group.event, entry, match, programs),
-        lineup: lineupChoices(group.event, siblings, programs),
+        // Doubles is score-only, so the pinned bar's Change menu lists a
+        // doubles line but cannot switch the upload onto it — the same answer
+        // the `discipline !== "singles"` redirect above gives a URL.
+        lineup: lineupChoices(group.event, siblings, programs).map((choice) =>
+          choice.preset?.discipline === "doubles"
+            ? { ...choice, preset: null }
+            : choice,
+        ),
       };
 
-      return <UploadMatchFlow preset={preset} />;
+      // An upload aimed at a line sits under its event, like `/edit` and
+      // `/score` beside it: "Schedule › vs Stanford › Upload video". Where the
+      // page is, not how you got here — never "… › Add score › Upload video".
+      // The header has no path check for this route (`EVENT_PAGE` covers the
+      // schedule tree only), so the static "Upload video" crumb shows for the
+      // frame before this effect publishes; the other branches keep it.
+      return (
+        <>
+          <EventHeaderSlot
+            eventId={group.event.id}
+            name={group.event.name}
+            kind={group.event.kind}
+            leaf="Upload video"
+          />
+          <UploadMatchFlow preset={preset} />
+        </>
+      );
     }
     // The id names a line that already has video, or one from another program.
     redirect("/dashboard/team/upload");

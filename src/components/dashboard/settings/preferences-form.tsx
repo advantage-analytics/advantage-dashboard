@@ -12,12 +12,13 @@ import { SettingsToggle } from "@/components/dashboard/settings/settings-toggle"
 import { MenuSelect } from "@/components/ui/menu-select";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { savePreferences } from "@/components/dashboard/settings/preferences-actions";
+import { REPORT_VIEWS } from "@/components/dashboard/matches/match-detail/report-view";
 import { capitalize } from "@/lib/utils";
 import type {
   DefaultWorkspace,
   Preferences,
-  ReportEntryPoint,
 } from "@/lib/data/preferences-server";
+import type { DistanceUnit } from "@/lib/format/distance";
 
 const WORKSPACE_OPTIONS: readonly { value: DefaultWorkspace; label: string }[] =
   [
@@ -26,10 +27,24 @@ const WORKSPACE_OPTIONS: readonly { value: DefaultWorkspace; label: string }[] =
     { value: "team", label: "Team" },
   ];
 
-const REPORT_OPTIONS: readonly { value: ReportEntryPoint; label: string }[] = [
-  { value: "story", label: "The story" },
-  { value: "stats", label: "Statistics" },
-  { value: "video", label: "Video" },
+// The rail's own rows, so the setting and the switcher can never disagree.
+const REPORT_OPTIONS = REPORT_VIEWS;
+
+const UNIT_OPTIONS: readonly {
+  value: DistanceUnit;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "ft",
+    label: "Feet",
+    description: "Distances read 12 ft, speeds in mph",
+  },
+  {
+    value: "m",
+    label: "Metres",
+    description: "Distances read 3.5 m, speeds in km/h",
+  },
 ];
 
 /**
@@ -176,6 +191,20 @@ export function PreferencesForm({
               value={preferences.matchReportOpensAt}
               options={REPORT_OPTIONS}
               onChange={(value) => update({ matchReportOpensAt: value })}
+            />
+          }
+        />
+        <SettingsCardRow
+          label="Units"
+          description="Court distances, ball speed and contact depth"
+          control={
+            <MenuSelect
+              label="Units"
+              value={preferences.unit}
+              options={UNIT_OPTIONS}
+              onChange={(value) => update({ unit: value })}
+              note="Applies to every chart and readout in your workspaces. Scores and set counts never change."
+              width={208}
             />
           }
         />

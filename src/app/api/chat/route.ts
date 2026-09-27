@@ -1,6 +1,11 @@
-import { NextRequest } from "next/server";
+import { after, NextRequest } from "next/server";
+import { flushPostHogLogs, logPostHog } from "@/lib/posthog-logs";
 import { createClient } from "@/lib/supabase/server";
-import { getLLMStream, type ChatMessage } from "@/lib/llm/adapter";
+import {
+  createLLMObservabilityContext,
+  getLLMStream,
+  type ChatMessage,
+} from "@/lib/llm/adapter";
 
 interface MatchContext {
   player1Name: string;
@@ -27,6 +32,8 @@ interface ChatRequestBody {
   messages: ChatMessage[];
   matchContext: MatchContext;
 }
+
+const ROUTE = "/api/chat";
 
 function buildSystemPrompt(ctx: MatchContext): string {
   const courtLine = ctx.courtType ? ` · ${ctx.courtType}` : "";
@@ -126,11 +133,20 @@ export async function POST(request: NextRequest) {
   // 4. Get LLM stream
   let iterable: AsyncIterable<string>;
   try {
-    iterable = await getLLMStream(systemPrompt, messages);
+    iterable = await getLLMStream(
+      systemPrompt,
+      messages,
+      createLLMObservabilityContext(user.id),
+    );
   } catch (err) {
     console.error("LLM adapter error:", err);
     return new Response("LLM error", { status: 500 });
   }
+
+  logPostHog("info", "ai_chat_stream_started", {
+    route: ROUTE,
+    provider_configured: Boolean(process.env.LLM_PROVIDER),
+  });
 
   // 5. Pipe async iterable into a ReadableStream response
   const stream = new ReadableStream({
@@ -140,13 +156,23 @@ export async function POST(request: NextRequest) {
         for await (const chunk of iterable) {
           controller.enqueue(encoder.encode(chunk));
         }
+        logPostHog("info", "ai_chat_stream_completed", {
+          route: ROUTE,
+        });
       } catch (err) {
         console.error("Stream error:", err);
+        logPostHog("error", "ai_chat_stream_failed", {
+          route: ROUTE,
+        });
         controller.error(err);
       } finally {
         controller.close();
       }
     },
+  });
+
+  after(async () => {
+    await flushPostHogLogs();
   });
 
   return new Response(stream, {

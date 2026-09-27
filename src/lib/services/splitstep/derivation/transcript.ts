@@ -41,6 +41,7 @@ import {
 import { resolvePointWinners } from "./winners";
 import { pressureFor } from "./pressure";
 import { pointScoresOf } from "./scores";
+import { bounceVideoTimes } from "./frame-clock";
 import type { SplitStepRally, SplitStepStroke } from "./types";
 
 export interface DerivedShot {
@@ -55,6 +56,12 @@ export interface DerivedShot {
   landing_y: number | null;
   result: string | null;
   video_time: number | null;
+  /**
+   * Seconds of the ball's bounce on the same clock as `video_time`, fitted
+   * from the vendor's `bounce_frame` through the strokes' frame/time pairs.
+   * Null when the vendor saw no bounce or the match had no clock to fit.
+   */
+  bounce_video_time: number | null;
   zone: string | null;
   flags: string[];
   derived: true;
@@ -235,6 +242,14 @@ export function buildTranscript(options: BuildOptions): Transcript {
   }
 
   const topLabel = geometryTopLabel(rallies, labels);
+
+  // One clock for the whole match: the fit wants every stroke's frame/time
+  // pair, not one rally's, so a short rally still lands on the same line.
+  const allStrokes = rallies.flatMap((rally) => rally.strokes);
+  const bounceTimeOf = new Map<SplitStepStroke, number | null>();
+  bounceVideoTimes(allStrokes).forEach((t, i) => {
+    bounceTimeOf.set(allStrokes[i], t);
+  });
   const rec = reconcile({
     winners,
     labels,
@@ -346,11 +361,6 @@ export function buildTranscript(options: BuildOptions): Transcript {
     if (last?.strokeType === "serve") unreturned += 1;
 
     const shots: DerivedShot[] = [];
-    const serveLanding = rally.serves[rally.serves.length - 1];
-    const serveLandingX =
-      serveLanding && serveLandingUsable(serveLanding)
-        ? serveLanding.bounceX
-        : null;
 
     rally.strokes.forEach((stroke, index) => {
       const isServe = stroke.strokeType === "serve";
@@ -391,9 +401,10 @@ export function buildTranscript(options: BuildOptions): Transcript {
           ? shotResult({ stroke, index, rally, serveIndex, winner })
           : null,
         video_time: stroke.videoTime,
+        bounce_video_time: bounceTimeOf.get(stroke) ?? null,
         zone: isServe
           ? serveZone(landing?.x ?? null)
-          : directionZone(landing?.x ?? null, serveLandingX),
+          : directionZone(landing?.x ?? null, contact?.x ?? null),
         flags: flagStroke({ stroke, index, rally, serveIndex }),
         derived: true,
       });

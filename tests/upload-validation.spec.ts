@@ -442,6 +442,10 @@ test.describe("upload hook identity and submission", () => {
   });
 
   test("event-owned names, scores, format, and scoring survive replacement files", async () => {
+    // A singles line: every preset opens on the default (video) source, so
+    // the coach switches to the import provider by hand, as they would to
+    // bring a SwingVision export to a scheduled line. (Doubles is score-only
+    // and refused before it gets here — that path is not what this proves.)
     const h = uploadWizardHarness({
       props: {
         preset: {
@@ -452,12 +456,15 @@ test.describe("upload hook identity and submission", () => {
           date: "2026-09-10",
           bestOf: 1,
           adScoring: false,
-          supportsVideo: false,
+          discipline: "singles",
+          supportsVideo: true,
           score: { player1: [7], player2: [6] },
         } as never,
       },
     });
     await h.flush();
+    h.current.handleProviderSelect("swing-vision");
+    h.render();
     for (const name of ["first.csv", "replacement.csv"]) {
       const pending = await h.pick(name);
       pending.resolve(parsedNames("File Player", "File Opponent"));

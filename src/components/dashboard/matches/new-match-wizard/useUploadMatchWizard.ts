@@ -19,14 +19,16 @@ import {
   getProviderStrategy,
   getProviderKind,
   isProviderSupported,
-  providerKindOrNull,
   IProcessingProviderStrategy,
   ProviderId,
   ProviderKind,
   ValidationResult,
 } from "@/lib/services/upload";
 import { getParser, hasParser } from "@/lib/services/upload/parsers";
-import { providers } from "@/lib/providers";
+import {
+  DEFAULT_PROVIDER_ID,
+  resolveStartingProvider,
+} from "./resolve-starting-provider";
 import {
   createProcessingJob,
   uploadAndSubmitVideo,
@@ -36,8 +38,9 @@ import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import {
   accountTypeFor,
   monthlyCapSecondsFor,
+  sumUsedSeconds,
 } from "@/lib/services/splitstep/quota";
-import { formatResetDate } from "@/lib/data/usage-format";
+import { formatResetDate, secondsLeft } from "@/lib/data/usage-format";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import type { Workspace } from "@/lib/workspace/types";
 import type { ProgramApprovalReading } from "@/lib/workspace/upload-eligibility";
@@ -70,6 +73,7 @@ import {
   type IdentityMatchStatus,
 } from "./types";
 import { deleteMatchDraft, saveMatchDraft } from "@/lib/wizard/actions";
+import { draftTargetMatchId } from "@/lib/wizard/draft-target";
 import { playedSets, scoreSetsFrom } from "@/lib/ui/score-format";
 import type { CreatedMatch } from "./upload-progress";
 import {
@@ -87,6 +91,7 @@ import {
 import {
   asksIfEndedEarly,
   isStoppedResult,
+  sameRecordedScore,
   scoreCheckAnswered,
   scoreGames,
   scoreUndecided,
@@ -97,7 +102,119 @@ import {
   buildImportIdentityConfirmationKey,
   collectMatchCompletionRequirements,
   evaluateImportedIdentityMatch,
+  quotaRefusal,
 } from "./validation";
+
+/**
+ * How far the window start may travel, in seconds, before the top-player
+ * answer stops describing the frame it was given for.
+ *
+ * `initialTopPlayerIsPlayer1` is camera-relative and describes the FIRST FRAME
+ * OF THE SELECTED WINDOW (`docs/ui-revamp-guardrails.md` §4). Move the start
+ * across a changeover and the answer silently inverts, which attributes every
+ * statistic to the wrong player with nothing looking broken on screen — so the
+ * rule fails safe: a false clear costs one click, a false keep costs the match.
+ *
+ * Thirty seconds, because it is longer than every fine-positioning step the
+ * trim step offers (one frame, a 1 s Shift-nudge, a ±10 s jump), so hunting for
+ * the first serve never trips it; and shorter than a change of ends (~90 s) and
+ * the shortest game (~3 min), so the one move that CAN flip the answer —
+ * repositioning across a changeover — cannot slip under it. Clearing on a
+ * one-frame nudge would only train a reflex re-click without a second look at
+ * the frame, which produces the same wrong answer this rule exists to prevent.
+ */
+export const TOP_PLAYER_ANSWER_RESET_SECONDS = 30;
+
+/**
+ * Both camera answers, dropped — never defaulted.
+ *
+ * `fixedCamera` describes the whole recording and `initialTopPlayerIsPlayer1`
+ * its first frame (`docs/ui-revamp-guardrails.md` §3.1, §4), so a DIFFERENT
+ * recording invalidates both. `handleTrimChange` drops the top-player answer
+ * when the window start travels; that rule alone was not enough, because
+ * swapping the video never moves a handle — it rewrites the window from
+ * `onVideoPick`, so the drift rule never runs and the question would render as
+ * already answered, for a frame from the previous file.
+ */
+const CLEARED_CAMERA_ANSWERS = {
+  fixedCamera: undefined,
+  initialTopPlayerIsPlayer1: undefined,
+} as const;
+
+/**
+ * What `startOver()` returns to `DEFAULT_FORM_DATA` — and nothing else.
+ *
+ * Everything here was set up for ONE player: their name and style, the
+ * opponent as seen from their side, the score in their order, and the video
+ * check (the window and both camera answers, which are read relative to
+ * player 1 — `docs/ui-revamp-guardrails.md` §4). A different player makes
+ * every one of them suspect. The match's own facts — event, round, format,
+ * scoring, date, court — describe the match whoever played it, and stay.
+ *
+ * The camera answers go back to `undefined`, never to a boolean: unanswered
+ * is not "no" (§3.1).
+ */
+const START_OVER_FIELDS = [
+  "playerName",
+  "playerHand",
+  "playerBackhand",
+  "playerStyleSource",
+  "opponentName",
+  "opponentSource",
+  "opponentPlayerId",
+  "opponentHand",
+  "opponentBackhand",
+  "opponentStyleSource",
+  "opponentProgramKey",
+  "opponentSchool",
+  "playerScores",
+  "opponentScores",
+  "playerTiebreaks",
+  "opponentTiebreaks",
+  "numberOfSets",
+  "result",
+  "retiredSide",
+  "videoStartSeconds",
+  "videoEndSeconds",
+  "fixedCamera",
+  "initialTopPlayerIsPlayer1",
+] as const satisfies readonly (keyof MatchFormData)[];
+
+/**
+ * What a PinnedLineBar line swap returns to `DEFAULT_FORM_DATA` — the answers
+ * given about line A's PEOPLE, which the new line's seed does not rewrite.
+ *
+ * A swap is not a start-over: the event facts, date and format come from the
+ * new line, and the trim window and `fixedCamera` describe the recording, not
+ * who is in it, so they stay. The top-player answer is camera-relative — "were
+ * YOU at the top" — and "you" just changed (`docs/ui-revamp-guardrails.md`
+ * §4); the styles and the opponent's roster id belong to line A's players; the
+ * tiebreaks belong to a score the new line may rewrite. The top-player answer
+ * goes back to `undefined`, never to a boolean (§3.1).
+ * See `docs/investigations/2026-09-23-pinned-line-swap-carries-answers.md`.
+ */
+const LINE_SWAP_FIELDS = [
+  "initialTopPlayerIsPlayer1",
+  "playerHand",
+  "playerBackhand",
+  "playerStyleSource",
+  "opponentHand",
+  "opponentBackhand",
+  "opponentStyleSource",
+  "opponentPlayerId",
+  "playerTiebreaks",
+  "opponentTiebreaks",
+] as const satisfies readonly (keyof MatchFormData)[];
+
+/** Which line a preset fills — what tells a swap from a re-run of the seed. */
+function presetLineKey(preset: EventPreset): string | null {
+  return preset.entryId ?? preset.matchId;
+}
+
+/** Name, size and mtime — enough to tell one picked recording from another. */
+function videoSignature(file: File): string {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
 
 export interface ImportIdentityState {
   /** Original parser perspective, never rewritten by display-name edits. */
@@ -222,38 +339,6 @@ async function rollbackAndAnnounceFailure(params: {
 }
 
 /**
- * The source a new match starts on.
- *
- * Resolved from the registry by KIND rather than named, so the wizard stays
- * written against "your own video" instead of against a particular vendor.
- */
-const DEFAULT_PROVIDER_ID: ProviderId | null =
-  providers.find(
-    (p) => p.available !== false && providerKindOrNull(p.id) === "processing",
-  )?.id ?? null;
-
-/**
- * Where a line that CANNOT take video starts instead.
- *
- * A doubles line was handed the processing provider like every other preset,
- * and a preset opens on the file step, so there was no way to choose anything
- * else. The coach picked a multi-gigabyte file and met
- * "Video analysis supports singles matches only" from `job-request.ts` after
- * the upload — a 422 at the end of the most expensive step, with an orphaned
- * blob and a job stuck at `uploaded`.
- *
- * `supportsVideo()` already knows this at page-build time, and the import
- * provider is a real path for a doubles line: it parses numbers and never goes
- * near the vision pipeline. Its step order also skips the video step, so the
- * wizard asks for a file instead of a video and the "Add file" label the
- * schedule row already shows becomes true.
- */
-const DEFAULT_IMPORT_PROVIDER_ID: ProviderId | null =
-  providers.find(
-    (p) => p.available !== false && providerKindOrNull(p.id) === "import",
-  )?.id ?? null;
-
-/**
  * The flow the progress bar starts on, before anyone has chosen anything.
  *
  * Read off DEFAULT_PROVIDER_ID's kind so the first paint draws the same number
@@ -313,6 +398,17 @@ export interface UseUploadMatchWizardProps {
    * link is not the same as having chosen in the picker.
    */
   initialProvider?: ProviderId | null;
+  /**
+   * The source the viewer's onboarding answer points at
+   * (`providerForRecordingSource(viewer.recordingSource)`), or null when they
+   * said "none" or never answered.
+   *
+   * Ranked BELOW the stored provider, not above it: the answer was given once,
+   * about recording in general, and a choice made in the picker since is the
+   * better evidence. Like `initialProvider` it only preselects Source — step
+   * one still opens — and it is never persisted. See `resolveStartingProvider`.
+   */
+  preferredProvider?: ProviderId | null;
   /**
    * A player named by the link that opened the wizard (`?player=`), already
    * checked against the active program's roster server-side.
@@ -413,11 +509,26 @@ export interface UseUploadMatchWizardReturn {
   quotaCapSeconds: number;
   /** When the allowance comes back, already formatted — "Sep 1". */
   quotaResetsOn: string;
+  /**
+   * Step 1's refusal sentence when this month's allowance is entirely spent,
+   * for the provider step to render next to Advantage Intelligence. Null for
+   * an import provider, while the reading loads, and whenever anything is
+   * left — the trim window's own overage is raised on Continue instead.
+   */
+  providerQuotaRefusal: string | null;
   /** What the file picker accepts, for whichever provider is selected. */
   acceptString: string;
   requirementChips: readonly string[];
   onVideoPick: (file: File | null) => void;
   handleTrimChange: (startSeconds: number, endSeconds: number) => void;
+  /**
+   * The top-player answer was dropped because the window start moved past
+   * {@link TOP_PLAYER_ANSWER_RESET_SECONDS} — true until it is answered again.
+   * It changes what the trim step's hint says and nothing else: Continue is
+   * already asleep while the answer is `undefined`, and a second gate on the
+   * same fact could only disagree with the first.
+   */
+  topPlayerAnswerStale: boolean;
   handleRemoveVideo: () => void;
 
   // Step navigation
@@ -432,6 +543,24 @@ export interface UseUploadMatchWizardReturn {
    * answered, so it opens on the file step and Back there is Cancel.
    */
   firstStep: Step;
+  /**
+   * "Start over with a different player?" — back to step 1 with the subject
+   * cleared and everything that was set up FOR that player cleared with it:
+   * the trim window, both camera answers, the score and the players
+   * ({@link START_OVER_FIELDS}). The video file, its probe, the source and
+   * the match's own facts (event, date, format, court) are kept. It never
+   * installs a subject — only step 1's For field does that.
+   */
+  startOver: () => void;
+  /**
+   * "Not Marcus?" on an IMPORT (SwingVision) flow — straight back to step 1,
+   * no dialog. Clears only the player's own style (hand, backhand and where
+   * they came from) and the "is this player 1 in the export?" answer, which
+   * the next subject must give afresh. The subject itself is left for step
+   * 1's For field; the opponent, score, event and date — read from the kept
+   * file or typed by hand — are untouched.
+   */
+  resetImportPlayerAnswer: () => void;
 
   // The schedule offer on the details step (design 3d/7a)
   /** The lineup slot accepted with Attach, or null. */
@@ -583,6 +712,7 @@ export function useUploadMatchWizard({
   preset,
   draft,
   initialProvider,
+  preferredProvider,
   initialSubject,
 }: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
   const admin = useAdminWizardMode();
@@ -593,6 +723,18 @@ export function useUploadMatchWizard({
   // server-side once per request by the dashboard layout, so reading it here
   // costs nothing and cannot disagree with the sidebar's switcher.
   const { active: activeWorkspace, viewer } = useWorkspace();
+
+  /**
+   * The source the wizard opens on before localStorage can be read — the
+   * first paint is server-rendered, so `stored` is unknown and passed as null.
+   * The mount effect re-resolves with the stored value; when that one wins it
+   * is a resume, which sets the bar itself.
+   */
+  const firstPaintProvider = resolveStartingProvider({
+    linked: initialProvider ?? null,
+    stored: null,
+    preferred: preferredProvider ?? null,
+  });
 
   // State
   const [step, setStep] = useState<Step>("provider");
@@ -609,15 +751,17 @@ export function useUploadMatchWizard({
    * transition that leaves the provider step, which is the only place the kind
    * can still change.
    *
-   * A preset and a `?source=` link are the two exceptions, and they are the
-   * same exception: both decide the flow before the first paint, so the bar
-   * can be built at the right length instead of resizing into it.
+   * A preset, a `?source=` link and the onboarding preference are the
+   * exceptions, and they are the same exception: each decides the flow before
+   * the first paint, so the bar can be built at the right length instead of
+   * resizing into it. `firstPaintProvider` is that decision, taken by the same
+   * resolver the mount effect selects with.
    */
-  const [progressKind, setProgressKind] = useState<ProviderKind>(() => {
-    if (preset && !preset.supportsVideo) return "import";
-    if (initialProvider) return getProviderKind(initialProvider);
-    return DEFAULT_PROVIDER_KIND;
-  });
+  const [progressKind, setProgressKind] = useState<ProviderKind>(() =>
+    firstPaintProvider
+      ? getProviderKind(firstPaintProvider)
+      : DEFAULT_PROVIDER_KIND,
+  );
   const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(
     null,
   );
@@ -718,6 +862,46 @@ export function useUploadMatchWizard({
   const [videoProbe, setVideoProbe] = useState<VideoProbeSummary | null>(null);
   const [videoWarnings, setVideoWarnings] = useState<string[]>([]);
   const [isProbing, setIsProbing] = useState(false);
+  /**
+   * True from the moment a window start moved far enough to drop the
+   * top-player answer until the next answer is given. It is what lets the trim
+   * step say WHY the question went blank again; nothing gates on it.
+   */
+  const [topPlayerAnswerStale, setTopPlayerAnswerStale] = useState(false);
+  /**
+   * The window start as it stood when `initialTopPlayerIsPlayer1` was last
+   * answered — the distance every later trim is measured against, so ten 10 s
+   * jumps add up the way one 100 s drag does. Null when no answer has been
+   * given in this session (including a resumed draft, which restores the
+   * answer but not the moment it was given).
+   */
+  const topPlayerAnswerStartRef = useRef<number | null>(null);
+  /**
+   * What `handleTrimChange` must know about the form without closing over it:
+   * it is handed to the trim rail's gesture handlers, so rebuilding it when
+   * the form changes would swap a callback mid-drag.
+   */
+  const topPlayerAnswerRef = useRef<{
+    start: number | undefined;
+    answered: boolean;
+  }>({ start: undefined, answered: false });
+  /**
+   * The recording the camera answers describe, as {@link videoSignature}.
+   *
+   * Null means "no answer belongs to a file in this session" — which includes
+   * a RESUMED DRAFT, whose answers come back without the video they were given
+   * for. Re-picking then re-asks both questions rather than assuming the file
+   * chosen is the one they were answered for; two recordings can share a name,
+   * and the guardrail's own rule is that a false clear costs one click while a
+   * false keep costs the match.
+   */
+  const cameraAnswerFileRef = useRef<string | null>(null);
+  useEffect(() => {
+    topPlayerAnswerRef.current = {
+      start: formData.videoStartSeconds,
+      answered: formData.initialTopPlayerIsPlayer1 !== undefined,
+    };
+  }, [formData.videoStartSeconds, formData.initialTopPlayerIsPlayer1]);
   // The picked File itself rides along on `uploadedFile.file`, held in memory
   // only — a File cannot be serialised to localStorage, so a resumed draft
   // requires re-picking the video.
@@ -850,8 +1034,13 @@ export function useUploadMatchWizard({
     setIdentityAnswer({ key: identityKey, confirmed: false });
   }, [identityKey, parsedImport]);
 
-  // A workspace/preset switch must not carry file results into a different
-  // event or revive a confirmation when the user switches back. Form values
+  // A workspace, event or draft switch must not carry file results into a
+  // different event or revive a confirmation when the user switches back.
+  // Keyed on the EVENT, not the line: a PinnedLineBar swap between lines of
+  // one event is a wrong-line fix, not a new video, so the picked file, its
+  // probe and parse, and the trim window stay (the seed effect drops the file
+  // only when the swap changes the source kind). The import identity answer
+  // is keyed on the athlete and resets through the effect below. Form values
   // remain under the existing event seeding rules.
   useEffect(() => {
     resetFileGeneration();
@@ -862,7 +1051,7 @@ export function useUploadMatchWizard({
     open,
     activeWorkspace.id,
     activeWorkspace.kind,
-    preset?.entryId,
+    preset?.eventId,
     draft?.id,
     resetFileGeneration,
   ]);
@@ -871,21 +1060,66 @@ export function useUploadMatchWizard({
   }, [identityAthleteId, identityAthleteName, resetIdentityAnswer]);
 
   /**
+   * The workspace an EXISTING match belongs to — pinned the moment a preset
+   * or an accepted line first names one (`matchId`), and never re-read from
+   * the live switcher after that.
+   *
+   * The workspace switcher can change `activeWorkspace` on this same mounted
+   * page without navigating away (`setActiveWorkspaceInPlace`), so a coach
+   * who reuses a scored line and then switches programs would otherwise have
+   * that match's roster, approval and attribution re-decided against the
+   * NEWLY selected program — the client repeating the mistake T15/T16 fixed
+   * server-side with `billingWorkspaceFor(match.program_id)`. Cleared the
+   * moment nothing existing is in play (no `matchId`), so a fresh preset or a
+   * detached line still tracks the live workspace like any other new upload.
+   *
+   * Set from an effect, not during render — a ref read/write while
+   * rendering is what `react-hooks/refs` exists to catch, since it can
+   * silently disagree with what actually painted. The one-render lag this
+   * costs is free: on the render where an existing match FIRST appears,
+   * `activeWorkspace` and the eventual pin are the same workspace anyway: no
+   * switch has happened yet.
+   */
+  const activeWorkspaceRef = useRef(activeWorkspace);
+  useEffect(() => {
+    activeWorkspaceRef.current = activeWorkspace;
+  }, [activeWorkspace]);
+  const existingMatchId = draftTargetMatchId({ preset, attachedLine });
+  const [pinnedMatchWorkspace, setPinnedMatchWorkspace] =
+    useState<Workspace | null>(null);
+  useEffect(() => {
+    if (existingMatchId) {
+      setPinnedMatchWorkspace((prev) => prev ?? activeWorkspaceRef.current);
+    } else {
+      setPinnedMatchWorkspace((prev) => (prev === null ? prev : null));
+    }
+  }, [existingMatchId]);
+  /**
+   * The workspace eligibility, the roster fetch and the who-played reset all
+   * reason about — the pinned one while an existing match is in play, the
+   * live one otherwise.
+   */
+  const eligibilityWorkspace = pinnedMatchWorkspace ?? activeWorkspace;
+
+  /**
    * The allowance this upload will be billed against.
    *
-   * Keyed by the ACTIVE WORKSPACE, not the signed-in user: `Workspace.id` is
+   * Keyed by the workspace that will be BILLED — `eligibilityWorkspace`, the
+   * pinned one while an existing match is in play, the live one otherwise, the
+   * client's mirror of the server's `billingWorkspaceFor(match.program_id)` —
+   * and not by the signed-in user: `Workspace.id` is
    * `processing_usage.account_id` — the user's id for a personal workspace, the
    * program's for a team one — and the two tiers have different caps. Reading
    * the personal ledger while a coach sits in a program showed 2 hours against
    * a 75-hour budget.
    */
-  const quotaAccountType = accountTypeFor(activeWorkspace);
+  const quotaAccountType = accountTypeFor(eligibilityWorkspace);
   // Cap by tier, not by ledger: a custom org files under the program ledger
   // (`quotaAccountType` above, which the remaining-quota read filters on) but
   // draws the individual figure until a paid plan raises it — quotaTierFor().
   const quotaCapSeconds =
     admin?.context.videoAllowance.capSeconds ??
-    monthlyCapSecondsFor(activeWorkspace);
+    monthlyCapSecondsFor(eligibilityWorkspace);
   // "Sep 1". Settings › Usage already answers "when does this come back" from
   // the same billing-month key, so the wizard asks it rather than re-deriving.
   const quotaResetsOn = formatResetDate(currentBillingMonth());
@@ -895,14 +1129,26 @@ export function useUploadMatchWizard({
    * and the footer meter.
    *
    * Advisory only — reserve_processing_quota() is still the authority and
-   * refuses with a 429 at submit time. This mirrors its arithmetic exactly:
-   * unreleased rows for the current month, actual_seconds where a job finished
-   * and the reservation standing in until then. Getting it wrong here shows a
-   * misleading number; it cannot let anything through.
+   * refuses with a 429 at submit time. Getting it wrong here shows a misleading
+   * number; it cannot let anything through.
+   *
+   * A **team** workspace reads the pool through `program_usage_total`, not the
+   * ledger table: RLS scopes `processing_usage` to `created_by = auth.uid()`,
+   * so a direct select returns only the caller's own rows and the meter would
+   * show MY usage against the TEAM cap. The RPC is the same one Settings ›
+   * Usage reads (`getProgramUsage`). A personal workspace keeps the direct
+   * read — there the caller's rows ARE the whole ledger.
    */
   const [remainingQuotaSeconds, setRemainingQuotaSeconds] = useState<
     number | undefined
   >(admin?.context.videoAllowance.remainingSeconds);
+
+  // A teammate may have spent against the pool since the wizard opened, so the
+  // reading is refreshed as the flow crosses the trim step — on the way in for
+  // the cost warning and Continue's refusal, and on the way out for the meter
+  // and the re-check `handleCreateMatch` makes before it writes. Both
+  // crossings are wanted; this is not meant to fire only on arrival.
+  const isTrimStep = step === "trim";
 
   useEffect(() => {
     if (admin) return;
@@ -910,21 +1156,31 @@ export function useUploadMatchWizard({
     let cancelled = false;
 
     (async () => {
-      const { data, error } = await supabase
-        .from("processing_usage")
-        .select("reserved_seconds, actual_seconds")
-        .eq("account_id", activeWorkspace.id)
-        .eq("account_type", quotaAccountType)
-        .eq("billing_month", currentBillingMonth())
-        .eq("released", false);
+      let used: number;
 
-      if (error || cancelled) return;
+      if (eligibilityWorkspace.kind === "team") {
+        const { data, error } = await supabase.rpc("program_usage_total", {
+          p_program_id: eligibilityWorkspace.id,
+          p_billing_month: currentBillingMonth(),
+        });
 
-      const used = (data ?? []).reduce(
-        (n, row) => n + (row.actual_seconds ?? row.reserved_seconds ?? 0),
-        0,
-      );
-      setRemainingQuotaSeconds(Math.max(0, quotaCapSeconds - used));
+        if (error || cancelled) return;
+        used = Number(data ?? 0);
+      } else {
+        const { data, error } = await supabase
+          .from("processing_usage")
+          .select("reserved_seconds, actual_seconds")
+          .eq("account_id", eligibilityWorkspace.id)
+          .eq("account_type", quotaAccountType)
+          .eq("billing_month", currentBillingMonth())
+          .eq("released", false);
+
+        if (error || cancelled) return;
+
+        used = sumUsedSeconds(data ?? []);
+      }
+
+      setRemainingQuotaSeconds(secondsLeft(used, quotaCapSeconds));
     })();
 
     return () => {
@@ -934,9 +1190,11 @@ export function useUploadMatchWizard({
     admin,
     isProcessingProvider,
     supabase,
-    activeWorkspace.id,
+    eligibilityWorkspace.id,
+    eligibilityWorkspace.kind,
     quotaAccountType,
     quotaCapSeconds,
+    isTrimStep,
   ]);
 
   // Media rules, trim floor and billing all come from the provider rather than
@@ -947,12 +1205,71 @@ export function useUploadMatchWizard({
       ? (getProviderStrategy(selectedProvider) as IProcessingProviderStrategy)
       : null;
 
+  /**
+   * Step 1's refusal: this month's allowance is gone entirely.
+   *
+   * `neededSeconds: 0` asks only "is there anything left", which is the only
+   * question answerable before a video has been picked — and it is worth
+   * asking here, because the alternative is uploading a recording to find out.
+   * Null for an import provider: a SwingVision export does not bill, so the
+   * allowance never enters its flow. Null too while the reading is still
+   * loading — the server is the authority (`reserve_processing_quota()`), and
+   * an unread advisory number must never refuse on its own.
+   */
+  const providerQuotaRefusal = isProcessingProvider
+    ? quotaRefusal({
+        remainingSeconds: remainingQuotaSeconds,
+        neededSeconds: 0,
+        resetsOn: quotaResetsOn,
+        workspaceKind: eligibilityWorkspace.kind,
+      })
+    : null;
+
+  /**
+   * The same question asked of a real window, in the provider's own billing
+   * terms rather than `end - start`: `billableSeconds()` is what
+   * `createProcessingJob` is handed, so the sentence and the charge can never
+   * describe different amounts.
+   *
+   * Advisory, like the meter above it. Continue stays clickable and this is
+   * raised ON CLICK — a disabled button with a number next to it reads as a
+   * dead end, where a refusal that names the overage tells you to shorten the
+   * selection.
+   */
+  const refusalForWindow = useCallback(
+    (startSeconds: number, endSeconds: number) =>
+      processingStrategy
+        ? quotaRefusal({
+            remainingSeconds: remainingQuotaSeconds,
+            neededSeconds: processingStrategy.billableSeconds(
+              startSeconds,
+              endSeconds,
+            ),
+            resetsOn: quotaResetsOn,
+            workspaceKind: eligibilityWorkspace.kind,
+          })
+        : null,
+    [
+      processingStrategy,
+      remainingQuotaSeconds,
+      quotaResetsOn,
+      eligibilityWorkspace.kind,
+    ],
+  );
+
   // Cached on modal open so handleCreateMatch doesn't pay an auth round-trip
   // at click time. Why: getUser() can take 100–300ms over the network and the
   // user has been authenticated since they opened the dashboard.
   const cachedUserIdRef = useRef<string | null>(null);
   /** Whether a preset has seeded the step yet — see the preset branch below. */
   const seededRef = useRef(false);
+  /** The line the last seed was for ({@link presetLineKey}) — a swap is a new one. */
+  const seededLineRef = useRef<string | null>(null);
+  /**
+   * The preset the last seed was for. A swap reads line A's recorded score
+   * from it (to tell a carried score from a typed one) and its source kind.
+   */
+  const seededPresetRef = useRef<EventPreset | null>(null);
 
   // The wizard autosaves as you answer (design 11c): every change lands in
   // localStorage a moment later, and the header says so. A draft ROW is
@@ -1029,50 +1346,110 @@ export function useUploadMatchWizard({
     if (preset) {
       // This is where a preset answers the source question implicitly, which
       // is why it may only be built where the answer is a fact — see the bar
-      // on `EventPreset`. `job-request.ts` refusing a doubles line is what
-      // makes `supportsVideo: false` one.
-      const dashboardPresetProvider = preset.supportsVideo
-        ? DEFAULT_PROVIDER_ID
-        : DEFAULT_IMPORT_PROVIDER_ID;
-      const presetProvider =
-        isAdminMode && initialProvider
-          ? initialProvider
-          : dashboardPresetProvider;
-      setSelectedProvider(presetProvider);
-      setFormData((prev) => ({
-        ...prev,
-        ...(draft?.formData ?? {}),
-        eventName: preset.eventName ?? "",
-        eventKind: preset.eventKind ?? prev.eventKind,
-        round: preset.round ?? "",
-        playerName: preset.playerName,
-        opponentName: preset.opponentName,
-        opponentSource: preset.opponentName ? ("event" as const) : undefined,
-        date: preset.date,
-        dateSource: "event" as const,
-        courtType: preset.surface
-          ? surfaceToCourtType(preset.surface)
-          : prev.courtType,
-        bestOf: String(preset.bestOf),
-        adScoring: preset.adScoring ?? undefined,
-        matchType:
-          preset.eventKind === "dual"
-            ? "Dual Match"
-            : preset.eventKind === "tournament"
-              ? "Tournament"
-              : preset.supportsVideo
-                ? "Singles"
-                : "Doubles",
-        opponentProgramKey: preset.opponentProgramKey ?? undefined,
-        opponentSchool: preset.opponentSchool ?? undefined,
-        ...(preset.score
-          ? {
-              playerScores: preset.score.player1,
-              opponentScores: preset.score.player2,
-              numberOfSets: preset.score.player1.length,
-            }
-          : {}),
-      }));
+      // on `EventPreset`. Always the default source: a doubles line is not
+      // routed onto an import instead, it is refused outright by
+      // `wizardUploadEligibility()` (doubles is score-only), and the page
+      // that builds a `?entry=` preset never hands one over.
+      // The admin console is the one exception: it names its source up front
+      // (`initialProvider`), and a console preset keeps it.
+      setSelectedProvider(
+        isAdminMode && initialProvider ? initialProvider : DEFAULT_PROVIDER_ID,
+      );
+      // A PinnedLineBar swap re-runs this with a different line. The seed
+      // below rewrites the line's facts; the answers given about line A's
+      // players are cleared beside it (LINE_SWAP_FIELDS), and the top-player
+      // drift baseline and its stale hint with them — they described an answer
+      // that no longer exists. `cameraAnswerFileRef` stays: the recording did
+      // not change, and neither does the picked file or its trim window (the
+      // file-generation reset is keyed on the event, not the line).
+      //
+      // The score rule: a score that came from line A's RECORD is wrong for
+      // line B and is cleared — games, set count, and the `result` /
+      // `retiredSide` beside it — before line B's own score (if any) is
+      // seeded. A score typed in the wizard describes the recording and stays.
+      // Nothing in the form records provenance, so "came from the record"
+      // means "still equals the score line A seeded"; one that cannot be told
+      // apart from it is cleared. A re-run for the SAME line (another
+      // dependency moved) clears nothing.
+      const lineKey = presetLineKey(preset);
+      const swapped = seededRef.current && seededLineRef.current !== lineKey;
+      const previousPreset = seededPresetRef.current;
+      seededLineRef.current = lineKey;
+      seededPresetRef.current = preset;
+      const previousScore = swapped ? (previousPreset?.score ?? null) : null;
+      if (swapped) {
+        topPlayerAnswerStartRef.current = null;
+        // `start` is the live window start, which a swap does not move — and
+        // the sync effect above will not refresh it when neither of its
+        // inputs changes, so it is kept rather than blanked (a blank start
+        // would anchor the next answer at 0).
+        topPlayerAnswerRef.current = {
+          ...topPlayerAnswerRef.current,
+          answered: false,
+        };
+        setTopPlayerAnswerStale(false);
+      }
+      const swapCleared: Partial<MatchFormData> = {};
+      if (swapped) {
+        for (const field of LINE_SWAP_FIELDS) {
+          // Arrays are copied so the default's own arrays are never shared.
+          const value = DEFAULT_FORM_DATA[field];
+          (swapCleared as Record<string, unknown>)[field] = Array.isArray(value)
+            ? [...value]
+            : value;
+        }
+      }
+      setFormData((prev) => {
+        const base = { ...prev, ...(draft?.formData ?? {}) };
+        const scoreCleared: Partial<MatchFormData> =
+          // A score equal to line A's recorded one came from line A's record
+          // (or cannot be told apart from it) and is wrong for line B; a
+          // score that differs was typed in the wizard and stays.
+          previousScore && sameRecordedScore(base, previousScore)
+            ? {
+                playerScores: [...DEFAULT_FORM_DATA.playerScores],
+                opponentScores: [...DEFAULT_FORM_DATA.opponentScores],
+                numberOfSets: DEFAULT_FORM_DATA.numberOfSets,
+                result: DEFAULT_FORM_DATA.result,
+                retiredSide: DEFAULT_FORM_DATA.retiredSide,
+              }
+            : {};
+        return {
+          ...base,
+          // After the draft: a swap in a resumed flow re-spreads the draft,
+          // whose answers were given for its line's players too.
+          ...swapCleared,
+          ...scoreCleared,
+          eventName: preset.eventName ?? "",
+          eventKind: preset.eventKind ?? prev.eventKind,
+          round: preset.round ?? "",
+          playerName: preset.playerName,
+          opponentName: preset.opponentName,
+          opponentSource: preset.opponentName ? ("event" as const) : undefined,
+          date: preset.date,
+          dateSource: "event" as const,
+          courtType: preset.surface
+            ? surfaceToCourtType(preset.surface)
+            : prev.courtType,
+          bestOf: String(preset.bestOf),
+          adScoring: preset.adScoring ?? undefined,
+          matchType:
+            preset.eventKind === "dual"
+              ? "Dual Match"
+              : preset.eventKind === "tournament"
+                ? "Tournament"
+                : "Singles",
+          opponentProgramKey: preset.opponentProgramKey ?? undefined,
+          opponentSchool: preset.opponentSchool ?? undefined,
+          ...(preset.score
+            ? {
+                playerScores: preset.score.player1,
+                opponentScores: preset.score.player2,
+                numberOfSets: preset.score.player1.length,
+              }
+            : {}),
+        };
+      });
       // A line arrives with step 1 answered, so the flow opens on the file
       // (design 7b). Only on the first seed: switching lines from the pinned
       // bar re-runs this effect and must leave the step where it is.
@@ -1081,9 +1458,7 @@ export function useUploadMatchWizard({
         setProgressKind(
           isAdminMode && initialProvider
             ? getProviderKind(initialProvider)
-            : preset.supportsVideo
-              ? "processing"
-              : "import",
+            : DEFAULT_PROVIDER_KIND,
         );
         setStep("file");
       }
@@ -1124,24 +1499,30 @@ export function useUploadMatchWizard({
     const existingProvider = localStorage.getItem(
       STORAGE_KEYS.SELECTED_PROVIDER,
     );
-    let resumedProvider = false;
-    if (initialProvider) {
-      // The link named a source. It outranks the stored one — that is a stale
-      // choice, this is the one just made — and the step still opens, because
-      // it carries two answers besides this one. The progress bar was already
-      // built at this kind's length in the initialiser above, so nothing here
-      // resizes it.
-      setSelectedProvider(initialProvider);
-    } else if (existingProvider && isProviderSupported(existingProvider)) {
-      setSelectedProvider(existingProvider as ProviderId);
-      resumedProvider = true;
-    } else if (DEFAULT_PROVIDER_ID) {
-      // Your own video is the default source — it is what most people came to
-      // do, and the alternative is an import from somewhere else. Deliberately
-      // NOT written to storage: a default is not a choice, and persisting it
-      // would make the next visit resume past the step that offers it.
-      setSelectedProvider(DEFAULT_PROVIDER_ID);
-    }
+    // `resolveStartingProvider` ranks link > stored > onboarding preference >
+    // default. The link outranks the stored one — that is a stale choice, this
+    // is the one just made — and the step still opens, because it carries two
+    // answers besides this one. The progress bar was already built at the
+    // link's kind in the initialiser above, so nothing here resizes it.
+    //
+    // Only the stored tier is a resume. The onboarding preference and the
+    // default land here the same way: selected, and deliberately NOT written
+    // to storage. A default is not a choice, and neither is a preference
+    // answered once at sign-up — persisting either would make the next visit
+    // resume past the step that offers it, and would turn a guess into the
+    // stored choice that outranks the preference forever after. Your own video
+    // is the default source: it is what most people came to do, and the
+    // alternative is an import from somewhere else.
+    const startingProvider = resolveStartingProvider({
+      linked: initialProvider ?? null,
+      stored: existingProvider,
+      preferred: preferredProvider ?? null,
+    });
+    const resumedProvider =
+      !initialProvider &&
+      startingProvider !== null &&
+      startingProvider === existingProvider;
+    if (startingProvider) setSelectedProvider(startingProvider);
 
     const storedFormData = loadFormDataFromStorage();
     if (storedFormData || seededPlayerName) {
@@ -1178,13 +1559,13 @@ export function useUploadMatchWizard({
       setProgressKind(resumedKind);
       setStep(STEP_ORDER_BY_KIND[resumedKind][1]);
     } else {
-      // A `?source=` link keeps the kind the initialiser already built the bar
-      // at; everything else starts on the default flow. Writing the default
-      // unconditionally here was what made a linked import wizard count four
-      // steps and then drop to three on the first Continue.
+      // Keep the kind the initialiser already built the bar at — a `?source=`
+      // link's, the onboarding preference's, or the default's. Writing the
+      // default unconditionally here was what made a linked import wizard
+      // count four steps and then drop to three on the first Continue.
       setProgressKind(
-        initialProvider
-          ? getProviderKind(initialProvider)
+        firstPaintProvider
+          ? getProviderKind(firstPaintProvider)
           : DEFAULT_PROVIDER_KIND,
       );
       setStep("provider");
@@ -1260,51 +1641,10 @@ export function useUploadMatchWizard({
     draft,
     askWhoPlayed,
     seededPlayerName,
+    resetFileGeneration,
     initialProvider,
     isAdminMode,
   ]);
-
-  /**
-   * The workspace an EXISTING match belongs to — pinned the moment a preset
-   * or an accepted line first names one (`matchId`), and never re-read from
-   * the live switcher after that.
-   *
-   * The workspace switcher can change `activeWorkspace` on this same mounted
-   * page without navigating away (`setActiveWorkspaceInPlace`), so a coach
-   * who reuses a scored line and then switches programs would otherwise have
-   * that match's roster, approval and attribution re-decided against the
-   * NEWLY selected program — the client repeating the mistake T15/T16 fixed
-   * server-side with `billingWorkspaceFor(match.program_id)`. Cleared the
-   * moment nothing existing is in play (no `matchId`), so a fresh preset or a
-   * detached line still tracks the live workspace like any other new upload.
-   *
-   * Set from an effect, not during render — a ref read/write while
-   * rendering is what `react-hooks/refs` exists to catch, since it can
-   * silently disagree with what actually painted. The one-render lag this
-   * costs is free: on the render where an existing match FIRST appears,
-   * `activeWorkspace` and the eventual pin are the same workspace anyway: no
-   * switch has happened yet.
-   */
-  const activeWorkspaceRef = useRef(activeWorkspace);
-  useEffect(() => {
-    activeWorkspaceRef.current = activeWorkspace;
-  }, [activeWorkspace]);
-  const existingMatchId = (preset ?? attachedLine)?.matchId ?? null;
-  const [pinnedMatchWorkspace, setPinnedMatchWorkspace] =
-    useState<Workspace | null>(null);
-  useEffect(() => {
-    if (existingMatchId) {
-      setPinnedMatchWorkspace((prev) => prev ?? activeWorkspaceRef.current);
-    } else {
-      setPinnedMatchWorkspace((prev) => (prev === null ? prev : null));
-    }
-  }, [existingMatchId]);
-  /**
-   * The workspace eligibility, the roster fetch and the who-played reset all
-   * reason about — the pinned one while an existing match is in play, the
-   * live one otherwise.
-   */
-  const eligibilityWorkspace = pinnedMatchWorkspace ?? activeWorkspace;
 
   /**
    * A fresher `programs.status` than `eligibilityWorkspace` carries — the
@@ -1683,18 +2023,21 @@ export function useUploadMatchWizard({
 
   const handleProviderContinue = useCallback(() => {
     if (!selectedProvider) return;
-    // Belt as well as braces. The preset above already opens a doubles line on
-    // the import provider, but nothing else stops a processing provider being
-    // selected for one, and the cost of getting it wrong is paid entirely by
-    // the coach — a full video upload, then a 422.
-    if (preset && !preset.supportsVideo && isProcessingProvider) return;
     // May this match be recorded here, and for whom — the pending program,
-    // the restricted role, the missing or off-roster athlete all stop here,
-    // with the contract's own sentence. A reading not yet obtained (roster
+    // the restricted role, the missing or off-roster athlete, and a doubles
+    // line (score-only, `doubles-unsupported`) all stop here, with the
+    // decision's own sentence. A reading not yet obtained (roster
     // still loading, status unknown) stops too, silently: nothing has been
     // decided, and the page offers Retry for those rather than an error.
     if (!eligibility.ok) {
       if (!eligibility.retryable) setError(eligibility.message);
+      return;
+    }
+    // Nothing left in the month at all: a video job cannot be placed whatever
+    // the trim, so it is refused before a file is picked rather than after an
+    // upload. Null on the import path — that flow never reaches the allowance.
+    if (providerQuotaRefusal) {
+      setError(providerQuotaRefusal);
       return;
     }
     setError(null);
@@ -1705,9 +2048,8 @@ export function useUploadMatchWizard({
     selectedProvider,
     stepOrder,
     providerKind,
-    preset,
-    isProcessingProvider,
     eligibility,
+    providerQuotaRefusal,
   ]);
 
   // Where the file step goes depends on the kind: a video still needs its
@@ -1738,10 +2080,31 @@ export function useUploadMatchWizard({
       return;
     }
     setError(null);
+    // A kept video with no window — what `startOver()` leaves, since the
+    // window was the old player's — gets the whole recording again, exactly
+    // as a fresh pick does. Without it the trim step would draw the full rail
+    // over an empty form and hold Continue until a handle was touched.
+    const probedEnd = videoProbe?.durationSeconds;
+    if (
+      isProcessingProvider &&
+      probedEnd !== undefined &&
+      formData.videoStartSeconds === undefined &&
+      formData.videoEndSeconds === undefined
+    ) {
+      setFormData((prev) => ({
+        ...prev,
+        videoStartSeconds: 0,
+        videoEndSeconds: probedEnd,
+        duration: Math.max(0, Math.round(probedEnd)) * 1000,
+      }));
+    }
     const index = stepOrder.indexOf("file");
     if (index >= 0 && index + 1 < stepOrder.length)
       setStep(stepOrder[index + 1]);
   }, [
+    videoProbe,
+    formData.videoStartSeconds,
+    formData.videoEndSeconds,
     stepOrder,
     selectedProvider,
     uploadedFile,
@@ -1757,8 +2120,19 @@ export function useUploadMatchWizard({
   ]);
 
   const handleTrimContinue = useCallback(() => {
+    // The window is the bill. Asked here, on the click, because this is the
+    // last screen where shortening the selection is still the obvious fix.
+    const refusal = refusalForWindow(
+      formData.videoStartSeconds ?? 0,
+      formData.videoEndSeconds ?? 0,
+    );
+    if (refusal) {
+      setError(refusal);
+      return;
+    }
+    setError(null);
     setStep("match");
-  }, []);
+  }, [refusalForWindow, formData.videoStartSeconds, formData.videoEndSeconds]);
 
   /**
    * Pick and validate a video, entirely locally.
@@ -1767,6 +2141,21 @@ export function useUploadMatchWizard({
    * from the file itself so an unusable video is refused at pick time rather
    * than after a twenty-minute upload.
    */
+  /**
+   * Forget which recording the camera answers belonged to.
+   *
+   * The answers themselves are cleared in the same `setFormData` that rewrites
+   * the window, so the form and these refs move together. Not marked STALE:
+   * that hint says the window start moved, and a new recording is a different
+   * reason — both questions are simply asked again, with their usual hints.
+   */
+  const forgetCameraAnswers = useCallback(() => {
+    cameraAnswerFileRef.current = null;
+    topPlayerAnswerStartRef.current = null;
+    topPlayerAnswerRef.current = { start: undefined, answered: false };
+    setTopPlayerAnswerStale(false);
+  }, []);
+
   const onVideoPick = useCallback(
     async (file: File | null) => {
       if (!file || !selectedProvider) return;
@@ -1815,6 +2204,15 @@ export function useUploadMatchWizard({
         // Default the trim to the whole video. The user narrows it on the rail;
         // starting at the full extent means a straight-through flow still submits
         // a valid window.
+        // A DIFFERENT recording invalidates both camera answers — see
+        // CLEARED_CAMERA_ANSWERS. Re-picking the identical file (Remove, then
+        // add the same one back) is not a swap and keeps them; an unknown
+        // signature, which is what a resumed draft has, counts as different.
+        const signature = videoSignature(file);
+        const sameRecording = cameraAnswerFileRef.current === signature;
+        if (!sameRecording) forgetCameraAnswers();
+        cameraAnswerFileRef.current = signature;
+
         setFormData((prev) => {
           const end = summary?.durationSeconds ?? prev.videoEndSeconds;
           return {
@@ -1822,6 +2220,7 @@ export function useUploadMatchWizard({
             ...(fileDate && prev.dateSource !== "event"
               ? { ...fileDate, dateSource: "file" as const }
               : {}),
+            ...(sameRecording ? {} : CLEARED_CAMERA_ANSWERS),
             videoStartSeconds: 0,
             videoEndSeconds: end,
             // Same rule as handleTrimChange: the untrimmed clip is the starting
@@ -1842,16 +2241,49 @@ export function useUploadMatchWizard({
         if (generation === fileGenerationRef.current) setIsProbing(false);
       }
     },
-    [selectedProvider, resetFileGeneration],
+    [selectedProvider, resetFileGeneration, forgetCameraAnswers],
   );
 
   /** Set the trim window. Values are seconds into the original video. */
   const handleTrimChange = useCallback(
     (startSeconds: number, endSeconds: number) => {
+      // Moving a handle answers the over-allowance refusal Continue raised, so
+      // the sentence goes the moment the window changes rather than waiting for
+      // the next click to re-evaluate it.
+      setError(null);
+
+      // The top-player answer describes the window's FIRST FRAME, so a start
+      // that has travelled far enough may no longer be describing it. This is
+      // the ONE place that clears it: the handle drag's release, the arrow
+      // nudge, `I` and the start CutField's Set button all arrive here.
+      const { start: previousStart, answered } = topPlayerAnswerRef.current;
+      // A resumed draft restores the answer but not the moment it was given.
+      // Adopt the committed start as the baseline rather than reading "no
+      // baseline" as "clear": creep is then measured from where the player
+      // came back to the step.
+      const baseline = topPlayerAnswerStartRef.current ?? previousStart ?? 0;
+      const startMoved =
+        previousStart !== undefined && startSeconds !== previousStart;
+      const clearAnswer =
+        answered &&
+        startMoved &&
+        Math.abs(startSeconds - baseline) > TOP_PLAYER_ANSWER_RESET_SECONDS;
+      // Measured against the start AT ANSWER TIME, never the previous window,
+      // so ten 10 s jumps clear it exactly as one 100 s drag does.
+      topPlayerAnswerStartRef.current = clearAnswer ? null : baseline;
+      topPlayerAnswerRef.current = {
+        start: startSeconds,
+        answered: answered && !clearAnswer,
+      };
+      if (clearAnswer) setTopPlayerAnswerStale(true);
+
       setFormData((prev) => ({
         ...prev,
         videoStartSeconds: startSeconds,
         videoEndSeconds: endSeconds,
+        // Back to unanswered — never to a default. `fixedCamera` is about the
+        // whole recording and is not touched (`ui-revamp-guardrails.md` §3.1).
+        ...(clearAnswer ? { initialTopPlayerIsPlayer1: undefined } : {}),
         // The window IS the match: it was trimmed to the first serve and the
         // final point, so how long it runs is how long the match took. Typing
         // that a second time only creates a chance to disagree with the
@@ -1868,14 +2300,17 @@ export function useUploadMatchWizard({
     setVideoWarnings([]);
     setUploadedFile(null);
     setUploadError(null);
+    forgetCameraAnswers();
     setFormData((prev) => ({
       ...prev,
       videoStartSeconds: undefined,
       videoEndSeconds: undefined,
+      // No video, no window, and no frame for either camera answer to describe.
+      ...CLEARED_CAMERA_ANSWERS,
       // The duration came from the window; without a video there is no window.
       duration: 0,
     }));
-  }, [resetFileGeneration]);
+  }, [resetFileGeneration, forgetCameraAnswers]);
 
   /**
    * Accept the schedule's offer (design 7a). Six fields fill from the line
@@ -1942,9 +2377,83 @@ export function useUploadMatchWizard({
   const handleBack = useCallback(() => {
     const index = stepOrder.indexOf(step);
     if (index > stepOrder.indexOf(firstStep)) {
+      // `error` is one slot for the whole wizard, and the trim step now RENDERS
+      // it as the reason Continue refused. Left standing, a failed save on the
+      // details step would reappear under the rail as if the window were at
+      // fault. Going back is always a fresh start on the step behind you.
+      setError(null);
       setStep(stepOrder[index - 1]);
     }
   }, [step, stepOrder, firstStep]);
+
+  /**
+   * "Start over with a different player?" — confirmed from the subject bar on
+   * the trim and details steps. See `UseUploadMatchWizardReturn.startOver`.
+   *
+   * Writes the subject as null and nothing else: the next answer comes from
+   * step 1's For field through `chooseMatchSubject`, like the first one did.
+   *
+   * Storage is left to the autosave effect, which writes this emptier form on
+   * its own. `clearStorageData()` would also drop the kept file's entry and
+   * the selected source.
+   */
+  const startOver = useCallback(() => {
+    applyMatchSubject(null);
+    resetIdentityAnswer();
+    setError(null);
+    // The drift rule's baseline and the "why is this blank again" hint both
+    // describe answers that no longer exist. `cameraAnswerFileRef` stays: the
+    // file is kept, so answers given after this still belong to it.
+    topPlayerAnswerStartRef.current = null;
+    topPlayerAnswerRef.current = { start: undefined, answered: false };
+    setTopPlayerAnswerStale(false);
+    // A lineup slot accepted on the details step is the OLD player's line.
+    // Left attached, the next player's match would be filed under it — or
+    // would overwrite that line's existing match. Dropped without Detach's
+    // snapshot restore: the event, date, format and court it filled are
+    // match facts this reset keeps, and the opponent it filled is cleared
+    // below anyway.
+    attachedLineRef.current = null;
+    detachSnapshot.current = null;
+    setAttachedLine(null);
+    setFormData((prev) => {
+      const next = { ...prev };
+      for (const field of START_OVER_FIELDS) {
+        // Arrays are copied so the default's own arrays are never shared.
+        const value = DEFAULT_FORM_DATA[field];
+        (next as Record<string, unknown>)[field] = Array.isArray(value)
+          ? [...value]
+          : value;
+      }
+      return next;
+    });
+    setStep(firstStep);
+  }, [applyMatchSubject, resetIdentityAnswer, firstStep]);
+
+  /**
+   * "Not Marcus?" on an import flow. See
+   * `UseUploadMatchWizardReturn.resetImportPlayerAnswer`.
+   *
+   * Deliberately separate from `chooseMatchSubject`'s own style clear: this
+   * one runs on the click, before any new subject is picked. It never writes
+   * the subject. The player-1 confirmation re-asks by itself once the athlete
+   * changes (the identity effect above); clearing it here only stops the old
+   * answer standing while the same athlete is still selected.
+   */
+  const resetImportPlayerAnswer = useCallback(() => {
+    resetIdentityAnswer();
+    // `error` is one slot for the whole wizard and the file step renders it:
+    // a failed save left from the details step would reappear there as if the
+    // file were at fault — the same reason `handleBack` clears it.
+    setError(null);
+    setFormData((prev) => ({
+      ...prev,
+      playerHand: DEFAULT_FORM_DATA.playerHand,
+      playerBackhand: DEFAULT_FORM_DATA.playerBackhand,
+      playerStyleSource: DEFAULT_FORM_DATA.playerStyleSource,
+    }));
+    setStep(firstStep);
+  }, [resetIdentityAnswer, firstStep]);
 
   // Close keeps localStorage intact so an accidental ✕ doesn't destroy in-flight
   // typing. Storage is cleared only after a successful create (see handleCreateMatch)
@@ -2241,6 +2750,17 @@ export function useUploadMatchWizard({
       field: keyof MatchFormData,
       value: string | number | boolean | null | undefined,
     ) => {
+      // Answering the top-player question re-anchors the baseline the trim
+      // step's clear is measured from, so the distance is always "how far has
+      // the start moved since you last looked at this frame".
+      if (field === "initialTopPlayerIsPlayer1" && typeof value === "boolean") {
+        topPlayerAnswerStartRef.current = topPlayerAnswerRef.current.start ?? 0;
+        topPlayerAnswerRef.current = {
+          ...topPlayerAnswerRef.current,
+          answered: true,
+        };
+        setTopPlayerAnswerStale(false);
+      }
       setFormData((prev) => {
         const next = { ...prev, [field]: value };
         // When bestOf changes, reset numberOfSets so it uses the new format's default
@@ -2396,6 +2916,20 @@ export function useUploadMatchWizard({
         );
         return;
       }
+      // The trim step's question, re-asked at the write — the same
+      // `billableSeconds()` figure `createProcessingJob` is about to be handed,
+      // because the allowance can have been spent by a teammate since the trim
+      // step read it. Before `setIsCreating`, so a refusal leaves the dialog
+      // open on this step with its sentence rather than closing behind a row
+      // the server would refuse a moment later.
+      const windowRefusal = refusalForWindow(
+        formData.videoStartSeconds ?? 0,
+        formData.videoEndSeconds ?? 0,
+      );
+      if (windowRefusal) {
+        setError(windowRefusal);
+        return;
+      }
 
       setIsCreating(true);
       setError(null);
@@ -2533,9 +3067,13 @@ export function useUploadMatchWizard({
         // receipt exists to rule out.
         // A line reached either way — pinned by the page, or offered on the
         // details step and accepted — is the same destination.
+        // The same rule the Matches table folds drafts by
+        // (`draftTargetMatchId`), so a resumed draft updates the match it is
+        // listed under rather than minting a second row.
         const line = preset ?? attachedLine;
-        const matchId = line?.matchId ?? crypto.randomUUID();
-        const reusingMatch = Boolean(line?.matchId);
+        const existingTarget = draftTargetMatchId({ preset, attachedLine });
+        const matchId = existingTarget ?? crypto.randomUUID();
+        const reusingMatch = existingTarget !== null;
 
         const adjustedPlayerScores = getAdjustedScores(
           formData.playerScores,
@@ -2551,9 +3089,10 @@ export function useUploadMatchWizard({
         //
         // The id `uploadEligibility()` resolved and nothing else: the picked
         // roster profile's (`program_players.id`, the id
-        // `matches_block_client_regraft` checks against the roster), the
-        // viewer's own in a personal workspace, or null for a doubles line
-        // (`wizardUploadEligibility`). There is deliberately no `?? userId`
+        // `matches_block_client_regraft` checks against the roster) or the
+        // viewer's own in a personal workspace (`wizardUploadEligibility`,
+        // which refuses a doubles line before it gets here — doubles is
+        // score-only). There is deliberately no `?? userId`
         // here. Falling back to the uploader was the bug this replaces: it
         // attributed an athlete's match to their coach, and since `player1_id`
         // is half the `matches` SELECT policy, it also handed the coach read
@@ -2965,6 +3504,7 @@ export function useUploadMatchWizard({
     eligibilityInput,
     approvalReading,
     refreshApproval,
+    refusalForWindow,
     matchSubject,
     isUploading,
     isProbing,
@@ -3012,6 +3552,8 @@ export function useUploadMatchWizard({
     handleTrimContinue,
     handleBack,
     firstStep,
+    startOver,
+    resetImportPlayerAnswer,
 
     // The schedule offer
     attachedLine,
@@ -3043,6 +3585,7 @@ export function useUploadMatchWizard({
     remainingQuotaSeconds,
     quotaCapSeconds,
     quotaResetsOn,
+    providerQuotaRefusal,
     // Every strategy has one — the file picker on step 2 serves both kinds.
     acceptString: selectedProvider
       ? getProviderStrategy(selectedProvider).getAcceptString()
@@ -3050,6 +3593,7 @@ export function useUploadMatchWizard({
     requirementChips: processingStrategy?.requirementChips ?? [],
     onVideoPick,
     handleTrimChange,
+    topPlayerAnswerStale,
     handleRemoveVideo,
 
     // Form handling

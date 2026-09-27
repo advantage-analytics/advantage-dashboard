@@ -6,11 +6,35 @@
 
 ### Loading Skeleton
 
-```
-bg-[#F0F0F0] rounded animate-pulse
-// Various heights: h-2.5, h-3, h-4, h-5
-// Proportional widths: w-24, w-32, w-40
-```
+Build every skeleton from the three primitives in
+`src/components/dashboard/loading/pending.tsx`; never hand-write a bar.
+
+- **`PendingBar`** — one bar: `--surface-skeleton`, `rounded-[3px]`,
+  `motion-safe:animate-pulse`, `aria-hidden`. Size it with classes (`h-2`–`h-9`,
+  proportional widths such as `w-24`, `w-32`, `w-40`).
+- **`PendingRegion`** — a card or region: the one `role="status"`, labelled
+  "Loading <region>", with every bar under an `aria-hidden` wrapper.
+- **`PendingFrame`** — a route's `loading.tsx`: the same status on the page's
+  white ground. It pulses as one by default; `pulse={false}` when it holds real
+  text, so the text renders still and only the bars pulse.
+
+The colour is the `--surface-skeleton` token, never a hex, and the pulse is
+always `motion-safe:animate-pulse`. `tests/skeleton-primitives.spec.ts` fails
+any file outside `pending.tsx` that writes either by hand.
+
+**Carbon and this system.** The
+[Carbon loading pattern](https://carbondesignsystem.com/patterns/loading-pattern/)
+is the reference; where it differs, this system wins.
+
+- Skeletons for container and page loads, mirroring the loaded layout, so
+  nothing jumps when the data lands.
+- Chrome the page already knows (titles, eyebrows, column labels, step names)
+  renders as real text; only what is arriving is a bar.
+- The spinner only for blocking actions and inline button states — never a
+  page load, never inside a card.
+- Pulse, where Carbon shimmers.
+- A token, never a hex.
+- One `role="status"` per region, never one per bar.
 
 **A skeleton is a promise that something is arriving.** It belongs to a
 request that will resolve — a fetch in flight, a page mounting. It never
@@ -100,9 +124,13 @@ _The marker_ is a **24px outlined pill** — hairline border, no fill, ink-600 a
 11/500 — and the three alternatives were each rejected for a reason worth
 keeping. An eyebrow labels a SECTION; this labels the page's condition. Grey
 `StatePill` is the right register but is sized for a table row, and 18px alone
-above a 24px statement reads undersized. The blue-tinted pill is spoken for:
-it belongs to "New" and to nothing else, and a second blue pill costs the
-first its meaning.
+above a 24px statement reads undersized. And a blue-tinted pill is not an
+option — not because it is taken, but because the system has none: every pill
+is grey (Data Table rule 4). Blue marks action and emphasis, and a page's
+condition is neither.
+_Supersedes (v3): "The blue-tinted pill is spoken for: it belongs to "New" and
+to nothing else, and a second blue pill costs the first its meaning."_ "New" is
+no longer a pill at all — it is a 5px `--blue` dot after the opponent's name in the Matches row.
 
 The middle row is a judgement, not a loophole: Home dims one card and one row
 because those are shapes worth previewing, and Statistics does not because

@@ -6,6 +6,10 @@ import {
   type UploadUrlDeps,
   type UploadUrlMatch,
 } from "@/app/api/splitstep/upload-url/handler";
+import {
+  capRefusalMessage,
+  type QuotaLimit,
+} from "@/lib/services/splitstep/quota";
 import type { RosterIdentity } from "@/lib/workspace/upload-eligibility";
 import { PENDING_APPROVAL_NOTICE } from "@/lib/workspace/upload-eligibility";
 import {
@@ -36,6 +40,7 @@ const VIEWER = "u-coach";
 const OTHER_USER = "u-someone-else";
 const PROGRAM = "p-westfield";
 const OTHER_PROGRAM = "p-eastside";
+const CAP_SECONDS = 7200;
 const STUB_URL = "stub://upload-credential/not-a-sas";
 
 function team(overrides: Partial<Workspace> = {}): Workspace {
@@ -110,6 +115,12 @@ function harness(input: {
   workspaces?: Workspace[];
   roster?: readonly RosterIdentity[] | null;
   mintThrows?: boolean;
+  /** `processing_jobs.billable_seconds`; defaults to a 30-minute match. */
+  billableSeconds?: number | null;
+  /** Seconds left this month; defaults to plenty. `"throws"` = read failed. */
+  remainingSeconds?: number | "throws";
+  /** Which limit the peek reports; "account" unless a test says otherwise. */
+  limit?: QuotaLimit;
 }): Harness {
   const minted: string[] = [];
   const recorded: Array<{ matchId: string; blobName: string }> = [];
@@ -129,6 +140,20 @@ function harness(input: {
     loadRoster: async (programId) => {
       rosterReads.push(programId);
       return input.roster === undefined ? ROSTER : input.roster;
+    },
+    loadBillableSeconds: async () =>
+      input.billableSeconds === undefined ? 1800 : input.billableSeconds,
+    remainingQuotaSeconds: async () => {
+      if (input.remainingSeconds === "throws") {
+        throw new Error("Could not read processing usage: connection reset");
+      }
+      const remainingSeconds = input.remainingSeconds ?? CAP_SECONDS;
+      return {
+        remainingSeconds,
+        usedSeconds: CAP_SECONDS - remainingSeconds,
+        capSeconds: CAP_SECONDS,
+        limit: input.limit ?? "account",
+      };
     },
     mintUploadSas: ({ blobName }) => {
       if (input.mintThrows) throw new Error("AZURE_STORAGE_ACCOUNT is unset");
@@ -162,6 +187,8 @@ async function call(h: Harness, body: unknown = VALID_BODY) {
     error?: string;
     uploadUrl?: string;
     videoObjectKey?: string;
+    usedSeconds?: number;
+    capSeconds?: number;
   };
   // No response — allowed or refused — ever carries a signature.
   expect(JSON.stringify(json)).not.toContain("sig=");
@@ -441,6 +468,49 @@ test("a video seam refusal the contract did not catch still stops the mint", asy
   const r = await call(h);
   expectDenied(h, 403, r);
   expect(r.json.error).toMatch(/still being confirmed/);
+});
+
+// ── The allowance peek, before the credential ────────────────────────────
+
+test("a match longer than what is left this month → 429, nothing minted", async () => {
+  const h = harness({ billableSeconds: 1800, remainingSeconds: 1799 });
+  const r = await call(h);
+  expectDenied(h, 429, r);
+  expect(r.json.error).toBe(
+    capRefusalMessage({
+      neededSeconds: 1800,
+      remainingSeconds: 1799,
+      capSeconds: CAP_SECONDS,
+    }),
+  );
+  expect(r.json.usedSeconds).toBe(CAP_SECONDS - 1799);
+  expect(r.json.capSeconds).toBe(CAP_SECONDS);
+});
+
+test("a spent open-beta ceiling → 429, nothing minted", async () => {
+  const h = harness({
+    billableSeconds: 600,
+    remainingSeconds: 0,
+    limit: "open_hours",
+  });
+  const r = await call(h);
+  expectDenied(h, 429, r);
+  expect(r.json.error).toMatch(/fully booked/);
+});
+
+test("a match that exactly fits what is left → 200", async () => {
+  const h = harness({ billableSeconds: 1800, remainingSeconds: 1800 });
+  const r = await call(h);
+  expect(r.status).toBe(200);
+  expect(h.minted).toHaveLength(1);
+});
+
+test("an allowance read that fails → 200, the upload proceeds (fails open)", async () => {
+  const h = harness({ billableSeconds: 1800, remainingSeconds: "throws" });
+  const r = await call(h);
+  expect(r.status).toBe(200);
+  expect(r.json.uploadUrl).toBe(STUB_URL);
+  expect(h.recorded).toHaveLength(1);
 });
 
 // ── After authorization ───────────────────────────────────────────────────

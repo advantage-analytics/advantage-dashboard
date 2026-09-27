@@ -1,4 +1,5 @@
 import {
+  ballPathsUserSegment,
   playersObjectKey,
   resultsObjectKey,
   trajectoriesObjectKey,
@@ -68,7 +69,7 @@ export function selectDeliveryStorageKeys(params: {
     };
   }
 
-  const uploaderSegment = createdBy ?? "former-member";
+  const uploaderSegment = ballPathsUserSegment(createdBy);
   const ids = { userId: uploaderSegment, matchId: matchId!, jobId };
 
   return {

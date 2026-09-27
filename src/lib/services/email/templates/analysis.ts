@@ -144,3 +144,81 @@ export function analysisFailedEmail(input: AnalysisFailedInput): EmailMessage {
     tags: { type: "analysis_failed" },
   };
 }
+
+export interface AnalysisFailedInternalInput {
+  /** `INTERNAL_ALERTS_ADDRESS`, passed by the caller (`analysis-mail.ts`). */
+  to: string;
+  jobId: string;
+  matchId: string;
+  matchTitle: string;
+  /**
+   * Where it stopped, from `analysisFailureStage()`: "derivation_failed",
+   * "failed · downloading_video", or a bare "failed" when the vendor named no
+   * step.
+   */
+  stage: string;
+  /** `processing_jobs.error_code` — vendor codes, often absent. */
+  errorCode: string | null;
+  /** `processing_jobs.error_message`, verbatim. */
+  errorMessage: string | null;
+  /** Both null when `created_by` is gone — a retained match whose uploader deleted their account. */
+  uploaderName: string | null;
+  uploaderEmail: string | null;
+}
+
+/**
+ * The internal copy of a failed analysis — to the alerts inbox, never the
+ * athlete.
+ *
+ * It exists because the athlete's email is optional (`notifyAnalysisFailed`)
+ * and says nothing a person could debug from. This one carries the job id,
+ * stage and code, and fires whatever the uploader's preferences say.
+ */
+export function analysisFailedInternalEmail(
+  input: AnalysisFailedInternalInput,
+): EmailMessage {
+  const {
+    to,
+    jobId,
+    matchId,
+    matchTitle,
+    stage,
+    errorCode,
+    errorMessage,
+    uploaderName,
+    uploaderEmail,
+  } = input;
+
+  const uploader =
+    [uploaderName, uploaderEmail && `(${uploaderEmail})`]
+      .filter(Boolean)
+      .join(" ") || "Unknown — account deleted";
+
+  const content: EmailContent = {
+    preheader: `${matchTitle} stopped at ${stage}.`,
+    eyebrow: "Analysis failed",
+    heading: `Analysis failed for ${matchTitle}`,
+    body: [
+      errorMessage
+        ? `The job reported: ${errorMessage}`
+        : "The job settled as failed without a message.",
+    ],
+    facts: [
+      { label: "Job", value: jobId },
+      { label: "Match", value: matchId },
+      { label: "Stage", value: stage },
+      ...(errorCode ? [{ label: "Code", value: errorCode }] : []),
+      { label: "Uploader", value: uploader },
+    ],
+    cta: { label: "Open the match", url: matchUrl(matchId) },
+    note: "Sent to the internal alerts inbox, once per job. The uploader's own email, if they get one, is separate.",
+  };
+
+  return {
+    to,
+    subject: `Analysis failed: ${matchTitle}`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "analysis_failed_internal" },
+  };
+}

@@ -19,6 +19,12 @@ import {
   type ProfileResult,
   type ProfileStatRow,
 } from "@/lib/data/player-profile";
+import {
+  canonicalRosterIds,
+  idsResolvingTo,
+  sideOf,
+} from "@/lib/data/roster-ids";
+import { matchOutcome } from "@/lib/data/match-utils";
 
 /**
  * The player profile's arithmetic (Platform Audit `Te` / `Te2`).
@@ -479,5 +485,74 @@ test.describe("seasonKpis", () => {
       change: 5,
       changeLabel: "vs earlier",
     });
+  });
+});
+
+/**
+ * A claimed player's own profile, across both id eras (T29).
+ *
+ * Their matches from before the claim carry their USER id; the ones after
+ * carry their PROFILE id. The loader names every id that folds onto the
+ * profile in its query (`idsResolvingTo`) and then sides each row it gets
+ * back through the same fold (`sideOf`). These assert both halves against the
+ * roster shapes that matter, and that the side it picks is the one the
+ * outcome is read from.
+ */
+test.describe("a claimed player's pre-claim match on their profile", () => {
+  const ANA_PROFILE = "profile-ana";
+  const ANA_USER = "user-ana";
+  const COACH = "user-coach";
+  const BEN_PROFILE = "profile-ben";
+  const canonical = canonicalRosterIds([
+    { player_id: ANA_PROFILE, user_id: ANA_USER },
+    { player_id: COACH, user_id: COACH },
+    { player_id: BEN_PROFILE, user_id: null },
+  ]);
+
+  test("the fetch names both of a claimed player's ids", () => {
+    expect(idsResolvingTo(canonical, ANA_PROFILE).sort()).toEqual(
+      [ANA_PROFILE, ANA_USER].sort(),
+    );
+  });
+
+  test("a staff seat and an unclaimed player are fetched by one id", () => {
+    expect(idsResolvingTo(canonical, COACH)).toEqual([COACH]);
+    expect(idsResolvingTo(canonical, BEN_PROFILE)).toEqual([BEN_PROFILE]);
+  });
+
+  test("a pre-claim match is theirs, on the side the user id is on", () => {
+    // Ana is player TWO here and won. Siding against the profile id alone
+    // would not find her on either side; siding against the wrong column
+    // would hand her the opponent's loss.
+    const match = { player1_id: "stranger", player2_id: ANA_USER };
+    const isPlayer1 = sideOf(match, canonical, ANA_PROFILE);
+    expect(isPlayer1).toBe(false);
+    expect(
+      matchOutcome({ player1: [4, 3], player2: [6, 6] }, isPlayer1 as boolean),
+    ).toBe(true);
+  });
+
+  test("a post-claim match is sided by the profile id", () => {
+    const match = { player1_id: ANA_PROFILE, player2_id: "stranger" };
+    expect(sideOf(match, canonical, ANA_PROFILE)).toBe(true);
+  });
+
+  test("a teammate's match is not theirs, whichever of Ana's ids it carries", () => {
+    // Ben vs a stranger: nothing of Ana's on it.
+    expect(
+      sideOf(
+        { player1_id: BEN_PROFILE, player2_id: "x" },
+        canonical,
+        ANA_PROFILE,
+      ),
+    ).toBeNull();
+    // Ana (by her user id) vs Ben, read from Ben's profile: Ben is player two.
+    expect(
+      sideOf(
+        { player1_id: ANA_USER, player2_id: BEN_PROFILE },
+        canonical,
+        BEN_PROFILE,
+      ),
+    ).toBe(false);
   });
 });

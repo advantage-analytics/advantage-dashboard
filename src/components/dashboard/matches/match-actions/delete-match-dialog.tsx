@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { ConfirmDialog, ConfirmList } from "@/components/ui/confirm-dialog";
+import { ConfirmDialog, Em } from "@/components/ui/confirm-dialog";
+import posthog from "posthog-js";
+import { isPostHogConfigured } from "@/lib/posthog-client";
 
 interface DeleteMatchDialogProps {
   matchId: string;
@@ -33,6 +35,7 @@ export function DeleteMatchDialog({
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.error ?? "Failed to delete match");
       }
+      if (isPostHogConfigured) posthog.capture("match_deleted");
       onOpenChange(false);
       if (onDeleted) {
         onDeleted();
@@ -52,13 +55,12 @@ export function DeleteMatchDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Delete this match?"
+      // Three nouns are a sentence, not a bulleted list — so this confirm has
+      // no body at all any more, just the contract sentence.
       description={
         <>
-          Removes{" "}
-          <span className="font-medium text-[var(--ink-900)]">
-            {matchLabel}
-          </span>{" "}
-          for good. This can&apos;t be undone.
+          Removes <Em>{matchLabel}</Em> for good — its statistics, every
+          recorded point and shot, and the uploaded file. There is no undo.
         </>
       }
       tone="danger"
@@ -70,14 +72,6 @@ export function DeleteMatchDialog({
       // Opened from inside clickable match rows and cards, which must not
       // treat a click in the dialog as a click on the row.
       onContentClick={(event) => event.stopPropagation()}
-    >
-      <ConfirmList
-        items={[
-          "Its statistics",
-          "Every recorded point and shot",
-          "The uploaded file",
-        ]}
-      />
-    </ConfirmDialog>
+    />
   );
 }

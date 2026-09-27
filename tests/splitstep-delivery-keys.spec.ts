@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { ballPathsObjectKey } from "@/lib/services/splitstep/object-keys";
 import { selectDeliveryStorageKeys } from "@/lib/services/splitstep/delivery-storage-keys";
 
 /**
@@ -89,5 +90,19 @@ test.describe("selectDeliveryStorageKeys", () => {
 
     expect(keys.resultsKey).toBe("orphaned/unknown/del-4.json");
     expect(keys.trimmedKey).toBeNull();
+  });
+});
+
+test.describe("ballPathsObjectKey", () => {
+  test("sits beside the job's vendor files, match id as the third segment", () => {
+    const key = ballPathsObjectKey({
+      userId: "user-1",
+      matchId: "match-1",
+      jobId: "job-1",
+    });
+
+    expect(key).toBe("results/user-1/match-1/job-1.ball-paths.json");
+    // cleanup-orphan-storage.ts attributes an object by this segment.
+    expect(key.split("/")[2]).toBe("match-1");
   });
 });

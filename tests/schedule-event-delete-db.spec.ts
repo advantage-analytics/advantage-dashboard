@@ -81,14 +81,29 @@ test.describe("event deletion database boundary (local opt-in only)", () => {
     sql(
       `begin; ${setup} update public.program_members set role='staff' where program_id='${program}'; ${actor} ${denied(`delete from public.program_events where id='${event}';`, "42501")} rollback;`,
     );
-    for (const dependency of [
-      `insert into public.matches(event_entry_id,score) values('${entry}','{"sets":[[6,0],[6,0]]}');`,
-      `update public.program_event_entries set forfeit='ours' where id='${entry}';`,
-      `${actor} select public.set_schedule_outcome('${program}','${entry}',null,'default','theirs'); reset role;`,
+    // Recorded matches, forfeits and outcomes no longer block deletion: the
+    // match survives detached, outcomes cascade, and the audit counts matches.
+    const match = randomUUID();
+    for (const [dependency, detached] of [
+      [
+        `insert into public.matches(id,event_entry_id,score) values('${match}','${entry}','{"sets":[[6,0],[6,0]]}');`,
+        "1",
+      ],
+      [
+        `update public.program_event_entries set forfeit='ours' where id='${entry}';`,
+        "0",
+      ],
+      [
+        `${actor} select public.set_schedule_outcome('${program}','${entry}',null,'default','theirs'); reset role;`,
+        "0",
+      ],
     ]) {
-      sql(`begin; ${setup} ${dependency} ${actor} ${denied(remove, "23514")} ${denied(`delete from public.program_events where id='${event}';`, "23514")} reset role;
-        do $$ begin if not exists(select 1 from public.program_event_entries where id='${entry}') then raise exception 'Entry lost'; end if;
-        if exists(select 1 from public.program_audit_log where subject_id='${event}') then raise exception 'Refusal audited as deletion'; end if; end $$; rollback;`);
+      sql(`begin; ${setup} ${dependency} ${actor}
+        do $$ begin if (${remove.replace(/;$/, "")}) <> '${event}' then raise exception 'Wrong deleted id'; end if; end $$; reset role;
+        do $$ begin if (select count(*) from public.program_events where id='${event}') <> 0 then raise exception 'Event survived'; end if;
+        if ${detached === "1" ? `not exists(select 1 from public.matches where id='${match}' and event_entry_id is null)` : `exists(select 1 from public.matches where event_entry_id='${entry}')`} then raise exception 'Match not detached'; end if;
+        if exists(select 1 from public.program_event_outcomes where event_id='${event}') then raise exception 'Outcome survived'; end if;
+        if (select details->>'detached_matches' from public.program_audit_log where subject_id='${event}' and actor_user_id='${user}' and action='event.deleted') is distinct from '${detached}' then raise exception 'Wrong detached count'; end if; end $$; rollback;`);
     }
     // The actual CHECK is deliberately made to reject our action within this
     // rolled-back transaction: audit failure must restore event and entry.
@@ -117,10 +132,11 @@ test.describe("event deletion database boundary (local opt-in only)", () => {
         "Concurrent transaction did not reach its synchronization point",
       );
     };
+    const raceMatch = randomUUID();
     for (const kind of ["match", "outcome", "legacy"]) {
       const dependency =
         kind === "match"
-          ? `insert into public.matches(event_entry_id,score) values('${entry}','{}');`
+          ? `insert into public.matches(id,event_entry_id,score) values('${raceMatch}','${entry}','{}');`
           : kind === "legacy"
             ? `update public.program_event_entries set forfeit='ours' where id='${entry}';`
             : `${actor} select public.set_schedule_outcome('${program}','${entry}',null,'forfeit','ours');`;
@@ -137,22 +153,31 @@ test.describe("event deletion database boundary (local opt-in only)", () => {
           );
           const [a, b] = await Promise.all([first, second]);
           expect(a.code, a.output).toBe(0);
-          // Legacy UPDATE after entry deletion simply affects zero rows.
-          if (dependencyFirst || kind !== "legacy")
+          // A committed dependency no longer blocks deletion; a dependency
+          // written after the delete fails its entry FK check, except the
+          // legacy UPDATE, which simply affects zero rows.
+          if (!dependencyFirst && kind !== "legacy")
             expect(b.code, b.output).not.toBe(0);
+          else expect(b.code, b.output).toBe(0);
           expect(
             sql(
               `select count(*) from public.program_events where id='${event}';`,
             ).trim(),
-          ).toBe(dependencyFirst ? "1" : "0");
+          ).toBe("0");
           expect(
             sql(
               `select count(*) from public.matches where event_entry_id='${entry}';`,
             ).trim(),
+          ).toBe("0");
+          // The recorded match survives the event, detached from its entry.
+          expect(
+            sql(
+              `select count(*) from public.matches where id='${raceMatch}' and event_entry_id is null;`,
+            ).trim(),
           ).toBe(dependencyFirst && kind === "match" ? "1" : "0");
         } finally {
           sql(
-            `delete from public.program_event_outcomes where event_id='${event}'; delete from public.matches where event_entry_id='${entry}'; delete from public.program_event_entries where id='${entry}'; delete from public.program_events where id='${event}'; delete from public.program_audit_log where program_id='${program}'; delete from public.program_members where program_id='${program}'; delete from public.programs where id='${program}'; delete from auth.users where id='${user}';`,
+            `delete from public.program_event_outcomes where event_id='${event}'; delete from public.matches where id='${raceMatch}' or event_entry_id='${entry}'; delete from public.program_event_entries where id='${entry}'; delete from public.program_events where id='${event}'; delete from public.program_audit_log where program_id='${program}'; delete from public.program_members where program_id='${program}'; delete from public.programs where id='${program}'; delete from auth.users where id='${user}';`,
           );
         }
       }

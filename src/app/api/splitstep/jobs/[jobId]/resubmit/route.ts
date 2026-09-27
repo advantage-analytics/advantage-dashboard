@@ -8,6 +8,7 @@
  * drift on what a legal retry is.
  */
 
+import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -77,7 +78,7 @@ export async function POST(
     .maybeSingle();
 
   if (jobError) {
-    console.error(`${LOG} job lookup failed`, {
+    pipelineLog.error(`${LOG} job lookup failed`, {
       jobId,
       error: jobError.message,
     });

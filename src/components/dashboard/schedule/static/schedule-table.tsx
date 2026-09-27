@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
@@ -35,7 +37,10 @@ import type { EventDetail, ScheduleRow } from "@/lib/schedule/types";
  * Event rows have NO trailing chevron. They peek: a click opens the drawer
  * beside the list, and the selected row keeps its wash for as long as the
  * drawer is open. "Open event" — the page behind the peek — lives in the
- * drawer's header, not on the row.
+ * drawer's header, and the event's NAME is a shortcut to it, as a player's
+ * name is on Roster: the row peeks, the name travels, ⌘/Ctrl-click on the
+ * row travels too. That is why the row is not a `<button>` — a link cannot
+ * sit inside one — and carries its own key handling instead.
  *
  * ── What the cells say, beyond what the artboard draws ─────────────────────
  * The artboard draws two states of a dual: not played, and decided. A dual
@@ -120,17 +125,32 @@ function EventRow({
   isSelected: boolean;
   onSelect: (eventId: string, viaKeyboard: boolean) => void;
 }) {
+  const router = useRouter();
   const outcome = rowOutcome(row, detail);
   const isDual = row.kind === "dual";
+  const href = `/dashboard/team/schedule/${row.id}`;
 
   return (
-    <button
-      type="button"
+    <div
       id={scheduleRowId(row.id)}
-      aria-pressed={isSelected}
-      // A keyboard "click" (Enter/Space on the button) arrives with detail 0;
-      // a pointer click with the click count. One handler, both tell.
-      onClick={(event) => onSelect(row.id, event.detail === 0)}
+      tabIndex={0}
+      aria-current={isSelected ? "true" : undefined}
+      onClick={(event) => {
+        // ⌘/Ctrl on the row goes where the name goes, as on Roster.
+        if (event.metaKey || event.ctrlKey) {
+          router.push(href);
+          return;
+        }
+        onSelect(row.id, false);
+      }}
+      onKeyDown={(event) => {
+        // Keys pressed on the name link are the link's, not the row's.
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect(row.id, true);
+        }
+      }}
       className={cn(
         "-mx-4 grid h-[52px] w-[calc(100%+32px)] cursor-pointer items-center gap-4 rounded-[var(--radius-element)] px-4 text-left",
         "transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)]",
@@ -151,12 +171,13 @@ function EventRow({
 
       <span className="flex min-w-0 items-center gap-2.5">
         <EventMark kind={row.kind} name={row.name} size={26} />
-        <span
-          className="truncate text-[13px] font-medium"
-          style={{ color: "var(--ink-900)" }}
+        <Link
+          href={href}
+          onClick={(event) => event.stopPropagation()}
+          className="block truncate rounded-[var(--radius-cell)] text-[13px] font-medium text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
         >
           {row.name}
-        </span>
+        </Link>
       </span>
 
       <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
@@ -197,7 +218,7 @@ function EventRow({
       )}
 
       <ResultCell result={outcome.result} />
-    </button>
+    </div>
   );
 }
 

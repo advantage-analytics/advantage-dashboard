@@ -7,6 +7,94 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const POSTHOG_PROJECT_TOKEN = Deno.env.get("POSTHOG_PROJECT_TOKEN");
+const POSTHOG_HOST = Deno.env.get("POSTHOG_HOST");
+
+/**
+ * Gemini's transient refusals — 429 rate limit, 500, 503 "high demand" — used
+ * to end the review for good: every caller swallows this function's failure and
+ * nothing asks again, so the match simply never got one. Two more tries with
+ * backoff ride out a spike. Any other status is the request's own fault and is
+ * returned at once.
+ *
+ * Kept short on purpose: `deriveAndPublish` caps its wait on this function, so
+ * backing off past that cap would only finish after nobody is waiting.
+ */
+const RETRY_STATUSES = new Set([429, 500, 503]);
+const RETRY_DELAYS_MS = [1500, 4000];
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const delay = RETRY_DELAYS_MS[attempt];
+    try {
+      const response = await fetch(url, init);
+      if (!RETRY_STATUSES.has(response.status) || delay === undefined) {
+        return response;
+      }
+      console.warn(
+        `Gemini returned ${response.status}; retrying (attempt ${attempt + 2})`,
+      );
+      await response.body?.cancel();
+    } catch (err) {
+      if (delay === undefined) throw err;
+      console.warn(
+        `Gemini request threw; retrying (attempt ${attempt + 2}):`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+    await new Promise((r) => setTimeout(r, delay + Math.random() * 500));
+  }
+}
+
+/**
+ * Analytics only — nothing here may fail or stall the review. Every step,
+ * trace id included, sits inside the try, and PostHog gets three seconds.
+ */
+async function captureGeminiGeneration({
+  userId,
+  latency,
+}: {
+  userId?: string;
+  latency: number;
+}): Promise<void> {
+  if (!POSTHOG_PROJECT_TOKEN || !POSTHOG_HOST || !userId) return;
+
+  try {
+    const traceId = crypto.randomUUID();
+    const response = await fetch(new URL("/i/v0/e/", POSTHOG_HOST).toString(), {
+      method: "POST",
+      signal: AbortSignal.timeout(3000),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: POSTHOG_PROJECT_TOKEN,
+        event: "$ai_generation",
+        properties: {
+          distinct_id: userId,
+          $ai_trace_id: traceId,
+          $ai_session_id: null,
+          $ai_span_name: "generate_match_insights",
+          $ai_model: "gemini-2.5-flash",
+          $ai_provider: "gemini",
+          // No $ai_input / $ai_output_choices: the prompt and reply carry
+          // player first names and stats, so only usage is recorded — the
+          // same privacy mode the app's LLM adapter uses.
+          $ai_latency: latency,
+          $ai_temperature: 0.4,
+          $ai_http_status: 200,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn("PostHog AI generation capture failed:", response.status);
+    }
+  } catch (error) {
+    console.warn("PostHog AI generation capture threw:", error);
+  }
+}
 
 serve(async (req) => {
   try {
@@ -39,23 +127,39 @@ serve(async (req) => {
     // the player's career averages over PRIOR matches + their immediately previous match,
     // so the LLM can frame this match against them. Best-effort — any failure just omits it.
     let comparisonContext = "";
+    // Who PostHog attributes the generation to: the account that filed the
+    // match, read from the row rather than taken from the request body — any
+    // caller can reach this function, and a body field would let one attribute
+    // a generation to someone else. `player1_id` is not a substitute; it may be
+    // a program_players id rather than an account.
+    let uploaderId: string | undefined;
     try {
       const { data: matchRow } = await supabase
         .from("matches")
-        .select("player1_id, date")
+        .select("player1_id, date, program_id, created_by")
         .eq("id", matchId)
         .single();
 
+      uploaderId = matchRow?.created_by ?? undefined;
       const userId = matchRow?.player1_id;
       const matchDate = matchRow?.date;
 
-      if (userId && matchDate) {
-        const { data: priorMatches } = await supabase
+      if (userId && matchDate && matchRow.program_id !== undefined) {
+        let historyQuery = supabase
           .from("matches")
           .select("id, date")
           .eq("player1_id", userId)
-          .lt("date", matchDate)
-          .order("date", { ascending: false });
+          .lt("date", matchDate);
+
+        // This client bypasses RLS. History must stay in the match's own
+        // workspace so a team report never reveals personal/other-team stats.
+        historyQuery =
+          matchRow.program_id === null
+            ? historyQuery.is("program_id", null)
+            : historyQuery.eq("program_id", matchRow.program_id);
+        const { data: priorMatches } = await historyQuery.order("date", {
+          ascending: false,
+        });
 
         if (priorMatches && priorMatches.length > 0) {
           const priorIds = priorMatches.map((m) => m.id);
@@ -158,7 +262,7 @@ serve(async (req) => {
     const prompt = `
       You are an expert college tennis coach. Analyze the following match statistics and provide, for BOTH Player 1 and Player 2:
       - 3 key strengths and 3 areas to improve (weaknesses). The 'value' should be the relevant percentage (0-100) associated with that specific stat.
-      - a 'summary': a concise but insightful paragraph (4-5 sentences) speaking directly to the player about their performance and what to focus on next. Do not greet them, do not use markdown headers or bullet points, and do not restate the raw numbers as a list — synthesize them into a flowing observation with a clear recommendation.
+      - a 'summary': a short paragraph of 2-3 sentences, under 350 characters in total, speaking directly to the player. The first sentence is the single most important takeaway from this match; the rest gives the evidence and what to focus on next. Do not greet them, do not use markdown headers or bullet points, and do not restate the raw numbers as a list — synthesize them into a flowing observation with a clear recommendation.
 
       Crucially, contextualize their performances against each other. If Player 1 dominated at the net, factor that into Player 2's weaknesses.
       Keep everything encouraging and actionable for college athletes.
@@ -168,7 +272,8 @@ serve(async (req) => {
     `;
 
     // 6. Call the Gemini API via REST
-    const geminiResponse = await fetch(geminiUrl, {
+    const generationStartedAt = Date.now();
+    const geminiResponse = await fetchWithRetry(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -204,6 +309,10 @@ serve(async (req) => {
     }
 
     const generatedInsights = geminiData.candidates[0].content.parts[0].text;
+    await captureGeminiGeneration({
+      userId: uploaderId,
+      latency: (Date.now() - generationStartedAt) / 1000,
+    });
     const insightsJSON = JSON.parse(generatedInsights);
 
     // 7. Update the 'matches' table directly

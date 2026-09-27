@@ -1,11 +1,14 @@
+import { Calendar, Globe, Landmark, MapPin } from "lucide-react";
 import Link from "next/link";
 
-import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
+import { AdminTeamCrestControl } from "@/components/admin/team-crest-control";
+import { TeamHeaderActions } from "@/components/admin/team-header-actions";
+import { adminUploadHref } from "@/components/admin/admin-upload-selection";
 import { StatePill } from "@/components/ui/state-pill";
 import { PilotPill, ApprovePill } from "@/components/admin/plan-pills";
-import { adminUploadHref } from "@/components/admin/admin-upload-selection";
 import { programSubtitle } from "@/lib/data/programs-server";
 import { advButton } from "@/lib/ui/adv-button";
+import { formatShortDate } from "@/lib/ui/date-format";
 import type {
   AdminTeamClaim,
   AdminTeamProgram,
@@ -31,8 +34,16 @@ function programStatusLabel(status: string): string {
 }
 
 /**
- * The Admin › Teams detail page's header: crest, name, state, plan, and the
- * facts line every settings identity card already uses `programSubtitle` for.
+ * The Admin › Teams detail page's header: the crest — uploadable here, unlike
+ * every other place the console draws one — the name, the state and plan
+ * pills, the four-fact line under them, and the actions at the right edge
+ * (`TeamHeaderActions`, a client component: this one is a Server Component
+ * and reads `programSubtitle` from a `*-server.ts` module).
+ *
+ * Home venue is deliberately not one of those facts: the canvas' line is the
+ * four an admin triages on (what the program is, where it is, the domain a
+ * claim is matched against, when it was claimed), and the venue is a detail
+ * the Details card below already prints.
  *
  * `PilotPill` wins over `ApprovePill` on an active program for the same
  * reason `toAdminTeamRow` gives `plan` that order — once a program is active,
@@ -57,44 +68,73 @@ export function TeamPageHeader({
   const plan: "pilot" | "approve" | "none" =
     program.status === "active" ? "pilot" : needsDecision ? "approve" : "none";
 
-  const facts = [
-    programSubtitle(program.division, program.conference),
-    program.homeVenue,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const cityState = [program.city, program.state].filter(Boolean).join(", ");
+
+  /**
+   * The canvas' four facts, in its order: what the program is, where it is,
+   * the domain a claim's email is matched against, and when it was claimed.
+   * Each is dropped rather than drawn empty — an admin reading "—" cannot
+   * tell a program with no conference from one whose row was never filled in,
+   * and an unclaimed program has no claim date to print at all.
+   */
+  const facts: { key: string; icon: typeof Landmark; text: string }[] = [
+    {
+      key: "program",
+      icon: Landmark,
+      text: programSubtitle(program.division, program.conference),
+    },
+    { key: "place", icon: MapPin, text: cityState },
+    { key: "domain", icon: Globe, text: program.primaryDomain ?? "" },
+    {
+      key: "claimed",
+      icon: Calendar,
+      text: program.claimedAt
+        ? `Claimed ${formatShortDate(program.claimedAt)}`
+        : "",
+    },
+  ].filter((fact) => fact.text !== "");
 
   return (
-    <div className="flex flex-wrap items-start gap-4 pb-6">
-      <div className="flex min-w-0 flex-1 items-start gap-4">
-        <ProgramCrest
-          name={program.name}
-          crestUrl={program.crestUrl}
-          size={52}
-        />
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-display truncate">{program.name}</h1>
-            <StatePill>{programStatusLabel(program.status)}</StatePill>
-            {plan === "pilot" ? (
-              <PilotPill />
-            ) : plan === "approve" ? (
-              <ApprovePill />
-            ) : null}
-          </div>
-          {facts ? (
-            <p className="truncate text-[12px] text-[var(--ink-600)]">
-              {facts}
-            </p>
+    <div className="flex items-center gap-5">
+      <AdminTeamCrestControl
+        programId={program.id}
+        name={program.name}
+        crestUrl={program.crestUrl}
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h1 className="text-display truncate">{program.name}</h1>
+          <StatePill>{programStatusLabel(program.status)}</StatePill>
+          {plan === "pilot" ? (
+            <PilotPill />
+          ) : plan === "approve" ? (
+            <ApprovePill />
           ) : null}
         </div>
+        {facts.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-[18px] gap-y-1.5 text-[12px] text-[var(--ink-600)]">
+            {facts.map(({ key, icon: Icon, text }) => (
+              <span key={key} className="flex items-center gap-1.5">
+                <Icon
+                  aria-hidden="true"
+                  className="size-[13px] shrink-0 text-[var(--ink-400)]"
+                  strokeWidth={1.5}
+                />
+                {text}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
-      <Link
-        href={adminUploadHref(program.id, null)}
-        className={advButton("primary", "md")}
-      >
-        Upload for this team
-      </Link>
+      <div className="flex shrink-0 items-center gap-2.5">
+        <Link
+          href={adminUploadHref(program.id, null)}
+          className={advButton("primary", "md")}
+        >
+          Upload for this team
+        </Link>
+        <TeamHeaderActions program={program} />
+      </div>
     </div>
   );
 }

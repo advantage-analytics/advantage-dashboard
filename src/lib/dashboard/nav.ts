@@ -245,7 +245,8 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     label: "Usage",
     href: "/dashboard/settings/usage",
     title: "Usage & quota",
-    subtitle: "Advantage Intelligence analysis time — yours and the program's.",
+    subtitle:
+      "Advantage Intelligence analysis time and match video storage — yours and the program's.",
   },
   {
     id: "plan",

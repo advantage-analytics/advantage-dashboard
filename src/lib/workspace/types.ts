@@ -17,6 +17,7 @@
  */
 
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
+import type { RecordingSource } from "@/app/onboarding/answers";
 
 /** A member's standing inside a team workspace. Personal is always `owner`. */
 export type ProgramRole = "owner" | "coach" | "staff" | "player";
@@ -317,6 +318,15 @@ export interface Viewer {
    * re-onboards.
    */
   onboardedAt: string | null;
+  /**
+   * `users.recording_source` — how the player said they capture matches on
+   * onboarding screen 1.5 (`swing-vision` | `video` | `none`). Read by the
+   * upload wizard to pick a default provider via `providerForRecordingSource`;
+   * it gates nothing. Null for an account that never answered — and for any
+   * value outside the vocabulary, which the mapper drops rather than passes
+   * through, so a stale row can never select a provider that does not exist.
+   */
+  recordingSource: RecordingSource | null;
 }
 
 /**
@@ -332,6 +342,32 @@ export function isProgramStaff(
   workspace: Pick<Workspace, "kind" | "role">,
 ): boolean {
   return workspace.kind === "team" && workspace.role !== "player";
+}
+
+/**
+ * May this viewer change the active workspace's Visualizations-tab
+ * depth/contact bands (Phase 2B)? Personal workspaces have exactly one
+ * member — their sole owner — always able to edit; a team workspace follows
+ * `isProgramStaff` (owner/coach/staff may write, a player may only read).
+ *
+ * `kind`/`role` are nullable so a caller can pass them straight through a
+ * lost-session fallback WITHOUT choosing a permissive default itself: unlike
+ * `workspaceRole`'s existing `?? "player"` fallback (deliberately the
+ * least-privileged real role), `kind` has no such value to fall back to
+ * here, and a `null`/`undefined`/unrecognised `kind` reads as "cannot edit"
+ * — the restrictive direction, matching `workspaceRole`'s own fallback
+ * rather than defaulting an authorization input permissively. A save this
+ * wrongly allowed in the UI would still be refused by `viz_band_settings`'s
+ * own RLS, but showing an enabled editor whose Save always fails is its own
+ * bug — never show it in the first place.
+ */
+export function canEditBandsFor(
+  kind: WorkspaceKind | null | undefined,
+  role: ProgramRole | null | undefined,
+): boolean {
+  if (kind === "personal") return true;
+  if (kind === "team") return isProgramStaff({ kind, role: role ?? "player" });
+  return false;
 }
 
 /** The Schedule actions exposed to a viewer in the active workspace. */

@@ -101,10 +101,10 @@ export function ComingSoon({
           An outlined pill rather than an eyebrow, a grey `StatePill` or a blue
           one. An eyebrow labels a SECTION, and this labels the page's
           condition. `StatePill` is the right register but is sized for a table
-          row — 18px alone above a 24px statement reads undersized. The
-          blue-tinted pill is spoken for: the design system gives it to "New"
-          and to nothing else, and a second blue pill costs the first its
-          meaning. An outline gains the presence a page-level marker needs
+          row — 18px alone above a 24px statement reads undersized. A blue
+          pill is not an option: the design system has none, every pill is
+          grey, and a page's condition is neither action nor emphasis. An
+          outline gains the presence a page-level marker needs
           without gaining weight, and stays in the neutral register the state
           deserves. */}
       <motion.span

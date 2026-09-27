@@ -1,6 +1,6 @@
 ---
 name: task-add
-description: Plan one intent — or a batch — into right-sized, model-routed tasks and append them to this branch's queue. Use when adding work to .claude/tasks/, especially by voice or from a phone.
+description: Plan one intent — or a batch — into right-sized, model-routed tasks and append them to this branch's queue. Use when handing work over to run later rather than doing it now — especially a batch, or anything dictated by voice or from a phone. Not for: work you'd just do now, running or reordering the existing queue (/task-next), or undecided-approach work wanting a brief first (/feature-new).
 argument-hint: "<one or more one-line descriptions of work>"
 ---
 
@@ -10,7 +10,7 @@ Turn an intent — or a batch of them, often dictated from a phone — into task
 the gate can actually judge, then append them to this branch's queue and
 commit.
 
-Planning is routed, not inlined: a Fable subagent shapes and drafts (step 2),
+Planning is routed, not inlined: a planner subagent shapes and drafts (step 2),
 and `/task-next` executes each task on the smallest model the work deserves.
 This session only resolves the queue, relays the draft for confirmation, and
 commits.
@@ -44,11 +44,30 @@ Follow [queue-format](reference/queue-format.md) — locate the branch's queue
 and log files, create them from the templates there if the queue does not
 exist yet.
 
-## 2. Plan on Fable
+## 2. Plan on a routed planner
 
 Do not draft in this session. Dispatch **one** planner subagent via the Agent
-tool with `model: "fable"` — shaping and routing is frontier-model work even
-when this session runs on something smaller. Hand it:
+tool. Shaping is the judgment this skill exists for — deciding that an intent
+is really three tasks, or that a mechanical half can split off and run cheap —
+so route the planner to match the work:
+
+- **`fable`** — the default. A batch, anything whose shape is not obvious, and
+  every case where you are unsure.
+- **`sonnet`** — only when the intent arrives already task-shaped: one surface,
+  one mechanical edit, nothing to split and nothing that routes above `sonnet`
+  anyway. "Drop the event suffix from the drawer's recent-match rows" is this.
+  "Make the roster editable" is not.
+
+Thirty of the fifty-five adds this queue has seen carried a single task, and
+a good share of those were mechanical enough that a frontier planner had
+nothing to shape — the same asymmetry `/pr-check` routes around in its stage 2. Judge the intent in front of you rather than the ratio: single does not
+imply mechanical, and several of those single adds were not. What makes the cheaper tier safe
+here is step 3: the author reads the draft before anything is written, so a
+thin one costs an amendment in the reply they were already sending. That is
+why this threshold is looser than `task-next`'s, where a wrong-low route costs
+a failed gate and a stash instead.
+
+Hand the planner:
 
 - The intent(s) verbatim.
 - The **Drafting rules** section below, verbatim.
@@ -108,9 +127,27 @@ holding only the diff verdict this met or not met?_
 - ✅ "The badge reads 0 and the clear button is hidden once the last filter is removed"
 - ❌ "The filter code is cleaner"
 - ❌ "Performance is improved" — unless a number and a way to read it are named
+- ❌ "A screenshot confirms the stepper is visually unchanged" — concrete, and
+  still unverifiable: the evidence lives outside the diff
 
 Draft **three to five**. Fewer is usually under-specified. More usually means
 the task should be two tasks — say so rather than writing a nine-item list.
+
+**Criteria whose evidence lives outside the diff — the fourth bullet above —
+are the largest single cause of blocked tasks in this repo.** Two
+thirds of the gate failures in the run log are a clean mechanical pass
+followed by `VERDICT: needs-work`, and a recurring share of those named a
+screenshot, an `npm run dev` render check, or a browser session.
+`task-completion-reviewer` holds the diff and nothing else, so a criterion
+whose proof is an artifact nobody can commit is unmeetable by construction:
+the work lands correct and gets stashed anyway.
+
+Sounding concrete is not the test — the test is whether the evidence is _in
+the diff_. When a change genuinely needs eyes on a screen, name what the diff
+must contain instead: a Playwright spec that reaches it, a committed fixture,
+a test asserting the rendered markup. Or leave it off the list and look
+yourself once the task lands. A check nobody can carry out is not extra
+rigour; it is a gate that fires on correct work.
 
 **Refusal.** If the intent cannot be made observable, do not invent criteria.
 Say what is missing, ask **exactly one** clarifying question, and stop without

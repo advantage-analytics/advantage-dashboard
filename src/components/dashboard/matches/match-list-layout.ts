@@ -18,8 +18,12 @@
  */
 export const DATE_COL = "72px";
 export const DATE_COL_WITH_YEAR = "84px";
-/** Wide enough for its own "RESULT" heading, which is wider than the glyph. */
-const RESULT_COL = "60px";
+/**
+ * Wide enough for its own "RESULT" heading, which is wider than the glyph.
+ * Exported for the tournament table (`schedule/tournament-detail.tsx`), which
+ * draws the same Date and Result tracks so the two lists share their x's.
+ */
+export const RESULT_COL = "60px";
 const SCORE_COL = "116px";
 
 export const LIST_GRID_COLS = {
@@ -55,15 +59,15 @@ export function listGridCols(scope: "personal" | "team", compact = false) {
 
 /**
  * One header label per track, shared by `MatchesGrid` and the loading skeleton
- * so the two cannot drift. Lifecycle heads nothing but keeps an empty label so
- * the header's column count stays in step with the row's; Event stays in the
+ * so the two cannot drift. Analysis labels the trailing lifecycle track;
+ * Event stays in the
  * team header beside the drawer, fading with the cells under it.
  */
 export function listColumnLabels(scope: "personal" | "team"): string[] {
   if (scope === "personal") {
-    return ["Date", "Opponent", "Result", "Score", "Event", ""];
+    return ["Date", "Opponent", "Result", "Score", "Event", "Analysis"];
   }
-  return ["Date", "Player", "Opponent", "Result", "Score", "Event", ""];
+  return ["Date", "Player", "Opponent", "Result", "Score", "Event", "Analysis"];
 }
 
 export const LIST_ROW_FRAME = "grid items-center gap-x-4";

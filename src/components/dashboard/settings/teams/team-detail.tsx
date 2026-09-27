@@ -146,6 +146,7 @@ export function TeamDetail({
 
       <TeamMembersCard
         programId={programId}
+        programName={data.program.schoolName}
         isActiveWorkspace={isActiveWorkspace}
         members={data.members}
         invites={data.invites}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Upload } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PendingBar } from "@/components/dashboard/loading/pending";
 import {
   ANALYSIS_LABEL,
   isWorking,
@@ -104,7 +104,7 @@ export function AdminUploadHistory({
                 <tr key={i} aria-hidden="true">
                   {COLUMNS.map((label) => (
                     <td key={label} className="h-[52px] px-5">
-                      <Skeleton className="h-3 w-3/4 motion-reduce:animate-none" />
+                      <PendingBar className="h-3 w-3/4" />
                     </td>
                   ))}
                 </tr>

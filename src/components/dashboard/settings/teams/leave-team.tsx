@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { EyeOff, Upload, UserRound } from "lucide-react";
 import {
@@ -9,6 +9,7 @@ import {
 } from "@/components/dashboard/team/dialog-shell";
 import { SettingsCard } from "@/components/dashboard/settings/settings-card";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
+import { ConfirmProse, Em } from "@/components/ui/confirm-dialog";
 import { StatePill } from "@/components/ui/state-pill";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import { leaveProgram } from "@/components/dashboard/settings/team-actions";
@@ -38,7 +39,8 @@ type LeavingRole = Exclude<ProgramRole, "owner">;
  *
  * The dialog has two beats, like the transfer's. Confirm puts the one thing
  * that cannot be undone from this side in the contract line under the title,
- * then lists what leaving costs and what it leaves alone. Red is the only
+ * then says in two sentences what leaving costs and what it leaves alone —
+ * prose, not the grey bullet tub it used to be. Red is the only
  * warning colour on it — the danger button — with no amber notice beside it:
  * two alarm registers read as two levels of alarm, and a red-tinted box is
  * the shape `DialogProblem` uses for a failed action. Done shows the changed
@@ -173,6 +175,7 @@ function LeaveTeamDialog({
     profileKept: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const proseId = useId();
   const [isPending, startTransition] = useTransition();
 
   const leave = () => {
@@ -281,6 +284,7 @@ function LeaveTeamDialog({
 
   return (
     <RosterDialog
+      describedBodyId={proseId}
       open={open}
       onOpenChange={(next) => {
         if (!isPending) onOpenChange(next);
@@ -311,45 +315,39 @@ function LeaveTeamDialog({
       }
     >
       <div className="flex flex-col gap-3.5">
-        <ul className="flex flex-col gap-[7px] rounded-[8px] bg-[var(--surface-subtle)] px-3.5 py-3 text-[11px] leading-[1.5] text-[var(--ink-700)]">
-          <Bullet>
-            {isStaff
-              ? "You lose access to the team's matches, video and reports."
-              : "You lose access to the team's matches, video and reports, including the ones recorded of you."}
-          </Bullet>
-          {isStaff && (
-            <Bullet>
-              You give up your {PROGRAM_ROLE_LABEL[role].toLowerCase()} role —
-              the roster, schedule and team settings. Team matches you uploaded
-              stay with the program.
-            </Bullet>
-          )}
-          {hasProfile && (
-            <Bullet>
-              Your player profile and its matches stay with the program for{" "}
-              {ownerName ? `${ownerName} and the coaches` : "the coaches"} to
-              manage.
-            </Bullet>
-          )}
-          <Bullet>
-            Matches you uploaded to your personal workspace are unaffected.
-          </Bullet>
-        </ul>
+        {/* What you lose, then what survives — two paragraphs, because the
+            second one is the answer to the question people actually open this
+            dialog with, and it used to be the fourth bullet in a grey tub. */}
+        <ConfirmProse id={proseId}>
+          <p>
+            You lose access to the team&apos;s{" "}
+            <Em>matches, video and reports</Em>
+            {isStaff ? "" : ", including the ones recorded of you"}.
+            {isStaff && (
+              <>
+                {" "}
+                You give up your{" "}
+                <Em>{PROGRAM_ROLE_LABEL[role].toLowerCase()}</Em> role — the
+                roster, schedule and team settings.
+              </>
+            )}
+          </p>
+          <p>
+            {isStaff && <>Team matches you uploaded stay with the program. </>}
+            {hasProfile && (
+              <>
+                Your <Em>player profile</Em> and its matches stay for{" "}
+                {ownerName ? `${ownerName} and the coaches` : "the coaches"} to
+                manage.{" "}
+              </>
+            )}
+            Matches in your personal workspace are unaffected.
+          </p>
+        </ConfirmProse>
 
         <DialogProblem message={error} />
       </div>
     </RosterDialog>
-  );
-}
-
-function Bullet({ children }: { children: React.ReactNode }) {
-  return (
-    <li className="flex gap-2">
-      <span aria-hidden="true" className="text-[var(--ink-400)]">
-        ·
-      </span>
-      <span>{children}</span>
-    </li>
   );
 }
 

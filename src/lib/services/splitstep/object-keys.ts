@@ -86,6 +86,87 @@ export function trajectoriesObjectKey(params: {
 }
 
 /**
+ * `results/{user_id}/{match_id}/{job_id}.ball-paths.json` — OUR derived file,
+ * one compact flight path per stroke (derivation/ball-paths.ts).
+ *
+ * Beside the vendor files it is derived from, for the same reason they sit
+ * together: one job's output, and the match id stays the THIRD segment, which
+ * is how cleanup-orphan-storage.ts attributes it. Deterministic on purpose —
+ * there is no column recording it, so a reader rebuilds this key from the job.
+ */
+export function ballPathsObjectKey(params: {
+  userId: string;
+  matchId: string;
+  jobId: string;
+}): string {
+  return `results/${params.userId}/${params.matchId}/${params.jobId}.ball-paths.json`;
+}
+
+/**
+ * The user segment of a job's ball-paths key, from `processing_jobs.created_by`.
+ *
+ * `former-member` covers a retained team match whose uploader deleted their
+ * account: it keeps its match id and loses `created_by`, and its vendor files
+ * already sit under that segment. delivery-storage-keys.ts, the writer
+ * (ball-paths-store.ts) and the reader (ball-paths-access.ts) all go through
+ * this, because the key is recorded nowhere — building the segment any other
+ * way would never find the file.
+ */
+export function ballPathsUserSegment(createdBy: string | null): string {
+  return createdBy ?? "former-member";
+}
+
+/** A usable id: a non-empty string that cannot introduce a path segment. */
+function isKeySegment(value: unknown): value is string {
+  return typeof value === "string" && value !== "" && !value.includes("/");
+}
+
+/**
+ * The user segment a job's files were WRITTEN under, read back off its
+ * recorded `results_object_key` — or `null` when that key does not prove one.
+ *
+ * Why it exists: `ball-paths.json` is recorded nowhere, and
+ * `processing_jobs.created_by` is nulled when the uploader leaves, after which
+ * `ballPathsUserSegment` answers `former-member` and a file written earlier
+ * under the uploader's uuid can no longer be recomputed. It always sits beside
+ * the results key the webhook recorded in the same delivery, so that key's
+ * segment names it.
+ *
+ * ANCHORED, never a search. The key must be EXACTLY
+ * `results/{segment}/{match_id}/{job_id}.json` for the ids given, with a
+ * non-empty segment: four parts, the literal prefix, this match, this job's
+ * bare `.json` name. Anything else is `null` — a null or non-string key, an
+ * empty or slash-bearing id, an adopted `orphaned/…` key, another match's or
+ * job's key, a `.players.json` name. Callers feed the segment to a service-role
+ * `download` or `remove`, so a loose match here would reach another match's
+ * files.
+ *
+ * Returns the SEGMENT, not a finished key: every caller still builds its key
+ * through `ballPathsObjectKey`, so there is one place that spells the layout.
+ */
+export function resultsKeyUserSegment(params: {
+  resultsObjectKey: unknown;
+  matchId: unknown;
+  jobId: unknown;
+}): string | null {
+  const { resultsObjectKey, matchId, jobId } = params;
+  if (typeof resultsObjectKey !== "string") return null;
+  if (!isKeySegment(matchId) || !isKeySegment(jobId)) return null;
+
+  const parts = resultsObjectKey.split("/");
+  if (
+    parts.length !== 4 ||
+    parts[0] !== "results" ||
+    parts[1] === "" ||
+    parts[2] !== matchId ||
+    parts[3] !== `${jobId}.json`
+  ) {
+    return null;
+  }
+  return parts[1];
+}
+
+/**
  * `trimmed/{user_id}/{match_id}/{job_id}.mp4` — our copy of the vendor's
  * trimmed, re-encoded video.
  *

@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import posthog from "posthog-js";
+import { isPostHogConfigured } from "@/lib/posthog-client";
 import {
   CLAIM_BUTTON,
   CLAIM_FIELD,
@@ -336,7 +338,15 @@ export function JoinWrongAccount({
           type="button"
           disabled={pending}
           className={CLAIM_BUTTON}
-          onClick={() => start(() => signOutForInvite(token))}
+          onClick={() =>
+            start(() => {
+              // This path exists to hand the browser to another account, and
+              // the server action ends in a redirect — reset PostHog here, or
+              // the next person inherits this one's identity and workspace.
+              if (isPostHogConfigured) posthog.reset();
+              return signOutForInvite(token);
+            })
+          }
         >
           {pending ? "Signing out…" : "Sign out and continue"}
         </button>

@@ -7,6 +7,7 @@ import {
   moveToken,
   type SinglesOccupant,
 } from "@/lib/schedule/singles-order";
+import { applyDoublesOrder } from "@/lib/schedule/doubles-order";
 import type { LineupLine } from "@/lib/schedule/types";
 
 function line(key: string, ours: string | null, theirs: string): LineupLine {
@@ -106,4 +107,101 @@ test("a sub displaces a No player court before any player", () => {
     "sub",
     "t3",
   ]);
+});
+
+/* ── Doubles ─────────────────────────────────────────────────────────── */
+
+function pair(
+  key: string,
+  ours: [string, string] | null,
+  theirs: [string, string],
+): LineupLine {
+  return {
+    key,
+    slot: key,
+    discipline: "doubles",
+    ourIds: ours ? [...ours] : [],
+    ourLabels: ours ? ours.map((id) => id.toUpperCase()) : [],
+    theirLabels: [...theirs],
+    noPlayer: false,
+    theirNoPlayer: false,
+  };
+}
+
+const duo = (a: string, b: string): SinglesOccupant => ({
+  ids: [a, b],
+  labels: [a.toUpperCase(), b.toUpperCase()],
+});
+
+test("a doubles order moves our pairs only, in the order given", () => {
+  const lines = [
+    pair("D1", ["a", "b"], ["X1", "Y1"]),
+    pair("D2", ["c", "d"], ["X2", "Y2"]),
+    pair("D3", ["e", "f"], ["X3", "Y3"]),
+  ];
+  const next = applyDoublesOrder(
+    lines,
+    [duo("c", "d"), duo("e", "f"), duo("a", "b")],
+    {},
+  );
+  expect(next.map((row) => row.ourIds)).toEqual([
+    ["c", "d"],
+    ["e", "f"],
+    ["a", "b"],
+  ]);
+  expect(next.map((row) => row.ourLabels)).toEqual([
+    ["C", "D"],
+    ["E", "F"],
+    ["A", "B"],
+  ]);
+});
+
+test("a doubles court that receives a pair stops being our forfeit", () => {
+  const lines = [
+    pair("D1", ["a", "b"], ["X1", "Y1"]),
+    { ...pair("D2", null, ["X2", "Y2"]), noPlayer: true },
+    { ...pair("D3", null, ["X3", "Y3"]), noPlayer: true },
+  ];
+  const next = applyDoublesOrder(
+    lines,
+    [{ ids: [], labels: [] }, duo("a", "b"), { ids: [], labels: [] }],
+    {},
+  );
+  // D2 received a pair; D3 received nobody and keeps its No pair.
+  expect(next.map((row) => row.noPlayer)).toEqual([false, false, true]);
+  expect(next[1]).toMatchObject({ ourIds: ["a", "b"], noPlayer: false });
+});
+
+test("a doubles order leaves opponents and every singles line alone", () => {
+  const lines = [
+    line("S1", "s", "Opp 1"),
+    pair("D1", ["a", "b"], ["X1", "Y1"]),
+    { ...pair("D2", ["c", "d"], ["X2", "Y2"]), theirNoPlayer: true },
+    line("S2", "t", "Opp 2"),
+  ];
+  const next = applyDoublesOrder(lines, [duo("c", "d"), duo("a", "b")], {});
+  expect(next[0]).toEqual(lines[0]);
+  expect(next[3]).toEqual(lines[3]);
+  expect(next.map((row) => row.theirLabels)).toEqual(
+    lines.map((row) => row.theirLabels),
+  );
+  expect(next.map((row) => row.theirNoPlayer)).toEqual([
+    false,
+    false,
+    true,
+    false,
+  ]);
+  expect(next[1].ourIds).toEqual(["c", "d"]);
+  expect(next[2].ourIds).toEqual(["a", "b"]);
+});
+
+test("a settled doubles line refuses any doubles reorder", () => {
+  const lines = [
+    pair("D1", ["a", "b"], ["X1", "Y1"]),
+    pair("D2", ["c", "d"], ["X2", "Y2"]),
+  ];
+  const next = applyDoublesOrder(lines, [duo("c", "d"), duo("a", "b")], {
+    D2: "played",
+  });
+  expect(next).toEqual(lines);
 });

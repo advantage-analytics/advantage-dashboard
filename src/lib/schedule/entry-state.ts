@@ -148,8 +148,8 @@ export type EntryState =
  * No, if it is doubles. `job-request.ts` rejects a doubles match_type outright
  * with "Video analysis supports singles matches only", so offering a doubles
  * line an Upload button produces a 422 the coach only meets after picking a
- * multi-gigabyte file. A doubles line can still take a SwingVision export —
- * that path parses numbers and never goes near the vision pipeline.
+ * multi-gigabyte file. A doubles line records a score only — it can't take a
+ * SwingVision export either; statistics, like video, are singles-only.
  *
  * No, if it is forfeited. A forfeited line has no match to analyse.
  *
@@ -369,6 +369,30 @@ export function dualScore(entries: EventEntry[]): {
     them,
     decided: entries.length > 0 && entries.every(entryPlayed),
   };
+}
+
+/**
+ * What a delete confirmation has to warn about: how many matches are on the
+ * event, whether any line already has an outcome, and (for a dual) the team
+ * score to name in the copy — `null` when it is still 0–0.
+ */
+export function eventDeleteCost(
+  entries: EventEntry[],
+  isDual: boolean,
+): { matchCount: number; hasOutcome: boolean; teamScore: string | null } {
+  const matchCount = entries.reduce(
+    (sum, entry) => sum + entry.matches.length,
+    0,
+  );
+  const hasOutcome = entries.some(
+    (entry) => entry.forfeit !== null || (entry.outcomes?.length ?? 0) > 0,
+  );
+  const score = isDual ? dualScore(entries) : null;
+  const teamScore =
+    score && (score.us > 0 || score.them > 0)
+      ? `${score.us}–${score.them}`
+      : null;
+  return { matchCount, hasOutcome, teamScore };
 }
 
 /**

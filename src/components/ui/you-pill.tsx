@@ -9,7 +9,7 @@ import { StatePill } from "@/components/ui/state-pill";
  * The one way to draw it. Grey, in `StatePill`'s geometry (design owner's
  * call 2026-09-13, retiring the blue tint of 2026-09-06): blue is for actions
  * and emphasis, and a marker on a card with nothing to click was spending it —
- * "New" is the only blue-tinted pill left. Identity, not standing: it sits
+ * no pill in the system is blue-tinted. Identity, not standing: it sits
  * beside the name, never in a row's state-pill column, so a row carrying both
  * `You` and a role pill is not two states.
  *

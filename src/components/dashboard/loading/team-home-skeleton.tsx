@@ -1,38 +1,18 @@
 import { COURT_RECORD_COLS } from "@/components/dashboard/team/court-record-shell";
 import { COURT_RECORD_WINDOW } from "@/lib/data/team-court-record";
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { PendingBar, PendingRegion } from "./pending";
 import { TeamSeasonTitleFrame } from "@/components/dashboard/team/team-season-title";
 import { TopMoversFrame } from "@/components/dashboard/team/top-movers";
 import { CourtRecordFrame } from "@/components/dashboard/team/court-record";
 import { DualHistoryFrame } from "@/components/dashboard/team/dual-history";
-import { HomeKpisPending, HomeFooterPending } from "./home-skeleton";
+import {
+  FocusCardPending,
+  HomeKpisPending,
+  HomeFooterPending,
+} from "./home-skeleton";
 
-export function PendingBar({ className = "w-full" }: { className?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "block h-3 max-w-full rounded-[3px] bg-[var(--surface-skeleton)] motion-safe:animate-pulse",
-        className,
-      )}
-    />
-  );
-}
-
-export function PendingRegion({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div role="status" aria-label={`Loading ${label}`}>
-      <div aria-hidden="true">{children}</div>
-    </div>
-  );
-}
+export { PendingBar, PendingRegion } from "./pending";
 
 export function TeamHomeFrame({
   title,
@@ -124,7 +104,9 @@ export function TeamTitlePending({ action }: { action?: ReactNode }) {
 export function DualPending() {
   return (
     <section aria-label="Dual" className="surface-card p-5">
-      <span className="eyebrow">Dual</span>
+      <div className="flex items-center gap-3">
+        <span className="eyebrow">Dual</span>
+      </div>
       <PendingRegion label="dual">
         <PendingBar className="mt-4 h-6 w-48" />
         <PendingBar className="mt-3 w-32" />
@@ -208,7 +190,7 @@ export function TeamHomeSkeleton({ action }: { action?: ReactNode }) {
           <MoversBodyPending />
         </TopMoversFrame>
       }
-      insight={null}
+      insight={<FocusCardPending />}
       court={
         <CourtRecordFrame>
           <CourtBodyPending />

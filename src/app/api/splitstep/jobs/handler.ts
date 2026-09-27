@@ -31,6 +31,7 @@
  * inside the `try` — marks the job `failed`, and that was already so.
  */
 
+import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { NextResponse } from "next/server";
 
 import { buildSplitStepJobRequest } from "@/lib/services/splitstep/job-request";
@@ -241,7 +242,7 @@ export async function handleSubmitJob(
   // the job at all?
   const config = deps.deploymentConfig();
   if (!config.ok) {
-    console.error(`${LOG} refusing — deployment not configured`, {
+    pipelineLog.error(`${LOG} refusing — deployment not configured`, {
       missing: config.missing,
     });
     return NextResponse.json(
@@ -254,7 +255,7 @@ export async function handleSubmitJob(
   const { job, error: jobError } = await deps.loadJob(jobId);
 
   if (jobError) {
-    console.error(`${LOG} job lookup failed`, { jobId, error: jobError });
+    pipelineLog.error(`${LOG} job lookup failed`, { jobId, error: jobError });
     return NextResponse.json(
       { error: "Could not load the job" },
       { status: 500 },
@@ -493,7 +494,7 @@ export async function handleSubmitJob(
   });
 
   if (!eligibility.ok) {
-    console.log(`${LOG} refused — ${eligibility.reason}`, {
+    pipelineLog.info(`${LOG} refused — ${eligibility.reason}`, {
       jobId: job.id,
       matchId: match.id,
       workspaceId: billingWorkspace.id,
@@ -530,7 +531,7 @@ export async function handleSubmitJob(
 
   if (!reservation.ok) {
     if (adminVideo) await deps.updateJob(job.id, { status: "uploaded" });
-    console.log(
+    pipelineLog.info(
       `${LOG} refused — ${reservation.permission ? "not permitted" : "monthly cap"}`,
       {
         jobId: job.id,
@@ -602,7 +603,7 @@ export async function handleSubmitJob(
         JSON.parse(rawResponse),
       ).externalJobId;
     } catch {
-      console.warn(`${LOG} provider response was not JSON`, {
+      pipelineLog.warn(`${LOG} provider response was not JSON`, {
         jobId: job.id,
         body: rawResponse.slice(0, 500),
       });
@@ -637,7 +638,7 @@ export async function handleSubmitJob(
       );
     }
 
-    console.log(`${LOG} submitted`, {
+    pipelineLog.info(`${LOG} submitted`, {
       jobId: job.id,
       externalJobId,
       billableSeconds,
@@ -672,7 +673,7 @@ export async function handleSubmitJob(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
-    console.error(`${LOG} submission failed`, { jobId: job.id, message });
+    pipelineLog.error(`${LOG} submission failed`, { jobId: job.id, message });
 
     // Hand the allowance back and record the credential as retired. Each step
     // is isolated rather than chained: createVideoUrlStrategy() throws
@@ -699,7 +700,7 @@ export async function handleSubmitJob(
     });
 
     if (markError) {
-      console.error(`${LOG} could not mark the job failed`, {
+      pipelineLog.error(`${LOG} could not mark the job failed`, {
         jobId: job.id,
         error: markError,
       });

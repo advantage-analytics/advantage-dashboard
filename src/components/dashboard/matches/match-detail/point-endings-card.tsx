@@ -10,6 +10,7 @@ import {
   useSetScope,
 } from "@/components/dashboard/matches/match-detail/set-scope";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
+import { EmptyMark } from "@/components/ui/empty-mark";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { surnameLabels } from "@/lib/data/match-utils";
 
@@ -156,11 +157,60 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
   const youTotal = outcomes.reduce((sum, o) => sum + youTally[o.key], 0);
   const oppTotal = outcomes.reduce((sum, o) => sum + oppTally[o.key], 0);
 
-  // No point on this match records how it ended — two empty bars would read as
-  // "nobody hit a winner or made an error".
-  if (youTotal === 0 && oppTotal === 0) return null;
-
   const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
+
+  // No point on this match records how it ended — two filled bars would read
+  // as "nobody hit a winner or made an error". The anatomy stays: both names,
+  // a dash for each total, an empty track, the legend, and one sentence.
+  if (youTotal === 0 && oppTotal === 0) {
+    return (
+      <section
+        aria-labelledby="point-endings-heading"
+        className="surface-card flex flex-col gap-3"
+        style={{ padding: "16px 20px 14px" }}
+        data-testid="point-endings-empty"
+      >
+        <div className="flex items-baseline gap-2">
+          <span id="point-endings-heading" className="eyebrow">
+            How points ended
+          </span>
+          <div className="flex-1" />
+          <span
+            className="text-micro whitespace-nowrap"
+            style={{ color: "var(--ink-400)" }}
+          >
+            Own outcomes
+          </span>
+        </div>
+
+        {[youName, oppName].map((name, i) => (
+          <div key={i} className="flex flex-col gap-1.5">
+            <div className="flex items-baseline gap-2">
+              <span className="truncate text-[11px] text-[var(--ink-600)]">
+                {name}
+              </span>
+              <div className="flex-1" />
+              <span className="mono tabular text-[10px]">
+                <EmptyMark
+                  label="No outcomes recorded"
+                  className="text-[10px]"
+                />
+              </span>
+            </div>
+            <div
+              aria-hidden="true"
+              className="h-2.5 w-full rounded-[var(--radius-cell)]"
+              style={{ background: "var(--ink-100)" }}
+            />
+          </div>
+        ))}
+
+        <p className="text-micro pt-0.5" style={{ color: "var(--ink-500)" }}>
+          No point on this match records how it ended.
+        </p>
+      </section>
+    );
+  }
   const rows = [
     {
       id: "you",

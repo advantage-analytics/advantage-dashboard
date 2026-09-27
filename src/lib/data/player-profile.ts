@@ -161,8 +161,6 @@ export interface ProfileKpi {
   hintText?: string;
   /** Oldest → newest, at most `KPI_SERIES_WINDOW` long. */
   sparkline?: number[];
-  /** The tooltip on the label — what this statistic actually counts. */
-  description?: string;
   /** Which group the picker files it under. */
   category: SeasonKpiCategory;
   /**
@@ -182,7 +180,7 @@ export type SeasonKpiCategory = "Serve" | "Return" | "Other";
  * The catalogue the picker offers, and the reason the two pages stay one
  * strip: a viewer's chosen four or five are chosen once, and both the
  * personal Home and a team player's profile read the same list. The ten
- * rates ARE `PLAYER_MEASURES` — same keys, same hints — so a statistic here
+ * rates ARE `PLAYER_MEASURES` — same keys — so a statistic here
  * cannot mean something different from the same statistic on the roster
  * drawer or an opponent's page. `label` is the tile's own short spelling
  * ("1st serve won" fits a 9px tile where "First serve won" does not), the
@@ -193,8 +191,6 @@ export interface SeasonKpiSpec {
   label: string;
   category: SeasonKpiCategory;
 }
-
-const MEASURE_HINTS = new Map(PLAYER_MEASURES.map((m) => [m.key, m.hint]));
 
 export const SEASON_KPI_SPECS: readonly SeasonKpiSpec[] = [
   // The default five, in strip order.
@@ -662,7 +658,6 @@ export function seasonKpis(
       category: spec.category,
       value: percent(mean),
       sparkline: series.sparkline,
-      description: MEASURE_HINTS.get(spec.key),
       format: "percent",
       points: series.points,
     };
@@ -688,7 +683,6 @@ export function seasonKpis(
         // chart to open under it — the line is the season's shape, and the
         // hover would have nothing truthful to plot.
         sparkline: runningDifferential(results).slice(-KPI_SERIES_WINDOW),
-        description: "Matches won and lost this season",
       };
       if (input.duals.wins + input.duals.losses > 0) {
         record.subtext = `${recordLabel(input.duals.wins, input.duals.losses)} in duals`;
@@ -729,7 +723,6 @@ export function seasonKpis(
       tile.value = percent(
         opportunities > 0 ? (converted / opportunities) * 100 : null,
       );
-      tile.description = MEASURE_HINTS.get("break_points_converted_pct");
       if (opportunities > 0) tile.subtext = `${converted} of ${opportunities}`;
       else {
         const hint = trendHint(measured);
@@ -744,7 +737,6 @@ export function seasonKpis(
         spec,
         rows.map((r) => gamesWonPct(r)),
       );
-      tile.description = "Share of all games won, serving and returning";
       tiles.push(tile);
       continue;
     }

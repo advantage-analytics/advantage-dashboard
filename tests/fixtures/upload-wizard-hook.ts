@@ -7,6 +7,9 @@ import * as validation from "@/components/dashboard/matches/new-match-wizard/val
 import * as scoreState from "@/components/dashboard/matches/new-match-wizard/score-state";
 import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import * as scoreFormat from "@/lib/ui/score-format";
+import * as quota from "@/lib/services/splitstep/quota";
+import * as draftTarget from "@/lib/wizard/draft-target";
+import { secondsLeft } from "@/lib/data/usage-format";
 import type {
   UseUploadMatchWizardProps,
   UseUploadMatchWizardReturn,
@@ -91,6 +94,12 @@ export function uploadWizardHarness(
      * Defaults to a successful write.
      */
     draftSave?: "saved" | "refused";
+    /**
+     * This month's cap, in seconds, as `monthlyCapSecondsFor()` reports it.
+     * The stubbed usage reads return zero used, so this is also the remaining
+     * allowance — `0` is the spent-month case. Defaults to 2 hours.
+     */
+    quotaCapSeconds?: number;
   } = {},
 ) {
   const slots: any[] = [];
@@ -133,6 +142,11 @@ export function uploadWizardHarness(
   const checks = new Map<string, ReturnType<typeof deferred<any>>>();
   const apiChecks = new Map<string, ReturnType<typeof deferred<any>>>();
   const writes: unknown[] = [];
+  /**
+   * Every call on the shared query chain, in order — `from` included — so a
+   * spec can tell an `update(…).eq("id", M)` from an `insert(…)`.
+   */
+  const queryCalls: { method: string; args: unknown[] }[] = [];
   const stored = new Map<string, string>();
   const storage = {
     getItem: (key: string) => stored.get(key) ?? null,
@@ -196,9 +210,13 @@ export function uploadWizardHarness(
         if (key === "insert" || key === "update")
           return (row: unknown) => {
             writes.push(row);
+            queryCalls.push({ method: key, args: [row] });
             return query;
           };
-        return () => query;
+        return (...args: unknown[]) => {
+          queryCalls.push({ method: String(key), args });
+          return query;
+        };
       },
     },
   );
@@ -250,13 +268,19 @@ export function uploadWizardHarness(
   );
   const supabase = {
     auth: { getUser: async () => ({ data: { user: { id: "user" } } }) },
-    from: (table: string) =>
-      table === "program_players"
-        ? ownProfileQuery
-        : table === "programs"
-          ? programStatusQuery
-          : query,
-    rpc: async () => {
+    from: (table: string) => {
+      if (table === "program_players") return ownProfileQuery;
+      if (table === "programs") return programStatusQuery;
+      queryCalls.push({ method: "from", args: [table] });
+      return query;
+    },
+    // By name, so an RPC this harness has never heard of fails loudly
+    // instead of being answered with — and counted as — a roster.
+    rpc: async (fn: string) => {
+      // The team pool total behind the footer meter: a scalar.
+      if (fn === "program_usage_total") return { data: 0, error: null };
+      if (fn !== "program_roster_full")
+        throw new Error(`upload-wizard-hook: unstubbed rpc "${fn}"`);
       rosterRpcCallCount++;
       return options.rosterError
         ? { data: null, error: { message: options.rosterError } }
@@ -283,6 +307,12 @@ export function uploadWizardHarness(
         validateFile: (file: File) =>
           checks.get(file.name)?.promise ?? { success: true },
         getAcceptString: () => ".csv",
+        minTrimSeconds: 0,
+        // The real strategy's rule is the same whole-window one; the quota
+        // sentences are checked against this figure, so it must be the
+        // fixture's single source of the billable amount too.
+        billableSeconds: (startSeconds: number, endSeconds: number) =>
+          Math.max(0, endSeconds - startSeconds),
       }),
     },
     "@/lib/services/upload/parsers": {
@@ -292,13 +322,34 @@ export function uploadWizardHarness(
       }),
     },
     "@/lib/providers": { providers: [{ id: "video" }, { id: "swing-vision" }] },
+    // The real resolver's ranking over this fixture's registry, where every id
+    // is supported and "video" is the processing default. Stubbed rather than
+    // loaded because the real module reads the real registry, whose default
+    // is "splitstep" — `upload-provider-preference.spec.ts` pins that one.
+    "./resolve-starting-provider": {
+      DEFAULT_PROVIDER_ID: "video",
+      resolveStartingProvider: ({
+        linked,
+        stored,
+        preferred,
+      }: {
+        linked: string | null;
+        stored: string | null;
+        preferred: string | null;
+      }) => linked || stored || preferred || "video",
+    },
     "@/lib/services/splitstep/submit-match-video": {},
     "@/lib/services/splitstep/config": { currentBillingMonth: () => "2026-09" },
     "@/lib/services/splitstep/quota": {
       accountTypeFor: () => "user",
-      monthlyCapSecondsFor: () => 7200,
+      monthlyCapSecondsFor: () => options.quotaCapSeconds ?? 7200,
+      // Pure, so the real one.
+      sumUsedSeconds: quota.sumUsedSeconds,
     },
-    "@/lib/data/usage-format": { formatResetDate: () => "Oct 1" },
+    // `formatResetDate` is stubbed for a fixed date; `secondsLeft` is pure,
+    // so the real clamp — the meter's remaining figure is what several of
+    // these specs assert on.
+    "@/lib/data/usage-format": { formatResetDate: () => "Oct 1", secondsLeft },
     // Pure, and only read to describe the saved match to the success screen.
     "@/lib/ui/score-format": scoreFormat,
     "@/lib/wizard/actions": {
@@ -312,6 +363,8 @@ export function uploadWizardHarness(
         draftDeletes.push(id);
       },
     },
+    // Pure: the rule a draft's match is reused by (T20).
+    "@/lib/wizard/draft-target": draftTarget,
     "./types": types,
     "./validation": validation,
     "./score-state": scoreState,
@@ -432,6 +485,7 @@ export function uploadWizardHarness(
     workspace,
     props,
     writes,
+    queryCalls,
     winnerCalls,
     draftSaves,
     draftDeletes,

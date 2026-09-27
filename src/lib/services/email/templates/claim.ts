@@ -53,7 +53,7 @@ export function claimVerifyAddressEmail(
     eyebrow: "Confirm your address",
     heading: `Confirm this address for ${programName}`,
     body: [
-      `You asked to set up ${programName} on Advantage Analytics while signed in as ${accountEmail}. Opening the link below confirms you can receive mail at this address — that's the whole check.`,
+      `You asked to set up ${programName} on Advantage while signed in as ${accountEmail}. Opening the link below confirms you can receive mail at this address — that's the whole check.`,
       "The program stays on the account you're signed in with. This address is only how we tie you to the school.",
     ],
     facts: [
@@ -129,7 +129,7 @@ export function claimVerifyIdentityEmail(
     eyebrow: "Verification",
     heading: `Are you ${programName}'s ${claimantTitle}?`,
     body: [
-      `Someone is setting up ${programName} on Advantage Analytics — a match analysis tool for collegiate programs — as its ${claimantTitle.toLowerCase()}, and gave this address. Confirming below is the whole check.`,
+      `Someone is setting up ${programName} on Advantage — a match analysis tool for collegiate programs — as its ${claimantTitle.toLowerCase()}, and gave this address. Confirming below is the whole check.`,
     ],
     facts: [
       { label: "Program", value: programName },
@@ -203,7 +203,7 @@ export function programClaimInviteEmail(
     eyebrow: "Your program",
     heading: `${programName} is ready for you`,
     body: [
-      `We've added ${programName} to Advantage Analytics — a match analysis tool for collegiate programs — and you're listed as its head coach. Setting it up takes a couple of minutes and confirms the address you read this at.`,
+      `We've added ${programName} to Advantage — a match analysis tool for collegiate programs — and you're listed as its head coach. Setting it up takes a couple of minutes and confirms the address you read this at.`,
       pilot
         ? "Your program is already on the pilot, so the workspace opens as soon as you finish — there's no wait and nothing to pay."
         : "Once you finish, we'll check the details and open the workspace.",
@@ -355,7 +355,7 @@ export function claimObjectionNoticeEmail(
     eyebrow: "For your awareness",
     heading: `${claimantName} claimed ${programName}`,
     body: [
-      `You're listed as a contact for ${programName}, so we're letting you know that ${claimantName} has set it up on Advantage Analytics — a match analysis tool for collegiate programs.`,
+      `You're listed as a contact for ${programName}, so we're letting you know that ${claimantName} has set it up on Advantage — a match analysis tool for collegiate programs.`,
       "If that's expected, there's nothing to do. This email is the only one you'll get about it.",
       `If it isn't, tell us before ${windowClosesOn} and we'll pause the account while we sort it out.`,
     ],

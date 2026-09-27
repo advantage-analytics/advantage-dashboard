@@ -51,6 +51,7 @@ import {
 } from "@/lib/schedule/attach-line";
 import { lineName, type AttachLine } from "@/lib/schedule/attach-line-state";
 import { AttachLinePicker } from "./attach-line-picker";
+import { EditMatchPending } from "@/components/dashboard/loading/edit-match-pending";
 import {
   EditMatchScore,
   firstInvalidSet,
@@ -754,10 +755,7 @@ export function EditMatchDialog({
       {loadError ? (
         <DialogProblem message={loadError} />
       ) : !match ? (
-        <p className="flex items-center gap-2 py-2 text-[12px] text-[var(--ink-500)]">
-          <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          Reading the match…
-        </p>
+        <EditMatchPending />
       ) : (
         <form
           id={FORM_ID}

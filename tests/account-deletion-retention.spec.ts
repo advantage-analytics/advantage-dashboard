@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { expect, test } from "@playwright/test";
 import { type SupabaseClient } from "@supabase/supabase-js";
 
@@ -29,12 +31,18 @@ import {
  * The last test is the regression test for the constraint bug this work
  * started from: deleting an `auth.users` row with a claimed profile used to
  * fail on `program_players_claim_check` because the FK's SET NULL cleared
- * `claimed_by_user_id` and left `claimed_at` behind.
+ * `claimed_by_user_id` and left `claimed_at` behind. It now also proves the
+ * video-attachment side of retention (plan step 10): an ACTIVE
+ * `match_video_attachments` row on a retained team match survives its
+ * uploader's auth delete with `uploaded_by` nulled and everything else —
+ * match, state, keys — intact, so the team's video stays playable.
  *
  * Fixture rows are created by the service-role client in `beforeAll` under a
- * per-run prefix and deleted in `afterAll`: matches by id (after release
- * their `created_by` is null, so a delete keyed on the user would miss them),
- * then the program (cascades profiles, members, audit rows), then the logins.
+ * per-run prefix and deleted in `afterAll`: attachment rows first (a match
+ * delete would only orphan them for the cleanup cron), then matches by id
+ * (after release their `created_by` is null, so a delete keyed on the user
+ * would miss them), then the program (cascades profiles, members, audit
+ * rows), then the logins.
  *
  * Run on demand:  npx playwright test tests/account-deletion-retention.spec.ts
  */
@@ -51,6 +59,31 @@ function firstOfThisMonth(): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
 }
 
+/** An active attachment row as T4 would leave it, keyed like T3 mints them. */
+function activeAttachment(matchId: string, uploadedBy: string) {
+  const id = randomUUID();
+  return {
+    id,
+    match_id: matchId,
+    uploaded_by: uploadedBy,
+    state: "active",
+    filename: `${MARK}.mp4`,
+    declared_size_bytes: 1_000_000,
+    declared_content_type: "video/mp4",
+    staged_blob_key: `match-video/${matchId}/${id}/staged`,
+    final_blob_key: `match-video/${matchId}/${id}/final`,
+    client_request_id: randomUUID(),
+    // `match_video_attachments_active_verified_check`: an active row carries
+    // what the server measured and the alignment it was published with.
+    verified_size_bytes: 1_000_000,
+    verified_content_type: "video/mp4",
+    verified_duration_seconds: 3600,
+    confirmed_video_time_seconds: 12.5,
+    offset_seconds: -12.5,
+    activated_at: new Date().toISOString(),
+  };
+}
+
 test.describe("account deletion retains program data (live DB)", () => {
   test.describe.configure({ mode: "serial", timeout: 60_000 });
   test.skip(!HAVE_ENV, SKIP_REASON);
@@ -61,12 +94,15 @@ test.describe("account deletion retains program data (live DB)", () => {
 
   const authUserIds: string[] = [];
   const matchIds: string[] = [];
+  const attachmentIds: string[] = [];
   let programId: string;
   let profileId: string;
   let teamSelfMatch: string; // player1_id = the player's login id
   let teamNoIdsMatch: string; // no player ids; created_by is the only evidence
   let personalMatch: string; // program_id null
   let jobId: string;
+  let teamAttachment: ReturnType<typeof activeAttachment>;
+  let personalAttachment: ReturnType<typeof activeAttachment>;
 
   test.beforeAll(async () => {
     test.setTimeout(180_000);
@@ -180,11 +216,30 @@ test.describe("account deletion retains program data (live DB)", () => {
     ]);
     if (usage.error) throw new Error(`usage: ${usage.error.message}`);
     if (file.error) throw new Error(`file: ${file.error.message}`);
+
+    // Both the team self-upload and the personal match carry a published
+    // video attachment. Service role only: the table grants nothing to any
+    // client role.
+    teamAttachment = activeAttachment(teamSelfMatch, player.userId);
+    personalAttachment = activeAttachment(personalMatch, player.userId);
+    const attachments = await admin
+      .from("match_video_attachments")
+      .insert([teamAttachment, personalAttachment]);
+    if (attachments.error) {
+      throw new Error(`attachments: ${attachments.error.message}`);
+    }
+    attachmentIds.push(teamAttachment.id, personalAttachment.id);
   });
 
   test.afterAll(async () => {
     test.setTimeout(180_000);
     if (!admin) return;
+    if (attachmentIds.length > 0) {
+      await admin
+        .from("match_video_attachments")
+        .delete()
+        .in("id", attachmentIds);
+    }
     if (matchIds.length > 0) {
       await admin.from("matches").delete().in("id", matchIds);
     }
@@ -292,6 +347,39 @@ test.describe("account deletion retains program data (live DB)", () => {
     expect(file.data!.uploaded_by).toBeNull();
   });
 
+  test("the retained match keeps its active video attachment; the personal one is left for the action", async () => {
+    const rows = await admin
+      .from("match_video_attachments")
+      .select(
+        "id, match_id, uploaded_by, state, staged_blob_key, final_blob_key, cleaned_up_at",
+      )
+      .in("id", attachmentIds);
+    expect(rows.error).toBeNull();
+    expect(rows.data).toHaveLength(2);
+
+    // Release re-homes the match; the attachment row rides along untouched
+    // and still names its objects. (`uploaded_by` is cleared later, by the
+    // auth delete's FK — the last test proves that half.)
+    const team = rows.data!.find((r) => r.id === teamAttachment.id)!;
+    expect(team).toMatchObject({
+      match_id: teamSelfMatch,
+      state: "active",
+      staged_blob_key: teamAttachment.staged_blob_key,
+      final_blob_key: teamAttachment.final_blob_key,
+      cleaned_up_at: null,
+    });
+
+    // The personal match was not the RPC's to touch, and neither was its
+    // attachment: it is still attached, so `purgeMatchStorage` finds it.
+    const personal = rows.data!.find((r) => r.id === personalAttachment.id)!;
+    expect(personal).toMatchObject({
+      match_id: personalMatch,
+      uploaded_by: player.userId,
+      state: "active",
+      cleaned_up_at: null,
+    });
+  });
+
   test("membership is gone and one audit row records what moved", async () => {
     const member = await admin
       .from("program_members")
@@ -374,6 +462,16 @@ test.describe("account deletion retains program data (live DB)", () => {
       .single();
     expect(profile.error).toBeNull();
 
+    // The ghost also published a video on a team match. Their account going
+    // away must leave the team's footage playable: row active, match kept,
+    // keys intact, only the uploader column cleared.
+    const ghostAttachment = activeAttachment(teamNoIdsMatch, ghost.userId);
+    const inserted = await admin
+      .from("match_video_attachments")
+      .insert(ghostAttachment);
+    expect(inserted.error).toBeNull();
+    attachmentIds.push(ghostAttachment.id);
+
     const removed = await admin.auth.admin.deleteUser(ghost.userId);
     expect(removed.error).toBeNull();
 
@@ -385,5 +483,22 @@ test.describe("account deletion retains program data (live DB)", () => {
     expect(after.error).toBeNull();
     expect(after.data!.claimed_by_user_id).toBeNull();
     expect(after.data!.claimed_at).toBeNull();
+
+    const attachment = await admin
+      .from("match_video_attachments")
+      .select(
+        "match_id, uploaded_by, state, staged_blob_key, final_blob_key, cleaned_up_at, cleanup_next_attempt_at",
+      )
+      .eq("id", ghostAttachment.id)
+      .single();
+    expect(attachment.error).toBeNull();
+    expect(attachment.data).toMatchObject({
+      match_id: teamNoIdsMatch,
+      uploaded_by: null,
+      state: "active",
+      staged_blob_key: ghostAttachment.staged_blob_key,
+      final_blob_key: ghostAttachment.final_blob_key,
+      cleaned_up_at: null,
+    });
   });
 });

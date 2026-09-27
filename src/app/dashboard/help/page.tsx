@@ -344,7 +344,7 @@ export default function HelpCenterPage() {
                 />
                 <SourceCard
                   title="You have a SwingVision export"
-                  body="Drop the .xlsx. Stats appear as soon as it parses. Singles and doubles."
+                  body="Drop the .xlsx. Stats appear as soon as it parses. Singles only."
                   cost="No hours used · instant · stats only, no video"
                 />
               </div>
@@ -403,7 +403,7 @@ export default function HelpCenterPage() {
                   Files are checked when you pick them — a 720p video is
                   rejected before a single byte uploads, with the fix spelled
                   out: Phone settings → Camera → Record at 1080p/30 or higher.
-                  Doubles matches import via SwingVision instead.
+                  Doubles lines record a score only.
                 </p>
               </div>
 

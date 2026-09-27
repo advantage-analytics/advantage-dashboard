@@ -24,12 +24,7 @@ markers is hand-written — edit it as things move.
 | `/admin/conferences` | [`src/app/admin/conferences/page.tsx`](src/app/admin/conferences/page.tsx) |
 | `/admin` | [`src/app/admin/page.tsx`](src/app/admin/page.tsx) |
 | `/admin/requests` | [`src/app/admin/requests/page.tsx`](src/app/admin/requests/page.tsx) |
-| `/admin/teams/[programId]/activity` | [`src/app/admin/teams/[programId]/activity/page.tsx`](src/app/admin/teams/[programId]/activity/page.tsx) |
 | `/admin/teams/[programId]` | [`src/app/admin/teams/[programId]/page.tsx`](src/app/admin/teams/[programId]/page.tsx) |
-| `/admin/teams/[programId]/people` | [`src/app/admin/teams/[programId]/people/page.tsx`](src/app/admin/teams/[programId]/people/page.tsx) |
-| `/admin/teams/[programId]/roster` | [`src/app/admin/teams/[programId]/roster/page.tsx`](src/app/admin/teams/[programId]/roster/page.tsx) |
-| `/admin/teams/[programId]/schedule` | [`src/app/admin/teams/[programId]/schedule/page.tsx`](src/app/admin/teams/[programId]/schedule/page.tsx) |
-| `/admin/teams/[programId]/usage` | [`src/app/admin/teams/[programId]/usage/page.tsx`](src/app/admin/teams/[programId]/usage/page.tsx) |
 | `/admin/teams` | [`src/app/admin/teams/page.tsx`](src/app/admin/teams/page.tsx) |
 | `/admin/uploads/new` | [`src/app/admin/uploads/new/page.tsx`](src/app/admin/uploads/new/page.tsx) |
 | `/admin/uploads` | [`src/app/admin/uploads/page.tsx`](src/app/admin/uploads/page.tsx) |
@@ -37,6 +32,7 @@ markers is hand-written — edit it as things move.
 | `/claim/[programKey]` | [`src/app/claim/[programKey]/page.tsx`](src/app/claim/[programKey]/page.tsx) |
 | `/claim/[programKey]/request` | [`src/app/claim/[programKey]/request/page.tsx`](src/app/claim/[programKey]/request/page.tsx) |
 | `/claim/[programKey]/setup` | [`src/app/claim/[programKey]/setup/page.tsx`](src/app/claim/[programKey]/setup/page.tsx) |
+| `/claim/[programKey]/terms` | [`src/app/claim/[programKey]/terms/page.tsx`](src/app/claim/[programKey]/terms/page.tsx) |
 | `/claim/check-email` | [`src/app/claim/check-email/page.tsx`](src/app/claim/check-email/page.tsx) |
 | `/claim` | [`src/app/claim/page.tsx`](src/app/claim/page.tsx) |
 | `/claim/program/new` | [`src/app/claim/program/new/page.tsx`](src/app/claim/program/new/page.tsx) |
@@ -44,8 +40,10 @@ markers is hand-written — edit it as things move.
 | `/claim/program/referral` | [`src/app/claim/program/referral/page.tsx`](src/app/claim/program/referral/page.tsx) |
 | `/claim/ready` | [`src/app/claim/ready/page.tsx`](src/app/claim/ready/page.tsx) |
 | `/claim/review` | [`src/app/claim/review/page.tsx`](src/app/claim/review/page.tsx) |
+| `/claim/team/about` | [`src/app/claim/team/about/page.tsx`](src/app/claim/team/about/page.tsx) |
 | `/claim/team` | [`src/app/claim/team/page.tsx`](src/app/claim/team/page.tsx) |
 | `/claim/team/setup` | [`src/app/claim/team/setup/page.tsx`](src/app/claim/team/setup/page.tsx) |
+| `/claim/team/terms` | [`src/app/claim/team/terms/page.tsx`](src/app/claim/team/terms/page.tsx) |
 | `/claim/team/type` | [`src/app/claim/team/type/page.tsx`](src/app/claim/team/type/page.tsx) |
 | `/claim/verify-identity` | [`src/app/claim/verify-identity/page.tsx`](src/app/claim/verify-identity/page.tsx) |
 | `/claim/verify/failed` | [`src/app/claim/verify/failed/page.tsx`](src/app/claim/verify/failed/page.tsx) |
@@ -82,6 +80,7 @@ markers is hand-written — edit it as things move.
 | `/dashboard/team/settings` | [`src/app/dashboard/team/settings/page.tsx`](src/app/dashboard/team/settings/page.tsx) |
 | `/dashboard/team/statistics` | [`src/app/dashboard/team/statistics/page.tsx`](src/app/dashboard/team/statistics/page.tsx) |
 | `/dashboard/team/upload` | [`src/app/dashboard/team/upload/page.tsx`](src/app/dashboard/team/upload/page.tsx) |
+| `/design` | [`src/app/design/page.tsx`](src/app/design/page.tsx) |
 | `/invitations/[inviteId]` | [`src/app/invitations/[inviteId]/page.tsx`](src/app/invitations/[inviteId]/page.tsx) |
 | `/join/[token]` | [`src/app/join/[token]/page.tsx`](src/app/join/[token]/page.tsx) |
 | `/onboarding` | [`src/app/onboarding/page.tsx`](src/app/onboarding/page.tsx) |
@@ -106,7 +105,7 @@ which exists four separate times.
 |---|---|
 | `src/app/(auth)/` | Auth route group — dual-panel layout, login/sign-up/password flows |
 | `src/app/dashboard/` | Protected area: sidebar + header shell |
-| `src/app/api/` | Route handlers, one directory per group: `chat` (LLM streaming), `upload`, `validate-file`, `matches/[matchId]`, `home-insight`, `team-insight`, `programs/search` — plus money and webhook infra: `create-checkout-session` + `webhooks/stripe` (Stripe payments), `webhooks/splitstep` + `splitstep/jobs` + `splitstep/upload-url` (Advantage Intelligence pipeline), `cron/reclaim-videos` (scheduled job) |
+| `src/app/api/` | Route handlers, one directory per group: `chat` (LLM streaming), `upload`, `validate-file`, `matches/[matchId]`, `matches/[matchId]/video/uploads` plus `.../uploads/[attachmentId]` (DELETE, cancel), `.../uploads/[attachmentId]/renew` and `.../uploads/[attachmentId]/complete`, `matches/[matchId]/video/alignment` (PATCH, offset correction with no upload), `matches/[matchId]/video` (GET, playback metadata + read-only URL for anyone who can see the match; DELETE `{ attachmentId }`, removes the active video — its uploader, or an owner/coach of the match's program), `matches/[matchId]/video/viewed` (POST, counts a view on first play — restarts the retention clock; anyone who can see the match) (SwingVision video attachment — decision modules in `lib/services/match-video/`), `matches/[matchId]/ball-paths` (GET, derived ball paths for anyone who can see the match — decision module `lib/services/splitstep/ball-paths-access.ts`), `home-insight`, `team-insight`, `programs/search` — plus money and webhook infra: `create-checkout-session` + `webhooks/stripe` (Stripe payments), `webhooks/splitstep` + `splitstep/jobs` + `splitstep/upload-url` (Advantage Intelligence pipeline), `cron/cleanup-match-videos` (daily 05:00 UTC attachment cleanup sweep, `CRON_SECRET` bearer; scheduled in `vercel.json`) |
 | `src/components/ui/` | shadcn/ui primitives |
 | `src/components/dashboard/` | Feature components, mirroring the dashboard routes |
 | `src/lib/supabase/` | Three client factories: `server`, `client`, `admin` (service role) |

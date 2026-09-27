@@ -1,7 +1,7 @@
 # Transactional email
 
-**Status:** current as of 2026-09-13 (notification switches, allowance alert,
-analysis emails wired).
+**Status:** current as of 2026-09-24 (notification switches, allowance alert,
+analysis emails wired; match-video expiry warning scheduled, §8).
 **Read alongside:** the doc comment on [`src/lib/services/email/index.ts`](../src/lib/services/email/index.ts) — it is the authoritative list of which emails exist and what fires each one. Update it there; this doc does not duplicate it.
 
 How this application sends mail, what a new email has to look like, and the rules
@@ -76,22 +76,24 @@ it to `renderEmail()`. Every field is escaped on the way in, so user-supplied
 program and player names are safe by construction — and unsafe the moment someone
 bypasses the shell.
 
-| Field                | Required | Notes for the author                                                            |
-| -------------------- | -------- | ------------------------------------------------------------------------------- |
-| `preheader`          | **yes**  | The grey line beside the subject in the inbox                                   |
-| `eyebrow`            | **yes**  | Upper-cased for you — don't shout in the string                                 |
-| `heading`            | **yes**  | Also becomes the `<title>`                                                      |
-| `body`               | **yes**  | One paragraph per array entry                                                   |
-| `facts`              | no       | Label/value pairs in a quiet panel. Short values, not sentences                 |
-| `list` + `listTitle` | no       | Repeating rows: primary, secondary, optional right-aligned `trailing`           |
-| `cta`                | no       | **One** button. The shell renders a single CTA, plus a paste-this-link fallback |
-| `note`               | no       | Small print under the CTA — expiry, what to do if unexpected                    |
+| Field                | Required | Notes for the author                                                                                                                                                |
+| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `preheader`          | **yes**  | The grey line beside the subject in the inbox                                                                                                                       |
+| `eyebrow`            | **yes**  | Upper-cased for you — don't shout in the string                                                                                                                     |
+| `heading`            | **yes**  | Also becomes the `<title>`                                                                                                                                          |
+| `body`               | **yes**  | One paragraph per array entry. An entry may be `EmailSpan[]` to set part of it in `<b>` (weight 500) — a match or program name the sentence turns on; still escaped |
+| `facts`              | no       | Label/value pairs in a quiet panel. Short values, not sentences                                                                                                     |
+| `list` + `listTitle` | no       | Repeating rows: primary, secondary, optional right-aligned `trailing`                                                                                               |
+| `cta`                | no       | **One** button. The shell renders a single CTA, plus a paste-this-link fallback                                                                                     |
+| `note`               | no       | Small print under the CTA — expiry, what to do if unexpected                                                                                                        |
+| `footer`             | no       | Under the divider, above the support line: who it was sent to and why, for mail sent because of something the recipient did                                         |
 
 Block order is fixed by `renderEmail()` and is not a per-template decision:
 
 ```
 preheader (hidden) → wordmark → eyebrow → heading → body¶ → facts
-  → list → CTA + paste-link → note → support divider → © line (outside the card)
+  → list → CTA + paste-link → note → divider → footer → support line
+  → © line (outside the card)
 ```
 
 `EmailRow` is three fields and stays three: a fourth column stops fitting a 320px
@@ -167,7 +169,11 @@ Each of these exists because of a specific failure:
   Never derive an email link's origin from the request's `Host` header — an
   attacker who can set `Host` gets invitation links pointing at their own host,
   and the recipient hands over a valid token by clicking something that looks
-  legitimate. Email links come from configuration.
+  legitimate. Email links come from configuration. The other resolver,
+  `requestOrigin()` from `@/lib/request-origin`, is for what the requester
+  themselves sees or follows — a link printed on screen, a redirect, a Supabase
+  `redirectTo` — and is the reason a dev server on port 3002 says 3002. It is
+  never the right base for a mail body.
 
 ---
 
@@ -200,7 +206,22 @@ that file.
 
 ---
 
-## 8. Written but not yet wired
+## 8. Scheduled mail
+
+- **`matchVideoExpiryEmail`** (`templates/match-video-expiry.ts`, SwingVision
+  Add video T9) — "A match video will be removed on <date>". Sent by the daily
+  cleanup cron (`/api/cron/cleanup-match-videos`, 05:00 UTC) through
+  `services/match-video/expiry-sweep.ts`: the cron first retires videos a year
+  unwatched, then `match_video_claim_expiry_warnings` stamps the ones 30 days
+  from that, and each is mailed to its `uploaded_by` only after
+  `claimSend("match_video_expiry:<attachment>:<clock date>")` returns true. A
+  row with no uploader is skipped. No Settings switch — it is the only notice
+  before something of the recipient's is deleted — so the `footer` says why it
+  arrived instead. At most 25 a day and a 15 s budget, one row claimed at a
+  time, so it stays well under the 100-a-day cap below and never starves the
+  sweep of the route's 60 s.
+
+## 9. Written but not yet wired
 
 Inherited from the pilot branch (merged in PR #131), each waiting on one call
 site or one decision:

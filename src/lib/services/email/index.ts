@@ -18,6 +18,7 @@
  * | Program invite           | `inviteMember()` — WIRED                        |
  * | Analysis ready           | `deriveAndPublish()` sets `completed` · pref `notifyAnalysisReady` — WIRED |
  * | Analysis failed          | final `failed` (webhook, poll) / `derivation_failed` · pref `notifyAnalysisFailed` — WIRED |
+ * | Analysis failed (internal) | `notifyAnalysisOutcome({ outcome: "failed" })`, same final failures as above, to `INTERNAL_ALERTS_ADDRESS` only — no pref, `claimSend("analysis_failed_internal:<job_id>")` — WIRED |
  * | Usage alert (80% / spent) | `reserveQuota()` crosses a line, to owner + coaches · pref `notifyUsageAlerts` — WIRED |
  * | Weekly team digest       | Monday schedule · pref `weeklyTeamDigest` — NOT WIRED, row hidden |
  * | Claim verify address     | signed-in `startClaim()` / `resendClaim()` — WIRED |
@@ -33,7 +34,9 @@
  * | Expired-invite nudge     | `requestFreshInvite()` — WIRED                  |
  * | Ownership transferred    | `transferProgramOwnership()`, to the new owner — WIRED |
  * | Member left              | `leaveProgram()`, to the owner · pref `notifyTeamActivity` — WIRED |
- * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row — to every `is_admin` user — WIRED |
+ * | Match video expiry       | the daily cleanup cron (`/api/cron/cleanup-match-videos`), to the video's `uploaded_by`, once per retention clock via `claimSend("match_video_expiry:<attachment>:<clock date>")` — no pref, it is the only notice before a deletion — WIRED |
+ * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row — to every `is_admin` user plus `INTERNAL_ALERTS_ADDRESS` — WIRED |
+ * | Program went live (internal) | `notifyProgramWentLive()` — a claim lands live via `completeClaim()` / `completeClaimWithToken()` (path `auto`) or an admin's `approveClaim()` opens its objection window (path `reviewed`) — to `INTERNAL_ALERTS_ADDRESS` only, once per program via `claimSend("program_live:<program_id>")` — WIRED |
  *
  * The claim and invite-request rows fire from
  * `services/programs/{admin-actions,claim-actions}.ts`. None of them can fail
@@ -87,7 +90,7 @@
  * `getNotificationPrefs()` / `wantsNotification()` read the switch for a user
  * who may not be the caller, and `claimSend()` keys one-shot mail in
  * `notification_sends` so a retried webhook or a re-run derivation stays
- * silent. The digest is the one row still unwired (`docs/email-system.md` §8).
+ * silent. The digest is the one row still unwired (`docs/email-system.md` §9).
  */
 
 export { sendEmail, type EmailMessage, type EmailResult } from "./send";
@@ -98,8 +101,14 @@ export {
   type EmailContent,
   type EmailFact,
   type EmailRow,
+  type EmailSpan,
+  type EmailParagraph,
 } from "./shell";
-export { FROM_ADDRESS, SUPPORT_ADDRESS } from "./config";
+export {
+  FROM_ADDRESS,
+  SUPPORT_ADDRESS,
+  INTERNAL_ALERTS_ADDRESS,
+} from "./config";
 
 export {
   programInviteEmail,
@@ -110,8 +119,10 @@ export {
 export {
   analysisReadyEmail,
   analysisFailedEmail,
+  analysisFailedInternalEmail,
   type AnalysisReadyInput,
   type AnalysisFailedInput,
+  type AnalysisFailedInternalInput,
 } from "./templates/analysis";
 
 export {
@@ -168,5 +179,12 @@ export {
 
 export {
   adminReviewNeededEmail,
+  programLiveInternalEmail,
   type AdminReviewNeededInput,
+  type ProgramLiveInternalInput,
 } from "./templates/admin";
+
+export {
+  matchVideoExpiryEmail,
+  type MatchVideoExpiryInput,
+} from "./templates/match-video-expiry";

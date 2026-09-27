@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   RosterTable,
@@ -20,6 +27,7 @@ import {
 import { EditPlayerDialog } from "@/components/dashboard/team/edit-player-dialog";
 import { MergeProfilesDialog } from "@/components/dashboard/team/merge-profiles-dialog";
 import { setProgramLineup } from "@/components/dashboard/team/roster-actions";
+import { ClaimInviteContext } from "@/components/dashboard/team/roster-claim-invite";
 import { advButton } from "@/lib/ui/adv-button";
 import { Kbd } from "@/components/ui/kbd";
 import { GripVertical } from "lucide-react";
@@ -402,8 +410,20 @@ export function RosterView({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedId, lineup, close, cancelLineup, step]);
 
+  // The drawer asks, the header's Invite dialog answers — see
+  // `roster-claim-invite.tsx` for why this is a context and not a prop.
+  const [claimProfileId, setClaimProfileId] = useState<string | null>(null);
+  const claimInvite = useMemo(
+    () => ({
+      profileId: claimProfileId,
+      request: setClaimProfileId,
+      clear: () => setClaimProfileId(null),
+    }),
+    [claimProfileId],
+  );
+
   return (
-    <>
+    <ClaimInviteContext.Provider value={claimInvite}>
       <div className="flex w-full flex-1 bg-[var(--surface-card)]">
         <div className="flex min-w-0 flex-1 flex-col gap-5 px-14 pt-5 pb-8">
           <div className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-end lg:gap-10">
@@ -584,7 +604,7 @@ export function RosterView({
           if (!open) setMerging(null);
         }}
       />
-    </>
+    </ClaimInviteContext.Provider>
   );
 }
 

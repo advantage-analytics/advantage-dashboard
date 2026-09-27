@@ -21,6 +21,9 @@
  * one place the header admits the other workspaces exist. It is what the
  * trigger's hollow ring means when nothing local is moving.
  *
+ * Joins — staff only — trail everything: news about the team, never waiting
+ * on the reader, and never behind the dot.
+ *
  * No React, no Next, no tokens: the whole point is that a spec can assert the
  * exact strings without rendering anything.
  */
@@ -29,6 +32,7 @@ export function trayDetail(
   inFlightCount: number,
   elsewhereCount = 0,
   failedCount = 0,
+  joinedCount = 0,
 ): string {
   const parts: string[] = [];
 
@@ -48,6 +52,10 @@ export function trayDetail(
 
   if (elsewhereCount > 0) {
     parts.push(`${elsewhereCount} elsewhere`);
+  }
+
+  if (joinedCount > 0) {
+    parts.push(`${joinedCount} joined`);
   }
 
   // "Nothing in flight" is the tray's own empty state, said in the tooltip's

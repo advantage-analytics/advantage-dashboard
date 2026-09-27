@@ -167,21 +167,34 @@ export function wizardAthleteChoice(input: {
 
 /**
  * The wizard's reading of the decision: either the value to write to
- * `matches.player1_id`, or the contract's own refusal, untouched.
+ * `matches.player1_id`, or a refusal — the contract's own, untouched, or the
+ * wizard's one refusal of its own.
  *
  * `attribution` is the resolved id — the roster profile's, or the viewer's
- * own in a personal workspace — or `null` for the one case the contract does
- * not cover: a DOUBLES line, whose preset names no single player and whose
- * `supportsVideo: false` is how the event says so. Two athletes stand on our
- * side of that line and `player1_id` names neither; that is what the wizard
- * wrote before this file and what the regraft trigger accepts. A SINGLES line
- * with nobody assigned is not the same thing: it is refused as
- * `athlete-required`, because the fix is assigning the line on the event,
- * which owns that fact, not filing the match under nobody.
+ * own in a personal workspace. It is never null: a SINGLES line with nobody
+ * assigned is refused as `athlete-required`, because the fix is assigning the
+ * line on the event, which owns that fact, not filing the match under nobody.
+ *
+ * `doubles-unsupported` is the wizard's own reason, not the contract's. The
+ * contract decides who may record a match for whom and knows nothing about
+ * presets; a doubles line is refused on what it IS, before that question is
+ * asked. It lives here rather than in `UploadIneligibilityReason` so the
+ * contract's table of reasons stays a table of attribution rules.
+ * `retryable` is `false` by construction: nothing a retry could re-read
+ * changes a line's discipline.
  */
+export const DOUBLES_UNSUPPORTED_REFUSAL =
+  "Doubles lines record a score only. Statistics are singles only for now.";
+
 export type WizardEligibility =
-  | { ok: true; attribution: string | null }
-  | Extract<UploadEligibility, { ok: false }>;
+  | { ok: true; attribution: string }
+  | Extract<UploadEligibility, { ok: false }>
+  | {
+      ok: false;
+      reason: "doubles-unsupported";
+      message: typeof DOUBLES_UNSUPPORTED_REFUSAL;
+      retryable: false;
+    };
 
 export interface WizardEligibilityInput {
   workspace: Workspace;
@@ -206,6 +219,18 @@ export function wizardUploadEligibility(
   input: WizardEligibilityInput,
 ): WizardEligibility {
   const { workspace, viewerId, preset, subject, roster } = input;
+  // Doubles is score-only (decision 2026-09-22): no video analysis, no
+  // SwingVision statistics. Refused on the preset's discipline before any
+  // attribution rule runs, so a hand-built `?entry=` URL for a doubles line
+  // meets this sentence and not a picker for an athlete it cannot name.
+  if (preset?.discipline === "doubles") {
+    return {
+      ok: false,
+      reason: "doubles-unsupported",
+      message: DOUBLES_UNSUPPORTED_REFUSAL,
+      retryable: false,
+    };
+  }
   const athlete = wizardAthleteChoice({ workspace, preset, subject });
   const result = uploadEligibility({
     workspace,
@@ -227,17 +252,8 @@ export function wizardUploadEligibility(
     };
   }
 
-  // The doubles carve-out, and only that. Every other refusal — including a
-  // singles line with no player assigned — stands exactly as decided.
-  if (
-    result.reason === "athlete-required" &&
-    preset &&
-    preset.playerUserId === null &&
-    !preset.supportsVideo
-  ) {
-    return { ok: true, attribution: null };
-  }
-
+  // Every refusal — including a singles line with no player assigned —
+  // stands exactly as decided.
   return result;
 }
 

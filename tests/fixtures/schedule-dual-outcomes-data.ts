@@ -34,8 +34,14 @@ function entry(slot: string, overrides: Partial<EventEntry> = {}): EventEntry {
     position: Number(slot.slice(1)) - 1,
     draw: null,
     seed: null,
-    playerUserIds: [`player-${slot.toLowerCase()}`],
-    playerLabels: [`Our ${slot}`],
+    // A doubles line is a real pair, so the table's surname display
+    // ("Lee / Park") is exercised; singles keep one placeholder name.
+    playerUserIds: slot.startsWith("D")
+      ? [`player-${slot.toLowerCase()}-a`, `player-${slot.toLowerCase()}-b`]
+      : [`player-${slot.toLowerCase()}`],
+    playerLabels: slot.startsWith("D")
+      ? ["Ana Lee", "Bo Park"]
+      : [`Our ${slot}`],
     opponentLabels: [`Opponent ${slot}`],
     opponentSchool: "Meridian State",
     forfeit: null,
@@ -113,9 +119,33 @@ export const NORMAL_ENTRIES: EventEntry[] = [
       match("normal-ready-match", true, {
         status: "imported",
         hasVideo: true,
+        // T22: the match's own facts the drawer draws — `duration` arrives
+        // pre-formatted by the loader, `sourceProvider` is a `providers` id.
+        duration: "1H 42M",
+        sourceProvider: "swing-vision",
       }),
     ],
   }),
+  // Scored by hand, nothing sent: the line the drawer offers "Add video" on.
+  entry("S3", { matches: [match("normal-manual-loss", false)] }),
+  // T23: a video whose analysis failed — the drawer shows the job's note in
+  // its alert and, for a coach, Retry as the footer's one primary.
+  entry("S4", {
+    matches: [
+      match("normal-failed-match", false, {
+        status: "failed",
+        hasVideo: true,
+        jobId: "job-s4",
+        failNote: "The video ended before the match did",
+      }),
+    ],
+  }),
+  // The rest of the card, unplayed — a dual saves with all nine lines.
+  entry("S5"),
+  entry("S6"),
+  entry("D1"),
+  entry("D2"),
+  entry("D3"),
 ];
 
 export function detail(entries: EventEntry[]): EventDetail {

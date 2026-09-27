@@ -3,7 +3,7 @@ import { RosterPageSkeleton } from "@/components/dashboard/loading/team-page-pen
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { Fragment, Suspense } from "react";
 import { redirect } from "next/navigation";
-import { UserCheck } from "lucide-react";
+import { AlertTriangle, UserCheck } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import {
   isProgramStaff,
@@ -178,6 +178,11 @@ async function RosterContent({
     }));
 
   const unclaimed = managedPlayers.length;
+  const seatsFree = Math.max(
+    0,
+    roster.seats.seats - roster.seats.used - roster.seats.pending,
+  );
+  const seatsLow = seatsFree <= 3;
 
   /**
    * Day zero: nobody plays for the program, nobody has been invited, and
@@ -219,6 +224,7 @@ async function RosterContent({
           buttons={{
             managedPlayers,
             seats: roster.seats,
+            openInviteEmails: [],
             roster: players,
             playersCanUpload: roster.playersCanUpload,
             former,
@@ -264,7 +270,7 @@ async function RosterContent({
             {unclaimed > 0 && (
               <Fragment key="unclaimed">
                 {" · "}
-                <span className="tabular">{unclaimed} without an account</span>
+                <span className="tabular">{unclaimed} coach-managed</span>
               </Fragment>
             )}
             {roster.invites.length > 0 && (
@@ -272,6 +278,35 @@ async function RosterContent({
                 {" · "}
                 <span className="tabular">
                   {invitesPendingLabel(roster.invites.length)}
+                </span>
+              </Fragment>
+            )}
+            {/* The seat count rides the summary line — the title slot's rule is
+                that counts live here, never on pills. A seat is a player on
+                this table (or an open invitation to a new one), so the figure
+                agrees with the rows under it and needs no picture; the unit
+                boxes stay in Settings › Teams. Amber with a glyph once three
+                or fewer are left, so a full roster is never first met inside
+                a dialog — severity rides colour AND a mark, never colour
+                alone. No row (the loader's zero fallback) is "unknown", not
+                "full": say nothing rather than an amber "All 0 seats taken". */}
+            {roster.seats.seats > 0 && (
+              <Fragment key="seats">
+                {" · "}
+                <span
+                  className="tabular inline-flex items-center gap-1"
+                  style={seatsLow ? { color: "var(--viz-key)" } : undefined}
+                >
+                  {seatsLow && (
+                    <AlertTriangle
+                      className="size-3"
+                      strokeWidth={1.5}
+                      aria-hidden
+                    />
+                  )}
+                  {seatsFree === 0
+                    ? `All ${roster.seats.seats} seats taken`
+                    : `${seatsFree} of ${roster.seats.seats} seats free`}
                 </span>
               </Fragment>
             )}
@@ -289,6 +324,7 @@ async function RosterContent({
     <RosterHeaderButtons
       managedPlayers={managedPlayers}
       seats={roster.seats}
+      openInviteEmails={roster.invites.map((invite) => invite.email)}
       roster={players}
       playersCanUpload={roster.playersCanUpload}
       former={former}
@@ -298,8 +334,9 @@ async function RosterContent({
   const notices = (
     <>
       {/* Somebody bound a login to a roster row today. Stated once, above the
-          table, in the terms a coach worries about: the credits stayed, and a
-          seat moved. Rendered only on the day, and only when there was one. */}
+          table, in the terms a coach worries about: the credits stayed, and
+          so did the seats — the player held theirs from the day they were
+          added. Rendered only on the day, and only when there was one. */}
       {claimant && (
         <div
           key="claim"
@@ -320,11 +357,7 @@ async function RosterContent({
                 : "manage their own profiles"}
               .
             </strong>{" "}
-            Upload credits unchanged, seats{" "}
-            <span className="tabular">
-              {roster.seats.used} of {roster.seats.seats}
-            </span>
-            .
+            Upload credits and seats unchanged.
           </p>
           <RowAction
             href={`/dashboard/team/roster/${claimant.playerId}`}

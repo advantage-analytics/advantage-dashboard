@@ -254,7 +254,7 @@ export function JoinRequestsCard({
         onOpenChange={setOpen}
         width={480}
         title="Requests to join"
-        description="Approving sends a player invite and holds a team seat until they accept. Declining clears the request and sends nothing."
+        description="Approving sends a player invite, which takes a team seat now. Declining clears the request and sends nothing."
         footer={
           <>
             <div className="flex-1" />
@@ -358,14 +358,14 @@ export function JoinRequestsCard({
         <DialogInfoRow
           icon={<Users className="size-3.5" strokeWidth={1.5} aria-hidden />}
         >
-          Approving holds a team seat until they accept ·{" "}
+          Approving sends an invite, and the player takes a seat now ·{" "}
           <span className="tabular">
-            {seats.used} of {seats.seats}
+            {seats.used + seats.pending} of {seats.seats}
           </span>{" "}
-          used
+          taken
           {seats.pending > 0 && (
             <>
-              , <span className="tabular">{seats.pending}</span> held by open
+              , <span className="tabular">{seats.pending}</span> of them by open
               invites
             </>
           )}

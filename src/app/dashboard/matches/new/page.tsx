@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard/UploadMatchFlow";
+import { AttachmentWizardRoute } from "@/components/dashboard/matches/match-video-attachment/AttachmentWizardRoute";
 import type { RosterSubject } from "@/components/dashboard/matches/new-match-wizard/useUploadMatchWizard";
 import {
   draftBelongsToWorkspace,
@@ -11,10 +12,50 @@ import { getAddVideoTarget } from "@/lib/data/add-video-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getRosterPlayerOptions } from "@/lib/data/roster-server";
 import { isProviderSupported, type ProviderId } from "@/lib/services/upload";
+import { isMatchVideoMode } from "@/lib/match-video/types";
+import { providerForRecordingSource } from "@/app/onboarding/answers";
+import {
+  classifyNewMatchVisit,
+  type NewMatchSearchParams,
+} from "@/lib/matches/new-match-visit";
+import {
+  attachmentWizardStorageDeps,
+  resolveAttachmentWizardTarget,
+  supabaseAttachmentSourceRows,
+  supabaseAttachmentSummary,
+  MATCHES_LIST_HREF,
+} from "@/lib/data/match-video-attachment-server";
+import { matchVideoAccessDeps } from "@/lib/services/match-video/access";
+import { lazyAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
-export const metadata: Metadata = {
-  title: "New match",
-};
+/**
+ * "New match" everywhere but an attachment visit, which is not one.
+ *
+ * `generateMetadata` replaces the static export because the title is the only
+ * chrome outside the page that names the task, and a tab reading "New match"
+ * while the page says "Replace the match video" is the kind of small lie that
+ * makes someone close the wrong tab. The mode is read but never authorized
+ * here: a title is not a disclosure — every id in it came from the caller's own
+ * URL — and running the ladder twice would double every read.
+ */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<NewMatchSearchParams>;
+}): Promise<Metadata> {
+  const visit = classifyNewMatchVisit(await searchParams);
+  if (visit.kind !== "attach" || !isMatchVideoMode(visit.mode)) {
+    return { title: "New match" };
+  }
+  return {
+    title: {
+      add: "Add match video",
+      replace: "Replace match video",
+      align: "Adjust match video",
+    }[visit.mode],
+  };
+}
 
 /**
  * Who a `?player=` link names, or null for an id that names nobody here.
@@ -60,6 +101,13 @@ async function rosterSubjectFor(
  * `getAddVideoTarget()` for which matches the wizard takes and where the rest
  * are sent. That one DOES skip step one, because the match already answered it.
  *
+ * `?videoFor=&mode=` is a different wizard entirely: the SwingVision video
+ * attachment flow, which creates no match, no draft and no processing job. It
+ * is resolved FIRST, before any of the branches below, so that nothing on the
+ * creation path can run for a visit that was never about creating anything —
+ * and a URL carrying both readings is refused rather than ranked. See
+ * `classifyNewMatchVisit()` and `resolveAttachmentWizardTarget()`.
+ *
  * All are validated rather than trusted: an unknown or retired provider id
  * falls through to the wizard's own default, and a player id that names nobody
  * on the ACTIVE program's roster opens an unseeded wizard.
@@ -67,14 +115,46 @@ async function rosterSubjectFor(
 export default async function NewMatchPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    draft?: string;
-    source?: string;
-    player?: string;
-    match?: string;
-  }>;
+  searchParams: Promise<NewMatchSearchParams>;
 }): Promise<React.JSX.Element> {
-  const { draft: draftId, source, player, match } = await searchParams;
+  const params = await searchParams;
+  const { draft: draftId, source, player, match } = params;
+
+  // FIRST, before any branch that can insert a match. An attachment visit and
+  // a creation visit are different products sharing one URL, and the only safe
+  // order is the one where the creation path is never entered by accident.
+  const visit = classifyNewMatchVisit(params);
+  if (visit.kind === "refuse") redirect(MATCHES_LIST_HREF);
+  if (visit.kind === "attach") {
+    const supabase = await createClient();
+    // Lazy: a refused visit — and every check in the ladder runs before the
+    // attachment row is read — never constructs a service-role client.
+    const storage = attachmentWizardStorageDeps(lazyAdminClient());
+
+    const target = await resolveAttachmentWizardTarget(
+      visit.matchId,
+      visit.mode,
+      {
+        ...matchVideoAccessDeps({
+          supabase,
+          workspaceContext: getWorkspaceContext,
+        }),
+        ...storage,
+        loadSummary: supabaseAttachmentSummary(supabase),
+        loadSourceRows: supabaseAttachmentSourceRows(supabase),
+      },
+    );
+    if (target.kind === "redirect") redirect(target.href);
+    // Rendered as the page's own root, exactly as `UploadMatchFlow` is below:
+    // both are a `WizardShell`, and the sticky footer pins against the same
+    // dashboard scroll container because nothing here wraps one and not the
+    // other.
+    //
+    // `AttachmentWizardRoute` is the flow's client boundary. It adds no markup
+    // and no navigation of its own: the flow settles on a "Video saved" screen
+    // whose "Watch the film" returns to this match's Film view.
+    return <AttachmentWizardRoute {...target.props} />;
+  }
 
   if (match) {
     const context = await getWorkspaceContext();
@@ -88,14 +168,14 @@ export default async function NewMatchPage({
     return <UploadMatchFlow preset={target.preset} />;
   }
 
-  // Independent reads, so they overlap. The workspace is resolved for a
-  // `?player=` visit (to name a roster player) and for a `?draft=` one (to
-  // check the draft belongs here) — it is `cache()`d and the dashboard layout
-  // has already paid for it, but a page should not await a question it is not
-  // asking.
+  // Independent reads, so they overlap. The workspace is always resolved now:
+  // besides naming a `?player=` and checking a `?draft=` belongs here, it
+  // carries the viewer's onboarding answer that preselects Source. It is
+  // `cache()`d and the dashboard layout has already paid for it, so asking
+  // costs nothing.
   const [loadedDraft, workspace] = await Promise.all([
     draftId ? loadMatchDraft(draftId) : null,
-    player || draftId ? getWorkspaceContext() : null,
+    getWorkspaceContext(),
   ]);
 
   // A draft belongs to the workspace it was saved in, and resume is where that
@@ -120,6 +200,13 @@ export default async function NewMatchPage({
 
   const initialProvider: ProviderId | null =
     source && isProviderSupported(source) ? (source as ProviderId) : null;
+  // How the viewer said they record, asked once at onboarding. The weakest
+  // signal the wizard takes — below the link and below a choice already made
+  // in the picker (see `resolveStartingProvider`) — and, like `?source=`, it
+  // preselects Source without skipping step one.
+  const preferredProvider: ProviderId | null = providerForRecordingSource(
+    workspace?.viewer.recordingSource,
+  );
   // Only a team workspace has a roster to name, and only there does the wizard
   // ask For at all — in a personal one the uploader IS the player, so a
   // `?player=` has nowhere to land.
@@ -133,6 +220,7 @@ export default async function NewMatchPage({
       draft={draft}
       draftRefusal={draftRefusal}
       initialProvider={initialProvider}
+      preferredProvider={preferredProvider}
       initialSubject={initialSubject}
     />
   );

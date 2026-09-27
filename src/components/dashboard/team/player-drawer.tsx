@@ -38,6 +38,7 @@ import {
 } from "@/components/dashboard/settings/team-actions";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
 import { profileHref } from "@/components/dashboard/team/roster-table";
+import { useClaimInvite } from "@/components/dashboard/team/roster-claim-invite";
 import type {
   RosterMeasure,
   RosterMember,
@@ -417,8 +418,7 @@ function MemberMenu({
         ) : (
           member.role === "player" && (
             <p className="px-2 py-2 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-              No account yet, so there is no analysis time to grant. Invite them
-              to hand over their own uploads.
+              No login yet, so there is no analysis time to grant.
             </p>
           )
         )}
@@ -521,6 +521,15 @@ export function PlayerDrawer({
 }) {
   const { active: workspace } = useWorkspace();
   const canUpload = canUploadForProgram(workspace);
+  const claimInvite = useClaimInvite();
+  // `profileId` is what an invitation targets; a coach-managed row always has
+  // one, and holding it here (rather than a boolean plus a cast at the click
+  // site) is what keeps that guarantee honest.
+  const claimProfileId =
+    member.role === "player" && member.managedBy === "coach"
+      ? member.profileId
+      : null;
+  const coachManaged = claimProfileId !== null;
   const panelRef = useRef<HTMLDivElement>(null);
   // Which of the four the chart shows. Held here rather than per member so
   // stepping ↑↓ through the roster compares players on the same figure.
@@ -697,9 +706,39 @@ export function PlayerDrawer({
               </h2>
               <span className="text-[12px] text-[var(--ink-600)]">
                 {identityLine(member)}
+                {coachManaged && " · Coach-managed"}
               </span>
             </div>
           </div>
+
+          {/* What "coach-managed" means, and the one thing to do about it.
+              The row carries the pill because a coach scans for it; here they
+              are reading one player, so the fact joins the identity line and
+              this well says what follows from it. A well inset in a card is
+              what `--surface-page` is for. The ⋯ menu used to tell a coach to
+              "invite them" with nothing to press — this is that sentence with
+              its link. Staff only: a teammate can do nothing with it. */}
+          {coachManaged && canManage && (
+            <div className="flex flex-col items-start gap-2 rounded-[var(--radius-element)] bg-[var(--surface-page)] px-3.5 py-3">
+              <p className="text-[11px] leading-[1.6] text-[var(--ink-700)]">
+                <strong className="font-medium text-[var(--ink-900)]">
+                  No login yet.
+                </strong>{" "}
+                Staff upload {firstName}&rsquo;s matches; the stats build the
+                same. Invite {firstName} to claim this profile — every match
+                stays, and no new seat is used.
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  claimProfileId && claimInvite.request(claimProfileId)
+                }
+                className="cursor-pointer rounded-[var(--radius-cell)] text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              >
+                Invite to claim →
+              </button>
+            </div>
+          )}
 
           {/* One-line stat header over the sparkline */}
           {active && hasStats && (

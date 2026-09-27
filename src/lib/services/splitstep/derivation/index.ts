@@ -143,6 +143,16 @@ export {
   type BuildOptions,
 } from "./transcript";
 
+export { fitFrameToTime, bounceVideoTimes } from "./frame-clock";
+
+export {
+  deriveBallPaths,
+  BALL_PATHS_VERSION,
+  type BallPathSample,
+  type BallPathStroke,
+  type BallPathsFile,
+} from "./ball-paths";
+
 import { parseStrokes, type ParseOptions } from "./parse";
 import { groupIntoRallies, playerLabels } from "./rallies";
 import { aceCandidates, serveBracket, serveSideCounts } from "./serves";

@@ -1,9 +1,12 @@
 "use client";
 
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { cn } from "@/lib/utils";
 import { FooterMeter } from "./FooterMeter";
 import { jumpToMissingField, MissingFieldsPill } from "./MissingFieldsPill";
 import { useUploadWizard } from "./UploadWizardProvider";
+import { focusRingCls } from "./styles";
 
 /**
  * The wizard footer's three slots, each reading the wizard context — composed
@@ -77,12 +80,30 @@ export function WizardFooterStatus() {
   // this exact workspace, and the jobs route bills whichever one it names.
   if (workspaces.available.length > 1) {
     return (
-      <span className="text-[11px] text-[var(--ink-500)]">
-        Saves in{" "}
-        <span className="font-medium text-[var(--ink-900)]">
-          {workspaces.active.name}
+      // One line, always, never a column beside the meter: "University of
+      // California, Los Angeles" fits in 320px and only a longer name
+      // truncates. The hairline matches the meter's, so the footer reads
+      // Back | the allowance | whose allowance it is. Hover or focus shows the
+      // whole name and why it matters — a tooltip, not an expanding footer,
+      // so Save match never moves under the pointer.
+      <ChromeTooltip
+        side="top"
+        label={`Saves in ${workspaces.active.name}`}
+        detail="The match is saved here, and any video hours come from this program."
+      >
+        <span
+          tabIndex={0}
+          className={cn(
+            "flex min-w-0 cursor-default items-baseline gap-1 border-l border-[var(--border-medium)] pl-4 text-[11px] whitespace-nowrap text-[var(--ink-500)]",
+            focusRingCls,
+          )}
+        >
+          <span className="shrink-0">Saves in</span>
+          <span className="max-w-[320px] min-w-0 truncate font-medium text-[var(--ink-900)]">
+            {workspaces.active.name}
+          </span>
         </span>
-      </span>
+      </ChromeTooltip>
     );
   }
 

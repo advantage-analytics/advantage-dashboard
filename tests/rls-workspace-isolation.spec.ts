@@ -7,10 +7,9 @@ import {
   SKIP_REASON,
   type Session,
   createAdminClient,
-  createLogins,
-  deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
 
 /**
  * Cross-program match isolation, proven against the live database.
@@ -29,10 +28,12 @@ import {
  * This spec talks to the real Supabase project named in `.env.local` — the
  * live DB is this repo's only schema source of truth, so an isolation proof
  * against anything else would prove nothing. Session plumbing (env loading,
- * skip guard, logins, auth-user cleanup) comes from `fixtures/live-db`; every
- * fixture row is created by the service-role client in `beforeAll` under a
- * per-run unique prefix and deleted in `afterAll` (match first —
- * `matches.created_by` has no cascade — then programs, then the auth users).
+ * skip guard) comes from `fixtures/live-db` and the logins are reused pool
+ * users from `fixtures/live-db-pool`; every fixture row is created by the
+ * service-role client in `beforeAll` under a per-run unique prefix and deleted
+ * by id in `afterAll` (matches first — `matches.created_by` has no cascade —
+ * then memberships, then programs). The pool users themselves are never
+ * deleted, so nothing may rely on an auth-user cascade.
  *
  * Run on demand:  npx playwright test tests/rls-workspace-isolation.spec.ts
  * (or the full suite via `npm run test`).
@@ -44,7 +45,15 @@ import {
 
 /** A crashed run is findable by hand:
  *  `select * from programs where program_key like 'rls-iso-%'`. */
-const { mark: MARK, password: PASSWORD } = runMarker("rls-iso");
+const { mark: MARK } = runMarker("rls-iso");
+
+/** Pool slots, prefixed with this spec's name so no other spec draws them. */
+const SLOTS = [
+  "rls-workspace-isolation-a-owner",
+  "rls-workspace-isolation-athlete",
+  "rls-workspace-isolation-b-staff",
+  "rls-workspace-isolation-b-player",
+];
 
 test.describe("cross-program match isolation (live RLS)", () => {
   // One worker, in order: every test reads the beforeAll fixture.
@@ -60,7 +69,8 @@ test.describe("cross-program match isolation (live RLS)", () => {
   let bStaff: Session; // coach in B only
   let bPlayer: Session; // player in B only
 
-  const authUserIds: string[] = [];
+  /** The pool users' ids — every match this file writes is created by one. */
+  let poolUserIds: string[] = [];
   const programIds: string[] = [];
 
   let programA: string;
@@ -73,11 +83,20 @@ test.describe("cross-program match isolation (live RLS)", () => {
 
     admin = createAdminClient();
 
-    [aOwner, athlete, bStaff, bPlayer] = await createLogins(
-      admin,
-      ["a-owner", "athlete", "b-staff", "b-player"],
-      { mark: MARK, password: PASSWORD, authUserIds },
-    );
+    // A crashed run leaves its matches behind on the reused users; sweep them
+    // (points, stats, shots and files cascade off the match) before signing in.
+    const leftoverIds = await clearPoolLeftovers(admin, SLOTS);
+    if (leftoverIds.length > 0) {
+      const swept = await admin
+        .from("matches")
+        .delete()
+        .in("created_by", leftoverIds);
+      if (swept.error) throw new Error(`matches sweep: ${swept.error.message}`);
+    }
+
+    const sessions = await poolLogins(admin, SLOTS);
+    [aOwner, athlete, bStaff, bPlayer] = sessions;
+    poolUserIds = sessions.map((s) => s.userId);
 
     // Two programs. The assertion is that B's read stops at B's edge.
     const programs = await admin
@@ -167,13 +186,13 @@ test.describe("cross-program match isolation (live RLS)", () => {
 
     // Matches first: created_by has no ON DELETE, and the write-side tests
     // may have left bStaff a personal match. Everything under a match cascades.
-    if (authUserIds.length > 0) {
-      await admin.from("matches").delete().in("created_by", authUserIds);
+    if (poolUserIds.length > 0) {
+      await admin.from("matches").delete().in("created_by", poolUserIds);
     }
     if (programIds.length > 0) {
+      await admin.from("program_members").delete().in("program_id", programIds);
       await admin.from("programs").delete().in("id", programIds);
     }
-    await deleteAuthUsers(admin, authUserIds);
   });
 
   // -------------------------------------------------------------------------

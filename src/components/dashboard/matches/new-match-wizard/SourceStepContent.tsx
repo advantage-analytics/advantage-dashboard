@@ -44,6 +44,7 @@ import {
   Loader2,
   Plus,
   User,
+  XCircle,
 } from "lucide-react";
 import {
   Popover,
@@ -64,7 +65,7 @@ import {
   type Workspace,
 } from "@/lib/workspace/types";
 import type { MatchSubject, RosterOption } from "./useUploadMatchWizard";
-import { noteStripCls } from "./styles";
+import { noteIconCls, noteStripCls } from "./styles";
 import { PendingTeamNote } from "./PendingTeamNote";
 import { RosterMenuList, rosterMeta, workspaceLabel } from "./RosterMenu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
@@ -82,6 +83,13 @@ export interface SourceStepContentProps {
     subject: MatchSubject | null;
     choose: (subject: MatchSubject) => void;
   };
+  /**
+   * The hook's `providerQuotaRefusal` — non-null only when a processing
+   * provider is selected and this month's allowance is gone entirely. Words
+   * only: the sentence is decided in `quotaRefusal()`, and this step renders
+   * it without re-asking the question.
+   */
+  quotaRefusal?: string | null;
 }
 
 type FieldName = "workspace" | "for" | "source";
@@ -270,6 +278,7 @@ function SourceStepContentImpl({
   selectedProvider,
   onProviderSelect,
   whoPlayed,
+  quotaRefusal = null,
 }: SourceStepContentProps) {
   const { active, available, viewer } = useWorkspace();
   const isTeam = active.kind === "team";
@@ -443,7 +452,7 @@ function SourceStepContentImpl({
     currentKind === "import" ? (
       <div className={NOTE_CLS}>
         <Info
-          className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
+          className={`${noteIconCls} text-[var(--ink-400)]`}
           strokeWidth={1.5}
           aria-hidden="true"
         />
@@ -462,13 +471,27 @@ function SourceStepContentImpl({
       // A team still being confirmed: the wizard's eligibility gate keeps
       // Continue off for video, and this is the reason, with a way to ask.
       <PendingTeamNote message={videoRefusal} />
+    ) : quotaRefusal ? (
+      // The allowance is gone, and step 1 is where that is cheapest to learn:
+      // the alternative is picking a recording, waiting out the probe and the
+      // trim, and being refused at submit. Advisory still —
+      // `reserve_processing_quota()` remains the authority — so it states the
+      // fact and does not disable the source.
+      <div className={NOTE_CLS} role="alert">
+        <XCircle
+          className={`${noteIconCls} text-[var(--error)]`}
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+        <span>{quotaRefusal}</span>
+      </div>
     ) : videoRefusal ? (
       // Advisory, never a gate: `reserveQuota()` is the choke point every
       // submission passes and the only thing that refuses. This says WHY, in
       // the same sentence the spend would use.
       <div className={NOTE_CLS}>
         <Info
-          className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
+          className={`${noteIconCls} text-[var(--ink-400)]`}
           strokeWidth={1.5}
           aria-hidden="true"
         />

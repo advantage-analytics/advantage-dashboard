@@ -12,8 +12,8 @@ import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { formatShortDate } from "@/lib/ui/date-format";
-import { NewPill } from "@/components/ui/new-pill";
 import { PlayerMark } from "@/components/ui/player-mark";
+import { StatePill } from "@/components/ui/state-pill";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { RowLifecycle } from "./row-state";
 import { profileHref } from "@/components/dashboard/team/roster-table";
@@ -57,9 +57,8 @@ import { cn } from "@/lib/utils";
  * So the leftover width IS the lifecycle column. It carries a 96px minimum, so
  * at the narrow end of `lg` the upload's bar collapses before its words do —
  * the chip is what has to survive — and every bounded column gives up its own
- * slack first. It heads nothing: the cell is an annotation, self-describing on
- * the rows that use it, and a label over a column that is blank eight rows in
- * ten only draws attention to the blanks.
+ * slack first. It is headed Analysis and names the settled outcome as well as
+ * active work, so an empty-looking trailing track is no longer ambiguous.
  *
  * Opponent's cap was measured with the 26px mark it no longer carries (a full
  * 13/500 name plus the "New" pill came to 240px); the freed 36px is left as
@@ -81,8 +80,14 @@ interface MatchCardListProps {
   match: DisplayMatch;
   /** Highlights briefly right after this match was created, this session. */
   isNew?: boolean;
-  /** Never opened on this device — draws the blue "New" pill. */
+  /** Never opened on this device — draws the unread dot after the opponent's name. */
   unseen?: boolean;
+  /**
+   * A saved upload fills this match (a draft folded onto it by `foldDrafts`) —
+   * draws the outlined Draft pill beside the row's name, `DraftRow`'s variant.
+   * Its "Continue upload" lives in the drawer, not the row.
+   */
+  hasDraft?: boolean;
   scope?: "personal" | "team";
   /** The team table beside the open drawer, with its Event track dropped. */
   compact?: boolean;
@@ -101,6 +106,7 @@ export function MatchCardList({
   match,
   isNew,
   unseen,
+  hasDraft = false,
   scope = "personal",
   compact = false,
   selected = false,
@@ -116,6 +122,13 @@ export function MatchCardList({
   const isViewerRow =
     playerId !== null &&
     (playerId === viewer.id || playerId === active.myPlayerId);
+  // Beside the row's primary name — the player on a team table, the opponent
+  // on a personal one — and never truncated (tables.md rule 4).
+  const draftPill = hasDraft ? (
+    <StatePill outline className="shrink-0">
+      Draft
+    </StatePill>
+  ) : null;
 
   return (
     <div
@@ -179,11 +192,14 @@ export function MatchCardList({
               {match.player1.name}
             </span>
           )}
+          {draftPill}
         </span>
       )}
 
       {/* Opponent — the name a reader scans for on a personal list; the quiet
-          second name on a team list. The row's one state marker follows it. */}
+          second name on a team list. An unread match's dot trails the name
+          8px after it: it follows the name, so the name's x never changes,
+          and the name truncates while the dot stays pinned after it. */}
       <span className="flex min-w-0 items-center gap-2">
         <span
           className={cn(
@@ -195,7 +211,17 @@ export function MatchCardList({
         >
           {match.player2.name}
         </span>
-        {unseen && <NewPill className="shrink-0" />}
+        {unseen && (
+          <>
+            <span
+              aria-hidden="true"
+              className="size-[5px] shrink-0 rounded-full"
+              style={{ background: "var(--blue)" }}
+            />
+            <span className="sr-only">Unread</span>
+          </>
+        )}
+        {!isTeam && draftPill}
       </span>
 
       {/* Result — the outcome glyph, flush left under its heading, ahead of
@@ -233,11 +259,10 @@ export function MatchCardList({
         )}
       </span>
 
-      {/* Lifecycle — silent on a settled row; the upload's chip and bar, or the
+      {/* Analysis — the settled outcome, the upload's chip and bar, or the
           one word that explains an exception, on the rest. `grid` blockifies
           the chip onto the cell's line and stretches it across the track;
-          `row-lifecycle` gates the rotating copy on this cell's width (see
-          globals.css). */}
+          `row-lifecycle` identifies the lifecycle container (see globals.css). */}
       <div className="row-lifecycle grid min-w-0 items-center">
         <RowLifecycle
           analysis={match.analysis}
