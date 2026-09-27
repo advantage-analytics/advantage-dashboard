@@ -190,3 +190,14 @@ The eight admin-upload migrations the entries above call unapplied were applied 
 2. Confirmation step before "Abandon and delete match" (destructive, irreversible).
 3. Offline render test for the button labels and "Abandoned by an administrator" copy via `tests/fixtures/vm-modules.ts`.
 4. The video abandon flag cannot see `quota-held`; read unreleased `processing_usage` in the loader so the button does not show only to be refused.
+
+## T23 · Read durable file status when the admin file POST response is lost — done
+
+**gate:** mechanical PASS · completion pass
+
+**changed:** The admin file branch of `useUploadMatchWizard.ts` now treats a rejected POST, a non-JSON body, or the route's "Submission response was interrupted" 500 as unknown, and reads `GET /api/admin/uploads/file?operationId&itemId` with the same ids: an `ok` status sets `adminFileResult` and clears the error; otherwise the original POST message (or the existing fallback) is thrown. A normal 400 refusal never triggers the GET. Three new cases in `tests/admin-wizard-mode.spec.ts` (9/9); attribution inputs, `maxDuration` and the awaited dispatch untouched.
+
+**follow-ups:**
+
+1. Mention the GET-status fallback in `docs/admin-match-file-submissions.md`'s GET paragraph.
+2. Add a dedicated test for the non-JSON-body trigger (shares the reject path, untested on its own).

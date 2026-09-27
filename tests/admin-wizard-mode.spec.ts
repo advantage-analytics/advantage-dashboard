@@ -153,6 +153,150 @@ test("file admission retains exact operation IDs across queued retries and never
   expect(h.writes).toEqual([]);
 });
 
+/** Drives the file-branch wizard to the point of calling `handleCreateMatch`,
+ * shared by the two GET-fallback cases below (T23). */
+async function driveToFileSubmission(
+  h: ReturnType<typeof uploadWizardHarness>,
+) {
+  h.current.whoPlayed.choose({
+    kind: "roster",
+    playerId: "athlete",
+    name: "Target athlete",
+  });
+  await h.flush();
+  const pending = await h.pick("target.xlsx");
+  pending.resolve({
+    success: true,
+    warnings: [],
+    data: {
+      playerName: "Target athlete",
+      opponentName: "Opponent",
+      playerScores: [6],
+      opponentScores: [4],
+      bestOf: "1",
+      adScoring: true,
+    },
+  });
+  await h.flush();
+  h.current.importIdentity.confirm();
+  await h.flush();
+  for (const field of [
+    "playerHand",
+    "playerBackhand",
+    "opponentHand",
+    "opponentBackhand",
+  ] as const)
+    h.current.handleInputChange(field, "Right");
+  h.current.handleInputChange("date", "2026-09-16");
+  h.current.handleInputChange("courtType", "Hard");
+  await h.flush();
+}
+
+test("a lost POST recovers a durable state via the GET status fallback", async () => {
+  const mode = adminMode();
+  const calls: string[] = [];
+  const h = uploadWizardHarness({
+    team: true,
+    admin: mode,
+    adminFetch: async (url) => {
+      calls.push(url);
+      // Call 1: the POST itself never comes back — `fetch()` rejects, the
+      // same open question a non-JSON body or an interrupted 500 leaves.
+      if (calls.length === 1) throw new Error("network error");
+      // Call 2: the hook reads durable status with the same ids before
+      // deciding anything, rather than surfacing the raw network error.
+      expect(url).toBe(
+        `/api/admin/uploads/file?operationId=${mode.operationId}&itemId=${mode.itemId}`,
+      );
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          operationId: mode.operationId,
+          itemId: mode.itemId,
+          matchId: "durable-match",
+          fileId: "file-1",
+          state: "processing",
+          retryable: false,
+          message:
+            "Processing has started. If this state persists, administrator review is required before another attempt.",
+        }),
+      };
+    },
+  });
+  await driveToFileSubmission(h);
+  await h.current.handleCreateMatch();
+  await h.flush();
+  expect(calls).toHaveLength(2);
+  expect(h.current.error).toBeNull();
+  expect(h.current.adminFileResult?.state).toBe("processing");
+});
+
+test("a lost POST whose status read also fails throws the POST's own message", async () => {
+  const mode = adminMode();
+  const INTERRUPTED =
+    "Submission response was interrupted. Check this operation before retrying with the same file.";
+  const calls: string[] = [];
+  const h = uploadWizardHarness({
+    team: true,
+    admin: mode,
+    adminFetch: async (url) => {
+      calls.push(url);
+      // Call 1: a non-2xx POST carrying the route's own "interrupted" body —
+      // the file may already have landed, so this must not be thrown as-is.
+      if (calls.length === 1)
+        return {
+          ok: false,
+          json: async () => ({ ok: false, message: INTERRUPTED }),
+        };
+      // Call 2: the status read itself comes back refused too.
+      expect(url).toBe(
+        `/api/admin/uploads/file?operationId=${mode.operationId}&itemId=${mode.itemId}`,
+      );
+      return {
+        ok: false,
+        json: async () => ({
+          ok: false,
+          message: "This operation is unavailable.",
+        }),
+      };
+    },
+  });
+  await driveToFileSubmission(h);
+  await h.current.handleCreateMatch();
+  await h.flush();
+  expect(calls).toHaveLength(2);
+  expect(h.current.error).toBe(INTERRUPTED);
+  expect(h.current.adminFileResult).toBeNull();
+});
+
+test("a normal 400 refusal never triggers the GET status fallback", async () => {
+  const mode = adminMode();
+  const calls: string[] = [];
+  const h = uploadWizardHarness({
+    team: true,
+    admin: mode,
+    adminFetch: async (url) => {
+      calls.push(url);
+      return {
+        ok: false,
+        json: async () => ({
+          ok: false,
+          message: "The target changed. Administrator review is required.",
+        }),
+      };
+    },
+  });
+  await driveToFileSubmission(h);
+  await h.current.handleCreateMatch();
+  await h.flush();
+  expect(calls).toHaveLength(1);
+  expect(h.current.error).toBe(
+    "The target changed. Administrator review is required.",
+  );
+  expect(h.current.adminFileResult).toBeNull();
+});
+
 test("admin presentation refuses mixed preparation identity and projects only the target workspace", async () => {
   const fs = await import("node:fs");
   const vm = await import("node:vm");

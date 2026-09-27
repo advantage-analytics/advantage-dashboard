@@ -3000,10 +3000,68 @@ export function useUploadMatchWizard({
                   }),
             }))
               body.set(key, String(value));
-            response = await fetch("/api/admin/uploads/file", {
-              method: "POST",
-              body,
-            });
+            const fallbackMessage =
+              "Submission was refused. Retry with this same operation after checking the target.";
+            // The route's own 500 body for a thrown import — "Submission
+            // response was interrupted…" — means the file may have already
+            // landed: `submitAdminMatchFile` stores the blob and calls the
+            // RPC before that point. A rejected `fetch()` or a body that
+            // isn't JSON leave the exact same question open. All three read
+            // the durable status via GET with the same ids before deciding
+            // anything, rather than surfacing a network error that a blind
+            // retry would just repeat against an operation that may have
+            // already succeeded.
+            let fileResponse: Response | undefined;
+            let needsStatusCheck = false;
+            try {
+              fileResponse = await fetch("/api/admin/uploads/file", {
+                method: "POST",
+                body,
+              });
+            } catch {
+              needsStatusCheck = true;
+            }
+            let fileResult: { ok?: boolean; message?: string } | undefined;
+            if (fileResponse) {
+              try {
+                fileResult = await fileResponse.json();
+              } catch {
+                needsStatusCheck = true;
+              }
+            }
+            if (
+              fileResponse &&
+              fileResult &&
+              !fileResponse.ok &&
+              fileResult.message ===
+                "Submission response was interrupted. Check this operation before retrying with the same file."
+            )
+              needsStatusCheck = true;
+            if (needsStatusCheck) {
+              const status = await fetch(
+                `/api/admin/uploads/file?operationId=${encodeURIComponent(identity.operationId)}&itemId=${encodeURIComponent(identity.itemId)}`,
+                { method: "GET" },
+              )
+                .then((res) => res.json())
+                .catch(() => undefined);
+              if (status?.ok) {
+                setError(null);
+                setAdminFileResult(status);
+                return;
+              }
+              throw new Error(fileResult?.message ?? fallbackMessage);
+            }
+            if (!fileResponse!.ok || !fileResult!.ok)
+              throw new Error(fileResult!.message ?? fallbackMessage);
+            setError(null);
+            setAdminFileResult(
+              fileResult as {
+                state: string;
+                matchId: string;
+                message?: string;
+              },
+            );
+            return;
           }
           const result = await response.json();
           if (!response.ok || !result.ok)
@@ -3011,11 +3069,6 @@ export function useUploadMatchWizard({
               result.message ??
                 "Submission was refused. Retry with this same operation after checking the target.",
             );
-          if (!isProcessingProvider) {
-            setError(null);
-            setAdminFileResult(result);
-            return;
-          }
           if (!result.jobId || !result.matchId)
             throw new Error(
               "The server did not return the reserved job. Administrator review is required.",

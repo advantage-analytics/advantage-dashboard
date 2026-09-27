@@ -330,7 +330,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T23 · Read durable file status when the admin file POST response is lost
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** Best guesses: `src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts` (~2990–3020, the `/api/admin/uploads/file` branch); `tests/admin-wizard-mode.spec.ts` or a sibling using `tests/fixtures/upload-wizard-hook.ts`.
 - **done when:**
