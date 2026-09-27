@@ -96,8 +96,90 @@ async function captureGeminiGeneration({
   }
 }
 
+const JSON_HEADERS = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+};
+
+function refuse(status: number, error: string): Response {
+  return new Response(JSON.stringify({ success: false, error }), {
+    status,
+    headers: JSON_HEADERS,
+  });
+}
+
+type Caller = { kind: "service" } | { kind: "user"; userId: string };
+
+/**
+ * Who is calling. `verify_jwt` only proves the bearer is *a* JWT signed for
+ * this project — the public anon key passes it — so the function checks for
+ * itself. Two callers are legitimate: the project's own service role (the
+ * bearer equals SUPABASE_SERVICE_ROLE_KEY) and a signed-in user, whose access
+ * token is what `supabase.functions.invoke` sends from `/api/upload`. A user
+ * token is verified with `auth.getUser` on an anon client; anything else is
+ * answered 401. Whether that user may touch the match is decided afterwards,
+ * against `matches.created_by`.
+ *
+ * Meant to be the same helper in every edge function here — copy it verbatim
+ * rather than adapting it.
+ */
+async function authorizeCaller(
+  req: Request,
+): Promise<{ caller: Caller } | { status: 401; error: string }> {
+  const header = req.headers.get("authorization") ?? "";
+  const token = header.replace(/^bearer\s+/i, "").trim();
+  if (!token) {
+    return { status: 401, error: "Missing bearer token" };
+  }
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (serviceRoleKey && token === serviceRoleKey) {
+    return { caller: { kind: "service" } };
+  }
+  const anon = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { data, error } = await anon.auth.getUser(token);
+  if (error || !data?.user) {
+    return { status: 401, error: "Invalid or expired token" };
+  }
+  return { caller: { kind: "user", userId: data.user.id } };
+}
+
+/**
+ * Whether `caller` may (re)write this match's review. The service role may —
+ * it is what `process-match`'s chained invoke and the video webhook's
+ * `requestMatchInsights` send. A user must be the match's uploader; a match
+ * that cannot be read, or has no uploader, is refused the same way, so the
+ * answer never says whether a match id exists.
+ */
+async function callerOwnsMatch(
+  supabase: ReturnType<typeof createClient>,
+  caller: Caller,
+  matchId: string,
+): Promise<boolean> {
+  if (caller.kind === "service") return true;
+  const { data: match, error } = await supabase
+    .from("matches")
+    .select("created_by")
+    .eq("id", matchId)
+    .single();
+  if (error || !match?.created_by) return false;
+  return match.created_by === caller.userId;
+}
+
 serve(async (req) => {
   try {
+    // The caller is verified before the body is trusted for anything: the
+    // write below runs under the service role, so without this any anon-key
+    // call could overwrite `matches.insights` for any match id.
+    const auth = await authorizeCaller(req);
+    if ("status" in auth) {
+      return refuse(auth.status, auth.error);
+    }
+    const { caller } = auth;
+
     // 1. We only need the matchId now
     const { matchId } = await req.json();
 
@@ -108,6 +190,10 @@ serve(async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    if (!(await callerOwnsMatch(supabase, caller, matchId))) {
+      return refuse(403, "You do not have access to this match");
+    }
 
     // 2. Query your View to get stats for the entire match
     const { data: matchStats, error: viewError } = await supabase

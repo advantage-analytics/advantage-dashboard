@@ -3,6 +3,18 @@ import { runInNewContext } from "node:vm";
 import { expect, test } from "@playwright/test";
 import ts from "typescript";
 
+/**
+ * Distinct per key, so the function's service-role check compares the bearer
+ * against the real key rather than a value every key shares. The PostHog keys
+ * are left unset, which keeps its capture (and its fetch) out of the run.
+ */
+const ENV: Record<string, string> = {
+  SUPABASE_URL: "https://stub.supabase.co",
+  SUPABASE_ANON_KEY: "anon-key",
+  SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+  GEMINI_KEY: "gemini-key",
+};
+
 async function historyFilters(programId: string | null | undefined) {
   const filters: unknown[][] = [];
   let handler!: (request: Request) => Promise<Response>;
@@ -70,7 +82,7 @@ async function historyFilters(programId: string | null | undefined) {
               },
             }
           : { createClient: () => supabase },
-      Deno: { env: { get: () => "stub" } },
+      Deno: { env: { get: (key: string) => ENV[key] } },
       Response,
       console,
       fetch: async () =>
@@ -82,6 +94,7 @@ async function historyFilters(programId: string | null | undefined) {
   const response = await handler(
     new Request("https://example.test", {
       method: "POST",
+      headers: { authorization: `Bearer ${ENV.SUPABASE_SERVICE_ROLE_KEY}` },
       body: JSON.stringify({ matchId: "match" }),
     }),
   );

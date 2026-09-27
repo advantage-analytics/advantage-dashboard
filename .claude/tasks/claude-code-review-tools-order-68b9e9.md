@@ -129,7 +129,7 @@ ready).
 
 ## T10 · generate-insights: verify the caller
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T9
 - **files:** supabase/functions/generate-insights/index.ts, tests/generate-insights-retry.spec.ts, tests/insights-workspace-history.spec.ts, tests/generate-insights-guards.spec.ts (new), src/lib/services/splitstep/request-insights.ts (comment only) — guess

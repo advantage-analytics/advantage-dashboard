@@ -4,6 +4,18 @@ import { expect, test } from "@playwright/test";
 import ts from "typescript";
 
 /**
+ * Distinct per key, so the function's service-role check compares the bearer
+ * against the real key rather than a value every key shares. The PostHog keys
+ * are left unset, which keeps its capture (and its fetch) out of the run.
+ */
+const ENV: Record<string, string> = {
+  SUPABASE_URL: "https://stub.supabase.co",
+  SUPABASE_ANON_KEY: "anon-key",
+  SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+  GEMINI_KEY: "gemini-key",
+};
+
+/**
  * generate-insights retries Gemini's transient refusals. A 503 "high demand"
  * used to end the review for good, since every caller swallows the failure.
  * The edge function runs in a vm with a stubbed client, fetch and clock.
@@ -49,7 +61,7 @@ async function run(statuses: number[]) {
               },
             }
           : { createClient: () => ({ from: () => query }) },
-      Deno: { env: { get: () => "stub" } },
+      Deno: { env: { get: (key: string) => ENV[key] } },
       Response,
       console: { ...console, warn: () => {}, error: () => {} },
       setTimeout: (fn: () => void) => setTimeout(fn, 0),
@@ -67,6 +79,7 @@ async function run(statuses: number[]) {
   const response = await handler(
     new Request("https://example.test", {
       method: "POST",
+      headers: { authorization: `Bearer ${ENV.SUPABASE_SERVICE_ROLE_KEY}` },
       body: JSON.stringify({ matchId: "match" }),
     }),
   );
