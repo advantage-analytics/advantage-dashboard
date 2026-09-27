@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { purgeMatchStorage } from "@/lib/services/matches/purge-match-storage";
+import { releaseStoragePurgeClaims } from "@/lib/services/matches/release-storage-purge-claim";
 import { resolveAnalysisStatus } from "@/lib/data/match-analysis";
 import {
   normalizeMatchPatch,
@@ -323,7 +324,15 @@ export async function DELETE(
     .eq("created_by", user.id);
 
   if (deleteError) {
-    await releasePurgeClaim(matchId);
+    // The 409 refusal above takes no claim (the claim RPC answers false
+    // before its insert), so only this failed-delete branch releases. The id
+    // is the one the `created_by = user.id` lookup already admitted, never a
+    // body field. See `releaseStoragePurgeClaims` for why this matters.
+    await releaseStoragePurgeClaims(
+      createAdminClient(),
+      [matchId],
+      "match delete",
+    );
     return NextResponse.json({ error: deleteError.message }, { status: 500 });
   }
 
@@ -331,38 +340,4 @@ export async function DELETE(
   revalidatePath("/dashboard/matches");
 
   return NextResponse.json({ ok: true });
-}
-
-/**
- * Give back the purge claim of a match whose row delete failed.
- *
- * `purgeMatchStorage` starts by claiming the match in
- * `match_storage_purge_claims` (a service-role RPC), and from then on the
- * admin console refuses every admission of it with
- * `match-deletion-in-progress`. The claim cascades away with the row, so a
- * delete that succeeds needs nothing — but one that fails leaves the row, and
- * the claim, standing for ever: it has no expiry and a retry reuses it. The
- * 409 refusal above takes no claim (the claim RPC answers false before its
- * insert), so only the failed-delete branch releases.
- *
- * Service-role like the claim — the caller has no access to the claim table.
- * The id is the one the `created_by = user.id` lookup already admitted, never
- * a body field. Best-effort: a failure here is logged, and the 500 still
- * reports the delete error rather than this one.
- */
-async function releasePurgeClaim(matchId: string): Promise<void> {
-  try {
-    const { error } = await createAdminClient().rpc(
-      "admin_release_match_storage_purge",
-      { p_match_ids: [matchId] },
-    );
-    if (error) {
-      console.error(
-        "[match delete] could not release the purge claim:",
-        error.message,
-      );
-    }
-  } catch (error) {
-    console.error("[match delete] purge claim release threw:", error);
-  }
 }

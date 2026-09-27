@@ -41,6 +41,7 @@ import {
   sumUsedSeconds,
 } from "@/lib/services/splitstep/quota";
 import { formatResetDate, secondsLeft } from "@/lib/data/usage-format";
+import { SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE } from "@/lib/admin/uploads/types";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import type { Workspace } from "@/lib/workspace/types";
 import type { ProgramApprovalReading } from "@/lib/workspace/upload-eligibility";
@@ -3002,42 +3003,33 @@ export function useUploadMatchWizard({
               body.set(key, String(value));
             const fallbackMessage =
               "Submission was refused. Retry with this same operation after checking the target.";
-            // The route's own 500 body for a thrown import — "Submission
-            // response was interrupted…" — means the file may have already
-            // landed: `submitAdminMatchFile` stores the blob and calls the
-            // RPC before that point. A rejected `fetch()` or a body that
-            // isn't JSON leave the exact same question open. All three read
-            // the durable status via GET with the same ids before deciding
-            // anything, rather than surfacing a network error that a blind
-            // retry would just repeat against an operation that may have
-            // already succeeded.
+            // The route's own 500 body for a thrown import
+            // (SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE) means the file may
+            // have already landed: `submitAdminMatchFile` stores the blob and
+            // calls the RPC before that point. A rejected `fetch()` or a body
+            // that isn't JSON leave the exact same question open. All three
+            // read the durable status via GET with the same ids before
+            // deciding anything, rather than surfacing a network error that a
+            // blind retry would just repeat against an operation that may
+            // have already succeeded.
             let fileResponse: Response | undefined;
-            let needsStatusCheck = false;
+            let fileResult: { ok?: boolean; message?: string } | undefined;
             try {
               fileResponse = await fetch("/api/admin/uploads/file", {
                 method: "POST",
                 body,
               });
+              fileResult = await fileResponse.json();
             } catch {
-              needsStatusCheck = true;
-            }
-            let fileResult: { ok?: boolean; message?: string } | undefined;
-            if (fileResponse) {
-              try {
-                fileResult = await fileResponse.json();
-              } catch {
-                needsStatusCheck = true;
-              }
+              // Resolved by the status check below, which treats a rejected
+              // fetch or an unparseable body the same as a live "interrupted".
             }
             if (
-              fileResponse &&
-              fileResult &&
-              !fileResponse.ok &&
-              fileResult.message ===
-                "Submission response was interrupted. Check this operation before retrying with the same file."
-            )
-              needsStatusCheck = true;
-            if (needsStatusCheck) {
+              !fileResponse ||
+              !fileResult ||
+              (!fileResponse.ok &&
+                fileResult.message === SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE)
+            ) {
               const status = await fetch(
                 `/api/admin/uploads/file?operationId=${encodeURIComponent(identity.operationId)}&itemId=${encodeURIComponent(identity.itemId)}`,
                 { method: "GET" },
@@ -3051,8 +3043,8 @@ export function useUploadMatchWizard({
               }
               throw new Error(fileResult?.message ?? fallbackMessage);
             }
-            if (!fileResponse!.ok || !fileResult!.ok)
-              throw new Error(fileResult!.message ?? fallbackMessage);
+            if (!fileResponse.ok || !fileResult.ok)
+              throw new Error(fileResult.message ?? fallbackMessage);
             setError(null);
             setAdminFileResult(
               fileResult as {

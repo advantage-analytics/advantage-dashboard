@@ -81,6 +81,20 @@ function harness(scenario: {
         }
       },
     },
+    // The shared release helper, forwarding to the same admin-client RPC the
+    // route used to call inline — the effect order this spec asserts on
+    // comes from that RPC mock, not from this wrapper.
+    "@/lib/services/matches/release-storage-purge-claim": {
+      releaseStoragePurgeClaims: async (
+        client: { rpc: (name: string, args: unknown) => Promise<unknown> },
+        matchIds: string[],
+      ) => {
+        if (matchIds.length === 0) return;
+        await client.rpc("admin_release_match_storage_purge", {
+          p_match_ids: matchIds,
+        });
+      },
+    },
   };
   const code = ts.transpileModule(
     readFileSync("src/app/api/matches/[matchId]/route.ts", "utf8"),

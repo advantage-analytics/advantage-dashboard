@@ -114,6 +114,20 @@ function harness(
         }
       },
     },
+    // The shared release helper, forwarding to the same admin-client RPC the
+    // action used to call inline — the "release-purge" effect and `released`
+    // list this spec asserts on come from that RPC mock, not from this wrapper.
+    "@/lib/services/matches/release-storage-purge-claim": {
+      releaseStoragePurgeClaims: async (
+        client: { rpc: (name: string, args: unknown) => Promise<unknown> },
+        matchIds: string[],
+      ) => {
+        if (matchIds.length === 0) return;
+        await client.rpc("admin_release_match_storage_purge", {
+          p_match_ids: matchIds,
+        });
+      },
+    },
     "next/cache": { revalidatePath: () => {} },
     "next/navigation": {
       redirect: () => {

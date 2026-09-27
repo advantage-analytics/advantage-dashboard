@@ -1,3 +1,15 @@
+/**
+ * The admin upload file route's message when its own POST handler throws
+ * after `submitAdminMatchFile` may already have stored the blob and called
+ * its RPC — the file may have already landed. `useUploadMatchWizard`
+ * string-matches this exact sentence to decide whether a failed submit needs
+ * a status check before any retry, so the route and the wizard share it
+ * rather than keeping two copies in sync by hand. No server-only imports
+ * here: the wizard is a client component.
+ */
+export const SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE =
+  "Submission response was interrupted. Check this operation before retrying with the same file.";
+
 /** Durable console provenance; ordinary dashboard writes never create these rows. */
 export type AdminUploadSubmissionKind =
   "file" | "video" | "dual" | "tournament" | "analysis_attachment";

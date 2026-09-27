@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { purgeMatchStorage } from "@/lib/services/matches/purge-match-storage";
+import { releaseStoragePurgeClaims } from "@/lib/services/matches/release-storage-purge-claim";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
@@ -432,22 +433,12 @@ async function releaseDeletionClaims(
     console.error("[account delete] account claim release threw:", error);
   }
 
-  if (purgedMatchIds === null || purgedMatchIds.length === 0) return;
-
-  try {
-    const { error } = await adminClient.rpc(
-      "admin_release_match_storage_purge",
-      { p_match_ids: purgedMatchIds },
-    );
-    if (error) {
-      console.error(
-        "[account delete] could not release the purge claims:",
-        error.message,
-      );
-    }
-  } catch (error) {
-    console.error("[account delete] purge claim release threw:", error);
-  }
+  if (purgedMatchIds === null) return;
+  await releaseStoragePurgeClaims(
+    adminClient,
+    purgedMatchIds,
+    "account delete",
+  );
 }
 
 /** One row per program `release_my_account_from_programs()` touched. */
