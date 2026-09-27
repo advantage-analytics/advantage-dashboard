@@ -3,6 +3,7 @@ import {
   UploadAbortedError,
   uploadFileInBlocks,
 } from "@/lib/services/upload/azure-block-upload";
+import { markJobUploaded } from "@/lib/services/splitstep/mark-job-uploaded";
 import { remuxedJobWindow } from "@/lib/video/trim-plan";
 import {
   TrimCancelledError,
@@ -377,18 +378,22 @@ export async function uploadAndSubmitVideo({
       preparedStorageName = null;
     }
 
-    await supabase
-      .from("processing_jobs")
-      .update({
-        video_object_key: videoObjectKey,
-        status: "uploaded",
-        // Explicitly 100. The throttle above skips the final write — 99→100 is
-        // a 1-point move and the last block rarely takes 60 seconds — so
-        // without this the bar sits at 99 forever.
-        upload_progress_percent: 100,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", jobId);
+    // The terminal write, checked and retried once (`mark-job-uploaded.ts`).
+    // If it still does not land, the row is stuck at `uploading`: submitting
+    // would only earn a 409 from `/api/splitstep/jobs`, and the reaper would
+    // fail it silently 15 minutes from now. So don't submit — throw into the
+    // transfer-failure path below, which marks the job failed and reports it
+    // through `onEvent` / `onTransferFailed` like any other failed upload.
+    const marked = await markJobUploaded(supabase, { jobId, videoObjectKey });
+    if (!marked.ok) {
+      console.error(
+        "Could not mark the job uploaded after a retry:",
+        marked.error,
+      );
+      throw new Error(
+        "Your video reached storage but we couldn't record it, so it must be uploaded again.",
+      );
+    }
 
     onEvent?.({ matchId, kind: "done" });
 
@@ -476,7 +481,9 @@ export async function uploadAndSubmitVideo({
         : { matchId, kind: "failed", error: message },
     );
 
-    await supabase
+    // Best effort: a failed write here leaves the row for
+    // `reap_stalled_uploads()`, which is no worse than before — but say so.
+    const { error: failError } = await supabase
       .from("processing_jobs")
       .update({
         status: "failed",
@@ -484,6 +491,9 @@ export async function uploadAndSubmitVideo({
         updated_at: new Date().toISOString(),
       })
       .eq("id", jobId);
+    if (failError) {
+      console.error("Could not mark the job failed:", failError.message);
+    }
 
     // Fires on a user cancel too. That is what the wizard did before this move
     // and it is preserved deliberately — arguably a cancel should not surface

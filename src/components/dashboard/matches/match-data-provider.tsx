@@ -56,7 +56,6 @@ interface MatchDataContextValue {
       weaknesses?: Array<{ name: string; value: number; description: string }>;
     };
   } | null;
-  playerAverages: Partial<import("@/lib/data/types").PlayerStatistics> | null;
   kpiHistory: MatchKpiHistory | null;
 }
 
@@ -85,7 +84,6 @@ interface MatchDataProviderProps {
       weaknesses?: Array<{ name: string; value: number; description: string }>;
     };
   } | null;
-  playerAverages?: Partial<import("@/lib/data/types").PlayerStatistics> | null;
   kpiHistory?: MatchKpiHistory | null;
   children: React.ReactNode;
 }
@@ -96,7 +94,6 @@ export function MatchDataProvider({
   points,
   keyMoments = [],
   insights = null,
-  playerAverages = null,
   kpiHistory = null,
   children,
 }: MatchDataProviderProps) {
@@ -144,7 +141,6 @@ export function MatchDataProvider({
         setPoints,
         keyMoments,
         insights,
-        playerAverages,
         kpiHistory,
       }}
     >

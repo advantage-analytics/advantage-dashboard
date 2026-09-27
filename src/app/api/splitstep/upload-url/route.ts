@@ -85,9 +85,8 @@ export async function POST(request: NextRequest) {
     },
 
     async loadBillableSeconds(matchId) {
-      // Keyed on match_id like `recordBlobName` below and the wizard's other
-      // writes. A match normally has one row here; if a resubmit has added
-      // more, the newest is the one this upload belongs to.
+      // Keyed on match_id. A match normally has one row here; if a resubmit
+      // has added more, the newest is the one this upload belongs to.
       const { data, error } = await adminClient()
         .from("processing_jobs")
         .select("billable_seconds")
@@ -109,10 +108,17 @@ export async function POST(request: NextRequest) {
     mintUploadSas,
 
     async recordBlobName(matchId, blobName) {
+      // The live job only. `processing_jobs_one_live_per_match`
+      // (20260829184210) allows at most one row per match outside
+      // failed/completed/derivation_failed, so this touches at most one row.
+      // Unfiltered, `.eq("match_id")` also rewrote the `video_object_key` of a
+      // match's finished or failed jobs, pointing them at a blob they never
+      // uploaded.
       const { error } = await adminClient()
         .from("processing_jobs")
         .update({ video_object_key: blobName })
-        .eq("match_id", matchId);
+        .eq("match_id", matchId)
+        .in("status", ["pending", "uploading", "uploaded"]);
       return { error: error?.message ?? null };
     },
   };

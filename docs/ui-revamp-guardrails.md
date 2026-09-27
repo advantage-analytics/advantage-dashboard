@@ -139,6 +139,62 @@ be. Doubles teams and existing users depend on it.
 > `points` or `shots`. Blank captions (`""`) were fixed in the read path
 > instead, not by rewriting rows. This is not a precedent for backfills.
 
+> **A reviewed exception, added 2026-09-26: guards on the frozen paths, from the
+> final-pass codebase review** (`claude/code-review-tools-order-68b9e9`, tasks
+> T9–T11, T13, T15, T18, T21 in its queue). Each is a refusal or a bookkeeping
+> fix, never a change to what a file parses, attributes or computes:
+>
+> - `process-match` (and `generate-insights`, `generate-key-moments`) now verify
+>   the caller — service role, or a user token whose `matches.created_by` is the
+>   match — pin the bucket and object prefix, and refuse a second run for a match
+>   that already has points. The body's `userId` is never read. Parsing,
+>   `is_player1` (still keyed on the Settings "Host Team" cell) and every write
+>   shape are as they were. Not yet deployed — a user step, all three together.
+> - `swingvision-parser.ts` `transformToFormData` no longer swaps
+>   `playerName`/`opponentName` on the blank-Guest fallback: host is always
+>   player1, which is what `process-match` already assumed, so the name and the
+>   statistics agree. The flag, its detection and every other parser path are
+>   untouched; no existing row is touched.
+> - `upload-url/route.ts` `recordBlobName` writes only the match's live job
+>   (`status in pending|uploading|uploaded`); `submit-match-video.ts`'s terminal
+>   `uploaded` write moved into `mark-job-uploaded.ts`, is checked and retried
+>   once, and a failure marks the job failed instead of submitting into a 409.
+>   `upload-url/handler.ts` and `video-url/types.ts` changed doc comments only.
+> - `process-match`'s four writes — `points`, `shots`, `calculate_match_stats`,
+>   `backfill_returns_in_and_net_points` — now run inside one Postgres function,
+>   `import_match_rows` (T18), in one transaction under a per-match advisory
+>   lock: a match has all of them or none, and a concurrent second run is
+>   refused with the pre-check's 409 instead of doubling every statistic. Point
+>   ids are assigned by the edge function (`crypto.randomUUID()`) before the
+>   call rather than returned by the insert. Every row value, the `is_player1`
+>   keying and `calculate_match_stats` itself are unchanged — the RPC calls it,
+>   never edits it — and no existing row is touched. Migration
+>   `supabase/migrations/20260927040947_import_match_rows.sql`, applied live
+>   2026-09-26. The function is still not deployed — the user's step, and the
+>   migration had to land first.
+> - `process-match` also carries the admin console's claim flow (T21), which
+>   the live function — v22, deployed 2026-09-19 from `codex/admin-uploads`, a
+>   branch never merged here — had and this file did not, on top of T9's
+>   guards and T18's RPC. Every call asks `admin_claim_match_file` whether the
+>   match is a console attempt; the answer is null for every other match, so
+>   the SwingVision upload path is unchanged — except that `resolveStoragePath`
+>   now also refuses, on the percent-decoded path, the `_admin-console/`
+>   namespace, a `..` segment and a backslash (a literal `%` in a file name
+>   still resolves). A claimed attempt takes its one
+>   file, its actor and the sha256 from `admin_file_attempts` — the body decides
+>   nothing — hashes the downloaded bytes before parsing and refuses a
+>   mismatch, and settles the attempt through `admin_finish_match_file` after
+>   `import_match_rows`: completed, or failed for review on any other exit. So:
+>   a claim before the writes, a digest check on the bytes, a finish after.
+>   Parsing, `is_player1`, every row value and `calculate_match_stats` are
+>   unchanged and no existing row is touched. Both RPCs are already live
+>   (`schema_migrations` 20260919044716), so nothing was applied; the codex
+>   migrations are cited, not copied. Still not deployed — the user's step.
+>
+> `calculate_match_stats`, `swingvision-validator.ts` and existing match data
+> were not touched. Anything beyond this list on these paths still needs its own
+> entry here.
+
 **These files are the integration, not UI.** Changing them to suit a layout is
 almost always the wrong fix:
 

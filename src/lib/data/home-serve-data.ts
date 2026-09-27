@@ -1,16 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { pickServeShot, pickReturnShot } from "@/lib/data/serve-return-shots";
+import { fetchAllPages } from "@/lib/data/paged-query";
+import { pickServeShot } from "@/lib/data/serve-return-shots";
 import {
   pointToServeDot,
   type ServeDot,
   type ServePointInput,
 } from "@/lib/data/serve-zones";
 type ShotRow = {
+  id: string;
   shot_number: number | null;
   shot_type: string | null;
   landing_x: number | null;
   landing_y: number | null;
-  contact_x: number | null;
   contact_y: number | null;
   spin_type: string | null;
   zone: string | null;
@@ -25,7 +26,6 @@ type ShotRow = {
     point_score: string | null;
     game_score: string | null;
     won_by_player1: boolean | null;
-    rally_length: number | null;
   } | null;
 };
 
@@ -56,23 +56,35 @@ export async function loadHomeServes(
   if (!matches || matches.length === 0) return { dots: [], matchCount: 0 };
   const matchIds = matches.map((m) => m.id);
 
-  // Fetch every shot for these points (not just serves) so each point's
-  // return can be located by role; order by shot_number so "first" is
-  // earliest. Serve preview dots still null-guard downstream.
-  const { data: shotsData, error: shotsError } = await supabase
-    .from("shots")
-    .select(
-      "shot_number, shot_type, landing_x, landing_y, contact_x, contact_y, spin_type, zone, result, point_id, points!inner(id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1, rally_length)",
-    )
-    .in("points.match_id", matchIds)
-    .order("shot_number", { ascending: true });
+  // Serve rows only: `pointToServeDot` reads just the played serve
+  // (`firstShot*`) and a `ServeDot` carries no return, so the rally rows were
+  // dead weight. Paged through the fail-closed helper — four full matches of
+  // serves sit near PostgREST's 1000-row cap, and a truncated read would plot
+  // a partial set that looks complete. The order is total (`id` last) so pages
+  // never overlap or skip; `shot_number` keeps each point's rows earliest
+  // first. `pickServeShot` still guards a point with no serve row downstream.
+  let shotsError: string | null = null;
+  const shots = await fetchAllPages<ShotRow>(async (from, to) => {
+    const { data, error } = await supabase
+      .from("shots")
+      .select(
+        "id, shot_number, shot_type, landing_x, landing_y, contact_y, spin_type, zone, result, point_id, points!inner(id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1)",
+      )
+      .in("points.match_id", matchIds)
+      .in("shot_type", ["First Serve", "Second Serve"])
+      .order("point_id", { ascending: true })
+      .order("shot_number", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to);
+    // The helper stops at the first error, so this is set exactly once.
+    if (error) shotsError = error.message;
+    return { data: data as unknown as ShotRow[] | null, error };
+  });
+  // Fail closed: a page error is an error, never the rows before it.
+  if (!shots) throw new Error(shotsError ?? "Failed to fetch serves");
 
-  if (shotsError) throw new Error(shotsError.message);
-  const shots = (shotsData ?? []) as unknown as ShotRow[];
-
-  // Group every shot by point (query is ordered by shot_number) so the
-  // played serve and the return can be picked by role — see
-  // serve-return-shots.ts.
+  // Group serve rows by point so the played serve (second if there was one)
+  // can be picked by role — see serve-return-shots.ts.
   const shotsByPoint = new Map<string, ShotRow[]>();
   for (const s of shots) {
     if (!s.points) continue;
@@ -86,9 +98,8 @@ export async function loadHomeServes(
     const pt = pointShots[0].points;
     if (!pt) continue;
     const serve = pickServeShot(pointShots);
-    const ret = pickReturnShot(pointShots);
-    // firstShot* = played serve, secondShot* = return. Mirrors the
-    // match-detail mapping in serve-placement-card.tsx.
+    // firstShot* = played serve — the only shot `pointToServeDot` reads.
+    // Mirrors the match-detail mapping in serve-placement-card.tsx.
     const point: ServePointInput = {
       id: pt.id,
       serverIsPlayer1: pt.server_is_player1,
@@ -104,14 +115,6 @@ export async function loadHomeServes(
       setNumber: pt.set_number ?? undefined,
       pointScore: pt.point_score,
       gameScore: pt.game_score,
-      secondShotLandingX: ret?.landing_x ?? null,
-      secondShotLandingY: ret?.landing_y ?? null,
-      secondShotContactX: ret?.contact_x ?? null,
-      secondShotContactY: ret?.contact_y ?? null,
-      secondShotType: ret?.shot_type ?? null,
-      secondShotSpin: ret?.spin_type ?? null,
-      secondShotResult: ret?.result ?? null,
-      rallyLength: pt.rally_length ?? undefined,
     };
     // Only player-1 (the viewer's) serves feed the aggregate — an
     // opponent's placement would answer a different question.

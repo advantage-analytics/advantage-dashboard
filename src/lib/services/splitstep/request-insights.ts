@@ -12,6 +12,15 @@
  * failure is logged and swallowed. The statistics are already published and
  * the job already `completed`; a missing summary must never turn that into a
  * failed analysis.
+ *
+ * Who may call it: `generate-insights` verifies its caller before it reads or
+ * writes anything. The bearer must be the service-role key, or a signed-in
+ * user's session whose id equals the match's `created_by`; no or an invalid
+ * token is answered 401 and anyone else 403. The client passed in here needs
+ * no change for that — the webhook builds it with `createAdminClient()`
+ * (`webhooks/splitstep/route.ts`) and hands it to `deriveAndPublish`, and
+ * `functions.invoke` on that client sends the service-role key as its bearer.
+ * A browser or anon-key client passed here instead would be refused.
  */
 
 const LOG = "[splitstep:insights]";

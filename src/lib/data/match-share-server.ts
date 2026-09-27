@@ -266,6 +266,15 @@ export const getSharedMatchData = cache(
       resolveSharedBy(admin, sharerUserId, link.created_at as string),
     ]);
 
+    // A failed points read is unknown, not zero points: same as every other
+    // failed read here, never draw a report built on it.
+    if (!points) {
+      console.error("[match-share] could not read the shared match's points", {
+        matchId,
+      });
+      return null;
+    }
+
     const profiles = new Map<string, PlayerProfile>();
     for (const profile of profileResult.data ?? []) {
       profiles.set(profile.id, {

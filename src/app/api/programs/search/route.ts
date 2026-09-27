@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { searchPrograms, redactForPlayer } from "@/lib/data/programs-server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 /**
  * Typeahead for the claim flow's program search.
  *

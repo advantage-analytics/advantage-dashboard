@@ -6,7 +6,6 @@ import { analysedWindowSeconds } from "@/lib/data/match-video-choice";
 import {
   getMatchKpiHistory,
   getMatchStatisticsFromSupabase,
-  getPlayerAverageStats,
   type MatchKpiHistory,
 } from "@/lib/data/match-stats-server";
 import { getMyPlayerIds, isMe } from "@/lib/data/player-identity-server";
@@ -355,8 +354,7 @@ async function resolveUploadedBy(
  * drawn over the viewer's whole id set rather than the one id on the row. A
  * claimed athlete's matches sit under two ids — their login on personal
  * uploads, their roster profile on program ones — and a history read from one
- * of them is half a season under a label that says "your avg";
- * `getPlayerAverageStats` averages over the full set for the same reason.
+ * of them is half a season under a label that says "your avg".
  * Anyone else — a coach — is known to this page only by the id on the row.
  */
 async function resolveKpiHistory(
@@ -459,7 +457,6 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   const [
     statsResult,
     points,
-    playerAverages,
     kpiHistory,
     eventId,
     uploadedBy,
@@ -468,15 +465,10 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   ] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId),
     getMatchPointsFromSupabase(matchId),
-    // The averages need to know which ids mean "me" — a coach may have recorded
-    // this athlete's earlier matches against a roster profile they only claimed
-    // later. Chained inside the batch rather than awaited in front of it, so
-    // only this branch waits on the lookup.
-    (async () =>
-      getPlayerAverageStats(user?.id ? await getMyPlayerIds() : [], matchId))(),
-    // The history hangs off the same lookup, one step further: which seat on
-    // the row is "you" — and so whose baseline this is — is decided from the
-    // viewer's ids. Chained for the same reason as the averages.
+    // The history needs to know which ids mean "me" — a coach may have
+    // recorded this athlete's earlier matches against a roster profile they
+    // only claimed later. Chained inside the batch rather than awaited in
+    // front of it, so only this branch waits on the lookup.
     (async () =>
       resolveKpiHistory(
         dbRow,
@@ -528,6 +520,9 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   return {
     match,
     statsResult,
+    // `null` when the points read failed — passed through, never thrown here:
+    // this loader is awaited by the layout first, and a throw from the layout
+    // skips `[matchId]/error.tsx`. `page.tsx` turns it into the error.
     points,
     keyMoments: dbRow.key_moments?.length
       ? dbRow.key_moments
@@ -537,7 +532,6 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     // here would be attributed on screen to Advantage Intelligence
     // (spec 2026-09-15 match report › Decisions 4).
     insights: dbRow.insights ?? null,
-    playerAverages,
     kpiHistory,
   };
 });

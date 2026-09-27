@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { expect, test } from "@playwright/test";
 import ts from "typescript";
+import { GENERATE_INSIGHTS_ENV as ENV } from "./fixtures/edge-function-guard-identities";
 
 /**
  * generate-insights retries Gemini's transient refusals. A 503 "high demand"
@@ -49,7 +50,7 @@ async function run(statuses: number[]) {
               },
             }
           : { createClient: () => ({ from: () => query }) },
-      Deno: { env: { get: () => "stub" } },
+      Deno: { env: { get: (key: string) => ENV[key] } },
       Response,
       console: { ...console, warn: () => {}, error: () => {} },
       setTimeout: (fn: () => void) => setTimeout(fn, 0),
@@ -67,6 +68,7 @@ async function run(statuses: number[]) {
   const response = await handler(
     new Request("https://example.test", {
       method: "POST",
+      headers: { authorization: `Bearer ${ENV.SUPABASE_SERVICE_ROLE_KEY}` },
       body: JSON.stringify({ matchId: "match" }),
     }),
   );

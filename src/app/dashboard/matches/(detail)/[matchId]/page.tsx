@@ -226,6 +226,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const isAwaitingAnalysis =
     isInFlight(analysis.status) || isAnalysisFailed(analysis.status);
 
+  // A failed points read is "no answer", not a match with no points: rendering
+  // on would draw a zero-point report that looks like a real one. Thrown here,
+  // not in the loader or the layout, because `error.tsx` does not wrap this
+  // segment's own layout — this is the throw that reaches its retry surface.
+  // A match still analysing renders no points, so that branch never throws.
+  if (data.points === null && !isAwaitingAnalysis) {
+    throw new Error(`Failed to load points for match ${matchId}`);
+  }
+
   // Fetched only once there's a view switcher to show it in — the
   // awaiting-analysis branch below never renders `ShotsTab`, so a match still
   // analysing skips both queries entirely. Run together: neither depends on

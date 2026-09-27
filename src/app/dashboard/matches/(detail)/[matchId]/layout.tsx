@@ -20,15 +20,7 @@ export default async function MatchLayout({
     notFound();
   }
 
-  const {
-    match,
-    statsResult,
-    points,
-    keyMoments,
-    insights,
-    playerAverages,
-    kpiHistory,
-  } = data;
+  const { match, statsResult, points, keyMoments, insights, kpiHistory } = data;
 
   return (
     // A self-contained fixed-height box, not a `flex-1`/`min-h-0` relay: the
@@ -56,10 +48,11 @@ export default async function MatchLayout({
         key={match.id}
         match={match}
         statsResult={statsResult}
-        points={points}
+        // `null` is a failed points read; `page.tsx` throws on it so the
+        // error boundary replaces the page, and the provider never sees it.
+        points={points ?? []}
         keyMoments={keyMoments}
         insights={insights}
-        playerAverages={playerAverages}
         kpiHistory={kpiHistory}
       >
         <ClearRetryOnSuccess matchId={matchId} />
