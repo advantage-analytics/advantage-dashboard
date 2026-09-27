@@ -13,7 +13,9 @@ Supabase API `http://127.0.0.1:56321`, PostgreSQL port 56322, Azurite port 10000
 and a vendor transport substitute on port 3118. Existing unrelated containers
 were left intact. The local database uses a schema-only export of the linked
 live baseline (no athlete rows), followed by the six Phase 2b migrations and
-`20260917065829_fix_admin_attachment_shot_lookup.sql`. None was applied remotely.
+`20260919045156_fix_admin_attachment_shot_lookup.sql`. None was applied remotely
+during this run; all eight admin-upload migrations were applied live later, on
+2026-09-19 (see Required deployment work).
 
 Setup and restart instructions are in
 `/private/tmp/t19-integration/environment-readme.md`. Private local credentials
@@ -224,27 +226,33 @@ Console provenance is retained: self-service deletion refuses recorded/analyzed
 console matches and accounts with retained submissions. Any future retention or
 support deletion workflow must handle provenance and stored media together.
 
-### Required deployment work — not performed
+### Required deployment work
+
+Status 2026-09-27: step 2 is done. The eight migrations were applied live on
+2026-09-19 under new versions (`20260919044542` through `20260919045221`), and
+the repo files were renamed to carry those live-recorded versions. The rest of
+this list was written before that and is kept as the run left it.
 
 1. Refresh the target project's complete migration ledger and current function
    definitions before applying anything. Historical local filenames do not fully
    match the live ledger; do not run an unreviewed blanket `supabase db push`.
 2. Apply these **eight** new migrations in order, after confirming the correct
    target and compatibility with its current catalog:
-   - `20260917000513_persist_admin_upload_submissions.sql`
-   - `20260917004400_prepare_admin_analysis_attachments.sql`
-   - `20260917010000_submit_admin_match_files.sql`
-   - `20260917011813_submit_admin_match_videos.sql`
-   - `20260917025856_save_admin_dual_results.sql`
-   - `20260917032144_save_admin_tournament_results.sql`
-   - `20260917065829_fix_admin_attachment_shot_lookup.sql`
-   - `20260917072323_guard_admin_match_storage_purge.sql`
+   - `20260919044542_persist_admin_upload_submissions.sql`
+   - `20260919044622_prepare_admin_analysis_attachments.sql`
+   - `20260919044716_submit_admin_match_files.sql`
+   - `20260919044829_submit_admin_match_videos.sql`
+   - `20260919045015_save_admin_dual_results.sql`
+   - `20260919045138_save_admin_tournament_results.sql`
+   - `20260919045156_fix_admin_attachment_shot_lookup.sql`
+   - `20260919045221_guard_admin_match_storage_purge.sql`
 3. Verify table RLS, function ACLs, admission/preservation triggers and both
    deletion claim contracts on that target. The first seven were exercised in
    the disposable T19 schema. The eighth was then applied successfully with
    `ON_ERROR_STOP` to the same full-schema local database,
    `supabase_db_admin-uploads-t19`; `/private/tmp/t20-local-migration.log` records
-   that application. None was applied to the hosted project in this task.
+   that application. None was applied to the hosted project in this task
+   (they were applied live afterwards, on 2026-09-19).
 4. Deploy the changed `supabase/functions/process-match/index.ts` with its shared
    dependencies. Its required `generate-key-moments` function is absent from this
    repository; confirm the deployed dependency and its schema contract. Confirm

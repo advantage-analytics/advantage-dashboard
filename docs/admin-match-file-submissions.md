@@ -16,7 +16,7 @@ While a file attempt is queued/processing, a database trigger protects participa
 
 ## Deployment and verification
 
-Migration `20260917010000_submit_admin_match_files.sql` depends on T2/T5 and is **unapplied**. Live read-only catalog verification during T6 confirmed head `20260916183239`, the current matches/match_files/program_players columns, and the live `calculate_match_stats`, regraft and upload-transition definitions. No live data was mutated.
+Migration `20260919044716_submit_admin_match_files.sql` depends on T2/T5 and was **applied live on 2026-09-19**; the repo file carries its live-recorded version (written as `20260917010000`). Live read-only catalog verification during T6 confirmed head `20260916183239`, the current matches/match_files/program_players columns, and the live `calculate_match_stats`, regraft and upload-transition definitions. No live data was mutated.
 
 Deploy the migration before the updated `process-match` Edge function, and deploy both before exposing the console file endpoint. The Edge boundary now consults the new claim RPC on every request; deploying it without that migration will reject ordinary imports too. Deploying only the route with an old Edge function would omit the claim/hash safeguards and is not supported. No deployment was performed in T6.
 

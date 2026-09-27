@@ -1,7 +1,8 @@
 # Admin video submission contract (T7)
 
-The implementation is source-only. Apply T2, T5, T6 and
-`20260917011813_submit_admin_match_videos.sql` before deploying these routes.
+T2, T5, T6 and `20260919044829_submit_admin_match_videos.sql` were applied live
+on 2026-09-19; the repo files carry their live-recorded versions. Any other
+target database needs them before these routes are deployed.
 The existing dashboard video endpoints now consult this migration on every
 request; a missing migration deliberately fails closed.
 
