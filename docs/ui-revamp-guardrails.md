@@ -141,8 +141,8 @@ be. Doubles teams and existing users depend on it.
 
 > **A reviewed exception, added 2026-09-26: guards on the frozen paths, from the
 > final-pass codebase review** (`claude/code-review-tools-order-68b9e9`, tasks
-> T9–T11, T13, T15, T18 in its queue). Each is a refusal or a bookkeeping fix,
-> never a change to what a file parses, attributes or computes:
+> T9–T11, T13, T15, T18, T21 in its queue). Each is a refusal or a bookkeeping
+> fix, never a change to what a file parses, attributes or computes:
 >
 > - `process-match` (and `generate-insights`, `generate-key-moments`) now verify
 >   the caller — service role, or a user token whose `matches.created_by` is the
@@ -172,6 +172,21 @@ be. Doubles teams and existing users depend on it.
 >   `supabase/migrations/20260927040947_import_match_rows.sql`, applied live
 >   2026-09-26. The function is still not deployed — the user's step, and the
 >   migration had to land first.
+> - `process-match` also carries the admin console's claim flow (T21), which
+>   the live function — v22, deployed 2026-09-19 from `codex/admin-uploads`, a
+>   branch never merged here — had and this file did not, on top of T9's
+>   guards and T18's RPC. Every call asks `admin_claim_match_file` whether the
+>   match is a console attempt; the answer is null for every other match, so
+>   the SwingVision upload path is unchanged. A claimed attempt takes its one
+>   file, its actor and the sha256 from `admin_file_attempts` — the body decides
+>   nothing — hashes the downloaded bytes before parsing and refuses a
+>   mismatch, and settles the attempt through `admin_finish_match_file` after
+>   `import_match_rows`: completed, or failed for review on any other exit. So:
+>   a claim before the writes, a digest check on the bytes, a finish after.
+>   Parsing, `is_player1`, every row value and `calculate_match_stats` are
+>   unchanged and no existing row is touched. Both RPCs are already live
+>   (`schema_migrations` 20260919044716), so nothing was applied; the codex
+>   migrations are cited, not copied. Still not deployed — the user's step.
 >
 > `calculate_match_stats`, `swingvision-validator.ts` and existing match data
 > were not touched. Anything beyond this list on these paths still needs its own

@@ -12,8 +12,11 @@ This Edge Function processes uploaded SwingVision match files and persists struc
 Upload Flow:
 1. Frontend uploads .xlsx file to Supabase Storage
 2. `/api/upload` calls process-match with the user's session (functions.invoke)
-3. Edge Function verifies the caller, that they uploaded the match, that every
-   file sits under their own storage folder, and that the match has no points yet
+3. Edge Function verifies the caller, then asks `admin_claim_match_file`
+   whether the match is an admin-console attempt (null for every other match
+   — see [Admin console path](#admin-console-path)), and checks that the
+   caller uploaded the match, that every file sits under their own storage
+   folder, and that the match has no points yet
 4. Downloads each file from the `match-data` bucket, parses Excel sheets
 5. Builds the point and shot rows — each point gets its id here, so the shots
    can reference their points before anything is written — and calls ONE RPC,
@@ -40,6 +43,96 @@ The `match_stats` calculation is handled by a **Postgres function** (called by `
 - SQL is optimized for COUNT/AVG operations
 - Can be called independently for recalculation (e.g., after video QA edits)
 
+## Admin console path
+
+The admin console (`/admin/uploads`) submits SwingVision files on athletes'
+behalf. It validates the workbook itself, stores it at
+`_admin-console/<operation>/<item>/<sha256>.xlsx` in `match-data`, records the
+attempt through `admin_submit_match_file` — a `match_files` row plus an
+`admin_file_attempts` row carrying the validated `request` (`storagePath`,
+`sha256`) in state `queued` — and then invokes this function **with the
+service-role bearer**, fire-and-forget, with
+`{ matchId, userId, fileNames: [storagePath], sourceProvider }`. It never
+reads the HTTP response: it polls `admin_file_attempts.state` / `error_code`,
+and `error_code` is shown raw in the upload history, so the strings below are
+a contract.
+
+**The claim runs on every call.** After the caller is verified and the body
+checked, and before anything is read, the function calls
+`admin_claim_match_file(p_match_id, p_actor_id, p_service)` —
+`p_service = true` for the service-role bearer, `p_actor_id` the verified
+user id or null. Three answers:
+
+- `null` — not a console match. The request continues exactly as documented
+  above; nothing about the upload path changes.
+- `{ claimed: false, state, operationId, itemId }` — a console attempt that is
+  not `queued`: already `processing`, `completed` or `failed`. The function
+  answers `{ success: state === "completed", state, operationId, itemId }`
+  with **200** (or **409** when `state` is `failed`) and reads nothing — a
+  repeated or duplicated invoke cannot process a match twice.
+- the attempt row plus `{ claimed: true, actorId }` — this run owns it (the
+  RPC moved it to `processing` under the row's lock and minted
+  `claim_token`). From here the claim is the sole source of the file
+  (`match-data/<request.storagePath>`), the actor (`actorId`, the admin who
+  submitted — `matches.created_by` is not consulted, and a console attachment
+  to an existing match may carry none) and the expected digest
+  (`request.sha256`). The body's `fileNames`, `userId`, `bucketId` and
+  `sourceProvider` decide nothing for a claimed attempt.
+
+A user bearer that is not the submitting admin makes the claim raise
+`admin-required` (42501), answered **403**; any other claim error is a
+**500**. Both come before any table read.
+
+For a claimed attempt the downloaded bytes are hashed
+(`crypto.subtle.digest("SHA-256")`) before a cell is parsed; a digest other
+than `request.sha256` throws `Validated file bytes changed; review required.`
+No per-file error is skipped for a claimed file — the attempt has one file and
+no fallback.
+
+**Outcomes** go to `admin_finish_match_file(p_match_id, p_claim_token, p_error)`,
+which updates only a `processing` row holding that token (anything else raises
+`invalid-file-claim`, 22023):
+
+- after `import_match_rows` and the chained invokes succeed:
+  `p_error: null` → state `completed`. Its own error is thrown — the caller
+  sees a 500 and the attempt is then marked failed as below, rather than left
+  `processing` with a fully processed match behind it.
+- on every other exit after the claim — the points pre-check 409, a `matches`
+  read failure, the digest mismatch, `import_match_rows`'s 23505 (still a 409
+  with the pre-check's body) and any other error — `p_error:
+"processing-failed-review-required"` → state `failed`, called exactly once
+  before the response. That call's own error is only logged; the response
+  stays the one the failure earned.
+
+A request with no claim never calls `admin_finish_match_file`.
+
+Since `import_match_rows` (T18) a failed console attempt persists **no** rows
+— the transaction rolled back — unless the failure came after the RPC
+returned, i.e. in a chained `generate-key-moments` / `generate-insights`
+invoke or in the finish call itself; then the rows are committed and the
+attempt still reads `failed`. The console's "may have saved partial analysis"
+wording predates T18 and describes the four-statement writes it replaced.
+
+The `_admin-console/` namespace is refused for **every non-claim call**: a
+`fileNames` entry containing `_admin-console`, `%` or `\` is a 400 with no
+download (`_admin-console/op/item/x.xlsx`, `%5fadmin-console/…`,
+`<userId>/%2e%2e/x.xlsx`, `folder\x.xlsx`). The
+`admin_file_storage_namespace` policy on `storage.objects` keeps user tokens
+out of that prefix, but it binds `authenticated`/`anon` only — not the
+service role this function downloads with — which is why the refusal lives
+here too.
+
+The two RPCs, `admin_file_attempts` and the storage policy come from
+`codex/admin-uploads`'s
+`supabase/migrations/20260917010000_submit_admin_match_files.sql`, live as
+`schema_migrations` version `20260919044716` (the branch's eight admin
+migrations are live as `20260919044542`–`20260919045221`). That branch was
+never merged; its migration files are cited here, not copied into
+`supabase/migrations/`, because a copy under a new version number would be
+re-applied by `db push`. Both RPCs are `security definer`, executable by
+`service_role` only — the function's own client — so a user token cannot
+claim or finish an attempt directly.
+
 ## Deployment
 
 Deploying is a separate, user-run step — no task, gate or agent deploys this
@@ -54,6 +147,14 @@ function is whatever was deployed last, not what this directory contains.
 
 The `import_match_rows` RPC this function calls must already be live in the
 database before the function is deployed — see [Recovery](#recovery).
+
+As of 2026-09-26 nothing needs applying first: `import_match_rows`
+(`20260927040947`) and the admin-console RPCs (`admin_claim_match_file`,
+`admin_finish_match_file`, `20260919044716`) are all live. The live function
+is v22, deployed 2026-09-19 from `codex/admin-uploads`, which has the claim
+flow but still writes `points`, `shots` and `match_stats` in four separate
+statements; deploying this file keeps the console's processing path and
+retires those four-statement writes for the single RPC.
 
 ## Recovery
 
@@ -129,7 +230,11 @@ through, but `auth.getUser` rejects it and the function answers 401.
 - Every `fileNames` entry must resolve under the user's own folder: a full
   path must start with `<userId>/` and contain no empty, `.` or `..` segment;
   a bare file name resolves to `<userId>/<fileName>`. One entry outside that
-  folder refuses the whole request before any file is downloaded.
+  folder refuses the whole request before any file is downloaded. An entry
+  containing `_admin-console`, `%` or `\` is refused the same way — that
+  namespace is reachable only through a claim (see
+  [Admin console path](#admin-console-path)), for which the body's
+  `fileNames` is not read at all.
 
 **Note:** Only `source_provider: "swing-vision"` is currently supported. Other providers will return an error.
 
@@ -152,13 +257,17 @@ Error:
 }
 ```
 
-| Status | Meaning                                                                                                                                                                                                                                                                            |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | Missing `matchId`/`fileNames`, an unsupported provider, or a file outside the user's folder                                                                                                                                                                                        |
-| 401    | No bearer, or a bearer that is neither a user's access token nor the service role key                                                                                                                                                                                              |
-| 403    | The user is not the match's uploader (or, for the service role, the match has no uploader)                                                                                                                                                                                         |
-| 409    | The match already has `points` rows — the pre-check, or `import_match_rows`'s own refusal when a concurrent run landed first — it has been processed and will not be run again                                                                                                     |
-| 500    | The match could not be read, or `import_match_rows` failed — nothing was persisted. A failure in the chained `generate-key-moments`/`generate-insights` invoke after the RPC is also a 500, but the rows are already committed and a retry answers 409 (see [Recovery](#recovery)) |
+| Status | Meaning                                                                                                                                                                                                                                                                                                                                                               |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | Missing `matchId`/`fileNames`, an unsupported provider, a file outside the user's folder, or one naming the `_admin-console/` namespace (`_admin-console`, `%` or `\`)                                                                                                                                                                                                |
+| 401    | No bearer, or a bearer that is neither a user's access token nor the service role key                                                                                                                                                                                                                                                                                 |
+| 403    | The user is not the match's uploader (or, for the service role, the match has no uploader); or, on a console match, a user token that is not the admin who submitted it                                                                                                                                                                                               |
+| 409    | The match already has `points` rows — the pre-check, or `import_match_rows`'s own refusal when a concurrent run landed first — it has been processed and will not be run again; or a console attempt already in state `failed` (body `{ success: false, state, operationId, itemId }`)                                                                                |
+| 500    | The match could not be read, the claim RPC failed, a claimed file's bytes no longer match its validated sha256, or `import_match_rows` failed — nothing was persisted. A failure in the chained `generate-key-moments`/`generate-insights` invoke after the RPC is also a 500, but the rows are already committed and a retry answers 409 (see [Recovery](#recovery)) |
+
+A console attempt that is already `processing` or `completed` answers 200 with
+`{ success: state === "completed", state, operationId, itemId }` and reads
+nothing — see [Admin console path](#admin-console-path).
 
 ## Usage from Frontend
 

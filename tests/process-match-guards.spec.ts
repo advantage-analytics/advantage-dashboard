@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { expect, test } from "@playwright/test";
@@ -23,8 +24,23 @@ import {
  * lands points, shots and match_stats in a single transaction. With a real
  * workbook handed to the stubbed bucket the same harness observes that call:
  * its arguments, the ids the function assigned, and how its errors map.
+ *
+ * Before any of that, every call asks `admin_claim_match_file` whether the
+ * match is an admin-console attempt. The harness answers that rpc from the
+ * `claim` option (null: an ordinary match), `import_match_rows` from
+ * `rpcError` and `admin_finish_match_file` from `finishError`, and records
+ * every rpc's name and arguments so a claimed run's file, digest and
+ * settlement can be asserted.
  */
 const OWN_FILE = `${OWNER}/swing-vision/${MATCH}/match.xlsx`;
+
+/** A console attempt's identifiers, as `admin_file_attempts` carries them. */
+const OPERATION = "44444444-4444-4444-8444-444444444444";
+const ITEM = "55555555-5555-4555-8555-555555555555";
+const CLAIM_TOKEN = "66666666-6666-4666-8666-666666666666";
+const consoleFile = (sha256: string) =>
+  `_admin-console/${OPERATION}/${ITEM}/${sha256}.xlsx`;
+const REVIEW_REQUIRED = "processing-failed-review-required";
 
 // Transpiled once — the source never changes between tests, only the vm
 // context each `invoke()` call runs it in.
@@ -180,6 +196,19 @@ async function buildWorkbook(): Promise<Buffer<ArrayBuffer>> {
 
 type RpcCall = { name: string; args: Record<string, unknown> };
 type RpcError = { code: string; message: string };
+/**
+ * What the live `admin_claim_match_file` answers for a console match: the
+ * attempt's state when it is not `queued`, or — `to_jsonb(row)` plus
+ * `claimed`/`actorId` — the row this run now owns.
+ */
+type Claim =
+  | { claimed: false; state: string; operationId: string; itemId: string }
+  | {
+      claimed: true;
+      claim_token: string;
+      actorId: string;
+      request: { storagePath: string; sha256: string };
+    };
 
 async function invoke({
   bearer,
@@ -187,7 +216,10 @@ async function invoke({
   existingPoints = [],
   createdBy = OWNER,
   workbook,
+  claim = null,
+  claimError = null,
   rpcError = null,
+  finishError = null,
 }: {
   bearer?: string;
   body: Record<string, unknown>;
@@ -195,8 +227,14 @@ async function invoke({
   createdBy?: string | null;
   /** The .xlsx every download answers with; without it the bucket is empty. */
   workbook?: Buffer<ArrayBuffer>;
-  /** What every rpc() answers; null is success. */
+  /** What `admin_claim_match_file` answers; null is "not a console match". */
+  claim?: Claim | null;
+  /** An error from `admin_claim_match_file` instead of an answer. */
+  claimError?: RpcError | null;
+  /** What `import_match_rows` answers; null is success. */
   rpcError?: RpcError | null;
+  /** What `admin_finish_match_file` answers; null is success. */
+  finishError?: RpcError | null;
 }) {
   let handler!: (request: Request) => Promise<Response>;
   const events: string[] = [];
@@ -266,6 +304,12 @@ async function invoke({
     rpc: async (name: string, args: Record<string, unknown>) => {
       events.push(`rpc:${name}`);
       rpcCalls.push({ name, args });
+      if (name === "admin_claim_match_file") {
+        return { data: claimError ? null : claim, error: claimError };
+      }
+      if (name === "admin_finish_match_file") {
+        return { data: null, error: finishError };
+      }
       return { data: null, error: rpcError };
     },
   });
@@ -305,8 +349,14 @@ async function invoke({
       body: JSON.stringify(body),
     }),
   );
-  const json = (await response.json()) as { success: boolean; error?: string };
-  return { status: response.status, json, events, rpcCalls };
+  const json = (await response.json()) as {
+    success: boolean;
+    error?: string;
+    [key: string]: unknown;
+  };
+  const argsOf = (name: string) =>
+    rpcCalls.filter((call) => call.name === name).map((call) => call.args);
+  return { status: response.status, json, events, rpcCalls, argsOf };
 }
 
 test("no bearer is answered 401 before anything is read", async () => {
@@ -335,7 +385,11 @@ test("a signed-in user who is not the uploader is answered 403", async () => {
   });
   expect(status).toBe(403);
   expect(json.success).toBe(false);
-  expect(events).toEqual(["getUser:anon", "read:matches"]);
+  expect(events).toEqual([
+    "getUser:anon",
+    "rpc:admin_claim_match_file",
+    "read:matches",
+  ]);
 });
 
 test("a file outside the caller's folder is answered 400 with no download", async () => {
@@ -350,7 +404,11 @@ test("a file outside the caller's folder is answered 400 with no download", asyn
     });
     expect(status, fileNames.join()).toBe(400);
     expect(json.success).toBe(false);
-    expect(events).toEqual(["getUser:anon", "read:matches"]);
+    expect(events).toEqual([
+      "getUser:anon",
+      "rpc:admin_claim_match_file",
+      "read:matches",
+    ]);
   }
 });
 
@@ -365,7 +423,12 @@ test("a match that already has points is answered 409 and nothing runs", async (
     success: false,
     error: "This match has already been processed",
   });
-  expect(events).toEqual(["getUser:anon", "read:matches", "read:points"]);
+  expect(events).toEqual([
+    "getUser:anon",
+    "rpc:admin_claim_match_file",
+    "read:matches",
+    "read:points",
+  ]);
 });
 
 test("the service role with in-folder paths clears every guard", async () => {
@@ -379,6 +442,7 @@ test("the service role with in-folder paths clears every guard", async () => {
     },
   });
   expect(events).toEqual([
+    "rpc:admin_claim_match_file",
     "read:matches",
     "read:points",
     `download:match-data/${OWN_FILE}`,
@@ -390,15 +454,20 @@ test("the service role with in-folder paths clears every guard", async () => {
 });
 
 test("the uploader's own token clears every guard", async () => {
-  const { events } = await invoke({
+  const { events, argsOf } = await invoke({
     bearer: "owner-token",
     body: { matchId: MATCH, fileNames: [OWN_FILE] },
   });
   expect(events).toEqual([
     "getUser:anon",
+    "rpc:admin_claim_match_file",
     "read:matches",
     "read:points",
     `download:match-data/${OWN_FILE}`,
+  ]);
+  // The claim carries the verified user, never the body's.
+  expect(argsOf("admin_claim_match_file")).toEqual([
+    { p_match_id: MATCH, p_actor_id: OWNER, p_service: false },
   ]);
 });
 
@@ -409,11 +478,11 @@ test("the service role cannot process a match with no uploader", async () => {
     createdBy: null,
   });
   expect(status).toBe(403);
-  expect(events).toEqual(["read:matches"]);
+  expect(events).toEqual(["rpc:admin_claim_match_file", "read:matches"]);
 });
 
 test("a real export lands points, shots and stats through one RPC, then the invokes", async () => {
-  const { status, json, events, rpcCalls } = await invoke({
+  const { status, json, events, argsOf } = await invoke({
     bearer: SERVICE_ROLE_KEY,
     body: { matchId: MATCH, fileNames: [OWN_FILE] },
     workbook: await exportWorkbook(),
@@ -421,6 +490,7 @@ test("a real export lands points, shots and stats through one RPC, then the invo
   expect(status).toBe(200);
   expect(json).toEqual({ success: true });
   expect(events).toEqual([
+    "rpc:admin_claim_match_file",
     "read:matches",
     "read:points",
     `download:match-data/${OWN_FILE}`,
@@ -429,12 +499,16 @@ test("a real export lands points, shots and stats through one RPC, then the invo
     "invoke:generate-insights",
   ]);
   // No table insert and no separate stats rpc: the function itself writes
-  // nothing — the one rpc is the whole write path.
+  // nothing — the one rpc past the (read-only-for-this-match) claim is the
+  // whole write path.
   expect(
     events.filter((e) => e.startsWith("insert:") || e.startsWith("rpc:")),
-  ).toEqual(["rpc:import_match_rows"]);
+  ).toEqual(["rpc:admin_claim_match_file", "rpc:import_match_rows"]);
+  expect(argsOf("admin_claim_match_file")).toEqual([
+    { p_match_id: MATCH, p_actor_id: null, p_service: true },
+  ]);
 
-  const [{ args }] = rpcCalls;
+  const [args] = argsOf("import_match_rows");
   expect(args.p_match_id).toBe(MATCH);
   const points = args.p_points as Record<string, unknown>[];
   const shots = args.p_shots as Record<string, unknown>[];
@@ -483,6 +557,7 @@ test("the RPC's unique_violation is answered 409 with the pre-check's body and n
     error: "This match has already been processed",
   });
   expect(events).toEqual([
+    "rpc:admin_claim_match_file",
     "read:matches",
     "read:points",
     `download:match-data/${OWN_FILE}`,
@@ -506,9 +581,280 @@ test("any other RPC error is a 500 and nothing is invoked", async () => {
     error: "canceling statement due to statement timeout",
   });
   expect(events).toEqual([
+    "rpc:admin_claim_match_file",
     "read:matches",
     "read:points",
     `download:match-data/${OWN_FILE}`,
     "rpc:import_match_rows",
   ]);
+});
+
+// ---------------------------------------------------------------------------
+// The admin console's claim flow
+// ---------------------------------------------------------------------------
+
+/** A taken claim over the given bytes, as the console records them. */
+function claimOver(
+  workbook: Buffer,
+  sha256?: string,
+): Extract<Claim, { claimed: true }> {
+  const digest = sha256 ?? createHash("sha256").update(workbook).digest("hex");
+  return {
+    claimed: true,
+    claim_token: CLAIM_TOKEN,
+    actorId: OWNER,
+    request: { storagePath: consoleFile(digest), sha256: digest },
+  };
+}
+
+/** What the console sends: the service-role bearer and its own field set. */
+function consoleBody(storagePath: string) {
+  return {
+    matchId: MATCH,
+    userId: OWNER,
+    fileNames: [storagePath],
+    sourceProvider: "swing-vision",
+  };
+}
+
+test("a claimed console attempt is read from the claim, not the body, and finished completed", async () => {
+  const workbook = await exportWorkbook();
+  const claim = claimOver(workbook);
+  const { storagePath } = claim.request;
+  // created_by is null — a console attachment to an existing match may carry
+  // none — and the service role alone would be refused (see the case above);
+  // the claim's actor is the identity.
+  const { status, json, events, argsOf } = await invoke({
+    bearer: SERVICE_ROLE_KEY,
+    body: consoleBody(storagePath),
+    createdBy: null,
+    workbook,
+    claim,
+  });
+  expect(status).toBe(200);
+  expect(json).toEqual({ success: true });
+  expect(events).toEqual([
+    "rpc:admin_claim_match_file",
+    "read:matches",
+    "read:points",
+    `download:match-data/${storagePath}`,
+    "rpc:import_match_rows",
+    "invoke:generate-key-moments",
+    "invoke:generate-insights",
+    "rpc:admin_finish_match_file",
+  ]);
+  expect(argsOf("admin_finish_match_file")).toEqual([
+    { p_match_id: MATCH, p_claim_token: CLAIM_TOKEN, p_error: null },
+  ]);
+  // The rows themselves are the ordinary ones: same keys, same keying.
+  const [args] = argsOf("import_match_rows");
+  expect(args.p_match_id).toBe(MATCH);
+  expect(args.p_points as unknown[]).toHaveLength(2);
+  expect(
+    (args.p_shots as Record<string, unknown>[]).map((s) => s.is_player1),
+  ).toEqual([true, true, false, true]);
+});
+
+test("a console attempt that is not queued answers its state and reads nothing", async () => {
+  for (const [state, status] of [
+    ["processing", 200],
+    ["completed", 200],
+    ["failed", 409],
+  ] as const) {
+    const {
+      status: got,
+      json,
+      events,
+    } = await invoke({
+      bearer: SERVICE_ROLE_KEY,
+      body: consoleBody(consoleFile("0".repeat(64))),
+      createdBy: null,
+      claim: { claimed: false, state, operationId: OPERATION, itemId: ITEM },
+    });
+    expect(got, state).toBe(status);
+    expect(json, state).toEqual({
+      success: state === "completed",
+      state,
+      operationId: OPERATION,
+      itemId: ITEM,
+    });
+    expect(events, state).toEqual(["rpc:admin_claim_match_file"]);
+  }
+});
+
+test("a claimed file whose bytes no longer hash to the validated sha256 fails the attempt before parsing", async () => {
+  const workbook = await exportWorkbook();
+  const claim = claimOver(workbook, "0".repeat(64));
+  const { storagePath } = claim.request;
+  const expected = {
+    status: 500,
+    json: {
+      success: false,
+      error: "Validated file bytes changed; review required.",
+    },
+    events: [
+      "rpc:admin_claim_match_file",
+      "read:matches",
+      "read:points",
+      `download:match-data/${storagePath}`,
+      "rpc:admin_finish_match_file",
+    ],
+    finish: [
+      {
+        p_match_id: MATCH,
+        p_claim_token: CLAIM_TOKEN,
+        p_error: REVIEW_REQUIRED,
+      },
+    ],
+  };
+  const run = await invoke({
+    bearer: SERVICE_ROLE_KEY,
+    body: consoleBody(storagePath),
+    createdBy: null,
+    workbook,
+    claim,
+  });
+  expect(run.status).toBe(expected.status);
+  expect(run.json).toEqual(expected.json);
+  expect(run.events).toEqual(expected.events);
+  expect(run.argsOf("admin_finish_match_file")).toEqual(expected.finish);
+
+  // The finish call's own error is logged, never the answer.
+  const logged = await invoke({
+    bearer: SERVICE_ROLE_KEY,
+    body: consoleBody(storagePath),
+    createdBy: null,
+    workbook,
+    claim,
+    finishError: { code: "22023", message: "invalid-file-claim" },
+  });
+  expect(logged.status).toBe(expected.status);
+  expect(logged.json).toEqual(expected.json);
+  expect(logged.events).toEqual(expected.events);
+  expect(logged.argsOf("admin_finish_match_file")).toEqual(expected.finish);
+});
+
+test("a claimed attempt on a match with points, or refused by the RPC, is a 409 that fails the attempt", async () => {
+  const workbook = await exportWorkbook();
+  const claim = claimOver(workbook);
+  const { storagePath } = claim.request;
+  const body = {
+    success: false,
+    error: "This match has already been processed",
+  };
+  const finish = [
+    { p_match_id: MATCH, p_claim_token: CLAIM_TOKEN, p_error: REVIEW_REQUIRED },
+  ];
+
+  // The pre-check: nothing is downloaded.
+  const preCheck = await invoke({
+    bearer: SERVICE_ROLE_KEY,
+    body: consoleBody(storagePath),
+    createdBy: null,
+    workbook,
+    claim,
+    existingPoints: [{ id: "existing-point" }],
+  });
+  expect(preCheck.status).toBe(409);
+  expect(preCheck.json).toEqual(body);
+  expect(preCheck.events).toEqual([
+    "rpc:admin_claim_match_file",
+    "read:matches",
+    "read:points",
+    "rpc:admin_finish_match_file",
+  ]);
+  expect(preCheck.argsOf("admin_finish_match_file")).toEqual(finish);
+
+  // import_match_rows's unique_violation: nothing is invoked.
+  const rpc = await invoke({
+    bearer: SERVICE_ROLE_KEY,
+    body: consoleBody(storagePath),
+    createdBy: null,
+    workbook,
+    claim,
+    rpcError: { code: "23505", message: "match already has points" },
+  });
+  expect(rpc.status).toBe(409);
+  expect(rpc.json).toEqual(body);
+  expect(rpc.events).toEqual([
+    "rpc:admin_claim_match_file",
+    "read:matches",
+    "read:points",
+    `download:match-data/${storagePath}`,
+    "rpc:import_match_rows",
+    "rpc:admin_finish_match_file",
+  ]);
+  expect(rpc.argsOf("admin_finish_match_file")).toEqual(finish);
+});
+
+test("a completed-finish error is thrown, and the attempt is then failed for review", async () => {
+  const workbook = await exportWorkbook();
+  const claim = claimOver(workbook);
+  const { status, json, events, argsOf } = await invoke({
+    bearer: SERVICE_ROLE_KEY,
+    body: consoleBody(claim.request.storagePath),
+    createdBy: null,
+    workbook,
+    claim,
+    finishError: { code: "57014", message: "statement timeout" },
+  });
+  // The rows are committed by now; the caller learns the settlement failed,
+  // and the attempt reads `failed` (with a full match behind it) rather than
+  // staying `processing` with nothing to poll for.
+  expect(status).toBe(500);
+  expect(json).toEqual({ success: false, error: "statement timeout" });
+  expect(events.slice(-3)).toEqual([
+    "invoke:generate-insights",
+    "rpc:admin_finish_match_file",
+    "rpc:admin_finish_match_file",
+  ]);
+  expect(argsOf("admin_finish_match_file")).toEqual([
+    { p_match_id: MATCH, p_claim_token: CLAIM_TOKEN, p_error: null },
+    { p_match_id: MATCH, p_claim_token: CLAIM_TOKEN, p_error: REVIEW_REQUIRED },
+  ]);
+});
+
+test("a user token the claim refuses is answered 403 before any table read", async () => {
+  const { status, json, events } = await invoke({
+    bearer: "owner-token",
+    body: { matchId: MATCH, fileNames: [OWN_FILE] },
+    claimError: { code: "42501", message: "admin-required" },
+  });
+  expect(status).toBe(403);
+  expect(json.success).toBe(false);
+  expect(events).toEqual(["getUser:anon", "rpc:admin_claim_match_file"]);
+
+  // Any other claim failure is the database's, not the caller's.
+  const other = await invoke({
+    bearer: "owner-token",
+    body: { matchId: MATCH, fileNames: [OWN_FILE] },
+    claimError: { code: "PGRST202", message: "function not found" },
+  });
+  expect(other.status).toBe(500);
+  expect(other.json).toEqual({
+    success: false,
+    error: "Failed to claim the match file: function not found",
+  });
+  expect(other.events).toEqual(["getUser:anon", "rpc:admin_claim_match_file"]);
+});
+
+test("the console namespace and its escaped aliases are refused for every non-claim call", async () => {
+  for (const fileName of [
+    "_admin-console/op/item/x.xlsx",
+    "%5fadmin-console/op/item/x.xlsx",
+    `${OWNER}/%2e%2e/x.xlsx`,
+    "folder\\x.xlsx",
+  ]) {
+    const { status, json, events } = await invoke({
+      bearer: "owner-token",
+      body: { matchId: MATCH, fileNames: [fileName] },
+    });
+    expect(status, fileName).toBe(400);
+    expect(json.success, fileName).toBe(false);
+    expect(events, fileName).toEqual([
+      "getUser:anon",
+      "rpc:admin_claim_match_file",
+      "read:matches",
+    ]);
+  }
 });

@@ -269,7 +269,7 @@ ready).
 
 ## T21 · process-match: carry live v22's admin-console claim flow onto T9's guards and T18's import RPC
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/functions/process-match/index.ts, tests/process-match-guards.spec.ts, supabase/functions/process-match/README.md, docs/ui-revamp-guardrails.md (§2, the 2026-09-26 blockquote) — guess
 - **done when:**
