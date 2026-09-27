@@ -13,7 +13,14 @@ const ACTOR = id(9);
 function harness({
   authorized = true,
   consoleCreated = true,
+  // Independent of consoleCreated: the console creates matches for videos and
+  // files alike, and attaches both to a coach's match.
+  kind = (consoleCreated ? "video" : "file") as "video" | "file",
+  // What the RPC hands back for the abandoned file's object; null is what a
+  // video abandon and a complete return.
+  storagePath = null as string | null,
   purgeThrows = false,
+  removeFails = false,
   rpcError = null as string | null,
 } = {}) {
   const effects: string[] = [];
@@ -28,17 +35,28 @@ function harness({
       return {
         data: {
           mode: args.p_mode,
-          kind: consoleCreated ? "video" : "file",
+          kind,
           operationId: args.p_operation_id,
           itemId: args.p_item_id,
           programId: id(3),
           matchId: id(5),
-          jobId: consoleCreated ? id(6) : null,
-          fileId: consoleCreated ? null : id(7),
+          jobId: kind === "video" ? id(6) : null,
+          fileId: kind === "file" ? id(7) : null,
+          storagePath,
           consoleCreated,
         },
         error: null,
       };
+    },
+    storage: {
+      from: (bucket: string) => ({
+        remove: async (paths: string[]) => {
+          effects.push(`remove:${bucket}:${paths.join(",")}`);
+          return removeFails
+            ? { data: null, error: { message: "Object not found" } }
+            : { data: paths.map((name) => ({ name })), error: null };
+        },
+      }),
     },
     from: (table: string) => {
       const filters: { column: string; value: unknown }[] = [];
@@ -165,6 +183,87 @@ test("rpc refusal codes become operator messages with no follow-up effects", asy
   expect(result).toMatchObject({ ok: false });
   if (!result.ok) expect(result.message).toContain("reservation");
   expect(h.effects).toEqual(["rpc"]);
+});
+
+// ─── The abandoned file's object (T29) ──────────────────────────────────────
+
+const XLSX = `_admin-console/${id(1)}/${id(2)}/${"a".repeat(64)}.xlsx`;
+
+test("a console-created file abandon removes the .xlsx, then purges and deletes the match", async () => {
+  const h = harness({ kind: "file", storagePath: XLSX });
+  expect(
+    await reconcileAdminSubmission(input("abandon"), h.deps),
+  ).toMatchObject({
+    ok: true,
+    kind: "file",
+    matchDeleted: true,
+    matchId: id(5),
+  });
+  // The remove comes straight after the RPC: the purge reads match_files by
+  // match id and the RPC has just deleted that row, so it would miss the object.
+  expect(h.effects).toEqual([
+    "rpc",
+    `remove:match-data:${XLSX}`,
+    `purge:${id(5)}:console abandon`,
+    "delete:matches",
+  ]);
+});
+
+test("an attachment file abandon removes the .xlsx and keeps the coach's match", async () => {
+  const h = harness({ consoleCreated: false, kind: "file", storagePath: XLSX });
+  expect(
+    await reconcileAdminSubmission(input("abandon"), h.deps),
+  ).toMatchObject({ ok: true, kind: "file", matchDeleted: false });
+  expect(h.effects).toEqual(["rpc", `remove:match-data:${XLSX}`]);
+});
+
+test("a video abandon, a file complete and a null path never touch storage", async () => {
+  // The guards are the kind, the mode and the path itself: a stray path on a
+  // video or on a complete is ignored, as is a file abandon with no path.
+  const video = harness({ kind: "video", storagePath: XLSX });
+  await reconcileAdminSubmission(input("abandon"), video.deps);
+  expect(video.effects).toEqual([
+    "rpc",
+    `purge:${id(5)}:console abandon`,
+    "delete:matches",
+  ]);
+  const complete = harness({ kind: "file", storagePath: XLSX });
+  expect(
+    await reconcileAdminSubmission(input("complete"), complete.deps),
+  ).toMatchObject({ ok: true, mode: "complete" });
+  expect(complete.effects).toEqual(["rpc"]);
+  const pathless = harness({ kind: "file" });
+  await reconcileAdminSubmission(input("abandon"), pathless.deps);
+  expect(pathless.effects).toEqual([
+    "rpc",
+    `purge:${id(5)}:console abandon`,
+    "delete:matches",
+  ]);
+});
+
+test("a failed remove is logged and changes nothing about the reconcile", async () => {
+  const logged: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  try {
+    const h = harness({ kind: "file", storagePath: XLSX, removeFails: true });
+    expect(
+      await reconcileAdminSubmission(input("abandon"), h.deps),
+    ).toMatchObject({ ok: true, matchDeleted: true });
+    expect(h.effects).toEqual([
+      "rpc",
+      `remove:match-data:${XLSX}`,
+      `purge:${id(5)}:console abandon`,
+      "delete:matches",
+    ]);
+  } finally {
+    console.error = original;
+  }
+  expect(logged).toHaveLength(1);
+  expect(String(logged[0][0])).toContain("[console abandon]");
+  expect(String(logged[0][0])).toContain(XLSX);
 });
 
 // ─── Resume and abandon pending dual/tournament results (T25) ───────────────

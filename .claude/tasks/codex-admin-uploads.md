@@ -407,7 +407,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T29 · Return the abandoned file's storage path from admin_reconcile_submission_item and remove the .xlsx after an abandon
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** Best guesses: new `supabase/migrations/<live-version>_reconcile_returns_file_storage_path.sql`; `tests/database/fixtures/admin-video-harness.mjs` (append the new file after `20260927084958_…`); `tests/database/admin-reconcile.test.mjs`; `src/lib/services/programs/admin-reconciliation.ts` (~95–147); `tests/admin-reconciliation.spec.ts` (harness + cases); `docs/admin-uploads-contracts.md` (the T21 paragraph, line 77); `docs/admin-match-file-submissions.md` (line 11 paragraph).
 - **done when:**

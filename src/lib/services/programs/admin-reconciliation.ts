@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdmin } from "./admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { purgeMatchStorage } from "@/lib/services/matches/purge-match-storage";
+import { MATCH_DATA_BUCKET } from "@/lib/services/upload/storage.service";
 import { UUID_RE } from "@/lib/admin/validation";
 import { createClient } from "@/lib/supabase/server";
 import { submitAdminDualResults } from "./admin-dual-submission";
@@ -69,12 +70,20 @@ const REFUSALS: Record<string, string> = {
  * Administrator reconciliation of a stuck console attempt (T22).
  *
  * The RPC does every database write in one transaction and names the session
- * actor in its audit row. When it abandons an item whose match the console
- * itself created (`consoleCreated`), that match now has no console reference
- * and is ordinary storage to clear: purge its objects, then delete the row.
- * The purge comes first and a throw stops before the delete — the RPC's
- * reversion stays, and the match is left as an ordinary manual match rather
- * than a row whose storage was never cleared.
+ * actor in its audit row. When it abandons a file attempt it deletes the
+ * `match_files` row — the only other record of the `.xlsx`'s path — and hands
+ * the path back as `storagePath`, so the object is removed here, right after
+ * the RPC and before any purge (which reads `match_files` by match id and so
+ * cannot find it, and which an attachment abandon never runs). That removal
+ * is best-effort, like the purge's own lanes: nothing references the object
+ * once the RPC commits, the path is kept under `result->'abandoned'` for a
+ * retry by hand, and a storage failure must not fail a reconcile that already
+ * committed. When the abandoned item's match was the console's own
+ * (`consoleCreated`), that match now has no console reference and is ordinary
+ * storage to clear: purge its objects, then delete the row. The purge comes
+ * first and a throw stops before the delete — the RPC's reversion stays, and
+ * the match is left as an ordinary manual match rather than a row whose
+ * storage was never cleared.
  */
 export async function reconcileAdminSubmission(
   input: { operationId: unknown; itemId: unknown; mode: unknown },
@@ -110,8 +119,29 @@ export async function reconcileAdminSubmission(
     kind: "video" | "file";
     programId: string;
     matchId: string | null;
+    /** The abandoned `match_files.storage_path`; non-null only on a file abandon. */
+    storagePath: string | null;
     consoleCreated: boolean;
   };
+  if (
+    mode === "abandon" &&
+    result.kind === "file" &&
+    typeof result.storagePath === "string" &&
+    result.storagePath.length > 0
+  ) {
+    try {
+      const { error: removeError } = await admin.storage
+        .from(MATCH_DATA_BUCKET)
+        .remove([result.storagePath]);
+      if (removeError)
+        console.error(
+          `[console abandon] could not remove ${result.storagePath} from ${MATCH_DATA_BUCKET}:`,
+          removeError.message,
+        );
+    } catch (e) {
+      console.error("[console abandon] file removal threw:", e);
+    }
+  }
   let matchDeleted = false;
   if (mode === "abandon" && result.consoleCreated === true && result.matchId) {
     try {

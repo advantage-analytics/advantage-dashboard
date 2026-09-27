@@ -132,6 +132,7 @@ test("reconciliation abandons stuck console attempts and completes orphaned file
       matchId: id(20),
       jobId: attached.job_id,
       fileId: null,
+      storagePath: null,
       consoleCreated: false,
     });
     await role(null, "owner");
@@ -302,6 +303,7 @@ test("reconciliation abandons stuck console attempts and completes orphaned file
       matchId: file.match_id,
       jobId: null,
       fileId: file.file_id,
+      storagePath: null,
       consoleCreated: true,
     });
     await role(null, "owner");
@@ -351,6 +353,9 @@ test("reconciliation abandons stuck console attempts and completes orphaned file
       matchId: second.match_id,
       jobId: null,
       fileId: second.file_id,
+      // Read before the match_files delete erased it: the caller's only way
+      // to the object, and null for the video abandon and the complete above.
+      storagePath: fileRequest(700).storagePath,
       consoleCreated: true,
     });
     await role(null, "owner");
@@ -375,6 +380,10 @@ test("reconciliation abandons stuck console attempts and completes orphaned file
     assert.equal(secondItem.audit_id, null);
     assert.equal(secondItem.match_file_id, null);
     assert.equal(secondItem.result.abandoned.fileId, second.file_id);
+    assert.equal(
+      secondItem.result.abandoned.storagePath,
+      fileRequest(700).storagePath,
+    );
     assert.equal((await lastAudit()).details.match_file_id, second.file_id);
 
     // Schedule results are not this RPC's business.

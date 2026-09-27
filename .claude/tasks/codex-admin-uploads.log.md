@@ -254,3 +254,14 @@ The eight admin-upload migrations the entries above call unapplied were applied 
 1. Eyes-on in a browser for the dialog open/confirm/refusal paths — Radix portals render nothing offline, so only typecheck covers them.
 2. The task text cited `TeamHeaderActions` as the error-line shape, but that renders 11px absolute text; T28 used the criterion's explicit 12px in-flow line.
 3. T22 follow-up 4 (loader cannot see `quota-held`) still open.
+
+## T29 · Return the abandoned file's storage path from admin_reconcile_submission_item and remove the .xlsx after an abandon — done
+
+**gate:** mechanical PASS · completion pass
+
+**changed:** `create or replace` of `admin_reconcile_submission_item` (T21's body verbatim, confirmed by md5 of the live source, plus `v_storage_path`): a file abandon reads `match_files.storage_path` before the row is deleted and returns it as `storagePath` (also under `result->'abandoned'`). Applied live via the Supabase MCP; file renamed to recorded version 20260927213505. `reconcileAdminSubmission` removes that object from `match-data` with the service-role client right after the RPC and before any purge, for console-created and attachment abandons alike, best-effort and logged under `[console abandon]`. PGlite test updated (test:database 24/24); four new effect-order cases in `tests/admin-reconciliation.spec.ts`; two docs updated. `purge-match-storage.ts` untouched.
+
+**follow-ups:**
+
+1. The orphan sweep (`scripts/orphan-attribution.ts` `MATCH_DATA_LAYOUTS`) does not know the `_admin-console/{op}/{item}/{sha}.xlsx` layout; a failed remove leaves the path only under `result->'abandoned'` for a hand retry.
+2. No dedicated spec for a thrown (vs returned-error) `remove`.
