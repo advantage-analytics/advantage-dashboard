@@ -26,9 +26,6 @@ export const metadata: Metadata = {
   title: "Advantage Analytics",
   description:
     "The world's first centralized hub for tennis analytics. Built for the modern athlete.",
-  icons: {
-    icon: "/favicon.ico",
-  },
   openGraph: {
     title: "Advantage Analytics",
     description:
