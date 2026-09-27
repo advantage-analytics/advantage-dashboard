@@ -6,8 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getImportProviderStrategy } from "@/lib/services/upload/providers";
 import { getParser } from "@/lib/services/upload/parsers";
 import { validateSwingVisionFile } from "@/lib/services/upload/validators/swingvision-validator";
-
-const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+import { UUID_RE as uuid, FINGERPRINT_RE } from "@/lib/admin/validation";
 const refusals: Record<string, string> = {
   "player-mismatch":
     "The file's players do not match the recorded players or selected roster athlete. Choose the matching file; recorded players were not changed.",
@@ -75,7 +74,7 @@ export async function submitAdminMatchFile(
     (matchId &&
       (!uuid.test(matchId) ||
         !fingerprint ||
-        !/^[a-f0-9]{32}$/.test(fingerprint))) ||
+        !FINGERPRINT_RE.test(fingerprint))) ||
     (!matchId &&
       (!playerId ||
         !uuid.test(playerId) ||

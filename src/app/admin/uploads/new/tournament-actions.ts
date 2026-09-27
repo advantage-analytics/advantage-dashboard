@@ -40,10 +40,13 @@ export async function loadAdminTournamentAction(
   const actor = await requireAdmin();
   if (!actor)
     return { ok: false, message: "Administrator access is required." };
-  const target = await getAdminUploadContext(programId);
+  // Neither read depends on the other; only the results are cross-checked.
+  const [target, snapshot] = await Promise.all([
+    getAdminUploadContext(programId),
+    getAdminTournamentResultContext(programId, eventId),
+  ]);
   if (!target.ok || target.context.actorId !== actor.id)
     return { ok: false, message: "This program is unavailable." };
-  const snapshot = await getAdminTournamentResultContext(programId, eventId);
   if (!snapshot.ok) return snapshot;
   try {
     const data = snapshot.context as {

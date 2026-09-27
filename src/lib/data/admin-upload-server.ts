@@ -15,6 +15,8 @@ import {
   type OwnProfileRow,
 } from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import type { RosterFullRow, RosterPlayerOption } from "./roster-shared";
+import { readAllPages } from "./admin-range-read";
+import { UUID_RE } from "@/lib/admin/validation";
 
 /** Server-only through the server/admin imports, enforced by client-bundle-boundary.spec.ts. */
 export interface AdminUploadContext {
@@ -73,24 +75,6 @@ interface UserRow {
   class: string | null;
 }
 
-/** Read every page: PostgREST caps each response, including service reads. */
-async function readAll<T>(query: {
-  range: (
-    from: number,
-    to: number,
-  ) => PromiseLike<{ data: T[] | null; error: unknown }>;
-}): Promise<T[]> {
-  const rows: T[] = [];
-  const pageSize = 500;
-  for (let offset = 0; ; offset += pageSize) {
-    const result = await query.range(offset, offset + pageSize - 1);
-    if (result.error) throw new Error("context read failed");
-    const page = result.data ?? [];
-    rows.push(...page);
-    if (page.length < pageSize) return rows;
-  }
-}
-
 /**
  * Mirrors E1's program_roster_full player and safety arms, plus the existing
  * eligibleRosterOptions own-profile exception. Archived non-merged profiles
@@ -103,7 +87,7 @@ async function readRoster(
   actorId: string,
 ) {
   const [profilesResult, membersResult] = await Promise.all([
-    readAll(
+    readAllPages(
       admin
         .from("program_players")
         .select(
@@ -112,13 +96,15 @@ async function readRoster(
         .eq("program_id", programId)
         .is("merged_into_id", null)
         .order("id"),
+      "context read failed",
     ),
-    readAll(
+    readAllPages(
       admin
         .from("program_members")
         .select("user_id, role, ladder_position")
         .eq("program_id", programId)
         .order("user_id"),
+      "context read failed",
     ),
   ]);
   const profiles = profilesResult as Profile[];
@@ -131,19 +117,25 @@ async function readRoster(
       ].filter((id): id is string => Boolean(id)),
     ),
   ];
-  const userRows: UserRow[] = [];
   // Bound the URL as well as the response when a large roster has login IDs.
-  for (let offset = 0; offset < ids.length; offset += 200) {
-    userRows.push(
-      ...(await readAll<UserRow>(
-        admin
-          .from("users")
-          .select("id, first_name, last_name, email, class")
-          .in("id", ids.slice(offset, offset + 200))
-          .order("id"),
-      )),
-    );
-  }
+  // Each chunk is independent, so every chunk's page-through runs concurrently.
+  const idChunks: string[][] = [];
+  for (let offset = 0; offset < ids.length; offset += 200)
+    idChunks.push(ids.slice(offset, offset + 200));
+  const userRows = (
+    await Promise.all(
+      idChunks.map((chunk) =>
+        readAllPages<UserRow>(
+          admin
+            .from("users")
+            .select("id, first_name, last_name, email, class")
+            .in("id", chunk)
+            .order("id"),
+          "context read failed",
+        ),
+      ),
+    )
+  ).flat();
   const users = new Map(userRows.map((u) => [u.id, u]));
   const seats = new Map(members.map((m) => [m.user_id, m]));
   const rows: RosterFullRow[] = profiles
@@ -227,11 +219,7 @@ export const getAdminUploadContext = cache(
         reason: "admin-required",
         message: "Administrator access is required.",
       };
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        programId,
-      )
-    ) {
+    if (!UUID_RE.test(programId)) {
       return {
         ok: false,
         reason: "invalid-program-id",
@@ -283,7 +271,7 @@ export const getAdminUploadContext = cache(
       const billingMonth = currentBillingMonth(deps.now());
       const [roster, usage] = await Promise.all([
         readRoster(admin, programId, actor.id),
-        readAll(
+        readAllPages(
           admin
             .from("processing_usage")
             .select("actual_seconds, reserved_seconds")
@@ -292,6 +280,7 @@ export const getAdminUploadContext = cache(
             .eq("billing_month", billingMonth)
             .eq("released", false)
             .order("id"),
+          "context read failed",
         ),
       ]);
       const usedSeconds = usage.reduce(

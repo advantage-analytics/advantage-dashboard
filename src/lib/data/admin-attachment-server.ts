@@ -4,6 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { prepareAdminAnalysisAttachment } from "@/lib/services/programs/admin-analysis-attachment";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
 
+// NOT sourced from `@/lib/admin/validation`: this file's spec
+// (admin-attachment-entry.spec.ts) transpiles it in isolation against a fixed
+// module allowlist, so a new runtime import throws there. Keep this local.
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export interface AdminAttachmentOption {
   id: string;
@@ -62,24 +65,30 @@ export async function listAdminAttachmentTargets(programId: string) {
       message: "We couldn’t load recorded results. Try again.",
     };
   const client = await createClient();
+  const expected = [
+    "program-inactive",
+    "match-not-found",
+    "wrong-program",
+    "processing-in-flight",
+    "existing-analysis",
+    "match-ineligible",
+    "athlete-ineligible",
+    "entry-ineligible",
+  ];
+  // Every row's preview is an independent read, so they run concurrently
+  // instead of one round trip at a time for up to 100 matches.
+  const previews = await Promise.all(
+    (query.data ?? []).map((row) =>
+      // The authenticated RPC applies every current roster/event/analysis guard.
+      client.rpc("admin_get_analysis_attachment", {
+        p_program_id: programId,
+        p_match_id: row.id,
+      }),
+    ),
+  );
   const options: AdminAttachmentOption[] = [];
-  for (const row of query.data ?? []) {
-    // The authenticated RPC applies every current roster/event/analysis guard.
-    const preview = await client.rpc("admin_get_analysis_attachment", {
-      p_program_id: programId,
-      p_match_id: row.id,
-    });
+  for (const preview of previews) {
     if (preview.error) {
-      const expected = [
-        "program-inactive",
-        "match-not-found",
-        "wrong-program",
-        "processing-in-flight",
-        "existing-analysis",
-        "match-ineligible",
-        "athlete-ineligible",
-        "entry-ineligible",
-      ];
       if (expected.includes(preview.error.message)) continue;
       return {
         ok: false as const,

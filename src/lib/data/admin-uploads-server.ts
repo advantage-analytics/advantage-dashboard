@@ -11,6 +11,8 @@ import type {
   AdminUploadHistoryState,
 } from "@/lib/admin/uploads/history";
 import { resolveAnalysisStatus, withStatsPublished } from "./match-analysis";
+import { readAllPages } from "./admin-range-read";
+import { UUID_RE } from "@/lib/admin/validation";
 
 interface Dependencies {
   requireAdmin: typeof requireAdmin;
@@ -22,7 +24,6 @@ const defaults: Dependencies = {
   createClient,
   createAdminClient,
 };
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Keep PostgreSQL microseconds: Date.toISOString() would lose the pagination boundary.
 const TIMESTAMP =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -36,7 +37,7 @@ function decodeCursor(cursor: string): { date: string; id: string } | null {
       !TIMESTAMP.test(value.date) ||
       !Number.isFinite(Date.parse(value.date)) ||
       typeof value.id !== "string" ||
-      !UUID.test(value.id)
+      !UUID_RE.test(value.id)
     )
       return null;
     return { date: value.date, id: value.id };
@@ -49,20 +50,6 @@ function cursorFor(row: DbAdminUploadSubmission) {
     JSON.stringify({ v: 1, date: row.created_at, id: row.operation_id }),
   ).toString("base64url");
 }
-async function all<T>(query: {
-  range: (
-    from: number,
-    to: number,
-  ) => PromiseLike<{ data: T[] | null; error: unknown }>;
-}): Promise<T[]> {
-  const rows: T[] = [];
-  for (let offset = 0; ; offset += 500) {
-    const result = await query.range(offset, offset + 499);
-    if (result.error || !result.data) throw new Error("history read failed");
-    rows.push(...result.data);
-    if (result.data.length < 500) return rows;
-  }
-}
 async function byIds<T>(
   client: SupabaseClient,
   table: string,
@@ -72,20 +59,24 @@ async function byIds<T>(
   order = "id",
 ): Promise<T[]> {
   const unique = [...new Set(ids)];
-  const rows: T[] = [];
-  for (let offset = 0; offset < unique.length; offset += 100) {
-    rows.push(
-      ...(await all<T>(
+  // Each id-chunk is an independent query, so every chunk resolves concurrently.
+  const chunks: string[][] = [];
+  for (let offset = 0; offset < unique.length; offset += 100)
+    chunks.push(unique.slice(offset, offset + 100));
+  const pages = await Promise.all(
+    chunks.map((chunk) =>
+      readAllPages<T>(
         client
           .from(table)
           .select(columns)
-          .in(key, unique.slice(offset, offset + 100))
+          .in(key, chunk)
           .order(order)
           .returns<T[]>(),
-      )),
-    );
-  }
-  return rows;
+        "history read failed",
+      ),
+    ),
+  );
+  return pages.flat();
 }
 interface Match {
   id: string;

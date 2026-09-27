@@ -6,6 +6,14 @@ import {
   validateLineup,
   DUAL_SLOTS,
 } from "@/lib/schedule/lineup-validation";
+import {
+  UUID_RE,
+  FINGERPRINT_RE,
+  isObject as object,
+  hasOnlyKeys as keys,
+  isNonEmptyText as text,
+  isValidDateString,
+} from "@/lib/admin/validation";
 import type {
   AdminDualSubmissionInput,
   AdminDualSubmissionResult,
@@ -13,15 +21,7 @@ import type {
 } from "@/lib/admin/results/types";
 
 const defaults = { requireAdmin, createAdminClient, getAdminUploadContext };
-const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function object(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
-function keys(value: Record<string, unknown>, allowed: string[]) {
-  return Object.keys(value).every((key) => allowed.includes(key));
-}
-const text = (v: unknown) =>
-  typeof v === "string" && v.trim().length > 0 && v.length <= 200;
+const uuid = UUID_RE;
 const strings = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every(text);
 const games = (v: unknown): v is number[] =>
@@ -105,7 +105,7 @@ export function validateAdminDualSubmission(value: unknown): string | null {
   if (event.kind === "existing")
     return keys(event, ["kind", "eventId", "fingerprint"]) &&
       uuid.test(String(event.eventId)) &&
-      /^[a-f0-9]{32}$/.test(String(event.fingerprint))
+      FINGERPRINT_RE.test(String(event.fingerprint))
       ? null
       : "Reload the existing dual before submitting its results.";
   if (
@@ -131,10 +131,7 @@ export function validateAdminDualSubmission(value: unknown): string | null {
     ]) ||
     !text(d.opponent) ||
     !(d.opponentProgramKey === null || text(d.opponentProgramKey)) ||
-    typeof d.date !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(d.date) ||
-    !Number.isFinite(Date.parse(d.date)) ||
-    new Date(d.date).toISOString().slice(0, 10) !== d.date ||
+    !isValidDateString(d.date) ||
     !(
       d.startsAtTime === null ||
       (typeof d.startsAtTime === "string" &&

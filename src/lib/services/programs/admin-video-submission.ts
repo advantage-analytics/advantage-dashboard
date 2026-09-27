@@ -3,8 +3,7 @@ import { requireAdmin } from "./admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAdminUploadContext } from "@/lib/data/admin-upload-server";
 import { buildSplitStepJobRequest } from "@/lib/services/splitstep/job-request";
-
-const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+import { UUID_RE as uuid, FINGERPRINT_RE } from "@/lib/admin/validation";
 const defaults = { requireAdmin, createAdminClient, getAdminUploadContext };
 
 /** Stable operation identity and vendor answers, never an actor or workspace role. */
@@ -49,7 +48,7 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
     (body.matchId != null && !matchId) ||
     (matchId &&
       (typeof body.fingerprint !== "string" ||
-        !/^[a-f0-9]{32}$/.test(body.fingerprint))) ||
+        !FINGERPRINT_RE.test(body.fingerprint))) ||
     ["initialTopPlayerIsPlayer1", "adScoring", "fixedCamera"].some(
       (key) => typeof body[key] !== "boolean",
     ) ||

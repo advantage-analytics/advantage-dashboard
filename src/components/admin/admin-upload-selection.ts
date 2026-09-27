@@ -1,3 +1,5 @@
+import { UUID_RE } from "@/lib/admin/validation";
+
 export const ADMIN_UPLOAD_KINDS = [
   "file",
   "video",
@@ -18,12 +20,7 @@ export function adminUploadSelection(params: { team?: Param; kind?: Param }) {
   return {
     team,
     kind,
-    invalidTeam:
-      params.team !== undefined &&
-      (!team ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          team,
-        )),
+    invalidTeam: params.team !== undefined && (!team || !UUID_RE.test(team)),
     invalidKind: params.kind !== undefined && kind === null,
   };
 }

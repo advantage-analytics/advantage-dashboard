@@ -3,27 +3,19 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAdminUploadContext } from "@/lib/data/admin-upload-server";
 import { validateAdminLineResult } from "./admin-dual-submission";
 import { ROUND_ORDER } from "@/lib/schedule/format";
+import {
+  isUuid as uuid,
+  isObject as object,
+  hasOnlyKeys as keys,
+  isNonEmptyText as text,
+  isFingerprint as fingerprint,
+  isValidDateString as date,
+} from "@/lib/admin/validation";
 import type {
   AdminTournamentSubmissionInput,
   AdminTournamentSubmissionResult,
 } from "@/lib/admin/results/types";
 const defaults = { requireAdmin, createAdminClient, getAdminUploadContext };
-const uuid = (v: unknown): v is string =>
-  typeof v === "string" &&
-  /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(v);
-const object = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
-const keys = (v: Record<string, unknown>, allowed: string[]) =>
-  Object.keys(v).every((k) => allowed.includes(k));
-const text = (v: unknown) =>
-  typeof v === "string" && v.trim().length > 0 && v.length <= 200;
-const fingerprint = (v: unknown) =>
-  typeof v === "string" && /^[a-f0-9]{32}$/.test(v);
-const date = (v: unknown) =>
-  typeof v === "string" &&
-  /^\d{4}-\d{2}-\d{2}$/.test(v) &&
-  Number.isFinite(Date.parse(v)) &&
-  new Date(v).toISOString().slice(0, 10) === v;
 export function validateAdminTournamentSubmission(v: unknown): string | null {
   if (
     !object(v) ||

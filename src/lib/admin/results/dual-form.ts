@@ -5,6 +5,7 @@ import {
 } from "@/lib/schedule/lineup-validation";
 import type { EventFormat } from "@/lib/schedule/types";
 import { planSave, type ScoreFormState } from "@/lib/schedule/score-seed";
+import { isValidDateString } from "@/lib/admin/validation";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
 import type {
   CreateDualInput,
@@ -180,11 +181,7 @@ export function validateDualDraft(
   const errors: Record<string, string> = {};
   if (!existing) {
     if (!dual.opponent.trim()) errors.event = "Name the opposing team.";
-    if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(dual.date) ||
-      !Number.isFinite(Date.parse(dual.date)) ||
-      new Date(dual.date).toISOString().slice(0, 10) !== dual.date
-    )
+    if (!isValidDateString(dual.date))
       errors.event = "Choose a valid event date and opposing team.";
     for (const error of [
       ...validateLineup(drafts.map((d) => d.line)),

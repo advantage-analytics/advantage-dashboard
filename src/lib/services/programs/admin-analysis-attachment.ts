@@ -1,8 +1,10 @@
 import { requireAdmin } from "./admin-guard";
 import { createClient } from "@/lib/supabase/server";
+import {
+  UUID_RE as uuid,
+  FINGERPRINT_RE as token,
+} from "@/lib/admin/validation";
 
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const token = /^[0-9a-f]{32}$/;
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
