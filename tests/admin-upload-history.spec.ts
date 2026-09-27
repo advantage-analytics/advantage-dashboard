@@ -496,3 +496,23 @@ test("reconcile flags follow the linked job or file attempt", async () => {
     "abandoned",
   );
 });
+
+test("pending dual and tournament rows carry resume only for their own actor", async () => {
+  const h = harness();
+  h.add(1, "dual", "pending"); // the viewer's own pending dual
+  h.add(2, "tournament", "pending"); // another administrator's pending tournament
+  h.tables.admin_upload_submissions[1].actor_user_id = id(902);
+  h.tables.users.push({ id: id(902), first_name: "Other", last_name: "Admin" });
+  h.add(3, "dual"); // fully saved
+  h.add(4, "video", "pending"); // pending, but not a result kind
+  const result = await getAdminUploadHistory({}, h.deps);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const actions = new Map(
+    result.rows.map((r) => [r.operationId, r.pendingActions]),
+  );
+  expect(actions.get(id(1))).toEqual({ resume: true, abandon: true });
+  expect(actions.get(id(2))).toEqual({ resume: false, abandon: true });
+  expect(actions.get(id(3))).toEqual({ resume: false, abandon: false });
+  expect(actions.get(id(4))).toEqual({ resume: false, abandon: false });
+});

@@ -32,6 +32,12 @@ export interface AdminUploadHistoryRow {
   eventId: string | null;
   state: AdminUploadHistoryState;
   counts: { saved: number; failed: number; pending: number; unknown: number };
+  /**
+   * Row-level controls for a dual or tournament with pending items (T25).
+   * `resume` only for the operation's own actor — `admin_prepare_*` replays
+   * for nobody else — `abandon` for any administrator. Both false otherwise.
+   */
+  pendingActions: { resume: boolean; abandon: boolean };
   items: AdminUploadHistoryItem[];
 }
 export type AdminUploadHistoryResult =

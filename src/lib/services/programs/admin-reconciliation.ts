@@ -3,6 +3,13 @@ import { requireAdmin } from "./admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { purgeMatchStorage } from "@/lib/services/matches/purge-match-storage";
 import { UUID_RE } from "@/lib/admin/validation";
+import { createClient } from "@/lib/supabase/server";
+import { submitAdminDualResults } from "./admin-dual-submission";
+import { submitAdminTournamentResult } from "./admin-tournament-submission";
+import type {
+  AdminDualSubmissionResult,
+  AdminTournamentSubmissionResult,
+} from "@/lib/admin/results/types";
 
 export type AdminReconcileMode = "abandon" | "complete";
 export type AdminReconcileResult =
@@ -136,5 +143,161 @@ export async function reconcileAdminSubmission(
     kind: result.kind,
     matchId: result.matchId,
     matchDeleted,
+  };
+}
+
+// ─── Dual and tournament result operations (T25) ────────────────────────────
+
+interface ResultDependencies {
+  requireAdmin: () => Promise<{ id: string } | null>;
+  /** Session client: the provenance and batch tables have admin SELECT RLS only. */
+  createClient: () => Promise<SupabaseClient>;
+  createAdminClient: () => SupabaseClient;
+  submitAdminDualResults: (
+    input: unknown,
+  ) => Promise<AdminDualSubmissionResult>;
+  submitAdminTournamentResult: (
+    input: unknown,
+  ) => Promise<AdminTournamentSubmissionResult>;
+}
+const resultDefaults: ResultDependencies = {
+  requireAdmin,
+  createClient,
+  createAdminClient,
+  submitAdminDualResults: (input) => submitAdminDualResults(input),
+  submitAdminTournamentResult: (input) => submitAdminTournamentResult(input),
+};
+
+export type AdminResumeResult =
+  | { ok: true; kind: "dual"; result: AdminDualSubmissionResult & { ok: true } }
+  | {
+      ok: true;
+      kind: "tournament";
+      result: AdminTournamentSubmissionResult & { ok: true };
+    }
+  | { ok: false; message: string };
+
+/**
+ * Resume a dual or tournament submission whose browser closed between prepare
+ * and the last apply.
+ *
+ * The request is the one `admin_prepare_*` froze in `admin_dual_batches` /
+ * `admin_tournament_batches` — read through the session client, whose admin
+ * SELECT RLS is the only grant those tables have — and it is handed to the
+ * submit service unmodified, so the prepare RPC's replay equality check sees
+ * exactly what it stored. Nothing but the operation id is taken from the
+ * caller. Only the operation's own actor may resume: `admin_prepare_*`
+ * refuses anyone else with `operation-unavailable`, so the refusal is made
+ * here first, before any submit call.
+ */
+export async function resumeAdminResults(
+  operationId: unknown,
+  deps: ResultDependencies = resultDefaults,
+): Promise<AdminResumeResult> {
+  const actor = await deps.requireAdmin();
+  if (!actor)
+    return { ok: false, message: "Administrator access is required." };
+  if (typeof operationId !== "string" || !UUID_RE.test(operationId))
+    return { ok: false, message: "Invalid resume request." };
+  const id = operationId.toLowerCase();
+  const session = await deps.createClient();
+  const submission = await session
+    .from("admin_upload_submissions")
+    .select("operation_id, actor_user_id, kind")
+    .eq("operation_id", id)
+    .maybeSingle();
+  if (submission.error)
+    return {
+      ok: false,
+      message: "We couldn't load this submission. Try again.",
+    };
+  const row = submission.data as {
+    actor_user_id: string | null;
+    kind: string;
+  } | null;
+  if (!row) return { ok: false, message: "This submission no longer exists." };
+  if (row.kind !== "dual" && row.kind !== "tournament")
+    return {
+      ok: false,
+      message: "Only dual and tournament results can be resumed.",
+    };
+  if (row.actor_user_id !== actor.id)
+    return {
+      ok: false,
+      message:
+        "Only the administrator who started this submission can resume it. Abandon its pending results instead.",
+    };
+  const batch = await session
+    .from(
+      row.kind === "dual" ? "admin_dual_batches" : "admin_tournament_batches",
+    )
+    .select("request")
+    .eq("operation_id", id)
+    .maybeSingle();
+  if (batch.error)
+    return {
+      ok: false,
+      message: "We couldn't load this submission. Try again.",
+    };
+  const request = (batch.data as { request: unknown } | null)?.request;
+  if (request == null || typeof request !== "object")
+    return {
+      ok: false,
+      message:
+        "This submission has no saved request, so it cannot be resumed. Abandon its pending results instead.",
+    };
+  if (row.kind === "dual") {
+    const result = await deps.submitAdminDualResults(request);
+    return result.ok ? { ok: true, kind: "dual", result } : result;
+  }
+  const result = await deps.submitAdminTournamentResult(request);
+  return result.ok ? { ok: true, kind: "tournament", result } : result;
+}
+
+/** `admin_abandon_result_items`' refusal codes, in operator words. */
+const ABANDON_REFUSALS: Record<string, string> = {
+  "admin-required": "Administrator access is required.",
+  "operation-not-found": "This submission no longer exists.",
+  "kind-unsupported": "Only dual and tournament results can be abandoned here.",
+};
+
+export type AdminAbandonResultsResult =
+  { ok: true; abandonedItemIds: string[] } | { ok: false; message: string };
+
+/**
+ * Abandon every still-pending item of a dual or tournament submission (T24's
+ * RPC), releasing the lines those items reserve. Any current administrator
+ * may abandon — the original actor may be gone — and the RPC's audit row
+ * names the session actor, never a caller-supplied one.
+ */
+export async function abandonAdminResults(
+  operationId: unknown,
+  deps: Pick<
+    ResultDependencies,
+    "requireAdmin" | "createAdminClient"
+  > = resultDefaults,
+): Promise<AdminAbandonResultsResult> {
+  const actor = await deps.requireAdmin();
+  if (!actor)
+    return { ok: false, message: "Administrator access is required." };
+  if (typeof operationId !== "string" || !UUID_RE.test(operationId))
+    return { ok: false, message: "Invalid abandon request." };
+  const { data, error } = await deps
+    .createAdminClient()
+    .rpc("admin_abandon_result_items", {
+      p_actor_id: actor.id,
+      p_operation_id: operationId.toLowerCase(),
+    });
+  if (error || !data || typeof data !== "object")
+    return {
+      ok: false,
+      message:
+        (error && ABANDON_REFUSALS[error.message]) ??
+        "We couldn't abandon these results. Try again.",
+    };
+  const ids = (data as { abandonedItemIds?: unknown }).abandonedItemIds;
+  return {
+    ok: true,
+    abandonedItemIds: Array.isArray(ids) ? ids.map(String) : [],
   };
 }

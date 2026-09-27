@@ -213,3 +213,14 @@ The eight admin-upload migrations the entries above call unapplied were applied 
 1. Nothing in `src/` calls `admin_abandon_result_items` yet — T25 wires it; the dual/tournament services and history UI should treat `abandoned` as terminal (no retry affordance).
 2. Add a T24 paragraph to `docs/admin-uploads-contracts.md` alongside T21's.
 3. `docs/README.md` does not index `admin-dual-results.md` / `admin-tournament-results.md` (pre-existing gap).
+
+## T25 · Add Resume and Abandon pending controls for dual/tournament history rows — done
+
+**gate:** mechanical PASS · completion pass
+
+**changed:** `resumeAdminResults` reads the frozen request from `admin_dual_batches` / `admin_tournament_batches` through the session client and submits it unchanged, refusing a missing batch, wrong kind, or a caller who is not the operation's actor before any submit; `abandonAdminResults` calls `admin_abandon_result_items` with the session actor. Both are exposed as "use server" actions (only `operationId` read from the form) that revalidate `/admin/uploads`. History rows carry `pendingActions: { resume, abandon }` (resume = own pending dual/tournament, abandon = any admin's) and the State cell renders "Resume" / "Abandon pending" forms. New cases in `tests/admin-reconciliation.spec.ts` and `tests/admin-upload-history.spec.ts` (23/23); both docs updated; `dual-form.ts` unchanged. Deviation: `pendingActions` sits on every row as false/false outside pending result rows.
+
+**follow-ups:**
+
+1. Form actions discard their result, so a refusal (stale render, RPC refusal) gives no feedback beyond the revalidated page — same gap as T22's follow-up 1.
+2. Resume is offered only when items are `pending`; a submission with only retryable `failed` items gets no Resume.

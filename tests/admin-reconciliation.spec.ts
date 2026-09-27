@@ -1,6 +1,10 @@
 import { test, expect } from "@playwright/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { reconcileAdminSubmission } from "@/lib/services/programs/admin-reconciliation";
+import {
+  abandonAdminResults,
+  reconcileAdminSubmission,
+  resumeAdminResults,
+} from "@/lib/services/programs/admin-reconciliation";
 
 const id = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -161,4 +165,187 @@ test("rpc refusal codes become operator messages with no follow-up effects", asy
   expect(result).toMatchObject({ ok: false });
   if (!result.ok) expect(result.message).toContain("reservation");
   expect(h.effects).toEqual(["rpc"]);
+});
+
+// ─── Resume and abandon pending dual/tournament results (T25) ───────────────
+
+function resultHarness({
+  kind = "dual",
+  actorUserId = ACTOR,
+  batch = true,
+  submission = true,
+  rpcError = null as string | null,
+} = {}) {
+  const effects: string[] = [];
+  const reads: { table: string; filters: [string, unknown][] }[] = [];
+  const stored = {
+    operationId: id(1),
+    programId: id(3),
+    event: { kind: "existing", eventId: id(4), fingerprint: "a".repeat(32) },
+    items: [
+      {
+        itemId: id(2),
+        slot: "S1",
+        result: { kind: "outcome", outcome: "forfeit", side: "theirs" },
+      },
+    ],
+  };
+  const tables: Record<string, Record<string, unknown> | null> = {
+    admin_upload_submissions: submission
+      ? { operation_id: id(1), actor_user_id: actorUserId, kind }
+      : null,
+    admin_dual_batches: batch && kind === "dual" ? { request: stored } : null,
+    admin_tournament_batches:
+      batch && kind === "tournament" ? { request: stored } : null,
+  };
+  const session = {
+    from(table: string) {
+      const filters: [string, unknown][] = [];
+      const q = {
+        select: () => q,
+        eq: (column: string, value: unknown) => {
+          filters.push([column, value]);
+          return q;
+        },
+        maybeSingle: async () => {
+          effects.push(`read:${table}`);
+          reads.push({ table, filters });
+          return { data: tables[table] ?? null, error: null };
+        },
+      };
+      return q;
+    },
+  };
+  const submitted: { service: string; input: unknown }[] = [];
+  const rpcCalls: { name: string; args: Record<string, unknown> }[] = [];
+  const deps = {
+    requireAdmin: async () => ({ id: ACTOR }),
+    createClient: async () => session as unknown as SupabaseClient,
+    createAdminClient: () =>
+      ({
+        rpc: async (name: string, args: Record<string, unknown>) => {
+          effects.push("rpc");
+          rpcCalls.push({ name, args });
+          if (rpcError) return { data: null, error: { message: rpcError } };
+          return {
+            data: { abandonedItemIds: [id(2)], items: [] },
+            error: null,
+          };
+        },
+      }) as unknown as SupabaseClient,
+    submitAdminDualResults: async (input: unknown) => {
+      effects.push("submit:dual");
+      submitted.push({ service: "dual", input });
+      return {
+        ok: true as const,
+        operationId: id(1),
+        eventId: id(4),
+        items: [],
+      };
+    },
+    submitAdminTournamentResult: async (input: unknown) => {
+      effects.push("submit:tournament");
+      submitted.push({ service: "tournament", input });
+      return {
+        ok: true as const,
+        operationId: id(1),
+        eventId: id(4),
+        entryId: id(6),
+        item: {
+          itemId: id(2),
+          status: "succeeded",
+          round: "R32",
+        } as never,
+      };
+    },
+  };
+  return { deps, effects, reads, submitted, rpcCalls, stored };
+}
+
+test("resume hands the stored batch request, unmodified, to the submit service", async () => {
+  for (const kind of ["dual", "tournament"] as const) {
+    const h = resultHarness({ kind });
+    const snapshot = JSON.stringify(h.stored);
+    const result = await resumeAdminResults(id(1), h.deps);
+    expect(result).toMatchObject({ ok: true, kind });
+    expect(h.submitted).toHaveLength(1);
+    expect(h.submitted[0].service).toBe(kind);
+    // Same object, same bytes: nothing was rebuilt, reordered or added.
+    expect(h.submitted[0].input).toBe(h.stored);
+    expect(JSON.stringify(h.submitted[0].input)).toBe(snapshot);
+    expect(h.reads.map((r) => r.table)).toEqual([
+      "admin_upload_submissions",
+      kind === "dual" ? "admin_dual_batches" : "admin_tournament_batches",
+    ]);
+    expect(h.reads.every((r) => r.filters[0][1] === id(1))).toBe(true);
+  }
+});
+
+test("resume never reads a request from its input", async () => {
+  const h = resultHarness();
+  const forged = {
+    operationId: id(1),
+    request: { operationId: id(1), programId: id(77), items: [] },
+  };
+  expect(await resumeAdminResults(forged, h.deps)).toMatchObject({
+    ok: false,
+  });
+  expect(h.submitted).toHaveLength(0);
+  expect(h.effects).toEqual([]);
+  // Only the id is taken from the caller; the service reads the stored one.
+  const ok = resultHarness();
+  await resumeAdminResults(id(1).toUpperCase(), ok.deps);
+  expect(ok.submitted[0].input).toBe(ok.stored);
+});
+
+test("resume by a different administrator refuses before any submit call", async () => {
+  const h = resultHarness({ actorUserId: id(55) });
+  const result = await resumeAdminResults(id(1), h.deps);
+  expect(result.ok).toBe(false);
+  if (!result.ok) expect(result.message).toContain("started this submission");
+  expect(h.submitted).toHaveLength(0);
+  expect(h.effects).toEqual(["read:admin_upload_submissions"]);
+});
+
+test("resume refuses a missing batch, a missing operation and other kinds", async () => {
+  for (const h of [
+    resultHarness({ batch: false }),
+    resultHarness({ submission: false }),
+    resultHarness({ kind: "video" }),
+  ]) {
+    expect(await resumeAdminResults(id(1), h.deps)).toMatchObject({
+      ok: false,
+    });
+    expect(h.submitted).toHaveLength(0);
+  }
+  const unauthorized = resultHarness();
+  unauthorized.deps.requireAdmin = async () => null as never;
+  expect(await resumeAdminResults(id(1), unauthorized.deps)).toEqual({
+    ok: false,
+    message: "Administrator access is required.",
+  });
+  expect(unauthorized.effects).toEqual([]);
+});
+
+test("abandon calls the rpc with the session actor", async () => {
+  const h = resultHarness({ actorUserId: id(55) });
+  expect(await abandonAdminResults(id(1), h.deps)).toEqual({
+    ok: true,
+    abandonedItemIds: [id(2)],
+  });
+  expect(h.rpcCalls).toEqual([
+    {
+      name: "admin_abandon_result_items",
+      args: { p_actor_id: ACTOR, p_operation_id: id(1) },
+    },
+  ]);
+  const refused = resultHarness({ rpcError: "kind-unsupported" });
+  const result = await abandonAdminResults(id(1), refused.deps);
+  expect(result.ok).toBe(false);
+  if (!result.ok) expect(result.message).toContain("dual and tournament");
+  const bad = resultHarness();
+  expect(await abandonAdminResults("x", bad.deps)).toMatchObject({
+    ok: false,
+  });
+  expect(bad.rpcCalls).toHaveLength(0);
 });

@@ -106,7 +106,8 @@ export async function getAdminUploadHistory(
   deps: Dependencies = defaults,
 ): Promise<AdminUploadHistoryResult> {
   // Authorization precedes either client and all parameter-driven reads.
-  if (!(await deps.requireAdmin()))
+  const viewer = await deps.requireAdmin();
+  if (!viewer)
     return {
       ok: false,
       reason: "admin-required",
@@ -354,6 +355,12 @@ export async function getAdminUploadHistory(
           : mapped.length && mapped.every((i) => i.state === mapped[0].state)
             ? mapped[0].state
             : "unknown";
+      const pending =
+        (s.kind === "dual" || s.kind === "tournament") && counts.pending > 0;
+      const pendingActions = {
+        resume: pending && s.actor_user_id === viewer.id,
+        abandon: pending,
+      };
       const program = programs.find((p) => p.id === s.program_id);
       const actor = actors.find((a) => a.id === s.actor_user_id);
       return {
@@ -379,6 +386,7 @@ export async function getAdminUploadHistory(
         eventId: s.event_id,
         state,
         counts,
+        pendingActions,
         items: mapped,
       };
     });

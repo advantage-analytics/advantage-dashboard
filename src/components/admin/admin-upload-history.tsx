@@ -12,7 +12,11 @@ import type {
   AdminUploadHistoryState,
 } from "@/lib/admin/uploads/history";
 import { advButton } from "@/lib/ui/adv-button";
-import { reconcileAdminSubmissionAction } from "@/app/admin/uploads/history-actions";
+import {
+  abandonAdminResultsAction,
+  reconcileAdminSubmissionAction,
+  resumeAdminResultsAction,
+} from "@/app/admin/uploads/history-actions";
 
 const KINDS = {
   file: "SwingVision file",
@@ -64,6 +68,34 @@ export function HistoryState({ state }: { state: AdminUploadHistoryState }) {
 const reconcileFormAction = reconcileAdminSubmissionAction as unknown as (
   formData: FormData,
 ) => Promise<void>;
+
+type FormAction = (formData: FormData) => Promise<void>;
+const resumeFormAction = resumeAdminResultsAction as unknown as FormAction;
+const abandonResultsFormAction =
+  abandonAdminResultsAction as unknown as FormAction;
+
+/**
+ * A dual or tournament row's pending-result control (T25). The form carries
+ * only the operation id: resume reads the durable batch request server-side.
+ */
+function PendingResultsForm({
+  operationId,
+  action,
+  label,
+}: {
+  operationId: string;
+  action: FormAction;
+  label: string;
+}) {
+  return (
+    <form action={action}>
+      <input type="hidden" name="operationId" value={operationId} />
+      <button type="submit" className={advButton("outline", "sm")}>
+        {label}
+      </button>
+    </form>
+  );
+}
 
 /** One reconciliation control: a server-action form, no client island. */
 function ReconcileForm({
@@ -247,6 +279,25 @@ export function AdminUploadHistory({
                             ? ` · ${row.counts.unknown} unavailable`
                             : ""}
                         </p>
+                      )}
+                      {(row.pendingActions.resume ||
+                        row.pendingActions.abandon) && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {row.pendingActions.resume && (
+                            <PendingResultsForm
+                              operationId={row.operationId}
+                              action={resumeFormAction}
+                              label="Resume"
+                            />
+                          )}
+                          {row.pendingActions.abandon && (
+                            <PendingResultsForm
+                              operationId={row.operationId}
+                              action={abandonResultsFormAction}
+                              label="Abandon pending"
+                            />
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>

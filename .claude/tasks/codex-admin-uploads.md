@@ -355,7 +355,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T25 · Add Resume and Abandon pending controls for dual/tournament history rows
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T22, T24
 - **files:** Best guesses: `src/app/admin/uploads/history-actions.ts` (add `resumeAdminResultsAction`, `abandonAdminResultsAction`); `src/lib/services/programs/admin-reconciliation.ts` (result-operation helpers); `src/lib/data/admin-uploads-server.ts` + `src/lib/admin/uploads/history.ts` (row-level `pendingActions`); `src/components/admin/admin-upload-history.tsx`; `tests/admin-reconciliation.spec.ts`; `tests/admin-upload-history.spec.ts`; `docs/admin-upload-history.md`.
