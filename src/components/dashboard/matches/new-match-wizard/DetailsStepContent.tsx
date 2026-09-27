@@ -1083,6 +1083,7 @@ function DetailsStepContentImpl({
     if (formData.playerHand || formData.playerBackhand) return;
     styleAsked.current = true;
     void playerStyleFromMatches({
+      scope: lookupScope,
       playerId: subject.playerId,
       playerName: subject.name,
     }).then((style) => {
@@ -1101,6 +1102,7 @@ function DetailsStepContentImpl({
       onInputChange("playerStyleSource", "history");
     });
   }, [
+    lookupScope,
     subject.isSelf,
     subject.playerId,
     subject.name,
