@@ -381,7 +381,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T27 · Release deletion claims when a later deletion step fails
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** Best guesses: new `supabase/migrations/<live-version>_release_deletion_claims.sql`; `src/components/dashboard/settings/actions.ts` (`deleteAccount`, ~255–370); `src/app/api/matches/[matchId]/route.ts` (DELETE, ~304–320); `tests/admin-account-delete-protection.spec.ts`; new `tests/match-delete-claim-release.spec.ts`; `tests/database/admin-delete-protection.test.mjs`.
 - **done when:**

@@ -230,3 +230,15 @@ The eight admin-upload migrations the entries above call unapplied were applied 
 **gate:** mechanical PASS · completion pass
 
 **changed:** `scheduleWriteError` now maps `console-result-reserved` (checked before the 40001/40P01 branch) to the resume-or-abandon sentence, and a 23503 naming any of `admin_upload_submissions_event_id_fkey`, `admin_upload_submission_items_outcome_id_fkey` or `admin_schedule_result_targets_entry_id_fkey` to the console-results sentence; everything else passes through. `applyEntryPlan`'s delete/update/insert failures route through it, so `updateDual`'s slot-swap reaches the mapping. New `tests/schedule-write-errors.spec.ts` (6, incl. an `updateDual` entry-delete 23503 case). No migration.
+
+## T27 · Release deletion claims when a later deletion step fails — done
+
+**gate:** mechanical PASS · completion pass
+
+**changed:** New `release_my_account_deletion_claim()` (authenticated only, removes the caller's own claim under the users row lock) and `admin_release_match_storage_purge(uuid[])` (service_role only, removes purge claims under the matches row locks), applied live via the Supabase MCP; file renamed to recorded version 20260927103502. `deleteAccount` releases the account claim on every failure after `prepare_my_account_deletion` (and the purge claims once purging was attempted, including a purge throw); the match DELETE route releases its purge claim via the service-role client when `matches.delete()` fails, 409 branch unchanged. Specs: `tests/admin-account-delete-protection.spec.ts` (harness moved to a scenario object; 6 new effect-order cases), new `tests/match-delete-claim-release.spec.ts`, and a second PGlite test in `tests/database/admin-delete-protection.test.mjs` (test:database 24/24). `purge-match-storage.ts` untouched.
+
+**follow-ups:**
+
+1. The PostToolUse typecheck hook reads the main checkout's stale `.next/` types and reports false TS2307 errors on every worktree edit — delete that build output or point the hook at the worktree.
+2. Optional multi-connection proof in `tests/database/postgres/admin-delete-concurrency.test.mjs` that a release waits behind an in-flight admission's parent lock.
+3. `tests/database/README.md` has no paragraph for `admin-delete-protection.test.mjs`.
