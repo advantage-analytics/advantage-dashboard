@@ -21,7 +21,8 @@
 #   preflight            ensure node_modules exists (npm ci if not)
 #   gate                 run lint, typecheck, test; handle the stale
 #                        .next/types false-failure; print PASS or FAIL
-#   surfaces [<range>]   print which guardrail reviewers a change is due —
+#   surfaces [<range>]   print which reviewers a change is due — the two
+#                        guardrail agents and /pr-check's ui-verifier — for
 #                        a git range if given, else the working tree
 #   clean                fail if the working tree is not clean
 #
@@ -188,7 +189,7 @@ gate() {
 # is staged — so anything staged-but-uncommitted falls through BOTH halves,
 # and the caller reports a skip it believes is legitimate.
 surfaces() {
-  local range=${1:-} touched dashboard=0 supabase=0
+  local range=${1:-} touched dashboard=0 supabase=0 ui=0
   if [ -n "$range" ]; then
     touched=$(git diff "$range" --name-only 2>/dev/null | sort -u)
   else
@@ -219,11 +220,21 @@ surfaces() {
       supabase=1
       ;;
     esac
+    # Anything a browser renders. Wider than the dashboard pattern above on
+    # purpose: /login, /m/[token], /admin and the marketing pages are UI too.
+    # Route handlers under src/app/api/ are not — nothing to look at.
+    case "$f" in
+    src/app/api/*) ;;
+    src/app/*.tsx | src/components/* | src/styles/*)
+      ui=1
+      ;;
+    esac
   done <<<"$touched"
 
   [ "$dashboard" -eq 1 ] && printf 'pipeline-guardrails-reviewer: needed (dashboard/wizard surface touched)\n'
   [ "$supabase" -eq 1 ] && printf 'rls-boundary-reviewer: needed (supabase/data-layer surface touched)\n'
-  if [ "$dashboard" -eq 0 ] && [ "$supabase" -eq 0 ]; then
+  [ "$ui" -eq 1 ] && printf 'ui-verifier: needed (UI surface touched)\n'
+  if [ "$dashboard" -eq 0 ] && [ "$supabase" -eq 0 ] && [ "$ui" -eq 0 ]; then
     printf 'no guardrail surface touched\n'
   fi
 }

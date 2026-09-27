@@ -1,6 +1,6 @@
 ---
 name: pr-check
-description: Run the full pre-merge gate on the current branch — lint, typecheck, tests, then quality and safety review via /simplify, the vercel-react-best-practices skill, and this project's guardrail subagents. Use before opening a PR or merging to main. .github/workflows/ci.yml runs the same lint/typecheck/test trio on every PR and push, but only this skill runs the review stages.
+description: Run the full pre-merge gate on the current branch — lint, typecheck, tests, then quality and safety review via /simplify, the vercel-react-best-practices skill, this project's guardrail subagents, and an eyes-on pass that opens every changed page in a headless browser. Use before opening a PR or merging to main. .github/workflows/ci.yml runs the same lint/typecheck/test trio on every PR and push, but only this skill runs the review stages.
 disable-model-invocation: true
 argument-hint: "[optional: 'full' to force every reviewer at full effort, or a scope like 'ui only']"
 ---
@@ -89,14 +89,15 @@ nobody should have to read three agent definitions to find it:
 | 3 — `pipeline-guardrails-reviewer`              | `sonnet`          | its own frontmatter      |
 | 3 — `rls-boundary-reviewer`                     | `sonnet`          | its own frontmatter      |
 | 3 — `supabase:supabase-postgres-best-practices` | the session model | only when triggered      |
+| 3b — `ui-verifier`                              | `opus`            | its own frontmatter      |
 
 The two `only when triggered` rows are skills, not agents: they load into whatever session invokes
 them, so they cost session-model tokens on the runs where their triggers fire
 and nothing on the runs where they do not. That is why the trigger checks in
 stages 2 and 3 are worth running honestly rather than loading them by reflex.
 
-For the two guardrail reviewers, "its own frontmatter" means **pass no
-`model` on their `Agent` calls** and let it answer. To change what they cost,
+For the two guardrail reviewers and `ui-verifier`, "its own frontmatter"
+means **pass no `model` on their `Agent` calls** and let it answer. To change what they cost,
 edit the agent file, not this table.
 
 There is deliberately **no cheap mode**. `full` is the only mode axis. A second
@@ -287,6 +288,67 @@ this session, if its trigger applies — same as stage 2's React skill, and for
 the same reason: a skill loaded inside a subagent reports where stage 4 cannot
 see it.
 
+## Stage 3b — eyes-on
+
+The stages above read code. This one looks at screens, because the failures
+this project is most afraid of look fine in a diff: a page of zeroes, an empty
+serve chart that reads as "you hit no serves", both players' stats swapped, a
+route that bounces to `/login`. `docs/ui-revamp-guardrails.md` lists them; a
+reviewer holding only the diff cannot see any of them.
+
+**Runs when `check.sh surfaces` printed `ui-verifier: needed`.** That is the
+only trigger and the only legitimate skip: "UI surface not touched",
+established mechanically by that command. Do not skip it because the change
+"is just copy" — a copy change that broke a layout is exactly what this finds.
+
+**It runs in a fresh subagent, never in this session.** Dispatch
+`.claude/agents/ui-verifier.md` — `Agent` with `subagent_type: "ui-verifier"`
+and **no `model` arg**. The implementer reviewing its own screens sees what it
+meant to build; a verifier that has never seen the conversation, the run log
+or memory sees what is there. Do not hand it any of those. Hand it exactly:
+
+1. **The range** — the same `"$base"...HEAD` the other stages use.
+2. **The intent** — the task blocks that landed in the range, title and
+   `done when:` only. Derive them from the commit subjects
+   (`git log "$base"..HEAD --format=%s | grep -o '^T[0-9]*'`) and pull each
+   heading's block from `.claude/tasks/<slug>.md` or its log sibling (a finished
+   task's block may live only in the log). A branch with no queue gets the
+   commit subjects themselves.
+3. **Candidate routes** — every `- **routes:**` line those blocks carry, plus
+   the routes `MAP.md`'s table maps for each changed `page.tsx`/`layout.tsx`,
+   plus the route the `trace-route` skill resolves for each changed component
+   under `src/components/`. Name a dynamic segment as-is
+   (`/dashboard/matches/[matchId]`); the verifier resolves an id from the
+   index page's links.
+4. **The harness command and a scratch dir** —
+   `node scripts/eyes-on/capture.mjs --out "$OUT" <paths…>`, with `$OUT`
+   under the session scratchpad. The script starts (or attaches to) a dev
+   server, signs in as the `EYES_ON_*` account from `.env.local`, and writes
+   the PNGs and `report.json` the agent reads. It never prints the
+   credentials, and neither do you.
+
+**Credentials unset** — the harness exits 2 and the agent's verdict is
+`unverifiable`. That is an explicit skip, named in stage 4 as
+`ui-verifier: EYES_ON credentials unset`, and by the rule in "Do not" below a
+skipped stage makes the branch **`not-ready`**. Say so plainly; a UI branch
+nobody has looked at is not ready. `.env.example` documents the one-time
+account setup.
+
+**Fail-closed**, same standard as `/task-next` 5b: the first line of the
+report must be the literal `VERDICT: pass`. `VERDICT: needs-work`,
+`VERDICT: unverifiable`, prose with no verdict, or a crashed agent are all a
+failed stage. Read the `## Routes` and `## Findings` sections for the reason.
+
+**Send the screenshots to the user.** Whatever the verdict, pass the PNGs the
+agent named — every `[finding]` and at least the first `[ok]` — through
+`SendUserFile`, so the human gets eyes on the branch too. This stage exists
+because "no eyes-on yet" kept appearing on merged PRs; a verdict without the
+frames would rebuild that gap one level up.
+
+The harness leaves `.next/dev` alone — it may belong to the user's own dev
+server. If Next reports an existing server for this checkout, the harness
+attaches to it rather than starting a second; that is expected, not a finding.
+
 ## Stage 4 — report
 
 Give the user:
@@ -298,7 +360,11 @@ Give the user:
    reason to skip a guardrail reviewer here, and `check.sh surfaces` is what
    establishes it. "Already covered per-task" is not a reason: nothing runs
    them per-task any more.
-4. A plain verdict: ready to merge, or the specific list of what is not.
+4. The eyes-on verdict, route by route (`[ok]`, `[finding]`, `[bounced]`,
+   `[error]`, `[not covered]`), the screenshot filenames sent, and any
+   `## Not covered` intent — or the skip and its reason: `no UI surface
+touched` (legitimate) or `EYES_ON credentials unset` (a `not-ready`).
+5. A plain verdict: ready to merge, or the specific list of what is not.
 
 Do not soften a failure into "mostly passing". If it is not ready, say what
 blocks it.
@@ -310,9 +376,14 @@ Run this once, last, **whatever the verdict was**:
 ```bash
 .claude/hooks/pr-check-receipt.sh record --verdict ready \
   --reviewed branch-range --note "<one line>" \
-  --ran lint,tsc,test,simplify,code-review \
+  --ran lint,tsc,test,simplify,code-review,eyes-on \
   --skipped "rls-boundary-reviewer: no data surface touched"
 ```
+
+`eyes-on` goes in `--ran` only when `ui-verifier` returned a verdict; otherwise
+name it in `--skipped` with the reason (`ui-verifier: no UI surface touched`,
+or `ui-verifier: EYES_ON credentials unset`). A receipt that lists neither
+says the stage was forgotten, which is the state this stage was added to end.
 
 `--reviewed` must match the target you picked in "What to review" above. A
 `working-tree` receipt does not attest that the commit was gated, and the
@@ -335,3 +406,8 @@ Read prior receipts with `.claude/hooks/pr-check-receipt.sh show`.
   makes it a `not-ready` with the skip named — never a `ready`.
 - Do not skip stage 3 because stage 1 was green. Lint and tsc do not know what
   a workspace is, and cannot tell you a query crossed an account boundary.
+- Do not run stage 3b in this session, and do not brief `ui-verifier` with the
+  conversation, the run log, or memory. Its whole value is that it has not
+  seen how the branch was built.
+- Do not open the pages yourself as a substitute for the agent, and do not
+  type the verifier credentials anywhere. The harness owns sign-in.
