@@ -15,13 +15,26 @@ Upload Flow:
 3. Edge Function verifies the caller, that they uploaded the match, that every
    file sits under their own storage folder, and that the match has no points yet
 4. Downloads each file from the `match-data` bucket, parses Excel sheets
-5. Inserts points into database
-6. Inserts shots into database
-7. Calls calculate_match_stats() Postgres function via RPC
-8. Returns success/error
+5. Builds the point and shot rows — each point gets its id here, so the shots
+   can reference their points before anything is written — and calls ONE RPC,
+   `import_match_rows(p_match_id, p_points, p_shots)`: a single transaction
+   that takes the match's advisory lock, refuses a match that already has
+   points, inserts points and shots, then runs calculate_match_stats() and
+   backfill_returns_in_and_net_points(). Nothing persists unless all of it does
+6. Invokes generate-key-moments, then generate-insights
+7. Returns success/error
 ```
 
-The `match_stats` calculation is handled by a **Postgres function** (not computed in the Edge Function) because:
+`import_match_rows` (`supabase/migrations/20260927040947_import_match_rows.sql`)
+is `security invoker` and executable by `service_role` only — the function's
+own client — so it adds no write path a user token can reach. It inserts the
+rows exactly as given, through `jsonb_to_recordset` with explicit column lists;
+columns it does not name (`created_at`, `flags`, `derived`, …) keep their
+defaults. Its refusal of an already-processed match raises `unique_violation`
+(SQLSTATE 23505), which this function answers with the same 409 as its
+pre-check; any other error from the RPC is a 500 with nothing persisted.
+
+The `match_stats` calculation is handled by a **Postgres function** (called by `import_match_rows`, not computed in the Edge Function) because:
 
 - Runs inside the database = no network round-trips for aggregations
 - SQL is optimized for COUNT/AVG operations
@@ -38,6 +51,44 @@ supabase functions deploy process-match
 
 (or the Supabase MCP `deploy_edge_function`). Until that runs, the live
 function is whatever was deployed last, not what this directory contains.
+
+The `import_match_rows` RPC this function calls must already be live in the
+database before the function is deployed — see [Recovery](#recovery).
+
+## Recovery
+
+A run that fails inside `import_match_rows` persists nothing: the transaction
+rolls back, the match has no `points`, `shots` or `match_stats` rows, and the
+pre-check does not refuse a re-run. What a failed run does leave behind is the
+`match_files` row `/api/upload` wrote before invoking this function (and the
+.xlsx in the `match-data` bucket), so a second upload for the same match is
+answered 409 `This match already has a file`. Two ways back, and only these:
+
+- `DELETE /api/matches/[matchId]` as the uploader — it purges the match's
+  storage and deletes the `matches` row, which cascades `match_files`,
+  `points` (and through them `shots`) and `match_stats` — then upload again.
+- An operator re-invoking `process-match` with the service-role bearer, the
+  same `matchId` and the same `fileNames`: the file is still in the bucket,
+  and the function acts as the match's uploader.
+
+Never a hand-run `UPDATE` or `INSERT` against `points`, `shots` or
+`match_stats`.
+
+Before this RPC the function wrote in four separate statements, and a run that
+died between them left a match with `points` but no `match_stats` row — every
+later invoke answered 409 from the pre-check, with no way back. When the RPC
+was applied (2026-09-26) the live count of such matches was **0** (26 matches
+have points; all 26 have `match_stats`). Should one ever appear, the same
+procedure applies minus the re-invoke branch, which the pre-check refuses
+because the match has points: delete the match and upload again.
+
+**Order of operations:** `import_match_rows` must be live in the database
+BEFORE this function is deployed. A deployed function without it fails every
+run at the RPC (PostgREST answers "function not found") — nothing persisted,
+but nothing processed either. Until the function is deployed, the live
+function keeps writing the old four-statement way. The migration is
+`supabase/migrations/20260927040947_import_match_rows.sql`, applied live on
+2026-09-26.
 
 ## Environment Variables
 
@@ -101,13 +152,13 @@ Error:
 }
 ```
 
-| Status | Meaning                                                                                     |
-| ------ | ------------------------------------------------------------------------------------------- |
-| 400    | Missing `matchId`/`fileNames`, an unsupported provider, or a file outside the user's folder |
-| 401    | No bearer, or a bearer that is neither a user's access token nor the service role key       |
-| 403    | The user is not the match's uploader (or, for the service role, the match has no uploader)  |
-| 409    | The match already has `points` rows — it has been processed and will not be run again       |
-| 500    | The match could not be read, or processing itself failed                                    |
+| Status | Meaning                                                                                                                                                                        |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 400    | Missing `matchId`/`fileNames`, an unsupported provider, or a file outside the user's folder                                                                                    |
+| 401    | No bearer, or a bearer that is neither a user's access token nor the service role key                                                                                          |
+| 403    | The user is not the match's uploader (or, for the service role, the match has no uploader)                                                                                     |
+| 409    | The match already has `points` rows — the pre-check, or `import_match_rows`'s own refusal when a concurrent run landed first — it has been processed and will not be run again |
+| 500    | The match could not be read, or processing itself failed — nothing was persisted (see [Recovery](#recovery))                                                                   |
 
 ## Usage from Frontend
 
@@ -186,7 +237,7 @@ A point is a match point when it's a set point for a player who has won `setsToW
 
 ### Match Stats Calculation
 
-After inserting points and shots, the Edge Function calls the `calculate_match_stats(p_match_id)` Postgres function which aggregates data from `points` and `shots` tables.
+`import_match_rows` calls the `calculate_match_stats(p_match_id)` Postgres function in the same transaction as the points and shots inserts; it aggregates data from the `points` and `shots` tables.
 
 **Stats Schema (Raw Counts):**
 

@@ -260,6 +260,12 @@ Deno.serve(async (req: Request) => {
     });
   } catch (error: any) {
     console.error("Error in process-match Edge Function:", error);
+    // import_match_rows refuses a match that already has points with
+    // unique_violation — a concurrent run landed first. Same answer as the
+    // pre-check; nothing was persisted and nothing was invoked.
+    if (error?.code === "23505") {
+      return refuse(409, "This match has already been processed");
+    }
     return new Response(
       JSON.stringify({
         success: false,
@@ -347,7 +353,8 @@ async function processMatchToDb({
   const rallyLengthMap = buildRallyLengthMap(shotsRows);
   console.log(`🎾 Rally length map built with ${rallyLengthMap.size} entries`);
 
-  // 2. Insert points
+  // 2. Build points. Each gets its id here, not from a returning insert, so
+  //    the shots can reference their points before anything is written.
   const pointInserts = buildPointInserts(
     pointsRows,
     matchId,
@@ -355,53 +362,31 @@ async function processMatchToDb({
     gameScoreMap,
     rallyLengthMap,
     matchFormat,
-  );
+  ).map((point) => ({ id: crypto.randomUUID(), ...point }));
 
-  const { data: insertedPoints, error: pointsError } = await supabase
-    .from("points")
-    .insert(pointInserts)
-    .select("id, set_number, game_number, point_number");
+  const pointIdMap = buildPointIdMap(pointInserts);
 
-  if (pointsError) {
-    console.error("Error inserting points:", pointsError);
-    throw pointsError;
-  }
+  // 3. Build shots (if we have shot data)
+  const shotInserts = shotsRows.length
+    ? buildShotInserts(shotsRows, pointIdMap, hostTeam)
+    : [];
 
-  const pointIdMap = buildPointIdMap(insertedPoints ?? []);
-
-  // 3. Insert shots (if we have shot data)
-  if (shotsRows.length) {
-    const shotInserts = buildShotInserts(shotsRows, pointIdMap, hostTeam);
-    if (shotInserts.length) {
-      const { error: shotsError } = await supabase
-        .from("shots")
-        .insert(shotInserts);
-      if (shotsError) {
-        console.error("Error inserting shots:", shotsError);
-        throw shotsError;
-      }
-    }
-  }
-
-  // 4. Calculate match stats using Postgres function
-  // This aggregates from the points/shots we just inserted and upserts into match_stats
-  console.log("📊 Calculating match statistics...");
-  const { error: statsError } = await supabase.rpc("calculate_match_stats", {
+  // 4. Points, shots and match_stats land in one transaction, or not at all.
+  //    import_match_rows takes the match's advisory lock, refuses a match that
+  //    already has points (23505 — the handler answers the pre-check's 409),
+  //    inserts both sets of rows as given, then runs calculate_match_stats and
+  //    backfill_returns_in_and_net_points. A failure anywhere rolls back the
+  //    lot, so the pre-check above does not refuse the re-run.
+  console.log("📊 Importing rows and calculating match statistics...");
+  const { error: importError } = await supabase.rpc("import_match_rows", {
     p_match_id: matchId,
+    p_points: pointInserts,
+    p_shots: shotInserts,
   });
 
-  if (statsError) {
-    console.error("Error calculating match_stats:", statsError);
-    throw statsError;
-  }
-
-  const { error: backfillError } = await supabase.rpc(
-    "backfill_returns_in_and_net_points",
-    { p_match_id: matchId },
-  );
-  if (backfillError) {
-    console.error("Error computing returns_in/net_points:", backfillError);
-    throw backfillError;
+  if (importError) {
+    console.error("Error importing match rows:", importError);
+    throw importError;
   }
   console.log("✅ Match statistics calculated successfully");
 

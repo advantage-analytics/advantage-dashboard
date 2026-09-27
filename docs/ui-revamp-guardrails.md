@@ -141,8 +141,8 @@ be. Doubles teams and existing users depend on it.
 
 > **A reviewed exception, added 2026-09-26: guards on the frozen paths, from the
 > final-pass codebase review** (`claude/code-review-tools-order-68b9e9`, tasks
-> T9–T11, T13, T15 in its queue). Each is a refusal or a bookkeeping fix, never a
-> change to what a file parses, attributes or computes:
+> T9–T11, T13, T15, T18 in its queue). Each is a refusal or a bookkeeping fix,
+> never a change to what a file parses, attributes or computes:
 >
 > - `process-match` (and `generate-insights`, `generate-key-moments`) now verify
 >   the caller — service role, or a user token whose `matches.created_by` is the
@@ -160,6 +160,18 @@ be. Doubles teams and existing users depend on it.
 >   `uploaded` write moved into `mark-job-uploaded.ts`, is checked and retried
 >   once, and a failure marks the job failed instead of submitting into a 409.
 >   `upload-url/handler.ts` and `video-url/types.ts` changed doc comments only.
+> - `process-match`'s four writes — `points`, `shots`, `calculate_match_stats`,
+>   `backfill_returns_in_and_net_points` — now run inside one Postgres function,
+>   `import_match_rows` (T18), in one transaction under a per-match advisory
+>   lock: a match has all of them or none, and a concurrent second run is
+>   refused with the pre-check's 409 instead of doubling every statistic. Point
+>   ids are assigned by the edge function (`crypto.randomUUID()`) before the
+>   call rather than returned by the insert. Every row value, the `is_player1`
+>   keying and `calculate_match_stats` itself are unchanged — the RPC calls it,
+>   never edits it — and no existing row is touched. Migration
+>   `supabase/migrations/20260927040947_import_match_rows.sql`, applied live
+>   2026-09-26. The function is still not deployed — the user's step, and the
+>   migration had to land first.
 >
 > `calculate_match_stats`, `swingvision-validator.ts` and existing match data
 > were not touched. Anything beyond this list on these paths still needs its own

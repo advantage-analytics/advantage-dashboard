@@ -232,7 +232,7 @@ ready).
 
 ## T18 · process-match: points, shots and stats land in one transaction, or not at all
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<live-timestamp>_import_match_rows.sql (new; timestamp from the live apply), supabase/functions/process-match/index.ts, supabase/functions/process-match/README.md, docs/ui-revamp-guardrails.md (§2, the 2026-09-26 blockquote), tests/process-match-guards.spec.ts — guess
 - **done when:**
