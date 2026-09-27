@@ -291,7 +291,7 @@ export function createScheduleWriter(
         // braces — but it is the cheap kind, and it is what makes the statement
         // safe to read in isolation.
         .eq("program_id", event.programId);
-      if (error) return { error: error.message };
+      if (error) return scheduleWriteError(error);
     }
 
     for (const row of plan.update) {
@@ -300,7 +300,7 @@ export function createScheduleWriter(
         .update({ ...columns(row.row), updated_at: new Date().toISOString() })
         .eq("id", row.id)
         .eq("program_id", event.programId);
-      if (error) return { error: error.message };
+      if (error) return scheduleWriteError(error);
     }
 
     if (plan.insert.length > 0) {
@@ -311,7 +311,7 @@ export function createScheduleWriter(
           ...columns(row.row),
         })),
       );
-      if (error) return { error: error.message };
+      if (error) return scheduleWriteError(error);
     }
 
     return null;
@@ -908,10 +908,32 @@ export async function resolveOpponentProgramId(
   return id === ourProgramId ? null : id;
 }
 
+/** Foreign keys naming an admin-console row this write's row is still referenced by. */
+const CONSOLE_REFERENCE_FKEYS = [
+  "admin_upload_submissions_event_id_fkey",
+  "admin_upload_submission_items_outcome_id_fkey",
+  "admin_schedule_result_targets_entry_id_fkey",
+];
+
 export function scheduleWriteError(error: {
   code?: string;
   message: string;
 }): ActionError {
+  if (error.message.includes("console-result-reserved")) {
+    return {
+      error:
+        "An administrator's console submission has reserved this line and has not finished. Ask an administrator to resume or abandon it in the admin console.",
+    };
+  }
+  if (
+    error.code === "23503" &&
+    CONSOLE_REFERENCE_FKEYS.some((fkey) => error.message.includes(fkey))
+  ) {
+    return {
+      error:
+        "This event has results recorded through the admin console, so it can't be deleted or have its lines removed here.",
+    };
+  }
   return {
     error:
       error.code === "40001" || error.code === "40P01"

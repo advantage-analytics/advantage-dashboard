@@ -224,3 +224,9 @@ The eight admin-upload migrations the entries above call unapplied were applied 
 
 1. Form actions discard their result, so a refusal (stale render, RPC refusal) gives no feedback beyond the revalidated page — same gap as T22's follow-up 1.
 2. Resume is offered only when items are `pending`; a submission with only retryable `failed` items gets no Resume.
+
+## T26 · Map console-reserved and console-FK errors to sentences in scheduleWriteError — done
+
+**gate:** mechanical PASS · completion pass
+
+**changed:** `scheduleWriteError` now maps `console-result-reserved` (checked before the 40001/40P01 branch) to the resume-or-abandon sentence, and a 23503 naming any of `admin_upload_submissions_event_id_fkey`, `admin_upload_submission_items_outcome_id_fkey` or `admin_schedule_result_targets_entry_id_fkey` to the console-results sentence; everything else passes through. `applyEntryPlan`'s delete/update/insert failures route through it, so `updateDual`'s slot-swap reaches the mapping. New `tests/schedule-write-errors.spec.ts` (6, incl. an `updateDual` entry-delete 23503 case). No migration.

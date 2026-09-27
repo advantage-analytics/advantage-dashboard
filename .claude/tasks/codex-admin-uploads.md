@@ -369,7 +369,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T26 · Map console-reserved and console-FK errors to sentences in scheduleWriteError
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** Best guesses: `src/lib/schedule/writes-server.ts` (`scheduleWriteError` at ~906–917; `applyEntryPlan` ~275–312); new `tests/schedule-write-errors.spec.ts` via `tests/helpers/schedule-writer.ts`.
 - **done when:**
