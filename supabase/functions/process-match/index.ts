@@ -22,16 +22,167 @@ const TARGET_SHEETS: TargetSheetName[] = [
 
 interface ProcessMatchRequest {
   matchId: string;
-  userId: string;
   fileNames: string[];
-  bucketId?: string;
   sourceProvider?: string; // Optional: if not provided, will be fetched from match record
+}
+
+/**
+ * What `admin_claim_match_file` answers. `null` for a match the admin console
+ * never submitted; `claimed: false` for a console attempt that is not
+ * `queued` (already processing, completed or failed); otherwise the
+ * `admin_file_attempts` row this run now owns — `to_jsonb(row)`, so its
+ * columns keep their snake_case — plus `claimed` and the submitting admin as
+ * `actorId` (`admin_upload_submissions.actor_user_id`). `request` is the
+ * console's validated submission: `storagePath` is
+ * `_admin-console/<operation>/<item>/<sha256>.xlsx` and `sha256` the digest of
+ * the bytes it validated. Definition: `codex/admin-uploads`
+ * `supabase/migrations/20260917010000_submit_admin_match_files.sql`, live as
+ * `schema_migrations` version 20260919044716.
+ */
+type FileClaim =
+  | { claimed: false; state: string; operationId: string; itemId: string }
+  | {
+      claimed: true;
+      claim_token: string;
+      actorId: string | null;
+      request: { storagePath: string; sha256: string };
+    };
+
+/**
+ * Where the workbook comes from — one or the other, never both. A `folder`
+ * request lists files that must each resolve under the caller's own storage
+ * folder; a `claim` names the single object an admin-console attempt
+ * validated, whose bytes must still hash to `sha256` before they are parsed.
+ */
+type FileSource =
+  | { kind: "folder"; userId: string; fileNames: string[] }
+  | { kind: "claim"; storagePath: string; sha256: string };
+
+/**
+ * The only bucket this function reads. It used to come from the request body,
+ * which let any caller aim a service-role download at any bucket.
+ */
+const STORAGE_BUCKET = "match-data";
+
+const JSON_HEADERS = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+};
+
+function refuse(status: number, error: string): Response {
+  return new Response(JSON.stringify({ success: false, error }), {
+    status,
+    headers: JSON_HEADERS,
+  });
+}
+
+type Caller = { kind: "service" } | { kind: "user"; userId: string };
+
+/**
+ * Who is calling. `verify_jwt` only proves the bearer is *a* JWT signed for
+ * this project — the public anon key passes it — so the function checks for
+ * itself. Two callers are legitimate: the project's own service role (the
+ * bearer equals SUPABASE_SERVICE_ROLE_KEY) and a signed-in user, whose access
+ * token is what `supabase.functions.invoke` sends from `/api/upload`. A user
+ * token is verified with `auth.getUser` on an anon client; anything else is
+ * answered 401. Whether that user may touch the match is decided afterwards,
+ * against `matches.created_by`.
+ *
+ * Meant to be the same helper in every edge function here — copy it verbatim
+ * rather than adapting it.
+ */
+async function authorizeCaller(
+  req: Request,
+): Promise<{ caller: Caller } | { status: 401; error: string }> {
+  const header = req.headers.get("authorization") ?? "";
+  const token = header.replace(/^bearer\s+/i, "").trim();
+  if (!token) {
+    return { status: 401, error: "Missing bearer token" };
+  }
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (serviceRoleKey && token === serviceRoleKey) {
+    return { caller: { kind: "service" } };
+  }
+  const anon = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { data, error } = await anon.auth.getUser(token);
+  if (error || !data?.user) {
+    return { status: 401, error: "Invalid or expired token" };
+  }
+  return { caller: { kind: "user", userId: data.user.id } };
+}
+
+/**
+ * Where a requested file may live. Uploads land at
+ * `${userId}/${providerId}/${matchId}/${fileName}` (upload.service.ts), so a
+ * full path must sit under the user's own folder; a bare file name is the
+ * pre-provider layout and resolves to `${userId}/${fileName}`. Anything with
+ * an empty, `.` or `..` segment, or another user's prefix, resolves to null
+ * and the request is refused before a single download.
+ *
+ * So does anything naming the admin console's `_admin-console/` namespace,
+ * which is reachable only through a claim (`admin_claim_match_file`), never
+ * through this list — and anything storage's URL normalisation could turn
+ * into it or into a `..`: a percent-escape (`%5fadmin-console`, `%2e%2e`) or
+ * a backslash separator. The checks run on the decoded form, so a literal `%`
+ * in an athlete's own file name ("Match 100%.xlsx", stored as typed) still
+ * resolves. The storage policy that keeps user tokens out of that namespace
+ * does not bind the service role this function downloads with.
+ */
+function resolveStoragePath(userId: string, fileName: unknown): string | null {
+  if (typeof fileName !== "string" || fileName.length === 0) {
+    return null;
+  }
+  // Judge the path as storage would read it, percent-escapes decoded. A name
+  // whose `%` is not a valid escape has nothing to decode and is judged as is.
+  let normalized = fileName;
+  try {
+    normalized = decodeURIComponent(fileName);
+  } catch {
+    normalized = fileName;
+  }
+  if (normalized.includes("\\") || /_admin-console/i.test(normalized)) {
+    return null;
+  }
+  const segments = normalized.split("/");
+  if (segments.some((s) => s === "" || s === "." || s === "..")) {
+    return null;
+  }
+  if (segments.length === 1) {
+    return `${userId}/${fileName}`;
+  }
+  return segments[0] === userId ? fileName : null;
 }
 
 Deno.serve(async (req: Request) => {
   console.log("🚀 Edge Function 'process-match' invoked");
-  let consoleAttempt: { matchId: string; claimToken: string } | null = null;
-  let processingClient: ReturnType<typeof createClient> | null = null;
+  // The admin-console attempt this run has claimed, if any. From the claim on,
+  // every exit settles it through admin_finish_match_file: the 200 path marks
+  // it completed; everything else marks it failed for review, exactly once.
+  let attempt: {
+    supabase: ReturnType<typeof createClient>;
+    matchId: string;
+    claimToken: string;
+  } | null = null;
+  const failAttempt = async () => {
+    if (!attempt) return;
+    const { supabase, matchId, claimToken } = attempt;
+    attempt = null;
+    const { error } = await supabase.rpc("admin_finish_match_file", {
+      p_match_id: matchId,
+      p_claim_token: claimToken,
+      p_error: "processing-failed-review-required",
+    });
+    // The attempt row is what the console polls (its error_code is shown as
+    // is). Failing to mark it is logged, never allowed to replace the answer
+    // the caller is owed for the failure that got us here.
+    if (error) {
+      console.error("Error marking the console attempt failed:", error);
+    }
+  };
   try {
     // CORS headers
     if (req.method === "OPTIONS") {
@@ -45,40 +196,26 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    let {
-      matchId,
-      userId,
-      fileNames,
-      bucketId = "match-data",
-      sourceProvider,
-    }: ProcessMatchRequest = await req.json();
+    const auth = await authorizeCaller(req);
+    if ("status" in auth) {
+      return refuse(auth.status, auth.error);
+    }
+    const { caller } = auth;
+
+    const { matchId, fileNames, sourceProvider }: ProcessMatchRequest =
+      await req.json();
 
     console.log("📥 Request received:", {
       matchId,
-      userId,
-      fileCount: fileNames.length,
+      caller: caller.kind,
+      fileCount: Array.isArray(fileNames) ? fileNames.length : 0,
       sourceProvider,
     });
 
-    if (
-      !matchId ||
-      !userId ||
-      !Array.isArray(fileNames) ||
-      fileNames.length === 0
-    ) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error:
-            "matchId, userId, and a non-empty fileNames array are required",
-        }),
-        {
-          status: 400,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-          },
-        },
+    if (!matchId || !Array.isArray(fileNames) || fileNames.length === 0) {
+      return refuse(
+        400,
+        "matchId and a non-empty fileNames array are required",
       );
     }
 
@@ -93,72 +230,67 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    processingClient = supabase;
-    // Every call consults the durable match linkage, even if a caller omits
-    // console fields. Only verified service dispatch or the submitting admin
-    // may claim a console file; request body userId is never authorization.
-    const authorization =
-      req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-    const serviceDispatch = authorization === supabaseServiceKey;
-    const identity = serviceDispatch
-      ? null
-      : await supabase.auth.getUser(authorization);
-    const { data: claim, error: claimError } = await supabase.rpc(
+    // Every call asks whether this match is an admin-console attempt, so
+    // leaving the console's fields out of the body cannot bypass its claim.
+    // The RPC answers null for any other match. For a console match it either
+    // hands this run the attempt (queued → processing under the row's lock, so
+    // a repeated invoke cannot process twice) or reports the state it is
+    // already in. A user token that is not the submitting admin makes it
+    // raise admin-required (42501).
+    const { data: claimData, error: claimError } = await supabase.rpc(
       "admin_claim_match_file",
       {
         p_match_id: matchId,
-        p_actor_id: identity?.data.user?.id ?? null,
-        p_service: serviceDispatch,
+        p_actor_id: caller.kind === "user" ? caller.userId : null,
+        p_service: caller.kind === "service",
       },
     );
-    if (claimError) throw new Error("File processing authorization failed.");
-    let expectedSha256: string | undefined;
+    if (claimError) {
+      console.error("Error claiming the console attempt:", claimError);
+      return claimError.code === "42501"
+        ? refuse(403, "You do not have access to this match")
+        : refuse(500, "Failed to claim the match file");
+    }
+    const claim = (claimData ?? null) as FileClaim | null;
+    if (claim && !claim.claimed) {
+      // Not this run's to process: a console attempt already processing,
+      // completed or failed. The console reads the outcome from
+      // admin_file_attempts, so the state is the whole answer — completed is
+      // a success, failed a 409, processing a 200 that persisted nothing.
+      return new Response(
+        JSON.stringify({
+          success: claim.state === "completed",
+          state: claim.state,
+          operationId: claim.operationId,
+          itemId: claim.itemId,
+        }),
+        {
+          status: claim.state === "failed" ? 409 : 200,
+          headers: JSON_HEADERS,
+        },
+      );
+    }
     if (claim) {
-      if (!claim.claimed) {
-        return new Response(
-          JSON.stringify({
-            success: claim.state === "completed",
-            state: claim.state,
-            operationId: claim.operationId,
-            itemId: claim.itemId,
-          }),
-          {
-            status: claim.state === "failed" ? 409 : 200,
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-            },
-          },
-        );
-      }
-      consoleAttempt = { matchId, claimToken: claim.claim_token };
-      // Use ONLY the server-validated durable file, never submitted filenames,
-      // provider, bucket or user identity from the incoming request.
-      userId = claim.actorId;
-      fileNames = [claim.request.storagePath];
-      bucketId = "match-data";
-      sourceProvider = "swing-vision";
-      expectedSha256 = claim.request.sha256;
+      // From here the claim is the sole source of the file, the actor and the
+      // digest; the body's fileNames, userId, bucketId and sourceProvider
+      // decide nothing for a claimed attempt.
+      attempt = { supabase, matchId, claimToken: claim.claim_token };
+      console.log("🔐 Admin-console attempt claimed:", {
+        actor: claim.actorId,
+        storagePath: claim.request.storagePath,
+      });
     }
 
-    // Console bytes are never eligible for the legacy caller-supplied file
-    // list. Also reject encoded/path-separator aliases before storage's URL
-    // normalization can turn a legacy path into the reserved namespace.
-    if (
-      !claim &&
-      [userId, ...fileNames].some((path) => /_admin-console|%|\\/.test(path))
-    )
-      throw new Error("Console files require their durable processing claim.");
-
-    // Fetch match record for source_provider and format (JSONB with best_of)
+    // Fetch match record for source_provider, format (JSONB with best_of)
+    // and the uploader, who is the only user allowed to process it
     const { data: match, error: matchError } = await supabase
       .from("matches")
-      .select("source_provider, format")
+      .select("source_provider, format, created_by")
       .eq("id", matchId)
       .single();
 
     if (matchError) {
-      if (consoleAttempt) throw matchError;
+      await failAttempt();
       console.error("Error fetching match:", matchError);
       return new Response(
         JSON.stringify({
@@ -175,7 +307,32 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const provider = sourceProvider || match?.source_provider || null;
+    // The verified identity is the only userId this function works with — the
+    // request body's is never read. A user must be the match's uploader; the
+    // service role acts as the uploader. A claimed console attempt is the one
+    // exception: its actor is the admin who submitted it, and created_by is
+    // not consulted — an attachment to an existing match may carry none.
+    const createdBy = (match?.created_by as string | null | undefined) ?? null;
+    if (!claim && caller.kind === "user" && caller.userId !== createdBy) {
+      return refuse(403, "You do not have access to this match");
+    }
+    // A claimed attempt reads its one file from the claim, so it needs no
+    // uploader folder: `actorId` may be null once the submitting admin's
+    // account is gone, and that is no reason to fail the attempt.
+    const userId = claim
+      ? claim.actorId
+      : caller.kind === "user"
+        ? caller.userId
+        : createdBy;
+    if (!claim && !userId) {
+      return refuse(403, "This match has no uploader to read files for");
+    }
+
+    // A claimed attempt is always a SwingVision file (admin_submit_match_file
+    // pins the provider); the body's sourceProvider is not consulted for it.
+    const provider = claim
+      ? "swing-vision"
+      : sourceProvider || match?.source_provider || null;
     // Extract best_of from format JSONB field, default to best-of-3
     const matchFormat =
       (match?.format as { best_of?: number } | null)?.best_of ?? 3;
@@ -197,26 +354,74 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Every file must live under the uploader's own storage folder. A claimed
+    // attempt's file is the claim's, never this list.
+    if (
+      !claim &&
+      userId &&
+      fileNames.some((name) => resolveStoragePath(userId, name) === null)
+    ) {
+      return refuse(
+        400,
+        `Every fileNames entry must be a path under ${userId}/ with no ".." segment`,
+      );
+    }
+
+    // Refuse a second run: a match that already carries points would get every
+    // row duplicated and key moments + insights fired again
+    const { data: existingPoints, error: existingError } = await supabase
+      .from("points")
+      .select("id")
+      .eq("match_id", matchId)
+      .limit(1);
+
+    if (existingError) {
+      await failAttempt();
+      console.error("Error checking existing points:", existingError);
+      return refuse(
+        500,
+        `Failed to check existing points: ${existingError.message}`,
+      );
+    }
+    if (existingPoints && existingPoints.length > 0) {
+      await failAttempt();
+      return refuse(409, "This match has already been processed");
+    }
+
     // Process the match data
     console.log("⚙️ Starting match data processing...");
     await processMatchToDb({
       supabase,
       matchId,
-      userId,
-      fileNames,
-      bucketId,
+      source: claim
+        ? {
+            kind: "claim",
+            storagePath: claim.request.storagePath,
+            sha256: claim.request.sha256,
+          }
+        : { kind: "folder", userId: userId as string, fileNames },
       matchFormat,
-      expectedSha256,
     });
 
-    if (consoleAttempt) {
-      const finished = await supabase.rpc("admin_finish_match_file", {
-        p_match_id: matchId,
-        p_claim_token: consoleAttempt.claimToken,
-        p_error: null,
-      });
-      if (finished.error) throw finished.error;
+    if (attempt) {
+      // The rows are committed; the attempt row is what the console polls.
+      // Its own error is thrown — the caller sees a 500 and the catch marks
+      // the attempt failed for review, rather than leaving it `processing`
+      // with a fully processed match behind it.
+      const { error: finishError } = await supabase.rpc(
+        "admin_finish_match_file",
+        {
+          p_match_id: matchId,
+          p_claim_token: attempt.claimToken,
+          p_error: null,
+        },
+      );
+      if (finishError) {
+        throw finishError;
+      }
+      attempt = null;
     }
+
     console.log("✅ Match data processing completed successfully");
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
@@ -226,14 +431,14 @@ Deno.serve(async (req: Request) => {
       },
     });
   } catch (error: any) {
-    if (consoleAttempt && processingClient) {
-      await processingClient.rpc("admin_finish_match_file", {
-        p_match_id: consoleAttempt.matchId,
-        p_claim_token: consoleAttempt.claimToken,
-        p_error: "processing-failed-review-required",
-      });
-    }
+    await failAttempt();
     console.error("Error in process-match Edge Function:", error);
+    // import_match_rows refuses a match that already has points with
+    // unique_violation — a concurrent run landed first. Same answer as the
+    // pre-check; nothing was persisted and nothing was invoked.
+    if (error?.code === "23505") {
+      return refuse(409, "This match has already been processed");
+    }
     return new Response(
       JSON.stringify({
         success: false,
@@ -257,28 +462,21 @@ Deno.serve(async (req: Request) => {
 async function processMatchToDb({
   supabase,
   matchId,
-  userId,
-  fileNames,
-  bucketId = "match-data",
+  source,
   matchFormat = 3,
-  expectedSha256,
 }: {
   supabase: ReturnType<typeof createClient>;
   matchId: string;
-  userId: string;
-  fileNames: string[];
-  bucketId?: string;
+  source: FileSource;
   matchFormat?: number;
-  expectedSha256?: string;
 }): Promise<void> {
   // 1. Combine sheets across all files
+  const fileNames =
+    source.kind === "claim" ? [source.storagePath] : source.fileNames;
   console.log(`📋 Processing ${fileNames.length} file(s):`, fileNames);
   const combined: CombinedSheets = await createCombinedSheets({
     supabase,
-    userId,
-    fileNames,
-    bucketId,
-    expectedSha256,
+    source,
   });
 
   const pointsRows = combined.Points ?? [];
@@ -327,7 +525,8 @@ async function processMatchToDb({
   const rallyLengthMap = buildRallyLengthMap(shotsRows);
   console.log(`🎾 Rally length map built with ${rallyLengthMap.size} entries`);
 
-  // 2. Insert points
+  // 2. Build points. Each gets its id here, not from a returning insert, so
+  //    the shots can reference their points before anything is written.
   const pointInserts = buildPointInserts(
     pointsRows,
     matchId,
@@ -335,53 +534,31 @@ async function processMatchToDb({
     gameScoreMap,
     rallyLengthMap,
     matchFormat,
-  );
+  ).map((point) => ({ id: crypto.randomUUID(), ...point }));
 
-  const { data: insertedPoints, error: pointsError } = await supabase
-    .from("points")
-    .insert(pointInserts)
-    .select("id, set_number, game_number, point_number");
+  const pointIdMap = buildPointIdMap(pointInserts);
 
-  if (pointsError) {
-    console.error("Error inserting points:", pointsError);
-    throw pointsError;
-  }
+  // 3. Build shots (if we have shot data)
+  const shotInserts = shotsRows.length
+    ? buildShotInserts(shotsRows, pointIdMap, hostTeam)
+    : [];
 
-  const pointIdMap = buildPointIdMap(insertedPoints ?? []);
-
-  // 3. Insert shots (if we have shot data)
-  if (shotsRows.length) {
-    const shotInserts = buildShotInserts(shotsRows, pointIdMap, hostTeam);
-    if (shotInserts.length) {
-      const { error: shotsError } = await supabase
-        .from("shots")
-        .insert(shotInserts);
-      if (shotsError) {
-        console.error("Error inserting shots:", shotsError);
-        throw shotsError;
-      }
-    }
-  }
-
-  // 4. Calculate match stats using Postgres function
-  // This aggregates from the points/shots we just inserted and upserts into match_stats
-  console.log("📊 Calculating match statistics...");
-  const { error: statsError } = await supabase.rpc("calculate_match_stats", {
+  // 4. Points, shots and match_stats land in one transaction, or not at all.
+  //    import_match_rows takes the match's advisory lock, refuses a match that
+  //    already has points (23505 — the handler answers the pre-check's 409),
+  //    inserts both sets of rows as given, then runs calculate_match_stats and
+  //    backfill_returns_in_and_net_points. A failure anywhere rolls back the
+  //    lot, so the pre-check above does not refuse the re-run.
+  console.log("📊 Importing rows and calculating match statistics...");
+  const { error: importError } = await supabase.rpc("import_match_rows", {
     p_match_id: matchId,
+    p_points: pointInserts,
+    p_shots: shotInserts,
   });
 
-  if (statsError) {
-    console.error("Error calculating match_stats:", statsError);
-    throw statsError;
-  }
-
-  const { error: backfillError } = await supabase.rpc(
-    "backfill_returns_in_and_net_points",
-    { p_match_id: matchId },
-  );
-  if (backfillError) {
-    console.error("Error computing returns_in/net_points:", backfillError);
-    throw backfillError;
+  if (importError) {
+    console.error("Error importing match rows:", importError);
+    throw importError;
   }
   console.log("✅ Match statistics calculated successfully");
 
@@ -422,16 +599,10 @@ async function processMatchToDb({
 
 async function createCombinedSheets({
   supabase,
-  userId,
-  fileNames,
-  expectedSha256,
-  bucketId = "match-data",
+  source,
 }: {
-  expectedSha256?: string;
   supabase: ReturnType<typeof createClient>;
-  userId: string;
-  fileNames: string[];
-  bucketId?: string;
+  source: FileSource;
 }): Promise<CombinedSheets> {
   // Dynamic import ExcelJS for Deno compatibility
   const ExcelJSModule = await import("npm:exceljs@4.4.0");
@@ -447,16 +618,31 @@ async function createCombinedSheets({
     Settings: [],
   };
 
+  // A claimed attempt names exactly one object, read as given — the console
+  // validated the path when it submitted it. A folder request lists files,
+  // each of which must resolve under the caller's own folder.
+  const fileNames =
+    source.kind === "claim" ? [source.storagePath] : source.fileNames;
+
   for (const fileName of fileNames) {
-    if (!fileName.endsWith(".xlsx") || fileName === "combined.xlsx") {
+    if (
+      source.kind === "folder" &&
+      (!fileName.endsWith(".xlsx") || fileName === "combined.xlsx")
+    ) {
       continue;
     }
 
-    // If fileName is already a full storage path (contains '/'), use it directly.
-    // Otherwise, construct it as {userId}/{fileName} for backward compatibility.
-    const filePath = fileName.includes("/")
-      ? fileName
-      : `${userId}/${fileName}`;
+    // The handler has already refused any entry outside the user's folder;
+    // resolving again here keeps the guard next to the download it protects.
+    const filePath =
+      source.kind === "folder"
+        ? resolveStoragePath(source.userId, fileName)
+        : fileName;
+    if (filePath === null) {
+      throw new Error(
+        `Refusing to read a file outside the caller's folder: ${fileName}`,
+      );
+    }
 
     // Extract just the filename for __source_file__ field (last part after '/')
     const sourceFileName = fileName.includes("/")
@@ -467,25 +653,33 @@ async function createCombinedSheets({
       console.log(`📥 Downloading file from storage: ${filePath}`);
 
       const { data, error } = await supabase.storage
-        .from(bucketId)
+        .from(STORAGE_BUCKET)
         .download(filePath);
 
       if (error || !data) {
         console.error(`❌ Error downloading ${filePath}:`, error);
+        if (source.kind === "claim") {
+          throw new Error(
+            `Failed to download ${filePath}: ${error?.message ?? "empty object"}`,
+          );
+        }
         continue;
       }
 
       console.log(`✅ Successfully downloaded ${filePath}`);
 
       const arrayBuffer = await data.arrayBuffer();
-      if (expectedSha256) {
+      // The console validated these exact bytes and recorded their digest;
+      // anything else in the object now is refused before a cell is parsed.
+      if (source.kind === "claim") {
         const digest = Array.from(
           new Uint8Array(await crypto.subtle.digest("SHA-256", arrayBuffer)),
         )
           .map((byte) => byte.toString(16).padStart(2, "0"))
           .join("");
-        if (digest !== expectedSha256)
+        if (digest !== source.sha256) {
           throw new Error("Validated file bytes changed; review required.");
+        }
       }
       // ExcelJS in Deno: Workbook is available directly on the module
       const Workbook = ExcelJS.Workbook;
@@ -524,7 +718,9 @@ async function createCombinedSheets({
         }
       }
     } catch (err) {
-      if (expectedSha256) throw err;
+      // A claimed attempt has one file and no fallback: its failure is the
+      // attempt's, and the handler marks it so.
+      if (source.kind === "claim") throw err;
       console.error(`⚠️ Error with ${filePath}:`, err);
       continue;
     }
