@@ -172,6 +172,32 @@ to put a testable seam.
 > `reserveQuota()` at `/api/splitstep/jobs` remains the sole authority and
 > still refuses at the spend either way.
 
+> **A reviewed exception, added 2026-09-27: the admin console's video path,
+> from `codex/admin-uploads`.** The admin console submits a video for a
+> program's match through the same two routes the wizard uses, so `jobs/` and
+> `upload-url/` each gain one `adminVideo` branch rather than a second copy of
+> the decision. `authorizeAdminVideo()` re-verifies the caller through the
+> `admin_video_access` RPC (program active, the actor is the operation's owner
+> and an admin, roster eligibility) and builds the billing workspace with the
+> same `getAdminUploadContext()` every other console path uses, so
+> `canSubmitVideo` comes from the one `program.status === "active"` rule;
+> `uploadEligibility()` itself is called unchanged. Quota for an admin job
+> goes through `admin_reserve_video_quota`, which calls the same
+> `reserve_processing_quota()` as `reserveQuota()` — one ledger, two authorised
+> callers. A later submit that disagrees with the job row's saved
+> `initialTopPlayerIsPlayer1` / `adScoring` / `fixedCamera` is refused 409; the
+> three inputs keep their meaning and `job-request.ts` is untouched. Two fixes
+> rode along for every caller: `submitting.error` is now checked, and
+> `recordBlobName` writes only the match's live job. Also on the frozen list
+> and covered by this entry: `video-url/azure-sas.ts` accepts an optional
+> `AZURE_STORAGE_ENDPOINT` for the Azurite emulator, only outside production
+> and only for plain http on a loopback host (`tests/azure-local-endpoint.spec.ts`
+> asserts the production refusal); and `swingvision-parser.ts` /
+> `swingvision-validator.ts` change one line each in `getExcelJS()` —
+> `exceljs.default ?? exceljs`, the ESM/CommonJS interop the admin file route
+> needs to run them in Node — with parsing, validation, attribution and the
+> blank-Guest fallback untouched. The webhook route is not touched.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 
