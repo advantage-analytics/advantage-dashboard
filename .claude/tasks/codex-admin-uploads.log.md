@@ -164,3 +164,16 @@ is the runner's. Newest entries at the bottom.
 ## 2026-09-27 · Migration status note (appended; entries above left as written)
 
 The eight admin-upload migrations the entries above call unapplied were applied live on 2026-09-19, and commit 781e96c9 renamed the files to their live-recorded versions: 20260917000513 → 20260919044542 (persist_admin_upload_submissions), 20260917004400 → 20260919044622 (prepare_admin_analysis_attachments), 20260917010000 → 20260919044716 (submit_admin_match_files), 20260917011813 → 20260919044829 (submit_admin_match_videos), 20260917025856 → 20260919045015 (save_admin_dual_results), 20260917032144 → 20260919045138 (save_admin_tournament_results), 20260917065829 → 20260919045156 (fix_admin_attachment_shot_lookup), 20260917072323 → 20260919045221 (guard_admin_match_storage_purge). The docs under docs/admin-*.md now cite the new names.
+
+## T21 · Add admin_reconcile_submission_item for stuck video and file attempts — done
+
+**gate:** mechanical PASS · completion pass
+
+**changed:** New service-role-only RPC `admin_reconcile_submission_item` (abandon for video/file, complete for file; refusal codes incl. kind-unsupported, attempt-active, quota-held, analysis-present, analysis-missing, attempt-completed, mode-unsupported) plus the audit CHECK widened with `console.submission_reconciled`. Applied live via the Supabase MCP; file renamed to the recorded version 20260927084958. PGlite test `tests/database/admin-reconcile.test.mjs` added to the video harness (test:database 20/20); contracts doc paragraph added. Deliberate extras: `kind` returns the branch, `result.abandoned.fileId`, `result.completed` on complete, extra refusal codes (mode-invalid, operation-not-found, item-not-found, attempt-missing, attempt-not-processing, linkage-mismatch).
+
+**follow-ups:**
+
+1. Add a `tests/database/README.md` paragraph for admin-reconcile.test.mjs.
+2. Load `20260919045221_guard_admin_match_storage_purge.sql` into the video harness so `reject_purging_match` is exercised by the item rewrite.
+3. A prepared-but-never-submitted item (reservation, no attempt) is `attempt-missing` yet still blocks a fresh prepare with `attachment-reserved` — needs a `release` mode or reservation expiry.
+4. `quota-held` is a dead end in the UI unless T22 offers `release_processing_quota` before abandon.

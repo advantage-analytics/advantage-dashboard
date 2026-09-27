@@ -303,7 +303,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T21 · Add admin_reconcile_submission_item for stuck video and file attempts
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** Best guesses: new `supabase/migrations/<live-version>_reconcile_admin_submission_items.sql`; `tests/database/fixtures/admin-video-harness.mjs` (append the new file to its migration list); new `tests/database/admin-reconcile.test.mjs`; `docs/admin-uploads-contracts.md` (one paragraph under "Verified trigger and RPC behavior").
 - **done when:**

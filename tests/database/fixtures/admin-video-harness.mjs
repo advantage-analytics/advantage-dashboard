@@ -39,6 +39,7 @@ export async function setup(db = new PGlite()) {
     "20260919044716_submit_admin_match_files.sql",
     "20260919044829_submit_admin_match_videos.sql",
     "20260919045156_fix_admin_attachment_shot_lookup.sql",
+    "20260927084958_reconcile_admin_submission_items.sql",
   ])
     await db.exec(
       await readFile(
