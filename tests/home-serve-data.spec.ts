@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { loadHomeServes } from "@/lib/data/home-serve-data";
+import { inBox, pointMeta } from "./fixtures/serve-dot-row-fixtures";
 
 /**
  * `loadHomeServes` reads the personal Home's serve-placement dots (T3). The
@@ -27,30 +28,6 @@ type Role = "p1-first" | "p1-second" | "opponent";
 // (dropped by the `serverIsPlayer1` gate).
 const roleOf = (i: number): Role =>
   i % 3 === 0 ? "p1-first" : i % 3 === 1 ? "p1-second" : "opponent";
-
-function pointMeta(id: string, matchId: string, serverIsPlayer1: boolean) {
-  return {
-    id,
-    match_id: matchId,
-    server_is_player1: serverIsPlayer1,
-    set_number: 1,
-    result_type: null,
-    point_score: "15-0",
-    game_score: "1-0",
-    won_by_player1: true,
-  };
-}
-
-// A landing inside the far service box, struck from the near baseline, called
-// In — any row shaped like this plots if it reaches `pointToServeDot`.
-const inBox = {
-  landing_x: 1,
-  landing_y: 15,
-  contact_y: 0,
-  spin_type: "Flat",
-  zone: null,
-  result: "In",
-};
 
 // One serve row per point: 4 × 300 = 1,200 rows.
 const serveRows = matches.flatMap((match, m) =>

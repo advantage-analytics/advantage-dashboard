@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import { fetchAllPages } from "@/lib/data/paged-query";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { createLoader } from "./fixtures/vm-modules";
+import { withConsoleErrors } from "./fixtures/with-console-errors";
 
 /**
  * `fetchAllPages` is the fail-closed paged read (T2): every row in order, or
@@ -169,19 +170,6 @@ function loadGetMatchPoints(client: unknown) {
   return mod.getMatchPointsFromSupabase as (
     matchId: string,
   ) => Promise<MatchPoint[]>;
-}
-
-async function withConsoleErrors<T>(run: () => Promise<T>) {
-  const errors: unknown[][] = [];
-  const original = console.error;
-  console.error = (...args: unknown[]) => {
-    errors.push(args);
-  };
-  try {
-    return { result: await run(), errors };
-  } finally {
-    console.error = original;
-  }
 }
 
 test("getMatchPointsFromSupabase attaches every shot across three pages", async () => {

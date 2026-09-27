@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 import { swingVisionStrategy } from "@/lib/services/upload";
 import { createLoader } from "./fixtures/vm-modules";
+import { withConsoleErrors } from "./fixtures/with-console-errors";
 
 /**
  * The app-side guards on the SwingVision import routes (T12).
@@ -162,19 +163,6 @@ function validateRequest(body: unknown, raw = false) {
     headers: { "content-type": "application/json" },
     body: raw ? (body as string) : JSON.stringify(body),
   });
-}
-
-async function withConsoleErrors<T>(run: () => Promise<T>) {
-  const errors: unknown[][] = [];
-  const original = console.error;
-  console.error = (...args: unknown[]) => {
-    errors.push(args);
-  };
-  try {
-    return { result: await run(), errors };
-  } finally {
-    console.error = original;
-  }
 }
 
 function ownDb(overrides: Partial<FakeDb> = {}): FakeDb {

@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 import { serveMapFor } from "@/lib/data/player-profile-server";
+import { withConsoleErrors } from "./fixtures/with-console-errors";
+import { inBox, pointMeta } from "./fixtures/serve-dot-row-fixtures";
 
 /**
  * `serveMapFor` reads the player-profile serve map (T4) — the same job
@@ -28,30 +30,6 @@ const matchSides = Array.from({ length: MATCHES }, (_, m) => ({
   id: `match-${m}`,
   isPlayer1: m % 2 === 0,
 }));
-
-function pointMeta(id: string, matchId: string, serverIsPlayer1: boolean) {
-  return {
-    id,
-    match_id: matchId,
-    server_is_player1: serverIsPlayer1,
-    set_number: 1,
-    result_type: null,
-    point_score: "15-0",
-    game_score: "1-0",
-    won_by_player1: true,
-  };
-}
-
-// A landing inside the far service box, struck from the near baseline,
-// called In — any row shaped like this survives `pointToServeDot`.
-const inBox = {
-  landing_x: 1,
-  landing_y: 15,
-  contact_y: 0,
-  spin_type: "Flat",
-  zone: null,
-  result: "In",
-};
 
 // One serve row per point: 10 matches × 220 points = 2,200 rows → three
 // pages ([0,999], [1000,1999], [2000,2999], the last mostly empty).
@@ -145,19 +123,6 @@ function fakeClient(failShotPage?: number) {
     shotIn,
     tables,
   };
-}
-
-async function withConsoleErrors<T>(run: () => Promise<T>) {
-  const errors: unknown[][] = [];
-  const original = console.error;
-  console.error = (...args: unknown[]) => {
-    errors.push(args);
-  };
-  try {
-    return { result: await run(), errors };
-  } finally {
-    console.error = original;
-  }
 }
 
 test("reads 2,200 serve rows across three pages and counts every profile-side serve", async () => {

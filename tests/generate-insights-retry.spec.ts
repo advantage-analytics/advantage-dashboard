@@ -2,18 +2,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { expect, test } from "@playwright/test";
 import ts from "typescript";
-
-/**
- * Distinct per key, so the function's service-role check compares the bearer
- * against the real key rather than a value every key shares. The PostHog keys
- * are left unset, which keeps its capture (and its fetch) out of the run.
- */
-const ENV: Record<string, string> = {
-  SUPABASE_URL: "https://stub.supabase.co",
-  SUPABASE_ANON_KEY: "anon-key",
-  SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
-  GEMINI_KEY: "gemini-key",
-};
+import { GENERATE_INSIGHTS_ENV as ENV } from "./fixtures/edge-function-guard-identities";
 
 /**
  * generate-insights retries Gemini's transient refusals. A 503 "high demand"

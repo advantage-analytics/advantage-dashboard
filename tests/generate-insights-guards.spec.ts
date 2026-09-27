@@ -2,6 +2,13 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { expect, test } from "@playwright/test";
 import ts from "typescript";
+import {
+  ANON_KEY,
+  MATCH,
+  OWNER,
+  SERVICE_ROLE_KEY,
+  USER_TOKENS,
+} from "./fixtures/edge-function-guard-identities";
 
 /**
  * generate-insights writes `matches.insights` under a service-role client, and
@@ -10,15 +17,18 @@ import ts from "typescript";
  * function runs in a vm with a stubbed client and Gemini, and every guard is
  * observed from what those stubs are asked to do, in order.
  */
-const OWNER = "11111111-1111-4111-8111-111111111111";
-const STRANGER = "22222222-2222-4222-8222-222222222222";
-const MATCH = "33333333-3333-4333-8333-333333333333";
-const ANON_KEY = "anon-key";
-const SERVICE_ROLE_KEY = "service-role-key";
-const USER_TOKENS: Record<string, string> = {
-  "owner-token": OWNER,
-  "stranger-token": STRANGER,
-};
+
+// Transpiled once — the source never changes between tests, only the vm
+// context each `invoke()` call runs it in.
+const SOURCE = ts.transpileModule(
+  readFileSync("supabase/functions/generate-insights/index.ts", "utf8"),
+  {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+  },
+).outputText;
 
 async function invoke({
   bearer,
@@ -84,42 +94,30 @@ async function invoke({
     SUPABASE_SERVICE_ROLE_KEY: SERVICE_ROLE_KEY,
     GEMINI_KEY: "gemini-key",
   };
-  const source = readFileSync(
-    "supabase/functions/generate-insights/index.ts",
-    "utf8",
-  );
-  runInNewContext(
-    ts.transpileModule(source, {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2022,
-      },
-    }).outputText,
-    {
-      exports: {},
-      require: (id: string) =>
-        id.includes("http/server")
-          ? {
-              serve: (callback: typeof handler) => {
-                handler = callback;
-              },
-            }
-          : { createClient },
-      Deno: { env: { get: (key: string) => env[key] } },
-      Response,
-      console: { ...console, warn: () => {}, error: () => {} },
-      fetch: async (url: string) => {
-        events.push(
-          url.startsWith("https://generativelanguage.googleapis.com/")
-            ? "fetch:gemini"
-            : `fetch:${url}`,
-        );
-        return Response.json({
-          candidates: [{ content: { parts: [{ text: "{}" }] } }],
-        });
-      },
+  runInNewContext(SOURCE, {
+    exports: {},
+    require: (id: string) =>
+      id.includes("http/server")
+        ? {
+            serve: (callback: typeof handler) => {
+              handler = callback;
+            },
+          }
+        : { createClient },
+    Deno: { env: { get: (key: string) => env[key] } },
+    Response,
+    console: { ...console, warn: () => {}, error: () => {} },
+    fetch: async (url: string) => {
+      events.push(
+        url.startsWith("https://generativelanguage.googleapis.com/")
+          ? "fetch:gemini"
+          : `fetch:${url}`,
+      );
+      return Response.json({
+        candidates: [{ content: { parts: [{ text: "{}" }] } }],
+      });
     },
-  );
+  });
 
   const response = await handler(
     new Request("https://example.test", {

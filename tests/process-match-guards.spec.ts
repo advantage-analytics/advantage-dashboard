@@ -2,6 +2,14 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { expect, test } from "@playwright/test";
 import ts from "typescript";
+import {
+  ANON_KEY,
+  MATCH,
+  OWNER,
+  SERVICE_ROLE_KEY,
+  STRANGER,
+  USER_TOKENS,
+} from "./fixtures/edge-function-guard-identities";
 
 /**
  * process-match writes under a service-role client, and `verify_jwt` is
@@ -10,16 +18,19 @@ import ts from "typescript";
  * processed. The edge function runs in a vm with a stubbed client, and every
  * guard is observed from what that client is asked to do, in order.
  */
-const OWNER = "11111111-1111-4111-8111-111111111111";
-const STRANGER = "22222222-2222-4222-8222-222222222222";
-const MATCH = "33333333-3333-4333-8333-333333333333";
-const ANON_KEY = "anon-key";
-const SERVICE_ROLE_KEY = "service-role-key";
-const USER_TOKENS: Record<string, string> = {
-  "owner-token": OWNER,
-  "stranger-token": STRANGER,
-};
 const OWN_FILE = `${OWNER}/swing-vision/${MATCH}/match.xlsx`;
+
+// Transpiled once — the source never changes between tests, only the vm
+// context each `invoke()` call runs it in.
+const SOURCE = ts.transpileModule(
+  readFileSync("supabase/functions/process-match/index.ts", "utf8"),
+  {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+  },
+).outputText;
 
 async function invoke({
   bearer,
@@ -105,32 +116,20 @@ async function invoke({
     SUPABASE_ANON_KEY: ANON_KEY,
     SUPABASE_SERVICE_ROLE_KEY: SERVICE_ROLE_KEY,
   };
-  const source = readFileSync(
-    "supabase/functions/process-match/index.ts",
-    "utf8",
-  );
-  runInNewContext(
-    ts.transpileModule(source, {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2022,
+  runInNewContext(SOURCE, {
+    exports: {},
+    require: (id: string) =>
+      id.includes("supabase-js") ? { createClient } : {},
+    Deno: {
+      serve: (callback: typeof handler) => {
+        handler = callback;
       },
-    }).outputText,
-    {
-      exports: {},
-      require: (id: string) =>
-        id.includes("supabase-js") ? { createClient } : {},
-      Deno: {
-        serve: (callback: typeof handler) => {
-          handler = callback;
-        },
-        env: { get: (key: string) => env[key] },
-      },
-      Request,
-      Response,
-      console: { ...console, log: () => {}, error: () => {} },
+      env: { get: (key: string) => env[key] },
     },
-  );
+    Request,
+    Response,
+    console: { ...console, log: () => {}, error: () => {} },
+  });
 
   const response = await handler(
     new Request("https://example.test", {

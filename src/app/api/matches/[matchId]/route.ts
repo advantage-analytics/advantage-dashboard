@@ -70,6 +70,15 @@ function badRequest(error: string, field?: string) {
   );
 }
 
+/**
+ * A 500 whose logged detail (the real Supabase error) never reaches the
+ * client — only `publicMessage` does.
+ */
+function serverError(logLabel: string, cause: unknown, publicMessage: string) {
+  console.error(logLabel, cause);
+  return NextResponse.json({ error: publicMessage }, { status: 500 });
+}
+
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 /** The newest job for the match, in the shared status vocabulary, or null. */
@@ -153,10 +162,10 @@ export async function GET(
 
   const { data, error } = await loadOwnMatch(supabase, matchId, user.id);
   if (error) {
-    console.error("GET /api/matches/[matchId]: failed to load match", error);
-    return NextResponse.json(
-      { error: "Could not load the match" },
-      { status: 500 },
+    return serverError(
+      "GET /api/matches/[matchId]: failed to load match",
+      error,
+      "Could not load the match",
     );
   }
   if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -209,13 +218,10 @@ export async function PATCH(
     analysisFor(supabase, matchId),
   ]);
   if (lookupError) {
-    console.error(
+    return serverError(
       "PATCH /api/matches/[matchId]: failed to load match",
       lookupError,
-    );
-    return NextResponse.json(
-      { error: "Could not load the match" },
-      { status: 500 },
+      "Could not load the match",
     );
   }
   if (!existing)
@@ -281,10 +287,10 @@ export async function PATCH(
     .maybeSingle();
 
   if (error) {
-    console.error("PATCH /api/matches/[matchId]: failed to save match", error);
-    return NextResponse.json(
-      { error: "Could not save the match" },
-      { status: 500 },
+    return serverError(
+      "PATCH /api/matches/[matchId]: failed to save match",
+      error,
+      "Could not save the match",
     );
   }
   if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -315,13 +321,10 @@ export async function DELETE(
     .maybeSingle();
 
   if (lookupError) {
-    console.error(
+    return serverError(
       "DELETE /api/matches/[matchId]: failed to load match",
       lookupError,
-    );
-    return NextResponse.json(
-      { error: "Could not load the match" },
-      { status: 500 },
+      "Could not load the match",
     );
   }
   if (!existing)
@@ -339,13 +342,10 @@ export async function DELETE(
     .eq("created_by", user.id);
 
   if (deleteError) {
-    console.error(
+    return serverError(
       "DELETE /api/matches/[matchId]: failed to delete match",
       deleteError,
-    );
-    return NextResponse.json(
-      { error: "Could not delete the match" },
-      { status: 500 },
+      "Could not delete the match",
     );
   }
 

@@ -139,6 +139,32 @@ be. Doubles teams and existing users depend on it.
 > `points` or `shots`. Blank captions (`""`) were fixed in the read path
 > instead, not by rewriting rows. This is not a precedent for backfills.
 
+> **A reviewed exception, added 2026-09-26: guards on the frozen paths, from the
+> final-pass codebase review** (`claude/code-review-tools-order-68b9e9`, tasks
+> T9–T11, T13, T15 in its queue). Each is a refusal or a bookkeeping fix, never a
+> change to what a file parses, attributes or computes:
+>
+> - `process-match` (and `generate-insights`, `generate-key-moments`) now verify
+>   the caller — service role, or a user token whose `matches.created_by` is the
+>   match — pin the bucket and object prefix, and refuse a second run for a match
+>   that already has points. The body's `userId` is never read. Parsing,
+>   `is_player1` (still keyed on the Settings "Host Team" cell) and every write
+>   shape are as they were. Not yet deployed — a user step, all three together.
+> - `swingvision-parser.ts` `transformToFormData` no longer swaps
+>   `playerName`/`opponentName` on the blank-Guest fallback: host is always
+>   player1, which is what `process-match` already assumed, so the name and the
+>   statistics agree. The flag, its detection and every other parser path are
+>   untouched; no existing row is touched.
+> - `upload-url/route.ts` `recordBlobName` writes only the match's live job
+>   (`status in pending|uploading|uploaded`); `submit-match-video.ts`'s terminal
+>   `uploaded` write moved into `mark-job-uploaded.ts`, is checked and retried
+>   once, and a failure marks the job failed instead of submitting into a 409.
+>   `upload-url/handler.ts` and `video-url/types.ts` changed doc comments only.
+>
+> `calculate_match_stats`, `swingvision-validator.ts` and existing match data
+> were not touched. Anything beyond this list on these paths still needs its own
+> entry here.
+
 **These files are the integration, not UI.** Changing them to suit a layout is
 almost always the wrong fix:
 
