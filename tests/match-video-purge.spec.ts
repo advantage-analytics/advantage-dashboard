@@ -101,6 +101,9 @@ function fakeCaller(tables: Tables, options: { matchesError?: string } = {}) {
  * The attachment lane's seams
  * ---------------------------------------------------------------------- */
 
+/** The console's deletion guard is not under test: every match may go. */
+const claimPurge = async () => ({ data: true, error: null });
+
 function purgeDeps(overrides: Partial<AttachmentPurgeDeps> = {}) {
   const h = harness();
   const scheduled: Array<() => Promise<void>> = [];
@@ -159,6 +162,7 @@ test("match delete: the rows are orphaned by the delete and the scheduled run co
 
   await purgeMatchStorage(caller.client, [matchId], "match delete", {
     attachments: p.deps,
+    claimPurge,
   });
 
   // Before the delete nothing is touched: no storage call, no state change.
@@ -337,6 +341,7 @@ for (const failure of [
       await expect(
         purgeMatchStorage(caller.client, [matchId], "match delete", {
           attachments: p.deps,
+          claimPurge,
         }),
       ).resolves.toBeUndefined();
     } finally {
@@ -401,6 +406,7 @@ test("account delete: the personal match's video is collected; the retained team
 
   await purgeMatchStorage(admin.client, [personal], "account delete", {
     attachments: p.deps,
+    claimPurge,
   });
   expect(p.listed).toEqual([[personal]]);
 
@@ -446,6 +452,7 @@ test("a failed deletion keeps the keys and the retry metadata; the next sweep fi
 
   await purgeMatchStorage(caller.client, [matchId], "match delete", {
     attachments: p.deps,
+    claimPurge,
   });
   p.db.orphan(matchId);
   await p.runScheduled();
@@ -498,6 +505,7 @@ test("a copy in flight when the match is deleted: activation is refused, the cop
 
   await purgeMatchStorage(caller.client, [matchId], "match delete", {
     attachments: p.deps,
+    claimPurge,
   });
   p.db.orphan(matchId);
   await p.runScheduled();
@@ -539,6 +547,7 @@ test("a late upload under a still-valid credential is fenced at once and collect
 
   await purgeMatchStorage(caller.client, [matchId], "match delete", {
     attachments: p.deps,
+    claimPurge,
   });
   p.db.orphan(matchId);
   await p.runScheduled();

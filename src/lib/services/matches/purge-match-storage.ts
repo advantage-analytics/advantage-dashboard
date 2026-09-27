@@ -20,6 +20,18 @@ export interface PurgeMatchStorageOptions {
    * service-role client; `tests/match-video-purge.spec.ts` injects fakes.
    */
   attachments?: AttachmentPurgeDeps;
+  /**
+   * The admin console's deletion guard: `admin_claim_match_storage_purge`
+   * (codex/admin-uploads T20), a service-role RPC that claims the purge and
+   * answers false for a match the console recorded or analysed. Production
+   * asks the service-role client; the offline purge specs
+   * (`tests/match-video-purge.spec.ts`, `tests/purge-match-results-keys.spec.ts`)
+   * inject an allow-all fake, since they run with no service-role key and are
+   * not about this guard — `tests/admin-match-delete-protection.spec.ts` is.
+   */
+  claimPurge?: (
+    matchIds: string[],
+  ) => Promise<{ data: unknown; error: { message: string } | null }>;
 }
 
 /** What the results lane reads off a `processing_jobs` row. */
@@ -158,10 +170,17 @@ export async function purgeMatchStorage(
   // Console references intentionally block row deletion. Ordinary creators cannot
   // see this provenance through RLS, so a server-only claim RPC checks it for
   // both single-match and account cleanup before any object is removed.
-  const { data: protectedMatch, error: protectionError } =
-    await createAdminClient().rpc("admin_claim_match_storage_purge", {
-      p_match_ids: matchIds,
+  const claimPurge =
+    options.claimPurge ??
+    (async (ids: string[]) => {
+      const { data, error } = await createAdminClient().rpc(
+        "admin_claim_match_storage_purge",
+        { p_match_ids: ids },
+      );
+      return { data, error };
     });
+  const { data: protectedMatch, error: protectionError } =
+    await claimPurge(matchIds);
   if (protectionError || protectedMatch !== true) {
     throw new Error(
       protectionError

@@ -1352,9 +1352,8 @@ export function useUploadMatchWizard({
       // that builds a `?entry=` preset never hands one over.
       // The admin console is the one exception: it names its source up front
       // (`initialProvider`), and a console preset keeps it.
-      setSelectedProvider(
-        isAdminMode && initialProvider ? initialProvider : DEFAULT_PROVIDER_ID,
-      );
+      if (isAdminMode && initialProvider) setSelectedProvider(initialProvider);
+      else setSelectedProvider(DEFAULT_PROVIDER_ID);
       // A PinnedLineBar swap re-runs this with a different line. The seed
       // below rewrites the line's facts; the answers given about line A's
       // players are cleared beside it (LINE_SWAP_FIELDS), and the top-player
