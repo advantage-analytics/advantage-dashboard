@@ -35,7 +35,7 @@ import type { Match } from "@/lib/data/types";
  *
  * Two readers, on two clients, on purpose:
  *
- * - `getMatchShareLink` runs on the request's cookie client. RLS on
+ * - `getMatchShareState` runs on the request's cookie client. RLS on
  *   `match_share_links` answers whether THIS viewer may see the match's link
  *   (`can_share_match`), so the Share popover shows a link only to someone
  *   who could have minted it.
