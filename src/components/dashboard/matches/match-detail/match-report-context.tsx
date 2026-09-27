@@ -104,6 +104,15 @@ export interface MatchReportMeta {
    * Band STORAGE stays feet regardless — this only affects display.
    */
   unit: DistanceUnit;
+  /**
+   * The public share page (`/m/[token]`): an anonymous reader with no
+   * workspace, no session and nowhere else in the app to go. A part that
+   * offers a way onward into the dashboard — the insight card's "Why this"
+   * link, the empty Statistics view's "Open the Video tab" — draws nothing
+   * instead. Everything else reads the same. `false` everywhere under
+   * `/dashboard`.
+   */
+  readOnly: boolean;
 }
 
 export interface MatchReportContextValue {
@@ -122,7 +131,12 @@ export function useMatchReport(): MatchReportContextValue {
   return value;
 }
 
-export interface MatchReportProviderProps extends MatchReportMeta {
+export interface MatchReportProviderProps extends Omit<
+  MatchReportMeta,
+  "readOnly"
+> {
+  /** See `MatchReportMeta.readOnly`. Defaults to `false`. */
+  readOnly?: boolean;
   /**
    * The view a URL without `?tab=` opens at — the reader's "Match report opens
    * at" preference, resolved in `page.tsx`. An explicit `?tab=` still wins.
@@ -145,6 +159,7 @@ export function MatchReportProvider({
   bandSettings,
   canEditBands,
   unit,
+  readOnly = false,
   defaultView = "statistics",
   children,
 }: MatchReportProviderProps) {
@@ -204,6 +219,7 @@ export function MatchReportProvider({
       bandSettings,
       canEditBands,
       unit,
+      readOnly,
     }),
     [
       matchId,
@@ -219,6 +235,7 @@ export function MatchReportProvider({
       bandSettings,
       canEditBands,
       unit,
+      readOnly,
     ],
   );
 

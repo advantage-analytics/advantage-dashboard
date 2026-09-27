@@ -249,7 +249,7 @@ function InsightExpanded({
     <div className="flex flex-col gap-2 p-[16px_20px_12px]">
       <p className="text-body [text-wrap:pretty]" style={CLAIM_STYLE}>
         {claim}
-        {!evidence && (
+        {!evidence && !meta.readOnly && (
           <>
             {" "}
             <WhyThisLink />
@@ -259,7 +259,15 @@ function InsightExpanded({
 
       {evidence && (
         <p className="text-[11px] leading-[1.6] [text-wrap:pretty] text-[var(--ink-700)]">
-          {evidence} <WhyThisLink />
+          {evidence}
+          {/* `/dashboard/ask` is behind sign-in; the public page has no
+              door there (`meta.readOnly`). */}
+          {!meta.readOnly && (
+            <>
+              {" "}
+              <WhyThisLink />
+            </>
+          )}
         </p>
       )}
 

@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { pickServeShot, pickReturnShot } from "@/lib/data/serve-return-shots";
 
@@ -179,7 +180,7 @@ function determinePlayer(
  * loader.
  */
 async function fetchSavedByPointId(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   matchId: string,
   pointIds: string[],
 ): Promise<Map<string, { userId: string; name: string | null }[]>> {
@@ -250,8 +251,24 @@ async function fetchSavedByPointId(
 
 export async function getMatchPointsFromSupabase(
   matchId: string,
+  /**
+   * The client to read through. Defaults to the request's cookie client, so
+   * RLS answers who may see the match. The public share page passes the
+   * service-role client after it has resolved a share token
+   * (`match-share-server.ts`); nothing else should.
+   */
+  client?: SupabaseClient,
+  options: {
+    /**
+     * Whether to read `point_bookmarks`. The public share page turns this
+     * off: bookmarks carry teammates' user ids, and an anonymous reader has
+     * no business seeing who saved what.
+     */
+    includeBookmarks?: boolean;
+  } = {},
 ): Promise<MatchPoint[]> {
-  const supabase = await createClient();
+  const supabase = client ?? (await createClient());
+  const { includeBookmarks = true } = options;
 
   // Fetch points first
   const { data: pointsData, error: pointsError } = await supabase
@@ -301,7 +318,9 @@ export async function getMatchPointsFromSupabase(
   }
 
   // Who bookmarked each point, workspace-wide (see fetchSavedByPointId).
-  const savedByPointId = await fetchSavedByPointId(supabase, matchId, pointIds);
+  const savedByPointId = includeBookmarks
+    ? await fetchSavedByPointId(supabase, matchId, pointIds)
+    : new Map<string, { userId: string; name: string | null }[]>();
 
   // Group shots by point_id
   const shotsByPointId = new Map<string, DbShot[]>();

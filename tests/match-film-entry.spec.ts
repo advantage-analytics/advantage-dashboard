@@ -787,7 +787,8 @@ test("the capability is resolved on the server and handed down", () => {
   // `workspace` joined this wave in Task 6 (saved views need the active
   // workspace's id), riding the layout's already-`cache()`-wrapped call.
   // `preferences` joined in Stage 2C (Units) for the same reason.
+  // `shareLink` joined with the public share link: one RLS-scoped row.
   expect(PAGE).toMatch(
-    /const \[data, jobs, video, filmEntry, workspace, preferences\] =\s*\n?\s*await Promise\.all\(\[/,
+    /const \[data, jobs, video, filmEntry, workspace, preferences, shareLink\] =\s*\n?\s*await Promise\.all\(\[/,
   );
 });

@@ -15,7 +15,7 @@ import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { Match, SetScore } from "@/lib/data/types";
 
-interface DbMatch {
+export interface DbMatch {
   id: string;
   program_id: string | null;
   created_by: string | null;
@@ -88,7 +88,7 @@ function buildSets(row: DbMatch): SetScore[] {
   });
 }
 
-type PlayerProfile = { hand: string | null; backhand: string | null };
+export type PlayerProfile = { hand: string | null; backhand: string | null };
 
 /**
  * Which seat on the row is "you", and the id sitting in it.
@@ -144,7 +144,7 @@ async function resolveRosterSeatIds(
   return (data ?? []).map((player) => player.id as string);
 }
 
-function transformDbMatchToMatch(
+export function transformDbMatchToMatch(
   row: DbMatch,
   /**
    * Every id that names the viewer as a player — their login, plus any roster
@@ -386,7 +386,7 @@ async function resolveKpiHistory(
  * RLS is per-creator, so a coach viewing a player's match would otherwise read
  * nothing. Only the two window columns leave the query.
  */
-async function resolveAnalysedWindowSeconds(
+export async function resolveAnalysedWindowSeconds(
   dbRow: DbMatch,
 ): Promise<number | null> {
   if (dbRow.source_provider !== "splitstep") return null;
@@ -410,6 +410,14 @@ async function resolveAnalysedWindowSeconds(
   return analysedWindowSeconds(jobs ?? []);
 }
 
+/**
+ * The `matches` columns the report reads — one string, so the public share
+ * loader (`match-share-server.ts`) and this one cannot drift apart on which
+ * fields `DbMatch` actually carries.
+ */
+export const MATCH_DETAIL_COLUMNS =
+  "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights";
+
 export const getMatchDetailData = cache(async (matchId: string) => {
   const supabase = await createClient();
 
@@ -419,9 +427,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
 
   const { data: row, error } = await supabase
     .from("matches")
-    .select(
-      "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights",
-    )
+    .select(MATCH_DETAIL_COLUMNS)
     .eq("id", matchId)
     .single();
 
