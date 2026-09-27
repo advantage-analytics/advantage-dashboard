@@ -2,8 +2,10 @@
 
 import {
   useEffect,
+  useOptimistic,
   useState,
   useSyncExternalStore,
+  useTransition,
   type ComponentProps,
   type ComponentType,
 } from "react";
@@ -14,9 +16,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { AdvSwitch } from "@/components/ui/adv-switch";
+import {
+  disableMatchShare,
+  enableMatchShare,
+} from "@/app/dashboard/matches/(detail)/[matchId]/share-actions";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import type { Match } from "@/lib/data/types";
+import type { MatchShareLink } from "@/lib/data/match-share-server";
+import { realTournamentName } from "@/lib/data/match-share-format";
 
 type PopoverContentProps = ComponentProps<typeof PopoverContent>;
 
@@ -48,6 +57,20 @@ interface ShareMatchButtonProps {
   trigger: ComponentType<ShareTriggerProps>;
   side?: PopoverContentProps["side"];
   align?: PopoverContentProps["align"];
+  /**
+   * The match's public link, if one is on and this viewer may see it —
+   * `getMatchShareLink()` in `page.tsx`, RLS-scoped. Null draws the switch
+   * off. A viewer who cannot share the match (a plain teammate) never sees a
+   * link and never manages to turn one on: the action's insert is refused
+   * and the switch settles back to off.
+   */
+  shareLink: MatchShareLink | null;
+  /**
+   * May this viewer turn the link on or off — `getMatchShareState`, which
+   * asks the database's `can_share_match`. False for a teammate who can open
+   * the match but not publish it: they see the switch disabled and why.
+   */
+  canShare: boolean;
 }
 
 /**
@@ -64,6 +87,8 @@ export function ShareMatchButton({
   trigger: Trigger,
   side = "bottom",
   align = "end",
+  shareLink,
+  canShare,
 }: ShareMatchButtonProps): React.JSX.Element {
   const { match } = useMatchData();
   const [open, setOpen] = useState(false);
@@ -100,7 +125,12 @@ export function ShareMatchButton({
           "shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]",
         )}
       >
-        <SharePopoverPanel match={match} onClose={() => setOpen(false)} />
+        <SharePopoverPanel
+          match={match}
+          shareLink={shareLink}
+          canShare={canShare}
+          onClose={() => setOpen(false)}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -180,26 +210,68 @@ export function ShareRailTrigger({
   );
 }
 
-function SharePopoverPanel({
+/**
+ * The popover's body. Sharing is a switch: off, the match is visible only to
+ * people who can already open it in Advantage, and the panel says so rather
+ * than offering a dashboard URL that bounces everyone else to sign-in; on,
+ * the public `/m/<token>` link is what gets copied, mailed and handed to the
+ * native share sheet.
+ *
+ * The switch flips optimistically and settles on the server's answer: a
+ * refused insert (someone who may view but not publish) lands back on off
+ * with a line saying so.
+ */
+export function SharePopoverPanel({
   match,
+  shareLink,
+  canShare,
   onClose,
 }: {
   match: Match;
+  shareLink: MatchShareLink | null;
+  canShare: boolean;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [canNativeShare, setCanNativeShare] = useState(false);
+  const [link, setLink] = useState<MatchShareLink | null>(shareLink);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [optimisticOn, setOptimisticOn] = useOptimistic(link !== null);
+
+  // A fresh server render (the toggle's `revalidatePath`, a `router.refresh`)
+  // hands down the current row; follow it.
+  const [seeded, setSeeded] = useState(shareLink);
+  if (seeded !== shareLink) {
+    setSeeded(shareLink);
+    setLink(shareLink);
+  }
 
   useEffect(() => {
     setCanNativeShare(typeof navigator.share === "function");
   }, []);
 
-  const url = typeof window !== "undefined" ? window.location.href : "";
+  const url = link?.url ?? "";
   const displayUrl = formatDisplayUrl(url);
-  const shareTitle = match.tournamentName?.trim()
-    ? match.tournamentName
-    : `${match.player1.name} vs ${match.player2.name}`;
+  const shareTitle =
+    realTournamentName(match.tournamentName) ??
+    `${match.player1.name} vs ${match.player2.name}`;
   const mailtoHref = buildMailtoHref(match, url);
+
+  function toggle(next: boolean) {
+    setError(null);
+    startTransition(async () => {
+      setOptimisticOn(next);
+      const result = next
+        ? await enableMatchShare(match.id)
+        : await disableMatchShare(match.id);
+      if (!result.ok) {
+        setError("Couldn't update sharing. Try again.");
+        return;
+      }
+      setLink(result.url ? { url: result.url } : null);
+    });
+  }
 
   async function copyToClipboard() {
     try {
@@ -220,86 +292,132 @@ function SharePopoverPanel({
     }
   }
 
+  const on = optimisticOn && link !== null;
+
   return (
     <div className="flex flex-col">
-      {/* URL pill + Copy button — top section */}
-      <div className="flex items-center gap-2 px-2 pt-2 pb-2">
-        <div
-          className={cn(
-            "flex h-8 min-w-0 flex-1 items-center px-2.5",
-            "rounded-[6px] border border-[#EAECF0] bg-[#F5F5F5]",
-          )}
-        >
-          <span className="truncate text-[12px] leading-none text-[#71717A]">
-            {displayUrl}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={copyToClipboard}
-          autoFocus
-          aria-live="polite"
-          className={cn(
-            "inline-flex h-8 shrink-0 items-center gap-1 rounded-[6px] px-3 text-[12px] font-medium",
-            "border border-[#EAECF0] bg-white text-[#525252]",
-            "hover:bg-[#F5F5F5] hover:text-[var(--ink-900)] active:bg-[var(--ink-200)]",
-            "transition-[background-color,transform,color] duration-150 ease-out active:scale-[0.97]",
-            "focus-visible:outline-none",
-          )}
-        >
-          {copied ? (
-            <>
-              <Check className="size-3.5" strokeWidth={2} aria-hidden="true" />
-              Copied
-            </>
-          ) : (
-            <>
-              <Copy className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-              Copy
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Divider — inset, doesn't span edges */}
-      <div className="mx-2 my-1 h-px bg-[#E5E5EA]" />
-
-      {/* Item rows */}
-      <div className="flex flex-col">
-        <a
-          href={mailtoHref}
-          className={cn(
-            "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--ink-900)]",
-            "hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[var(--ink-200)]",
-            "transition-colors duration-100",
-          )}
-        >
-          <Mail
-            className="size-3.5 text-[#8A8A8E]"
-            strokeWidth={1.5}
-            aria-hidden="true"
+      {/* The switch row: what the link does, and whether it exists. */}
+      <div className="flex flex-col gap-1.5 px-2.5 pt-2.5 pb-2">
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <AdvSwitch
+            checked={optimisticOn}
+            onCheckedChange={toggle}
+            disabled={pending || !canShare}
+            label="Anyone with the link can view"
           />
-          <span className="flex-1">Email this match</span>
-        </a>
-        {canNativeShare && (
-          <button
-            type="button"
-            onClick={nativeShare}
-            className={cn(
-              "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-[var(--ink-900)]",
-              "hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[var(--ink-200)]",
-              "transition-colors duration-100",
-            )}
-          >
-            <ArrowUpRight
-              className="size-3.5 text-[#8A8A8E]"
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-            <span className="flex-1">More options…</span>
-          </button>
-        )}
+          <span className="text-[13px] text-[var(--ink-900)]">
+            Anyone with the link can view
+          </span>
+        </label>
+        <p
+          className={cn(
+            "text-micro",
+            error ? "text-[var(--danger)]" : "text-[var(--ink-500)]",
+          )}
+          aria-live="polite"
+        >
+          {error ??
+            (on
+              ? "Statistics only. No video."
+              : canShare
+                ? "Only people who can open this match in Advantage can see it. Turn this on to get a link anyone can view."
+                : "Only the player, whoever uploaded it, or a coach can share this match.")}
+        </p>
       </div>
+
+      {on && (
+        <>
+          {/* Divider — inset, doesn't span edges */}
+          <div className="mx-2 my-1 h-px bg-[var(--border-hairline)]" />
+
+          {/* URL pill + Copy button */}
+          <div className="flex items-center gap-2 px-2 pt-1 pb-2">
+            <div
+              className={cn(
+                "flex h-8 min-w-0 flex-1 items-center px-2.5",
+                "rounded-[6px] border border-[#EAECF0] bg-[#F5F5F5]",
+              )}
+            >
+              <span className="truncate text-[12px] leading-none text-[#71717A]">
+                {displayUrl}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={copyToClipboard}
+              autoFocus
+              aria-live="polite"
+              className={cn(
+                "inline-flex h-8 shrink-0 items-center gap-1 rounded-[6px] px-3 text-[12px] font-medium",
+                "border border-[#EAECF0] bg-white text-[#525252]",
+                "hover:bg-[#F5F5F5] hover:text-[var(--ink-900)] active:bg-[var(--ink-200)]",
+                "transition-[background-color,transform,color] duration-150 ease-out active:scale-[0.97]",
+                "focus-visible:outline-none",
+              )}
+            >
+              {copied ? (
+                <>
+                  <Check
+                    className="size-3.5"
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Copy
+                    className="size-3.5"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                  Copy
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Divider — inset, doesn't span edges */}
+          <div className="mx-2 my-1 h-px bg-[#E5E5EA]" />
+
+          {/* Item rows */}
+          <div className="flex flex-col">
+            <a
+              href={mailtoHref}
+              className={cn(
+                "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--ink-900)]",
+                "hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[var(--ink-200)]",
+                "transition-colors duration-100",
+              )}
+            >
+              <Mail
+                className="size-3.5 text-[#8A8A8E]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <span className="flex-1">Email this match</span>
+            </a>
+            {canNativeShare && (
+              <button
+                type="button"
+                onClick={nativeShare}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-[var(--ink-900)]",
+                  "hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[var(--ink-200)]",
+                  "transition-colors duration-100",
+                )}
+              >
+                <ArrowUpRight
+                  className="size-3.5 text-[#8A8A8E]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                <span className="flex-1">More options…</span>
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -310,7 +428,8 @@ function formatDisplayUrl(url: string): string {
 
 function buildMailtoHref(match: Match, url: string): string {
   const players = `${match.player1.name} vs ${match.player2.name}`;
-  const tournament = match.tournamentName?.trim();
+  // Never "Unknown Event: …" in a subject line a stranger reads.
+  const tournament = realTournamentName(match.tournamentName);
   const subject = tournament
     ? `${tournament}: ${players}`
     : `Match: ${players}`;

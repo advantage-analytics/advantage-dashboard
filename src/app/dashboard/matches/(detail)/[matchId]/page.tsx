@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 
 import { getMatchDetailData } from "@/lib/data/match-detail-server";
+import { getMatchShareState } from "@/lib/data/match-share-server";
 import { getSavedViews } from "@/lib/data/saved-views-server";
 import { getBandSettings } from "@/lib/data/viz-bands-server";
 import { getPreferences } from "@/lib/data/preferences-server";
@@ -106,7 +107,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // `getWorkspaceContext()` is `cache()`-wrapped and the layout above this
   // page already called it once to gate sign-in, so this rides the same
   // request-scoped result rather than a second query.
-  const [data, jobs, video, filmEntry, workspace, preferences] =
+  // `shareState` rides the same wave: one RLS-scoped row and one permission
+  // check, and nothing else here depends on them. No link for every match
+  // with sharing off; `canShare` false for a viewer who may see the match
+  // but not publish it.
+  const [data, jobs, video, filmEntry, workspace, preferences, shareState] =
     await Promise.all([
       getMatchDetailData(matchId),
       createClient().then(async (supabase) => {
@@ -139,6 +144,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
       getMatchFilmEntry(matchId),
       getWorkspaceContext(),
       getPreferences(),
+      getMatchShareState(matchId),
     ]);
   const unit = preferences.unit;
 
@@ -240,7 +246,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
           Component, and an element handed across the RSC boundary into
           `PopoverTrigger asChild` is dropped without a word whenever React
           has not resolved it yet — see `ShareMatchButton`'s `trigger`. */}
-      <ShareMatchButton trigger={ShareRailTrigger} side="top" align="start" />
+      <ShareMatchButton
+        trigger={ShareRailTrigger}
+        side="top"
+        align="start"
+        shareLink={shareState.link}
+        canShare={shareState.canShare}
+      />
     </MatchReportRailFooter>
   );
 

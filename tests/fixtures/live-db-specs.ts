@@ -23,6 +23,8 @@ export const LIVE_DB_SPECS = [
   "admin-self-promotion.spec.ts",
   "join-requests-staff-read.spec.ts",
   "leave-program.spec.ts",
+  "match-share-browser.spec.ts",
+  "match-share-links-rls.spec.ts",
   "match-video-attachments-db.spec.ts",
   "onboarding-flow-browser.spec.ts",
   "onboarding-intake-live.spec.ts",
