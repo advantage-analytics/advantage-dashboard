@@ -43,7 +43,10 @@ const dir =
   args.find((a) => !a.startsWith("--")) ??
   "/Users/cjgimena/Desktop/advantage-program-claim-dataset";
 const APPLY = args.includes("--apply");
-const CHUNK = 500;
+// Programs carry a per-row conference-resolving trigger, and the connection
+// pool caps a statement at 8s — 500 rows blew through it on the 2026-09-27
+// refresh. Override when a batch times out.
+const CHUNK = Number(process.env.SEED_CHUNK ?? 500);
 // `.in("…", ids)` puts every id in the URL; 100 uuids stays well under the
 // request-line limits PostgREST sits behind.
 const ID_CHUNK = 100;
