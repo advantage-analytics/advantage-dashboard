@@ -160,7 +160,12 @@ test("a failed page returns an empty map instead of a partial one, with one cons
     serveMapFor(client, matchSides),
   );
 
-  expect(serve).toEqual({ zoneStats: null, matchCount: 0, serves: 0 });
+  expect(serve).toEqual({
+    zoneStats: null,
+    matchCount: 0,
+    serves: 0,
+    unavailable: true,
+  });
   expect(errors).toHaveLength(1);
   expect(errors[0]).toEqual([
     "Failed to fetch serve map shots:",
@@ -178,6 +183,11 @@ test("no matches returns no map without reading shots", async () => {
 
   const serve = await serveMapFor(client, []);
 
-  expect(serve).toEqual({ zoneStats: null, matchCount: 0, serves: 0 });
+  expect(serve).toEqual({
+    zoneStats: null,
+    matchCount: 0,
+    serves: 0,
+    unavailable: false,
+  });
   expect(tables).toEqual([]);
 });

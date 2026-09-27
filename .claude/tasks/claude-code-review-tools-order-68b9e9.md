@@ -257,7 +257,7 @@ ready).
 
 ## T20 · Player profile: the serve map says "couldn't load" instead of "no matches"
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/player-profile-server.ts (`PlayerProfile["serve"]`, `serveMapFor`), src/components/dashboard/team/player-profile/serve-placement-card.tsx, tests/player-profile-serve-map.spec.ts, tests/player-profile-serve-card.spec.ts (new) — guess
 - **done when:**

@@ -130,6 +130,12 @@ export interface PlayerProfile {
     matchCount: number;
     /** How many serves it plots. */
     serves: number;
+    /**
+     * The shots read failed. The map is zeroed so the rest of the profile
+     * still renders; this is what lets the card say "couldn't load" rather
+     * than "no report yet".
+     */
+    unavailable: boolean;
   };
 }
 
@@ -263,7 +269,8 @@ export async function serveMapFor(
   sides: readonly { id: string; isPlayer1: boolean }[],
 ): Promise<PlayerProfile["serve"]> {
   const recent = sides.slice(0, SERVE_MAP_MATCHES);
-  if (recent.length === 0) return { zoneStats: null, matchCount: 0, serves: 0 };
+  if (recent.length === 0)
+    return { zoneStats: null, matchCount: 0, serves: 0, unavailable: false };
 
   const sideByMatch = new Map(recent.map((r) => [r.id, r.isPlayer1]));
 
@@ -287,7 +294,7 @@ export async function serveMapFor(
 
   if (!shots) {
     console.error("Failed to fetch serve map shots:", shotsError);
-    return { zoneStats: null, matchCount: 0, serves: 0 };
+    return { zoneStats: null, matchCount: 0, serves: 0, unavailable: true };
   }
 
   const shotsByPoint = new Map<string, DbServeShotRow[]>();
@@ -330,6 +337,7 @@ export async function serveMapFor(
     zoneStats: computeZoneStats(dots),
     matchCount: recent.length,
     serves: dots.length,
+    unavailable: false,
   };
 }
 
