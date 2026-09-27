@@ -104,7 +104,14 @@ export interface UploadUrlDeps {
     uploadUrl: string;
     expiresAt: Date;
   };
-  /** `processing_jobs.video_object_key` for the match, before the bytes move. */
+  /**
+   * `processing_jobs.video_object_key` for the match's LIVE job — status
+   * `pending`, `uploading` or `uploaded` — before the bytes move.
+   * `processing_jobs_one_live_per_match` makes that at most one row; a match's
+   * finished or failed jobs keep the key they were run with. With `adminJobId`
+   * (an admin-console video) the write goes through `admin_video_access`
+   * for that exact job instead.
+   */
   recordBlobName(
     matchId: string,
     blobName: string,
