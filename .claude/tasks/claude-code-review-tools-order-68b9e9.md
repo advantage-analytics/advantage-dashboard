@@ -113,3 +113,106 @@ ready).
   - [ ] A spec drives one of the four loaders with a fake client returning 1,200 matches and asserts all 1,200 reach the aggregate (precedent for the fake: tests/schedule-outcome-loader.spec.ts)
   - [ ] `npm run typecheck` passes; `tests/team-home-week.spec.ts`, `tests/team-court-record.spec.ts`, `tests/team-roster-ids.spec.ts` and `tests/team-home-schedule-reads.spec.ts` still pass
 - **notes:** Intent 7, deferred by its author — a multi-season program crosses the cap in year 3. Read `docs/ui-revamp-guardrails.md` first: team-home and team-roster attribute a stat row to a side by `is_player1` against the match's `player1_id` (team-home-server.ts:1719-1724 spells out why there must be one way), and chunking must not reorder rows relative to their match. When promoted, consider splitting per file — four loaders of this size may exceed one subagent context.
+
+## T9 · process-match: verify the caller, pin the bucket and prefix, refuse a second run
+
+- **status:** todo
+- **model:** fable
+- **files:** supabase/functions/process-match/index.ts, supabase/functions/process-match/README.md, tests/process-match-guards.spec.ts (new) — guess
+- **done when:**
+  - [ ] The handler (index.ts:31-92) reads the `Authorization` bearer before building the service-role client: a token equal to `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")` is the internal caller; any other token goes to `auth.getUser(token)` on an anon client (`SUPABASE_ANON_KEY`, auto-injected) and the match select gains `created_by`, which must equal that user's id — no/invalid token answers 401, a mismatch 403, both as `{ success: false, error }` JSON, and the body `userId` is no longer read: the verified user's id (for the service-role path, the match's `created_by`) is the only `userId` passed to `processMatchToDb`
+  - [ ] `bucketId` is dropped from the request and hard-coded to `"match-data"`, and every `fileNames` entry must resolve under `${userId}/` — an entry containing `/` must start with that prefix and contain no `..` segment — else 400 before any `storage.from().download` call (`createCombinedSheets`, index.ts:376-378, is where the path is built)
+  - [ ] Before `buildPointInserts` (index.ts:251-263) the function reads `points` for `match_id = matchId` with `limit(1)`; a hit answers 409 `{ success: false, error: "This match has already been processed" }` and inserts nothing, invokes nothing
+  - [ ] A new offline spec `tests/process-match-guards.spec.ts` loads the function in a vm the way `tests/generate-insights-retry.spec.ts` does (stub `Deno.serve`/`Deno.env`, `createClient`, the `jsr:`/`npm:` requires) and asserts: no bearer → 401; a user bearer whose id is not `created_by` → 403; a foreign `fileNames` prefix → 400 with zero download calls; an existing `points` row → 409 with zero inserts; the service-role bearer with in-prefix paths gets past every guard (the spec observes the `points` pre-check read or the first `download` call)
+  - [ ] `README.md`'s Request Format / Usage sections drop `bucketId` and the honoured `userId`, document 401/403/409, and state that deploying is a separate, user-run step; `git diff supabase/functions/process-match/index.ts` touches only the handler preamble, `createCombinedSheets`'s path guard and the pre-insert check — `buildPointInserts`, `buildShotInserts`, the set/game/rally maps, the `hostTeam` keying (231-237, 718-722) and the `calculate_match_stats`/`backfill_returns_in_and_net_points` RPCs are byte-identical
+- **notes:** Intent 1, function 1 of 3. Live today: `verify_jwt=true` is satisfied by the PUBLIC anon key, so anyone can point this at any `matchId`/`bucketId`/path and have points+shots inserted under a service-role client, then chain key-moments + insights. The only legitimate external caller is `/api/upload` (`src/app/api/upload/route.ts:150-158`) via `supabase.functions.invoke` on the user's session client, which sends the user's access token as the bearer; nothing in the repo calls it with the service role, but allowing it keeps the rule identical across the three functions. Storage paths are `${userId}/${providerId}/${matchId}/${fileName}` (`upload.service.ts:127-130`), so the prefix rule matches every real file. `docs/ui-revamp-guardrails.md` §2 freezes this path — this is a security fix: guards only, no parser/stat-logic edits. **Deploying the function is the user's step** (`supabase functions deploy process-match` or the Supabase MCP `deploy_edge_function`) — the task stops at "code + README + spec"; no live-DB or live-deploy criterion is allowed and the gate must not require one. **User action, not a task:** the live Edge Function `inspect-swingvision` (`verify_jwt=false`, not in the repo) lets anyone download any `match-data` object with the service role — delete it in the Supabase dashboard or with `supabase functions delete inspect-swingvision`.
+
+## T10 · generate-insights: verify the caller
+
+- **status:** todo
+- **model:** opus
+- **needs:** T9
+- **files:** supabase/functions/generate-insights/index.ts, tests/generate-insights-retry.spec.ts, tests/insights-workspace-history.spec.ts, tests/generate-insights-guards.spec.ts (new), src/lib/services/splitstep/request-insights.ts (comment only) — guess
+- **done when:**
+  - [ ] The handler (index.ts:99-108) applies T9's rule before any query: the service-role key as bearer is allowed (this is what `process-match`'s chained invoke and the webhook's admin client via `requestMatchInsights` send); any other bearer goes to `auth.getUser(token)` on an anon client and must equal `matches.created_by` for `matchId` (one added `select created_by` on `matches`); no/invalid token → 401, mismatch → 403, JSON bodies
+  - [ ] The diff to index.ts is the preamble plus one small helper: the Gemini prompt, `fetchWithRetry`, `captureGeminiGeneration`, the comparison-context block and the `.update({ insights }).eq("id", matchId)` write are unchanged
+  - [ ] `tests/generate-insights-retry.spec.ts` and `tests/insights-workspace-history.spec.ts` still pass — their fixtures gain a service-role bearer (or an `auth.getUser` stub), whichever is the smaller edit, with `Deno.env.get` returning distinct values per key so the equality check is real
+  - [ ] A new `tests/generate-insights-guards.spec.ts` (same vm harness) asserts 401 with no bearer, 403 for a signed-in user who is not `created_by`, and that the service-role bearer reaches the Gemini `fetch` stub
+  - [ ] `src/lib/services/splitstep/request-insights.ts`'s header comment records that the function now requires the service-role bearer or the match owner's session, and that the webhook's `createAdminClient()` (`webhooks/splitstep/route.ts:307` → `deriveAndPublish`) already qualifies — no code change there; `npm run typecheck` passes
+- **notes:** Intent 1, function 2 of 3. Live: overwrites `matches.insights` for any `matchId` on an anon-key call. Copy T9's helper verbatim rather than inventing a second shape — the three functions should read the same. Deploying is the user's step; no live criterion.
+
+## T11 · Commit generate-key-moments from live and verify its caller
+
+- **status:** todo
+- **model:** fable
+- **needs:** T9
+- **files:** supabase/functions/generate-key-moments/index.ts (new, from live), supabase/functions/generate-key-moments/README.md (new), tests/generate-key-moments-guards.spec.ts (new) — guess
+- **done when:**
+  - [ ] `supabase/functions/generate-key-moments/index.ts` exists, fetched from the live project `pouxujkhtbvkdwbzfvka` with the Supabase MCP `get_edge_function`, committed verbatim in the task's first commit-worthy step with a header comment recording the retrieval date and that it was live-only until now — never reconstructed from memory: if the MCP is unauthenticated in the runner's session, block with that reason
+  - [ ] The handler then applies T9's rule: service-role bearer allowed (this is what `process-match` sends on its chained invoke, index.ts:309-312), any other bearer resolves via `auth.getUser` and must equal `matches.created_by` for the body's `match_id`; 401/403 JSON; the `{ match_id }` body contract `process-match` sends is unchanged
+  - [ ] Every write the function makes stays scoped to that one match (its existing `.eq(<match column>, match_id)` filters are kept; nothing else in its logic changes — the diff against the verbatim commit is the preamble plus the helper)
+  - [ ] A new offline vm spec `tests/generate-key-moments-guards.spec.ts` (harness: `tests/generate-insights-retry.spec.ts`) asserts 401 without a bearer, 403 for a non-owner, and that the service-role bearer reaches the function's first database read
+  - [ ] Its README (or a shared "Edge function auth" section in `supabase/functions/process-match/README.md`, linked from the new one) lists the three functions, the one auth rule, the chain order upload → process-match → generate-key-moments → generate-insights, and that deploying each is the user's step
+- **notes:** Intent 1, function 3 of 3. Live-only today (`verify_jwt=true`, anon key satisfies it, service-role client built from the body). The offline spec does not need the function's real logic — stub every table read to return empty data after the guard. Deploying is the user's step; no live-DB or live-deploy criterion.
+
+## T12 · /api/upload checks the match; /api/validate-file gets an auth gate and a size ceiling
+
+- **status:** todo
+- **model:** fable
+- **files:** src/app/api/upload/route.ts, src/app/api/validate-file/route.ts, tests/upload-route-guards.spec.ts (new) — guess
+- **done when:**
+  - [ ] POST `/api/upload` (route.ts:53-127), after `getUser()` and before `uploadMatchFile`, loads the match through the caller's client (`select id, created_by … .eq("id", matchId).maybeSingle()`) and answers 404 when no row is visible and 403 when `created_by !== user.id`; neither the storage upload nor the `process-match` invoke runs after a refusal
+  - [ ] It answers 409 (`"This match already has a file"`) when the caller's client finds a `match_files` row or a `points` row for the match (`select id … limit 1` each), so a retried POST can no longer fire `process-match` a second time against a match that already has statistics
+  - [ ] POST `/api/validate-file` gates on `supabase.auth.getUser()` (401, same shape as `/api/upload`), rejects a `file` string longer than the SwingVision `maxFileSizeMB` allows as base64 (`Math.ceil(50 MiB / 3) * 4` chars, derived from `swingVisionStrategy`'s config, not a second literal) with 413 before `Buffer.from`, and both 500 branches return the fixed string `"Failed to validate file. Please try again."` with the caught error only in `console.error`
+  - [ ] A new offline spec `tests/upload-route-guards.spec.ts` drives both handlers with `@/lib/supabase/server` stubbed — either through `tests/fixtures/vm-modules.ts` `createLoader()` (precedent: `tests/paged-query.spec.ts` loading `getMatchPointsFromSupabase`) or by splitting each route into a `handler.ts` that takes its deps the way `splitstep/upload-url` does — and asserts: unauthenticated → 401 on both; a match with a different `created_by` → 403 with zero storage uploads and zero `functions.invoke` calls; an existing `match_files` row → 409; an oversized base64 body → 413 with `validateSwingVisionFile` never called
+  - [ ] `npm run typecheck` and `npm run lint` pass; `tests/upload-write-eligibility.spec.ts` is untouched (it skips without a local stack)
+- **notes:** Intent 2. Today the route trusts the live `match_files_guard_upload_eligibility` trigger (`20260911000000_upload_eligibility.sql:430`) for ownership and has no idempotency at all — `process-match` inserts unconditionally, so every retried POST doubles every stat. `created_by === user.id` is safe for every wizard path: the create path inserts the row under the uploader immediately before the POST (`useUploadMatchWizard.ts:3106`, `utils.ts:192`), and the existing-line path refuses when the row is someone else's (`useUploadMatchWizard.ts:3096-3120`). The wizard uploads exactly one file per match (`useUploadMatchWizard.ts:3266-3277`), so the 409 on an existing `match_files` row breaks nothing that works today. The only callers are the wizard's two `fetch`es (`useUploadMatchWizard.ts:2473`, `:3273`). Keep sending `userId` in the invoke body — T9's function ignores it, and the undeployed one still reads it. T16 edits this file's outer catch afterwards; leave line 180 alone here.
+
+## T13 · SwingVision parser: host is always player1, even on the blank-Guest fallback
+
+- **status:** todo
+- **model:** opus
+- **files:** src/lib/services/upload/parsers/swingvision-parser.ts, tests/swingvision-parser-fallback.spec.ts (new) — guess
+- **done when:**
+  - [ ] `transformToFormData` (swingvision-parser.ts:338-388) no longer branches on `settings.guestTeamFromFallback` for names or scores: in every case `playerName = settings.hostTeam || "Player"`, `opponentName = settings.guestTeam || "Opponent"`, player scores/tiebreaks come from `hostScore`/`hostTiebreak` and opponent from `guestScore`/`guestTiebreak`, and the result caption follows (`"<Host Team> Wins"` when host won more sets); the flag itself, its detection code (149-215) and `SwingVisionSettingsSheet` are untouched
+  - [ ] A new offline spec `tests/swingvision-parser-fallback.spec.ts` imports `SwingVisionParser` from `@/lib/services/upload/parsers/swingvision-parser` directly (a `.ts` module — no JSX, so no `createLoader` needed) and builds workbooks with ExcelJS the way `oneSetExport()` does in `tests/upload-score-regression.spec.ts`, wrapping the buffer in a Node `File`: (a) Guest Team cell blank and the opponent's name in a Settings metadata row (`rows[5..9][0]`, > 2 chars, not the host, not containing "Speed"/"is positive") — asserts the fallback was taken (`opponentName` equals that metadata name) and `playerName === "<Host Team>"`, `playerScores` equal the host scores, `opponentScores` the guest scores, `result === "<Host Team> Wins"` for a host-won set line; (b) the same file with Guest Team filled — identical output
+  - [ ] `git diff --stat` shows only the parser's `transformToFormData` block and the new spec; `npm run typecheck` passes and the spec passes
+- **notes:** Intent 3. Today a fallback file swaps the names (`playerName = guestTeam`) while keeping host scores, and downstream both `player1_name = formData.playerName` (`new-match-wizard/utils.ts:155-159`) and `process-match`'s `is_player1` (keyed solely on the Settings "Host Team" cell, `index.ts:231-237`, `718-722`) assume host = player1 — so the name and the statistics disagree for every such file. `docs/ui-revamp-guardrails.md` §2 freezes this path; this is the minimal correctness edit and no other parser behaviour may change. The parser's `getExcelJS()` dynamic import works under Playwright's Node runtime; `File` is global on Node 20+.
+
+## T14 · Delete the callerless POST /api/chat
+
+- **status:** todo
+- **model:** sonnet
+- **files:** src/app/api/chat/route.ts (delete), MAP.md (line 107, hand-written row), docs/README.md (line 13), docs/llm-setup.md — guess
+- **done when:**
+  - [ ] `src/app/api/chat/` is gone and `grep -rn 'api/chat' src tests` returns only the historical note in `src/lib/llm/stream-response.ts:7` (reword or keep — it describes the past)
+  - [ ] Nothing else is deleted: `createLLMObservabilityContext`, `getLLMStream`, `ChatMessage` (`src/lib/llm/adapter.ts`) and `logPostHog`/`flushPostHogLogs` (`src/lib/posthog-logs`) each still have an importer (`home-insight`, `team-insight`, `pipeline-log.ts`) and stay as they are
+  - [ ] MAP.md's hand-written `src/app/api/` row (line 107) drops "`chat` (LLM streaming)"; `docs/README.md:13`'s `llm-setup.md` description and any `/api/chat` mention inside `docs/llm-setup.md` name `/api/home-insight` and `/api/team-insight` instead; `docs/ux-overhaul-brief.md` (point-in-time) is left alone
+  - [ ] `npm run map` has been run (the generated table covers `page.tsx` routes only, so a no-op is expected) and `npx playwright test tests/generate-map.spec.ts`, `npm run typecheck`, `npm run lint` all pass
+- **notes:** Intent 4. The route has no caller in `src/` or `tests/`, streams for any signed-in user with an unbounded `messages` array and a client-authored system prompt, and `buildSystemPrompt` runs outside the try so a body without `keyMoments` throws a 500. `docs/ux-overhaul-brief.md:112,147,210,299` planned to wire it to `/dashboard/ask` (a `ComingSoonPage`); AGENTS.md already says those pages have no implementation to revive.
+
+## T15 · Splitstep: record the blob name on the live job only; error-check the `uploaded` write; fix the SAS re-mint comment
+
+- **status:** todo
+- **model:** opus
+- **files:** src/app/api/splitstep/upload-url/route.ts, src/app/api/splitstep/upload-url/handler.ts (doc comment), src/lib/services/splitstep/mark-job-uploaded.ts (new), src/lib/services/splitstep/submit-match-video.ts, src/lib/services/splitstep/video-url/types.ts, tests/splitstep-mark-uploaded.spec.ts (new) — guess
+- **done when:**
+  - [ ] `recordBlobName` in `upload-url/route.ts:111-116` updates only the live job — `.eq("match_id", matchId).in("status", ["pending", "uploading", "uploaded"])` — which `processing_jobs_one_live_per_match` (`20260829184210`) makes at most one row; the `UploadUrlDeps.recordBlobName` doc comment in `handler.ts:101-105` says so
+  - [ ] The terminal write in `submit-match-video.ts:380-391` moves into a new pure module `src/lib/services/splitstep/mark-job-uploaded.ts` exporting `markJobUploaded(supabase, { jobId, videoObjectKey })`, which keeps the same payload (`status: "uploaded"`, `upload_progress_percent: 100`, `updated_at`), checks the error, retries once, and returns `{ ok: true } | { ok: false; error: string }`
+  - [ ] `uploadAndSubmitVideo` calls it and, on `{ ok: false }`, does not POST `/api/splitstep/jobs`; it writes `status: "failed"` with an `error_message` saying the video must be uploaded again (best effort, error logged) and reports through the existing failure surface (`onTransferFailed` / `onEvent` — no new UI); the success path is unchanged
+  - [ ] A new offline spec `tests/splitstep-mark-uploaded.spec.ts` drives `markJobUploaded` with a fake client: fail-then-succeed → `{ ok: true }` and exactly two `update` calls both filtered `.eq("id", jobId)`; fail twice → `{ ok: false }` after two calls; succeed first → one call
+  - [ ] `VideoUrlStrategy.mint`'s doc comment (`video-url/types.ts:45-52`) no longer claims re-minting invalidates the previous URL; it says that under `azure-sas` the earlier SAS keeps working until it expires (`azure-sas.ts:16-28`) and that a strategy with real revocation may do better; `npm run typecheck` passes and `tests/upload-url-authorization.spec.ts` still passes
+- **notes:** Intents 5 + 7, merged: same pipeline, small edits. Live: 1 of 12 matches already has two job rows, so the unfiltered `.eq("match_id")` update rewrites a finished job's `video_object_key`. The un-checked `uploaded` write is why a failed write leaves the row at `uploading` until `reap_stalled_uploads()` fails it 15 minutes later while `/api/splitstep/jobs` answers 409 (`handler.ts:267-275`). `submit-match-video.ts` touches `window`/`fetch` and is stubbed wholesale by `tests/fixtures/upload-wizard-hook.ts:335`, which is why the helper gets its own importable module.
+
+## T16 · API routes: generic 500 bodies and the runtime/dynamic convention exports
+
+- **status:** todo
+- **model:** sonnet
+- **needs:** T12, T14
+- **files:** src/app/api/matches/[matchId]/route.ts, src/app/api/webhooks/stripe/route.ts, src/app/api/upload/route.ts, src/app/api/validate-file/route.ts, src/app/api/home-insight/route.ts, src/app/api/team-insight/route.ts, src/app/api/programs/search/route.ts, src/app/api/create-checkout-session/route.ts
+- **done when:**
+  - [ ] In `matches/[matchId]/route.ts` the five 500 responses that echo `error.message` / `lookupError.message` / `deleteError.message` (lines 153, 204, 268, 298, 313) return fixed strings ("Could not load the match", "Could not save the match", "Could not delete the match") with the Supabase error in a `console.error` beside each — precedent `splitstep/jobs/handler.ts:247-250`
+  - [ ] `webhooks/stripe/route.ts:65` and `:79` drop the `details:` field (the message stays in the existing `console.error` / is added to one for `result.error`); `upload/route.ts`'s outer catch (line 180) returns `"Internal server error"` unconditionally
+  - [ ] `export const runtime = "nodejs";` and `export const dynamic = "force-dynamic";` are added after the imports (placement as `splitstep/upload-url/route.ts:34-35`) to upload, validate-file, home-insight, team-insight, programs/search, create-checkout-session, matches/[matchId] and webhooks/stripe, so `grep -L 'export const runtime' $(find src/app/api -name route.ts)` prints nothing
+  - [ ] `npm run typecheck` and `npm run lint` pass, and `tests/upload-route-guards.spec.ts` (T12) still passes
+- **notes:** Intent 6 — the rls reviewer's informational drift. Waits on T12 (shares `upload/route.ts`) and T14 (`chat` is gone, so it is not in the list). `splitstep/jobs/route.ts` and `jobs/[jobId]/resubmit/route.ts` already export `runtime` and `maxDuration` without `dynamic`; leave them.
