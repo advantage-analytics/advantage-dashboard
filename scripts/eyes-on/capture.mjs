@@ -26,7 +26,12 @@ import { chromium } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/** The checkout this script lives in — .env.local and `next dev` both
+ * belong to it, whatever directory the caller happened to be in. */
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const VIEWPORT = { width: 1440, height: 900 };
 /** A cold `next dev` compiles each route on first hit. */
@@ -67,7 +72,8 @@ mkdirSync(out, { recursive: true });
 function loadEnv() {
   const fromProcess = (name) => process.env[name]?.trim() ?? "";
   let raw = "";
-  if (existsSync(".env.local")) raw = readFileSync(".env.local", "utf8");
+  const envFile = join(ROOT, ".env.local");
+  if (existsSync(envFile)) raw = readFileSync(envFile, "utf8");
   const fromFile = (name) =>
     raw
       .split("\n")
@@ -115,7 +121,7 @@ function freePort() {
 function startDevServer(port) {
   return new Promise((done, fail) => {
     const child = spawn("npx", ["next", "dev", "-p", String(port)], {
-      cwd: process.cwd(),
+      cwd: ROOT,
       env: { ...process.env, BROWSER: "none" },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -273,6 +279,10 @@ async function main() {
     });
   };
 
+  const reportPath = join(out, "report.json");
+  const writeReport = () =>
+    writeFileSync(reportPath, JSON.stringify(report, null, 2));
+
   const signInBucket = { consoleErrors: [], failedRequests: [] };
   attachCollectors(page, signInBucket);
   await page.goto(`${baseUrl}/dashboard`, {
@@ -290,7 +300,7 @@ async function main() {
       await page.screenshot({ path: shot, fullPage: true }).catch(() => {});
       report.signIn = "failed";
       report.signInErrors = signInBucket;
-      writeFileSync(join(out, "report.json"), JSON.stringify(report, null, 2));
+      writeReport();
       console.error(
         `capture: sign-in did not reach /dashboard (landed on ${page.url()}); see ${shot}`,
       );
@@ -298,8 +308,13 @@ async function main() {
       process.exit(3);
     }
     await context.storageState({ path: statePath });
+    report.signIn =
+      report.signIn === "fresh"
+        ? "signed in"
+        : "reused state expired; signed in again";
+  } else if (report.signIn === "fresh") {
+    report.signIn = "already signed in (no login page shown)";
   }
-  report.signIn = report.signIn === "fresh" ? "signed in" : report.signIn;
 
   // ── pages ──
   for (const path of paths) {
@@ -314,6 +329,7 @@ async function main() {
       links: [],
       note: "",
     };
+    const shotPath = join(out, entry.screenshot);
     const p = await context.newPage();
     attachCollectors(p, entry);
     try {
@@ -338,12 +354,10 @@ async function main() {
           ),
         )
         .catch(() => []);
-      await p.screenshot({ path: join(out, entry.screenshot), fullPage: true });
+      await p.screenshot({ path: shotPath, fullPage: true });
     } catch (e) {
       entry.note = `error: ${String(e).slice(0, 300)}`;
-      await p
-        .screenshot({ path: join(out, entry.screenshot), fullPage: true })
-        .catch(() => {});
+      await p.screenshot({ path: shotPath, fullPage: true }).catch(() => {});
     } finally {
       await p.close();
     }
@@ -352,8 +366,7 @@ async function main() {
 
   await browser.close();
   stopServer();
-  const reportPath = join(out, "report.json");
-  writeFileSync(reportPath, JSON.stringify(report, null, 2));
+  writeReport();
   for (const e of report.pages) {
     const flag = e.note
       ? "!!"
