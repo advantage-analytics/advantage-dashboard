@@ -68,11 +68,18 @@ export function StatisticsView() {
       {/* F1: 436px + 416px in the 868px pane. The head-to-head's slot takes
           what the fixed column leaves. Under 720px of pane (the `@container`
           on `MatchReport.Pane`) the row stacks: head-to-head first, the
-          charts under it, both full width — `items-start` only applies side
-          by side, since in a column it would shrink each child to its
-          content's width. */}
+          charts under it, both full width.
+
+          Side by side, the two columns end on one line. The row stretches
+          (flex's default), and the chart column hands its slack to Rally
+          length, whose bars fill whatever height the card gets (the
+          landing page mockup's `.mb-chart .bands`). The height goes to the
+          chart, never to a card's empty surface: a stretched card with
+          top-aligned content reads worse than uneven columns. The
+          head-to-head card keeps its natural height; its slot stretches,
+          invisibly. */}
       {hasPoints && (
-        <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row @min-[720px]:items-start">
+        <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row">
           {meta.statsPublished && (
             <div className="min-w-0 flex-1">
               <HeadToHeadCard />
@@ -81,7 +88,9 @@ export function StatisticsView() {
 
           <div
             className={cn(
-              "flex flex-col gap-4",
+              // `*:shrink-0`: the column only ever gains height from the row,
+              // never gives it up — a card squeezed below its content clips.
+              "flex flex-col gap-4 *:shrink-0",
               meta.statsPublished
                 ? "w-full shrink-0 @min-[720px]:w-[416px]"
                 : "min-w-0 flex-1",
