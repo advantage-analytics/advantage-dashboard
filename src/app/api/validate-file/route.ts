@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { swingVisionStrategy } from "@/lib/services/upload";
 import { validateSwingVisionFile } from "@/lib/services/upload/validators/swingvision-validator";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 interface ValidateFileRequest {
   file: string; // base64 encoded file
   fileName: string;

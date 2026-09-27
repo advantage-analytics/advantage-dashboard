@@ -5,6 +5,9 @@ import { isProPlan } from "@/lib/user/plan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type Stripe from "stripe";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 if (!webhookSecret) {
@@ -61,10 +64,7 @@ export async function POST(request: NextRequest) {
         userId,
         error: fetchError,
       });
-      return NextResponse.json(
-        { error: "User not found", details: fetchError?.message },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     if (isProPlan(existingUser.plan)) {
@@ -75,8 +75,12 @@ export async function POST(request: NextRequest) {
     const result = await upgradeUserToPro(userId);
 
     if (!result.success) {
+      console.error("Stripe webhook: failed to upgrade user to Pro", {
+        userId,
+        error: result.error,
+      });
       return NextResponse.json(
-        { error: "Failed to update user plan", details: result.error },
+        { error: "Failed to update user plan" },
         { status: 500 },
       );
     }

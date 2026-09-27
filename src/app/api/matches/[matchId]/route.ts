@@ -15,6 +15,9 @@ import {
   type RosterFullRow,
 } from "@/lib/data/roster-shared";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 // Beta gate: every PATCH forces private = true until we surface the toggle.
 const BETA_FORCE_PRIVATE = true;
 
@@ -149,8 +152,13 @@ export async function GET(
   if (!user) return unauthorized();
 
   const { data, error } = await loadOwnMatch(supabase, matchId, user.id);
-  if (error)
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("GET /api/matches/[matchId]: failed to load match", error);
+    return NextResponse.json(
+      { error: "Could not load the match" },
+      { status: 500 },
+    );
+  }
   if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const match = data as unknown as MatchRow;
 
@@ -200,8 +208,16 @@ export async function PATCH(
     loadOwnMatch(supabase, matchId, user.id),
     analysisFor(supabase, matchId),
   ]);
-  if (lookupError)
-    return NextResponse.json({ error: lookupError.message }, { status: 500 });
+  if (lookupError) {
+    console.error(
+      "PATCH /api/matches/[matchId]: failed to load match",
+      lookupError,
+    );
+    return NextResponse.json(
+      { error: "Could not load the match" },
+      { status: 500 },
+    );
+  }
   if (!existing)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   const stored = existing as unknown as MatchRow;
@@ -264,8 +280,13 @@ export async function PATCH(
     .select(MATCH_COLUMNS)
     .maybeSingle();
 
-  if (error)
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("PATCH /api/matches/[matchId]: failed to save match", error);
+    return NextResponse.json(
+      { error: "Could not save the match" },
+      { status: 500 },
+    );
+  }
   if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   revalidatePath("/dashboard");
@@ -293,8 +314,16 @@ export async function DELETE(
     .eq("created_by", user.id)
     .maybeSingle();
 
-  if (lookupError)
-    return NextResponse.json({ error: lookupError.message }, { status: 500 });
+  if (lookupError) {
+    console.error(
+      "DELETE /api/matches/[matchId]: failed to load match",
+      lookupError,
+    );
+    return NextResponse.json(
+      { error: "Could not load the match" },
+      { status: 500 },
+    );
+  }
   if (!existing)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -309,8 +338,16 @@ export async function DELETE(
     .eq("id", matchId)
     .eq("created_by", user.id);
 
-  if (deleteError)
-    return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  if (deleteError) {
+    console.error(
+      "DELETE /api/matches/[matchId]: failed to delete match",
+      deleteError,
+    );
+    return NextResponse.json(
+      { error: "Could not delete the match" },
+      { status: 500 },
+    );
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/matches");

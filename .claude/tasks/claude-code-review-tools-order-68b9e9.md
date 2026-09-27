@@ -206,7 +206,7 @@ ready).
 
 ## T16 · API routes: generic 500 bodies and the runtime/dynamic convention exports
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T12, T14
 - **files:** src/app/api/matches/[matchId]/route.ts, src/app/api/webhooks/stripe/route.ts, src/app/api/upload/route.ts, src/app/api/validate-file/route.ts, src/app/api/home-insight/route.ts, src/app/api/team-insight/route.ts, src/app/api/programs/search/route.ts, src/app/api/create-checkout-session/route.ts

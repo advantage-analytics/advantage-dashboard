@@ -14,6 +14,9 @@ import {
   ProviderId,
 } from "@/lib/services/upload";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 /** Response type for upload API */
 interface UploadApiResponse {
   success: boolean;
@@ -254,10 +257,7 @@ export async function POST(
   } catch (error) {
     console.error("Upload API error:", error);
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Internal server error",
-      },
+      { success: false, error: "Internal server error" },
       { status: 500 },
     );
   }
