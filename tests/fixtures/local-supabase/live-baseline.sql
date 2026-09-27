@@ -320,6 +320,7 @@ create table public.match_files (
   video_file_name text,
   video_path      text
 );
+create unique index match_files_one_per_match on public.match_files (match_id) where match_id is not null;
 alter table public.match_files enable row level security;
 
 -- Live grants every privilege on these tables to the three API roles.

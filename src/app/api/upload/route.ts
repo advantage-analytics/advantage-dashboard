@@ -159,6 +159,9 @@ export async function POST(
     //    wizard uploads exactly one file per match, so refusing a second one
     //    breaks nothing; the function's own 409 (T9) is the backstop, this is
     //    the check that keeps the bytes out of storage in the first place.
+    //    It is a read, so two POSTs in flight at once can both pass it; the
+    //    partial unique index `match_files_one_per_match` (T17) refuses the
+    //    second insert, and step 8 answers that loser with this same 409.
     const [
       { data: existingFiles, error: filesError },
       { data: existingPoints, error: pointsError },
@@ -202,8 +205,19 @@ export async function POST(
     });
 
     if (!uploadResult.success) {
+      // The insert lost to `match_files_one_per_match`: another upload for
+      // this match landed between step 7's read and the insert. Same body as
+      // step 7 so the wizard sees one answer either way, and nothing is
+      // invoked — the winner's own POST already did that.
+      if (uploadResult.code === "conflict") {
+        return NextResponse.json(
+          { success: false, error: "This match already has a file" },
+          { status: 409 },
+        );
+      }
+      console.error("Upload API: failed to store the file", uploadResult.error);
       return NextResponse.json(
-        { success: false, error: uploadResult.error },
+        { success: false, error: "Failed to store the file" },
         { status: 500 },
       );
     }

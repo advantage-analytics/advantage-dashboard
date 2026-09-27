@@ -219,7 +219,7 @@ ready).
 
 ## T17 · /api/upload: one `match_files` row per match, enforced by the database
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<live-timestamp>_match_files_one_per_match.sql (new; timestamp from the live apply), src/lib/services/upload/upload.service.ts, src/lib/services/upload/types.ts, src/app/api/upload/route.ts, tests/upload-route-guards.spec.ts, tests/fixtures/local-supabase/live-baseline.sql — guess
 - **done when:**

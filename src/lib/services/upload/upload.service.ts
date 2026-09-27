@@ -93,6 +93,35 @@ export class UploadService implements IUploadService {
       .single();
 
     if (dbError) {
+      // Unique violation on `match_files_one_per_match`: another upload for
+      // this match committed its row between the route's pre-check and this
+      // insert (two tabs, or a double-submit). Matched on SQLSTATE, never on
+      // the message. The object this call just wrote is removed ONLY when the
+      // survivor's `storage_path` differs from ours — both tabs uploading the
+      // same file name share one path under `upsert: true`, so an
+      // unconditional delete would remove the winner's file before
+      // `process-match` downloads it. The survivor is visible through the
+      // caller's own client because both uploads are the same user
+      // (`match_files` "Users can view own files"); if that read fails or
+      // answers empty the object is left in place rather than risk deleting
+      // the winner's bytes.
+      if (dbError.code === "23505") {
+        const { data: survivors } = await this.supabase
+          .from("match_files")
+          .select("storage_path")
+          .eq("match_id", matchId)
+          .limit(1);
+        const survivorPath = survivors?.[0]?.storage_path;
+        if (typeof survivorPath === "string" && survivorPath !== storagePath) {
+          await this.storageService.delete(storagePath);
+        }
+        return {
+          success: false,
+          code: "conflict",
+          error: "This match already has a file",
+        };
+      }
+
       // Cleanup: remove uploaded file if DB insert fails
       await this.storageService.delete(storagePath);
       return {

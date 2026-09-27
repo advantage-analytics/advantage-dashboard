@@ -17,10 +17,20 @@ import { withConsoleErrors } from "./fixtures/with-console-errors";
  * had no auth gate, decoded any body it was handed, and echoed parser
  * messages on its 500s.
  *
+ * T17 closed the gap that pre-check leaves open: it is a read, so two POSTs
+ * in flight at once can both pass it. The partial unique index
+ * `match_files_one_per_match` refuses the second insert; the fake's
+ * `insertError` + `survivor` model exactly that — the pre-check answers empty,
+ * the insert answers 23505, and the other tab's row is visible afterwards.
+ * The route answers the loser with the pre-check's own 409, and the service
+ * removes the loser's object only when the survivor's `storage_path` differs
+ * from its own (the same file name from two tabs shares one path under
+ * `upsert: true`, so an unconditional delete would take the winner's bytes).
+ *
  * Both routes are driven through the vm loader with `@/lib/supabase/server`
- * stubbed; the fake client records every storage upload and every
- * `functions.invoke`, so each refusal asserts that neither happened. Nothing
- * here opens a database or a browser.
+ * stubbed; the fake client records every storage upload, every storage
+ * remove and every `functions.invoke`, so each refusal asserts on exactly
+ * what happened. Nothing here opens a database or a browser.
  */
 
 const OWNER = "u-owner";
@@ -38,6 +48,17 @@ interface FakeDb {
   match: { id: string; created_by: string | null } | null;
   matchFiles: Row[];
   points: Row[];
+  /**
+   * What `match_files.insert` answers instead of appending — the shape of a
+   * PostgrestError, `code` being the SQLSTATE the service matches on.
+   */
+  insertError?: { code: string; message: string };
+  /**
+   * A `match_files` row that becomes visible only once an insert has been
+   * attempted: the other tab's row, committed between the route's pre-check
+   * (which must still answer empty) and this request's insert.
+   */
+  survivor?: Row;
 }
 
 /**
@@ -48,31 +69,42 @@ interface FakeDb {
  */
 function fakeClient(db: FakeDb) {
   const uploads: string[] = [];
+  const removes: string[] = [];
   const invokes: { name: string; body: unknown }[] = [];
+  let insertAttempted = false;
 
   function from(table: string) {
     const rows = (): Row[] => {
-      if (table === "match_files") return db.matchFiles;
+      if (table === "match_files")
+        return insertAttempted && db.survivor
+          ? [...db.matchFiles, db.survivor]
+          : db.matchFiles;
       if (table === "points") return db.points;
       if (table === "matches" && db.match)
         return [{ source_provider: "swing-vision", ...db.match }];
       return [];
     };
     let inserted: Row | null = null;
+    let insertFailed: FakeDb["insertError"] | null = null;
     const builder = {
       select: () => builder,
       eq: () => builder,
       limit: () => builder,
       insert(row: Row) {
+        insertAttempted = true;
+        if (db.insertError) {
+          insertFailed = db.insertError;
+          return builder;
+        }
         inserted = { id: `mf-${db.matchFiles.length + 1}`, ...row };
         db.matchFiles.push(inserted);
         return builder;
       },
       maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
-      single: async () => ({
-        data: inserted ?? rows()[0] ?? null,
-        error: null,
-      }),
+      single: async () =>
+        insertFailed
+          ? { data: null, error: insertFailed }
+          : { data: inserted ?? rows()[0] ?? null, error: null },
       then<R>(resolve: (value: { data: Row[]; error: null }) => R) {
         return Promise.resolve({ data: [...rows()], error: null }).then(
           resolve,
@@ -96,7 +128,10 @@ function fakeClient(db: FakeDb) {
           uploads.push(path);
           return { data: { path }, error: null };
         },
-        remove: async () => ({ error: null }),
+        remove: async (paths: string[]) => {
+          removes.push(...paths);
+          return { error: null };
+        },
       }),
     },
     functions: {
@@ -107,7 +142,7 @@ function fakeClient(db: FakeDb) {
     },
   };
 
-  return { client, uploads, invokes };
+  return { client, uploads, removes, invokes };
 }
 
 type RouteHandler = (request: NextRequest) => Promise<Response>;
@@ -274,6 +309,91 @@ test.describe("/api/upload", () => {
         },
       },
     ]);
+  });
+
+  // ── T17: the insert itself loses the race ─────────────────────────────────
+
+  const OWN_PATH = `${OWNER}/swing-vision/${MATCH}/match.xlsx`;
+  const UNIQUE_VIOLATION = {
+    code: "23505",
+    message:
+      'duplicate key value violates unique constraint "match_files_one_per_match"',
+  };
+
+  test("insert hits match_files_one_per_match, survivor at the SAME path → 409, nothing invoked, nothing removed", async () => {
+    const { client, uploads, removes, invokes } = fakeClient(
+      ownDb({
+        insertError: UNIQUE_VIOLATION,
+        survivor: { id: "mf-winner", match_id: MATCH, storage_path: OWN_PATH },
+      }),
+    );
+    const POST = loadUploadRoute(client);
+
+    const res = await POST(uploadRequest());
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: "This match already has a file",
+    });
+    // The pre-check answered empty, so the bytes did land — under `upsert:
+    // true` onto the winner's own path, which is exactly why they must stay.
+    expect(uploads).toEqual([OWN_PATH]);
+    expect(removes).toEqual([]);
+    expect(invokes).toEqual([]);
+  });
+
+  test("insert hits match_files_one_per_match, survivor at a DIFFERENT path → 409, nothing invoked, only the loser's own object removed", async () => {
+    const winnerPath = `${OWNER}/swing-vision/${MATCH}/other.xlsx`;
+    const { client, uploads, removes, invokes } = fakeClient(
+      ownDb({
+        insertError: UNIQUE_VIOLATION,
+        survivor: {
+          id: "mf-winner",
+          match_id: MATCH,
+          storage_path: winnerPath,
+        },
+      }),
+    );
+    const POST = loadUploadRoute(client);
+
+    const res = await POST(uploadRequest());
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: "This match already has a file",
+    });
+    expect(uploads).toEqual([OWN_PATH]);
+    expect(removes).toEqual([OWN_PATH]);
+    expect(invokes).toEqual([]);
+  });
+
+  test("a non-23505 insert error → 500 with the fixed string, the cause only in the log, one remove", async () => {
+    const { client, removes, invokes } = fakeClient(
+      ownDb({
+        insertError: {
+          code: "42501",
+          message:
+            'new row violates row-level security policy for table "match_files"',
+        },
+      }),
+    );
+    const POST = loadUploadRoute(client);
+
+    const { result: res, errors } = await withConsoleErrors(() =>
+      POST(uploadRequest()),
+    );
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: "Failed to store the file",
+    });
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0][1])).toContain("row-level security");
+    expect(removes).toEqual([OWN_PATH]);
+    expect(invokes).toEqual([]);
   });
 });
 
