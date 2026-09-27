@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   readShareToken,
+  realTournamentName,
   sharedMatchPair,
   sharedMatchWinner,
 } from "@/lib/data/match-share-format";
@@ -59,4 +60,13 @@ test("a malformed token reads as unknown instead of throwing", () => {
   expect(readShareToken("%")).toBe("");
   expect(readShareToken("abc_DEF-123")).toBe("abc_DEF-123");
   expect(readShareToken("a%2Db")).toBe("a-b");
+});
+
+test("the Unknown Event placeholder reads as no tournament", () => {
+  expect(realTournamentName("Unknown Event")).toBeNull();
+  expect(realTournamentName("  ")).toBeNull();
+  expect(realTournamentName(null)).toBeNull();
+  expect(realTournamentName(" Spring Invitational ")).toBe(
+    "Spring Invitational",
+  );
 });

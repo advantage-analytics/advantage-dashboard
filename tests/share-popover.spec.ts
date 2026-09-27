@@ -47,6 +47,7 @@ const { SharePopoverPanel } = loader.load(
   SharePopoverPanel: React.ComponentType<{
     match: Match;
     shareLink: { url: string } | null;
+    canShare: boolean;
     onClose: () => void;
   }>;
 };
@@ -69,11 +70,12 @@ const MATCH: Match = {
 
 const PUBLIC_URL = "https://app.example.com/m/abc123";
 
-function render(shareLink: { url: string } | null) {
+function render(shareLink: { url: string } | null, canShare = true) {
   return renderToStaticMarkup(
     React.createElement(SharePopoverPanel, {
       match: MATCH,
       shareLink,
+      canShare,
       onClose: () => {},
     }),
   );
@@ -101,4 +103,32 @@ test("on: the switch is checked and the public link is what gets copied and mail
     PUBLIC_URL,
   );
   expect(html).toContain("Email this match");
+});
+
+test("a viewer who cannot share sees the switch disabled and who can", () => {
+  const html = render(null, false);
+  expect(html).toMatch(
+    /role="switch"[^>]*disabled=""|disabled=""[^>]*role="switch"/,
+  );
+  expect(html).toContain(
+    "Only the player, whoever uploaded it, or a coach can share this match.",
+  );
+  expect(html).not.toContain("Turn this on");
+  expect(html).not.toContain("mailto:");
+});
+
+test("the email subject never carries the Unknown Event placeholder", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(SharePopoverPanel, {
+      match: { ...MATCH, tournamentName: "Unknown Event" },
+      shareLink: { url: PUBLIC_URL },
+      canShare: true,
+      onClose: () => {},
+    }),
+  );
+  const mailto = decodeURIComponent(
+    (html.match(/href="mailto:[^"]*"/)?.[0] ?? "").replace(/&amp;/g, "&"),
+  );
+  expect(mailto).toContain("subject=Match: Ava Watson vs Mia Reid");
+  expect(mailto).not.toContain("Unknown Event");
 });

@@ -24,7 +24,10 @@ import { siteUrl } from "@/lib/site-url";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
 import { getInitials } from "@/lib/data/match-utils";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
-import { sharedMatchWinner } from "@/lib/data/match-share-format";
+import {
+  realTournamentName,
+  sharedMatchWinner,
+} from "@/lib/data/match-share-format";
 import type { Match } from "@/lib/data/types";
 
 /**
@@ -66,28 +69,56 @@ export function matchShareUrl(token: string): string {
   return `${siteUrl()}/m/${encodeURIComponent(token)}`;
 }
 
+/** What the Share popover needs to know about this viewer and this match. */
+export interface MatchShareState {
+  /** The public link, if one is on and this viewer may see it. */
+  link: MatchShareLink | null;
+  /**
+   * May this viewer turn the link on or off? The database's own rule
+   * (`can_share_match`: the uploader, either seated player, or program
+   * staff), asked rather than re-derived here, so the popover and the RLS
+   * policies can never disagree. A plain teammate can open the match but
+   * not publish it; the popover shows them the switch disabled and says why,
+   * instead of letting them flip it into an error.
+   */
+  canShare: boolean;
+}
+
 /**
- * The match's public link, if this viewer may see one. RLS-scoped: a viewer
- * who cannot share the match (a plain teammate) reads no row and gets null,
- * which the popover draws as "no link".
+ * The match's share state for the signed-in viewer. RLS-scoped on both
+ * reads: a viewer who cannot share reads no link row and `can_share_match`
+ * answers false. A failed read degrades to "no link, cannot share" — the
+ * quiet, safe reading — rather than failing the page.
  */
-export async function getMatchShareLink(
+export async function getMatchShareState(
   matchId: string,
-): Promise<MatchShareLink | null> {
+): Promise<MatchShareState> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("match_share_links")
-    .select("token")
-    .eq("match_id", matchId)
-    .maybeSingle();
-  if (error) {
+  const [linkResult, canShareResult] = await Promise.all([
+    supabase
+      .from("match_share_links")
+      .select("token")
+      .eq("match_id", matchId)
+      .maybeSingle(),
+    supabase.rpc("can_share_match", { p_match_id: matchId }),
+  ]);
+  if (linkResult.error) {
     console.error("[match-share] could not read the share link", {
       matchId,
-      message: error.message,
+      message: linkResult.error.message,
     });
-    return null;
   }
-  return data?.token ? { url: matchShareUrl(data.token as string) } : null;
+  if (canShareResult.error) {
+    console.error("[match-share] could not read share permission", {
+      matchId,
+      message: canShareResult.error.message,
+    });
+  }
+  const token = linkResult.data?.token as string | undefined;
+  return {
+    link: token ? { url: matchShareUrl(token) } : null,
+    canShare: canShareResult.data === true,
+  };
 }
 
 /** Who turned the link on, for the rail's footer. */
@@ -249,6 +280,9 @@ export const getSharedMatchData = cache(
       profiles,
       rosterIds,
     );
+    // No "Unknown Event" on a public page: the facts line, the preview card
+    // and the page description all skip an empty name.
+    match.tournamentName = realTournamentName(dbRow.tournament_name) ?? "";
     if (!(match.durationSec && match.durationSec > 0) && windowSeconds) {
       match.durationSec = windowSeconds;
       match.duration = formatDuration(windowSeconds * 1000);

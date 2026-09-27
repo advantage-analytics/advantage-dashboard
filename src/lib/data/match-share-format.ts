@@ -52,3 +52,20 @@ export function sharedMatchPair(
   if (winner === "player2") return `${player2} def. ${player1}`;
   return `${player1} vs ${player2}`;
 }
+
+/**
+ * The dashboard's match transform fills a missing tournament with the
+ * placeholder "Unknown Event" (`match-detail-server.ts`,
+ * `matches-list-types.ts`). Inside the app that reads as a label; on a public
+ * link, a preview card or an email subject it reads as a fact about the
+ * match. Public surfaces ask this instead: the real name, or null.
+ */
+export const UNKNOWN_EVENT_PLACEHOLDER = "Unknown Event";
+
+export function realTournamentName(
+  name: string | null | undefined,
+): string | null {
+  const trimmed = name?.trim();
+  if (!trimmed || trimmed === UNKNOWN_EVENT_PLACEHOLDER) return null;
+  return trimmed;
+}

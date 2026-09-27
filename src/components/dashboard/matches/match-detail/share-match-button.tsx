@@ -25,6 +25,7 @@ import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import type { Match } from "@/lib/data/types";
 import type { MatchShareLink } from "@/lib/data/match-share-server";
+import { realTournamentName } from "@/lib/data/match-share-format";
 
 type PopoverContentProps = ComponentProps<typeof PopoverContent>;
 
@@ -64,6 +65,12 @@ interface ShareMatchButtonProps {
    * and the switch settles back to off.
    */
   shareLink: MatchShareLink | null;
+  /**
+   * May this viewer turn the link on or off — `getMatchShareState`, which
+   * asks the database's `can_share_match`. False for a teammate who can open
+   * the match but not publish it: they see the switch disabled and why.
+   */
+  canShare: boolean;
 }
 
 /**
@@ -81,6 +88,7 @@ export function ShareMatchButton({
   side = "bottom",
   align = "end",
   shareLink,
+  canShare,
 }: ShareMatchButtonProps): React.JSX.Element {
   const { match } = useMatchData();
   const [open, setOpen] = useState(false);
@@ -120,6 +128,7 @@ export function ShareMatchButton({
         <SharePopoverPanel
           match={match}
           shareLink={shareLink}
+          canShare={canShare}
           onClose={() => setOpen(false)}
         />
       </PopoverContent>
@@ -215,10 +224,12 @@ export function ShareRailTrigger({
 export function SharePopoverPanel({
   match,
   shareLink,
+  canShare,
   onClose,
 }: {
   match: Match;
   shareLink: MatchShareLink | null;
+  canShare: boolean;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -242,9 +253,9 @@ export function SharePopoverPanel({
 
   const url = link?.url ?? "";
   const displayUrl = formatDisplayUrl(url);
-  const shareTitle = match.tournamentName?.trim()
-    ? match.tournamentName
-    : `${match.player1.name} vs ${match.player2.name}`;
+  const shareTitle =
+    realTournamentName(match.tournamentName) ??
+    `${match.player1.name} vs ${match.player2.name}`;
   const mailtoHref = buildMailtoHref(match, url);
 
   function toggle(next: boolean) {
@@ -291,7 +302,7 @@ export function SharePopoverPanel({
           <AdvSwitch
             checked={optimisticOn}
             onCheckedChange={toggle}
-            disabled={pending}
+            disabled={pending || !canShare}
             label="Anyone with the link can view"
           />
           <span className="text-[13px] text-[var(--ink-900)]">
@@ -308,7 +319,9 @@ export function SharePopoverPanel({
           {error ??
             (on
               ? "Statistics only. No video."
-              : "Only people who can open this match in Advantage can see it. Turn this on to get a link anyone can view.")}
+              : canShare
+                ? "Only people who can open this match in Advantage can see it. Turn this on to get a link anyone can view."
+                : "Only the player, whoever uploaded it, or a coach can share this match.")}
         </p>
       </div>
 
@@ -415,7 +428,8 @@ function formatDisplayUrl(url: string): string {
 
 function buildMailtoHref(match: Match, url: string): string {
   const players = `${match.player1.name} vs ${match.player2.name}`;
-  const tournament = match.tournamentName?.trim();
+  // Never "Unknown Event: …" in a subject line a stranger reads.
+  const tournament = realTournamentName(match.tournamentName);
   const subject = tournament
     ? `${tournament}: ${players}`
     : `Match: ${players}`;
