@@ -181,7 +181,7 @@ ready).
 
 ## T14 · Delete the callerless POST /api/chat
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/app/api/chat/route.ts (delete), MAP.md (line 107, hand-written row), docs/README.md (line 13), docs/llm-setup.md — guess
 - **done when:**
