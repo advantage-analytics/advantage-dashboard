@@ -249,17 +249,13 @@ function InsightExpanded({
     <div className="flex flex-col gap-2 p-[16px_20px_12px]">
       <p className="text-body [text-wrap:pretty]" style={CLAIM_STYLE}>
         {claim}
-        {!evidence && (
-          <>
-            {" "}
-            <WhyThisLink />
-          </>
-        )}
+        {!evidence && <WhyThisSuffix readOnly={meta.readOnly} />}
       </p>
 
       {evidence && (
         <p className="text-[11px] leading-[1.6] [text-wrap:pretty] text-[var(--ink-700)]">
-          {evidence} <WhyThisLink />
+          {evidence}
+          <WhyThisSuffix readOnly={meta.readOnly} />
         </p>
       )}
 
@@ -338,6 +334,21 @@ function InsightCollapsed({
         />
       </button>
     </div>
+  );
+}
+
+/**
+ * `WhyThisLink`, space-led so it trails inline text, or nothing at all —
+ * `/dashboard/ask` is behind sign-in, and the public share page
+ * (`meta.readOnly`) has no door there.
+ */
+function WhyThisSuffix({ readOnly }: { readOnly: boolean }) {
+  if (readOnly) return null;
+  return (
+    <>
+      {" "}
+      <WhyThisLink />
+    </>
   );
 }
 

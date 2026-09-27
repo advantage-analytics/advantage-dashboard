@@ -1,4 +1,6 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPages } from "@/lib/data/paged-query";
 import { pickServeShot, pickReturnShot } from "@/lib/data/serve-return-shots";
 
 /** One shot inside a point, in rally order — the film room's shot feed. */
@@ -179,7 +181,7 @@ function determinePlayer(
  * loader.
  */
 async function fetchSavedByPointId(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   matchId: string,
   pointIds: string[],
 ): Promise<Map<string, { userId: string; name: string | null }[]>> {
@@ -248,10 +250,33 @@ async function fetchSavedByPointId(
   return savedByPointId;
 }
 
+/**
+ * Every point of a match with its shots attached, or `null` when the answer is
+ * unknown. `[]` means the match genuinely has no `points` rows; `null` means a
+ * read failed (the `points` read itself, or any page of the shots read), and
+ * the caller must say so rather than draw a zero-point report — the
+ * `fetchAllPages` contract, carried one level up.
+ */
 export async function getMatchPointsFromSupabase(
   matchId: string,
-): Promise<MatchPoint[]> {
-  const supabase = await createClient();
+  /**
+   * The client to read through. Defaults to the request's cookie client, so
+   * RLS answers who may see the match. The public share page passes the
+   * service-role client after it has resolved a share token
+   * (`match-share-server.ts`); nothing else should.
+   */
+  client?: SupabaseClient,
+  options: {
+    /**
+     * Whether to read `point_bookmarks`. The public share page turns this
+     * off: bookmarks carry teammates' user ids, and an anonymous reader has
+     * no business seeing who saved what.
+     */
+    includeBookmarks?: boolean;
+  } = {},
+): Promise<MatchPoint[] | null> {
+  const supabase = client ?? (await createClient());
+  const { includeBookmarks = true } = options;
 
   // Fetch points first
   const { data: pointsData, error: pointsError } = await supabase
@@ -264,7 +289,7 @@ export async function getMatchPointsFromSupabase(
 
   if (pointsError) {
     console.error("Failed to fetch points:", pointsError.message);
-    return [];
+    return null;
   }
   if (!pointsData?.length) {
     return [];
@@ -278,10 +303,13 @@ export async function getMatchPointsFromSupabase(
   // silently dropped the tail of the match, which the film room's shot feed
   // shows row by row. The order is total (point, shot number, id) so pages
   // never overlap or skip.
-  const SHOT_PAGE = 1000;
-  const shots: DbShot[] = [];
-  for (let from = 0; ; from += SHOT_PAGE) {
-    const { data: page, error: shotsError } = await supabase
+  //
+  // Fail-closed, like `supabaseAttachmentSourceRows`: an error on any page
+  // returns `null` ("no answer") rather than points carrying half their shots.
+  // A point with its shots cut off reads as a short rally and relabels its
+  // serve, return and last shot — a wrong answer that looks like a right one.
+  const shots = await fetchAllPages<DbShot>(async (from, to) => {
+    const { data, error } = await supabase
       .from("shots")
       .select(
         "id, point_id, shot_number, is_player1, shot_type, spin_type, speed_mph, video_time, bounce_video_time, zone, result, contact_x, contact_y, landing_x, landing_y",
@@ -290,18 +318,17 @@ export async function getMatchPointsFromSupabase(
       .order("point_id", { ascending: true })
       .order("shot_number", { ascending: true })
       .order("id", { ascending: true })
-      .range(from, from + SHOT_PAGE - 1);
-
-    if (shotsError) {
-      console.error("Failed to fetch shots:", shotsError.message);
-      break;
-    }
-    shots.push(...((page ?? []) as DbShot[]));
-    if (!page || page.length < SHOT_PAGE) break;
-  }
+      .range(from, to);
+    // The helper stops at the first error, so this logs exactly once.
+    if (error) console.error("Failed to fetch shots:", error.message);
+    return { data: data as DbShot[] | null, error };
+  });
+  if (!shots) return null;
 
   // Who bookmarked each point, workspace-wide (see fetchSavedByPointId).
-  const savedByPointId = await fetchSavedByPointId(supabase, matchId, pointIds);
+  const savedByPointId = includeBookmarks
+    ? await fetchSavedByPointId(supabase, matchId, pointIds)
+    : new Map<string, { userId: string; name: string | null }[]>();
 
   // Group shots by point_id
   const shotsByPointId = new Map<string, DbShot[]>();

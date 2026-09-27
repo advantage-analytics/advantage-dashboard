@@ -50,6 +50,32 @@ const nextConfig: NextConfig = {
   turbopack: {
     // Turbopack will handle the dynamic imports correctly
   },
+  // The shared match report's Open Graph image reads its font and the
+  // wordmark PNG from disk at module scope (`src/app/m/[token]/
+  // opengraph-image.tsx`). A `readFile` on a computed path is invisible to
+  // the build's file tracing, so both are named here or the deployed
+  // function 500s looking for them.
+  outputFileTracingIncludes: {
+    "/m/[token]/opengraph-image": [
+      "./src/app/m/[token]/*.woff",
+      "./public/logos/logo-email.png",
+    ],
+  },
+  async headers() {
+    return [
+      {
+        // A shared match report is public by its sharer's choice, but the
+        // token in its URL should not leak further than the person it was
+        // sent to: no caching of the page by shared caches, and no referer
+        // carrying the token to any link the reader follows.
+        source: "/m/:path*",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+    ];
+  },
   async redirects() {
     return [
       {

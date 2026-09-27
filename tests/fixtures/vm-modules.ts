@@ -34,6 +34,12 @@ export function createLoader(
     stubs?: Stubs;
     /** Return a marker component for any import that is not a file or a stub. */
     markUnknown?: boolean;
+    /**
+     * Extra globals for the vm context. It starts with only `process`,
+     * `console` and `require`, so a module that reaches for `Buffer`, `File`
+     * or `URL` at call time needs them handed in here.
+     */
+    globals?: Record<string, unknown>;
   } = {},
 ) {
   const cache = new Map<string, Record<string, unknown>>();
@@ -79,6 +85,7 @@ export function createLoader(
       fileName: file,
     });
     runInNewContext(outputText, {
+      ...options.globals,
       exports,
       module: { exports },
       process,

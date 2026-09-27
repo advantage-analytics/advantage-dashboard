@@ -46,6 +46,14 @@ export interface UploadResult {
   storagePath?: string;
   fileId?: string;
   error?: string;
+  /**
+   * Why the upload failed, when the caller must answer differently from a
+   * plain error. `conflict`: the `match_files` insert lost to another row for
+   * the same match — the partial unique index `match_files_one_per_match`
+   * refused it (SQLSTATE 23505). `/api/upload` maps it to the same 409 body as
+   * its pre-check; every other failure stays a 500.
+   */
+  code?: "conflict";
 }
 
 /**

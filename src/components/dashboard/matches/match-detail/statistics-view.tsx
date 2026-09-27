@@ -1,7 +1,6 @@
 "use client";
 
 import { HeadToHeadCard } from "@/components/dashboard/matches/match-detail/head-to-head-card";
-import { MatchDataBlock } from "@/components/dashboard/matches/match-detail/match-data-block";
 import { MatchReport } from "@/components/dashboard/matches/match-detail/match-report";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { PerformanceTrackerChart } from "@/components/dashboard/matches/match-detail/performance-tracker-chart";
@@ -17,21 +16,20 @@ import { cn } from "@/lib/utils";
  * the unpublished-stats notice when there is one, the Advantage Intelligence
  * insight, then the widgets row — the head-to-head table beside a 416px
  * column of the three point-derived charts (performance tracker → rally
- * length → how points ended) — and, on a video-derived match, the `MatchDataBlock`
- * caveats under it. Successor to the round-47f Statistics tab panel; the KPI
- * strip and the set-scope chips it drew are gone from the settled design.
+ * length → how points ended). Successor to the round-47f Statistics tab
+ * panel; the KPI strip and the set-scope chips it drew are gone from the
+ * settled design. The "Match data" caveats block that sat under the row on a
+ * video-derived match was removed on 2026-09-27: it only ever said "Coming
+ * soon" over a disabled button, and nothing used it.
  *
  * Takes no props: `statsPublished` and `isDerived` are `meta` on
  * `useMatchReport()`, decided once in `page.tsx`, so this view cannot be
  * handed a different answer than the rail or the title row got.
  *
- * Two states the frames do not draw but the data has (spec › Decisions 8):
+ * One state the frames do not draw but the data has (spec › Decisions 8):
  * the notice, for a match with a verified point timeline and no published
  * aggregates — the head-to-head returns null then, so the chart column takes
- * the full width instead of sitting as a lone 416px strip — and the data
- * block, for a derived match whose stats have published and so has the
- * winners/errors figures the caveats are about (`isDerived && statsPublished`,
- * the same gate the old rail used).
+ * the full width instead of sitting as a lone 416px strip.
  *
  * `shrink-0` on the notice's slot and the widgets row: this view renders in a
  * flex column, and a flex item whose minimum height is not its content — the
@@ -70,11 +68,18 @@ export function StatisticsView() {
       {/* F1: 436px + 416px in the 868px pane. The head-to-head's slot takes
           what the fixed column leaves. Under 720px of pane (the `@container`
           on `MatchReport.Pane`) the row stacks: head-to-head first, the
-          charts under it, both full width — `items-start` only applies side
-          by side, since in a column it would shrink each child to its
-          content's width. */}
+          charts under it, both full width.
+
+          Side by side, the two columns end on one line. The row stretches
+          (flex's default), and the chart column hands its slack to Rally
+          length, whose bars fill whatever height the card gets (the
+          landing page mockup's `.mb-chart .bands`). The height goes to the
+          chart, never to a card's empty surface: a stretched card with
+          top-aligned content reads worse than uneven columns. The
+          head-to-head card keeps its natural height; its slot stretches,
+          invisibly. */}
       {hasPoints && (
-        <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row @min-[720px]:items-start">
+        <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row">
           {meta.statsPublished && (
             <div className="min-w-0 flex-1">
               <HeadToHeadCard />
@@ -83,7 +88,9 @@ export function StatisticsView() {
 
           <div
             className={cn(
-              "flex flex-col gap-4",
+              // `*:shrink-0`: the column only ever gains height from the row,
+              // never gives it up — a card squeezed below its content clips.
+              "flex flex-col gap-4 *:shrink-0",
               meta.statsPublished
                 ? "w-full shrink-0 @min-[720px]:w-[416px]"
                 : "min-w-0 flex-1",
@@ -95,8 +102,6 @@ export function StatisticsView() {
           </div>
         </div>
       )}
-
-      {meta.isDerived && meta.statsPublished && <MatchDataBlock />}
     </>
   );
 }

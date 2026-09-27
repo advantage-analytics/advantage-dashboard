@@ -41,6 +41,7 @@ import { HeaderGreeting } from "@/components/dashboard/header-greeting";
 import { BetaHeaderMeter } from "@/components/dashboard/beta-header-meter";
 import { MENU_ROW_CLASS, MENU_RULE_CLASS } from "@/lib/ui/menu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
+import { UNKNOWN_EVENT_PLACEHOLDER } from "@/lib/data/match-share-format";
 import {
   PendingBar,
   PendingRegion,
@@ -227,7 +228,7 @@ export function Header({
           .single();
         if (data) {
           setMatchCrumb({
-            tournamentName: data.tournament_name ?? "Unknown Event",
+            tournamentName: data.tournament_name ?? UNKNOWN_EVENT_PLACEHOLDER,
             player1Name: data.player1_name,
             player2Name: data.player2_name,
           });

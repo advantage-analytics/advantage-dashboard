@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 
 import { getMatchDetailData } from "@/lib/data/match-detail-server";
+import { getMatchShareState } from "@/lib/data/match-share-server";
 import { getSavedViews } from "@/lib/data/saved-views-server";
 import { getBandSettings } from "@/lib/data/viz-bands-server";
 import { getPreferences } from "@/lib/data/preferences-server";
@@ -106,7 +107,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // `getWorkspaceContext()` is `cache()`-wrapped and the layout above this
   // page already called it once to gate sign-in, so this rides the same
   // request-scoped result rather than a second query.
-  const [data, jobs, video, filmEntry, workspace, preferences] =
+  // `shareState` rides the same wave: one RLS-scoped row and one permission
+  // check, and nothing else here depends on them. No link for every match
+  // with sharing off; `canShare` false for a viewer who may see the match
+  // but not publish it.
+  const [data, jobs, video, filmEntry, workspace, preferences, shareState] =
     await Promise.all([
       getMatchDetailData(matchId),
       createClient().then(async (supabase) => {
@@ -139,6 +144,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
       getMatchFilmEntry(matchId),
       getWorkspaceContext(),
       getPreferences(),
+      getMatchShareState(matchId),
     ]);
   const unit = preferences.unit;
 
@@ -220,6 +226,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const isAwaitingAnalysis =
     isInFlight(analysis.status) || isAnalysisFailed(analysis.status);
 
+  // A failed points read is "no answer", not a match with no points: rendering
+  // on would draw a zero-point report that looks like a real one. Thrown here,
+  // not in the loader or the layout, because `error.tsx` does not wrap this
+  // segment's own layout — this is the throw that reaches its retry surface.
+  // A match still analysing renders no points, so that branch never throws.
+  if (data.points === null && !isAwaitingAnalysis) {
+    throw new Error(`Failed to load points for match ${matchId}`);
+  }
+
   // Fetched only once there's a view switcher to show it in — the
   // awaiting-analysis branch below never renders `ShotsTab`, so a match still
   // analysing skips both queries entirely. Run together: neither depends on
@@ -240,7 +255,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
           Component, and an element handed across the RSC boundary into
           `PopoverTrigger asChild` is dropped without a word whenever React
           has not resolved it yet — see `ShareMatchButton`'s `trigger`. */}
-      <ShareMatchButton trigger={ShareRailTrigger} side="top" align="start" />
+      <ShareMatchButton
+        trigger={ShareRailTrigger}
+        side="top"
+        align="start"
+        shareLink={shareState.link}
+        canShare={shareState.canShare}
+      />
     </MatchReportRailFooter>
   );
 

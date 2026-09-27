@@ -325,66 +325,32 @@ export class SwingVisionParser implements IFileParser {
   ): Partial<FormData> {
     const { settings, sets, totalDuration } = parsed;
 
-    // Determine player and opponent names
-    // When fallback was used (guestTeam from metadata), SwingVision puts opponent in hostTeam
-    let playerName: string;
-    let opponentName: string;
-    let playerScores: number[];
-    let opponentScores: number[];
-    let playerTiebreaks: (number | null)[];
-    let opponentTiebreaks: (number | null)[];
+    // Host is always player1, including when guestTeam came from the
+    // metadata/Shots fallback: the wizard stores playerName as player1_name
+    // and process-match keys is_player1 on the Settings "Host Team" cell, so
+    // swapping names here would put one player's name on the other's stats.
+    const playerName = settings.hostTeam || "Player";
+    const opponentName = settings.guestTeam || "Opponent";
+    const playerScores = sets.map((s) => s.hostScore);
+    const opponentScores = sets.map((s) => s.guestScore);
+    const playerTiebreaks = sets.map((s) => s.hostTiebreak);
+    const opponentTiebreaks = sets.map((s) => s.guestTiebreak);
+
     let result: string = "";
+    const hostWins = sets.filter((s) => s.winner === "host").length;
+    const guestWins = sets.filter((s) => s.winner === "guest").length;
+    const draws = sets.filter((s) => s.winner === "draw").length;
 
-    if (settings.guestTeamFromFallback) {
-      // Fallback case: Guest was empty, found in metadata
-      // Only swap the names - scores/tiebreaks are already correct
-      playerName = settings.guestTeam || "Player";
-      opponentName = settings.hostTeam || "Opponent";
-      // Keep scores/tiebreaks mapped to host/guest (don't swap)
-      playerScores = sets.map((s) => s.hostScore);
-      opponentScores = sets.map((s) => s.guestScore);
-      playerTiebreaks = sets.map((s) => s.hostTiebreak);
-      opponentTiebreaks = sets.map((s) => s.guestTiebreak);
-      // Calculate result normally
-      const hostWins = sets.filter((s) => s.winner === "host").length;
-      const guestWins = sets.filter((s) => s.winner === "guest").length;
-      const draws = sets.filter((s) => s.winner === "draw").length;
-
-      if (draws > 0) {
-        // If any set is a draw, match is incomplete
-        result = "Unfinished";
-      } else if (hostWins > guestWins) {
-        result = `${playerName} Wins`;
-      } else if (guestWins > hostWins) {
-        result = `${opponentName} Wins`;
-      } else if (hostWins === guestWins && hostWins > 0) {
-        // Tied sets (both won same number of sets)
-        result = "Unfinished";
-      }
-    } else {
-      // Normal case: Both teams populated from Settings sheet
-      playerName = settings.hostTeam || "Player";
-      opponentName = settings.guestTeam || "Opponent";
-      playerScores = sets.map((s) => s.hostScore);
-      opponentScores = sets.map((s) => s.guestScore);
-      playerTiebreaks = sets.map((s) => s.hostTiebreak);
-      opponentTiebreaks = sets.map((s) => s.guestTiebreak);
-      // Calculate result normally
-      const hostWins = sets.filter((s) => s.winner === "host").length;
-      const guestWins = sets.filter((s) => s.winner === "guest").length;
-      const draws = sets.filter((s) => s.winner === "draw").length;
-
-      if (draws > 0) {
-        // If any set is a draw, match is incomplete
-        result = "Unfinished";
-      } else if (hostWins > guestWins) {
-        result = `${playerName} Wins`;
-      } else if (guestWins > hostWins) {
-        result = `${opponentName} Wins`;
-      } else if (hostWins === guestWins && hostWins > 0) {
-        // Tied sets (both won same number of sets)
-        result = "Unfinished";
-      }
+    if (draws > 0) {
+      // If any set is a draw, match is incomplete
+      result = "Unfinished";
+    } else if (hostWins > guestWins) {
+      result = `${playerName} Wins`;
+    } else if (guestWins > hostWins) {
+      result = `${opponentName} Wins`;
+    } else if (hostWins === guestWins && hostWins > 0) {
+      // Tied sets (both won same number of sets)
+      result = "Unfinished";
     }
 
     // Determine bestOf - only 1, 3, or 5 are valid

@@ -130,8 +130,10 @@ test("a failed row delete releases the purge claim, after the purge and the dele
   const h = harness({ deleteError: { message: "deadlock detected" } });
   const response = await h.run();
   expect(response.status).toBe(500);
-  // The 500 still names the delete failure, not anything about the release.
-  expect(response.body).toEqual({ error: "deadlock detected" });
+  // The 500 is the route's public sentence (serverError keeps the raw
+  // Supabase text out of the response), and says nothing about the release.
+  expect(response.body).toEqual({ error: "Could not delete the match" });
+  expect(JSON.stringify(response.body)).not.toContain("deadlock detected");
   expect(h.effects).toEqual(["purge", "delete", "release"]);
   expect(h.released).toEqual([[h.matchId]]);
 });

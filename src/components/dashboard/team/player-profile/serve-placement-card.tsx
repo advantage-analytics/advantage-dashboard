@@ -73,6 +73,27 @@ export function ServePlacementCard({
   serve: PlayerProfile["serve"];
   subject: CardSubject;
 }) {
+  // The read failed, which is not the same as "no matches": the loader zeroes
+  // the map so the rest of the profile still renders, and flags it so this
+  // card does not promise a map that is already owed. The frame and one line
+  // — no ghost, no band — because nothing here is waiting on a report.
+  if (serve.unavailable) {
+    return (
+      <section
+        aria-label="Serve placement"
+        className="surface-card flex flex-col"
+        style={{ padding: "var(--pad-card)" }}
+      >
+        <span className="eyebrow">Serve placement</span>
+        <p role="status" className="text-body-sm mt-3.5">
+          {subject.isSelf
+            ? "Couldn't load your serves. Reload the page to try again."
+            : `Couldn't load ${subject.firstName}'s serves. Reload the page to try again.`}
+        </p>
+      </section>
+    );
+  }
+
   if (serve.zoneStats !== null) {
     return (
       <ServePlacementQuietStrip

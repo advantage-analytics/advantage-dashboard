@@ -7,6 +7,9 @@ import {
   type OverallPerformanceData,
 } from "@/lib/data/performance-server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 function buildHomeInsightSystemPrompt(
   perf: OverallPerformanceData,
   name: string,

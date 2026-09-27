@@ -9,6 +9,9 @@ import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { createLLMObservabilityContext, getLLMStream } from "@/lib/llm/adapter";
 import { formatChange, textStreamResponse } from "@/lib/llm/stream-response";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 /**
  * The Focus card's claim, for a program — Team Home's counterpart to
  * `/api/home-insight`.

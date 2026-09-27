@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { expect, test } from "@playwright/test";
 import ts from "typescript";
+import { GENERATE_INSIGHTS_ENV as ENV } from "./fixtures/edge-function-guard-identities";
 
 async function historyFilters(programId: string | null | undefined) {
   const filters: unknown[][] = [];
@@ -70,7 +71,7 @@ async function historyFilters(programId: string | null | undefined) {
               },
             }
           : { createClient: () => supabase },
-      Deno: { env: { get: () => "stub" } },
+      Deno: { env: { get: (key: string) => ENV[key] } },
       Response,
       console,
       fetch: async () =>
@@ -82,6 +83,7 @@ async function historyFilters(programId: string | null | undefined) {
   const response = await handler(
     new Request("https://example.test", {
       method: "POST",
+      headers: { authorization: `Bearer ${ENV.SUPABASE_SERVICE_ROLE_KEY}` },
       body: JSON.stringify({ matchId: "match" }),
     }),
   );

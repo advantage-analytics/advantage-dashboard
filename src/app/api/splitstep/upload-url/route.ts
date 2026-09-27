@@ -95,9 +95,8 @@ export async function POST(request: NextRequest) {
     },
 
     async loadBillableSeconds(matchId) {
-      // Keyed on match_id like `recordBlobName` below and the wizard's other
-      // writes. A match normally has one row here; if a resubmit has added
-      // more, the newest is the one this upload belongs to.
+      // Keyed on match_id. A match normally has one row here; if a resubmit
+      // has added more, the newest is the one this upload belongs to.
       const { data, error } = await adminClient()
         .from("processing_jobs")
         .select("billable_seconds")
