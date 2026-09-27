@@ -143,7 +143,7 @@ ready).
 
 ## T11 · Commit generate-key-moments from live and verify its caller
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T9
 - **files:** supabase/functions/generate-key-moments/index.ts (new, from live), supabase/functions/generate-key-moments/README.md (new), tests/generate-key-moments-guards.spec.ts (new) — guess
