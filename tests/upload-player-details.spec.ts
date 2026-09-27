@@ -383,7 +383,7 @@ test("the footer's missing-answers counter and the write-time gate share one fun
     "collectMatchCompletionRequirements,\n  wizardContinueBlocked,",
   );
   const missingBlock = flowSrc.slice(
-    flowSrc.indexOf("const missing = useMemo("),
+    flowSrc.indexOf("const ordinaryMissing = useMemo("),
     flowSrc.indexOf("const stepBusy = stepBusyLabel("),
   );
   expect(missingBlock).toContain("collectMatchCompletionRequirements({");

@@ -3,8 +3,9 @@
 /**
  * Server actions behind the upload wizard's details step and its drafts.
  *
- * Every read here runs as the signed-in user through the server client, so
- * RLS answers "what may this person see" — nothing below restates a policy.
+ * Dashboard reads use the signed-in session. Explicit console lookup scopes
+ * re-authorize an admin before service reads of the selected program.
+ * Opponent pool reads always retain the session and public-pool policies.
  * The staff-only reads (a program's schedule, an opponent's pooled roster)
  * additionally ask `canManageTeamSchedule`, the same predicate the schedule's
  * own actions use, because a player may open the wizard and must not be offered
@@ -16,8 +17,12 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { canManageTeamSchedule } from "@/lib/workspace/types";
-import { getProgramSchedule } from "@/lib/data/schedule-server";
+import {
+  resolveWizardLookupScope,
+  readWizardSchedule,
+  readWizardRosterIds,
+  type WizardLookupScope,
+} from "./lookup-scope-server";
 import { headToHeadRows } from "@/lib/data/opponents-server";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import type { EventEntry, EventSite, ProgramEvent } from "@/lib/schedule/types";
@@ -26,7 +31,7 @@ import {
   attachLineGroups,
   type AttachLine,
 } from "@/lib/schedule/attach-line-state";
-import { canonicalRosterIds, type RosterIdRow } from "@/lib/data/roster-ids";
+import { canonicalRosterIds } from "@/lib/data/roster-ids";
 import type {
   LineOffer,
   MatchDraft,
@@ -147,13 +152,13 @@ export async function findLineOffers(input: {
   date: string;
   playerUserId: string | null;
   playerName: string;
+  scope?: WizardLookupScope;
 }): Promise<LineOffer[]> {
-  const workspace = await getWorkspaceContext();
-  if (!workspace || workspace.active.kind !== "team") return [];
-  if (!canManageTeamSchedule(workspace.active)) return [];
+  const scope = await resolveWizardLookupScope(input.scope);
+  if (!scope?.programId || !scope.canReadSchedule) return [];
   if (!input.date) return [];
 
-  const schedule = await getProgramSchedule(workspace.active.id);
+  const schedule = await readWizardSchedule(scope);
   const wanted = normalizedPersonName(input.playerName);
   const offers: LineOffer[] = [];
 
@@ -226,13 +231,10 @@ export async function findUploadLines(input: {
   bestOf: number;
   adScoring: boolean | null;
   query?: string;
+  scope?: WizardLookupScope;
 }): Promise<FindUploadLinesResult> {
-  const workspace = await getWorkspaceContext();
-  if (
-    !workspace ||
-    workspace.active.kind !== "team" ||
-    !canManageTeamSchedule(workspace.active)
-  ) {
+  const scope = await resolveWizardLookupScope(input.scope);
+  if (!scope?.programId || !scope.canReadSchedule) {
     return {
       ok: false,
       error: "Only schedule staff can add a match to an event.",
@@ -243,15 +245,14 @@ export async function findUploadLines(input: {
   }
 
   const supabase = await createClient();
-  const programId = workspace.active.id;
   const [schedule, roster] = await Promise.all([
-    getProgramSchedule(programId),
-    supabase.rpc("program_roster_full", { p_program_id: programId }),
+    readWizardSchedule(scope),
+    readWizardRosterIds(scope),
   ]);
   const groups = attachLineGroups({
     events: schedule.events,
     entriesByEvent: schedule.entriesByEvent,
-    canonical: canonicalRosterIds((roster.data ?? []) as RosterIdRow[]),
+    canonical: canonicalRosterIds(roster),
     query: input.query,
     mode: "upload",
     match: {
@@ -331,14 +332,12 @@ export interface OpponentPlayed {
  * personal workspace's opponents are private labels; a team's are the
  * program's own matches. Either way the same shape: name, volume, recency.
  */
-export async function opponentsPlayed(): Promise<OpponentPlayed[]> {
-  const workspace = await getWorkspaceContext();
-  if (!workspace) return [];
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
+export async function opponentsPlayed(
+  inputScope?: WizardLookupScope,
+): Promise<OpponentPlayed[]> {
+  const scope = await resolveWizardLookupScope(inputScope);
+  if (!scope) return [];
+  const supabase = scope.client;
 
   const query = supabase
     .from("matches")
@@ -348,9 +347,9 @@ export async function opponentsPlayed(): Promise<OpponentPlayed[]> {
     .order("date", { ascending: false })
     .limit(400);
   const { data } =
-    workspace.active.kind === "team"
-      ? await query.eq("program_id", workspace.active.id)
-      : await query.eq("created_by", user.id).is("program_id", null);
+    scope.programId !== null
+      ? await query.eq("program_id", scope.programId)
+      : await query.eq("created_by", scope.actorId).is("program_id", null);
 
   const byName = new Map<string, OpponentPlayed>();
   for (const row of (data ?? []) as {
@@ -393,14 +392,12 @@ export interface YourEvent {
  * The events this workspace's matches already belong to (design 6b), for the
  * Event type-ahead. An event is a grouping in the library and nothing more.
  */
-export async function yourEvents(): Promise<YourEvent[]> {
-  const workspace = await getWorkspaceContext();
-  if (!workspace) return [];
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
+export async function yourEvents(
+  inputScope?: WizardLookupScope,
+): Promise<YourEvent[]> {
+  const scope = await resolveWizardLookupScope(inputScope);
+  if (!scope) return [];
+  const supabase = scope.client;
 
   const query = supabase
     .from("matches")
@@ -409,9 +406,9 @@ export async function yourEvents(): Promise<YourEvent[]> {
     .order("date", { ascending: false })
     .limit(400);
   const { data } =
-    workspace.active.kind === "team"
-      ? await query.eq("program_id", workspace.active.id)
-      : await query.eq("created_by", user.id).is("program_id", null);
+    scope.programId !== null
+      ? await query.eq("program_id", scope.programId)
+      : await query.eq("created_by", scope.actorId).is("program_id", null);
 
   const byName = new Map<string, YourEvent & { first: number; last: number }>();
   for (const row of (data ?? []) as {
@@ -469,10 +466,11 @@ export interface OpponentRosterRow {
 export async function opponentRosterForLine(input: {
   opponentProgramKey: string;
   slot: string | null;
+  scope?: WizardLookupScope;
 }): Promise<OpponentRosterRow[]> {
-  const workspace = await getWorkspaceContext();
-  if (!workspace || workspace.active.kind !== "team") return [];
-  if (!canManageTeamSchedule(workspace.active)) return [];
+  const scope = await resolveWizardLookupScope(input.scope);
+  if (!scope?.programId || !scope.canReadSchedule) return [];
+  // The opponent is not the admin's selected target. Keep pooled visibility.
   const supabase = await createClient();
 
   const { data: program } = await supabase
@@ -481,16 +479,15 @@ export async function opponentRosterForLine(input: {
     .eq("program_key", input.opponentProgramKey)
     .maybeSingle();
   const opponentProgramId = (program as { id: string } | null)?.id ?? null;
-  if (!opponentProgramId || opponentProgramId === workspace.active.id)
-    return [];
+  if (!opponentProgramId || opponentProgramId === scope.programId) return [];
 
   const [{ data: rosterRows }, { data: matchRows }, { data: lineupRows }] =
     await Promise.all([
       supabase.rpc("pooled_roster", { p_program_id: opponentProgramId }),
-      supabase
+      scope.client
         .from("matches")
         .select("id, player2_name, opponent_player_id")
-        .eq("program_id", workspace.active.id),
+        .eq("program_id", scope.programId),
       supabase.rpc("pooled_lineups", {
         p_opponent_program_id: opponentProgramId,
       }),
@@ -509,7 +506,7 @@ export async function opponentRosterForLine(input: {
     slot: string | null;
     opponent_labels: string[] | null;
   }[]) {
-    if (line.program_id !== workspace.active.id) continue;
+    if (line.program_id !== scope.programId) continue;
     if (!input.slot || line.slot !== input.slot) continue;
     for (const label of line.opponent_labels ?? [])
       heldNames.add(normalizedPersonName(label));
@@ -552,14 +549,11 @@ export async function opponentRosterForLine(input: {
 export async function playerStyleFromMatches(input: {
   playerId: string | null;
   playerName: string;
+  scope?: WizardLookupScope;
 }): Promise<{ hand: string | null; backhand: string | null } | null> {
-  const workspace = await getWorkspaceContext();
-  if (!workspace) return null;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const scope = await resolveWizardLookupScope(input.scope);
+  if (!scope) return null;
+  const supabase = scope.client;
   let query = supabase
     .from("matches")
     .select("player_hand, player_backhand")
@@ -568,9 +562,9 @@ export async function playerStyleFromMatches(input: {
   // Scoped like opponentsPlayed above: this workspace's matches, never a
   // row RLS happens to show from another program the viewer belongs to.
   query =
-    workspace.active.kind === "team"
-      ? query.eq("program_id", workspace.active.id)
-      : query.eq("created_by", user.id).is("program_id", null);
+    scope.programId !== null
+      ? query.eq("program_id", scope.programId)
+      : query.eq("created_by", scope.actorId).is("program_id", null);
   query = input.playerId
     ? query.eq("player1_id", input.playerId)
     : query.ilike("player1_name", input.playerName.trim());

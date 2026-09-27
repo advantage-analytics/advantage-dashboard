@@ -202,6 +202,7 @@ export async function readScheduleWithClient(
   const { data: entryRows, error: entryError } = await supabase
     .from("program_event_entries")
     .select(ENTRY_COLUMNS)
+    .eq("program_id", programId)
     .in(
       "event_id",
       events.map((event) => event.id),
@@ -222,6 +223,7 @@ export async function readScheduleWithClient(
         supabase
           .from("matches")
           .select(MATCH_COLUMNS)
+          .eq("program_id", programId)
           .in("event_entry_id", entryIds),
         supabase
           .from("program_event_outcomes")

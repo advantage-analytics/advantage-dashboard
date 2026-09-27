@@ -1,10 +1,13 @@
 import { Calendar, Globe, Landmark, MapPin } from "lucide-react";
+import Link from "next/link";
 
 import { AdminTeamCrestControl } from "@/components/admin/team-crest-control";
 import { TeamHeaderActions } from "@/components/admin/team-header-actions";
+import { adminUploadHref } from "@/components/admin/admin-upload-selection";
 import { StatePill } from "@/components/ui/state-pill";
 import { PilotPill, ApprovePill } from "@/components/admin/plan-pills";
 import { programSubtitle } from "@/lib/data/programs-server";
+import { advButton } from "@/lib/ui/adv-button";
 import { formatShortDate } from "@/lib/ui/date-format";
 import type {
   AdminTeamClaim,
@@ -123,7 +126,15 @@ export function TeamPageHeader({
           </div>
         )}
       </div>
-      <TeamHeaderActions program={program} />
+      <div className="flex shrink-0 items-center gap-2.5">
+        <Link
+          href={adminUploadHref(program.id, null)}
+          className={advButton("primary", "md")}
+        >
+          Upload for this team
+        </Link>
+        <TeamHeaderActions program={program} />
+      </div>
     </div>
   );
 }

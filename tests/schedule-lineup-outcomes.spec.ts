@@ -1,3 +1,4 @@
+import { loadScheduleWriter } from "./helpers/schedule-writer";
 /**
  * A dual's lineup and its saved outcomes, through the real actions.
  *
@@ -242,7 +243,11 @@ function harness() {
     }).outputText,
     {
       exports: actions,
-      require(name: string) {
+      require: function mockRequire(name: string) {
+        if (name === "./writes-server")
+          return loadScheduleWriter(mockRequire, {
+            crypto: { randomUUID: () => "match" },
+          });
         if (name === "next/cache") return { revalidatePath: () => undefined };
         if (name === "@/lib/supabase/server")
           return { createClient: async () => client };

@@ -1,17 +1,24 @@
 import { AdminPage } from "@/components/admin/admin-page";
-import { ComingSoon } from "@/components/dashboard/coming-soon";
+import { AdminUploadHistory } from "@/components/admin/admin-upload-history";
+import { getAdminUploadHistory } from "@/lib/data/admin-uploads-server";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Uploads" };
 
-export default function AdminUploadsPage() {
+export default async function AdminUploadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const cursorParam = Array.isArray(params.cursor)
+    ? params.cursor[0]
+    : params.cursor;
+  const cursor = cursorParam ?? null;
+  const result = await getAdminUploadHistory({ cursor });
   return (
     <AdminPage>
-      <h1 className="text-display">Uploads</h1>
-      <ComingSoon
-        heading="Upload oversight is coming soon"
-        description="A cross-team view of match processing — what's in flight, what failed, what it cost — isn't built yet."
-        action={{ label: "Back to teams", href: "/admin/teams" }}
-      />
+      <AdminUploadHistory result={result} cursor={cursor} />
     </AdminPage>
   );
 }

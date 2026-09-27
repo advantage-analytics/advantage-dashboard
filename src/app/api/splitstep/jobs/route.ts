@@ -20,6 +20,10 @@
  * are in the handler's header.
  */
 
+import {
+  authorizeAdminVideo,
+  reserveAdminVideoQuota,
+} from "@/lib/services/programs/admin-video-access";
 import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { after, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -62,12 +66,33 @@ export async function POST(request: NextRequest) {
   let admin: ReturnType<typeof createAdminClient> | null = null;
   const adminClient = () => (admin ??= createAdminClient());
   let userId: string | null = null;
+  let adminVideoJobId: string | null = null;
 
   // Resolved once the handler has passed the config check; every vendor and
   // storage seam below reads it. `deploymentConfig()` is the only writer.
   let config: ReturnType<typeof resolveSplitstepDeploymentConfig> | null = null;
 
   const deps: SubmitJobDeps = {
+    async authorizeAdminVideo(actorId, matchId, jobId) {
+      const authorized = await authorizeAdminVideo(
+        adminClient(),
+        actorId,
+        matchId,
+        jobId,
+        "read",
+      );
+      adminVideoJobId = authorized?.jobId ?? null;
+      return authorized;
+    },
+    async claimAdminVideo(actorId, matchId, jobId) {
+      const { data, error } = await adminClient().rpc("admin_video_access", {
+        p_actor_id: actorId,
+        p_match_id: matchId,
+        p_job_id: jobId,
+        p_action: "claim",
+      });
+      return !error && Boolean(data);
+    },
     async currentUserId() {
       const {
         data: { user },
@@ -124,6 +149,8 @@ export async function POST(request: NextRequest) {
     },
 
     reserveQuota(params) {
+      if (adminVideoJobId === params.jobId)
+        return reserveAdminVideoQuota(adminClient(), params);
       return reserveQuota({ supabase: adminClient(), ...params });
     },
 

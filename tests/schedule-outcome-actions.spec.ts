@@ -1,7 +1,12 @@
+import { loadScheduleWriter } from "./helpers/schedule-writer";
 import { expect, test } from "@playwright/test";
 import { matchResultFor } from "@/lib/schedule/entry-state";
 import { readFileSync } from "node:fs";
-import { canManageTeamSchedule, isProgramStaff } from "@/lib/workspace/types";
+import {
+  canManageTeamSchedule,
+  isProgramStaff,
+  uploadPolicyLabel,
+} from "@/lib/workspace/types";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 
@@ -13,6 +18,7 @@ function actions(
     rpcError?: string;
     outcome?: boolean;
     otherProgram?: boolean;
+    eventsPolicy?: "staff" | "owner";
   } = {},
 ) {
   const writes: unknown[] = [];
@@ -79,7 +85,11 @@ function actions(
   runInNewContext(code, {
     exports,
     crypto: { randomUUID: () => "match" },
-    require(name: string) {
+    require: function mockRequire(name: string) {
+      if (name === "./writes-server")
+        return loadScheduleWriter(mockRequire, {
+          crypto: { randomUUID: () => "match" },
+        });
       if (name === "next/cache")
         return { revalidatePath: (path: string) => refreshed.push(path) };
       if (name === "@/lib/supabase/server")
@@ -94,14 +104,15 @@ function actions(
                     kind: "team",
                     id: "program",
                     role,
-                    eventsPolicy: "staff",
+                    eventsPolicy: options.eventsPolicy ?? "staff",
+                    name: "Team",
                   },
                   viewer: { id: "viewer" },
                 },
         };
       if (name === "./entry-state") return { matchResultFor };
       if (name === "@/lib/workspace/types")
-        return { canManageTeamSchedule, isProgramStaff };
+        return { canManageTeamSchedule, isProgramStaff, uploadPolicyLabel };
       return {};
     },
   });
@@ -193,4 +204,28 @@ test("cleared outcome leaves the score path available without processing jobs", 
     "/dashboard/team/schedule",
     "/dashboard/team/schedule/event",
   ]);
+});
+
+test("all extracted writes retain member policy authorization before touching inputs", async () => {
+  for (const role of ["anonymous", "player", "coach"]) {
+    const run = actions(role, { eventsPolicy: "owner" });
+    for (const name of [
+      "createDual",
+      "createTournament",
+      "updateDual",
+      "updateTournament",
+      "recordResult",
+      "setOutcome",
+    ])
+      expect(await run.actions[name](null)).toHaveProperty("error");
+    expect(run.writes).toEqual([]);
+    expect(run.refreshed).toEqual([]);
+  }
+});
+
+test("internal writer has no remotely callable Server Action directive", () => {
+  const service = readFileSync("src/lib/schedule/writes-server.ts", "utf8");
+  expect(service).not.toMatch(/["']use server["']/);
+  const boundary = readFileSync("tests/client-bundle-boundary.spec.ts", "utf8");
+  expect(boundary).toContain('"lib/schedule/writes-server.ts"');
 });

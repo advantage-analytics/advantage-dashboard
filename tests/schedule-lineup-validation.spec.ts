@@ -1,3 +1,4 @@
+import { loadScheduleWriter } from "./helpers/schedule-writer";
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
@@ -59,7 +60,8 @@ function entry(overrides: Partial<EventEntry> = {}): EventEntry {
 }
 
 // Actual actions and planner, with only request/database boundaries mocked.
-function actions(entries: EventEntry[] = []) {
+function actions(entries: EventEntry[] = [], eventProgram = "program") {
+  const reads: unknown[] = [];
   const writes: unknown[] = [];
   const refreshed: string[] = [];
   const client = {
@@ -93,7 +95,11 @@ function actions(entries: EventEntry[] = []) {
   ).outputText;
   runInNewContext(code, {
     exports,
-    require(name: string) {
+    require: function mockRequire(name: string) {
+      if (name === "./writes-server")
+        return loadScheduleWriter(mockRequire, {
+          crypto: { randomUUID: () => "match" },
+        });
       if (name === "next/cache")
         return { revalidatePath: (path: string) => refreshed.push(path) };
       if (name === "@/lib/supabase/server")
@@ -114,10 +120,12 @@ function actions(entries: EventEntry[] = []) {
         return { canManageTeamSchedule, isProgramStaff };
       if (name === "@/lib/data/schedule-server")
         return {
-          getEventDetail: async () => ({
-            event: { id: "event", kind: "dual" },
-            entries,
-          }),
+          getEventDetail: async (programId: string, eventId: string) => {
+            reads.push({ programId, eventId });
+            return programId === eventProgram
+              ? { event: { id: "event", kind: "dual" }, entries }
+              : null;
+          },
         };
       if (name === "./entry-plan")
         return { isNoPlayerLine, lineupForfeitSide, planEntryChanges };
@@ -126,7 +134,7 @@ function actions(entries: EventEntry[] = []) {
       return {};
     },
   });
-  return { actions: exports, writes, refreshed };
+  return { actions: exports, writes, refreshed, reads };
 }
 
 const input = {
@@ -408,4 +416,26 @@ test("a tournament outcome in any round protects the entry while unchanged saves
   expect(planEntryChanges([saved], []).refuse[0].reason).toContain(
     "can't be removed",
   );
+});
+
+test("both event edit services refuse another program through the scoped loader", async () => {
+  const run = actions([], "other-program");
+  expect(await run.actions.updateDual({ ...input, lines: full() })).toEqual({
+    error: "That event no longer exists.",
+  });
+  expect(
+    await run.actions.updateTournament({
+      eventId: "event",
+      name: "Open",
+      startsOn: "2026-09-10",
+      endsOn: "2026-09-11",
+      entries: [],
+    }),
+  ).toEqual({ error: "That event no longer exists." });
+  expect(run.reads).toEqual([
+    { programId: "program", eventId: "event" },
+    { programId: "program", eventId: "event" },
+  ]);
+  expect(run.writes).toEqual([]);
+  expect(run.refreshed).toEqual([]);
 });

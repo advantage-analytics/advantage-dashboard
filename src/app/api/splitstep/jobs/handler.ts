@@ -48,6 +48,8 @@ import {
   type Workspace,
 } from "@/lib/workspace/types";
 
+import type { AdminVideoAuthorization } from "@/lib/services/programs/admin-video-access";
+
 const LOG = "[splitstep-submit]";
 
 /** The columns of `processing_jobs` this decision reads. */
@@ -106,6 +108,16 @@ export type SubmitJobDeploymentConfig =
   { ok: true; webhookUrl: string } | { ok: false; missing: string };
 
 export interface SubmitJobDeps {
+  authorizeAdminVideo?(
+    userId: string,
+    matchId: string,
+    jobId: string,
+  ): Promise<AdminVideoAuthorization | null>;
+  claimAdminVideo?(
+    userId: string,
+    matchId: string,
+    jobId: string,
+  ): Promise<boolean>;
   /** The signed-in login, or null. */
   currentUserId(): Promise<string | null>;
   /** Can this deployment finish a job at all — `resolveSplitstepDeploymentConfig()`. */
@@ -301,6 +313,38 @@ export async function handleSubmitJob(
     );
   }
 
+  let adminVideo: AdminVideoAuthorization | null = null;
+  try {
+    adminVideo =
+      (await deps.authorizeAdminVideo?.(userId, match.id, job.id)) ?? null;
+  } catch {
+    return NextResponse.json(
+      { error: "This video operation is unavailable." },
+      { status: 403 },
+    );
+  }
+  if (
+    adminVideo &&
+    (adminVideo.matchId !== match.id ||
+      adminVideo.jobId !== job.id ||
+      adminVideo.programId !== match.program_id)
+  )
+    return NextResponse.json(
+      { error: "Video operation mismatch" },
+      { status: 403 },
+    );
+  if (
+    adminVideo &&
+    ((initialTopPlayerIsPlayer1 !== undefined &&
+      initialTopPlayerIsPlayer1 !== job.initial_top_player_is_player1) ||
+      (adScoring !== undefined && adScoring !== job.ad_scoring) ||
+      (fixedCamera !== undefined && fixedCamera !== job.fixed_camera))
+  )
+    return NextResponse.json(
+      { error: "Use this operation's saved video answers." },
+      { status: 409 },
+    );
+
   // ── The three vendor answers: body, then job, then match ──────────────────
   //
   // A first submit carries them in the body — the wizard has just asked. A
@@ -396,10 +440,9 @@ export async function handleSubmitJob(
   // `/api/splitstep/upload-url` asks its permission question about the same
   // workspace this one charges — a check aimed at a different budget is a check
   // that only looks enforced.
-  const billingWorkspace = billingWorkspaceFor(
-    await deps.availableWorkspaces(),
-    match.program_id,
-  );
+  const billingWorkspace =
+    adminVideo?.workspace ??
+    billingWorkspaceFor(await deps.availableWorkspaces(), match.program_id);
 
   if (!billingWorkspace) {
     return NextResponse.json(
@@ -437,9 +480,10 @@ export async function handleSubmitJob(
   // allowance be spent" and asks it unchanged below; this asks whether a match
   // may be recorded here at all, which is the layer under it.
   const roster =
-    billingWorkspace.kind === "team"
+    adminVideo?.roster ??
+    (billingWorkspace.kind === "team"
       ? await deps.loadRoster(billingWorkspace.id)
-      : undefined;
+      : undefined);
 
   const eligibility = uploadEligibility({
     workspace: billingWorkspace,
@@ -467,6 +511,17 @@ export async function handleSubmitJob(
     );
   }
 
+  // A compare-and-set claim serializes admin retries BEFORE quota or vendor I/O.
+  // A crash leaves submitting for review; never replay an uncertain vendor POST.
+  if (adminVideo && !(await deps.claimAdminVideo?.(userId, match.id, job.id)))
+    return NextResponse.json(
+      {
+        error:
+          "This video is already being submitted or is no longer eligible.",
+      },
+      { status: 409 },
+    );
+
   const reservation = await deps.reserveQuota({
     jobId: job.id,
     userId,
@@ -475,6 +530,7 @@ export async function handleSubmitJob(
   });
 
   if (!reservation.ok) {
+    if (adminVideo) await deps.updateJob(job.id, { status: "uploaded" });
     pipelineLog.info(
       `${LOG} refused — ${reservation.permission ? "not permitted" : "monthly cap"}`,
       {
@@ -502,7 +558,7 @@ export async function handleSubmitJob(
     // the orientation especially must survive the request: Phase 2 maps
     // top-of-frame strokes back onto player1/player2 and has no other
     // authoritative source for which was which.
-    await deps.updateJob(job.id, {
+    const submitting = await deps.updateJob(job.id, {
       status: "submitting",
       billable_seconds: billableSeconds,
       // Counted, not pinned. This was `1`, which reset the tally on every
@@ -513,6 +569,8 @@ export async function handleSubmitJob(
       ad_scoring: vendorRequest.Ad,
       fixed_camera: vendorRequest.FixedCamera,
     });
+
+    if (submitting.error) throw new Error(submitting.error);
 
     // 7. Mint the vendor URL — a read-only SAS on our Azure blob. There is no
     //    processing-started signal; the first thing we hear is the webhook.
@@ -560,13 +618,25 @@ export async function handleSubmitJob(
       );
     }
 
-    await deps.updateJob(job.id, {
+    const queued = await deps.updateJob(job.id, {
       status: "queued",
       external_job_id: externalJobId,
       submitted_at: new Date().toISOString(),
       video_url_expires_at: vendorUrl.expiresAt?.toISOString() ?? null,
       error_message: null,
     });
+
+    if (queued.error && adminVideo) {
+      // The vendor accepted this POST. Preserve its reservation and submitting
+      // claim for reconciliation; refunding/replaying here can duplicate work.
+      return NextResponse.json(
+        {
+          error:
+            "The provider accepted this video, but its status could not be saved. Administrator reconciliation is required.",
+        },
+        { status: 503 },
+      );
+    }
 
     pipelineLog.info(`${LOG} submitted`, {
       jobId: job.id,

@@ -68,6 +68,8 @@ export interface AzureStorageConfig {
   account: string;
   accountKey: string;
   container: string;
+  /** Loopback-only emulator endpoint; never accepted in production. */
+  endpoint?: string;
 }
 
 /** Env var names, in one place, so the preflight gate and the client agree. */
@@ -94,7 +96,37 @@ export function resolveAzureStorageConfig():
   if (!accountKey) return { ok: false, missing: "AZURE_STORAGE_KEY" };
   if (!container) return { ok: false, missing: "AZURE_STORAGE_CONTAINER" };
 
-  return { ok: true, config: { account, accountKey, container } };
+  const endpoint = process.env.AZURE_STORAGE_ENDPOINT;
+  if (endpoint) {
+    try {
+      const url = new URL(endpoint);
+      if (
+        process.env.NODE_ENV === "production" ||
+        url.protocol !== "http:" ||
+        !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash
+      )
+        throw new Error("Unsafe emulator endpoint");
+    } catch {
+      return {
+        ok: false,
+        missing:
+          "AZURE_STORAGE_ENDPOINT (requires nonproduction loopback HTTP)",
+      };
+    }
+  }
+  return {
+    ok: true,
+    config: {
+      account,
+      accountKey,
+      container,
+      ...(endpoint ? { endpoint } : {}),
+    },
+  };
 }
 
 /**
@@ -132,7 +164,7 @@ function credentialFor(config: AzureStorageConfig): StorageSharedKeyCredential {
  */
 function containerClientFor(config: AzureStorageConfig): ContainerClient {
   return new BlobServiceClient(
-    `https://${config.account}.blob.core.windows.net`,
+    config.endpoint ?? `https://${config.account}.blob.core.windows.net`,
     credentialFor(config),
   ).getContainerClient(config.container);
 }
@@ -159,7 +191,7 @@ function signBlobUrl(params: {
       permissions: BlobSASPermissions.parse(permissions),
       startsOn: new Date(Date.now() - CLOCK_SKEW_SECONDS * 1000),
       expiresOn,
-      protocol: SASProtocol.Https,
+      protocol: config.endpoint ? SASProtocol.HttpsAndHttp : SASProtocol.Https,
     },
     credentialFor(config),
   ).toString();

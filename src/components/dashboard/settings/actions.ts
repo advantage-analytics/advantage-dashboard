@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { purgeMatchStorage } from "@/lib/services/matches/purge-match-storage";
+import { releaseStoragePurgeClaims } from "@/lib/services/matches/release-storage-purge-claim";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
@@ -234,6 +235,10 @@ export async function requestPasswordReset(): Promise<ActionResult> {
  * stragglers, then the auth user last. If an earlier step fails the account
  * still exists and the user can retry — every step is idempotent — where
  * the reverse would leave orphaned data belonging to nobody.
+ *
+ * Every failure return after `prepare_my_account_deletion` succeeded gives
+ * back the claims it took — see `releaseDeletionClaims`. The success path
+ * never does: both claim tables cascade from the rows the deletion removes.
  */
 export async function deleteAccount(): Promise<ActionResult> {
   const supabase = await createClient();
@@ -249,14 +254,20 @@ export async function deleteAccount(): Promise<ActionResult> {
     };
   }
 
-  // 1. Programs first, and as the user: the RPC derives its subject from
-  //    auth.uid(), so the admin client would have nobody to act for. Failing
-  //    here changes nothing, which is the point of doing it first.
+  // Claim deletion and release program data atomically. A refused release rolls
+  // back the claim; successful release blocks concurrent console admissions.
   const { data: released, error: releaseError } = await supabase.rpc(
-    "release_my_account_from_programs",
+    "prepare_my_account_deletion",
   );
 
   if (releaseError) {
+    if (releaseError.message?.includes("console-history-protected")) {
+      return {
+        ok: false,
+        error:
+          "Your account has retained console submissions. Contact support before deleting your account.",
+      };
+    }
     if (releaseError.code === "42501") {
       return {
         ok: false,
@@ -301,6 +312,8 @@ export async function deleteAccount(): Promise<ActionResult> {
       "[account delete] could not list matches:",
       matchesError.message,
     );
+    // No purge has run, so there are no purge claims to give back yet.
+    await releaseDeletionClaims(supabase, adminClient, null);
     return {
       ok: false,
       error:
@@ -312,7 +325,20 @@ export async function deleteAccount(): Promise<ActionResult> {
 
   // Storage BEFORE rows — the object keys live on `processing_jobs`, which
   // cascades away with the match.
-  await purgeMatchStorage(adminClient, matchIds, "account delete");
+  try {
+    await purgeMatchStorage(adminClient, matchIds, "account delete");
+  } catch (error) {
+    // The purge claim is the first thing `purgeMatchStorage` takes, so a
+    // throw may or may not have left one behind; releasing none is a no-op.
+    await releaseDeletionClaims(supabase, adminClient, matchIds);
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Match deletion is unavailable.",
+    };
+  }
 
   if (matchIds.length > 0) {
     const { error: matchDeleteError } = await adminClient
@@ -325,6 +351,7 @@ export async function deleteAccount(): Promise<ActionResult> {
         "[account delete] match delete failed:",
         matchDeleteError.message,
       );
+      await releaseDeletionClaims(supabase, adminClient, matchIds);
       return {
         ok: false,
         error:
@@ -351,6 +378,10 @@ export async function deleteAccount(): Promise<ActionResult> {
       "[account delete] auth delete failed:",
       deleteAuthError.message,
     );
+    // Released on purpose although the data is gone: the claim guards
+    // deletion I/O, which is over, and the person is being sent to support
+    // — whose own console must be able to see them.
+    await releaseDeletionClaims(supabase, adminClient, matchIds);
     return {
       ok: false,
       error:
@@ -361,6 +392,53 @@ export async function deleteAccount(): Promise<ActionResult> {
 
   revalidatePath("/", "layout");
   redirect("/");
+}
+
+/**
+ * Give back the claims a deletion took and then failed to use.
+ *
+ * `prepare_my_account_deletion` claims the caller in
+ * `admin_actor_delete_claims`, and `purgeMatchStorage` claims every match in
+ * `match_storage_purge_claims`; from then on the admin console refuses each
+ * with `*-deletion-in-progress`. Both tables cascade from their parent, so a
+ * deletion that completes cleans up on its own — but one that stops part-way
+ * leaves the parent standing and the claim with it, for ever: a claim has no
+ * expiry and a retry reuses the stuck row. So every failure return after the
+ * claim calls this. The account claim always goes back; the purge claims only
+ * once `purgeMatchStorage` has run and may have taken them (`purgedMatchIds`
+ * is null before that point).
+ *
+ * The account release runs with the USER's client, and the RPC takes no
+ * argument — it can only ever release the caller. The purge release is
+ * service-role like the claim, for ids that are the caller's own matches.
+ *
+ * Best-effort on purpose. A release that fails is logged, and the caller's
+ * message is unchanged: a claim left behind is recoverable by hand, while a
+ * message about the wrong failure is not.
+ */
+async function releaseDeletionClaims(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  adminClient: ReturnType<typeof createAdminClient>,
+  purgedMatchIds: string[] | null,
+): Promise<void> {
+  try {
+    const { error } = await supabase.rpc("release_my_account_deletion_claim");
+    if (error) {
+      console.error(
+        "[account delete] could not release the account claim:",
+        error.message,
+      );
+    }
+  } catch (error) {
+    console.error("[account delete] account claim release threw:", error);
+  }
+
+  if (purgedMatchIds === null) return;
+  await releaseStoragePurgeClaims(
+    adminClient,
+    purgedMatchIds,
+    "account delete",
+  );
 }
 
 /** One row per program `release_my_account_from_programs()` touched. */

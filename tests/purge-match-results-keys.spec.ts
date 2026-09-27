@@ -73,6 +73,8 @@ const attachments = {
   cleanup: {},
   async schedule() {},
 } as unknown as AttachmentPurgeDeps;
+/** The console's deletion guard is not under test either: every match may go. */
+const claimPurge = async () => ({ data: true, error: null });
 
 async function purge(
   jobs: JobRow[],
@@ -84,7 +86,7 @@ async function purge(
     caller.client,
     matchIds,
     "match delete",
-    { attachments },
+    { attachments, claimPurge },
   );
   return { ...caller, result };
 }
@@ -340,6 +342,7 @@ test("blast radius: a missing, null or empty match_id contributes no computed ke
 
     await purgeMatchStorage(caller.client, [MATCH], "match delete", {
       attachments,
+      claimPurge,
     });
 
     const paths = resultsPaths(caller.removed);

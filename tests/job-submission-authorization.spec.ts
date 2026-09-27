@@ -709,3 +709,107 @@ test("a minter that throws past the reservation still releases and marks failed"
   expect(h.released).toEqual(["j-1"]);
   expect(h.patches.at(-1)?.patch.status).toBe("failed");
 });
+
+// Console authorization is discovered server-side even without console body fields.
+function adminHarness(workspaces: Workspace[] = []) {
+  const h = harness({
+    workspaces,
+    job: job({
+      initial_top_player_is_player1: true,
+      ad_scoring: false,
+      fixed_camera: true,
+    }),
+  });
+  h.deps.authorizeAdminVideo = async () => ({
+    jobId: "j-1",
+    matchId: "m-1",
+    programId: PROGRAM,
+    workspace: team({ role: "owner", uploadPolicy: "owner" }),
+    roster: ROSTER,
+  });
+  h.deps.claimAdminVideo = async () => true;
+  return h;
+}
+
+for (const member of [false, true]) {
+  test(`admin ${member ? "member" : "non-member"} charges target program with saved vendor answers`, async () => {
+    const h = adminHarness(
+      member ? [personal(), team({ id: OTHER_PROGRAM })] : [personal()],
+    );
+    expect((await call(h)).status).toBe(200);
+    expect(h.reserved).toEqual([
+      { jobId: "j-1", workspaceId: PROGRAM, seconds: 5182 },
+    ]);
+    expect(h.sent[0]).toMatchObject({
+      InitialTopPlayer: "Ava Adams",
+      Ad: false,
+      FixedCamera: true,
+      StartTime: 90,
+      EndTime: 5271.5,
+    });
+    expect(h.rosterReads).toEqual([]);
+  });
+}
+
+test("console discovery denies unauthorized actors and wrong program before quota", async () => {
+  const denied = adminHarness();
+  denied.deps.authorizeAdminVideo = async () => {
+    throw new Error("admin required");
+  };
+  expectDenied(denied, 403, await call(denied));
+  const wrong = adminHarness();
+  wrong.deps.authorizeAdminVideo = async () => ({
+    jobId: "j-1",
+    matchId: "m-1",
+    programId: OTHER_PROGRAM,
+    workspace: team({ id: OTHER_PROGRAM }),
+    roster: ROSTER,
+  });
+  expectDenied(wrong, 403, await call(wrong));
+  const notOwner = adminHarness();
+  notOwner.deps.currentUserId = async () => OTHER_USER;
+  expectDenied(notOwner, 404, await call(notOwner));
+});
+
+test("admin cannot replace saved vendor answers or submit a concurrently claimed job", async () => {
+  const changed = adminHarness();
+  expectDenied(
+    changed,
+    409,
+    await call(changed, { ...FIRST_SUBMIT, fixedCamera: false }),
+  );
+  const concurrent = adminHarness();
+  let claimed = false;
+  concurrent.deps.claimAdminVideo = async () => {
+    if (claimed) return false;
+    claimed = true;
+    return true;
+  };
+  const results = await Promise.all([call(concurrent), call(concurrent)]);
+  expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+  expect(concurrent.reserved).toHaveLength(1);
+  expect(concurrent.sent).toHaveLength(1);
+});
+
+test("admin quota refusal restores uploaded for retry without sending to vendor", async () => {
+  const h = adminHarness();
+  h.deps.reserveQuota = async () => ({
+    ok: false,
+    usedSeconds: 270000,
+    capSeconds: 270000,
+    message: "Monthly cap",
+  });
+  expect((await call(h)).status).toBe(429);
+  expect(h.patches).toEqual([{ jobId: "j-1", patch: { status: "uploaded" } }]);
+  expect(h.sent).toEqual([]);
+});
+
+test("accepted admin vendor POST with lost queued write retains quota for reconciliation", async () => {
+  const h = adminHarness();
+  h.deps.updateJob = async (_id, patch) => ({
+    error: patch.status === "queued" ? "write failed" : null,
+  });
+  expect((await call(h)).status).toBe(503);
+  expect(h.sent).toHaveLength(1);
+  expect(h.released).toEqual([]);
+});

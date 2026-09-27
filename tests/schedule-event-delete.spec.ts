@@ -1,3 +1,4 @@
+import { loadScheduleWriter } from "./helpers/schedule-writer";
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
@@ -17,7 +18,8 @@ function deletion(role: string, error: string | null = null) {
     }).outputText,
     {
       exports,
-      require(name: string) {
+      require: function mockRequire(name: string) {
+        if (name === "./writes-server") return loadScheduleWriter(mockRequire);
         if (name === "@/lib/workspace/types")
           return { canDeleteTeamScheduleEvent };
         if (name === "next/cache")

@@ -26,6 +26,7 @@ markers is hand-written — edit it as things move.
 | `/admin/requests` | [`src/app/admin/requests/page.tsx`](src/app/admin/requests/page.tsx) |
 | `/admin/teams/[programId]` | [`src/app/admin/teams/[programId]/page.tsx`](src/app/admin/teams/[programId]/page.tsx) |
 | `/admin/teams` | [`src/app/admin/teams/page.tsx`](src/app/admin/teams/page.tsx) |
+| `/admin/uploads/new` | [`src/app/admin/uploads/new/page.tsx`](src/app/admin/uploads/new/page.tsx) |
 | `/admin/uploads` | [`src/app/admin/uploads/page.tsx`](src/app/admin/uploads/page.tsx) |
 | `/claim/[programKey]/object` | [`src/app/claim/[programKey]/object/page.tsx`](src/app/claim/[programKey]/object/page.tsx) |
 | `/claim/[programKey]` | [`src/app/claim/[programKey]/page.tsx`](src/app/claim/[programKey]/page.tsx) |

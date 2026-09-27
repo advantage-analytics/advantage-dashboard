@@ -84,6 +84,11 @@ const SERVER_ONLY = [
   // the loader, one keyword away from dragging the signer into the bundle.
   "lib/data/match-film-entry-server.ts",
   "lib/data/match-video-server.ts",
+  // codex/admin-uploads: the schedule writer and the admin console's result
+  // submissions build service-role clients and re-authorize the admin server-side.
+  "lib/schedule/writes-server.ts",
+  "lib/services/programs/admin-dual-submission.ts",
+  "lib/services/programs/admin-tournament-submission.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];

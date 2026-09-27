@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { purgeMatchStorage } from "@/lib/services/matches/purge-match-storage";
+import { releaseStoragePurgeClaims } from "@/lib/services/matches/release-storage-purge-claim";
 import { resolveAnalysisStatus } from "@/lib/data/match-analysis";
 import {
   normalizeMatchPatch,
@@ -333,7 +335,19 @@ export async function DELETE(
   // Storage first, then the row. The ordering is load-bearing and the reason
   // this is a function call rather than a foreign-key cascade — see
   // purgeMatchStorage().
-  await purgeMatchStorage(supabase, [matchId]);
+  try {
+    await purgeMatchStorage(supabase, [matchId]);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Match deletion is unavailable.",
+      },
+      { status: 409 },
+    );
+  }
 
   const { error: deleteError } = await supabase
     .from("matches")
@@ -342,6 +356,15 @@ export async function DELETE(
     .eq("created_by", user.id);
 
   if (deleteError) {
+    // The 409 refusal above takes no claim (the claim RPC answers false
+    // before its insert), so only this failed-delete branch releases. The id
+    // is the one the `created_by = user.id` lookup already admitted, never a
+    // body field. See `releaseStoragePurgeClaims` for why this matters.
+    await releaseStoragePurgeClaims(
+      createAdminClient(),
+      [matchId],
+      "match delete",
+    );
     return serverError(
       "DELETE /api/matches/[matchId]: failed to delete match",
       deleteError,

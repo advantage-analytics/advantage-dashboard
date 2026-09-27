@@ -59,6 +59,11 @@ export function deferred<T>() {
 export function uploadWizardHarness(
   options: {
     team?: boolean;
+    adminFetch?: (
+      url: string,
+      init: { body: unknown },
+    ) => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
+    admin?: import("@/components/dashboard/matches/new-match-wizard/admin-mode").AdminWizardMode;
     props?: Partial<UseUploadMatchWizardProps>;
     /** Overrides on the active workspace — `programStatus`, `role`, … */
     workspace?: Partial<Workspace>;
@@ -284,6 +289,7 @@ export function uploadWizardHarness(
   };
   const dependencies: Record<string, unknown> = {
     react,
+    "./admin-mode": { useAdminWizardMode: () => options.admin ?? null },
     "@/lib/utils": { capitalize: (value: string) => value },
     "next/navigation": { useRouter: () => ({ refresh() {} }) },
     "@/lib/supabase/client": { createClient: () => supabase },
@@ -344,6 +350,12 @@ export function uploadWizardHarness(
     // so the real clamp — the meter's remaining figure is what several of
     // these specs assert on.
     "@/lib/data/usage-format": { formatResetDate: () => "Oct 1", secondsLeft },
+    // Pure string constant shared with the admin upload file route's own 500
+    // body; the hook string-matches it verbatim.
+    "@/lib/admin/uploads/types": {
+      SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE:
+        "Submission response was interrupted. Check this operation before retrying with the same file.",
+    },
     // Pure, and only read to describe the saved match to the success screen.
     "@/lib/ui/score-format": scoreFormat,
     "@/lib/wizard/actions": {
@@ -426,15 +438,18 @@ export function uploadWizardHarness(
         this.onload?.();
       }
     },
-    fetch: async (url: string, init: { body: string }) => ({
-      ok: true,
-      json: async () =>
-        url === "/api/validate-file"
-          ? (apiChecks.get(JSON.parse(init.body).fileName)?.promise ?? {
-              success: true,
-            })
-          : { success: true },
-    }),
+    fetch: async (url: string, init: { body: string }) =>
+      url.startsWith("/api/admin/") && options.adminFetch
+        ? options.adminFetch(url, init)
+        : {
+            ok: true,
+            json: async () =>
+              url === "/api/validate-file"
+                ? (apiChecks.get(JSON.parse(init.body).fileName)?.promise ?? {
+                    success: true,
+                  })
+                : { success: true },
+          },
   });
   const props: UseUploadMatchWizardProps = {
     open: true,
