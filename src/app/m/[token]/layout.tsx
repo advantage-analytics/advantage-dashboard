@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { PublicReportHeader } from "@/components/public/public-report-header";
 import { getSharedMatchData } from "@/lib/data/match-share-server";
 import { surname } from "@/lib/data/match-utils";
+import { readShareToken, sharedMatchPair } from "@/lib/data/match-share-format";
 
 /**
  * A shared match report's frame: the public header, then a fixed-height box
@@ -21,11 +22,13 @@ export default async function SharedMatchLayout({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  const data = await getSharedMatchData(decodeURIComponent(token));
+  const data = await getSharedMatchData(readShareToken(token));
 
   return (
     <div className="flex min-h-dvh flex-col bg-white">
-      <PublicReportHeader crumb={data ? crumbFor(data.match) : null} />
+      <PublicReportHeader
+        crumb={data ? crumbFor(data.match, data.winner) : null}
+      />
       <div className="flex h-[calc(100dvh-var(--header-h))] w-full flex-col overflow-hidden bg-white">
         {children}
       </div>
@@ -33,21 +36,18 @@ export default async function SharedMatchLayout({
   );
 }
 
-/** "Moore def. Baek · August 27, 2026" — or "vs" for a match nobody won. */
-function crumbFor(match: {
-  player1: { name: string };
-  player2: { name: string };
-  score: { winner: "player1" | "player2" };
-  matchContext?: string;
-  date: string;
-}): string {
-  const unfinished = match.matchContext?.toLowerCase().includes("unfinished");
-  const a = surname(match.player1.name);
-  const b = surname(match.player2.name);
-  const pair = unfinished
-    ? `${a} vs ${b}`
-    : match.score.winner === "player1"
-      ? `${a} def. ${b}`
-      : `${b} def. ${a}`;
+/**
+ * "Moore def. Baek · August 27, 2026", or "Moore vs Baek" when the score does
+ * not settle who won (`sharedMatchWinner`).
+ */
+function crumbFor(
+  match: { player1: { name: string }; player2: { name: string }; date: string },
+  winner: "player1" | "player2" | null,
+): string {
+  const pair = sharedMatchPair(
+    surname(match.player1.name),
+    surname(match.player2.name),
+    winner,
+  );
   return match.date ? `${pair} · ${match.date}` : pair;
 }

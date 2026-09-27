@@ -5,6 +5,7 @@ import { lazyAdminClient } from "@/lib/supabase/admin";
 import {
   MATCH_DETAIL_COLUMNS,
   resolveAnalysedWindowSeconds,
+  resolveRosterSeatIds,
   transformDbMatchToMatch,
   type DbMatch,
   type PlayerProfile,
@@ -23,6 +24,7 @@ import { siteUrl } from "@/lib/site-url";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
 import { getInitials } from "@/lib/data/match-utils";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
+import { sharedMatchWinner } from "@/lib/data/match-share-format";
 import type { Match } from "@/lib/data/types";
 
 /**
@@ -109,6 +111,13 @@ export interface SharedMatchData {
    * the footer then falls back to the product alone rather than an email.
    */
   sharedBy: SharedBy | null;
+  /**
+   * Who the public page may name as the winner, from the RAW score
+   * (`sharedMatchWinner`); null for an unscored, level or unfinished match.
+   * Never `match.score.winner`, which defaults to player2 when the score
+   * cannot say.
+   */
+  winner: "player1" | "player2" | null;
 }
 
 /**
@@ -156,23 +165,6 @@ async function resolveSharerIds(
     .select("id")
     .eq("claimed_by_user_id", sharerUserId);
   return [sharerUserId, ...(data ?? []).map((row) => row.id as string)];
-}
-
-/** Which of the row's seat ids are on its program's roster (`youSeat`). */
-async function resolveRosterSeatIds(
-  admin: SupabaseClient,
-  row: Pick<DbMatch, "program_id" | "player1_id" | "player2_id">,
-): Promise<string[]> {
-  const seatIds = [row.player1_id, row.player2_id].filter(
-    (id): id is string => id != null,
-  );
-  if (!row.program_id || seatIds.length === 0) return [];
-  const { data } = await admin
-    .from("program_players")
-    .select("id")
-    .eq("program_id", row.program_id)
-    .in("id", seatIds);
-  return (data ?? []).map((row) => row.id as string);
 }
 
 /**
@@ -270,6 +262,21 @@ export const getSharedMatchData = cache(
     );
     const summary = insight?.summary?.trim() || null;
 
-    return { match, statsResult, points, summary, sharedBy };
+    // Shot rows stay on the server. Only the Video and Visualizations views
+    // read `point.shots`, and the public page renders neither — shipping
+    // every shot of a full match to the browser would be most of the page's
+    // serialized payload for nothing. `shots` is optional on `MatchPoint`.
+    const pagePoints = points.map((point) => ({ ...point, shots: undefined }));
+
+    const winner = sharedMatchWinner(dbRow.score, match.matchContext);
+
+    return {
+      match,
+      statsResult,
+      points: pagePoints,
+      summary,
+      sharedBy,
+      winner,
+    };
   },
 );

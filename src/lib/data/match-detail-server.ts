@@ -1,4 +1,5 @@
 import { cache } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { analysedWindowSeconds } from "@/lib/data/match-video-choice";
@@ -127,9 +128,13 @@ function resolveYouSide(
 /**
  * Which of the row's two seat ids are players on the match's own program
  * roster. Empty for a personal match, without a round trip.
+ *
+ * Exported for `match-share-server.ts`, which calls this against the
+ * service-role client rather than the cookie one — same query, same shape,
+ * an anonymous visitor's client just cannot run it.
  */
-async function resolveRosterSeatIds(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+export async function resolveRosterSeatIds(
+  supabase: SupabaseClient,
   row: Pick<DbMatch, "program_id" | "player1_id" | "player2_id">,
 ): Promise<string[]> {
   const seatIds = [row.player1_id, row.player2_id].filter(

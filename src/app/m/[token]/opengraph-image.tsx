@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getSharedMatchData } from "@/lib/data/match-share-server";
 import { formatScoreText, playedSets } from "@/lib/ui/score-format";
+import { readShareToken, sharedMatchPair } from "@/lib/data/match-share-format";
 
 /**
  * The card a shared match link unfurls into (iMessage, Slack, X): who beat
@@ -44,21 +45,18 @@ export default async function Image({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  const data = await getSharedMatchData(decodeURIComponent(token));
+  const data = await getSharedMatchData(readShareToken(token));
   if (!data) return new Response(null, { status: 404 });
 
-  const { match } = data;
-  // `match.score.winner` is the shared rule already applied (a stored winner,
-  // then sets; level sets read as player2). An unfinished match has no
-  // "def." to claim, so it reads as "A vs B".
-  const unfinished = match.matchContext?.toLowerCase().includes("unfinished");
-  const winner = unfinished ? null : match.score.winner;
-  const headline =
-    winner === "player1"
-      ? `${match.player1.name} def. ${match.player2.name}`
-      : winner === "player2"
-        ? `${match.player2.name} def. ${match.player1.name}`
-        : `${match.player1.name} vs ${match.player2.name}`;
+  const { match, winner } = data;
+  // `winner` comes from the raw score (`sharedMatchWinner`): null for an
+  // unscored, level or unfinished match, which reads "A vs B" — never a
+  // "def." the score does not support.
+  const headline = sharedMatchPair(
+    match.player1.name,
+    match.player2.name,
+    winner,
+  );
   // Sets read winner-first, so the line agrees with the headline. The
   // tiebreak slots swap with the games, never apart from them.
   const sets = playedSets(match.score.sets).map((set) =>

@@ -23,6 +23,7 @@ import { SharedByFooter } from "@/components/public/shared-by-footer";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import { MatchReportPending } from "@/components/dashboard/loading/match-report-pending";
 import { getSharedMatchData } from "@/lib/data/match-share-server";
+import { readShareToken } from "@/lib/data/match-share-format";
 import { formatScoreText, playedSets } from "@/lib/ui/score-format";
 
 /**
@@ -49,7 +50,7 @@ interface PageProps {
 }
 
 async function load(rawToken: string) {
-  return getSharedMatchData(decodeURIComponent(rawToken));
+  return getSharedMatchData(readShareToken(rawToken));
 }
 
 export async function generateMetadata({
