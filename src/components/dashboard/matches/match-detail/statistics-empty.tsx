@@ -12,16 +12,21 @@ import { ReportPaneEmpty } from "@/components/dashboard/matches/match-detail/rep
  * is how a match gets its points.
  */
 export function StatisticsEmpty() {
-  const { actions } = useMatchReport();
+  const { actions, meta } = useMatchReport();
   return (
     <ReportPaneEmpty
       testId="statistics-empty"
       heading="No point-by-point data for this match"
       body="Head to head, performance tracker, rally length and how points ended are built from the points in a match. They arrive with a video analysed by Advantage Intelligence or a SwingVision export."
-      action={{
-        label: "Open the Video tab",
-        onClick: () => actions.selectView("film"),
-      }}
+      // The public share page has no Video view to open (`meta.readOnly`).
+      action={
+        meta.readOnly
+          ? undefined
+          : {
+              label: "Open the Video tab",
+              onClick: () => actions.selectView("film"),
+            }
+      }
     />
   );
 }

@@ -82,6 +82,7 @@ markers is hand-written — edit it as things move.
 | `/design` | [`src/app/design/page.tsx`](src/app/design/page.tsx) |
 | `/invitations/[inviteId]` | [`src/app/invitations/[inviteId]/page.tsx`](src/app/invitations/[inviteId]/page.tsx) |
 | `/join/[token]` | [`src/app/join/[token]/page.tsx`](src/app/join/[token]/page.tsx) |
+| `/m/[token]` | [`src/app/m/[token]/page.tsx`](src/app/m/[token]/page.tsx) |
 | `/onboarding` | [`src/app/onboarding/page.tsx`](src/app/onboarding/page.tsx) |
 | `/` | [`src/app/page.tsx`](src/app/page.tsx) |
 | `/wizard-reproduction` | [`src/app/wizard-reproduction/page.tsx`](src/app/wizard-reproduction/page.tsx) |

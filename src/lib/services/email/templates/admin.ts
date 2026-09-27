@@ -54,7 +54,7 @@ export function adminReviewNeededEmail(
       { label: "Reason", value: reason },
     ],
     cta: { label: "Open requests", url: requestsUrl },
-    note: "You're getting this because you're an admin on Advantage Analytics.",
+    note: "You're getting this because you're an admin on Advantage.",
   };
 
   return {

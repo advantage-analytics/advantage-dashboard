@@ -1,4 +1,5 @@
 import { cache } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { analysedWindowSeconds } from "@/lib/data/match-video-choice";
@@ -11,10 +12,11 @@ import { getMyPlayerIds, isMe } from "@/lib/data/player-identity-server";
 import { youSeat } from "@/lib/data/viewer-side";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
+import { UNKNOWN_EVENT_PLACEHOLDER } from "@/lib/data/match-share-format";
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { Match, SetScore } from "@/lib/data/types";
 
-interface DbMatch {
+export interface DbMatch {
   id: string;
   program_id: string | null;
   created_by: string | null;
@@ -87,7 +89,7 @@ function buildSets(row: DbMatch): SetScore[] {
   });
 }
 
-type PlayerProfile = { hand: string | null; backhand: string | null };
+export type PlayerProfile = { hand: string | null; backhand: string | null };
 
 /**
  * Which seat on the row is "you", and the id sitting in it.
@@ -126,9 +128,13 @@ function resolveYouSide(
 /**
  * Which of the row's two seat ids are players on the match's own program
  * roster. Empty for a personal match, without a round trip.
+ *
+ * Exported for `match-share-server.ts`, which calls this against the
+ * service-role client rather than the cookie one — same query, same shape,
+ * an anonymous visitor's client just cannot run it.
  */
-async function resolveRosterSeatIds(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+export async function resolveRosterSeatIds(
+  supabase: SupabaseClient,
   row: Pick<DbMatch, "program_id" | "player1_id" | "player2_id">,
 ): Promise<string[]> {
   const seatIds = [row.player1_id, row.player2_id].filter(
@@ -143,7 +149,7 @@ async function resolveRosterSeatIds(
   return (data ?? []).map((player) => player.id as string);
 }
 
-function transformDbMatchToMatch(
+export function transformDbMatchToMatch(
   row: DbMatch,
   /**
    * Every id that names the viewer as a player — their login, plus any roster
@@ -181,7 +187,7 @@ function transformDbMatchToMatch(
 
   return {
     id: row.id,
-    tournamentName: row.tournament_name ?? "Unknown Event",
+    tournamentName: row.tournament_name ?? UNKNOWN_EVENT_PLACEHOLDER,
     date: formatDisplayDate(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
@@ -384,7 +390,7 @@ async function resolveKpiHistory(
  * RLS is per-creator, so a coach viewing a player's match would otherwise read
  * nothing. Only the two window columns leave the query.
  */
-async function resolveAnalysedWindowSeconds(
+export async function resolveAnalysedWindowSeconds(
   dbRow: DbMatch,
 ): Promise<number | null> {
   if (dbRow.source_provider !== "splitstep") return null;
@@ -408,6 +414,14 @@ async function resolveAnalysedWindowSeconds(
   return analysedWindowSeconds(jobs ?? []);
 }
 
+/**
+ * The `matches` columns the report reads — one string, so the public share
+ * loader (`match-share-server.ts`) and this one cannot drift apart on which
+ * fields `DbMatch` actually carries.
+ */
+export const MATCH_DETAIL_COLUMNS =
+  "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights";
+
 export const getMatchDetailData = cache(async (matchId: string) => {
   const supabase = await createClient();
 
@@ -417,9 +431,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
 
   const { data: row, error } = await supabase
     .from("matches")
-    .select(
-      "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights",
-    )
+    .select(MATCH_DETAIL_COLUMNS)
     .eq("id", matchId)
     .single();
 

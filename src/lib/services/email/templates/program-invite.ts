@@ -76,8 +76,8 @@ export function programInviteEmail(input: ProgramInviteInput): EmailMessage {
     : `You've been invited to ${programName} on Advantage`;
 
   const opening = inviter
-    ? `${inviter} added you to ${programName} on Advantage Analytics.`
-    : `You've been added to ${programName} on Advantage Analytics.`;
+    ? `${inviter} added you to ${programName} on Advantage.`
+    : `You've been added to ${programName} on Advantage.`;
 
   const content: EmailContent = {
     // Never left to the client to scrape — without this the preview line in

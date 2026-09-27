@@ -1,4 +1,5 @@
 import { meanOfPresent, num, pct } from "./aggregate";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type {
   MatchDetailedStats,
@@ -567,8 +568,15 @@ export async function getMatchKpiHistory(
 
 export async function getMatchStatisticsFromSupabase(
   matchId: string,
+  /**
+   * The client to read through. Defaults to the request's cookie client, so
+   * RLS answers who may see the match. The public share page passes the
+   * service-role client after it has resolved a share token
+   * (`match-share-server.ts`); nothing else should.
+   */
+  client?: SupabaseClient,
 ): Promise<MatchStatisticsResult | null> {
-  const supabase = await createClient();
+  const supabase = client ?? (await createClient());
 
   const [statsResult, matchResult] = await Promise.all([
     supabase
