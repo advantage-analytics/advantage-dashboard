@@ -48,7 +48,9 @@ export default async function MatchLayout({
         key={match.id}
         match={match}
         statsResult={statsResult}
-        points={points}
+        // `null` is a failed points read; `page.tsx` throws on it so the
+        // error boundary replaces the page, and the provider never sees it.
+        points={points ?? []}
         keyMoments={keyMoments}
         insights={insights}
         kpiHistory={kpiHistory}

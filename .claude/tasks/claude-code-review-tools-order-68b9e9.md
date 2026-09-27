@@ -245,7 +245,7 @@ ready).
 
 ## T19 · Match points: a failed read reaches the match's error boundary, not a zero-point page
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/match-points-server.ts, src/lib/data/match-detail-server.ts, src/app/dashboard/matches/(detail)/[matchId]/layout.tsx, src/app/dashboard/matches/(detail)/[matchId]/page.tsx, tests/paged-query.spec.ts — guess
 - **done when:**

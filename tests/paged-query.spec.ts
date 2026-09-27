@@ -120,7 +120,7 @@ const dbShots = dbPoints.flatMap((point) =>
   })),
 );
 
-function fakeClient(failShotPage?: number) {
+function fakeClient(failShotPage?: number, failPoints = false) {
   const shotRanges: [number, number][] = [];
   const shotOrder: string[] = [];
 
@@ -142,7 +142,10 @@ function fakeClient(failShotPage?: number) {
       maybeSingle: async () => ({ data: null, error: null }),
       then<R>(resolve: (value: Page<unknown>) => R) {
         let result: Page<unknown>;
-        if (table === "points") result = { data: dbPoints, error: null };
+        if (table === "points")
+          result = failPoints
+            ? { data: null, error: { message: "points read failed" } }
+            : { data: dbPoints, error: null };
         else if (table === "shots" && range) {
           result =
             shotRanges.length === failShotPage
@@ -169,7 +172,7 @@ function loadGetMatchPoints(client: unknown) {
   const mod = loader.load("src/lib/data/match-points-server.ts");
   return mod.getMatchPointsFromSupabase as (
     matchId: string,
-  ) => Promise<MatchPoint[]>;
+  ) => Promise<MatchPoint[] | null>;
 }
 
 test("getMatchPointsFromSupabase attaches every shot across three pages", async () => {
@@ -189,13 +192,13 @@ test("getMatchPointsFromSupabase attaches every shot across three pages", async 
   // The total order pages depend on — without it pages overlap or skip.
   expect(shotOrder.slice(0, 3)).toEqual(["point_id", "shot_number", "id"]);
   expect(result).toHaveLength(POINTS);
-  const shotIds = result.flatMap((point) =>
+  const shotIds = result!.flatMap((point) =>
     (point.shots ?? []).map((shot) => shot.id),
   );
   expect(shotIds).toEqual(dbShots.map((shot) => shot.id));
 });
 
-test("getMatchPointsFromSupabase returns [] with one console.error when a shots page fails", async () => {
+test("getMatchPointsFromSupabase returns null with one console.error when a shots page fails", async () => {
   const { client, shotRanges } = fakeClient(2);
   const getMatchPoints = loadGetMatchPoints(client);
 
@@ -203,11 +206,27 @@ test("getMatchPointsFromSupabase returns [] with one console.error when a shots 
     getMatchPoints("match-1"),
   );
 
-  expect(result).toEqual([]);
+  expect(result).toBeNull();
   expect(errors).toHaveLength(1);
   expect(errors[0]).toEqual(["Failed to fetch shots:", "shots page failed"]);
   expect(shotRanges).toEqual([
     [0, 999],
     [1000, 1999],
   ]);
+});
+
+test("getMatchPointsFromSupabase returns null with one console.error when the points read fails", async () => {
+  const { client, shotRanges } = fakeClient(undefined, true);
+  const getMatchPoints = loadGetMatchPoints(client);
+
+  const { result, errors } = await withConsoleErrors(() =>
+    getMatchPoints("match-1"),
+  );
+
+  // "No answer", not a match with no points — `[]` is reserved for that.
+  expect(result).toBeNull();
+  expect(errors).toHaveLength(1);
+  expect(errors[0]).toEqual(["Failed to fetch points:", "points read failed"]);
+  // Stops before the shots read.
+  expect(shotRanges).toEqual([]);
 });

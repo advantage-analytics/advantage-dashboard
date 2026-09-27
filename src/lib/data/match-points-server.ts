@@ -249,9 +249,16 @@ async function fetchSavedByPointId(
   return savedByPointId;
 }
 
+/**
+ * Every point of a match with its shots attached, or `null` when the answer is
+ * unknown. `[]` means the match genuinely has no `points` rows; `null` means a
+ * read failed (the `points` read itself, or any page of the shots read), and
+ * the caller must say so rather than draw a zero-point report — the
+ * `fetchAllPages` contract, carried one level up.
+ */
 export async function getMatchPointsFromSupabase(
   matchId: string,
-): Promise<MatchPoint[]> {
+): Promise<MatchPoint[] | null> {
   const supabase = await createClient();
 
   // Fetch points first
@@ -265,7 +272,7 @@ export async function getMatchPointsFromSupabase(
 
   if (pointsError) {
     console.error("Failed to fetch points:", pointsError.message);
-    return [];
+    return null;
   }
   if (!pointsData?.length) {
     return [];
@@ -281,7 +288,7 @@ export async function getMatchPointsFromSupabase(
   // never overlap or skip.
   //
   // Fail-closed, like `supabaseAttachmentSourceRows`: an error on any page
-  // returns no points at all rather than points carrying half their shots.
+  // returns `null` ("no answer") rather than points carrying half their shots.
   // A point with its shots cut off reads as a short rally and relabels its
   // serve, return and last shot — a wrong answer that looks like a right one.
   const shots = await fetchAllPages<DbShot>(async (from, to) => {
@@ -299,7 +306,7 @@ export async function getMatchPointsFromSupabase(
     if (error) console.error("Failed to fetch shots:", error.message);
     return { data: data as DbShot[] | null, error };
   });
-  if (!shots) return [];
+  if (!shots) return null;
 
   // Who bookmarked each point, workspace-wide (see fetchSavedByPointId).
   const savedByPointId = await fetchSavedByPointId(supabase, matchId, pointIds);

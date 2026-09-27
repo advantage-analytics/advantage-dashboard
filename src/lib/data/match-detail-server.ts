@@ -508,6 +508,9 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   return {
     match,
     statsResult,
+    // `null` when the points read failed — passed through, never thrown here:
+    // this loader is awaited by the layout first, and a throw from the layout
+    // skips `[matchId]/error.tsx`. `page.tsx` turns it into the error.
     points,
     keyMoments: dbRow.key_moments?.length
       ? dbRow.key_moments
