@@ -13,6 +13,10 @@ import type {
 } from "@/lib/admin/uploads/history";
 import { advButton } from "@/lib/ui/adv-button";
 import {
+  ABANDON_MATCH_CONFIRM,
+  HistoryActionButton,
+} from "@/components/admin/history-action-button";
+import {
   abandonAdminResultsAction,
   reconcileAdminSubmissionAction,
   resumeAdminResultsAction,
@@ -57,67 +61,6 @@ export function HistoryState({ state }: { state: AdminUploadHistoryState }) {
     >
       {label}
     </StatusChip>
-  );
-}
-
-/**
- * A plain `<form action>` discards an action's return value, and React types
- * the prop as returning void; the action still returns the service result
- * unchanged for any caller that reads it.
- */
-const reconcileFormAction = reconcileAdminSubmissionAction as unknown as (
-  formData: FormData,
-) => Promise<void>;
-
-type FormAction = (formData: FormData) => Promise<void>;
-const resumeFormAction = resumeAdminResultsAction as unknown as FormAction;
-const abandonResultsFormAction =
-  abandonAdminResultsAction as unknown as FormAction;
-
-/**
- * A dual or tournament row's pending-result control (T25). The form carries
- * only the operation id: resume reads the durable batch request server-side.
- */
-function PendingResultsForm({
-  operationId,
-  action,
-  label,
-}: {
-  operationId: string;
-  action: FormAction;
-  label: string;
-}) {
-  return (
-    <form action={action}>
-      <input type="hidden" name="operationId" value={operationId} />
-      <button type="submit" className={advButton("outline", "sm")}>
-        {label}
-      </button>
-    </form>
-  );
-}
-
-/** One reconciliation control: a server-action form, no client island. */
-function ReconcileForm({
-  operationId,
-  itemId,
-  mode,
-  label,
-}: {
-  operationId: string;
-  itemId: string;
-  mode: "abandon" | "complete";
-  label: string;
-}) {
-  return (
-    <form action={reconcileFormAction}>
-      <input type="hidden" name="operationId" value={operationId} />
-      <input type="hidden" name="itemId" value={itemId} />
-      <input type="hidden" name="mode" value={mode} />
-      <button type="submit" className={advButton("outline", "sm")}>
-        {label}
-      </button>
-    </form>
   );
 }
 
@@ -237,24 +180,38 @@ export function AdminUploadHistory({
                                 )}
                                 {(item.reconcile.abandon ||
                                   item.reconcile.complete) && (
-                                  <div className="mt-2 flex flex-wrap gap-2">
+                                  <div className="mt-2 flex flex-wrap items-start gap-2">
                                     {item.reconcile.complete && (
-                                      <ReconcileForm
-                                        operationId={row.operationId}
-                                        itemId={item.itemId}
-                                        mode="complete"
+                                      <HistoryActionButton
+                                        action={reconcileAdminSubmissionAction}
+                                        fields={{
+                                          operationId: row.operationId,
+                                          itemId: item.itemId,
+                                          mode: "complete",
+                                        }}
                                         label="Mark complete"
                                       />
                                     )}
                                     {item.reconcile.abandon && (
-                                      <ReconcileForm
-                                        operationId={row.operationId}
-                                        itemId={item.itemId}
-                                        mode="abandon"
+                                      <HistoryActionButton
+                                        action={reconcileAdminSubmissionAction}
+                                        fields={{
+                                          operationId: row.operationId,
+                                          itemId: item.itemId,
+                                          mode: "abandon",
+                                        }}
                                         label={
                                           item.kind === "match"
                                             ? "Abandon and delete match"
                                             : "Abandon"
+                                        }
+                                        confirm={
+                                          item.kind === "match"
+                                            ? {
+                                                copy: ABANDON_MATCH_CONFIRM,
+                                                subject: item.what,
+                                              }
+                                            : undefined
                                         }
                                       />
                                     )}
@@ -282,18 +239,18 @@ export function AdminUploadHistory({
                       )}
                       {(row.pendingActions.resume ||
                         row.pendingActions.abandon) && (
-                        <div className="mt-2 flex flex-wrap gap-2">
+                        <div className="mt-2 flex flex-wrap items-start gap-2">
                           {row.pendingActions.resume && (
-                            <PendingResultsForm
-                              operationId={row.operationId}
-                              action={resumeFormAction}
+                            <HistoryActionButton
+                              action={resumeAdminResultsAction}
+                              fields={{ operationId: row.operationId }}
                               label="Resume"
                             />
                           )}
                           {row.pendingActions.abandon && (
-                            <PendingResultsForm
-                              operationId={row.operationId}
-                              action={abandonResultsFormAction}
+                            <HistoryActionButton
+                              action={abandonAdminResultsAction}
+                              fields={{ operationId: row.operationId }}
                               label="Abandon pending"
                             />
                           )}

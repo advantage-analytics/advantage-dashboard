@@ -394,7 +394,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T28 · Add a confirm step and refusal messages to the upload-history controls
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** Best guesses: new `src/components/admin/history-action-button.tsx` ("use client"); `src/components/admin/admin-upload-history.tsx`; new `tests/admin-upload-history-controls.spec.ts`; `docs/admin-upload-history.md`. Unchanged: `src/app/admin/uploads/history-actions.ts`, `tests/admin-reconciliation.spec.ts`, `tests/admin-upload-history.spec.ts`.
 - **done when:**

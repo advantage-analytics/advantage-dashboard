@@ -242,3 +242,15 @@ The eight admin-upload migrations the entries above call unapplied were applied 
 1. The PostToolUse typecheck hook reads the main checkout's stale `.next/` types and reports false TS2307 errors on every worktree edit — delete that build output or point the hook at the worktree.
 2. Optional multi-connection proof in `tests/database/postgres/admin-delete-concurrency.test.mjs` that a release waits behind an in-flight admission's parent lock.
 3. `tests/database/README.md` has no paragraph for `admin-delete-protection.test.mjs`.
+
+## T28 · Add a confirm step and refusal messages to the upload-history controls — done
+
+**gate:** mechanical PASS · completion pass
+
+**changed:** New "use client" `HistoryActionButton` (`src/components/admin/history-action-button.tsx`) runs each server action in `useTransition` and shows an `{ ok:false }` message in a `<p role="alert">` under the button; with a `confirm` prop it opens `ConfirmDialog` (danger tone, copy exported as `ABANDON_MATCH_CONFIRM`) and only `onConfirm` runs the action, refusals shown in the dialog. `admin-upload-history.tsx` drops every `<form action>`, `ReconcileForm`/`PendingResultsForm` and the void casts; only "Abandon and delete match" confirms. New offline `tests/admin-upload-history-controls.spec.ts`; `docs/admin-upload-history.md` updated. `history-actions.ts` and `tests/admin-reconciliation.spec.ts` unchanged. Deviations: confirm description exported as `{ before, after }` around the Em'd `what`; a thrown action shows "The request did not complete. Try again."
+
+**follow-ups:**
+
+1. Eyes-on in a browser for the dialog open/confirm/refusal paths — Radix portals render nothing offline, so only typecheck covers them.
+2. The task text cited `TeamHeaderActions` as the error-line shape, but that renders 11px absolute text; T28 used the criterion's explicit 12px in-flow line.
+3. T22 follow-up 4 (loader cannot see `quota-held`) still open.
