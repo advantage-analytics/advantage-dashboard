@@ -420,7 +420,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T30 · Release the purge claim when the console match delete fails, and keep the reconcile refusal on screen
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T29
 - **files:** Best guesses: `src/lib/services/programs/admin-reconciliation.ts` (the `deleted.error` branch, ~127–139, and the two partial-failure messages); `src/app/admin/uploads/history-actions.ts` (`reconcileAdminSubmissionAction` — held byte-for-byte by T28, changed here); `tests/admin-reconciliation.spec.ts` (harness + one case); new `tests/admin-history-actions.spec.ts` (via `tests/fixtures/vm-modules.ts` `createLoader()`); `docs/admin-upload-history.md` (line 9).

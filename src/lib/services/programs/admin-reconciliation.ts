@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdmin } from "./admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { purgeMatchStorage } from "@/lib/services/matches/purge-match-storage";
+import { releaseStoragePurgeClaims } from "@/lib/services/matches/release-storage-purge-claim";
 import { MATCH_DATA_BUCKET } from "@/lib/services/upload/storage.service";
 import { UUID_RE } from "@/lib/admin/validation";
 import { createClient } from "@/lib/supabase/server";
@@ -151,7 +152,7 @@ export async function reconcileAdminSubmission(
         ok: false,
         message: `The attempt was abandoned, but its match could not be deleted: ${
           e instanceof Error ? e.message : "storage purge failed."
-        }`,
+        } Reload the page to see the updated item.`,
       };
     }
     const deleted = await admin
@@ -159,12 +160,18 @@ export async function reconcileAdminSubmission(
       .delete()
       .eq("id", result.matchId)
       .eq("program_id", result.programId);
-    if (deleted.error)
+    if (deleted.error) {
+      await releaseStoragePurgeClaims(
+        admin,
+        [result.matchId],
+        "console abandon",
+      );
       return {
         ok: false,
         message:
-          "The attempt was abandoned and its files removed, but the match row could not be deleted.",
+          "The attempt was abandoned and its files removed, but the match row could not be deleted. Reload the page to see the updated item.",
       };
+    }
     matchDeleted = true;
   }
   return {

@@ -22,7 +22,7 @@ export async function reconcileAdminSubmissionAction(
     itemId: formData.get("itemId"),
     mode: formData.get("mode"),
   });
-  revalidatePath("/admin/uploads");
+  if (result.ok) revalidatePath("/admin/uploads");
   return result;
 }
 

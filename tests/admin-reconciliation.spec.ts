@@ -22,6 +22,7 @@ function harness({
   purgeThrows = false,
   removeFails = false,
   rpcError = null as string | null,
+  deleteError = false,
 } = {}) {
   const effects: string[] = [];
   const rpcCalls: { name: string; args: Record<string, unknown> }[] = [];
@@ -29,8 +30,13 @@ function harness({
   let clients = 0;
   const client = {
     rpc: async (name: string, args: Record<string, unknown>) => {
-      effects.push("rpc");
       rpcCalls.push({ name, args });
+      if (name === "admin_release_match_storage_purge") {
+        const ids = args.p_match_ids as string[];
+        effects.push(`release:${ids.join(",")}`);
+        return { data: ids.length, error: null };
+      }
+      effects.push("rpc");
       if (rpcError) return { data: null, error: { message: rpcError } };
       return {
         data: {
@@ -69,7 +75,9 @@ function harness({
         then: (resolve: (v: unknown) => unknown) => {
           effects.push(`delete:${table}`);
           deletes.push(filters);
-          return Promise.resolve({ error: null }).then(resolve);
+          return Promise.resolve({
+            error: deleteError ? { message: "Deletion failed" } : null,
+          }).then(resolve);
         },
       };
       return q;
@@ -173,8 +181,37 @@ test("a purge throw stops before the delete and reports failure", async () => {
   const h = harness({ purgeThrows: true });
   const result = await reconcileAdminSubmission(input("abandon"), h.deps);
   expect(result.ok).toBe(false);
-  if (!result.ok) expect(result.message).toContain("Storage is unavailable.");
+  if (!result.ok) {
+    expect(result.message).toContain("Storage is unavailable.");
+    expect(result.message).toContain(
+      "Reload the page to see the updated item.",
+    );
+  }
   expect(h.effects).toEqual(["rpc", `purge:${id(5)}:console abandon`]);
+});
+
+// ─── The failed match delete releases the purge claim (T30) ────────────────
+
+test("a failed match delete releases the purge claim and asks for a reload", async () => {
+  const h = harness({ deleteError: true });
+  const result = await reconcileAdminSubmission(input("abandon"), h.deps);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.message).toContain("could not be deleted");
+    expect(result.message).toContain(
+      "Reload the page to see the updated item.",
+    );
+  }
+  expect(h.effects).toEqual([
+    "rpc",
+    `purge:${id(5)}:console abandon`,
+    "delete:matches",
+    `release:${id(5)}`,
+  ]);
+  expect(h.rpcCalls[1]).toEqual({
+    name: "admin_release_match_storage_purge",
+    args: { p_match_ids: [id(5)] },
+  });
 });
 
 test("rpc refusal codes become operator messages with no follow-up effects", async () => {

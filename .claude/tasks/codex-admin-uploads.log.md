@@ -265,3 +265,13 @@ The eight admin-upload migrations the entries above call unapplied were applied 
 
 1. The orphan sweep (`scripts/orphan-attribution.ts` `MATCH_DATA_LAYOUTS`) does not know the `_admin-console/{op}/{item}/{sha}.xlsx` layout; a failed remove leaves the path only under `result->'abandoned'` for a hand retry.
 2. No dedicated spec for a thrown (vs returned-error) `remove`.
+
+## T30 · Release the purge claim when the console match delete fails, and keep the reconcile refusal on screen — done
+
+**gate:** mechanical PASS · completion pass
+
+**changed:** `reconcileAdminSubmission` calls `releaseStoragePurgeClaims(admin, [matchId], "console abandon")` when the match delete fails after the purge (success and purge-throw paths unchanged), and both partial-failure messages now end "Reload the page to see the updated item."; `reconcileAdminSubmissionAction` revalidates `/admin/uploads` only on `ok`, so a refusal's message stays on screen (resume/abandon-pending actions unchanged). New release case in `tests/admin-reconciliation.spec.ts`, new offline `tests/admin-history-actions.spec.ts`, `docs/admin-upload-history.md` updated.
+
+**follow-ups:**
+
+1. `docs/admin-upload-history.md` line 9 is now one long paragraph covering T22/T28/T30 — split it on a future pass.
