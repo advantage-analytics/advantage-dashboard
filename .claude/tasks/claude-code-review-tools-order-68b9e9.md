@@ -116,7 +116,7 @@ ready).
 
 ## T9 · process-match: verify the caller, pin the bucket and prefix, refuse a second run
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/functions/process-match/index.ts, supabase/functions/process-match/README.md, tests/process-match-guards.spec.ts (new) — guess
 - **done when:**

@@ -22,10 +22,87 @@ const TARGET_SHEETS: TargetSheetName[] = [
 
 interface ProcessMatchRequest {
   matchId: string;
-  userId: string;
   fileNames: string[];
-  bucketId?: string;
   sourceProvider?: string; // Optional: if not provided, will be fetched from match record
+}
+
+/**
+ * The only bucket this function reads. It used to come from the request body,
+ * which let any caller aim a service-role download at any bucket.
+ */
+const STORAGE_BUCKET = "match-data";
+
+const JSON_HEADERS = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+};
+
+function refuse(status: number, error: string): Response {
+  return new Response(JSON.stringify({ success: false, error }), {
+    status,
+    headers: JSON_HEADERS,
+  });
+}
+
+type Caller = { kind: "service" } | { kind: "user"; userId: string };
+
+/**
+ * Who is calling. `verify_jwt` only proves the bearer is *a* JWT signed for
+ * this project — the public anon key passes it — so the function checks for
+ * itself. Two callers are legitimate: the project's own service role (the
+ * bearer equals SUPABASE_SERVICE_ROLE_KEY) and a signed-in user, whose access
+ * token is what `supabase.functions.invoke` sends from `/api/upload`. A user
+ * token is verified with `auth.getUser` on an anon client; anything else is
+ * answered 401. Whether that user may touch the match is decided afterwards,
+ * against `matches.created_by`.
+ *
+ * Meant to be the same helper in every edge function here — copy it verbatim
+ * rather than adapting it.
+ */
+async function authorizeCaller(
+  req: Request,
+): Promise<{ caller: Caller } | { status: 401; error: string }> {
+  const header = req.headers.get("authorization") ?? "";
+  const token = header.replace(/^bearer\s+/i, "").trim();
+  if (!token) {
+    return { status: 401, error: "Missing bearer token" };
+  }
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (serviceRoleKey && token === serviceRoleKey) {
+    return { caller: { kind: "service" } };
+  }
+  const anon = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { data, error } = await anon.auth.getUser(token);
+  if (error || !data?.user) {
+    return { status: 401, error: "Invalid or expired token" };
+  }
+  return { caller: { kind: "user", userId: data.user.id } };
+}
+
+/**
+ * Where a requested file may live. Uploads land at
+ * `${userId}/${providerId}/${matchId}/${fileName}` (upload.service.ts), so a
+ * full path must sit under the user's own folder; a bare file name is the
+ * pre-provider layout and resolves to `${userId}/${fileName}`. Anything with
+ * an empty, `.` or `..` segment, or another user's prefix, resolves to null
+ * and the request is refused before a single download.
+ */
+function resolveStoragePath(userId: string, fileName: unknown): string | null {
+  if (typeof fileName !== "string" || fileName.length === 0) {
+    return null;
+  }
+  const segments = fileName.split("/");
+  if (segments.some((s) => s === "" || s === "." || s === "..")) {
+    return null;
+  }
+  if (segments.length === 1) {
+    return `${userId}/${fileName}`;
+  }
+  return segments[0] === userId ? fileName : null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -43,40 +120,26 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const {
-      matchId,
-      userId,
-      fileNames,
-      bucketId = "match-data",
-      sourceProvider,
-    }: ProcessMatchRequest = await req.json();
+    const auth = await authorizeCaller(req);
+    if ("status" in auth) {
+      return refuse(auth.status, auth.error);
+    }
+    const { caller } = auth;
+
+    const { matchId, fileNames, sourceProvider }: ProcessMatchRequest =
+      await req.json();
 
     console.log("📥 Request received:", {
       matchId,
-      userId,
-      fileCount: fileNames.length,
+      caller: caller.kind,
+      fileCount: Array.isArray(fileNames) ? fileNames.length : 0,
       sourceProvider,
     });
 
-    if (
-      !matchId ||
-      !userId ||
-      !Array.isArray(fileNames) ||
-      fileNames.length === 0
-    ) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error:
-            "matchId, userId, and a non-empty fileNames array are required",
-        }),
-        {
-          status: 400,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-          },
-        },
+    if (!matchId || !Array.isArray(fileNames) || fileNames.length === 0) {
+      return refuse(
+        400,
+        "matchId and a non-empty fileNames array are required",
       );
     }
 
@@ -91,10 +154,11 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    // Fetch match record for source_provider and format (JSONB with best_of)
+    // Fetch match record for source_provider, format (JSONB with best_of)
+    // and the uploader, who is the only user allowed to process it
     const { data: match, error: matchError } = await supabase
       .from("matches")
-      .select("source_provider, format")
+      .select("source_provider, format, created_by")
       .eq("id", matchId)
       .single();
 
@@ -113,6 +177,18 @@ Deno.serve(async (req: Request) => {
           },
         },
       );
+    }
+
+    // The verified identity is the only userId this function works with — the
+    // request body's is never read. A user must be the match's uploader; the
+    // service role acts as the uploader.
+    const createdBy = (match?.created_by as string | null | undefined) ?? null;
+    if (caller.kind === "user" && caller.userId !== createdBy) {
+      return refuse(403, "You do not have access to this match");
+    }
+    const userId = caller.kind === "user" ? caller.userId : createdBy;
+    if (!userId) {
+      return refuse(403, "This match has no uploader to read files for");
     }
 
     const provider = sourceProvider || match?.source_provider || null;
@@ -137,6 +213,33 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Every file must live under the uploader's own storage folder
+    if (fileNames.some((name) => resolveStoragePath(userId, name) === null)) {
+      return refuse(
+        400,
+        `Every fileNames entry must be a path under ${userId}/ with no ".." segment`,
+      );
+    }
+
+    // Refuse a second run: a match that already carries points would get every
+    // row duplicated and key moments + insights fired again
+    const { data: existingPoints, error: existingError } = await supabase
+      .from("points")
+      .select("id")
+      .eq("match_id", matchId)
+      .limit(1);
+
+    if (existingError) {
+      console.error("Error checking existing points:", existingError);
+      return refuse(
+        500,
+        `Failed to check existing points: ${existingError.message}`,
+      );
+    }
+    if (existingPoints && existingPoints.length > 0) {
+      return refuse(409, "This match has already been processed");
+    }
+
     // Process the match data
     console.log("⚙️ Starting match data processing...");
     await processMatchToDb({
@@ -144,7 +247,6 @@ Deno.serve(async (req: Request) => {
       matchId,
       userId,
       fileNames,
-      bucketId,
       matchFormat,
     });
 
@@ -183,14 +285,12 @@ async function processMatchToDb({
   matchId,
   userId,
   fileNames,
-  bucketId = "match-data",
   matchFormat = 3,
 }: {
   supabase: ReturnType<typeof createClient>;
   matchId: string;
   userId: string;
   fileNames: string[];
-  bucketId?: string;
   matchFormat?: number;
 }): Promise<void> {
   // 1. Combine sheets across all files
@@ -199,7 +299,6 @@ async function processMatchToDb({
     supabase,
     userId,
     fileNames,
-    bucketId,
   });
 
   const pointsRows = combined.Points ?? [];
@@ -345,12 +444,10 @@ async function createCombinedSheets({
   supabase,
   userId,
   fileNames,
-  bucketId = "match-data",
 }: {
   supabase: ReturnType<typeof createClient>;
   userId: string;
   fileNames: string[];
-  bucketId?: string;
 }): Promise<CombinedSheets> {
   // Dynamic import ExcelJS for Deno compatibility
   const ExcelJSModule = await import("npm:exceljs@4.4.0");
@@ -371,11 +468,14 @@ async function createCombinedSheets({
       continue;
     }
 
-    // If fileName is already a full storage path (contains '/'), use it directly.
-    // Otherwise, construct it as {userId}/{fileName} for backward compatibility.
-    const filePath = fileName.includes("/")
-      ? fileName
-      : `${userId}/${fileName}`;
+    // The handler has already refused any entry outside the user's folder;
+    // resolving again here keeps the guard next to the download it protects.
+    const filePath = resolveStoragePath(userId, fileName);
+    if (filePath === null) {
+      throw new Error(
+        `Refusing to read a file outside ${userId}/: ${fileName}`,
+      );
+    }
 
     // Extract just the filename for __source_file__ field (last part after '/')
     const sourceFileName = fileName.includes("/")
@@ -386,7 +486,7 @@ async function createCombinedSheets({
       console.log(`📥 Downloading file from storage: ${filePath}`);
 
       const { data, error } = await supabase.storage
-        .from(bucketId)
+        .from(STORAGE_BUCKET)
         .download(filePath);
 
       if (error || !data) {

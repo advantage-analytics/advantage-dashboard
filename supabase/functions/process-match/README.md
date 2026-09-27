@@ -11,12 +11,14 @@ This Edge Function processes uploaded SwingVision match files and persists struc
 ```
 Upload Flow:
 1. Frontend uploads .xlsx file to Supabase Storage
-2. Frontend calls process-match Edge Function
-3. Edge Function downloads file, parses Excel sheets
-4. Inserts points into database
-5. Inserts shots into database
-6. Calls calculate_match_stats() Postgres function via RPC
-7. Returns success/error
+2. `/api/upload` calls process-match with the user's session (functions.invoke)
+3. Edge Function verifies the caller, that they uploaded the match, that every
+   file sits under their own storage folder, and that the match has no points yet
+4. Downloads each file from the `match-data` bucket, parses Excel sheets
+5. Inserts points into database
+6. Inserts shots into database
+7. Calls calculate_match_stats() Postgres function via RPC
+8. Returns success/error
 ```
 
 The `match_stats` calculation is handled by a **Postgres function** (not computed in the Edge Function) because:
@@ -27,30 +29,56 @@ The `match_stats` calculation is handled by a **Postgres function** (not compute
 
 ## Deployment
 
-Deploy this function using the Supabase CLI:
+Deploying is a separate, user-run step — no task, gate or agent deploys this
+function. Once a change is merged, deploy it with the Supabase CLI:
 
 ```bash
 supabase functions deploy process-match
 ```
+
+(or the Supabase MCP `deploy_edge_function`). Until that runs, the live
+function is whatever was deployed last, not what this directory contains.
 
 ## Environment Variables
 
 The function uses the following environment variables (automatically provided by Supabase):
 
 - `SUPABASE_URL` - Your Supabase project URL
-- `SUPABASE_SERVICE_ROLE_KEY` - Service role key for admin operations
+- `SUPABASE_ANON_KEY` - Anon key, used only to verify a caller's access token
+- `SUPABASE_SERVICE_ROLE_KEY` - Service role key for admin operations, and the
+  bearer that identifies the project's own internal caller
 
 ## Request Format
+
+The `Authorization: Bearer …` header identifies the caller and is required.
+Two bearers are accepted:
+
+- a signed-in user's **access token** — the user must be the match's
+  `created_by`; this is what `supabase.functions.invoke` sends from
+  `/api/upload`
+- the project's **service role key** — the internal caller, which acts as the
+  match's uploader
+
+The public anon key is not a valid bearer on its own: `verify_jwt` lets it
+through, but `auth.getUser` rejects it and the function answers 401.
 
 ```json
 {
   "matchId": "uuid-of-existing-match",
-  "userId": "uuid-of-user",
-  "fileNames": ["path/to/file1.xlsx", "path/to/file2.xlsx"],
-  "bucketId": "match-data", // optional, defaults to "match-data"
+  "fileNames": ["<userId>/swing-vision/<matchId>/file1.xlsx", "file2.xlsx"],
   "sourceProvider": "swing-vision" // optional, fetched from match record if not provided
 }
 ```
+
+- There is no `userId` field. The user is whoever the bearer verifies to (for
+  the service role, the match's `created_by`); a `userId` in the body is
+  ignored.
+- There is no `bucketId` field. Files are always read from the `match-data`
+  bucket.
+- Every `fileNames` entry must resolve under the user's own folder: a full
+  path must start with `<userId>/` and contain no empty, `.` or `..` segment;
+  a bare file name resolves to `<userId>/<fileName>`. One entry outside that
+  folder refuses the whole request before any file is downloaded.
 
 **Note:** Only `source_provider: "swing-vision"` is currently supported. Other providers will return an error.
 
@@ -73,6 +101,14 @@ Error:
 }
 ```
 
+| Status | Meaning                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------- |
+| 400    | Missing `matchId`/`fileNames`, an unsupported provider, or a file outside the user's folder |
+| 401    | No bearer, or a bearer that is neither a user's access token nor the service role key       |
+| 403    | The user is not the match's uploader (or, for the service role, the match has no uploader)  |
+| 409    | The match already has `points` rows — it has been processed and will not be run again       |
+| 500    | The match could not be read, or processing itself failed                                    |
+
 ## Usage from Frontend
 
 **Recommended: Using Supabase Client**
@@ -82,11 +118,12 @@ import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
 
+// The user's session token is sent as the bearer; the function verifies it
+// and checks that this user uploaded the match.
 const { data, error } = await supabase.functions.invoke("process-match", {
   body: {
     matchId,
-    userId,
-    fileNames: [storagePath], // Array of storage paths
+    fileNames: [storagePath], // Array of storage paths under this user's folder
   },
 });
 
@@ -99,17 +136,19 @@ if (error) {
 
 ```typescript
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const {
+  data: { session },
+} = await supabase.auth.getSession();
 
 const res = await fetch(`${supabaseUrl}/functions/v1/process-match`, {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${supabaseAnonKey}`,
+    // The user's access token — not the anon key, which is answered 401.
+    Authorization: `Bearer ${session!.access_token}`,
   },
   body: JSON.stringify({
     matchId,
-    userId,
     fileNames,
   }),
 });
