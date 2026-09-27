@@ -214,6 +214,83 @@ export async function searchPrograms(
 }
 
 /**
+ * The four self-serve org types `create_custom_program` accepts. 'college' is
+ * deliberately not one of them: collegiate programs are the seeded directory.
+ */
+export const CUSTOM_ORG_TYPES = [
+  "club",
+  "high_school",
+  "academy",
+  "other",
+] as const;
+
+export type CustomOrgType = (typeof CUSTOM_ORG_TYPES)[number];
+
+export function isCustomOrgType(value: unknown): value is CustomOrgType {
+  return (CUSTOM_ORG_TYPES as readonly unknown[]).includes(value);
+}
+
+/**
+ * One row of the custom-org typeahead — exactly the three facts a second
+ * coach needs to recognise an existing club, and nothing else.
+ *
+ * Custom orgs are private workspaces (migration 20260830050000), so this is
+ * a deliberate, minimal disclosure: the name, the type and the owner as
+ * "Elena V.". No id space beyond `programId`, no status, no contact column —
+ * `search_custom_programs` projects exactly these and the mapping below is
+ * built field by field so a wider SQL projection could not leak through.
+ */
+export interface CustomProgramSearchResult {
+  programId: string;
+  name: string;
+  orgType: CustomOrgType;
+  /** "Elena V." on a row whose owner has a name, null otherwise. */
+  ownerDisplay: string | null;
+}
+
+/**
+ * Signed-in typeahead over the custom orgs.
+ *
+ * Goes through `search_custom_programs()` because the `programs` SELECT
+ * policy hides every custom row from non-members — the whole point is to let
+ * a non-member find the row. EXECUTE is granted to `authenticated` only, so
+ * the caller must be the cookie client with a session; an anonymous client
+ * gets a permission error, which comes back here as `[]`. Same two-character
+ * floor as `searchPrograms`, for the same reason: the SQL enforces it too, and
+ * skipping the round trip on the first keystroke is free.
+ *
+ * `orgType` narrows to one custom type when it is one; anything else means
+ * every custom type, and the SQL never returns a college row regardless.
+ */
+export async function searchCustomPrograms(
+  supabase: SupabaseClient,
+  term: string,
+  orgType?: string | null,
+): Promise<CustomProgramSearchResult[]> {
+  const query = term.trim();
+  if (query.length < 2) return [];
+
+  const { data, error } = await supabase.rpc("search_custom_programs", {
+    p_term: query,
+    p_org_type: isCustomOrgType(orgType) ? orgType : null,
+    p_limit: SEARCH_LIMIT,
+  });
+
+  if (error) {
+    console.error("[programs] custom search failed", { error: error.message });
+    return [];
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    programId: row.program_id as string,
+    name: row.school_name as string,
+    orgType: row.org_type as CustomOrgType,
+    ownerDisplay:
+      titleCaseName((row.owner_display as string | null) ?? "") || null,
+  }));
+}
+
+/**
  * One program, with its owner's display name.
  *
  * Goes through the SECURITY DEFINER projection rather than selecting from

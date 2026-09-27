@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Add an authenticated search over existing custom orgs
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<timestamp>_search_custom_programs.sql (new), src/lib/data/programs-server.ts, src/app/api/programs/custom-search/route.ts (new, guess), tests/custom-program-search.spec.ts (new), tests/custom-program-search-rls.spec.ts (new, live), tests/fixtures/live-db-specs.ts
 - **done when:**
