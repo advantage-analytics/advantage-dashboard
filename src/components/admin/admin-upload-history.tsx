@@ -12,6 +12,7 @@ import type {
   AdminUploadHistoryState,
 } from "@/lib/admin/uploads/history";
 import { advButton } from "@/lib/ui/adv-button";
+import { reconcileAdminSubmissionAction } from "@/app/admin/uploads/history-actions";
 
 const KINDS = {
   file: "SwingVision file",
@@ -52,6 +53,39 @@ export function HistoryState({ state }: { state: AdminUploadHistoryState }) {
     >
       {label}
     </StatusChip>
+  );
+}
+
+/**
+ * A plain `<form action>` discards an action's return value, and React types
+ * the prop as returning void; the action still returns the service result
+ * unchanged for any caller that reads it.
+ */
+const reconcileFormAction = reconcileAdminSubmissionAction as unknown as (
+  formData: FormData,
+) => Promise<void>;
+
+/** One reconciliation control: a server-action form, no client island. */
+function ReconcileForm({
+  operationId,
+  itemId,
+  mode,
+  label,
+}: {
+  operationId: string;
+  itemId: string;
+  mode: "abandon" | "complete";
+  label: string;
+}) {
+  return (
+    <form action={reconcileFormAction}>
+      <input type="hidden" name="operationId" value={operationId} />
+      <input type="hidden" name="itemId" value={itemId} />
+      <input type="hidden" name="mode" value={mode} />
+      <button type="submit" className={advButton("outline", "sm")}>
+        {label}
+      </button>
+    </form>
   );
 }
 
@@ -164,8 +198,35 @@ export function AdminUploadHistory({
                                 </div>
                                 {item.error && (
                                   <p className="mt-1 text-[11px] break-words text-[var(--ink-600)]">
-                                    {item.error}
+                                    {item.error === "abandoned"
+                                      ? "Abandoned by an administrator"
+                                      : item.error}
                                   </p>
+                                )}
+                                {(item.reconcile.abandon ||
+                                  item.reconcile.complete) && (
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {item.reconcile.complete && (
+                                      <ReconcileForm
+                                        operationId={row.operationId}
+                                        itemId={item.itemId}
+                                        mode="complete"
+                                        label="Mark complete"
+                                      />
+                                    )}
+                                    {item.reconcile.abandon && (
+                                      <ReconcileForm
+                                        operationId={row.operationId}
+                                        itemId={item.itemId}
+                                        mode="abandon"
+                                        label={
+                                          item.kind === "match"
+                                            ? "Abandon and delete match"
+                                            : "Abandon"
+                                        }
+                                      />
+                                    )}
+                                  </div>
                                 )}
                               </li>
                             ))}

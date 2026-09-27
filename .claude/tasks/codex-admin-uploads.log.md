@@ -177,3 +177,16 @@ The eight admin-upload migrations the entries above call unapplied were applied 
 2. Load `20260919045221_guard_admin_match_storage_purge.sql` into the video harness so `reject_purging_match` is exercised by the item rewrite.
 3. A prepared-but-never-submitted item (reservation, no attempt) is `attempt-missing` yet still blocks a fresh prepare with `attachment-reserved` — needs a `release` mode or reservation expiry.
 4. `quota-held` is a dead end in the UI unless T22 offers `release_processing_quota` before abandon.
+
+## T22 · Add console reconciliation controls and finish a console-created match's teardown — done
+
+**gate:** mechanical PASS · completion pass
+
+**changed:** New `reconcileAdminSubmission` service (admin check before any client, session actor as `p_actor_id`, consoleCreated abandon runs purge → match delete by id+program, purge throw returns ok:false with no delete) and "use server" `reconcileAdminSubmissionAction`; history loader reads `external_job_id` and derives per-item `reconcile: {abandon, complete}`; `admin-upload-history.tsx` renders Abandon / Abandon and delete match / Mark complete forms (advButton outline sm) and "Abandoned by an administrator"; new `tests/admin-reconciliation.spec.ts` (7) + flag cases in `tests/admin-upload-history.spec.ts`; three admin docs updated. Deviations: the form binds a void-typed cast of the action; `docs/admin-video-submission.md` gained a paragraph after lines 67–71 rather than an in-place rewrite; no route harness needed a mock (none renders /admin/uploads).
+
+**follow-ups:**
+
+1. Surface refusal/success messages (redirect with `?reconciled=` or a small `useActionState` island) — today a refusal such as `quota-held` leaves the page silently unchanged.
+2. Confirmation step before "Abandon and delete match" (destructive, irreversible).
+3. Offline render test for the button labels and "Abandoned by an administrator" copy via `tests/fixtures/vm-modules.ts`.
+4. The video abandon flag cannot see `quota-held`; read unreleased `processing_usage` in the loader so the button does not show only to be refused.

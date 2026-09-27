@@ -70,6 +70,25 @@ whether the vendor accepted the first. In particular, acceptance followed by a
 failed queued-state write keeps the reservation and submitting claim. The
 existing automated replacement-job retry cannot bypass the reservation trigger.
 
+Reconciliation is the **Abandon** control on the item in `/admin/uploads`
+("Abandon and delete match" for a console-created match, "Abandon" for an
+analysis attachment). It appears while the linked job is in
+`pending|uploading|uploaded|failed` with a null `external_job_id`, and posts to
+`reconcileAdminSubmissionAction` → `reconcileAdminSubmission`
+(`src/lib/services/programs/admin-reconciliation.ts`), which re-checks
+`requireAdmin` and calls the service-only
+`admin_reconcile_submission_item(p_actor_id, p_operation_id, p_item_id,
+'abandon')` with the session actor. The RPC closes the job (`failed`), rewrites
+the item to `failed`/`abandoned` (shown as "Abandoned by an administrator"),
+reverts the match to manual and writes one `console.submission_reconciled`
+audit row. It refuses with `attempt-active` once the vendor has the job, with
+`quota-held` while an unreleased `processing_usage` row exists (release it
+first), and with `mode-unsupported` for `complete` — a video completes only
+through the webhook. For a console-created match the service then runs
+`purgeMatchStorage(admin, [matchId], "console abandon")` and deletes that
+`matches` row (cascading its job); a purge failure stops before the delete and
+leaves the match as an ordinary manual match.
+
 The item succeeds/audits once at linkage. Its durable `result.state` then tracks
 job outcomes; `completed` without `derivation_version` is `stats_pending`.
 Failure text is stored in `error_code`. An admitted job ID is not proof that

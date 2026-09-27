@@ -438,3 +438,61 @@ test("empty history succeeds and failed provenance reads never become empty hist
     reason: "read-failed",
   });
 });
+
+test("reconcile flags follow the linked job or file attempt", async () => {
+  const h = harness();
+  const video = (n: number, status: string, external: string | null) => {
+    const item = h.add(n, "video");
+    item.processing_job_id = id(n + 3000);
+    h.tables.processing_jobs.push({
+      id: item.processing_job_id,
+      match_id: item.match_id,
+      status,
+      derivation_version: null,
+      error_message: null,
+      external_job_id: external,
+    });
+    return item;
+  };
+  const file = (n: number, state: string) => {
+    const item = h.add(n, "file");
+    item.match_file_id = id(n + 4000);
+    h.tables.admin_file_attempts.push({
+      operation_id: item.operation_id,
+      item_id: item.item_id,
+      match_id: item.match_id,
+      file_id: item.match_file_id,
+      state,
+      error_code: null,
+    });
+    return item;
+  };
+  video(1, "uploaded", null); // abandonable video
+  video(2, "failed", "vendor-1"); // vendor took it
+  video(3, "processing", null); // attempt active
+  file(4, "queued");
+  file(5, "processing");
+  file(6, "failed");
+  file(7, "completed");
+  const abandoned = h.add(8, "video", "failed");
+  abandoned.error_code = "abandoned";
+  abandoned.match_id = null;
+  const result = await getAdminUploadHistory({}, h.deps);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const flags = new Map(
+    result.rows.map((r) => [r.operationId, r.items[0].reconcile]),
+  );
+  const none = { abandon: false, complete: false };
+  expect(flags.get(id(1))).toEqual({ abandon: true, complete: false });
+  expect(flags.get(id(2))).toEqual(none);
+  expect(flags.get(id(3))).toEqual(none);
+  expect(flags.get(id(4))).toEqual({ abandon: true, complete: false });
+  expect(flags.get(id(5))).toEqual({ abandon: true, complete: true });
+  expect(flags.get(id(6))).toEqual({ abandon: true, complete: false });
+  expect(flags.get(id(7))).toEqual(none);
+  expect(flags.get(id(8))).toEqual(none);
+  expect(result.rows.find((r) => r.operationId === id(8))!.items[0].error).toBe(
+    "abandoned",
+  );
+});

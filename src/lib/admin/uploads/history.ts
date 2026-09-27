@@ -16,6 +16,11 @@ export interface AdminUploadHistoryItem {
   outcome: { kind: string; side: string; round: string | null } | null;
   /** Only supplied when the current session can read this match. */
   matchHref: string | null;
+  /**
+   * Which administrator reconciliation controls apply (T22). A hint from the
+   * loaded evidence; `admin_reconcile_submission_item` re-checks under locks.
+   */
+  reconcile: { abandon: boolean; complete: boolean };
 }
 export interface AdminUploadHistoryRow {
   operationId: string;

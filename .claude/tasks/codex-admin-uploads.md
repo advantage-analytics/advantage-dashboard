@@ -316,7 +316,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T22 · Add console reconciliation controls and finish a console-created match's teardown
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T21
 - **files:** Best guesses: new `src/lib/services/programs/admin-reconciliation.ts`; new `src/app/admin/uploads/history-actions.ts` ("use server"); `src/lib/data/admin-uploads-server.ts` (read `external_job_id`, derive per-item `reconcile` flags); `src/lib/admin/uploads/history.ts`; `src/components/admin/admin-upload-history.tsx`; new `tests/admin-reconciliation.spec.ts`; `tests/admin-upload-history.spec.ts`; `docs/admin-video-submission.md`, `docs/admin-match-file-submissions.md`, `docs/admin-upload-history.md`.

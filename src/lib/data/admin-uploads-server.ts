@@ -89,6 +89,7 @@ interface Job {
   status: string;
   derivation_version: string | null;
   error_message: string | null;
+  external_job_id: string | null;
 }
 interface Attempt {
   operation_id: string;
@@ -205,7 +206,7 @@ export async function getAdminUploadHistory(
       byIds<Job>(
         admin,
         "processing_jobs",
-        "id, match_id, status, derivation_version, error_message",
+        "id, match_id, status, derivation_version, error_message, external_job_id",
         "id",
         items.flatMap((i) =>
           i.processing_job_id ? [i.processing_job_id] : [],
@@ -246,6 +247,14 @@ export async function getAdminUploadHistory(
             : undefined;
           let state: AdminUploadHistoryState = "unknown";
           let error = i.error_code;
+          // Mirrors admin_reconcile_submission_item's admission rules; the RPC
+          // re-checks everything (quota, analysis rows) under its locks.
+          const reconcile = { abandon: false, complete: false };
+          const reconcilable =
+            i.kind !== "outcome" &&
+            (s.kind === "video" ||
+              s.kind === "file" ||
+              s.kind === "analysis_attachment");
           if (i.status === "failed") state = "failed";
           else if (i.status === "pending") state = "pending";
           else if (i.status === "succeeded") {
@@ -262,6 +271,12 @@ export async function getAdminUploadHistory(
                     published.has(job.match_id),
                   );
                 error = job.error_message ?? error;
+                reconcile.abandon =
+                  reconcilable &&
+                  ["pending", "uploading", "uploaded", "failed"].includes(
+                    job.status,
+                  ) &&
+                  job.external_job_id == null;
               }
             } else if (i.match_file_id) {
               const attempt = attemptMap.get(`${s.operation_id}/${i.item_id}`);
@@ -276,6 +291,11 @@ export async function getAdminUploadHistory(
                 )
                   state = attempt.state as AdminUploadHistoryState;
                 error = attempt.error_code ?? error;
+                reconcile.abandon =
+                  reconcilable &&
+                  ["queued", "processing", "failed"].includes(attempt.state);
+                reconcile.complete =
+                  reconcilable && attempt.state === "processing";
               }
             } else if (
               outcome ||
@@ -317,6 +337,7 @@ export async function getAdminUploadHistory(
               i.match_id && readable.has(i.match_id)
                 ? `/dashboard/matches/${i.match_id}`
                 : null,
+            reconcile,
           };
         });
       const counts = {
