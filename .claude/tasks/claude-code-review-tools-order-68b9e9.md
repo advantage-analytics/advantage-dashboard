@@ -193,7 +193,7 @@ ready).
 
 ## T15 · Splitstep: record the blob name on the live job only; error-check the `uploaded` write; fix the SAS re-mint comment
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/app/api/splitstep/upload-url/route.ts, src/app/api/splitstep/upload-url/handler.ts (doc comment), src/lib/services/splitstep/mark-job-uploaded.ts (new), src/lib/services/splitstep/submit-match-video.ts, src/lib/services/splitstep/video-url/types.ts, tests/splitstep-mark-uploaded.spec.ts (new) — guess
 - **done when:**

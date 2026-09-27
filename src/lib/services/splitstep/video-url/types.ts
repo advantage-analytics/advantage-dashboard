@@ -46,9 +46,11 @@ export interface VideoUrlStrategy {
    * Issue a vendor-facing URL for a job's video and persist whatever is needed
    * to validate it later.
    *
-   * Minting again for the same job replaces the previous credential — the old
-   * URL stops working immediately. That is what makes retry-with-a-fresh-URL
-   * safe.
+   * Minting again for the same job issues a fresh URL, but does NOT invalidate
+   * the previous one. Under `azure-sas` the earlier SAS keeps working until it
+   * expires — a signature checked arithmetically cannot be withdrawn (see the
+   * header of `azure-sas.ts`). A strategy with real per-job revocation may do
+   * better; callers must not assume it does.
    */
   mint(input: MintVendorUrlInput): Promise<VendorVideoUrl>;
 
