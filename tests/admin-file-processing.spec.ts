@@ -1,3 +1,15 @@
+/**
+ * One narrow guard on process-match's admin-console claim, kept apart from
+ * `tests/process-match-guards.spec.ts` because that spec never pairs a forged
+ * body `userId` with a user token on an unclaimed console match: here the
+ * claim must carry the token's verified actor (`p_service: false`), answer the
+ * attempt's state, and read no table at all. Everything else this file used to
+ * cover lives in the guards spec: the refusal of `_admin-console/` paths and
+ * their escaped aliases ("the console namespace and its escaped aliases are
+ * refused for every non-claim call") and the sha-256 mismatch that fails a
+ * claimed attempt before parsing ("a claimed file whose bytes no longer hash
+ * to the validated sha256 ..."). Add new process-match cases there, not here.
+ */
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
@@ -53,16 +65,8 @@ function edge(claim: unknown) {
     Response,
     console: { log() {}, error() {} },
   };
-  vm.runInNewContext(
-    code + "\nglobalThis.readCombined = createCombinedSheets;",
-    context,
-  );
+  vm.runInNewContext(code, context);
   return {
-    readCombined: (
-      context as unknown as {
-        readCombined: (args: unknown) => Promise<unknown>;
-      }
-    ).readCombined,
     calls,
     run: (body: unknown, token = "user-token") =>
       handler(
@@ -105,42 +109,4 @@ test("Edge always claims by match, deriving actor from token even without operat
       },
     },
   ]);
-});
-test("legacy match cannot borrow console files, including encoded paths and forged prefix userId", async () => {
-  for (const patch of [
-    { fileNames: ["_admin-console/op/item/hash.xlsx"] },
-    { fileNames: ["%5fadmin-console/op/item/hash.xlsx"] },
-    { fileNames: ["folder/../_admin-console/op/item/hash.xlsx"] },
-    { fileNames: ["folder\\_admin-console\\hash.xlsx"] },
-    { userId: "_admin-console/op/item", fileNames: ["hash.xlsx"] },
-  ]) {
-    const h = edge(null);
-    const result = await h.run({ ...body, ...patch });
-    expect(result.status).toBe(500);
-    expect(await result.json()).toMatchObject({
-      error: "Console files require their durable processing claim.",
-    });
-    expect(h.calls).toHaveLength(1);
-  }
-});
-
-test("processor rejects changed bytes before parsing or analysis writes", async () => {
-  const h = edge(null);
-  await expect(
-    h.readCombined({
-      supabase: {
-        storage: {
-          from: () => ({
-            download: async () => ({
-              data: new Blob(["tampered"]),
-              error: null,
-            }),
-          }),
-        },
-      },
-      userId: "actor",
-      fileNames: ["_admin-console/op/item/file.xlsx"],
-      expectedSha256: "a".repeat(64),
-    }),
-  ).rejects.toThrow("Validated file bytes changed; review required.");
 });
