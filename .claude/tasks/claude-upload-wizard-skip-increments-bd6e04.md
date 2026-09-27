@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Retune the trim step's seek scale to ±1s / ±10s
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/new-match-wizard/TrimStepContent.tsx, tests/trim-step-navigation.spec.ts (guess — both confirmed to hold every current reference to the trim increments)
 - **done when:**

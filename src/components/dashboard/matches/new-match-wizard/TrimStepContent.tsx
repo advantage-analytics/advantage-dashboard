@@ -87,7 +87,6 @@ import {
   XCircle,
 } from "lucide-react";
 import { useVideoFilmstrip } from "@/hooks/use-video-filmstrip";
-import { JUMP_STEP_SECONDS } from "../match-video-attachment/use-attachment-alignment";
 import type { VideoProbeSummary } from "./types";
 import { focusRingCls, noteIconCls, noteStripCls } from "./styles";
 import { Kbd } from "@/components/ui/kbd";
@@ -161,11 +160,13 @@ const FALLBACK_ASPECT = 16 / 9;
 const PLAYER_MAX_HEIGHT = "405px";
 
 /**
- * The coarse in-frame jump, in seconds. `JUMP_STEP_SECONDS` (10s) is the
- * shared short hop; a minute is what it takes to cross a game on an
- * hours-long recording without dragging the rail.
+ * The two coarse in-frame jumps, in seconds. The gap in the old scale sat
+ * between one frame (~0.03s) and ten seconds — nothing nudged by a second,
+ * which is what landing a cut on a serve needs, so a dedicated 1s hop fills
+ * it; 10s remains the step's own short hop across a rally.
  */
-const LONG_JUMP_SECONDS = 60;
+const SHORT_JUMP_SECONDS = 1;
+const LONG_JUMP_SECONDS = 10;
 
 /**
  * A cut, and the two things you do to it, as one control.
@@ -571,8 +572,8 @@ function TrimStepContentImpl({
       const el = videoRef.current;
       if (!el) return;
       // Clamped BEFORE it is parked: `seekBy` and the I/O keys read the parked
-      // value as the truthful position, and a raw overshoot (+1m near the end)
-      // would have the next −10s measured from beyond the file.
+      // value as the truthful position, and a raw overshoot (+10s near the end)
+      // would have the next −1s measured from beyond the file.
       const clamped = Math.max(0, Math.min(duration, time));
       wantedSeekRef.current = clamped;
       if (el.seeking) return;
@@ -909,11 +910,11 @@ function TrimStepContentImpl({
         }
         case "ArrowLeft":
           e.preventDefault();
-          seekBy(e.shiftKey ? -LONG_JUMP_SECONDS : -JUMP_STEP_SECONDS);
+          seekBy(e.shiftKey ? -LONG_JUMP_SECONDS : -SHORT_JUMP_SECONDS);
           return;
         case "ArrowRight":
           e.preventDefault();
-          seekBy(e.shiftKey ? LONG_JUMP_SECONDS : JUMP_STEP_SECONDS);
+          seekBy(e.shiftKey ? LONG_JUMP_SECONDS : SHORT_JUMP_SECONDS);
           return;
         case "i":
         case "I":
@@ -1094,18 +1095,18 @@ function TrimStepContentImpl({
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-gradient-to-t from-black/55 to-transparent pt-8 pb-2.5">
           <div className="pointer-events-auto flex items-center gap-2">
             {/* Coarse jumps flank the frame steps, longest on the outside, so
-                the row reads as one scale from a minute down to a frame. */}
-            <JumpButton
-              label="Back one minute"
-              onClick={() => seekBy(-LONG_JUMP_SECONDS)}
-            >
-              −1m
-            </JumpButton>
+                the row reads as one scale from ten seconds down to a frame. */}
             <JumpButton
               label="Back ten seconds"
-              onClick={() => seekBy(-JUMP_STEP_SECONDS)}
+              onClick={() => seekBy(-LONG_JUMP_SECONDS)}
             >
               −10s
+            </JumpButton>
+            <JumpButton
+              label="Back one second"
+              onClick={() => seekBy(-SHORT_JUMP_SECONDS)}
+            >
+              −1s
             </JumpButton>
             <button
               type="button"
@@ -1148,16 +1149,16 @@ function TrimStepContentImpl({
               />
             </button>
             <JumpButton
-              label="Forward ten seconds"
-              onClick={() => seekBy(JUMP_STEP_SECONDS)}
+              label="Forward one second"
+              onClick={() => seekBy(SHORT_JUMP_SECONDS)}
             >
-              +10s
+              +1s
             </JumpButton>
             <JumpButton
-              label="Forward one minute"
+              label="Forward ten seconds"
               onClick={() => seekBy(LONG_JUMP_SECONDS)}
             >
-              +1m
+              +10s
             </JumpButton>
             <span className="mx-1 h-3 w-px bg-white/35" aria-hidden="true" />
             <button
@@ -1338,7 +1339,7 @@ function TrimStepContentImpl({
                         }
                         // A focused handle owns its arrows: one frame, or a
                         // second with Shift. Stopping here keeps the step's
-                        // ±10s / ±60s seek from firing as well — it is a React
+                        // ±1s / ±10s seek from firing as well — it is a React
                         // handler on the step root for exactly this reason.
                         e.preventDefault();
                         e.stopPropagation();
@@ -1407,14 +1408,14 @@ function TrimStepContentImpl({
           </span>
           <Kbd size="sm">←</Kbd>
           <Kbd size="sm">→</Kbd>
-          <span>10 s</span>
+          <span>1 s</span>
           <span aria-hidden="true" className="text-[var(--ink-300)]">
             ·
           </span>
           <Kbd size="sm">shift</Kbd>
           <Kbd size="sm">←</Kbd>
           <Kbd size="sm">→</Kbd>
-          <span>1 min</span>
+          <span>10 s</span>
           <span aria-hidden="true" className="text-[var(--ink-300)]">
             ·
           </span>
