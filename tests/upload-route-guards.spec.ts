@@ -85,25 +85,22 @@ function fakeClient(db: FakeDb) {
       return [];
     };
     let inserted: Row | null = null;
-    let insertFailed: FakeDb["insertError"] | null = null;
     const builder = {
       select: () => builder,
       eq: () => builder,
       limit: () => builder,
       insert(row: Row) {
         insertAttempted = true;
-        if (db.insertError) {
-          insertFailed = db.insertError;
-          return builder;
+        if (!db.insertError) {
+          inserted = { id: `mf-${db.matchFiles.length + 1}`, ...row };
+          db.matchFiles.push(inserted);
         }
-        inserted = { id: `mf-${db.matchFiles.length + 1}`, ...row };
-        db.matchFiles.push(inserted);
         return builder;
       },
       maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
       single: async () =>
-        insertFailed
-          ? { data: null, error: insertFailed }
+        db.insertError
+          ? { data: null, error: db.insertError }
           : { data: inserted ?? rows()[0] ?? null, error: null },
       then<R>(resolve: (value: { data: Row[]; error: null }) => R) {
         return Promise.resolve({ data: [...rows()], error: null }).then(

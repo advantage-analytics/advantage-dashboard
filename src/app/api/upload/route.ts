@@ -211,7 +211,7 @@ export async function POST(
       // invoked — the winner's own POST already did that.
       if (uploadResult.code === "conflict") {
         return NextResponse.json(
-          { success: false, error: "This match already has a file" },
+          { success: false, error: uploadResult.error },
           { status: 409 },
         );
       }

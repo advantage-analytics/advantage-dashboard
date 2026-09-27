@@ -90,8 +90,17 @@ const GUEST = "Casey Guest";
  * A two-point SwingVision export with the three sheets the write path reads:
  * Settings (the "Host Team" cell keys `is_player1`), Points and Shots. Point 1
  * is an ace; point 2 is a three-shot rally the guest wins.
+ *
+ * Deterministic and read-only once built (only ever fed to a stubbed
+ * `download()`), so every caller shares the one buffer instead of paying for
+ * the workbook build and xlsx serialization again per test.
  */
-async function exportWorkbook(): Promise<Buffer<ArrayBuffer>> {
+let cachedWorkbook: Promise<Buffer<ArrayBuffer>> | undefined;
+function exportWorkbook(): Promise<Buffer<ArrayBuffer>> {
+  return (cachedWorkbook ??= buildWorkbook());
+}
+
+async function buildWorkbook(): Promise<Buffer<ArrayBuffer>> {
   const workbook = new ExcelJS.Workbook();
 
   const settings = workbook.addWorksheet("Settings");

@@ -152,13 +152,13 @@ Error:
 }
 ```
 
-| Status | Meaning                                                                                                                                                                        |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 400    | Missing `matchId`/`fileNames`, an unsupported provider, or a file outside the user's folder                                                                                    |
-| 401    | No bearer, or a bearer that is neither a user's access token nor the service role key                                                                                          |
-| 403    | The user is not the match's uploader (or, for the service role, the match has no uploader)                                                                                     |
-| 409    | The match already has `points` rows — the pre-check, or `import_match_rows`'s own refusal when a concurrent run landed first — it has been processed and will not be run again |
-| 500    | The match could not be read, or processing itself failed — nothing was persisted (see [Recovery](#recovery))                                                                   |
+| Status | Meaning                                                                                                                                                                                                                                                                            |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | Missing `matchId`/`fileNames`, an unsupported provider, or a file outside the user's folder                                                                                                                                                                                        |
+| 401    | No bearer, or a bearer that is neither a user's access token nor the service role key                                                                                                                                                                                              |
+| 403    | The user is not the match's uploader (or, for the service role, the match has no uploader)                                                                                                                                                                                         |
+| 409    | The match already has `points` rows — the pre-check, or `import_match_rows`'s own refusal when a concurrent run landed first — it has been processed and will not be run again                                                                                                     |
+| 500    | The match could not be read, or `import_match_rows` failed — nothing was persisted. A failure in the chained `generate-key-moments`/`generate-insights` invoke after the RPC is also a 500, but the rows are already committed and a retry answers 409 (see [Recovery](#recovery)) |
 
 ## Usage from Frontend
 

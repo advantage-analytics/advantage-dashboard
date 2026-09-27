@@ -31,12 +31,16 @@ function buildSupportMailto(
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
+// `retry`, not `reset`: the failure is in a Server Component's fetch — the
+// match's points read (`page.tsx` throws when it answers "no answer") — and
+// only `retry()` re-fetches the segment. `reset()` re-renders the same failed
+// payload, so three clicks would escalate over a blip one refetch clears.
 export default function Error({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   const params = useParams<{ matchId: string }>();
   const matchId = params?.matchId;
@@ -63,7 +67,7 @@ export default function Error({
       setRetryCount(next);
     }
     startTransition(() => {
-      reset();
+      retry();
       setManualPending(false);
     });
   }
