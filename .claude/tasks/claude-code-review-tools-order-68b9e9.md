@@ -157,7 +157,7 @@ ready).
 
 ## T12 · /api/upload checks the match; /api/validate-file gets an auth gate and a size ceiling
 
-- **status:** todo
+- **status:** doing
 - **model:** fable
 - **files:** src/app/api/upload/route.ts, src/app/api/validate-file/route.ts, tests/upload-route-guards.spec.ts (new) — guess
 - **done when:**
