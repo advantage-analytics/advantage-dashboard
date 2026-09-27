@@ -177,7 +177,10 @@ be. Doubles teams and existing users depend on it.
 >   branch never merged here — had and this file did not, on top of T9's
 >   guards and T18's RPC. Every call asks `admin_claim_match_file` whether the
 >   match is a console attempt; the answer is null for every other match, so
->   the SwingVision upload path is unchanged. A claimed attempt takes its one
+>   the SwingVision upload path is unchanged — except that `resolveStoragePath`
+>   now also refuses, on the percent-decoded path, the `_admin-console/`
+>   namespace, a `..` segment and a backslash (a literal `%` in a file name
+>   still resolves). A claimed attempt takes its one
 >   file, its actor and the sha256 from `admin_file_attempts` — the body decides
 >   nothing — hashes the downloaded bytes before parsing and refuses a
 >   mismatch, and settles the attempt through `admin_finish_match_file` after

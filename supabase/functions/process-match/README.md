@@ -51,8 +51,8 @@ behalf. It validates the workbook itself, stores it at
 attempt through `admin_submit_match_file` — a `match_files` row plus an
 `admin_file_attempts` row carrying the validated `request` (`storagePath`,
 `sha256`) in state `queued` — and then invokes this function **with the
-service-role bearer**, fire-and-forget, with
-`{ matchId, userId, fileNames: [storagePath], sourceProvider }`. It never
+service-role bearer** — awaiting the invoke but discarding its response —
+with `{ matchId, userId, fileNames: [storagePath], sourceProvider }`. It never
 reads the HTTP response: it polls `admin_file_attempts.state` / `error_code`,
 and `error_code` is shown raw in the upload history, so the strings below are
 a contract.
@@ -108,15 +108,19 @@ A request with no claim never calls `admin_finish_match_file`.
 
 Since `import_match_rows` (T18) a failed console attempt persists **no** rows
 — the transaction rolled back — unless the failure came after the RPC
-returned, i.e. in a chained `generate-key-moments` / `generate-insights`
-invoke or in the finish call itself; then the rows are committed and the
-attempt still reads `failed`. The console's "may have saved partial analysis"
+returned, i.e. in the chained `generate-key-moments` invoke or in the finish
+call itself; then the rows are committed and the attempt still reads `failed`.
+(A `generate-insights` failure is only logged, so the attempt completes without
+insights.) The console's "may have saved partial analysis"
 wording predates T18 and describes the four-statement writes it replaced.
 
 The `_admin-console/` namespace is refused for **every non-claim call**: a
-`fileNames` entry containing `_admin-console`, `%` or `\` is a 400 with no
+`fileNames` entry that, once its percent-escapes are decoded, names
+`_admin-console`, contains a backslash or a `..` segment is a 400 with no
 download (`_admin-console/op/item/x.xlsx`, `%5fadmin-console/…`,
-`<userId>/%2e%2e/x.xlsx`, `folder\x.xlsx`). The
+`<userId>/%2e%2e/x.xlsx`, `folder\x.xlsx`). A literal `%` in an athlete's own
+file name (`Match 100%.xlsx`, stored as typed) is not an escape and still
+resolves. The
 `admin_file_storage_namespace` policy on `storage.objects` keeps user tokens
 out of that prefix, but it binds `authenticated`/`anon` only — not the
 service role this function downloads with — which is why the refusal lives
@@ -163,7 +167,8 @@ rolls back, the match has no `points`, `shots` or `match_stats` rows, and the
 pre-check does not refuse a re-run. What a failed run does leave behind is the
 `match_files` row `/api/upload` wrote before invoking this function (and the
 .xlsx in the `match-data` bucket), so a second upload for the same match is
-answered 409 `This match already has a file`. Two ways back, and only these:
+answered 409 `This match already has a file`. Two ways back for a wizard
+upload, and only these:
 
 - `DELETE /api/matches/[matchId]` as the uploader — it purges the match's
   storage and deletes the `matches` row, which cascades `match_files`,
@@ -174,6 +179,13 @@ answered 409 `This match already has a file`. Two ways back, and only these:
 
 Never a hand-run `UPDATE` or `INSERT` against `points`, `shots` or
 `match_stats`.
+
+A failed **console attempt** takes neither route: `DELETE /api/matches/[matchId]`
+is refused by the foreign key from `admin_file_attempts.match_id` (no cascade),
+and a re-invoke answers the attempt's own state — `claimed: false`,
+`state: "failed"`, 409 — before the pre-check. Its way back is the
+administrator review the console offers for a `failed` attempt, not this
+function.
 
 Before this RPC the function wrote in four separate statements, and a run that
 died between them left a match with `points` but no `match_stats` row — every
@@ -231,7 +243,8 @@ through, but `auth.getUser` rejects it and the function answers 401.
   path must start with `<userId>/` and contain no empty, `.` or `..` segment;
   a bare file name resolves to `<userId>/<fileName>`. One entry outside that
   folder refuses the whole request before any file is downloaded. An entry
-  containing `_admin-console`, `%` or `\` is refused the same way — that
+  that decodes to `_admin-console`, a `..` segment or a backslash is refused
+  the same way — that
   namespace is reachable only through a claim (see
   [Admin console path](#admin-console-path)), for which the body's
   `fileNames` is not read at all.
@@ -257,13 +270,13 @@ Error:
 }
 ```
 
-| Status | Meaning                                                                                                                                                                                                                                                                                                                                                               |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | Missing `matchId`/`fileNames`, an unsupported provider, a file outside the user's folder, or one naming the `_admin-console/` namespace (`_admin-console`, `%` or `\`)                                                                                                                                                                                                |
-| 401    | No bearer, or a bearer that is neither a user's access token nor the service role key                                                                                                                                                                                                                                                                                 |
-| 403    | The user is not the match's uploader (or, for the service role, the match has no uploader); or, on a console match, a user token that is not the admin who submitted it                                                                                                                                                                                               |
-| 409    | The match already has `points` rows — the pre-check, or `import_match_rows`'s own refusal when a concurrent run landed first — it has been processed and will not be run again; or a console attempt already in state `failed` (body `{ success: false, state, operationId, itemId }`)                                                                                |
-| 500    | The match could not be read, the claim RPC failed, a claimed file's bytes no longer match its validated sha256, or `import_match_rows` failed — nothing was persisted. A failure in the chained `generate-key-moments`/`generate-insights` invoke after the RPC is also a 500, but the rows are already committed and a retry answers 409 (see [Recovery](#recovery)) |
+| Status | Meaning                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | Missing `matchId`/`fileNames`, an unsupported provider, a file outside the user's folder, or one that decodes to the `_admin-console/` namespace, a `..` segment or a backslash                                                                                                                                                                                                                 |
+| 401    | No bearer, or a bearer that is neither a user's access token nor the service role key                                                                                                                                                                                                                                                                                                           |
+| 403    | The user is not the match's uploader (or, for the service role, the match has no uploader); or, on a console match, a user token that is not the admin who submitted it                                                                                                                                                                                                                         |
+| 409    | The match already has `points` rows — the pre-check, or `import_match_rows`'s own refusal when a concurrent run landed first — it has been processed and will not be run again; or a console attempt already in state `failed` (body `{ success: false, state, operationId, itemId }`)                                                                                                          |
+| 500    | The match could not be read, the claim RPC failed, a claimed file's bytes no longer match its validated sha256, or `import_match_rows` failed — nothing was persisted. A failure in the chained `generate-key-moments` invoke after the RPC is also a 500, but the rows are already committed and a retry answers 409; a `generate-insights` failure is only logged (see [Recovery](#recovery)) |
 
 A console attempt that is already `processing` or `completed` answers 200 with
 `{ success: state === "completed", state, operationId, itemId }` and reads

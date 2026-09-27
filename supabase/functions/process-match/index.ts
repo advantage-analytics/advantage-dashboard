@@ -126,18 +126,28 @@ async function authorizeCaller(
  * So does anything naming the admin console's `_admin-console/` namespace,
  * which is reachable only through a claim (`admin_claim_match_file`), never
  * through this list — and anything storage's URL normalisation could turn
- * into it or into a `..`: a `%` escape (`%5fadmin-console`, `%2e%2e`) or a
- * backslash separator. The storage policy that keeps user tokens out of that
- * namespace does not bind the service role this function downloads with.
+ * into it or into a `..`: a percent-escape (`%5fadmin-console`, `%2e%2e`) or
+ * a backslash separator. The checks run on the decoded form, so a literal `%`
+ * in an athlete's own file name ("Match 100%.xlsx", stored as typed) still
+ * resolves. The storage policy that keeps user tokens out of that namespace
+ * does not bind the service role this function downloads with.
  */
 function resolveStoragePath(userId: string, fileName: unknown): string | null {
   if (typeof fileName !== "string" || fileName.length === 0) {
     return null;
   }
-  if (/_admin-console|%|\\/.test(fileName)) {
+  // Judge the path as storage would read it, percent-escapes decoded. A name
+  // whose `%` is not a valid escape has nothing to decode and is judged as is.
+  let normalized = fileName;
+  try {
+    normalized = decodeURIComponent(fileName);
+  } catch {
+    normalized = fileName;
+  }
+  if (normalized.includes("\\") || /_admin-console/i.test(normalized)) {
     return null;
   }
-  const segments = fileName.split("/");
+  const segments = normalized.split("/");
   if (segments.some((s) => s === "" || s === "." || s === "..")) {
     return null;
   }
@@ -239,7 +249,7 @@ Deno.serve(async (req: Request) => {
       console.error("Error claiming the console attempt:", claimError);
       return claimError.code === "42501"
         ? refuse(403, "You do not have access to this match")
-        : refuse(500, `Failed to claim the match file: ${claimError.message}`);
+        : refuse(500, "Failed to claim the match file");
     }
     const claim = (claimData ?? null) as FileClaim | null;
     if (claim && !claim.claimed) {
@@ -306,13 +316,15 @@ Deno.serve(async (req: Request) => {
     if (!claim && caller.kind === "user" && caller.userId !== createdBy) {
       return refuse(403, "You do not have access to this match");
     }
+    // A claimed attempt reads its one file from the claim, so it needs no
+    // uploader folder: `actorId` may be null once the submitting admin's
+    // account is gone, and that is no reason to fail the attempt.
     const userId = claim
       ? claim.actorId
       : caller.kind === "user"
         ? caller.userId
         : createdBy;
-    if (!userId) {
-      await failAttempt();
+    if (!claim && !userId) {
       return refuse(403, "This match has no uploader to read files for");
     }
 
@@ -346,6 +358,7 @@ Deno.serve(async (req: Request) => {
     // attempt's file is the claim's, never this list.
     if (
       !claim &&
+      userId &&
       fileNames.some((name) => resolveStoragePath(userId, name) === null)
     ) {
       return refuse(
@@ -386,7 +399,7 @@ Deno.serve(async (req: Request) => {
             storagePath: claim.request.storagePath,
             sha256: claim.request.sha256,
           }
-        : { kind: "folder", userId, fileNames },
+        : { kind: "folder", userId: userId as string, fileNames },
       matchFormat,
     });
 

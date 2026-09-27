@@ -206,7 +206,8 @@ type Claim =
   | {
       claimed: true;
       claim_token: string;
-      actorId: string;
+      /** Null once the submitting admin's account is gone. */
+      actorId: string | null;
       request: { storagePath: string; sha256: string };
     };
 
@@ -220,6 +221,8 @@ async function invoke({
   claimError = null,
   rpcError = null,
   finishError = null,
+  matchError = null,
+  pointsError = null,
 }: {
   bearer?: string;
   body: Record<string, unknown>;
@@ -235,6 +238,10 @@ async function invoke({
   rpcError?: RpcError | null;
   /** What `admin_finish_match_file` answers; null is success. */
   finishError?: RpcError | null;
+  /** An error from the `matches` read instead of the row. */
+  matchError?: RpcError | null;
+  /** An error from the existing-`points` read instead of its rows. */
+  pointsError?: RpcError | null;
 }) {
   let handler!: (request: Request) => Promise<Response>;
   const events: string[] = [];
@@ -243,6 +250,7 @@ async function invoke({
   const from = (table: string) => {
     const resolve = () => {
       if (table === "matches") {
+        if (matchError) return { data: null, error: matchError };
         return {
           data: {
             source_provider: "swing-vision",
@@ -252,7 +260,11 @@ async function invoke({
           error: null,
         };
       }
-      if (table === "points") return { data: existingPoints, error: null };
+      if (table === "points") {
+        return pointsError
+          ? { data: null, error: pointsError }
+          : { data: existingPoints, error: null };
+      }
       return { data: [], error: null };
     };
     const query: Record<string, unknown> = {};
@@ -617,20 +629,47 @@ function consoleBody(storagePath: string) {
   };
 }
 
+/** An `admin_finish_match_file` call's args for the given settlement. */
+const finishArgs = (p_error: string | null) => ({
+  p_match_id: MATCH,
+  p_claim_token: CLAIM_TOKEN,
+  p_error,
+});
+
+/**
+ * A claimed console call with the harness's usual defaults: the service-role
+ * bearer, no created_by (a console attachment to an existing match may carry
+ * none), and the claim's own file and bytes. Callers override only what the
+ * case under test needs to vary.
+ */
+function invokeClaimed(
+  claim: Extract<Claim, { claimed: true }>,
+  workbook: Buffer<ArrayBuffer>,
+  overrides: Partial<Parameters<typeof invoke>[0]> = {},
+) {
+  return invoke({
+    bearer: SERVICE_ROLE_KEY,
+    body: consoleBody(claim.request.storagePath),
+    createdBy: null,
+    workbook,
+    claim,
+    ...overrides,
+  });
+}
+
 test("a claimed console attempt is read from the claim, not the body, and finished completed", async () => {
   const workbook = await exportWorkbook();
   const claim = claimOver(workbook);
   const { storagePath } = claim.request;
   // created_by is null — a console attachment to an existing match may carry
   // none — and the service role alone would be refused (see the case above);
-  // the claim's actor is the identity.
-  const { status, json, events, argsOf } = await invoke({
-    bearer: SERVICE_ROLE_KEY,
-    body: consoleBody(storagePath),
-    createdBy: null,
-    workbook,
+  // the claim's actor is the identity. The body names a different, ordinary
+  // file, so the download below can only have come from the claim.
+  const { status, json, events, argsOf } = await invokeClaimed(
     claim,
-  });
+    workbook,
+    { body: { ...consoleBody(storagePath), fileNames: [OWN_FILE] } },
+  );
   expect(status).toBe(200);
   expect(json).toEqual({ success: true });
   expect(events).toEqual([
@@ -643,9 +682,7 @@ test("a claimed console attempt is read from the claim, not the body, and finish
     "invoke:generate-insights",
     "rpc:admin_finish_match_file",
   ]);
-  expect(argsOf("admin_finish_match_file")).toEqual([
-    { p_match_id: MATCH, p_claim_token: CLAIM_TOKEN, p_error: null },
-  ]);
+  expect(argsOf("admin_finish_match_file")).toEqual([finishArgs(null)]);
   // The rows themselves are the ordinary ones: same keys, same keying.
   const [args] = argsOf("import_match_rows");
   expect(args.p_match_id).toBe(MATCH);
@@ -699,33 +736,16 @@ test("a claimed file whose bytes no longer hash to the validated sha256 fails th
       `download:match-data/${storagePath}`,
       "rpc:admin_finish_match_file",
     ],
-    finish: [
-      {
-        p_match_id: MATCH,
-        p_claim_token: CLAIM_TOKEN,
-        p_error: REVIEW_REQUIRED,
-      },
-    ],
+    finish: [finishArgs(REVIEW_REQUIRED)],
   };
-  const run = await invoke({
-    bearer: SERVICE_ROLE_KEY,
-    body: consoleBody(storagePath),
-    createdBy: null,
-    workbook,
-    claim,
-  });
+  const run = await invokeClaimed(claim, workbook);
   expect(run.status).toBe(expected.status);
   expect(run.json).toEqual(expected.json);
   expect(run.events).toEqual(expected.events);
   expect(run.argsOf("admin_finish_match_file")).toEqual(expected.finish);
 
   // The finish call's own error is logged, never the answer.
-  const logged = await invoke({
-    bearer: SERVICE_ROLE_KEY,
-    body: consoleBody(storagePath),
-    createdBy: null,
-    workbook,
-    claim,
+  const logged = await invokeClaimed(claim, workbook, {
     finishError: { code: "22023", message: "invalid-file-claim" },
   });
   expect(logged.status).toBe(expected.status);
@@ -742,17 +762,10 @@ test("a claimed attempt on a match with points, or refused by the RPC, is a 409 
     success: false,
     error: "This match has already been processed",
   };
-  const finish = [
-    { p_match_id: MATCH, p_claim_token: CLAIM_TOKEN, p_error: REVIEW_REQUIRED },
-  ];
+  const finish = [finishArgs(REVIEW_REQUIRED)];
 
   // The pre-check: nothing is downloaded.
-  const preCheck = await invoke({
-    bearer: SERVICE_ROLE_KEY,
-    body: consoleBody(storagePath),
-    createdBy: null,
-    workbook,
-    claim,
+  const preCheck = await invokeClaimed(claim, workbook, {
     existingPoints: [{ id: "existing-point" }],
   });
   expect(preCheck.status).toBe(409);
@@ -766,12 +779,7 @@ test("a claimed attempt on a match with points, or refused by the RPC, is a 409 
   expect(preCheck.argsOf("admin_finish_match_file")).toEqual(finish);
 
   // import_match_rows's unique_violation: nothing is invoked.
-  const rpc = await invoke({
-    bearer: SERVICE_ROLE_KEY,
-    body: consoleBody(storagePath),
-    createdBy: null,
-    workbook,
-    claim,
+  const rpc = await invokeClaimed(claim, workbook, {
     rpcError: { code: "23505", message: "match already has points" },
   });
   expect(rpc.status).toBe(409);
@@ -790,14 +798,11 @@ test("a claimed attempt on a match with points, or refused by the RPC, is a 409 
 test("a completed-finish error is thrown, and the attempt is then failed for review", async () => {
   const workbook = await exportWorkbook();
   const claim = claimOver(workbook);
-  const { status, json, events, argsOf } = await invoke({
-    bearer: SERVICE_ROLE_KEY,
-    body: consoleBody(claim.request.storagePath),
-    createdBy: null,
-    workbook,
+  const { status, json, events, argsOf } = await invokeClaimed(
     claim,
-    finishError: { code: "57014", message: "statement timeout" },
-  });
+    workbook,
+    { finishError: { code: "57014", message: "statement timeout" } },
+  );
   // The rows are committed by now; the caller learns the settlement failed,
   // and the attempt reads `failed` (with a full match behind it) rather than
   // staying `processing` with nothing to poll for.
@@ -809,15 +814,16 @@ test("a completed-finish error is thrown, and the attempt is then failed for rev
     "rpc:admin_finish_match_file",
   ]);
   expect(argsOf("admin_finish_match_file")).toEqual([
-    { p_match_id: MATCH, p_claim_token: CLAIM_TOKEN, p_error: null },
-    { p_match_id: MATCH, p_claim_token: CLAIM_TOKEN, p_error: REVIEW_REQUIRED },
+    finishArgs(null),
+    finishArgs(REVIEW_REQUIRED),
   ]);
 });
 
 test("a user token the claim refuses is answered 403 before any table read", async () => {
+  const body = { matchId: MATCH, fileNames: [OWN_FILE] };
   const { status, json, events } = await invoke({
     bearer: "owner-token",
-    body: { matchId: MATCH, fileNames: [OWN_FILE] },
+    body,
     claimError: { code: "42501", message: "admin-required" },
   });
   expect(status).toBe(403);
@@ -827,13 +833,14 @@ test("a user token the claim refuses is answered 403 before any table read", asy
   // Any other claim failure is the database's, not the caller's.
   const other = await invoke({
     bearer: "owner-token",
-    body: { matchId: MATCH, fileNames: [OWN_FILE] },
+    body,
     claimError: { code: "PGRST202", message: "function not found" },
   });
   expect(other.status).toBe(500);
   expect(other.json).toEqual({
     success: false,
-    error: "Failed to claim the match file: function not found",
+    // A fixed string: the database's message is only logged.
+    error: "Failed to claim the match file",
   });
   expect(other.events).toEqual(["getUser:anon", "rpc:admin_claim_match_file"]);
 });
@@ -857,4 +864,81 @@ test("the console namespace and its escaped aliases are refused for every non-cl
       "read:matches",
     ]);
   }
+});
+
+test("an athlete's own file name with a literal % is not mistaken for an escape", async () => {
+  // "100%." is not a valid percent-escape, so there is nothing to decode and
+  // the name is judged as typed: in the owner's folder, no alias.
+  const fileName = `${OWNER}/swing-vision/${MATCH}/Match 100%.xlsx`;
+  const { status, json, events } = await invoke({
+    bearer: "owner-token",
+    body: { matchId: MATCH, fileNames: [fileName] },
+    workbook: await exportWorkbook(),
+  });
+  expect(status).toBe(200);
+  expect(json).toEqual({ success: true });
+  expect(events).toContain(`download:match-data/${fileName}`);
+});
+
+test("a claimed attempt whose actor is gone still completes from the claim", async () => {
+  const workbook = await exportWorkbook();
+  const claim = { ...claimOver(workbook), actorId: null };
+  const { storagePath } = claim.request;
+  const { status, json, events, argsOf } = await invokeClaimed(claim, workbook);
+  expect(status).toBe(200);
+  expect(json).toEqual({ success: true });
+  expect(events).toEqual([
+    "rpc:admin_claim_match_file",
+    "read:matches",
+    "read:points",
+    `download:match-data/${storagePath}`,
+    "rpc:import_match_rows",
+    "invoke:generate-key-moments",
+    "invoke:generate-insights",
+    "rpc:admin_finish_match_file",
+  ]);
+  expect(argsOf("admin_finish_match_file")).toEqual([finishArgs(null)]);
+});
+
+test("a claimed attempt whose match read fails is a 500 that fails the attempt", async () => {
+  const workbook = await exportWorkbook();
+  const { status, json, events, argsOf } = await invokeClaimed(
+    claimOver(workbook),
+    workbook,
+    { matchError: { code: "57014", message: "statement timeout" } },
+  );
+  expect(status).toBe(500);
+  expect(json.success).toBe(false);
+  expect(events).toEqual([
+    "rpc:admin_claim_match_file",
+    "read:matches",
+    "rpc:admin_finish_match_file",
+  ]);
+  expect(events.some((e) => e.startsWith("download:"))).toBe(false);
+  expect(argsOf("import_match_rows")).toEqual([]);
+  expect(argsOf("admin_finish_match_file")).toEqual([
+    finishArgs(REVIEW_REQUIRED),
+  ]);
+});
+
+test("a claimed attempt whose points read fails is a 500 that fails the attempt", async () => {
+  const workbook = await exportWorkbook();
+  const { status, json, events, argsOf } = await invokeClaimed(
+    claimOver(workbook),
+    workbook,
+    { pointsError: { code: "57014", message: "statement timeout" } },
+  );
+  expect(status).toBe(500);
+  expect(json.success).toBe(false);
+  expect(events).toEqual([
+    "rpc:admin_claim_match_file",
+    "read:matches",
+    "read:points",
+    "rpc:admin_finish_match_file",
+  ]);
+  expect(events.some((e) => e.startsWith("download:"))).toBe(false);
+  expect(argsOf("import_match_rows")).toEqual([]);
+  expect(argsOf("admin_finish_match_file")).toEqual([
+    finishArgs(REVIEW_REQUIRED),
+  ]);
 });
