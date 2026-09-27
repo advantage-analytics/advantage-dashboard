@@ -342,7 +342,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T24 · Add admin_abandon_result_items and make abandoned dual/tournament items terminal
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T21
 - **files:** Best guesses: new `supabase/migrations/<live-version>_abandon_admin_result_items.sql`; new `tests/database/admin-abandon-results.test.mjs` on `tests/database/fixtures/admin-schedule-harness.mjs`; `docs/admin-dual-results.md`, `docs/admin-tournament-results.md`.

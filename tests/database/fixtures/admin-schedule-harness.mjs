@@ -23,6 +23,10 @@ export async function setup(extraMigrations = [], db = new PGlite()) {
  create table matches(id uuid primary key default gen_random_uuid(),created_by uuid,program_id uuid,event_entry_id uuid references program_event_entries(id),player1_id uuid,player1_name text,player2_name text,tournament_name text,round text,date timestamptz,match_type text,court_type text,format jsonb,score jsonb,result text,source_provider text,analysis_method text,private boolean);
  create table processing_jobs(id uuid primary key,match_id uuid,created_by uuid);
  create table match_files(id uuid primary key,match_id uuid,uploaded_by uuid);
+ -- Never written here: 20260927084958 (T21) declares row variables of these two
+ -- types, and PL/pgSQL resolves them when the function is created.
+ create table admin_video_attempts(operation_id uuid,item_id uuid,match_id uuid,job_id uuid,request jsonb,primary key(operation_id,item_id));
+ create table admin_file_attempts(operation_id uuid,item_id uuid,match_id uuid,file_id uuid,request jsonb,state text,claim_token uuid,error_code text,started_at timestamptz,completed_at timestamptz,primary key(operation_id,item_id));
  create table program_audit_log(id bigint generated always as identity primary key,program_id uuid,actor_user_id uuid,action text,subject_id uuid,details jsonb,constraint program_audit_log_action_check check(action='program.conference_changed'));
  create function user_program_ids() returns setof uuid language sql stable security definer set search_path='' as $$ select program_id from public.program_members where user_id=auth.uid() $$;
  create function can_manage_program_schedule(p uuid) returns boolean language sql stable security definer set search_path='' as $$ select exists(select 1 from public.program_members where program_id=p and user_id=auth.uid() and role in ('owner','coach','staff')) $$;

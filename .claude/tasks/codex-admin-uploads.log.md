@@ -201,3 +201,15 @@ The eight admin-upload migrations the entries above call unapplied were applied 
 
 1. Mention the GET-status fallback in `docs/admin-match-file-submissions.md`'s GET paragraph.
 2. Add a dedicated test for the non-JSON-body trigger (shares the reject path, untested on its own).
+
+## T24 · Add admin_abandon_result_items and make abandoned dual/tournament items terminal — done
+
+**gate:** mechanical PASS · completion pass
+
+**changed:** New service-role-only RPC `admin_abandon_result_items(p_actor_id, p_operation_id)` (any current admin; dual/tournament only; each pending item takes its entry version lock then goes failed/`abandoned`; one `console.submission_reconciled` audit row naming the abandoned ids) and `admin_apply_dual_result` / `admin_apply_tournament_result` patched via the functiondef-replace pattern so an `abandoned` item returns without re-applying. Applied live via the Supabase MCP; file renamed to recorded version 20260927094436; live bodies verified to carry the new early-return. New PGlite `tests/database/admin-abandon-results.test.mjs` (3 tests; test:database 23/23); schedule harness gained two empty stub tables (`admin_video_attempts`, `admin_file_attempts`) because T21's function declares row-typed variables of them — the task note's "creates only a function" was inaccurate. Both result docs gained a paragraph. Deliberate: no audit row on a no-op re-run; item `result` not annotated; extra return keys (abandonedItemIds, kind, programId, eventId).
+
+**follow-ups:**
+
+1. Nothing in `src/` calls `admin_abandon_result_items` yet — T25 wires it; the dual/tournament services and history UI should treat `abandoned` as terminal (no retry affordance).
+2. Add a T24 paragraph to `docs/admin-uploads-contracts.md` alongside T21's.
+3. `docs/README.md` does not index `admin-dual-results.md` / `admin-tournament-results.md` (pre-existing gap).
