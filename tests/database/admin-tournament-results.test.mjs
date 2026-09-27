@@ -2,7 +2,7 @@ import { tournamentRequest as request } from "./fixtures/admin-result-requests.m
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { id, setup } from "./fixtures/admin-schedule-harness.mjs";
-const migration = "20260917032144_save_admin_tournament_results.sql";
+const migration = "20260919045138_save_admin_tournament_results.sql";
 const reject = (fn, message) =>
   assert.rejects(fn, (e) => e.message.includes(message));
 async function harness() {

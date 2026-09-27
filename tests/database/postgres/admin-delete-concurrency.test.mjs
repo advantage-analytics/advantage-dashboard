@@ -20,7 +20,7 @@ test("deletion and console admission serialize in both orders", async () => {
     await db.exec(
       await readFile(
         new URL(
-          "../../../supabase/migrations/20260917072323_guard_admin_match_storage_purge.sql",
+          "../../../supabase/migrations/20260919045221_guard_admin_match_storage_purge.sql",
           import.meta.url,
         ),
         "utf8",

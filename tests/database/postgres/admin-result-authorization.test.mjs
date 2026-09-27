@@ -10,7 +10,7 @@ import {
 test("schedule batch and result target RLS permits admins only and exposes no browser mutations", async () => {
   const p = await postgresHarness();
   try {
-    await setup(["20260917032144_save_admin_tournament_results.sql"], p.db);
+    await setup(["20260919045138_save_admin_tournament_results.sql"], p.db);
     const session = await p.connect();
     await role(session, id(2));
     await session.query("select admin_prepare_dual_results($1,$2,$3,$4)", [

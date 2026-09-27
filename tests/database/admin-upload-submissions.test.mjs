@@ -21,7 +21,7 @@ const file = uuid(30),
   outcome = uuid(40);
 const migration = await readFile(
   new URL(
-    "../../supabase/migrations/20260917000513_persist_admin_upload_submissions.sql",
+    "../../supabase/migrations/20260919044542_persist_admin_upload_submissions.sql",
     import.meta.url,
   ),
   "utf8",

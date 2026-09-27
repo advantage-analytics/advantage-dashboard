@@ -308,7 +308,7 @@ async function resultHarness(kind) {
   const p = await postgresHarness();
   try {
     await scheduleSetup(
-      ["20260917032144_save_admin_tournament_results.sql"],
+      ["20260919045138_save_admin_tournament_results.sql"],
       p.db,
     );
     const a = await p.connect(),

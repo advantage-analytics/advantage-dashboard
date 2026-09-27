@@ -12,7 +12,7 @@
  * "splitstep": the video pipeline is "Advantage Intelligence" in every
  * user-visible string. `console.result_added` and `console.analysis_attached`
  * are NOT that pipeline, though the name suggests it — their only writer
- * (migration `20260917000513_persist_admin_upload_submissions.sql`, commit
+ * (migration `20260919044542_persist_admin_upload_submissions.sql`, commit
  * `5a8d47d6`) inserts them from the admin console's own upload flow
  * (`details.origin: 'admin_console'`), for an admin entering a match result
  * or attaching an analysis file by hand from that console.

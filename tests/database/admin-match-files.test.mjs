@@ -33,9 +33,9 @@ test("file admission, attachment preservation and durable processing claims exec
  insert into matches values ('${id(20)}','${id(3)}','${id(10)}','${id(30)}','${id(4)}',null,null,'Athlete','Opponent','{"sets":[[6,4],[7,6]],"winner":1,"tiebreaks":[null,[7,4]]}','Final Score','F','Open','2026-09-15','Singles','{"ad_scoring":true}','Hard',null,'manual',false);
  `);
     for (const name of [
-      "20260917000513_persist_admin_upload_submissions.sql",
-      "20260917004400_prepare_admin_analysis_attachments.sql",
-      "20260917010000_submit_admin_match_files.sql",
+      "20260919044542_persist_admin_upload_submissions.sql",
+      "20260919044622_prepare_admin_analysis_attachments.sql",
+      "20260919044716_submit_admin_match_files.sql",
     ])
       await db.exec(
         await readFile(

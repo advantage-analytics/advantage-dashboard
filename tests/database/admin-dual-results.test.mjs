@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { id, setup as setupBase } from "./fixtures/admin-schedule-harness.mjs";
 const setup = () =>
-  setupBase(["20260917032144_save_admin_tournament_results.sql"]);
+  setupBase(["20260919045138_save_admin_tournament_results.sql"]);
 const rejects = (fn, text) =>
   assert.rejects(fn, (e) => e.message.includes(text));
 test("dual setup validates everything before writes and replays exact actor-owned setup", async () => {

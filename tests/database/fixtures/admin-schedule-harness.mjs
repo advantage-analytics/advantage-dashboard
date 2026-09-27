@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 export const id = (n) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-const migration = "20260917025856_save_admin_dual_results.sql";
+const migration = "20260919045015_save_admin_dual_results.sql";
 export async function setup(extraMigrations = [], db = new PGlite()) {
   await db.exec(`
  create role anon; create role authenticated; create role service_role;
@@ -45,7 +45,7 @@ export async function setup(extraMigrations = [], db = new PGlite()) {
     ),
   );
   for (const name of [
-    "20260917000513_persist_admin_upload_submissions.sql",
+    "20260919044542_persist_admin_upload_submissions.sql",
     migration,
     ...extraMigrations,
   ])

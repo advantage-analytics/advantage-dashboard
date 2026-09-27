@@ -33,9 +33,9 @@ test("attachment SQL preserves results, revalidates and serializes reservation i
  insert into matches values ('${id(20)}','${id(3)}','${id(10)}','${id(30)}','${id(4)}',null,null,'Athlete','Opponent','{"sets":[[6,4],[7,6]],"winner":1,"tiebreaks":[null,[7,4]]}','Final Score','F','Open','2026-09-15','Singles','{"ad_scoring":true}','Hard',null,'manual');
  `);
     for (const name of [
-      "20260917000513_persist_admin_upload_submissions.sql",
-      "20260917004400_prepare_admin_analysis_attachments.sql",
-      "20260917065829_fix_admin_attachment_shot_lookup.sql",
+      "20260919044542_persist_admin_upload_submissions.sql",
+      "20260919044622_prepare_admin_analysis_attachments.sql",
+      "20260919045156_fix_admin_attachment_shot_lookup.sql",
     ])
       await db.exec(
         await readFile(

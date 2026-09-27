@@ -34,11 +34,11 @@ export async function setup(db = new PGlite()) {
     "CREATE OR REPLACE FUNCTION public.reserve_processing_quota(p_job_id uuid, p_account_id uuid, p_account_type text, p_created_by uuid, p_billing_month date, p_seconds integer, p_cap_seconds integer)\n RETURNS TABLE(ok boolean, used_seconds integer, cap_seconds integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_used integer;\nbegin\n  if p_seconds is null or p_seconds <= 0 then\n    raise exception 'reserve_processing_quota: p_seconds must be positive, got %', p_seconds;\n  end if;\n\n  -- Serialize every reservation for this account+month. Transaction-scoped, so\n  -- it releases on commit or rollback without any cleanup path.\n  perform pg_advisory_xact_lock(\n    hashtext(p_account_id::text || ':' || p_billing_month::text)\n  );\n\n  -- A released row is a refund and must not count. Where a job has finished,\n  -- actual_seconds is the truth; until then the reservation stands in for it.\n  select coalesce(sum(coalesce(u.actual_seconds, u.reserved_seconds)), 0)\n    into v_used\n    from public.processing_usage u\n   where u.account_id = p_account_id\n     and u.billing_month = p_billing_month\n     and u.released = false;\n\n  if v_used + p_seconds > p_cap_seconds then\n    return query select false, v_used, p_cap_seconds;\n    return;\n  end if;\n\n  insert into public.processing_usage\n    (account_id, account_type, billing_month, job_id, created_by, reserved_seconds)\n  values\n    (p_account_id, p_account_type, p_billing_month, p_job_id, p_created_by, p_seconds);\n\n  return query select true, v_used + p_seconds, p_cap_seconds;\nend;\n$function$\n",
   );
   for (const name of [
-    "20260917000513_persist_admin_upload_submissions.sql",
-    "20260917004400_prepare_admin_analysis_attachments.sql",
-    "20260917010000_submit_admin_match_files.sql",
-    "20260917011813_submit_admin_match_videos.sql",
-    "20260917065829_fix_admin_attachment_shot_lookup.sql",
+    "20260919044542_persist_admin_upload_submissions.sql",
+    "20260919044622_prepare_admin_analysis_attachments.sql",
+    "20260919044716_submit_admin_match_files.sql",
+    "20260919044829_submit_admin_match_videos.sql",
+    "20260919045156_fix_admin_attachment_shot_lookup.sql",
   ])
     await db.exec(
       await readFile(
