@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { toClaimRole } from "./claim-roles";
+import { displayName } from "./invite-acceptance";
 
 /**
  * A signed-in coach asking to join an existing CUSTOM org from the 7.2 setup
@@ -97,13 +98,26 @@ export async function requestToJoinCustomOrg(
   // none of that, so it stays custom-only.
   if (program.org_type === "college") return { ok: false, reason: "college" };
 
-  const { data: membership, error: memberError } = await clients.admin
-    .from("program_members")
-    .select("id")
-    .eq("program_id", programId)
-    .eq("user_id", user.id)
-    .limit(1)
-    .maybeSingle();
+  // Membership and the caller's own name come from different tables under
+  // different clients and don't depend on each other, so they go out together.
+  const [membershipResult, profileResult] = await Promise.all([
+    clients.admin
+      .from("program_members")
+      .select("id")
+      .eq("program_id", programId)
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle(),
+    // Own-row RLS: this returns the caller's row or nothing. A coach with no
+    // name yet files as a bare address, the same as the college form allows.
+    clients.session
+      .from("users")
+      .select("first_name, last_name")
+      .eq("id", user.id)
+      .maybeSingle(),
+  ]);
+  const { data: membership, error: memberError } = membershipResult;
+  const { data: profile } = profileResult;
 
   if (memberError) {
     console.error("[join-custom-org] could not read memberships", {
@@ -113,19 +127,10 @@ export async function requestToJoinCustomOrg(
   }
   if (membership) return { ok: false, reason: "already-member" };
 
-  // Own-row RLS: this returns the caller's row or nothing. A coach with no
-  // name yet files as a bare address, the same as the college form allows.
-  const { data: profile } = await clients.session
-    .from("users")
-    .select("first_name, last_name")
-    .eq("id", user.id)
-    .maybeSingle();
-  const requesterName =
-    [profile?.first_name, profile?.last_name]
-      .filter((part): part is string => typeof part === "string")
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .join(" ") || null;
+  const requesterName = displayName(
+    profile?.first_name ?? null,
+    profile?.last_name ?? null,
+  );
 
   // The same columns `fileRequest` writes for the college path, with the two
   // that path leaves to the form fixed to the session's own facts.

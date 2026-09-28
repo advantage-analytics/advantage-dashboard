@@ -43,23 +43,25 @@ export default async function TeamRequestedPage({
   if (!user || !email) redirect("/login");
 
   const admin = createAdminClient();
-  const { data: request } = await admin
-    .from("program_requests")
-    .select("id")
-    .eq("kind", "invite_request")
-    .eq("status", "open")
-    .eq("program_id", team)
-    .ilike("email", email)
-    .limit(1)
-    .maybeSingle();
-  if (!request) redirect("/claim/team/type");
-
-  const { data: program } = await admin
-    .from("programs")
-    .select("school_name, org_type")
-    .eq("id", team)
-    .maybeSingle();
-  if (!program || !isCustomOrgType(program.org_type)) {
+  // Neither query depends on the other's result — both only need `team` (and
+  // the request check also needs `email`) — so they go out together.
+  const [{ data: request }, { data: program }] = await Promise.all([
+    admin
+      .from("program_requests")
+      .select("id")
+      .eq("kind", "invite_request")
+      .eq("status", "open")
+      .eq("program_id", team)
+      .eq("email", email)
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("programs")
+      .select("school_name, org_type")
+      .eq("id", team)
+      .maybeSingle(),
+  ]);
+  if (!request || !program || !isCustomOrgType(program.org_type)) {
     redirect("/claim/team/type");
   }
 

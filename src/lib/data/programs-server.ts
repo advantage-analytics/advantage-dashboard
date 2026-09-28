@@ -10,6 +10,10 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { titleCaseName } from "@/lib/data/person-name";
+import {
+  isCustomOrgType,
+  type CustomOrgType,
+} from "@/lib/services/programs/custom-org";
 
 /**
  * The published facts about a program — the columns every result row carries,
@@ -211,23 +215,6 @@ export async function searchPrograms(
   }
 
   return ((data ?? []) as Record<string, unknown>[]).map(toResult);
-}
-
-/**
- * The four self-serve org types `create_custom_program` accepts. 'college' is
- * deliberately not one of them: collegiate programs are the seeded directory.
- */
-export const CUSTOM_ORG_TYPES = [
-  "club",
-  "high_school",
-  "academy",
-  "other",
-] as const;
-
-export type CustomOrgType = (typeof CUSTOM_ORG_TYPES)[number];
-
-export function isCustomOrgType(value: unknown): value is CustomOrgType {
-  return (CUSTOM_ORG_TYPES as readonly unknown[]).includes(value);
 }
 
 /**
