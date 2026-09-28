@@ -130,7 +130,7 @@ ready).
 
 ## T10 · Add Prequalifying and PQ Consolation to the draw vocabulary
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **files:** src/lib/schedule/format.ts (`ROUND_ORDER`, `ROUND_LONG`, `drawOfRound`), src/lib/schedule/tournament-run.ts (`nextRound` first-round pick, `groupByDraw`), src/components/dashboard/schedule/static/static-tournament-builder.tsx (`DRAWS`, `MAIN_DRAW`, `QUALIFYING` ~line 1382, the per-row draw menu), src/components/dashboard/schedule/score-only-flow.tsx (Round menu), src/lib/schedule/fixtures.ts, tests/schedule-format.spec.ts (or wherever `drawOfRound`/`roundRank` are pinned), tests/tournament-run.spec.ts, tests/schedule-static-copy.spec.ts
 - **done when:**
