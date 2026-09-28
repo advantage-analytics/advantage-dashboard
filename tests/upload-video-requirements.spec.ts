@@ -228,6 +228,37 @@ test.describe("frame-rate boundary", () => {
       false,
     );
   });
+
+  // Browsers without requestVideoFrameCallback (Firefox) report no sampled
+  // rate, but the container read still works — so the average stands in.
+  test("with no sampled rate, a sub-29.96 average still gets the VFR warning", () => {
+    const p = probe({ fps: null, averageFps: 29.94 });
+    const result = evaluateVideoProbe(p);
+
+    expect(result.success).toBe(true);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings?.[0]).toContain("29.94 fps");
+    expect(result.warnings?.[0]).toContain("constant 30 fps");
+    expect(result.warnings?.[0]).not.toContain("can't measure");
+    expect(formatProbeFps(p)).toBe("29.94 fps");
+  });
+
+  test("with no sampled rate, an average under the floor is refused", () => {
+    const result = evaluateVideoProbe(probe({ fps: null, averageFps: 24 }));
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("24 fps");
+  });
+
+  test("with no sampled rate, a constant 29.97 average passes and reads as 30", () => {
+    const p = probe({ fps: null, averageFps: 29.97 });
+    const result = evaluateVideoProbe(p);
+
+    expect(result.success).toBe(true);
+    expect(result.warnings?.join(" ") ?? "").not.toContain("can't measure");
+    expect(result.warnings?.join(" ") ?? "").not.toContain("constant 30 fps");
+    expect(formatProbeFps(p)).toBe("30 fps");
+  });
 });
 
 test.describe("unknown metadata stays distinct from a known violation", () => {

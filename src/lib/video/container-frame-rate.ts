@@ -86,11 +86,8 @@ export async function readAverageFrameRate(
   options?: { deadlineMs?: number },
 ): Promise<number | null> {
   const deadlineMs = options?.deadlineMs ?? CONTAINER_FRAME_RATE_DEADLINE_MS;
-  let work: Promise<number | null>;
-  try {
-    work = readUnbounded(file);
-  } catch {
-    return null;
-  }
-  return withDeadline(work, deadlineMs);
+  // readUnbounded is async, so calling it can never throw synchronously —
+  // any failure surfaces as a rejection, which withDeadline already turns
+  // into null.
+  return withDeadline(readUnbounded(file), deadlineMs);
 }

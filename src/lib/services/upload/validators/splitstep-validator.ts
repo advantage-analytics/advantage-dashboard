@@ -147,15 +147,28 @@ function averageInWarnBand(probe: VideoProbe): probe is VideoProbe & {
 }
 
 /**
+ * The frame rate the checks judge: the sampled rate when the browser could
+ * measure one, otherwise the whole-track container average snapped the same
+ * way. The fallback matters in browsers without `requestVideoFrameCallback`
+ * (Firefox): the sample is null there, but the container read still works, and
+ * without it a 24 fps MP4 would skip the floor and fail only after upload.
+ * Null only when neither is known.
+ */
+function effectiveFps(probe: VideoProbe): number | null {
+  if (probe.fps !== null) return probe.fps;
+  return probe.averageFps != null ? snapToStandardFps(probe.averageFps) : null;
+}
+
+/**
  * The frame rate to show beside a checked video: the whole-track average to 2
  * decimals when the variable-frame-rate warning applies (so the fact agrees
- * with the warning under it), the probe's snapped rate otherwise, and null
- * when the rate is unknown.
+ * with the warning under it), the effective rate otherwise, and null when the
+ * rate is unknown.
  */
 export function formatProbeFps(probe: VideoProbe): string | null {
-  if (probe.fps === null) return null;
   if (averageInWarnBand(probe)) return `${probe.averageFps.toFixed(2)} fps`;
-  return `${probe.fps} fps`;
+  const fps = effectiveFps(probe);
+  return fps === null ? null : `${fps} fps`;
 }
 
 /**
@@ -163,8 +176,10 @@ export function formatProbeFps(probe: VideoProbe): string | null {
  *
  * The frame-rate comparison snaps first, so the 30 floor sees 30 for NTSC
  * 29.97 footage whether or not the caller's `fps` had already been rounded.
- * A null fps is "the browser wouldn't say", which is a warning and never a
- * refusal — see the module comment.
+ * The rate judged is the sampled one, or the container average when the
+ * browser could not sample (see `effectiveFps`). Only when neither is known is
+ * it "the browser wouldn't say", which is a warning and never a refusal — see
+ * the module comment.
  */
 export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   const details: ValidationResult["details"] = { video: probe };
@@ -182,10 +197,11 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   // 29.97 clears the 30 floor here as well, and not only because probe.ts
   // happened to round it on the way in; the message still quotes the rate the
   // file reported, which is the number the camera's menu shows.
-  if (probe.fps !== null && snapToStandardFps(probe.fps) < MIN_VIDEO_FPS) {
+  const fps = effectiveFps(probe);
+  if (fps !== null && snapToStandardFps(fps) < MIN_VIDEO_FPS) {
     return {
       success: false,
-      error: `Video runs at ${probe.fps} fps. Analysis needs at least ${MIN_VIDEO_FPS} fps.`,
+      error: `Video runs at ${fps} fps. Analysis needs at least ${MIN_VIDEO_FPS} fps.`,
       details,
     };
   }
@@ -203,23 +219,24 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
 
   const warnings: string[] = [];
 
-  if (probe.fps === null) {
+  if (averageInWarnBand(probe)) {
+    // First, because it is the one line that can cost the upload, and it only
+    // needs the container average — so it fires even where the browser could
+    // not sample a rate. Replaces the other frame-rate lines below: one
+    // frame-rate line per file. Warn, never block — see the module comment.
+    warnings.push(
+      `This recording averages ${probe.averageFps.toFixed(2)} fps, which usually means a variable frame rate, and ${PROVIDER_DISPLAY_NAME} may reject it. Exporting at a constant 30 fps avoids that.`,
+    );
+  } else if (fps === null) {
     // Says three things on purpose: what we could not do, that the requirement
     // is unchanged by our not being able to check it, and who refuses the file
     // if it is wrong. Without the last clause this reads as permission.
     warnings.push(
       `This browser can't measure frame rate. Analysis still needs at least ${MIN_VIDEO_FPS} fps — check your camera setting, because ${PROVIDER_DISPLAY_NAME} can still reject the video after it uploads.`,
     );
-  } else if (averageInWarnBand(probe)) {
-    // Replaces the 60 fps nudge below: one frame-rate line per file, and this
-    // one is the one that can cost the upload. Warn, never block — see the
-    // module comment.
+  } else if (fps < RECOMMENDED_VIDEO_FPS) {
     warnings.push(
-      `This recording averages ${probe.averageFps.toFixed(2)} fps, which usually means a variable frame rate, and ${PROVIDER_DISPLAY_NAME} may reject it. Exporting at a constant 30 fps avoids that.`,
-    );
-  } else if (probe.fps < RECOMMENDED_VIDEO_FPS) {
-    warnings.push(
-      `Recorded at ${probe.fps} fps. ${RECOMMENDED_VIDEO_FPS} fps produces noticeably better ball tracking.`,
+      `Recorded at ${fps} fps. ${RECOMMENDED_VIDEO_FPS} fps produces noticeably better ball tracking.`,
     );
   }
 
