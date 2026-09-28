@@ -256,3 +256,8 @@ is the runner's. Newest entries at the bottom.
 
 1. `getMatchPageHint` has no caller yet; T29 is its first consumer and should document the reap/reconcile drift.
 2. T27's criterion names a non-existent `verification_status` column; correct any later task text that repeats it.
+
+## T28 · Stepper-column skeleton for the analysing match page — done
+
+**gate:** mechanical PASS · completion PASS
+**changed:** New `AnalysisStepsPending` (`loading/analysis-steps-pending.tsx`): a `PendingFrame` ("Loading analysis progress", the single status role) around the stepper column's geometry — title bar, match-line bar, and a `mt-9` list of four `gap-3.5` rows, each a `size-4 rounded-full` mark bar beside a label bar, all `PendingBar`s. New offline spec `tests/analysis-steps-pending.spec.ts` pins the markup. Not mounted yet (T29).

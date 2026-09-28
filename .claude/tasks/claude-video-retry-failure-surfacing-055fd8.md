@@ -381,7 +381,7 @@ ready).
 
 ## T28 · Stepper-column skeleton for the analysing match page
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/loading/analysis-steps-pending.tsx (new, guess), tests/analysis-steps-pending.spec.ts (new, guess)
 - **done when:**
