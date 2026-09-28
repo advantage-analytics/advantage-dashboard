@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Add a "watch this cut" intent from the report into the Video tab
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/components/dashboard/matches/match-detail/match-report-context.tsx, src/components/dashboard/matches/match-detail/film/film-tab.tsx, a new src/components/dashboard/matches/match-detail/film-cut-context.tsx (pattern: film-head-context.tsx), tests/film-cut-intent.spec.ts — guess
 - **done when:**
