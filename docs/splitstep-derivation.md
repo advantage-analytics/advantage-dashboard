@@ -183,8 +183,17 @@ fold, **never by string-matching `pred_player_id`** against `matches.player1_nam
 advisory: the one match with ground truth grades `low` yet reproduces its score
 exactly.
 
-Of three real payloads, **only one passes Gate 1**. Ad-scoring matches and match
-tiebreaks are refused by design.
+Of three real payloads, **only one passes Gate 1**. Ad-scoring matches are
+refused by design.
+
+**Tiebreaks (2026-09-28).** Tiebreak points now resolve: `winners.ts` rule 2 reads
+the absolutized integer point score across a serve rotation when the absolute game
+count is unchanged (`via: "tiebreak"`). Before this, the last point before every
+rotation resolved no winner and every tiebreak match was refused outright. The fold
+still keys games on the server, so a tiebreak folds as several pseudo-games and the
+match cannot reproduce `matches.score`. Under the Gate 1 bypass below it is written
+unreconciled, and it would be refused again if the gate returned, until the fold
+learns to keep a tiebreak as one game.
 
 > **Gate 1 temporarily bypassed (2026-09-02).** `ACCEPT_UNRECONCILED_FOLD` in
 > `derivation/reconcile.ts` is `true`: a fold that misses the entered score is still
@@ -192,7 +201,8 @@ tiebreaks are refused by design.
 > or failing that from whichever mapping folds closest to the score (a tie is still a
 > refusal). `Reconciliation.ok` stays `false` on that path and `player1Source` records
 > how player1 was chosen; `derive-and-publish` logs `grade: unreconciled`. Rows carry
-> `DERIVATION_VERSION = 0.3.0-unreconciled` and must be rebuilt when the gate returns.
+> `DERIVATION_VERSION = 0.3.x-unreconciled` (0.3.1 since the tiebreak rule) and must
+> be rebuilt when the gate returns.
 > The unresolved-points gate is untouched.
 
 ---

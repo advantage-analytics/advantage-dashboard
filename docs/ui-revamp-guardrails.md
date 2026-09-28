@@ -254,6 +254,28 @@ to put a testable seam.
 > needs to run them in Node — with parsing, validation, attribution and the
 > blank-Guest fallback untouched. The webhook route is not touched.
 
+> **A reviewed exception, added 2026-09-28: tiebreak point winners, in
+> `derivation/winners.ts`.** A tiebreak changes server every two points without
+> closing a game, and the vendor's server-relative game string flips with it
+> ("7-5" → "5-7"). `resolveWinner` only read the point ladder when the raw game
+> string and the server were both unchanged, so the last point before every
+> serve rotation fell through to the game and set rules, saw no change, and
+> resolved no winner — `reconcile()` refused every match with a tiebreak
+> ("N point(s) resolved no winner"; job b74a1e04 was the first). A new rule 2
+> fires only when the server changed and the ABSOLUTE game count did not, and
+> resolves by a one-point climb in the absolutized integer point score, with
+> `via: "tiebreak"`. The 0/15/30/40 ladder never climbs by one as a number, so
+> a stale game score across an ordinary game change cannot trigger it. Nothing
+> else moved: `reconcile()`, the fold's game keys, the player1 mapping, the
+> unresolved-points gate and `calculate_match_stats` are untouched, and no
+> schema changed. `DERIVATION_VERSION` is `0.3.1-unreconciled`. Known limit:
+> the fold still keys games on the server, so a tiebreak folds as several
+> pseudo-games and a tiebreak match cannot reconcile — it publishes through
+> `ACCEPT_UNRECONCILED_FOLD` with `ok = false`, never as verified. A 2^n search
+> over unresolved winners against `matches.score` was considered and rejected:
+> on b74a1e04 no assignment fit, because game boundaries, not winners, were
+> what disagreed with the entered score.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 
