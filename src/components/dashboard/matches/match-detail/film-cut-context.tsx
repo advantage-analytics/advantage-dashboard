@@ -10,6 +10,7 @@ import {
   MATCH_FILTER_KEYS,
   type MatchFilterContext,
   type MatchFilters,
+  type PlayerSide,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 
 /**
@@ -204,18 +205,51 @@ export function applyFilmCut(
   );
 }
 
+/* ── A side laid over a cut ──────────────────────────────────────────────── */
+
 /**
- * Take a pending cut: the cut it asks for, and nothing left pending. `null`
- * in gives `null` out — there was nothing to consume. Pure, so the once-only
- * rule is checkable without a provider. It returns the cut and never a
- * `MatchFilters` value: taking a cut changes nothing the shared provider
- * holds.
+ * One value cell's cut: the row's cut with the cell's side laid over it, in
+ * the shared filters' vocabulary.
+ *
+ * - `server` (the default): the side SERVED the point (Serve › Player) — a
+ *   player's first-serve points are the ones they served.
+ * - `returner`: the side RETURNED it, so Serve › Player is the other one —
+ *   your first-serve returns are the opponent's first serves.
+ * - `player`: the side is Result › Player, the point of view Result › Outcome
+ *   reads — whoever hit the winner or made the error (a double fault is the
+ *   server's, an ace the server's).
+ *
+ * `won` adds Result › Won from that side, so "74 of 100 won" opens the 74.
+ *
+ * `you`/`opp` are relative, resolved through the filter context's
+ * `youIsPlayer1` inside the film tab (guardrails §4); nothing here reads
+ * player order. Shared by `head-to-head-card.tsx` and `point-endings-card.tsx`
+ * — both compose a `FilmCut` this same way.
  */
-export function consumeFilmCut(
-  pending: FilmCutIntent | null,
-): { intent: FilmCutIntent; pending: null } | null {
-  if (!pending) return null;
-  return { intent: pending, pending: null };
+export type CutSide = "server" | "returner" | "player";
+
+function playerSide(side: "you" | "opp"): PlayerSide {
+  return side === "you" ? "you" : "opponent";
+}
+
+function otherSide(side: "you" | "opp"): PlayerSide {
+  return side === "you" ? "opponent" : "you";
+}
+
+export function sideCut(
+  cut: FilmCut,
+  side: "you" | "opp",
+  by: CutSide = "server",
+  won = false,
+): FilmCut {
+  const who = playerSide(side);
+  const attributed: FilmCut =
+    by === "player"
+      ? { ...cut, resultPlayer: who }
+      : { ...cut, server: by === "returner" ? otherSide(side) : who };
+  return won
+    ? { ...attributed, resultOutcome: ["won"], resultPlayer: who }
+    : attributed;
 }
 
 /* ── The pending intent ──────────────────────────────────────────────────── */

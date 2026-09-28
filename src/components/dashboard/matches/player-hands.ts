@@ -46,15 +46,14 @@ export function normalizePlayerHand(
  * `match.player2.hand` already IS the account's hand. Swapping again on the
  * client using `youIsPlayer1` would flip an already-correct answer back onto
  * the wrong player — the exact silent mis-attribution
- * `docs/ui-revamp-guardrails.md` warns about. `youIsPlayer1` is accepted as a
- * parameter only so call sites can build the filters' `{ youIsPlayer1, hands }`
- * context in one place; it plays no part in this function's own mapping.
+ * `docs/ui-revamp-guardrails.md` warns about. No `youIsPlayer1` parameter
+ * here: it plays no part in this function's own mapping, and the caller
+ * already has it in scope for the filters' `{ youIsPlayer1, hands }` context.
  */
-export function playerHands(
-  match: Pick<Match, "player1" | "player2">,
-  youIsPlayer1: boolean,
-): { player1: PlayerHand; player2: PlayerHand } {
-  void youIsPlayer1; // see doc comment: attribution is already resolved server-side
+export function playerHands(match: Pick<Match, "player1" | "player2">): {
+  player1: PlayerHand;
+  player2: PlayerHand;
+} {
   return {
     player1: normalizePlayerHand(match.player1.hand),
     player2: normalizePlayerHand(match.player2.hand),

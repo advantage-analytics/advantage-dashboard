@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -47,7 +47,7 @@ import {
  * shared Serve › Player — so a pick here is a pick the Statistics tab shows
  * too — and "Saved only" is the Film-only saved toggle, never a match filter.
  */
-export function FilmQuickFilters({
+export const FilmQuickFilters = memo(function FilmQuickFilters({
   filmFilters,
   sides,
   onOpenAdvanced,
@@ -274,4 +274,4 @@ export function FilmQuickFilters({
       </FilmDarkMenuNote>
     </FilmDarkMenu>
   );
-}
+});

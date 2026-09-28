@@ -39,10 +39,7 @@ import {
   type PointFocus,
 } from "./film-timeline";
 import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
-import {
-  consumeFilmCut,
-  usePendingFilmCut,
-} from "@/components/dashboard/matches/match-detail/film-cut-context";
+import { usePendingFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import {
   FilterRail,
@@ -255,6 +252,13 @@ function FilmRoom({
     }),
     [shared, setShared, local, clearCut, setSavedOnly, clearAll],
   );
+  // Stable across a playback tick (`currentTime` re-renders this component
+  // ~4x/second) so `FilmFilterStrip`'s own `memo` actually skips re-rendering
+  // it between filter changes.
+  const filmStripNames = useMemo(
+    () => ({ you: sides.you.shortName, opponent: sides.opp.shortName }),
+    [sides.you.shortName, sides.opp.shortName],
+  );
   // "Advanced filters…" opens the 340px filters drawer over the list column
   // (`FilterRail`, rendered at the end of this view). The room's own drawer
   // keeps its in-column panel.
@@ -431,12 +435,12 @@ function FilmRoom({
    * in two steps because the first admitted point is only known once the
    * filters it sets have been applied.
    *
-   * 1. Take the pending cut (`consumeFilmCut`): it becomes the Film-only
-   *    `local.cut`, laid OVER the shared filters, which it never touches
-   *    (`landFilmCut` hands `shared` back as the same object); the saved
-   *    toggle goes off, since the card counted every point. The same value
-   *    is remembered as the `landing`, and the intent is CLEARED — leaving
-   *    and re-entering the Video view finds nothing pending.
+   * 1. Take the pending cut: it becomes the Film-only `local.cut`, laid OVER
+   *    the shared filters, which it never touches (`landFilmCut` hands
+   *    `shared` back as the same object); the saved toggle goes off, since
+   *    the card counted every point. The same value is remembered as the
+   *    `landing`, and the intent is CLEARED — leaving and re-entering the
+   *    Video view finds nothing pending.
    * 2. Once `local` IS that landing (identity: both were set from the same
    *    object in one batch) and the media is playable, the shell player seeks
    *    to the first stop the cut admits and the list holds that point. A cut
@@ -452,9 +456,8 @@ function FilmRoom({
   const pendingCut = usePendingFilmCut();
   const [landing, setLanding] = useState<FilmLocalFilters | null>(null);
   useEffect(() => {
-    const taken = consumeFilmCut(pendingCut?.intent ?? null);
-    if (!taken || !pendingCut) return;
-    const next = landFilmCut({ shared, local }, taken.intent).local;
+    if (!pendingCut) return;
+    const next = landFilmCut({ shared, local }, pendingCut.intent).local;
     // The provider's intent arriving is the external event; this runs once
     // per `watchCut`, never per frame.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -839,7 +842,7 @@ function FilmRoom({
           strip, v3's Data Table rule 6. */}
       <FilmFilterStrip
         filmFilters={filmFilters}
-        names={{ you: sides.you.shortName, opponent: sides.opp.shortName }}
+        names={filmStripNames}
         shown={filteredPoints.length}
         total={points.length}
       />

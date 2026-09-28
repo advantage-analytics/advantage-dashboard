@@ -1,4 +1,5 @@
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import { surname } from "@/lib/data/match-utils";
 
 import {
   appliedPhrases,
@@ -9,7 +10,6 @@ import {
   activeFilterCount,
   applyMatchFilters,
   EMPTY_MATCH_FILTERS,
-  MATCH_FILTER_KEYS,
   type MatchFilterContext,
   type MatchFilters,
   type PlayerSide,
@@ -153,19 +153,20 @@ export function withQuickShow(
   };
 }
 
-/** Whether `shared` holds nothing beyond the quick menu's own two groups. */
+/**
+ * Whether `shared` holds nothing beyond the quick menu's own two groups:
+ * zero out Serve › Player and Score › Breakpoint (the menu's own axes) and
+ * ask the shared model whether anything is still active — the same
+ * "what counts as empty" rule every other reading of `MatchFilters` uses.
+ */
 function quickOnly(shared: MatchFilters): boolean {
-  return MATCH_FILTER_KEYS.every((key) => {
-    if (key === "server") return true;
-    if (key === "scoreType") {
-      return (
-        shared.scoreType.length === 0 ||
-        (shared.scoreType.length === 1 && shared.scoreType[0] === "breakpoint")
-      );
-    }
-    const v = shared[key] as unknown;
-    return Array.isArray(v) ? v.length === 0 : v === null;
-  });
+  return (
+    activeFilterCount({
+      ...shared,
+      server: null,
+      scoreType: shared.scoreType.filter((t) => t !== "breakpoint"),
+    }) === 0
+  );
 }
 
 /**
@@ -263,11 +264,12 @@ export function filmDraftCount(
   ).length;
 }
 
-/** "Reid" out of "Marcus Reid" — the list's group-header/pill shorthand. */
-export function lastNameOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  return parts.length > 0 ? parts[parts.length - 1] : name;
-}
+/**
+ * "Reid" out of "Marcus Reid" — the list's group-header/pill shorthand.
+ * Re-exported under the list's own name; the actual rule (suffixes, doubles
+ * partners) lives once in `surname()`.
+ */
+export const lastNameOf = surname;
 
 /* ── Legacy URL params ───────────────────────────────────────────────────── */
 

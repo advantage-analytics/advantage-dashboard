@@ -1,16 +1,17 @@
 import type { ScoreLineSet } from "@/lib/ui/score-format";
 
 /**
- * What is left of the Statistics view's set scope: the games-and-points
- * summary `report-facts.tsx` prints for the whole match.
+ * What is left of the Statistics view's set scope: the whole-match games
+ * total `report-facts.tsx` prints.
  *
  * ── Retired ─────────────────────────────────────────────────────────────────
  * The point-derived Statistics cards no longer narrow themselves at all: they
  * are always the whole match (`useMatchData().points`). Narrowing to a set is
  * the Video tab's job now — its match filters (`match-filters/provider.tsx`)
  * carry a Score › Set group, mirrored in `?f=` rather than `?set=` — so
- * `useSetScope`, the `?set=` parse/write rules and the selectable-set rule
- * are gone.
+ * `useSetScope`, the `?set=` parse/write rules, the selectable-set rule and
+ * the per-set `scopeMeta`/`scopePoints` reads are gone; only the whole-match
+ * games total survives, since the facts line still prints one.
  *
  * Sets come from the score, never from player order
  * (docs/ui-revamp-guardrails.md §4).
@@ -24,53 +25,15 @@ import type { ScoreLineSet } from "@/lib/ui/score-format";
  */
 export const SET_PARAM = "set";
 
-/** The only field scoping reads off a point row — see `MatchPoint`. */
-interface ScopedPoint {
-  setNumber: number;
-}
-
-export interface SetScopeMeta {
-  /** "Whole match" or "Set 2". */
-  label: string;
-  /** Points in the scoped rows. */
-  points: number;
-  /** Games in the scoped sets, from the score. */
-  games: number;
-}
-
-/** The rows one scope covers. `null` is every row, not zero rows. */
-export function scopePoints<T extends ScopedPoint>(
-  points: readonly T[],
-  activeSet: number | null,
-): T[] {
-  return activeSet === null
-    ? [...points]
-    : points.filter((point) => point.setNumber === activeSet);
-}
-
 /**
- * What a scope is worth, for a "N points · M games" line.
+ * The whole match's games, for the facts line's "N points · M games".
  *
- * Games come from the score, never from the point rows. A 7-6 set is 13 games
+ * Taken from the score, never from the point rows. A 7-6 set is 13 games
  * (guardrails §4.3 — the game count is what is stored, not the tiebreak
- * points), and counting distinct game numbers off `points` would both
- * undercount that set and report 0 games for a match whose stats are published
- * but whose points were never imported.
+ * points), and counting distinct game numbers off point rows would both
+ * undercount that set and report 0 games for a match whose stats are
+ * published but whose points were never imported.
  */
-export function scopeMeta(
-  sets: readonly ScoreLineSet[],
-  points: readonly ScopedPoint[],
-  activeSet: number | null,
-): SetScopeMeta {
-  const scoped =
-    activeSet === null
-      ? sets
-      : sets.filter((_, index) => index + 1 === activeSet);
-  const games = scoped.reduce((sum, set) => sum + set.player1 + set.player2, 0);
-
-  return {
-    label: activeSet === null ? "Whole match" : `Set ${activeSet}`,
-    points: scopePoints(points, activeSet).length,
-    games,
-  };
+export function totalGames(sets: readonly ScoreLineSet[]): number {
+  return sets.reduce((sum, set) => sum + set.player1 + set.player2, 0);
 }

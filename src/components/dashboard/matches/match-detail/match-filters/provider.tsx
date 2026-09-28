@@ -22,7 +22,9 @@ import {
   hasActiveMatchFilters,
   MATCH_FILTERS_PARAM,
   matchFiltersQuery,
+  optionAvailability,
   parseMatchFilters,
+  type MatchFilterAvailability,
   type MatchFilterContext,
   type MatchFilters,
 } from "./model";
@@ -206,4 +208,39 @@ export function useMatchFilters(): MatchFiltersValue {
     [points, youIsPlayer1],
   );
   return provided ?? fallback;
+}
+
+export interface FiltersPanelData {
+  /** Every point on the match — the count's denominator. */
+  points: MatchPoint[];
+  /** `optionAvailability(points, context)` for this match, over the WHOLE
+   *  match: options must not vanish as you pick. */
+  availability: MatchFilterAvailability;
+  youName: string;
+  oppName: string;
+  total: number;
+}
+
+/**
+ * `FiltersPanel`'s host props, minus `filters`/`countFor`/the callbacks —
+ * the one computation `FilterRailShell` (`filter-rail.tsx`) and
+ * `FilmAdvancedPanel` (`film/film-advanced-panel.tsx`) each did on their own
+ * before T7's Film move, now shared so the availability scan and the prop
+ * plumbing exist once.
+ */
+export function useFiltersPanelData(): FiltersPanelData {
+  const { points } = useMatchData();
+  const sides = useMatchSides();
+  const { context } = useMatchFilters();
+  const availability = useMemo(
+    () => optionAvailability(points, context),
+    [points, context],
+  );
+  return {
+    points,
+    availability,
+    youName: sides.you.shortName,
+    oppName: sides.opp.shortName,
+    total: points.length,
+  };
 }

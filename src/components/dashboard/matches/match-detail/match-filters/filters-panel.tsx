@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
 
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -98,7 +98,10 @@ export function FiltersPanel({
     initialOpenSection(filters, sections),
   );
   const actions = panelActions(draft, setDraft, onApply);
-  const count = countFor(draft);
+  // `countFor` re-filters the whole match, so it only reruns when the draft
+  // itself changes — not on every render (e.g. the accordion opening/closing
+  // while the film keeps playing behind the panel).
+  const count = useMemo(() => countFor(draft), [countFor, draft]);
 
   return (
     <section

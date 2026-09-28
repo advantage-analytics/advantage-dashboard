@@ -15,9 +15,10 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
 import {
   applyFilmCut,
   isReturnWinner,
+  sideCut,
+  type CutSide,
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
-import type { PlayerSide } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { PlayerStatistics, StatFraction } from "@/lib/data/types";
@@ -311,49 +312,12 @@ const ALL_H2H_CONFIGS: H2HRowConfig[] = H2H_GROUPS.flatMap(
   (group) => group.configs,
 );
 
-/**
- * One value cell's cut: the row's cut with the cell's side laid over it, in
- * the shared filters' vocabulary.
- *
- * - `server` (the default): the side SERVED the point (Serve › Player) — a
- *   player's first-serve points are the ones they served.
- * - `returner`: the side RETURNED it, so Serve › Player is the other one —
- *   your first-serve returns are the opponent's first serves.
- * - `player`: the side is Result › Player, the point of view Result › Outcome
- *   reads — whoever hit the winner or made the error (a double fault is the
- *   server's, an ace the server's).
- *
- * `won` adds Result › Won from that side, so "74 of 100 won" opens the 74.
- *
- * `you`/`opp` are relative, resolved through the filter context's
- * `youIsPlayer1` inside the film tab (guardrails §4); nothing here reads
- * player order.
- */
-export type CutSide = "server" | "returner" | "player";
-
-function playerSide(side: "you" | "opp"): PlayerSide {
-  return side === "you" ? "you" : "opponent";
-}
-
-function otherSide(side: "you" | "opp"): PlayerSide {
-  return side === "you" ? "opponent" : "you";
-}
-
-export function sideCut(
-  cut: FilmCut,
-  side: "you" | "opp",
-  by: CutSide = "server",
-  won = false,
-): FilmCut {
-  const who = playerSide(side);
-  const attributed: FilmCut =
-    by === "player"
-      ? { ...cut, resultPlayer: who }
-      : { ...cut, server: by === "returner" ? otherSide(side) : who };
-  return won
-    ? { ...attributed, resultOutcome: ["won"], resultPlayer: who }
-    : attributed;
-}
+// `CutSide`/`sideCut` — one value cell's cut, the row's cut with the cell's
+// side laid over it — now live in `film-cut-context.tsx` beside `FilmCut`
+// itself, since `point-endings-card.tsx` composes a cut the same way.
+// Re-exported here so this module's own call sites are unchanged.
+export type { CutSide };
+export { sideCut };
 
 /* ── Values and the leader rule ─────────────────────────────────────────── */
 

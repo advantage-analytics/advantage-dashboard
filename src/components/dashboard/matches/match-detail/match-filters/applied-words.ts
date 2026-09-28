@@ -1,3 +1,5 @@
+import { capitalize } from "@/lib/utils";
+
 import {
   MATCH_FILTER_OPTIONS,
   type MatchFilterKey,
@@ -162,6 +164,4 @@ export function appliedPhrases(
 }
 
 /** "second serve · break point" → "Second serve · break point". */
-export function capitalizeFirst(sentence: string): string {
-  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
-}
+export const capitalizeFirst = capitalize;

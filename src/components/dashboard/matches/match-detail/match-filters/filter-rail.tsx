@@ -11,20 +11,17 @@ import {
   type ReactNode,
 } from "react";
 
-import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
-import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { createPortal } from "react-dom";
+
 import { cn } from "@/lib/utils";
 
 import { FiltersPanel } from "./filters-panel";
-import {
-  optionAvailability,
-  serializeMatchFilters,
-  type MatchFilters,
-} from "./model";
-import { useMatchFilters } from "./provider";
+import { serializeMatchFilters, type MatchFilters } from "./model";
+import { useFiltersPanelData, useMatchFilters } from "./provider";
 import {
   escClosesRail,
   filterRailReducer,
+  MATCH_REPORT_FRAME_ID,
   type FilterRailPhase,
 } from "./rail-state";
 
@@ -37,13 +34,15 @@ import {
  * left edge, `--shadow-dropdown`: the peek drawer's paint.
  *
  * ── Placement ───────────────────────────────────────────────────────────
- * `FilmRoom` (film/film-tab.tsx) renders `FilterRail` as a direct child of
- * its root, which has no positioned ancestor below `MatchReportPane`. The
- * pane is an `@container`, and container queries apply layout containment —
- * which makes the pane the containing block for absolutely positioned
- * descendants. So `absolute inset-y-0 right-0` is the pane's box: under the
- * header, to its bottom, flush right. The Video view never scrolls the pane
- * (`MatchReportWhen scrollsInside`), so the drawer never scrolls away.
+ * `FilmRoom` (film/film-tab.tsx) renders `FilterRail`, which portals the
+ * drawer into `MatchReportFrame` (`MATCH_REPORT_FRAME_ID`, `relative`, never
+ * scrolls), so `absolute inset-y-0 right-0` is the frame's box: under the
+ * header, to its bottom, flush right. It must not stay inside
+ * `#match-report-pane`: that pane is the page's scroll container, and on a
+ * short viewport (1366×600) the Video view does overflow it — a drawer
+ * positioned there was laid out in the scrolled content, its header slid off
+ * the top and it scrolled away with the cards. The pane's `@container` also
+ * contains `fixed` descendants, so `fixed` is no way out either.
  *
  * ── The shell ───────────────────────────────────────────────────────────
  * The roster's (`team/player-drawer.tsx`, `matches/match-drawer.tsx`
@@ -169,7 +168,17 @@ export interface FilterRailProps {
 export function FilterRail(props: FilterRailProps) {
   const rail = use(FilterRailContext);
   if (!rail || rail.phase === "closed") return null;
-  return <FilterRailShell rail={rail} {...props} />;
+  const shell = <FilterRailShell rail={rail} {...props} />;
+  // Portalled into the report frame (relative, never scrolls) so the drawer
+  // pins to its right edge however far `#match-report-pane` has scrolled —
+  // positioned inside that pane it was laid out in the scrolled content and
+  // slid off with the cards. Only ever open after a click, so reading the
+  // DOM here never runs on the server. Context still flows through a portal.
+  const host =
+    typeof document === "undefined"
+      ? null
+      : document.getElementById(MATCH_REPORT_FRAME_ID);
+  return host ? createPortal(shell, host) : shell;
 }
 
 function FilterRailShell({
@@ -180,15 +189,8 @@ function FilterRailShell({
   const closing = phase === "closing";
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const { points } = useMatchData();
-  const sides = useMatchSides();
-  const { filters, setFilters, context } = useMatchFilters();
-  // Over the WHOLE match, never the filtered subset: options must not vanish
-  // as you pick (`optionAvailability`'s contract).
-  const availability = useMemo(
-    () => optionAvailability(points, context),
-    [points, context],
-  );
+  const { filters, setFilters } = useMatchFilters();
+  const { availability, youName, oppName, total } = useFiltersPanelData();
 
   // Take focus on open so Esc and Tab start inside the drawer. A frame
   // late: the quick menu that opened it hands focus back to its trigger as
@@ -245,10 +247,10 @@ function FilterRailShell({
           className="min-h-0 flex-1"
           filters={filters}
           availability={availability}
-          youName={sides.you.shortName}
-          oppName={sides.opp.shortName}
+          youName={youName}
+          oppName={oppName}
           countFor={countFor}
-          total={points.length}
+          total={total}
           onApply={(next) => {
             setFilters(next);
             close();

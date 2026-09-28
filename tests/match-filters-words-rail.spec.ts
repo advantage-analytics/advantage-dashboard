@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { expect, test } from "@playwright/test";
 
 import {
@@ -12,6 +15,7 @@ import {
 import {
   escClosesRail,
   filterRailReducer,
+  MATCH_REPORT_FRAME_ID,
 } from "@/components/dashboard/matches/match-detail/match-filters/rail-state";
 
 /**
@@ -121,5 +125,28 @@ test.describe("rail-state", () => {
     expect(
       escClosesRail("open", { key: "Enter", defaultPrevented: false }),
     ).toBe(false);
+  });
+});
+
+test.describe("filters drawer placement", () => {
+  const dir = path.join(
+    process.cwd(),
+    "src/components/dashboard/matches/match-detail",
+  );
+  const read = (file: string) => readFileSync(path.join(dir, file), "utf8");
+
+  // `#match-report-pane` is the page's scroll container and overflows on a
+  // short viewport; a drawer positioned inside it scrolled away with the
+  // cards. It must portal into the frame, which is relative and never scrolls.
+  test("the drawer portals into the report frame, which is its relative anchor", () => {
+    const rail = read("match-filters/filter-rail.tsx");
+    expect(rail).toContain("createPortal(shell, host)");
+    expect(rail).toContain("document.getElementById(MATCH_REPORT_FRAME_ID)");
+
+    const report = read("match-report.tsx");
+    expect(report).toMatch(
+      /id=\{MATCH_REPORT_FRAME_ID\}\s*className="relative /,
+    );
+    expect(MATCH_REPORT_FRAME_ID).toBe("match-report-frame");
   });
 });

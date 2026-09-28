@@ -73,6 +73,19 @@ export function courtSideOf(
   return indexInGame % 2 === 0 ? "deuce" : "ad";
 }
 
+type CourtSidePoints = readonly Pick<
+  MatchPoint,
+  "pointScore" | "setNumber" | "gameNumber"
+>[];
+
+// Keyed by array identity, never by content: every caller passes the same
+// whole-match array (`applyMatchFilters`, `optionAvailability`, and every
+// `FilmCut` a card composes over it), so a card that lays several cuts over
+// one match — `head-to-head-card.tsx`'s `counts`, up to three per row — walks
+// this O(n) derivation once instead of once per cut. The match array is never
+// mutated in place, only replaced, so a stale entry is never observable.
+const courtSidesCache = new WeakMap<CourtSidePoints, ("deuce" | "ad")[]>();
+
 /**
  * The service court of every point, index-aligned with `points` (which must be
  * in match order — the running index within a game depends on it). The same
@@ -80,16 +93,13 @@ export function courtSideOf(
  * when the match has real point scores at all, else the point's index in its
  * game.
  */
-export function courtSidesOf(
-  points: readonly Pick<
-    MatchPoint,
-    "pointScore" | "setNumber" | "gameNumber"
-  >[],
-): ("deuce" | "ad")[] {
+export function courtSidesOf(points: CourtSidePoints): ("deuce" | "ad")[] {
+  const cached = courtSidesCache.get(points);
+  if (cached) return cached;
   const hasPointScore = points.some((p) => p.pointScore !== "0-0");
   let gameKey = "";
   let indexInGame = 0;
-  return points.map((point) => {
+  const courts = points.map((point) => {
     const key = `${point.setNumber}-${point.gameNumber}`;
     if (key !== gameKey) {
       gameKey = key;
@@ -99,6 +109,8 @@ export function courtSidesOf(
     }
     return courtSideOf(point, indexInGame, hasPointScore);
   });
+  courtSidesCache.set(points, courts);
+  return courts;
 }
 
 /* ── The Points grid ────────────────────────────────────────────────────── */

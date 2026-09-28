@@ -7,10 +7,10 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
+  sideCut,
   watchableSegmentProps,
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
-import { sideCut } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import type { MatchPoint } from "@/lib/data/match-points-server";

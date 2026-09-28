@@ -1,7 +1,9 @@
 "use client";
 
+import { memo } from "react";
 import { Filter } from "lucide-react";
 
+import { draftCountLine } from "../match-filters/panel-draft";
 import {
   filmListActive,
   filmListSentence,
@@ -26,7 +28,7 @@ import {
  * No `next/navigation` here — the offline spec loads this file through
  * `createLoader()`.
  */
-export function FilmFilterStrip({
+export const FilmFilterStrip = memo(function FilmFilterStrip({
   filmFilters,
   names,
   shown,
@@ -62,9 +64,7 @@ export function FilmFilterStrip({
         style={{ background: "var(--ink-300)" }}
         aria-hidden="true"
       />
-      <span className="text-micro tabular">
-        {shown} of {total} {total === 1 ? "point" : "points"}
-      </span>
+      <span className="text-micro tabular">{draftCountLine(shown, total)}</span>
       <div className="flex-1" />
       <button
         type="button"
@@ -75,4 +75,4 @@ export function FilmFilterStrip({
       </button>
     </div>
   );
-}
+});

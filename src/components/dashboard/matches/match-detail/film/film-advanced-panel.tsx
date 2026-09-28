@@ -1,17 +1,16 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
-
-import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
-import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { useCallback } from "react";
 
 import { FiltersPanel } from "../match-filters/filters-panel";
 import {
-  optionAvailability,
   serializeMatchFilters,
   type MatchFilters,
 } from "../match-filters/model";
-import { useMatchFilters } from "../match-filters/provider";
+import {
+  useFiltersPanelData,
+  useMatchFilters,
+} from "../match-filters/provider";
 import { filmDraftCount, type FilmListFilters } from "./film-list-filters";
 import type { FilmListTone } from "./point-list";
 
@@ -50,15 +49,9 @@ export function FilmAdvancedPanel({
   onClose,
   tone = "light",
 }: FilmAdvancedPanelProps) {
-  const { points } = useMatchData();
-  const sides = useMatchSides();
   const { context } = useMatchFilters();
-  // Over the WHOLE match, never the filtered subset: options must not vanish
-  // as you pick (`optionAvailability`'s contract).
-  const availability = useMemo(
-    () => optionAvailability(points, context),
-    [points, context],
-  );
+  const { points, availability, youName, oppName, total } =
+    useFiltersPanelData();
   const { shared, setShared, cut, savedOnly } = filmFilters;
   const countFor = useCallback(
     (draft: MatchFilters) =>
@@ -78,10 +71,10 @@ export function FilmAdvancedPanel({
         tone={tone}
         filters={shared}
         availability={availability}
-        youName={sides.you.shortName}
-        oppName={sides.opp.shortName}
+        youName={youName}
+        oppName={oppName}
         countFor={countFor}
-        total={points.length}
+        total={total}
         onApply={(next) => {
           setShared(next);
           onClose();

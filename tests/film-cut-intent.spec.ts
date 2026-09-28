@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 
 import {
   applyFilmCut,
-  consumeFilmCut,
   filmCutFilters,
   hasFilmCut,
   type FilmCutIntent,
@@ -33,7 +32,7 @@ import { pt } from "./fixtures/film-point";
 
 /**
  * The "watch this cut" intent (Advantage Intelligence UI T2, rewritten onto
- * the shared match filters in T7): the pure consume/land helpers behind
+ * the shared match filters in T7): the pure `landFilmCut` helper behind
  * `MatchReportActions.watchCut` and the film tab's once-only application of
  * it, the Film list's three layers (shared filters ∧ cut ∧ saved), and the
  * legacy `?cut=`/`?serve=` links. Offline; the contexts themselves are React
@@ -67,17 +66,6 @@ const points = [
   }),
   pt({ id: "d", setNumber: 2, rallyLength: 2, serverIsPlayer1: false }),
 ];
-
-test("consumeFilmCut applies once: it hands back the intent and nothing pending", () => {
-  const pending = intent({ rallyMin: 5 }, "Medium rallies");
-  const taken = consumeFilmCut(pending);
-  expect(taken).not.toBeNull();
-  expect(taken?.intent).toBe(pending);
-  expect(taken?.pending).toBeNull();
-  // Consuming what is left is a no-op — the intent was honoured exactly once.
-  expect(consumeFilmCut(taken?.pending ?? null)).toBeNull();
-  expect(consumeFilmCut(null)).toBeNull();
-});
 
 test("a cut's MatchFilters half is laid over the empty filters", () => {
   const cut = {

@@ -40,3 +40,9 @@ export function escClosesRail(
 ): boolean {
   return phase === "open" && event.key === "Escape" && !event.defaultPrevented;
 }
+
+/**
+ * The element the filters drawer portals into: `MatchReportFrame`, which is
+ * `relative` and does not scroll. See `filter-rail.tsx`.
+ */
+export const MATCH_REPORT_FRAME_ID = "match-report-frame";

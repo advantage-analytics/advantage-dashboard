@@ -358,7 +358,7 @@ export function buildFilterContext(
   points: readonly Pick<MatchPoint, "shots">[],
   youIsPlayer1: boolean,
 ): MatchFilterContext {
-  const stored = playerHands(match, youIsPlayer1);
+  const stored = playerHands(match);
   return {
     youIsPlayer1,
     hands: {
