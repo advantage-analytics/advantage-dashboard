@@ -484,7 +484,7 @@ export function PerformanceTrackerChart() {
             </span>
             {watchId && (
               <span className="text-[10px] text-white/[0.64]">
-                Watch in Video
+                Click to watch in Video
               </span>
             )}
           </div>

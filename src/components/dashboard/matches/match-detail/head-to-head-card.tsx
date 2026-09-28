@@ -8,12 +8,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  ChartTooltip,
-  useReadoutPointer,
-  type ReadoutFrame,
-  type ReadoutPointer,
-} from "@/components/dashboard/matches/match-detail/chart-tooltip";
+import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
@@ -26,6 +21,7 @@ import {
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { PlayerStatistics, StatFraction } from "@/lib/data/types";
 import { surnameLabels } from "@/lib/data/match-utils";
+import { cn } from "@/lib/utils";
 
 /**
  * The Statistics pane's head-to-head table (artboard 47f).
@@ -557,7 +553,15 @@ function ValueCell({
   if (value.display) {
     const figure = (
       <span
-        className="tabular text-[13px]"
+        className={cn(
+          "tabular text-[13px]",
+          // A clickable figure washes on hover like any control (`surface-
+          // subtle` over the row's lighter `surface-muted`), sized to the
+          // number itself; the -mr cancels the pr so the digits stay on the
+          // column's right edge, aligned with every non-clickable figure.
+          watch &&
+            "-mr-1.5 rounded-[var(--radius-cell)] py-0.5 pr-1.5 pl-1.5 transition-colors duration-200 ease-[var(--ease-primary)] group-hover/watch:bg-[var(--surface-subtle)]",
+        )}
         style={{
           fontWeight: emphasised ? 500 : 400,
           color: emphasised ? "var(--ink-900)" : "var(--ink-500)",
@@ -567,15 +571,15 @@ function ValueCell({
       </span>
     );
     if (watch) {
-      // A bare button around the same figure: nothing about the number
-      // changes, the row's hover wash and its readout's "Watch in Video" line
-      // are the affordance. Focus is `focus.css`'s ring — nothing written here.
+      // A bare button around the same figure: the number's own hover wash and
+      // the readout's "Click a number to watch in Video" line are the
+      // affordance. Focus is `focus.css`'s ring — nothing written here.
       return (
         <button
           type="button"
           onClick={watch.onClick}
           aria-label={watch.label}
-          className={`${COLUMN} cursor-pointer rounded-[var(--radius-element)] border-0 bg-transparent p-0`}
+          className={`${COLUMN} group/watch cursor-pointer rounded-[var(--radius-element)] border-0 bg-transparent p-0`}
         >
           {figure}
         </button>
@@ -611,9 +615,16 @@ function ValueCell({
 }
 
 /**
- * The dark readout above a hovered row. It is where the fraction went when the
+ * The dark readout for a hovered row. It is where the fraction went when the
  * 9 px sub-figures came off the numbers: `62%` is the figure a reader wants at
  * a glance, `38/61` is the one they want when they doubt it.
+ *
+ * It sits to the LEFT of the two value columns, centred on the row, and never
+ * moves while the row is hovered. The numbers are what a reader looks at and
+ * what a click lands on, so the readout goes beside them rather than over
+ * them; the only thing it covers is the row's own label, which its title
+ * repeats. It is a label, not a control — the numbers are the buttons, which
+ * is why its last line names them.
  */
 function RowTooltip({
   open,
@@ -621,8 +632,6 @@ function RowTooltip({
   youName,
   oppName,
   watchable,
-  pointer,
-  frame,
 }: {
   open: boolean;
   row: H2HRow;
@@ -630,8 +639,6 @@ function RowTooltip({
   oppName: string;
   /** The row's numbers open its points in the Video tab. */
   watchable: boolean;
-  pointer: ReadoutPointer | null;
-  frame: ReadoutFrame | null;
 }) {
   const detail =
     row.note ??
@@ -642,10 +649,8 @@ function RowTooltip({
   return (
     <ChartTooltip
       open={open}
-      align="center"
-      bottomOffset={-4}
-      pointer={pointer}
-      frame={frame}
+      side="left"
+      offset={8}
       className="gap-0.5 px-2.5 py-2"
     >
       <span className="text-[12px] font-medium text-white">{row.label}</span>
@@ -655,7 +660,9 @@ function RowTooltip({
         </span>
       )}
       {watchable && (
-        <span className="text-[10px] text-white/[0.64]">Watch in Video</span>
+        <span className="text-[10px] text-white/[0.64]">
+          Click a number to watch in Video
+        </span>
       )}
     </ChartTooltip>
   );
@@ -667,8 +674,6 @@ export function HeadToHeadCard() {
   const sides = useMatchSides();
   const { activeSet } = useSetScope();
   const [hovered, setHovered] = useState<string | null>(null);
-  const { boundsRef, track, clear, pointerFor, frameFor } =
-    useReadoutPointer<string>();
 
   const youStats = sides.you.stats;
   const oppStats = sides.opp.stats;
@@ -713,7 +718,6 @@ export function HeadToHeadCard() {
 
   return (
     <section
-      ref={boundsRef}
       aria-labelledby="head-to-head-heading"
       className="surface-card flex flex-col"
       style={{ padding: "18px 20px 14px" }}
@@ -794,35 +798,36 @@ export function HeadToHeadCard() {
                     current === row.label ? null : current,
                   )
                 }
-                onPointerMove={(e) => track(row.label, e)}
-                onPointerLeave={() => clear(row.label)}
               >
                 <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-600)]">
                   {row.label}
                 </span>
-                <ValueCell
-                  value={row.you}
-                  emphasised={row.leader === "you"}
-                  note={row.note}
-                  scoped={scoped}
-                  watch={youWatch}
-                />
-                <ValueCell
-                  value={row.opp}
-                  emphasised={row.leader === "opp"}
-                  note={row.note}
-                  scoped={scoped}
-                  watch={oppWatch}
-                />
-                <RowTooltip
-                  open={hovered === row.label}
-                  row={row}
-                  youName={youName}
-                  oppName={oppName}
-                  watchable={Boolean(youWatch || oppWatch)}
-                  pointer={pointerFor(row.label)}
-                  frame={frameFor(row.label)}
-                />
+                {/* The two value columns are the readout's anchor, so it
+                    lands beside the numbers rather than off the row's far
+                    edge. */}
+                <div className="relative flex shrink-0 items-center">
+                  <ValueCell
+                    value={row.you}
+                    emphasised={row.leader === "you"}
+                    note={row.note}
+                    scoped={scoped}
+                    watch={youWatch}
+                  />
+                  <ValueCell
+                    value={row.opp}
+                    emphasised={row.leader === "opp"}
+                    note={row.note}
+                    scoped={scoped}
+                    watch={oppWatch}
+                  />
+                  <RowTooltip
+                    open={hovered === row.label}
+                    row={row}
+                    youName={youName}
+                    oppName={oppName}
+                    watchable={Boolean(youWatch || oppWatch)}
+                  />
+                </div>
               </div>
             );
           })}

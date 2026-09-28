@@ -251,6 +251,7 @@ test.describe("rally-length bands", () => {
     expect(html).not.toContain("cursor-pointer");
     expect(html).not.toContain('role="button"');
     expect(html).not.toContain("Watch in Video");
+    expect(html).not.toContain("Click to watch in Video");
   });
 
   test("with video: each band is a button and says so", () => {
@@ -258,8 +259,10 @@ test.describe("rally-length bands", () => {
     expect(count(html, 'role="button"')).toBe(3);
     expect(count(html, "cursor-pointer")).toBe(3);
     expect(html).not.toContain("cursor-default");
-    // Once in each readout, once in each band's aria-label.
-    expect(count(html, "Watch in Video")).toBe(6);
+    // The readout names the click ("Click to watch…"); the aria-label names
+    // the action. Once each per band.
+    expect(count(html, "Click to watch in Video")).toBe(3);
+    expect(count(html, "Watch in Video")).toBe(3);
   });
 });
 
@@ -274,6 +277,7 @@ test.describe("point-endings segments", () => {
     expect(html).not.toContain("cursor-pointer");
     expect(html).not.toContain('role="button"');
     expect(html).not.toContain("Watch in Video");
+    expect(html).not.toContain("Click to watch in Video");
   });
 
   test("with video: each segment is a button and says so", () => {
@@ -281,7 +285,8 @@ test.describe("point-endings segments", () => {
     expect(count(html, 'role="button"')).toBe(SEGMENTS);
     expect(count(html, "cursor-pointer")).toBe(SEGMENTS);
     expect(html).not.toContain("cursor-default");
-    expect(count(html, "Watch in Video")).toBe(SEGMENTS * 2);
+    expect(count(html, "Click to watch in Video")).toBe(SEGMENTS);
+    expect(count(html, "Watch in Video")).toBe(SEGMENTS);
   });
 });
 
@@ -296,6 +301,7 @@ test.describe("performance tracker", () => {
       expect(html).toContain("above</span>");
       expect(html).not.toContain("cursor-pointer");
       expect(html).not.toContain("Watch in Video");
+      expect(html).not.toContain("Click to watch in Video");
     }
   });
 });
