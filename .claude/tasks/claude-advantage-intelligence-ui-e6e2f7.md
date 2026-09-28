@@ -85,7 +85,7 @@ ready).
 
 ## T6 · Match page's uploading state mirrors the wizard's "Uploading your video"
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/match-detail/match-analysis-progress.tsx, src/components/dashboard/matches/new-match-wizard/UploadMatchSuccess.tsx, a new shared copy module (e.g. src/components/dashboard/matches/upload-progress-copy.ts), src/components/dashboard/shared/vertical-steps.tsx (import only) — guess
 - **done when:**

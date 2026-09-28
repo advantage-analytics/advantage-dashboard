@@ -17,8 +17,10 @@ const src = readFileSync(
 );
 
 test("mid-upload, the instruction leads and the reassurance sits under it", () => {
-  const keep = src.indexOf("Keep this tab open until the upload finishes.");
-  const reassure = src.indexOf("You can keep using the dashboard.");
+  // The strings live in `upload-progress-copy.ts` (shared with the match
+  // page's progress panel); the order they render in is this file's.
+  const keep = src.indexOf("UPLOADING_COPY.notes.keepTabOpen");
+  const reassure = src.indexOf("UPLOADING_COPY.notes.keepUsing");
   expect(keep).toBeGreaterThan(-1);
   expect(reassure).toBeGreaterThan(keep);
 });
