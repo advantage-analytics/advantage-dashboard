@@ -8,8 +8,8 @@
 //
 //   node scripts/eyes-on/capture.mjs --out <dir> /dashboard /dashboard/matches …
 //
-// Environment (read from .env.local by this script — never pass the values
-// on a command line, and never print them):
+// Environment (loaded from the checkout's .env.local via scripts/lib/env.ts —
+// never pass the values on a command line, and never print them):
 //   EYES_ON_EMAIL / EYES_ON_PASSWORD   the verifier account. Unset → exit 2.
 //   EYES_ON_BASE_URL                   optional. Attach to a running loopback
 //                                      dev server instead of starting one.
@@ -25,9 +25,11 @@
 import { chromium } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { loadEnvLocal } from "../lib/env.ts";
 
 /** The checkout this script lives in — .env.local and `next dev` both
  * belong to it, whatever directory the caller happened to be in. */
@@ -70,18 +72,8 @@ mkdirSync(out, { recursive: true });
 // ── env ────────────────────────────────────────────────────────────────────
 /** Read the verifier credentials without printing either value. */
 function loadEnv() {
-  const fromProcess = (name) => process.env[name]?.trim() ?? "";
-  let raw = "";
-  const envFile = join(ROOT, ".env.local");
-  if (existsSync(envFile)) raw = readFileSync(envFile, "utf8");
-  const fromFile = (name) =>
-    raw
-      .split("\n")
-      .find((l) => l.startsWith(`${name}=`))
-      ?.slice(name.length + 1)
-      .trim()
-      .replace(/^(['"])(.*)\1$/, "$2") ?? "";
-  const get = (name) => fromProcess(name) || fromFile(name);
+  loadEnvLocal(ROOT);
+  const get = (name) => process.env[name]?.trim() ?? "";
   return {
     email: get("EYES_ON_EMAIL"),
     password: get("EYES_ON_PASSWORD"),
@@ -247,11 +239,12 @@ async function main() {
     }
   });
 
+  const hadStoredState = existsSync(statePath);
   const report = {
     baseUrl,
     capturedAt: new Date().toISOString(),
     viewport: VIEWPORT,
-    signIn: existsSync(statePath) ? "reused storage state" : "fresh",
+    signIn: hadStoredState ? "reused storage state" : "fresh",
     pages: [],
   };
 
@@ -308,11 +301,10 @@ async function main() {
       process.exit(3);
     }
     await context.storageState({ path: statePath });
-    report.signIn =
-      report.signIn === "fresh"
-        ? "signed in"
-        : "reused state expired; signed in again";
-  } else if (report.signIn === "fresh") {
+    report.signIn = hadStoredState
+      ? "reused state expired; signed in again"
+      : "signed in";
+  } else if (!hadStoredState) {
     report.signIn = "already signed in (no login page shown)";
   }
 
