@@ -14,6 +14,16 @@ import { drawOfRound, ROUND_ORDER, roundLongLabel, roundRank } from "./format";
 import type { EntryMatch, EventEntry } from "./types";
 
 /**
+ * The part of an entry the round pickers read: where it started and which
+ * rounds it holds. An `EventEntry` is one; the score flow builds one from its
+ * `recordedRounds` without holding the entry itself.
+ */
+export type RunRounds = {
+  draw: string | null;
+  matches: readonly { round: string | null }[];
+};
+
+/**
  * The round after the last one recorded, so the common case is pre-picked.
  *
  * One ladder, `ROUND_ORDER` — the same one the run is sorted by. A second
@@ -23,7 +33,7 @@ import type { EntryMatch, EventEntry } from "./types";
  * UPDATE the recorded quarter-final with the semi-final's score, losing the
  * earlier result with no error.
  */
-export function nextRound(entry: EventEntry): string {
+export function nextRound(entry: RunRounds): string {
   const last = entry.matches[entry.matches.length - 1]?.round;
   if (!last) {
     return entry.draw?.toLowerCase().includes("qualif") ? "Q1" : "R32";
@@ -32,6 +42,65 @@ export function nextRound(entry: EventEntry): string {
   return index >= 0 && index < ROUND_ORDER.length - 1
     ? ROUND_ORDER[index + 1]
     : last;
+}
+
+/** `drawOfRound`'s names for the two draws a qualifier crosses. */
+const QUALIFYING = "Qualifying";
+const MAIN_DRAW = "Main draw";
+/** Where a fresh main-draw run starts — the same default `nextRound` uses. */
+const MAIN_DRAW_START = "R32";
+
+/**
+ * The round to open after saving `savedRound`, or null when nothing follows.
+ *
+ * A WIN moves the entry one step up its own draw — the next `ROUND_ORDER`
+ * entry whose `drawOfRound` matches (R32→R16, QF→SF, Q1→Q2, C1→C2). Read off
+ * the ladder and `drawOfRound` rather than a list of its own, so a round added
+ * to the ladder is picked up here with no second edit.
+ *
+ * - **A won `F`** is a title: null, nothing follows it.
+ * - **The last round of a draw** with nothing after it in the same draw: a
+ *   qualifier's last round won carries them into the main draw — the first
+ *   main-draw round after the furthest one the entry already holds, or the
+ *   run's usual main-draw start (R32, as `nextRound` opens a fresh entry)
+ *   when it holds none. Null when the ladder defines no main draw, and for
+ *   any other draw (the last consolation round) — there is nowhere to go.
+ * - **An unrecognised round** has no ladder position: null.
+ *
+ * A LOSS — until T11 decides where a loss goes — answers what it always has:
+ * `nextRound(entry)`.
+ */
+export function nextRoundAfter(
+  entry: RunRounds,
+  savedRound: string,
+  won: boolean,
+): string | null {
+  if (!won) return nextRound(entry);
+
+  const saved = savedRound.toUpperCase();
+  const index = ROUND_ORDER.indexOf(saved);
+  const draw = drawOfRound(saved);
+  if (index === -1 || draw === null) return null;
+  if (saved === "F") return null;
+
+  const sameDraw = ROUND_ORDER.slice(index + 1).find(
+    (round) => drawOfRound(round) === draw,
+  );
+  if (sameDraw) return sameDraw;
+  if (draw !== QUALIFYING) return null;
+
+  const main = ROUND_ORDER.filter((round) => drawOfRound(round) === MAIN_DRAW);
+  if (main.length === 0) return null;
+
+  // The furthest main-draw round already held; the one after it is next.
+  const furthest = entry.matches.reduce((best, match) => {
+    const at = match.round ? main.indexOf(match.round.toUpperCase()) : -1;
+    return Math.max(best, at);
+  }, -1);
+  if (furthest === -1) {
+    return main.includes(MAIN_DRAW_START) ? MAIN_DRAW_START : main[0];
+  }
+  return main[furthest + 1] ?? null;
 }
 
 /**

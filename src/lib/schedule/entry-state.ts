@@ -22,6 +22,7 @@ import type {
   OutcomeKind,
   ResolvedOutcome,
 } from "./types";
+import type { RecordResultInput } from "./write-types";
 
 /** Exact round lookup: a tournament result never leaks into a sibling round. */
 export function outcomeForRound(
@@ -172,6 +173,28 @@ export function matchWon(match: EntryMatch): boolean | null {
   // that stopped may be ahead — 3-6, 2-1 ret. is the other player's line),
   // then sets.
   const winner = scoreWinner(match.score);
+  return winner === null ? null : winner === "player1";
+}
+
+/**
+ * Would this `recordResult` payload be a match we won — asked BEFORE it is
+ * written, so the score flow can word its button from the typed score.
+ *
+ * The payload is turned into the score `recordResult` stores (player1 is
+ * always ours; a stopped match's `winner` is the side that did not stop) and
+ * read with `matchWon`'s own rule, so the button and every reader afterwards
+ * agree on who took it.
+ */
+export function resultInputWon(
+  input: Pick<RecordResultInput, "ourGames" | "theirGames" | "ending">,
+): boolean | null {
+  const winner = scoreWinner({
+    player1: input.ourGames,
+    player2: input.theirGames,
+    ...(input.ending
+      ? { winner: input.ending.side === "ours" ? "player2" : "player1" }
+      : {}),
+  });
   return winner === null ? null : winner === "player1";
 }
 

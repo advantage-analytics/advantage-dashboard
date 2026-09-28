@@ -1,9 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-import { ROUND_ORDER, roundLongLabel } from "@/lib/schedule/format";
+import {
+  ROUND_ORDER,
+  drawOfRound,
+  roundLongLabel,
+} from "@/lib/schedule/format";
 import {
   groupByDraw,
   nextRound,
+  nextRoundAfter,
   runFinish,
 } from "@/lib/schedule/tournament-run";
 import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
@@ -204,5 +209,61 @@ test.describe("nextRound", () => {
   test("the round after the last one recorded", () => {
     expect(nextRound(runOf(["R32", "R16"]))).toBe("QF");
     expect(nextRound(runOf(["Q1", "Q2"]))).toBe("Q3");
+  });
+});
+
+test.describe("nextRoundAfter", () => {
+  const run = (rounds: string[], draw: string | null = null) =>
+    entry(
+      rounds.map((round, index) => match(`m-${index}`, round, "us")),
+      draw,
+    );
+
+  test("a win moves one step up the same draw", () => {
+    expect(nextRoundAfter(run(["R32"]), "R32", true)).toBe("R16");
+    expect(nextRoundAfter(run(["QF"]), "QF", true)).toBe("SF");
+    expect(nextRoundAfter(run(["Q1"]), "Q1", true)).toBe("Q2");
+    expect(nextRoundAfter(run(["C1"]), "C1", true)).toBe("C2");
+    // Codes are read case-blind, like `roundRank`.
+    expect(nextRoundAfter(run(["r32"]), "r32", true)).toBe("R16");
+  });
+
+  test("the step is read off ROUND_ORDER, never a list of its own", () => {
+    for (const [index, round] of ROUND_ORDER.entries()) {
+      const next = ROUND_ORDER[index + 1];
+      if (round === "F" || !next || drawOfRound(next) !== drawOfRound(round)) {
+        continue;
+      }
+      expect(nextRoundAfter(run([round]), round, true)).toBe(next);
+    }
+  });
+
+  test("nothing follows a won final", () => {
+    expect(nextRoundAfter(run(["SF", "F"]), "F", true)).toBeNull();
+  });
+
+  test("the last qualifying round won leads into the main draw", () => {
+    // Nothing held in the main draw: its usual start, as `nextRound` opens it.
+    expect(
+      nextRoundAfter(run(["Q1", "Q2", "Q3"], "Qualifying"), "Q3", true),
+    ).toBe("R32");
+    // A main-draw round already held: the first one after it.
+    expect(nextRoundAfter(run(["Q3", "R32"], "Qualifying"), "Q3", true)).toBe(
+      "R16",
+    );
+  });
+
+  test("the last consolation round and an unknown round lead nowhere", () => {
+    expect(nextRoundAfter(run(["C3"]), "C3", true)).toBeNull();
+    expect(nextRoundAfter(run(["Final 4"]), "Final 4", true)).toBeNull();
+  });
+
+  test("a loss answers what nextRound always has (until T11)", () => {
+    for (const rounds of [["R32"], ["R32", "R16"], ["Q1", "Q2"], ["F"]]) {
+      const entryRun = run(rounds);
+      expect(nextRoundAfter(entryRun, rounds.at(-1)!, false)).toBe(
+        nextRound(entryRun),
+      );
+    }
   });
 });

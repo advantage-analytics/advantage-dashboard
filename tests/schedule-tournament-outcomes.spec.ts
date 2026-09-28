@@ -10,6 +10,7 @@ import {
   lineCoverageFrom,
   readyMatchIdsFrom,
 } from "@/lib/schedule/entry-state";
+import { nextRoundAfter } from "@/lib/schedule/tournament-run";
 import { entry } from "./fixtures/schedule-tournament-outcomes-data";
 
 /**
@@ -382,6 +383,15 @@ const PRIMARY_CLASS = /(^|\s)bg-\[var\(--blue\)\](\s|$)/;
 const GHOST_CLASS = /(^|\s)bg-transparent(\s|$)/;
 // `nextRound(entry)`: the round after the run's last match, R16.
 const NEXT = `${SCORE}?entry=tournament-entry&round=QF`;
+
+test("Add result points at the round a won last match leads to", () => {
+  // R16 is the run's last match, and won: the score flow's "Save and next
+  // round" (T9) would open the same round the event page links to.
+  const last = entry.matches.at(-1)!;
+  expect(new URLSearchParams(NEXT.split("?")[1]).get("round")).toBe(
+    nextRoundAfter(entry, last.round!, true),
+  );
+});
 
 test("a played round opens the match drawer with its report and facts", async ({
   page,

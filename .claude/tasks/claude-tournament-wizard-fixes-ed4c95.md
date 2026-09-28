@@ -117,7 +117,7 @@ ready).
 
 ## T9 · After a won tournament round, offer that entry's next round first
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** src/lib/schedule/tournament-run.ts (`nextRound`), src/lib/schedule/entry-state.ts (`matchWon`), src/components/dashboard/schedule/score-only-flow.tsx (`save`/`finish`, footer labels), tests/tournament-run.spec.ts, tests/schedule-score-flow-outcomes.spec.ts

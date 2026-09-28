@@ -378,7 +378,7 @@ test.describe("a tournament entry", () => {
   }) => {
     await openFlow(page, "?kind=tournament");
     await expect(page.getByText("Entry 1 of 2", { exact: true })).toBeVisible();
-    const round = page.getByRole("button", { name: "Round" });
+    const round = page.getByRole("button", { name: "Round", exact: true });
     await expect(round).toContainText("R32");
 
     await page.getByLabel("Jordan Lee, set 1").fill("6");
@@ -409,7 +409,7 @@ test.describe("a tournament entry", () => {
     page,
   }) => {
     await openFlow(page, "?kind=tournament&recorded=true");
-    const round = page.getByRole("button", { name: "Round" });
+    const round = page.getByRole("button", { name: "Round", exact: true });
     await expect(round).toContainText("R16");
     await expect(page.getByLabel("Jordan Lee, set 1")).toHaveValue("");
     await expect(
@@ -445,7 +445,7 @@ test.describe("a tournament entry", () => {
     page,
   }) => {
     await openFlow(page, "?kind=tournament&recorded=true");
-    const round = page.getByRole("button", { name: "Round" });
+    const round = page.getByRole("button", { name: "Round", exact: true });
     // R16 holds no match, so it names nobody — the typed opponent row is
     // still "Opponent", and it is kept along with the digits.
     await page.getByLabel("Jordan Lee, set 1").fill("6");
@@ -490,7 +490,7 @@ test.describe("a tournament entry", () => {
     page,
   }) => {
     await openFlow(page, "?kind=tournament&recorded=true");
-    const round = page.getByRole("button", { name: "Round" });
+    const round = page.getByRole("button", { name: "Round", exact: true });
     await expect(round).toContainText("R16");
     await expect(
       page.getByRole("button", { name: "Name their player" }),
@@ -516,7 +516,7 @@ test.describe("a tournament entry", () => {
     page,
   }) => {
     await openFlow(page, "?kind=tournament&recorded=true");
-    const round = page.getByRole("button", { name: "Round" });
+    const round = page.getByRole("button", { name: "Round", exact: true });
     await round.click();
     await page.getByRole("menuitemradio", { name: /^R32/ }).click();
 
@@ -566,19 +566,105 @@ test.describe("a tournament entry", () => {
       window.failNextScore =
         "Another coach saved this round. Refresh and review it.";
     });
-    await page.getByRole("button", { name: "Save and next entry" }).click();
+    // 6-4, played out: a won QF, so (T9) the primary walks up the draw.
+    await page.getByRole("button", { name: "Save and next round" }).click();
     await expect(
       page.getByText("Another coach saved this round. Refresh and review it."),
     ).toBeVisible();
     await expect(page.getByLabel("Alex Kim, set 1")).toHaveValue("6");
 
-    await page.getByRole("button", { name: "Save and next entry" }).click();
+    await page.getByRole("button", { name: "Save and next round" }).click();
     await expect
       .poll(() => page.evaluate(() => window.actionCalls.at(-1)))
       .toEqual({
         action: "recordResult",
         input: expect.objectContaining({ entryId: "entry-t2", round: "QF" }),
       });
+    await expect(
+      page.getByRole("button", { name: "Round", exact: true }),
+    ).toContainText("SF");
+  });
+
+  test("a won round offers that entry's next round, and opens it blank after the save", async ({
+    page,
+  }) => {
+    await openFlow(page, "?kind=tournament&recorded=true");
+    const round = page.getByRole("button", { name: "Round", exact: true });
+    await expect(round).toContainText("R16");
+    // Nothing typed yet: no win to follow, so the footer is as it was.
+    await expect(
+      page.getByRole("button", { name: "Save and next round" }),
+    ).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Name their player" }).click();
+    await page.getByRole("option", { name: /Taylor Park/ }).click();
+    await page.getByLabel("Jordan Lee, set 1").fill("6");
+    await page.getByLabel("Taylor Park, set 1").fill("3");
+    await page.getByLabel("Jordan Lee, set 2").fill("6");
+    await page.getByLabel("Taylor Park, set 2").fill("4");
+
+    const primary = page.getByRole("button", { name: "Save and next round" });
+    await expect(primary).toBeVisible();
+    // The ghost stays beside it: closing is still a different choice.
+    await expect(
+      page.getByRole("button", { name: "Save and close" }),
+    ).toBeVisible();
+    await primary.click();
+
+    await expect
+      .poll(() => page.evaluate(() => window.actionCalls.at(-1)))
+      .toEqual({
+        action: "recordResult",
+        input: expect.objectContaining({
+          entryId: "entry-t1",
+          round: "R16",
+          opponentLabels: ["Taylor Park"],
+          ourGames: [6, 6],
+          theirGames: [3, 4],
+        }),
+      });
+
+    // Same entry, the next round of its draw, blank — score and opponent.
+    await expect(round).toContainText("QF");
+    await expect(page.getByText("Entry 1 of 2", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Jordan Lee, set 1")).toHaveValue("");
+    await expect(page.getByLabel("Opponent, set 1")).toHaveValue("");
+    await expect(
+      page.getByRole("button", { name: "Name their player" }),
+    ).toBeVisible();
+    await expect(page.getByText("R16 saved", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => window.routerPushes)).toEqual([]);
+    expect(
+      new URLSearchParams(
+        await page.evaluate(() => window.location.search),
+      ).get("round"),
+    ).toBe("QF");
+
+    // The round just filed now counts as recorded.
+    await round.click();
+    await page.getByRole("menuitemradio", { name: /^R16/ }).click();
+    await expect(
+      page.getByText("Replaces the R16 result already recorded."),
+    ).toBeVisible();
+  });
+
+  test("a lost round keeps today's footer: no next round is offered", async ({
+    page,
+  }) => {
+    await openFlow(page, "?kind=tournament&recorded=true");
+    await page.getByRole("button", { name: "Name their player" }).click();
+    await page.getByRole("option", { name: /Taylor Park/ }).click();
+    await page.getByLabel("Jordan Lee, set 1").fill("3");
+    await page.getByLabel("Taylor Park, set 1").fill("6");
+
+    await expect(
+      page.getByRole("button", { name: "Save and next round" }),
+    ).toHaveCount(0);
+    // The only other entry already has its result, so this is the last one.
+    await page.getByRole("button", { name: "Save and close" }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.routerPushes))
+      .toEqual(["/dashboard/team/schedule/event-browser"]);
   });
 });
 

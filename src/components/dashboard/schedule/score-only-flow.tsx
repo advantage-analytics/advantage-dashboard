@@ -26,6 +26,13 @@
  * coach has typed into keeps its digits (`reseedForRound`). The URL's
  * `?round=` follows via `history.replaceState`, so a reload reopens the same
  * round with no server round-trip on the change itself.
+ *
+ * A round our side WON walks up that entry's draw instead of on to the next
+ * entry: the primary reads "Save and next round" (decided from the typed
+ * score before the write, by `nextRoundAfter`) and, once saved, the same
+ * Round path moves the form to that round — the just-saved form counts as
+ * its own seed, so the next round opens blank rather than carrying the score
+ * that was just filed.
  */
 
 import { useMemo, useState, useTransition } from "react";
@@ -52,7 +59,8 @@ import {
   type SavedLineUpload,
   type ScoreFormState,
 } from "@/lib/schedule/score-seed";
-import { endingMark } from "@/lib/schedule/entry-state";
+import { endingMark, resultInputWon } from "@/lib/schedule/entry-state";
+import { nextRoundAfter } from "@/lib/schedule/tournament-run";
 import {
   OpponentPopup,
   useOpponentPool,
@@ -155,6 +163,13 @@ export function ScoreOnlyFlow({
    * the line the form has just LEFT.
    */
   const [lastSaved, setLastSaved] = useState<SavedLineUpload | null>(null);
+  /**
+   * Rounds saved this session, per entry — on top of the page's
+   * `recordedRounds`, which only a refresh brings up to date. A round just
+   * filed by "Save and next round" is recorded from that moment, so going
+   * back to it says saving replaces it.
+   */
+  const [savedRounds, setSavedRounds] = useState<Record<string, string[]>>({});
   // The opponent's saved roster, fetched once for the event rather than on
   // every line's remount — and only when a form can name someone: some line
   // still needs a name, or this is a tournament, whose every round is named
@@ -228,6 +243,16 @@ export function ScoreOnlyFlow({
     ? outcomeKey(current.entryId, tournament ? current.round : null)
     : null;
 
+  /** Every round this entry holds: the page's, plus this session's saves. */
+  const heldRounds = current.entryId
+    ? Array.from(
+        new Set([
+          ...(recordedRounds[current.entryId] ?? []),
+          ...(savedRounds[current.entryId] ?? []),
+        ]),
+      )
+    : [];
+
   /** The saved outcome under one key, this session's writes first. */
   const outcomeAt = (
     key: string | null,
@@ -284,10 +309,11 @@ export function ScoreOnlyFlow({
         pool={pool}
         initialOutcome={outcomeAt(currentKey)}
         recorded={
-          tournament && current.entryId && current.round
-            ? (recordedRounds[current.entryId] ?? []).includes(current.round)
+          tournament && current.round
+            ? heldRounds.includes(current.round)
             : false
         }
+        heldRounds={heldRounds}
         noun={noun}
         onRoundChange={(round) => {
           const next = presetAtRound(current, round, roundSeeds);
@@ -314,6 +340,21 @@ export function ScoreOnlyFlow({
             }));
           }
           if (next) switchLine(next);
+        }}
+        onAdvanced={(entryId, round, outcome, upload) => {
+          // The entry stays open — it has a next round to record — so only
+          // the round just filed, its outcome and its video offer move.
+          setLastSaved(upload);
+          setSavedRounds((prior) => ({
+            ...prior,
+            [entryId]: [...(prior[entryId] ?? []), round],
+          }));
+          if (currentKey) {
+            setOutcomeOverrides((prior) => ({
+              ...prior,
+              [currentKey]: outcome,
+            }));
+          }
         }}
         onCleared={(entryId) => {
           setLastSaved(null);
@@ -345,6 +386,7 @@ function ScoreForm({
   pool,
   initialOutcome,
   recorded,
+  heldRounds,
   noun,
   onRoundChange,
   eventHref,
@@ -353,6 +395,7 @@ function ScoreForm({
   canUpload,
   lastSaved,
   onSaved,
+  onAdvanced,
   onCleared,
 }: {
   preset: EventPreset;
@@ -363,6 +406,8 @@ function ScoreForm({
   initialOutcome: Pick<EntryOutcome, "kind" | "side"> | null;
   /** A tournament round that already holds a result — saving replaces it. */
   recorded: boolean;
+  /** The rounds this entry already holds — where a won round leads next. */
+  heldRounds: string[];
   /** "line" on a dual, "entry" on a tournament — the footer's word. */
   noun: "line" | "entry";
   /**
@@ -385,6 +430,17 @@ function ScoreForm({
     next: EventPreset | null,
     outcome: Pick<EntryOutcome, "kind" | "side"> | null,
     /** What the footer offers for the line just saved; null for an outcome. */
+    upload: SavedLineUpload | null,
+  ) => void;
+  /**
+   * A won tournament round was saved and the form is moving up the draw:
+   * the parent records the round just filed. The move itself is the Round
+   * control's own path, taken from here.
+   */
+  onAdvanced: (
+    entryId: string,
+    savedRound: string,
+    outcome: Pick<EntryOutcome, "kind" | "side"> | null,
     upload: SavedLineUpload | null,
   ) => void;
   onCleared: (entryId: string) => void;
@@ -434,9 +490,25 @@ function ScoreForm({
    */
   const changeRound = (round: string) => {
     if (round === preset.round) return;
+    moveToRound(round, false);
+  };
+
+  /**
+   * The Round control's move, shared with "Save and next round". A form that
+   * was just written is its own seed — nothing in it is unsaved — so
+   * `reseedForRound` opens the next round from that round's seed (blank, with
+   * no opponent, for a round holding no match) rather than keeping digits
+   * that now belong to the round left behind.
+   */
+  const moveToRound = (round: string, justSaved: boolean) => {
     setError(null);
     const next = onRoundChange(round);
-    const decided = reseedForRound(state, seeded, next.preset, next.outcome);
+    const decided = reseedForRound(
+      state,
+      justSaved ? state : seeded,
+      next.preset,
+      next.outcome,
+    );
     setState(decided.state);
     setSeeded(decided.seeded);
     setSavedOutcome(next.outcome);
@@ -509,6 +581,28 @@ function ScoreForm({
     }));
   };
 
+  /**
+   * Where "Save and next round" goes, or null when saving walks on as it
+   * always has. Decided from the TYPED score, before anything is written,
+   * with the writer's own payload (`planSave`) and winner rule
+   * (`resultInputWon`): a tournament round played out and won. A retirement
+   * or a default, a loss, a dual line, a won final — null.
+   */
+  const advanceTo = (() => {
+    if (!tournament || !preset.round || !preset.entryId || state.ending) {
+      return null;
+    }
+    const plan = planSave(preset, state, savedOutcome);
+    if (plan.kind !== "score" || resultInputWon(plan.input) !== true) {
+      return null;
+    }
+    return nextRoundAfter(
+      { draw: null, matches: heldRounds.map((round) => ({ round })) },
+      preset.round,
+      true,
+    );
+  })();
+
   const walkOn = () => {
     if (nextOpen) onSaved(preset.entryId ?? "", nextOpen, savedOutcome, null);
     else router.push(eventHref);
@@ -556,12 +650,20 @@ function ScoreForm({
       setError(plan.message);
       return;
     }
+    // Read now, from what was typed: the label the coach clicked promised it.
+    const advance = then === "next" ? advanceTo : null;
+    const savedRound = preset.round;
 
     const finish = (
       outcome: Pick<EntryOutcome, "kind" | "side"> | null,
       upload: SavedLineUpload | null,
     ) => {
       router.refresh();
+      if (advance && savedRound) {
+        onAdvanced(preset.entryId ?? "", savedRound, outcome, upload);
+        moveToRound(advance, true);
+        return;
+      }
       if (then === "close" || !nextOpen) {
         router.push(eventHref);
         return;
@@ -789,11 +891,12 @@ function ScoreForm({
             </button>
           ) : (
             <>
-              {/* Only while there IS a next line. On the last one the primary
+              {/* Only while there IS a next line (or a won round's next
+                  round, which needs no open line). On the last one the primary
                   falls back to "Save and close", and drawing the ghost too
                   would put two identically labelled buttons side by side
                   doing the same thing — a choice that isn't one. */}
-              {nextOpen ? (
+              {nextOpen || advanceTo ? (
                 <button
                   type="button"
                   disabled={pending}
@@ -811,9 +914,11 @@ function ScoreForm({
               >
                 {pending
                   ? "Saving…"
-                  : nextOpen
-                    ? `Save and next ${noun}`
-                    : "Save and close"}
+                  : advanceTo
+                    ? "Save and next round"
+                    : nextOpen
+                      ? `Save and next ${noun}`
+                      : "Save and close"}
               </button>
             </>
           )}
