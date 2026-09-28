@@ -287,3 +287,11 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical PASS · completion PASS
 **changed:** New pure `activity/tray-failure.ts`: `isTrayFailure` (= `matchListGroup(...) === "Failed"`), `trayFailureAction` (href from `analysisAction`; label "Open" for retry / rederive / wait_or_ask, else analysisAction's own "Add video" / "Start over"), `trayFailureReason` (via new `TRAY_REASON` in analysis-failure-copy.ts, wait_or_ask by `waitOrAskVariant`). New tests/activity-tray-failure.spec.ts pins every class and variant. Reviewer confirmed forcing status "failed" in the analysisAction call cannot change a derivation_failed row's href.
+
+## T33 · Tray rows become whole-row links with the stepper's marks — done
+
+**gate:** mechanical PASS · completion PASS
+**changed:** activity-tray.tsx partitions `failed` with `isTrayFailure` after the live merge. `FailedRow` is one whole-row `Link` (href/label from `trayFailureAction`): truncating title + `trayFailureReason`, grey action word (ink-600 → ink-900 on hover/focus) and chevron; no bordered button, no blue, no `/dashboard/matches/new` literal. `StepMark` gains `size="compact"` (14px, 9px glyph; default markup unchanged); in-flight rows lead with the compact spinner, failed rows with the compact fail mark; invitations keep the blue dot. Header, FailedRow and tray-detail comments rewritten. New tests/activity-tray-rows.spec.ts renders the whole tray offline.
+**follow-ups:**
+
+1. `.skills/advantage-analytics-design/reference/chrome.md` "Activity Tray (v3)" (~L93–115) still describes red circle-x rows with a bordered "Start over" and blue dots on moving rows; update it to the shipped tray.

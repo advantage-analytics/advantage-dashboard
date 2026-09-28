@@ -445,7 +445,7 @@ ready).
 
 ## T33 · Tray rows become whole-row links with the stepper's marks
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T32
 - **files:** src/components/dashboard/activity/activity-tray.tsx, src/components/dashboard/activity/tray-detail.ts (comment only), src/components/dashboard/shared/vertical-steps.tsx, tests/activity-tray-rows.spec.ts (new, guess)

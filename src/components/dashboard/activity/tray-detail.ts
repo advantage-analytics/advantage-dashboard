@@ -12,9 +12,11 @@
  * looks. A person who has both wants to read the one with a button first.
  *
  * Failures come next. They used to be receipts, unmarked and uncounted; now
- * the row carries "Start over", which makes a failure the second thing in
- * the tray waiting on the reader. A count that left it out would say
- * "Nothing in flight" over a row with a button on it.
+ * each failed row is a link to its recovery ("Add video", or "Open" onto the
+ * match page), which makes a failure the second thing in the tray waiting on
+ * the reader. A count that left it out would say "Nothing in flight" over a
+ * row that needs someone. The caller counts only `isTrayFailure` rows, so a
+ * `stats_unavailable` match — Ready on the matches list — is never one.
  *
  * Work in a workspace the viewer is NOT looking at comes last, and only as a
  * count: the tray is scoped to the active workspace on purpose, so this is the
