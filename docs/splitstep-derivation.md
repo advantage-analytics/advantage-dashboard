@@ -229,13 +229,19 @@ match cannot reproduce `matches.score`. Under the Gate 1 bypass below it is writ
 unreconciled, and it would be refused again if the gate returned, until the fold
 learns to keep a tiebreak as one game.
 
+**Collapsed score tail (2026-09-28).** When the score stream resets to 0-0 / 0-0 /
+no set at the end of a match and never recovers (job 45ff4bd7), those rallies are
+kept, folded into the last real game, and their winners are guessed from the last
+stroke (`lastStrokeWinner`). Each such point is flagged `winner_guessed`. Only a
+trailing reset qualifies; any other unresolved point still refuses the match.
+
 > **Gate 1 temporarily bypassed (2026-09-02).** `ACCEPT_UNRECONCILED_FOLD` in
 > `derivation/reconcile.ts` is `true`: a fold that misses the entered score is still
 > written, with player1 named from the wizard's top-player input plus court geometry,
 > or failing that from whichever mapping folds closest to the score (a tie is still a
 > refusal). `Reconciliation.ok` stays `false` on that path and `player1Source` records
 > how player1 was chosen; `derive-and-publish` logs `grade: unreconciled`. Rows carry
-> `DERIVATION_VERSION = 0.3.x-unreconciled` (0.3.1 since the tiebreak rule) and must
+> `DERIVATION_VERSION = 0.x-unreconciled` (0.3.1 since the tiebreak rule, 0.4.1 since the collapsed-tail rule) and must
 > be rebuilt when the gate returns.
 > The unresolved-points gate is untouched.
 

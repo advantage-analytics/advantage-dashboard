@@ -16,6 +16,8 @@ import {
   scoreIsSelfMirroring,
   shotNumber,
   shotResult,
+  collapsedTailStart,
+  lastStrokeWinner,
   POINT_FLAGS,
   SHOT_FLAGS,
   type PointWinner,
@@ -837,5 +839,113 @@ test.describe("reconcile: the final point", () => {
     expect(rec.ok).toBe(true);
     expect(rec.unresolvedPoints).toEqual([]);
     expect(rec.settledWinners).toEqual(resolved);
+  });
+});
+
+test.describe("collapsed score tail", () => {
+  /** A one-stroke rally whose first stroke carries the given score strings. */
+  const at = (
+    rallyId: number,
+    set: string | null,
+    game: string | null,
+    point: string | null,
+  ): SplitStepRally => ({
+    ...rally([
+      stroke({
+        rallyId,
+        strokeType: "serve",
+        predSetScore: set,
+        predGameScore: game,
+        predPointScore: point,
+      }),
+    ]),
+    rallyId,
+  });
+
+  test("finds a trailing run that reset to 0-0 / 0-0 / no set", () => {
+    // Job 45ff4bd7's last rallies: 97 at 0-15, then 98 onward reset.
+    const rallies = [
+      at(96, "1-0", "6-0", "0-0"),
+      at(97, "1-0", "6-0", "0-15"),
+      at(98, null, "0-0", "0-0"),
+      at(99, null, "0-0", "0-0"),
+      at(100, null, "0-0", "0-0"),
+    ];
+    expect(collapsedTailStart(rallies)).toBe(2);
+  });
+
+  test("a leading warm-up reset is not a tail, and stays a refusal", () => {
+    const rallies = [at(1, null, "0-0", "0-0"), at(2, "0-0", "0-0", "0-0")];
+    expect(collapsedTailStart(rallies)).toBeNull();
+  });
+
+  test("a stream that never carried a set score has no tail", () => {
+    const rallies = [at(1, null, "0-0", "0-0"), at(2, null, "0-0", "0-0")];
+    expect(collapsedTailStart(rallies)).toBeNull();
+  });
+
+  test("a trailing rally that lost only its set score is not a reset", () => {
+    // A missing set string alone is not a reset: the game and point scores
+    // still read, and winners.ts falls through to them.
+    const rallies = [at(1, "0-0", "3-2", "15-0"), at(2, null, "3-2", "30-0")];
+    expect(collapsedTailStart(rallies)).toBeNull();
+  });
+
+  test("lastStrokeWinner: in goes to the striker, out to the other player", () => {
+    const rallyOf = (lastIn: boolean) =>
+      rally([
+        stroke({ playerLabel: "A", strokeType: "serve" }),
+        stroke({ playerLabel: "B", strokeNumber: 2, in: lastIn }),
+      ]);
+    expect(lastStrokeWinner(rallyOf(true))).toBe("B");
+    expect(lastStrokeWinner(rallyOf(false))).toBe("A");
+    // A rally that only ever shows one player needs the labels to answer.
+    const lone = rally([stroke({ playerLabel: "A", in: false })]);
+    expect(lastStrokeWinner(lone)).toBeNull();
+    expect(lastStrokeWinner(lone, ["A", "B"])).toBe("B");
+  });
+
+  test("a match that ends in a reset tail keeps every point, guessed and flagged", () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, "Gate 1 is restored");
+    const a = analyzeResults(clean);
+    const lastId = a.rallies[a.rallies.length - 1].rallyId;
+    const server = a.rallies[a.rallies.length - 1].server;
+    const tail = [1, 2, 3].map((n) => ({
+      ...at(lastId + n, null, "0-0", "0-0"),
+      server,
+      strokes: [
+        stroke({
+          rallyId: lastId + n,
+          playerLabel: server,
+          strokeType: "serve",
+          predSetScore: null,
+          in: true,
+        }),
+      ],
+    }));
+    const t = buildTranscript({
+      rallies: [...a.rallies, ...tail],
+      labels: a.players,
+      score: { player1: [6, 0, 6], player2: [0, 6, 0] },
+      initialTopIsPlayer1: null,
+    });
+    expect(t.ok).toBe(true);
+    expect(t.points).toHaveLength(a.rallies.length + tail.length);
+    expect(t.reconciliation.unresolvedPoints).toEqual([]);
+
+    // The last real rally lost its successor's score, so it is guessed too.
+    const tailIds = tail.map((r) => r.rallyId);
+    expect(t.guessedTailRallies).toEqual([lastId, ...tailIds]);
+    const guessed = t.points.filter((p) =>
+      p.flags.includes(POINT_FLAGS.WINNER_GUESSED),
+    );
+    expect(guessed).toHaveLength(tailIds.length + 1);
+
+    // Folded into the last real game: no phantom set or game.
+    const lastReal = t.points[a.rallies.length - 1];
+    for (const p of t.points.slice(a.rallies.length)) {
+      expect(p.set_number).toBe(lastReal.set_number);
+      expect(p.game_number).toBe(lastReal.game_number);
+    }
   });
 });
