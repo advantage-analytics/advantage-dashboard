@@ -432,7 +432,7 @@ ready).
 
 ## T32 · Tray failure helpers: which rows, where the row goes, what it says
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T30, T31
 - **files:** src/components/dashboard/activity/tray-failure.ts (new, guess), src/components/dashboard/matches/analysis-failure-copy.ts, tests/activity-tray-failure.spec.ts (new, guess)

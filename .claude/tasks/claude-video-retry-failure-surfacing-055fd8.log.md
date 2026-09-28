@@ -282,3 +282,8 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. Run `rls-boundary-reviewer` at /pr-check: the select now reads storage-key columns on the server.
+
+## T32 · Tray failure helpers: which rows, where the row goes, what it says — done
+
+**gate:** mechanical PASS · completion PASS
+**changed:** New pure `activity/tray-failure.ts`: `isTrayFailure` (= `matchListGroup(...) === "Failed"`), `trayFailureAction` (href from `analysisAction`; label "Open" for retry / rederive / wait_or_ask, else analysisAction's own "Add video" / "Start over"), `trayFailureReason` (via new `TRAY_REASON` in analysis-failure-copy.ts, wait_or_ask by `waitOrAskVariant`). New tests/activity-tray-failure.spec.ts pins every class and variant. Reviewer confirmed forcing status "failed" in the analysisAction call cannot change a derivation_failed row's href.

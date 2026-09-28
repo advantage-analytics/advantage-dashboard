@@ -66,6 +66,37 @@ export function waitOrAskVariant(
 }
 
 /**
+ * The activity tray's one-line reason for a failed row (T32, design canvas
+ * Direction E, chosen 2026-09-28). The tray draws this on a single
+ * truncating line, so it is deliberately shorter than `byClass`'s card/drawer
+ * bodies above — a different surface, not a trimmed copy of the same one.
+ *
+ * `wait_or_ask` is itself a map, one entry per `waitOrAskVariant()` result,
+ * mirroring `WAIT_OR_ASK_VARIANTS` above without reusing its longer copy.
+ * `none` is the tray's reason when a failed row carries no `recovery` at all
+ * (the loader could not classify it — see `MatchAnalysis.recovery`'s doc
+ * comment) — "Analysis failed" is the fact still true in that case.
+ */
+export const TRAY_REASON: Record<
+  Exclude<RecoveryClass, "stats_unavailable" | "wait_or_ask">,
+  string
+> & {
+  wait_or_ask: Record<"allowance" | "permission" | "ceiling", string>;
+  none: string;
+} = {
+  upload_again: "Upload didn't finish",
+  fix_recording: "Recording didn't meet the requirements",
+  retry: "Analysis stopped · retry available",
+  rederive: "Stats need rebuilding",
+  wait_or_ask: {
+    allowance: "No analysis time left this month",
+    permission: "Needs your team's owner",
+    ceiling: "Tried three times",
+  },
+  none: "Analysis failed",
+};
+
+/**
  * The failed-row drawer's body when the viewer has no action to take
  * (`canAct` is false) — a fixed line pointing them at the match page rather
  * than repeating the class's own drawer copy. Named apart from `byClass` so
