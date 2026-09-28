@@ -439,14 +439,17 @@ const STALL_TICK_MS = 10_000;
 
 /**
  * The clock the stalled-hand-off check reads — `analysis-steps-column.tsx`'s,
- * for a drawer. Null on the render the server also makes, then set only from
- * timers (first tick straight after mount, so an already-stalled row reads as
+ * for a drawer, shared by both peek drawers (`event-line-drawer.tsx` imports
+ * it). Null on the render the server also makes, then set only from timers
+ * (first tick straight after mount, so an already-stalled row reads as
  * stalled when it opens, then every `STALL_TICK_MS`), never from `Date.now()`
  * during render: the server has no "now" the client would agree with. Runs
  * only while the row is `uploaded`, the one status the drawer's view reads the
  * clock for; the view ignores it for every other status.
  */
-function useStallClock(status: AnalysisStatus | undefined): number | null {
+export function useStallClock(
+  status: AnalysisStatus | undefined,
+): number | null {
   const [now, setNow] = useState<number | null>(null);
   const readsClock = status === "uploaded";
 

@@ -237,3 +237,13 @@ is the runner's. Newest entries at the bottom.
 
 1. No spec renders `MatchDrawer` with a stalled or failed row, so the footer wiring is covered only by the unit specs — a `matches-drafts`-harness case would close it.
 2. The stall clock now exists twice (`analysis-steps-column.tsx`, `match-drawer.tsx`); make it one shared hook when T26 needs it too.
+
+## T26 · Schedule event drawer draws the Analysis steps; retire AnalysisNotice — done
+
+**gate:** mechanical pass · completion pass (`schedule-dual-outcomes.spec.ts` and its fixture unedited and green; every old AnalysisNotice case carried by a DrawerAnalysisSteps case)
+**changed:** `EntryMatch` gains `updatedAt`, `jobReference`, `uploadPercent` (set in `schedule-server.ts`). `event-line-drawer.tsx` builds a `MatchAnalysis` from the entry, renders `DrawerAnalysisSteps` (canAct = `canEdit`) for played singles lines (doubles unchanged), and feeds the footer from the view's `failure`, so a stalled hand-off puts "Try again" in the footer primary with View match as ghost; the failed-row footer is unchanged. It shares `useStallClock`, now exported from `match-drawer.tsx`. `AnalysisNotice`, its `drawerCopy` helper and its 9 spec cases are deleted.
+**follow-ups:**
+
+1. `drawerRecovery` has no caller in `src` now — delete it with its spec case.
+2. No spec covers the event drawer's stalled "Try again" footer (the protected fixture has no stalled row) — a separate fixture would pin it.
+3. `useStallClock` lives in `match-drawer.tsx` and the event drawer imports it from there; a tiny shared hooks module would be a cleaner home.

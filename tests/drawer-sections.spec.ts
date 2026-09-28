@@ -14,9 +14,10 @@ import { createLoader, marker } from "./fixtures/vm-modules";
 /**
  * The pure halves of the match drawer's shared body sections
  * (`drawer-sections.tsx`): the snapshot row mapping, the doubles-aware side
- * name, `AnalysisNotice`, which must read its failure copy from the shared
- * `analysis-failure-copy` module (`byClass`, by recovery class) rather than
- * hand-rolled strings, and the footer's `DrawerRecoveryAction`.
+ * name, the compact `DrawerAnalysisSteps`, which must read its failure copy
+ * from the shared `analysis-failure-copy` module (`byClass`, by recovery
+ * class) rather than hand-rolled strings, and the footer's
+ * `DrawerRecoveryAction`.
  * Loaded through `fixtures/vm-modules` so the `.tsx` module is transpiled
  * offline, with the browser client and link stubbed.
  */
@@ -57,14 +58,6 @@ const sections = loader.load(
   ProviderFact: (props: { providerId: string | null | undefined }) => {
     props: { label: string; children: unknown };
   } | null;
-  AnalysisNotice: React.ComponentType<{
-    status: string | null | undefined;
-    recovery: string | null | undefined;
-    note?: string | null;
-    errorCode?: string | null;
-    attemptsUsed?: number | null;
-    canAct: boolean;
-  }>;
   drawerRecovery: (
     status: string | null | undefined,
     recovery: string | null | undefined,
@@ -126,26 +119,7 @@ function decode(html: string): string {
     .replace(/&amp;/g, "&");
 }
 
-/** The first `<p>` inside the `role="alert"` block — the alert's headline. */
-function alertHeadline(html: string): string {
-  const alert = html.slice(html.indexOf('role="alert"'));
-  const match = alert.match(/<p\b[^>]*>([\s\S]*?)<\/p>/);
-  if (!match) throw new Error("no <p> inside role=alert");
-  return decode(match[1]);
-}
-
 const NOTE = "5 point(s) resolved no winner";
-
-function notice(props: Record<string, unknown>): string {
-  return renderToStaticMarkup(
-    React.createElement(sections.AnalysisNotice, {
-      status: "failed",
-      recovery: null,
-      canAct: true,
-      ...props,
-    } as never),
-  );
-}
 
 function action(props: Record<string, unknown>): string {
   return decode(
@@ -175,108 +149,6 @@ test("drawerRecovery: a failed row's class, the pre-class fallback, null otherwi
   expect(sections.drawerRecovery(null, undefined)).toBeNull();
 });
 
-// T9's derivation case, as a class. The reconciler's note is never drawn:
-// `showsStoredNote()` keeps DERIVATION_* notes out of `note`, and the notice
-// no longer reads the raw failNote.
-test("AnalysisNotice: stats_unavailable reads the shared derivation title/body, no retry copy", () => {
-  const html = notice({
-    status: "derivation_failed",
-    recovery: "stats_unavailable",
-    note: null,
-  });
-  const out = decode(html);
-
-  expect(html).toContain('role="alert"');
-  expect(out).toContain(byClass.stats_unavailable.title);
-  expect(out).toContain(byClass.stats_unavailable.cardBody);
-  expect(out).not.toContain("The match page has the details");
-  expect(out).not.toContain("Retrying uses");
-  expect(alertHeadline(html)).toBe(byClass.stats_unavailable.title);
-  expect(out).not.toContain(NOTE);
-});
-
-test("AnalysisNotice: retry for a viewer who can act heads with the note and reads the drawer's retry body", () => {
-  const html = notice({ recovery: "retry", note: NOTE });
-  const out = decode(html);
-
-  expect(alertHeadline(html)).toBe(NOTE);
-  expect(out).toContain(
-    "Retrying uses the video you already uploaded. Nothing needs uploading again.",
-  );
-  expect(out).not.toContain(DRAWER_NO_ACTION_BODY);
-});
-
-test("AnalysisNotice: retry without a note falls back to the class title", () => {
-  const html = notice({ recovery: "retry", note: null });
-  expect(alertHeadline(html)).toBe(byClass.retry.title);
-  expect(decode(html)).toContain(byClass.retry.drawerBody);
-});
-
-// T9's "failed without canRetry": a viewer who cannot act reads the class
-// title and the details line — never the note, never the retry promise.
-test("AnalysisNotice: a viewer who cannot act reads the class title and the details line only", () => {
-  for (const recovery of [
-    "retry",
-    "fix_recording",
-    "upload_again",
-    "rederive",
-    "stats_unavailable",
-  ]) {
-    const html = notice({
-      status: recovery === "stats_unavailable" ? "derivation_failed" : "failed",
-      recovery,
-      note: NOTE,
-      canAct: false,
-    });
-    const out = decode(html);
-    expect(alertHeadline(html), recovery).toBe(
-      byClass[recovery as keyof typeof byClass].title,
-    );
-    expect(out, recovery).toContain(DRAWER_NO_ACTION_BODY);
-    expect(out, recovery).not.toContain(NOTE);
-    expect(out, recovery).not.toContain("Retrying");
-  }
-});
-
-// T12's input-rejected case, as the fix_recording class.
-test("AnalysisNotice: fix_recording keeps the vendor's note as headline and never offers a retry", () => {
-  const note = "The video must be at least 29.9 fps.";
-  const html = notice({ recovery: "fix_recording", note });
-  const out = decode(html);
-
-  expect(alertHeadline(html)).toContain(note);
-  expect(out).toContain(byClass.fix_recording.drawerBody);
-  expect(out).not.toContain("Retrying uses");
-  expect(out).not.toContain(DRAWER_NO_ACTION_BODY);
-  expect(action({ recovery: "fix_recording" })).not.toContain("Retry");
-});
-
-test("AnalysisNotice: wait_or_ask picks its variant from the error code", () => {
-  const html = notice({
-    recovery: "wait_or_ask",
-    note: null,
-    errorCode: "NOT_ELIGIBLE",
-    attemptsUsed: 1,
-  });
-  const out = decode(html);
-
-  expect(alertHeadline(html)).toBe(WAIT_OR_ASK_VARIANTS.permission.title);
-  expect(out).toContain(WAIT_OR_ASK_VARIANTS.permission.drawerBody);
-  expect(out).not.toContain(WAIT_OR_ASK_VARIANTS.allowance.title);
-});
-
-test("upload_again with a manager: the notice says upload again, the footer links to the wizard, nothing says Retrying", () => {
-  const matchId = "match-123";
-  const body = decode(notice({ recovery: "upload_again", note: null }));
-  const footer = action({ recovery: "upload_again", matchId });
-
-  expect(body).toContain(byClass.upload_again.title);
-  expect(body).toContain(byClass.upload_again.drawerBody);
-  expect(footer).toContain(`href="${addVideoHref(matchId)}"`);
-  expect(footer).toContain("Upload the video again");
-  expect(body + footer).not.toContain("Retrying");
-});
-
 test("DrawerRecoveryAction: Retry and Rebuild statistics are buttons in the caller's variant; wait_or_ask and stats_unavailable draw nothing", () => {
   const retry = action({ recovery: "retry" });
   expect(retry).toMatch(/<button[^>]*>Retry<\/button>/);
@@ -294,19 +166,9 @@ test("DrawerRecoveryAction: Retry and Rebuild statistics are buttons in the call
   expect(action({ recovery: null })).toBe("");
 });
 
-test("AnalysisNotice: an in-flight status still shows the placeholder line and no alert", () => {
-  const html = notice({ status: "processing", recovery: null, note: null });
-  const out = decode(html);
-
-  expect(out).toContain(
-    "Serve and pressure numbers appear here once analysis finishes.",
-  );
-  expect(html).not.toContain('role="alert"');
-});
-
-// ── DrawerAnalysisSteps: the compact stepper that replaces AnalysisNotice ───
-// Every AnalysisNotice case above, again, as the drawer's four steps — plus
-// the two states the notice never drew: a live upload and a stalled hand-off.
+// ── DrawerAnalysisSteps: the drawers' compact stepper ───────────────────────
+// Every failure class as the drawer's four steps — plus the two states the
+// retired failure notice never drew: a live upload and a stalled hand-off.
 
 const drawerParts = sections as unknown as {
   DrawerAnalysisSteps: React.ComponentType<{
@@ -435,6 +297,7 @@ test("DrawerAnalysisSteps: fix_recording keeps the vendor's note as headline and
     byClass.fix_recording.drawerBody,
   ]);
   expect(decode(html)).not.toContain("Retrying uses");
+  expect(action({ recovery: "fix_recording" })).not.toContain("Retry");
 });
 
 test("DrawerAnalysisSteps: wait_or_ask picks its variant from the error code", () => {
@@ -466,6 +329,7 @@ test("DrawerAnalysisSteps: upload_again with a manager — the video step stops,
     byClass.upload_again.drawerBody,
   ]);
   expect(footer).toContain(`href="${addVideoHref(matchId)}"`);
+  expect(footer).toContain("Upload the video again");
   expect(decode(html) + footer).not.toContain("Retrying");
 });
 
@@ -476,7 +340,7 @@ test("DrawerAnalysisSteps: an in-flight status draws its note and no alert", () 
   expect(decode(html)).toContain(
     "This fills in as soon as the analysis lands.",
   );
-  // The placeholder AnalysisNotice drew is deliberately not carried over.
+  // The retired notice's placeholder line is deliberately not carried over.
   expect(decode(html)).not.toContain("Serve and pressure numbers");
 });
 

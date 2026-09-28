@@ -3,20 +3,23 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Calendar, Clock, Info, MapPin, Trophy } from "lucide-react";
-import { PeekDrawerFrame } from "@/components/dashboard/matches/match-drawer";
+import {
+  PeekDrawerFrame,
+  useStallClock,
+} from "@/components/dashboard/matches/match-drawer";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 import {
-  AnalysisNotice,
+  DrawerAnalysisSteps,
   DrawerFact,
   DrawerHeading,
   DrawerRecoveryAction,
   ProviderFact,
   SnapshotSection,
-  drawerRecovery,
   drawerSideName,
   recoveryHasAction,
   useMatchSnapshot,
 } from "@/components/dashboard/matches/drawer-sections";
+import { drawerAnalysisStepsView } from "@/components/dashboard/matches/match-detail/analysis-steps";
 import {
   noteIconCls,
   noteStripCls,
@@ -33,6 +36,7 @@ import {
   isAnalysisFailed,
   isAnalysisReady,
   isInFlight,
+  type MatchAnalysis,
 } from "@/lib/data/match-analysis";
 import {
   resolveEntryResult,
@@ -52,6 +56,7 @@ import { advButton } from "@/lib/ui/adv-button";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { cn } from "@/lib/utils";
 import type {
+  EntryMatch,
   EventEntry,
   EventFormat,
   ProgramEvent,
@@ -82,9 +87,12 @@ import type {
  *   1. "Add result" / "Edit result" into the event's `/score` flow — a line
  *      with no match, an outcome, or any doubles line (score only: no
  *      snapshot, video or report to offer).
- *   2. The recovery action of a singles match whose analysis failed
- *      (`DrawerRecoveryAction`: "Retry", "Rebuild statistics", or the upload
- *      link), for a viewer who can edit the schedule. A class with nothing to
+ *   2. The recovery action of a singles match whose analysis failed, or
+ *      whose hand-off stalled (`DrawerRecoveryAction`: "Retry", "Try again",
+ *      "Rebuild statistics", or the upload link), for a viewer who can edit
+ *      the schedule. It is the stopped step's, off the same
+ *      `drawerAnalysisStepsView()` the body's `DrawerAnalysisSteps` draws, at
+ *      the same clock, so the footer and the steps cannot disagree. A class with nothing to
  *      press adds nothing and leaves the primary to the next follow-up.
  *      `EntryMatch` carries no uploader, so `canEdit` gates it and the routes
  *      refuse anyone else (T10's rule).
@@ -187,7 +195,6 @@ export function EventLineDrawer({
 
   // No numbers while a match is being worked on or has failed — the score
   // would draw as a result the analysis has not stood behind yet.
-  const status = played?.status;
   const settled =
     played !== null &&
     !isInFlight(played.status) &&
@@ -211,12 +218,19 @@ export function EventLineDrawer({
     canScore && nextResultHref && resultLink?.label !== "Add result"
       ? nextResultHref
       : null;
-  // A failed singles analysis's recovery class (null unless it failed).
-  // `!doubles && canEdit` is this drawer's own access-control clause: it
-  // decides who reads the class's body and note, and who gets its action.
-  const recovery = doubles ? null : drawerRecovery(status, played?.recovery);
+  // A singles match's analysis, in `MatchAnalysis` shape. A doubles line is
+  // score only: no steps, no recovery.
+  const analysis = played && !doubles ? entryAnalysis(played) : null;
+  const now = useStallClock(analysis?.status);
+  // The stopped step — a failed job, or an `uploaded` one whose hand-off
+  // stalled — and its recovery class. `canEdit` is this drawer's own
+  // access-control clause: it decides who reads the step's body and note, and
+  // who gets its action.
+  const stopped = analysis
+    ? drawerAnalysisStepsView(analysis, now, canEdit)?.failure
+    : undefined;
   const showRecovery =
-    !doubles && canEdit && recoveryHasAction(recovery, played?.jobId);
+    !doubles && canEdit && recoveryHasAction(stopped?.recovery, played?.jobId);
   // The first follow-up on offer is the footer's one primary; "View match"
   // is primary only when there is none (the Matches drawer's rule).
   const primary: "result" | "recovery" | "video" | "next" | "view" = resultLink
@@ -280,7 +294,8 @@ export function EventLineDrawer({
             {showRecovery && played ? (
               <DrawerRecoveryAction
                 key={played.jobId ?? played.id}
-                recovery={recovery}
+                recovery={stopped?.recovery}
+                stalled={stopped?.stalled ?? false}
                 jobId={played.jobId}
                 matchId={played.id}
                 variant={recoveryVariant}
@@ -391,15 +406,12 @@ export function EventLineDrawer({
           </div>
         ) : played ? (
           <>
-            <AnalysisNotice
-              status={status}
-              recovery={recovery}
-              // AnalysisNotice shows the stored note and the class body only
-              // to a viewer who can act; anyone else reads only that
+            <DrawerAnalysisSteps
+              analysis={analysis}
+              now={now}
+              // The stopped step shows the stored note and the class body
+              // only to a viewer who can act; anyone else reads only that
               // analysis stopped and where the details are.
-              note={played.note}
-              errorCode={played.errorCode}
-              attemptsUsed={played.attemptsUsed}
               canAct={canEdit}
             />
             {settled && isAnalysisReady(played.status) ? (
@@ -412,6 +424,27 @@ export function EventLineDrawer({
       </div>
     </PeekDrawerFrame>
   );
+}
+
+/**
+ * A line's match as the `MatchAnalysis` the drawers' steps read — the fields
+ * the loader copied off the same analysis map (`schedule-server.ts`). Nothing
+ * here is invented: an absent field stays absent, so a row with no
+ * `updatedAt` is never read as stalled.
+ */
+function entryAnalysis(match: EntryMatch): MatchAnalysis {
+  return {
+    status: match.status,
+    providerId: null,
+    uploadPercent: match.uploadPercent ?? undefined,
+    jobId: match.jobId ?? undefined,
+    updatedAt: match.updatedAt ?? undefined,
+    jobReference: match.jobReference ?? undefined,
+    recovery: match.recovery ?? undefined,
+    note: match.note ?? undefined,
+    errorCode: match.errorCode ?? undefined,
+    attemptsUsed: match.attemptsUsed ?? undefined,
+  };
 }
 
 /**

@@ -5,13 +5,10 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { TriangleAlert } from "lucide-react";
 import { shortName } from "@/lib/data/match-utils";
 import { providers } from "@/lib/providers";
 import {
-  ANALYSIS_LABEL,
   isAnalysisFailed,
-  isInFlight,
   type AnalysisStatus,
   type MatchAnalysis,
   type RecoveryClass,
@@ -23,12 +20,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { ScoreLineSet } from "@/lib/ui/score-format";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
-import {
-  DRAWER_NO_ACTION_BODY,
-  WAIT_OR_ASK_VARIANTS,
-  byClass,
-  waitOrAskVariant,
-} from "@/components/dashboard/matches/analysis-failure-copy";
+import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
 import {
   LABEL_INK,
   StepMark,
@@ -200,93 +192,6 @@ export function drawerRecovery(
   return (
     recovery ?? (status === "derivation_failed" ? "stats_unavailable" : "retry")
   );
-}
-
-/** A recovery class's title and drawer body, with `wait_or_ask`'s variant. */
-function drawerCopy(
-  recovery: RecoveryClass,
-  errorCode: string | null | undefined,
-  attemptsUsed: number | null | undefined,
-): { title: string; drawerBody: string } {
-  // byClass.wait_or_ask is only the allowance default; the row's error code
-  // picks the variant that actually applies.
-  if (recovery === "wait_or_ask") {
-    return WAIT_OR_ASK_VARIANTS[waitOrAskVariant(errorCode, attemptsUsed ?? 1)];
-  }
-  return byClass[recovery];
-}
-
-/**
- * The analysis state, when there is one: the in-flight label with a line on
- * when numbers arrive, or the failed block (`role="alert"`) that reads the
- * row's recovery class. Draws nothing for a settled match.
- *
- * A viewer who can act on the row reads headline `note ?? title`, then the
- * class's drawer body. Anyone else reads only the class title and "The match
- * page has the details." — no stored note, no promise about retrying, since
- * the footer offers them nothing. The action itself is the footer's
- * `DrawerRecoveryAction`, not this block's.
- */
-export function AnalysisNotice({
-  status,
-  recovery,
-  note,
-  errorCode,
-  attemptsUsed,
-  canAct,
-}: {
-  status: AnalysisStatus | null | undefined;
-  /** `drawerRecovery()`'s answer: set on a failed row, null otherwise. */
-  recovery: RecoveryClass | null | undefined;
-  /** The stored note `showsStoredNote()` let through — never the raw
-   * `failNote`, which can be a writer string or the reconciler's reason. */
-  note?: string | null;
-  /** `wait_or_ask`'s variant inputs; unread by every other class. */
-  errorCode?: string | null;
-  attemptsUsed?: number | null;
-  /** The viewer may act on this row — the drawer's own access clause. */
-  canAct: boolean;
-}) {
-  if (!status) return null;
-
-  if (isInFlight(status)) {
-    return (
-      <div className="flex flex-col gap-2 border-t border-[var(--border-hairline)] pt-4">
-        <span className="text-[11px] leading-none text-[var(--blue)]">
-          {ANALYSIS_LABEL[status]}
-        </span>
-        <p className="text-[12px] leading-[1.6] text-[var(--ink-500)]">
-          Serve and pressure numbers appear here once analysis finishes.
-        </p>
-      </div>
-    );
-  }
-
-  if (isAnalysisFailed(status) && recovery) {
-    const copy = drawerCopy(recovery, errorCode, attemptsUsed);
-    return (
-      <div
-        role="alert"
-        className="flex items-start gap-2.5 rounded-[10px] border border-[rgba(229,24,55,0.2)] bg-[rgba(229,24,55,0.04)] px-3.5 py-3"
-      >
-        <TriangleAlert
-          className="mt-0.5 size-[15px] shrink-0 text-[var(--danger)]"
-          strokeWidth={1.5}
-          aria-hidden
-        />
-        <div className="flex flex-col gap-1">
-          <p className="text-[13px] font-medium text-[var(--ink-900)]">
-            {canAct ? (note ?? copy.title) : copy.title}
-          </p>
-          <p className="text-[12px] leading-[1.5] text-[var(--ink-700)]">
-            {canAct ? copy.drawerBody : DRAWER_NO_ACTION_BODY}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return null;
 }
 
 /**

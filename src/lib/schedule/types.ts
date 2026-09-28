@@ -142,6 +142,12 @@ export interface EntryMatch {
   sourceProvider?: string | null;
   /** `processing_jobs.id` from the analysis map — what a retry acts on. */
   jobId?: string | null;
+  /** When the job row last moved, from the analysis map — `isSubmitStalled()`'s staleness input. */
+  updatedAt?: string | null;
+  /** The vendor's job reference, from the analysis map — an accepted job is never stalled. */
+  jobReference?: string | null;
+  /** Bytes moved, 0-100, only while the transfer runs — from the analysis map. */
+  uploadPercent?: number | null;
   /** The failed job's note, from the analysis map. */
   failNote?: string | null;
   /** What can be done about a job that did not finish, from the analysis map. */

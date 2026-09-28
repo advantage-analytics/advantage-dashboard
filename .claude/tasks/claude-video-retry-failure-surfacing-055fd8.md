@@ -353,7 +353,7 @@ ready).
 
 ## T26 · Schedule event drawer draws the Analysis steps; retire AnalysisNotice
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T24, T25
 - **files:** src/components/dashboard/schedule/event-line-drawer.tsx, src/lib/schedule/types.ts (`EntryMatch`), src/lib/data/schedule-server.ts (~261-281), src/components/dashboard/matches/drawer-sections.tsx, tests/drawer-sections.spec.ts (guess)
