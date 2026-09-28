@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Add a `rallyMax` axis to the film filter model
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/match-detail/film/filters/types.ts, src/components/dashboard/matches/match-detail/film/film-advanced-panel.tsx, tests/film-filters-model.spec.ts — guess
 - **done when:**

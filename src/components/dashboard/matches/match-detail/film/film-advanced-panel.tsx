@@ -31,7 +31,7 @@ import {
  * over the film — which is why the room's old dialog is gone.
  *
  * ── Why a pill for every option ─────────────────────────────────────────────
- * Fourteen axes in a 320px column cannot afford one row per option, and the
+ * Fifteen axes in a 320px column cannot afford one row per option, and the
  * frame retires the segmented controls, native selects and checkboxes the old
  * `FilmFiltersPanel` drew. A pill carries its own count, which is the whole
  * point of the panel: the number answers "how many points would this give me,
@@ -232,6 +232,36 @@ function oneGroup<K extends FilmAxisKey>(
 }
 
 /**
+ * The Rally section's "Length" pills: open-ended minimums only. The panel has
+ * no control for `rallyMax` — a closed range (the rally-length card's Short
+ * and Medium bands) arrives from outside and is shown by the cut sentence, not
+ * by a pill here. So a pill is only "selected" when the cut is open-ended, and
+ * picking one clears any upper bound rather than combining with it (5+ under a
+ * max of 4 would be an empty cut).
+ */
+function rallyLengthGroup(draft: FilmFilters): Group {
+  const group = oneGroup("rallyMin", "Length", draft, null, [
+    { value: 5, label: "5 or more shots" },
+    { value: 9, label: "9 or more shots" },
+  ]);
+  return {
+    ...group,
+    options: group.options.map((option) => {
+      const selected = option.selected && draft.rallyMax === null;
+      return {
+        ...option,
+        selected,
+        patch: {
+          rallyMin: selected ? null : Number(option.id),
+          rallyMax: null,
+        },
+        alone: { ...option.alone, rallyMax: null },
+      };
+    }),
+  };
+}
+
+/**
  * The groups of one section, in the frame's order.
  *
  * You/opponent labels come from `sides`, never from player order — a hardcoded
@@ -297,10 +327,7 @@ function groupsFor(
       ];
     case "rally":
       return [
-        oneGroup("rallyMin", "Length", draft, null, [
-          { value: 5, label: "5 or more shots" },
-          { value: 9, label: "9 or more shots" },
-        ]),
+        rallyLengthGroup(draft),
         orGroup("shot", "Last shot", draft, [
           { value: "forehand", label: "Forehand" },
           { value: "backhand", label: "Backhand" },

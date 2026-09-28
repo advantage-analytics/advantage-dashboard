@@ -51,6 +51,13 @@ export interface FilmFilters {
   set: number | null;
   /** Rallies of at least this many shots, or any length. */
   rallyMin: number | null;
+  /**
+   * Rallies of at most this many shots, or no upper bound. With `rallyMin` it
+   * makes a closed range — the rally-length card's Short (1–4) and Medium
+   * (5–8) bands. Either bound set drops points with no recorded shot count
+   * (`rallyLength === 0`), as that card does.
+   */
+  rallyMax: number | null;
   ended: EndedKey[];
   shot: ShotKey[];
   /** Which service court the point was played from. */
@@ -70,6 +77,7 @@ export const DEFAULT_FILM_FILTERS: FilmFilters = {
   savedOnly: false,
   set: null,
   rallyMin: null,
+  rallyMax: null,
   ended: [],
   shot: [],
   court: "any",
@@ -89,6 +97,7 @@ export function hasActiveFilmFilters(f: FilmFilters): boolean {
     f.savedOnly ||
     f.set !== null ||
     f.rallyMin !== null ||
+    f.rallyMax !== null ||
     f.ended.length > 0 ||
     f.shot.length > 0 ||
     f.court !== "any"
@@ -259,7 +268,13 @@ function matchesFilm(
 ): boolean {
   if (f.savedOnly && !point.saved) return false;
   if (f.set !== null && point.setNumber !== f.set) return false;
-  if (f.rallyMin !== null && point.rallyLength < f.rallyMin) return false;
+  if (f.rallyMin !== null || f.rallyMax !== null) {
+    // 0 is "no shot count recorded", not a one-shot rally, so it belongs to
+    // no bounded range — the same exclusion rally-length-card.tsx makes.
+    if (point.rallyLength < 1) return false;
+    if (f.rallyMin !== null && point.rallyLength < f.rallyMin) return false;
+    if (f.rallyMax !== null && point.rallyLength > f.rallyMax) return false;
+  }
   if (f.court !== "any" && court !== f.court) return false;
   if (f.server !== "any") {
     const youServed = point.serverIsPlayer1 === youIsPlayer1;
@@ -378,6 +393,18 @@ const SHOT_PHRASE: Record<ShotKey, string> = {
   "serve-plus-one": "serve +1",
 };
 
+/** "rallies of 1–4 shots", "rallies of 9+ shots", "rallies of up to 4 shots". */
+function rallyPhrase(min: number | null, max: number | null): string | null {
+  if (min !== null && max !== null) {
+    return min === max
+      ? `rallies of ${min} ${min === 1 ? "shot" : "shots"}`
+      : `rallies of ${min}–${max} shots`;
+  }
+  if (min !== null) return `rallies of ${min}+ shots`;
+  if (max !== null) return `rallies of up to ${max} shots`;
+  return null;
+}
+
 function orList(phrases: string[]): string {
   if (phrases.length <= 1) return phrases[0] ?? "";
   return `${phrases.slice(0, -1).join(", ")} or ${phrases[phrases.length - 1]}`;
@@ -406,7 +433,8 @@ export function describeFilmCut(f: FilmFilters, sides: MatchSides): string {
   }
   if (f.court === "deuce") clauses.push("deuce court");
   if (f.court === "ad") clauses.push("ad court");
-  if (f.rallyMin !== null) clauses.push(`rallies of ${f.rallyMin}+ shots`);
+  const rally = rallyPhrase(f.rallyMin, f.rallyMax);
+  if (rally) clauses.push(rally);
   if (f.ended.length > 0) {
     clauses.push(orList(f.ended.map((k) => ENDED_PHRASE[k])));
   }
@@ -459,6 +487,7 @@ export function cutName(f: FilmFilters, sides: MatchSides): string {
     f.result.length > 0 ||
     f.set !== null ||
     f.rallyMin !== null ||
+    f.rallyMax !== null ||
     f.ended.length > 0 ||
     f.shot.length > 0 ||
     f.court !== "any";
@@ -504,7 +533,7 @@ export type FilmAxisKey = Exclude<keyof FilmFilters, "savedOnly">;
 
 /**
  * Which axis lives in which section of the in-column Advanced panel (handoff
- * P4). Six sections in the frame's order over the fourteen axes; `savedOnly`
+ * P4). Six sections in the frame's order over the fifteen axes; `savedOnly`
  * is the standalone pill above them, not a section. Pure data, so the spec
  * can assert the partition without React.
  */
@@ -516,7 +545,7 @@ export const FILM_FILTER_SECTIONS: readonly {
   { id: "score", name: "Score", keys: ["set", "pressure", "score"] },
   { id: "serve", name: "Serve", keys: ["server", "ball", "serve"] },
   { id: "return", name: "Return", keys: ["wing", "returns"] },
-  { id: "rally", name: "Rally", keys: ["rallyMin", "shot"] },
+  { id: "rally", name: "Rally", keys: ["rallyMin", "rallyMax", "shot"] },
   { id: "result", name: "Result", keys: ["result", "ended", "outcome"] },
   { id: "court", name: "Court", keys: ["court"] },
 ];
@@ -554,6 +583,7 @@ export function filmFiltersEqual(a: FilmFilters, b: FilmFilters): boolean {
     a.savedOnly === b.savedOnly &&
     a.set === b.set &&
     a.rallyMin === b.rallyMin &&
+    a.rallyMax === b.rallyMax &&
     a.court === b.court &&
     sameSet(a.score, b.score) &&
     sameSet(a.serve, b.serve) &&
