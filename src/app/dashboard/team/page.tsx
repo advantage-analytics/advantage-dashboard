@@ -32,7 +32,7 @@ import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
 import { TeamSetupLine } from "@/components/dashboard/team/team-setup-line";
 import { TeamHomeDayZeroPage } from "@/components/dashboard/team/team-home-day-zero-page";
 import { PresenceReport } from "@/components/dashboard/presence-provider";
-import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
+import { SCHEDULE_ENABLED, scheduleSlot } from "@/lib/schedule/availability";
 
 import { topMovers } from "@/lib/data/team-movers";
 import { TopMoversFrame } from "@/components/dashboard/team/top-movers";
@@ -119,16 +119,16 @@ export default async function TeamHomePage() {
   // The dual, court-record and dual-history cards are built from the
   // schedule and link into it; while it is closed they are not drawn at all,
   // and `TeamHomeRegions` closes up around the gap.
-  const dual = SCHEDULE_ENABLED
-    ? region(
-        "Dual",
-        <DualPending />,
-        <Dual
-          resources={resources}
-          canSchedule={canManageTeamSchedule(active)}
-        />,
-      )
-    : null;
+  const dual = scheduleSlot(
+    region(
+      "Dual",
+      <DualPending />,
+      <Dual
+        resources={resources}
+        canSchedule={canManageTeamSchedule(active)}
+      />,
+    ),
+  );
   const movers = region(
     "Top movers",
     <TopMoversFrame>
@@ -141,24 +141,24 @@ export default async function TeamHomePage() {
     <FocusCardPending />,
     <Insight resources={resources} programId={active.id} />,
   );
-  const court = SCHEDULE_ENABLED
-    ? region(
-        "Court record",
-        <CourtRecordFrame>
-          <CourtBodyPending />
-        </CourtRecordFrame>,
-        <Court resources={resources} />,
-      )
-    : null;
-  const history = SCHEDULE_ENABLED
-    ? region(
-        "Dual match history",
-        <DualHistoryFrame>
-          <HistoryBodyPending />
-        </DualHistoryFrame>,
-        <History resources={resources} teamName={active.name} />,
-      )
-    : null;
+  const court = scheduleSlot(
+    region(
+      "Court record",
+      <CourtRecordFrame>
+        <CourtBodyPending />
+      </CourtRecordFrame>,
+      <Court resources={resources} />,
+    ),
+  );
+  const history = scheduleSlot(
+    region(
+      "Dual match history",
+      <DualHistoryFrame>
+        <HistoryBodyPending />
+      </DualHistoryFrame>,
+      <History resources={resources} teamName={active.name} />,
+    ),
+  );
   const setupLine = isStaff
     ? region("Getting set up", null, <Setup resources={resources} />)
     : null;
@@ -339,17 +339,16 @@ async function Setup({ resources }: { resources: Resources }) {
     resources.roster,
     resources.analytics,
   ]);
+  // Not read while the Schedule is closed: `TeamSetupLine` drops the step
+  // (`lib/schedule/availability.ts`).
+  const schedule =
+    SCHEDULE_ENABLED &&
+    (await resources.schedule).scheduleRows.some((row) => row.kind === "dual");
   return (
     <TeamSetupLine
       setup={{
         roster: roster.members.some((member) => member.role === "player"),
-        // Not read while the Schedule is closed: `TeamSetupLine` drops the
-        // step (`lib/schedule/availability.ts`).
-        schedule:
-          SCHEDULE_ENABLED &&
-          (await resources.schedule).scheduleRows.some(
-            (row) => row.kind === "dual",
-          ),
+        schedule,
         report: analytics.firstReport !== null,
       }}
     />

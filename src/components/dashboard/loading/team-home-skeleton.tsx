@@ -6,7 +6,7 @@ import { TeamSeasonTitleFrame } from "@/components/dashboard/team/team-season-ti
 import { TopMoversFrame } from "@/components/dashboard/team/top-movers";
 import { CourtRecordFrame } from "@/components/dashboard/team/court-record";
 import { DualHistoryFrame } from "@/components/dashboard/team/dual-history";
-import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
+import { scheduleSlot } from "@/lib/schedule/availability";
 import {
   FocusCardPending,
   HomeKpisPending,
@@ -187,27 +187,23 @@ export function TeamHomeSkeleton({ action }: { action?: ReactNode }) {
     <TeamHomeFrame
       title={<TeamTitlePending action={action} />}
       kpis={<HomeKpisPending />}
-      dual={SCHEDULE_ENABLED ? <DualPending /> : null}
+      dual={scheduleSlot(<DualPending />)}
       movers={
         <TopMoversFrame>
           <MoversBodyPending />
         </TopMoversFrame>
       }
       insight={<FocusCardPending />}
-      court={
-        SCHEDULE_ENABLED ? (
-          <CourtRecordFrame>
-            <CourtBodyPending />
-          </CourtRecordFrame>
-        ) : null
-      }
-      history={
-        SCHEDULE_ENABLED ? (
-          <DualHistoryFrame>
-            <HistoryBodyPending />
-          </DualHistoryFrame>
-        ) : null
-      }
+      court={scheduleSlot(
+        <CourtRecordFrame>
+          <CourtBodyPending />
+        </CourtRecordFrame>,
+      )}
+      history={scheduleSlot(
+        <DualHistoryFrame>
+          <HistoryBodyPending />
+        </DualHistoryFrame>,
+      )}
       footer={<HomeFooterPending />}
     />
   );

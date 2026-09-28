@@ -13,7 +13,7 @@ import {
 } from "@/components/dashboard/home/focus-empty";
 import { TeamHomeRegions } from "@/components/dashboard/loading/team-home-skeleton";
 import { courtRecordFrom } from "@/lib/data/team-court-record";
-import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
+import { scheduleSlot } from "@/lib/schedule/availability";
 
 const EMPTY_COURT_RECORD = courtRecordFrom([], new Map());
 const EMPTY_FORM = { form: [], wins: 0, losses: 0 };
@@ -58,11 +58,9 @@ export function TeamHomeDayZeroPage({
                 ariaLabel="Program summary"
               />
             }
-            dual={
-              SCHEDULE_ENABLED ? (
-                <DualSheetEmpty canSchedule={false} isPreview />
-              ) : null
-            }
+            dual={scheduleSlot(
+              <DualSheetEmpty canSchedule={false} isPreview />,
+            )}
             movers={
               <TopMovers
                 movers={[]}
@@ -76,21 +74,15 @@ export function TeamHomeDayZeroPage({
                 <FocusEmpty band={teamInsightBand(0)} />
               </FocusCard>
             }
-            court={
-              SCHEDULE_ENABLED ? (
-                <CourtRecord record={EMPTY_COURT_RECORD} />
-              ) : null
-            }
-            history={
-              SCHEDULE_ENABLED ? (
-                <DualHistory
-                  rows={[]}
-                  form={EMPTY_FORM}
-                  teamName={teamName}
-                  isPreview
-                />
-              ) : null
-            }
+            court={scheduleSlot(<CourtRecord record={EMPTY_COURT_RECORD} />)}
+            history={scheduleSlot(
+              <DualHistory
+                rows={[]}
+                form={EMPTY_FORM}
+                teamName={teamName}
+                isPreview
+              />,
+            )}
           />
         </TeamDayZeroHome>
       </div>

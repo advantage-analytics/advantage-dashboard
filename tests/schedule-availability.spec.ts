@@ -13,14 +13,17 @@ import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
  * Only a render can say for certain that a link is hidden, and most of these
  * files are client components deep inside a page. So this checks the next best
  * thing: every file outside the schedule's own subtree that names a schedule
- * URL either reads `SCHEDULE_ENABLED` or is listed below with the reason it
- * needs no gate. A new link into the schedule has to pick one of the two, and
- * an entry here that stops naming a schedule URL fails as stale.
+ * URL either reads `SCHEDULE_ENABLED` (or one of its `scheduleHref`/
+ * `scheduleSlot` helpers, which read it internally) or is listed below with
+ * the reason it needs no gate. A new link into the schedule has to pick one
+ * of the two, and an entry here that stops naming a schedule URL fails as
+ * stale.
  */
+const GATE_MARKERS = ["SCHEDULE_ENABLED", "scheduleHref", "scheduleSlot"];
+
 const UNGATED: Record<string, string> = {
   "src/app/dashboard/header.tsx":
     "breadcrumb patterns for schedule paths, which next.config redirects",
-  "src/lib/dashboard/nav.ts": "the nav row itself and breadcrumb labels",
   "src/components/dashboard/loading/event-wizard-pending.tsx": "comments only",
   "src/components/dashboard/loading/page-skeletons.tsx": "comments only",
   "src/components/dashboard/loading/score-flow-pending.tsx": "comments only",
@@ -76,7 +79,7 @@ test.describe("Schedule availability", () => {
         const text = fs.readFileSync(path.join(root, file), "utf8");
         return (
           text.includes("/dashboard/team/schedule") &&
-          !text.includes("SCHEDULE_ENABLED")
+          !GATE_MARKERS.some((marker) => text.includes(marker))
         );
       })
       .sort();

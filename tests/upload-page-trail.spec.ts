@@ -134,7 +134,10 @@ function loadPage() {
     "@/components/dashboard/schedule/event-header-slot": { EventHeaderSlot },
     // Either value leaves the trail alone; the flag only retargets the
     // player redirect and a single match's exit link.
-    "@/lib/schedule/availability": { SCHEDULE_ENABLED: false },
+    "@/lib/schedule/availability": {
+      SCHEDULE_ENABLED: false,
+      scheduleHref: (_schedulePath: string, fallback: string) => fallback,
+    },
   };
 
   runInNewContext(output, {
@@ -215,6 +218,11 @@ test("an entry outside the program still redirects to the picker", async () => {
 test("the bare staff line picker publishes no slot", async () => {
   const tree = await render({});
   expect(findAll(tree, EventHeaderSlot)).toHaveLength(0);
+});
+
+test("with the Schedule closed, bare staff get the plain wizard, not the line picker", async () => {
+  const tree = await render({});
+  expect(findAll(tree, UploadMatchFlow)).toHaveLength(1);
 });
 
 test("a ?match=-only single match publishes no slot", async () => {

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
+import { SCHEDULE_ENABLED, scheduleHref } from "@/lib/schedule/availability";
 import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
 import {
   getProgramSchedule,
@@ -76,7 +76,7 @@ export default async function TeamUploadPage({
   // coming-soon page (`lib/schedule/availability.ts`): landing a player on a
   // stub reads as a broken link.
   if (!canUploadForProgram(active))
-    redirect(SCHEDULE_ENABLED ? "/dashboard/team/schedule" : "/dashboard/team");
+    redirect(scheduleHref("/dashboard/team/schedule", "/dashboard/team"));
 
   // Who may open this page and who may attach a match to a SCHEDULED LINE are
   // two different questions, and only the second one is authorization. The
@@ -160,9 +160,10 @@ export default async function TeamUploadPage({
       date: single.date,
       surface: single.surface,
       score: single.score,
-      eventHref: SCHEDULE_ENABLED
-        ? `/dashboard/team/schedule/single/${single.id}`
-        : `/dashboard/matches/${single.id}`,
+      eventHref: scheduleHref(
+        `/dashboard/team/schedule/single/${single.id}`,
+        `/dashboard/matches/${single.id}`,
+      ),
     });
 
     return <UploadMatchFlow preset={preset} />;
@@ -251,7 +252,11 @@ export default async function TeamUploadPage({
   // a member — their own program, no line, and a `player1_id` that is a
   // `program_members` user of it — which is why this path works where the line
   // picker's does not.
-  if (!staff) return <UploadMatchFlow />;
+  //
+  // Staff get the same while the Schedule is a coming-soon page
+  // (`lib/schedule/availability.ts`): the picker below is a list of scheduled
+  // lines, and this page's own fallback redirects still land here.
+  if (!staff || !SCHEDULE_ENABLED) return <UploadMatchFlow />;
 
   return <LinePicker groups={await getUploadQueue(active.id)} />;
 }

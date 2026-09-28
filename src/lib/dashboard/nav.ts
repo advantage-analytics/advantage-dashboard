@@ -9,6 +9,7 @@ import {
   Settings,
   HelpCircle,
 } from "lucide-react";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 
 /**
  * The dashboard's destinations, defined once.
@@ -85,9 +86,10 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  *
  * Schedule is a coming-soon page for now (`lib/schedule/availability.ts`), so
  * it sits below Roster with the other unfinished entries rather than beside
- * Matches: the live pages lead the rail and the stubs close it. Move it back
- * to second — the design's place for it — when the flag turns on, and drop
- * its `comingSoon`.
+ * Matches: the live pages lead the rail and the stubs close it. Its
+ * `comingSoon` below reads `SCHEDULE_ENABLED` rather than a literal, so
+ * turning the flag on only leaves the position to fix by hand: move it back
+ * to second, the design's place for it.
  *
  * Opponents took Compare's slot. Compare answered "which of my two players is
  * holding serve better" and nothing replaces it — that was weighed and
@@ -121,7 +123,7 @@ export const TEAM_NAV: readonly NavLink[] = [
     name: "Schedule",
     href: "/dashboard/team/schedule",
     icon: Calendar,
-    comingSoon: true,
+    comingSoon: SCHEDULE_ENABLED ? undefined : true,
   },
   {
     name: "Opponents",

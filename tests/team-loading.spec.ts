@@ -146,8 +146,15 @@ function route(
               return pending;
             },
           };
-        if (id === "@/lib/schedule/availability")
-          return { SCHEDULE_ENABLED: options.scheduleEnabled ?? true };
+        if (id === "@/lib/schedule/availability") {
+          const enabled = options.scheduleEnabled ?? true;
+          return {
+            SCHEDULE_ENABLED: enabled,
+            scheduleSlot: (node: unknown) => (enabled ? node : null),
+            scheduleHref: (schedulePath: string, fallback: string) =>
+              enabled ? schedulePath : fallback,
+          };
+        }
         if (id.includes("splitstep/config"))
           return { currentBillingMonth: () => "2026-09" };
         return new Proxy({}, { get: (_, key) => component(String(key)) });
