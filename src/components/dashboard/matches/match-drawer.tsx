@@ -146,6 +146,8 @@ export function MatchDrawer({
   const canRetry =
     status === "failed" &&
     Boolean(match.analysis?.jobId) &&
+    // An input-rejected video fails the same way on resubmit.
+    !match.analysis?.inputRejected &&
     match.canManage !== false;
   // No numbers while a match is still being worked on or has failed: the
   // score and snapshot would draw zeroes that read as "no serves".
@@ -253,6 +255,7 @@ export function MatchDrawer({
           status={status}
           failNote={match.analysis?.failNote}
           canRetry={canRetry}
+          inputRejected={match.analysis?.inputRejected}
         />
 
         {settled && snapshot && <SnapshotSection snapshot={snapshot} />}

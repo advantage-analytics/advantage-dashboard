@@ -44,6 +44,7 @@ const sections = loader.load(
     status: string | null | undefined;
     failNote?: string | null;
     canRetry: boolean;
+    inputRejected?: boolean;
   }>;
 };
 
@@ -159,6 +160,24 @@ test("AnalysisNotice: failed without canRetry or failNote falls back to the shar
 
   expect(out).toContain("Analysis stopped");
   expect(out).toContain("The match page has the details.");
+});
+
+test("AnalysisNotice: an input-rejected failure keeps the vendor's note as headline and never offers a retry", () => {
+  const note = "The video must be at least 29.9 fps.";
+  const html = renderToStaticMarkup(
+    React.createElement(sections.AnalysisNotice, {
+      status: "failed",
+      failNote: note,
+      canRetry: true,
+      inputRejected: true,
+    }),
+  );
+  const out = decode(html);
+
+  expect(alertHeadline(html)).toContain(note);
+  expect(out).toContain(ANALYSIS_FAILURE_COPY.failed.inputRejected.drawer);
+  expect(out).not.toContain("Retrying uses");
+  expect(out).not.toContain("The match page has the details.");
 });
 
 test("AnalysisNotice: an in-flight status still shows the placeholder line and no alert", () => {

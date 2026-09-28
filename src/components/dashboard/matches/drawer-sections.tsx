@@ -169,11 +169,15 @@ export function AnalysisNotice({
   status,
   failNote,
   canRetry,
+  inputRejected,
 }: {
   status: AnalysisStatus | null | undefined;
   failNote?: string | null;
   /** The viewer can resubmit — the copy then says the video is reused. */
   canRetry: boolean;
+  /** The vendor refused the footage itself; a retry would fail the same way,
+   * so the body says what to fix instead, whatever `canRetry` says. */
+  inputRejected?: boolean;
 }) {
   if (!status) return null;
 
@@ -226,9 +230,11 @@ export function AnalysisNotice({
               {failNote ?? ANALYSIS_FAILURE_COPY.failed.title}
             </p>
             <p className="text-[12px] leading-[1.5] text-[var(--ink-700)]">
-              {canRetry
-                ? ANALYSIS_FAILURE_COPY.failed.drawer.retry
-                : ANALYSIS_FAILURE_COPY.failed.drawer.details}
+              {inputRejected
+                ? ANALYSIS_FAILURE_COPY.failed.inputRejected.drawer
+                : canRetry
+                  ? ANALYSIS_FAILURE_COPY.failed.drawer.retry
+                  : ANALYSIS_FAILURE_COPY.failed.drawer.details}
             </p>
           </div>
         )}

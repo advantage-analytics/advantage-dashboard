@@ -209,9 +209,14 @@ export function EventLineDrawer({
       ? nextResultHref
       : null;
   // A failed singles analysis the coach can resubmit. `status` is the line's
-  // match's own — the in-flight and ready states never offer it.
+  // match's own — the in-flight and ready states never offer it, and nor does
+  // an input-rejected video, which would fail the same way again.
   const retryJobId =
-    !doubles && canEdit && played?.status === "failed" && played.jobId
+    !doubles &&
+    canEdit &&
+    played?.status === "failed" &&
+    !played.inputRejected &&
+    played.jobId
       ? played.jobId
       : null;
   // The first follow-up on offer is the footer's one primary; "View match"
@@ -388,10 +393,14 @@ export function EventLineDrawer({
           <>
             <AnalysisNotice
               status={status}
-              // The job's note travels with the retry: a viewer who cannot
-              // resubmit reads only that analysis stopped.
-              failNote={retryJobId ? played.failNote : null}
+              // The job's note travels with the retry, or with an
+              // input-rejected video, where it says what to fix: otherwise a
+              // viewer who cannot resubmit reads only that analysis stopped.
+              failNote={
+                retryJobId || played.inputRejected ? played.failNote : null
+              }
               canRetry={retryJobId !== null}
+              inputRejected={played?.inputRejected ?? false}
             />
             {settled && isAnalysisReady(played.status) ? (
               <LineSnapshot matchId={played.id} />

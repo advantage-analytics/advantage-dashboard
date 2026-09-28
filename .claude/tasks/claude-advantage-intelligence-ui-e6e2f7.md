@@ -164,7 +164,7 @@ ready).
 
 ## T12 · Drawers: no retry for an input-rejected failure
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T9, T10, T11
 - **files:** src/components/dashboard/matches/drawer-sections.tsx (`AnalysisNotice`), src/components/dashboard/matches/match-drawer.tsx (`canRetry` ~line 146, `AnalysisNotice` call ~line 254), src/components/dashboard/schedule/event-line-drawer.tsx (`retryJobId` ~line 213, `AnalysisNotice` call ~line 390), tests/drawer-sections.spec.ts (extend)
