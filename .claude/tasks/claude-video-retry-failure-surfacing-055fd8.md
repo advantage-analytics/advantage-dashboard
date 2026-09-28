@@ -405,3 +405,68 @@ ready).
   - [ ] page.tsx still computes its gate from its own reconciled `loadMatchAnalysis` result, not from the hint, and a comment near the gate states that the layout's hint is read before reap/reconcile, so a stale hint can change only which skeleton flashes, never what the page renders
   - [ ] A new source-order spec asserts that in layout.tsx the hint call and its `notFound()` precede `<Suspense`, that `getMatchDetailData(` appears only after it, and that loading.tsx does not contain `MatchReportSkeleton`; tests/match-film-entry.spec.ts, tests/match-report-pending.spec.ts, tests/skeleton-primitives.spec.ts and tests/design-drift.spec.ts pass without their assertions being weakened
 - **notes:** Routed opus — would be fable (a Next 16 streaming/RSC restructure around the §3.3 gate) but fable is over its monthly spend limit today. Next 16 docs (`03-file-conventions/loading`, `02-guides/streaming.md`): `loading.js` never wraps its sibling layout, which is why the boundary sits at `(detail)/`. The group `loading.tsx` already commits the response to 200, so the 404 is a not-found render, not a status code; keep `notFound()` before the Suspense anyway, as the docs advise. A throw from the Suspense child keeps today's error routing because it is still rendered by the layout. Update `MatchReportSkeleton`'s doc comment ("`(detail)/loading.tsx`'s body"). Eyes-on: the verifier's seeded matches (T21) should show the stepper skeleton for the stopped classes and the report skeleton for `stats_unavailable` and completed matches; do not click "Try again" on seeded rows. The widget-states hook will run on this dashboard diff.
+
+## T30 · Point analysisAction's failed-row Add video at this match
+
+- **status:** todo
+- **model:** sonnet
+- **files:** src/lib/data/match-analysis.ts, tests/match-analysis-timeline.spec.ts
+- **done when:**
+  - [ ] For a failed row whose `recovery` is `upload_again` or `fix_recording`, `analysisAction(analysis, matchId)` returns label "Add video" with `href` equal to `addVideoHref(matchId)` (imported from `@/lib/matches/add-video-href`), i.e. `/dashboard/matches/new?match=<id>`, not bare `/dashboard/matches/new`
+  - [ ] The `manual` branch and the no-`recovery` "Start over" fallback keep today's label and `href` (`/dashboard/matches/new`); retry / rederive / wait_or_ask / stats_unavailable are unchanged
+  - [ ] In tests/match-analysis-timeline.spec.ts, the "upload_again and fix_recording get the Add video action" case now expects `/dashboard/matches/new?match=m1`; its label assertion and every other `analysisAction` assertion in the file are left as they are, and the spec passes
+  - [ ] `analysisAction`'s doc comment says the add-video action for these classes opens the wizard on this match (`addVideoHref`), not a new match; `npm run typecheck` passes
+- **notes:** T8 follow-up 1. `RecoveryAction` already uses `addVideoHref(matchId)` for these classes, so the list action and the page now agree. `add-video-href.ts` has no imports and is client-safe. `analysisAction` has no caller in `src` yet; T32 is the first. `manual` is left alone on purpose (author decision 2026-09-28).
+
+## T31 · Activity feed carries each failed row's recovery class
+
+- **status:** todo
+- **model:** opus
+- **files:** src/lib/data/activity-server.ts, tests/activity-feed-recovery.spec.ts (new, guess)
+- **done when:**
+  - [ ] `getActivityFeed`'s `processing_jobs` select still carries `matches!inner(player1_name, player2_name, program_id)` and `scopeToWorkspace`, and adds the columns recovery needs (`id, error_code, error_category, error_step, video_object_key, results_object_key, resubmitted_from_job_id, external_job_id, updated_at`) but not `error_message`
+  - [ ] Each item's `recovery` comes from `recoveryFields(jobRecoveryFacts({...row, hasVideo, hasResults}), chainAttempts(<that match's fetched rows>, row.id), null)`, with no hand-built `RecoveryInput`; `ActivityAnalysis` gains `recovery`, `jobId`, `attemptsUsed` and `errorCode`, and nothing holding a storage key, `note`, `failNote` or an error message
+  - [ ] A new offline spec calls `getActivityFeed` with a stubbed `SupabaseClient` (a fake chainable query builder resolving fixture rows) and asserts one item per match with the class per fixture: failed with a null video key → `upload_again`; failed with `error_category` input-rejected → `fix_recording`; failed plain → `retry`; a three-row resubmission chain ending failed → `wait_or_ask`; `derivation_failed` + `DERIVATION_ERROR` → `rederive`; `derivation_failed` with another code → `stats_unavailable`
+  - [ ] The same spec asserts `JSON.stringify(items)` contains neither `object_key` nor any fixture storage-key value, and `npm run typecheck` passes
+- **notes:** Intent (author, 2026-09-28): "Can we also update the activity dropdown – it currently says start over for all". Live patches already carry `recovery`, but the tray only subscribes while something is live-updating, so a failed row's class has to come from the server. Reusing `jobRecoveryFacts` / `recoveryFields` / `chainAttempts` keeps it identical to `loadMatchAnalysis`. The chain count only sees rows inside the 50-row `MAX_ITEMS` window; say so in a comment. Storage keys become `hasVideo` / `hasResults` booleans on the server and never reach an item. `processing_jobs` carries a live SAS credential and its own `created_by` policy, so the `!inner` join is load-bearing; keep it and its comment. `errorCode` is the code only (e.g. `QUOTA_EXCEEDED`), which T32 needs for `waitOrAskVariant`. `jobId` / `attemptsUsed` let `withLiveAnalysis` re-decide `recovery` after a live resubmit. tests/personal-home-scope.spec.ts is a live-DB spec that copies the old select string; it needs no edit and must not be run against prod. Worth an `rls-boundary-reviewer` pass at `/pr-check`.
+
+## T32 · Tray failure helpers: which rows, where the row goes, what it says
+
+- **status:** todo
+- **model:** sonnet
+- **needs:** T30, T31
+- **files:** src/components/dashboard/activity/tray-failure.ts (new, guess), src/components/dashboard/matches/analysis-failure-copy.ts, tests/activity-tray-failure.spec.ts (new, guess)
+- **done when:**
+  - [ ] A new pure module (no `"use client"`, no React) exports `isTrayFailure(analysis)`, exactly `matchListGroup(analysis) === "Failed"` (so `stats_unavailable` is false and every in-flight status is false)
+  - [ ] It exports `trayFailureAction(analysis, matchId)` returning `{ label, href }`: `upload_again` / `fix_recording` → "Add video" at `/dashboard/matches/new?match=<id>`; `retry` / `rederive` / `wait_or_ask` → "Open" at `/dashboard/matches/<id>`; failed with no `recovery` → "Start over" at `/dashboard/matches/new`. Hrefs come from `analysisAction`, not retyped
+  - [ ] `analysis-failure-copy.ts` exports a `TRAY_REASON` map and the module exports `trayFailureReason(analysis)`: `upload_again` "Upload didn't finish"; `fix_recording` "Recording didn't meet the requirements"; `retry` "Analysis stopped · retry available"; `rederive` "Stats need rebuilding"; `wait_or_ask` by `waitOrAskVariant(errorCode, attemptsUsed)`: allowance "No analysis time left this month", permission "Needs your team's owner", ceiling "Tried three times"; no `recovery` "Analysis failed"
+  - [ ] The new spec pins every case above (label, href and reason per class and per wait_or_ask variant, plus `isTrayFailure` false for `stats_unavailable` and each in-flight status); tests/match-analysis-timeline.spec.ts passes unedited and `npm run typecheck` passes
+- **notes:** Direction E on the design canvas (https://claude.ai/artifact/Fn78DpgqH2PbRDGeEM5qtt, "E · Whole-row hover + click"), chosen by the author 2026-09-28. "Open" is the tray's short word for `analysisAction`'s "View match": the row is the link, so the word only says where the click goes. The reasons are short on purpose; the tray draws them on one truncating line. No "free": a failed retry's cost is not the tray's claim to make. The tray never POSTs `/resubmit` or `/rederive`; those live on the match page and in the drawers.
+
+## T33 · Tray rows become whole-row links with the stepper's marks
+
+- **status:** todo
+- **model:** opus
+- **needs:** T32
+- **files:** src/components/dashboard/activity/activity-tray.tsx, src/components/dashboard/activity/tray-detail.ts (comment only), src/components/dashboard/shared/vertical-steps.tsx, tests/activity-tray-rows.spec.ts (new, guess)
+- **routes:** /dashboard/matches
+- **done when:**
+  - [ ] `activity-tray.tsx` partitions `failed` with `isTrayFailure` after the live merge, so a `stats_unavailable` row renders no `FailedRow` and adds nothing to `trayDetail`'s failed count or the trigger's `unread` dot
+  - [ ] `FailedRow` is one `Link` (`ROW_CLASS` + `ROW_INTERACTIVE_CLASS`, `href` from `trayFailureAction`) with two single-line, truncating lines (the match title in `font-medium` ink-900 12px; `trayFailureReason` in 11px ink-500) and a trailing grey (`--ink-600`, `--ink-900` on row hover/focus) action word plus the 13px ink-400 `ChevronRight`. No bordered button, no blue, no "Analysis failed —" sentence, and no `href="/dashboard/matches/new"` literal in the file
+  - [ ] `StepMark` gains an optional compact size (14px, glyph scaled to match) that leaves every existing caller's markup unchanged; `InFlightRow` leads with `StepMark state="now"` (the spinner, still under `motion-reduce`) and `FailedRow` with `StepMark state="fail"`, both compact, replacing the blue `DOT` and the `CircleX`. Invitation rows keep the blue dot
+  - [ ] The file header ("Start over keeps its border", "There is no retry endpoint"), `FailedRow`'s doc comment and `tray-detail.ts`'s "carries Start over" comment describe the new rows and marks
+  - [ ] A new offline spec renders `ActivityTray` rows (via tests/fixtures/vm-modules.ts `createLoader()`) and asserts: an `upload_again` row's link targets `?match=<id>` and reads "Add video"; a `retry` row targets `/dashboard/matches/<id>` and reads "Open"; a `stats_unavailable` item renders no failed row; tests/activity-tray-detail.spec.ts, tests/skeleton-primitives.spec.ts and tests/design-drift.spec.ts pass
+- **notes:** Direction E (see T32's notes); the board's leading marks are the stepper's own at 14px. Blue in the chrome now means waiting on you: the trigger's unread dot and the invitation row's dot. Keep the 14px `Lead` column so every row's text still starts on one x. Touch has no hover, so the action word is always visible; hover only darkens it with the row wash. The tray is navigation-only. Eyes-on: the verifier's T21 seeded matches (one per class) sit in its personal workspace; open the tray on any dashboard page and expect five failed rows (no stats_unavailable), "Add video" on two and "Open" on three. Do not click through seeded rows' actions. The widget-states hook will run on this dashboard diff.
+
+## T34 · Stalled hand-off shows as a tray failure row
+
+- **status:** todo
+- **model:** sonnet
+- **needs:** T33
+- **files:** src/components/dashboard/activity/tray-failure.ts, src/components/dashboard/activity/activity-tray.tsx, tests/activity-tray-failure.spec.ts
+- **routes:** /dashboard/matches
+- **done when:**
+  - [ ] `isTrayFailure` also returns true for `status === "uploaded"` carrying a `recovery` (the server-classified stalled hand-off, `retry` or `wait_or_ask`), and `activity-tray.tsx`'s `inFlight` list excludes exactly those rows, so a stalled hand-off renders one `FailedRow`, no `InFlightRow`, and counts under "failed" in `trayDetail`
+  - [ ] For such a row `trayFailureAction` returns "Open" at `/dashboard/matches/<id>` and `trayFailureReason` returns `STEPPER_COPY.titles.stalled` ("Couldn't send for analysis"), imported from `match-detail/analysis-steps.ts`, not retyped
+  - [ ] Spec cases: `uploaded` + `retry` and `uploaded` + `wait_or_ask` → `isTrayFailure` true, "Open", the stalled reason; `uploaded` with no `recovery` → false (still in flight); every T32 case still passes; `npm run typecheck` passes
+- **notes:** Kept by the author (direction E draws the stalled row). A deliberate divergence from `matchListGroup`, which keeps a stalled `uploaded` row under "In progress"; the page (T23) and both drawers (T25/T26) already show it as stopped. Server-classified only: a row that stalls while the tray is open flips on the next navigation. No clock in the tray, `hasLiveWork` unchanged, and the tray POSTs nothing.
