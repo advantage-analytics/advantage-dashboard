@@ -71,7 +71,7 @@ ready).
 
 ## T5 · Rally, point-endings and performance-tracker widgets open their points in the Video tab
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T4
 - **files:** src/components/dashboard/matches/match-detail/rally-length-card.tsx, src/components/dashboard/matches/match-detail/point-endings-card.tsx, src/components/dashboard/matches/match-detail/performance-tracker-chart.tsx, src/components/dashboard/matches/match-detail/chart-tooltip.tsx — guess

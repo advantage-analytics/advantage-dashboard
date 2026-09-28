@@ -5,6 +5,8 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
+import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
 import {
   scopePoints,
   useSetScope,
@@ -34,6 +36,10 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * way every other point-derived card on this tab does
  * (performance-tracker-chart.tsx makes the identical read).
  *
+ * With a playable video each band opens its points in the Video tab
+ * (`RALLY_BAND_CUTS`) on click or Enter — hovering only reads. Without one
+ * the markup is exactly the read-only card.
+ *
  * The card is the right column's `flex:1` absorber — its own height comes
  * from the grid row, and the mosaic in turn claims whatever that leaves
  * after the header, labels and legend take their natural height.
@@ -58,16 +64,30 @@ const BAND_META: { key: Band["key"]; title: string; label: string }[] = [
   { key: "long", title: "Long rallies · 9+ shots", label: "Long" },
 ];
 
+/**
+ * The film cut that shows each band's points in the Video tab. Long is sent
+ * with an explicit `rallyMax: null` so a leftover upper bound from an earlier
+ * cut can never narrow it. The filter model drops shot-count-less points from
+ * any bounded range, exactly as the bucketing below does.
+ */
+export const RALLY_BAND_CUTS: Record<Band["key"], Partial<FilmFilters>> = {
+  short: { rallyMin: 1, rallyMax: 4 },
+  medium: { rallyMin: 5, rallyMax: 8 },
+  long: { rallyMin: 9, rallyMax: null },
+};
+
 function pct(part: number, whole: number): number {
   return whole > 0 ? (part / whole) * 100 : 0;
 }
 
 export function RallyLengthCard() {
   const { points } = useMatchData();
+  const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
   const { activeSet } = useSetScope();
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<Band["key"] | null>(null);
+  const watchable = meta.hasPlayableVideo;
 
   const youIsPlayer1 = sides.you.isPlayer1;
   const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
@@ -191,11 +211,22 @@ export function RallyLengthCard() {
             const youShare = pct(band.youWon, band.count);
             const isFirst = i === 0;
             const isLast = i === visible.length - 1;
+            const label = `${band.title}. ${band.count} points, ${Math.round(width)} percent of the match. ${youName} won ${band.youWon}, ${oppName} won ${band.oppWon}.`;
+            // Only with a playable video does the band take a click; every
+            // attribute below is `undefined` otherwise, so the read-only
+            // markup is unchanged. Focus is `focus.css`'s ring.
+            const watch = watchable
+              ? () => actions.watchCut(RALLY_BAND_CUTS[band.key])
+              : undefined;
 
             return (
               <div
                 key={band.key}
-                className="relative box-border flex cursor-default flex-col"
+                className={
+                  watch
+                    ? "relative box-border flex cursor-pointer flex-col"
+                    : "relative box-border flex cursor-default flex-col"
+                }
                 style={{
                   width: `${width}%`,
                   borderRight: isLast
@@ -203,7 +234,19 @@ export function RallyLengthCard() {
                     : "2px solid var(--surface-card)",
                 }}
                 tabIndex={0}
-                aria-label={`${band.title}. ${band.count} points, ${Math.round(width)} percent of the match. ${youName} won ${band.youWon}, ${oppName} won ${band.oppWon}.`}
+                role={watch ? "button" : undefined}
+                aria-label={watch ? `${label} Watch in Video` : label}
+                onClick={watch}
+                onKeyDown={
+                  watch
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          watch();
+                        }
+                      }
+                    : undefined
+                }
                 onMouseEnter={() => setHovered(band.key)}
                 onMouseLeave={() => setHovered(null)}
                 onFocus={() => setHovered(band.key)}
@@ -216,6 +259,7 @@ export function RallyLengthCard() {
                   youName={youName}
                   oppName={oppName}
                   align={isFirst ? "start" : isLast ? "end" : "center"}
+                  watchable={Boolean(watch)}
                 />
 
                 {/* Fixed tones, never swapped by who led the band (47f drops
@@ -305,6 +349,7 @@ function BandTooltip({
   youName,
   oppName,
   align,
+  watchable,
 }: {
   band: Band;
   open: boolean;
@@ -312,6 +357,8 @@ function BandTooltip({
   youName: string;
   oppName: string;
   align: "start" | "center" | "end";
+  /** The band opens its points in the Video tab. */
+  watchable: boolean;
 }) {
   return (
     <ChartTooltip
@@ -330,6 +377,9 @@ function BandTooltip({
       <span className="tabular text-[11px] text-white/[0.78]">
         {oppName} {Math.round(pct(band.oppWon, band.count))}%
       </span>
+      {watchable && (
+        <span className="text-[10px] text-white/[0.64]">Watch in Video</span>
+      )}
     </ChartTooltip>
   );
 }
