@@ -3,6 +3,10 @@
 import { Info } from "lucide-react";
 
 import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
+import {
+  noteIconCls,
+  noteStripCls,
+} from "@/components/dashboard/matches/new-match-wizard/styles";
 import { HeadToHeadCard } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import { MatchReport } from "@/components/dashboard/matches/match-detail/match-report";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
@@ -62,6 +66,15 @@ import { cn } from "@/lib/utils";
  * `StatisticsEmpty` (whose "arrive with a video analysed by Advantage
  * Intelligence" would be false here). Any points the match carries are not
  * charted: a stat section over a refused derivation reads as a fact.
+ *
+ * A second, unrelated caveat (T18): `meta.foldUnreconciled` — the point
+ * timeline derived, but didn't reproduce the score entered (T13's
+ * `derivation_quality->fold`). Unlike `stats_unavailable` this does not stop
+ * the rest of the view: a quiet `noteStripCls` strip (the wizard's own grey
+ * note register) sits above everything else, and `UnpublishedStatsNotice`
+ * drops its "checked against the final score" clause when both are true —
+ * the two notices would otherwise say opposite things about the same points.
+ * Jobs derived before T13 carry no `fold` key and never set this.
  */
 export function StatisticsView() {
   const { meta } = useMatchReport();
@@ -78,9 +91,23 @@ export function StatisticsView() {
 
   return (
     <>
+      {meta.foldUnreconciled && (
+        <div className={cn(noteStripCls, "shrink-0")}>
+          <Info
+            aria-hidden
+            className={`${noteIconCls} text-[var(--ink-400)]`}
+          />
+          <span>
+            Advantage Intelligence couldn&apos;t match every point to the final
+            score you entered, so some points may sit in the wrong game. The
+            score shown is the one you entered.
+          </span>
+        </div>
+      )}
+
       {!meta.statsPublished && hasPoints && (
         <div className="shrink-0">
-          <UnpublishedStatsNotice />
+          <UnpublishedStatsNotice foldUnreconciled={meta.foldUnreconciled} />
         </div>
       )}
 

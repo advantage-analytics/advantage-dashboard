@@ -242,7 +242,7 @@ ready).
 
 ## T18 · Show the unreconciled-score caveat on the Statistics tab
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T13, T17
 - **files:** src/lib/data/match-detail-server.ts, src/components/dashboard/matches/match-detail/match-report-context.tsx, src/components/dashboard/matches/match-detail/statistics-view.tsx, src/components/dashboard/matches/match-detail/unpublished-stats-notice.tsx (guess)

@@ -80,6 +80,16 @@ export interface MatchReportMeta {
    * `false`; `/m/[token]` never sets it.
    */
   statsUnavailable: boolean;
+  /**
+   * The match's newest completed job recorded that the derived point
+   * timeline could not be reconciled against the score entered
+   * (`derivation_quality->fold.reconciled === false`, T13). Some points may
+   * sit in the wrong game even though the score shown is the one entered.
+   * Defaults to `false`; a job derived before T13 carries no `fold` key and
+   * reads as `false` too — no backfill (guardrails §2). `/m/[token]` never
+   * sets it.
+   */
+  foldUnreconciled: boolean;
   /** A playable match video was resolved on the server. */
   hasPlayableVideo: boolean;
   /**
@@ -158,10 +168,12 @@ export function useMatchReport(): MatchReportContextValue {
 
 export interface MatchReportProviderProps extends Omit<
   MatchReportMeta,
-  "readOnly" | "statsUnavailable"
+  "readOnly" | "statsUnavailable" | "foldUnreconciled"
 > {
   /** See `MatchReportMeta.statsUnavailable`. Defaults to `false`. */
   statsUnavailable?: boolean;
+  /** See `MatchReportMeta.foldUnreconciled`. Defaults to `false`. */
+  foldUnreconciled?: boolean;
   /** See `MatchReportMeta.readOnly`. Defaults to `false`. */
   readOnly?: boolean;
   /**
@@ -179,6 +191,7 @@ export function MatchReportProvider({
   isDerived,
   statsPublished,
   statsUnavailable = false,
+  foldUnreconciled = false,
   hasPlayableVideo,
   savedViews,
   workspaceRole,
@@ -255,6 +268,7 @@ export function MatchReportProvider({
       isDerived,
       statsPublished,
       statsUnavailable,
+      foldUnreconciled,
       hasPlayableVideo,
       savedViews,
       workspaceRole,
@@ -272,6 +286,7 @@ export function MatchReportProvider({
       isDerived,
       statsPublished,
       statsUnavailable,
+      foldUnreconciled,
       hasPlayableVideo,
       savedViews,
       workspaceRole,

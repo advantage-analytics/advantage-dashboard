@@ -144,3 +144,12 @@ is the runner's. Newest entries at the bottom.
 3. `page.tsx`'s comment above `jobAnalysis` ("Failures take the same path") is now slightly stale (T20 amends guardrails §3.3).
 4. `/m/[token]` never sets `statsUnavailable` — decide whether a shared stats-unavailable match shows the note.
 5. Eyes-on owed: open live job b74a1e04's match.
+
+## T18 · Show the unreconciled-score caveat on the Statistics tab — done
+
+**gate:** mechanical pass · completion pass (widget-states: a conditional note strip and one copy clause; no loading, empty or error state changed)
+**changed:** `match-detail-server.ts` adds `resolveFoldUnreconciled()` (newest completed job's `derivation_quality.fold.reconciled === false`) inside `getMatchDetailData`'s existing `Promise.all`, exposed as `foldUnreconciled` and passed through `page.tsx` into `MatchReportMeta` (optional, defaults false, so `/m/[token]` is unchanged). `statistics-view.tsx` renders a grey `noteStripCls` strip with the caveat above the statistics (not on the `statsUnavailable` path). `UnpublishedStatsNotice` takes an optional `foldUnreconciled` and drops only its "checked against the final score" clause. `report-empty-states.spec.ts` now renders the real notice (one old marker assertion became a stronger real-markup check) and adds flag on/off cases.
+**follow-ups:**
+
+1. `/m/[token]` share pages never show the caveat; decide whether they should.
+2. `resolveFoldUnreconciled` itself has no unit test — only the UI spec with a stubbed `meta` covers the path.

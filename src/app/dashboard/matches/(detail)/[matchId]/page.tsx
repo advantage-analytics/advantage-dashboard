@@ -334,6 +334,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         isDerived={isDerived}
         statsPublished={statsPublished}
         statsUnavailable={statsUnavailable}
+        foldUnreconciled={data.foldUnreconciled}
         hasPlayableVideo={Boolean(video)}
         // "Match report opens at" (Settings › Preferences), clamped to an
         // available view.

@@ -52,6 +52,10 @@ const REAL = new Set([
   "@/components/ui/empty-mark",
   "@/lib/utils",
   "@/components/dashboard/matches/match-detail/report-view",
+  // T18: the fold-unreconciled clause is only checkable against the real
+  // component's copy, not a marker's `data-component` span.
+  "@/components/dashboard/matches/match-detail/unpublished-stats-notice",
+  "@/components/dashboard/matches/new-match-wizard/styles",
 ]);
 
 function render(
@@ -163,9 +167,46 @@ test.describe("StatisticsView", () => {
   test("points without published stats: the notice and the chart column, full width", () => {
     const html = render(file, "StatisticsView", [point()], stubs(false));
     expect(html).not.toContain('data-component="StatisticsEmpty"');
-    expect(html).toContain('data-component="UnpublishedStatsNotice"');
+    // The notice is the real component (T18), not a marker: its own anatomy
+    // is what proves it rendered.
+    expect(html).toContain('aria-label="Statistics not published"');
+    expect(html).toContain(
+      "Every point below has been checked against the final score you",
+    );
     expect(html).toContain('data-component="RallyLengthCard"');
     expect(html).not.toContain('data-component="HeadToHeadCard"');
+  });
+
+  test("fold unreconciled: the caveat strip renders, and the notice drops its accuracy clause", () => {
+    const html = render(file, "StatisticsView", [point()], {
+      ...stubs(false),
+      "@/components/dashboard/matches/match-detail/match-report-context": {
+        useMatchReport: () => ({
+          meta: {
+            statsPublished: false,
+            isDerived: false,
+            foldUnreconciled: true,
+          },
+        }),
+      },
+    });
+    expect(html).toContain(
+      "Advantage Intelligence couldn&#x27;t match every point to the final score you entered",
+    );
+    expect(html).toContain('aria-label="Statistics not published"');
+    expect(html).not.toContain(
+      "Every point below has been checked against the final score you",
+    );
+  });
+
+  test("fold reconciled (the default): no caveat strip, and the notice keeps its accuracy clause", () => {
+    const html = render(file, "StatisticsView", [point()], stubs(false));
+    expect(html).not.toContain(
+      "Advantage Intelligence couldn&#x27;t match every point",
+    );
+    expect(html).toContain(
+      "Every point below has been checked against the final score you",
+    );
   });
 
   test("points with published stats: the full widgets row", () => {
