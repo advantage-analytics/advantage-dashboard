@@ -23,16 +23,22 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import {
   type MatchAnalysis,
+  isInputRejected,
   pipelinePercent,
   resolveAnalysisStatus,
 } from "@/lib/data/match-analysis";
 
 /** The columns a live update can change. Everything else comes from the server render. */
-interface LiveJobRow {
+export interface LiveJobRow {
   match_id: string;
   status: string;
   upload_progress_percent: number | null;
   error_message: string | null;
+  /**
+   * The vendor's failure class. On the wire for the same reason as
+   * `derivation_version` below; `invalid_input` means the video was refused.
+   */
+  error_category: string | null;
   external_job_id: string | null;
   created_at: string;
   /**
@@ -49,9 +55,43 @@ export type LiveAnalysisPatch = Pick<
   | "progressPercent"
   | "uploadPercent"
   | "failNote"
+  | "inputRejected"
   | "jobReference"
   | "startedAt"
 >;
+
+/**
+ * Project one realtime `processing_jobs` row onto the fields a live update may
+ * override. Pure, and exported so it can be tested without a socket.
+ *
+ * Returns undefined for a status the UI has no word for; the caller warns and
+ * skips. `inputRejected` is set on EVERY patch, not only failed ones, so a
+ * later non-failed row (a resubmission) resets it to false rather than leaving
+ * the previous refusal merged over the server render.
+ */
+export function liveAnalysisPatch(
+  row: Pick<LiveJobRow, "status"> & Partial<LiveJobRow>,
+): LiveAnalysisPatch | undefined {
+  const status = resolveAnalysisStatus(row.status, row.derivation_version);
+  if (!status) return undefined;
+
+  const uploadPercent =
+    status === "uploading" && row.upload_progress_percent != null
+      ? row.upload_progress_percent
+      : undefined;
+
+  return {
+    status,
+    progressPercent: pipelinePercent(status, uploadPercent),
+    uploadPercent,
+    // Without this the patch would blank the ETA's only input the moment the
+    // first live event landed.
+    startedAt: row.created_at,
+    failNote: row.error_message ?? undefined,
+    inputRejected: isInputRejected(row.status, row.error_category),
+    jobReference: row.external_job_id ?? undefined,
+  };
+}
 
 /**
  * What to follow.
@@ -127,34 +167,17 @@ export function useLiveMatchAnalysis(
             const row = payload.new as Partial<LiveJobRow> | null;
             if (!row?.match_id || !row.status) return;
 
-            const status = resolveAnalysisStatus(
-              row.status,
-              row.derivation_version,
-            );
-            if (!status) {
+            const patch = liveAnalysisPatch({ ...row, status: row.status });
+            if (!patch) {
               console.warn("[live-analysis] unmapped processing_jobs.status", {
                 status: row.status,
               });
               return;
             }
 
-            const uploadPercent =
-              status === "uploading" && row.upload_progress_percent != null
-                ? row.upload_progress_percent
-                : undefined;
-
             setPatches((prev) => {
               const next = new Map(prev);
-              next.set(row.match_id!, {
-                status,
-                progressPercent: pipelinePercent(status, uploadPercent),
-                uploadPercent,
-                // Without this the patch would blank the ETA's only input the
-                // moment the first live event landed.
-                startedAt: row.created_at,
-                failNote: row.error_message ?? undefined,
-                jobReference: row.external_job_id ?? undefined,
-              });
+              next.set(row.match_id!, patch);
               return next;
             });
           },

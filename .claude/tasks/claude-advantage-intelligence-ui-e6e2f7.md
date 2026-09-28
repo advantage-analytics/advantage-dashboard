@@ -138,7 +138,7 @@ ready).
 
 ## T10 · Carry `inputRejected` on `MatchAnalysis` from the loader and the live hook
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/match-analysis.ts (`MatchAnalysis` ~line 83, new predicate beside `resolveAnalysisStatus`), src/lib/data/match-analysis-server.ts (`JobRow`, select ~line 91, projection ~line 143), src/hooks/use-live-match-analysis.ts (`LiveJobRow`, `LiveAnalysisPatch`, patch ~line 148), src/lib/schedule/types.ts (`EntryMatch` ~line 146), src/lib/data/schedule-server.ts (~line 276), tests/match-analysis-input-rejected.spec.ts (new, guess — pattern `tests/fixtures/vm-modules.ts` `createLoader`)
 - **done when:**

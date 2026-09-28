@@ -144,6 +144,8 @@ export interface EntryMatch {
   jobId?: string | null;
   /** The failed job's note, from the analysis map. */
   failNote?: string | null;
+  /** The vendor refused the video itself, from the analysis map — no retry. */
+  inputRejected?: boolean | null;
 }
 
 export interface EventEntry {
