@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Show matching existing teams under the 7.2 team-name field
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/components/claim/team-setup-form.tsx, src/components/claim/existing-team-matches.tsx (new, guess), tests/existing-team-matches.spec.ts (new)

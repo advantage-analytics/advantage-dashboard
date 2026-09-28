@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { continueToPilotTerms } from "@/app/claim/team/actions";
 import { CLAIM_ROLES } from "@/lib/services/programs/claim-roles";
+import type { CustomProgramSearchResult } from "@/lib/data/programs-server";
 import type { CustomOrgType } from "@/lib/services/programs/create-actions";
 import { OWNER_NAME_MAX } from "@/lib/services/programs/custom-org";
 import {
@@ -12,6 +13,7 @@ import {
   CLAIM_LABEL,
   ClaimSelect,
 } from "./claim-shell";
+import { ExistingTeamMatches, TYPE_LABEL } from "./existing-team-matches";
 
 /**
  * Onboarding & Team Setup, screen 7.2 — you name it, you own it, no
@@ -30,32 +32,8 @@ import {
  * would mean inventing a destination the schema doesn't have.
  */
 
-/** The eyebrow + title reflect the org type chosen on 7.1. */
-const TYPE_LABEL: Record<
-  CustomOrgType,
-  { eyebrow: string; title: string; placeholder: string }
-> = {
-  club: {
-    eyebrow: "Tennis club",
-    title: "Set up your club team",
-    placeholder: "Riverside Tennis Club — Juniors",
-  },
-  high_school: {
-    eyebrow: "High school",
-    title: "Set up your high school team",
-    placeholder: "Riverside High — Varsity",
-  },
-  academy: {
-    eyebrow: "Academy",
-    title: "Set up your academy team",
-    placeholder: "Baseline Academy — Performance Group",
-  },
-  other: {
-    eyebrow: "Something else",
-    title: "Set up your team",
-    placeholder: "Your team's name",
-  },
-};
+/** Long enough to stop typing, short enough not to feel laggy. */
+const DEBOUNCE_MS = 180;
 
 function reasonMessage(reason: string): string {
   switch (reason) {
@@ -98,6 +76,39 @@ export function TeamSetupForm({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // Existing custom teams with a name like the one being typed. The debounce
+  // and the latest-request guard are `ProgramSearch`'s, so a slow early
+  // keystroke cannot overwrite a faster later one.
+  const [matches, setMatches] = useState<CustomProgramSearchResult[]>([]);
+  const latest = useRef(0);
+  const query = teamName.trim();
+  // Derived during render: below two characters there is nothing to show, and
+  // no request is made.
+  const active = query.length >= 2;
+  const visibleMatches = active ? matches : [];
+
+  useEffect(() => {
+    if (!active) return;
+
+    const id = ++latest.current;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/programs/custom-search?q=${encodeURIComponent(query)}&type=${encodeURIComponent(orgType)}`,
+        );
+        const body = (await res.json()) as {
+          results: CustomProgramSearchResult[];
+        };
+        if (id !== latest.current) return;
+        setMatches(body.results ?? []);
+      } catch {
+        if (id === latest.current) setMatches([]);
+      }
+    }, DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [query, active, orgType]);
+
   const canSubmit = teamName.trim().length >= 2 && ownerName.trim().length > 0;
 
   function onSubmit(event: React.FormEvent) {
@@ -139,6 +150,7 @@ export function TeamSetupForm({
             autoComplete="off"
             className={CLAIM_FIELD}
           />
+          <ExistingTeamMatches rows={visibleMatches} term={query} />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
