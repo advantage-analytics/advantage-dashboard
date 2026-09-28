@@ -2,7 +2,6 @@
 
 import {
   useEffect,
-  useId,
   useOptimistic,
   useState,
   useSyncExternalStore,
@@ -29,7 +28,6 @@ import type { Match } from "@/lib/data/types";
 import type {
   MatchShareLink,
   MatchShareState,
-  ShareAudience,
   SharePerson,
 } from "@/lib/data/match-share-server";
 import { realTournamentName } from "@/lib/data/match-share-format";
@@ -126,10 +124,7 @@ export function ShareMatchButton({
       >
         <SharePopoverPanel
           match={match}
-          shareLink={share.link}
-          canShare={share.canShare}
-          publicLinkOn={share.publicLinkOn}
-          audience={share.audience}
+          share={share}
           onClose={() => setOpen(false)}
         />
       </PopoverContent>
@@ -240,20 +235,14 @@ export function ShareRailTrigger({
  */
 export function SharePopoverPanel({
   match,
-  shareLink,
-  canShare,
-  publicLinkOn = shareLink !== null,
-  audience = { kind: "personal" },
+  share,
   onClose,
 }: {
   match: Match;
-  shareLink: MatchShareLink | null;
-  canShare: boolean;
-  publicLinkOn?: boolean;
-  audience?: ShareAudience;
+  share: MatchShareState;
   onClose: () => void;
 }) {
-  const groupName = useId();
+  const { link: shareLink, canShare, publicLinkOn, audience } = share;
   const [canNativeShare, setCanNativeShare] = useState(false);
   const [link, setLink] = useState<MatchShareLink | null>(shareLink);
   const [error, setError] = useState<string | null>(null);
@@ -323,7 +312,7 @@ export function SharePopoverPanel({
 
   const privateRung = team
     ? {
-        label: team.programName,
+        label: team.programName ?? "The team",
         description: "Everyone on the team can open it",
         trailing: <TeamFaces faces={team.faces} count={team.memberCount} />,
       }
@@ -393,7 +382,7 @@ export function SharePopoverPanel({
         </div>
       </ActionBlock>
     );
-  } else if (team && (locked || !isPublic)) {
+  } else if (team?.teamUrl && (locked || !isPublic)) {
     body = (
       <ActionBlock>
         <UrlRow url={team.teamUrl} />
@@ -432,7 +421,7 @@ export function SharePopoverPanel({
         } · statistics only`}
       </>
     );
-  } else if (team && !isPublic) {
+  } else if (team?.teamUrl && !isPublic) {
     note = "Teammates sign in to open this link.";
   } else {
     note = "Links show statistics only — never the video.";
@@ -444,17 +433,16 @@ export function SharePopoverPanel({
         role="radiogroup"
         aria-label="Who can open this match"
         aria-disabled={locked || undefined}
+        onKeyDown={moveFocusBetweenRungs}
         className="flex flex-col"
       >
         <AccessOption
-          name={groupName}
           chosen={!isPublic}
           locked={locked}
           onChoose={() => choose("private")}
           {...privateRung}
         />
         <AccessOption
-          name={groupName}
           chosen={isPublic}
           locked={locked}
           onChoose={() => choose("public")}
@@ -510,17 +498,39 @@ function MenuDivider() {
 }
 
 /**
- * One rung of the access ladder: a native radio (arrow keys, grouping and
- * announcement for free), drawn as the DS check-dot — 14px, a hairline ring
- * at rest, solid Signal Blue with a white check when chosen. The chosen row
- * takes no fill of its own; the dot is the one colour that says "chosen".
- *
- * The ring sits on the row, not the hidden input (the wrapper-ring pattern):
- * `data-focus-ring="none"` on the input, `has-[input:focus-visible]` on the
- * label.
+ * Arrow keys walk focus between the rungs — and only focus. A native radio
+ * group selects on arrow, and here selecting "Anyone with the link" mints a
+ * public link on the spot, so a keystroke meant to reach Copy would publish
+ * the match. Choosing takes a click, Enter or Space (the button's own
+ * activation); arrows are navigation. The chosen rung holds the group's one
+ * tab stop (roving tabindex).
+ */
+function moveFocusBetweenRungs(event: React.KeyboardEvent<HTMLElement>) {
+  const step =
+    event.key === "ArrowDown" || event.key === "ArrowRight"
+      ? 1
+      : event.key === "ArrowUp" || event.key === "ArrowLeft"
+        ? -1
+        : 0;
+  if (step === 0) return;
+  const rungs = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'),
+  );
+  const at = rungs.indexOf(document.activeElement as HTMLElement);
+  if (at === -1) return;
+  event.preventDefault();
+  rungs[(at + step + rungs.length) % rungs.length]?.focus();
+}
+
+/**
+ * One rung of the access ladder: a `role="radio"` button drawn as the DS
+ * check-dot — 14px, a hairline ring at rest, solid Signal Blue with a white
+ * check when chosen. The chosen row takes no fill of its own; the dot is the
+ * one colour that says "chosen". A button, not a native radio, so that
+ * arrowing past it cannot choose it (`moveFocusBetweenRungs`); the system's
+ * focus ring draws on the row itself.
  */
 function AccessOption({
-  name,
   label,
   description,
   trailing,
@@ -528,7 +538,6 @@ function AccessOption({
   locked,
   onChoose,
 }: {
-  name: string;
   label: string;
   description: string;
   trailing?: React.ReactNode;
@@ -537,24 +546,20 @@ function AccessOption({
   onChoose: () => void;
 }) {
   return (
-    <label
+    <button
+      type="button"
+      role="radio"
+      aria-checked={chosen}
+      aria-disabled={locked || undefined}
+      tabIndex={chosen ? 0 : -1}
+      onClick={onChoose}
       className={cn(
-        "flex items-start gap-2.5 rounded-[var(--radius-element)] px-2.5 py-2",
-        "has-[input:focus-visible]:shadow-[var(--focus-ring)]",
+        "flex w-full items-start gap-2.5 rounded-[var(--radius-element)] px-2.5 py-2 text-left",
         locked
           ? "cursor-default"
           : "cursor-pointer transition-colors duration-100 hover:bg-[var(--surface-subtle)]",
       )}
     >
-      <input
-        type="radio"
-        name={name}
-        checked={chosen}
-        onChange={onChoose}
-        aria-disabled={locked || undefined}
-        data-focus-ring="none"
-        className="sr-only"
-      />
       <span
         aria-hidden="true"
         className={cn(
@@ -587,7 +592,7 @@ function AccessOption({
         </span>
       </span>
       {trailing}
-    </label>
+    </button>
   );
 }
 

@@ -50,10 +50,12 @@ const { SharePopoverPanel } = loader.load(
 ) as {
   SharePopoverPanel: React.ComponentType<{
     match: Match;
-    shareLink: { url: string } | null;
-    canShare: boolean;
-    publicLinkOn?: boolean;
-    audience?: unknown;
+    share: {
+      link: { url: string } | null;
+      canShare: boolean;
+      publicLinkOn: boolean;
+      audience: unknown;
+    };
     onClose: () => void;
   }>;
 };
@@ -92,27 +94,31 @@ function render(
   shareLink: { url: string } | null,
   {
     canShare = true,
-    audience,
-    publicLinkOn,
+    audience = { kind: "personal" },
+    publicLinkOn = shareLink !== null,
   }: { canShare?: boolean; audience?: unknown; publicLinkOn?: boolean } = {},
 ) {
   return renderToStaticMarkup(
     React.createElement(SharePopoverPanel, {
       match: MATCH,
-      shareLink,
-      canShare,
-      audience,
-      publicLinkOn,
+      share: { link: shareLink, canShare, audience, publicLinkOn },
       onClose: () => {},
     }),
   );
 }
 
-/** The label text of each radio, in order, with whether it is checked. */
+/** Each rung's opening tag, in order. */
+function rungTags(html: string): string[] {
+  return html.match(/<button[^>]*role="radio"[^>]*>/g) ?? [];
+}
+
+/** The label text of each rung, in order, with whether it is checked. */
 function rungs(html: string): { label: string; checked: boolean }[] {
-  return [...html.matchAll(/<label[^>]*>(.*?)<\/label>/g)].map((m) => ({
-    label: m[1].match(/leading-\[18px\][^>]*>([^<]*)</)?.[1] ?? "",
-    checked: /<input[^>]*checked=""/.test(m[1]),
+  return [
+    ...html.matchAll(/<button([^>]*role="radio"[^>]*)>(.*?)<\/button>/g),
+  ].map((m) => ({
+    label: m[2].match(/leading-\[18px\][^>]*>([^<]*)</)?.[1] ?? "",
+    checked: m[1].includes('aria-checked="true"'),
   }));
 }
 
@@ -158,15 +164,47 @@ test("team, private: the program's rung carries the faces and the team link", ()
 
 test("a teammate who cannot publish sees the ladder unavailable and who can", () => {
   const html = render(null, { canShare: false, audience: TEAM });
-  const inputs = html.match(/<input[^>]*>/g) ?? [];
-  expect(inputs).toHaveLength(2);
-  for (const input of inputs) {
-    expect(input).toContain('aria-disabled="true"');
-    expect(input).not.toMatch(/\sdisabled=""/);
+  const tags = rungTags(html);
+  expect(tags).toHaveLength(2);
+  for (const tag of tags) {
+    expect(tag).toContain('aria-disabled="true"');
+    expect(tag).not.toMatch(/\sdisabled=""/);
   }
   expect(html).toContain("Ava Watson or team staff can make a public link.");
   expect(html).toContain("app.example.com/dashboard/matches/");
   expect(html).not.toContain("mailto:");
+});
+
+test("arrow keys cannot choose: rungs are buttons with one roving tab stop", () => {
+  // A native radio selects on arrow, and choosing "Anyone" publishes the
+  // match — so the rungs must not be native radios, and only the chosen one
+  // may take the tab stop.
+  const html = render(null);
+  expect(html).not.toMatch(/<input[^>]*type="radio"/);
+  const tags = rungTags(html);
+  expect(tags).toHaveLength(2);
+  expect(tags[0]).toContain('tabindex="0"');
+  expect(tags[1]).toContain('tabindex="-1"');
+});
+
+test("a non-member viewing a team match gets no team link, faces or count", () => {
+  const html = render(null, {
+    audience: {
+      kind: "team",
+      programName: null,
+      teamUrl: null,
+      memberCount: null,
+      faces: [],
+    },
+  });
+  expect(rungs(html)).toEqual([
+    { label: "The team", checked: true },
+    { label: "Anyone with the link", checked: false },
+  ]);
+  expect(html).not.toContain("/dashboard/");
+  expect(html).not.toContain("Copy");
+  expect(html).not.toContain("people");
+  expect(html).not.toContain("Teammates sign in");
 });
 
 test("a teammate is told when a public link is already on", () => {
@@ -186,8 +224,12 @@ test("the email subject never carries the Unknown Event placeholder", () => {
   const html = renderToStaticMarkup(
     React.createElement(SharePopoverPanel, {
       match: { ...MATCH, tournamentName: "Unknown Event" },
-      shareLink: { url: PUBLIC_URL },
-      canShare: true,
+      share: {
+        link: { url: PUBLIC_URL },
+        canShare: true,
+        publicLinkOn: true,
+        audience: { kind: "personal" },
+      },
       onClose: () => {},
     }),
   );

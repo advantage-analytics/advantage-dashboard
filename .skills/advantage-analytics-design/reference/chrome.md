@@ -309,9 +309,12 @@ white 9px check when chosen, on the **left** of the row. Everything else is
 the menu's own vocabulary: the `FloatMenu` surface (320px, 4px inset), 8px
 rows with the `--surface-subtle` hover wash and no standing fill on the chosen
 one, inset hairlines between groups, and one closing 11px ink-500 sentence.
-The radio is native (`sr-only` input, wrapper ring on the row), and a viewer
-who may not change it gets `aria-disabled` rows — never `disabled` — plus a
-note naming who can. A trailing face stack (22px avatars overlapped 6px on a
+**Where choosing a rung does something** (the Share ladder mints a public
+link), the rungs are `role="radio"` buttons, not native radios: a native group
+selects on arrow, so a keystroke meant to reach Copy would publish the match.
+Arrows move focus only (roving tabindex, the chosen rung holds the tab stop);
+click, Enter or Space chooses. A viewer who may not change it gets
+`aria-disabled` rows — never `disabled` — plus a note naming who can. A trailing face stack (22px avatars overlapped 6px on a
 2px card ring, then `+N` in 11px ink-500) may sit on a rung that names a
 group of people. _Shipped:_ `matches/match-detail/share-match-button.tsx`
 (`AccessOption`, `TeamFaces`).

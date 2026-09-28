@@ -96,13 +96,19 @@ export type ShareAudience =
   | { kind: "personal" }
   | {
       kind: "team";
-      /** `programs.school_name` — the workspace's own name. */
-      programName: string;
+      /**
+       * `programs.school_name` — the workspace's own name. Null when the
+       * viewer cannot read the program (a custom org they are not in).
+       */
+      programName: string | null;
       /**
        * The match's `/dashboard` URL. Only a signed-in member of the program
-       * can open it, which is exactly what the team rung promises.
+       * can open it, which is exactly what the team rung promises — so it is
+       * null for a viewer who is not a member themselves (the uploader or a
+       * seated player from outside the program), who has no team to hand it
+       * to.
        */
-      teamUrl: string;
+      teamUrl: string | null;
       /** Seats on the program, or null when the roster could not be read. */
       memberCount: number | null;
       /** The first few members, owner and coaches first, for the face stack. */
@@ -140,32 +146,62 @@ function shortDate(iso: string): string {
   });
 }
 
+/** Logs a failed read in this module's own voice, `matchId`/`programId` and all. */
+function logShareError(
+  action: string,
+  error: { message: string } | null,
+  context: Record<string, unknown>,
+): void {
+  if (!error) return;
+  console.error(`[match-share] could not ${action}`, {
+    ...context,
+    message: error.message,
+  });
+}
+
 /**
  * The team rung's facts: the program's name, how many seats it has and the
  * first three faces. `program_roster` and `program_member_avatars` both
  * answer any member of the program, so a player sees the same stack a coach
  * does. A failed roster read keeps the rung and drops the count and faces.
+ *
+ * `matches` RLS also lets a NON-member open a team match — its uploader, or a
+ * seated player from outside the program — and for them the roster reads
+ * come back empty rather than failing. `user_program_role` says which case
+ * this is, so a non-member gets the rung without a team link, faces or a
+ * headcount that would all be guesses.
  */
 async function loadTeamAudience(
   supabase: SupabaseClient,
   matchId: string,
   programId: string,
 ): Promise<ShareAudience> {
-  const [programResult, rosterResult, avatars] = await Promise.all([
+  const [programResult, roleResult, rosterResult, avatars] = await Promise.all([
     supabase
       .from("programs")
       .select("school_name")
       .eq("id", programId)
       .maybeSingle(),
+    supabase.rpc("user_program_role", { p_program_id: programId }),
     supabase.rpc("program_roster", { p_program_id: programId }),
     getMemberAvatarUrls(supabase, programId),
   ]);
-  if (rosterResult.error) {
-    console.error("[match-share] could not read the team roster", {
+  const programName =
+    (programResult.data?.school_name as string | undefined) ?? null;
+  // A failed role read is "not a member" — the quiet reading: no team link.
+  if (typeof roleResult.data !== "string") {
+    logShareError("read the viewer's team role", roleResult.error, {
       programId,
-      message: rosterResult.error.message,
     });
+    return {
+      kind: "team",
+      programName,
+      teamUrl: null,
+      memberCount: null,
+      faces: [],
+    };
   }
+  logShareError("read the team roster", rosterResult.error, { programId });
   const roster = (rosterResult.data ?? []) as {
     user_id: string;
     display_name: string | null;
@@ -173,8 +209,7 @@ async function loadTeamAudience(
   }[];
   return {
     kind: "team",
-    programName:
-      (programResult.data?.school_name as string | undefined) ?? "Team",
+    programName,
     teamUrl: `${siteUrl()}/dashboard/matches/${encodeURIComponent(matchId)}`,
     memberCount: rosterResult.error ? null : roster.length,
     faces: roster.slice(0, 3).map((member) => {
@@ -217,24 +252,9 @@ export async function getMatchShareState(
         .maybeSingle(),
       getWorkspaceContext(),
     ]);
-  if (linkResult.error) {
-    console.error("[match-share] could not read the share link", {
-      matchId,
-      message: linkResult.error.message,
-    });
-  }
-  if (canShareResult.error) {
-    console.error("[match-share] could not read share permission", {
-      matchId,
-      message: canShareResult.error.message,
-    });
-  }
-  if (matchResult.error) {
-    console.error("[match-share] could not read the match's program", {
-      matchId,
-      message: matchResult.error.message,
-    });
-  }
+  logShareError("read the share link", linkResult.error, { matchId });
+  logShareError("read share permission", canShareResult.error, { matchId });
+  logShareError("read the match's program", matchResult.error, { matchId });
   const canShare = canShareResult.data === true;
   const visible = Boolean(matchResult.data);
   const programId =
@@ -248,7 +268,7 @@ export async function getMatchShareState(
     programId
       ? loadTeamAudience(supabase, matchId, programId)
       : Promise.resolve<ShareAudience>({ kind: "personal" }),
-    resolveLinkMaker(token ? createdBy : null, viewer),
+    resolveLinkMaker(createdBy, viewer),
     // Only a viewer who could not read the row needs asking, and only once
     // they have shown they can open the match.
     !token && !canShare && visible
