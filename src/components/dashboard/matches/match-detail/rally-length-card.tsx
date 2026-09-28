@@ -6,6 +6,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
+import { scopeCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
 import {
   scopePoints,
@@ -216,7 +217,10 @@ export function RallyLengthCard() {
             // attribute below is `undefined` otherwise, so the read-only
             // markup is unchanged. Focus is `focus.css`'s ring.
             const watch = watchable
-              ? () => actions.watchCut(RALLY_BAND_CUTS[band.key])
+              ? () =>
+                  actions.watchCut(
+                    scopeCut(RALLY_BAND_CUTS[band.key], activeSet),
+                  )
               : undefined;
 
             return (

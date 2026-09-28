@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   consumeFilmCut,
   mergeFilmCut,
+  scopeCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
   DEFAULT_FILM_FILTERS,
@@ -85,4 +86,33 @@ test("the URL form is unchanged: only cut= and serve= travel", () => {
     pressure: "break",
     server: "you",
   });
+});
+
+test("scopeCut narrows a statistic's cut to the report's set scope", () => {
+  const cut = { rallyMin: 1, rallyMax: 4 };
+  // A set chip is on: the cut carries that set, so the Video tab opens the
+  // same points the card counted.
+  expect(scopeCut(cut, 2)).toEqual({ rallyMin: 1, rallyMax: 4, set: 2 });
+  // The whole match is sent explicitly, never left to a leftover `set`.
+  expect(scopeCut(cut, null)).toEqual({ rallyMin: 1, rallyMax: 4, set: null });
+  // The card's own table is not mutated.
+  expect(cut).toEqual({ rallyMin: 1, rallyMax: 4 });
+});
+
+test("a set-scoped cut admits only that set's points", () => {
+  const points = [
+    pt({ id: "s1", setNumber: 1, rallyLength: 3 }),
+    pt({ id: "s2", setNumber: 2, rallyLength: 3 }),
+    pt({ id: "s2-long", setNumber: 2, rallyLength: 11 }),
+  ];
+  const band = { rallyMin: 1, rallyMax: 4 };
+  const scoped = mergeFilmCut(scopeCut(band, 2));
+  expect(applyFilmFilters(points, scoped, true).map((p) => p.id)).toEqual([
+    "s2",
+  ]);
+  const whole = mergeFilmCut(scopeCut(band, null));
+  expect(applyFilmFilters(points, whole, true).map((p) => p.id)).toEqual([
+    "s1",
+    "s2",
+  ]);
 });

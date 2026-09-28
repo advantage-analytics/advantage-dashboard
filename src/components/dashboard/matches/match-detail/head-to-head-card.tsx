@@ -12,6 +12,7 @@ import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
+import { scopeCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
 import {
   scopeMeta,
@@ -781,7 +782,8 @@ export function HeadToHeadCard() {
             ) =>
               cut && value.display
                 ? {
-                    onClick: () => actions.watchCut(sideCut(cut, side)),
+                    onClick: () =>
+                      actions.watchCut(scopeCut(sideCut(cut, side), activeSet)),
                     label: `${row.label}, ${name} ${value.display}. Watch in Video`,
                   }
                 : undefined;

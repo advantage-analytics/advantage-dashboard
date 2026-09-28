@@ -34,6 +34,20 @@ export function mergeFilmCut(cut: Partial<FilmFilters>): FilmFilters {
 }
 
 /**
+ * A statistic's cut, narrowed to the set the report is scoped to. The
+ * Statistics cards count only `scopePoints(points, activeSet)`, so the points a
+ * click opens must be the same ones: `set` filters on `point.setNumber`, the
+ * field `scopePoints` reads. `null` (the whole match) is sent explicitly, so a
+ * cut is always exactly what the card counted.
+ */
+export function scopeCut(
+  cut: Partial<FilmFilters>,
+  activeSet: number | null,
+): Partial<FilmFilters> {
+  return { ...cut, set: activeSet };
+}
+
+/**
  * Take a pending cut: the filters it asks for, and nothing left pending.
  * `null` in gives `null` out — there was nothing to consume. Pure, so the
  * once-only rule is checkable without a provider.
