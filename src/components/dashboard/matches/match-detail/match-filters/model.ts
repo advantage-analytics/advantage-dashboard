@@ -323,7 +323,7 @@ export const MATCH_FILTER_SECTIONS: readonly {
     id: "custom",
     label: "Custom",
     groups: [
-      { key: "customPlayer", label: "Player" },
+      { key: "customPlayer", label: "Choose Player" },
       { key: "customSide", label: "Side" },
       { key: "customDirection", label: "Direction" },
       { key: "customRallyShot", label: "Rally Shot" },

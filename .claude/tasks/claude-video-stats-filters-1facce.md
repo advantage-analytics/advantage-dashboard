@@ -70,7 +70,7 @@ ready).
 
 ## T5 · Build the FiltersPanel from the mockups
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/matches/match-detail/match-filters/filters-panel.tsx, tests/match-filters-panel.spec.ts (guess)

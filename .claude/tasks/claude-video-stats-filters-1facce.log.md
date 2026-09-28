@@ -37,3 +37,13 @@ Implementer's own calls:
 1. `point-endings-card.tsx` and head-to-head's derived path credit Service Winners to `p.player` (usually the returner), so their winner counts will disagree with the new filter's Winner count. This matters when T7 maps the "Winners" cut.
 2. `applyFilmFilters` could use `courtSidesOf` instead of its own game walk (moot once T8 deletes it).
 3. T5 decides whether a group with at most one available option is hidden (the plan says a one-set match shows no Sets group).
+
+## T5 · Build the FiltersPanel from the mockups — done
+
+**gate:** mechanical pass; completion pass. Widget states: loading n/a (renders from props, no fetch or Suspense); empty ✓ ("No filterable points in this match.", no `return null`); error n/a until T6/T7 mount it inside a region.
+**changed:** New `match-filters/filters-panel.tsx` (`FiltersPanel`: "Filters" title, blue-text Clear all with no icon, collapsible Score/Serve/Return/Result/Custom sections from the model's catalog, `rounded-full` pills with `aria-pressed`, a Points grid laid out server-column × returner-row, and an `advButton` Apply that is disabled until the draft differs). New `match-filters/panel-draft.ts` holds the pure draft logic (`panelSections`, `draftToggle`, `draftClear`, `panelActions`, `initialOpenSections`, `pointGridCell`). `model.ts`: the Custom player group is now labelled "Choose Player". `tests/match-filters-panel.spec.ts` renders through `createLoader()`. Not yet mounted anywhere.
+**follow-ups:**
+
+1. A URL filter the match can't produce (e.g. Ad-40 on a video match) is still applied but its pill isn't drawn, so only Clear all removes it. T6/T7 should either draw selected-but-unavailable pills or drop unavailable values when parsing.
+2. The draft is seeded from `filters` only on mount, so hosts should remount with `key={serializeMatchFilters(filters)}`.
+3. The DS filter-panel rule wants a live match count in the footer; T6/T7 can pass one in.
