@@ -20,3 +20,8 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. No spec asserts the new call end-to-end: add a case to `tests/upload-draft-resume.spec.ts` where a wizard opened via `?entry=&match=` (draftId null) submits and `draftDeletesForMatch` records the match id.
+
+## T3 · Remove the dead "Estimates" lifecycle chip — done
+
+**gate:** mechanical — PASS (lint, typecheck, full suite). completion — `VERDICT: pass`.
+**changed:** `lifecycle-chips.tsx` — `LifecycleValue` narrowed to `"all" | "new" | "in-progress"`, Estimates option and its doc paragraph removed. `matches-page-content.tsx` — `isEstimate` (always `false`) and its doc, the unused `MatchAnalysis` import, `LIFECYCLE_NOUN.estimates`, the filter branch and the URL-parse option deleted; `?lifecycle=estimates` now falls back to `all` and is not re-written. `view-pills.tsx` — comment only. No spec referenced the chip.

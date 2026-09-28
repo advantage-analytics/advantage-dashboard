@@ -44,7 +44,7 @@ ready).
 
 ## T3 · Remove the dead "Estimates" lifecycle chip
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/lifecycle-chips.tsx, src/components/dashboard/matches/matches-page-content.tsx, src/components/admin/view-pills.tsx (comment only) (guess)
 - **done when:**

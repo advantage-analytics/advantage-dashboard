@@ -37,7 +37,6 @@ import { DRAWER_ATTR, MatchDrawer } from "./match-drawer";
 import { DraftDrawer } from "./draft-drawer";
 import { matchRowId } from "./match-card-list";
 import { MATCH_DRAWER_SLOT_ID } from "./match-drawer-slot";
-import type { MatchAnalysis } from "@/lib/data/match-analysis";
 import {
   MatchesFilterPanel,
   type FilterOption,
@@ -120,21 +119,6 @@ function analysisGroup(match: DisplayMatch): string | null {
 }
 
 const ANALYSIS_GROUP_ORDER = ["In progress", "Ready", "Failed", "No video"];
-
-/**
- * The "Estimates" view — statistics the engine published but could not defend
- * at full confidence, to be read as "Estimate · Review data" in the row.
- *
- * No analysis state carries that marker yet: Phase 2 derivation withholds the
- * aggregates it cannot stand behind (`timeline`) rather than publishing them
- * flagged, so today nothing qualifies and the view is honestly empty. The
- * predicate exists so the pill is wired to the fact the moment a low-confidence
- * flag lands on `MatchAnalysis`, instead of to a status list that would need
- * re-deriving then.
- */
-function isEstimate(_analysis: MatchAnalysis | undefined): boolean {
-  return false;
-}
 
 interface ActiveFilter {
   key: FilterKey;
@@ -359,7 +343,6 @@ function SortDropdown({
 const LIFECYCLE_NOUN: Record<Exclude<LifecycleValue, "all">, string> = {
   new: "new matches",
   "in-progress": "matches in progress",
-  estimates: "estimates",
 };
 
 /**
@@ -527,7 +510,7 @@ export function MatchesPageContent({
   });
   const [lifecycle, setLifecycle] = useState<LifecycleValue>(() => {
     const v = searchParams.get("lifecycle");
-    return v === "new" || v === "in-progress" || v === "estimates" ? v : "all";
+    return v === "new" || v === "in-progress" ? v : "all";
   });
   const readyMatchIds = useMemo(
     () =>
@@ -618,8 +601,6 @@ export function MatchesPageContent({
       result = result.filter(
         (m) => !!m.analysis && isInFlight(m.analysis.status),
       );
-    } else if (lifecycle === "estimates") {
-      result = result.filter((m) => isEstimate(m.analysis));
     }
 
     return result;
