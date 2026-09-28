@@ -10,7 +10,7 @@
  *
  * Patches are keyed by COLUMN name (`contact_x`, `ended_by`), the wire format
  * of `updateLabelShot` / `updateLabelPoint`. Every allowed value is one the
- * migration's CHECK accepts (supabase/migrations/20260928180000_label_sessions.sql),
+ * migration's CHECK accepts (supabase/migrations/20260928190122_label_sessions.sql),
  * so a patch that parses here can never be refused by the table.
  */
 

@@ -7,7 +7,7 @@
  * writes live in seed-session.ts. Every value here is a PREFILL — the labeller
  * overwrites whatever the video contradicts, and the scoring script compares
  * the two joined on the vendor `event_id` (see
- * supabase/migrations/20260928180000_label_sessions.sql).
+ * supabase/migrations/20260928190122_label_sessions.sql).
  *
  * Sides are 'p1'/'p2', p1 = matches.player1_id, exactly as the transcript's
  * `is_player1` / `server_is_player1` / `won_by_player1` already mean.

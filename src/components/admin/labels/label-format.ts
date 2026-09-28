@@ -10,7 +10,7 @@ import { surnameLabels } from "@/lib/data/match-utils";
 
 /**
  * The console's words for the label vocabularies — one table per CHECK list
- * in `20260928180000_label_sessions.sql`, so a value the migration allows can
+ * in `20260928190122_label_sessions.sql`, so a value the migration allows can
  * never render as its raw snake_case.
  */
 
