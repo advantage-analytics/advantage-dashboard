@@ -340,8 +340,9 @@ export async function resubmitJob(params: {
     // The vendor rejected the file itself — a frame-rate, resolution, or
     // similar recording defect. Resubmitting sends the identical blob, so it
     // cannot succeed and would only spend quota. Distinct from the
-    // isDownloadFailure() auto-retry class below: this refuses before that
-    // class is even considered.
+    // isDownloadFailure() auto-retry class: callers (webhooks/splitstep,
+    // reconcile, jobs route) classify with that before ever calling in here,
+    // so this check exists as its own gate rather than sitting beside theirs.
     return {
       ok: false,
       reason: "input_rejected",

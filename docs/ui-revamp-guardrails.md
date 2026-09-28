@@ -254,6 +254,34 @@ to put a testable seam.
 > needs to run them in Node — with parsing, validation, attribution and the
 > blank-Guest fallback untouched. The webhook route is not touched.
 
+> **A reviewed exception, added 2026-09-28: input-rejected retries and the
+> frame-rate warning, from `claude/match-analysis-failure-retry-8769f3`**
+> (tasks T1–T3 in its queue). Both touches are a refusal or a constant, never a
+> change to what the pipeline sends, bills or computes:
+>
+> - `resubmit-job.ts` selects the parent's `error_category` and refuses to
+>   resubmit one the vendor marked `invalid_input` (reason `input_rejected`,
+>   409 from the resubmit route). Resubmitting sends the identical blob, so it
+>   can only fail the same way and spend quota. The refusal sits after the
+>   existing not-failed check and before the video check, returns before
+>   `reserveQuota()`, and lives inside `resubmitJob()` so the webhook,
+>   `reconcile.ts` and jobs-route auto paths inherit it unchanged; the route's
+>   ownership check still runs first, so only the uploader sees the message.
+>   Live case: job 45ff4bd7, `VIDEO_FRAME_RATE_TOO_LOW`.
+> - `config.ts` gains `FRAME_RATE_WARN_BELOW_FPS = 29.96`, read only by the
+>   upload validator. A file whose whole-track container average (MP4/MOV, via
+>   `src/lib/video/container-frame-rate.ts`) is under it gets a warning, never
+>   a block — the vendor's own measurement differs from ours (29.80 against a
+>   29.94 container average for the same file), and its exact rule is open as
+>   Q14 in `docs/splitstep-vendor-questions.md`. That is why this is a warning
+>   and not an invented floor. The existing 30 fps floor (`MIN_VIDEO_FPS`) is
+>   unchanged in value; it now also refuses when the container average is
+>   known and snaps below it, so the verdict no longer depends on whether the
+>   browser could sample a rate.
+>
+> `job-request.ts`, the three inputs in §4, `canSubmitVideo` and the webhook are
+> untouched.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 

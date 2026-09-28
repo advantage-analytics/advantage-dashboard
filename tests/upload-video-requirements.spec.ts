@@ -243,6 +243,16 @@ test.describe("frame-rate boundary", () => {
     expect(formatProbeFps(p)).toBe("29.94 fps");
   });
 
+  test("a known average under the floor refuses even when the sample reads 30", () => {
+    // A variable-rate MP4 that opens at 30 but averages 24 — the vendor
+    // rejects it, so the verdict must not depend on whether the browser
+    // could sample.
+    const result = evaluateVideoProbe(probe({ fps: 30, averageFps: 24 }));
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("24 fps");
+  });
+
   test("with no sampled rate, an average under the floor is refused", () => {
     const result = evaluateVideoProbe(probe({ fps: null, averageFps: 24 }));
 

@@ -144,13 +144,16 @@ test.describe("readAverageFrameRate", () => {
     expect(await readAverageFrameRate(new Blob([]))).toBeNull();
   });
 
-  test("deadlineMs: 1 against a real fixture returns null, no rejection", async () => {
+  test("a 1 ms deadline racing a real read never rejects", async () => {
     const spacing = 1 / 30;
     const file = await buildVideo("mp4", evenTimestamps(300, spacing), spacing);
-    // The read needs several async slices, so 1 ms cannot be enough; the
-    // abandoned read finishes in the background and its result is dropped.
-    expect(await readAverageFrameRate(file, { deadlineMs: 1 })).toBeNull();
-    // Let the abandoned read settle inside the test so a stray rejection would
+    // Which side wins is timing: usually the timer (null), but in a loaded
+    // full-suite run the read can settle first. Both are correct — what must
+    // hold is that the race resolves and never rejects. The deadline itself is
+    // proven deterministically by the withDeadline tests below.
+    const result = await readAverageFrameRate(file, { deadlineMs: 1 });
+    expect(result === null || Math.abs(result - 30) < 0.01).toBe(true);
+    // Let an abandoned read settle inside the test so a stray rejection would
     // fail this test rather than a later one.
     await new Promise((r) => setTimeout(r, 200));
   });

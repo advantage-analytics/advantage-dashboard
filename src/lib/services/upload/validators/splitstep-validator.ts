@@ -197,14 +197,30 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   // 29.97 clears the 30 floor here as well, and not only because probe.ts
   // happened to round it on the way in; the message still quotes the rate the
   // file reported, which is the number the camera's menu shows.
-  const fps = effectiveFps(probe);
-  if (fps !== null && snapToStandardFps(fps) < MIN_VIDEO_FPS) {
+  //
+  // Either known rate can refuse: the 20-frame sample, and the whole-track
+  // container average. Judging only the sample when one exists made the
+  // verdict depend on the browser — a variable-rate MP4 that opens at 30 but
+  // averages 24 passed in Chrome (sample 30) and was refused in Firefox (no
+  // sample, average 24), and the vendor rejects it either way. The average
+  // never rescues a low sample; it can only add a refusal.
+  const sampledUnder =
+    probe.fps !== null && snapToStandardFps(probe.fps) < MIN_VIDEO_FPS;
+  const averageUnder =
+    probe.averageFps != null &&
+    snapToStandardFps(probe.averageFps) < MIN_VIDEO_FPS;
+  if (sampledUnder || averageUnder) {
+    const quoted = sampledUnder
+      ? probe.fps
+      : snapToStandardFps(probe.averageFps as number);
     return {
       success: false,
-      error: `Video runs at ${fps} fps. Analysis needs at least ${MIN_VIDEO_FPS} fps.`,
+      error: `Video runs at ${quoted} fps. Analysis needs at least ${MIN_VIDEO_FPS} fps.`,
       details,
     };
   }
+
+  const fps = effectiveFps(probe);
 
   if (
     probe.durationSeconds > 0 &&

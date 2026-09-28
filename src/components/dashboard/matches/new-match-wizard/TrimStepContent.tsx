@@ -432,8 +432,13 @@ function TrimStepContentImpl({
   const selectedDuration = Math.max(0, end - start);
   const tooShort = duration > 0 && selectedDuration < minTrimSeconds;
 
-  /** One frame, when we know the rate. Falls back to a reasonable nudge. */
-  const frameStep = probe?.fps ? 1 / probe.fps : 0.1;
+  /**
+   * One frame, when we know the rate — the sampled rate, or the container
+   * average where the browser could not sample (Firefox). Falls back to a
+   * reasonable nudge.
+   */
+  const frameRate = probe?.fps || probe?.averageFps;
+  const frameStep = frameRate ? 1 / frameRate : 0.1;
   // The cuts as the playhead publisher sees them, so the trailing timer can
   // ask "would this flip a Set button?" without closing over a render's
   // values. Mirrored, never read for paint — `start`/`end`/`frameStep`
