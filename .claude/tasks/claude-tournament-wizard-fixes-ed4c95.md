@@ -55,7 +55,7 @@ ready).
 
 ## T4 · Keep the upload success screen on /dashboard/team/upload after the row is written
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/app/dashboard/team/upload/page.tsx (the `?entry=` branch, lines ~171-244), src/lib/data/schedule-server.ts (`uploadQueueFrom` / `getProgramSchedule`), possibly a new pure resolver in src/lib/schedule/ (e.g. `upload-target.ts`), tests/upload-route-guards.spec.ts (or a new spec)
 - **done when:**
