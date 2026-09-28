@@ -7,6 +7,7 @@ import {
 } from "@/components/dashboard/beta-welcome-dialog";
 import { advButton } from "@/lib/ui/adv-button";
 import { HeaderPreview } from "./header-preview";
+import { AnalysisStepsPreview } from "./analysis-steps-preview";
 
 const VARIANTS: readonly {
   id: string;
@@ -92,6 +93,8 @@ export function DesignPreview() {
           )}
         </div>
       </div>
+
+      <AnalysisStepsPreview />
 
       <BetaWelcomeDialog
         open={open}
