@@ -24,6 +24,7 @@ type ConsoleProps = {
   initialExpandedPointId?: string | null;
   initialSelectedShotId?: string | null;
   initialVideoTime?: number | null;
+  initialVideoMinimised?: boolean;
   onSaveShot?: (...args: unknown[]) => Promise<unknown>;
   onSavePoint?: (...args: unknown[]) => Promise<unknown>;
 };
@@ -157,18 +158,22 @@ test("the court is board 08's art, with the open point's strokes on it", () => {
   ).toBe(3);
 });
 
-test("the band is small: a 384px video beside a court card of its height", () => {
+test("the band holds only the court card, at the video's old height", () => {
   const html = render({
     session: labelSessionFixture(),
     video: { url: "https://example.test/v.mp4?sig=x", startTimeSeconds: 0 },
   });
-  // 384 × 216 is 16:9; the card matches it, and the court keeps the art's
-  // 12.4 × 27.97 m proportions (86 / 194 = 0.4433).
-  expect(html).toContain('data-label-band=""');
-  expect(html).toContain("w-[384px]");
+  // The court keeps the art's 12.4 × 27.97 m proportions (86 / 194 = 0.4433).
+  const bandStart = html.indexOf('data-label-band=""');
+  expect(bandStart).toBeGreaterThan(-1);
   expect(html).toMatch(/aria-label="Court"[^>]*class="[^"]*h-\[216px\]/);
   expect(html).toContain("h-[194px] w-[86px]");
   expect(html).not.toContain("h-[430px]");
+  // The video left the band for the dock.
+  expect(html).not.toContain("w-[384px]");
+  expect(html.indexOf("<video")).toBeGreaterThan(
+    html.indexOf('data-label-dock=""'),
+  );
 });
 
 test("the video is the signed file, or a quiet frame without one", () => {
@@ -181,6 +186,142 @@ test("the video is the signed file, or a quiet frame without one", () => {
   const without = render({ session: labelSessionFixture(), video: null });
   expect(without).not.toContain("<video");
   expect(text(without)).toContain("No video for this job");
+});
+
+test.describe("the video dock", () => {
+  const VIDEO = {
+    url: "https://example.test/v.mp4?sig=x",
+    startTimeSeconds: 0,
+  };
+
+  /** The dock's markup: from its fixed layer to the end of the render. */
+  function dock(html: string): string {
+    const start = html.indexOf("data-label-dock-layer");
+    expect(start).toBeGreaterThan(-1);
+    return html.slice(html.lastIndexOf("<", start));
+  }
+
+  /** One element's opening tag, found by an attribute on it. */
+  function tag(html: string, attr: string): string {
+    const at = html.indexOf(attr);
+    expect(at, attr).toBeGreaterThan(-1);
+    return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
+  }
+
+  test("floats over the page in the bottom-right corner, fixed to the viewport", () => {
+    const html = dock(render({ session: labelSessionFixture(), video: VIDEO }));
+    expect(tag(html, "data-label-dock-layer")).toMatch(
+      /class="[^"]*pointer-events-none fixed inset-0/,
+    );
+    const box = tag(html, 'data-label-dock=""');
+    expect(box).toContain('data-dock-anchor="bottom-right"');
+    expect(box).toContain('data-dock-minimised="false"');
+    expect(box).toContain('role="group"');
+    expect(box).toContain('tabindex="0"');
+    expect(box).toContain("width:480px");
+    // Invisible until the hook has measured it, so it never flies in.
+    expect(box).toMatch(/class="[^"]*\binvisible\b/);
+  });
+
+  test("is the film tab's player, minus bookmarks and the film room", () => {
+    const html = dock(render({ session: labelSessionFixture(), video: VIDEO }));
+    expect(html).toContain('data-testid="film-player-video"');
+    expect(html).toContain('src="https://example.test/v.mp4?sig=x"');
+    expect(html).toContain('preload="metadata"');
+    expect(html).toContain('aria-label="Previous point"');
+    expect(html).toContain('aria-label="Next point"');
+    expect(html).toContain('aria-label="Playback speed, 1×"');
+    expect(html).not.toContain("Save point");
+    expect(html).not.toContain("Open the film room fullscreen");
+  });
+
+  test("the bar is the drag handle, with the playing point and a minimise button", () => {
+    const html = dock(
+      render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialVideoTime: 2473.4,
+      }),
+    );
+    const handle = tag(html, "data-dock-handle");
+    expect(handle).toMatch(/class="[^"]*touch-none[^"]*cursor-grab/);
+    expect(html).toContain("lucide-grip-vertical");
+    // s-return, the second live stroke (the tombstone is not counted).
+    expect(text(html)).toContain("Point 1 · shot 2");
+    expect(tag(html, 'aria-label="Minimise the video"')).toContain(
+      'type="button"',
+    );
+  });
+
+  test("with nothing playing the bar just says Video", () => {
+    const html = dock(render({ session: labelSessionFixture(), video: VIDEO }));
+    const bar = html.slice(html.indexOf("data-dock-now-playing"));
+    expect(text(bar.slice(0, bar.indexOf("</span>")))).toContain("Video");
+  });
+
+  test("minimised, it is a pill in its corner and the player stays mounted", () => {
+    const html = dock(
+      render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialVideoTime: 2490.5,
+        initialVideoMinimised: true,
+      }),
+    );
+    const box = tag(html, 'data-label-dock=""');
+    expect(box).toContain('data-dock-minimised="true"');
+    expect(box).toContain('tabindex="-1"');
+
+    const card = tag(html, "data-dock-card");
+    expect(card).toContain('aria-hidden="true"');
+    expect(card).toMatch(/class="[^"]*pointer-events-none invisible/);
+    // Hidden, not unmounted: playback carries on behind the pill.
+    expect(html).toContain('data-testid="film-player-video"');
+
+    const pill = tag(html, "data-dock-pill");
+    expect(pill).not.toContain("aria-hidden");
+    expect(pill).toMatch(/class="[^"]*bottom-0 right-0/);
+    expect(pill).toContain("transform-origin:bottom right");
+    const pillHtml = html.slice(html.indexOf("data-dock-pill"));
+    expect(pillHtml).toContain('aria-label="Play"');
+    expect(pillHtml).toContain('aria-label="Expand the video"');
+    expect(text(pillHtml)).toContain("Point 2");
+  });
+
+  test("motion: fast in, faster out, and none of the scale under reduced motion", () => {
+    const expanded = dock(
+      render({ session: labelSessionFixture(), video: VIDEO }),
+    );
+    const card = tag(expanded, "data-dock-card");
+    expect(card).toContain("transition-[opacity,scale] duration-[220ms]");
+    expect(card).toContain("duration-[220ms]");
+    expect(card).toContain("motion-reduce:scale-100");
+    expect(card).toContain("transform-origin:bottom right");
+    // Out is faster, and only the outgoing half keeps `visibility` on its
+    // transition, so it stays drawn while it fades.
+    expect(tag(expanded, "data-dock-pill")).toContain(
+      "transition-[opacity,scale,visibility] duration-[160ms]",
+    );
+
+    const lift = tag(expanded, "data-dock-lift");
+    expect(lift).toContain("transition-[scale,box-shadow]");
+    expect(lift).toContain("motion-reduce:scale-100");
+    expect(lift).not.toContain("scale-[1.015]");
+
+    // The corner glide is the film room's, which drops to a jump under
+    // reduced motion; it goes on once the dock has been placed.
+    const { SETTLE_CLASS } = createLoader().load(
+      "src/components/dashboard/matches/match-detail/film/use-corner-drag.ts",
+    ) as { SETTLE_CLASS: string };
+    expect(SETTLE_CLASS).toContain("duration-[360ms]");
+    expect(SETTLE_CLASS).toContain("ease-[var(--ease-out-expo)]");
+    expect(SETTLE_CLASS).toContain("motion-reduce:transition-none");
+    const source = readFileSync(
+      path.resolve("src/components/admin/labels/label-video-dock.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("!move.free && move.placed && SETTLE_CLASS");
+  });
 });
 
 test("no labels component reads a flags field", () => {

@@ -1,79 +1,102 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from "react";
 import { VideoOff } from "lucide-react";
-import type { LabelVideo } from "@/lib/services/labels/session";
+import {
+  FilmPlayer,
+  type FilmPlayerHandle,
+} from "@/components/dashboard/matches/match-detail/film/film-player";
+import type { LabelPoint, LabelVideo } from "@/lib/services/labels/session";
+import { labelFilmStops } from "./label-film-stops";
 
 /**
- * The console's video: the labelled job's own file in a plain `<video>`,
- * on the film tab's dark stage. The frame is 16:9 at whatever width the
- * console gives it — the band's small, fixed 384px, so the points table gets
- * the screen — with the court card's radius, so the band's two halves read
- * as a pair.
+ * The console's video: the labelled job's own file in the match film tab's
+ * player — `FilmPlayer`, the same frame, set-by-set track, seek preview and
+ * transport — so a labeller watches the match exactly as an athlete does.
  *
- * Not `FilmPlayer`. That component is the film tab's — its props are the
- * attachment-refresh hook's state, the tab's point stops on the film clock
- * (built from `MatchPoint`s, which a label session does not have), and
- * bookmark and fullscreen callbacks that would be dead controls here.
- * Embedding it would mean faking a `MatchPoint` per label point and wiring
- * glyphs to nothing, so this takes the same signed URL (`getLabelSession`'s
- * `loadJobVideo`, the same `choosePlaybackFile` + `mintPlaybackSas` the film
- * tab's loader uses) and the browser's own controls instead. The one thing
- * the console needs from it — landing on a stroke — is `seekTo`.
+ * What the tab wires to it, and what this wires instead:
  *
- * No SAS refresh: the credential lasts `PLAYBACK_SAS_TTL_SECONDS`, and a
- * labeller whose session outlives it reloads the page, which is what the
- * provider-job lineage of the film tab does too.
+ * - **The credential.** The same signed URL (`getLabelSession`'s
+ *   `loadJobVideo`, the same `choosePlaybackFile` + `mintPlaybackSas` the
+ *   tab's loader uses), passed as `passthrough` — the Advantage Intelligence
+ *   lineage's contract: no refresh hook, generation 0, and a media error
+ *   raises the player's own "The film stopped loading · Reload" panel. That
+ *   is the right repair here too: the page signs a fresh URL per render.
+ * - **The stops.** The label points, on the console's playing rule
+ *   (`label-film-stops.ts`), so Previous/Next point, Loop and Skip dead time
+ *   walk exactly the spans the table lights up.
+ * - **No bookmarks, no film room.** `showSave` and `showFullscreen` are off;
+ *   their callbacks are never reached.
+ *
+ * ── Two clocks ──────────────────────────────────────────────────────────────
+ * The player speaks FILE seconds; a label's `videoTime` is on the ANALYSIS
+ * clock. `startTimeSeconds` is subtracted on the way in (`seekTo`) and added
+ * back on the way out (`onTime`), here and nowhere else in the console.
  */
 export interface LabelVideoHandle {
   /** Seek to a label's `videoTime` (analysis clock), converted to this file. */
   seekTo: (videoTime: number) => void;
+  togglePlay: () => void;
+  /** The previous (-1) or next (1) point, as the transport's glyphs step. */
+  step: (direction: -1 | 1) => void;
 }
+
+const noop = () => {};
 
 export const LabelVideoPlayer = forwardRef<
   LabelVideoHandle,
   {
     video: LabelVideo | null;
+    /** The session's rows, for the player's point stops. */
+    points: readonly LabelPoint[];
     /**
      * Where the file is, on the analysis clock (the offset added back), on
-     * every `timeupdate` and every `seeking` step — the console's playing
-     * highlight. The console decides what, if anything, to re-render.
+     * every `timeupdate` and `seeked` — the console's playing highlight. The
+     * console decides what, if anything, to re-render.
      */
     onTime?: (videoTime: number) => void;
+    /** Play and pause as the element reports them — the minimised pill's glyph. */
+    onPlayingChange?: (playing: boolean) => void;
   }
->(function LabelVideoPlayer({ video, onTime }, ref) {
-  const element = useRef<HTMLVideoElement>(null);
-  const report = (event: React.SyntheticEvent<HTMLVideoElement>) => {
-    if (video)
-      onTime?.(event.currentTarget.currentTime + video.startTimeSeconds);
-  };
+>(function LabelVideoPlayer({ video, points, onTime, onPlayingChange }, ref) {
+  const player = useRef<FilmPlayerHandle>(null);
+  const offset = video?.startTimeSeconds ?? 0;
+  const stops = useMemo(() => labelFilmStops(points, offset), [points, offset]);
+
+  const onTimeChange = useCallback(
+    (seconds: number) => onTime?.(seconds + offset),
+    [onTime, offset],
+  );
+  const onPlaybackPlaying = useCallback(
+    (playing: boolean) => onPlayingChange?.(playing),
+    [onPlayingChange],
+  );
 
   useImperativeHandle(
     ref,
     () => ({
       seekTo(videoTime) {
-        const el = element.current;
-        if (!el || !video) return;
-        el.currentTime = Math.max(0, videoTime - video.startTimeSeconds);
+        player.current?.seekTo(Math.max(0, videoTime - offset));
+      },
+      togglePlay() {
+        player.current?.togglePlay();
+      },
+      step(direction) {
+        player.current?.step(direction);
       },
     }),
-    [video],
+    [offset],
   );
 
-  return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-[var(--radius-card)] bg-[#1A1A1C]">
-      {video ? (
-        <video
-          ref={element}
-          src={video.url}
-          controls
-          preload="metadata"
-          playsInline
-          onTimeUpdate={report}
-          onSeeking={report}
-          className="absolute inset-0 block h-full w-full"
-        />
-      ) : (
+  if (!video) {
+    return (
+      <div className="relative aspect-video w-full overflow-hidden rounded-[var(--radius-card)] bg-[#1A1A1C]">
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
           <VideoOff
             className="size-8 text-white/50"
@@ -84,7 +107,32 @@ export const LabelVideoPlayer = forwardRef<
             No video for this job
           </span>
         </div>
-      )}
-    </div>
+      </div>
+    );
+  }
+
+  return (
+    <FilmPlayer
+      ref={player}
+      url={video.url}
+      generation={0}
+      resume={null}
+      problem={null}
+      passthrough
+      background={false}
+      stops={stops}
+      allStops={stops}
+      saved={null}
+      showSave={false}
+      showFullscreen={false}
+      onTimeChange={onTimeChange}
+      onPlaybackTime={noop}
+      onPlaybackPlaying={onPlaybackPlaying}
+      onLoadFailure={noop}
+      onPlayRejected={noop}
+      onRetry={noop}
+      onToggleSaved={noop}
+      onEnterFullscreen={noop}
+    />
   );
 });

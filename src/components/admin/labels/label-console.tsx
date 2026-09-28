@@ -67,7 +67,8 @@ import {
   type LabelRowOperations,
 } from "./label-points-table";
 import { LabelSaveStatus } from "./label-save-status";
-import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
+import type { LabelVideoHandle } from "./label-video";
+import { LabelVideoDock, type DockNowPlaying } from "./label-video-dock";
 import { INITIAL_SAVE_STATUS, saveStatusReducer } from "./save-status";
 import {
   createVideoClock,
@@ -76,8 +77,8 @@ import {
 } from "./video-clock";
 
 /**
- * `/admin/labels/[sessionId]` — board 08: the header, the band (video
- * top-left, the vertical court card beside it) and the points table.
+ * `/admin/labels/[sessionId]` — board 08: the header, the court card, the
+ * points table, and the video floating over them in a corner.
  *
  * Owns the session's rows for this visit and every edit to them. There is no
  * Save button: a change is applied to the rows at once (optimistic), handed to
@@ -100,11 +101,17 @@ import {
  * writing: the write happens on the dialog's action, and Cancel changes
  * nothing. Enter marks the open point checked when focus is not in a control.
  *
- * The band is small — a 384 × 216 video and the court card beside it at the
- * same height — so the points table gets the screen. As the video plays (or is scrubbed) the table marks the point and
- * the stroke on screen (`playingRowAt`, via the video clock in
- * video-clock.ts). The mark is only a mark: it never opens a point, selects a
- * stroke or scrolls the table — the labeller stays in charge of all three.
+ * The video is the match film tab's player in a floating dock
+ * (`label-video-dock.tsx`): always on screen while the table scrolls, dragged
+ * to any corner or minimised to a pill. The band above the table holds only
+ * the 320 × 216 court card, so the table keeps the screen. As the video plays
+ * (or is scrubbed) the table marks the point and the stroke on screen
+ * (`playingRowAt`, via the video clock in video-clock.ts). The mark is only a
+ * mark: it never opens a point, selects a stroke or scrolls the table — the
+ * labeller stays in charge of all three.
+ *
+ * Outside a control, Space plays and pauses and ← / → step to the previous or
+ * next point — the keys the player's own tooltips name.
  */
 export function LabelConsole({
   session,
@@ -117,6 +124,7 @@ export function LabelConsole({
   initialConfirm = null,
   initialOpenTombstoneIds,
   initialVideoTime = null,
+  initialVideoMinimised,
   headerAction,
 }: {
   session: LabelSession;
@@ -149,6 +157,8 @@ export function LabelConsole({
   initialOpenTombstoneIds?: readonly string[];
   /** The video's position on first render, on the analysis clock — for specs. */
   initialVideoTime?: number | null;
+  /** The video dock minimised on first render — for specs. */
+  initialVideoMinimised?: boolean;
   /** The header's trailing link, rendered by the page. */
   headerAction?: ReactNode;
 }) {
@@ -186,8 +196,15 @@ export function LabelConsole({
   // current rows every render, so a retimed stroke moves the mark at once.
   const playingSnapshot = () =>
     playingRowKey(playingRowAt(points, clock.get()));
-  const playing = parsePlayingRowKey(
-    useSyncExternalStore(clock.subscribe, playingSnapshot, playingSnapshot),
+  const playingKey = useSyncExternalStore(
+    clock.subscribe,
+    playingSnapshot,
+    playingSnapshot,
+  );
+  const playing = parsePlayingRowKey(playingKey);
+  const nowPlaying = useMemo(
+    () => dockNowPlaying(points, parsePlayingRowKey(playingKey)),
+    [points, playingKey],
   );
 
   // A deleted point is a marker, not an open point: nothing of it on the court.
@@ -619,7 +636,9 @@ export function LabelConsole({
     : undefined;
 
   // Enter marks the open point checked — but never from inside a control,
-  // where Enter already means "open this cell" or "press this button".
+  // where Enter already means "open this cell" or "press this button". Space
+  // and ← / → drive the video on the same terms: they are the keys the
+  // player's tooltips name, and inside a control they already mean something.
   const checkOpenPoint = useRef<() => void>(() => {});
   useEffect(() => {
     checkOpenPoint.current = () => {
@@ -629,8 +648,12 @@ export function LabelConsole({
   });
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      const key = event.key;
       if (
-        event.key !== "Enter" ||
+        (key !== "Enter" &&
+          key !== " " &&
+          key !== "ArrowLeft" &&
+          key !== "ArrowRight") ||
         event.defaultPrevented ||
         event.metaKey ||
         event.ctrlKey ||
@@ -648,7 +671,9 @@ export function LabelConsole({
         return;
       }
       event.preventDefault();
-      checkOpenPoint.current();
+      if (key === "Enter") checkOpenPoint.current();
+      else if (key === " ") player.current?.togglePlay();
+      else player.current?.step(key === "ArrowLeft" ? -1 : 1);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -693,13 +718,11 @@ export function LabelConsole({
         </div>
       </div>
 
-      {/* Not sticky: `body` is its own overflow container (globals.css), so
-          `position: sticky` never engages anywhere in the admin — the header's
-          own `sticky` included. */}
-      <div data-label-band="" className="flex gap-4">
-        <div className="w-[384px] shrink-0">
-          <LabelVideoPlayer ref={player} video={video} onTime={clock.set} />
-        </div>
+      {/* The video is not in the band: it floats (`LabelVideoDock`, fixed to
+          the viewport), because `position: sticky` never engages anywhere in
+          the admin — `body` is its own overflow container (globals.css) — so
+          a video in the flow scrolls away with the header. */}
+      <div data-label-band="" className="flex">
         <LabelCourt
           title={
             expanded ? `Court · point ${expanded.pointIndex + 1}` : "Court"
@@ -727,6 +750,15 @@ export function LabelConsole({
         onToggleTombstone={toggleTombstone}
         playingPointId={playing?.pointId ?? null}
         playingShotId={playing?.shotId ?? null}
+      />
+
+      <LabelVideoDock
+        ref={player}
+        video={video}
+        points={points}
+        nowPlaying={nowPlaying}
+        onTime={clock.set}
+        initialMinimised={initialVideoMinimised}
       />
 
       {operable ? (
@@ -767,6 +799,22 @@ export interface LabelConsoleOperations {
   resetShot: (shotId: string) => Promise<LabelShotStatusResult>;
   /** The point's own fields back to the seed: status `unchanged`. */
   resetPoint: (pointId: string) => Promise<LabelPointStatusResult>;
+}
+
+/** The dock bar's "Point N · shot M", numbered as the table numbers them. */
+function dockNowPlaying(
+  points: readonly LabelPoint[],
+  playing: { pointId: string; shotId: string } | null,
+): DockNowPlaying | null {
+  if (!playing) return null;
+  const point = points.find((p) => p.id === playing.pointId);
+  if (!point) return null;
+  const live = point.shots.filter((shot) => shot.status !== "deleted");
+  const index = live.findIndex((shot) => shot.id === playing.shotId);
+  return {
+    point: point.pointIndex + 1,
+    shot: index === -1 ? null : index + 1,
+  };
 }
 
 function defaultPoint(points: readonly LabelPoint[]): LabelPoint | null {
