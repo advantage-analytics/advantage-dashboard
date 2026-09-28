@@ -228,3 +228,12 @@ is the runner's. Newest entries at the bottom.
 
 1. `processed` keeps `STAGE_NOTE.processed` under its (later) stats step in the drawer, matching the page — drop it if the Drawer frames should show nothing there.
 2. For T25/T26: each drawer must keep a hydration-safe clock for the stall check, pass it as `now`, and feed the footer from the view's `failure` (`recovery`, `stalled`) — `drawerRecovery` still returns null for stalled rows.
+
+## T25 · Matches drawer draws the Analysis steps — done
+
+**gate:** mechanical pass · completion pass (footer order/variants identical to before; failed-row recovery class matches the old `drawerRecovery`; no `Date.now()` in render)
+**changed:** `match-drawer.tsx` renders `DrawerAnalysisSteps` (canAct = `canManage !== false`) where `AnalysisNotice` was, and feeds `DrawerRecoveryAction` from `drawerAnalysisStepsView(...)?.failure` (recovery + stalled), so a stalled hand-off gets the outline "Try again" for actors and wait_or_ask / non-actors get none. A local `useStallClock(status)` is null on first render, ticks once right after mount then every 10 s, only while `uploaded`. Footer unchanged: View match primary (ghost beside Continue upload), Continue upload, recovery outline.
+**follow-ups:**
+
+1. No spec renders `MatchDrawer` with a stalled or failed row, so the footer wiring is covered only by the unit specs — a `matches-drafts`-harness case would close it.
+2. The stall clock now exists twice (`analysis-steps-column.tsx`, `match-drawer.tsx`); make it one shared hook when T26 needs it too.

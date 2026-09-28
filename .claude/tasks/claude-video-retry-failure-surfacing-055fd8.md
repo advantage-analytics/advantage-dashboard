@@ -339,7 +339,7 @@ ready).
 
 ## T25 · Matches drawer draws the Analysis steps
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T24
 - **files:** src/components/dashboard/matches/match-drawer.tsx (guess)

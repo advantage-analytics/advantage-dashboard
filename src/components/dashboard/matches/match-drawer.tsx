@@ -14,22 +14,26 @@ import {
   X,
 } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
-import { isAnalysisFailed, isInFlight } from "@/lib/data/match-analysis";
+import {
+  isAnalysisFailed,
+  isInFlight,
+  type AnalysisStatus,
+} from "@/lib/data/match-analysis";
 import { createClient } from "@/lib/supabase/client";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 import {
-  AnalysisNotice,
+  DrawerAnalysisSteps,
   DrawerFact,
   DrawerHeading,
   DrawerRecoveryAction,
   ProviderFact,
   SnapshotSection,
-  drawerRecovery,
   drawerSideName,
   forgetMatchSnapshot,
   useMatchSnapshot,
 } from "./drawer-sections";
+import { drawerAnalysisStepsView } from "./match-detail/analysis-steps";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { advButton } from "@/lib/ui/adv-button";
 import { capitalize, cn } from "@/lib/utils";
@@ -76,15 +80,16 @@ export function forgetMatchDetails(matchId: string): void {
  * ⋯ is the uploader's Edit · Delete — the only place a match row's actions live.
  *
  * Body, top to bottom: the abbreviated match name links to its report, followed
- * by the outcome and score; compact icon-and-value metadata rows; the analysis
- * state when there is one; four snapshot figures once numbers exist — absent,
+ * by the outcome and score; compact icon-and-value metadata rows; the compact
+ * Analysis steps (`DrawerAnalysisSteps`) when there are any; four snapshot figures once numbers exist — absent,
  * not empty, before that; and on a team match, its scheduled line.
  *
  * ── The footer ─────────────────────────────────────────────────────────────
  * A blue "View match" for everyone, always — so a player, or a coach whose
  * events policy grants no schedule rights, is never left with an empty footer,
  * and the footer does not change shape from one viewer to the next. On a
- * failed analysis, the row's recovery action (`DrawerRecoveryAction`: "Retry",
+ * failed analysis, or a hand-off that stalled (`isSubmitStalled`), the stopped
+ * step's recovery action (`DrawerRecoveryAction`: "Retry", "Try again",
  * "Rebuild statistics", or the upload link) sits outlined under it for the
  * person who uploaded it (the routes refuse anyone else). A class with nothing
  * to press — waiting on the allowance, statistics unavailable — adds nothing.
@@ -146,11 +151,16 @@ export function MatchDrawer({
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
   const title = `${drawerSideName(match.player1.name)} vs ${drawerSideName(match.player2.name)}`;
-  // The failed row's recovery class (null unless it failed). This drawer's
-  // access-control clause is canManage: it decides who reads the class's body
-  // and note, and who gets its action.
-  const recovery = drawerRecovery(status, match.analysis?.recovery);
+  // This drawer's access-control clause is canManage: it decides who reads the
+  // stopped step's body and note, and who gets its action.
   const canAct = match.canManage !== false;
+  const now = useStallClock(status);
+  // The stopped step — a failed row, or an `uploaded` row whose hand-off
+  // stalled — and its recovery class. The same view `DrawerAnalysisSteps`
+  // draws from, at the same clock, so the footer and the body cannot disagree.
+  const stopped = match.analysis
+    ? drawerAnalysisStepsView(match.analysis, now, canAct)?.failure
+    : undefined;
   // No numbers while a match is still being worked on or has failed: the
   // score and snapshot would draw zeroes that read as "no serves".
   const settled = !inFlight && !failed;
@@ -203,7 +213,8 @@ export function MatchDrawer({
           {canAct && (
             <DrawerRecoveryAction
               key={match.analysis?.jobId ?? match.id}
-              recovery={recovery}
+              recovery={stopped?.recovery}
+              stalled={stopped?.stalled ?? false}
               jobId={match.analysis?.jobId}
               matchId={match.id}
               variant="outline"
@@ -259,12 +270,9 @@ export function MatchDrawer({
           </dl>
         </div>
 
-        <AnalysisNotice
-          status={status}
-          recovery={recovery}
-          note={match.analysis?.note}
-          errorCode={match.analysis?.errorCode}
-          attemptsUsed={match.analysis?.attemptsUsed}
+        <DrawerAnalysisSteps
+          analysis={match.analysis}
+          now={now}
           canAct={canAct}
         />
 
@@ -424,6 +432,36 @@ export function PeekDrawerFrame({
       </div>
     </aside>
   );
+}
+
+/** The stall clock's period: a threshold check, not a stopwatch. */
+const STALL_TICK_MS = 10_000;
+
+/**
+ * The clock the stalled-hand-off check reads — `analysis-steps-column.tsx`'s,
+ * for a drawer. Null on the render the server also makes, then set only from
+ * timers (first tick straight after mount, so an already-stalled row reads as
+ * stalled when it opens, then every `STALL_TICK_MS`), never from `Date.now()`
+ * during render: the server has no "now" the client would agree with. Runs
+ * only while the row is `uploaded`, the one status the drawer's view reads the
+ * clock for; the view ignores it for every other status.
+ */
+function useStallClock(status: AnalysisStatus | undefined): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  const readsClock = status === "uploaded";
+
+  useEffect(() => {
+    if (!readsClock) return;
+    const tick = () => setNow(Date.now());
+    const first = setTimeout(tick, 0);
+    const id = setInterval(tick, STALL_TICK_MS);
+    return () => {
+      clearTimeout(first);
+      clearInterval(id);
+    };
+  }, [readsClock]);
+
+  return now;
 }
 
 /**
