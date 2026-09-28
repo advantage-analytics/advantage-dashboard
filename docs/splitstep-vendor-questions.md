@@ -258,7 +258,7 @@ Ask:
    invoices it.
 
 Decided 2026-09-27, before an answer: the upload wizard **refuses** a file
-whose whole-track container average is under 29.96 (`MIN_CONTAINER_AVERAGE_FPS`),
+whose whole-track container average is under 29.97 (`MIN_CONTAINER_AVERAGE_FPS`),
 following the API docs' "29.97 fps (NTSC) and higher is accepted" — the band
 below that is not promised, and this file shows the vendor measures lower than
 the container. An answer to question 1 could let us narrow or relax that. A

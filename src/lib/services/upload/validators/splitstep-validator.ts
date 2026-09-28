@@ -30,9 +30,10 @@
  * So two rates are judged. The browser sample, snapped to a standard rate, must
  * clear `MIN_VIDEO_FPS` (snapping keeps genuine 29.97 at 30). And when the
  * container's whole-track average is known (`averageFps`, MP4/MOV only), it
- * must be at least `MIN_CONTAINER_AVERAGE_FPS` — just under 30000/1001, so
- * constant-rate NTSC, 30 and 60 fps footage always passes and a variable-rate
- * file like 45ff4bd7's is refused before a byte uploads. Either rate can
+ * must be at least `MIN_CONTAINER_AVERAGE_FPS` (29.97, the documented accepted
+ * rate). Constant-rate NTSC, 30 and 60 fps footage always passes; a
+ * variable-rate file like 45ff4bd7's (29.94) or b74a1e04's (29.95, accepted but
+ * unreadable) is refused before a byte uploads. Either rate can
  * refuse; neither rescues the other. A null average (another container, a
  * failed or slow read) leaves the sample to decide, as before. How the vendor
  * computes its number is still open as Q14 in docs/splitstep-vendor-questions.md.

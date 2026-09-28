@@ -60,13 +60,18 @@ export const MIN_VIDEO_FPS = 30;
  * 2026-09-27) guarantee "29.97 fps (NTSC) and higher is accepted" and reject
  * below 29.9 fps by the vendor's own measurement — which reads lower than the
  * container: job 45ff4bd7 averaged 29.94 in its container, the vendor measured
- * 29.80, and it was rejected. So anything under the documented 29.97 is a
- * gamble that costs a full upload. 29.96 rather than 29.97 because genuine NTSC
- * is 30000/1001 = 29.97003 and a constant-rate file with a short final frame
- * can average 29.968 — just under 29.97, never under 29.96. Compared against
- * `VideoProbe.averageFps` (MP4/MOV only), never the snapped `fps`.
+ * 29.80, and it was rejected. A second file averaging 29.95 was accepted but
+ * its score stream lost five points and it published nothing (job b74a1e04).
+ * So anything under the documented 29.97 is refused before upload.
+ *
+ * Compared against `VideoProbe.averageFps` (MP4/MOV only, rounded to two
+ * decimals by container-frame-rate.ts), never the snapped `fps`. Genuine NTSC
+ * is 30000/1001 = 29.97003; over a match-length recording a short final frame
+ * moves the average by around 1e-5, so it still rounds to 29.97 and passes.
+ * Reaching 29.96 takes dozens of missing frames — the variable-rate case this
+ * refuses.
  */
-export const MIN_CONTAINER_AVERAGE_FPS = 29.96;
+export const MIN_CONTAINER_AVERAGE_FPS = 29.97;
 
 /** Vendor's recommended frame rate. Below this we warn but do not block. */
 export const RECOMMENDED_VIDEO_FPS = 60;

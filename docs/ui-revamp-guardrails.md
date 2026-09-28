@@ -268,13 +268,13 @@ to put a testable seam.
 >   `reconcile.ts` and jobs-route auto paths inherit it unchanged; the route's
 >   ownership check still runs first, so only the uploader sees the message.
 >   Live case: job 45ff4bd7, `VIDEO_FRAME_RATE_TOO_LOW`.
-> - `config.ts` gains `MIN_CONTAINER_AVERAGE_FPS = 29.96`, read only by the
+> - `config.ts` gains `MIN_CONTAINER_AVERAGE_FPS = 29.97`, read only by the
 >   upload validator. A file whose whole-track container average (MP4/MOV, via
 >   `src/lib/video/container-frame-rate.ts`) is under it is refused before
 >   upload, in every browser. This is not an invented floor: the vendor's API
 >   docs (https://splitstep.ai/api-docs.html, re-read 2026-09-27) guarantee
->   "29.97 fps (NTSC) and higher is accepted", and 29.96 sits just under
->   30000/1001 so genuine NTSC always passes. The vendor measures lower than
+>   "29.97 fps (NTSC) and higher is accepted"; genuine NTSC (30000/1001)
+>   reads 29.97 to two decimals and passes. The vendor measures lower than
 >   the container (29.80 against a 29.94 average for the same file), which is
 >   why the band under 29.97 is refused rather than gambled on; how it
 >   measures is still open as Q14 in `docs/splitstep-vendor-questions.md`. The

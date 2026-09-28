@@ -189,7 +189,7 @@ test.describe("frame-rate boundary", () => {
     expect(evaluateVideoProbe(probe()).warnings).toBeUndefined();
   });
 
-  test("a whole-track average under 29.96 is refused, naming the average", () => {
+  test("a whole-track average under 29.97 is refused, naming the average", () => {
     // Job 45ff4bd7: probe read 30, container average 29.94, vendor refused.
     // The vendor documents 29.97 and higher as accepted.
     const input = probe({ fps: 30, averageFps: 29.94 });
@@ -205,15 +205,15 @@ test.describe("frame-rate boundary", () => {
     expect(formatProbeFps(input)).toBe("29.94 fps");
   });
 
-  test("an average just under 29.97 from a short final frame still passes", () => {
-    // 30000/1001 is 29.97003; a constant-rate file whose last frame is short
-    // can average 29.968, which reads as 29.97 to two decimals.
+  test("the cutoff sits exactly at the documented 29.97", () => {
+    // 30000/1001 is 29.97003; the reader rounds to two decimals, so genuine
+    // NTSC reads 29.97 and passes. Job b74a1e04's 29.95 is refused.
     expect(
       evaluateVideoProbe(probe({ fps: 30, averageFps: 29.97 })).success,
     ).toBe(true);
     expect(
       evaluateVideoProbe(probe({ fps: 30, averageFps: 29.96 })).success,
-    ).toBe(true);
+    ).toBe(false);
     expect(
       evaluateVideoProbe(probe({ fps: 30, averageFps: 29.95 })).success,
     ).toBe(false);
@@ -244,7 +244,7 @@ test.describe("frame-rate boundary", () => {
 
   // Browsers without requestVideoFrameCallback (Firefox) report no sampled
   // rate, but the container read still works — so the average stands in.
-  test("with no sampled rate, a sub-29.96 average is still refused", () => {
+  test("with no sampled rate, a sub-29.97 average is still refused", () => {
     const p = probe({ fps: null, averageFps: 29.94 });
     const result = evaluateVideoProbe(p);
 
