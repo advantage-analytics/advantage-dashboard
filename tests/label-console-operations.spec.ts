@@ -12,7 +12,8 @@ import { createLoader } from "./fixtures/vm-modules";
 /**
  * T7 in the console, rendered offline through `fixtures/vm-modules`: the ✕
  * that asks before deleting, the tombstone that expands to a ghost row with
- * Undo, the move question, and the point's checked footer.
+ * Undo, the move question, the point's checked footer, and Reset on an edited
+ * row that has a seed.
  *
  * Radix portals render nothing under `renderToStaticMarkup`, so
  * `ConfirmDialog` is stubbed to print its props — and to hand the spec its
@@ -46,6 +47,8 @@ function spies() {
     addShot: record("addShot", { error: "not in this spec" }),
     movePoint: record("movePoint", { error: "not in this spec" }),
     setChecked: record("setChecked", { ok: true, checkedAt: null }),
+    resetShot: record("resetShot", { ok: true, status: "kept" }),
+    resetPoint: record("resetPoint", { ok: true, status: "unchanged" }),
   };
   return { calls, operations };
 }
@@ -191,6 +194,8 @@ function tableTree(overrides: Props = {}) {
     onMovePoint: ask("onMovePoint"),
     onSetChecked: ask("onSetChecked"),
     onAddShot: ask("onAddShot"),
+    onAskResetShot: ask("onAskResetShot"),
+    onAskResetPoint: ask("onAskResetPoint"),
   };
   const { LabelPointsTable } = loader().load(
     "src/components/admin/labels/label-points-table.tsx",
@@ -474,5 +479,126 @@ test.describe("mark point checked", () => {
     expect(html).not.toContain("data-point-footer");
     expect(html).not.toContain("Mark point checked");
     expect(html).not.toContain("Move point");
+  });
+});
+
+// ── Reset ──────────────────────────────────────────────────────────────────
+
+test.describe("reset", () => {
+  test("appears only on an edited row that has a seed", () => {
+    const { operations } = spies();
+    const html = renderConsole({
+      ...SAVES,
+      operations,
+      initialExpandedPointId: P1,
+    });
+    // Point 1 and its return (shot 2) are edited with a seed; the kept
+    // serve, the added stroke and the unchanged points are not.
+    expect(html).toContain('aria-label="Reset point 1"');
+    expect(html).toContain('aria-label="Reset shot 2"');
+    expect(count(html, /data-reset-row/g)).toBe(2);
+    for (const name of [
+      "Reset shot 1",
+      "Reset shot 3",
+      "Reset point 2",
+      "Reset point 4",
+    ]) {
+      expect(html).not.toContain(`aria-label="${name}"`);
+    }
+    // Revealed on the open point and hidden (hover/focus) on the unselected
+    // stroke, like the row's ✕.
+    expect(html).toMatch(
+      /<button[^>]*aria-label="Reset point 1"[^>]*class="[^"]*opacity-100/,
+    );
+    expect(html).toMatch(
+      /<button[^>]*aria-label="Reset shot 2"[^>]*class="[^"]*opacity-0/,
+    );
+  });
+
+  test("no seed, no Reset — and none on a read-only console", () => {
+    const { operations } = spies();
+    const session = labelSessionFixture();
+    const unseeded: LabelSession = {
+      ...session,
+      points: session.points.map((point) => ({
+        ...point,
+        seed: null,
+        shots: point.shots.map((shot) => ({ ...shot, seed: null })),
+      })),
+    };
+    const html = renderConsole({
+      ...SAVES,
+      operations,
+      session: unseeded,
+      initialExpandedPointId: P1,
+    });
+    expect(html).not.toContain("data-reset-row");
+
+    const readOnly = renderConsole({ initialExpandedPointId: P1 });
+    expect(readOnly).not.toContain("data-reset-row");
+  });
+
+  test("Reset only asks: the table hands the request up", () => {
+    const { tree, asked } = tableTree();
+    press(tree, "Reset shot 2");
+    press(tree, "Reset point 1");
+    expect(asked).toEqual({
+      onAskResetShot: [["s-return", 2, 1]],
+      onAskResetPoint: [[P1]],
+    });
+  });
+
+  test("the shot confirm asks, and the reset waits for its action", async () => {
+    const { calls, operations } = spies();
+    renderConsole({
+      ...SAVES,
+      operations,
+      initialConfirm: {
+        kind: "reset-shot",
+        shotId: "s-return",
+        shotNumber: 2,
+        pointNumber: 1,
+      },
+    });
+    const dialog = dialogs.at(-1)!;
+    expect(dialog).toMatchObject({
+      open: true,
+      title: "Reset shot 2 to its original values?",
+      confirmLabel: "Reset",
+      tone: "primary",
+    });
+    expect(String(dialog.description)).toMatch(
+      /^Your changes to this shot in point 1 are replaced/,
+    );
+    // No reason picker: a reset asks nothing more.
+    expect(dialog.children ?? null).toBeNull();
+    expect(calls).toEqual({});
+
+    (dialog.onConfirm as () => void)();
+    await Promise.resolve();
+    expect(calls).toEqual({ resetShot: [["s-return"]] });
+  });
+
+  test("the point confirm asks, and the reset waits for its action", async () => {
+    const { calls, operations } = spies();
+    renderConsole({
+      ...SAVES,
+      operations,
+      initialConfirm: { kind: "reset-point", pointId: P1, pointNumber: 1 },
+    });
+    const dialog = dialogs.at(-1)!;
+    expect(dialog).toMatchObject({
+      title: "Reset point 1 to its original values?",
+      confirmLabel: "Reset",
+      tone: "primary",
+    });
+    expect(String(dialog.description)).toContain(
+      "Its shots, note and checked mark stay as they are.",
+    );
+    expect(calls).toEqual({});
+
+    (dialog.onConfirm as () => void)();
+    await Promise.resolve();
+    expect(calls).toEqual({ resetPoint: [[P1]] });
   });
 });

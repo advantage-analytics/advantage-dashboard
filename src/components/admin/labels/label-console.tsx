@@ -47,6 +47,7 @@ import type {
   LabelPointStatusResult,
   LabelShotStatusResult,
 } from "@/lib/services/labels/operations-session";
+import { applyPointReset, applyShotReset } from "@/lib/services/labels/reset";
 import type { CourtPoint } from "./court-geometry";
 import {
   NO_PLACEMENT,
@@ -85,11 +86,12 @@ import { INITIAL_SAVE_STATUS, saveStatusReducer } from "./save-status";
  * and the save line.
  *
  * Row operations (T7) follow the same optimistic contract through
- * `operations`: delete and Undo, add a stroke, move a point, mark it checked.
- * Two of them ask first — a delete always, a move only into a game someone
- * else serves — and those open `LabelConfirmDialog` WITHOUT writing: the
- * write happens on the dialog's action, and Cancel changes nothing. Enter
- * marks the open point checked when focus is not in a control.
+ * `operations`: delete and Undo, add a stroke, move a point, mark it checked,
+ * and reset an edited stroke or point to the values it was seeded with.
+ * Three of them ask first — a delete and a reset always, a move only into a
+ * game someone else serves — and those open `LabelConfirmDialog` WITHOUT
+ * writing: the write happens on the dialog's action, and Cancel changes
+ * nothing. Enter marks the open point checked when focus is not in a control.
  */
 export function LabelConsole({
   session,
@@ -380,6 +382,7 @@ export function LabelConsole({
       landingX: null,
       landingY: null,
       videoTime: plan.write.video_time,
+      seed: null,
     };
     // The new stroke is the one a court click places next.
     setPlacement(startPlacement(tempId));
@@ -479,6 +482,44 @@ export function LabelConsole({
     );
   }
 
+  /** Back to the seed. The dialog asked first; the write happens here. */
+  function resetShot(shotId: string) {
+    const before = findShot(points, shotId);
+    if (!before || !operations) return;
+    // A reset can move the stroke's time, so it re-sorts like a time edit.
+    void runOperation(
+      (rows) => updateShot(rows, shotId, true, applyShotReset),
+      () => operations.resetShot(shotId),
+      (rows, result) =>
+        replaceShot(rows, shotId, (s) => ({ ...s, status: result.status })),
+      (rows) => updateShot(rows, shotId, true, () => before),
+    );
+  }
+
+  /** The point's own fields back to the seed; its strokes are not touched. */
+  function resetPoint(pointId: string) {
+    const before = points.find((p) => p.id === pointId);
+    if (!before || !operations) return;
+    void runOperation(
+      (rows) => replacePoint(rows, pointId, applyPointReset),
+      () => operations.resetPoint(pointId),
+      (rows, result) =>
+        replacePoint(rows, pointId, (p) => ({ ...p, status: result.status })),
+      (rows) =>
+        replacePoint(rows, pointId, (p) => ({
+          ...p,
+          setNumber: before.setNumber,
+          gameNumber: before.gameNumber,
+          server: before.server,
+          serveSide: before.serveSide,
+          winner: before.winner,
+          ending: before.ending,
+          endedBy: before.endedBy,
+          status: before.status,
+        })),
+    );
+  }
+
   function toggleTombstone(id: string) {
     setOpenTombstones((current) => {
       const next = new Set(current);
@@ -508,6 +549,12 @@ export function LabelConsole({
       case "move-point":
         movePoint(question.pointId, question.to, true);
         return;
+      case "reset-shot":
+        resetShot(question.shotId);
+        return;
+      case "reset-point":
+        resetPoint(question.pointId);
+        return;
     }
   }
 
@@ -532,6 +579,17 @@ export function LabelConsole({
         onMovePoint: requestMove,
         onSetChecked: setChecked,
         onAddShot: addShot,
+        onAskResetShot: (shotId, shotNumber, pointNumber) =>
+          setConfirm({ kind: "reset-shot", shotId, shotNumber, pointNumber }),
+        onAskResetPoint: (pointId) => {
+          const point = points.find((p) => p.id === pointId);
+          if (!point) return;
+          setConfirm({
+            kind: "reset-point",
+            pointId,
+            pointNumber: point.pointIndex + 1,
+          });
+        },
       }
     : undefined;
 
@@ -673,6 +731,10 @@ export interface LabelConsoleOperations {
     pointId: string,
     checked: boolean,
   ) => Promise<LabelCheckedResult>;
+  /** Back to the seeded values: status `kept`. */
+  resetShot: (shotId: string) => Promise<LabelShotStatusResult>;
+  /** The point's own fields back to the seed: status `unchanged`. */
+  resetPoint: (pointId: string) => Promise<LabelPointStatusResult>;
 }
 
 function defaultPoint(points: readonly LabelPoint[]): LabelPoint | null {

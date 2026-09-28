@@ -6,8 +6,9 @@
  * CALCULATED (point, set · game, server, stroke count) in muted ink, one
  * fluid gap, then what the labeller DECIDES (won by, ending, ended by) and
  * whether the point has been checked. The gap falls on that boundary, so the
- * two halves never interleave. The last, headerless track holds the row's
- * delete control.
+ * two halves never interleave; on an edited point it holds the row's Reset,
+ * right-aligned against the labelled half it restores. The last, headerless
+ * track holds the row's delete control.
  *
  * The header rows draw from the same arrays, so a label always sits over the
  * track it names.

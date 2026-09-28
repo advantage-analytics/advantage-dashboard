@@ -10,6 +10,10 @@ import {
  * them a tombstone, one checked, and a first point whose strokes cover every
  * shot state the table draws — kept, edited, added and deleted.
  *
+ * Seeds: every vendor row carries the values it was seeded with, and the two
+ * edited rows (point 1 and its return, `s-return`) carry seeds that differ
+ * from what they hold now. Added rows have none.
+ *
  * Point 1's strokes are listed OUT of video order on purpose (the loader
  * sorts them with `orderLabelShots` before the console ever sees them), so
  * the fixture runs them through that same function.
@@ -38,7 +42,30 @@ function shot(
     landingX: null,
     landingY: null,
     videoTime: null,
+    seed: null,
     ...fields,
+  };
+}
+
+/** A kept shot's seed: exactly what it holds. */
+function seededShot(
+  id: string,
+  labelPointId: string,
+  fields: Partial<LabelShot>,
+): LabelShot {
+  const row = shot(id, labelPointId, fields);
+  return {
+    ...row,
+    seed: row.seed ?? {
+      hitter: row.hitter,
+      stroke: row.stroke,
+      result: row.result,
+      contact_x: row.contactX,
+      contact_y: row.contactY,
+      landing_x: row.landingX,
+      landing_y: row.landingY,
+      video_time: row.videoTime,
+    },
   };
 }
 
@@ -59,8 +86,19 @@ export const POINT_1_SHOTS: LabelShot[] = [
     landingY: 3.49,
     videoTime: 2473.1,
     status: "edited",
+    // Seeded as a forehand the vendor put 30 cm wider.
+    seed: {
+      hitter: "p2",
+      stroke: "forehand",
+      result: "in",
+      contact_x: 2.1,
+      contact_y: 24.49,
+      landing_x: -2.1,
+      landing_y: 3.49,
+      video_time: 2473.1,
+    },
   }),
-  shot("s-serve", P1, {
+  seededShot("s-serve", P1, {
     eventId: 101,
     hitter: "p1",
     stroke: "first_serve",
@@ -71,7 +109,7 @@ export const POINT_1_SHOTS: LabelShot[] = [
     landingY: 17.79,
     videoTime: 2472.0,
   }),
-  shot("s-phantom", P1, {
+  seededShot("s-phantom", P1, {
     eventId: 103,
     hitter: "p1",
     stroke: "forehand",
@@ -112,8 +150,30 @@ function point(
     status: "unchanged",
     statusBeforeDelete: null,
     checkedAt: null,
+    seed: null,
     shots: [],
     ...fields,
+  };
+}
+
+/** An unchanged point's seed: exactly what it holds. */
+function seededPoint(
+  id: string,
+  pointIndex: number,
+  fields: Partial<LabelPoint>,
+): LabelPoint {
+  const row = point(id, pointIndex, fields);
+  return {
+    ...row,
+    seed: row.seed ?? {
+      set_number: row.setNumber,
+      game_number: row.gameNumber,
+      server: row.server,
+      serve_side: row.serveSide,
+      winner: row.winner,
+      ending: row.ending,
+      ended_by: row.endedBy,
+    },
   };
 }
 
@@ -132,16 +192,26 @@ export function labelSessionFixture(): LabelSession {
         ending: "error",
         endedBy: "p1",
         status: "edited",
+        // Seeded as won by Lee on Lee's winner.
+        seed: {
+          set_number: 1,
+          game_number: 1,
+          server: "p1",
+          serve_side: "deuce",
+          winner: "p1",
+          ending: "winner",
+          ended_by: "p1",
+        },
         shots: orderLabelShots(POINT_1_SHOTS),
       }),
-      point(P2, 1, {
+      seededPoint(P2, 1, {
         serveSide: "ad",
         winner: "p1",
         ending: "ace",
         endedBy: "p1",
         checkedAt: "2026-09-28T10:00:00Z",
         shots: [
-          shot("s-ace", P2, {
+          seededShot("s-ace", P2, {
             eventId: 201,
             stroke: "first_serve",
             result: "in",
@@ -149,12 +219,12 @@ export function labelSessionFixture(): LabelSession {
           }),
         ],
       }),
-      point(P3, 2, {
+      seededPoint(P3, 2, {
         status: "deleted",
         statusBeforeDelete: "unchanged",
         ending: "let_replayed",
       }),
-      point(P4, 3, { gameNumber: 2, server: "p2" }),
+      seededPoint(P4, 3, { gameNumber: 2, server: "p2" }),
     ],
   };
 }

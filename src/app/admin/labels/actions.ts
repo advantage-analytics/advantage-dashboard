@@ -25,6 +25,10 @@ import {
   type LabelPointStatusResult,
   type LabelShotStatusResult,
 } from "@/lib/services/labels/operations-session";
+import {
+  resetLabelPoint,
+  resetLabelShot,
+} from "@/lib/services/labels/reset-session";
 import type { LabelGame } from "@/lib/services/labels/operations";
 
 /**
@@ -126,4 +130,26 @@ export async function setLabelPointCheckedAction(
   return checked
     ? markLabelPointChecked(pointId)
     : unmarkLabelPointChecked(pointId);
+}
+
+/**
+ * Reset an edited shot to the values it was seeded with (status back to
+ * `kept`). Refused for an added or deleted shot, or one with no stored seed.
+ * Its unclear marks stay as they are.
+ */
+export async function resetLabelShotAction(
+  shotId: string,
+): Promise<LabelShotStatusResult> {
+  return resetLabelShot(shotId);
+}
+
+/**
+ * Reset an edited point's own fields — set, game, server, serve side, won by,
+ * ending, ended by — to the values it was seeded with (status back to
+ * `unchanged`). Its shots, note and checked mark stay as they are.
+ */
+export async function resetLabelPointAction(
+  pointId: string,
+): Promise<LabelPointStatusResult> {
+  return resetLabelPoint(pointId);
 }

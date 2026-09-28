@@ -8,6 +8,8 @@ import {
   deleteLabelPointAction,
   deleteLabelShotAction,
   moveLabelPointAction,
+  resetLabelPointAction,
+  resetLabelShotAction,
   restoreLabelPointAction,
   restoreLabelShotAction,
   setLabelPointCheckedAction,
@@ -19,7 +21,8 @@ import {
  * Admin › Labels › one session — the hand-labelling console (board 08): the
  * header, the video + court band and the points table, every label field
  * autosaving through `updateLabelShot` / `updateLabelPoint`, and the row
- * operations (delete and Undo, add a shot, move a point, mark it checked)
+ * operations (delete and Undo, add a shot, move a point, mark it checked,
+ * reset an edited row to its seed)
  * through the rest of `../actions`. The header lives
  * in the console, beside the save line it owns; the page only supplies the
  * way back.
@@ -68,6 +71,8 @@ export default async function AdminLabelSessionPage({
           addShot: addLabelShotAction,
           movePoint: moveLabelPointAction,
           setChecked: setLabelPointCheckedAction,
+          resetShot: resetLabelShotAction,
+          resetPoint: resetLabelPointAction,
         }}
         headerAction={
           <Link

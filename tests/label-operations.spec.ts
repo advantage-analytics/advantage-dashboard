@@ -11,6 +11,7 @@ import {
   applyShotRestore,
   destinationServerIn,
   gameServer,
+  applyPointMove,
   moveNeedsServerSwitch,
   neighbourGames,
   planAddedShot,
@@ -258,7 +259,98 @@ test.describe("move point", () => {
     server: "p1" as const,
     setNumber: 1,
     gameNumber: 3,
+    serveSide: null,
+    winner: "p1" as const,
+    ending: "winner" as const,
+    endedBy: "p1" as const,
+    seed: null,
   };
+  /** The same point, seeded where it sits: set 1, game 3, p1 serving. */
+  const seededP1 = {
+    ...unchangedP1,
+    seed: {
+      set_number: 1,
+      game_number: 3,
+      server: "p1" as const,
+      serve_side: null,
+      winner: "p1" as const,
+      ending: "winner" as const,
+      ended_by: "p1" as const,
+    },
+  };
+
+  test("moved away is edited; moved back to its seeded game is unchanged", () => {
+    const away = planPointMove(
+      seededP1,
+      { setNumber: 1, gameNumber: 4 },
+      "p1",
+      false,
+    );
+    expect(away).toEqual({
+      ok: true,
+      write: { set_number: 1, game_number: 4, status: "edited" },
+    });
+    const moved = { ...seededP1, gameNumber: 4, status: "edited" as const };
+    expect(
+      planPointMove(moved, { setNumber: 1, gameNumber: 3 }, "p1", false),
+    ).toEqual({
+      ok: true,
+      write: { set_number: 1, game_number: 3, status: "unchanged" },
+    });
+    // Back in its game but with a label still changed: stays edited.
+    expect(
+      planPointMove(
+        { ...moved, winner: "p2" },
+        { setNumber: 1, gameNumber: 3 },
+        "p1",
+        false,
+      ),
+    ).toMatchObject({ write: { status: "edited" } });
+  });
+
+  test("a server switched away and switched back counts as set back", () => {
+    // Moved into game 4, whose server p2 it took on.
+    const moved = {
+      ...seededP1,
+      gameNumber: 4,
+      server: "p2" as const,
+      status: "edited" as const,
+    };
+    expect(
+      planPointMove(moved, { setNumber: 1, gameNumber: 3 }, "p1", true),
+    ).toEqual({
+      ok: true,
+      write: {
+        set_number: 1,
+        game_number: 3,
+        status: "unchanged",
+        server: "p1",
+      },
+    });
+  });
+
+  test("the console's applyPointMove agrees with the plan on a round trip", () => {
+    const { points } = labelSessionFixture();
+    const p4 = points.find((p) => p.id === FIXTURE_POINT_IDS.P4)!;
+    expect(p4.status).toBe("unchanged");
+    const away = planPointMove(
+      p4,
+      { setNumber: 1, gameNumber: 1 },
+      null,
+      false,
+    );
+    if ("error" in away) throw new Error(away.error);
+    const moved = applyPointMove(p4, away.write);
+    expect(moved.status).toBe("edited");
+    const back = planPointMove(
+      moved,
+      { setNumber: 1, gameNumber: 2 },
+      null,
+      false,
+    );
+    if ("error" in back) throw new Error(back.error);
+    expect(applyPointMove(moved, back.write).status).toBe("unchanged");
+  });
 
   test("into a game someone else serves: refused unless switchServer", () => {
     const refused = planPointMove(
@@ -823,6 +915,8 @@ test("no operation issues a SQL DELETE on a label_* row", () => {
     "src/lib/services/labels/operations.ts",
     "src/lib/services/labels/operations-session.ts",
     "src/lib/services/labels/edit-session.ts",
+    "src/lib/services/labels/reset.ts",
+    "src/lib/services/labels/reset-session.ts",
     "src/app/admin/labels/actions.ts",
   ]) {
     const source = readFileSync(path.resolve(file), "utf8");

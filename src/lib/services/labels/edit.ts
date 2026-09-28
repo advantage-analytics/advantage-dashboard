@@ -17,10 +17,12 @@
 import type {
   LabelEnding,
   LabelPoint,
+  LabelPointSeedValues,
   LabelPointStatus,
   LabelServeSide,
   LabelShot,
   LabelShotResult,
+  LabelShotSeedValues,
   LabelShotStatus,
   LabelSide,
   LabelStroke,
@@ -80,17 +82,8 @@ export const LABEL_SHOT_EDIT_FIELDS = [
 ] as const;
 export type LabelShotEditField = (typeof LABEL_SHOT_EDIT_FIELDS)[number];
 
-/** A shot's editable values, keyed by column. */
-export interface LabelShotValues {
-  hitter: LabelSide | null;
-  stroke: LabelStroke | null;
-  result: LabelShotResult | null;
-  contact_x: number | null;
-  contact_y: number | null;
-  landing_x: number | null;
-  landing_y: number | null;
-  video_time: number | null;
-}
+/** A shot's editable values, keyed by column — the same keys as its seed. */
+export type LabelShotValues = LabelShotSeedValues;
 
 export type LabelShotPatch = Partial<LabelShotValues> & {
   /**
@@ -129,6 +122,22 @@ export interface LabelPointValues {
 export type LabelPointPatch = Partial<LabelPointValues> & {
   note?: string | null;
 };
+
+/**
+ * Every field a point's status is measured on — the patchable values plus
+ * set, game and server, which only a move changes — keyed by column, the
+ * same keys as `label_points.seed`.
+ */
+export const LABEL_POINT_SEED_FIELDS = [
+  "set_number",
+  "game_number",
+  "server",
+  "serve_side",
+  "winner",
+  "ending",
+  "ended_by",
+] as const;
+export type LabelPointFields = LabelPointSeedValues;
 
 /** The longest note kept — a sentence or two about a point, not an essay. */
 export const LABEL_NOTE_MAX = 2000;
@@ -351,6 +360,38 @@ export function sameShotValue(
   return a === b;
 }
 
+/** Whether every value field of `values` is its seed's, within tolerance. */
+export function shotMatchesSeed(
+  values: LabelShotValues,
+  seed: LabelShotSeedValues,
+): boolean {
+  return LABEL_SHOT_VALUE_FIELDS.every((field) =>
+    sameShotValue(field, values[field], seed[field]),
+  );
+}
+
+/** Whether every field of `values` is its seed's. */
+export function pointMatchesSeed(
+  values: LabelPointFields,
+  seed: LabelPointSeedValues,
+): boolean {
+  return LABEL_POINT_SEED_FIELDS.every(
+    (field) => values[field] === seed[field],
+  );
+}
+
+/** A shot as the status rule reads it: its values, status and seed. */
+export type LabelShotState = LabelShotValues & {
+  status: LabelShotStatus;
+  seed: LabelShotSeedValues | null;
+};
+
+/** A point as the status rule reads it: its fields, status and seed. */
+export type LabelPointState = LabelPointFields & {
+  status: LabelPointStatus;
+  seed: LabelPointSeedValues | null;
+};
+
 /**
  * The status a shot takes after `patch` is applied to `current`.
  *
@@ -360,17 +401,22 @@ export function sameShotValue(
  *            event id, so it can never become a vendor shot).
  *   deleted  is left alone — tombstones are T7's; edit-session.ts refuses to
  *            edit one at all.
- *   kept     becomes `edited` when any patched VALUE field differs, beyond
- *            its tolerance, from its baseline; otherwise stays `kept`.
- *   edited   stays `edited`.
+ *   kept / edited, with a seed:
+ *            `kept` when every value field, after the patch, equals its seed
+ *            within its tolerance; otherwise `edited`. So an edit set back to
+ *            what was seeded returns the shot to `kept`, both ways.
+ *   kept / edited, without a seed (a vendor row seeded before
+ *            `label_shots.seed` existed and not yet backfilled by
+ *            scripts/label-backfill-seed.ts):
+ *            `kept` becomes `edited` when a patched value differs from the
+ *            stored one; `edited` stays `edited` — with nothing to compare
+ *            against, a value set back cannot be told from a change.
  *
- * ── The baseline: the vendor snapshot as the seed mapped it ────────────────
+ * ── The baseline: the seed, frozen ──────────────────────────────────────────
  * A field's baseline is the value the seed wrote for it (seed.ts
- * `buildLabelSeed`): the row's own `vendor` stroke carried through the
- * pinned derivation into the label vocabulary. While a row is `kept`, every
- * one of its value fields still holds exactly that — `kept` means nothing has
- * diverged — so for a `kept` row the baseline IS `current`, and this compares
- * against it.
+ * `buildLabelSeed`), kept whole in the row's `seed` jsonb
+ * (supabase/migrations/20260928190425_label_rows_seed.sql) — never the value
+ * currently in the row, which an edit overwrites.
  *
  * Why not re-derive each baseline from the `vendor` jsonb instead: three of
  * the eight fields cannot be derived from one stroke at all —
@@ -385,45 +431,207 @@ export function sameShotValue(
  * `start_time_seconds`) could be re-derived, but only with TODAY's
  * derivation code, while the seed used the session's pinned
  * `derivation_version` — once the two drift, a no-op edit would read as a
- * change. The seeded value has neither problem.
- *
- * The price: an `edited` shot does not go back to `kept` when its values are
- * set back, because an overwritten seed value is no longer in the row to
- * compare against. `edited` therefore means "the labeller changed a value
- * here", which is what the pill tells them.
+ * change. The frozen seed has neither problem.
  *
  * `unclear` never moves the status: it says the video cannot settle a field,
- * not that the field's value is different.
+ * not that the field's value is different — and it is not part of the seed.
+ *
+ * The server's write (edit-session.ts) and the console's optimistic apply
+ * ({@link applyLabelShotPatch}) both call this, so they cannot disagree.
  */
 export function labelShotStatusAfterPatch(
-  current: LabelShotValues & { status: LabelShotStatus },
+  current: LabelShotState,
   patch: LabelShotPatch,
 ): LabelShotStatus {
-  if (current.status !== "kept") return current.status;
-  for (const field of LABEL_SHOT_VALUE_FIELDS) {
-    if (!(field in patch)) continue;
-    const next = patch[field] as LabelShotValues[typeof field];
-    if (!sameShotValue(field, current[field], next)) return "edited";
+  if (current.status === "added" || current.status === "deleted") {
+    return current.status;
   }
-  return "kept";
+  if (current.seed === null) {
+    if (current.status !== "kept") return current.status;
+    for (const field of LABEL_SHOT_VALUE_FIELDS) {
+      if (!(field in patch)) continue;
+      const next = patch[field] as LabelShotValues[typeof field];
+      if (!sameShotValue(field, current[field], next)) return "edited";
+    }
+    return "kept";
+  }
+  const after: LabelShotValues = {
+    ...pickShotValues(current),
+    ...(Object.fromEntries(
+      LABEL_SHOT_VALUE_FIELDS.filter((field) => field in patch).map((field) => [
+        field,
+        patch[field] ?? null,
+      ]),
+    ) as Partial<LabelShotValues>),
+  };
+  return shotMatchesSeed(after, current.seed) ? "kept" : "edited";
 }
 
 /**
- * The status a point takes after `patch`: `unchanged` becomes `edited` when a
- * patched value field differs from the stored one; `edited`, `added` and
- * `deleted` are left as they are. The note never moves it — it annotates the
- * point, it is not a label.
+ * The status a point takes when `change` is applied to `current` — a patch's
+ * values, or a move's set, game and server.
+ *
+ * The shot rule, for points: `added` and `deleted` are left as they are;
+ * with a seed, `unchanged` when every field (set, game, server, serve side,
+ * won by, ending, ended by) equals its seed after the change, else `edited` —
+ * so moving a point back to its seeded game, or setting a value back, returns
+ * it to `unchanged`; without one, `unchanged` becomes `edited` on a changed
+ * value and `edited` stays `edited`.
+ */
+export function labelPointStatusAfterChange(
+  current: LabelPointState,
+  change: Partial<LabelPointFields>,
+): LabelPointStatus {
+  if (current.status === "added" || current.status === "deleted") {
+    return current.status;
+  }
+  if (current.seed === null) {
+    if (current.status !== "unchanged") return current.status;
+    for (const field of LABEL_POINT_SEED_FIELDS) {
+      if (!(field in change)) continue;
+      if (current[field] !== (change[field] ?? null)) return "edited";
+    }
+    return "unchanged";
+  }
+  const after: LabelPointFields = {
+    ...pickPointFields(current),
+    ...(Object.fromEntries(
+      LABEL_POINT_SEED_FIELDS.filter((field) => field in change).map(
+        (field) => [field, change[field] ?? null],
+      ),
+    ) as Partial<LabelPointFields>),
+  };
+  return pointMatchesSeed(after, current.seed) ? "unchanged" : "edited";
+}
+
+/**
+ * The status a point takes after a patch — {@link labelPointStatusAfterChange}
+ * over its value fields. The note never moves it: it annotates the point, it
+ * is not a label.
  */
 export function labelPointStatusAfterPatch(
-  current: LabelPointValues & { status: LabelPointStatus },
+  current: LabelPointState,
   patch: LabelPointPatch,
 ): LabelPointStatus {
-  if (current.status !== "unchanged") return current.status;
-  for (const field of LABEL_POINT_VALUE_FIELDS) {
-    if (!(field in patch)) continue;
-    if (current[field] !== patch[field]) return "edited";
+  const change = Object.fromEntries(
+    LABEL_POINT_VALUE_FIELDS.filter((field) => field in patch).map((field) => [
+      field,
+      patch[field] ?? null,
+    ]),
+  ) as Partial<LabelPointFields>;
+  return labelPointStatusAfterChange(current, change);
+}
+
+function pickShotValues(row: LabelShotValues): LabelShotValues {
+  return {
+    hitter: row.hitter,
+    stroke: row.stroke,
+    result: row.result,
+    contact_x: row.contact_x,
+    contact_y: row.contact_y,
+    landing_x: row.landing_x,
+    landing_y: row.landing_y,
+    video_time: row.video_time,
+  };
+}
+
+function pickPointFields(row: LabelPointFields): LabelPointFields {
+  return {
+    set_number: row.set_number,
+    game_number: row.game_number,
+    server: row.server,
+    serve_side: row.serve_side,
+    winner: row.winner,
+    ending: row.ending,
+    ended_by: row.ended_by,
+  };
+}
+
+// ── The stored seed ─────────────────────────────────────────────────────────
+
+/**
+ * A `label_shots.seed` jsonb as the status rule can trust it, or null.
+ *
+ * All eight keys must be present with a value the column would accept; a
+ * seed missing one, or holding anything else, is treated as no seed at all —
+ * a half-trusted baseline would read a real edit as a revert.
+ */
+export function parseLabelShotSeed(value: unknown): LabelShotSeedValues | null {
+  if (!isPlainObject(value)) return null;
+  if (!LABEL_SHOT_VALUE_FIELDS.every((field) => field in value)) return null;
+  const hitter = vocab(value.hitter, LABEL_SIDES);
+  const stroke = vocab(value.stroke, LABEL_STROKES);
+  const result = vocab(value.result, LABEL_SHOT_RESULTS);
+  const contactX = finite(value.contact_x);
+  const contactY = finite(value.contact_y);
+  const landingX = finite(value.landing_x);
+  const landingY = finite(value.landing_y);
+  const videoTime = finite(value.video_time);
+  if (
+    hitter === undefined ||
+    stroke === undefined ||
+    result === undefined ||
+    contactX === undefined ||
+    contactY === undefined ||
+    landingX === undefined ||
+    landingY === undefined ||
+    videoTime === undefined
+  ) {
+    return null;
   }
-  return "unchanged";
+  return {
+    hitter,
+    stroke,
+    result,
+    contact_x: contactX,
+    contact_y: contactY,
+    landing_x: landingX,
+    landing_y: landingY,
+    video_time: videoTime,
+  };
+}
+
+/** A `label_points.seed` jsonb, or null — see {@link parseLabelShotSeed}. */
+export function parseLabelPointSeed(
+  value: unknown,
+): LabelPointSeedValues | null {
+  if (!isPlainObject(value)) return null;
+  if (!LABEL_POINT_SEED_FIELDS.every((field) => field in value)) return null;
+  const setNumber = whole(value.set_number);
+  const gameNumber = whole(value.game_number);
+  const server = vocab(value.server, LABEL_SIDES);
+  const serveSide = vocab(value.serve_side, LABEL_SERVE_SIDES);
+  const winner = vocab(value.winner, LABEL_SIDES);
+  const ending = vocab(value.ending, LABEL_ENDINGS);
+  const endedBy = vocab(value.ended_by, LABEL_SIDES);
+  if (
+    setNumber === undefined ||
+    gameNumber === undefined ||
+    server === undefined ||
+    serveSide === undefined ||
+    winner === undefined ||
+    ending === undefined ||
+    endedBy === undefined
+  ) {
+    return null;
+  }
+  return {
+    set_number: setNumber,
+    game_number: gameNumber,
+    server,
+    serve_side: serveSide,
+    winner,
+    ending,
+    ended_by: endedBy,
+  };
+}
+
+/** `null`, or an integer. `undefined` = invalid. */
+function whole(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  return typeof value === "number" && Number.isInteger(value)
+    ? value
+    : undefined;
 }
 
 // ── The console's camelCase rows ────────────────────────────────────────────
@@ -442,14 +650,38 @@ export function labelShotValues(shot: LabelShot): LabelShotValues {
   };
 }
 
-/** A console point's value fields, keyed by column. */
-export function labelPointValues(point: LabelPoint): LabelPointValues {
+/** A console point's fields the status is measured on, keyed by column. */
+export function labelPointFields(
+  point: Pick<
+    LabelPoint,
+    | "setNumber"
+    | "gameNumber"
+    | "server"
+    | "serveSide"
+    | "winner"
+    | "ending"
+    | "endedBy"
+  >,
+): LabelPointFields {
   return {
+    set_number: point.setNumber,
+    game_number: point.gameNumber,
+    server: point.server,
+    serve_side: point.serveSide,
     winner: point.winner,
     ending: point.ending,
     ended_by: point.endedBy,
-    serve_side: point.serveSide,
   };
+}
+
+/** A console shot as the status rule reads it. */
+export function labelShotState(shot: LabelShot): LabelShotState {
+  return { ...labelShotValues(shot), status: shot.status, seed: shot.seed };
+}
+
+/** A console point as the status rule reads it. */
+export function labelPointState(point: LabelPoint): LabelPointState {
+  return { ...labelPointFields(point), status: point.status, seed: point.seed };
 }
 
 /** `shot` with `patch`'s values (and the status they imply) applied. */
@@ -459,10 +691,7 @@ export function applyLabelShotPatch(
 ): LabelShot {
   const next: LabelShot = {
     ...shot,
-    status: labelShotStatusAfterPatch(
-      { ...labelShotValues(shot), status: shot.status },
-      patch,
-    ),
+    status: labelShotStatusAfterPatch(labelShotState(shot), patch),
   };
   if ("hitter" in patch) next.hitter = patch.hitter ?? null;
   if ("stroke" in patch) next.stroke = patch.stroke ?? null;
@@ -482,10 +711,7 @@ export function applyLabelPointPatch(
 ): LabelPoint {
   const next: LabelPoint = {
     ...point,
-    status: labelPointStatusAfterPatch(
-      { ...labelPointValues(point), status: point.status },
-      patch,
-    ),
+    status: labelPointStatusAfterPatch(labelPointState(point), patch),
   };
   if ("winner" in patch) next.winner = patch.winner ?? null;
   if ("ending" in patch) next.ending = patch.ending ?? null;

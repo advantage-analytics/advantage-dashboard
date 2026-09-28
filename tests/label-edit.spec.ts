@@ -9,7 +9,10 @@ import {
   parseLabelPointPatch,
   parseLabelShotPatch,
   sameShotValue,
-  type LabelPointValues,
+  labelPointStatusAfterChange,
+  parseLabelPointSeed,
+  parseLabelShotSeed,
+  type LabelPointFields,
   type LabelShotValues,
 } from "@/lib/services/labels/edit";
 import {
@@ -41,7 +44,7 @@ const SEEDED: LabelShotValues = {
   landing_y: 3.49,
   video_time: 2473.1,
 };
-const kept = { ...SEEDED, status: "kept" as const };
+const kept = { ...SEEDED, status: "kept" as const, seed: SEEDED };
 
 test.describe("the allowlists", () => {
   test("are exactly the task's fields", () => {
@@ -263,25 +266,79 @@ test.describe("labelShotStatusAfterPatch — the edited rule", () => {
     );
   });
 
-  test("added stays added, edited stays edited, deleted is untouched", () => {
+  test("added stays added and deleted is untouched, seed or not", () => {
+    for (const seed of [SEEDED, null]) {
+      expect(
+        labelShotStatusAfterPatch(
+          { ...SEEDED, status: "added", seed },
+          { result: "out" },
+        ),
+      ).toBe("added");
+      expect(
+        labelShotStatusAfterPatch(
+          { ...SEEDED, status: "deleted", seed },
+          { result: "in" },
+        ),
+      ).toBe("deleted");
+    }
+  });
+
+  test("an edited shot set back to its seed is kept again", () => {
+    // Edited: the result was changed to out.
+    const edited = {
+      ...SEEDED,
+      result: "out" as const,
+      status: "edited" as const,
+      seed: SEEDED,
+    };
+    expect(labelShotStatusAfterPatch(edited, { result: "in" })).toBe("kept");
+    // Still off the seed on another field: stays edited.
+    expect(labelShotStatusAfterPatch(edited, { hitter: "p1" })).toBe("edited");
+    // Set back within tolerance counts as set back.
+    const moved = {
+      ...SEEDED,
+      contact_x: 3,
+      contact_y: 20,
+      status: "edited" as const,
+      seed: SEEDED,
+    };
+    expect(
+      labelShotStatusAfterPatch(moved, { contact_x: 1.805, contact_y: 24.495 }),
+    ).toBe("kept");
+    // A kept shot whose unrelated field changes goes edited, then back.
+    const once = applyLabelShotPatch(
+      POINT_1_SHOTS.find((s) => s.id === "s-serve")!,
+      { video_time: 2480 },
+    );
+    expect(once.status).toBe("edited");
+    expect(applyLabelShotPatch(once, { video_time: 2472.0 }).status).toBe(
+      "kept",
+    );
+  });
+
+  test("the fixture's edited return goes kept only when every field is back", () => {
+    const edited = POINT_1_SHOTS.find((s) => s.id === "s-return")!;
+    expect(edited.status).toBe("edited");
+    // The seed has a forehand at x 2.1; one field back is not enough.
+    const half = applyLabelShotPatch(edited, { stroke: "forehand" });
+    expect(half.status).toBe("edited");
+    const whole = applyLabelShotPatch(half, {
+      contact_x: 2.1,
+      contact_y: 24.49,
+    });
+    expect(whole).toMatchObject({ status: "kept", stroke: "forehand" });
+  });
+
+  test("without a seed, kept goes edited and edited never comes back", () => {
+    const noSeed = { ...SEEDED, status: "kept" as const, seed: null };
+    expect(labelShotStatusAfterPatch(noSeed, { result: "out" })).toBe("edited");
+    expect(labelShotStatusAfterPatch(noSeed, { result: "in" })).toBe("kept");
     expect(
       labelShotStatusAfterPatch(
-        { ...SEEDED, status: "added" },
-        { result: "out" },
-      ),
-    ).toBe("added");
-    expect(
-      labelShotStatusAfterPatch(
-        { ...SEEDED, status: "edited" },
+        { ...noSeed, status: "edited" },
         { result: "in" },
       ),
     ).toBe("edited");
-    expect(
-      labelShotStatusAfterPatch(
-        { ...SEEDED, status: "deleted" },
-        { result: "out" },
-      ),
-    ).toBe("deleted");
   });
 
   test("the console's optimistic apply uses the same rule", () => {
@@ -304,15 +361,70 @@ test.describe("labelShotStatusAfterPatch — the edited rule", () => {
 });
 
 test.describe("labelPointStatusAfterPatch", () => {
-  const point: LabelPointValues = {
+  const point: LabelPointFields = {
+    set_number: 1,
+    game_number: 3,
+    server: "p1",
+    serve_side: "deuce",
     winner: "p1",
     ending: "winner",
     ended_by: "p1",
-    serve_side: "deuce",
   };
 
   test("unchanged becomes edited when a value changes", () => {
-    const unchanged = { ...point, status: "unchanged" as const };
+    for (const seed of [point, null]) {
+      const unchanged = { ...point, status: "unchanged" as const, seed };
+      expect(labelPointStatusAfterPatch(unchanged, { winner: "p2" })).toBe(
+        "edited",
+      );
+      expect(labelPointStatusAfterPatch(unchanged, { note: "let" })).toBe(
+        "unchanged",
+      );
+    }
+  });
+
+  test("an edited point set back to its seed is unchanged again", () => {
+    const edited = {
+      ...point,
+      winner: "p2" as const,
+      ending: "error" as const,
+      status: "edited" as const,
+      seed: point,
+    };
+    expect(labelPointStatusAfterPatch(edited, { winner: "p1" })).toBe("edited");
+    expect(
+      labelPointStatusAfterPatch(
+        { ...edited, winner: "p1" },
+        { ending: "winner" },
+      ),
+    ).toBe("unchanged");
+    // The note never moves it, either way.
+    expect(labelPointStatusAfterPatch(edited, { note: "x" })).toBe("edited");
+    // Without a seed, edited stays edited.
+    expect(
+      labelPointStatusAfterPatch(
+        { ...edited, winner: "p1", seed: null },
+        { ending: "winner" },
+      ),
+    ).toBe("edited");
+  });
+
+  test("a set or game still away from the seed keeps it edited", () => {
+    const moved = {
+      ...point,
+      game_number: 4,
+      winner: "p2" as const,
+      status: "edited" as const,
+      seed: point,
+    };
+    expect(labelPointStatusAfterPatch(moved, { winner: "p1" })).toBe("edited");
+    expect(
+      labelPointStatusAfterChange(moved, { game_number: 3, winner: "p1" }),
+    ).toBe("unchanged");
+  });
+
+  test("without a seed, unchanged moves only on a changed value", () => {
+    const unchanged = { ...point, status: "unchanged" as const, seed: null };
     expect(labelPointStatusAfterPatch(unchanged, { winner: "p2" })).toBe(
       "edited",
     );
@@ -330,9 +442,43 @@ test.describe("labelPointStatusAfterPatch", () => {
   test("added, edited and deleted are left alone", () => {
     for (const status of ["added", "edited", "deleted"] as const) {
       expect(
-        labelPointStatusAfterPatch({ ...point, status }, { winner: "p2" }),
+        labelPointStatusAfterPatch(
+          { ...point, status, seed: null },
+          { winner: "p2" },
+        ),
       ).toBe(status);
     }
+  });
+});
+
+test.describe("the stored seed", () => {
+  test("a whole, valid seed parses; anything else is no seed", () => {
+    expect(parseLabelShotSeed(SEEDED)).toEqual(SEEDED);
+    expect(parseLabelShotSeed({ ...SEEDED, stroke: null })).toEqual({
+      ...SEEDED,
+      stroke: null,
+    });
+    const { video_time: _dropped, ...partial } = SEEDED;
+    expect(parseLabelShotSeed(partial)).toBeNull();
+    expect(parseLabelShotSeed({ ...SEEDED, hitter: "p3" })).toBeNull();
+    expect(parseLabelShotSeed({ ...SEEDED, contact_x: "1.8" })).toBeNull();
+    expect(parseLabelShotSeed(null)).toBeNull();
+    expect(parseLabelShotSeed([SEEDED])).toBeNull();
+
+    const pointSeed = {
+      set_number: 1,
+      game_number: 2,
+      server: "p2",
+      serve_side: null,
+      winner: null,
+      ending: "error",
+      ended_by: "p1",
+    };
+    expect(parseLabelPointSeed(pointSeed)).toEqual(pointSeed);
+    expect(parseLabelPointSeed({ ...pointSeed, game_number: 2.5 })).toBeNull();
+    expect(parseLabelPointSeed({ ...pointSeed, ending: "lucky" })).toBeNull();
+    const { serve_side: _side, ...noSide } = pointSeed;
+    expect(parseLabelPointSeed(noSide)).toBeNull();
   });
 });
 
@@ -532,6 +678,64 @@ test.describe("updateLabelShot (editLabelShot)", () => {
       patch: { result: "out" },
     });
     expect((result as { error: string }).error).toContain("write refused");
+  });
+});
+
+test.describe("status against the stored seed, on the server", () => {
+  test("reads the seed, and an edited shot set back writes kept", async () => {
+    const fake = fakeClient({
+      shot: shotRow({ status: "edited", result: "out" }),
+    });
+    const result = await writeLabelShotEdit({
+      supabase: fake.supabase,
+      shotId: SHOT_ID,
+      patch: { result: "in" },
+    });
+    expect(result).toEqual({ ok: true, status: "kept" });
+    expect(fake.calls.find((c) => c.op === "update")?.values).toEqual({
+      result: "in",
+      status: "kept",
+    });
+  });
+
+  test("a malformed stored seed falls back to the seedless rule", async () => {
+    const fake = fakeClient({
+      shot: shotRow({ status: "edited", result: "out", seed: { hitter: 1 } }),
+    });
+    expect(
+      await writeLabelShotEdit({
+        supabase: fake.supabase,
+        shotId: SHOT_ID,
+        patch: { result: "in" },
+      }),
+    ).toEqual({ ok: true, status: "edited" });
+  });
+
+  test("an edited point set back to its seed writes unchanged", async () => {
+    const seed = {
+      set_number: 1,
+      game_number: 3,
+      server: "p1",
+      serve_side: null,
+      winner: "p1",
+      ending: "winner",
+      ended_by: "p1",
+    };
+    const fake = fakeClient({
+      point: pointRow({
+        ...seed,
+        winner: "p2",
+        status: "edited",
+        seed,
+      }),
+    });
+    expect(
+      await writeLabelPointEdit({
+        supabase: fake.supabase,
+        pointId: POINT_ID,
+        patch: { winner: "p1" },
+      }),
+    ).toEqual({ ok: true, status: "unchanged" });
   });
 });
 

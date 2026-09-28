@@ -9,6 +9,10 @@
  * the two joined on the vendor `event_id` (see
  * supabase/migrations/20260928190122_label_sessions.sql).
  *
+ * Every row also carries `seed`: its own value fields, frozen as written, so
+ * the console can reset an edited row and see an edit set back
+ * (edit.ts `labelShotStatusAfterPatch`). A row the labeller adds has none.
+ *
  * Sides are 'p1'/'p2', p1 = matches.player1_id, exactly as the transcript's
  * `is_player1` / `server_is_player1` / `won_by_player1` already mean.
  * Coordinates are copied from the transcript unchanged: they are already in
@@ -46,6 +50,37 @@ export type LabelStroke =
 /** `label_shots.result`. */
 export type LabelShotResult = "in" | "out" | "net";
 
+/** `label_points.serve_side`. Never seeded — the labeller sets it. */
+export type LabelServeSide = "deuce" | "ad";
+
+/**
+ * `label_shots.seed`: a shot's value fields exactly as the seed wrote them,
+ * frozen, so the console can tell an edit set back from a real change and
+ * reset an edited shot (supabase/migrations/20260928190425_label_rows_seed.sql).
+ * `unclear` is not a value and is not in it.
+ */
+export interface LabelShotSeedValues {
+  hitter: LabelSide | null;
+  stroke: LabelStroke | null;
+  result: LabelShotResult | null;
+  contact_x: number | null;
+  contact_y: number | null;
+  landing_x: number | null;
+  landing_y: number | null;
+  video_time: number | null;
+}
+
+/** `label_points.seed`: the point's own labelled fields, as seeded. */
+export interface LabelPointSeedValues {
+  set_number: number | null;
+  game_number: number | null;
+  server: LabelSide | null;
+  serve_side: LabelServeSide | null;
+  winner: LabelSide | null;
+  ending: LabelEnding | null;
+  ended_by: LabelSide | null;
+}
+
 /** One `label_shots` row before it has a session or a point id. */
 export interface LabelShotSeed {
   event_id: number;
@@ -61,6 +96,8 @@ export interface LabelShotSeed {
   landing_y: number | null;
   video_time: number | null;
   unclear: string[];
+  /** The eight value fields above, frozen — what Reset writes back. */
+  seed: LabelShotSeedValues;
 }
 
 /** One `label_points` row before it has a session id, plus its strokes. */
@@ -76,6 +113,8 @@ export interface LabelPointSeed {
   /** Who struck the last ball; null when no stroke carries a result. */
   ended_by: LabelSide | null;
   status: "unchanged";
+  /** The point's fields above (serve_side null), frozen for Reset. */
+  seed: LabelPointSeedValues;
   /** In video order. Not a column — seed-session.ts attaches the point id. */
   shots: LabelShotSeed[];
 }
@@ -218,10 +257,7 @@ export function buildLabelSeed(
           `results file has no stroke with event_id ${shot.event_id}`,
         );
       }
-      return {
-        event_id: shot.event_id,
-        vendor,
-        status: "kept",
+      const values = {
         hitter: side(shot.is_player1),
         stroke: labelStroke(shot.shot_type, vendor.stroke_side),
         result: labelShotResult(shot.result),
@@ -230,20 +266,33 @@ export function buildLabelSeed(
         landing_x: shot.landing_x,
         landing_y: shot.landing_y,
         video_time: shot.video_time,
+      };
+      return {
+        event_id: shot.event_id,
+        vendor,
+        status: "kept",
+        ...values,
         unclear: [],
+        seed: { ...values },
       };
     });
 
-    return {
-      point_index: index,
-      vendor_rally_ids: [point.rally_id],
+    const row = {
       set_number: point.set_number,
       game_number: point.game_number,
       server: side(point.server_is_player1),
       winner: resolved.get(point.rally_id) ? side(point.won_by_player1) : null,
       ending: labelEnding(point.result_type),
       ended_by: endedBy(ordered),
+    };
+    return {
+      point_index: index,
+      vendor_rally_ids: [point.rally_id],
+      ...row,
       status: "unchanged",
+      // serve_side is never seeded (the column stays null), but the frozen
+      // seed names it so Reset clears a serve side the labeller set.
+      seed: { ...row, serve_side: null },
       shots,
     };
   });

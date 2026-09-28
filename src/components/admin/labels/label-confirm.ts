@@ -7,9 +7,9 @@ import type { SideNames } from "./label-format";
  * says. Pure, so a spec can hold the copy without mounting Radix (whose
  * portal renders nothing under `renderToStaticMarkup`).
  *
- * Nothing is written while a confirm is open. The ✕ on a row and a move into
- * a game someone else serves only ever OPEN one of these; the write happens
- * on the dialog's action, and Cancel leaves every row as it was.
+ * Nothing is written while a confirm is open. The ✕ on a row, a row's Reset
+ * and a move into a game someone else serves only ever OPEN one of these; the
+ * write happens on the dialog's action, and Cancel leaves every row as it was.
  */
 export type LabelConfirm =
   | {
@@ -33,6 +33,18 @@ export type LabelConfirm =
       to: LabelGame;
       /** The destination game's server — who the point's server becomes. */
       server: LabelSide;
+    }
+  | {
+      kind: "reset-shot";
+      shotId: string;
+      /** As the table numbers it: live strokes, 1…n. */
+      shotNumber: number;
+      pointNumber: number;
+    }
+  | {
+      kind: "reset-point";
+      pointId: string;
+      pointNumber: number;
     };
 
 export interface LabelConfirmCopy {
@@ -77,5 +89,22 @@ export function labelConfirmCopy(
         tone: "primary",
       };
     }
+    case "reset-shot":
+      return {
+        title: `Reset shot ${confirm.shotNumber} to its original values?`,
+        description: `Your changes to this shot in point ${confirm.pointNumber} are replaced by the values it was seeded with. Any field marked unclear stays marked.`,
+        confirmLabel: "Reset",
+        pendingLabel: "Resetting…",
+        tone: "primary",
+      };
+    case "reset-point":
+      return {
+        title: `Reset point ${confirm.pointNumber} to its original values?`,
+        description:
+          "Your changes to this point — its game, server, serve side, winner, ending and who ended it — are replaced by the values it was seeded with. Its shots, note and checked mark stay as they are.",
+        confirmLabel: "Reset",
+        pendingLabel: "Resetting…",
+        tone: "primary",
+      };
   }
 }

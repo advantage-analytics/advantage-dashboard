@@ -36,6 +36,7 @@ import {
   type LabelPointPatch,
   type LabelShotPatch,
 } from "@/lib/services/labels/edit";
+import { canResetPoint, canResetShot } from "@/lib/services/labels/reset";
 import {
   EditableCell,
   SelectEditor,
@@ -80,7 +81,11 @@ import {
  *   · the set · game cell opens a menu of the games either side, to move the
  *     point (the console asks "switch players?" when someone else serves it);
  *   · the open point's footer marks it checked (and Undo clears that), and
- *     adds a stroke after the selected one, or at the end of the rally.
+ *     adds a stroke after the selected one, or at the end of the rally;
+ *   · Reset, on an edited stroke (beside its Edited pill) or an edited point
+ *     (in the gap before its labelled columns) that has a stored seed, asks
+ *     to put the row back to the values it was seeded with — revealed like
+ *     the ✕, and it too only opens the console's confirm.
  *
  * A tombstone is not drawn as a row at all. A deleted point or shot is a thin
  * red rule with a "Deleted point" / "Deleted shot" pill on it — present, so
@@ -138,7 +143,7 @@ export function LabelPointsTable({
   return (
     <TooltipProvider>
       <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-        <div className="min-w-[900px] px-6 pt-0.5 pb-1.5">
+        <div className="min-w-[940px] px-6 pt-0.5 pb-1.5">
           <div
             className={cn(
               POINT_GRID,
@@ -205,6 +210,12 @@ export interface LabelRowOperations {
   onSetChecked: (pointId: string, checked: boolean) => void;
   /** After `afterShotId`, or at the end of the rally when null. */
   onAddShot: (pointId: string, afterShotId: string | null) => void;
+  onAskResetShot: (
+    shotId: string,
+    shotNumber: number,
+    pointNumber: number,
+  ) => void;
+  onAskResetPoint: (pointId: string) => void;
 }
 
 /** What every row needs to draw and save its editors. */
@@ -326,7 +337,17 @@ function PointRow({
         )}
         <Calculated>{sideLabel(point.server, names)}</Calculated>
         <Calculated>{liveShots.length}</Calculated>
-        <span aria-hidden="true" />
+        {operations && canResetPoint(point) ? (
+          <span className="flex min-w-0 justify-end">
+            <ResetRowButton
+              label={`Reset point ${number}`}
+              revealed={open}
+              onClick={() => operations.onAskResetPoint(point.id)}
+            />
+          </span>
+        ) : (
+          <span aria-hidden="true" />
+        )}
 
         <PointSelectCell
           point={point}
@@ -546,6 +567,15 @@ function ShotRow({
           <StatePill>Added</StatePill>
         ) : shot.status === "edited" ? (
           <StatePill>Edited</StatePill>
+        ) : null}
+        {operations && canResetShot(shot) ? (
+          <ResetRowButton
+            label={`Reset shot ${number}`}
+            revealed={selected}
+            onClick={() =>
+              operations.onAskResetShot(shot.id, number, pointNumber)
+            }
+          />
         ) : null}
         {operations ? (
           <DeleteRowButton
@@ -768,6 +798,40 @@ function UndoButton({
       )}
     >
       Undo
+    </button>
+  );
+}
+
+/**
+ * Reset, as a row action: board 08's `.card-link` blue words (like Undo), at
+ * 12px. Revealed like the ✕ — on the row's hover, on focus, and on the open
+ * point or selected stroke — 200ms. It only ASKS: the console opens the
+ * confirm, and nothing is written from here.
+ */
+function ResetRowButton({
+  label,
+  onClick,
+  revealed = false,
+}: {
+  label: string;
+  onClick: () => void;
+  revealed?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      data-reset-row=""
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        "shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-[opacity,color] duration-200 group-hover/row:opacity-100 hover:text-[var(--blue-hover)] focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        revealed ? "opacity-100" : "opacity-0",
+      )}
+    >
+      Reset
     </button>
   );
 }

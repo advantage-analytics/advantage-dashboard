@@ -39,9 +39,12 @@ import {
   planShotRestore,
   type LabelGame,
 } from "./operations";
+import { parseLabelPointSeed, parseLabelShotSeed } from "./edit";
 import {
   orderLabelShots,
+  type LabelEnding,
   type LabelPointStatus,
+  type LabelServeSide,
   type LabelShot,
   type LabelShotResult,
   type LabelShotStatus,
@@ -69,7 +72,7 @@ export type LabelCheckedResult = LabelOpResult<{ checkedAt: string | null }>;
 
 const RACED = "This row changed in another tab. Reload to see it.";
 
-function normaliseId(id: unknown): string | null {
+export function normaliseId(id: unknown): string | null {
   if (typeof id !== "string") return null;
   const lower = id.toLowerCase();
   return UUID_RE.test(lower) ? lower : null;
@@ -80,7 +83,7 @@ function message(err: unknown): string {
 }
 
 /** The gate every entry point shares: admin first, then the work. */
-async function gated<T extends object>(
+export async function gated<T extends object>(
   deps: LabelWriteDependencies,
   work: (supabase: AdminClient) => Promise<LabelOpResult<T>>,
   what: string,
@@ -99,7 +102,7 @@ async function gated<T extends object>(
  * UPDATE one row, but only while it still has the status it was read with.
  * Returns an error sentence, or null when exactly that row was written.
  */
-async function updateIfUnchanged(
+export async function updateIfUnchanged(
   supabase: AdminClient,
   table: "label_points" | "label_shots",
   id: string,
@@ -209,10 +212,11 @@ interface ShotRow {
   landing_x: number | null;
   landing_y: number | null;
   video_time: number | null;
+  seed: unknown;
 }
 
 const SHOT_COLUMNS =
-  "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, contact_x, contact_y, landing_x, landing_y, video_time";
+  "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, contact_x, contact_y, landing_x, landing_y, video_time, seed";
 
 function toLabelShot(row: ShotRow): LabelShot {
   return {
@@ -231,6 +235,8 @@ function toLabelShot(row: ShotRow): LabelShot {
     landingX: row.landing_x,
     landingY: row.landing_y,
     videoTime: row.video_time,
+    // An inserted stroke comes back without one (`seed` is null on it).
+    seed: parseLabelShotSeed(row.seed ?? null),
   };
 }
 
@@ -298,6 +304,11 @@ interface PointStateRow {
   server: LabelSide | null;
   set_number: number | null;
   game_number: number | null;
+  serve_side: LabelServeSide | null;
+  winner: LabelSide | null;
+  ending: LabelEnding | null;
+  ended_by: LabelSide | null;
+  seed: unknown;
 }
 
 async function readPointState(
@@ -307,7 +318,7 @@ async function readPointState(
   const { data, error } = await supabase
     .from("label_points")
     .select(
-      "id, session_id, status, status_before_delete, server, set_number, game_number",
+      "id, session_id, status, status_before_delete, server, set_number, game_number, serve_side, winner, ending, ended_by, seed",
     )
     .eq("id", pointId)
     .maybeSingle<PointStateRow>();
@@ -416,6 +427,11 @@ export async function writeLabelPointMove(params: {
       server: read.row.server,
       setNumber: read.row.set_number,
       gameNumber: read.row.game_number,
+      serveSide: read.row.serve_side,
+      winner: read.row.winner,
+      ending: read.row.ending,
+      endedBy: read.row.ended_by,
+      seed: parseLabelPointSeed(read.row.seed ?? null),
     },
     to,
     destination,

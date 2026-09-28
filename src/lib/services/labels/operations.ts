@@ -21,6 +21,7 @@ import type {
   LabelShotStatus,
   LabelSide,
 } from "./session";
+import { labelPointFields, labelPointStatusAfterChange } from "./edit";
 
 // ── Delete and Undo ─────────────────────────────────────────────────────────
 
@@ -366,10 +367,13 @@ export interface PointMoveWrite {
  * move (or a move into a game nobody else is in yet) needs no question and
  * leaves `server` alone.
  *
- * Moving is a labelled change: an `unchanged` point becomes `edited`.
+ * Moving is a labelled change, and its status comes from the same rule as an
+ * edit (edit.ts `labelPointStatusAfterChange`): measured against the point's
+ * seed, so a point moved away is `edited` and one moved back into its seeded
+ * game (with its seeded server) is `unchanged` again.
  */
 export function planPointMove(
-  point: Pick<LabelPoint, "status" | "server" | "setNumber" | "gameNumber">,
+  point: MovablePoint,
   to: LabelGame,
   destinationServer: LabelSide | null,
   switchServer: boolean,
@@ -383,22 +387,46 @@ export function planPointMove(
   if (point.setNumber === to.setNumber && point.gameNumber === to.gameNumber) {
     return { error: "The point is already in that game." };
   }
+  const switches =
+    destinationServer !== null && destinationServer !== point.server;
+  if (switches && !switchServer) {
+    return {
+      error:
+        "Someone else serves that game. Confirm switching the server to move this point there.",
+    };
+  }
+  const change = {
+    set_number: to.setNumber,
+    game_number: to.gameNumber,
+    ...(switches ? { server: destinationServer } : {}),
+  };
+  const status = labelPointStatusAfterChange(
+    { ...labelPointFields(point), status: point.status, seed: point.seed },
+    change,
+  );
+  // `status` can only be live here: a tombstone was refused above.
   const write: PointMoveWrite = {
     set_number: to.setNumber,
     game_number: to.gameNumber,
-    status: point.status === "unchanged" ? "edited" : point.status,
+    status: status as LivePointStatus,
   };
-  if (destinationServer !== null && destinationServer !== point.server) {
-    if (!switchServer) {
-      return {
-        error:
-          "Someone else serves that game. Confirm switching the server to move this point there.",
-      };
-    }
-    write.server = destinationServer;
-  }
+  if (switches) write.server = destinationServer;
   return { ok: true, write };
 }
+
+/** What a move reads of a point: where it is, its fields, status and seed. */
+export type MovablePoint = Pick<
+  LabelPoint,
+  | "status"
+  | "server"
+  | "setNumber"
+  | "gameNumber"
+  | "serveSide"
+  | "winner"
+  | "ending"
+  | "endedBy"
+  | "seed"
+>;
 
 /** Whether moving `point` to `to` would change its server — the dialog's cue. */
 export function moveNeedsServerSwitch(

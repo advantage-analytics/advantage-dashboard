@@ -123,6 +123,36 @@ test.describe("buildLabelSeed", () => {
     }
   });
 
+  test("every row freezes its own values as its seed", () => {
+    for (const point of seed.points) {
+      expect(point.seed).toEqual({
+        set_number: point.set_number,
+        game_number: point.game_number,
+        server: point.server,
+        serve_side: null,
+        winner: point.winner,
+        ending: point.ending,
+        ended_by: point.ended_by,
+      });
+      // serve_side is a seed key only, never a seeded column.
+      expect("serve_side" in point).toBe(false);
+      for (const shot of point.shots) {
+        expect(shot.seed).toEqual({
+          hitter: shot.hitter,
+          stroke: shot.stroke,
+          result: shot.result,
+          contact_x: shot.contact_x,
+          contact_y: shot.contact_y,
+          landing_x: shot.landing_x,
+          landing_y: shot.landing_y,
+          video_time: shot.video_time,
+        });
+        // A copy, not the row: nothing that edits one reaches the other.
+        expect(shot.seed).not.toBe(shot);
+      }
+    }
+  });
+
   test("shots are in video order within a point", () => {
     for (const point of seed.points) {
       const times = point.shots.map((s) => s.video_time ?? Infinity);
@@ -437,6 +467,21 @@ test.describe("seedLabelSessionForJob", () => {
     );
     expect(shots.map((s) => [s.event_id, s.label_point_id])).toEqual(expected);
     expect(shots.every((s) => s.session_id === "new-session")).toBe(true);
+
+    // Every inserted row carries its seed (the migration's `seed` jsonb).
+    expect(points.map((p) => p.seed)).toEqual(seed.points.map((p) => p.seed));
+    for (const shot of shots) {
+      expect(shot.seed).toEqual({
+        hitter: shot.hitter,
+        stroke: shot.stroke,
+        result: shot.result,
+        contact_x: shot.contact_x,
+        contact_y: shot.contact_y,
+        landing_x: shot.landing_x,
+        landing_y: shot.landing_y,
+        video_time: shot.video_time,
+      });
+    }
   });
 
   test("an open session is returned without re-seeding", async () => {

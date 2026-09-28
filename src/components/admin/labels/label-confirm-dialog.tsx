@@ -13,8 +13,9 @@ import { DELETE_REASON_LABEL, type SideNames } from "./label-format";
 
 /**
  * The console's one confirm, drawn by the product's `ConfirmDialog`: delete a
- * stroke (with the reason the table requires), delete a point, or move a
- * point into a game someone else serves.
+ * stroke (with the reason the table requires), delete a point, move a point
+ * into a game someone else serves, or reset an edited stroke or point to its
+ * seed.
  *
  * The action does not wait on the server: the console applies the change to
  * its rows at once and reports the write on the header's save line, putting

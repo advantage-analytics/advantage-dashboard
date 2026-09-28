@@ -6,8 +6,9 @@
  * admin session, validates the patch whole against edit.ts's allowlist and
  * vocabularies before anything is read, refuses a row in a `complete` session
  * (the run is frozen for scoring) or a tombstone (T7 restores those), and
- * writes the patch together with the status it implies — computed by the same
- * pure rule the console used for its optimistic update.
+ * writes the patch together with the status it implies — measured against the
+ * row's frozen `seed` by the same pure rule the console used for its
+ * optimistic update.
  *
  * Runs on the service-role client, like seed-session.ts and the loader behind
  * the page (`getLabelSession`), with `requireAdmin` as the gate.
@@ -19,13 +20,15 @@ import { requireAdmin } from "@/lib/services/programs/admin-guard";
 import { UUID_RE } from "@/lib/admin/validation";
 import type { LabelPointStatus, LabelShotStatus } from "./session";
 import {
-  LABEL_POINT_VALUE_FIELDS,
+  LABEL_POINT_SEED_FIELDS,
   LABEL_SHOT_VALUE_FIELDS,
   labelPointStatusAfterPatch,
   labelShotStatusAfterPatch,
   parseLabelPointPatch,
+  parseLabelPointSeed,
   parseLabelShotPatch,
-  type LabelPointValues,
+  parseLabelShotSeed,
+  type LabelPointFields,
   type LabelShotValues,
 } from "./edit";
 
@@ -70,6 +73,8 @@ type ShotRow = LabelShotValues & {
   id: string;
   session_id: string;
   status: LabelShotStatus;
+  /** Raw jsonb — parsed before the status rule trusts it. */
+  seed: unknown;
 };
 
 /** Validate, then write `patch` and its status to one shot. Never throws. */
@@ -89,7 +94,9 @@ export async function writeLabelShotEdit(params: {
   try {
     const { data: row, error } = await supabase
       .from("label_shots")
-      .select(`id, session_id, status, ${LABEL_SHOT_VALUE_FIELDS.join(", ")}`)
+      .select(
+        `id, session_id, status, seed, ${LABEL_SHOT_VALUE_FIELDS.join(", ")}`,
+      )
       .eq("id", shotId)
       .maybeSingle<ShotRow>();
     if (error) return { error: `Could not read the shot: ${error.message}` };
@@ -100,7 +107,10 @@ export async function writeLabelShotEdit(params: {
     const closed = await checkSessionOpen(supabase, row.session_id);
     if (closed) return { error: closed };
 
-    const status = labelShotStatusAfterPatch(row, patch);
+    const status = labelShotStatusAfterPatch(
+      { ...row, seed: parseLabelShotSeed(row.seed) },
+      patch,
+    );
     const { error: writeError } = await supabase
       .from("label_shots")
       .update({ ...patch, status })
@@ -116,10 +126,12 @@ export async function writeLabelShotEdit(params: {
   }
 }
 
-type PointRow = LabelPointValues & {
+type PointRow = LabelPointFields & {
   id: string;
   session_id: string;
   status: LabelPointStatus;
+  /** Raw jsonb — parsed before the status rule trusts it. */
+  seed: unknown;
 };
 
 /** Validate, then write `patch` and its status to one point. Never throws. */
@@ -139,7 +151,9 @@ export async function writeLabelPointEdit(params: {
   try {
     const { data: row, error } = await supabase
       .from("label_points")
-      .select(`id, session_id, status, ${LABEL_POINT_VALUE_FIELDS.join(", ")}`)
+      .select(
+        `id, session_id, status, seed, ${LABEL_POINT_SEED_FIELDS.join(", ")}`,
+      )
       .eq("id", pointId)
       .maybeSingle<PointRow>();
     if (error) return { error: `Could not read the point: ${error.message}` };
@@ -150,7 +164,10 @@ export async function writeLabelPointEdit(params: {
     const closed = await checkSessionOpen(supabase, row.session_id);
     if (closed) return { error: closed };
 
-    const status = labelPointStatusAfterPatch(row, patch);
+    const status = labelPointStatusAfterPatch(
+      { ...row, seed: parseLabelPointSeed(row.seed) },
+      patch,
+    );
     const { error: writeError } = await supabase
       .from("label_points")
       .update({ ...patch, status })

@@ -36,6 +36,10 @@ import {
   type LabelStroke,
   type LabelVideo,
 } from "@/lib/services/labels/session";
+import {
+  parseLabelPointSeed,
+  parseLabelShotSeed,
+} from "@/lib/services/labels/edit";
 
 /** One completed job an admin could start or continue labelling. */
 export interface LabelJobRow {
@@ -297,6 +301,8 @@ interface DbPointRow {
   status: LabelPointStatus;
   status_before_delete: Exclude<LabelPointStatus, "deleted"> | null;
   checked_at: string | null;
+  /** jsonb, parsed by `parseLabelPointSeed` before anything trusts it. */
+  seed?: unknown;
 }
 interface DbShotRow {
   id: string;
@@ -314,6 +320,8 @@ interface DbShotRow {
   landing_x: number | null;
   landing_y: number | null;
   video_time: number | null;
+  /** jsonb, parsed by `parseLabelShotSeed` before anything trusts it. */
+  seed?: unknown;
 }
 
 const UUID_RE =
@@ -365,7 +373,7 @@ export async function getLabelSession(
       db
         .from("label_points")
         .select(
-          "id, point_index, set_number, game_number, server, serve_side, winner, ending, ended_by, status, status_before_delete, checked_at",
+          "id, point_index, set_number, game_number, server, serve_side, winner, ending, ended_by, status, status_before_delete, checked_at, seed",
         )
         .eq("session_id", session.id)
         .order("point_index")
@@ -376,7 +384,7 @@ export async function getLabelSession(
       db
         .from("label_shots")
         .select(
-          "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, contact_x, contact_y, landing_x, landing_y, video_time",
+          "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, contact_x, contact_y, landing_x, landing_y, video_time, seed",
         )
         .eq("session_id", session.id)
         .order("id"),
@@ -436,6 +444,7 @@ export function buildLabelSession(
       landingX: row.landing_x,
       landingY: row.landing_y,
       videoTime: row.video_time,
+      seed: parseLabelShotSeed(row.seed ?? null),
     });
     shotsByPoint.set(row.label_point_id, list);
   }
@@ -455,6 +464,7 @@ export function buildLabelSession(
       status: row.status,
       statusBeforeDelete: row.status_before_delete ?? null,
       checkedAt: row.checked_at,
+      seed: parseLabelPointSeed(row.seed ?? null),
       shots: orderLabelShots(shotsByPoint.get(row.id) ?? []),
     }));
 

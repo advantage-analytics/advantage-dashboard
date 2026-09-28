@@ -15,16 +15,26 @@
 
 import type {
   LabelEnding,
+  LabelPointSeedValues,
+  LabelServeSide,
   LabelShotResult,
+  LabelShotSeedValues,
   LabelSide,
   LabelStroke,
 } from "./seed";
 
-export type { LabelEnding, LabelShotResult, LabelSide, LabelStroke };
+export type {
+  LabelEnding,
+  LabelPointSeedValues,
+  LabelServeSide,
+  LabelShotResult,
+  LabelShotSeedValues,
+  LabelSide,
+  LabelStroke,
+};
 
 export type LabelPointStatus = "unchanged" | "edited" | "added" | "deleted";
 export type LabelShotStatus = "kept" | "edited" | "added" | "deleted";
-export type LabelServeSide = "deuce" | "ad";
 
 /** One `label_shots` row. Coordinates are metres, near baseline at y = 0. */
 export interface LabelShot {
@@ -47,6 +57,12 @@ export interface LabelShot {
   landingY: number | null;
   /** Seconds on the analysis clock — the same clock as `shots.video_time`. */
   videoTime: number | null;
+  /**
+   * The value fields as the seed wrote them — what Reset restores and what
+   * `kept` is measured against. Null for an added stroke, and for a vendor
+   * stroke seeded before the column existed and not yet backfilled.
+   */
+  seed: LabelShotSeedValues | null;
 }
 
 /** One `label_points` row with its strokes, already in video order. */
@@ -64,6 +80,12 @@ export interface LabelPoint {
   /** A tombstone's status before it was deleted — what Undo restores. */
   statusBeforeDelete: Exclude<LabelPointStatus, "deleted"> | null;
   checkedAt: string | null;
+  /**
+   * The point's own fields as seeded (set, game, server, serve side, won by,
+   * ending, ended by) — what Reset restores and what `unchanged` is measured
+   * against. Null for an added point, or one not yet backfilled.
+   */
+  seed: LabelPointSeedValues | null;
   shots: LabelShot[];
 }
 
