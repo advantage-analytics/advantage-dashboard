@@ -45,9 +45,8 @@ import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { EmptyMark } from "@/components/ui/empty-mark";
-import { PersonAvatar } from "@/components/ui/person-avatar";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { StatusChip } from "@/components/ui/status-chip";
-import { getInitials } from "@/lib/data/match-utils";
 import { scoreSetsFrom } from "@/lib/ui/score-format";
 import { advButton } from "@/lib/ui/adv-button";
 import {
@@ -67,7 +66,11 @@ import {
   siteTitle,
   surfaceTitle,
 } from "@/lib/schedule/format";
-import { nextRound, runFinish, runRecord } from "@/lib/schedule/tournament-run";
+import {
+  compareTournamentRows,
+  nextRound,
+  runRecord,
+} from "@/lib/schedule/tournament-run";
 import type { EventTeamTotals } from "@/lib/data/event-team-totals";
 import type {
   EntryMatch,
@@ -77,29 +80,28 @@ import type {
 } from "@/lib/schedule/types";
 
 /**
- * Date · Round · Opponent · Result · Score · Analysis
- * (`TournamentDrawer.dc.html`). No Player column: the entry's group head
- * names who played every row under it.
+ * Date · Player · Draw · Round · Opponent · Result · Score · Analysis — the
+ * team Matches list's grammar (`tables.md` law 1) with Event dropped (every
+ * row is this event) and Draw + Round in its place, Analysis trailing.
  *
- * **Spatial thesis.** A coach reads this table down, a run at a time: the
- * entry's head names the player, then each round answers "when, which round,
- * against whom, how did it go". Date leads and the outcome sits in fixed
- * tracks so the eye drops straight down one x per fact; the two text columns
- * take the slack. It is the Matches table's grammar with Round in Player's
- * place, so the tracks it shares are that table's, not look-alikes:
+ * **Spatial thesis.** One row per match, newest-played last, read down the
+ * weekend: Date leads, then who played, which draw and round, against whom,
+ * and how it went. There is no per-entry head — a player's record and how
+ * their run ended live in the drawer's run summary and the strip. The tracks
+ * this table shares with Matches are that table's, not look-alikes:
  *
- * - **Date** — `DATE_COL`, 72px: `tables.md` rule 1, "Date leads … 72px".
- *   The narrower track it had was a near-miss that put this table's first
- *   column a different width from every other list in the product.
+ * - **Date** — `DATE_COL`, 72px: law 1, "Date leads … 72px".
+ * - **Player** — `minmax(150px,1fr)`: the name at 13/500 ink-900 beside its
+ *   26px initials mark (law 1) — two marks and "A / B" for a doubles team.
+ * - **Draw** — 104px: context at 12px ink-600, sized to its widest word,
+ *   "PQ Consolation" (~88px at 12px), so no draw name ever truncates.
  * - **Round** — 48px: sized to its heading, not its cell. "ROUND" in the 9px
- *   eyebrow with 2.5px tracking is ~46px and clipped at the 40px it had; the
- *   widest code (`R128`, 11px mono) is ~27px, so the heading sets the floor.
- * - **Opponent** — `minmax(150px,1fr)`: a name, truncating, sharing spare
- *   width with Analysis as the Matches team grid's text columns do
- *   (d233f439).
- * - **Result** — `RESULT_COL`, 60px: sized to its widest content, the
- *   "RESULT" heading, which the narrower track it had clipped (`tables.md`
- *   rule 1). The glyph and `EmptyMark`'s dash start at one x inside it.
+ *   eyebrow with 2.5px tracking is ~46px; the widest code (`R128`, 11px
+ *   mono) is ~27px, so the heading sets the floor.
+ * - **Opponent** — `minmax(150px,1fr)`: 13/400 ink-700, truncating, sharing
+ *   spare width with Player and Analysis as the Matches team grid does.
+ * - **Result** — `RESULT_COL`, 60px: sized to the "RESULT" heading. The glyph
+ *   and `EmptyMark`'s dash start at one x inside it.
  * - **Score** — 140px: wider than Matches' 116px because a tournament cell
  *   also carries the ending ("ret.") or a `StatusChip` ("Withdrawn") where
  *   a round was not played.
@@ -109,17 +111,28 @@ import type {
  * card scrolls sideways (`TABLE_MIN_WIDTH`) instead of crushing a track, so
  * no heading clips and the Score column keeps one x in both states.
  */
+const PLAYER_MIN = "150px";
+const DRAW_COL = "104px";
 const ROUND_COL = "48px";
 const SCORE_COL = "140px";
 const OPPONENT_MIN = "150px";
 const ANALYSIS_MIN = "96px";
-const TRACKS = `${DATE_COL} ${ROUND_COL} minmax(${OPPONENT_MIN},1fr) ${RESULT_COL} ${SCORE_COL} minmax(${ANALYSIS_MIN},1fr)`;
-/** Six tracks' minimums plus five 16px gaps (`gap-x-4`): 646px. */
+const TRACKS = `${DATE_COL} minmax(${PLAYER_MIN},1fr) ${DRAW_COL} ${ROUND_COL} minmax(${OPPONENT_MIN},1fr) ${RESULT_COL} ${SCORE_COL} minmax(${ANALYSIS_MIN},1fr)`;
+/** Eight tracks' minimums plus seven 16px gaps (`gap-x-4`): 932px. */
 const TABLE_MIN_PX =
-  [DATE_COL, ROUND_COL, OPPONENT_MIN, RESULT_COL, SCORE_COL, ANALYSIS_MIN]
+  [
+    DATE_COL,
+    PLAYER_MIN,
+    DRAW_COL,
+    ROUND_COL,
+    OPPONENT_MIN,
+    RESULT_COL,
+    SCORE_COL,
+    ANALYSIS_MIN,
+  ]
     .map((track) => parseInt(track, 10))
     .reduce((sum, px) => sum + px, 0) +
-  5 * 16;
+  7 * 16;
 /** The header and every row read their tracks from this one custom property. */
 const GRID = "grid-cols-(--tournament-tracks)";
 const TABLE_MIN_WIDTH = "min-w-(--tournament-min-width)";
@@ -129,6 +142,8 @@ const TABLE_VARS = {
 } as React.CSSProperties;
 const COLUMNS = [
   "Date",
+  "Player",
+  "Draw",
   "Round",
   "Opponent",
   "Result",
@@ -145,9 +160,9 @@ const PILLS: readonly ToolbarOption<Pill>[] = [
 ];
 
 type ResultCut = "won" | "lost";
-type Sort = "round" | "player";
+type Sort = "date" | "player";
 const SORTS: readonly ToolbarOption<Sort>[] = [
-  { value: "round", label: "Round order" },
+  { value: "date", label: "Date" },
   { value: "player", label: "Player" },
 ];
 
@@ -171,15 +186,15 @@ export interface TournamentRow {
 /**
  * A tournament's event page: the header (name, one subline of facts, Edit
  * tournament + Add result), a four-cell summary strip, and every entry's run
- * as a table grouped by entry.
+ * as one flat table of match rows, oldest played first (`compareTournamentRows`).
  *
  * Rows peek, never navigate: a click selects the round (`aria-current`,
  * `?match=<id>`, see `TournamentRow.id`) and opens `EventLineDrawer` beside
  * the table as "Match n / N", with the player's run as its context list. The
  * per-round and per-entry actions live in that drawer: Edit result on an
  * outcome-only round, View match, Add video, and the entry's next-round Add
- * result. An entry with nothing played has no row to open, so its group head
- * carries its own "Add first result" for a coach.
+ * result. An entry with nothing played contributes no row; the header's
+ * "Add result" opens the score flow on the first entry still waiting.
  *
  * ── Why there is no team result on this page ───────────────────────────────
  * A dual is over when every line is in and the page can check that. A
@@ -211,7 +226,7 @@ export function TournamentDetail({
 
   const [pill, setPill] = useState<Pill>("all");
   const [resultCut, setResultCut] = useState<ResultCut | null>(null);
-  const [sort, setSort] = useState<Sort>("round");
+  const [sort, setSort] = useState<Sort>("date");
 
   const runs = useMemo(
     () => entries.map((entry) => ({ entry, rows: tournamentRows(entry) })),
@@ -220,28 +235,25 @@ export function TournamentDetail({
   const allRows = useMemo(() => runs.flatMap((run) => run.rows), [runs]);
   const cut = pill !== "all" || resultCut !== null;
 
-  // The toolbar's cut: pill, then the Result filter, then the entry order.
-  // An entry the cut leaves empty drops out; with no cut every entry shows,
-  // an entry with no results as its head alone.
+  // The toolbar's cut: pill, then the Result filter, then the sort. With no
+  // cut every row shows; an entry with nothing played has no row at all.
   const visible = useMemo(() => {
-    const keep = (row: TournamentRow) =>
-      pillKeeps(pill, row) && (resultCut === null || rowCut(row) === resultCut);
-    const groups = runs
-      .map((run) => ({ entry: run.entry, rows: run.rows.filter(keep) }))
-      .filter((run) => !cut || run.rows.length > 0);
-    return sort === "round"
-      ? groups
-      : [...groups].sort((a, b) =>
-          entryLabel(a.entry).localeCompare(entryLabel(b.entry), undefined, {
-            sensitivity: "base",
-          }),
+    const rows = allRows.filter(
+      (row) =>
+        pillKeeps(pill, row) &&
+        (resultCut === null || rowCut(row) === resultCut),
+    );
+    return sort === "date"
+      ? rows.sort(compareTournamentRows)
+      : rows.sort(
+          (a, b) =>
+            entryLabel(a.entry).localeCompare(entryLabel(b.entry), undefined, {
+              sensitivity: "base",
+            }) || compareTournamentRows(a, b),
         );
-  }, [runs, pill, resultCut, sort, cut]);
+  }, [allRows, pill, resultCut, sort]);
 
-  const visibleIds = useMemo(
-    () => visible.flatMap((run) => run.rows.map((row) => row.id)),
-    [visible],
-  );
+  const visibleIds = useMemo(() => visible.map((row) => row.id), [visible]);
   const selection = useRowSelection({
     ids: visibleIds,
     initialId: initialMatchId,
@@ -459,8 +471,6 @@ export function TournamentDetail({
             grid={GRID}
             columns={COLUMNS}
             minWidth={TABLE_MIN_WIDTH}
-            // Group heads count: an entry with no results still draws its head
-            // and "No matches yet", so the card is not empty.
             rowCount={visible.length}
             empty={
               entries.length === 0 ? (
@@ -468,6 +478,11 @@ export function TournamentDetail({
                   icon={Trophy}
                   title="No entries on this tournament"
                 />
+              ) : !cut ? (
+                // Entries, but nothing played or decided yet: there is no cut
+                // to lift, so no "Show all" — the header's Add result is the
+                // way forward.
+                <TableEmptyBody icon={Trophy} title="No results yet" />
               ) : (
                 <TableEmptyBody
                   icon={Trophy}
@@ -483,23 +498,14 @@ export function TournamentDetail({
               )
             }
           >
-            {visible.map((run, index) => (
-              <Fragment key={run.entry.id}>
-                <EntryHead
-                  entry={run.entry}
-                  rosterPlayerIds={rosterPlayerIds}
-                  first={index === 0}
-                  canEdit={canEdit}
-                />
-                {run.rows.map((row) => (
-                  <MatchTableRow
-                    key={row.id}
-                    row={row}
-                    selected={selection.selectedId === row.id}
-                    onToggle={selection.toggle}
-                  />
-                ))}
-              </Fragment>
+            {visible.map((row) => (
+              <MatchTableRow
+                key={row.id}
+                row={row}
+                rosterPlayerIds={rosterPlayerIds}
+                selected={selection.selectedId === row.id}
+                onToggle={selection.toggle}
+              />
             ))}
           </EventTable>
         </div>
@@ -560,127 +566,17 @@ export function TournamentDetail({
   );
 }
 
-/* ── Group head ─────────────────────────────────────────────────────────── */
-
-/**
- * One entry above its rows: avatar, name, draw words, and on the right the
- * run's record and how it ended — or "No matches yet". The first sits 14px
- * under the header rule, later ones 24px under the row above.
- */
-function EntryHead({
-  entry,
-  rosterPlayerIds,
-  first,
-  canEdit,
-}: {
-  entry: EventEntry;
-  rosterPlayerIds: Record<string, string>;
-  first: boolean;
-  canEdit: boolean;
-}) {
-  const record = runRecord(entry.matches);
-  const finish = runFinish(entry);
-
-  return (
-    <div
-      className={`flex items-center gap-2.5 pb-1.5 ${first ? "pt-3.5" : "pt-6"}`}
-    >
-      {entry.playerLabels.length > 0 ? (
-        <span className="flex shrink-0 gap-0.5">
-          {entry.playerLabels.map((name, index) => (
-            <PersonAvatar
-              key={`${name}-${index}`}
-              initials={getInitials(name)}
-              photoUrl={null}
-              className="size-6 text-[9px]"
-            />
-          ))}
-        </span>
-      ) : null}
-
-      <span className="min-w-0 truncate text-[13px] leading-none font-medium text-[var(--ink-900)]">
-        {entry.playerLabels.length === 0
-          ? "Unnamed entry"
-          : entry.playerLabels.map((name, index) => {
-              const profileId =
-                rosterPlayerIds[entry.playerUserIds[index] ?? ""] ?? null;
-              return (
-                <Fragment key={`${name}-${index}`}>
-                  {index > 0 ? " / " : null}
-                  {profileId ? (
-                    <Link
-                      href={`/dashboard/team/roster/${profileId}`}
-                      className="rounded-[4px] outline-none hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)]"
-                    >
-                      {name}
-                    </Link>
-                  ) : (
-                    name
-                  )}
-                </Fragment>
-              );
-            })}
-      </span>
-
-      <span
-        className="shrink-0 text-[11px] leading-none"
-        style={{ color: "var(--ink-500)" }}
-      >
-        {drawWords(entry)}
-      </span>
-
-      <span className="flex-1" />
-
-      {entry.matches.length === 0 ? (
-        <>
-          <span
-            className="shrink-0 text-[11px] leading-none"
-            style={{ color: "var(--ink-500)" }}
-          >
-            No matches yet
-          </span>
-          {/* Nothing played means no row, so no drawer to hold this entry's
-              first result — the head carries it. The score flow needs the
-              entry named to land on this player, not the first one waiting. */}
-          {canEdit && entry.playerLabels.length > 0 ? (
-            <Link
-              href={scoreHref(entry.eventId, entry.id, nextRound(entry))}
-              className="shrink-0 rounded-[4px] text-[11px] leading-none font-medium text-[var(--blue)] outline-none hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)]"
-            >
-              Add first result
-            </Link>
-          ) : null}
-        </>
-      ) : (
-        <>
-          <span
-            className="tabular shrink-0 text-[12px] leading-none"
-            style={{ color: "var(--ink-900)" }}
-          >
-            {record.won}–{record.lost}
-          </span>
-          {finish ? (
-            <span
-              className="shrink-0 text-[11px] leading-none"
-              style={{ color: "var(--ink-500)" }}
-            >
-              {finish}
-            </span>
-          ) : null}
-        </>
-      )}
-    </div>
-  );
-}
-
 /* ── Rows ───────────────────────────────────────────────────────────────── */
 
 function MatchTableRow({
   row,
+  rosterPlayerIds,
   selected,
   onToggle,
 }: {
   row: TournamentRow;
+  /** Lineup id → roster profile id; a name links only when it resolves. */
+  rosterPlayerIds: Record<string, string>;
   selected: boolean;
   onToggle: (id: string, viaKeyboard: boolean) => void;
 }) {
@@ -720,6 +616,51 @@ function MatchTableRow({
           // An outcome-only round has no match, so no date of its own.
           <EmptyMark label="No date" />
         )}
+      </span>
+
+      {/* Player — the 26px mark per name, then the names ("A / B" for a
+          doubles team). A name links to its roster profile only when the
+          lineup id resolves to one; the row opens the drawer, the name goes
+          to the player. */}
+      <span className="flex min-w-0 items-center gap-2.5">
+        {entry.playerLabels.length > 0 ? (
+          <span className="flex shrink-0 gap-0.5">
+            {entry.playerLabels.map((name, index) => (
+              <InitialsAvatar key={`${name}-${index}`} name={name} />
+            ))}
+          </span>
+        ) : null}
+        <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+          {entry.playerLabels.length === 0
+            ? "Unnamed entry"
+            : entry.playerLabels.map((name, index) => {
+                const profileId =
+                  rosterPlayerIds[entry.playerUserIds[index] ?? ""] ?? null;
+                return (
+                  <Fragment key={`${name}-${index}`}>
+                    {index > 0 ? " / " : null}
+                    {profileId ? (
+                      <Link
+                        href={`/dashboard/team/roster/${profileId}`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="rounded-[var(--radius-cell)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                      >
+                        {name}
+                      </Link>
+                    ) : (
+                      name
+                    )}
+                  </Fragment>
+                );
+              })}
+        </span>
+      </span>
+
+      <span
+        className="min-w-0 truncate text-[12px] whitespace-nowrap"
+        style={{ color: "var(--ink-600)" }}
+      >
+        {row.draw}
       </span>
 
       <span className="mono text-[11px]" style={{ color: "var(--ink-500)" }}>
@@ -797,7 +738,7 @@ function runEyebrow(entry: EventEntry): string {
 }
 
 /**
- * "Seed 3 · 1–0". The record is `runRecord`, the group head's figure, so it
+ * "Seed 3 · 1–0". The record is `runRecord`, the strip's figure, so it
  * counts matches only — an outcome-only round has no score behind it. The
  * seed prints whatever the draw: inside one player's run there is no other
  * entry's seed to compare it against.
@@ -917,18 +858,6 @@ function homeDraw(entry: EventEntry): string {
   if (!draw || draw.toLowerCase() === "main") return "Main draw";
   if (draw.toLowerCase().includes("qualif")) return "Qualifying";
   return draw;
-}
-
-/**
- * "Main draw · Seed 3", "Qualifying" — the head's draw words. A qualifying
- * seed is a different number from a main-draw seed, and printing it beside
- * main-draw entries invites the two to be compared, so it is left off.
- */
-function drawWords(entry: EventEntry): string {
-  const draw = homeDraw(entry);
-  return draw !== "Qualifying" && entry.seed
-    ? `${draw} · Seed ${entry.seed}`
-    : draw;
 }
 
 function pillKeeps(pill: Pill, row: TournamentRow): boolean {

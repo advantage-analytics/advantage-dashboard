@@ -186,3 +186,48 @@ export function runRecord(matches: EntryMatch[]): {
   }
   return { won, lost };
 }
+
+/**
+ * The part of a tournament table row the default sort reads. Structural, so
+ * the `"use client"` component's `TournamentRow` satisfies it without this
+ * module importing from the component.
+ */
+export type DatedRoundRow = {
+  round: string | null;
+  match: { date?: string | null } | null;
+};
+
+/** `matches.date`'s calendar day ("2026-09-12"), or null when there is none. */
+function rowDay(row: DatedRoundRow): string | null {
+  const date = row.match?.date;
+  return date ? date.slice(0, 10) : null;
+}
+
+/**
+ * The tournament table's default order: the calendar day each match was
+ * played, earliest first, then `roundRank` for rounds played the same day
+ * (Q2 before R32 on one Saturday).
+ *
+ * **Undated rows go last.** An outcome-only round — a default, a withdrawal,
+ * a forfeit — has no `matches` row and so no date of its own. It is a chosen
+ * policy, not an accident, that every such row sorts after every dated row
+ * and, among themselves, by `roundRank`: guessing a day for it would place a
+ * decision on a date nobody recorded.
+ *
+ * Compares on the day (the first ten characters of the timestamptz), not the
+ * instant: `recordResult` writes the event's day at noon, so two rounds from
+ * one day are ordered by the ladder, never by when a coach happened to save.
+ */
+export function compareTournamentRows(
+  a: DatedRoundRow,
+  b: DatedRoundRow,
+): number {
+  const dayA = rowDay(a);
+  const dayB = rowDay(b);
+  if (dayA !== dayB) {
+    if (dayA === null) return 1;
+    if (dayB === null) return -1;
+    return dayA < dayB ? -1 : 1;
+  }
+  return roundRank(a.round) - roundRank(b.round);
+}

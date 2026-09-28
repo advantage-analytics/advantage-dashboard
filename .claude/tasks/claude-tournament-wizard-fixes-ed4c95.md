@@ -156,7 +156,7 @@ ready).
 
 ## T12 · Flatten the tournament table into date-ordered match rows with Player, Draw and Round columns
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/schedule/tournament-detail.tsx (`TRACKS`/`TABLE_MIN_PX`/`COLUMNS` ~112-137, `TournamentDetail` visible/rowCount ~226-244 and 456-505, `EntryHead` 570-674 and `drawWords` 927-932 to delete, `MatchTableRow` 678-789), src/lib/schedule/tournament-run.ts (new pure row comparator), tests/tournament-run.spec.ts, tests/schedule-tournament-outcomes.spec.ts (+ tests/fixtures/schedule-tournament-outcomes-data.ts if a second dated row is needed to exercise the sort in the browser)
 - **done when:**

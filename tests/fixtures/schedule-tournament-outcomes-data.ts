@@ -56,9 +56,9 @@ export const entry: EventEntry = {
 };
 
 /**
- * A main-draw entry that has played nothing yet: its group head still draws,
- * with "No matches yet", and it contributes no rows. Its lineup id is an auth
- * uid the roster does not know, so its name stays plain text.
+ * A main-draw entry that has played nothing yet: it contributes no row to
+ * the table (there is no per-entry head), though the footer still counts it.
+ * Its lineup id is an auth uid the roster does not know.
  */
 export const waitingEntry: EventEntry = {
   id: "tournament-entry-waiting",

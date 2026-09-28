@@ -6,6 +6,7 @@ import {
   roundLongLabel,
 } from "@/lib/schedule/format";
 import {
+  compareTournamentRows,
   groupByDraw,
   nextRound,
   nextRoundAfter,
@@ -265,5 +266,42 @@ test.describe("nextRoundAfter", () => {
         nextRound(entryRun),
       );
     }
+  });
+});
+
+test.describe("compareTournamentRows", () => {
+  const row = (round: string | null, date: string | null) => ({
+    round,
+    match: date === null ? null : { date },
+  });
+  const order = (rows: ReturnType<typeof row>[]) =>
+    [...rows].sort(compareTournamentRows).map((r) => r.round);
+
+  test("a later day sorts after an earlier one, whatever the round", () => {
+    const r32 = row("R32", "2026-09-11T12:00:00+00:00");
+    const r16 = row("R16", "2026-09-12T12:00:00+00:00");
+    expect(order([r16, r32])).toEqual(["R32", "R16"]);
+    expect(compareTournamentRows(r16, r32)).toBeGreaterThan(0);
+  });
+
+  test("the same day orders by roundRank, not by the time saved", () => {
+    const r32 = row("R32", "2026-09-11T09:00:00+00:00");
+    const q2 = row("Q2", "2026-09-11T18:00:00+00:00");
+    expect(order([r32, q2])).toEqual(["Q2", "R32"]);
+  });
+
+  test("undated rows follow every dated row, by roundRank among themselves", () => {
+    const r16 = row("R16", "2026-09-12T12:00:00+00:00");
+    const qf = row("QF", null);
+    const q1 = row("Q1", null);
+    expect(order([qf, r16, q1])).toEqual(["R16", "Q1", "QF"]);
+    expect(compareTournamentRows(qf, r16)).toBeGreaterThan(0);
+    expect(compareTournamentRows(q1, qf)).toBeLessThan(0);
+  });
+
+  test("a match with a null date counts as undated", () => {
+    const undated = { round: "Q1", match: { date: null } };
+    const dated = row("F", "2026-09-13T12:00:00+00:00");
+    expect(compareTournamentRows(undated, dated)).toBeGreaterThan(0);
   });
 });
