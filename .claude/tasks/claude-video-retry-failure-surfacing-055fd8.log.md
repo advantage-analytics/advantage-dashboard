@@ -56,3 +56,9 @@ is the runner's. Newest entries at the bottom.
 1. `waitOrAskVariant` picks by error code alone; a failed row at the attempt ceiling that carried a quota/eligibility code would get allowance/permission copy — check `attemptsUsed >= MAX_TOTAL_ATTEMPTS` first.
 2. `STALLED_RETRY_COPY` lives in the card; move it into `analysis-failure-copy.ts` if T7's drawers need the same wording.
 3. Eyes-on: confirm on screen that a `retry` card losing its secondary "Upload a new recording" link reads right.
+
+## T7 · Drawers render the recovery class through RecoveryAction — blocked
+
+**gate:** mechanical FAIL (`tests/schedule-dual-outcomes.spec.ts:469` "a failed analysis shows its note and offers Retry to a coach only") · completion not run
+**reason:** The change contradicts deliberate schedule-drawer behaviour pinned by that spec (T23 "footer follows the Matches drawer"): (1) the event drawer's Retry is the footer's blue primary button labelled "Retry" — `RecoveryAction` renders an outline "Retry analysis"; (2) a coach sees the job note "The video ended before the match did" — the fixture row is uncoded, so the new `showsStoredNote` rule hides it; (3) a viewer who can't edit sees only "The match page has the details.", no note, no retry promise — the task's "one body for every viewer, note whenever the class shows one" shows the retry body to everyone. Needs an author decision on which rule wins before re-running.
+**stash:** 7fceca0f51e51ceb576021c6cef67184b6b42827

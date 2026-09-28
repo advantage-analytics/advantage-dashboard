@@ -98,7 +98,7 @@ ready).
 
 ## T7 · Drawers render the recovery class through RecoveryAction
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T3, T4, T5
 - **files:** src/components/dashboard/matches/drawer-sections.tsx (`AnalysisNotice`), src/components/dashboard/matches/match-drawer.tsx, src/components/dashboard/schedule/event-line-drawer.tsx, tests/drawer-sections.spec.ts (guess)
