@@ -170,3 +170,13 @@ is the runner's. Newest entries at the bottom.
 
 1. `ui-revamp-guardrails.md`'s header still reads "current as of 2026-08-15".
 2. The §2 entry predates T7 (drawers), which is blocked; amend it if T7 lands.
+
+## T7 · Drawers render the recovery class through RecoveryAction — done
+
+**gate:** mechanical pass · completion pass (second run, on the author's 2026-09-28 amendment; widget-states: failure notice and footer action only, loading/in-flight states untouched)
+**changed:** `AnalysisNotice` works from the recovery class and a `canAct` flag: a viewer who can act sees `note ?? title` and the class drawer body (wait-or-ask variant via `waitOrAskVariant`); a viewer who can't sees the class title and "The match page has the details.", no note, no action. `match-drawer.tsx`'s `RetryButton` became a shared `DrawerRecoveryAction` in `drawer-sections.tsx`: "Retry" (→ `/resubmit`), "Rebuild statistics" (→ `/rederive`), or the upload link; `wait_or_ask` / `stats_unavailable` add nothing. Each drawer keeps today's layout: in the event drawer the recovery action takes the primary slot (View match drops to ghost); in the Matches drawer it stays an outline button under View match, as Retry always was. `EntryMatch` gains `errorCode` / `attemptsUsed`. `tests/schedule-dual-outcomes.spec.ts` passes unedited; its S4 fixture gained the loader-produced `recovery`, `note`, `errorCode`. `drawer-sections.spec.ts` rewritten for class inputs with an upload_again-with-manager case. First run's stash `7fceca0f` used as a reference only, never applied.
+**follow-ups:**
+
+1. The event drawer now also offers Rebuild statistics and the upload link, not just Retry — check in eyes-on.
+2. The Matches drawer now hides the stored note and class body from viewers who can't manage the match (before, they saw `failNote` as the headline).
+3. Stash `7fceca0f51e51ceb576021c6cef67184b6b42827` (blocked: T7) is superseded and can be dropped.

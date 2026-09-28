@@ -150,6 +150,10 @@ export interface EntryMatch {
   recovery?: RecoveryClass | null;
   /** The stored note `showsStoredNote()` allows, from the analysis map. */
   note?: string | null;
+  /** The job's raw error code, from the analysis map — `waitOrAskVariant()`'s input only. */
+  errorCode?: string | null;
+  /** Rows in the job's resubmission chain, from the analysis map — `waitOrAskVariant()`'s input only. */
+  attemptsUsed?: number | null;
 }
 
 export interface EventEntry {

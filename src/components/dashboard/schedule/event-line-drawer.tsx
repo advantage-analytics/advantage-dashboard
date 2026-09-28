@@ -3,18 +3,18 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Calendar, Clock, Info, MapPin, Trophy } from "lucide-react";
-import {
-  PeekDrawerFrame,
-  RetryButton,
-} from "@/components/dashboard/matches/match-drawer";
+import { PeekDrawerFrame } from "@/components/dashboard/matches/match-drawer";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 import {
   AnalysisNotice,
   DrawerFact,
   DrawerHeading,
+  DrawerRecoveryAction,
   ProviderFact,
   SnapshotSection,
+  drawerRecovery,
   drawerSideName,
+  recoveryHasAction,
   useMatchSnapshot,
 } from "@/components/dashboard/matches/drawer-sections";
 import {
@@ -30,7 +30,6 @@ import { scoreHref } from "@/lib/schedule/score-seed";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
-  canRetryAnalysis,
   isAnalysisFailed,
   isAnalysisReady,
   isInFlight,
@@ -83,9 +82,12 @@ import type {
  *   1. "Add result" / "Edit result" into the event's `/score` flow — a line
  *      with no match, an outcome, or any doubles line (score only: no
  *      snapshot, video or report to offer).
- *   2. "Retry" — a singles match whose analysis failed, for a viewer who can
- *      edit the schedule. `EntryMatch` carries no uploader, so `canEdit`
- *      gates it and the resubmit route refuses anyone else (T10's rule).
+ *   2. The recovery action of a singles match whose analysis failed
+ *      (`DrawerRecoveryAction`: "Retry", "Rebuild statistics", or the upload
+ *      link), for a viewer who can edit the schedule. A class with nothing to
+ *      press adds nothing and leaves the primary to the next follow-up.
+ *      `EntryMatch` carries no uploader, so `canEdit` gates it and the routes
+ *      refuse anyone else (T10's rule).
  *   3. "Add video" — a scored singles line nothing was sent for.
  *   4. A tournament round's next step — `nextResultHref`, "Add result" into
  *      the score flow at the round after the run's last match — so every
@@ -209,25 +211,18 @@ export function EventLineDrawer({
     canScore && nextResultHref && resultLink?.label !== "Add result"
       ? nextResultHref
       : null;
-  // A failed singles analysis the coach can resubmit. canRetryAnalysis owns
-  // the shared rule; `!doubles && canEdit` is this drawer's own
-  // access-control clause.
-  const retryJobId =
-    !doubles &&
-    canEdit &&
-    canRetryAnalysis({
-      status: played?.status,
-      jobId: played?.jobId,
-      inputRejected: played?.inputRejected,
-    })
-      ? (played?.jobId ?? null)
-      : null;
+  // A failed singles analysis's recovery class (null unless it failed).
+  // `!doubles && canEdit` is this drawer's own access-control clause: it
+  // decides who reads the class's body and note, and who gets its action.
+  const recovery = doubles ? null : drawerRecovery(status, played?.recovery);
+  const showRecovery =
+    !doubles && canEdit && recoveryHasAction(recovery, played?.jobId);
   // The first follow-up on offer is the footer's one primary; "View match"
   // is primary only when there is none (the Matches drawer's rule).
-  const primary: "result" | "retry" | "video" | "next" | "view" = resultLink
+  const primary: "result" | "recovery" | "video" | "next" | "view" = resultLink
     ? "result"
-    : retryJobId
-      ? "retry"
+    : showRecovery
+      ? "recovery"
       : addVideo
         ? "video"
         : nextResult
@@ -235,8 +230,8 @@ export function EventLineDrawer({
           : "view";
   const variant = (slot: typeof primary) =>
     primary === slot ? "primary" : slot === "view" ? "ghost" : "outline";
-  // Retry is a follow-up, never "view", so it is primary or outline.
-  const retryVariant = primary === "retry" ? "primary" : "outline";
+  // The recovery action is a follow-up, never "view": primary or outline.
+  const recoveryVariant = primary === "recovery" ? "primary" : "outline";
 
   return (
     <PeekDrawerFrame
@@ -264,7 +259,7 @@ export function EventLineDrawer({
         ) : null
       }
       footer={
-        resultLink || viewMatch || retryJobId || addVideo || nextResult ? (
+        resultLink || viewMatch || showRecovery || addVideo || nextResult ? (
           <>
             {resultLink ? (
               <Link
@@ -282,11 +277,13 @@ export function EventLineDrawer({
                 View match
               </Link>
             ) : null}
-            {retryJobId ? (
-              <RetryButton
-                key={retryJobId}
-                jobId={retryJobId}
-                variant={retryVariant}
+            {showRecovery && played ? (
+              <DrawerRecoveryAction
+                key={played.jobId ?? played.id}
+                recovery={recovery}
+                jobId={played.jobId}
+                matchId={played.id}
+                variant={recoveryVariant}
               />
             ) : null}
             {addVideo ? (
@@ -396,14 +393,14 @@ export function EventLineDrawer({
           <>
             <AnalysisNotice
               status={status}
-              // The job's note travels with the retry, or with an
-              // input-rejected video, where it says what to fix: otherwise a
-              // viewer who cannot resubmit reads only that analysis stopped.
-              failNote={
-                retryJobId || played.inputRejected ? played.failNote : null
-              }
-              canRetry={retryJobId !== null}
-              inputRejected={played?.inputRejected ?? false}
+              recovery={recovery}
+              // AnalysisNotice shows the stored note and the class body only
+              // to a viewer who can act; anyone else reads only that
+              // analysis stopped and where the details are.
+              note={played.note}
+              errorCode={played.errorCode}
+              attemptsUsed={played.attemptsUsed}
+              canAct={canEdit}
             />
             {settled && isAnalysisReady(played.status) ? (
               <LineSnapshot matchId={played.id} />

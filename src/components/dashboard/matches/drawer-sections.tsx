@@ -3,7 +3,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { shortName } from "@/lib/data/match-utils";
 import { providers } from "@/lib/providers";
@@ -12,12 +13,21 @@ import {
   isAnalysisFailed,
   isInFlight,
   type AnalysisStatus,
+  type RecoveryClass,
 } from "@/lib/data/match-analysis";
+import { addVideoHref } from "@/lib/matches/add-video-href";
+import { advButton } from "@/lib/ui/adv-button";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { ScoreLineSet } from "@/lib/ui/score-format";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
-import { ANALYSIS_FAILURE_COPY } from "@/components/dashboard/matches/analysis-failure-copy";
+import {
+  ANALYSIS_FAILURE_COPY,
+  WAIT_OR_ASK_VARIANTS,
+  byClass,
+  waitOrAskVariant,
+} from "@/components/dashboard/matches/analysis-failure-copy";
 
 /**
  * The body sections of a match peek drawer, lifted out of `match-drawer.tsx`
@@ -161,23 +171,68 @@ export function DrawerHeading({
 }
 
 /**
+ * The recovery class a failed drawer row reads, when there is one.
+ *
+ * Every failed row the loader or the live patch projects carries a class
+ * (`recoveryFields()`); the fallback only covers a projection that predates
+ * it — the same fallback the match page's progress card uses. Null for a row
+ * that has not failed: a stalled `uploaded` row is in flight as far as the
+ * drawers are concerned, and keeps the in-flight line.
+ */
+export function drawerRecovery(
+  status: AnalysisStatus | null | undefined,
+  recovery: RecoveryClass | null | undefined,
+): RecoveryClass | null {
+  if (!status || !isAnalysisFailed(status)) return null;
+  return (
+    recovery ?? (status === "derivation_failed" ? "stats_unavailable" : "retry")
+  );
+}
+
+/** A recovery class's title and drawer body, with `wait_or_ask`'s variant. */
+function drawerCopy(
+  recovery: RecoveryClass,
+  errorCode: string | null | undefined,
+  attemptsUsed: number | null | undefined,
+): { title: string; drawerBody: string } {
+  // byClass.wait_or_ask is only the allowance default; the row's error code
+  // picks the variant that actually applies.
+  if (recovery === "wait_or_ask") {
+    return WAIT_OR_ASK_VARIANTS[waitOrAskVariant(errorCode, attemptsUsed ?? 1)];
+  }
+  return byClass[recovery];
+}
+
+/**
  * The analysis state, when there is one: the in-flight label with a line on
- * when numbers arrive, or the failed block (`role="alert"`) with its note and
- * what to do next. Draws nothing for a settled match.
+ * when numbers arrive, or the failed block (`role="alert"`) that reads the
+ * row's recovery class. Draws nothing for a settled match.
+ *
+ * A viewer who can act on the row reads headline `note ?? title`, then the
+ * class's drawer body. Anyone else reads only the class title and "The match
+ * page has the details." — no stored note, no promise about retrying, since
+ * the footer offers them nothing. The action itself is the footer's
+ * `DrawerRecoveryAction`, not this block's.
  */
 export function AnalysisNotice({
   status,
-  failNote,
-  canRetry,
-  inputRejected,
+  recovery,
+  note,
+  errorCode,
+  attemptsUsed,
+  canAct,
 }: {
   status: AnalysisStatus | null | undefined;
-  failNote?: string | null;
-  /** The viewer can resubmit — the copy then says the video is reused. */
-  canRetry: boolean;
-  /** The vendor refused the footage itself; a retry would fail the same way,
-   * so the body says what to fix instead, whatever `canRetry` says. */
-  inputRejected?: boolean;
+  /** `drawerRecovery()`'s answer: set on a failed row, null otherwise. */
+  recovery: RecoveryClass | null | undefined;
+  /** The stored note `showsStoredNote()` let through — never the raw
+   * `failNote`, which can be a writer string or the reconciler's reason. */
+  note?: string | null;
+  /** `wait_or_ask`'s variant inputs; unread by every other class. */
+  errorCode?: string | null;
+  attemptsUsed?: number | null;
+  /** The viewer may act on this row — the drawer's own access clause. */
+  canAct: boolean;
 }) {
   if (!status) return null;
 
@@ -194,7 +249,8 @@ export function AnalysisNotice({
     );
   }
 
-  if (isAnalysisFailed(status)) {
+  if (isAnalysisFailed(status) && recovery) {
+    const copy = drawerCopy(recovery, errorCode, attemptsUsed);
     return (
       <div
         role="alert"
@@ -205,44 +261,156 @@ export function AnalysisNotice({
           strokeWidth={1.5}
           aria-hidden
         />
-        {status === "derivation_failed" ? (
-          <div className="flex flex-col gap-1">
-            {/* The video was analyzed; what failed is matching its rallies
-            to the entered score. `canRetry` is ignored here — resubmitJob()
-            refuses this status, and the footage was read fine — and
-            `failNote` is the reconciler's reason, a muted detail line under
-            the explanation, never the headline. */}
-            <p className="text-[13px] font-medium text-[var(--ink-900)]">
-              {ANALYSIS_FAILURE_COPY.derivation_failed.title}
-            </p>
-            <p className="text-[12px] leading-[1.5] text-[var(--ink-700)]">
-              {ANALYSIS_FAILURE_COPY.derivation_failed.body}
-            </p>
-            {failNote && (
-              <p className="text-[11px] leading-[1.5] text-[#888888]">
-                {failNote}
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1">
-            <p className="text-[13px] font-medium text-[var(--ink-900)]">
-              {failNote ?? ANALYSIS_FAILURE_COPY.failed.title}
-            </p>
-            <p className="text-[12px] leading-[1.5] text-[var(--ink-700)]">
-              {inputRejected
-                ? ANALYSIS_FAILURE_COPY.failed.inputRejected.drawer
-                : canRetry
-                  ? ANALYSIS_FAILURE_COPY.failed.drawer.retry
-                  : ANALYSIS_FAILURE_COPY.failed.drawer.details}
-            </p>
-          </div>
-        )}
+        <div className="flex flex-col gap-1">
+          <p className="text-[13px] font-medium text-[var(--ink-900)]">
+            {canAct ? (note ?? copy.title) : copy.title}
+          </p>
+          <p className="text-[12px] leading-[1.5] text-[var(--ink-700)]">
+            {canAct
+              ? copy.drawerBody
+              : ANALYSIS_FAILURE_COPY.failed.drawer.details}
+          </p>
+        </div>
       </div>
     );
   }
 
   return null;
+}
+
+/**
+ * Does a failed row's recovery class have something to press in a drawer?
+ * `byClass`'s `action: null` classes (`wait_or_ask`, `stats_unavailable`)
+ * have nothing, and a retry or rebuild needs a job to act on — so a caller
+ * never draws an empty footer slot, nor lets an absent action take the
+ * footer's primary from "View match".
+ */
+export function recoveryHasAction(
+  recovery: RecoveryClass | null | undefined,
+  jobId: string | null | undefined,
+): recovery is RecoveryClass {
+  if (!recovery || byClass[recovery].action === null) return false;
+  if (recovery === "retry" || recovery === "rederive") return Boolean(jobId);
+  return true;
+}
+
+/**
+ * A failed row's recovery action in a peek drawer's footer — the one
+ * definition both drawers draw (`match-drawer.tsx`, `event-line-drawer.tsx`).
+ * Each is a full-width `advButton(variant, "md")`, the styling the drawers'
+ * "Retry" has always had; the caller picks `variant` from its footer rule so
+ * a footer never holds two primaries.
+ *
+ * - `retry` — "Retry", POSTed to `/api/splitstep/jobs/<jobId>/resubmit`.
+ * - `rederive` — "Rebuild statistics", POSTed to `…/rederive`.
+ * - `upload_again` / `fix_recording` — the wizard link `byClass` names.
+ *
+ * `wait_or_ask`, `stats_unavailable` or no class draw nothing. The routes
+ * refuse anyone who may not act, so a caller gates only on what it knows.
+ */
+export function DrawerRecoveryAction({
+  recovery,
+  jobId,
+  matchId,
+  variant,
+}: {
+  recovery: RecoveryClass | null | undefined;
+  jobId: string | null | undefined;
+  matchId: string;
+  variant: "primary" | "outline";
+}) {
+  if (!recoveryHasAction(recovery, jobId)) return null;
+
+  if (recovery === "retry" && jobId) {
+    return (
+      <DrawerRequestButton
+        label="Retry"
+        pendingLabel="Retrying…"
+        url={`/api/splitstep/jobs/${jobId}/resubmit`}
+        variant={variant}
+      />
+    );
+  }
+
+  if (recovery === "rederive" && jobId) {
+    return (
+      <DrawerRequestButton
+        label={byClass.rederive.action ?? "Rebuild statistics"}
+        pendingLabel="Rebuilding…"
+        url={`/api/splitstep/jobs/${jobId}/rederive`}
+        variant={variant}
+      />
+    );
+  }
+
+  if (recovery === "upload_again" || recovery === "fix_recording") {
+    return (
+      <Link
+        href={addVideoHref(matchId)}
+        className={cn(advButton(variant, "md"), "w-full")}
+      >
+        {byClass[recovery].action ?? ANALYSIS_FAILURE_COPY.failed.uploadLink}
+      </Link>
+    );
+  }
+
+  return null;
+}
+
+/**
+ * The drawers' POST button: pending label while the request runs, the
+ * route's refusal verbatim under it, and a refresh once it goes through.
+ */
+function DrawerRequestButton({
+  label,
+  pendingLabel,
+  url,
+  variant,
+}: {
+  label: string;
+  pendingLabel: string;
+  url: string;
+  variant: "primary" | "outline";
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            setError(null);
+            const response = await fetch(url, { method: "POST" }).catch(
+              () => null,
+            );
+            if (!response?.ok) {
+              const payload = (await response?.json().catch(() => null)) as {
+                error?: string;
+              } | null;
+              setError(payload?.error ?? "That didn't go through.");
+              return;
+            }
+            router.refresh();
+          })
+        }
+        className={cn(advButton(variant, "md"), "w-full")}
+      >
+        {pending ? pendingLabel : label}
+      </button>
+      {error && (
+        <p
+          role="alert"
+          className="text-[12px] leading-[18px] text-[var(--danger)]"
+        >
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** Four figures a player reads first — serve, then pressure — or null when none exist. */

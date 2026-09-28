@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Calendar,
   Clock,
@@ -15,11 +14,7 @@ import {
   X,
 } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
-import {
-  canRetryAnalysis,
-  isAnalysisFailed,
-  isInFlight,
-} from "@/lib/data/match-analysis";
+import { isAnalysisFailed, isInFlight } from "@/lib/data/match-analysis";
 import { createClient } from "@/lib/supabase/client";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
@@ -27,8 +22,10 @@ import {
   AnalysisNotice,
   DrawerFact,
   DrawerHeading,
+  DrawerRecoveryAction,
   ProviderFact,
   SnapshotSection,
+  drawerRecovery,
   drawerSideName,
   forgetMatchSnapshot,
   useMatchSnapshot,
@@ -86,9 +83,11 @@ export function forgetMatchDetails(matchId: string): void {
  * ── The footer ─────────────────────────────────────────────────────────────
  * A blue "View match" for everyone, always — so a player, or a coach whose
  * events policy grants no schedule rights, is never left with an empty footer,
- * and the footer does not change shape from one viewer to the next. An outlined
- * "Retry" sits under it on a failed analysis for the person who uploaded it
- * (the resubmit route refuses anyone else).
+ * and the footer does not change shape from one viewer to the next. On a
+ * failed analysis, the row's recovery action (`DrawerRecoveryAction`: "Retry",
+ * "Rebuild statistics", or the upload link) sits outlined under it for the
+ * person who uploaded it (the routes refuse anyone else). A class with nothing
+ * to press — waiting on the allowance, statistics unavailable — adds nothing.
  *
  * When a saved upload fills this match (a draft folded onto its row), the
  * footer's one primary is "Continue upload", back into that draft's wizard,
@@ -147,15 +146,11 @@ export function MatchDrawer({
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
   const title = `${drawerSideName(match.player1.name)} vs ${drawerSideName(match.player2.name)}`;
-  // canRetryAnalysis owns the shared rule (failed vendor job, still has a job
-  // to resubmit, not an input rejection); this drawer's own access-control
-  // clause is canManage.
-  const canRetry =
-    canRetryAnalysis({
-      status,
-      jobId: match.analysis?.jobId,
-      inputRejected: match.analysis?.inputRejected,
-    }) && match.canManage !== false;
+  // The failed row's recovery class (null unless it failed). This drawer's
+  // access-control clause is canManage: it decides who reads the class's body
+  // and note, and who gets its action.
+  const recovery = drawerRecovery(status, match.analysis?.recovery);
+  const canAct = match.canManage !== false;
   // No numbers while a match is still being worked on or has failed: the
   // score and snapshot would draw zeroes that read as "no serves".
   const settled = !inFlight && !failed;
@@ -205,8 +200,14 @@ export function MatchDrawer({
               Continue upload
             </Link>
           )}
-          {canRetry && match.analysis?.jobId && (
-            <RetryButton jobId={match.analysis.jobId} />
+          {canAct && (
+            <DrawerRecoveryAction
+              key={match.analysis?.jobId ?? match.id}
+              recovery={recovery}
+              jobId={match.analysis?.jobId}
+              matchId={match.id}
+              variant="outline"
+            />
           )}
         </>
       }
@@ -260,9 +261,11 @@ export function MatchDrawer({
 
         <AnalysisNotice
           status={status}
-          failNote={match.analysis?.failNote}
-          canRetry={canRetry}
-          inputRejected={match.analysis?.inputRejected}
+          recovery={recovery}
+          note={match.analysis?.note}
+          errorCode={match.analysis?.errorCode}
+          attemptsUsed={match.analysis?.attemptsUsed}
+          canAct={canAct}
         />
 
         {settled && snapshot && <SnapshotSection snapshot={snapshot} />}
@@ -420,63 +423,6 @@ export function PeekDrawerFrame({
         </div>
       </div>
     </aside>
-  );
-}
-
-/**
- * "Retry" — the match page's resubmit, POSTed to
- * `/api/splitstep/jobs/<jobId>/resubmit`. The one definition both peek
- * drawers draw: the Matches drawer keeps it outline under its blue "View
- * match"; the event pages' line drawer (`event-line-drawer.tsx`) makes it the
- * footer's one primary and drops "View match" to ghost. The route refuses
- * anyone who may not resubmit, so a caller gates only on what it knows.
- */
-export function RetryButton({
-  jobId,
-  variant = "outline",
-}: {
-  jobId: string;
-  variant?: "primary" | "outline";
-}) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() =>
-          start(async () => {
-            setError(null);
-            const response = await fetch(
-              `/api/splitstep/jobs/${jobId}/resubmit`,
-              { method: "POST" },
-            ).catch(() => null);
-            if (!response?.ok) {
-              const payload = (await response?.json().catch(() => null)) as {
-                error?: string;
-              } | null;
-              setError(payload?.error ?? "That didn't go through.");
-              return;
-            }
-            router.refresh();
-          })
-        }
-        className={cn(advButton(variant, "md"), "w-full")}
-      >
-        {pending ? "Retrying…" : "Retry"}
-      </button>
-      {error && (
-        <p
-          role="alert"
-          className="text-[12px] leading-[18px] text-[var(--danger)]"
-        >
-          {error}
-        </p>
-      )}
-    </div>
   );
 }
 

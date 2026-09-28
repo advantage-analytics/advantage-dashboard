@@ -277,6 +277,8 @@ export async function readScheduleWithClient(
       inputRejected: analysis?.inputRejected ?? null,
       recovery: analysis?.recovery ?? null,
       note: analysis?.note ?? null,
+      errorCode: analysis?.errorCode ?? null,
+      attemptsUsed: analysis?.attemptsUsed ?? null,
     };
     const list = matchesByEntry.get(match.event_entry_id);
     if (list) list.push(entryMatch);

@@ -98,7 +98,7 @@ ready).
 
 ## T7 · Drawers render the recovery class through RecoveryAction
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3, T4, T5
 - **files:** src/components/dashboard/matches/drawer-sections.tsx (`AnalysisNotice`), src/components/dashboard/matches/match-drawer.tsx, src/components/dashboard/schedule/event-line-drawer.tsx, src/lib/schedule/types.ts, src/lib/data/schedule-server.ts, tests/drawer-sections.spec.ts, tests/fixtures/schedule-dual-outcomes-data.ts (guess)
