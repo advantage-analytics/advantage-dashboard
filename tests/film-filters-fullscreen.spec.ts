@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  filmDraftCount,
   filmListName,
   filmListPoints,
   filmListSentence,
@@ -160,6 +161,33 @@ test("the cut in words — the trigger and the zero state", () => {
       names,
     ),
   ).toBe(
-    "Saved, Long rallies · 9+ shots, Set 2, Revelli serving, Result: Winner",
+    "Revelli serving · set 2 · winners · long rallies · 9+ shots, from Statistics · saved",
   );
+});
+
+test("the filters drawer's count is the list's own rule over the DRAFT", () => {
+  const ctx = { youIsPlayer1: true, hands: { player1: null, player2: null } };
+  const draft = (f: Partial<MatchFilters>) => ({
+    ...EMPTY_MATCH_FILTERS,
+    ...f,
+  });
+  // The draft alone, as the list would show it once applied.
+  expect(filmDraftCount(points, draft({}), NO_FILM_LOCAL_FILTERS, ctx)).toBe(4);
+  expect(
+    filmDraftCount(
+      points,
+      draft({ server: "you" }),
+      NO_FILM_LOCAL_FILTERS,
+      ctx,
+    ),
+  ).toBe(list({ server: "you" }).length);
+  // The Film-only layers still hold: the statistic's cut and the saved toggle.
+  const local: FilmLocalFilters = {
+    cut: { cut: { rallyMin: 5, rallyMax: null }, label: "Long rallies" },
+    savedOnly: false,
+  };
+  expect(filmDraftCount(points, draft({ sets: [1] }), local, ctx)).toBe(1);
+  expect(
+    filmDraftCount(points, draft({}), { ...local, savedOnly: true }, ctx),
+  ).toBe(1);
 });

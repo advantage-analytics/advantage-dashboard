@@ -27,8 +27,8 @@ import {
  * A `FilmCut` is a `Partial<MatchFilters>` — the same vocabulary as the
  * Video tab's filters — plus a few Film-only extras for what that vocabulary
  * cannot say without changing a count (`FilmCutExtras`). In Film it is ANDed
- * on top of the shared filters (`applyFilmCut`), drawn as its own removable
- * chip, and never written to `MatchFiltersProvider`: the Statistics tab and
+ * on top of the shared filters (`applyFilmCut`), named in the Video tab's
+ * filter strip ("…, from Statistics"), and never written to `MatchFiltersProvider`: the Statistics tab and
  * the `?f=` URL know nothing about it. A card counts its "Watch all N" with
  * the very same predicate over the WHOLE match (`applyFilmCut(points,
  * points, …)`), since Statistics is never filtered; with no Video filter
@@ -93,9 +93,9 @@ export const FILM_CUT_EXTRA_KEYS: readonly (keyof FilmCutExtras)[] = [
 ];
 
 /**
- * A cut on its way to the Video tab, and the words its chip reads — the
- * statistic's own label ("Aces · Stepanov", "Short rallies · 1–4 shots"), so
- * the chip names what was clicked rather than paraphrasing the predicate.
+ * A cut on its way to the Video tab, and the words the filter strip reads —
+ * the statistic's own label ("Aces · Stepanov", "Short rallies · 1–4 shots"),
+ * so the strip names what was clicked rather than paraphrasing the predicate.
  */
 export interface FilmCutIntent {
   cut: FilmCut;

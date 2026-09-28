@@ -16,10 +16,13 @@ import {
   canApply,
   draftClear,
   draftToggle,
-  initialOpenSections,
+  draftCountLine,
+  initialOpenSection,
   isOptionSelected,
   panelActions,
   panelSections,
+  sectionSummary,
+  showPointsLabel,
 } from "@/components/dashboard/matches/match-detail/match-filters/panel-draft";
 
 import { pt } from "./fixtures/film-point";
@@ -73,6 +76,9 @@ function render(
       youName: "Rudy Quan",
       oppName: "Federico Gomez",
       onApply: () => {},
+      onClose: () => {},
+      countFor: () => 9,
+      total: 114,
       ...extra,
     }),
   );
@@ -95,6 +101,17 @@ function sectionHtml(html: string, id: string): string {
   return next === -1 ? rest : rest.slice(0, next);
 }
 
+/** Each section header's title and its collapsed summary, in order. */
+function sectionHeaders(
+  html: string,
+): { title: string; expanded: string; summary: string }[] {
+  return [
+    ...html.matchAll(
+      /<button[^>]*aria-expanded="(true|false)"[^>]*><span[^>]*>([^<]*)<\/span><span[^>]*data-summary=""[^>]*>([^<]*)<\/span>/g,
+    ),
+  ].map((m) => ({ expanded: m[1], title: m[2], summary: m[3] }));
+}
+
 /** The text labels of every pill (a `<button aria-pressed>`) in `html`. */
 function pillLabels(html: string): string[] {
   return [
@@ -105,17 +122,21 @@ function pillLabels(html: string): string[] {
 test.describe("FiltersPanel markup", () => {
   test("title, Clear all, and sections in order Score, Serve, Return, Result, Custom", () => {
     const html = render(fullAvailability());
-    expect(html).toContain(">Filters</h2>");
+    // The dropdown trigger's look: the SlidersHorizontal glyph, then the word.
+    expect(html).toMatch(
+      /<h2[^>]*><svg[^>]*lucide-sliders-horizontal[^>]*>.*?<\/svg>Filters<\/h2>/,
+    );
     const order = [...html.matchAll(/data-section="([a-z]+)"/g)].map(
       (m) => m[1],
     );
     expect(order).toEqual(["score", "serve", "return", "result", "custom"]);
-    const headers = [
-      ...html.matchAll(
-        /<button[^>]*aria-expanded="(?:true|false)"[^>]*>([^<]*)</g,
-      ),
-    ].map((m) => m[1]);
-    expect(headers).toEqual(["Score", "Serve", "Return", "Result", "Custom"]);
+    expect(sectionHeaders(html).map((h) => h.title)).toEqual([
+      "Score",
+      "Serve",
+      "Return",
+      "Result",
+      "Custom",
+    ]);
   });
 
   test("group labels and option labels come from the catalog, with player names", () => {
@@ -145,15 +166,22 @@ test.describe("FiltersPanel markup", () => {
     // The Result row is "Shot" (the mockup's "Zone" was a typo).
     expect(groupLabels("result")).toEqual(["Player", "Shot", "Outcome"]);
     expect(groupLabels("custom")).toEqual([
-      "Choose Player",
+      "Choose player",
       "Side",
       "Direction",
-      "Rally Shot",
+      "Rally shot",
     ]);
 
     const score = pillLabels(sectionHtml(html, "score"));
     expect(score).toEqual(
-      expect.arrayContaining(["Set 1", "Set 2", "Pressure", "Match Point"]),
+      expect.arrayContaining([
+        "Set 1",
+        "Set 2",
+        "Pressure",
+        "Break point",
+        "Set point",
+        "Match point",
+      ]),
     );
     expect(score).toEqual(
       expect.arrayContaining(["0-0", "40-40", "Ad-40", "40-Ad"]),
@@ -162,7 +190,7 @@ test.describe("FiltersPanel markup", () => {
     const serve = pillLabels(sectionHtml(html, "serve"));
     expect(serve.slice(0, 2)).toEqual(["Rudy Quan", "Federico Gomez"]);
     expect(serve).toEqual(
-      expect.arrayContaining(["First Serve", "Second Serve", "Kick", "T"]),
+      expect.arrayContaining(["First serve", "Second serve", "Kick", "T"]),
     );
 
     const result = pillLabels(sectionHtml(html, "result"));
@@ -226,7 +254,7 @@ test.describe("FiltersPanel markup", () => {
     // No return contact was measured → the Contact group is not drawn at all.
     expect(sectionHtml(html, "return")).not.toContain(">Contact<");
     // No shot rows → no Custom rally shots → no Rally Shot group.
-    expect(html).not.toContain(">Rally Shot<");
+    expect(html).not.toContain(">Rally shot<");
   });
 
   test("a group emptied by availability is not drawn; a one-set match has no Sets", () => {
@@ -259,7 +287,7 @@ test.describe("FiltersPanel markup", () => {
     expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*>T</);
   });
 
-  test("Clear all is a blue text action with no icon; Apply is the advButton primary", () => {
+  test("Clear all is a blue text action with no icon; Show N points is the advButton primary", () => {
     const html = render(fullAvailability());
     const clear = html.match(/<button[^>]*>Clear all<\/button>/)?.[0] ?? "";
     expect(clear).not.toBe("");
@@ -269,7 +297,7 @@ test.describe("FiltersPanel markup", () => {
     expect(clear).not.toContain("border");
     expect(clear).not.toContain("rounded");
 
-    const apply = html.match(/<button[^>]*>Apply<\/button>/)?.[0] ?? "";
+    const apply = html.match(/<button[^>]*>Show 9 points<\/button>/)?.[0] ?? "";
     expect(apply).toContain("bg-[var(--blue)]");
     expect(apply).toContain("rounded-[var(--radius-button)]");
     // Nothing to commit yet: the draft equals the applied filters.
@@ -281,9 +309,7 @@ test.describe("FiltersPanel markup", () => {
       ...EMPTY_MATCH_FILTERS,
       resultOutcome: ["winner"],
     });
-    const expanded = [
-      ...html.matchAll(/aria-expanded="(true|false)"[^>]*>([^<]*)</g),
-    ].map((m) => [m[2], m[1]]);
+    const expanded = sectionHeaders(html).map((h) => [h.title, h.expanded]);
     expect(Object.fromEntries(expanded)).toEqual({
       Score: "false",
       Serve: "false",
@@ -387,6 +413,99 @@ test.describe("FiltersPanel draft", () => {
       you: "a",
       opponent: "b",
     });
-    expect(initialOpenSections(EMPTY_MATCH_FILTERS, shown)).toEqual(["score"]);
+    expect(initialOpenSection(EMPTY_MATCH_FILTERS, shown)).toBe("score");
+  });
+
+  test("an accordion: with filters in two sections, only the first opens", () => {
+    const filters = {
+      ...EMPTY_MATCH_FILTERS,
+      server: "you" as const,
+      resultOutcome: ["winner"] as const,
+    };
+    const shown = panelSections(fullAvailability(), {
+      you: "a",
+      opponent: "b",
+    });
+    expect(initialOpenSection(filters, shown)).toBe("serve");
+    const html = render(fullAvailability(), filters);
+    expect(
+      sectionHeaders(html)
+        .filter((h) => h.expanded === "true")
+        .map((h) => h.title),
+    ).toEqual(["Serve"]);
+  });
+});
+
+test.describe("FiltersPanel header, summaries and footer", () => {
+  test("48px header: the trigger's title and an X labelled Close filters", () => {
+    const html = render(fullAvailability());
+    const close =
+      html.match(
+        /<button[^>]*aria-label="Close filters"[^>]*>.*?<\/button>/,
+      )?.[0] ?? "";
+    expect(close).toContain("lucide-x");
+    expect(close).toContain("size-7");
+    expect(close).toContain("rounded-[var(--radius-element)]");
+    expect(html).toContain("h-12");
+  });
+
+  test("a collapsed section states what is picked in it, else Any", () => {
+    const html = render(fullAvailability(), {
+      ...EMPTY_MATCH_FILTERS,
+      scoreType: ["breakpoint"],
+      server: "you",
+      serveType: ["second"],
+    });
+    const byTitle = Object.fromEntries(
+      sectionHeaders(html).map((h) => [h.title, h.summary]),
+    );
+    // Score holds a filter, so it is the one open — an open header is quiet.
+    expect(byTitle).toEqual({
+      Score: "",
+      Serve: "Rudy Quan · second serve",
+      Return: "Federico Gomez returning",
+      Result: "Any",
+      Custom: "Any",
+    });
+    expect(
+      sectionSummary(
+        { ...EMPTY_MATCH_FILTERS, sets: [1, 2], scorePoints: ["40-Ad"] },
+        "score",
+        { you: "a", opponent: "b" },
+      ),
+    ).toBe("Set 1 · set 2 · 40-Ad");
+  });
+
+  test("no Any pill; Points is a 5-column grid with Ad-40 right of 40-40 and 40-Ad beneath", () => {
+    const html = render(fullAvailability());
+    expect(pillLabels(html)).not.toContain("Any");
+    const points = sectionHtml(html, "score");
+    expect(points).toContain("grid-cols-5");
+    expect(points).toMatch(/grid-column:5;grid-row:4[^>]*>Ad-40</);
+    expect(points).toMatch(/grid-column:4;grid-row:5[^>]*>40-Ad</);
+    expect(points).toContain("server first");
+    expect(sectionHtml(html, "return")).toContain("follows the server");
+    expect(text(sectionHtml(html, "custom"))).toContain(
+      "One shot in the rally has to match every choice here.",
+    );
+  });
+
+  test("the footer count and the primary read off countFor(draft)", () => {
+    const seen: MatchFilters[] = [];
+    const applied = { ...EMPTY_MATCH_FILTERS, serveZone: ["T"] as const };
+    const html = render(fullAvailability(), applied, {
+      countFor: (draft: MatchFilters) => {
+        seen.push(draft);
+        return draft.serveZone.length === 1 ? 1 : 0;
+      },
+      total: 114,
+    });
+    // The draft starts as the applied filters, and the count is its count.
+    expect(seen.at(-1)).toEqual(applied);
+    expect(text(html)).toContain("1 of 114 points");
+    expect(html).toMatch(/<button[^>]*>Show 1 point<\/button>/);
+    expect(draftCountLine(9, 114)).toBe("9 of 114 points");
+    expect(showPointsLabel(0)).toBe("Show 0 points");
+    expect(showPointsLabel(1)).toBe("Show 1 point");
   });
 });

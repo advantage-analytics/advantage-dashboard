@@ -130,8 +130,6 @@ root.render(
       <PointList
         allPoints={[POINT]}
         visiblePoints={[POINT]}
-        advancedOpen={false}
-        onAdvancedOpenChange={() => {}}
         activePointId={POINT.id}
         activeStart={0}
         activeEnd={22}

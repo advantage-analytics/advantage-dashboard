@@ -15,9 +15,7 @@ import {
   Bookmark,
   ChevronDown,
   ChevronUp,
-  CirclePlay,
   PanelRightClose,
-  X,
 } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
@@ -39,14 +37,11 @@ import {
   type PointFocus,
 } from "./film-timeline";
 import { scoreColumns, youFirstScore } from "./film-score";
-import { removeChip } from "../match-filters/applied-chips";
 import {
   filmListActive,
-  filmListChips,
   filmListSentence,
   INERT_FILM_LIST_FILTERS,
   lastNameOf,
-  type FilmListChip,
   type FilmListFilters,
 } from "./film-list-filters";
 
@@ -241,10 +236,21 @@ interface PointListProps {
    * fixture that mounts the list alone). Stable identity, please.
    */
   filmFilters?: FilmListFilters;
-  /** Advanced takes this column; the state is the host's, so it survives the
-   *  list re-rendering. */
-  advancedOpen: boolean;
-  onAdvancedOpenChange: (open: boolean) => void;
+  /**
+   * The report column's "Advanced filters…": opens the 340px filters drawer
+   * over this column (`FilterRail`). Given, the quick menu's Advanced row
+   * calls it and nothing swaps into the column.
+   */
+  onOpenFilters?: () => void;
+  /** The quick-filters trigger's element, for the drawer's focus return. */
+  filtersTriggerRef?: (element: HTMLButtonElement | null) => void;
+  /**
+   * Without `onOpenFilters` (the fullscreen room's drawer), Advanced takes
+   * this column instead; the state is the host's, so it survives the list
+   * re-rendering.
+   */
+  advancedOpen?: boolean;
+  onAdvancedOpenChange?: (open: boolean) => void;
   /** Point whose window contains the playhead, and how far through it is. */
   activePointId: string | null;
   /** Film-clock window of the playing point; its rule reads `--film-t`. */
@@ -320,8 +326,10 @@ export const PointList = memo(function PointList({
   allPoints,
   visiblePoints,
   filmFilters = INERT_FILM_LIST_FILTERS,
-  advancedOpen,
-  onAdvancedOpenChange,
+  onOpenFilters,
+  filtersTriggerRef,
+  advancedOpen = false,
+  onAdvancedOpenChange = NOOP,
   activePointId,
   activeStart,
   activeEnd,
@@ -615,47 +623,50 @@ export const PointList = memo(function PointList({
   return (
     <section aria-label="Point list" className={t.root} style={t.rootStyle}>
       {advancedOpen ? (
-        // Advanced takes the list's own column, in this same section and on
-        // this same tone (frame R4: never a modal over the film): Apply
-        // commits the draft and returns to the list, Close returns without
-        // touching the cut. No popover, no overlay.
+        // The room's drawer: Advanced takes the list's own column, in this
+        // same section and on this same tone (frame R4: never a modal over
+        // the film). "Show N points" commits the draft and returns to the
+        // list, the X returns without touching the cut. The report column
+        // opens the filters drawer instead (`onOpenFilters`).
         <FilmAdvancedPanel
-          filters={filmFilters.shared}
-          onApply={filmFilters.setShared}
+          filmFilters={filmFilters}
           onClose={() => onAdvancedOpenChange(false)}
           tone={tone}
         />
       ) : (
         <>
           {/* The header (handoff P1/P2, frame E): one 28px trigger naming the
-          cut, a 22px clear beside it once anything is on, and
-          `matched / total` on the right. Under it, only while something is
-          applied, one chip per applied layer (T7): the shared filters' chips,
-          the statistic's cut as its own chip (it clears only the cut) and
-          the saved toggle.
+          cut and `matched / total` on the right. No chips under it — the
+          design system bans accumulating filter chips (tables.md, Data
+          Table rule 6): in the report the cut is stated in words by the
+          filter strip ABOVE the video and this column (film-tab.tsx), and
+          the room's drawer keeps its header "Clear all".
 
-          Both sit OUTSIDE the scroller and outside the zero-state branch
+          It sits OUTSIDE the scroller and outside the zero-state branch
           below, so the frame the column always has stays drawn while the
           rows are empty (P5: furniture, never a skeleton). */}
           <div className={t.header}>
             {/* The quick menu owns the trigger and already branches on tone —
             `light` is the in-shell set of tokens, `dark` is the room's own
-            menu — and its Advanced row swaps the panel into this column in
-            both. */}
+            menu. Its Advanced row opens the filters drawer where the host
+            gives one, else swaps the panel into this column. */}
             <FilmQuickFilters
               filmFilters={filmFilters}
               sides={sides}
               tone={tone}
-              onOpenAdvanced={() => onAdvancedOpenChange(true)}
+              triggerRef={filtersTriggerRef}
+              onOpenAdvanced={
+                onOpenFilters ?? (() => onAdvancedOpenChange(true))
+              }
             />
 
-            {/* One control clears every axis at once, Advanced included. Drawn
-            only while something is applied, so the resting header is the
-            trigger and the count and nothing else. A text action, no glyph:
-            an X beside a "Filters" trigger reads as "close the menu", and the
-            word already names it. Blue on the light tone like every other
-            clear in the app; white on the dark one, where blue is progress. */}
-            {filtered && (
+            {/* The room's drawer only: one control clears every axis at once,
+            Advanced included, drawn only while something is applied. A text
+            action, no glyph: an X beside a "Filters" trigger reads as "close
+            the menu". White, where blue is progress. The report column has
+            no clear here — the filter strip above it carries "Clear filter",
+            and a second one a few inches away would be two answers. */}
+            {filtered && tone === "dark" && (
               <button type="button" onClick={clearAll} className={t.clear}>
                 Clear all
               </button>
@@ -690,17 +701,6 @@ export const PointList = memo(function PointList({
               </button>
             )}
           </div>
-
-          {filtered && (
-            <FilmChipStrip
-              filmFilters={filmFilters}
-              names={{
-                you: sides.you.shortName,
-                opponent: sides.opp.shortName,
-              }}
-              tone={tone}
-            />
-          )}
 
           {groups.length === 0 ? (
             <EmptyList
@@ -1408,79 +1408,6 @@ const ShotWellRow = memo(function ShotWellRow({
   );
 });
 
-/* ── Applied chips ────────────────────────────────────────── */
-
-/** The chip strip's paint, per tone. The chips are the same in both. */
-const CHIP_TONE = {
-  light: {
-    row: "mx-1 flex flex-wrap items-center gap-1.5 pt-2.5 pb-0.5",
-    chip: "inline-flex h-6 max-w-full min-w-0 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-[var(--border-field)] pr-1.5 pl-2.5 text-[12px] whitespace-nowrap text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-    icon: "size-3 shrink-0 text-[var(--ink-400)]",
-    cutIcon: "size-3 shrink-0 text-[var(--ink-500)]",
-  },
-  dark: {
-    row: "flex flex-wrap items-center gap-1.5 px-2.5 pt-2.5 pb-0.5",
-    chip: "inline-flex h-6 max-w-full min-w-0 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-white/15 pr-1.5 pl-2.5 text-[12px] whitespace-nowrap text-white/70 transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-    icon: "size-3 shrink-0 text-white/45",
-    cutIcon: "size-3 shrink-0 text-white/55",
-  },
-} satisfies Record<FilmListTone, Record<string, string>>;
-
-/**
- * One removable chip per applied value, in reading order: saved, the
- * statistic's cut, then the shared filters (`filmListChips`). Each chip
- * removes only its own layer — the cut chip clears the cut and leaves the
- * shared filters, which the Statistics tab also reads, exactly as they were.
- * The cut chip leads with the same play glyph the card's "Watch in Video"
- * readout draws, so it reads as "the statistic you opened", not as one more
- * filter value.
- */
-function FilmChipStrip({
-  filmFilters,
-  names,
-  tone,
-}: {
-  filmFilters: FilmListFilters;
-  names: { you: string; opponent: string };
-  tone: FilmListTone;
-}) {
-  const t = CHIP_TONE[tone];
-  const chips = filmListChips(filmFilters, names);
-  const remove = (chip: FilmListChip) => {
-    if (chip.kind === "saved") filmFilters.setSavedOnly(false);
-    else if (chip.kind === "cut") filmFilters.clearCut();
-    else filmFilters.setShared(removeChip(filmFilters.shared, chip.chip));
-  };
-  return (
-    <div role="group" aria-label="Applied filters" className={t.row}>
-      {chips.map((chip) => (
-        <button
-          key={chip.id}
-          type="button"
-          data-chip-kind={chip.kind}
-          aria-label={
-            chip.kind === "cut"
-              ? `Remove statistic cut: ${chip.label}`
-              : `Remove filter: ${chip.label}`
-          }
-          onClick={() => remove(chip)}
-          className={t.chip}
-        >
-          {chip.kind === "cut" && (
-            <CirclePlay
-              className={t.cutIcon}
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-          )}
-          <span className="min-w-0 truncate">{chip.label}</span>
-          <X className={t.icon} strokeWidth={1.5} aria-hidden="true" />
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /* ── Empty states ─────────────────────────────────────────── */
 
 /**
@@ -1493,7 +1420,8 @@ function FilmChipStrip({
  * - any other cut that matches nothing is a FILTER result, which states the
  *   cut in words so the body and the header's count agree.
  *
- * Left-aligned and top-weighted, matching the frame: no icon circle, no
+ * Centred in the report column (the "States" frame), left-aligned in the
+ * room's drawer where the rows start: no icon circle, no
  * skeleton rows, no sample point. The header above stays drawn in all three.
  * "Analysis still running" is deliberately absent — `matches/[matchId]/page.tsx`
  * short-circuits the whole pane to `MatchAnalysisProgress` while a match is
@@ -1544,17 +1472,19 @@ function EmptyList({
     );
   }
 
-  // Every other applied cut. The body states the cut rather than a generic
-  // sentence, so it can never say "too narrow" about a cut the viewer can
-  // read differently from what is actually applied.
+  // Every other applied cut. The body states the cut — the filter strip's
+  // own sentence — rather than a generic line, so it can never say "too
+  // narrow" about a cut the viewer can read differently from what is
+  // actually applied. The report column draws no action: the strip above
+  // carries "Clear filter". The room's drawer has no strip, so it keeps one.
   return (
     <EmptyBody
-      title="No points match this cut"
-      body={`Nothing in this match matched this cut — ${filmListSentence(
-        filmFilters,
-        { you: sides.you.shortName, opponent: sides.opp.shortName },
-      )}.`}
-      action="Clear the cut"
+      title="No points match these filters"
+      body={`Nothing in this match matched: ${filmListSentence(filmFilters, {
+        you: sides.you.shortName,
+        opponent: sides.opp.shortName,
+      })}.`}
+      action={tone === "dark" ? "Clear the cut" : undefined}
       onAction={onClear}
       tone={tone}
     />
@@ -1564,7 +1494,8 @@ function EmptyList({
 /** The zero state's paint, per tone. The copy above is the same in both. */
 const EMPTY_TONE = {
   light: {
-    root: "flex flex-col gap-[7px] px-3 pt-[22px] pb-5",
+    // Centred in the card (the approved "States" frame).
+    root: "flex flex-col items-center gap-1.5 px-7 pt-[22px] pb-6 text-center",
     title: "text-[13px] text-[var(--ink-900)]",
     body: "max-w-[40ch] text-[11px] leading-[1.55]",
     bodyStyle: { color: "var(--ink-500)" } as const,

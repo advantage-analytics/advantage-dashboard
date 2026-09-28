@@ -14,7 +14,9 @@ import type { WorkspaceContextValue } from "@/lib/workspace/types";
 
 /**
  * T8: the header's "Clear all" is a labelled text button, not a bare glyph,
- * and it is drawn only while something is applied (`filmListActive`).
+ * and it is drawn only while something is applied (`filmListActive`). It is
+ * the fullscreen room's drawer's (`tone="dark"`): the report column states
+ * the cut in the filter strip above it, which carries "Clear filter".
  *
  * Two `PointList`s are mounted side by side, in separate root divs so the
  * spec can address each header independently: one with nothing applied (no
@@ -119,8 +121,7 @@ function mount(containerId: string, filmFilters: FilmListFilters): void {
               container.dataset.cleared = "true";
             },
           }}
-          advancedOpen={false}
-          onAdvancedOpenChange={() => {}}
+          tone="dark"
           activePointId={null}
           activeStart={0}
           activeEnd={0}

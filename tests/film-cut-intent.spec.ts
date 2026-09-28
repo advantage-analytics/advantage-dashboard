@@ -8,8 +8,9 @@ import {
   type FilmCutIntent,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
-  filmListChips,
   filmListName,
+  filmListSentence,
+  filmStripAction,
   filmListPoints,
   landFilmCut,
   NO_FILM_LOCAL_FILTERS,
@@ -194,21 +195,35 @@ test("landing a cut never writes to the shared filters", () => {
   ).toEqual(NO_FILM_LOCAL_FILTERS);
 });
 
-test("the cut shows as its own chip, apart from the shared filters' chips", () => {
+test("the strip states the cut in words — the shared filters, then the statistic, then saved", () => {
   const names = { you: "Reid", opponent: "Alvarez" };
-  const chips = filmListChips(
-    {
-      shared: { ...EMPTY_MATCH_FILTERS, scoreType: ["breakpoint"] },
-      cut: intent({ resultOutcome: ["winner"], ending: "ace" }, "Aces · Reid"),
-      savedOnly: true,
+  const f = {
+    shared: {
+      ...EMPTY_MATCH_FILTERS,
+      scoreType: ["breakpoint"] as const,
+      server: "you" as const,
     },
-    names,
+    cut: intent({ resultOutcome: ["winner"], ending: "ace" }, "Aces · Reid"),
+    savedOnly: true,
+  };
+  expect(filmListSentence(f, names)).toBe(
+    "Reid serving · break point · aces · Reid, from Statistics · saved",
   );
-  expect(chips.map((c) => [c.kind, c.label])).toEqual([
-    ["saved", "Saved"],
-    ["cut", "Aces · Reid"],
-    ["shared", "Breakpoint"],
-  ]);
+  expect(filmStripAction(f)).toBe("Clear filter");
+
+  // A statistic's cut on its own: its label leads, and the way out is
+  // "Back to all points".
+  const onlyCut = { shared: EMPTY_MATCH_FILTERS, cut: f.cut, savedOnly: false };
+  expect(filmListSentence(onlyCut, names)).toBe("Aces · Reid, from Statistics");
+  expect(filmStripAction(onlyCut)).toBe("Back to all points");
+
+  // Saved alone is a filter too.
+  expect(
+    filmListSentence(
+      { shared: EMPTY_MATCH_FILTERS, cut: null, savedOnly: true },
+      names,
+    ),
+  ).toBe("Saved");
 });
 
 test("the quick menu writes the shared filters; Saved only stays Film-only", () => {

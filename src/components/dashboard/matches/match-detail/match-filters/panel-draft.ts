@@ -2,7 +2,6 @@ import {
   EMPTY_MATCH_FILTERS,
   MATCH_FILTER_OPTIONS,
   MATCH_FILTER_SECTIONS,
-  activeFilterCount,
   filtersEqual,
   toggleMatchFilter,
   type MatchFilterAvailability,
@@ -13,6 +12,7 @@ import {
   type MatchFilters,
   type PlayerSide,
 } from "./model";
+import { appliedValues, optionLabel } from "./applied-words";
 
 /**
  * The FiltersPanel's pure half — what it shows and how its draft changes —
@@ -184,21 +184,63 @@ export function sectionHasSelection(
 }
 
 /**
- * The sections open on first draw: every section holding an applied filter,
- * else the first section shown — so the panel never opens as a stack of
- * closed headers, and never hides a filter that is in force.
+ * The one section open on first draw — the panel is an accordion: the first
+ * section holding an applied filter, else the first section shown. Never a
+ * stack of closed headers.
  */
-export function initialOpenSections(
+export function initialOpenSection(
   filters: MatchFilters,
   shown: readonly PanelSection[],
-): MatchFilterSectionId[] {
-  if (activeFilterCount(filters) > 0) {
-    const withSelection = shown
-      .filter((s) => sectionHasSelection(filters, s.id))
-      .map((s) => s.id);
-    if (withSelection.length > 0) return withSelection;
+): MatchFilterSectionId | null {
+  const withSelection = shown.find((s) => sectionHasSelection(filters, s.id));
+  return withSelection?.id ?? shown[0]?.id ?? null;
+}
+
+/**
+ * What a collapsed section's header says is set in it, from the DRAFT: the
+ * picked options' labels, first one as-is and the rest lower-cased ("G.
+ * Revelli · second serve"), names and scores untouched. Return › Player
+ * reads "T. Stepanov returning" (the returner is the other side of `server`).
+ * `null` when nothing in the section is picked — the header reads "Any".
+ */
+export function sectionSummary(
+  draft: MatchFilters,
+  sectionId: MatchFilterSectionId,
+  names: { you: string; opponent: string },
+): string | null {
+  const section = MATCH_FILTER_SECTIONS.find((s) => s.id === sectionId);
+  if (!section) return null;
+  const parts: string[] = [];
+  for (const group of section.groups) {
+    for (const value of appliedValues(draft, group.key)) {
+      if (PLAYER_KEYS.has(group.key)) {
+        const shown = group.invertPlayer
+          ? otherPlayer(value as PlayerSide)
+          : (value as PlayerSide);
+        const name = shown === "you" ? names.you : names.opponent;
+        parts.push(group.invertPlayer ? `${name} returning` : name);
+      } else if (group.key === "sets") {
+        parts.push(`${parts.length === 0 ? "Set" : "set"} ${String(value)}`);
+      } else {
+        const label = optionLabel(group.key, value);
+        const keepCase = group.key === "scorePoints" || label.length === 1;
+        parts.push(
+          parts.length === 0 || keepCase ? label : label.toLowerCase(),
+        );
+      }
+    }
   }
-  return shown.length > 0 ? [shown[0].id] : [];
+  return parts.length === 0 ? null : parts.join(" · ");
+}
+
+/** The drawer footer's live count: "9 of 114 points". */
+export function draftCountLine(count: number, total: number): string {
+  return `${count} of ${total} ${total === 1 ? "point" : "points"}`;
+}
+
+/** The drawer's primary: "Show 9 points", "Show 1 point". */
+export function showPointsLabel(count: number): string {
+  return `Show ${count} ${count === 1 ? "point" : "points"}`;
 }
 
 /**

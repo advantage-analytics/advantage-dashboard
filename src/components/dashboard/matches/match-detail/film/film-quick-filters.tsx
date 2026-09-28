@@ -38,7 +38,8 @@ import {
 /**
  * The three filters you reach for mid-rally (handoff F4), anchored to the
  * panel's Filters trigger. Quick choices apply on click — they are one tap —
- * and the last row opens the advanced panel. Filters drive ↑↓ as well as the
+ * and the last row opens the advanced filters (the report's 340px drawer, or
+ * the room drawer's own column). Filters drive ↑↓ as well as the
  * list.
  *
  * Since T7 the rows write the layers they belong to (`film-list-filters.ts`):
@@ -50,12 +51,18 @@ export function FilmQuickFilters({
   filmFilters,
   sides,
   onOpenAdvanced,
+  triggerRef,
   tone,
 }: {
   filmFilters: FilmListFilters;
   sides: MatchSides;
   /** Absent = no "Advanced filters…" row. */
   onOpenAdvanced?: () => void;
+  /**
+   * The light trigger's element, for the filters drawer to hand focus back
+   * to when it closes (`useFilterRail().registerTrigger`).
+   */
+  triggerRef?: (element: HTMLButtonElement | null) => void;
   /** "dark" is the fullscreen film's menu; "light" is the in-shell list's. */
   tone: "light" | "dark";
 }) {
@@ -134,6 +141,7 @@ export function FilmQuickFilters({
         className="rounded-[12px] [box-shadow:var(--shadow-dropdown)]!"
         trigger={
           <button
+            ref={triggerRef}
             type="button"
             aria-expanded={open}
             className={cn(

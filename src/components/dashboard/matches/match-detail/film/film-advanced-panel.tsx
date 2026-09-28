@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
@@ -12,45 +12,33 @@ import {
   type MatchFilters,
 } from "../match-filters/model";
 import { useMatchFilters } from "../match-filters/provider";
+import { filmDraftCount, type FilmListFilters } from "./film-list-filters";
 import type { FilmListTone } from "./point-list";
 
 /**
- * Advanced filters, in the point list's own column (handoff P4) — since T7 a
- * thin host for the shared `FiltersPanel`, the same panel the Statistics tab
- * opens in its filters rail, editing the same `MatchFilters`.
+ * Advanced filters in the point list's own column — the fullscreen film
+ * room's host for the shared `FiltersPanel` (frame R4). In the report the
+ * same panel opens in the 340px filters drawer instead (`FilterRail`,
+ * `match-filters/filter-rail.tsx`); in the room that drawer would sit under
+ * the room where it could not be reached, so the room's points drawer swaps
+ * this in where its list was — never a modal over the film, which keeps
+ * playing behind every filter operation.
  *
- * Not a dialog, not a popover and not the report's frame-level rail: the
- * caller swaps this in where the list was, so the film keeps playing behind
- * every filter operation. That holds in the fullscreen room too (frame R4) —
- * it opens in the drawer's own column through the same branch, never as a
- * modal over the film, and the report's rail sits under the room where it
- * could not be reached. So Film keeps one in-column host in both tones, and
- * what it hosts is the one shared panel.
+ * "Show N points" writes the shared filters and returns to the list; the X
+ * returns without touching them. The panel's draft seeds on mount, so it is
+ * keyed on the applied filters: a quick pick made while it is open re-seeds
+ * it rather than leaving a stale draft. A statistic's cut and "Saved only"
+ * are not in here — they are Film-only layers, never part of `MatchFilters`
+ * — but the footer's count honours them (`filmDraftCount`), so "Show 9
+ * points" is exactly what the list will show.
  *
- * Apply writes the shared filters (the Statistics cards follow) and returns
- * to the list; Cancel returns without touching them. The panel's draft seeds
- * on mount, so it is keyed on the applied filters: a chip removed or a quick
- * pick made while it is open re-seeds it rather than leaving a stale draft.
- * A statistic's cut and "Saved only" are not in here — they are Film-only
- * layers, never part of `MatchFilters`, and each has its own control.
- *
- * `tone="dark"` is the fullscreen room's drawer: the panel opens the design
- * system's `.dark` token scope, and the host pads it to the drawer's header
- * inset. The light host pads it inside the report column's card.
+ * `tone="dark"` opens the design system's `.dark` token scope inside the
+ * room's 320px sheet.
  */
 
-const HOST_TONE = {
-  // The list's card already draws the surface and its 10px/8px padding.
-  light: "flex min-h-0 flex-1 flex-col px-1.5 pt-1",
-  // The drawer draws the 320px sheet; line up with its header's inset.
-  dark: "flex min-h-0 flex-1 flex-col px-3.5 pt-[13px] pb-3",
-} satisfies Record<FilmListTone, string>;
-
 export interface FilmAdvancedPanelProps {
-  /** The applied shared filters — the panel's draft starts here. */
-  filters: MatchFilters;
-  /** Commit the draft to the shared filters. */
-  onApply: (next: MatchFilters) => void;
+  /** The list's filter layers — the shared half seeds the draft. */
+  filmFilters: FilmListFilters;
   /** Back to the list, the filters untouched. */
   onClose: () => void;
   /** Paint only. "dark" is the fullscreen room's drawer column (frame R4). */
@@ -58,8 +46,7 @@ export interface FilmAdvancedPanelProps {
 }
 
 export function FilmAdvancedPanel({
-  filters,
-  onApply,
+  filmFilters,
   onClose,
   tone = "light",
 }: FilmAdvancedPanelProps) {
@@ -72,26 +59,34 @@ export function FilmAdvancedPanel({
     () => optionAvailability(points, context),
     [points, context],
   );
+  const { shared, setShared, cut, savedOnly } = filmFilters;
+  const countFor = useCallback(
+    (draft: MatchFilters) =>
+      filmDraftCount(points, draft, { cut, savedOnly }, context),
+    [points, cut, savedOnly, context],
+  );
 
   return (
     <div
       aria-label="Advanced filters"
       role="region"
-      className={HOST_TONE[tone]}
+      className="flex min-h-0 flex-1 flex-col"
     >
       <FiltersPanel
-        key={serializeMatchFilters(filters)}
+        key={serializeMatchFilters(shared)}
         className="min-h-0 flex-1"
         tone={tone}
-        filters={filters}
+        filters={shared}
         availability={availability}
         youName={sides.you.shortName}
         oppName={sides.opp.shortName}
+        countFor={countFor}
+        total={points.length}
         onApply={(next) => {
-          onApply(next);
+          setShared(next);
           onClose();
         }}
-        onCancel={onClose}
+        onClose={onClose}
       />
     </div>
   );

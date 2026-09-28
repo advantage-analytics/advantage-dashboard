@@ -44,9 +44,17 @@ import {
   usePendingFilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
+import {
+  FilterRail,
+  FilterRailProvider,
+  useFilterRailHost,
+} from "@/components/dashboard/matches/match-detail/match-filters/filter-rail";
+import type { MatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import { FilmFilterStrip } from "./film-filter-strip";
 import { useAttachmentPlayback } from "./use-attachment-playback";
 import { recordMatchVideoView } from "./record-video-view";
 import {
+  filmDraftCount,
   filmListPoints,
   landFilmCut,
   NO_FILM_LOCAL_FILTERS,
@@ -108,7 +116,15 @@ export function FilmTab({
    */
   unit: DistanceUnit;
 }) {
-  if (video) return <FilmRoom video={video} entry={entry} unit={unit} />;
+  // The filters drawer's open state lives with the room, so a switch to
+  // another view (which unmounts this tab) always leaves it shut.
+  if (video) {
+    return (
+      <FilterRailProvider>
+        <FilmRoom video={video} entry={entry} unit={unit} />
+      </FilterRailProvider>
+    );
+  }
   const view = filmEntryView(entry);
   if (view === "empty") return <FilmEmptyState entry={entry} />;
   if (view === "expired") return <FilmExpiredState entry={entry} />;
@@ -165,8 +181,8 @@ function FilmRoom({
    *   ABOVE the view switch and mirrored to `?f=` there. The quick menu and
    *   the Advanced panel write it, and the Statistics tab reads the same
    *   state. Film no longer keeps a filter model of its own.
-   * - `local.cut` — a statistic's cut, Film only: a chip, never written to
-   *   the shared state or the URL.
+   * - `local.cut` — a statistic's cut, Film only: named in the filter
+   *   strip, never written to the shared state or the URL.
    * - `local.savedOnly` — the viewer's bookmarks, Film only.
    *
    * The local layers live here, and `MatchReportWhen` unmounts this view on a
@@ -239,9 +255,10 @@ function FilmRoom({
     }),
     [shared, setShared, local, clearCut, setSavedOnly, clearAll],
   );
-  // Advanced lives in the list column; its open flag is the tab's, so the
-  // list re-rendering never closes it.
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // "Advanced filters…" opens the 340px filters drawer over the list column
+  // (`FilterRail`, rendered at the end of this view). The room's own drawer
+  // keeps its in-column panel.
+  const filterRail = useFilterRailHost();
   const [currentTime, setCurrentTime] = useState(0);
   const [room, setRoom] = useState<{ time: number; playing: boolean } | null>(
     null,
@@ -379,6 +396,13 @@ function FilmRoom({
   const filteredPoints = useMemo(
     () => filmListPoints(points, sharedPoints, local, filterContext),
     [points, sharedPoints, local, filterContext],
+  );
+  // The filters drawer's live count: what this list would show if the draft
+  // replaced the shared filters, under the same cut and saved toggle.
+  const countForDraft = useCallback(
+    (draft: MatchFilters) =>
+      filmDraftCount(points, draft, local, filterContext),
+    [points, local, filterContext],
   );
 
   // A cut change that removes the held point leaves no row to hold: back to
@@ -810,6 +834,15 @@ function FilmRoom({
           expiresAt={expiry.expiresAt}
         />
       )}
+      {/* The cut in words, above the video and the list (never inside the
+          list's card), while anything is applied — the Matches page's
+          strip, v3's Data Table rule 6. */}
+      <FilmFilterStrip
+        filmFilters={filmFilters}
+        names={{ you: sides.you.shortName, opponent: sides.opp.shortName }}
+        shown={filteredPoints.length}
+        total={points.length}
+      />
       <div
         ref={clockRef}
         className="flex min-h-0 flex-1 flex-col gap-4 @min-[720px]:flex-row"
@@ -873,8 +906,8 @@ function FilmRoom({
               // the room's drawer off the very same array and filter object.
               visiblePoints={filteredPoints}
               filmFilters={filmFilters}
-              advancedOpen={advancedOpen}
-              onAdvancedOpenChange={setAdvancedOpen}
+              onOpenFilters={filterRail.toggle}
+              filtersTriggerRef={filterRail.registerTrigger}
               activePointId={active?.stop.point.id ?? null}
               activeStart={active?.stop.start ?? 0}
               activeEnd={active?.stop.end ?? 0}
@@ -933,6 +966,11 @@ function FilmRoom({
           />
         )}
       </div>
+
+      {/* The filters drawer: 340px over the list column, anchored to the
+          report pane's right edge — its absolute box resolves to the pane
+          (see filter-rail.tsx › Placement), so nothing here reflows. */}
+      <FilterRail countFor={countForDraft} />
     </div>
   );
 }

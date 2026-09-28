@@ -16,7 +16,11 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { cn } from "@/lib/utils";
 
 import { FiltersPanel } from "./filters-panel";
-import { optionAvailability, serializeMatchFilters } from "./model";
+import {
+  optionAvailability,
+  serializeMatchFilters,
+  type MatchFilters,
+} from "./model";
 import { useMatchFilters } from "./provider";
 import {
   escClosesRail,
@@ -25,40 +29,40 @@ import {
 } from "./rail-state";
 
 /**
- * The match report's filters rail — `FiltersPanel` in a 340px rail at the
- * report's right edge.
- *
- * ── Not mounted, for now ────────────────────────────────────────────────
- * It was built for a Filter button on the Statistics view, which the product
- * owner then removed: filters live on the Video tab alone, and Statistics is
- * always the whole match. Nothing mounts `FilterRailProvider`/`FilterRail`
- * until the rail is re-hosted for the Video tab (as an overlay there, so the
- * notes below on the frame's third column describe the original placement).
+ * The Video tab's filters drawer — `FiltersPanel` in a 340px panel that
+ * OVERLAYS the point-list column: anchored to the report pane's right edge
+ * (the frame's right edge), from just under the top header to the bottom,
+ * above the page content. The video keeps its size and nothing reflows — the
+ * film keeps playing beside every filter operation. White surface, hairline
+ * left edge, `--shadow-dropdown`: the peek drawer's paint.
  *
  * ── Placement ───────────────────────────────────────────────────────────
- * `MatchReportFrame` mounts the provider and the rail, so the rail is the
- * frame's third column — score rail │ pane │ filters — and the pane reflows to
- * the width left, the way the Roster, Schedule and Matches tables reflow
- * beside their drawers. Inside the pane it would sit in the pane's own
- * padding and scroll away with the cards; over the pane it would cover the
- * cards whose cut it edits. The widgets row answers to the pane's width
- * (`@container`), so with the rail open it stacks as it would in any
- * narrower window.
+ * `FilmRoom` (film/film-tab.tsx) renders `FilterRail` as a direct child of
+ * its root, which has no positioned ancestor below `MatchReportPane`. The
+ * pane is an `@container`, and container queries apply layout containment —
+ * which makes the pane the containing block for absolutely positioned
+ * descendants. So `absolute inset-y-0 right-0` is the pane's box: under the
+ * header, to its bottom, flush right. The Video view never scrolls the pane
+ * (`MatchReportWhen scrollsInside`), so the drawer never scrolls away.
  *
  * ── The shell ───────────────────────────────────────────────────────────
  * The roster's (`team/player-drawer.tsx`, `matches/match-drawer.tsx`
  * `PeekDrawerFrame`): the WIDTH animates (`roster-drawer-in` / `-out`, 200ms
- * `--ease-primary`) so the pane reflows rather than being covered, and the
- * rail leaves the DOM on the out animation's end. A Framer inline width left
- * an earlier rail invisible; this is the CSS one on purpose.
+ * `--ease-primary`) from the right edge, and the drawer leaves the DOM on the
+ * out animation's end. A Framer inline width left an earlier rail invisible;
+ * this is the CSS one on purpose.
  *
  * ── Selection model ─────────────────────────────────────────────────────
- * `rail-state.ts`: the Filter button toggles (re-click closes), Esc closes,
- * Cancel and Apply close. A switch to another view resets it shut —
- * `useFilterRailHost` in the view that owns the button.
+ * `rail-state.ts`: "Advanced filters…" toggles (re-picking it closes), Esc,
+ * the X and "Show N points" close. Focus moves in on open and back to the
+ * dropdown trigger (`registerTrigger`) on close. `FilmRoom` is what
+ * `MatchReportWhen` unmounts on a view switch, and the provider lives with
+ * it, so a switch always leaves the drawer shut; `useFilterRailHost` also
+ * resets it when the list that owns the trigger unmounts.
  *
  * The panel is keyed on the serialized applied filters, because its draft is
- * seeded only on mount: an Apply, a chip removed, or Back/Forward re-seeds it.
+ * seeded only on mount: an Apply, a quick pick, a strip clear or
+ * Back/Forward re-seeds it.
  */
 
 interface FilterRailValue {
@@ -70,7 +74,7 @@ interface FilterRailValue {
   /** The out animation ended — the rail leaves the DOM. */
   finish: () => void;
   /**
-   * Callback ref for the Filter button — focus goes back to it when the rail
+   * Callback ref for the quick-filters trigger — focus goes back to it when the drawer
    * closes with focus inside. A callback, not a ref object, so no ref ever
    * travels through context into a render.
    */
@@ -79,7 +83,7 @@ interface FilterRailValue {
 
 const FilterRailContext = createContext<FilterRailValue | null>(null);
 
-/** The id the Filter button's `aria-controls` names. */
+/** The drawer's id — an `aria-controls` target, and how `close` finds it. */
 export const FILTER_RAIL_ID = "match-filters-rail";
 
 export function FilterRailProvider({ children }: { children: ReactNode }) {
@@ -115,8 +119,8 @@ export function FilterRailProvider({ children }: { children: ReactNode }) {
     [phase, toggle, close, reset, finish, registerTrigger],
   );
 
-  // State only: the rail itself is `FilterRail`, which the frame places in
-  // its flex row — a child rendered here would not reflow the pane.
+  // State only: the drawer itself is `FilterRail`, which `FilmRoom` places
+  // where its absolute box resolves to the report pane.
   return <FilterRailContext value={value}>{children}</FilterRailContext>;
 }
 
@@ -137,9 +141,9 @@ export function useFilterRail(): FilterRailValue {
 }
 
 /**
- * For the view that owns the Filter button: shuts the rail when that view
- * unmounts (`MatchReportWhen` unmounts an inactive view), so a switch to
- * Visualizations does not leave the Statistics filters open beside it.
+ * For the list that owns the drawer's trigger: shuts the drawer when it
+ * unmounts, so nothing is left open beside a view that no longer has the
+ * control that closes it.
  */
 export function useFilterRailHost(): FilterRailValue {
   const rail = useFilterRail();
@@ -148,19 +152,30 @@ export function useFilterRailHost(): FilterRailValue {
   return rail;
 }
 
-/**
- * The rail. Draws nothing while shut, so the frame is exactly its old two
- * columns until the Filter button is pressed — and so the skeleton frame
- * (`match-report-pending.tsx`), which has no match data, never reaches the
- * data hooks below.
- */
-export function FilterRail() {
-  const rail = use(FilterRailContext);
-  if (!rail || rail.phase === "closed") return null;
-  return <FilterRailShell rail={rail} />;
+export interface FilterRailProps {
+  /**
+   * How many points the host's list would show under a draft — the footer's
+   * live count and "Show N points". The Video list's rule is
+   * `filmDraftCount` (film-list-filters.ts): the draft AND the statistic's
+   * cut AND the saved toggle.
+   */
+  countFor: (draft: MatchFilters) => number;
 }
 
-function FilterRailShell({ rail }: { rail: FilterRailValue }) {
+/**
+ * The drawer. Draws nothing while shut, so the page is exactly as it was
+ * until "Advanced filters…" is picked.
+ */
+export function FilterRail(props: FilterRailProps) {
+  const rail = use(FilterRailContext);
+  if (!rail || rail.phase === "closed") return null;
+  return <FilterRailShell rail={rail} {...props} />;
+}
+
+function FilterRailShell({
+  rail,
+  countFor,
+}: FilterRailProps & { rail: FilterRailValue }) {
   const { phase, close, finish } = rail;
   const closing = phase === "closing";
   const panelRef = useRef<HTMLDivElement>(null);
@@ -175,9 +190,15 @@ function FilterRailShell({ rail }: { rail: FilterRailValue }) {
     [points, context],
   );
 
-  // Take focus on open so Esc and Tab start inside the rail.
+  // Take focus on open so Esc and Tab start inside the drawer. A frame
+  // late: the quick menu that opened it hands focus back to its trigger as
+  // it closes, in the same commit, and would otherwise take it straight back.
   useEffect(() => {
-    if (phase === "open") panelRef.current?.focus({ preventScroll: true });
+    if (phase !== "open") return;
+    const frame = requestAnimationFrame(() =>
+      panelRef.current?.focus({ preventScroll: true }),
+    );
+    return () => cancelAnimationFrame(frame);
   }, [phase]);
 
   // `motion-reduce:animate-none` means no `animationend` ever fires, so a
@@ -201,14 +222,14 @@ function FilterRailShell({ rail }: { rail: FilterRailValue }) {
   return (
     <aside
       id={FILTER_RAIL_ID}
-      aria-label="Match filters"
+      aria-label="Filters"
       // Shrinking to nothing, it must not stay in the tab order.
       inert={closing}
       onAnimationEnd={(event) => {
         if (event.animationName === "roster-drawer-out") finish();
       }}
       className={cn(
-        "min-h-0 shrink-0 self-stretch overflow-hidden border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] motion-reduce:animate-none",
+        "absolute inset-y-0 right-0 z-30 overflow-hidden border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] motion-reduce:animate-none",
         closing
           ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
           : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]",
@@ -217,7 +238,7 @@ function FilterRailShell({ rail }: { rail: FilterRailValue }) {
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="flex h-full w-[340px] flex-col px-4 pt-4 pb-4 outline-none"
+        className="flex h-full w-[340px] flex-col outline-none"
       >
         <FiltersPanel
           key={serializeMatchFilters(filters)}
@@ -226,11 +247,13 @@ function FilterRailShell({ rail }: { rail: FilterRailValue }) {
           availability={availability}
           youName={sides.you.shortName}
           oppName={sides.opp.shortName}
+          countFor={countFor}
+          total={points.length}
           onApply={(next) => {
             setFilters(next);
             close();
           }}
-          onCancel={close}
+          onClose={close}
         />
       </div>
     </aside>

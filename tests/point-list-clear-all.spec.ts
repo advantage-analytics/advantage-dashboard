@@ -20,8 +20,10 @@ let server: Server;
 let origin: string;
 
 /**
- * T8: the header's clear control is a labelled "Clear all" text button, not
- * a bare glyph, and it is drawn only while a cut is applied.
+ * T8: the room drawer's header clear is a labelled "Clear all" text button,
+ * not a bare glyph, and it is drawn only while a cut is applied. (The report
+ * column has none — its filter strip carries "Clear filter"; see
+ * film-playback-refresh.spec.ts.)
  *
  * `point-list-clear-all-harness.tsx` mounts the real `PointList` twice —
  * once with nothing applied (no button), once with the shared Score ›

@@ -1,12 +1,13 @@
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
 import {
-  appliedChips,
-  type AppliedChip,
-  type ChipNames,
-} from "../match-filters/applied-chips";
+  appliedPhrases,
+  capitalizeFirst,
+  type PhraseNames,
+} from "../match-filters/applied-words";
 import {
   activeFilterCount,
+  applyMatchFilters,
   EMPTY_MATCH_FILTERS,
   MATCH_FILTER_KEYS,
   type MatchFilterContext,
@@ -25,9 +26,9 @@ import {
  *
  * 1. `shared` — the match report's `MatchFilters` (`MatchFiltersProvider`),
  *    the same state the Statistics tab reads and `?f=` mirrors. Film edits it
- *    through the quick menu and the Advanced panel (`FiltersPanel`).
+ *    through the quick menu and the filters drawer (`FiltersPanel`).
  * 2. `cut` — a statistic's one-off cut (`film-cut-context.tsx`), Film only:
- *    one removable chip, never written to the shared state.
+ *    named in the filter strip, never written to the shared state.
  * 3. `savedOnly` — the viewer's bookmarks, a Film-only local toggle: it is
  *    about the viewer, not about the tennis, so it is not a match filter.
  *
@@ -47,7 +48,7 @@ export const NO_FILM_LOCAL_FILTERS: FilmLocalFilters = Object.freeze({
 });
 
 /**
- * Everything the list's header, quick menu and chips need: the three layers
+ * Everything the list's header, quick menu and filter strip need: the three layers
  * and the one writer for each. `film-tab.tsx` builds ONE of these and hands
  * the same object to both `PointList` mounts (the report column and the
  * fullscreen room's drawer), so the two can never show different cuts.
@@ -175,7 +176,7 @@ function quickOnly(shared: MatchFilters): boolean {
  */
 export function filmListName(
   f: { shared: MatchFilters; cut: FilmCutIntent | null; savedOnly: boolean },
-  names: ChipNames,
+  names: PhraseNames,
 ): string {
   if (f.cut !== null || !quickOnly(f.shared)) return "Filtered";
   const show = quickShow(f);
@@ -188,44 +189,78 @@ export function filmListName(
   return showName ?? serverName ?? "All points";
 }
 
-function playerNameOf(side: PlayerSide, names: ChipNames): string {
+function playerNameOf(side: PlayerSide, names: PhraseNames): string {
   return side === "you" ? names.you : names.opponent;
 }
 
-/**
- * Every applied layer as chips, in reading order: saved, the statistic's
- * cut, then the shared filters in panel order. `kind` says which layer a chip
- * removes — the cut chip clears only the cut.
- */
-export type FilmListChip =
-  | { kind: "saved"; id: "saved"; label: string }
-  | { kind: "cut"; id: "cut"; label: string }
-  | { kind: "shared"; id: string; label: string; chip: AppliedChip };
-
-export function filmListChips(
-  f: { shared: MatchFilters; cut: FilmCutIntent | null; savedOnly: boolean },
-  names: ChipNames,
-): FilmListChip[] {
-  const out: FilmListChip[] = [];
-  if (f.savedOnly) out.push({ kind: "saved", id: "saved", label: "Saved" });
-  if (f.cut) out.push({ kind: "cut", id: "cut", label: f.cut.label });
-  for (const chip of appliedChips(f.shared, names)) {
-    out.push({ kind: "shared", id: chip.id, label: chip.label, chip });
+/** Lower-case a cut label's first letter mid-sentence, unless it opens on a name. */
+function midSentence(label: string, names: PhraseNames): string {
+  if (label.startsWith(names.you) || label.startsWith(names.opponent)) {
+    return label;
   }
-  return out;
+  // "Aces · Reid" → "aces · Reid"; an acronym or a score ("T", "40-Ad") stays.
+  return /^[A-Z][a-z]/.test(label)
+    ? label.charAt(0).toLowerCase() + label.slice(1)
+    : label;
 }
 
 /**
- * The applied layers in words, for the zero state: "Saved, Aces · Reid,
- * Breakpoint". The same labels as the chips, so the sentence and the strip
- * above it cannot disagree.
+ * Every applied layer in words, for the filter strip above the video and the
+ * zero state (the design system bans accumulating chips — tables.md, Data
+ * Table rule 6 — so the cut reads as one sentence): the shared filters
+ * (`appliedPhrases`, rally order), then the statistic's cut ("…, from
+ * Statistics"), then "saved" — joined with " · " and capitalised once.
+ * "G. Revelli serving · second serve · break point". "All points" when
+ * nothing is applied.
  */
 export function filmListSentence(
   f: { shared: MatchFilters; cut: FilmCutIntent | null; savedOnly: boolean },
-  names: ChipNames,
+  names: PhraseNames,
 ): string {
-  const labels = filmListChips(f, names).map((chip) => chip.label);
-  return labels.length === 0 ? "All points" : labels.join(", ");
+  const parts = appliedPhrases(f.shared, names);
+  if (f.cut) {
+    const label =
+      parts.length === 0 ? f.cut.label : midSentence(f.cut.label, names);
+    parts.push(`${label}, from Statistics`);
+  }
+  if (f.savedOnly) parts.push("saved");
+  return parts.length === 0 ? "All points" : capitalizeFirst(parts.join(" · "));
+}
+
+/**
+ * The strip's one action. Every layer clears at once ("Clear filter"), but
+ * when the ONLY thing applied is a statistic's cut the viewer arrived from a
+ * number on the Statistics tab, and the way out reads "Back to all points".
+ */
+export function filmStripAction(f: {
+  shared: MatchFilters;
+  cut: FilmCutIntent | null;
+  savedOnly: boolean;
+}): "Clear filter" | "Back to all points" {
+  return f.cut !== null && !f.savedOnly && activeFilterCount(f.shared) === 0
+    ? "Back to all points"
+    : "Clear filter";
+}
+
+/**
+ * How many points the list would show if `draft` replaced the shared filters
+ * — the filters drawer's live footer count ("9 of 114 points") and its
+ * "Show 9 points". The list's own rule (`filmListPoints`): the draft's points
+ * AND the statistic's cut AND, when on, the saved toggle, over the whole
+ * match in match order.
+ */
+export function filmDraftCount(
+  points: MatchPoint[],
+  draft: MatchFilters,
+  local: FilmLocalFilters,
+  ctx: MatchFilterContext,
+): number {
+  return filmListPoints(
+    points,
+    applyMatchFilters(points, draft, ctx),
+    local,
+    ctx,
+  ).length;
 }
 
 /** "Reid" out of "Marcus Reid" — the list's group-header/pill shorthand. */

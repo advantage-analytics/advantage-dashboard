@@ -191,16 +191,16 @@ export const MATCH_FILTER_OPTIONS: {
   sets: [],
   scoreType: [
     { value: "pressure", label: "Pressure" },
-    { value: "breakpoint", label: "Breakpoint" },
-    { value: "setPoint", label: "Set Point" },
-    { value: "matchPoint", label: "Match Point" },
+    { value: "breakpoint", label: "Break point" },
+    { value: "setPoint", label: "Set point" },
+    { value: "matchPoint", label: "Match point" },
   ],
   scorePoints: POINT_SCORE_OPTIONS.map((value) => ({ value, label: value })),
   server: PLAYER_OPTIONS,
   court: SIDE_OPTIONS,
   serveType: [
-    { value: "first", label: "First Serve" },
-    { value: "second", label: "Second Serve" },
+    { value: "first", label: "First serve" },
+    { value: "second", label: "Second serve" },
   ],
   serveSpin: [
     { value: "Flat", label: "Flat" },
@@ -221,7 +221,7 @@ export const MATCH_FILTER_OPTIONS: {
     { value: "Slice", label: "Slice" },
   ],
   returnZone: [
-    { value: "Down the Line", label: "Down the Line" },
+    { value: "Down the Line", label: "Down the line" },
     { value: "Middle", label: "Middle" },
     { value: "Crosscourt", label: "Crosscourt" },
   ],
@@ -249,9 +249,9 @@ export const MATCH_FILTER_OPTIONS: {
   customSide: SIDE_OPTIONS,
   customDirection: [
     { value: "Crosscourt", label: "Crosscourt" },
-    { value: "Down the Line", label: "Down the Line" },
-    { value: "Inside Out", label: "Inside Out" },
-    { value: "Inside In", label: "Inside In" },
+    { value: "Down the Line", label: "Down the line" },
+    { value: "Inside Out", label: "Inside out" },
+    { value: "Inside In", label: "Inside in" },
   ],
   customRallyShot: RALLY_SHOT_NUMBERS.map((n) => ({
     value: n,
@@ -271,6 +271,8 @@ export interface MatchFilterGroup {
    * "opponent".
    */
   invertPlayer?: boolean;
+  /** A quiet aside printed after the label ("server first"). */
+  note?: string;
 }
 
 /** Sections and their groups, in panel order. */
@@ -285,7 +287,7 @@ export const MATCH_FILTER_SECTIONS: readonly {
     groups: [
       { key: "sets", label: "Sets" },
       { key: "scoreType", label: "Type" },
-      { key: "scorePoints", label: "Points" },
+      { key: "scorePoints", label: "Points", note: "server first" },
     ],
   },
   {
@@ -303,7 +305,12 @@ export const MATCH_FILTER_SECTIONS: readonly {
     id: "return",
     label: "Return",
     groups: [
-      { key: "server", label: "Player", invertPlayer: true },
+      {
+        key: "server",
+        label: "Player",
+        note: "follows the server",
+        invertPlayer: true,
+      },
       { key: "court", label: "Side" },
       { key: "returnType", label: "Type" },
       { key: "returnSpin", label: "Spin" },
@@ -324,10 +331,10 @@ export const MATCH_FILTER_SECTIONS: readonly {
     id: "custom",
     label: "Custom",
     groups: [
-      { key: "customPlayer", label: "Choose Player" },
+      { key: "customPlayer", label: "Choose player" },
       { key: "customSide", label: "Side" },
       { key: "customDirection", label: "Direction" },
-      { key: "customRallyShot", label: "Rally Shot" },
+      { key: "customRallyShot", label: "Rally shot" },
     ],
   },
 ];
