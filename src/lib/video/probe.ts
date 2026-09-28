@@ -10,6 +10,8 @@
  * for analysis must never take that path.
  */
 
+import { readAverageFrameRate } from "@/lib/video/container-frame-rate";
+
 /** Metadata read from a local video file. */
 export interface VideoProbe {
   width: number;
@@ -17,6 +19,18 @@ export interface VideoProbe {
   durationSeconds: number;
   /** Measured frame rate, or null when the browser cannot report one. */
   fps: number | null;
+  /**
+   * Whole-track average frame rate from the container index (MP4/MOV only),
+   * to 2 decimals — or null/absent when it could not be read. Unlike `fps` it
+   * is never snapped, so a variable-rate 29.94 average stays 29.94.
+   *
+   * Exists to work around one vendor's rejection behavior (see
+   * src/lib/video/container-frame-rate.ts and MIN_CONTAINER_AVERAGE_FPS in
+   * src/lib/services/splitstep/config.ts), not as a general quality signal —
+   * a future non-splitstep consumer of `VideoProbe` should not read meaning
+   * into this field beyond "the container's own average, if known".
+   */
+  averageFps?: number | null;
   mimeType: string;
   sizeBytes: number;
 }
@@ -168,6 +182,11 @@ function measureFps(video: FrameCallbackVideo): Promise<number | null> {
  * surface it.
  */
 export async function probeVideo(file: File): Promise<VideoProbe> {
+  // Started first and awaited last, so the container read runs alongside the
+  // metadata load and frame sample instead of after them. readAverageFrameRate
+  // never rejects (it resolves null on any failure or timeout), so no .catch
+  // is needed here.
+  const averageFpsPromise = readAverageFrameRate(file);
   const objectUrl = URL.createObjectURL(file);
   const video = document.createElement("video") as FrameCallbackVideo;
 
@@ -216,12 +235,14 @@ export async function probeVideo(file: File): Promise<VideoProbe> {
     }
 
     const fps = await measureFps(video);
+    const averageFps = await averageFpsPromise;
 
     return {
       width,
       height,
       durationSeconds,
       fps,
+      averageFps,
       mimeType: file.type,
       sizeBytes: file.size,
     };

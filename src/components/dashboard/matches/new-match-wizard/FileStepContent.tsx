@@ -39,6 +39,7 @@ import type {
 import { noteStripCls } from "./styles";
 import { formatResolution, formatTimecode, getNumberOfSets } from "./utils";
 import { VideoRequirements } from "./VideoRequirements";
+import { formatProbeFps } from "@/lib/services/upload/validators/splitstep-validator";
 
 export interface FileStepContentProps {
   kind: ProviderKind;
@@ -346,7 +347,7 @@ function FileStepContentImpl({
     ? [
         formatTimecode(probe.durationSeconds),
         formatResolution(probe.width, probe.height),
-        probe.fps ? `${probe.fps} fps` : null,
+        formatProbeFps(probe),
         uploadedFile?.size,
         "checked",
       ]

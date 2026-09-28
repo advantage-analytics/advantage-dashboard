@@ -20,6 +20,7 @@ import { expect, test } from "@playwright/test";
 import {
   checkVideoFileBasics,
   evaluateVideoProbe,
+  formatProbeFps,
 } from "@/lib/services/upload/validators/splitstep-validator";
 import { videoExtensionFor } from "@/lib/services/splitstep/object-keys";
 import {
@@ -186,6 +187,97 @@ test.describe("frame-rate boundary", () => {
 
   test("the preferred rate passes with nothing to say", () => {
     expect(evaluateVideoProbe(probe()).warnings).toBeUndefined();
+  });
+
+  test("a whole-track average under 29.97 is refused, naming the average", () => {
+    // Job 45ff4bd7: probe read 30, container average 29.94, vendor refused.
+    // The vendor documents 29.97 and higher as accepted.
+    const input = probe({ fps: 30, averageFps: 29.94 });
+    const result = evaluateVideoProbe(input);
+    expect(result.success).toBe(false);
+    const error = result.error ?? "";
+    expect(error).toContain("29.94 fps");
+    expect(error).toContain("variable");
+    expect(error).toContain(PROVIDER_DISPLAY_NAME);
+    expect(error).toContain("29.97");
+    expect(error).toContain("constant 30 fps");
+    expect(error).not.toMatch(/splitstep|swingvision/i);
+    expect(formatProbeFps(input)).toBe("29.94 fps");
+  });
+
+  test("the cutoff sits exactly at the documented 29.97", () => {
+    // 30000/1001 is 29.97003; the reader rounds to two decimals, so genuine
+    // NTSC reads 29.97 and passes. Job b74a1e04's 29.95 is refused.
+    expect(
+      evaluateVideoProbe(probe({ fps: 30, averageFps: 29.97 })).success,
+    ).toBe(true);
+    expect(
+      evaluateVideoProbe(probe({ fps: 30, averageFps: 29.96 })).success,
+    ).toBe(false);
+    expect(
+      evaluateVideoProbe(probe({ fps: 30, averageFps: 29.95 })).success,
+    ).toBe(false);
+  });
+
+  test("constant-rate footage and an unknown average are never refused on the average", () => {
+    const cases: Array<[Partial<VideoProbe>, string]> = [
+      [{ fps: 30, averageFps: 29.97 }, "30 fps"],
+      [{ fps: 30, averageFps: 30 }, "30 fps"],
+      [{ fps: 60, averageFps: 59.94 }, "60 fps"],
+      [{ fps: 30, averageFps: null }, "30 fps"],
+      [{ fps: 30 }, "30 fps"],
+    ];
+    for (const [overrides, shown] of cases) {
+      const input = probe(overrides);
+      const result = evaluateVideoProbe(input);
+      expect(result.success).toBe(true);
+      expect(result.error).toBeUndefined();
+      expect(formatProbeFps(input)).toBe(shown);
+    }
+  });
+
+  test("the average never rescues a rate under the floor", () => {
+    expect(evaluateVideoProbe(probe({ fps: 24, averageFps: 24 })).success).toBe(
+      false,
+    );
+  });
+
+  // Browsers without requestVideoFrameCallback (Firefox) report no sampled
+  // rate, but the container read still works — so the average stands in.
+  test("with no sampled rate, a sub-29.97 average is still refused", () => {
+    const p = probe({ fps: null, averageFps: 29.94 });
+    const result = evaluateVideoProbe(p);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("29.94 fps");
+    expect(result.error).toContain("constant 30 fps");
+    expect(formatProbeFps(p)).toBe("29.94 fps");
+  });
+
+  test("a known average under the floor refuses even when the sample reads 30", () => {
+    // A variable-rate MP4 that opens at 30 but averages 24 — the vendor
+    // rejects it, so the verdict must not depend on whether the browser
+    // could sample.
+    const result = evaluateVideoProbe(probe({ fps: 30, averageFps: 24 }));
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("24 fps");
+  });
+
+  test("with no sampled rate, an average under the floor is refused", () => {
+    const result = evaluateVideoProbe(probe({ fps: null, averageFps: 24 }));
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("24 fps");
+  });
+
+  test("with no sampled rate, a constant 29.97 average passes and reads as 30", () => {
+    const p = probe({ fps: null, averageFps: 29.97 });
+    const result = evaluateVideoProbe(p);
+
+    expect(result.success).toBe(true);
+    expect(result.warnings?.join(" ") ?? "").not.toContain("can't measure");
+    expect(formatProbeFps(p)).toBe("30 fps");
   });
 });
 
