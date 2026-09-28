@@ -230,7 +230,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // the route's skeleton (via `match-page-hint-server.ts`) and this page answer
   // from one function (guardrails §3.2/§3.3). Fed this page's own
   // post-reconcile `analysis`: the hint is a skeleton's guess, never this gate's
-  // input. A stats-unavailable match renders like any other and the Statistics
+  // input. The layout's hint is read before this page's reap/reconcile, so a
+  // stale hint can change only which skeleton flashes, never what the page
+  // renders. A stats-unavailable match renders like any other and the Statistics
   // view says, once, that no statistics were saved (`meta.statsUnavailable`).
   const statsUnavailable = isStatsUnavailable(analysis);
   const isAwaitingAnalysis = matchPageKind(analysis) === "steps";

@@ -393,7 +393,7 @@ ready).
 
 ## T29 · Match layout streams a status-aware skeleton; the group loading state goes neutral
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T27, T28
 - **files:** src/app/dashboard/matches/(detail)/[matchId]/layout.tsx, src/app/dashboard/matches/(detail)/loading.tsx, src/app/dashboard/matches/(detail)/[matchId]/page.tsx (comment only), src/components/dashboard/loading/match-report-skeleton.tsx (comment), tests/match-layout-skeleton.spec.ts (new, guess)

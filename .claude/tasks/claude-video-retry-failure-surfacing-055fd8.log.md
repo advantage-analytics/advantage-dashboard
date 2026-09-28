@@ -261,3 +261,11 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical PASS · completion PASS
 **changed:** New `AnalysisStepsPending` (`loading/analysis-steps-pending.tsx`): a `PendingFrame` ("Loading analysis progress", the single status role) around the stepper column's geometry — title bar, match-line bar, and a `mt-9` list of four `gap-3.5` rows, each a `size-4 rounded-full` mark bar beside a label bar, all `PendingBar`s. New offline spec `tests/analysis-steps-pending.spec.ts` pins the markup. Not mounted yet (T29).
+
+## T29 · Match layout streams a status-aware skeleton; the group loading state goes neutral — done
+
+**gate:** mechanical PASS · completion PASS
+**changed:** layout.tsx awaits `getMatchPageHint` first, `notFound()`s on null, then renders the fixed-height wrapper around a `<Suspense>` whose fallback is `AnalysisStepsPending` for kind "steps", else `MatchReportSkeleton`; a new async `MatchData` inside the boundary holds `getMatchDetailData`, its `notFound()`, `MatchDataProvider key={match.id}`, `ClearRetryOnSuccess` and children. `(detail)/loading.tsx` is now an empty fixed-height `PendingFrame`. page.tsx gate unchanged, with a comment that the pre-reconcile hint only picks which skeleton flashes. New tests/match-layout-skeleton.spec.ts pins the source order and the single caller pair. Comment-only touch to analysis-steps-pending.tsx (its "not mounted yet" line went stale).
+**follow-ups:**
+
+1. A missing match renders not-found with a 200 status because the group loading.tsx streams first (pre-existing behaviour, not new here).

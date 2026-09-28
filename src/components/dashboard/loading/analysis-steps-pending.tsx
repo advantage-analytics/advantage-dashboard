@@ -11,9 +11,9 @@ import { PendingBar, PendingFrame } from "./pending";
  * `PendingRegion` inside it would add a second. Everything visual lives in
  * `PendingFrame`'s own `aria-hidden` wrapper.
  *
- * Not mounted yet — T29 wires this as the layout's Suspense fallback for the
- * match page while it resolves whether the match is still analysing. Kept
- * free of `next/navigation` so it renders offline in
+ * `[matchId]/layout.tsx`'s `<Suspense>` fallback while the match loads, when
+ * its status hint says the page will draw the Analysis steps. Kept free of
+ * `next/navigation` so it renders offline in
  * `tests/analysis-steps-pending.spec.ts`.
  */
 export function AnalysisStepsPending() {
