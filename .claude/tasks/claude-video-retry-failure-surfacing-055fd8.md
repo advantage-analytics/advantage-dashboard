@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Sync onto splitstep-integration once both dependency branches have merged
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** none beyond the merge commit (guess)
 - **done when:**
