@@ -125,7 +125,7 @@ ready).
 
 ## T9 · Drawer's `AnalysisNotice` reads the shared failure copy
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T8
 - **files:** src/components/dashboard/matches/drawer-sections.tsx (`AnalysisNotice`, ~line 165-215), tests/drawer-sections.spec.ts (extend — its `createLoader` already stubs `next/link`, `next/image`, the supabase client, `ResultMark`, `ScoreLine`)
@@ -135,3 +135,43 @@ ready).
   - [ ] `tests/drawer-sections.spec.ts` gains cases that `renderToStaticMarkup(React.createElement(sections.AnalysisNotice, props))`: (a) `derivation_failed`, `failNote: "5 point(s) resolved no winner"`, `canRetry: false` → contains the title and body, does not contain `The match page has the details` or `Retrying uses`, and the first `<p` inside `role="alert"` does not contain `5 point(s)`; (b) `failed`, `canRetry: true` → contains `Retrying uses the video you already uploaded. Nothing needs uploading again.`; (c) `failed`, `canRetry: false`, no `failNote` → contains `Analysis stopped` and `The match page has the details.`; (d) an in-flight status (`processing`) still renders `Serve and pressure numbers appear here once analysis finishes.` and no `role="alert"`.
   - [ ] `src/components/dashboard/matches/match-drawer.tsx` (`canRetry = status === "failed" && …`, ~line 146) and `src/components/dashboard/schedule/event-line-drawer.tsx` (`retryJobId`, ~line 213, and its `AnalysisNotice` call ~line 390) are not in the diff, `match-analysis-progress.tsx` is not in the diff, and `npx tsc --noEmit` passes.
 - **notes:** Two callers feed `AnalysisNotice`: `match-drawer.tsx` (passes `failNote` always; `canRetry` is `status === "failed" && jobId && canManage !== false`) and `schedule/event-line-drawer.tsx` (passes `failNote` only when `retryJobId` is set, so a derivation failure there already arrives with `failNote: null` — the new branch must render its title/body without one). Today a `derivation_failed` row in either drawer shows the raw reconcile reason as the headline and "The match page has the details." as the body. Guardrails §2 (no vendor name), §3.2 (`isInFlight`/`isAnalysisFailed` untouched — the drawer branches on the literal status inside the failed block), §3.5 (copy free). Do not merge with T8: different surface, different spec file, and T8's module must exist first.
+
+## T10 · Carry `inputRejected` on `MatchAnalysis` from the loader and the live hook
+
+- **status:** todo
+- **model:** opus
+- **files:** src/lib/data/match-analysis.ts (`MatchAnalysis` ~line 83, new predicate beside `resolveAnalysisStatus`), src/lib/data/match-analysis-server.ts (`JobRow`, select ~line 91, projection ~line 143), src/hooks/use-live-match-analysis.ts (`LiveJobRow`, `LiveAnalysisPatch`, patch ~line 148), src/lib/schedule/types.ts (`EntryMatch` ~line 146), src/lib/data/schedule-server.ts (~line 276), tests/match-analysis-input-rejected.spec.ts (new, guess — pattern `tests/fixtures/vm-modules.ts` `createLoader`)
+- **done when:**
+  - [ ] `match-analysis.ts` defines `INPUT_REJECTED_CATEGORY = "invalid_input"` once and exports `isInputRejected(dbStatus: string, errorCategory: string | null | undefined): boolean`, true only for `dbStatus === "failed"` with that category; `MatchAnalysis` gains `inputRejected?: boolean` with a doc comment; `resolveAnalysisStatus`, `withStatsPublished`, `isInFlight`, `isWorking`, `isLiveUpdating` and `isAnalysisFailed` are untouched (no removed lines in `match-analysis.ts` outside additions).
+  - [ ] Both projections compute it through that one function: `loadMatchAnalysis` selects `error_category` and sets `inputRejected: isInputRejected(row.status, row.error_category)`; the hook's per-row projection is extracted into an exported pure `liveAnalysisPatch(row)` that declares `error_category` on `LiveJobRow` and sets `inputRejected` the same way on every patch (so a later non-failed row resets it to false), and `LiveAnalysisPatch` picks `"inputRejected"`; `grep -rn '"invalid_input"' src` matches only `match-analysis.ts`.
+  - [ ] `EntryMatch` gains `inputRejected?: boolean | null` and `schedule-server.ts` copies it from the analysis map beside `jobId`/`failNote`.
+  - [ ] The new spec asserts `isInputRejected` truth-table rows (`("failed","invalid_input")` → true; `("failed","internal")`, `("failed",null)`, `("derivation_failed","invalid_input")`, `("completed","invalid_input")` → false) and, loading the hook through `createLoader` with `@/lib/supabase/client` stubbed, that `liveAnalysisPatch({ match_id, status: "failed", error_category: "invalid_input", … }).inputRejected === true` and `false` for `error_category: "internal"`.
+  - [ ] No component file is in the diff and `npx tsc --noEmit` passes.
+- **notes:** Why: job 45ff4bd7 (2026-09-28) failed with `error_category = invalid_input` (`VIDEO_FRAME_RATE_TOO_LOW`); resubmitting the same blob cannot succeed, so T11/T12 hide Retry. `processing_jobs.error_category` already exists (migration 20260829174158) and realtime publishes the whole row, so no migration. One function for both paths is the `withStatsPublished` lesson and guardrails §3.2 — a field one path sets and the other doesn't puts the match page and the matches list back to disagreeing. The server-side refusal lands separately on `claude/match-analysis-failure-retry-8769f3` (T1) with its own copy of the literal; consolidate after both merge. No dependency on it. `video_quality` is deliberately not included (author's decision).
+
+## T11 · Progress card: no retry for an input-rejected failure
+
+- **status:** todo
+- **model:** sonnet
+- **needs:** T8, T10
+- **files:** src/components/dashboard/matches/analysis-failure-copy.ts, src/components/dashboard/matches/match-detail/match-analysis-progress.tsx (the `failed` branch of the alert), tests/analysis-failure-copy.spec.ts (extend)
+- **done when:**
+  - [ ] `ANALYSIS_FAILURE_COPY.failed` gains an `inputRejected` entry with a card body and a drawer body, neither containing `Retrying`, both saying the video didn't meet a recording requirement and pointing to a new recording (suggested card body: `This video didn't meet one of the recording requirements, so analyzing it again would stop the same way. Upload a new recording that meets them.`).
+  - [ ] When `analysis.status === "failed" && analysis.inputRejected`, the card's headline is `failNote ?? failed.title` as today, the body is the `failed.inputRejected` card body, `<RetryAnalysis>` is not rendered regardless of `jobId`, and the `Upload a new recording` `<Link>` is still rendered.
+  - [ ] `tests/analysis-failure-copy.spec.ts` gains a case with `status: "failed"`, `inputRejected: true`, `jobId: "job-1"`, `failNote: "The video must be at least 29.9 fps."`: the first `<p` inside `role="alert"` contains the failNote; the markup contains the input-rejected body and `Upload a new recording`, and does not contain `data-component="RetryAnalysis"` or `Retrying uses`; the existing T8 `failed` case (no `inputRejected`) still asserts `Retrying uses` and `RetryAnalysis`; markup and module match `/splitstep|swingvision/i` zero times.
+  - [ ] `drawer-sections.tsx`, `src/lib/data/*` and `page.tsx` are not in the diff, and `npx tsc --noEmit` passes.
+- **notes:** `failNote` is `error_message`, the vendor's designated end-user string (migration 20260829174158's comment), so it stays the headline. Written against T8's module shape (`ANALYSIS_FAILURE_COPY.failed.{title, body, uploadLink, drawer}`) — adapt to what T8 actually committed. Guardrails §2 (no vendor name), §3.2 (branch on the literal status plus `inputRejected` inside the failed block; predicates untouched), §3.5 (copy free). The server refuses the same case with a 409 (T1 on `claude/match-analysis-failure-retry-8769f3`).
+
+## T12 · Drawers: no retry for an input-rejected failure
+
+- **status:** todo
+- **model:** opus
+- **needs:** T9, T10, T11
+- **files:** src/components/dashboard/matches/drawer-sections.tsx (`AnalysisNotice`), src/components/dashboard/matches/match-drawer.tsx (`canRetry` ~line 146, `AnalysisNotice` call ~line 254), src/components/dashboard/schedule/event-line-drawer.tsx (`retryJobId` ~line 213, `AnalysisNotice` call ~line 390), tests/drawer-sections.spec.ts (extend)
+- **done when:**
+  - [ ] `AnalysisNotice` takes `inputRejected?: boolean`; for `status === "failed" && inputRejected` the headline is `failNote ?? failed.title` and the body is the module's `failed.inputRejected` drawer body regardless of `canRetry`; neither `Retrying uses` nor `The match page has the details.` renders.
+  - [ ] `match-drawer.tsx`: `canRetry` additionally requires `!match.analysis?.inputRejected` (so `<RetryButton>` is not rendered for it), and the call passes `inputRejected={match.analysis?.inputRejected}`.
+  - [ ] `event-line-drawer.tsx`: `retryJobId` is null when `played.inputRejected`; `failNote` is passed when `retryJobId || played.inputRejected`, so the vendor's message still reaches the headline; the call passes `inputRejected={played?.inputRejected ?? false}`.
+  - [ ] `tests/drawer-sections.spec.ts` gains a case (`failed`, `inputRejected: true`, `canRetry: true`, `failNote: "The video must be at least 29.9 fps."`): the first `<p` in `role="alert"` contains the failNote, the markup contains the input-rejected drawer body, and does not contain `Retrying uses`; T9's cases (b) and (c) still pass unedited.
+  - [ ] `match-analysis-progress.tsx` and `src/lib/data/*` are not in the diff, and `npx tsc --noEmit` passes.
+- **notes:** Callers get the category from T10: the Matches drawer via `match.analysis.inputRejected` (from `loadMatchAnalysis`), the event drawer via `EntryMatch.inputRejected` (copied in `schedule-server.ts`). Today the event drawer passes `failNote` only when `retryJobId` is set, so without the third criterion hiding retry would also drop the vendor's message there. Guardrails §2, §3.2. Do not merge with T11: different surface, different spec.
