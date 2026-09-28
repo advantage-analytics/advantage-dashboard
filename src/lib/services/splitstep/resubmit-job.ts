@@ -97,9 +97,11 @@ import type { RosterIdentity } from "@/lib/workspace/upload-eligibility";
 import type { Workspace } from "@/lib/workspace/types";
 
 import {
+  classifyFailure,
   isDownloadFailure,
   MAX_TOTAL_ATTEMPTS,
 } from "@/lib/data/match-analysis";
+import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
 
 // Defined in match-analysis.ts so client code can classify with them (this
 // file pulls in @azure/storage-blob); re-exported so the webhook route, the
@@ -239,6 +241,8 @@ interface ParentJob {
   created_by: string;
   status: string;
   error_category: string | null;
+  error_code: string | null;
+  error_step: string | null;
   video_object_key: string | null;
   start_time_seconds: number | null;
   end_time_seconds: number | null;
@@ -289,7 +293,7 @@ export async function resubmitJob(params: {
   const { data: parentRow, error: parentError } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, created_by, status, error_category, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id",
+      "id, match_id, created_by, status, error_category, error_code, error_step, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id",
     )
     .eq("id", jobId)
     .maybeSingle();
@@ -324,7 +328,25 @@ export async function resubmitJob(params: {
     };
   }
 
-  if (parent.error_category === "invalid_input") {
+  // classifyFailure() is the single source of truth for what a failed row
+  // means for recovery (design §4). attemptsUsed is 0 here on purpose: the
+  // attempt-ceiling gate is a separate check below (`chain.length >=
+  // MAX_TOTAL_ATTEMPTS`) that this call must not pre-empt, and
+  // classifyFailure() only turns a "failed" row's retry into wait_or_ask once
+  // attemptsUsed reaches that ceiling. hasResults is irrelevant for a failed
+  // job, so it is always false.
+  const recoveryClass = classifyFailure({
+    dbStatus: parent.status,
+    errorCode: parent.error_code,
+    errorCategory: parent.error_category,
+    errorStep: parent.error_step,
+    hasVideo: parent.video_object_key !== null,
+    hasResults: false,
+    attemptsUsed: 0,
+    stalledSubmit: false,
+  });
+
+  if (recoveryClass === "fix_recording") {
     // The vendor rejected the file itself — a frame-rate, resolution, or
     // similar recording defect. Resubmitting sends the identical blob, so it
     // cannot succeed and would only spend quota. Distinct from the
@@ -336,6 +358,31 @@ export async function resubmitJob(params: {
       reason: "input_rejected",
       message:
         "This video didn't meet one of the recording requirements, so retrying it would stop the same way. Upload a new recording instead.",
+    };
+  }
+
+  if (recoveryClass === "upload_again") {
+    // No video to resend from — refuse here, before the blob HEAD below,
+    // using the same plain copy the recovery card shows for this class.
+    return {
+      ok: false,
+      reason: "video_unavailable",
+      message: byClass.upload_again.cardBody,
+    };
+  }
+
+  if (recoveryClass !== "retry") {
+    // Unreachable today: with dbStatus "failed" and attemptsUsed forced to 0,
+    // classifyFailure() can only return "retry", "fix_recording" or
+    // "upload_again" (the other classes require derivation_failed, or a
+    // failed row past MAX_TOTAL_ATTEMPTS, which attemptsUsed: 0 rules out).
+    // Kept as a refusal rather than a fallthrough so a future change to
+    // classifyFailure()'s rules fails safe — no submit, reservation or vendor
+    // call — instead of silently reaching the retry path below.
+    return {
+      ok: false,
+      reason: "not_failed",
+      message: "This analysis cannot be retried right now.",
     };
   }
 

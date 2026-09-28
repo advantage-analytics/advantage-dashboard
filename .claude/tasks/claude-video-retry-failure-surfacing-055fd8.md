@@ -150,7 +150,7 @@ ready).
 
 ## T11 · resubmitJob refuses every non-retry class
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T2
 - **files:** src/lib/services/splitstep/resubmit-job.ts, tests/resubmit-authorization.spec.ts (guess)

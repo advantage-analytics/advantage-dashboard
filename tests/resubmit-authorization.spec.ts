@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
 import type { SplitStepJobRequest } from "@/lib/services/splitstep/job-request";
 import {
   resubmitJob,
@@ -719,4 +720,45 @@ test("an invalid_input failure is refused before the video check, on both paths"
 test("a source blob that is gone → video_unavailable, nothing spent", async () => {
   const h = harness({ blobExists: false });
   expectRefused(h, await manual(h), "video_unavailable");
+});
+
+// ── T11: classifyFailure() gates every non-retry class ────────────────────
+
+test("a no-video failed parent is refused with the plain upload-again message, before any blob check", async () => {
+  const h = harness({ job: parentJob({ video_object_key: null }) });
+  const r = await manual(h);
+  expectRefused(h, r, "video_unavailable");
+  if (r.ok) return;
+  expect(r.message).toBe(byClass.upload_again.cardBody);
+  // classifyFailure() refuses on hasVideo alone — no Azure HEAD is ever made.
+  expect(h.blobChecks).toEqual([]);
+});
+
+test("a failed parent with an INTERNAL_ERROR code and a video is still accepted", async () => {
+  // INTERNAL_ERROR outside the downloading_video step is not a download
+  // failure and not an input rejection, so classifyFailure() calls it
+  // "retry" and the ladder continues past the new check.
+  const h = harness({
+    job: parentJob({
+      error_category: "internal",
+      error_code: "INTERNAL_ERROR",
+      error_step: "some_other_step",
+    }),
+  });
+  const r = await manual(h);
+  expect(r.ok).toBe(true);
+});
+
+test("an automatic retry of a downloading_video failure is not refused by the new check", async () => {
+  // isDownloadFailure() ⊂ retry: the auto path must reach the same
+  // already-auto-resubmitted / reservation / vendor ladder it always did.
+  const h = harness({
+    job: parentJob({
+      error_category: "internal",
+      error_code: "INTERNAL_ERROR",
+      error_step: "downloading_video",
+    }),
+  });
+  const r = await auto(h);
+  expect(r.ok).toBe(true);
 });

@@ -76,3 +76,11 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical pass · completion pass (widget-states: grouping/label logic only; no loading, empty or error state touched)
 **changed:** New pure helpers `matchListGroup()` and `matchListStatusLabel()` in `match-analysis.ts`: a `stats_unavailable` row groups under Ready and reads "Stats unavailable". `matches-page-content.tsx`'s `analysisGroup` delegates to `matchListGroup` (import + function body only), so the Analysis filter chips and row filtering stay consistent. The row's status word is rendered by `RowLifecycle` in `row-state.tsx` (outside `files:`, required), which now uses both helpers — this also applies on the schedule's dual/tournament detail, which share `RowLifecycle`. `isAnalysisFailed` and `ANALYSIS_LABEL` unchanged. New `tests/matches-list-grouping.spec.ts`. No existing spec pinned the old grouping.
+
+## T11 · resubmitJob refuses every non-retry class — done
+
+**gate:** mechanical pass · completion pass (accepted path confirmed behaviourally unchanged)
+**changed:** `resubmitJob()` selects `error_code`/`error_step` and replaces the `invalid_input` check with one `classifyFailure()` call at the same point (after `not_failed`, before any chain load, blob HEAD, insert, reservation or vendor call). `fix_recording` → `input_rejected` (message kept); `upload_again` → `video_unavailable` with the plain upload-again body; any other non-retry class → `not_failed` (unreachable today, kept as a fail-safe). No new refusal reason; `resubmit/route.ts` untouched. Spec adds no-video (no blob HEAD), INTERNAL_ERROR-accepted and auto download-failure cases; existing `input_rejected` cases unedited.
+**follow-ups:**
+
+1. `resubmit-job.ts` (server, `src/lib/services`) now imports `byClass` from `src/components/dashboard/matches/analysis-failure-copy.ts`. It's plain TS with no React, so it works, but the copy module might belong under `src/lib` if more server code starts reading it (T19's email will).
