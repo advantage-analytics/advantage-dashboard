@@ -104,15 +104,15 @@ ready).
 
 ## T8 · Choose the opponent's school on a tournament round
 
-- **status:** blocked
-- **model:** fable
+- **status:** todo
+- **model:** opus
 - **needs:** T7
 - **files:** src/components/dashboard/schedule/score-only-flow.tsx (tournament branch of `ScoreForm`/`OpponentInRow`), src/components/dashboard/schedule/static/dual-school-step.tsx (directory search over `/api/programs/search` to reuse or extract), src/lib/schedule/write-types.ts (`RecordResultInput.opponentSchool`, add program id/key), src/lib/schedule/writes-server.ts (`syncEntryOpponent` ~lines 760-780), src/lib/schedule/actions.ts (`opponentRosterForDual`, `saveOpponentPlayer`), tests/schedule-score-flow-outcomes.spec.ts, writer spec
 - **done when:**
   - [ ] On a tournament entry, "The result." shows a School control above the opponent name (directory search with a typed free-text fallback, the same source the dual builder uses) — a dual line shows no such control (harness spec asserts presence/absence).
   - [ ] Choosing a directory school re-points the opponent picker's pool at that school: `opponentRosterForDual` is called with the chosen program key and the picker offers that roster; a typed school (no directory row) yields a pool with no roster and a plain text opponent (harness spec with the action stubbed).
   - [ ] Save passes `opponentSchool` and the chosen program id/key in `RecordResultInput`; on a tournament round `recordResult` writes `program_event_entries.opponent_school` and `opponent_program_id` for that entry (writer spec asserts the update payload; the "correction on a later round must not clobber" rule in `syncEntryOpponent` is preserved for tournaments — write the school only when the saved round is the entry's latest, or state the chosen rule in a comment and pin it).
-  - [ ] "Save to {school} roster" is offered for a two-token name against a directory school and calls `saveOpponentPlayer` with that school's key (harness spec); the tournament detail's `SchoolsFaced` rail shows the saved school (existing loader path, one assertion in tests/schedule-tournament-outcomes.spec.ts).
+  - [ ] "Save to {school} roster" is offered for a two-token name against a directory school and calls `saveOpponentPlayer` with that school's key (harness spec).
 - **notes:** Data model, verified in code: an opponent player IS a `program_players` row under the opponent PROGRAM (school), contributed via the `contribute_opponent_player` RPC (migration 20260822150000); the entry carries `opponent_school` + `opponent_program_id` (per entry, "last round filed"); `matches` has NO opponent-school column. So no migration is needed for the entry-level interpretation above. If a school PER ROUND turns out to be required, that needs a `matches` column — a migration; verify the live schema with `mcp__supabase__execute_sql` first (the repo is ~100 migrations behind) and stop to confirm before applying. Why it is missing today: the score flow builds its pool from `current.opponentSchool ?? current.eventName` (the tournament's NAME) and `opponentProgramKey` (null on a tournament), score-only-flow.tsx:139-146, so there is no roster and nowhere to say which school the round's opponent is from. New controls use design-system primitives (`MenuSelect`, `advButton()`), see .skills/advantage-analytics-design/SKILL.md.
 
 ## T9 · After a won tournament round, offer that entry's next round first
@@ -130,8 +130,8 @@ ready).
 
 ## T10 · Add Prequalifying and PQ Consolation to the draw vocabulary
 
-- **status:** blocked
-- **model:** fable
+- **status:** todo
+- **model:** opus
 - **files:** src/lib/schedule/format.ts (`ROUND_ORDER`, `ROUND_LONG`, `drawOfRound`), src/lib/schedule/tournament-run.ts (`nextRound` first-round pick, `groupByDraw`), src/components/dashboard/schedule/static/static-tournament-builder.tsx (`DRAWS`, `MAIN_DRAW`, `QUALIFYING` ~line 1382, the per-row draw menu), src/components/dashboard/schedule/score-only-flow.tsx (Round menu), src/lib/schedule/fixtures.ts, tests/schedule-format.spec.ts (or wherever `drawOfRound`/`roundRank` are pinned), tests/tournament-run.spec.ts, tests/schedule-static-copy.spec.ts
 - **done when:**
   - [ ] `ROUND_ORDER` becomes, in chronological order: `PQ1–PQ4`, `PC1–PC4` (PQ consolation), `Q1–Q3`, `R256`, `R128–F`, `C1–C5`; `drawOfRound` maps `PQ*`→"Prequalifying", `PC*`→"PQ Consolation", `Q*`→"Qualifying", `R*/QF/SF/F`→"Main draw", `C*`→"Consolation"; `roundLongLabel` covers every new code ("prequalifying round 2", "PQ consolation round 1", "the round of 256"); all pinned in a spec, and `roundRank` still sorts the existing fixtures identically.
