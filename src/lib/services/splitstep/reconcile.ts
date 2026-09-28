@@ -25,6 +25,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { after } from "next/server";
 import { normaliseKey, parseWebhookPayload } from "./webhook-payload";
 import { releaseQuota } from "./quota";
 import { isDownloadFailure, resubmitJob } from "./resubmit-job";
@@ -46,6 +47,15 @@ const POLL_GAP_MS = 10 * 60 * 1000;
 const DEFAULT_CAP = 3;
 
 const POLL_TIMEOUT_MS = 10_000;
+
+/**
+ * OUR code for "the vendor finished, but its results never reached us" — shared
+ * by the status poll (a lost delivery) and the results sweep (a delivery whose
+ * download failed). Same code, same copy: to the user both are one fact.
+ */
+const RESULTS_DELIVERY_LOST = "RESULTS_DELIVERY_LOST";
+const RESULTS_DELIVERY_LOST_MESSAGE =
+  "The analysis finished, but its results never arrived. Retry the analysis.";
 
 export interface ReconcileOutcome {
   polled: number;
@@ -218,11 +228,10 @@ export async function reconcileVendorJobs(params: {
           jobId: job.id,
           // OUR code, not a vendor one — vendor codes come from their error
           // object, and this failure is the delivery's, not the job's.
-          errorCode: "RESULTS_DELIVERY_LOST",
+          errorCode: RESULTS_DELIVERY_LOST,
           errorCategory: "internal",
           errorStep: null,
-          errorMessage:
-            "The analysis finished, but its results never arrived. Retry the analysis.",
+          errorMessage: RESULTS_DELIVERY_LOST_MESSAGE,
         };
       }
 
@@ -270,6 +279,405 @@ export async function reconcileBeforePageRead(
       error: err instanceof Error ? err.message : String(err),
     });
   }
+
+  // The results sweep runs AFTER the response, never in front of it: unlike
+  // the poll above (one small GET per job), it downloads a results file and
+  // derives a whole match, which is seconds of work no render should wait on.
+  // `after()` is allowed in Server Components, which both callers are (the
+  // matches list loader runs inside its page). The page this read renders will
+  // still say "Stats pending"; the next read shows the recovered match.
+  //
+  // Both halves are guarded: `after()` itself throws outside a request scope
+  // (a script calling this), and nothing inside the callback may reject.
+  try {
+    after(async () => {
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/admin");
+        await recoverUndeliveredResults({
+          supabase: createAdminClient(),
+          matchIds,
+        });
+      } catch (err) {
+        console.warn(`[${pageTag}] results sweep failed`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    });
+  } catch (err) {
+    console.warn(`[${pageTag}] could not schedule the results sweep`, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/** Ceiling per page read for the results sweep — separate from the poll's. */
+const RESULTS_SWEEP_CAP = 2;
+
+/**
+ * How long after `completed_at` a missing results key counts as stuck. The
+ * webhook secures results in its own `after()` within seconds; ten minutes
+ * leaves any in-flight download well alone.
+ */
+const RESULTS_SWEEP_AFTER_MS = 10 * 60 * 1000;
+
+/**
+ * Budget for one sweep's derivation wait. deriveAndPublish() must settle the
+ * job before the platform kills the invocation (a row frozen at `deriving`
+ * reads as analysing forever), and a page invocation's remaining duration is
+ * unknown here — so this is deliberately short of the 60 s floor.
+ */
+const RESULTS_SWEEP_BUDGET_MS = 40_000;
+
+export interface ResultsSweepOutcome {
+  claimed: number;
+  recovered: number;
+  lost: number;
+}
+
+/** The sweep's side effects, injectable for tests. Defaults load lazily. */
+export interface ResultsSweepIo {
+  secureResults: typeof import("./secure-results").secureResults;
+  gradeResults: typeof import("./grade-results").gradeResults;
+  deriveAndPublish: typeof import("./derive-and-publish").deriveAndPublish;
+  resultsKeyFor: (job: {
+    id: string;
+    created_by: string | null;
+    match_id: string | null;
+    external_job_id: string | null;
+  }) => string;
+  releaseQuota: typeof releaseQuota;
+  notifyAnalysisOutcome: typeof notifyAnalysisOutcome;
+}
+
+async function defaultResultsSweepIo(): Promise<ResultsSweepIo> {
+  // Imported on use: the render path loads this module on every list read,
+  // and only a sweep that actually claimed a row needs the derivation engine.
+  const [secure, grade, derive, keys] = await Promise.all([
+    import("./secure-results"),
+    import("./grade-results"),
+    import("./derive-and-publish"),
+    import("./delivery-storage-keys"),
+  ]);
+  return {
+    secureResults: secure.secureResults,
+    gradeResults: grade.gradeResults,
+    deriveAndPublish: derive.deriveAndPublish,
+    // The webhook's own key builder, so a recovered file lands exactly where
+    // a normal delivery would have put it. With a job id the delivery id only
+    // names the orphan fallback, which this path can never take.
+    resultsKeyFor: (job) =>
+      keys.selectDeliveryStorageKeys({
+        jobId: job.id,
+        createdBy: job.created_by,
+        matchId: job.match_id,
+        externalJobId: job.external_job_id,
+        deliveryId: "reconcile",
+      }).resultsKey,
+    releaseQuota,
+    notifyAnalysisOutcome,
+  };
+}
+
+interface UndeliveredJob {
+  id: string;
+  match_id: string | null;
+  created_by: string | null;
+  external_job_id: string | null;
+  sas_url: string | null;
+  sas_expires_at: string | null;
+  completed_at: string;
+  last_polled_at: string | null;
+}
+
+/**
+ * Recover jobs the vendor completed whose results never landed.
+ *
+ * The webhook's `completed` branch records the delivery (status `completed`,
+ * `sas_url` = the strokes url) and returns 200, then downloads in `after()`.
+ * If that download fails nothing retries it, and the row sits at `completed`
+ * with no `results_object_key` and no `derivation_version` — "Stats pending"
+ * forever. This sweep re-runs the webhook's post-download path for such rows:
+ * secureResults → gradeResults → deriveAndPublish, the same three calls in the
+ * same order, gated on the results being secured exactly as the webhook gates
+ * them. (The webhook's per-frame files and ball paths are not repeated: they
+ * are best-effort, read by nothing yet, and their urls stay on the row.)
+ *
+ * ── Claiming, and what "a second attempt" means ─────────────────────────────
+ * Two page reads can sweep the same row. Each row is CLAIMED before any work
+ * by a compare-and-swap on `last_polled_at`: an update that stamps it to now,
+ * conditional on the row still being stuck AND on `last_polled_at` still
+ * holding the value this sweep read. Only one sweep can win that swap; a
+ * sweep whose claim matches 0 rows skips the row. The stamp doubles as the
+ * rate limit — a claimed row is not selected again for POLL_GAP_MS.
+ *
+ * A failed attempt leaves only that stamp behind. The NEXT claim therefore
+ * sees a `last_polled_at` later than `completed_at`, which is how it knows a
+ * sweep has already tried and failed once. (A stamp from BEFORE completion is
+ * the status poll's, from while the job was still processing, and does not
+ * count.) Rule: an attempt that fails when a previous sweep attempt already
+ * exists marks the job lost; a first failure just waits for the next read.
+ *
+ * A job is also marked lost WITHOUT a download attempt when its strokes url is
+ * missing or already expired — `sas_expires_at`, or failing that the SAS's own
+ * `se=` expiry — because there is nothing left to fetch.
+ *
+ * Marking lost is the same RESULTS_DELIVERY_LOST failure the status poll
+ * writes, conditional on `status = completed` so a derivation or webhook that
+ * moved the row first wins; it then refunds the reservation and sends the
+ * failure mail, as applyPolledFailure() does for that code.
+ *
+ * Never throws for a per-row failure; each is logged and the sweep moves on.
+ */
+export async function recoverUndeliveredResults(params: {
+  /** Service-role client. */
+  supabase: SupabaseClient;
+  /** Scope to the rows the page shows (RLS-scoped); undefined sweeps all. */
+  matchIds?: string[];
+  cap?: number;
+  /** Clock, for tests. */
+  now?: () => Date;
+  io?: Partial<ResultsSweepIo>;
+}): Promise<ResultsSweepOutcome> {
+  const {
+    supabase,
+    matchIds,
+    cap = RESULTS_SWEEP_CAP,
+    now = () => new Date(),
+  } = params;
+  const outcome: ResultsSweepOutcome = { claimed: 0, recovered: 0, lost: 0 };
+  if (matchIds !== undefined && matchIds.length === 0) return outcome;
+
+  const startedAt = now();
+  const completedBefore = new Date(
+    startedAt.getTime() - RESULTS_SWEEP_AFTER_MS,
+  ).toISOString();
+  const polledBefore = new Date(
+    startedAt.getTime() - POLL_GAP_MS,
+  ).toISOString();
+
+  let query = supabase
+    .from("processing_jobs")
+    .select(
+      "id, match_id, created_by, external_job_id, sas_url, sas_expires_at, completed_at, last_polled_at",
+    )
+    .eq("status", "completed")
+    .is("results_object_key", null)
+    .is("derivation_version", null)
+    .lt("completed_at", completedBefore)
+    .or(`last_polled_at.is.null,last_polled_at.lt.${polledBefore}`)
+    .order("completed_at", { ascending: true })
+    .limit(cap);
+  if (matchIds !== undefined) query = query.in("match_id", matchIds);
+
+  const { data, error } = await query;
+  if (error) {
+    console.warn(`${LOG} could not list undelivered results`, {
+      error: error.message,
+    });
+    return outcome;
+  }
+  // The cap is enforced here as well as in the query, so a misbehaving
+  // client can never widen a render-path sweep.
+  const jobs = ((data ?? []) as UndeliveredJob[]).slice(0, cap);
+  if (jobs.length === 0) return outcome;
+
+  const io: ResultsSweepIo = {
+    ...(await defaultResultsSweepIoIfNeeded(params.io)),
+    ...params.io,
+  } as ResultsSweepIo;
+  const deadline = startedAt.getTime() + RESULTS_SWEEP_BUDGET_MS;
+
+  // Sequential: each row can end in a derivation, and the budget is shared.
+  for (const job of jobs) {
+    try {
+      const result = await sweepOneJob({ supabase, job, io, now, deadline });
+      if (result !== "skipped") outcome.claimed += 1;
+      if (result === "recovered") outcome.recovered += 1;
+      if (result === "lost") outcome.lost += 1;
+    } catch (err) {
+      console.error(`${LOG} results sweep threw on a job`, {
+        jobId: job.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return outcome;
+}
+
+/** Only pay for the lazy imports when a test has not injected every one. */
+async function defaultResultsSweepIoIfNeeded(
+  injected: Partial<ResultsSweepIo> | undefined,
+): Promise<Partial<ResultsSweepIo>> {
+  const needed: (keyof ResultsSweepIo)[] = [
+    "secureResults",
+    "gradeResults",
+    "deriveAndPublish",
+    "resultsKeyFor",
+  ];
+  if (injected && needed.every((k) => injected[k] !== undefined)) {
+    return { releaseQuota, notifyAnalysisOutcome };
+  }
+  return defaultResultsSweepIo();
+}
+
+async function sweepOneJob(params: {
+  supabase: SupabaseClient;
+  job: UndeliveredJob;
+  io: ResultsSweepIo;
+  now: () => Date;
+  deadline: number;
+}): Promise<"skipped" | "recovered" | "lost" | "retry-later" | "unsettled"> {
+  const { supabase, job, io, now, deadline } = params;
+  const at = now();
+
+  // Claim: compare-and-swap on last_polled_at (see the doc comment above).
+  let claim = supabase
+    .from("processing_jobs")
+    .update({ last_polled_at: at.toISOString() })
+    .eq("id", job.id)
+    .eq("status", "completed")
+    .is("results_object_key", null)
+    .is("derivation_version", null);
+  claim =
+    job.last_polled_at === null
+      ? claim.is("last_polled_at", null)
+      : claim.eq("last_polled_at", job.last_polled_at);
+  const { data: claimed, error: claimError } = await claim.select("id");
+  if (claimError) {
+    console.warn(`${LOG} could not claim an undelivered job`, {
+      jobId: job.id,
+      error: claimError.message,
+    });
+    return "skipped";
+  }
+  if (!claimed || claimed.length === 0) return "skipped";
+
+  const previousSweepAttempt =
+    job.last_polled_at !== null &&
+    new Date(job.last_polled_at).getTime() >
+      new Date(job.completed_at).getTime();
+
+  const expiresAt = strokesUrlExpiry(job);
+  if (!job.sas_url || (expiresAt !== null && expiresAt <= at.getTime())) {
+    console.warn(`${LOG} strokes url missing or expired — results are lost`, {
+      jobId: job.id,
+    });
+    return (await markResultsLost({ supabase, jobId: job.id, io, now }))
+      ? "lost"
+      : "unsettled";
+  }
+
+  const objectKey = io.resultsKeyFor(job);
+  const secured = await io.secureResults({
+    supabase,
+    jobId: job.id,
+    strokesUrl: job.sas_url,
+    objectKey,
+    logPrefix: LOG,
+  });
+
+  if (!secured.resultsSecured) {
+    if (previousSweepAttempt) {
+      return (await markResultsLost({ supabase, jobId: job.id, io, now }))
+        ? "lost"
+        : "unsettled";
+    }
+    // First failure: the claim's stamp is the record of it. The next read
+    // after POLL_GAP_MS tries once more, and that attempt decides.
+    console.warn(`${LOG} results recovery failed once — will retry`, {
+      jobId: job.id,
+      error: secured.error,
+    });
+    return "retry-later";
+  }
+
+  // The webhook's post-secure path, in its order: grade, then derive.
+  await io.gradeResults({
+    supabase,
+    jobId: job.id,
+    objectKey: secured.objectKey,
+    body: secured.body,
+  });
+  const derived = await io.deriveAndPublish({
+    supabase,
+    jobId: job.id,
+    deadline,
+  });
+  console.log(`${LOG} recovered undelivered results`, {
+    jobId: job.id,
+    derived: derived.ok,
+  });
+  return "recovered";
+}
+
+/**
+ * When the strokes url stops working: the row's `sas_expires_at` when set,
+ * else the SAS token's own `se=` parameter. Null when neither is readable —
+ * then only the download attempt can tell.
+ */
+function strokesUrlExpiry(job: {
+  sas_url: string | null;
+  sas_expires_at: string | null;
+}): number | null {
+  if (job.sas_expires_at) {
+    const t = new Date(job.sas_expires_at).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  if (job.sas_url) {
+    try {
+      const se = new URL(job.sas_url).searchParams.get("se");
+      if (se) {
+        const t = new Date(se).getTime();
+        if (!Number.isNaN(t)) return t;
+      }
+    } catch {
+      /* not a URL — let the download attempt decide */
+    }
+  }
+  return null;
+}
+
+/**
+ * Settle a completed-but-undelivered job as RESULTS_DELIVERY_LOST. Conditional
+ * on `status = completed`: 0 rows means something else moved it (a derivation
+ * that started, a webhook redelivery) and that answer wins — leave it.
+ */
+async function markResultsLost(params: {
+  supabase: SupabaseClient;
+  jobId: string;
+  io: ResultsSweepIo;
+  now: () => Date;
+}): Promise<boolean> {
+  const { supabase, jobId, io, now } = params;
+  const { data, error } = await supabase
+    .from("processing_jobs")
+    .update({
+      status: "failed",
+      error_code: RESULTS_DELIVERY_LOST,
+      error_category: "internal",
+      error_step: null,
+      error_message: RESULTS_DELIVERY_LOST_MESSAGE,
+      completed_at: now().toISOString(),
+    })
+    .eq("id", jobId)
+    .eq("status", "completed")
+    .select("id");
+
+  if (error) {
+    console.error(`${LOG} could not mark results lost`, {
+      jobId,
+      error: error.message,
+    });
+    return false;
+  }
+  if (!data || data.length === 0) return false;
+
+  console.log(`${LOG} job failed: results never landed`, { jobId });
+  // As applyPolledFailure() does for this same code: refund, then the
+  // uploader's failure mail. Never auto-resubmitted — `internal`.
+  await io.releaseQuota(supabase, jobId);
+  await io.notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
+  return true;
 }
 
 /** The top-level `status`/`state` string of a parsed body, if one exists. */

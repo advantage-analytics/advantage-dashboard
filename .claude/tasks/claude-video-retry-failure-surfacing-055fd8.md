@@ -215,7 +215,7 @@ ready).
 
 ## T16 · Reconcile sweep recovers completed jobs whose results never landed
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T13, T15
 - **files:** src/lib/services/splitstep/reconcile.ts, the `reconcileBeforePageRead` caller, tests/reconcile-results-sweep.spec.ts (new) (guess)

@@ -121,3 +121,14 @@ is the runner's. Newest entries at the bottom.
 
 1. Two copies of `storeVendorJson` now exist; have the route import the `secure-results.ts` one in a later change (touches frozen route lines, record under guardrails §2).
 2. Without a delivery id, a failed download has no delivery row to hold `processing_error` — T16's sweep must record the failure its own way.
+
+## T16 · Reconcile sweep recovers completed jobs whose results never landed — done
+
+**gate:** mechanical pass · completion pass (existing POLLABLE path confirmed unchanged apart from two literals moved into constants)
+**changed:** `reconcile.ts` gains `recoverUndeliveredResults`: a separately capped (2) sweep over `completed` jobs with no results, no derivation and `completed_at` > 10 min, scoped to the page's `matchIds`. Each row is claimed by a conditional `last_polled_at` stamp; claimed rows run `secureResults` (stored `sas_url`, webhook key builder) → `gradeResults` → `deriveAndPublish` (40 s deadline), mirroring the webhook's completed path. A missing/expired URL (`sas_expires_at`, else the link's `se=` expiry) or a second failed attempt marks `failed / RESULTS_DELIVERY_LOST` by a conditional update on `status = 'completed'`, with the quota refund and failure email the poll path already sends for that code. Scheduled with `after()` inside `reconcileBeforePageRead` (docs confirm Server Components may call it); errors logged, never thrown. New `tests/reconcile-results-sweep.spec.ts` (12 cases).
+**follow-ups:**
+
+1. `processing_jobs.sas_expires_at` is never written by anything (all live rows null) — have `record_splitstep_webhook` write it so the fallback to the URL's `se=` parameter isn't needed.
+2. The 40 s derivation budget assumes a 60 s limit for `after()` work on the Vercel plan — unmeasured; a kill mid-derivation leaves the row at `deriving` (same stale-`deriving` gap as T14 follow-up 1).
+3. A process death after results are saved but before derivation leaves `results_object_key` set with no derivation — no longer selected by this sweep, and `/rederive` only accepts `derivation_failed`.
+4. Only tested with fakes: the live DB has no stuck completed-without-results rows today.
