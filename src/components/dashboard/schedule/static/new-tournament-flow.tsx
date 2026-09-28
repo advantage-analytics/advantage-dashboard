@@ -206,14 +206,18 @@ export function tournamentSeed(
 }
 
 /**
- * The two draws the field step's control offers, restated here.
+ * The three draws the field step's control offers, restated here.
  *
  * `DRAWS` is private to `static-tournament-builder.tsx` and stays that way —
  * this is the read side of the same rule, and the seed above needs to know
  * which saved draws have a row to sit on. Widening one without the other
  * shows an entry a control that cannot hold its own value.
  */
-const DRAW_OPTIONS: readonly string[] = ["Main draw", "Qualifying"];
+const DRAW_OPTIONS: readonly string[] = [
+  "Prequalifying",
+  "Qualifying",
+  "Main draw",
+];
 
 export function NewTournamentFlow({
   roster,

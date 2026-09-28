@@ -603,6 +603,39 @@ for (const source of ["preset", "attached"] as const) {
   }
 }
 
+for (const eventKind of ["dual", "tournament"] as const) {
+  test(`a ${eventKind} preset seeds Play On Lets before the Lets cell is touched`, async () => {
+    const h = uploadWizardHarness({
+      props: {
+        preset: {
+          entryId: "entry",
+          eventId: "event",
+          playerName: "Event Player",
+          playerUserId: "event-player",
+          opponentName: "Event Opponent",
+          date: "2026-09-09",
+          bestOf: 3,
+          adScoring: null,
+          supportsVideo: false,
+          eventName: "Event",
+          eventKind,
+        } as never,
+      },
+    });
+    await h.flush();
+    expect(h.current.formData.playOnLets).toBe(true);
+    // bestOf/adScoring seeding is untouched by this change.
+    expect(h.current.formData.bestOf).toBe("3");
+    expect(h.current.formData.adScoring).toBeUndefined();
+  });
+}
+
+test("no preset (personal upload) leaves Play On Lets at its false default", async () => {
+  const h = uploadWizardHarness();
+  await h.flush();
+  expect(h.current.formData.playOnLets).toBe(false);
+});
+
 test("a pending parse uses scoring ownership after attaching or detaching an event", async () => {
   for (const change of ["attach", "detach"]) {
     const h = uploadWizardHarness();

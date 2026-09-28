@@ -235,8 +235,15 @@ export interface TournamentDraftSeed {
   carry?: TournamentEntryInput[];
 }
 
-/** The `FORMATS` row an option name names, or `3c`'s own. Never a parse. */
-function formatFor(value: EventFormatValue | undefined): TournamentFormat {
+/**
+ * The `FORMATS` row an option name names, or `3c`'s own default. Never a
+ * parse — see `TournamentFormat`'s header. Exported so a spec can assert the
+ * default and an edited seed's format resolve to the right `{ bestOf,
+ * adScoring }` row without rendering the builder or decoding a string.
+ */
+export function formatFor(
+  value: EventFormatValue | undefined,
+): TournamentFormat {
   if (!value) return DEFAULT_FORMAT;
   return FORMATS.find((option) => option.value === value) ?? DEFAULT_FORMAT;
 }
@@ -431,7 +438,7 @@ export function useTournamentDraft(
         // A qualifier is not seeded, and the cell beside the draw says so with
         // a dash. Keeping a seed alive behind that dash would send a number
         // nobody could see.
-        seed: draw === QUALIFYING ? "" : (existing?.seed ?? ""),
+        seed: unseededDraw(draw) ? "" : (existing?.seed ?? ""),
       });
       return next;
     });
@@ -846,7 +853,7 @@ export function TournamentFieldStep({
   const seeded = fieldIds.filter((id) => {
     const entry = entered.get(id);
     return (
-      entry !== undefined && entry.draw !== QUALIFYING && entry.seed !== ""
+      entry !== undefined && !unseededDraw(entry.draw) && entry.seed !== ""
     );
   }).length;
   const benchPlayers = benchIds.flatMap((id) => {
@@ -1194,8 +1201,8 @@ function FieldRow({
 
   const name = player.name;
   const locked = entry.locked;
-  const qualifying = entry.draw === QUALIFYING;
-  const seeded = !qualifying && entry.seed !== "";
+  const unseeded = unseededDraw(entry.draw);
+  const seeded = !unseeded && entry.seed !== "";
 
   return (
     <div className={cn("grid h-11 items-center gap-3.5", ENTRY_GRID)}>
@@ -1219,7 +1226,7 @@ function FieldRow({
         width={260}
       />
 
-      {locked || qualifying ? (
+      {locked || unseeded ? (
         // Read-only on a settled entry, and NOT because the seed is
         // uninteresting: `changed()` in `entry-plan.ts` compares `seed` on a
         // tournament row, so a settled entry whose seed moved is one the save
@@ -1371,48 +1378,75 @@ type TournamentFormat = DualFormat;
  */
 const FORMAT_OPTIONS = formatOptions(FORMATS);
 
-/** What `3c` draws in the Format cell: best of 3, ad scoring. */
+/** What `3c` draws in the Format cell: best of 3, no-ad — the same default the
+ *  dual builder opens on (`dual-build-step.tsx`'s own `DEFAULT_FORMAT`). */
 const DEFAULT_FORMAT =
-  FORMATS.find((format) => format.value === "bo3-ad") ?? FORMATS[0];
+  FORMATS.find((format) => format.value === "bo3-no-ad") ?? FORMATS[0];
 
 /** What `3c` draws in the Site cell, and the usual answer for a tournament. */
 const DEFAULT_SITE: EventSite = "neutral";
 
-/** The first of `DRAWS` — a stored value, not a label. */
+/** The draw an entry opens in and the one a seed belongs to — a stored value,
+ *  not a label. */
 const MAIN_DRAW = "Main draw";
 
-/** The other one. `3c` draws it on Rafael Osei's row. */
+/** `3c` draws it on Rafael Osei's row. */
 const QUALIFYING = "Qualifying";
 
-/**
- * Where an entry can start, and nowhere else.
- *
- * These two strings are the deleted `entry-editor.tsx`'s `DRAWS`, ported
- * verbatim rather than reworded. They are STORED values — they land in
- * `program_event_entries.draw` and come back out as themselves — so an entry
- * this screen writes has to be spelled the way every entry that pair wrote is
- * spelled, or the same draw reads as two.
- *
- * Consolation and the flights are not offered, for that file's own reason: they
- * are not places a coach enters anyone. A player arrives in consolation by
- * losing, and that move is recorded per result on the event page. Offering them
- * at creation would let a weekend be described before it happened.
- */
-const DRAWS: readonly string[] = [MAIN_DRAW, QUALIFYING];
+/** The earliest flight; `nextRound` opens a fresh entry here at PQ1. */
+const PREQUALIFYING = "Prequalifying";
 
 /**
- * The two supported stored values, with the decision each one represents.
+ * Where an entry can start, and nowhere else — in the order the flights are
+ * played.
+ *
+ * These are FREE-TEXT STORED values, not an enum: they land in
+ * `program_event_entries.draw` (a `text` column with no check constraint, so
+ * adding one here took no migration) and come back out as themselves. An entry
+ * this screen writes has to be spelled the way every entry before it was
+ * spelled, or the same draw reads as two. "Main draw" and "Qualifying" are the
+ * deleted `entry-editor.tsx`'s `DRAWS`, ported verbatim.
+ *
+ * Each mirrors a flight of the ITA's own draws page (2026 ITA Men's
+ * All-American): "Prequalifying" is its Prequalifying flight, "Qualifying" its
+ * Qualifying flight (one draw here — the regional sections are not modelled),
+ * "Main draw" its Main Draw. A player who moves between them keeps ONE entry;
+ * the crossing is recorded by the round codes on their results
+ * (`drawOfRound`), never by a second entry row.
+ *
+ * The consolations ("PQ Consolation", "Consolation") are not offered, for
+ * `entry-editor.tsx`'s own reason: they are not places a coach enters anyone. A
+ * player arrives in a consolation by losing, and that move is recorded per
+ * result on the event page. Offering them at creation would let a weekend be
+ * described before it happened.
+ */
+const DRAWS: readonly string[] = [PREQUALIFYING, QUALIFYING, MAIN_DRAW];
+
+/** A seed belongs to the main draw alone: a qualifier or prequalifier holds
+ *  none, and the cell beside the draw says so with a dash. */
+function unseededDraw(draw: string): boolean {
+  return draw !== MAIN_DRAW;
+}
+
+/**
+ * The three supported stored values, with the decision each one represents.
  * `MenuSelect` can carry this second line; a native option cannot.
  */
 const DRAW_MENU_OPTIONS: readonly MenuOption<string>[] = [
   {
-    value: MAIN_DRAW,
-    label: MAIN_DRAW,
-    description: "The athlete starts in the tournament's main bracket.",
+    value: PREQUALIFYING,
+    label: PREQUALIFYING,
+    description:
+      "The athlete must come through prequalifying, then qualifying.",
   },
   {
     value: QUALIFYING,
     label: QUALIFYING,
     description: "The athlete must qualify before entering the main bracket.",
+  },
+  {
+    value: MAIN_DRAW,
+    label: MAIN_DRAW,
+    description: "The athlete starts in the tournament's main bracket.",
   },
 ];

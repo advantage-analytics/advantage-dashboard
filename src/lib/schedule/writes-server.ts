@@ -15,7 +15,11 @@ import {
   type IncomingEntry,
 } from "./entry-plan";
 import { validateDualLineup, validateLineup } from "./lineup-validation";
-import { DEFAULT_DOUBLES_GAMES_TO, type DoublesGamesTo } from "./format";
+import {
+  DEFAULT_DOUBLES_GAMES_TO,
+  roundRank,
+  type DoublesGamesTo,
+} from "./format";
 import { matchResultFor } from "./entry-state";
 import type { OutcomeKind, OutcomeSide } from "./types";
 import type {
@@ -322,6 +326,17 @@ export function createScheduleWriter(
     revalidatePath(`/dashboard/team/schedule/${eventId}`);
   }
 
+  /**
+   * An edit to the event itself — its format above all. The upload wizard's
+   * line preset carries the event's `best_of` / `ad_scoring`, so a wizard
+   * opened on one of its lines has to re-read them or it scores the next
+   * match under the format the coach just changed.
+   */
+  function revalidateEventEdit(eventId: string): void {
+    revalidateEvent(eventId);
+    revalidatePath("/dashboard/team/upload");
+  }
+
   /** Which side a submitted line's "No player" forfeits, if either. */
   function lineupSideOf(line: LineupLineInput): OutcomeSide | null {
     if (line.noPlayer) return "ours";
@@ -522,7 +537,7 @@ export function createScheduleWriter(
     );
     if (forfeitFailure) return forfeitFailure;
 
-    revalidateEvent(detail.event.id);
+    revalidateEventEdit(detail.event.id);
     return { eventId: detail.event.id };
   }
 
@@ -582,7 +597,7 @@ export function createScheduleWriter(
     );
     if (failure) return failure;
 
-    revalidateEvent(detail.event.id);
+    revalidateEventEdit(detail.event.id);
     return { eventId: detail.event.id };
   }
 
@@ -745,7 +760,8 @@ export function createScheduleWriter(
         : (((entry.player_user_ids as string[] | null) ?? [])[0] ?? null);
 
     /**
-     * The opponent's name, back onto the entry the line is drawn from.
+     * The opponent — name, school, program — back onto the entry the line is
+     * drawn from.
      *
      * The entry's copy is not what the event pages print when a match exists —
      * that prefers `match.opponentLabels` — but it IS what `dualSeed` seeds the
@@ -753,28 +769,70 @@ export function createScheduleWriter(
      * So a correction that fixed a misspelling on the match left the editor
      * still offering the old spelling, ready to write it back on the next save.
      *
-     * ── Only on a dual when correcting ──────────────────────────────────────
-     * A tournament entry has ONE `opponent_labels` column and one `recordResult`
-     * per round, so the column means "the last round filed" (stated at
-     * `tournament-detail.tsx`'s `SchoolsFaced`). Syncing on a correction breaks
-     * that: fix a typo in the R32 score after R16 is recorded, and the entry
-     * reverts to naming R32's opponent — a round-old school on the rail, from an
-     * edit that was only ever about a score. A dual line has exactly one round
-     * (its court), so it has no later round to clobber.
+     * ── On a tournament, only from the entry's LATEST round ─────────────────
+     * A tournament entry has ONE `opponent_labels` / `opponent_school` /
+     * `opponent_program_id` and one `recordResult` per round, so the columns
+     * mean "the last round filed" (`line-choices.ts` reads them that way, and
+     * the tournament page's fallback opponent is the same column). A sync from
+     * any round breaks that: fix a typo in the R32 score after R16 is
+     * recorded, and the entry reverts to naming R32's opponent — a round-old
+     * school from an edit that was only ever about a score.
+     *
+     * **The rule, pinned:** the entry is written when the round being saved
+     * ranks at or past every other round this entry already holds a match for
+     * (`roundRank`, so R16 outranks R32 and an unknown code ranks last). That
+     * covers a first result, the next round played, and a correction of the
+     * latest round; a correction of an earlier round — insert or update —
+     * leaves the entry alone. A dual line has exactly one round (its court),
+     * so it has no later round to clobber and always syncs.
+     *
+     * The school and program follow `RecordResultInput`'s own three-valued
+     * shape: `undefined` leaves a column alone (a dual, which names its school
+     * on the event), null clears it, a string sets it — the key resolved to an
+     * id here, never trusted from the browser.
      */
     const syncEntryOpponent = async () => {
       if (
         input.opponentSchool === undefined &&
+        input.opponentProgramKey === undefined &&
         input.opponentLabels.length === 0
       ) {
         return;
       }
+
+      if (event.kind === "tournament") {
+        // Strictly later: the round being saved ranks equal to its own row,
+        // so a correction of the latest round passes without excluding it.
+        const { data: roundRows } = await supabase
+          .from("matches")
+          .select("round")
+          .eq("event_entry_id", entry.id);
+        const laterRoundHeld = (
+          (roundRows ?? []) as { round: string | null }[]
+        ).some((row) => roundRank(row.round) > roundRank(round ?? null));
+        if (laterRoundHeld) return;
+      }
+
+      const opponentProgramId =
+        input.opponentProgramKey === undefined
+          ? undefined
+          : input.opponentProgramKey === null
+            ? null
+            : await resolveOpponentProgramId(
+                supabase,
+                input.opponentProgramKey,
+                auth.programId,
+              );
+
       await supabase
         .from("program_event_entries")
         .update({
           opponent_labels: input.opponentLabels,
           ...(input.opponentSchool !== undefined
             ? { opponent_school: input.opponentSchool }
+            : {}),
+          ...(opponentProgramId !== undefined
+            ? { opponent_program_id: opponentProgramId }
             : {}),
           updated_at: new Date().toISOString(),
         })
@@ -812,9 +870,10 @@ export function createScheduleWriter(
         };
       }
 
-      // Duals only — see `syncEntryOpponent`. `input.round` is null exactly when
-      // the line's round is its own court, which is what a dual line is.
-      if (input.round === null) await syncEntryOpponent();
+      // A dual always; a tournament only from its latest round — the gate is
+      // `syncEntryOpponent`'s own, so a correction of an earlier round cannot
+      // put a round-old opponent back on the entry.
+      await syncEntryOpponent();
 
       revalidatePath("/dashboard/team/schedule");
       revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
@@ -849,13 +908,13 @@ export function createScheduleWriter(
             ad_scoring: format.doubles
               ? (format.doubles.ad_scoring ?? null)
               : (format.ad_scoring ?? null),
-            play_on_lets: false,
+            play_on_lets: true,
             games_to: doublesGamesTo,
           }
         : {
             best_of: format.best_of ?? 3,
             ad_scoring: format.ad_scoring ?? null,
-            play_on_lets: false,
+            play_on_lets: true,
           },
       score: scorePayload,
       // The context string: "Final Score", or how a stopped match ended. Who won

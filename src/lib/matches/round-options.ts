@@ -3,8 +3,8 @@
  * place a round's spelling is settled on its way in.
  *
  * `matches.round` holds short codes everywhere the schedule reads it: the
- * tournament ladder (`ROUND_ORDER` — Q1…R16…F…C3, what `roundRank` sorts and
- * `program_event_outcomes` checks) and a dual's line slot (S1…D3). The upload
+ * tournament ladder (`ROUND_ORDER` — PQ1…Q1…R16…F…C5, what `roundRank` sorts;
+ * `program_event_outcomes` still checks the older Q1…C3 subset) and a dual's line slot (S1…D3). The upload
  * wizard's Round menu saves long labels ("Round of 16"), which none of those
  * readers recognise. The dialog reads both and saves the code; a value that is
  * neither survives as its own option rather than being cleared.
@@ -18,9 +18,18 @@ interface RoundOption {
 }
 
 const TOURNAMENT_LABEL: Record<string, string> = {
+  PQ1: "Prequalifying 1",
+  PQ2: "Prequalifying 2",
+  PQ3: "Prequalifying 3",
+  PQ4: "Prequalifying 4",
+  PC1: "PQ Consolation 1",
+  PC2: "PQ Consolation 2",
+  PC3: "PQ Consolation 3",
+  PC4: "PQ Consolation 4",
   Q1: "Qualifying 1",
   Q2: "Qualifying 2",
   Q3: "Qualifying 3",
+  R256: "Round of 256",
   R128: "Round of 128",
   R64: "Round of 64",
   R32: "Round of 32",
@@ -31,6 +40,8 @@ const TOURNAMENT_LABEL: Record<string, string> = {
   C1: "Consolation 1",
   C2: "Consolation 2",
   C3: "Consolation 3",
+  C4: "Consolation 4",
+  C5: "Consolation 5",
 };
 
 const TOURNAMENT_ROUNDS: readonly RoundOption[] = ROUND_ORDER.map((code) => ({
@@ -45,6 +56,7 @@ const DUAL_LINES: readonly RoundOption[] = [
 
 /** The wizard's long labels, and the other spellings people type, → codes. */
 const LONG_TO_CODE: Record<string, string> = {
+  "round of 256": "R256",
   "round of 128": "R128",
   "round of 64": "R64",
   "round of 32": "R32",

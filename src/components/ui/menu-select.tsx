@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import {
   FloatMenu,
+  FloatMenuDivider,
   FloatMenuItem,
+  FloatMenuLabel,
   FloatMenuNote,
 } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
@@ -14,6 +16,15 @@ export interface MenuOption<T extends string> {
   label: string;
   /** One line on what choosing it means. The reason this is not a native select. */
   description?: string;
+  /**
+   * The section this option sits under. Options are rendered in the order
+   * given; each run of a new `group` opens with its quiet `FloatMenuLabel`
+   * (sentence case, 11px ink-400 — never an eyebrow inside a menu) and a
+   * hairline closes the run before it. The Round menu on a tournament's
+   * score page is the caller: two dozen codes read as a wall until the draw
+   * each belongs to is written over them. Ungrouped lists render as before.
+   */
+  group?: string;
 }
 
 /**
@@ -155,14 +166,24 @@ export function MenuSelect<T extends string>({
           : undefined
       }
     >
-      {options.map((option) => (
-        <MenuSelectRow
-          key={option.value}
-          option={option}
-          chosen={option.value === value}
-          onPick={pick}
-        />
-      ))}
+      {options.map((option, index) => {
+        const previous = index > 0 ? options[index - 1].group : undefined;
+        const opensGroup =
+          option.group !== undefined && option.group !== previous;
+        return (
+          <Fragment key={option.value}>
+            {opensGroup && index > 0 ? <FloatMenuDivider /> : null}
+            {opensGroup ? (
+              <FloatMenuLabel>{option.group}</FloatMenuLabel>
+            ) : null}
+            <MenuSelectRow
+              option={option}
+              chosen={option.value === value}
+              onPick={pick}
+            />
+          </Fragment>
+        );
+      })}
       {note ? <FloatMenuNote>{note}</FloatMenuNote> : null}
     </FloatMenu>
   );
