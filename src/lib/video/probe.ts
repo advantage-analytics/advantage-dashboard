@@ -25,7 +25,7 @@ export interface VideoProbe {
    * is never snapped, so a variable-rate 29.94 average stays 29.94.
    *
    * Exists to work around one vendor's rejection behavior (see
-   * src/lib/video/container-frame-rate.ts and FRAME_RATE_WARN_BELOW_FPS in
+   * src/lib/video/container-frame-rate.ts and MIN_CONTAINER_AVERAGE_FPS in
    * src/lib/services/splitstep/config.ts), not as a general quality signal —
    * a future non-splitstep consumer of `VideoProbe` should not read meaning
    * into this field beyond "the container's own average, if known".

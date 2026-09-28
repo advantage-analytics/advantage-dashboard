@@ -257,10 +257,13 @@ Ask:
    released the reservation on failure; we need to know whether the vendor
    invoices it.
 
-Until answered, the upload wizard **warns** below 29.97 and does not block,
-because blocking would turn our guess into a refusal of files the vendor may
-accept. A failure with `error_category = 'invalid_input'` is not offered a
-retry, since resubmitting the same file fails the same way.
+Decided 2026-09-27, before an answer: the upload wizard **refuses** a file
+whose whole-track container average is under 29.96 (`MIN_CONTAINER_AVERAGE_FPS`),
+following the API docs' "29.97 fps (NTSC) and higher is accepted" — the band
+below that is not promised, and this file shows the vendor measures lower than
+the container. An answer to question 1 could let us narrow or relax that. A
+failure with `error_category = 'invalid_input'` is not offered a retry, since
+resubmitting the same file fails the same way.
 
 ---
 

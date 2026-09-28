@@ -18,31 +18,24 @@
  * a real file could not exist. See tests/upload-video-requirements.spec.ts.
  * Do not add a second copy of any threshold at a call site.
  *
- * ── Boundaries this file deliberately does NOT tighten ───────────────────────
- * The vendor's guide (checked 2026-09-10, see
- * work/upload-flow-refinements/01_brief/output/brief.md §"Also consulted")
- * contradicts itself on frame rate: the specification accepts 29.97 fps, while
- * the error table describes rejection below 29.9 fps. Both statements are about
- * the same boundary and cannot both be the boundary. We keep the existing,
- * more permissive behavior — the floor is `MIN_VIDEO_FPS` applied to the
- * *snapped* rate, so genuine 29.97 footage reads as 30 and passes — rather
- * than inventing a third number. Anything in the narrow band
- * the vendor might still refuse is left to the vendor, which is the party that
- * actually knows.
+ * ── The frame-rate floor ─────────────────────────────────────────────────────
+ * The vendor's API docs (https://splitstep.ai/api-docs.html, re-read
+ * 2026-09-27) say "29.97 fps (NTSC) and higher is accepted", and their error
+ * table rejects below 29.9 fps by the vendor's own measurement. Those are not
+ * a contradiction: at and above 29.97 is guaranteed, below 29.9 is refused, and
+ * the band between is not promised. It is also not safe — job 45ff4bd7 read 30
+ * to our 20-frame sample and 29.94 in its container, the vendor measured 29.80,
+ * and it was rejected after a full upload.
  *
- * ── The variable-frame-rate warning band ────────────────────────────────────
- * Job 45ff4bd7 (2026-09-28) was rejected as too slow although the probe read
- * it as 30: its whole-track container average is 29.94 fps (the vendor's own
- * figure was 29.80), and a 20-frame sample snapped within 2% cannot tell that
- * from genuine 29.97. So the probe also carries `averageFps`, the whole-track
- * average from the MP4/MOV index, and a file that passes the gate with an
- * average below `FRAME_RATE_WARN_BELOW_FPS` (set just under 30000/1001,
- * so constant 29.97/30/60 footage never trips it) gets one warning naming the
- * average and suggesting a constant 30 fps export. It warns and does not
- * block, because the vendor's formula differs from ours and nobody knows its
- * exact boundary until the vendor answers Q14 in
- * docs/splitstep-vendor-questions.md. A null average (non-MP4/MOV, read
- * failed or timed out) changes nothing.
+ * So two rates are judged. The browser sample, snapped to a standard rate, must
+ * clear `MIN_VIDEO_FPS` (snapping keeps genuine 29.97 at 30). And when the
+ * container's whole-track average is known (`averageFps`, MP4/MOV only), it
+ * must be at least `MIN_CONTAINER_AVERAGE_FPS` — just under 30000/1001, so
+ * constant-rate NTSC, 30 and 60 fps footage always passes and a variable-rate
+ * file like 45ff4bd7's is refused before a byte uploads. Either rate can
+ * refuse; neither rescues the other. A null average (another container, a
+ * failed or slow read) leaves the sample to decide, as before. How the vendor
+ * computes its number is still open as Q14 in docs/splitstep-vendor-questions.md.
  *
  * Likewise the container allowlist is exactly `ACCEPTED_VIDEO_EXTENSIONS` —
  * not the message's MP4 preference being enforced (.mov, .m4v, .avi, .mkv and
@@ -63,8 +56,8 @@ import {
 } from "@/lib/video/probe";
 import {
   ACCEPTED_VIDEO_EXTENSIONS,
-  FRAME_RATE_WARN_BELOW_FPS,
   MAX_VIDEO_SIZE_BYTES,
+  MIN_CONTAINER_AVERAGE_FPS,
   MIN_TRIM_DURATION_SECONDS,
   MIN_VIDEO_FPS,
   MIN_VIDEO_HEIGHT,
@@ -135,15 +128,20 @@ export function checkVideoFileBasics(file: {
 }
 
 /**
- * Does this probe's whole-track average sit in the variable-frame-rate warning
- * band? Only meaningful for a probe that has already cleared the gate.
+ * Is this probe's whole-track container average known and below the rate the
+ * vendor documents as accepted? See the module comment's frame-rate floor.
  */
-function averageInWarnBand(probe: VideoProbe): probe is VideoProbe & {
+function averageBelowAccepted(probe: VideoProbe): probe is VideoProbe & {
   averageFps: number;
 } {
   return (
-    probe.averageFps != null && probe.averageFps < FRAME_RATE_WARN_BELOW_FPS
+    probe.averageFps != null && probe.averageFps < MIN_CONTAINER_AVERAGE_FPS
   );
+}
+
+/** An average to at most two decimals, without trailing zeros: 29.94, 24. */
+function formatAverage(averageFps: number): string {
+  return `${Number(averageFps.toFixed(2))} fps`;
 }
 
 /**
@@ -160,13 +158,12 @@ function effectiveFps(probe: VideoProbe): number | null {
 }
 
 /**
- * The frame rate to show beside a checked video: the whole-track average to 2
- * decimals when the variable-frame-rate warning applies (so the fact agrees
- * with the warning under it), the effective rate otherwise, and null when the
- * rate is unknown.
+ * The frame rate to show beside a video: the whole-track average when it is
+ * below the accepted rate (so the fact agrees with the refusal beside it), the
+ * effective rate otherwise, and null when the rate is unknown.
  */
 export function formatProbeFps(probe: VideoProbe): string | null {
-  if (averageInWarnBand(probe)) return `${probe.averageFps.toFixed(2)} fps`;
+  if (averageBelowAccepted(probe)) return formatAverage(probe.averageFps);
   const fps = effectiveFps(probe);
   return fps === null ? null : `${fps} fps`;
 }
@@ -198,23 +195,21 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   // happened to round it on the way in; the message still quotes the rate the
   // file reported, which is the number the camera's menu shows.
   //
-  // Either known rate can refuse: the 20-frame sample, and the whole-track
-  // container average. Judging only the sample when one exists made the
-  // verdict depend on the browser — a variable-rate MP4 that opens at 30 but
-  // averages 24 passed in Chrome (sample 30) and was refused in Firefox (no
-  // sample, average 24), and the vendor rejects it either way. The average
-  // never rescues a low sample; it can only add a refusal.
-  const snappedAverage =
-    probe.averageFps != null ? snapToStandardFps(probe.averageFps) : null;
-  const sampledUnder =
-    probe.fps !== null && snapToStandardFps(probe.fps) < MIN_VIDEO_FPS;
-  const averageUnder =
-    snappedAverage !== null && snappedAverage < MIN_VIDEO_FPS;
-  if (sampledUnder || averageUnder) {
-    const quoted = sampledUnder ? probe.fps : snappedAverage;
+  if (probe.fps !== null && snapToStandardFps(probe.fps) < MIN_VIDEO_FPS) {
     return {
       success: false,
-      error: `Video runs at ${quoted} fps. Analysis needs at least ${MIN_VIDEO_FPS} fps.`,
+      error: `Video runs at ${probe.fps} fps. Analysis needs at least ${MIN_VIDEO_FPS} fps.`,
+      details,
+    };
+  }
+
+  // The container average is judged too, in every browser — a variable-rate
+  // MP4 can open at 30 (what the sample sees) and average well under it (what
+  // the vendor measures). It never rescues a low sample; it can only refuse.
+  if (averageBelowAccepted(probe)) {
+    return {
+      success: false,
+      error: `This recording averages ${formatAverage(probe.averageFps)}, which usually means a variable frame rate. ${PROVIDER_DISPLAY_NAME} accepts 29.97 fps and higher, so export it at a constant 30 fps and pick it again.`,
       details,
     };
   }
@@ -234,15 +229,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
 
   const warnings: string[] = [];
 
-  if (averageInWarnBand(probe)) {
-    // First, because it is the one line that can cost the upload, and it only
-    // needs the container average — so it fires even where the browser could
-    // not sample a rate. Replaces the other frame-rate lines below: one
-    // frame-rate line per file. Warn, never block — see the module comment.
-    warnings.push(
-      `This recording averages ${probe.averageFps.toFixed(2)} fps, which usually means a variable frame rate, and ${PROVIDER_DISPLAY_NAME} may reject it. Exporting at a constant 30 fps avoids that.`,
-    );
-  } else if (fps === null) {
+  if (fps === null) {
     // Says three things on purpose: what we could not do, that the requirement
     // is unchanged by our not being able to check it, and who refuses the file
     // if it is wrong. Without the last clause this reads as permission.

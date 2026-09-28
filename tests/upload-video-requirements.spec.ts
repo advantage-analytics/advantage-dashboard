@@ -189,22 +189,37 @@ test.describe("frame-rate boundary", () => {
     expect(evaluateVideoProbe(probe()).warnings).toBeUndefined();
   });
 
-  test("a whole-track average under 29.96 warns once, naming the average", () => {
+  test("a whole-track average under 29.96 is refused, naming the average", () => {
     // Job 45ff4bd7: probe read 30, container average 29.94, vendor refused.
+    // The vendor documents 29.97 and higher as accepted.
     const input = probe({ fps: 30, averageFps: 29.94 });
     const result = evaluateVideoProbe(input);
-    expect(result.success).toBe(true);
-    expect(result.warnings).toHaveLength(1);
-    const warning = result.warnings![0];
-    expect(warning).toContain("29.94 fps");
-    expect(warning).toContain("variable");
-    expect(warning).toContain(PROVIDER_DISPLAY_NAME);
-    expect(warning).toContain("constant 30 fps");
-    expect(warning).not.toMatch(/splitstep|swingvision/i);
+    expect(result.success).toBe(false);
+    const error = result.error ?? "";
+    expect(error).toContain("29.94 fps");
+    expect(error).toContain("variable");
+    expect(error).toContain(PROVIDER_DISPLAY_NAME);
+    expect(error).toContain("29.97");
+    expect(error).toContain("constant 30 fps");
+    expect(error).not.toMatch(/splitstep|swingvision/i);
     expect(formatProbeFps(input)).toBe("29.94 fps");
   });
 
-  test("constant-rate footage and an unknown average never get the VFR warning", () => {
+  test("an average just under 29.97 from a short final frame still passes", () => {
+    // 30000/1001 is 29.97003; a constant-rate file whose last frame is short
+    // can average 29.968, which reads as 29.97 to two decimals.
+    expect(
+      evaluateVideoProbe(probe({ fps: 30, averageFps: 29.97 })).success,
+    ).toBe(true);
+    expect(
+      evaluateVideoProbe(probe({ fps: 30, averageFps: 29.96 })).success,
+    ).toBe(true);
+    expect(
+      evaluateVideoProbe(probe({ fps: 30, averageFps: 29.95 })).success,
+    ).toBe(false);
+  });
+
+  test("constant-rate footage and an unknown average are never refused on the average", () => {
     const cases: Array<[Partial<VideoProbe>, string]> = [
       [{ fps: 30, averageFps: 29.97 }, "30 fps"],
       [{ fps: 30, averageFps: 30 }, "30 fps"],
@@ -216,9 +231,7 @@ test.describe("frame-rate boundary", () => {
       const input = probe(overrides);
       const result = evaluateVideoProbe(input);
       expect(result.success).toBe(true);
-      for (const warning of result.warnings ?? []) {
-        expect(warning).not.toContain("constant 30 fps");
-      }
+      expect(result.error).toBeUndefined();
       expect(formatProbeFps(input)).toBe(shown);
     }
   });
@@ -231,15 +244,13 @@ test.describe("frame-rate boundary", () => {
 
   // Browsers without requestVideoFrameCallback (Firefox) report no sampled
   // rate, but the container read still works — so the average stands in.
-  test("with no sampled rate, a sub-29.96 average still gets the VFR warning", () => {
+  test("with no sampled rate, a sub-29.96 average is still refused", () => {
     const p = probe({ fps: null, averageFps: 29.94 });
     const result = evaluateVideoProbe(p);
 
-    expect(result.success).toBe(true);
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings?.[0]).toContain("29.94 fps");
-    expect(result.warnings?.[0]).toContain("constant 30 fps");
-    expect(result.warnings?.[0]).not.toContain("can't measure");
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("29.94 fps");
+    expect(result.error).toContain("constant 30 fps");
     expect(formatProbeFps(p)).toBe("29.94 fps");
   });
 
@@ -266,7 +277,6 @@ test.describe("frame-rate boundary", () => {
 
     expect(result.success).toBe(true);
     expect(result.warnings?.join(" ") ?? "").not.toContain("can't measure");
-    expect(result.warnings?.join(" ") ?? "").not.toContain("constant 30 fps");
     expect(formatProbeFps(p)).toBe("30 fps");
   });
 });

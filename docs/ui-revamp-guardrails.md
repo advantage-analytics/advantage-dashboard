@@ -268,16 +268,17 @@ to put a testable seam.
 >   `reconcile.ts` and jobs-route auto paths inherit it unchanged; the route's
 >   ownership check still runs first, so only the uploader sees the message.
 >   Live case: job 45ff4bd7, `VIDEO_FRAME_RATE_TOO_LOW`.
-> - `config.ts` gains `FRAME_RATE_WARN_BELOW_FPS = 29.96`, read only by the
+> - `config.ts` gains `MIN_CONTAINER_AVERAGE_FPS = 29.96`, read only by the
 >   upload validator. A file whose whole-track container average (MP4/MOV, via
->   `src/lib/video/container-frame-rate.ts`) is under it gets a warning, never
->   a block — the vendor's own measurement differs from ours (29.80 against a
->   29.94 container average for the same file), and its exact rule is open as
->   Q14 in `docs/splitstep-vendor-questions.md`. That is why this is a warning
->   and not an invented floor. The existing 30 fps floor (`MIN_VIDEO_FPS`) is
->   unchanged in value; it now also refuses when the container average is
->   known and snaps below it, so the verdict no longer depends on whether the
->   browser could sample a rate.
+>   `src/lib/video/container-frame-rate.ts`) is under it is refused before
+>   upload, in every browser. This is not an invented floor: the vendor's API
+>   docs (https://splitstep.ai/api-docs.html, re-read 2026-09-27) guarantee
+>   "29.97 fps (NTSC) and higher is accepted", and 29.96 sits just under
+>   30000/1001 so genuine NTSC always passes. The vendor measures lower than
+>   the container (29.80 against a 29.94 average for the same file), which is
+>   why the band under 29.97 is refused rather than gambled on; how it
+>   measures is still open as Q14 in `docs/splitstep-vendor-questions.md`. The
+>   existing 30 fps floor on the browser sample (`MIN_VIDEO_FPS`) is unchanged.
 >
 > `job-request.ts`, the three inputs in §4, `canSubmitVideo` and the webhook are
 > untouched.

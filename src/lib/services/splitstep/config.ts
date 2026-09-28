@@ -53,16 +53,20 @@ export const MIN_VIDEO_HEIGHT = 1080;
 export const MIN_VIDEO_FPS = 30;
 
 /**
- * Whole-track average frame rate below which the wizard warns (never blocks).
+ * Whole-track container average frame rate below which the wizard refuses a
+ * video before upload.
  *
- * The vendor rejects below 29.9 fps by its own measurement, and that is not
- * ours: job 45ff4bd7 was rejected at a 29.94 container average (the vendor
- * reported 29.80 for the same file). 29.96 catches that file while sitting
- * just under genuine 29.97 (30000/1001), so constant-rate NTSC, 30 and 60 fps
- * footage never warns. Compared against `VideoProbe.averageFps`, never the
- * snapped `fps`.
+ * The vendor's API docs (https://splitstep.ai/api-docs.html, checked
+ * 2026-09-27) guarantee "29.97 fps (NTSC) and higher is accepted" and reject
+ * below 29.9 fps by the vendor's own measurement — which reads lower than the
+ * container: job 45ff4bd7 averaged 29.94 in its container, the vendor measured
+ * 29.80, and it was rejected. So anything under the documented 29.97 is a
+ * gamble that costs a full upload. 29.96 rather than 29.97 because genuine NTSC
+ * is 30000/1001 = 29.97003 and a constant-rate file with a short final frame
+ * can average 29.968 — just under 29.97, never under 29.96. Compared against
+ * `VideoProbe.averageFps` (MP4/MOV only), never the snapped `fps`.
  */
-export const FRAME_RATE_WARN_BELOW_FPS = 29.96;
+export const MIN_CONTAINER_AVERAGE_FPS = 29.96;
 
 /** Vendor's recommended frame rate. Below this we warn but do not block. */
 export const RECOMMENDED_VIDEO_FPS = 60;
