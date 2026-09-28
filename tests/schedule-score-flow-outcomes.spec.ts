@@ -645,8 +645,14 @@ test.describe("a tournament entry", () => {
       page.getByRole("button", { name: "Save and next round" }),
     ).toHaveCount(0);
 
+    // A round with no match of its own opens with no school, so no roster:
+    // the new opponent is typed, and Enter commits the name.
     await page.getByRole("button", { name: "Name their player" }).click();
-    await page.getByRole("option", { name: /Taylor Park/ }).click();
+    const typedName = page
+      .getByRole("dialog", { name: "Add opposing name" })
+      .getByRole("combobox");
+    await typedName.fill("Taylor Park");
+    await typedName.press("Enter");
     await page.getByLabel("Jordan Lee, set 1").fill("6");
     await page.getByLabel("Taylor Park, set 1").fill("3");
     await page.getByLabel("Jordan Lee, set 2").fill("6");
@@ -705,8 +711,14 @@ test.describe("a tournament entry", () => {
     await openFlow(page, "?kind=tournament&recorded=true");
     const round = page.getByRole("button", { name: "Round", exact: true });
     await expect(round).toContainText("R16");
+    // A round with no match of its own opens with no school, so no roster:
+    // the new opponent is typed, and Enter commits the name.
     await page.getByRole("button", { name: "Name their player" }).click();
-    await page.getByRole("option", { name: /Taylor Park/ }).click();
+    const typedName = page
+      .getByRole("dialog", { name: "Add opposing name" })
+      .getByRole("combobox");
+    await typedName.fill("Taylor Park");
+    await typedName.press("Enter");
     await page.getByLabel("Jordan Lee, set 1").fill("3");
     await page.getByLabel("Taylor Park, set 1").fill("6");
     await page.getByLabel("Jordan Lee, set 2").fill("4");
@@ -811,8 +823,14 @@ test.describe("a tournament entry", () => {
     await expect(round).toContainText("F");
 
     // F holds no match, so it opens naming nobody; name them to save.
+    // A round with no match of its own opens with no school, so no roster:
+    // the new opponent is typed, and Enter commits the name.
     await page.getByRole("button", { name: "Name their player" }).click();
-    await page.getByRole("option", { name: /Taylor Park/ }).click();
+    const typedName = page
+      .getByRole("dialog", { name: "Add opposing name" })
+      .getByRole("combobox");
+    await typedName.fill("Taylor Park");
+    await typedName.press("Enter");
     await page.getByLabel("Alex Kim, set 1").fill("3");
     await page.getByLabel("Taylor Park, set 1").fill("6");
     await page.getByLabel("Alex Kim, set 2").fill("2");
@@ -901,24 +919,47 @@ test("the School search offers only our team's program for a school fielding bot
 });
 
 test.describe("the opponent's school on a tournament round", () => {
+  test("a school the coach chose stays put when the round changes", async ({
+    page,
+  }) => {
+    await serveDirectory(page);
+    await openFlow(page, "?kind=tournament&recorded=true");
+    await schoolField(page).fill("Ridge");
+    await page.getByRole("option", { name: /Ridgeline University/ }).click();
+    await expect(schoolField(page)).toHaveValue("Ridgeline University");
+
+    // Touched, so NOT reseeded to the recorded round's "Rival State".
+    await page.getByRole("button", { name: "Round", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: /^R32\b/ }).click();
+    await expect(schoolField(page)).toHaveValue("Ridgeline University");
+  });
+
   test("a tournament asks the school above the opponent; a dual line does not", async ({
     page,
   }) => {
-    await openFlow(page, "?kind=tournament");
-    // Seeded from the entry — "the last round filed" — with its roster behind it.
-    await expect(schoolField(page)).toHaveValue("Rival State");
-    await expect(
-      page.getByText("On the directory · their saved roster is offered below."),
-    ).toBeVisible();
+    // R16 has no match of its own: a new opponent, so no school yet — the
+    // entry's school is the LAST round's opponent's, never this one's.
+    await openFlow(page, "?kind=tournament&recorded=true");
+    await expect(schoolField(page)).toHaveValue("");
     // Reading order: School, then the opponent's name in the score row.
     const school = await schoolField(page).boundingBox();
     const opponent = await page
       .getByRole("button", { name: "Name their player" })
       .boundingBox();
     expect(school!.y).toBeLessThan(opponent!.y);
-    expect(await page.evaluate(() => window.rosterCalls)).toEqual([
-      "rival-state",
-    ]);
+    expect(await page.evaluate(() => window.rosterCalls)).toEqual([]);
+
+    // A recorded round opens with the entry's school and its roster behind
+    // it: an untouched School reseeds on a round change, as the score does.
+    await page.getByRole("button", { name: "Round", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: /^R32\b/ }).click();
+    await expect(schoolField(page)).toHaveValue("Rival State");
+    await expect(
+      page.getByText("On the directory · their saved roster is offered below."),
+    ).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => window.rosterCalls))
+      .toEqual(["rival-state"]);
 
     // A dual names its school on the event, so its lines never ask.
     await openFlow(page, "?unnamed=true");
@@ -944,7 +985,7 @@ test.describe("the opponent's school on a tournament round", () => {
     await expect(field).toHaveValue("Ridgeline University");
     await expect
       .poll(() => page.evaluate(() => window.rosterCalls))
-      .toEqual(["rival-state", "ridgeline"]);
+      .toEqual(["ridgeline"]);
 
     // Their roster now, not Rival State's.
     await page.getByRole("button", { name: "Name their player" }).click();

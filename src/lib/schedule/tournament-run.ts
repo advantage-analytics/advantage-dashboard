@@ -79,10 +79,12 @@ const MAIN_DRAW_START = "R32";
  *   qualifier's last round won carries them into the main draw — the first
  *   main-draw round after the furthest one the entry already holds, or the
  *   run's usual main-draw start (R32, as `nextRound` opens a fresh entry)
- *   when it holds none. Null when the ladder defines no main draw, and for
- *   any other draw — the last consolation round, and the last prequalifying
- *   or PQ-consolation round too: a prequalifier only leaves their draw by
- *   losing, which the loss rules below answer.
+ *   when it holds none. Null when the ladder defines no main draw.
+ *   A prequalifier's last round won carries them into QUALIFYING the same way
+ *   — the first qualifying round they do not already hold (Q1) — because
+ *   that is what prequalifying is for (the builder's own copy: "must come
+ *   through prequalifying, then qualifying"). Null for any other draw: the
+ *   last consolation round and the last PQ-consolation round lead nowhere.
  * - **An unrecognised round** has no ladder position: null.
  *
  * A LOSS drops the entry into the consolation draw that feeds from the draw it
@@ -136,6 +138,19 @@ export function nextRoundAfter(
     (round) => drawOfRound(round) === draw,
   );
   if (sameDraw) return sameDraw;
+
+  if (draw === PREQUALIFYING) {
+    const held = new Set(
+      entry.matches.flatMap((match) =>
+        match.round ? [match.round.toUpperCase()] : [],
+      ),
+    );
+    return (
+      ROUND_ORDER.find(
+        (round) => drawOfRound(round) === QUALIFYING && !held.has(round),
+      ) ?? null
+    );
+  }
   if (draw !== QUALIFYING) return null;
 
   const main = ROUND_ORDER.filter((round) => drawOfRound(round) === MAIN_DRAW);

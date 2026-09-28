@@ -140,12 +140,27 @@ export interface OpponentSchool {
   programKey: string | null;
 }
 
-/** What the School field opens with: the entry's school, "the last round filed". */
+const NO_SCHOOL: OpponentSchool = { name: "", programKey: null };
+
+/**
+ * What the School field opens with.
+ *
+ * The entry's `opponent_school` is "the last round filed", so it is only an
+ * honest answer for a round that already HAS a match. A tournament round with
+ * no match of its own is a new opponent — its name opens empty (`presetFor`),
+ * and so does its school: seeding the last round's school pointed the picker
+ * at that school's roster and filed it onto the entry for somebody else.
+ */
 function seedSchool(preset: EventPreset): OpponentSchool {
+  if (preset.eventKind === "tournament" && !preset.matchId) return NO_SCHOOL;
   return {
     name: preset.opponentSchool ?? "",
     programKey: preset.opponentProgramKey ?? null,
   };
+}
+
+function sameSchool(a: OpponentSchool, b: OpponentSchool): boolean {
+  return a.name === b.name && a.programKey === b.programKey;
 }
 
 export function ScoreOnlyFlow({
@@ -201,16 +216,25 @@ export function ScoreOnlyFlow({
   const [lineSwitches, setLineSwitches] = useState(0);
   /**
    * A tournament round's opponent school. Held here, beside the pool it
-   * points, so one `useOpponentPool` serves every line — and reseeded on a
-   * LINE switch only: the school belongs to the entry, not to the round, so
-   * the Round control leaves it where the coach put it.
+   * points, so one `useOpponentPool` serves every line. Reseeded on a LINE
+   * switch; on a ROUND change it follows the score's own rule
+   * (`reseedForRound`): a school the coach has not touched since it was
+   * seeded reseeds for the new round, one they chose stays where they put it.
    */
   const [school, setSchool] = useState<OpponentSchool>(() =>
     seedSchool(preset),
   );
+  /** What `school` was last seeded with — "untouched" means equal to this. */
+  const [schoolSeed, setSchoolSeed] = useState<OpponentSchool>(() =>
+    seedSchool(preset),
+  );
+  const reseedSchool = (next: OpponentSchool) => {
+    setSchool(next);
+    setSchoolSeed(next);
+  };
   const switchLine = (next: EventPreset) => {
     setCurrent(next);
-    setSchool(seedSchool(next));
+    reseedSchool(seedSchool(next));
     setLineSwitches((count) => count + 1);
   };
   /**
@@ -389,6 +413,7 @@ export function ScoreOnlyFlow({
         onRoundChange={(round) => {
           const next = presetAtRound(current, round, roundSeeds);
           setCurrent(next);
+          if (sameSchool(school, schoolSeed)) reseedSchool(seedSchool(next));
           return {
             preset: next,
             outcome: outcomeAt(
@@ -420,7 +445,7 @@ export function ScoreOnlyFlow({
           // carrying the last opponent's school would point the picker at
           // the wrong roster and file that school onto the entry. (A plain
           // Round change is a correction and keeps it — see `school`.)
-          setSchool({ name: "", programKey: null });
+          reseedSchool(NO_SCHOOL);
           setLastSaved(upload);
           setSavedRounds((prior) => ({
             ...prior,

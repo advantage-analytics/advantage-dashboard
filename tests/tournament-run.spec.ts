@@ -426,12 +426,21 @@ test.describe("nextRoundAfter", () => {
     expect(nextRoundAfter(run(["Final 4"]), "Final 4", true)).toBeNull();
   });
 
-  test("prequalifying and its consolation step within their own draw only", () => {
+  test("prequalifying and its consolation step within their own draw", () => {
     expect(nextRoundAfter(run(["PQ1"]), "PQ1", true)).toBe("PQ2");
     expect(nextRoundAfter(run(["PC3"]), "PC3", true)).toBe("PC4");
-    // A prequalifier only leaves their draw by losing (the loss cases below).
-    expect(nextRoundAfter(run(["PQ4"]), "PQ4", true)).toBeNull();
+    // The last PQ-consolation round won leads nowhere.
     expect(nextRoundAfter(run(["PC4"]), "PC4", true)).toBeNull();
+  });
+
+  test("the last prequalifying round won leads into qualifying", () => {
+    // "must come through prequalifying, then qualifying"
+    expect(nextRoundAfter(run(["PQ3", "PQ4"]), "PQ4", true)).toBe("Q1");
+    // Never a qualifying round the entry already holds.
+    expect(nextRoundAfter(run(["PQ4", "Q1"]), "PQ4", true)).toBe("Q2");
+    expect(
+      nextRoundAfter(run(["PQ4", "Q1", "Q2", "Q3"]), "PQ4", true),
+    ).toBeNull();
   });
 
   test("a lost prequalifying round drops into PQ Consolation at PC1", () => {

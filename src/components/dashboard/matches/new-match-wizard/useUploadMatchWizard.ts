@@ -1397,6 +1397,15 @@ export function useUploadMatchWizard({
       // dependency moved) clears nothing.
       const lineKey = presetLineKey(preset);
       const swapped = seededRef.current && seededLineRef.current !== lineKey;
+      // Captured here, not read in the updater below: `seededRef` flips to
+      // true further down this effect, before React runs the updater.
+      const firstSeed = !seededRef.current;
+      // The Lets default applies when a line is (re)opened — its first seed
+      // or a swap — never on a re-run for the SAME line (a format re-sync),
+      // which would silently undo a coach's "Lets played" choice. A resumed
+      // draft's own saved answer stands on its first seed.
+      const defaultLets =
+        (firstSeed && draft?.formData?.playOnLets === undefined) || swapped;
       const previousPreset = seededPresetRef.current;
       seededLineRef.current = lineKey;
       seededPresetRef.current = preset;
@@ -1462,9 +1471,10 @@ export function useUploadMatchWizard({
           // upload never reaches this branch, so DEFAULT_FORM_DATA's `false`
           // stands for it.
           playOnLets:
-            preset.eventKind === "dual" || preset.eventKind === "tournament"
+            defaultLets &&
+            (preset.eventKind === "dual" || preset.eventKind === "tournament")
               ? true
-              : prev.playOnLets,
+              : base.playOnLets,
           matchType:
             preset.eventKind === "dual"
               ? "Dual Match"

@@ -531,6 +531,23 @@ test.describe("a server preset for the same line with a new format", () => {
     expect(f.videoStartSeconds).toBe(120);
   });
 
+  test("a format re-sync keeps a Lets choice the coach made", async () => {
+    const lineA = line({ adScoring: true });
+    const h = await answeredOnLineA({ lineA });
+    // A college line opens on Play On (T2)…
+    expect(h.current.formData.playOnLets).toBe(true);
+    // …and the coach says lets were played.
+    h.current.handleInputChange("playOnLets", false);
+    h.render();
+    expect(h.current.formData.playOnLets).toBe(false);
+
+    const followed = followServerPreset(lineA, line({ adScoring: false }));
+    await swapTo(h, followed!);
+    expect(h.current.formData.adScoring).toBe(false);
+    // Same line, re-run: the default is not re-applied over their answer.
+    expect(h.current.formData.playOnLets).toBe(false);
+  });
+
   test("a best-of edit reaches formData, and an unset Ad/No-Ad reads as unset", async () => {
     const lineA = line({ adScoring: true, bestOf: 3 });
     const h = await answeredOnLineA({ lineA });
