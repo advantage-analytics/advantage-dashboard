@@ -91,8 +91,18 @@ async function main() {
     );
   }
   console.log(`folded sets: ${JSON.stringify(r.foldedSets)}`);
+  console.log(`unresolved points: ${r.unresolvedPoints.length}`);
   console.log(
     `points ${t.points.length}   shots ${shots}   games ${r.games.length}`,
+  );
+  // The pressure flags are the only output ad scoring reaches, so a dry run
+  // has to show them for a format change to be reviewable before --write.
+  const count = (f: (p: (typeof t.points)[number]) => boolean) =>
+    t.points.filter(f).length;
+  console.log(
+    `pressure: break ${count((p) => p.is_break_point)} · ` +
+      `set ${count((p) => p.is_set_point)} · ` +
+      `match ${count((p) => p.is_match_point)}`,
   );
   console.log(
     `winnerShare ${t.winnerShare.toFixed(3)} (gate <0.40)   ` +

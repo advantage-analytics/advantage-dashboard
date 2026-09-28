@@ -179,7 +179,10 @@ export interface BuildOptions {
   labels: string[];
   score: MatchScore | null;
   initialTopIsPlayer1: boolean | null;
-  /** matches.format.ad_scoring. Decides whether 40-40 is a deciding point. */
+  /**
+   * processing_jobs.ad_scoring, falling back to matches.format.ad_scoring (see
+   * resolveAdScoring). Decides whether 40-40 is a deciding point.
+   */
   adScoring?: boolean;
   /** matches.format.best_of. Decides when a set point is also a match point. */
   bestOf?: number;
