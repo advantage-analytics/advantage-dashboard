@@ -1,8 +1,7 @@
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
 /**
- * Point-score reading for the match filters (and, until it is deleted, the
- * film filter model) — pure, no React.
+ * Point-score reading for the match filters — pure, no React.
  *
  * Every score here is SERVER-FIRST, the way `points.point_score` has always
  * been stored ("30-40" is server 30, returner 40; see
@@ -10,7 +9,8 @@ import type { MatchPoint } from "@/lib/data/match-points-server";
  * was played.
  */
 
-/* ── Moved from film/filters/types.ts ───────────────────────────────────── */
+/* ── Formerly `film/filters/types.ts`, before the old film filter model was
+ * deleted (T8) ──────────────────────────────────────────────────────────── */
 
 function scoreParts(
   point: Pick<MatchPoint, "pointScore">,
@@ -76,8 +76,9 @@ export function courtSideOf(
 /**
  * The service court of every point, index-aligned with `points` (which must be
  * in match order — the running index within a game depends on it). The same
- * walk `applyFilmFilters` has always made: the score's rung parity when the
- * match has real point scores at all, else the point's index in its game.
+ * walk `applyMatchFilters` makes for the court axis: the score's rung parity
+ * when the match has real point scores at all, else the point's index in its
+ * game.
  */
 export function courtSidesOf(
   points: readonly Pick<

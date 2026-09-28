@@ -86,3 +86,11 @@ Behaviour changes (author should know):
 1. T8: `film/film-this-point.tsx:10` imports `lastNameOf` from `./film-filters`; switch it to `./film-list-filters`. `tests/film-filters-model.spec.ts` is the only remaining user of `DEFAULT_FILM_FILTERS`, `applyFilmFilters`, `countFilmOption`, `filmFiltersEqual`, `FILM_FILTER_SECTIONS`, `cutName`, `describeFilmCut`, `hasActiveFilmFilters`, `parseCut` and `serializeCut`. Stale comments remain at `film/film-room-prefs.ts:13` and `match-filters/score.ts:79`. The copy of `isReturnWinner` in `types.ts` has no importers, and `groupsFor` has none either.
 2. Move the legacy-URL translation into `provider.tsx`, so an old `?cut=break` link that lands on Statistics is translated too (today that only happens once Film mounts).
 3. Check chip wrapping on screen in the 320px column with many shared filters applied.
+
+## T8 · Delete the old FilmFilters model and its specs — done
+
+**gate:** mechanical pass; completion pass
+**changed:** Deleted `film/filters/types.ts` (the whole old model, the unused `isReturnWinner` copy and the `courtSideOf` re-export), `film/film-filters.tsx` and `tests/film-filters-model.spec.ts`. `film-this-point.tsx` now imports `lastNameOf` from `./film-list-filters`. Stale comments updated in `film-room-prefs.ts` and `match-filters/score.ts`. None of the old spec's assertions needed porting: each is already covered by `match-filters-model`, `film-cut-intent`, `stat-widget-cuts` or `film-filters-fullscreen`, or tested code that no longer exists. A grep for the deleted symbols across `src` and `tests` is empty.
+**follow-ups:**
+
+1. `isDeucePoint`/`isGamePoint` in `match-filters/score.ts` are now unused outside that file.

@@ -112,7 +112,7 @@ ready).
 
 ## T8 · Delete the old FilmFilters model and its specs
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T6, T7
 - **files:** src/components/dashboard/matches/match-detail/film/filters/types.ts, film/film-advanced-panel.tsx option table, tests/film-filters-model.spec.ts (guess)
