@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Let a coach ask to join an existing custom org from 7.2
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1, T2
 - **files:** src/lib/services/programs/claim-actions.ts (requestInvite, ~line 1235), src/app/claim/team/actions.ts, src/components/claim/existing-team-matches.tsx, src/app/claim/team/requested/page.tsx (new, guess), supabase/migrations/<timestamp>_invite_request_by_program_id.sql (only if the write RPC is keyed by program_key), tests/custom-org-join-request.spec.ts (new, live)

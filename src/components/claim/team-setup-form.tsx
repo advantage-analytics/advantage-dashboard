@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { continueToPilotTerms } from "@/app/claim/team/actions";
+import {
+  askToJoinExistingTeam,
+  continueToPilotTerms,
+} from "@/app/claim/team/actions";
 import { CLAIM_ROLES } from "@/lib/services/programs/claim-roles";
 import type { CustomProgramSearchResult } from "@/lib/data/programs-server";
 import type { CustomOrgType } from "@/lib/services/programs/create-actions";
@@ -59,6 +62,24 @@ function reasonMessage(reason: string): string {
   }
 }
 
+/** The refusals `askToJoinExistingTeam` can return; success never returns. */
+function askReasonMessage(reason: string): string {
+  switch (reason) {
+    case "already-member":
+      return "You're already on that team — switch to it from your workspace menu.";
+    case "already-requested":
+      return "You've already asked to join that team. Its owner has your request.";
+    case "college":
+      return "That's a college program. Find it from the college path to ask for access.";
+    case "not-found":
+      return "That team isn't on Advantage any more. Try the search again.";
+    case "no-session":
+      return "Your session expired. Sign in again to ask to join.";
+    default:
+      return "We couldn't send that request. Try again.";
+  }
+}
+
 export function TeamSetupForm({
   orgType,
   defaultOwnerName,
@@ -75,6 +96,11 @@ export function TeamSetupForm({
   const [role, setRole] = useState<string>(CLAIM_ROLES[0].value);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // The row whose "Ask to join" is in flight. Stays set through a successful
+  // ask, because success is a server redirect and the button should not come
+  // back to life while the navigation is under way.
+  const [askingId, setAskingId] = useState<string | null>(null);
+  const [, startAsk] = useTransition();
 
   // Existing custom teams with a name like the one being typed. The debounce
   // and the latest-request guard are `ProgramSearch`'s, so a slow early
@@ -127,6 +153,20 @@ export function TeamSetupForm({
     });
   }
 
+  function askToJoin(programId: string) {
+    setError(null);
+    setAskingId(programId);
+    startAsk(async () => {
+      // The role is the 7.2 answer, validated against the allowlist on the
+      // server; the coach's address and name are the session's, never sent.
+      const result = await askToJoinExistingTeam({ programId, role });
+      if (result && !result.ok) {
+        setError(askReasonMessage(result.reason));
+        setAskingId(null);
+      }
+    });
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-0.5">
@@ -150,7 +190,12 @@ export function TeamSetupForm({
             autoComplete="off"
             className={CLAIM_FIELD}
           />
-          <ExistingTeamMatches rows={visibleMatches} term={query} />
+          <ExistingTeamMatches
+            rows={visibleMatches}
+            term={query}
+            onAskToJoin={askToJoin}
+            pendingProgramId={askingId}
+          />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -195,7 +240,7 @@ export function TeamSetupForm({
         <div className="pt-1">
           <button
             type="submit"
-            disabled={!canSubmit || pending}
+            disabled={!canSubmit || pending || askingId !== null}
             className={CLAIM_BUTTON}
           >
             {pending ? (

@@ -1,5 +1,6 @@
 import type { CustomProgramSearchResult } from "@/lib/data/programs-server";
 import type { CustomOrgType } from "@/lib/services/programs/create-actions";
+import { advButton } from "@/lib/ui/adv-button";
 
 /**
  * The eyebrow, title and placeholder for each org type chosen on 7.1.
@@ -56,20 +57,37 @@ export function orderMatches(
 /**
  * Existing custom teams whose name matches what the coach is typing on 7.2.
  *
- * Informational only: a row carries no action yet (asking to join is its own
- * step), and creating a same-named team stays permitted. No rows renders
- * nothing — not even "Nothing matched", because an empty result is the normal
- * case on this screen, not a failed search.
+ * Creating a same-named team stays permitted; the list is there so a coach
+ * whose team already exists can ask to join it instead. The ask is a prop,
+ * not an import: `onAskToJoin` is the form's server-action call, and taking
+ * it as a callback is what keeps this leaf free of `next/*` and server
+ * modules, so the offline spec can render it with nothing but `react`.
+ * Without the prop the rows are the informational list T2 shipped. No rows
+ * renders nothing — not even "Nothing matched", because an empty result is
+ * the normal case on this screen, not a failed search.
+ *
+ * The button is the design system's `outline` at `sm`, not a primary: the
+ * screen's one primary is Continue, and asking to join is the alternative
+ * to it, not a second call to action. While one row's ask is in flight every
+ * row's button is disabled — one request at a time is the only honest state
+ * for a form that redirects on success.
  */
 export function ExistingTeamMatches({
   rows,
   term,
+  onAskToJoin,
+  pendingProgramId = null,
 }: {
   rows: CustomProgramSearchResult[];
   term: string;
+  /** Files a join request for the row's program. Absent = list only. */
+  onAskToJoin?: (programId: string) => void;
+  /** The row whose ask is in flight, or null. */
+  pendingProgramId?: string | null;
 }) {
   if (rows.length === 0) return null;
   const ordered = orderMatches(rows, term).slice(0, 8);
+  const busy = pendingProgramId !== null;
 
   return (
     <div className="mt-2 flex flex-col gap-2">
@@ -78,7 +96,11 @@ export function ExistingTeamMatches({
         {ordered.map((row) => (
           <li
             key={row.programId}
-            className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 border-t border-[var(--border-hairline)] px-4 py-3 first:border-t-0"
+            className={`grid items-center gap-4 border-t border-[var(--border-hairline)] px-4 py-3 first:border-t-0 ${
+              onAskToJoin
+                ? "grid-cols-[minmax(0,1fr)_auto_auto_auto]"
+                : "grid-cols-[minmax(0,1fr)_auto_auto]"
+            }`}
           >
             <span className="truncate text-[13px] text-[var(--ink-900)]">
               {row.name}
@@ -89,6 +111,17 @@ export function ExistingTeamMatches({
             <span className="text-micro truncate text-right">
               {row.ownerDisplay ?? "Set up"}
             </span>
+            {onAskToJoin && (
+              <button
+                type="button"
+                onClick={() => onAskToJoin(row.programId)}
+                disabled={busy}
+                aria-label={`Ask to join ${row.name}`}
+                className={advButton("outline", "sm")}
+              >
+                {pendingProgramId === row.programId ? "Asking…" : "Ask to join"}
+              </button>
+            )}
           </li>
         ))}
       </ul>

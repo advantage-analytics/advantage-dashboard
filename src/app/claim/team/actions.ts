@@ -2,7 +2,17 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sendEmail, joinRequestOwnerNoticeEmail } from "@/lib/services/email";
+import { getProgramOwner } from "@/lib/services/programs/program-owner";
+import {
+  requestToJoinCustomOrg,
+  type JoinCustomOrgReason,
+} from "@/lib/services/programs/join-custom-org";
+import { wantsNotification } from "@/lib/services/notifications/should-notify";
+import { notifyAdminsReviewNeeded } from "@/lib/services/notifications/admin-review-mail";
 import {
   createCustomProgram,
   type CreateCustomProgramResult,
@@ -182,4 +192,77 @@ async function createCustomTeam(input: {
     name: input.name,
     orgType: input.orgType,
   });
+}
+
+/**
+ * "Ask to join" on a row of the existing-teams list under 7.2's team-name
+ * field: the coach found their team already on Advantage and would rather be
+ * added to it than create a copy.
+ *
+ * Takes the program's id and nothing else typed by the client — the address
+ * and name come from the session (`requestToJoinCustomOrg`). The filing is
+ * the same `invite_request` row the college path files, so the org's owner
+ * finds it on the roster's join requests; no `programs` row is written and
+ * the pending-team cookie is left alone, because no team is being set up.
+ *
+ * Success is a redirect to the confirmation screen; a returned value is a
+ * refusal. The two notices — owner and admin — run in `after()`, once the
+ * response has left, the same way `requestInvite` sends them: the redirect
+ * must not wait on mail, and they only fire for a row this call created
+ * (a duplicate comes back `already-requested` before reaching them).
+ */
+export async function askToJoinExistingTeam(input: {
+  programId: string;
+  /** The 7.2 "Your role" answer — one of `CLAIM_ROLES`, or nothing. */
+  role?: string;
+}): Promise<{ ok: false; reason: JoinCustomOrgReason }> {
+  const result = await requestToJoinCustomOrg(
+    { session: await createClient(), admin: createAdminClient() },
+    { programId: input?.programId ?? "", role: input?.role ?? null },
+  );
+  if (!result.ok) return result;
+
+  const { programId, programName, requestId, requesterEmail, requesterName } =
+    result;
+
+  after(async () => {
+    // The recipient is resolved from `program_members`, never from the
+    // client, and gated on the owner's "Team activity" switch — the same
+    // template and the same gate the college join request uses.
+    const owner = await getProgramOwner(programId);
+    if (
+      owner &&
+      (await wantsNotification(owner.userId, "notifyTeamActivity"))
+    ) {
+      const sent = await sendEmail(
+        joinRequestOwnerNoticeEmail({
+          to: owner.email,
+          ownerName: owner.name,
+          programName,
+          requesterEmail,
+          requesterName,
+        }),
+      );
+      if (!sent.ok) {
+        // The row is written and the roster shows it regardless; `sendEmail`
+        // logged the cause.
+        console.warn("[claim/team] join-request owner notice not sent", {
+          programId,
+        });
+      }
+    }
+
+    // Not gated on there being an owner: the request sits in the admin queue
+    // either way, and an admin working it needs to know it exists.
+    await notifyAdminsReviewNeeded(createAdminClient(), {
+      kind: "request",
+      id: requestId,
+      programName,
+      requesterName: requesterName ?? requesterEmail,
+      requesterEmail,
+      reason: "New invite request — nobody has acted on it yet",
+    });
+  });
+
+  redirect(`/claim/team/requested?${new URLSearchParams({ team: programId })}`);
 }
