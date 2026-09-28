@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
-import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
@@ -11,10 +10,7 @@ import {
   watchableSegmentProps,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
-import {
-  scopePoints,
-  useSetScope,
-} from "@/components/dashboard/matches/match-detail/set-scope";
+import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { EmptyMark } from "@/components/ui/empty-mark";
@@ -36,8 +32,8 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * rally — so those points fall outside all three bands, exactly as
  * `head-to-head-card.tsx` treats them.
  *
- * Scope-aware: `scopePoints(points, activeSet)` narrows the bands the same
- * way every other point-derived card on this tab does
+ * Filter-aware: the bands are counted over `useMatchFilters().filteredPoints`,
+ * the same read every other point-derived card on this tab makes
  * (performance-tracker-chart.tsx makes the identical read).
  *
  * With a playable video each band opens its points in the Video tab
@@ -85,24 +81,18 @@ function pct(part: number, whole: number): number {
 }
 
 export function RallyLengthCard() {
-  const { points } = useMatchData();
   const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
-  const { activeSet } = useSetScope();
+  const { filteredPoints: scopedPoints, filtersActive } = useMatchFilters();
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<Band["key"] | null>(null);
   const watchable = meta.hasPlayableVideo;
 
   const youIsPlayer1 = sides.you.isPlayer1;
   const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
-
-  // Narrow to the chosen set through the shared helper — the same read every
-  // point-derived card on this tab makes, so the chip selection moves them
-  // in step. `null` is the whole match.
-  const scopedPoints = useMemo(
-    () => scopePoints(points, activeSet),
-    [points, activeSet],
-  );
+  // What a band's share is a share OF: the whole match, or the points the
+  // match filters left in.
+  const ofScope = filtersActive ? "of the filtered points" : "of the match";
 
   const { bands, total, avgShots } = useMemo(() => {
     const counters: Record<Band["key"], { count: number; youWon: number }> = {
@@ -186,7 +176,9 @@ export function RallyLengthCard() {
         </div>
 
         <p className="text-micro" style={{ color: "var(--ink-500)" }}>
-          No rally lengths were recorded on this match&apos;s points.
+          {filtersActive
+            ? "No rally lengths were recorded on the filtered points."
+            : "No rally lengths were recorded on this match's points."}
         </p>
       </section>
     );
@@ -215,14 +207,16 @@ export function RallyLengthCard() {
             const youShare = pct(band.youWon, band.count);
             const isFirst = i === 0;
             const isLast = i === visible.length - 1;
-            const label = `${band.title}. ${band.count} points, ${Math.round(width)} percent of the match. ${youName} won ${band.youWon}, ${oppName} won ${band.oppWon}.`;
+            const label = `${band.title}. ${band.count} points, ${Math.round(width)} percent ${ofScope}. ${youName} won ${band.youWon}, ${oppName} won ${band.oppWon}.`;
             // Only with a playable video does the band take a click; every
             // attribute below is `undefined` otherwise, so the read-only
             // markup is unchanged. Focus is `focus.css`'s ring.
             const watch = watchable
               ? () =>
                   actions.watchCut(
-                    scopeCut(RALLY_BAND_CUTS[band.key], activeSet),
+                    // T7 moves cuts onto `MatchFilters`; until then the
+                    // Video tab has no set scope to carry.
+                    scopeCut(RALLY_BAND_CUTS[band.key], null),
                   )
               : undefined;
 
@@ -251,6 +245,7 @@ export function RallyLengthCard() {
                   band={band}
                   open={hovered === band.key}
                   sharePct={width}
+                  ofScope={ofScope}
                   youName={youName}
                   oppName={oppName}
                   align={isFirst ? "start" : isLast ? "end" : "center"}
@@ -341,6 +336,7 @@ function BandTooltip({
   band,
   open,
   sharePct,
+  ofScope,
   youName,
   oppName,
   align,
@@ -349,6 +345,8 @@ function BandTooltip({
   band: Band;
   open: boolean;
   sharePct: number;
+  /** "of the match", or "of the filtered points" under the match filters. */
+  ofScope: string;
   youName: string;
   oppName: string;
   align: "start" | "center" | "end";
@@ -364,7 +362,7 @@ function BandTooltip({
     >
       <span className="text-[12px] font-medium text-white">{band.title}</span>
       <span className="tabular text-[11px] text-white/[0.64]">
-        {band.count} points · {sharePct.toFixed(1)}% of the match
+        {band.count} points · {sharePct.toFixed(1)}% {ofScope}
       </span>
       <span className="tabular pt-0.5 text-[11px] text-white">
         {youName} {Math.round(pct(band.youWon, band.count))}%

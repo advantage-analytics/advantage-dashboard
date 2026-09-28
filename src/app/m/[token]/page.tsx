@@ -19,6 +19,8 @@ import {
 } from "@/components/dashboard/matches/match-detail/report-title-row";
 import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
 import { StatisticsView } from "@/components/dashboard/matches/match-detail/statistics-view";
+import { MatchFiltersProvider } from "@/components/dashboard/matches/match-detail/match-filters/provider";
+import { MATCH_FILTERS_PARAM } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { SharedByFooter } from "@/components/public/shared-by-footer";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import { MatchReportPending } from "@/components/dashboard/loading/match-report-pending";
@@ -79,8 +81,13 @@ export async function generateMetadata({
   };
 }
 
-export default async function SharedMatchPage({ params }: PageProps) {
-  const { token } = await params;
+export default async function SharedMatchPage({
+  params,
+  searchParams,
+}: PageProps & {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const [{ token }, query] = await Promise.all([params, searchParams]);
   const data = await load(token);
 
   if (!data) {
@@ -113,49 +120,55 @@ export default async function SharedMatchPage({ params }: PageProps) {
       statsResult={statsResult}
       points={points}
     >
-      {/* `MatchReportProvider` reads `useSearchParams`, which needs a
+      {/* The same filter state as the signed-in report, so the shared
+          Statistics view reads one `filteredPoints` either way. Filtering
+          only reads; nothing here writes back to the match. Seeded from
+          `?f=` as read on the server. */}
+      <MatchFiltersProvider initialQuery={query[MATCH_FILTERS_PARAM]}>
+        {/* `MatchReportProvider` reads `useSearchParams`, which needs a
           Suspense boundary above it on a page that is not itself a client
           component. */}
-      <Suspense fallback={<MatchReportPending view="statistics" />}>
-        <MatchReportProvider
-          matchId={match.id}
-          summary={summary}
-          canCompare={false}
-          isDerived={isDerived}
-          statsPublished={statsPublished}
-          hasPlayableVideo={false}
-          savedViews={[]}
-          workspaceRole="player"
-          workspaceKind="personal"
-          workspaceName=""
-          bandSettings={DEFAULT_BANDS}
-          canEditBands={false}
-          unit="ft"
-          defaultView="statistics"
-          readOnly
-        >
-          <MatchReportFrame>
-            <MatchReportRail>
-              <MatchReportScoreboard />
-              <MatchReportSpacer />
-              <SharedByFooter sharedBy={sharedBy} />
-            </MatchReportRail>
+        <Suspense fallback={<MatchReportPending view="statistics" />}>
+          <MatchReportProvider
+            matchId={match.id}
+            summary={summary}
+            canCompare={false}
+            isDerived={isDerived}
+            statsPublished={statsPublished}
+            hasPlayableVideo={false}
+            savedViews={[]}
+            workspaceRole="player"
+            workspaceKind="personal"
+            workspaceName=""
+            bandSettings={DEFAULT_BANDS}
+            canEditBands={false}
+            unit="ft"
+            defaultView="statistics"
+            readOnly
+          >
+            <MatchReportFrame>
+              <MatchReportRail>
+                <MatchReportScoreboard />
+                <MatchReportSpacer />
+                <SharedByFooter sharedBy={sharedBy} />
+              </MatchReportRail>
 
-            <MatchReportPane>
-              <MatchReportTitleRow>
-                <div className="min-w-0">
-                  <MatchReportTitle />
-                  <MatchReportFacts />
-                </div>
-              </MatchReportTitleRow>
+              <MatchReportPane>
+                <MatchReportTitleRow>
+                  <div className="min-w-0">
+                    <MatchReportTitle />
+                    <MatchReportFacts />
+                  </div>
+                </MatchReportTitleRow>
 
-              <MatchReportWhen view="statistics">
-                <StatisticsView />
-              </MatchReportWhen>
-            </MatchReportPane>
-          </MatchReportFrame>
-        </MatchReportProvider>
-      </Suspense>
+                <MatchReportWhen view="statistics">
+                  <StatisticsView />
+                </MatchReportWhen>
+              </MatchReportPane>
+            </MatchReportFrame>
+          </MatchReportProvider>
+        </Suspense>
+      </MatchFiltersProvider>
     </MatchDataProvider>
   );
 }

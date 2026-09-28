@@ -57,7 +57,7 @@ ready).
 
 ## T4 · Add MatchFiltersProvider with a URL mirror, replacing set scope
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/matches/match-detail/match-filters/provider.tsx, set-scope.tsx, head-to-head-card.tsx, performance-tracker-chart.tsx, rally-length-card.tsx, point-endings-card.tsx, src/app/dashboard/matches/(detail)/[matchId]/page.tsx (guess)

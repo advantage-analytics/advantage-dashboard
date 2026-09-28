@@ -47,3 +47,14 @@ Implementer's own calls:
 1. A URL filter the match can't produce (e.g. Ad-40 on a video match) is still applied but its pill isn't drawn, so only Clear all removes it. T6/T7 should either draw selected-but-unavailable pills or drop unavailable values when parsing.
 2. The draft is seeded from `filters` only on mount, so hosts should remount with `key={serializeMatchFilters(filters)}`.
 3. The DS filter-panel rule wants a live match count in the footer; T6/T7 can pass one in.
+
+## T4 · Add MatchFiltersProvider with a URL mirror, replacing set scope — done
+
+**gate:** mechanical pass (branch merged with origin/splitstep-integration incl. PR #303 first; merged tree passed the gate before T4 ran); completion pass. Widget states: loading unchanged (the Suspense/`MatchReportPending` boundary is re-nested, not altered); empty ✓ (cards filtered to zero points name the filters; head-to-head's derived rows show em dashes via a value-level null, never zeros); error unchanged.
+**changed:** New `match-filters/provider.tsx` (`MatchFiltersProvider({ initialQuery })`; `useMatchFilters()` returns filters, setFilters, clearFilters, filteredPoints, filtersActive and context, and is safe with no provider), mounted above `MatchReportProvider` in `[matchId]/page.tsx` and in `/m/[token]/page.tsx`. Filters are seeded server-side from `?f=` and written back with `history.replaceState(null, …)`, keeping other params and dropping `f` when empty; a `popstate` listener re-applies `?f=` on Back/Forward. `model.ts` gains `MATCH_FILTERS_PARAM = "f"` and `matchFiltersQuery`. Head-to-head, the performance tracker, rally length and point endings read `filteredPoints`; head-to-head's derived path is gated on `filtersActive`, and its hover counts are taken over the filtered points. `useSetScope`, `parseSetParam`, `selectableSets` and `setScopeQuery` are removed; `scopePoints`/`scopeMeta` stay for `report-facts.tsx`. Every `scopeCut(…, activeSet)` is now `scopeCut(…, null)`, with T7 comments. Filtered copy: "Filtered · N of M points", "in the filtered points". Specs: new `match-filters-provider.spec.ts`; `set-scope`, `report-empty-states` and `stat-widget-cuts` updated. Not checked in a browser (the `?f=` write-back and popstate were reasoned through, not run).
+**follow-ups:**
+
+1. T7: clicks from Statistics open Video without the match filters, so Video can list more points than the hover count. Move `watchCut`/`scopeCut` onto `MatchFilters` and remove `scopeCut` plus its stale `scopePoints` comment in `film-cut-context.tsx`.
+2. T6: add the page-level "No points match these filters" state when `filtersActive && filteredPoints.length === 0`.
+3. T6: head-to-head's published sections still render when filtered, with unsupported rows as em dashes; consider an explanatory note.
+4. T6: `report-facts.tsx` still prints whole-match points and games; decide whether it should follow the filters.

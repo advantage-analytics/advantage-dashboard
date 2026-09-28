@@ -55,6 +55,8 @@ import {
   ShareRailTrigger,
 } from "@/components/dashboard/matches/match-detail/share-match-button";
 import { StatisticsView } from "@/components/dashboard/matches/match-detail/statistics-view";
+import { MatchFiltersProvider } from "@/components/dashboard/matches/match-detail/match-filters/provider";
+import { MATCH_FILTERS_PARAM } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import {
   FilmPanePending,
   VisualizationsPanePending,
@@ -88,10 +90,14 @@ const FilmTab = dynamic(
 
 interface PageProps {
   params: Promise<{ matchId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export default async function MatchDetailPage({ params }: PageProps) {
-  const { matchId } = await params;
+export default async function MatchDetailPage({
+  params,
+  searchParams,
+}: PageProps) {
+  const [{ matchId }, query] = await Promise.all([params, searchParams]);
   // The job read only needs `matchId`, so it rides along with the other two
   // rather than waiting for a page's worth of stats to come back first.
   // `video` joins the same wave rather than following it: it reads different
@@ -308,71 +314,77 @@ export default async function MatchDetailPage({ params }: PageProps) {
   return (
     <>
       <MarkReportSeen matchId={matchId} />
-      <MatchReportProvider
-        matchId={matchId}
-        summary={summary}
-        // Compare is drawn only once a second analysed match exists to compare
-        // against. `buildKpiHistory` already leaves this match out of the
-        // baseline, so a non-empty one is exactly that; `kpiHistory !== null`
-        // would be wrong on a first match, whose own stat row keeps the
-        // history non-null.
-        canCompare={hasComparisonBaseline(kpiHistory)}
-        isDerived={isDerived}
-        statsPublished={statsPublished}
-        hasPlayableVideo={Boolean(video)}
-        // "Match report opens at" (Settings › Preferences), clamped to an
-        // available view.
-        defaultView={resolveDefaultView(
-          preferences.matchReportOpensAt,
-          Boolean(video),
-        )}
-        savedViews={savedViews}
-        workspaceRole={workspaceRole}
-        workspaceKind={workspaceKind}
-        workspaceName={workspaceName}
-        bandSettings={bandSettings}
-        canEditBands={canEditBands}
-        unit={unit}
-      >
-        <MatchReportFrame>
-          <MatchReportRail>
-            <MatchReportScoreboard />
-            <MatchReportViewSwitcher />
-            <MatchReportSpacer />
-            {share}
-          </MatchReportRail>
+      {/* The applied match filters sit ABOVE the view switch
+          (`MatchReportWhen` unmounts an inactive view), so they survive a
+          trip to another view and back. Seeded from `?f=` as read here, on
+          the server, so the first client render matches this one. */}
+      <MatchFiltersProvider initialQuery={query[MATCH_FILTERS_PARAM]}>
+        <MatchReportProvider
+          matchId={matchId}
+          summary={summary}
+          // Compare is drawn only once a second analysed match exists to compare
+          // against. `buildKpiHistory` already leaves this match out of the
+          // baseline, so a non-empty one is exactly that; `kpiHistory !== null`
+          // would be wrong on a first match, whose own stat row keeps the
+          // history non-null.
+          canCompare={hasComparisonBaseline(kpiHistory)}
+          isDerived={isDerived}
+          statsPublished={statsPublished}
+          hasPlayableVideo={Boolean(video)}
+          // "Match report opens at" (Settings › Preferences), clamped to an
+          // available view.
+          defaultView={resolveDefaultView(
+            preferences.matchReportOpensAt,
+            Boolean(video),
+          )}
+          savedViews={savedViews}
+          workspaceRole={workspaceRole}
+          workspaceKind={workspaceKind}
+          workspaceName={workspaceName}
+          bandSettings={bandSettings}
+          canEditBands={canEditBands}
+          unit={unit}
+        >
+          <MatchReportFrame>
+            <MatchReportRail>
+              <MatchReportScoreboard />
+              <MatchReportViewSwitcher />
+              <MatchReportSpacer />
+              {share}
+            </MatchReportRail>
 
-          <MatchReportPane>
-            <MatchReportTitleRow>
-              {/* `min-w-0` (F1): a long facts line shrinks its block rather
+            <MatchReportPane>
+              <MatchReportTitleRow>
+                {/* `min-w-0` (F1): a long facts line shrinks its block rather
                   than pushing the actions out of the row. */}
-              <div className="min-w-0">
-                <MatchReportTitle />
-                <MatchReportFacts />
-              </div>
-              <MatchReportTitleActions>
-                <MatchReportCompareButton />
-                <MatchReportMoreMenu />
-              </MatchReportTitleActions>
-            </MatchReportTitleRow>
+                <div className="min-w-0">
+                  <MatchReportTitle />
+                  <MatchReportFacts />
+                </div>
+                <MatchReportTitleActions>
+                  <MatchReportCompareButton />
+                  <MatchReportMoreMenu />
+                </MatchReportTitleActions>
+              </MatchReportTitleRow>
 
-            <MatchReportWhen view="statistics">
-              <StatisticsView />
-            </MatchReportWhen>
-            <MatchReportWhen view="shots">
-              <ShotsTab />
-            </MatchReportWhen>
-            <MatchReportWhen view="film" scrollsInside>
-              {/* `video` is the short-lived playback SAS, or null when there
+              <MatchReportWhen view="statistics">
+                <StatisticsView />
+              </MatchReportWhen>
+              <MatchReportWhen view="shots">
+                <ShotsTab />
+              </MatchReportWhen>
+              <MatchReportWhen view="film" scrollsInside>
+                {/* `video` is the short-lived playback SAS, or null when there
                   is no file to serve. `entry` says which no-video case that
                   is — genuinely none, or a storage problem over a match that
                   has one — and which actions this viewer may take. Points
                   come from `MatchDataProvider`. */}
-              <FilmTab video={video} entry={filmEntry} unit={unit} />
-            </MatchReportWhen>
-          </MatchReportPane>
-        </MatchReportFrame>
-      </MatchReportProvider>
+                <FilmTab video={video} entry={filmEntry} unit={unit} />
+              </MatchReportWhen>
+            </MatchReportPane>
+          </MatchReportFrame>
+        </MatchReportProvider>
+      </MatchFiltersProvider>
     </>
   );
 }

@@ -19,11 +19,7 @@ import {
   isReturnWinner,
   type FilmFilters,
 } from "@/components/dashboard/matches/match-detail/film/filters/types";
-import {
-  scopeMeta,
-  scopePoints,
-  useSetScope,
-} from "@/components/dashboard/matches/match-detail/set-scope";
+import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { PlayerStatistics, StatFraction } from "@/lib/data/types";
 import { surnameLabels } from "@/lib/data/match-utils";
@@ -125,7 +121,7 @@ export interface H2HRowConfig {
   verb?: string;
   /**
    * A statistic no provider publishes, counted from the points themselves
-   * (`tallySide`) for the whole match as well as for one set.
+   * (`tallySide`) for the whole match as well as for the filtered points.
    */
   fromPoints?: "returnWinners";
 }
@@ -440,9 +436,10 @@ export function buildStatRows(
   );
 }
 
-/* ── Per-set derivation ─────────────────────────────────────────────────────
-   `useSetScope()` narrows the pane to one set. The published `match_stats`
-   numbers are whole-match only, so the scoped view is recomputed from `points`
+/* ── Filtered derivation ────────────────────────────────────────────────────
+   `useMatchFilters()` narrows the pane to the points the match filters keep.
+   The published `match_stats` numbers are whole-match only, so the filtered
+   view is recomputed from `filteredPoints`
    — and only for the statistics a `MatchPoint` genuinely carries. Everything
    else shows the same em dash the card already uses for missing data, because
    a plausible-looking number computed from fields that cannot support it is
@@ -571,13 +568,16 @@ function pctValue(t: Tally): DerivedValue {
 
 /**
  * The scoped value for one statistic, or `null` when a `MatchPoint` cannot
- * support it for a single set — first/second serve splits, net play and any
+ * support it for a subset of points — first/second serve splits, net play and any
  * game-level count all need information the point rows do not carry.
  */
 function derivedValue(
   config: H2HRowConfig,
   d: DerivedSide,
 ): DerivedValue | null {
+  // No points at all (filters that match nothing) measures nothing: every
+  // row is an em dash, never a column of confident zeros.
+  if (d.allPoints.total === 0) return null;
   // 0 is a measurement only where returns were recorded; with none, a zero
   // would say "no return winners" about points nobody looked at.
   if (config.fromPoints === "returnWinners") {
@@ -909,7 +909,7 @@ function ValueCell({
           sideOffset={6}
           className="px-2.5 py-1.5 text-[11px] leading-[14px]"
         >
-          {note ?? (scoped ? "Not measurable for a single set" : "No data")}
+          {note ?? (scoped ? "Not measurable for filtered points" : "No data")}
         </TooltipContent>
       </Tooltip>
     </span>
@@ -927,7 +927,7 @@ export function HeadToHeadCard() {
   const { match, points } = useMatchData();
   const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
-  const { activeSet } = useSetScope();
+  const { filteredPoints, filtersActive } = useMatchFilters();
   const [hover, setHover] = useState<HoverTarget | null>(null);
 
   const youStats = sides.you.stats;
@@ -935,10 +935,8 @@ export function HeadToHeadCard() {
   const youIsPlayer1 = sides.you.isPlayer1;
   const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
 
-  const scopedPoints = useMemo(
-    () => scopePoints(points, activeSet),
-    [points, activeSet],
-  );
+  // With no filter applied this is `points` itself.
+  const scopedPoints = filteredPoints;
 
   const sections = useMemo(() => {
     if (!youStats || !oppStats) return [];
@@ -951,13 +949,12 @@ export function HeadToHeadCard() {
       const published = buildStatRows(group.configs, youStats, oppStats);
       return {
         title: group.title,
-        rows:
-          activeSet !== null
-            ? buildDerivedRows(group.configs, published, youDerived, oppDerived)
-            : withPointRows(group.configs, published, youDerived, oppDerived),
+        rows: filtersActive
+          ? buildDerivedRows(group.configs, published, youDerived, oppDerived)
+          : withPointRows(group.configs, published, youDerived, oppDerived),
       };
     });
-  }, [youStats, oppStats, youIsPlayer1, activeSet, scopedPoints]);
+  }, [youStats, oppStats, youIsPlayer1, filtersActive, scopedPoints]);
 
   // The exact points each target opens, counted through the Video tab's own
   // filter so the readout's "Watch all 12" is what the tab will show — on a
@@ -965,15 +962,22 @@ export function HeadToHeadCard() {
   // readout says the true count rather than borrowing the statistic's. Each
   // of `both`/`you`/`opp` is its own count() call — see the comment below on
   // why `both` is not simply `you + opp`.
+  //
+  // Counted over `scopedPoints` (the filtered points) so the readout's count
+  // agrees with the figure beside it. Until T7 moves the Video tab and its
+  // cuts onto `MatchFilters`, the tab a click opens does NOT apply the match
+  // filters, so under an active filter it can list more points than this
+  // count says; `scopeCut(…, null)` is the whole-match set scope the cut
+  // vocabulary still carries.
   const counts = useMemo(() => {
     const byRow = new Map<string, RowCounts>();
     if (!meta.hasPlayableVideo) return byRow;
     const count = (cut: Partial<FilmFilters>) =>
       countFilmOption(
-        points,
+        scopedPoints,
         DEFAULT_FILM_FILTERS,
         youIsPlayer1,
-        scopeCut(cut, activeSet),
+        scopeCut(cut, null),
       );
     for (const config of ALL_H2H_CONFIGS) {
       if (!config.cut) continue;
@@ -987,19 +991,16 @@ export function HeadToHeadCard() {
       });
     }
     return byRow;
-  }, [meta.hasPlayableVideo, points, activeSet, youIsPlayer1]);
+  }, [meta.hasPlayableVideo, scopedPoints, youIsPlayer1]);
 
-  // Memoized rather than recomputed inline: the card re-renders on every row
-  // hover, and `scopeMeta` allocates a scoped-points array just to count it —
-  // work that has nothing to do with which row the cursor is on.
-  const scope = useMemo(
-    () => scopeMeta(sides.sets, points, activeSet),
-    [sides.sets, points, activeSet],
-  );
+  // "Whole match · 148 points", or "Filtered · 32 of 148 points".
+  const scopeLine = filtersActive
+    ? `Filtered · ${scopedPoints.length} of ${points.length} points`
+    : `Whole match · ${points.length} points`;
 
   if (sections.length === 0) return null;
 
-  const scoped = activeSet !== null;
+  const scoped = filtersActive;
 
   const target = (row: string, zone: Zone): TargetHandlers => ({
     onMouseEnter: () => setHover({ row, zone }),
@@ -1033,7 +1034,7 @@ export function HeadToHeadCard() {
           className="text-micro tabular whitespace-nowrap"
           style={{ color: "var(--ink-400)" }}
         >
-          {scope.label} · {scope.points} points
+          {scopeLine}
         </span>
       </div>
 
@@ -1100,7 +1101,7 @@ export function HeadToHeadCard() {
               return {
                 onClick: () =>
                   actions.watchCut(
-                    scopeCut(sideCut(row.cut!, side, row.sideBy), activeSet),
+                    scopeCut(sideCut(row.cut!, side, row.sideBy), null),
                   ),
                 label: `${row.label}, ${name}: ${figure}. ${watchLabel(n, noun)}`,
                 handlers: target(row.label, side),
@@ -1112,8 +1113,9 @@ export function HeadToHeadCard() {
             // a count: 0% of 3 break points is three break points, not none.
             const isZeroCount = (side: "you" | "opp") =>
               row[side].display === "0";
-            const inScope =
-              activeSet === null ? "in this match" : `in set ${activeSet}`;
+            const inScope = filtersActive
+              ? "in the filtered points"
+              : "in this match";
             const cellZero = (side: "you" | "opp", watchable: boolean) =>
               !watchable && isZeroCount(side) && row.noun
                 ? {
@@ -1132,8 +1134,7 @@ export function HeadToHeadCard() {
             // players" — is built the same way as each player's.
             const rowWatch = rowWatchable
               ? {
-                  onClick: () =>
-                    actions.watchCut(scopeCut(row.cut!, activeSet)),
+                  onClick: () => actions.watchCut(scopeCut(row.cut!, null)),
                   label: `${row.label}, both players. ${watchLabel(rowCounts!.both, noun)}`,
                   handlers: target(row.label, "row"),
                 }

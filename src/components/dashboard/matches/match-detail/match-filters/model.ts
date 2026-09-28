@@ -991,6 +991,29 @@ export function serializeMatchFilters(f: MatchFilters): string {
   return groups.join("_");
 }
 
+/**
+ * The match report's URL parameter for the applied filters (`?f=`), absent
+ * when nothing is filtered. Here, not in `provider.tsx`, because the Server
+ * Component pages read it and a constant exported from a `"use client"`
+ * module reaches the server as a client reference rather than a string.
+ */
+export const MATCH_FILTERS_PARAM = "f";
+
+/**
+ * A query string with `?f=` set to `filters`, or removed when they are empty.
+ * Every other parameter is carried through; `current` is never mutated.
+ */
+export function matchFiltersQuery(
+  current: URLSearchParams | string,
+  filters: MatchFilters,
+): string {
+  const next = new URLSearchParams(current.toString());
+  const value = serializeMatchFilters(filters);
+  if (value) next.set(MATCH_FILTERS_PARAM, value);
+  else next.delete(MATCH_FILTERS_PARAM);
+  return next.toString();
+}
+
 const KEY_BY_CODE = new Map<string, MatchFilterKey>(
   MATCH_FILTER_KEYS.map((key) => [URL_CODEC[key].key, key]),
 );

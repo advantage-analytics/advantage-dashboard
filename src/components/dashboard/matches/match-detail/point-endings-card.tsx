@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
-import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
@@ -12,10 +11,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { sideCut } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
-import {
-  scopePoints,
-  useSetScope,
-} from "@/components/dashboard/matches/match-detail/set-scope";
+import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import type { MatchPoint } from "@/lib/data/match-points-server";
@@ -52,9 +48,9 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * player rather than about the analysis. The segment is dropped on the same
  * provider test the SQL uses, not on the count being zero.
  *
- * Scope-aware: `scopePoints(points, activeSet)` narrows the tally to the
- * selected set before bucketing, the same read every point-derived card on
- * this tab makes (rally-length-card.tsx takes the identical dependency).
+ * Filter-aware: the tally is taken over `useMatchFilters().filteredPoints`,
+ * the same read every point-derived card on this tab makes
+ * (rally-length-card.tsx takes the identical dependency).
  *
  * With a playable video each segment opens its points in the Video tab
  * (`outcomeCut`) on click or Enter — hovering only reads. Without one the
@@ -165,22 +161,13 @@ interface PointEndingsCardProps {
 }
 
 export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
-  const { points } = useMatchData();
   const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
-  const { activeSet } = useSetScope();
+  const { filteredPoints: scopedPoints, filtersActive } = useMatchFilters();
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<string | null>(null);
 
   const youIsPlayer1 = sides.you.isPlayer1;
-
-  // Narrow to the chosen set through the shared helper — the same read every
-  // point-derived card on this tab makes, so the chip selection moves them
-  // in step. `null` is the whole match.
-  const scopedPoints = useMemo(
-    () => scopePoints(points, activeSet),
-    [points, activeSet],
-  );
 
   const { youTally, oppTally } = useMemo(
     () => ({
@@ -244,7 +231,9 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
         ))}
 
         <p className="text-micro pt-0.5" style={{ color: "var(--ink-500)" }}>
-          No point on this match records how it ended.
+          {filtersActive
+            ? "None of the filtered points records how it ended."
+            : "No point on this match records how it ended."}
         </p>
       </section>
     );
@@ -326,7 +315,9 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                 const watch = meta.hasPlayableVideo
                   ? () =>
                       actions.watchCut(
-                        scopeCut(outcomeCut(o.key, row.id), activeSet),
+                        // T7 moves cuts onto `MatchFilters`; until then
+                        // the Video tab has no set scope to carry.
+                        scopeCut(outcomeCut(o.key, row.id), null),
                       )
                   : undefined;
 

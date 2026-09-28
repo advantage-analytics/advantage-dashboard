@@ -6,10 +6,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
-import {
-  scopePoints,
-  useSetScope,
-} from "@/components/dashboard/matches/match-detail/set-scope";
+import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { surnameLabels } from "@/lib/data/match-utils";
@@ -29,10 +26,12 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * below the line and colour it as the opponent's — a chart that reads as its
  * own mirror image, with nothing on screen indicating the flip.
  *
- * Scope-aware: the series is `scopePoints(points, activeSet)`, the same read
- * every other point-derived card on this view makes (head-to-head-card.tsx
- * makes the identical `useSetScope()` / `scopePoints()` read). `useSetScope`
- * currently always answers the whole match.
+ * Filter-aware: the series is `useMatchFilters().filteredPoints`, the same
+ * read every other point-derived card on this view makes. A filtered series
+ * skips the points the filters leave out, so the running differential is over
+ * the kept points only. Breaks of serve are still found on the WHOLE match
+ * (a game's boundary is only visible with all its points) and then looked up
+ * by point id, so a filtered series never invents a break at a gap.
  *
  * With a playable video, a click while a timed point is hovered opens that
  * point in the Video tab (`actions.watchPoint`) — hovering alone never moves
@@ -103,7 +102,7 @@ export function PerformanceTrackerChart() {
   const { points } = useMatchData();
   const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
-  const { activeSet } = useSetScope();
+  const { filteredPoints: scopedPoints, filtersActive } = useMatchFilters();
   const shouldReduceMotion = useReducedMotion();
   const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
 
@@ -119,14 +118,6 @@ export function PerformanceTrackerChart() {
 
   const youIsPlayer1 = sides.you.isPlayer1;
 
-  // Narrow to the chosen set through the shared helper — the same read every
-  // point-derived card on this tab makes, so the chip selection moves them in
-  // step. `null` is the whole match.
-  const scopedPoints = useMemo(
-    () => scopePoints(points, activeSet),
-    [points, activeSet],
-  );
-
   const samples: Sample[] = useMemo(() => {
     const out: Sample[] = [];
     let diff = 0;
@@ -137,13 +128,21 @@ export function PerformanceTrackerChart() {
     return out;
   }, [scopedPoints, youIsPlayer1]);
 
-  // Points that ended a game the server lost, as indices into the scoped
+  // Points that ended a game the server lost, as indices into the filtered
   // series. The 47f chart draws no break verticals, so this feeds only the
   // hover annotation's "Break of serve" line; a Set keeps that lookup O(1).
-  const breakIndexSet = useMemo(
-    () => new Set(detectBreakIndices(scopedPoints)),
-    [scopedPoints],
-  );
+  // Detected on every point, then matched by id: a game's boundary is only
+  // visible with all its points, and the filters may keep just one of them.
+  const breakIndexSet = useMemo(() => {
+    const breakIds = new Set(
+      detectBreakIndices(points).map((index) => points[index].id),
+    );
+    const indices = new Set<number>();
+    scopedPoints.forEach((point, index) => {
+      if (breakIds.has(point.id)) indices.add(index);
+    });
+    return indices;
+  }, [points, scopedPoints]);
 
   // `match-points-server.ts` coerces a null `game_score`/`point_score` to
   // "0-0" — the Advantage Intelligence derivation writes neither, so an
@@ -243,7 +242,9 @@ export function PerformanceTrackerChart() {
           />
         </svg>
         <p className="text-micro" style={{ color: "var(--ink-500)" }}>
-          Momentum is drawn once at least two points are tagged.
+          {filtersActive
+            ? "Momentum is drawn once at least two points match the filters."
+            : "Momentum is drawn once at least two points are tagged."}
         </p>
       </section>
     );
