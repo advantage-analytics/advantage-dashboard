@@ -207,6 +207,34 @@ const LINE_SWAP_FIELDS = [
   "opponentTiebreaks",
 ] as const satisfies readonly (keyof MatchFormData)[];
 
+/**
+ * A recorded score's tiebreak POINTS as the form's two tiebreak rows, or
+ * nothing when the record has none (a score saved before the tiebreak cells
+ * existed) — then the rows stay as they are, which on a first seed or after a
+ * swap is `DEFAULT_FORM_DATA`'s nulls.
+ *
+ * Copied cell for cell, side for side: `player1_tiebreaks` is our row, and the
+ * points stay on whichever side the record put them (the set's loser). Games
+ * never come from here and points never go into the games — guardrails §4.3.
+ * Padded to at least the default's length so a two-set score still has a
+ * third tiebreak cell.
+ */
+function presetTiebreaks(
+  score: NonNullable<EventPreset["score"]>,
+): Partial<Pick<MatchFormData, "playerTiebreaks" | "opponentTiebreaks">> {
+  if (!score.player1_tiebreaks && !score.player2_tiebreaks) return {};
+  const size = Math.max(
+    score.player1.length,
+    DEFAULT_FORM_DATA.playerTiebreaks.length,
+  );
+  const row = (points: (number | null)[] | undefined) =>
+    Array.from({ length: size }, (_, i) => points?.[i] ?? null);
+  return {
+    playerTiebreaks: row(score.player1_tiebreaks),
+    opponentTiebreaks: row(score.player2_tiebreaks),
+  };
+}
+
 /** Which line a preset fills — what tells a swap from a re-run of the seed. */
 function presetLineKey(preset: EventPreset): string | null {
   return preset.entryId ?? preset.matchId;
@@ -1454,6 +1482,7 @@ export function useUploadMatchWizard({
                 playerScores: preset.score.player1,
                 opponentScores: preset.score.player2,
                 numberOfSets: preset.score.player1.length,
+                ...presetTiebreaks(preset.score),
               }
             : {}),
         };

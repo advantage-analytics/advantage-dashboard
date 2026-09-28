@@ -43,7 +43,7 @@ ready).
 
 ## T3 · Carry tiebreak points from a recorded result into both score seeds
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/new-match-wizard/types.ts (`EventPreset.score` ~line 468), src/lib/schedule/line-choices.ts (`presetFor`), src/lib/schedule/score-seed.ts (`seedScoreForm`), src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (preset seed ~lines 1444-1450 and `sameRecordedScore`), tests/score-seed.spec.ts, tests/upload-score-state.spec.ts
 - **done when:**

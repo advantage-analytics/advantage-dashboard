@@ -173,6 +173,26 @@ test.describe("presetFor · the preset one entry builds", () => {
     expect(preset.opponentProgramKey).toBe("rival-state");
     expect(preset.opponentSchool).toBe("Rival State");
   });
+
+  test("forwards the match's tiebreak arrays unchanged beside its games", () => {
+    const scored: EntryMatch = {
+      ...match("m-tb"),
+      score: {
+        player1: [7, 6],
+        player2: [6, 4],
+        player1_tiebreaks: [null, null],
+        player2_tiebreaks: [5, null],
+      },
+    };
+    const line = entry({ position: 0, matches: [scored] });
+
+    expect(presetFor(EVENT, line, scored, PROGRAMS).score).toEqual({
+      player1: [7, 6],
+      player2: [6, 4],
+      player1_tiebreaks: [null, null],
+      player2_tiebreaks: [5, null],
+    });
+  });
 });
 
 test.describe("tournament entries · for the score flow", () => {

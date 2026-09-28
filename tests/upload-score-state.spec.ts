@@ -12,8 +12,12 @@ import {
   setWinner,
   updateScoreState,
 } from "@/components/dashboard/matches/new-match-wizard/score-state";
-import { DEFAULT_FORM_DATA } from "@/components/dashboard/matches/new-match-wizard/types";
+import {
+  DEFAULT_FORM_DATA,
+  type EventPreset,
+} from "@/components/dashboard/matches/new-match-wizard/types";
 import { getAdjustedScores } from "@/components/dashboard/matches/new-match-wizard/utils";
+import { uploadWizardHarness } from "./fixtures/upload-wizard-hook";
 
 function scoreState(
   overrides: Partial<typeof DEFAULT_FORM_DATA> = {},
@@ -338,4 +342,65 @@ test("scoreGames reads an unparseable format as best of 3", () => {
   const scores = { playerScores: [6], opponentScores: [4] };
   expect(scoreGames({ bestOf: "5", ...scores }).bestOf).toBe(5);
   expect(scoreGames({ bestOf: "", ...scores }).bestOf).toBe(3);
+});
+
+test.describe("the wizard's preset seed · recorded tiebreaks", () => {
+  function scoredLine(score: EventPreset["score"]): EventPreset {
+    return {
+      entryId: "entry-a",
+      eventId: "event-1",
+      eventName: "Westfield vs Meridian",
+      matchId: "match-a",
+      round: "S1",
+      playerName: "Marcus Reid",
+      playerUserId: "athlete",
+      opponentName: "Jordan Alvarez",
+      date: "2026-09-10",
+      surface: "hard",
+      bestOf: 3,
+      adScoring: false,
+      score,
+      supportsVideo: true,
+      eventHref: "/dashboard/team/schedule/event-1",
+      site: "home",
+      eventKind: "dual",
+      opponentProgramKey: "meridian",
+      opponentSchool: "Meridian",
+    };
+  }
+
+  async function seeded(preset: EventPreset) {
+    const h = uploadWizardHarness({
+      team: true,
+      props: { preset, initialProvider: "splitstep" },
+    });
+    await h.flush();
+    return h.current.formData;
+  }
+
+  test("a 7-6(5), 6-4 record fills games and the 5 in the loser's tiebreak cell", async () => {
+    const f = await seeded(
+      scoredLine({
+        player1: [7, 6],
+        player2: [6, 4],
+        player1_tiebreaks: [null, null],
+        player2_tiebreaks: [5, null],
+      }),
+    );
+
+    expect(f.playerScores).toEqual([7, 6]);
+    expect(f.opponentScores).toEqual([6, 4]);
+    expect(f.numberOfSets).toBe(2);
+    expect(f.playerTiebreaks).toEqual([null, null, null]);
+    expect(f.opponentTiebreaks).toEqual([5, null, null]);
+  });
+
+  test("a record with no tiebreak arrays seeds nulls as before", async () => {
+    const f = await seeded(scoredLine({ player1: [6, 6], player2: [3, 4] }));
+
+    expect(f.playerScores).toEqual([6, 6]);
+    expect(f.numberOfSets).toBe(2);
+    expect(f.playerTiebreaks).toEqual(DEFAULT_FORM_DATA.playerTiebreaks);
+    expect(f.opponentTiebreaks).toEqual(DEFAULT_FORM_DATA.opponentTiebreaks);
+  });
 });

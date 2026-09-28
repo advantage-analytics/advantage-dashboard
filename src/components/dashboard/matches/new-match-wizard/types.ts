@@ -464,10 +464,18 @@ export interface EventPreset {
    * Already recorded courtside, so the wizard does not ask again. `winner` is
    * set when the line stopped (retired or defaulted) — the games alone would
    * name the wrong side, so a fill keeps it.
+   *
+   * GAMES in `player1` / `player2`; tiebreak POINTS in the `_tiebreaks`
+   * arrays, stored against whoever lost the set (a 7-6(5) set is `7`/`6` with
+   * the `5` in the loser's array) — guardrails §4.3. Never mix the two. The
+   * tiebreak arrays are optional: a match scored before the tiebreak cells
+   * existed has neither.
    */
   score: {
     player1: number[];
     player2: number[];
+    player1_tiebreaks?: (number | null)[];
+    player2_tiebreaks?: (number | null)[];
     winner?: "player1" | "player2";
   } | null;
   /** How the line's match ended when it stopped — "retired" or "defaulted". */

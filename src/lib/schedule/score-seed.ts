@@ -64,11 +64,12 @@ function nulls(count: number): (number | null)[] {
 /**
  * The initial state for one line.
  *
- * A line that was already scored courtside comes back with its GAMES filled
- * and its tiebreak cells blank — `EventPreset.score` carries `player1` /
- * `player2` game counts and no tiebreaks at all, so inventing one here would
- * be a number nobody entered. The person re-typing the set will re-type the
- * breaker with it.
+ * A line that was already scored courtside comes back with its GAMES in the
+ * set cells and its tiebreak POINTS in the tiebreak cells, each copied from
+ * the stored arrays unchanged — the points sit on whichever side the record
+ * put them (the loser of the set), never folded into the games. A score saved
+ * before the tiebreak cells existed has no tiebreak arrays and opens with
+ * those cells blank: inventing one would be a number nobody entered.
  *
  * A line with no score gets `bestOf`-length nulls, so the block opens at the
  * event's own format rather than a hard-coded three.
@@ -104,8 +105,14 @@ export function seedScoreForm(
     opponentScores: score
       ? Array.from({ length: size }, (_, i) => score.player2[i] ?? null)
       : nulls(size),
-    playerTiebreaks: nulls(size),
-    opponentTiebreaks: nulls(size),
+    playerTiebreaks: Array.from(
+      { length: size },
+      (_, i) => score?.player1_tiebreaks?.[i] ?? null,
+    ),
+    opponentTiebreaks: Array.from(
+      { length: size },
+      (_, i) => score?.player2_tiebreaks?.[i] ?? null,
+    ),
     ending: fromOutcome?.ending ?? preset.ending ?? null,
     stoppedBy:
       fromOutcome?.stoppedBy ?? (preset.ending ? stoppedByWinner : null),

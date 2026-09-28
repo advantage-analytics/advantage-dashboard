@@ -303,6 +303,35 @@ test.describe("a PinnedLineBar line swap", () => {
     expect(f.retiredSide).toEqual(DEFAULT_FORM_DATA.retiredSide);
   });
 
+  test("line A's recorded score is cleared on a swap even when it carries tiebreaks", async () => {
+    const lineA = line({
+      score: {
+        player1: [7, 6],
+        player2: [6, 4],
+        player1_tiebreaks: [null, null],
+        player2_tiebreaks: [5, null],
+      },
+    });
+    const h = uploadWizardHarness({
+      team: true,
+      props: { preset: lineA, initialProvider: "splitstep" },
+    });
+    await h.flush();
+    expect(h.current.formData.playerScores).toEqual([7, 6]);
+    expect(h.current.formData.opponentTiebreaks).toEqual([5, null, null]);
+
+    await swapTo(h, LINE_B);
+
+    // `sameRecordedScore` compares games only, so the tiebreak arrays on
+    // line A's record do not stop it recognising its own seeded score.
+    const f = h.current.formData;
+    expect(f.playerScores).toEqual(DEFAULT_FORM_DATA.playerScores);
+    expect(f.opponentScores).toEqual(DEFAULT_FORM_DATA.opponentScores);
+    expect(f.numberOfSets).toEqual(DEFAULT_FORM_DATA.numberOfSets);
+    expect(f.playerTiebreaks).toEqual(DEFAULT_FORM_DATA.playerTiebreaks);
+    expect(f.opponentTiebreaks).toEqual(DEFAULT_FORM_DATA.opponentTiebreaks);
+  });
+
   test("a score typed in the wizard stays across a swap", async () => {
     // Line A unscored: whatever score is on the form was typed from the video,
     // which describes the recording — the right match — not line A.
