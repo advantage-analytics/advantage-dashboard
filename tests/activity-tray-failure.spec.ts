@@ -107,14 +107,38 @@ test.describe("T34: a stalled uploaded hand-off is a tray failure", () => {
     });
   });
 
-  test("a stalled uploaded row's reason is the stepper's stalled title", () => {
+  test("a stalled uploaded retry row's reason is the stepper's stalled title", () => {
     expect(trayFailureReason({ status: "uploaded", recovery: "retry" })).toBe(
       STEPPER_COPY.titles.stalled,
     );
-    expect(
-      trayFailureReason({ status: "uploaded", recovery: "wait_or_ask" }),
-    ).toBe(STEPPER_COPY.titles.stalled);
     expect(STEPPER_COPY.titles.stalled).toBe("Couldn't send for analysis");
+  });
+
+  test("a stalled uploaded wait_or_ask row reads its cause, not the stalled title", () => {
+    expect(
+      trayFailureReason({
+        status: "uploaded",
+        recovery: "wait_or_ask",
+        errorCode: "QUOTA_EXCEEDED",
+        attemptsUsed: 1,
+      }),
+    ).toBe("Not enough analysis time left this month");
+    expect(
+      trayFailureReason({
+        status: "uploaded",
+        recovery: "wait_or_ask",
+        errorCode: "NOT_ELIGIBLE",
+        attemptsUsed: 1,
+      }),
+    ).toBe("Needs your team's owner");
+    expect(
+      trayFailureReason({
+        status: "uploaded",
+        recovery: "wait_or_ask",
+        errorCode: undefined,
+        attemptsUsed: 3,
+      }),
+    ).toBe("Tried three times");
   });
 });
 
@@ -198,7 +222,7 @@ test.describe("trayFailureReason's one-line reason per class", () => {
         errorCode: "QUOTA_EXCEEDED",
         attemptsUsed: 1,
       }),
-    ).toBe("No analysis time left this month");
+    ).toBe("Not enough analysis time left this month");
   });
 
   test("wait_or_ask permission — NOT_ELIGIBLE", () => {

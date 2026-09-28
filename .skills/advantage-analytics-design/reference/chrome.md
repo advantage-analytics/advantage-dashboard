@@ -97,21 +97,42 @@ Signal-Blue dot at top 3px / right 3px — presence, not arithmetic: **no numeri
 count lives only in the tooltip ("2 in flight") and matching `aria-label`.
 Opens a 360px "Activity" panel on the popover primitive's own 14px hairline
 surface, named for the trigger that opens it. One job: what is happening and
-what is waiting on you. Rows: invitations (Accept as a two-step text action,
-plus Details), in-flight work (3px progress track, live sheen only while
-something is actually running, no ETA line — the bar is the estimate),
-failures (loss-red circle-x, bordered "Start over" — `analysisAction`'s
-word; there is no retry), and — staff of a team workspace only — "<name>
-joined the team" (ink-400 `Users` glyph, role subline, opens the Roster;
-news, so it trails the waiting rows behind a hairline and never lights the
-dot). An invitation that answers the viewer's own join request reads "Your
-request to join <program> was approved" on the same row. Settled successes are not rows; the footer
+what is waiting on you. Navigation only — the tray never submits, retries or
+rebuilds anything; those actions live on the match page and in the drawers.
+
+The 14px leading column carries state, never air, and borrows the analysis
+stepper's own marks (`StepMark size="compact"`) so a mark means the same thing
+on the match page, in the drawers and here. Rows:
+
+- **Invitations** — blue dot (waiting on you); Accept as a two-step text
+  action, plus Details. One that answers the viewer's own join request reads
+  "Your request to join <program> was approved" on the same row.
+- **In-flight work** — the stepper's compact spinner (`motion-reduce` stops
+  it), 3px progress track, live sheen only while something is actually
+  running, no ETA line — the bar is the estimate.
+- **Stopped analyses** — the stepper's compact fail mark. The whole row is one
+  link: match name (12px medium ink-900) over a one-line reason (11px
+  ink-500, from `TRAY_REASON`), both truncating, never wrapping; a trailing
+  grey action word (ink-600, ink-900 on row hover/focus) + 13px ink-400
+  chevron. The word says where the click goes: "Add video" (upload stopped,
+  recording rejected → the wizard on this match) or "Open" (retry, rebuild
+  stats, wait/ask → the match page); "Start over" only when a failure has no
+  class. Always visible, because touch has no hover. No bordered button, no
+  blue. A stalled hand-off is a stopped row too ("Couldn't send for
+  analysis", or its wait/ask cause). A stats-unavailable match is not a row:
+  its timeline is ready, so it is not a failure and never lights the dot.
+- **Joins** (staff of a team workspace only) — "<name> joined the team"
+  (ink-400 `Users` glyph, role subline, opens the Roster); news, so it trails
+  the waiting rows behind a hairline and never lights the dot.
+
+Blue in the tray means waiting on you: the trigger's dot and the invitation
+row's dot, nothing else. Settled successes are not rows; the footer
 "Everything that finished" opens the matches list. A grey workspace chip in
 the header (`WorkspaceScopeChip`, shared with the search palette) names the
 scope; a tail row per other workspace says "N uploads running in X" behind a
-hairline. The 14px leading column carries state, never air. Trigger: solid
-dot = something here is moving or waiting; hollow ring = only elsewhere;
-nothing = quiet. No "mark all read" — the mark clears itself.
+hairline. Trigger: solid dot = something here is moving or waiting; hollow
+ring = only elsewhere; nothing = quiet. No "mark all read" — the mark clears
+itself.
 Empty state: "Nothing running here."
 
 ### Header (v3)

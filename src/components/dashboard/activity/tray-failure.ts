@@ -108,13 +108,21 @@ export function trayFailureAction(
  * `STEPPER_COPY.titles.stalled` ("Couldn't send for analysis") rather than
  * `retry`'s ordinary "Analysis stopped · retry available" — the hand-off
  * never happened, so nothing has actually failed and retried yet.
+ *
+ * Except when the stall has a known cause. A stalled `wait_or_ask` row was
+ * held back by the allowance, a permission, or the attempt ceiling, and that
+ * cause is the more useful line: "Couldn't send" says what, the variant says
+ * why and who can fix it. So `wait_or_ask` reads its variant whether or not
+ * the row is stalled, and only a stalled `retry` row takes the stalled title.
  */
 export function trayFailureReason(
   analysis: Pick<MatchAnalysis, "recovery" | "errorCode" | "attemptsUsed"> & {
     status?: MatchAnalysis["status"];
   },
 ): string {
-  if (analysis.status === "uploaded") return STEPPER_COPY.titles.stalled;
+  if (analysis.status === "uploaded" && analysis.recovery !== "wait_or_ask") {
+    return STEPPER_COPY.titles.stalled;
+  }
   switch (analysis.recovery) {
     case "upload_again":
     case "fix_recording":

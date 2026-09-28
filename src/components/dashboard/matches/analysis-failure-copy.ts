@@ -89,7 +89,7 @@ export const TRAY_REASON: Record<
   retry: "Analysis stopped · retry available",
   rederive: "Stats need rebuilding",
   wait_or_ask: {
-    allowance: "No analysis time left this month",
+    allowance: "Not enough analysis time left this month",
     permission: "Needs your team's owner",
     ceiling: "Tried three times",
   },
