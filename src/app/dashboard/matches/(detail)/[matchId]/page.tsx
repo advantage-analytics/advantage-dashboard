@@ -259,8 +259,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         trigger={ShareRailTrigger}
         side="top"
         align="start"
-        shareLink={shareState.link}
-        canShare={shareState.canShare}
+        share={shareState}
       />
     </MatchReportRailFooter>
   );
