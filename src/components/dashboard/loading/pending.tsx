@@ -18,12 +18,24 @@ import { cn } from "@/lib/utils";
  * in three tiny components and not the team frames `team-home-skeleton.tsx`
  * composes around them.
  */
-export function PendingBar({ className = "w-full" }: { className?: string }) {
+export function PendingBar({
+  className = "w-full",
+  tone = "default",
+}: {
+  className?: string;
+  /**
+   * `inverse` for a bar on the brand gradient (the header's Beta pill), where
+   * the grey skeleton token all but vanishes: white at 30%, the same wash the
+   * pill's own tag and ring track use.
+   */
+  tone?: "default" | "inverse";
+}) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "block h-3 max-w-full rounded-[3px] bg-[var(--surface-skeleton)] motion-safe:animate-pulse",
+        "block h-3 max-w-full rounded-[3px] motion-safe:animate-pulse",
+        tone === "inverse" ? "bg-white/30" : "bg-[var(--surface-skeleton)]",
         className,
       )}
       data-pending-bar=""
