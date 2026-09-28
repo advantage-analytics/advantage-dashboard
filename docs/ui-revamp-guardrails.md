@@ -254,7 +254,7 @@ to put a testable seam.
 > needs to run them in Node — with parsing, validation, attribution and the
 > blank-Guest fallback untouched. The webhook route is not touched.
 
-> **A reviewed exception, added 2026-09-28: input-rejected retries and the
+> **A reviewed exception, added 2026-09-27: input-rejected retries and the
 > frame-rate warning, from `claude/match-analysis-failure-retry-8769f3`**
 > (tasks T1–T3 in its queue). Both touches are a refusal or a constant, never a
 > change to what the pipeline sends, bills or computes:

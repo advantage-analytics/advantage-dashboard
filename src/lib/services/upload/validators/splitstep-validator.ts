@@ -204,15 +204,14 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   // averages 24 passed in Chrome (sample 30) and was refused in Firefox (no
   // sample, average 24), and the vendor rejects it either way. The average
   // never rescues a low sample; it can only add a refusal.
+  const snappedAverage =
+    probe.averageFps != null ? snapToStandardFps(probe.averageFps) : null;
   const sampledUnder =
     probe.fps !== null && snapToStandardFps(probe.fps) < MIN_VIDEO_FPS;
   const averageUnder =
-    probe.averageFps != null &&
-    snapToStandardFps(probe.averageFps) < MIN_VIDEO_FPS;
+    snappedAverage !== null && snappedAverage < MIN_VIDEO_FPS;
   if (sampledUnder || averageUnder) {
-    const quoted = sampledUnder
-      ? probe.fps
-      : snapToStandardFps(probe.averageFps as number);
+    const quoted = sampledUnder ? probe.fps : snappedAverage;
     return {
       success: false,
       error: `Video runs at ${quoted} fps. Analysis needs at least ${MIN_VIDEO_FPS} fps.`,
