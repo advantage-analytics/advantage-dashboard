@@ -98,17 +98,18 @@ ready).
 
 ## T7 · Drawers render the recovery class through RecoveryAction
 
-- **status:** blocked
+- **status:** todo
 - **model:** opus
 - **needs:** T3, T4, T5
-- **files:** src/components/dashboard/matches/drawer-sections.tsx (`AnalysisNotice`), src/components/dashboard/matches/match-drawer.tsx, src/components/dashboard/schedule/event-line-drawer.tsx, tests/drawer-sections.spec.ts (guess)
+- **files:** src/components/dashboard/matches/drawer-sections.tsx (`AnalysisNotice`), src/components/dashboard/matches/match-drawer.tsx, src/components/dashboard/schedule/event-line-drawer.tsx, src/lib/schedule/types.ts, src/lib/data/schedule-server.ts, tests/drawer-sections.spec.ts, tests/fixtures/schedule-dual-outcomes-data.ts (guess)
 - **routes:** /dashboard/matches, /dashboard/team/schedule/[eventId]
 - **done when:**
-  - [ ] `AnalysisNotice` takes `recovery` and `note` and renders `byClass[recovery]` with the drawer body; the failure block no longer branches on `status` or `inputRejected`
-  - [ ] `grep -rn "function RetryButton" src` finds none; `match-drawer.tsx` renders `<RecoveryAction>` when `canManage !== false` and `event-line-drawer.tsx` when `canEdit`
-  - [ ] `tests/drawer-sections.spec.ts`: T9/T12's cases are moved to class inputs with their assertions kept, and a new case (an upload_again row with a manager) contains the upload link and not "Retrying"
+  - [ ] For a viewer who can act (`canManage !== false` in the match drawer, `canEdit` in the event drawer), `AnalysisNotice`'s failure block renders headline `note ?? byClass[recovery].title` and the class drawer body (wait-or-ask through `waitOrAskVariant`); it no longer branches on `inputRejected` and never renders the raw `failNote`
+  - [ ] For a viewer who cannot act, the failure block keeps today's behaviour: the class title as headline, the body "The match page has the details.", no note, no "Retrying" text and no action
+  - [ ] The recovery action for `retry` stays the footer's primary button labelled exactly "Retry" (today's `RetryButton` styling), `rederive` uses the same primary styling labelled "Rebuild statistics", and `upload_again` / `fix_recording` take that primary slot with the upload link; `wait_or_ask` and `stats_unavailable` add no action, and no drawer ever holds two primaries
+  - [ ] `tests/schedule-dual-outcomes.spec.ts` passes unedited, with its S4 fixture in `tests/fixtures/schedule-dual-outcomes-data.ts` given the loader-produced fields (`recovery: "retry"`, `note` equal to its `failNote`, a vendor `errorCode`) beside `failNote`; `tests/drawer-sections.spec.ts` moves T9/T12's cases to class inputs and adds an upload_again case with a manager (upload link, no "Retrying")
   - [ ] `npx tsc --noEmit` passes
-- **notes:** Design §3; plan step 6. The event drawer used to pass `failNote` only when retryable; it now passes `note` whenever the class shows one. Viewers without manage rights get title and body, no action.
+- **notes:** Design §3; plan step 6. Amended 2026-09-28 by the author after the first run was blocked: keep the existing drawer behaviour pinned by `tests/schedule-dual-outcomes.spec.ts` (T23 "footer follows the Matches drawer") — Retry is the footer primary labelled "Retry", and non-editors see only "The match page has the details." The first run's work is stash `7fceca0f51e51ceb576021c6cef67184b6b42827` (`git stash show -p 7fceca0f`) — a usable starting point for the class-copy and `EntryMatch.errorCode`/`attemptsUsed` plumbing, but its outline "Retry analysis" button and everyone-sees-the-body rule are what this amendment reverses.
 
 ## T8 · Matches list row action follows the recovery class
 
