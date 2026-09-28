@@ -34,6 +34,13 @@
  * its own seed, so the next round opens blank rather than carrying the score
  * that was just filed.
  *
+ * A round our side LOST goes the same way when the loss has a consolation
+ * draw to drop into (`nextRoundAfter(…, false)`): the primary reads "Save and
+ * start consolation" and reopens this entry at that round, blank. Not every
+ * player takes their consolation spot, so the form asks once rather than
+ * assuming — "Save — they're out" beside it saves and walks on to the next
+ * open entry as any other save does.
+ *
  * A tournament round also asks WHOSE player the opponent is — the School
  * field beside Round, the dual builder's directory search over
  * `/api/programs/search` with a typed fallback. It is what points the opponent
@@ -644,26 +651,33 @@ function ScoreForm({
   };
 
   /**
-   * Where "Save and next round" goes, or null when saving walks on as it
-   * always has. Decided from the TYPED score, before anything is written,
-   * with the writer's own payload (`planSave`) and winner rule
-   * (`resultInputWon`): a tournament round played out and won. A retirement
-   * or a default, a loss, a dual line, a won final — null.
+   * Where the primary's save goes on this entry, or null when saving walks on
+   * as it always has. Decided from the TYPED score, before anything is
+   * written, with the writer's own payload (`planSave`) and winner rule
+   * (`resultInputWon`): a tournament round played out and decided. A win
+   * walks up the draw ("Save and next round"); a loss drops into its
+   * consolation draw ("Save and start consolation"). A retirement or a
+   * default, a dual line, an undecided score, a won final, a loss with no
+   * consolation to go to — null.
    */
-  const advanceTo = (() => {
+  const advance = (() => {
     if (!tournament || !preset.round || !preset.entryId || state.ending) {
       return null;
     }
     const plan = planSave(preset, state, savedOutcome);
-    if (plan.kind !== "score" || resultInputWon(plan.input) !== true) {
-      return null;
-    }
-    return nextRoundAfter(
+    if (plan.kind !== "score") return null;
+    const won = resultInputWon(plan.input);
+    if (won === null) return null;
+    const round = nextRoundAfter(
       { draw: null, matches: heldRounds.map((round) => ({ round })) },
       preset.round,
-      true,
+      won,
     );
+    return round ? { round, won } : null;
   })();
+  const advanceTo = advance?.round ?? null;
+  /** A lost round with a consolation draw to drop into. */
+  const consolation = advance !== null && !advance.won;
 
   const walkOn = () => {
     if (nextOpen) onSaved(preset.entryId ?? "", nextOpen, savedOutcome, null);
@@ -698,7 +712,12 @@ function ScoreForm({
     });
   }
 
-  function save(then: "next" | "close") {
+  /**
+   * `next` is the primary: on to `advanceTo` when there is one, else the next
+   * open entry. `out` is "Save — they're out": a lost round's consolation
+   * declined, so it walks on exactly as `next` would with no advance.
+   */
+  function save(then: "next" | "close" | "out") {
     setError(null);
 
     // The server refuses this too; saying it here keeps the digits typed.
@@ -713,7 +732,7 @@ function ScoreForm({
       return;
     }
     // Read now, from what was typed: the label the coach clicked promised it.
-    const advance = then === "next" ? advanceTo : null;
+    const goTo = then === "next" ? advanceTo : null;
     const savedRound = preset.round;
 
     const finish = (
@@ -721,9 +740,9 @@ function ScoreForm({
       upload: SavedLineUpload | null,
     ) => {
       router.refresh();
-      if (advance && savedRound) {
+      if (goTo && savedRound) {
         onAdvanced(preset.entryId ?? "", savedRound, outcome, upload);
-        moveToRound(advance, true);
+        moveToRound(goTo, true);
         return;
       }
       if (then === "close" || !nextOpen) {
@@ -988,8 +1007,22 @@ function ScoreForm({
                   round, which needs no open line). On the last one the primary
                   falls back to "Save and close", and drawing the ghost too
                   would put two identically labelled buttons side by side
-                  doing the same thing — a choice that isn't one. */}
-              {nextOpen || advanceTo ? (
+                  doing the same thing — a choice that isn't one. A lost
+                  round with a consolation to drop into asks that question
+                  in this slot instead: its walk-on IS the declined answer. */}
+              {consolation ? (
+                // The consolation declined. A text action, not a second
+                // button: the primary is the expected answer, and this one
+                // walks on (the next open entry, or out) as any save does.
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => save("out")}
+                  className="cursor-pointer rounded-[2px] text-[13px] font-medium text-[var(--blue)] transition-colors duration-150 outline-none hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] disabled:pointer-events-none disabled:opacity-50"
+                >
+                  Save — they&apos;re out
+                </button>
+              ) : nextOpen || advanceTo ? (
                 <button
                   type="button"
                   disabled={pending}
@@ -1007,11 +1040,13 @@ function ScoreForm({
               >
                 {pending
                   ? "Saving…"
-                  : advanceTo
-                    ? "Save and next round"
-                    : nextOpen
-                      ? `Save and next ${noun}`
-                      : "Save and close"}
+                  : consolation
+                    ? "Save and start consolation"
+                    : advanceTo
+                      ? "Save and next round"
+                      : nextOpen
+                        ? `Save and next ${noun}`
+                        : "Save and close"}
               </button>
             </>
           )}

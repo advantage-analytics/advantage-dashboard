@@ -11,8 +11,11 @@
 
 import { matchWon } from "./entry-state";
 import {
+  CONSOLATION,
   drawOfRound,
   MAIN_DRAW,
+  PQ_CONSOLATION,
+  PREQUALIFYING,
   QUALIFYING,
   ROUND_ORDER,
   roundLongLabel,
@@ -77,25 +80,56 @@ const MAIN_DRAW_START = "R32";
  *   run's usual main-draw start (R32, as `nextRound` opens a fresh entry)
  *   when it holds none. Null when the ladder defines no main draw, and for
  *   any other draw — the last consolation round, and the last prequalifying
- *   or PQ-consolation round too: where a prequalifier goes next is a loss
- *   question (T11), not answered here.
+ *   or PQ-consolation round too: a prequalifier only leaves their draw by
+ *   losing, which the loss rules below answer.
  * - **An unrecognised round** has no ladder position: null.
  *
- * A LOSS — until T11 decides where a loss goes — answers what it always has:
- * `nextRound(entry)`.
+ * A LOSS drops the entry into the consolation draw that feeds from the draw it
+ * lost in (the ITA structure), or ends the run:
+ *
+ * - **A lost `PQ*`** → PQ Consolation, from `PC1`.
+ * - **A lost `Q*`, or a lost main-draw round other than `F`** → the main
+ *   Consolation, from `C1`. (The ITA's "C-R32-Q" feeder rounds, where
+ *   qualifying losers enter, are modelled as the same `C1`.)
+ * - **A lost `F`, a lost `PC*`, a lost `C*`** → null: the run is over. So is
+ *   a lost round with no ladder position.
+ *
+ * **Never a consolation round the entry already holds.** `recordResult`
+ * de-duplicates on (entry, round), so offering a held `C1` would overwrite
+ * that round's score with the next one's. When the draw's first round is
+ * held, the answer is the FIRST round of that consolation draw, in
+ * `ROUND_ORDER`, the entry does not hold — and null when it holds every one.
  */
 export function nextRoundAfter(
   entry: RunRounds,
   savedRound: string,
   won: boolean,
 ): string | null {
-  if (!won) return nextRound(entry);
-
   const saved = savedRound.toUpperCase();
   const index = ROUND_ORDER.indexOf(saved);
   const draw = drawOfRound(saved);
   if (index === -1 || draw === null) return null;
   if (saved === "F") return null;
+
+  if (!won) {
+    const consolation =
+      draw === PREQUALIFYING
+        ? PQ_CONSOLATION
+        : draw === QUALIFYING || draw === MAIN_DRAW
+          ? CONSOLATION
+          : null;
+    if (consolation === null) return null;
+    const held = new Set(
+      entry.matches.flatMap((match) =>
+        match.round ? [match.round.toUpperCase()] : [],
+      ),
+    );
+    return (
+      ROUND_ORDER.find(
+        (round) => drawOfRound(round) === consolation && !held.has(round),
+      ) ?? null
+    );
+  }
 
   const sameDraw = ROUND_ORDER.slice(index + 1).find(
     (round) => drawOfRound(round) === draw,

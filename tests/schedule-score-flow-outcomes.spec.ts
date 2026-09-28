@@ -697,23 +697,145 @@ test.describe("a tournament entry", () => {
     ).toBeVisible();
   });
 
-  test("a lost round keeps today's footer: no next round is offered", async ({
+  test("a lost round offers its consolation, and the primary opens it blank on the same entry", async ({
     page,
   }) => {
     await openFlow(page, "?kind=tournament&recorded=true");
+    const round = page.getByRole("button", { name: "Round", exact: true });
+    await expect(round).toContainText("R16");
     await page.getByRole("button", { name: "Name their player" }).click();
     await page.getByRole("option", { name: /Taylor Park/ }).click();
     await page.getByLabel("Jordan Lee, set 1").fill("3");
     await page.getByLabel("Taylor Park, set 1").fill("6");
+    await page.getByLabel("Jordan Lee, set 2").fill("4");
+    await page.getByLabel("Taylor Park, set 2").fill("6");
 
+    const primary = page.getByRole("button", {
+      name: "Save and start consolation",
+      exact: true,
+    });
+    await expect(primary).toBeVisible();
+    // The declined answer is a text action in the ghost's slot — not a
+    // second button, and not a "Save and close" beside it.
+    await expect(
+      page.getByRole("button", { name: "Save — they're out", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Save and close" }),
+    ).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Save and next round" }),
     ).toHaveCount(0);
-    // The only other entry already has its result, so this is the last one.
-    await page.getByRole("button", { name: "Save and close" }).click();
+    await primary.click();
+
     await expect
-      .poll(() => page.evaluate(() => window.routerPushes))
-      .toEqual(["/dashboard/team/schedule/event-browser"]);
+      .poll(() => page.evaluate(() => window.actionCalls.at(-1)))
+      .toEqual({
+        action: "recordResult",
+        input: expect.objectContaining({
+          entryId: "entry-t1",
+          round: "R16",
+          opponentLabels: ["Taylor Park"],
+          ourGames: [3, 4],
+          theirGames: [6, 6],
+        }),
+      });
+
+    // Same entry, the consolation's first round, blank — score and opponent.
+    await expect(round).toContainText("C1");
+    await expect(page.getByText("Entry 1 of 2", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Jordan Lee, set 1")).toHaveValue("");
+    await expect(page.getByLabel("Opponent, set 1")).toHaveValue("");
+    await expect(
+      page.getByRole("button", { name: "Name their player" }),
+    ).toBeVisible();
+    await expect(page.getByText("R16 saved", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => window.routerPushes)).toEqual([]);
+    expect(
+      new URLSearchParams(
+        await page.evaluate(() => window.location.search),
+      ).get("round"),
+    ).toBe("C1");
+  });
+
+  test('"Save — they\'re out" saves the lost round and walks on to the next open entry', async ({
+    page,
+  }) => {
+    // Entry #2 at QF; entry #1 is still open, so a walk-on lands there.
+    await openFlow(page, "?kind=tournament&saved=true");
+    await page.getByLabel("Alex Kim, set 1").fill("3");
+    await page.getByLabel("Robin Shah, set 1").fill("6");
+    await page.getByLabel("Alex Kim, set 2").fill("2");
+    await page.getByLabel("Robin Shah, set 2").fill("6");
+    await page.getByRole("button", { name: "It finished" }).click();
+
+    await expect(
+      page.getByRole("button", {
+        name: "Save and start consolation",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Save — they're out", exact: true })
+      .click();
+
+    await expect
+      .poll(() => page.evaluate(() => window.actionCalls.at(-1)))
+      .toEqual({
+        action: "recordResult",
+        input: expect.objectContaining({
+          entryId: "entry-t2",
+          round: "QF",
+          ourGames: [3, 2],
+          theirGames: [6, 6],
+        }),
+      });
+    await expect(page.getByText("Entry 1 of 2", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Round", exact: true }),
+    ).toContainText("R32");
+    expect(await page.evaluate(() => window.routerPushes)).toEqual([]);
+  });
+
+  test('a lost final has no consolation: the single "Save and next entry" stays', async ({
+    page,
+  }) => {
+    await openFlow(page, "?kind=tournament&saved=true");
+    const round = page.getByRole("button", { name: "Round", exact: true });
+    await round.click();
+    await page.getByRole("menuitemradio", { name: /^F/ }).click();
+    await expect(round).toContainText("F");
+
+    // F holds no match, so it opens naming nobody; name them to save.
+    await page.getByRole("button", { name: "Name their player" }).click();
+    await page.getByRole("option", { name: /Taylor Park/ }).click();
+    await page.getByLabel("Alex Kim, set 1").fill("3");
+    await page.getByLabel("Taylor Park, set 1").fill("6");
+    await page.getByLabel("Alex Kim, set 2").fill("2");
+    await page.getByLabel("Taylor Park, set 2").fill("6");
+
+    await expect(
+      page.getByRole("button", { name: "Save and start consolation" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Save — they're out" }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Save and next entry" }).click();
+
+    await expect
+      .poll(() => page.evaluate(() => window.actionCalls.at(-1)))
+      .toEqual({
+        action: "recordResult",
+        input: expect.objectContaining({
+          entryId: "entry-t2",
+          round: "F",
+          opponentLabels: ["Taylor Park"],
+          ourGames: [3, 2],
+          theirGames: [6, 6],
+        }),
+      });
+    await expect(page.getByText("Entry 1 of 2", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => window.routerPushes)).toEqual([]);
   });
 });
 

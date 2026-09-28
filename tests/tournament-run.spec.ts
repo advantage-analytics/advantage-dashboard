@@ -429,18 +429,67 @@ test.describe("nextRoundAfter", () => {
   test("prequalifying and its consolation step within their own draw only", () => {
     expect(nextRoundAfter(run(["PQ1"]), "PQ1", true)).toBe("PQ2");
     expect(nextRoundAfter(run(["PC3"]), "PC3", true)).toBe("PC4");
-    // Where a prequalifier goes after their last round is T11's question.
+    // A prequalifier only leaves their draw by losing (the loss cases below).
     expect(nextRoundAfter(run(["PQ4"]), "PQ4", true)).toBeNull();
     expect(nextRoundAfter(run(["PC4"]), "PC4", true)).toBeNull();
   });
 
-  test("a loss answers what nextRound always has (until T11)", () => {
-    for (const rounds of [["R32"], ["R32", "R16"], ["Q1", "Q2"], ["F"]]) {
-      const entryRun = run(rounds);
-      expect(nextRoundAfter(entryRun, rounds.at(-1)!, false)).toBe(
-        nextRound(entryRun),
+  test("a lost prequalifying round drops into PQ Consolation at PC1", () => {
+    for (const round of ["PQ1", "PQ2", "PQ3", "PQ4"]) {
+      expect(nextRoundAfter(run([round], "Prequalifying"), round, false)).toBe(
+        "PC1",
       );
     }
+    expect(nextRoundAfter(run(["pq2"]), "pq2", false)).toBe("PC1");
+  });
+
+  test("a lost qualifying round drops into the main Consolation at C1", () => {
+    for (const round of ["Q1", "Q2", "Q3"]) {
+      expect(nextRoundAfter(run([round], "Qualifying"), round, false)).toBe(
+        "C1",
+      );
+    }
+  });
+
+  test("a lost main-draw round other than the final drops into C1", () => {
+    for (const round of ["R256", "R128", "R64", "R32", "R16", "QF", "SF"]) {
+      expect(nextRoundAfter(run([round]), round, false)).toBe("C1");
+    }
+    // A qualifier who came through and then lost in the main draw.
+    expect(
+      nextRoundAfter(
+        run(["Q1", "Q2", "Q3", "R32"], "Qualifying"),
+        "R32",
+        false,
+      ),
+    ).toBe("C1");
+  });
+
+  test("a lost final, consolation round or unknown round ends the run", () => {
+    expect(nextRoundAfter(run(["SF", "F"]), "F", false)).toBeNull();
+    for (const round of ["PC1", "PC2", "PC3", "PC4"]) {
+      expect(nextRoundAfter(run(["PQ1", round]), round, false)).toBeNull();
+    }
+    for (const round of ["C1", "C2", "C3", "C4", "C5"]) {
+      expect(nextRoundAfter(run(["R32", round]), round, false)).toBeNull();
+    }
+    expect(nextRoundAfter(run(["Final 4"]), "Final 4", false)).toBeNull();
+  });
+
+  test("a consolation round the entry already holds is never returned", () => {
+    // C1 held (a correction of an earlier round): the first unheld C round.
+    expect(nextRoundAfter(run(["R32", "R16", "C1"]), "R16", false)).toBe("C2");
+    expect(nextRoundAfter(run(["Q1", "C1", "C2"]), "Q1", false)).toBe("C3");
+    expect(nextRoundAfter(run(["PQ1", "PC1"]), "PQ1", false)).toBe("PC2");
+    // Held case-blind, like every other round read.
+    expect(nextRoundAfter(run(["R32", "c1"]), "R32", false)).toBe("C2");
+    // Every round of that consolation draw held: nowhere left to go.
+    expect(
+      nextRoundAfter(run(["PQ1", "PC1", "PC2", "PC3", "PC4"]), "PQ1", false),
+    ).toBeNull();
+    expect(
+      nextRoundAfter(run(["R32", "C1", "C2", "C3", "C4", "C5"]), "R32", false),
+    ).toBeNull();
   });
 });
 

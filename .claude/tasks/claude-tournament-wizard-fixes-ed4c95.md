@@ -143,7 +143,7 @@ ready).
 
 ## T11 · Route a lost round to its consolation draw
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T9, T10
 - **files:** src/lib/schedule/tournament-run.ts (`nextRoundAfter`), src/components/dashboard/schedule/score-only-flow.tsx (`save`/`finish`, footer labels), tests/tournament-run.spec.ts, tests/schedule-score-flow-outcomes.spec.ts
