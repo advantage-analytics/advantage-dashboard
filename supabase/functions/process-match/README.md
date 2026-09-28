@@ -357,6 +357,36 @@ function calculateSetPoint(gameScore, pointScore) {
 **Match Point Logic:**
 A point is a match point when it's a set point for a player who has won `setsToWin - 1` sets. The function tracks WHO has the set point (host vs guest), not just that someone does.
 
+### Dead Balls (`keepDecidingRallies`)
+
+SwingVision files every ball struck since the previous point under the NEXT
+point's Set/Game/Point — feeds and knock-ups, lets, a first serve the players
+called out and played on anyway — each rally numbered from shot 1. The Points
+sheet has no row for them, `Serve State` names the deciding serve, and the
+Shots sheet's `Type` reads `none` on every dead ball. Before any shot is read,
+each point keeps:
+
+- every shot from its **last serve** up to the first feed after it (a feed
+  after the rally is the next point's ball, filed under this one);
+- before a second serve, the latest earlier **first serve** — the fault. Its
+  `Result` is forced to `Out` when the tracker called it in, since the point
+  was replayed on a second serve.
+
+Everything else is dropped, feeds included; `rally_length` is the kept
+rally's. Shots are ordered by `Video Time`, else the wall-clock `Start Time`
+(some exports carry no Video Time; a point spanning midnight is handled), else
+sheet order. A point with no serve is kept whole.
+
+Merged, the dead rallies counted dead serves as first serves (and as the
+opponent's first returns), dead shot 2s as returns and return contacts, and
+dead volleys as net points. Existing matches were repaired on 2026-09-28 by
+`20260928161741_swingvision_keep_deciding_rally` and
+`20260928162142_swingvision_cut_trailing_feed` (the same rule in SQL, for
+every point whose shots all carry a `video_time`) and, for `ef0f68b3` — the
+one export without Video Time — by running this function's own rule over its
+workbook and deleting the matched rows: 1,358 shots across 20 matches, and
+the eyes-on verifier's fixtures untouched.
+
 ### Shot Placement (`shots.zone`)
 
 Every shot's zone is decided here, once, and `calculate_match_stats` only
