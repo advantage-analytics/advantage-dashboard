@@ -57,7 +57,7 @@ ready).
 
 ## T4 · Add MatchFiltersProvider with a URL mirror, replacing set scope
 
-- **status:** later
+- **status:** todo
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/matches/match-detail/match-filters/provider.tsx, set-scope.tsx, head-to-head-card.tsx, performance-tracker-chart.tsx, rally-length-card.tsx, point-endings-card.tsx, src/app/dashboard/matches/(detail)/[matchId]/page.tsx (guess)
@@ -84,7 +84,7 @@ ready).
 
 ## T6 · Wire filters into the Statistics tab
 
-- **status:** later
+- **status:** todo
 - **model:** opus
 - **needs:** T4, T5
 - **files:** src/components/dashboard/matches/match-detail/statistics-view.tsx, a new applied-chips component in match-filters/, src/app/m/[token]/page.tsx (guess)
@@ -98,7 +98,7 @@ ready).
 
 ## T7 · Move the Film tab onto the shared model and rewrite watch cuts
 
-- **status:** later
+- **status:** todo
 - **model:** opus
 - **needs:** T4, T5
 - **files:** film/film-tab.tsx, film/film-advanced-panel.tsx, film/film-quick-filters.tsx, film-cut-context.tsx, match-report-context.tsx, head-to-head-card.tsx, rally-length-card.tsx, point-endings-card.tsx (guess)
@@ -112,7 +112,7 @@ ready).
 
 ## T8 · Delete the old FilmFilters model and its specs
 
-- **status:** later
+- **status:** todo
 - **model:** sonnet
 - **needs:** T6, T7
 - **files:** src/components/dashboard/matches/match-detail/film/filters/types.ts, film/film-advanced-panel.tsx option table, tests/film-filters-model.spec.ts (guess)
