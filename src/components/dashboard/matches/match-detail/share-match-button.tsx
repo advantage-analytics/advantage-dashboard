@@ -17,6 +17,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { PersonAvatar } from "@/components/ui/person-avatar";
+import { FloatMenuDivider } from "@/components/ui/float-menu";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import {
   disableMatchShare,
@@ -273,7 +274,9 @@ export function SharePopoverPanel({
   // their answer comes from `publicLinkOn`; everyone else follows the
   // optimistic toggle, and "Only you" is drawn chosen while its confirm is up.
   const isPublic = locked ? publicLinkOn : confirmingOff ? false : optimisticOn;
-  const on = !locked && optimisticOn && link !== null;
+  // A locked viewer's `link` is always null (RLS on `match_share_links`), so
+  // `link !== null` already implies `!locked` — see `MatchShareState.canShare`.
+  const on = optimisticOn && link !== null;
 
   function choose(next: "private" | "public") {
     if (locked || pending) return;
@@ -453,12 +456,12 @@ export function SharePopoverPanel({
 
       {body && (
         <>
-          <MenuDivider />
+          <FloatMenuDivider className="mx-2.5 bg-[var(--border-medium)]" />
           {body}
         </>
       )}
 
-      <MenuDivider />
+      <FloatMenuDivider className="mx-2.5 bg-[var(--border-medium)]" />
       <p
         aria-live="polite"
         className="text-micro flex items-center gap-2 px-2.5 pt-1.5 pb-2 leading-[15px] text-[var(--ink-500)]"
@@ -490,11 +493,6 @@ function ActionBlock({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2 px-2.5 pt-2 pb-2.5">{children}</div>
   );
-}
-
-/** The inset hairline between the menu's groups. */
-function MenuDivider() {
-  return <div className="mx-2.5 my-1 h-px bg-[var(--border-medium)]" />;
 }
 
 /**

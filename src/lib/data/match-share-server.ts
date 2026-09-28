@@ -314,19 +314,8 @@ async function resolveLinkMaker(
       isViewer: true,
     };
   }
-  const person = await resolveSharedBy(
-    lazyAdminClient(),
-    makerId,
-    new Date().toISOString(),
-  );
-  return person
-    ? {
-        name: person.name,
-        initials: person.initials,
-        photoUrl: person.photoUrl,
-        isViewer: false,
-      }
-    : null;
+  const person = await resolveUserIdentity(lazyAdminClient(), makerId);
+  return person ? { ...person, isViewer: false } : null;
 }
 
 /** Who turned the link on, for the rail's footer. */
@@ -360,20 +349,18 @@ export interface SharedMatchData {
 }
 
 /**
- * The sharer's name and photo. Their name is what they chose to show to
- * their team; their email is not, so a profile with no name yields null
- * rather than a fallback to the address.
+ * A user's display name and photo, by id. Their name is what they chose to
+ * show to their team; their email is not, so a profile with no name yields
+ * null rather than a fallback to the address.
  */
-async function resolveSharedBy(
+async function resolveUserIdentity(
   admin: SupabaseClient,
-  sharerUserId: string | null,
-  createdAt: string,
-): Promise<SharedBy | null> {
-  if (!sharerUserId) return null;
+  userId: string,
+): Promise<SharePerson | null> {
   const { data } = await admin
     .from("users")
     .select("first_name, last_name, avatar_path")
-    .eq("id", sharerUserId)
+    .eq("id", userId)
     .maybeSingle();
   const name = displayName(data?.first_name ?? null, data?.last_name ?? null);
   if (!name) return null;
@@ -381,12 +368,24 @@ async function resolveSharedBy(
     ? admin.storage.from(USER_AVATARS_BUCKET).getPublicUrl(data.avatar_path)
         .data.publicUrl
     : null;
+  return { name, initials: getInitials(name), photoUrl };
+}
+
+/** The sharer's identity, dated for the rail footer. */
+async function resolveSharedBy(
+  admin: SupabaseClient,
+  sharerUserId: string | null,
+  createdAt: string,
+): Promise<SharedBy | null> {
+  if (!sharerUserId) return null;
+  const person = await resolveUserIdentity(admin, sharerUserId);
+  if (!person) return null;
   const sharedOn = new Date(createdAt).toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
   });
-  return { name, initials: getInitials(name), photoUrl, sharedOn };
+  return { ...person, sharedOn };
 }
 
 /**
