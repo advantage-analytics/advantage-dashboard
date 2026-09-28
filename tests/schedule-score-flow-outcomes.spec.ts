@@ -352,6 +352,26 @@ test.describe("an opponent the lineup left blank", () => {
   });
 });
 
+test("a dual line's lineup-named opponent stays read-only, and its forfeit routes to Edit dual", async ({
+  page,
+}) => {
+  await openFlow(page);
+  // Named by the lineup: plain text in the score row, no picker to change it.
+  await expect(page.getByLabel("Casey Chen, set 1")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Casey Chen" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Name their player" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("combobox")).toHaveCount(0);
+
+  await openFlow(page, "?forfeit=true");
+  await changeLine(page, /S2Morgan Reed/);
+  await expect(page.getByRole("link", { name: "Edit dual" })).toHaveAttribute(
+    "href",
+    "/dashboard/team/schedule/event-browser/edit",
+  );
+});
+
 test.describe("a tournament entry", () => {
   test("asks the round, and changing it keeps what was typed without navigating", async ({
     page,
@@ -426,18 +446,25 @@ test.describe("a tournament entry", () => {
   }) => {
     await openFlow(page, "?kind=tournament&recorded=true");
     const round = page.getByRole("button", { name: "Round" });
+    // R16 holds no match, so it names nobody — the typed opponent row is
+    // still "Opponent", and it is kept along with the digits.
     await page.getByLabel("Jordan Lee, set 1").fill("6");
-    await page.getByLabel("Casey Chen, set 1").fill("2");
+    await page.getByLabel("Opponent, set 1").fill("2");
 
     await round.click();
     await page.getByRole("menuitemradio", { name: /^R32/ }).click();
 
     await expect(round).toContainText("R32");
     await expect(page.getByLabel("Jordan Lee, set 1")).toHaveValue("6");
-    await expect(page.getByLabel("Casey Chen, set 1")).toHaveValue("2");
+    await expect(page.getByLabel("Opponent, set 1")).toHaveValue("2");
     await expect(
       page.getByText("Replaces the R32 result already recorded."),
     ).toBeVisible();
+
+    // The kept form names nobody; the row is the picker, so name them here.
+    await page.getByRole("button", { name: "Name their player" }).click();
+    await page.getByRole("option", { name: /Casey Chen/ }).click();
+    await expect(page.getByLabel("Casey Chen, set 1")).toHaveValue("2");
 
     await page.getByRole("button", { name: "Save and close" }).click();
     await expect
@@ -447,6 +474,7 @@ test.describe("a tournament entry", () => {
         input: expect.objectContaining({
           entryId: "entry-t1",
           round: "R32",
+          opponentLabels: ["Casey Chen"],
           ourGames: [6],
           theirGames: [2],
         }),
@@ -456,6 +484,70 @@ test.describe("a tournament entry", () => {
         await page.evaluate(() => window.location.search),
       ).get("round"),
     ).toBe("R32");
+  });
+
+  test("a round with no match of its own opens with no opponent, not the last one filed", async ({
+    page,
+  }) => {
+    await openFlow(page, "?kind=tournament&recorded=true");
+    const round = page.getByRole("button", { name: "Round" });
+    await expect(round).toContainText("R16");
+    await expect(
+      page.getByRole("button", { name: "Name their player" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Opponent, set 1")).toBeVisible();
+
+    // Over to the recorded R32 and back: R32 opens on Casey Chen, R16 on
+    // nobody again — the name never follows the round change.
+    await round.click();
+    await page.getByRole("menuitemradio", { name: /^R32/ }).click();
+    await expect(
+      page.getByRole("button", { name: "Casey Chen" }),
+    ).toBeVisible();
+    await round.click();
+    await page.getByRole("menuitemradio", { name: /^R16/ }).click();
+    await expect(
+      page.getByRole("button", { name: "Name their player" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Casey Chen, set 1")).toHaveCount(0);
+  });
+
+  test("a recorded round's opponent opens in the picker and can be changed", async ({
+    page,
+  }) => {
+    await openFlow(page, "?kind=tournament&recorded=true");
+    const round = page.getByRole("button", { name: "Round" });
+    await round.click();
+    await page.getByRole("menuitemradio", { name: /^R32/ }).click();
+
+    // The recorded name sits in the picker itself, not a static label.
+    const opponent = page.getByRole("button", { name: "Casey Chen" });
+    await expect(opponent).toBeVisible();
+    await opponent.click();
+    const field = page.getByRole("combobox");
+    await expect(field).toHaveValue("Casey Chen");
+    await field.fill("Taylor");
+    await page.getByRole("option", { name: /Taylor Park/ }).click();
+
+    await expect(
+      page.getByRole("button", { name: "Taylor Park" }),
+    ).toBeVisible();
+    // The score stays as recorded; only the name moved.
+    await expect(page.getByLabel("Taylor Park, set 1")).toHaveValue("3");
+
+    await page.getByRole("button", { name: "Save and close" }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.actionCalls.at(-1)))
+      .toEqual({
+        action: "recordResult",
+        input: expect.objectContaining({
+          entryId: "entry-t1",
+          round: "R32",
+          opponentLabels: ["Taylor Park"],
+          ourGames: [6, 7],
+          theirGames: [3, 6],
+        }),
+      });
   });
 
   test("a legacy withdrawal reopens as Retired and a score replaces it", async ({

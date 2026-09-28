@@ -156,10 +156,14 @@ export function ScoreOnlyFlow({
    */
   const [lastSaved, setLastSaved] = useState<SavedLineUpload | null>(null);
   // The opponent's saved roster, fetched once for the event rather than on
-  // every line's remount — and only when some line still needs a name.
-  const naming = lineup.some(
-    (choice) => choice.preset && choice.preset.opponentName.trim() === "",
-  );
+  // every line's remount — and only when a form can name someone: some line
+  // still needs a name, or this is a tournament, whose every round is named
+  // (or renamed) in its own score row.
+  const naming =
+    current.eventKind === "tournament" ||
+    lineup.some(
+      (choice) => choice.preset && choice.preset.opponentName.trim() === "",
+    );
   const schoolName = current.opponentSchool ?? current.eventName ?? "";
   const programKey = current.opponentProgramKey;
   const pool = useOpponentPool(
@@ -394,9 +398,17 @@ function ScoreForm({
   );
   /** What the form was last seeded with — "untouched" is measured from it. */
   const [seeded, setSeeded] = useState<ScoreFormState>(state);
-  // Decided once, on mount: a name the lineup never had is named in the score
-  // row, and stays a picker while it is being chosen.
-  const [namingOpponent] = useState(() => preset.opponentName.trim() === "");
+  // Decided once, on mount. A dual line names only what its lineup left
+  // blank — a name the lineup holds is read here and changed through Edit
+  // dual. A tournament has no lineup: each round's opponent belongs to that
+  // round's match, so its row is ALWAYS the picker — a recorded name opens
+  // in it and can be changed, and a round with no match opens on "Name their
+  // player". The form is keyed per line, never per round, so this holds
+  // across the Round control's reseeds.
+  const [namingOpponent] = useState(
+    () =>
+      preset.eventKind === "tournament" || preset.opponentName.trim() === "",
+  );
 
   const tournament = preset.eventKind === "tournament";
   const doubles = preset.discipline === "doubles";
@@ -1074,6 +1086,11 @@ function LineupForfeitNote({
  * page's own pickers, so the same names and the same rules: the typed popup
  * over their saved roster on a singles line, and the pick-two pair checklist
  * on a doubles line. Saving writes the name back to the lineup too.
+ *
+ * On a tournament round it is drawn even with a name in it: the popup opens
+ * on the recorded name, and committing another one replaces it — saving then
+ * renames that round's match and no other round's (`recordResult`'s
+ * `syncEntryOpponent` leaves the entry alone on a tournament correction).
  */
 function OpponentInRow({
   preset,

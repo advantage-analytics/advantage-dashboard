@@ -107,8 +107,15 @@ export function presetFor(
     // one — see the note on EventPreset.playerUserId.
     playerUserId:
       entry.discipline === "doubles" ? null : (entry.playerUserIds[0] ?? null),
+    // A tournament entry's `opponent_labels` is "the last round filed", not
+    // this round's opponent: a round with no match of its own opens EMPTY
+    // rather than pre-named with whoever the entry played before. A dual
+    // line's labels are the lineup's, and are its opponent.
     opponentName:
-      (match?.opponentLabels ?? entry.opponentLabels).join(" / ") || "",
+      (
+        match?.opponentLabels ??
+        (event.kind === "tournament" ? [] : entry.opponentLabels)
+      ).join(" / ") || "",
     date: event.startsOn,
     surface: event.surface,
     bestOf: played.bestOf,

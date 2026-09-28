@@ -91,7 +91,7 @@ ready).
 
 ## T7 · Let the opponent be changed on a saved or inherited tournament round
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** src/components/dashboard/schedule/score-only-flow.tsx (`namingOpponent` ~line 352, `OpponentInRow` ~1010), src/lib/schedule/line-choices.ts (`presetFor` opponentName ~line 108), tests/fixtures/schedule-score-flow-outcomes-harness.tsx + tests/schedule-score-flow-outcomes.spec.ts, tests/line-choices.spec.ts
