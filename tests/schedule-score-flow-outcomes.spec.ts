@@ -682,6 +682,8 @@ test.describe("a tournament entry", () => {
       page.getByRole("button", { name: "Name their player" }),
     ).toBeVisible();
     await expect(page.getByText("R16 saved", { exact: true })).toBeVisible();
+    // A new round is a new opponent: the School starts blank again.
+    await expect(schoolField(page)).toHaveValue("");
     expect(await page.evaluate(() => window.routerPushes)).toEqual([]);
     expect(
       new URLSearchParams(
@@ -750,6 +752,8 @@ test.describe("a tournament entry", () => {
       page.getByRole("button", { name: "Name their player" }),
     ).toBeVisible();
     await expect(page.getByText("R16 saved", { exact: true })).toBeVisible();
+    // A new round is a new opponent: the School starts blank again.
+    await expect(schoolField(page)).toHaveValue("");
     expect(await page.evaluate(() => window.routerPushes)).toEqual([]);
     expect(
       new URLSearchParams(

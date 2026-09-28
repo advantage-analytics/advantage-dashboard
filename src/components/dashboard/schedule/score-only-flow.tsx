@@ -408,6 +408,11 @@ export function ScoreOnlyFlow({
         onAdvanced={(entryId, round, outcome, upload) => {
           // The entry stays open — it has a next round to record — so only
           // the round just filed, its outcome and its video offer move.
+          // The next round is a NEW opponent, so the School starts blank:
+          // carrying the last opponent's school would point the picker at
+          // the wrong roster and file that school onto the entry. (A plain
+          // Round change is a correction and keeps it — see `school`.)
+          setSchool({ name: "", programKey: null });
           setLastSaved(upload);
           setSavedRounds((prior) => ({
             ...prior,
@@ -1348,6 +1353,15 @@ function SchoolField({
   const listboxId = useId();
   const [term, setTerm] = useState(value.name);
   const [open, setOpen] = useState(false);
+  // Follow a school the PARENT changes (it clears the field when "Save and
+  // next round" / "Save and start consolation" opens a new opponent's
+  // round). Compared against the last value seen, during render, so typing
+  // — which never touches `value` until a commit — is left alone.
+  const [seenName, setSeenName] = useState(value.name);
+  if (value.name !== seenName) {
+    setSeenName(value.name);
+    setTerm(value.name);
+  }
   const results = useProgramSearch(term);
 
   const typed = term.trim();
