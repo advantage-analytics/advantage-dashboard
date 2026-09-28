@@ -269,7 +269,7 @@ ready).
 
 ## T20 · Record the guardrail exceptions and correct stale pipeline docs
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T11, T12, T13, T14, T15, T16, T17, T18
 - **files:** docs/ui-revamp-guardrails.md (§2, §3.3), docs/video-pipeline-overview.md (~603-615) (guess)

@@ -283,6 +283,99 @@ to put a testable seam.
 > `job-request.ts`, the three inputs in §4, `canSubmitVideo` and the webhook are
 > untouched.
 
+> **A reviewed exception, added 2026-09-28: video failure recovery, from
+> `claude/video-retry-failure-surfacing-055fd8`.** A stuck or failed video job
+> now has a real recovery path instead of a dead "failed" row. Each frozen file
+> gained one narrow capability, never a change to what it sends, bills or
+> computes:
+>
+> - `resubmit-job.ts` — **refusal only.** `resubmitJob()` now classifies the
+>   parent through `classifyFailure()` (the one recovery-class function, also
+>   used by the matches list and match page) instead of its own
+>   `error_category === "invalid_input"` check, and refuses before
+>   `reserveQuota()` for any class but `retry`: `fix_recording` (unchanged
+>   behaviour, now reached through the shared classifier) and the new
+>   `upload_again` (no video to resend from) each return their own refusal
+>   reason; any other class is refused too, as a fail-safe rather than a
+>   fallthrough. `isDownloadFailure` and `MAX_TOTAL_ATTEMPTS` moved to
+>   `src/lib/data/match-analysis.ts` (client code needs them without pulling in
+>   this file's `@azure/storage-blob` dependency) and are re-exported from here
+>   unchanged, so no caller's import broke.
+> - `submit-match-video.ts` — **code write, no overwrite on a handler failure.**
+>   A submit refusal now writes `processing_jobs.error_code` (via the new
+>   `refusal-code.ts`) alongside the existing `error_message`, always
+>   including `null` so a stale code from an earlier refusal cannot survive
+>   onto one that doesn't carry one. It never writes on a 502, because that
+>   status means the handler's own vendor-POST failure path already marked the
+>   row `failed` with the vendor's text; writing here would stomp it. Still
+>   never marks the row `failed` itself — status stays `uploaded`, as before.
+> - `derive-and-publish.ts` — **code and flag write.** A failed derivation now
+>   records `error_code`: `DERIVATION_REFUSED` when `persistTranscript` refused
+>   deterministically (won't reconcile, no results, provider mix), or
+>   `DERIVATION_ERROR` for everything else (a thrown exception, an RPC
+>   failure), read from `persist-transcript.ts`'s new `failure` field (see
+>   below). A successful derivation whose winner fold did not reconcile now
+>   merges `{ fold: { reconciled: false, reason } }` into the existing
+>   `derivation_quality` (read-modify-write, keeping `grade-results.ts`'s
+>   other keys); the merge is logged and swallowed on error so it can never
+>   turn a published match back into a failure. Every row value the
+>   derivation itself computes is unchanged.
+> - `persist-transcript.ts` — **return-shape only.** `PersistOutcome`'s failure
+>   arm and `buildTranscriptForJob()`'s return both gained a
+>   `failure: "refused" | "error"` field, stated at each return site, so a
+>   caller can tell a deterministic refusal from a transient error. No write,
+>   no query and no returned value besides that field changed.
+> - a new `/api/splitstep/jobs/[jobId]/rederive` **route + handler** — the
+>   "Rebuild statistics" action for a `derivation_failed` job classified
+>   `rederive`. `route.ts` is wiring (session, service-role client,
+>   `deriveAndPublish()`); `handler.ts` holds the ladder — signed in, owns the
+>   job (404 either way, never confirming another user's job), rebuildable
+>   (`derivation_failed`, `classifyFailure()` says `rederive`, results already
+>   stored), claim (`status = 'deriving'` only where still
+>   `derivation_failed`, so two clicks can't both derive), then one bounded
+>   derive. No vendor call, no quota spent, no attempt counted — it reruns
+>   `deriveAndPublish()` on results already on disk, and
+>   `persist-transcript.ts` deletes the match's derived points before
+>   inserting, so it is safe to repeat.
+> - `secure-results.ts` — **extraction, plus the webhook's own block replaced
+>   by a call.** The webhook's `completed` branch used to call
+>   `storeVendorJson` and `finalize_splitstep_results` inline; that block moved
+>   into `secure-results.ts`'s `secureResults()` verbatim — same arguments,
+>   log prefix and timeout — so the reconciler's results sweep can run the
+>   identical download → store → finalize step without a webhook delivery.
+>   `deliveryId` is optional for that reason: without one there is no delivery
+>   row for the RPC to update, but the `results_object_key` write on
+>   `processing_jobs` happens exactly as it does for a real delivery. The
+>   webhook route now calls `secureResults()` instead of inlining the steps;
+>   what it sends, stores and finalizes is identical.
+> - `reconcile.ts` — **sweep.** A new `recoverUndeliveredResults()` runs in
+>   `after()`, after the existing status-poll path (unchanged — still one
+>   `GET {BASE_URL}/jobs/{job_id}` per stuck job, capped, rate-limited),
+>   scoped to a page's own RLS-visible match ids. It claims (via a
+>   compare-and-swap on `last_polled_at`) a `completed` job with no
+>   `results_object_key` and no `derivation_version` whose `completed_at` is
+>   more than ten minutes old, then re-runs the webhook's post-download path —
+>   `secureResults` → `gradeResults` → `deriveAndPublish` — for it. A job with
+>   no usable strokes url, or a second failed attempt, is marked
+>   `RESULTS_DELIVERY_LOST` (the same code and copy the status poll already
+>   used for a lost delivery), which refunds the reservation and sends the
+>   failure mail through the existing `applyPolledFailure()` path. Capped
+>   separately from the poll (`RESULTS_SWEEP_CAP = 2`) and budgeted short of a
+>   serverless function's duration ceiling so a stuck job cannot freeze at
+>   `deriving` forever.
+> - `refusal-code.ts` — **new, pure.** `refusalCodeFor(status)` maps a
+>   `/api/splitstep/jobs` submit-refusal HTTP status (429/403/422/503) to the
+>   `error_code` `submit-match-video.ts` now records; any other status returns
+>   `null`. Split out so a spec can import it without `submit-match-video.ts`'s
+>   browser-only dependencies; that file re-exports it unchanged.
+>
+> `calculate_match_stats`, `swingvision-*`, `process-match` and existing match
+> data were not touched by any of the above. No migration was added — every
+> new code is written into the existing `error_code` / `error_category` /
+> `error_step` / `derivation_quality` columns — and no existing row was
+> rewritten: classification of a failed or stuck row happens at read time, in
+> `classifyFailure()`, from columns the row already carries.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 
@@ -360,6 +453,18 @@ serves".
 When `isInFlight(status) || isAnalysisFailed(status)`, the page renders hero +
 summary + `MatchAnalysisProgress` and **returns early**. Keep that gate. Every
 stat section below it would draw zeroes.
+
+**Since 2026-09-28, the gate has exactly one exemption.** A failed status whose
+recovery class (`classifyFailure()`, `src/lib/data/match-analysis.ts`) is
+`stats_unavailable` — a derivation that deterministically refused the vendor's
+data, e.g. points that resolved no winner — skips the short-circuit and
+renders the page normally, with the Statistics view showing a
+statistics-unavailable note instead of a stat section. Product decision,
+2026-09-27: a deterministic derivation failure should not block a player from
+seeing their own match — the score, details and any playable video are fine,
+and nothing about the vendor data will change on a retry. Every other
+in-flight or failed class, including the retryable ones, still returns early
+exactly as before.
 
 ### 3.4 Match deletion — `app/api/matches/[matchId]/route.ts`
 

@@ -161,3 +161,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The email table in `src/lib/services/email/index.ts` still describes "Analysis failed" generically — note that `stats_unavailable` doesn't send it.
+
+## T20 · Record the guardrail exceptions and correct stale pipeline docs — done
+
+**gate:** mechanical pass · completion pass (factual claims spot-checked against the code)
+**changed:** `docs/ui-revamp-guardrails.md` §2 gains one reviewed-exception entry (2026-09-28, video failure recovery) naming `resubmit-job.ts` (refusal), `submit-match-video.ts` + `refusal-code.ts` (code write, no 502 overwrite), `derive-and-publish.ts` (code + fold-flag write), `persist-transcript.ts` (return shape only), the `/rederive` route and handler (new route), `secure-results.ts` with the webhook extraction, and `reconcile.ts` (sweep); it records that `calculate_match_stats`, the SwingVision path and existing rows are untouched and no migration was added. §3.3 notes the single `stats_unavailable` exemption. `docs/video-pipeline-overview.md` now says the status endpoint is wired and the error columns are promoted and used. First draft misattributed the column writes to `finalize_splitstep_results` and to `classifyFailure()`; corrected in-run to `record_splitstep_webhook`, `reconcile.ts`, `submit-match-video.ts` and `derive-and-publish.ts`.
+**follow-ups:**
+
+1. `ui-revamp-guardrails.md`'s header still reads "current as of 2026-08-15".
+2. The §2 entry predates T7 (drawers), which is blocked; amend it if T7 lands.
