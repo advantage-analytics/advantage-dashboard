@@ -153,3 +153,11 @@ is the runner's. Newest entries at the bottom.
 
 1. `/m/[token]` share pages never show the caveat; decide whether they should.
 2. `resolveFoldUnreconciled` itself has no unit test — only the UI spec with a stubbed `meta` covers the path.
+
+## T19 · Failure email uses class copy and skips stats-unavailable — done
+
+**gate:** mechanical pass · completion pass (internal ops alert and success email byte-for-byte unchanged)
+**changed:** The athlete-facing `analysisFailedEmail` now renders the recovery class's title and body (wait-or-ask variant via `waitOrAskVariant`), plus the stored note only when `showsStoredNote` allows; `error_code` and the `failed · <step>` label no longer reach the athlete. `notifyAnalysisOutcome` selects the classifier's columns, counts the real attempt chain with `chainAttempts()` (one extra `processing_jobs` read), and skips the athlete email for `stats_unavailable`. The ops alert `analysisFailedInternalEmail` still fires for every failure, including `stats_unavailable`, with its diagnostic fields. New `tests/analysis-mail-copy.spec.ts`; `shell.ts` untouched.
+**follow-ups:**
+
+1. The email table in `src/lib/services/email/index.ts` still describes "Analysis failed" generically — note that `stats_unavailable` doesn't send it.

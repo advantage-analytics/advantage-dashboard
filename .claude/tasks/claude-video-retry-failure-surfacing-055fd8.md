@@ -256,7 +256,7 @@ ready).
 
 ## T19 · Failure email uses class copy and skips stats-unavailable
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T2, T4
 - **files:** src/lib/services/notifications/analysis-mail.ts, src/lib/services/email/templates/analysis.ts, tests/analysis-mail-copy.spec.ts (new unless a spec exists) (guess)
