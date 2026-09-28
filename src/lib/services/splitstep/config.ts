@@ -56,6 +56,11 @@ export const MIN_VIDEO_FPS = 30;
  * Whole-track container average frame rate below which the wizard refuses a
  * video before upload.
  *
+ * The vendor's recommendation, confirmed by email on 2026-09-28 (Q14 in
+ * docs/splitstep-vendor-questions.md): send 29.97 fps or higher. Its own hard
+ * gate is now 25 fps, so this is stricter than what it would reject — on
+ * purpose, for the reasons below.
+ *
  * The vendor's API docs (https://splitstep.ai/api-docs.html, checked
  * 2026-09-27) guarantee "29.97 fps (NTSC) and higher is accepted" and reject
  * below 29.9 fps by the vendor's own measurement — which reads lower than the

@@ -229,7 +229,7 @@ Winner indistinguishable. A `rally_end_reason` (`winner` / `out` / `net`), or
 anything marking that a player attempted and missed a shot, would unblock the
 remaining half.
 
-### Q14 — How is the frame-rate floor measured? **Blocks an accurate upload check.**
+### Q14 — How is the frame-rate floor measured? **Partly answered 2026-09-28 — floor lowered to 25; 29.97 still recommended.**
 
 A file whose own metadata reports **29.94 fps** was rejected with
 `VIDEO_FRAME_RATE_TOO_LOW` at step `trimming_video`, detail `video is 29.80 fps`,
@@ -261,9 +261,32 @@ Decided 2026-09-27, before an answer: the upload wizard **refuses** a file
 whose whole-track container average is under 29.97 (`MIN_CONTAINER_AVERAGE_FPS`),
 following the API docs' "29.97 fps (NTSC) and higher is accepted" — the band
 below that is not promised, and this file shows the vendor measures lower than
-the container. An answer to question 1 could let us narrow or relax that. A
-failure with `error_category = 'invalid_input'` is not offered a retry, since
-resubmitting the same file fails the same way.
+the container. A failure with `error_category = 'invalid_input'` is not offered
+a retry, since resubmitting the same file fails the same way.
+
+**Answer (Christian, SplitStep, 2026-09-28).** Asked by email with both jobs
+above plus the accepted one (`job_id` `f9faa057-e94f-4a65-a84c-62a2aca54b80`,
+`video_id` `599b8159-b143-44b2-b127-ce5588cc7d54`, container 29.95 fps,
+analyzed). The email asked two things: how the rate is calculated, and whether
+we should match our gate to it or keep 29.97. Reply, paraphrased: they have
+**lowered their internal threshold to 25 fps** so small differences in detected
+frame rate don't cause errors, but in practice we should **only send 29.97 fps
+or higher**, to get the best results and to avoid possibly being gated out.
+
+What that settles and what it does not:
+
+- **Question 2 — settled in practice.** Their hard gate is now 25 fps (the error
+  table's "below 29.9" is out of date). Variable-frame-rate footage above 25 is
+  not rejected, but 29.97 is the rate they stand behind.
+- **Question 1 — not answered.** How they compute the rate is still unknown; with
+  the gate at 25 it no longer decides whether a ~29.9 file is accepted.
+- **Question 3 (billing) — not asked** in the email; still open.
+
+**Decision, unchanged:** keep refusing below 29.97 (`MIN_CONTAINER_AVERAGE_FPS`).
+It is the vendor's own recommendation, and the one sub-29.97 file they accepted
+(29.95, above) was analyzed but lost five point winners and published nothing.
+If users are blocked on footage they need, the fallback is to refuse below 25
+and warn between 25 and 29.97.
 
 ---
 
