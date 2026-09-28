@@ -75,3 +75,44 @@ export function formatCourtPoint(
   if (x === null || y === null) return null;
   return `${x.toFixed(2)}, ${y.toFixed(2)}`;
 }
+
+/**
+ * The time cell's text → seconds, the inverse of {@link formatVideoTime}:
+ * "41:12.0", "1:02:03.4" or plain seconds ("2472", "2472.5"). Empty text
+ * clears the time (null); anything unreadable is `undefined`, and the cell
+ * keeps its editor open rather than writing it.
+ */
+export function parseVideoTime(text: string): number | null | undefined {
+  const trimmed = text.trim();
+  if (trimmed === "") return null;
+  const parts = trimmed.split(":");
+  if (parts.length > 3) return undefined;
+  const last = parts[parts.length - 1];
+  if (!/^\d+(\.\d+)?$/.test(last)) return undefined;
+  const whole = parts.slice(0, -1);
+  if (!whole.every((p) => /^\d+$/.test(p))) return undefined;
+  // Past the first field, minutes and seconds are clock digits: under 60.
+  if (parts.length > 1 && Number(last) >= 60) return undefined;
+  if (parts.length === 3 && Number(whole[1]) >= 60) return undefined;
+  return (
+    whole.reduce((total, p) => total * 60 + Number(p), 0) * 60 + Number(last)
+  );
+}
+
+/**
+ * A position cell's text → metres, the inverse of {@link formatCourtPoint}:
+ * "x, y" (a comma, spaces, or both between them). Empty text clears the
+ * position (null); anything else unreadable is `undefined`.
+ */
+export function parseCourtPoint(
+  text: string,
+): { x: number; y: number } | null | undefined {
+  const trimmed = text.trim();
+  if (trimmed === "") return null;
+  const parts = trimmed.split(/\s*,\s*|\s+/);
+  if (parts.length !== 2) return undefined;
+  const [x, y] = parts.map(Number);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
+  if (!parts.every((p) => /^-?\d+(\.\d+)?$/.test(p))) return undefined;
+  return { x, y };
+}

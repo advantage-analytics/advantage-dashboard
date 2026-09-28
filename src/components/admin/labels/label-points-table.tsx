@@ -9,11 +9,26 @@ import type {
   LabelSide,
 } from "@/lib/services/labels/session";
 import {
+  LABEL_ENDINGS,
+  LABEL_SHOT_RESULTS,
+  LABEL_STROKES,
+  type LabelPointPatch,
+  type LabelShotPatch,
+} from "@/lib/services/labels/edit";
+import {
+  EditableCell,
+  SelectEditor,
+  TextEditor,
+  type SelectOption,
+} from "./label-cells";
+import {
   ENDING_LABEL,
   RESULT_LABEL,
   STROKE_LABEL,
   formatCourtPoint,
   formatVideoTime,
+  parseCourtPoint,
+  parseVideoTime,
   type SideNames,
 } from "./label-format";
 import {
@@ -24,33 +39,58 @@ import {
 } from "./label-table-layout";
 
 /**
- * The console's points table — board 08's lower half, read-only (T5).
+ * The console's points table — board 08's lower half.
  *
  * One row per `label_points` row, in `point_index` order; the expanded
- * point's strokes fold underneath it in video order (the loader already put
- * them there with `orderLabelShots`). Every cell is plain text here: T6 turns
- * the right-hand columns and the shot cells into editors, T7 turns the
+ * point's strokes fold underneath it in video order (the console keeps them
+ * there with `orderLabelShots`, re-sorting after a time edit). The point's
+ * labelled columns (won by, ending, ended by) and every stroke value are
+ * `EditableCell`s: text until hovered, selected or opened from the keyboard,
+ * each change handed straight to the console to autosave. T7 turns the
  * deleted markers into expanders with Undo.
+ *
+ * Clicking a stroke (or tabbing into one) SELECTS it: the selected stroke
+ * shows every field, and it is the one a court click places.
  *
  * A tombstone is not drawn as a row at all. A deleted point or shot is a thin
  * red rule with a "Deleted point" / "Deleted shot" pill on it — present, so
  * the labeller can see something was removed there, but never read as a
  * point to check or a stroke to count.
  *
- * Stateless: which point is open is the caller's (`LabelConsole` holds it),
- * so a spec can render any point expanded without clicking.
+ * Stateless: which point is open, which stroke is selected and the rows
+ * themselves are the caller's (`LabelConsole` holds them), so a spec can
+ * render any state without clicking.
  */
 export function LabelPointsTable({
   points,
   names,
   expandedPointId,
   onTogglePoint,
+  editable = false,
+  selectedShotId = null,
+  onSelectShot,
+  onPatchPoint,
+  onPatchShot,
 }: {
   points: readonly LabelPoint[];
   names: SideNames;
   expandedPointId: string | null;
   onTogglePoint?: (pointId: string) => void;
+  /** False for a complete session, or with nothing to save to. */
+  editable?: boolean;
+  selectedShotId?: string | null;
+  onSelectShot?: (shotId: string) => void;
+  onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
+  onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
 }) {
+  const edit: EditContext = {
+    editable,
+    names,
+    selectedShotId,
+    onSelectShot,
+    onPatchPoint,
+    onPatchShot,
+  };
   return (
     <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
       <div className="min-w-[900px] px-6 pt-0.5 pb-1.5">
@@ -88,9 +128,9 @@ export function LabelPointsTable({
               <PointRow
                 key={point.id}
                 point={point}
-                names={names}
                 open={point.id === expandedPointId}
                 onToggle={onTogglePoint}
+                edit={edit}
               />
             ),
           )
@@ -100,17 +140,48 @@ export function LabelPointsTable({
   );
 }
 
+/** What every row needs to draw and save its editors. */
+interface EditContext {
+  editable: boolean;
+  names: SideNames;
+  selectedShotId: string | null;
+  onSelectShot?: (shotId: string) => void;
+  onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
+  onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
+}
+
+function sideOptions(names: SideNames): SelectOption[] {
+  return [
+    { value: "p1", label: names.p1 },
+    { value: "p2", label: names.p2 },
+  ];
+}
+
+const ENDING_OPTIONS: SelectOption[] = LABEL_ENDINGS.map((value) => ({
+  value,
+  label: ENDING_LABEL[value],
+}));
+const STROKE_OPTIONS: SelectOption[] = LABEL_STROKES.map((value) => ({
+  value,
+  label: STROKE_LABEL[value],
+}));
+const RESULT_OPTIONS: SelectOption[] = LABEL_SHOT_RESULTS.map((value) => ({
+  value,
+  label: RESULT_LABEL[value],
+}));
+
 function PointRow({
   point,
-  names,
   open,
   onToggle,
+  edit,
 }: {
   point: LabelPoint;
-  names: SideNames;
   open: boolean;
   onToggle?: (pointId: string) => void;
+  edit: EditContext;
 }) {
+  const { names } = edit;
   const number = point.pointIndex + 1;
   const shotsId = `label-point-${point.id}-shots`;
   const liveShots = point.shots.filter((shot) => shot.status !== "deleted");
@@ -120,7 +191,11 @@ function PointRow({
       <div
         data-row="point"
         data-point-id={point.id}
-        onClick={() => onToggle?.(point.id)}
+        onClick={(event) => {
+          // A click that lands in a cell is an edit, not a toggle.
+          if ((event.target as Element).closest("[data-cell]")) return;
+          onToggle?.(point.id);
+        }}
         className={cn(
           POINT_GRID,
           "-mx-4 min-h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 text-[13px] transition-colors duration-200",
@@ -171,9 +246,33 @@ function PointRow({
         <Calculated>{liveShots.length}</Calculated>
         <span aria-hidden="true" />
 
-        <Labelled>{sideLabel(point.winner, names)}</Labelled>
-        <Labelled>{point.ending ? ENDING_LABEL[point.ending] : null}</Labelled>
-        <Labelled>{sideLabel(point.endedBy, names)}</Labelled>
+        <PointSelectCell
+          point={point}
+          edit={edit}
+          field="winner"
+          label={`Point ${number} won by`}
+          value={point.winner}
+          text={sideLabel(point.winner, names)}
+          options={sideOptions(names)}
+        />
+        <PointSelectCell
+          point={point}
+          edit={edit}
+          field="ending"
+          label={`Point ${number} ending`}
+          value={point.ending}
+          text={point.ending ? ENDING_LABEL[point.ending] : null}
+          options={ENDING_OPTIONS}
+        />
+        <PointSelectCell
+          point={point}
+          edit={edit}
+          field="ended_by"
+          label={`Point ${number} ended by`}
+          value={point.endedBy}
+          text={sideLabel(point.endedBy, names)}
+          options={sideOptions(names)}
+        />
         <PointStatus checked={point.checkedAt !== null} />
       </div>
 
@@ -198,7 +297,7 @@ function PointRow({
               No strokes on this point
             </p>
           ) : (
-            <ShotRows shots={point.shots} names={names} />
+            <ShotRows shots={point.shots} edit={edit} />
           )}
         </div>
       ) : null}
@@ -212,10 +311,10 @@ function PointRow({
  */
 function ShotRows({
   shots,
-  names,
+  edit,
 }: {
   shots: readonly LabelShot[];
-  names: SideNames;
+  edit: EditContext;
 }) {
   let n = 0;
   return shots.map((shot) => {
@@ -223,28 +322,47 @@ function ShotRows({
       return <DeletedMarker key={shot.id} kind="shot" />;
     }
     n += 1;
-    return <ShotRow key={shot.id} shot={shot} number={n} names={names} />;
+    return <ShotRow key={shot.id} shot={shot} number={n} edit={edit} />;
   });
 }
 
 function ShotRow({
   shot,
   number,
-  names,
+  edit,
 }: {
   shot: LabelShot;
   number: number;
-  names: SideNames;
+  edit: EditContext;
 }) {
+  const { names, editable, onSelectShot, onPatchShot } = edit;
   const added = shot.status === "added";
+  const selected = shot.id === edit.selectedShotId;
+  const select = () => {
+    if (!selected) onSelectShot?.(shot.id);
+  };
+  const patch = (value: LabelShotPatch) => onPatchShot?.(shot.id, value);
+  const cell = { editable, rowSelected: selected };
+  const hitAt = formatCourtPoint(shot.contactX, shot.contactY);
+  const landedAt = formatCourtPoint(shot.landingX, shot.landingY);
+  const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
+
   return (
+    // Selecting is a pointer convenience; the keyboard selects by focusing
+    // any cell in the row, which bubbles here as the same call.
     <div
       data-row="shot"
       data-shot-id={shot.id}
+      data-selected={selected ? "" : undefined}
+      onClick={select}
+      onFocus={select}
       className={cn(
         SHOT_GRID,
-        "min-h-[44px] text-[13px] text-[var(--ink-900)]",
+        "min-h-[44px] text-[13px] text-[var(--ink-900)] transition-colors duration-200",
         added && "rounded-[var(--radius-element)]",
+        selected
+          ? "bg-[var(--surface-card)] shadow-[inset_0_1px_0_var(--border-hairline),inset_0_-1px_0_var(--border-hairline)]"
+          : editable && "cursor-pointer hover:bg-[var(--surface-subtle)]",
       )}
       style={
         added
@@ -256,15 +374,74 @@ function ShotRow({
           : undefined
       }
     >
-      <span className="tabular text-[var(--ink-600)]">{number}</span>
-      <Cell>
-        {shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null}
-      </Cell>
-      <Cell>{sideLabel(shot.hitter, names)}</Cell>
-      <Cell>{shot.stroke ? STROKE_LABEL[shot.stroke] : null}</Cell>
-      <Cell>{shot.result ? RESULT_LABEL[shot.result] : null}</Cell>
-      <Cell>{formatCourtPoint(shot.contactX, shot.contactY)}</Cell>
-      <Cell>{formatCourtPoint(shot.landingX, shot.landingY)}</Cell>
+      <span
+        className={cn(
+          "tabular",
+          selected
+            ? "font-medium text-[var(--ink-900)]"
+            : "text-[var(--ink-600)]",
+        )}
+      >
+        {number}
+      </span>
+      <EditableCell
+        {...cell}
+        label={`Shot ${number} time`}
+        valueText={time ?? "Not set"}
+        display={<Value>{time}</Value>}
+        editor={
+          <TextEditor
+            label={`Shot ${number} time`}
+            text={time ?? ""}
+            parse={parseVideoTime}
+            onCommit={(value) => patch({ video_time: value as number | null })}
+          />
+        }
+      />
+      <ShotSelectCell
+        {...cell}
+        label={`Shot ${number} player`}
+        value={shot.hitter}
+        text={sideLabel(shot.hitter, names)}
+        options={sideOptions(names)}
+        onChange={(value) => patch({ hitter: value as LabelSide | null })}
+      />
+      <ShotSelectCell
+        {...cell}
+        label={`Shot ${number} stroke`}
+        value={shot.stroke}
+        text={shot.stroke ? STROKE_LABEL[shot.stroke] : null}
+        options={STROKE_OPTIONS}
+        onChange={(value) =>
+          patch({ stroke: value as LabelShotPatch["stroke"] })
+        }
+      />
+      <ShotSelectCell
+        {...cell}
+        label={`Shot ${number} result`}
+        value={shot.result}
+        text={shot.result ? RESULT_LABEL[shot.result] : null}
+        options={RESULT_OPTIONS}
+        onChange={(value) =>
+          patch({ result: value as LabelShotPatch["result"] })
+        }
+      />
+      <PositionCell
+        {...cell}
+        label={`Shot ${number} hit at`}
+        text={hitAt}
+        onCommit={(p) =>
+          patch({ contact_x: p?.x ?? null, contact_y: p?.y ?? null })
+        }
+      />
+      <PositionCell
+        {...cell}
+        label={`Shot ${number} landed at`}
+        text={landedAt}
+        onCommit={(p) =>
+          patch({ landing_x: p?.x ?? null, landing_y: p?.y ?? null })
+        }
+      />
       <span className="flex min-w-0 items-center">
         {added ? (
           <StatePill>Added</StatePill>
@@ -347,11 +524,119 @@ function Labelled({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Cell({ children }: { children: React.ReactNode }) {
+/** A stroke value: an em dash until it is set. */
+function Value({ children }: { children: React.ReactNode }) {
+  return <>{children ?? <EmptyMark label="Not set" />}</>;
+}
+
+/** One of the point's labelled columns, as a select. */
+function PointSelectCell({
+  point,
+  edit,
+  field,
+  label,
+  value,
+  text,
+  options,
+}: {
+  point: LabelPoint;
+  edit: EditContext;
+  field: "winner" | "ending" | "ended_by";
+  label: string;
+  value: string | null;
+  text: string | null;
+  options: readonly SelectOption[];
+}) {
   return (
-    <span className="tabular truncate">
-      {children ?? <EmptyMark label="Not set" />}
-    </span>
+    <EditableCell
+      editable={edit.editable}
+      label={label}
+      valueText={text ?? "Not labelled"}
+      display={<Labelled>{text}</Labelled>}
+      editor={
+        <SelectEditor
+          label={label}
+          value={value}
+          options={options}
+          onChange={(next) =>
+            edit.onPatchPoint?.(point.id, {
+              [field]: next,
+            } as LabelPointPatch)
+          }
+        />
+      }
+    />
+  );
+}
+
+function ShotSelectCell({
+  editable,
+  rowSelected,
+  label,
+  value,
+  text,
+  options,
+  onChange,
+}: {
+  editable: boolean;
+  rowSelected: boolean;
+  label: string;
+  value: string | null;
+  text: string | null;
+  options: readonly SelectOption[];
+  onChange: (value: string | null) => void;
+}) {
+  return (
+    <EditableCell
+      editable={editable}
+      rowSelected={rowSelected}
+      label={label}
+      valueText={text ?? "Not set"}
+      display={<Value>{text}</Value>}
+      editor={
+        <SelectEditor
+          label={label}
+          value={value}
+          options={options}
+          onChange={onChange}
+        />
+      }
+    />
+  );
+}
+
+/** "x, y" in metres, typed; the court click is the other way in. */
+function PositionCell({
+  editable,
+  rowSelected,
+  label,
+  text,
+  onCommit,
+}: {
+  editable: boolean;
+  rowSelected: boolean;
+  label: string;
+  text: string | null;
+  onCommit: (point: { x: number; y: number } | null) => void;
+}) {
+  return (
+    <EditableCell
+      editable={editable}
+      rowSelected={rowSelected}
+      label={label}
+      valueText={text ?? "Not set"}
+      display={<Value>{text}</Value>}
+      editor={
+        <TextEditor
+          label={`${label}, metres x, y`}
+          text={text ?? ""}
+          parse={parseCourtPoint}
+          onCommit={(value) =>
+            onCommit(value as { x: number; y: number } | null)
+          }
+        />
+      }
+    />
   );
 }
 

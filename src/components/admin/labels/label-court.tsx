@@ -4,6 +4,7 @@ import {
   LINE_COLOR,
 } from "@/components/dashboard/matches/match-detail/shots/court-art";
 import type { LabelShot } from "@/lib/services/labels/session";
+import { cn } from "@/lib/utils";
 import {
   COURT_LENGTH,
   COURT_VIEW_BOX,
@@ -13,6 +14,8 @@ import {
   NET_Y,
   SINGLES_HALF_WIDTH,
   fromCourt,
+  toCourt,
+  type CourtPoint,
 } from "./court-geometry";
 import type { SideNames } from "./label-format";
 
@@ -22,9 +25,11 @@ import type { SideNames } from "./label-format";
  * where it landed, a dashed line between. Player 1's marks are white,
  * player 2's black, as the legend in the apron's corner says.
  *
- * Read-only in T5: the art is not a button yet, and there is no cursor
- * crosshair. Click placement (T6) turns the art box into the control and
- * calls `toCourt` with the click's percent position.
+ * With a stroke selected (and the session open), the art box is a button
+ * under a crosshair: a click is converted to metres with `toCourt` and handed
+ * to `onPlace` — which end it places is court-placement.ts's sequence, and
+ * the line under the court says which. The selected stroke's marks carry a
+ * `--blue` ring so the labeller can see what they are moving.
  *
  * The court palette comes from `court-art.tsx`'s exports rather than a second
  * copy of the literals — `scripts/check-design-drift.mjs` allowlists them in
@@ -39,13 +44,17 @@ const MARK_OUTLINE = { p1: DARK_MARK, p2: LINE_COLOR } as const;
 /** A stroke on screen: its hitter's colour and whichever ends are known. */
 interface Mark {
   id: string;
+  selected: boolean;
   color: string;
   outline: string;
   hit: { sx: number; sy: number } | null;
   landed: { sx: number; sy: number } | null;
 }
 
-function marksFor(shots: readonly LabelShot[]): Mark[] {
+function marksFor(
+  shots: readonly LabelShot[],
+  selectedShotId: string | null,
+): Mark[] {
   const marks: Mark[] = [];
   for (const shot of shots) {
     if (shot.status === "deleted") continue;
@@ -61,6 +70,7 @@ function marksFor(shots: readonly LabelShot[]): Mark[] {
     const side = shot.hitter ?? "p1";
     marks.push({
       id: shot.id,
+      selected: shot.id === selectedShotId,
       color: MARK_COLOR[side],
       outline: MARK_OUTLINE[side],
       hit,
@@ -76,15 +86,99 @@ export function LabelCourt({
   title,
   shots,
   names,
+  selectedShotId = null,
+  prompt = null,
+  onPlace,
 }: {
   /** The card's eyebrow: "Court · point 12", or "Court" with nothing chosen. */
   title: string;
   /** The selected point's strokes, in video order. Tombstones are skipped. */
   shots: readonly LabelShot[];
   names: SideNames;
+  /** The stroke a click places; its marks are ringed. */
+  selectedShotId?: string | null;
+  /** "Click where shot 3 was hit" — null when a click would place nothing. */
+  prompt?: string | null;
+  /** A click on the court, in metres. Absent: the court is a picture. */
+  onPlace?: (point: CourtPoint) => void;
 }) {
-  const marks = marksFor(shots);
+  const marks = marksFor(shots, selectedShotId);
   const placed = marks.length;
+  const placing = prompt !== null && onPlace !== undefined;
+  const description =
+    placed === 0
+      ? "Court with no strokes placed"
+      : `Court with ${placed} ${placed === 1 ? "stroke" : "strokes"} placed`;
+  const art = (
+    <>
+      <CourtArt />
+      <svg
+        className="absolute inset-0 block h-full w-full overflow-visible"
+        aria-hidden="true"
+        data-court-marks=""
+      >
+        {marks.map((mark) =>
+          mark.hit && mark.landed ? (
+            <line
+              key={`${mark.id}-path`}
+              x1={pct(mark.hit.sx)}
+              y1={pct(mark.hit.sy)}
+              x2={pct(mark.landed.sx)}
+              y2={pct(mark.landed.sy)}
+              stroke={mark.color}
+              strokeWidth="1"
+              strokeDasharray="3 3"
+              opacity="0.6"
+            />
+          ) : null,
+        )}
+        {marks.map((mark) =>
+          mark.selected
+            ? [mark.hit, mark.landed].map((end, i) =>
+                end ? (
+                  <circle
+                    key={`${mark.id}-ring-${i}`}
+                    data-selected-ring=""
+                    cx={pct(end.sx)}
+                    cy={pct(end.sy)}
+                    r="7.5"
+                    fill="none"
+                    strokeWidth="1.5"
+                    style={{ stroke: "var(--blue)" }}
+                  />
+                ) : null,
+              )
+            : null,
+        )}
+        {marks.map((mark) =>
+          mark.hit ? (
+            <circle
+              key={`${mark.id}-hit`}
+              cx={pct(mark.hit.sx)}
+              cy={pct(mark.hit.sy)}
+              r="4"
+              fill="none"
+              stroke={mark.color}
+              strokeWidth="1.5"
+            />
+          ) : null,
+        )}
+        {marks.map((mark) =>
+          mark.landed ? (
+            <circle
+              key={`${mark.id}-landed`}
+              cx={pct(mark.landed.sx)}
+              cy={pct(mark.landed.sy)}
+              r="3.5"
+              fill={mark.color}
+              stroke={mark.outline}
+              strokeWidth="0.5"
+            />
+          ) : null,
+        )}
+      </svg>
+    </>
+  );
 
   return (
     <section
@@ -129,70 +223,53 @@ export function LabelCourt({
           </span>
         </div>
 
-        <div
-          className="relative h-[430px] w-[191px]"
-          role="img"
-          aria-label={
-            placed === 0
-              ? "Court with no strokes placed"
-              : `Court with ${placed} ${placed === 1 ? "stroke" : "strokes"} placed`
-          }
-        >
-          <CourtArt />
-          <svg
-            className="absolute inset-0 block h-full w-full overflow-visible"
-            aria-hidden="true"
-            data-court-marks=""
+        {placing ? (
+          <button
+            type="button"
+            data-court-target=""
+            aria-label={`${prompt}. ${description}. Positions can also be typed in the stroke's row.`}
+            onClick={(event) => {
+              // A keyboard press has no position to place.
+              if (event.detail === 0) return;
+              const box = event.currentTarget.getBoundingClientRect();
+              if (box.width === 0 || box.height === 0) return;
+              onPlace(
+                toCourt({
+                  sx: ((event.clientX - box.left) / box.width) * 100,
+                  sy: ((event.clientY - box.top) / box.height) * 100,
+                }),
+              );
+            }}
+            className="relative block h-[430px] w-[191px] cursor-crosshair rounded-[var(--radius-element)] border-0 bg-transparent p-0"
           >
-            {marks.map((mark) =>
-              mark.hit && mark.landed ? (
-                <line
-                  key={`${mark.id}-path`}
-                  x1={pct(mark.hit.sx)}
-                  y1={pct(mark.hit.sy)}
-                  x2={pct(mark.landed.sx)}
-                  y2={pct(mark.landed.sy)}
-                  stroke={mark.color}
-                  strokeWidth="1"
-                  strokeDasharray="3 3"
-                  opacity="0.6"
-                />
-              ) : null,
-            )}
-            {marks.map((mark) =>
-              mark.hit ? (
-                <circle
-                  key={`${mark.id}-hit`}
-                  cx={pct(mark.hit.sx)}
-                  cy={pct(mark.hit.sy)}
-                  r="4"
-                  fill="none"
-                  stroke={mark.color}
-                  strokeWidth="1.5"
-                />
-              ) : null,
-            )}
-            {marks.map((mark) =>
-              mark.landed ? (
-                <circle
-                  key={`${mark.id}-landed`}
-                  cx={pct(mark.landed.sx)}
-                  cy={pct(mark.landed.sy)}
-                  r="3.5"
-                  fill={mark.color}
-                  stroke={mark.outline}
-                  strokeWidth="0.5"
-                />
-              ) : null,
-            )}
-          </svg>
-        </div>
+            {art}
+          </button>
+        ) : (
+          <div
+            className="relative h-[430px] w-[191px]"
+            role="img"
+            aria-label={description}
+          >
+            {art}
+          </div>
+        )}
       </div>
 
-      <div className="flex h-12 items-center px-4 text-[12px] text-[var(--ink-600)]">
-        {placed === 0
-          ? "No strokes placed on this point"
-          : `${placed} ${placed === 1 ? "stroke" : "strokes"} placed`}
+      <div
+        className={cn(
+          "flex h-12 items-center px-4 text-[12px]",
+          placing
+            ? "font-medium text-[var(--ink-900)]"
+            : "text-[var(--ink-600)]",
+        )}
+        data-court-prompt={placing ? "" : undefined}
+        aria-live="polite"
+      >
+        {placing
+          ? prompt
+          : placed === 0
+            ? "No strokes placed on this point"
+            : `${placed} ${placed === 1 ? "stroke" : "strokes"} placed`}
       </div>
     </section>
   );

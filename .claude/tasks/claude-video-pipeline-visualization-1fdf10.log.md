@@ -100,3 +100,28 @@ Decisions:
 3. An added shot with no `video_time` sorts to the end of its point; it should sit after its `after_event_id` instead.
 4. Board 08's set/game group headers, and refreshing the SAS URL during long sessions.
 5. Not yet run against real data: the label tables aren't live, and neither the loader nor the video URL has been exercised.
+
+## T6 · Field editing with autosave and court click placement — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:**
+
+- **Server actions.** New `updateLabelShot` / `updateLabelPoint`, backed by the pure `src/lib/services/labels/edit.ts` and the admin-checked `edit-session.ts`.
+  - They check allowed keys and values before touching anything, and refuse edits to a deleted row or a `complete` session.
+- **Edited-status baseline.** A shot counts as edited when a value differs from its seeded value, which is the vendor stroke mapped at the pinned derivation version (tolerance 1 cm / 0.05 s).
+  - Why: hitter, result and serve number can't be recomputed from one raw stroke.
+  - An edited shot never reverts to kept.
+- **Court placement.** `court-placement.ts` (`nextPlacement`, `placementPrompt`) cycles hit → landed → hit.
+- **Autosave.** Optimistic, reverting on error, with the save line ("Saving…" / "Saved · just now" / "Not saved · reason") in `save-status.ts` and `label-save-status.tsx`. No Save button.
+- **Editable cells.** `label-cells.tsx`: cells are text until hovered or selected, with Enter/Space to edit and Escape to cancel. The selected shot row mounts all its editors.
+- **Header.** Moved into `LabelConsole`. The Result column is now 64px.
+- **Tests.** `label-edit` and `label-console-edit` specs, plus 7 new render tests in `label-console`. The implementer also drove the UI in headless Chromium on a throwaway route, since deleted.
+
+**follow-ups:**
+
+1. Add a frozen `label_shots.seed jsonb` so an edited shot can revert to `kept` when its values are set back.
+2. There's no UI yet for `serve_side`, `note` or `unclear`; the actions accept them, but the loader doesn't fetch `note`/`unclear`.
+3. Two quick edits to the same row compute status from the row as read, so they can race (harmless while the rule never un-edits).
+4. Clicking a Hit at / Landed at cell could choose which end the next court click places.
+5. Point rows have no "Edited" marker.

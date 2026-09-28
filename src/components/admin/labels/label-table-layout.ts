@@ -34,7 +34,7 @@ export const POINT_COLUMNS: readonly {
 
 /** Shots indent under their point: 44px, the board's `.srow` left padding. */
 export const SHOT_GRID =
-  "grid grid-cols-[32px_76px_96px_128px_48px_112px_112px_minmax(0,1fr)] items-center gap-x-3 pr-4 pl-11";
+  "grid grid-cols-[32px_76px_96px_128px_64px_112px_112px_minmax(0,1fr)] items-center gap-x-3 pr-4 pl-11";
 
 export const SHOT_COLUMNS: readonly string[] = [
   "Shot",

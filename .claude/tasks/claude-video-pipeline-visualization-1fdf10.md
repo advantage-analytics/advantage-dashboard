@@ -85,7 +85,7 @@ ready).
 
 ## T6 · Field editing with autosave and court click placement
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** src/app/admin/labels/actions.ts, src/components/admin/labels/* (guess)

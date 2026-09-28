@@ -13,16 +13,35 @@ import {
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
- * `/admin/labels/[sessionId]`'s console (T5), rendered offline from a fixture
- * session through `fixtures/vm-modules` — the real table, court and player,
- * nothing stubbed.
+ * `/admin/labels/[sessionId]`'s console (T5, editing T6), rendered offline
+ * from a fixture session through `fixtures/vm-modules` — the real table,
+ * court and player, nothing stubbed.
  */
 
 type ConsoleProps = {
   session: LabelSession;
   video: LabelVideo | null;
   initialExpandedPointId?: string | null;
+  initialSelectedShotId?: string | null;
+  onSaveShot?: (...args: unknown[]) => Promise<unknown>;
+  onSavePoint?: (...args: unknown[]) => Promise<unknown>;
 };
+
+/** Save functions that are never called by a static render. */
+const SAVES = {
+  onSaveShot: async () => ({ ok: true, status: "edited" }),
+  onSavePoint: async () => ({ ok: true, status: "edited" }),
+};
+
+/** The markup of one row, up to the next row of any kind. */
+function rowMarkup(html: string, attr: string): string {
+  const start = html.indexOf(attr);
+  expect(start).toBeGreaterThan(-1);
+  const next = html.indexOf("data-row=", start + attr.length);
+  return html.slice(start, next === -1 ? undefined : next);
+}
+
+const EDITORS = /<select|<input|<textarea/g;
 
 function render(props: ConsoleProps): string {
   const { LabelConsole } = createLoader().load(
@@ -155,4 +174,152 @@ test("no labels component reads a flags field", () => {
     const source = readFileSync(path.join(dir, file), "utf8");
     expect(source, file).not.toMatch(/\bflags\b/i);
   }
+});
+
+test.describe("editing (T6)", () => {
+  test("every value cell is text until hovered or selected", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      ...SAVES,
+    });
+    // An open point with three strokes, and not one form control.
+    expect(count(html, /data-row="shot"/g)).toBe(3);
+    expect(count(html, EDITORS)).toBe(0);
+    // Each cell is a keyboard stop that names what it edits.
+    expect(html).toContain('aria-label="Point 1 won by: Vargas"');
+    expect(html).toContain('aria-label="Shot 2 stroke: Backhand"');
+    expect(html).toContain('aria-label="Shot 1 hit at: -0.80, -0.32"');
+    expect(count(html, /role="button" tabindex="0"/g)).toBeGreaterThanOrEqual(
+      3 * 3 + 3 * 6,
+    );
+  });
+
+  test("the selected stroke's row mounts its editors, and only that row", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      initialSelectedShotId: "s-return",
+      ...SAVES,
+    });
+    const selected = rowMarkup(html, 'data-shot-id="s-return"');
+    expect(selected).toContain("data-selected");
+    // Player, stroke, result as selects; time, hit at, landed at as inputs.
+    expect(count(selected, /<select/g)).toBe(3);
+    expect(count(selected, /<input/g)).toBe(3);
+    expect(selected).toContain('aria-label="Shot 2 stroke"');
+    expect(selected).toMatch(/<option value="backhand" selected="">/);
+
+    expect(count(rowMarkup(html, 'data-shot-id="s-serve"'), EDITORS)).toBe(0);
+    expect(count(rowMarkup(html, 'data-shot-id="s-added"'), EDITORS)).toBe(0);
+    expect(
+      count(
+        rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P1}"`),
+        EDITORS,
+      ),
+    ).toBe(0);
+    expect(count(html, EDITORS)).toBe(6);
+  });
+
+  test("the court asks where the selected stroke was hit", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      initialSelectedShotId: "s-return",
+      ...SAVES,
+    });
+    // The art box is the control; the line under it is the prompt.
+    expect(html).toMatch(/<button[^>]*data-court-target/);
+    expect(html).toMatch(
+      /data-court-prompt="[^"]*"[^>]*>Click where shot 2 was hit</,
+    );
+    // Its marks are ringed: a hit and a landing.
+    expect(count(html, /data-selected-ring/g)).toBe(2);
+
+    const none = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      ...SAVES,
+    });
+    expect(none).not.toContain("data-court-target");
+    expect(text(none)).not.toContain("Click where");
+    expect(text(none)).toContain("3 strokes placed");
+  });
+
+  test("without a way to save, the console is read-only", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      initialSelectedShotId: "s-return",
+    });
+    expect(count(html, EDITORS)).toBe(0);
+    expect(html).not.toContain('role="button" tabindex="0"');
+    expect(html).not.toContain("data-court-target");
+  });
+
+  test("a complete session is read-only too", () => {
+    const html = render({
+      session: { ...labelSessionFixture(), status: "complete" },
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      initialSelectedShotId: "s-return",
+      ...SAVES,
+    });
+    expect(count(html, EDITORS)).toBe(0);
+    expect(text(html)).toContain("· Complete");
+  });
+
+  test("the header carries the progress and the save line, and no Save button", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      ...SAVES,
+    });
+    const out = text(html);
+    expect(out).toContain("Label match · Jordan Lee vs Elena Vargas");
+    expect(out).toContain("1 of 3 points checked");
+    expect(out).toContain("derivation 0.3.2");
+    expect(html).toContain('data-save-status="idle"');
+    expect(html).not.toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*\bSave\b/);
+
+    const page = readFileSync(
+      path.resolve("src/app/admin/labels/[sessionId]/page.tsx"),
+      "utf8",
+    );
+    expect(page).not.toMatch(/>\s*Save\s*</);
+  });
+
+  test("the save line reads Saved · just now, or the error", () => {
+    const { LabelSaveStatus } = createLoader().load(
+      "src/components/admin/labels/label-save-status.tsx",
+    ) as {
+      LabelSaveStatus: React.ComponentType<{ status: unknown; now?: number }>;
+    };
+    const at = 1_000_000;
+    const saved = renderToStaticMarkup(
+      React.createElement(LabelSaveStatus, {
+        status: { pending: 0, last: { kind: "saved", at } },
+        now: at + 1_000,
+      }),
+    );
+    expect(saved).toContain('data-save-status="saved"');
+    expect(text(saved)).toBe("Saved · just now");
+
+    const failed = renderToStaticMarkup(
+      React.createElement(LabelSaveStatus, {
+        status: {
+          pending: 0,
+          last: { kind: "error", message: "write refused" },
+        },
+        now: at,
+      }),
+    );
+    expect(failed).toContain('role="alert"');
+    expect(text(failed)).toBe("Not saved · write refused");
+  });
 });
