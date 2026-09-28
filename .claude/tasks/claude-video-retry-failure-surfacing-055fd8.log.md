@@ -274,3 +274,11 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical PASS · completion PASS
 **changed:** `addVideoAction` takes an optional matchId and builds its href with `addVideoHref`; `analysisAction`'s upload_again / fix_recording branch passes the match id, so "Add video" opens `/dashboard/matches/new?match=<id>`. `manual` and the no-recovery "Start over" fallback keep the bare wizard URL. Doc comments updated; the timeline spec's add-video case expects `?match=m1`.
+
+## T31 · Activity feed carries each failed row's recovery class — done
+
+**gate:** mechanical PASS · completion PASS
+**changed:** `getActivityFeed` selects the recovery columns (live schema checked; no `error_message`), keeps the `!inner` join and `scopeToWorkspace`, groups rows by match and derives each item's `recovery` via `recoveryFields(jobRecoveryFacts({...row, hasVideo, hasResults}), chainAttempts(...), null)`. `ActivityAnalysis` gains `recovery`, `jobId`, `attemptsUsed`, `errorCode`; storage keys stay server-side booleans. Comment records the 50-row `MAX_ITEMS` chain-count limit. New offline spec tests/activity-feed-recovery.spec.ts pins all six classes and the no-key-leak check.
+**follow-ups:**
+
+1. Run `rls-boundary-reviewer` at /pr-check: the select now reads storage-key columns on the server.

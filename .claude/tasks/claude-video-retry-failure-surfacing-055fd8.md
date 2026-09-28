@@ -420,7 +420,7 @@ ready).
 
 ## T31 · Activity feed carries each failed row's recovery class
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/activity-server.ts, tests/activity-feed-recovery.spec.ts (new, guess)
 - **done when:**
