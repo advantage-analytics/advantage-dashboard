@@ -84,6 +84,13 @@ export async function buildTranscriptForJob(params: {
   transcript: Transcript | null;
   reason: string | null;
   job: JobRow | null;
+  /**
+   * The vendor's results JSON exactly as parsed from Storage, set whenever the
+   * download succeeded. The label seed (src/lib/services/labels) freezes each
+   * raw stroke next to its label row, and reading it here means one download
+   * serves both the transcript and the seed.
+   */
+  raw?: unknown;
 }> {
   const { supabase, jobId } = params;
 
@@ -136,7 +143,8 @@ export async function buildTranscriptForJob(params: {
   // `shots.video_time` are what the player seeks against, and the player seeks
   // in the ORIGINAL video while the vendor timestamps the trimmed one.
   const startTimeSeconds = Number(job.start_time_seconds ?? 0);
-  const analysis = analyzeResults(JSON.parse(await blob.text()), {
+  const raw: unknown = JSON.parse(await blob.text());
+  const analysis = analyzeResults(raw, {
     startTimeSeconds: Number.isFinite(startTimeSeconds) ? startTimeSeconds : 0,
   });
 
@@ -153,7 +161,7 @@ export async function buildTranscriptForJob(params: {
     bestOf: match.format?.best_of ?? 3,
   });
 
-  return { transcript, reason: transcript.reason, job };
+  return { transcript, reason: transcript.reason, job, raw };
 }
 
 /**

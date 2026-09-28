@@ -24,3 +24,35 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `event_id` is unique only within one vendor payload; T1's key `(session_id, event_id)` already scopes it per session (one job), so no change needed — keep it that way.
+
+## T3 · Seed a label session from a job's raw strokes — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:**
+
+- `src/lib/services/labels/seed.ts` (new, pure): `buildLabelSeed`, plus the tested mappers `labelEnding`, `labelStroke`, `labelShotResult` and `endedBy`.
+- `src/lib/services/labels/seed-session.ts` (new, orchestration):
+  - Returns the existing `labelling` session before doing any download.
+  - Rebuilds the transcript from the current code.
+  - Recovers from a 23505 insert race.
+  - Writes points and then shots in batches.
+  - Deletes a half-seeded session if a write fails.
+  - Is gated by `requireAdmin`.
+- `src/app/admin/labels/actions.ts` (new): `seedLabelSessionAction`.
+- `persist-transcript.ts`: `buildTranscriptForJob` also returns `raw`, reusing its single download (additive).
+- `tests/label-seed.spec.ts`: 20 tests, covering the fixture invariants and a recording fake client.
+
+Decisions:
+
+- `winner` is null when the derived winner never resolved (not a confident p2).
+- Volley side comes from the vendor's `stroke_side`.
+- `point_index` is 0-based.
+- `labeller` is set explicitly, because `auth.uid()` is null under the service role.
+
+**follow-ups:**
+
+1. Migration must be applied live before the seed can run against job d3bff342….
+2. `serve_side` isn't prefilled — could come from `serveCourtSide` on the deciding serve.
+3. Raw strokes the parse layer drops are never seeded, so a labeller can't mark them; consider seeding them.
+4. T4 can use `{ existing }` from `seedLabelSession` to show "resumed" vs "new".

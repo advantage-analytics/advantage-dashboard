@@ -43,7 +43,7 @@ ready).
 
 ## T3 · Seed a label session from a job's raw strokes
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T2
 - **files:** src/lib/services/labels/seed.ts, src/app/admin/labels/actions.ts, tests/label-seed.spec.ts (guess)
