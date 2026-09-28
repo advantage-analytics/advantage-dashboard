@@ -189,7 +189,7 @@ ready).
 
 ## T14 · Add the /rederive route
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T13
 - **files:** src/app/api/splitstep/jobs/[jobId]/rederive/route.ts (new, wiring), src/app/api/splitstep/jobs/[jobId]/rederive/handler.ts (new, decision), tests/rederive-handler.spec.ts (new), MAP.md (api list) (guess)

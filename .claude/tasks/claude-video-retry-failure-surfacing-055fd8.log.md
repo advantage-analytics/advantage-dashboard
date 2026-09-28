@@ -103,3 +103,12 @@ is the runner's. Newest entries at the bottom.
 1. "job not found" / "match not found" map to `DERIVATION_ERROR` (rebuildable) — right for a failed read, but a truly deleted row will just fail again on rebuild.
 2. An invalid-JSON results file throws inside the build and lands as `DERIVATION_ERROR` though it is deterministic; mark it refused explicitly if that matters.
 3. The fold merge is read-modify-write; switch to an atomic jsonb `||` RPC if another writer of `derivation_quality` ever runs concurrently.
+
+## T14 · Add the /rederive route — done
+
+**gate:** mechanical pass · completion pass (ownership from `getUser()`; no raw DB errors returned)
+**changed:** New `POST /api/splitstep/jobs/[jobId]/rederive`: `handler.ts` (injected deps) runs 401 → 404 (missing / not the uploader) → 409 unless `derivation_failed` + `classifyFailure` = `rederive` + results present → conditional claim `derivation_failed → deriving` (0 rows → 409) → `deriveAndPublish` once with the webhook's deadline formula (start + 60 s − 8 s). Failure reasons go to `pipelineLog` only. `route.ts` is wiring with `runtime = "nodejs"`, `maxDuration = 60`. New `tests/rederive-handler.spec.ts` (9 cases). MAP.md's api list names the route; `npm run map` clean.
+**follow-ups:**
+
+1. A platform timeout during the transcript write or the stats RPCs (which the deadline doesn't bound) leaves the row at `deriving` forever — no catch runs, and `/rederive` only claims `derivation_failed`. The webhook path shares this. Needs a sweep that resets stale `deriving` rows to `derivation_failed` / `DERIVATION_ERROR`.
+2. `deriveAndPublish` re-writes `deriving` after the claim — harmless, redundant.
