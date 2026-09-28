@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Expose the raw point score and both players' hands to the match page
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/data/match-points-server.ts, src/components/dashboard/matches/match-data-provider.tsx or a small helper next to it, tests/ (guess)
 - **done when:**
