@@ -70,7 +70,7 @@ ready).
 
 ## T5 · Read-only console: video, court, points and shots table
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4
 - **files:** src/app/admin/labels/[sessionId]/page.tsx, src/components/admin/labels/* (guess)

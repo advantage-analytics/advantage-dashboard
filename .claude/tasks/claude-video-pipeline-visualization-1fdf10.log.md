@@ -78,3 +78,25 @@ Decisions:
 1. A job whose latest session is `complete` shows "Continue" but the action would seed a new session — may want a third state once real use shows it.
 2. No pagination on the jobs list (fine at current volume).
 3. The page errors or shows nothing until the label migration is applied live.
+
+## T5 · Read-only console: video, court, points and shots table — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:**
+
+- `/admin/labels/[sessionId]` replaces the T4 placeholder. It shows a header with the checked count, a video and court band, and a read-only points table with shots folded under their point. Deleted points and shots render as "Deleted point"/"Deleted shot" markers; added and edited shots get pills.
+- New pure module `src/lib/services/labels/session.ts`, holding the shared types, `orderLabelShots` (video_time, then event_id) and `labelProgress`.
+- `getLabelSession` and `loadJobVideo` added to `labels-server.ts`. The video plays from a SAS URL minted for the labelled job itself.
+- `court-geometry.ts` adds `toCourt`/`fromCourt` in percent 0–100. The court colours are imported from `court-art.tsx`.
+- New components in `src/components/admin/labels/`: `label-console`, `label-points-table`, `label-court`, `label-video`, `label-format`, `label-table-layout`.
+- Specs: `label-console` (uses createLoader and also scans the folder for "flags"), `label-court-geometry` and `label-session-order`, with fixture `tests/fixtures/label-session.ts`.
+- The video is a plain `<video>`, not `FilmPlayer`, which is tied to the film tab's props and hooks.
+
+**follow-ups:**
+
+1. T6: the court needs to become a clickable button, and the right-hand point cells and the shot cells need to become editors. The row is currently a clickable div with a chevron and will need restructuring.
+2. T7: make the deleted marker expand to a struck-through ghost row with Undo.
+3. An added shot with no `video_time` sorts to the end of its point; it should sit after its `after_event_id` instead.
+4. Board 08's set/game group headers, and refreshing the SAS URL during long sessions.
+5. Not yet run against real data: the label tables aren't live, and neither the loader nor the video URL has been exercised.
