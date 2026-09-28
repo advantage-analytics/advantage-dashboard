@@ -68,8 +68,7 @@ export function resolveAdScoring(
   jobAdScoring: boolean | null | undefined,
   matchFormat: { ad_scoring?: boolean } | null,
 ): boolean {
-  if (typeof jobAdScoring === "boolean") return jobAdScoring;
-  return matchFormat?.ad_scoring ?? true;
+  return jobAdScoring ?? matchFormat?.ad_scoring ?? true;
 }
 
 /**

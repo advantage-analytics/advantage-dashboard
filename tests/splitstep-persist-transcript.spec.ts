@@ -148,29 +148,10 @@ function foldedUnder(adScoring: boolean) {
 }
 
 test.describe("buildTranscriptForJob", () => {
-  test("fetches ad_scoring with the job", async () => {
+  test("fetches ad_scoring with the job, and its false beats the match format's true", async () => {
     // A column missing from the select reads as undefined, which silently
     // falls back to the match format — exactly the bug this replaced.
     const { selects, supabase } = stubClient({
-      job: { ...JOB, ad_scoring: false },
-      match: { ...MATCH, format: { ad_scoring: true, best_of: 3 } },
-      results: clean,
-    });
-    await buildTranscriptForJob({ supabase, jobId: "job" });
-    expect(selects.processing_jobs.split(/,\s*/)).toContain("ad_scoring");
-  });
-
-  test("the fixture's pressure flags depend on the rule", () => {
-    // Otherwise the two tests below would pass whichever rule was used.
-    expect(foldedUnder(true).ok).toBe(true);
-    expect(foldedUnder(false).ok).toBe(true);
-    expect(pressure(foldedUnder(false))).not.toEqual(
-      pressure(foldedUnder(true)),
-    );
-  });
-
-  test("job ad_scoring false beats match format true", async () => {
-    const { supabase } = stubClient({
       job: { ...JOB, ad_scoring: false },
       match: { ...MATCH, format: { ad_scoring: true, best_of: 3 } },
       results: clean,
@@ -179,7 +160,17 @@ test.describe("buildTranscriptForJob", () => {
       supabase,
       jobId: "job",
     });
+    expect(selects.processing_jobs.split(/,\s*/)).toContain("ad_scoring");
     expect(pressure(transcript)).toEqual(pressure(foldedUnder(false)));
+  });
+
+  test("the fixture's pressure flags depend on the rule", () => {
+    // Otherwise the test above and the one below would pass whichever rule was used.
+    expect(foldedUnder(true).ok).toBe(true);
+    expect(foldedUnder(false).ok).toBe(true);
+    expect(pressure(foldedUnder(false))).not.toEqual(
+      pressure(foldedUnder(true)),
+    );
   });
 
   test("a null job value folds under the match format", async () => {
