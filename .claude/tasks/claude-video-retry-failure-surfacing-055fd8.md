@@ -283,7 +283,7 @@ ready).
 
 ## T21 · Seed one failing job per recovery class for the eyes-on verifier
 
-- **status:** later
+- **status:** done
 - **model:** opus
 - **needs:** T20
 - **files:** scripts/eyes-on/seed-failure-classes.ts (new) (guess)

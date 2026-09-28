@@ -188,3 +188,13 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `canRetryAnalysis()` has no callers in `src`; consider removing it.
+
+## T21 · Seed one failing job per recovery class for the eyes-on verifier — done
+
+**gate:** mechanical pass · completion pass (read closely: every write filtered to the verifier's `created_by`; dry run default; no secrets printed). Promoted from `later` by the author 2026-09-28.
+**changed:** New `scripts/eyes-on/seed-failure-classes.ts`: resolves the verifier from `EYES_ON_EMAIL`, builds six personal video matches (marker `tournament_name = "Eyes-on seed · <class>"`) each with one job shaped so the real `classifyFailure` returns retry / upload_again / fix_recording / wait_or_ask / rederive / stats_unavailable (it asserts this before writing). Default is a dry run; `--write` upserts; `--cleanup [--write]` removes only marked, verifier-owned rows (jobs then matches). `external_job_id` null and no `completed` status, so the reconciler poll, results sweep and upload reaper ignore them. Only dry runs were executed; production is unchanged.
+**follow-ups:**
+
+1. To seed: `npx tsx scripts/eyes-on/seed-failure-classes.ts --write`; to remove: `... --cleanup --write`.
+2. The eyes-on pass must not click actions on seeded rows: "Try again" on the stalled row POSTs `/api/splitstep/jobs`, which may reserve quota and call the vendor with a nonexistent blob.
+3. A second `--write` resets the wait_or_ask row's `updated_at`; it reads as stalled again after 3 minutes.
