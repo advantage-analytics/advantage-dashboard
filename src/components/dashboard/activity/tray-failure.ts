@@ -130,9 +130,7 @@ export function trayFailureReason(
     case "rederive":
       return TRAY_REASON[analysis.recovery];
     case "wait_or_ask":
-      return TRAY_REASON.wait_or_ask[
-        waitOrAskVariant(analysis.errorCode, analysis.attemptsUsed ?? 0)
-      ];
+      return TRAY_REASON.wait_or_ask[waitOrAskVariant(analysis.errorCode)];
     // `stats_unavailable` never reaches the tray (`isTrayFailure` excludes
     // it via `matchListGroup`); undefined is the unclassified case.
     case "stats_unavailable":

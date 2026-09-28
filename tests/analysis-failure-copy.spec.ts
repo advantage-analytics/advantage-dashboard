@@ -486,10 +486,10 @@ test("WAIT_OR_ASK_VARIANTS has the three variants, and permission tells the play
 });
 
 test("waitOrAskVariant maps error codes to the three variants", () => {
-  expect(waitOrAskVariant("QUOTA_EXCEEDED", 1)).toBe("allowance");
-  expect(waitOrAskVariant("NOT_ELIGIBLE", 1)).toBe("permission");
-  expect(waitOrAskVariant("NO_BILLING_WORKSPACE", 1)).toBe("permission");
-  expect(waitOrAskVariant("SOME_OTHER_CODE", 3)).toBe("ceiling");
-  expect(waitOrAskVariant(null, 3)).toBe("ceiling");
-  expect(waitOrAskVariant(undefined, 3)).toBe("ceiling");
+  expect(waitOrAskVariant("QUOTA_EXCEEDED")).toBe("allowance");
+  expect(waitOrAskVariant("NOT_ELIGIBLE")).toBe("permission");
+  expect(waitOrAskVariant("NO_BILLING_WORKSPACE")).toBe("permission");
+  expect(waitOrAskVariant("SOME_OTHER_CODE")).toBe("ceiling");
+  expect(waitOrAskVariant(null)).toBe("ceiling");
+  expect(waitOrAskVariant(undefined)).toBe("ceiling");
 });

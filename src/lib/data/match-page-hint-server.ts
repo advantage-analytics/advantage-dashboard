@@ -53,11 +53,15 @@ export const getMatchPageHint = cache(async function getMatchPageHint(
   // `matches` has no `verification_status` column; `verified` is the boolean
   // behind `Match.verificationStatus`, mapped the same way
   // `transformDbMatchToMatch` maps it, so `analysisFor` sees identical input.
-  const { data: row } = await supabase
+  const { data: row, error } = await supabase
     .from("matches")
     .select("id, source_provider, verified")
     .eq("id", matchId)
     .maybeSingle();
+  // A failed read is "no answer", not "no match": throw so the route's error
+  // boundary offers a retry, as `getMatchDetailData` does, rather than
+  // rendering not-found for a match that exists.
+  if (error) throw error;
   if (!row) return null;
 
   const analysis = analysisFor(await loadMatchAnalysis(supabase, [matchId]), {

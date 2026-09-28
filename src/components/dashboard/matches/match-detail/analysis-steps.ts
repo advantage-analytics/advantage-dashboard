@@ -141,11 +141,25 @@ function recoveryCopy(
   // byClass.wait_or_ask is only the allowance default; the row's error code
   // picks the variant that actually applies.
   if (recovery === "wait_or_ask") {
-    return WAIT_OR_ASK_VARIANTS[
-      waitOrAskVariant(analysis.errorCode, analysis.attemptsUsed ?? 1)
-    ];
+    return WAIT_OR_ASK_VARIANTS[waitOrAskVariant(analysis.errorCode)];
   }
   return byClass[recovery];
+}
+
+/**
+ * The card/drawer copy for a stopped step: the stalled-retry copy when the
+ * hand-off itself never happened, otherwise the recovery class's own copy.
+ * Shared by `failureBody` (card) and `drawerStoppedCopy` (drawer) so the two
+ * surfaces cannot pick different copy for the same stopped step.
+ */
+function stoppedCopy(
+  recovery: RecoveryClass,
+  stalled: boolean,
+  analysis: MatchAnalysis,
+): { title: string; cardBody: string; drawerBody: string } {
+  return stalled && recovery === "retry"
+    ? STALLED_RETRY_COPY
+    : recoveryCopy(recovery, analysis);
 }
 
 function failureBody(
@@ -153,10 +167,7 @@ function failureBody(
   analysis: MatchAnalysis,
   stalled: boolean,
 ): AnalysisStepBody {
-  const copy =
-    stalled && recovery === "retry"
-      ? STALLED_RETRY_COPY
-      : recoveryCopy(recovery, analysis);
+  const copy = stoppedCopy(recovery, stalled, analysis);
   return {
     kind: "failure",
     // The stored note only ever arrives filtered through showsStoredNote();
@@ -237,7 +248,14 @@ export function analysisStepsView(
     }
 
     case "uploaded": {
-      if (now !== null && isSubmitStalled(analysis, now)) {
+      // An `uploaded` row only carries a `recovery` when the server (or a live
+      // patch) already classified it as a stalled hand-off, with its own clock.
+      // Trust that before the client clock's first tick, so a page opened on a
+      // stalled job never opens on "Sending" and flips ten seconds later.
+      if (
+        analysis.recovery != null ||
+        (now !== null && isSubmitStalled(analysis, now))
+      ) {
         const recovery: RecoveryClass = analysis.recovery ?? "retry";
         return {
           title: STEPPER_COPY.titles.stalled,
@@ -528,10 +546,7 @@ function drawerStoppedCopy(
   if (!canAct) {
     return { headline: DRAWER_NO_ACTION_TITLE, body: DRAWER_NO_ACTION_BODY };
   }
-  const copy =
-    stalled && recovery === "retry"
-      ? STALLED_RETRY_COPY
-      : recoveryCopy(recovery, analysis);
+  const copy = stoppedCopy(recovery, stalled, analysis);
   // `note` only ever arrives filtered through showsStoredNote(); the raw
   // `failNote` is never read here.
   return { headline: analysis.note ?? copy.title, body: copy.drawerBody };

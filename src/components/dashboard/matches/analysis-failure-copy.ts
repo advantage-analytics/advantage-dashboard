@@ -49,14 +49,12 @@ export const WAIT_OR_ASK_VARIANTS: Record<
 /**
  * Which `WAIT_OR_ASK_VARIANTS` entry a `wait_or_ask` row should show.
  *
- * `attemptsUsed` is accepted for callers that want to double-check the
- * ceiling case themselves; the error code alone already disambiguates
- * allowance and permission refusals, and anything else — including a job
- * that simply ran out of resubmissions — falls to `ceiling`.
+ * The error code alone disambiguates allowance and permission refusals;
+ * anything else — including a job that simply ran out of resubmissions —
+ * falls to `ceiling`.
  */
 export function waitOrAskVariant(
   errorCode: string | null | undefined,
-  _attemptsUsed: number,
 ): "allowance" | "permission" | "ceiling" {
   if (errorCode === "QUOTA_EXCEEDED") return "allowance";
   if (errorCode === "NOT_ELIGIBLE" || errorCode === "NO_BILLING_WORKSPACE") {

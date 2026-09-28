@@ -603,7 +603,7 @@ test("drawer: a stalled retry reads the stalled title and the new drawer line", 
     recovery: "retry",
     stalled: true,
   });
-  // No clock yet: not stalled, the hand-off still running.
+  // No clock yet, but the server already classified it: still stalled.
   const early = drawerAnalysisStepsView(
     {
       ...BASE,
@@ -614,8 +614,15 @@ test("drawer: a stalled retry reads the stalled title and the new drawer line", 
     null,
     true,
   )!;
-  expect(early.failure).toBeUndefined();
-  expect(early.steps[2].state).toBe("now");
+  expect(early.failure).toEqual(view?.failure);
+  // No clock and no classification: not stalled, the hand-off still running.
+  const unclassified = drawerAnalysisStepsView(
+    { ...BASE, status: "uploaded", updatedAt: minutesAgo(20) },
+    null,
+    true,
+  )!;
+  expect(unclassified.failure).toBeUndefined();
+  expect(unclassified.steps[2].state).toBe("now");
 });
 
 test("drawer: a stalled wait_or_ask reads its variant's drawer body", () => {

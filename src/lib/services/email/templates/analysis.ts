@@ -138,7 +138,7 @@ export function analysisFailedEmail(input: AnalysisFailedInput): EmailMessage {
   // AnalysisSteps and the matches drawer use).
   const copy =
     failureClass === "wait_or_ask"
-      ? WAIT_OR_ASK_VARIANTS[waitOrAskVariant(errorCode, 1)]
+      ? WAIT_OR_ASK_VARIANTS[waitOrAskVariant(errorCode)]
       : byClass[failureClass];
 
   const storedNote =

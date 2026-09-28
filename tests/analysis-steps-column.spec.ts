@@ -239,10 +239,19 @@ for (const { id, analysis } of CASES.filter((c) =>
   });
 }
 
-test("stalled retry: a live clock starts null, so the first render is not stalled", () => {
+test("stalled retry: before the clock's first tick, only the server's classification makes it stalled", () => {
   const stalled = CASES.find((c) => c.id === "stalled retry")!.analysis;
-  const html = render(stalled, null);
-  const view = analysisStepsView(stalled, null);
+  // Server-classified (`recovery` set): stopped from the first render, never
+  // "Sending" for ten seconds and then flipped.
+  const classified = analysisStepsView(stalled, null);
+  expect(classified.failure?.recovery).toBe(stalled.recovery);
+  expect(render(stalled, null)).toMatch(
+    new RegExp(`<h1[^>]*>${escape(classified.title)}</h1>`),
+  );
+  // Not yet classified: a clock that has not started claims nothing.
+  const unclassified = { ...stalled, recovery: undefined };
+  const html = render(unclassified, null);
+  const view = analysisStepsView(unclassified, null);
   expect(view.steps.some((s) => s.state === "fail")).toBe(false);
   expect(html).toMatch(new RegExp(`<h1[^>]*>${escape(view.title)}</h1>`));
   expect(html).not.toContain("<button");
