@@ -43,7 +43,7 @@
  * (ACCEPT_UNRECONCILED_FOLD in reconcile.ts) and the suppression call is
  * commented out in derive-and-publish.ts. Rows written under this tag were NOT
  * verified against the entered score and must be rebuilt when the gate returns.
- * 0.3.1 (2026-09-28) resolves tiebreak points across a serve rotation
+ * 0.3.1 (2026-09-27) resolves tiebreak points across a serve rotation
  * (winners.ts rule 2); before it, every match with a tiebreak was refused.
  */
 export const DERIVATION_VERSION = "0.3.1-unreconciled";

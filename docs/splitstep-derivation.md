@@ -186,7 +186,7 @@ exactly.
 Of three real payloads, **only one passes Gate 1**. Ad-scoring matches are
 refused by design.
 
-**Tiebreaks (2026-09-28).** Tiebreak points now resolve: `winners.ts` rule 2 reads
+**Tiebreaks (2026-09-27).** Tiebreak points now resolve: `winners.ts` rule 2 reads
 the absolutized integer point score across a serve rotation when the absolute game
 count is unchanged (`via: "tiebreak"`). Before this, the last point before every
 rotation resolved no winner and every tiebreak match was refused outright. The fold

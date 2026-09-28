@@ -254,7 +254,7 @@ to put a testable seam.
 > needs to run them in Node — with parsing, validation, attribution and the
 > blank-Guest fallback untouched. The webhook route is not touched.
 
-> **A reviewed exception, added 2026-09-28: tiebreak point winners, in
+> **A reviewed exception, added 2026-09-27: tiebreak point winners, in
 > `derivation/winners.ts`.** A tiebreak changes server every two points without
 > closing a game, and the vendor's server-relative game string flips with it
 > ("7-5" → "5-7"). `resolveWinner` only read the point ladder when the raw game

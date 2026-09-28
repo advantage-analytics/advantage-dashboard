@@ -21,7 +21,7 @@
  *
  * Tiebreaks are the one place the server changes INSIDE a game — every two
  * points — and the raw game-score string flips with it ("7-5" → "5-7") while
- * the absolute game count stands still. Before 2026-09-28 every such point fell
+ * the absolute game count stands still. Before 2026-09-27 every such point fell
  * through all three rules and resolved no winner, so every match with a
  * tiebreak was refused (job b74a1e04 was the first). Rule 2 below reads those.
  */
@@ -95,6 +95,19 @@ function soleIncrement(
   return risers.length === 1 && steady.length === 1 ? risers[0] : null;
 }
 
+/**
+ * `soleIncrement` over an already-absolutized point-score pair, read as the
+ * ladder or as plain integers. Shared by rule 1 (which tries both readings)
+ * and rule 2 (which only ever needs the integer one).
+ */
+function pointSoleIncrement(
+  before: Record<string, string> | null,
+  after: Record<string, string> | null,
+  useLadder: boolean,
+): string | null {
+  return soleIncrement(numeric(before, useLadder), numeric(after, useLadder));
+}
+
 function otherLabel(label: string, labels: string[]): string | null {
   const others = labels.filter((l) => l !== label);
   return others.length === 1 ? others[0] : null;
@@ -134,10 +147,7 @@ export function resolveWinner(
     const before = absolutize(from.predPointScore, server, returner);
     const after = absolutize(to.predPointScore, nextServer, nextReturner);
     for (const useLadder of [true, false]) {
-      const winner = soleIncrement(
-        numeric(before, useLadder),
-        numeric(after, useLadder),
-      );
+      const winner = pointSoleIncrement(before, after, useLadder);
       if (winner) return { winner, via: "ladder" };
     }
     return { winner: null, via: null };
@@ -164,9 +174,10 @@ export function resolveWinner(
     gameAfter &&
     labels.every((l) => gameBefore[l] === gameAfter[l])
   ) {
-    const winner = soleIncrement(
-      numeric(absolutize(from.predPointScore, server, returner), false),
-      numeric(absolutize(to.predPointScore, nextServer, nextReturner), false),
+    const winner = pointSoleIncrement(
+      absolutize(from.predPointScore, server, returner),
+      absolutize(to.predPointScore, nextServer, nextReturner),
+      false,
     );
     if (winner) return { winner, via: "tiebreak" };
   }
