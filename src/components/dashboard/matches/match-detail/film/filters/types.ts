@@ -176,6 +176,16 @@ function matchesReturn(point: MatchPoint, key: ReturnKey): boolean {
   }
 }
 
+/**
+ * The point ended on a winning return: the "Return winners" filter chip, and
+ * the head-to-head card's Return winners row counts exactly these (adding
+ * that the returner won the point). One definition, so the figure and the
+ * points a click opens cannot drift apart.
+ */
+export function isReturnWinner(point: MatchPoint): boolean {
+  return matchesReturn(point, "winner");
+}
+
 function matchesResult(point: MatchPoint, key: ResultKey): boolean {
   switch (key) {
     case "winner":
