@@ -339,6 +339,20 @@ to put a testable seam.
 > `calculate_match_stats` and the schema are untouched. `DERIVATION_VERSION` is
 > `0.4.1-unreconciled`.
 
+> **A reviewed exception, added 2026-09-28: phantom strokes, in
+> `derivation/played.ts`, `transcript.ts` and `flags.ts`.** A non-serve stroke
+> before the deciding serve (the receiver striking a faulted first serve back)
+> was written to `shots` at `shot_number` 0, tied with the faulted serve, and
+> `pickReturnShot` and the film room took it as the point's return.
+> `playedRally` now removes it before any row is built, so it never reaches
+> `shots`; the point carries `phantom_strokes_dropped` and the raw payload
+> keeps the stroke. Two flag-only changes ride with it: `second_serve_called_out`
+> (review-only; inferring a double fault from it was rejected after 2 of 10
+> checked on video were right) and no `service_court_repeat` on a no-ad 40-40
+> point, where the receiver picks the side. Winners, `result_type` rules,
+> `reconcile()`, `calculate_match_stats` and the schema are untouched.
+> `DERIVATION_VERSION` is `0.4.2-unreconciled`.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 

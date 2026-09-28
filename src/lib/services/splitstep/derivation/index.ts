@@ -54,8 +54,14 @@
  * `winner_guessed`. Before it, such a match was refused for points that
  * resolved no winner. Numbered past 0.4.0 (phantom strokes, played.ts), which
  * was already stamped on live rows from another branch.
+ * 0.4.2 (2026-09-28) lands 0.4.0's phantom-stroke drop on top of 0.4.1: a
+ * non-serve stroke before the deciding serve no longer reaches shots
+ * (played.ts, point flag `phantom_strokes_dropped`). It also adds the
+ * review-only `second_serve_called_out` flag and stops flagging
+ * `service_court_repeat` on a no-ad deciding point, where the receiver picks
+ * the side.
  */
-export const DERIVATION_VERSION = "0.4.1-unreconciled";
+export const DERIVATION_VERSION = "0.4.2-unreconciled";
 
 export type {
   RawSplitStepStroke,
@@ -143,6 +149,7 @@ export {
 } from "./result-type";
 
 export { flagPoint, flagStroke, POINT_FLAGS, SHOT_FLAGS } from "./flags";
+export { playedRally, type PlayedRally } from "./played";
 
 export { pressureFor, type PressureFlags } from "./pressure";
 

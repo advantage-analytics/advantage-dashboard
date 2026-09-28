@@ -241,7 +241,7 @@ trailing reset qualifies; any other unresolved point still refuses the match.
 > or failing that from whichever mapping folds closest to the score (a tie is still a
 > refusal). `Reconciliation.ok` stays `false` on that path and `player1Source` records
 > how player1 was chosen; `derive-and-publish` logs `grade: unreconciled`. Rows carry
-> `DERIVATION_VERSION = 0.x-unreconciled` (0.3.1 since the tiebreak rule, 0.4.1 since the collapsed-tail rule) and must
+> `DERIVATION_VERSION = 0.x-unreconciled` (0.3.1 since the tiebreak rule, 0.4.1 since the collapsed-tail rule, 0.4.2 since phantom strokes are dropped) and must
 > be rebuilt when the gate returns.
 > The unresolved-points gate is untouched.
 

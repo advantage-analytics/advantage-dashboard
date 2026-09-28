@@ -40,6 +40,7 @@ import {
 } from "./result-type";
 import { lastStrokeWinner, resolvePointWinners } from "./winners";
 import { collapsedTailStart } from "./rallies";
+import { playedRally } from "./played";
 import { pressureFor } from "./pressure";
 import { pointScoresOf } from "./scores";
 import { bounceVideoTimes } from "./frame-clock";
@@ -370,7 +371,12 @@ export function buildTranscript(options: BuildOptions): Transcript {
     // winner — reading the raw array here recorded every match's last point as
     // won by player2, because `winner === player1` is false for null.
     const winner = rec.settledWinners[i]?.winner ?? null;
-    const serveIndex = lastServeIndex(rally);
+    // Phantom strokes are removed once, here, so numbering, results,
+    // result_type, flags and rally length all read the same list. Pressure and
+    // the score columns read the raw rally: they come from the score stream.
+    const played = playedRally(rally);
+    const kept = played.rally;
+    const serveIndex = lastServeIndex(kept);
     const pressure = pressureFor({
       rally,
       labels,
@@ -379,13 +385,13 @@ export function buildTranscript(options: BuildOptions): Transcript {
       adScoring,
       bestOf,
     });
-    const resultType = winner ? classifyPoint(rally, winner) : null;
+    const resultType = winner ? classifyPoint(kept, winner) : null;
     const numbering = gameNumberOf.get(`${gameIndex}`) ?? {
       set: 1,
       game: gameIndex + 1,
     };
 
-    const last = rally.strokes[rally.strokes.length - 1];
+    const last = kept.strokes[kept.strokes.length - 1];
     if (last && last.strokeType !== "serve" && winner) {
       rallyEnders += 1;
       if (last.playerLabel === winner) winnerStruckLast += 1;
@@ -394,7 +400,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
 
     const shots: DerivedShot[] = [];
 
-    rally.strokes.forEach((stroke, index) => {
+    kept.strokes.forEach((stroke, index) => {
       const isServe = stroke.strokeType === "serve";
       if (isServe) servesSeen += 1;
 
@@ -419,7 +425,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
         shot_number: number,
         is_player1: stroke.playerLabel === player1,
         shot_type: isServe
-          ? isFirstServe || rally.serves.length === 1
+          ? isFirstServe || kept.serves.length === 1
             ? "First Serve"
             : "Second Serve"
           : strokeShotType(stroke),
@@ -430,21 +436,24 @@ export function buildTranscript(options: BuildOptions): Transcript {
         landing_x: landing?.x ?? null,
         landing_y: landing?.y ?? null,
         result: winner
-          ? shotResult({ stroke, index, rally, serveIndex, winner })
+          ? shotResult({ stroke, index, rally: kept, serveIndex, winner })
           : null,
         video_time: stroke.videoTime,
         bounce_video_time: bounceTimeOf.get(stroke) ?? null,
         zone: isServe
           ? serveZone(landing?.x ?? null)
           : directionZone(landing?.x ?? null, contact?.x ?? null),
-        flags: flagStroke({ stroke, index, rally, serveIndex }),
+        flags: flagStroke({ stroke, index, rally: kept }),
         derived: true,
       });
     });
 
+    // The clip window spans every detected stroke, dropped ones included, so
+    // the film room still shows the whole exchange.
     const first = rally.strokes[0];
+    const end = rally.strokes[rally.strokes.length - 1];
     const duration =
-      first && last ? Math.max(0, last.videoTime - first.videoTime) : null;
+      first && end ? Math.max(0, end.videoTime - first.videoTime) : null;
 
     points.push({
       point_number: points.length + 1,
@@ -452,7 +461,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
       game_number: numbering.game,
       server_is_player1: rally.server === player1,
       won_by_player1: winner === player1,
-      rally_length: rally.strokes.length - serveIndex,
+      rally_length: kept.strokes.length - serveIndex,
       result_type: resultType,
       is_break_point: pressure.isBreakPoint,
       is_set_point: pressure.isSetPoint,
@@ -462,14 +471,16 @@ export function buildTranscript(options: BuildOptions): Transcript {
       duration,
       flags: [
         ...flagPoint({
-          rally,
+          rally: kept,
           winner,
           previousInGame: previousRally,
           resultType,
+          adScoring,
         }),
         ...(rec.settledWinners[i]?.via === "guess"
           ? [POINT_FLAGS.WINNER_GUESSED]
           : []),
+        ...played.flags,
       ],
       derived: true,
       shots,
