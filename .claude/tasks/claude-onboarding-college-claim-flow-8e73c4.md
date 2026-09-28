@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Add Back to every onboarding step after the first
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/app/onboarding/onboarding-flow.tsx, src/app/onboarding/steps.ts (new), tests/onboarding-steps.spec.ts (new), tests/onboarding-flow-browser.spec.ts
 - **done when:**
