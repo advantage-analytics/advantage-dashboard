@@ -66,6 +66,30 @@ export function nextRound(entry: RunRounds): string {
 /** Where a fresh main-draw run starts — the same default `nextRound` uses. */
 const MAIN_DRAW_START = "R32";
 
+/** The rounds an entry already holds, upper-cased, for a `held.has()` check. */
+function heldRounds(entry: RunRounds): Set<string> {
+  return new Set(
+    entry.matches.flatMap((match) =>
+      match.round ? [match.round.toUpperCase()] : [],
+    ),
+  );
+}
+
+/**
+ * The first round of `draw`, in `ROUND_ORDER`, the entry does not already
+ * hold — or null when it holds every one. Shared by `nextRoundAfter`'s two
+ * "enter a new draw for the first time" cases: a loss into consolation, and a
+ * prequalifier's win into qualifying.
+ */
+function firstUnheldRoundOf(entry: RunRounds, draw: string): string | null {
+  const held = heldRounds(entry);
+  return (
+    ROUND_ORDER.find(
+      (round) => drawOfRound(round) === draw && !held.has(round),
+    ) ?? null
+  );
+}
+
 /**
  * The round to open after saving `savedRound`, or null when nothing follows.
  *
@@ -122,16 +146,7 @@ export function nextRoundAfter(
           ? CONSOLATION
           : null;
     if (consolation === null) return null;
-    const held = new Set(
-      entry.matches.flatMap((match) =>
-        match.round ? [match.round.toUpperCase()] : [],
-      ),
-    );
-    return (
-      ROUND_ORDER.find(
-        (round) => drawOfRound(round) === consolation && !held.has(round),
-      ) ?? null
-    );
+    return firstUnheldRoundOf(entry, consolation);
   }
 
   const sameDraw = ROUND_ORDER.slice(index + 1).find(
@@ -139,18 +154,7 @@ export function nextRoundAfter(
   );
   if (sameDraw) return sameDraw;
 
-  if (draw === PREQUALIFYING) {
-    const held = new Set(
-      entry.matches.flatMap((match) =>
-        match.round ? [match.round.toUpperCase()] : [],
-      ),
-    );
-    return (
-      ROUND_ORDER.find(
-        (round) => drawOfRound(round) === QUALIFYING && !held.has(round),
-      ) ?? null
-    );
-  }
+  if (draw === PREQUALIFYING) return firstUnheldRoundOf(entry, QUALIFYING);
   if (draw !== QUALIFYING) return null;
 
   const main = ROUND_ORDER.filter((round) => drawOfRound(round) === MAIN_DRAW);
