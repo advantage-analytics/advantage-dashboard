@@ -23,7 +23,7 @@ import {
   directionZone,
   serveCourtSide,
 } from "./court";
-import { flagPoint, flagStroke } from "./flags";
+import { flagPoint, flagStroke, POINT_FLAGS } from "./flags";
 import {
   ACCEPT_UNRECONCILED_FOLD,
   reconcile,
@@ -38,7 +38,8 @@ import {
   shotResult,
   type ResultType,
 } from "./result-type";
-import { resolvePointWinners } from "./winners";
+import { lastStrokeWinner, resolvePointWinners } from "./winners";
+import { collapsedTailStart } from "./rallies";
 import { pressureFor } from "./pressure";
 import { pointScoresOf } from "./scores";
 import { bounceVideoTimes } from "./frame-clock";
@@ -100,6 +101,11 @@ export interface Transcript {
   serveGeometryRetention: number;
   /** Rallies whose last stroke was a serve, over points. */
   unreturnedServeRate: number;
+  /**
+   * Rallies whose winner is the last stroke's guess because the score stream
+   * collapsed under them (collapsedTailStart). Each carries `winner_guessed`.
+   */
+  guessedTailRallies: number[];
 }
 
 /**
@@ -215,6 +221,28 @@ export function buildTranscript(options: BuildOptions): Transcript {
 
   const winners = resolvePointWinners(rallies, labels);
 
+  // A collapsed score tail keeps its rallies. They fold into the game the last
+  // real rally was in (a reset key would open a phantom set), and every point
+  // from that rally on that the stream could not resolve takes the last
+  // stroke's guess. If the vendor's tail actually spanned a game change, it is
+  // one game here — the stream no longer says where that change was.
+  const tailStart = collapsedTailStart(rallies);
+  const guessedTailRallies: number[] = [];
+  if (tailStart !== null) {
+    const anchor = rallies[tailStart - 1].rallyId;
+    for (const rally of rallies.slice(tailStart)) {
+      gameKeyOf.set(rally.rallyId, gameKeyOf.get(anchor) ?? "");
+      setKeyOf.set(rally.rallyId, setKeyOf.get(anchor) ?? "");
+    }
+    for (let i = tailStart - 1; i < winners.length; i += 1) {
+      if (winners[i].winner) continue;
+      const guess = lastStrokeWinner(rallies[i], labels);
+      if (!guess) continue;
+      winners[i] = { ...winners[i], winner: guess, via: "guess" };
+      guessedTailRallies.push(winners[i].rallyId);
+    }
+  }
+
   const empty: Transcript = {
     ok: false,
     reason: null,
@@ -232,6 +260,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     winnerShare: 0,
     serveGeometryRetention: 0,
     unreturnedServeRate: 0,
+    guessedTailRallies,
   };
 
   if (!score) {
@@ -431,12 +460,17 @@ export function buildTranscript(options: BuildOptions): Transcript {
       ...pointScoresOf(rally),
       video_time: first?.videoTime ?? null,
       duration,
-      flags: flagPoint({
-        rally,
-        winner,
-        previousInGame: previousRally,
-        resultType,
-      }),
+      flags: [
+        ...flagPoint({
+          rally,
+          winner,
+          previousInGame: previousRally,
+          resultType,
+        }),
+        ...(rec.settledWinners[i]?.via === "guess"
+          ? [POINT_FLAGS.WINNER_GUESSED]
+          : []),
+      ],
       derived: true,
       shots,
     });
@@ -454,6 +488,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     winnerShare: rallyEnders === 0 ? 0 : winnerStruckLast / rallyEnders,
     serveGeometryRetention: servesSeen === 0 ? 0 : servesKept / servesSeen,
     unreturnedServeRate: rallies.length === 0 ? 0 : unreturned / rallies.length,
+    guessedTailRallies,
   };
 }
 

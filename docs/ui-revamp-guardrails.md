@@ -323,6 +323,22 @@ to put a testable seam.
 > is written. It corrupts silently the way the §4 inputs do, one level down.
 > `DERIVATION_VERSION` is `0.3.2-unreconciled`.
 
+> **A reviewed exception, added 2026-09-28: a collapsed score tail, in
+> `derivation/rallies.ts` and `transcript.ts`.** On job 45ff4bd7 the vendor's
+> score stream reset to point 0-0 / game 0-0 / set NaN for the last four rallies
+> and never recovered, so the last real rally and every reset one resolved no
+> winner and the match was refused. `collapsedTailStart` finds such a run
+> (trailing only, and only after a real set score). `buildTranscript` keeps the
+> rallies: it folds them into the last real rally's game and set keys, and every
+> point from that rally on that the stream could not resolve takes the last
+> stroke's guess (`lastStrokeWinner`, the same rule `winner_disputed` already
+> used) with `via: "guess"` and the point flag `winner_guessed`. The guess agreed
+> with the score stream on 77 of 96 points on that match: it is an estimate,
+> and the flag says so. Every other unresolved point still refuses the match,
+> the warm-up rally included; `reconcile()`, the player1 mapping,
+> `calculate_match_stats` and the schema are untouched. `DERIVATION_VERSION` is
+> `0.4.1-unreconciled`.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 
