@@ -761,7 +761,7 @@ test("the analysing short-circuit still returns before any Film entry", () => {
   // and the Video view — with its actions — is below it, so an in-flight match
   // still renders hero + progress and nothing else.
   const gate = PAGE.indexOf("if (isAwaitingAnalysis)");
-  const progress = PAGE.indexOf("<MatchAnalysisProgress");
+  const progress = PAGE.indexOf("<AnalysisSteps");
   const film = PAGE.indexOf("<FilmTab");
   expect(gate).toBeGreaterThan(-1);
   expect(progress).toBeGreaterThan(gate);

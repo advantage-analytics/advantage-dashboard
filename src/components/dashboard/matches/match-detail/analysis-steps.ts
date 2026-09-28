@@ -32,8 +32,8 @@ import {
 import type { StepState } from "@/components/dashboard/shared/vertical-steps";
 
 // ── Stage copy ──────────────────────────────────────────────────────────────
-// The one declaration. `match-analysis-progress.tsx` imports both rather than
-// keep a second copy, so the live card and this stepper cannot drift apart.
+// The one declaration, so no second surface keeps its own copy of these
+// lines and drifts from this stepper.
 
 const STORED_NOTE = "Your video is stored. Nothing else is needed from you.";
 

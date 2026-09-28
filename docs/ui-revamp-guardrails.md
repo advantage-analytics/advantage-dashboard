@@ -451,7 +451,7 @@ serves".
 ### 3.3 The match detail short-circuit — `app/dashboard/matches/(detail)/[matchId]/page.tsx`
 
 When `isInFlight(status) || isAnalysisFailed(status)`, the page renders hero +
-summary + `MatchAnalysisProgress` and **returns early**. Keep that gate. Every
+summary + `AnalysisSteps` and **returns early**. Keep that gate. Every
 stat section below it would draw zeroes.
 
 **Since 2026-09-28, the gate has exactly one exemption.** A failed status whose

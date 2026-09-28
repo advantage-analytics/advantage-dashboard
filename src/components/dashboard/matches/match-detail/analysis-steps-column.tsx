@@ -8,10 +8,11 @@
  * this draws them with the shared `VerticalStep` and hands every action to
  * `RecoveryAction`, so the retry-vs-link-vs-nothing decision stays in one place.
  *
- * Live like `MatchAnalysisProgress`: it follows the job row over Realtime and
- * keeps its own clock for the stalled-submit threshold and the upload estimate.
+ * Live: it follows the job row over Realtime and keeps its own clock for the
+ * stalled-submit threshold and the upload estimate.
  *
- * Not yet mounted on the match page: previewed on `/design` first.
+ * Mounted by the match page's awaiting-analysis short-circuit (guardrails
+ * §3.3), and previewed on `/design`.
  */
 
 import { useEffect, useState } from "react";
@@ -34,7 +35,7 @@ import { analysisStepsView, type AnalysisStepBody } from "./analysis-steps";
 
 const NOTE = "text-[12px] leading-[1.55] text-[var(--ink-600)]";
 
-/** The clock's period — the same 10 s `MatchAnalysisProgress` ticks at. */
+/** The clock's period: an estimate and a stall threshold, not a stopwatch. */
 const TICK_MS = 10_000;
 
 export function AnalysisSteps({

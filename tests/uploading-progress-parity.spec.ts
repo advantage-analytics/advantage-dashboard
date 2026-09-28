@@ -7,24 +7,39 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
 import { UPLOADING_COPY } from "@/components/dashboard/matches/upload-progress-copy";
+import type { MatchLineProps } from "@/components/dashboard/matches/match-line";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
  * While a match's job is `uploading`, the match page's progress panel reads as
- * the wizard's "Uploading your video" screen: same title, same three steps,
- * same two notes — from one copy module both surfaces import.
+ * the wizard's "Uploading your video" screen: same title, same three steps
+ * (then the page's own Stats step), same two notes — from one copy module both surfaces import.
  *
- * `MatchAnalysisProgress` is rendered offline through `fixtures/vm-modules`
+ * `AnalysisSteps` (the page's stepper column) is rendered offline through `fixtures/vm-modules`
  * with the Realtime hook, the retry buttons and `next/link` stubbed; the copy,
  * the stepper and the progress track are the real modules.
  */
 
 const PANEL =
-  "src/components/dashboard/matches/match-detail/match-analysis-progress.tsx";
+  "src/components/dashboard/matches/match-detail/analysis-steps-column.tsx";
 const WIZARD =
   "src/components/dashboard/matches/new-match-wizard/UploadMatchSuccess.tsx";
 
-type Props = { analysis: MatchAnalysis; matchId: string };
+type Props = {
+  analysis: MatchAnalysis;
+  matchId: string;
+  match: MatchLineProps;
+};
+
+const MATCH: MatchLineProps = {
+  player: "Maya Chen",
+  opponent: "Sofia Alvarez",
+  won: true,
+  sets: [
+    { player1: 6, player2: 4 },
+    { player1: 6, player2: 3 },
+  ],
+};
 
 function render(analysis: MatchAnalysis): string {
   const loader = createLoader({
@@ -39,11 +54,15 @@ function render(analysis: MatchAnalysis): string {
       "./retry-analysis": { RetryAnalysis: () => null },
     },
   });
-  const { MatchAnalysisProgress } = loader.load(PANEL) as {
-    MatchAnalysisProgress: React.ComponentType<Props>;
+  const { AnalysisSteps } = loader.load(PANEL) as {
+    AnalysisSteps: React.ComponentType<Props>;
   };
   return renderToStaticMarkup(
-    React.createElement(MatchAnalysisProgress, { analysis, matchId: "m1" }),
+    React.createElement(AnalysisSteps, {
+      analysis,
+      matchId: "m1",
+      match: MATCH,
+    }),
   );
 }
 
@@ -60,7 +79,7 @@ function analysis(overrides: Partial<MatchAnalysis>): MatchAnalysis {
   return { status: "uploading", ...overrides } as MatchAnalysis;
 }
 
-test("uploading: the wizard's title, three steps in order, the percentage and both notes", () => {
+test("uploading: the wizard's title, its three steps in order, the percentage and both notes", () => {
   const html = render(analysis({ status: "uploading", uploadPercent: 42.7 }));
   const out = text(html);
 
@@ -78,9 +97,11 @@ test("uploading: the wizard's title, three steps in order, the percentage and bo
   for (const index of at) expect(index).toBeGreaterThan(-1);
   expect(at).toEqual([...at].sort((a, b) => a - b));
 
-  // Exactly three steps; the four-milestone track is gone.
+  // Four steps: the wizard's three plus the page's own Stats step, which the
+  // work continues into past where the wizard stops. The four-milestone track
+  // is gone.
   const steps = html.match(/<li\b/g) ?? [];
-  expect(steps).toHaveLength(3);
+  expect(steps).toHaveLength(4);
   expect(out).not.toContain("Analyzing");
 
   // Floored, like the wizard.

@@ -135,7 +135,7 @@ export function analysisFailedEmail(input: AnalysisFailedInput): EmailMessage {
 
   // byClass.wait_or_ask is only the allowance default; the row's error code
   // picks the variant that actually applies (same rule the match page's
-  // MatchAnalysisProgress and the matches drawer use).
+  // AnalysisSteps and the matches drawer use).
   const copy =
     failureClass === "wait_or_ask"
       ? WAIT_OR_ASK_VARIANTS[waitOrAskVariant(errorCode, 1)]

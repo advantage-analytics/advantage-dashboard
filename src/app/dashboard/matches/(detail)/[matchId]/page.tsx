@@ -21,7 +21,7 @@ import {
   analysisFor,
   loadMatchAnalysis,
 } from "@/lib/data/match-analysis-server";
-import { MatchAnalysisProgress } from "@/components/dashboard/matches/match-detail/match-analysis-progress";
+import { AnalysisSteps } from "@/components/dashboard/matches/match-detail/analysis-steps-column";
 import { MarkReportSeen } from "@/components/dashboard/matches/match-detail/mark-report-seen";
 
 // The report's parts, by their named exports rather than the `MatchReport`
@@ -60,6 +60,7 @@ import {
   VisualizationsPanePending,
 } from "@/components/dashboard/loading/match-report-pending";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { playedSets } from "@/lib/ui/score-format";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMatchFilmEntry } from "@/lib/data/match-film-entry-server";
 
@@ -279,43 +280,32 @@ export default async function MatchDetailPage({ params }: PageProps) {
   );
 
   if (isAwaitingAnalysis) {
-    // Guardrails §3.3 — the short-circuit gate. The scoreboard renders fine
-    // from `match` (the score the player entered); the pane holds the pipeline
-    // state and nothing else. No view switcher — there are no views yet — no
-    // title row, and no stat section that would draw zeroes
-    // (spec › Decisions 9).
+    // Guardrails §3.3 — the short-circuit gate. The page is the upload
+    // wizard's final screen: a centred, card-free column with the title, the
+    // match line and the stepper, under the app chrome alone. No rail, no view
+    // switcher — there are no views yet — no title row, and no stat section
+    // that would draw zeroes (spec › Decisions 9). The report and its rail
+    // return once the stats are ready.
+    //
+    // The match line is oriented by `sides` (guardrails §4), never by raw
+    // player1/player2: the viewer's side first, sets already you-first, and the
+    // result from the viewer's seat. `match.won` is what the scoreboard shows;
+    // a score whose played sets are level decides nobody — a stopped or
+    // unfinished match — and gets no result word, as the wizard's own line.
+    const lineSets = playedSets(sides.sets);
+    const setsYou = lineSets.filter((s) => s.player1 > s.player2).length;
+    const setsOpp = lineSets.filter((s) => s.player2 > s.player1).length;
     return (
-      <MatchReportProvider
+      <AnalysisSteps
+        analysis={analysis}
         matchId={matchId}
-        summary={null}
-        canCompare={false}
-        isDerived={isDerived}
-        statsPublished={false}
-        hasPlayableVideo={false}
-        // No view switcher on this branch — ShotsTab never renders — so an
-        // empty list here costs nothing and skips fetching saved views before
-        // the match even has anything to visualize.
-        savedViews={[]}
-        workspaceRole={workspaceRole}
-        workspaceKind={workspaceKind}
-        workspaceName={workspaceName}
-        // Same reasoning as `savedViews` above — `ShotsTab` never renders on
-        // this branch, so the default is enough and skips the query.
-        bandSettings={DEFAULT_BANDS}
-        canEditBands={canEditBands}
-        unit={unit}
-      >
-        <MatchReportFrame>
-          <MatchReportRail>
-            <MatchReportScoreboard />
-            <MatchReportSpacer />
-            {share}
-          </MatchReportRail>
-          <MatchReportPane>
-            <MatchAnalysisProgress analysis={analysis} matchId={matchId} />
-          </MatchReportPane>
-        </MatchReportFrame>
-      </MatchReportProvider>
+        match={{
+          player: sides.you.name,
+          opponent: sides.opp.name,
+          won: setsYou === setsOpp ? null : match.won,
+          sets: lineSets,
+        }}
+      />
     );
   }
 

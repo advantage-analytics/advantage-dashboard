@@ -207,3 +207,15 @@ is the runner's. Newest entries at the bottom.
 
 1. An already-stalled row shows "Sending for analysis" for up to 10 s before the first tick flips it to "Couldn't send for analysis" — T23 may want an immediate first tick for `uploaded`.
 2. Each /design variant carries the full-page top padding, so the preview grid is very tall.
+
+## T23 · Mount the column on the match page and retire MatchAnalysisProgress — done
+
+**gate:** mechanical pass · completion pass (widget-states: awaiting branch renders the column; its states are the covered view states, no zeroes drawn)
+**changed:** The match page's `isAwaitingAnalysis` branch now renders only `AnalysisSteps` (T22's column) under the app chrome — no scoreboard rail, share, view switcher or `MatchReportProvider`. Its match line comes from `getMatchSides` (viewer first) and `match.won` (viewer-perspective; null when played sets are level). The gate declarations are byte-identical. `match-analysis-progress.tsx` deleted; guardrails §3.3 names `AnalysisSteps`; comment-only renames elsewhere. Specs: match-film-entry's marker renamed, parity's step count 3 → 4, plus harness-only `match` / `snapshotAt` props; no other assertion changed.
+**follow-ups:**
+
+1. The 10 s stalled-state lag stays: `analysis-steps-column.spec.ts` pins exactly one `Date.now()` in `setInterval`, so an immediate first tick needs that assertion relaxed.
+2. `AGENTS.md` ("short-circuits to the hero + `MatchAnalysisProgress`") and `.skills/advantage-analytics-design/reference/empty-and-loading.md:80` still name the deleted component.
+3. Guardrails §3.3 still says "hero + summary", which is no longer accurate — the branch renders only the column under the app chrome.
+4. The result word uses played-set counts only (no best-of on the page), so a stopped 6-4 3-2 match reads "Won" where the wizard's best-of-aware `scoreUndecided` gives no word.
+5. `STAGE_NOTE` / `STALLED_RETRY_COPY` exports have no outside importer now.

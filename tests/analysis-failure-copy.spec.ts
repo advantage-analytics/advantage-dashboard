@@ -18,6 +18,7 @@ import {
   WAIT_OR_ASK_VARIANTS,
   waitOrAskVariant,
 } from "@/components/dashboard/matches/analysis-failure-copy";
+import type { MatchLineProps } from "@/components/dashboard/matches/match-line";
 import { createLoader, marker } from "./fixtures/vm-modules";
 
 /**
@@ -27,18 +28,35 @@ import { createLoader, marker } from "./fixtures/vm-modules";
  * `failNote` (unfiltered `error_message`) is never rendered here — a stored
  * note reaches the card only through `showsStoredNote()`.
  *
- * `MatchAnalysisProgress` is rendered offline through `fixtures/vm-modules`
- * with the Realtime hook, `next/link` and the add-video route stubbed. The
+ * `AnalysisSteps` (the page's stepper column) is rendered offline through
+ * `fixtures/vm-modules` with the Realtime hook, `next/link` and the add-video
+ * route stubbed, and a fixed `snapshotAt` clock — a live clock starts null,
+ * so a stalled submit would otherwise never render in a static pass. The
  * real `RecoveryAction` runs; its three buttons (`RetryAnalysis`,
  * `RetrySubmission`, `RetryActionButton`) are markers, so a marker in the
  * markup means that action rendered.
  */
 
 const PANEL =
-  "src/components/dashboard/matches/match-detail/match-analysis-progress.tsx";
+  "src/components/dashboard/matches/match-detail/analysis-steps-column.tsx";
 const COPY = "src/components/dashboard/matches/analysis-failure-copy.ts";
 
-type Props = { analysis: MatchAnalysis; matchId: string };
+type Props = {
+  analysis: MatchAnalysis;
+  matchId: string;
+  match: MatchLineProps;
+  snapshotAt?: number;
+};
+
+const MATCH: MatchLineProps = {
+  player: "Maya Chen",
+  opponent: "Sofia Alvarez",
+  won: true,
+  sets: [
+    { player1: 6, player2: 4 },
+    { player1: 6, player2: 3 },
+  ],
+};
 
 const RETRY_MARKERS = [
   'data-component="RetryAnalysis"',
@@ -75,8 +93,8 @@ function render(
       },
     },
   });
-  const { MatchAnalysisProgress } = loader.load(PANEL) as {
-    MatchAnalysisProgress: React.ComponentType<Props>;
+  const { AnalysisSteps } = loader.load(PANEL) as {
+    AnalysisSteps: React.ComponentType<Props>;
   };
   const analysis = {
     status,
@@ -85,7 +103,12 @@ function render(
     ...overrides,
   } as MatchAnalysis;
   return renderToStaticMarkup(
-    React.createElement(MatchAnalysisProgress, { analysis, matchId: "m1" }),
+    React.createElement(AnalysisSteps, {
+      analysis,
+      matchId: "m1",
+      match: MATCH,
+      snapshotAt: Date.now(),
+    }),
   );
 }
 

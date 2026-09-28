@@ -310,7 +310,7 @@ ready).
 
 ## T23 · Mount the column on the match page and retire MatchAnalysisProgress
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T22
 - **files:** src/app/dashboard/matches/(detail)/[matchId]/page.tsx (the `if (isAwaitingAnalysis)` branch, ~300-335), src/components/dashboard/matches/match-detail/match-analysis-progress.tsx (delete), tests/analysis-failure-copy.spec.ts, tests/uploading-progress-parity.spec.ts, tests/match-film-entry.spec.ts, docs/ui-revamp-guardrails.md (§3.3 wording) (guess)
