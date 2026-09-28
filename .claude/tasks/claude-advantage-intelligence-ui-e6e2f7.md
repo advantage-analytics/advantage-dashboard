@@ -111,7 +111,7 @@ ready).
 
 ## T8 · Split the progress card's failure copy by status
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** src/components/dashboard/matches/analysis-failure-copy.ts (new), src/components/dashboard/matches/match-detail/match-analysis-progress.tsx (the `failed ? (…)` alert, ~line 197-250 today), tests/analysis-failure-copy.spec.ts (new, guess — pattern `tests/report-empty-states.spec.ts` + `tests/fixtures/vm-modules.ts` `createLoader`)

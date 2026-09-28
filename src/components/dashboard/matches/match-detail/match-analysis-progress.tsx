@@ -34,6 +34,7 @@ import {
 } from "@/lib/data/match-analysis";
 import { AnalysisProgressTrack } from "../analysis-progress-track";
 import { UPLOADING_COPY } from "../upload-progress-copy";
+import { ANALYSIS_FAILURE_COPY } from "../analysis-failure-copy";
 import { VerticalStep } from "@/components/dashboard/shared/vertical-steps";
 import { RetrySubmission } from "./retry-submission";
 import { RetryAnalysis } from "./retry-analysis";
@@ -221,39 +222,58 @@ export function MatchAnalysisProgress({
                   strokeWidth={1.5}
                   aria-hidden="true"
                 />
-                <div>
-                  {/* `failNote` is error_message — for a provider failure that is
-                  the vendor's designated end-user string (error.message),
-                  never the raw internals, which stay in the delivery ledger. */}
-                  <p className="text-[13px] font-medium text-[#0D0D0D]">
-                    {analysis.failNote ?? "Analysis stopped"}
-                  </p>
-                  <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
-                    Retrying uses the video you already uploaded — nothing needs
-                    uploading again. If it keeps failing, trim to a window where
-                    the camera stays fixed, or upload a new recording.
-                  </p>
-                  {/* Gated on the literal status, not the broader `failed` (which
-                  also covers derivation_failed): resubmitJob() refuses
-                  anything but a video-provider failure on purpose — a
-                  derivation failure already has its results and needs a
-                  derivation re-run, not a new video submission — so showing
-                  this button there would be a button that always 409s. */}
-                  {analysis.jobId && analysis.status === "failed" && (
-                    <RetryAnalysis jobId={analysis.jobId} />
-                  )}
-                  {/* The "upload a new recording" the copy above offers. The
-                  route re-checks the match and sends anything it can't take
-                  somewhere that can. */}
-                  {analysis.status === "failed" && (
-                    <Link
-                      href={addVideoHref(matchId)}
-                      className="mt-3 inline-block text-[12px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
-                    >
-                      Upload a new recording
-                    </Link>
-                  )}
-                </div>
+                {analysis.status === "derivation_failed" ? (
+                  <div>
+                    {/* The video was analyzed; what failed is matching its
+                    rallies to the entered score. `failNote` here is the
+                    reconciler's reason — detail, not a headline — so it sits
+                    under the explanation, muted. No retry and no new-video
+                    link: resubmitJob() refuses this status, and the footage
+                    was read fine. */}
+                    <p className="text-[13px] font-medium text-[#0D0D0D]">
+                      {ANALYSIS_FAILURE_COPY.derivation_failed.title}
+                    </p>
+                    <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
+                      {ANALYSIS_FAILURE_COPY.derivation_failed.body}
+                    </p>
+                    {analysis.failNote && (
+                      <p className="mt-1.5 text-[11px] leading-[1.5] text-[#888888]">
+                        {analysis.failNote}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    {/* `failNote` is error_message — for a provider failure
+                    that is the vendor's designated end-user string
+                    (error.message), never the raw internals, which stay in
+                    the delivery ledger. */}
+                    <p className="text-[13px] font-medium text-[#0D0D0D]">
+                      {analysis.failNote ?? ANALYSIS_FAILURE_COPY.failed.title}
+                    </p>
+                    <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
+                      {ANALYSIS_FAILURE_COPY.failed.body}
+                    </p>
+                    {/* Gated on the literal status, not the broader `failed`
+                    (which also covers derivation_failed): resubmitJob()
+                    refuses anything but a video-provider failure on purpose,
+                    so showing this button elsewhere would always 409. */}
+                    {analysis.jobId && analysis.status === "failed" && (
+                      <RetryAnalysis jobId={analysis.jobId} />
+                    )}
+                    {/* The "upload a new recording" the copy above offers. The
+                    route re-checks the match and sends anything it can't take
+                    somewhere that can. */}
+                    {analysis.status === "failed" && (
+                      <Link
+                        href={addVideoHref(matchId)}
+                        className="mt-3 inline-block text-[12px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
+                      >
+                        {ANALYSIS_FAILURE_COPY.failed.uploadLink}
+                      </Link>
+                    )}
+                  </div>
+                )}
               </div>
             ) : stalled ? (
               /* Ahead of STAGE_NOTE, because for this state that note says "your
