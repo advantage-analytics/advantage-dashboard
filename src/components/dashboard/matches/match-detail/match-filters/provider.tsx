@@ -28,15 +28,18 @@ import {
 } from "./model";
 
 /**
- * The match report's applied filters — one state behind every point-derived
- * Statistics card (and, from T7, the Video view), held ABOVE the view switch.
+ * The match report's applied filters — the Video view's filter state, held
+ * ABOVE the view switch. The Statistics view never reads them: it is always
+ * the whole match (the product owner's call — filters live on the Video tab
+ * alone).
  *
  * ── Why here and not in a view ───────────────────────────────────────────
  * `MatchReportWhen` unmounts an inactive view, so state kept inside
- * `StatisticsView` or `FilmTab` would reset on every switch. Both report pages
- * (`matches/(detail)/[matchId]/page.tsx` and the public `/m/[token]`) mount
- * this provider around `MatchReportProvider`, so the filters outlive a trip to
- * Visualizations and back.
+ * `FilmTab` would reset on every switch. The report page
+ * (`matches/(detail)/[matchId]/page.tsx`) mounts this provider around
+ * `MatchReportProvider`, so the filters outlive a trip to Statistics or
+ * Visualizations and back. The public `/m/[token]` page (Statistics only)
+ * mounts none.
  *
  * ── The URL mirror ──────────────────────────────────────────────────────
  * One search param, `MATCH_FILTERS_PARAM` (`?f=`), in `serializeMatchFilters`'
@@ -56,7 +59,7 @@ import {
  * rewritten to that canonical form, or dropped.
  *
  * Back/Forward restore the `?f=` of the entry they land on (`popstate`), so
- * the cards never disagree with the address bar.
+ * the Video list never disagrees with the address bar.
  *
  * ── Player attribution (docs/ui-revamp-guardrails.md §4) ─────────────────
  * The filters are you/opponent-relative and resolve to a seat through

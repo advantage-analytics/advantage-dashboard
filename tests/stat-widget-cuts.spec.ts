@@ -217,12 +217,6 @@ function render(
           sets: [],
         }),
       },
-      "@/components/dashboard/matches/match-detail/match-filters/provider": {
-        useMatchFilters: () => ({
-          filteredPoints: POINTS,
-          filtersActive: false,
-        }),
-      },
       "@/lib/data/match-utils": {
         surnameLabels: (a: string, b: string) => [a, b],
       },

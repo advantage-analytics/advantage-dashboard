@@ -260,7 +260,7 @@ function InsightPending() {
 }
 
 /**
- * `statistics-view.tsx`: the insight card, the filter bar, then the widgets row —
+ * `statistics-view.tsx`: the insight card, then the widgets row —
  * head-to-head beside the 416px chart column.
  */
 export function StatisticsPanePending() {
@@ -271,11 +271,6 @@ export function StatisticsPanePending() {
       innerClassName="flex flex-col gap-4"
     >
       <InsightPending />
-      {/* The filter bar (`match-filters/applied-filters.tsx`): nothing
-          applied on a fresh load, so just the 28px Filter button, right. */}
-      <div className="flex h-7 justify-end">
-        <PendingBar className="h-7 w-[72px] rounded-[6px]" />
-      </div>
       <div className="flex flex-col gap-4 @min-[720px]:flex-row @min-[720px]:items-start">
         <div className="min-w-0 flex-1">
           <HeadToHeadPending />

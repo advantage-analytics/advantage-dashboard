@@ -25,13 +25,14 @@ import {
  *
  * ── What a cut is ────────────────────────────────────────────────────────
  * A `FilmCut` is a `Partial<MatchFilters>` — the same vocabulary as the
- * Statistics filters — plus a few Film-only extras for what that vocabulary
+ * Video tab's filters — plus a few Film-only extras for what that vocabulary
  * cannot say without changing a count (`FilmCutExtras`). In Film it is ANDed
  * on top of the shared filters (`applyFilmCut`), drawn as its own removable
  * chip, and never written to `MatchFiltersProvider`: the Statistics tab and
- * the `?f=` URL know nothing about it. So the points a click opens are the
- * points the card counted — the card counts over the shared filtered points
- * with the very same predicate.
+ * the `?f=` URL know nothing about it. A card counts its "Watch all N" with
+ * the very same predicate over the WHOLE match (`applyFilmCut(points,
+ * points, …)`), since Statistics is never filtered; with no Video filter
+ * applied, the points a click opens are exactly the points the card counted.
  *
  * Its own context, like `film-head-context.tsx`, for the same two reasons: the
  * film subtree must not depend on `useMatchReport()` (`film-tab.tsx`'s header
@@ -175,8 +176,9 @@ export function matchesFilmCutExtras(point: MatchPoint, cut: FilmCut): boolean {
 
 /**
  * The cut laid over `base`: the points of `base` the cut also admits, in
- * `base`'s order. `base` is the shared filters' result
- * (`useMatchFilters().filteredPoints`); `points` is the WHOLE match in match
+ * `base`'s order. `base` is the Video list's shared filters' result
+ * (`useMatchFilters().filteredPoints`), or the whole match for a Statistics
+ * card's count; `points` is the WHOLE match in match
  * order, because the cut's `MatchFilters` part is evaluated over it (a
  * service court is a running count within each game, so it cannot be read
  * off a filtered subset). No cut, or an empty one, is `base` itself.

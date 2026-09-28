@@ -4,13 +4,13 @@ import type { ScoreLineSet } from "@/lib/ui/score-format";
  * What is left of the Statistics view's set scope: the games-and-points
  * summary `report-facts.tsx` prints for the whole match.
  *
- * ── Replaced by the match filters ───────────────────────────────────────────
- * The point-derived Statistics cards no longer narrow themselves here. They
- * read `useMatchFilters().filteredPoints`
- * (`match-filters/provider.tsx`), whose Score › Set group supersedes the
- * one-set scope — so `useSetScope`, the `?set=` parse/write rules and the
- * selectable-set rule are gone with it. A set is now just one filter among
- * many, mirrored in `?f=` rather than `?set=`.
+ * ── Retired ─────────────────────────────────────────────────────────────────
+ * The point-derived Statistics cards no longer narrow themselves at all: they
+ * are always the whole match (`useMatchData().points`). Narrowing to a set is
+ * the Video tab's job now — its match filters (`match-filters/provider.tsx`)
+ * carry a Score › Set group, mirrored in `?f=` rather than `?set=` — so
+ * `useSetScope`, the `?set=` parse/write rules and the selectable-set rule
+ * are gone.
  *
  * Sets come from the score, never from player order
  * (docs/ui-revamp-guardrails.md §4).

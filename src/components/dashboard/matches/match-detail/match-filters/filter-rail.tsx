@@ -26,7 +26,14 @@ import {
 
 /**
  * The match report's filters rail — `FiltersPanel` in a 340px rail at the
- * report's right edge, opened by the Statistics view's Filter button.
+ * report's right edge.
+ *
+ * ── Not mounted, for now ────────────────────────────────────────────────
+ * It was built for a Filter button on the Statistics view, which the product
+ * owner then removed: filters live on the Video tab alone, and Statistics is
+ * always the whole match. Nothing mounts `FilterRailProvider`/`FilterRail`
+ * until the rail is re-hosted for the Video tab (as an overlay there, so the
+ * notes below on the frame's third column describe the original placement).
  *
  * ── Placement ───────────────────────────────────────────────────────────
  * `MatchReportFrame` mounts the provider and the rail, so the rail is the

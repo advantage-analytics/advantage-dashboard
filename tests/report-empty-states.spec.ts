@@ -81,12 +81,6 @@ function render(
         "@/components/dashboard/matches/match-detail/use-match-sides": {
           useMatchSides: () => sides,
         },
-        "@/components/dashboard/matches/match-detail/match-filters/provider": {
-          useMatchFilters: () => ({
-            filteredPoints: points,
-            filtersActive: false,
-          }),
-        },
         "@/lib/data/match-utils": {
           surnameLabels: (a: string, b: string) => [a, b],
         },

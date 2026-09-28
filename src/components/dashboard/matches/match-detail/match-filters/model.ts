@@ -28,8 +28,9 @@ import {
 export { POINT_SCORE_OPTIONS, type PointScoreOption } from "./score";
 
 /**
- * The shared match filters — ONE model behind the Statistics tab and the Film
- * tab (Score / Serve / Return / Result / Custom). Pure logic: no React, no
+ * The shared match filters — ONE model behind the Film (Video) tab's filters
+ * and the statistic cuts that open it (Score / Serve / Return / Result /
+ * Custom). The Statistics tab itself is never filtered. Pure logic: no React, no
  * `next/navigation`, so Playwright specs import it directly.
  *
  * Combination rule, everywhere: OR within a group, AND across groups and

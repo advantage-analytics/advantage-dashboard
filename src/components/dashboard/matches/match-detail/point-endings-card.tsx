@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
+import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
@@ -10,7 +11,6 @@ import {
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { sideCut } from "@/components/dashboard/matches/match-detail/head-to-head-card";
-import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import type { MatchPoint } from "@/lib/data/match-points-server";
@@ -47,9 +47,10 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * player rather than about the analysis. The segment is dropped on the same
  * provider test the SQL uses, not on the count being zero.
  *
- * Filter-aware: the tally is taken over `useMatchFilters().filteredPoints`,
- * the same read every point-derived card on this tab makes
- * (rally-length-card.tsx takes the identical dependency).
+ * Whole match, always: the tally is taken over every point in
+ * `useMatchData().points`, the same read every point-derived card on this tab
+ * makes (rally-length-card.tsx takes the identical dependency). The match
+ * filters live on the Video tab only.
  *
  * With a playable video each segment opens its points in the Video tab
  * (`outcomeCut`) on click or Enter — hovering only reads. Without one the
@@ -164,7 +165,7 @@ interface PointEndingsCardProps {
 export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
   const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
-  const { filteredPoints: scopedPoints, filtersActive } = useMatchFilters();
+  const { points } = useMatchData();
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<string | null>(null);
 
@@ -172,10 +173,10 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
 
   const { youTally, oppTally } = useMemo(
     () => ({
-      youTally: tally(scopedPoints, youIsPlayer1),
-      oppTally: tally(scopedPoints, !youIsPlayer1),
+      youTally: tally(points, youIsPlayer1),
+      oppTally: tally(points, !youIsPlayer1),
     }),
-    [scopedPoints, youIsPlayer1],
+    [points, youIsPlayer1],
   );
 
   const outcomes = OUTCOMES.filter((o) => o.key !== "aces" || !isDerived);
@@ -232,9 +233,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
         ))}
 
         <p className="text-micro pt-0.5" style={{ color: "var(--ink-500)" }}>
-          {filtersActive
-            ? "None of the filtered points records how it ended."
-            : "No point on this match records how it ended."}
+          No point on this match records how it ended.
         </p>
       </section>
     );

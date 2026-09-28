@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -5,336 +7,301 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import {
   EMPTY_MATCH_FILTERS,
-  hasActiveMatchFilters,
+  type MatchFilterContext,
   type MatchFilters,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
-import {
-  appliedChips,
-  removeChip,
-} from "@/components/dashboard/matches/match-detail/match-filters/applied-chips";
-import {
-  escClosesRail,
-  filterRailReducer,
-} from "@/components/dashboard/matches/match-detail/match-filters/rail-state";
+import { applyFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 
 import { pt } from "./fixtures/film-point";
 import { createLoader, marker } from "./fixtures/vm-modules";
 
 /**
- * T6 — the match filters wired into the Statistics view.
+ * The Statistics tab has NO filters (product owner, 2026-09-28: "There should
+ * be no filter in the Statistics tab, just the Video tab"). It always shows
+ * the whole match, whatever `?f=` the URL carries — the match filters live on
+ * the Video tab alone.
  *
- * `StatisticsView` and the real `applied-filters.tsx` (with the real model
- * and chip helpers) render through `createLoader()`; the report, the match
- * data, the sides, the applied filters and the rail are stubbed, and the
- * cards are markers. A static render cannot click, so removing a chip, the
- * button's re-click and Esc are held through the pure `applied-chips.ts` and
- * `rail-state.ts` the components drive their handlers from.
+ * Every render below stubs `useMatchFilters()` as a URL `?f=` that matches
+ * NOTHING (`filteredPoints: []`, `filtersActive: true`). If the Statistics
+ * view or any of its four cards still read the applied filters, that stub
+ * would empty them; each test asserts it does not.
+ *
+ * Offline, through `createLoader()` (Playwright's JSX transform breaks
+ * `renderToStaticMarkup` on an imported .tsx).
  */
 
-const DETAIL = "@/components/dashboard/matches/match-detail/";
+const DETAIL = "src/components/dashboard/matches/match-detail/";
+const DETAIL_ID = "@/components/dashboard/matches/match-detail/";
 
-const NAMES = { you: "Rudy", opponent: "Sam" };
+/** p1–p3 won by player1 (you), p4–p5 by player2; rallies of 2–10 shots. */
+const POINTS: MatchPoint[] = [
+  pt({ id: "p1", pointNumber: 1, rallyLength: 2, wonByPlayer1: true }),
+  pt({ id: "p2", pointNumber: 2, rallyLength: 3, wonByPlayer1: true }),
+  pt({ id: "p3", pointNumber: 3, rallyLength: 6, wonByPlayer1: true }),
+  pt({
+    id: "p4",
+    pointNumber: 4,
+    rallyLength: 10,
+    wonByPlayer1: false,
+    player: "player2",
+    resultType: "Backhand Winner",
+  }),
+  pt({
+    id: "p5",
+    pointNumber: 5,
+    rallyLength: 4,
+    wonByPlayer1: false,
+    player: "player1",
+    resultType: "Forehand Unforced Error",
+  }),
+];
+
+const CTX: MatchFilterContext = {
+  youIsPlayer1: true,
+  hands: { player1: null, player2: null },
+};
+
+/** A `?f=` that no point passes — the case that must change nothing here. */
+const NOTHING_PASSES: MatchFilters = {
+  ...EMPTY_MATCH_FILTERS,
+  scorePoints: ["Ad-40"],
+};
+
 const sides = {
-  you: { isPlayer1: true, name: "Rudy Stepanov", shortName: NAMES.you },
-  opp: { isPlayer1: false, name: "Sam Okafor", shortName: NAMES.opponent },
+  you: {
+    isPlayer1: true,
+    name: "Rudy Stepanov",
+    shortName: "Rudy",
+    stats: { totalPointsWon: 3, totalPoints: 5, fractions: {} },
+  },
+  opp: {
+    isPlayer1: false,
+    name: "Sam Okafor",
+    shortName: "Sam",
+    stats: { totalPointsWon: 2, totalPoints: 5, fractions: {} },
+  },
   sets: [],
 };
 
-const POINTS: MatchPoint[] = [1, 2, 3, 4, 5].map((n) =>
-  pt({ id: `p${n}`, pointNumber: n }),
-);
+const passThrough = ({ children }: { children?: React.ReactNode }) =>
+  React.createElement(React.Fragment, null, children);
 
-function filtersWith(overrides: Partial<MatchFilters>): MatchFilters {
-  return { ...EMPTY_MATCH_FILTERS, ...overrides };
+function commonStubs(hasPlayableVideo: boolean): Record<string, unknown> {
+  const noop = () => {};
+  return {
+    "@/components/dashboard/matches/match-data-provider": {
+      useMatchData: () => ({
+        points: POINTS,
+        match: { verificationStatus: null },
+        statsResult: null,
+      }),
+    },
+    [DETAIL_ID + "match-report-context"]: {
+      useMatchReport: () => ({
+        meta: {
+          statsPublished: true,
+          isDerived: false,
+          readOnly: false,
+          hasPlayableVideo,
+        },
+        actions: { watchCut: noop, watchPoint: noop },
+      }),
+    },
+    [DETAIL_ID + "use-match-sides"]: { useMatchSides: () => sides },
+    [DETAIL_ID + "match-filters/provider"]: {
+      useMatchFilters: () => ({
+        filters: NOTHING_PASSES,
+        setFilters: noop,
+        clearFilters: noop,
+        filteredPoints: [],
+        filtersActive: true,
+        context: CTX,
+      }),
+    },
+    "@/lib/data/match-utils": {
+      surnameLabels: (a: string, b: string) => [
+        a.split(" ").pop(),
+        b.split(" ").pop(),
+      ],
+    },
+    "@/components/ui/tooltip": {
+      Tooltip: passThrough,
+      TooltipTrigger: passThrough,
+      TooltipContent: passThrough,
+    },
+    "framer-motion": {
+      useReducedMotion: () => true,
+      // `motion.div` → a plain element that drops the animation props.
+      motion: new Proxy(
+        {},
+        {
+          get:
+            (_, tag) =>
+            ({
+              initial: _i,
+              animate: _a,
+              transition: _t,
+              ...rest
+            }: Record<string, unknown>) =>
+              React.createElement(String(tag), rest),
+        },
+      ),
+    },
+  };
 }
 
-function renderStatistics({
-  filters = EMPTY_MATCH_FILTERS,
-  filteredPoints = POINTS,
-  canFilter,
-}: {
-  filters?: MatchFilters;
-  filteredPoints?: MatchPoint[];
-  canFilter?: boolean;
-} = {}) {
-  const noop = () => {};
+function renderCard(
+  file: string,
+  exportName: string,
+  { hasPlayableVideo = false, props = {} as Record<string, unknown> } = {},
+): string {
+  const loader = createLoader({
+    markUnknown: true,
+    stubs: commonStubs(hasPlayableVideo),
+  });
+  const exports = loader.load(DETAIL + file) as Record<
+    string,
+    React.ComponentType<Record<string, unknown>>
+  >;
+  return renderToStaticMarkup(React.createElement(exports[exportName], props));
+}
+
+function renderStatistics(): string {
   const loader = createLoader({
     stubs: {
-      [DETAIL + "match-report-context"]: {
-        useMatchReport: () => ({
-          meta: { statsPublished: true, isDerived: false, readOnly: false },
-          actions: {},
-        }),
-      },
-      [DETAIL + "match-report"]: {
+      ...commonStubs(false),
+      [DETAIL_ID + "match-report"]: {
         MatchReport: { Insight: marker("Insight") },
       },
-      "@/components/dashboard/matches/match-data-provider": {
-        useMatchData: () => ({ points: POINTS, match: {}, statsResult: null }),
-      },
-      [DETAIL + "use-match-sides"]: { useMatchSides: () => sides },
-      [DETAIL + "match-filters/provider"]: {
-        useMatchFilters: () => ({
-          filters,
-          setFilters: noop,
-          clearFilters: noop,
-          filteredPoints,
-          filtersActive: hasActiveMatchFilters(filters),
-          context: { youIsPlayer1: true, hands: {} },
-        }),
-      },
-      [DETAIL + "match-filters/filter-rail"]: {
-        FILTER_RAIL_ID: "match-filters-rail",
-        useFilterRailHost: () => ({
-          open: false,
-          toggle: noop,
-          registerTrigger: noop,
-        }),
-      },
-      [DETAIL + "head-to-head-card"]: {
+      [DETAIL_ID + "head-to-head-card"]: {
         HeadToHeadCard: marker("HeadToHeadCard"),
       },
-      [DETAIL + "performance-tracker-chart"]: {
+      [DETAIL_ID + "performance-tracker-chart"]: {
         PerformanceTrackerChart: marker("PerformanceTrackerChart"),
       },
-      [DETAIL + "rally-length-card"]: {
+      [DETAIL_ID + "rally-length-card"]: {
         RallyLengthCard: marker("RallyLengthCard"),
       },
-      [DETAIL + "point-endings-card"]: {
+      [DETAIL_ID + "point-endings-card"]: {
         PointEndingsCard: marker("PointEndingsCard"),
       },
-      [DETAIL + "statistics-empty"]: {
+      [DETAIL_ID + "statistics-empty"]: {
         StatisticsEmpty: marker("StatisticsEmpty"),
       },
-      [DETAIL + "unpublished-stats-notice"]: {
+      [DETAIL_ID + "unpublished-stats-notice"]: {
         UnpublishedStatsNotice: marker("UnpublishedStatsNotice"),
       },
     },
   });
-  const { StatisticsView } = loader.load(
-    "src/components/dashboard/matches/match-detail/statistics-view.tsx",
-  ) as { StatisticsView: React.ComponentType<{ canFilter?: boolean }> };
-  return renderToStaticMarkup(
-    React.createElement(
-      StatisticsView,
-      canFilter === undefined ? {} : { canFilter },
-    ),
-  );
+  const { StatisticsView } = loader.load(DETAIL + "statistics-view.tsx") as {
+    StatisticsView: React.ComponentType;
+  };
+  return renderToStaticMarkup(React.createElement(StatisticsView));
 }
 
-/** The Filter button's opening tag, or null when it is not drawn. */
-function filterButton(html: string): string | null {
-  const match = html.match(
-    /<button[^>]*aria-label="Filters[^"]*"[^>]*>.*?<\/button>/,
-  );
-  return match ? match[0] : null;
-}
+/* ── The view ──────────────────────────────────────────────────────────── */
 
-const TWO_VALUES = filtersWith({ server: "you", serveZone: ["Wide"] });
-
-test.describe("StatisticsView › Filter button", () => {
-  test("no filters: one Filter button, no badge, no applied strip", () => {
+test.describe("StatisticsView has no filters", () => {
+  test("no Filter button, no applied strip, no zero-match empty — even with ?f= set", () => {
     const html = renderStatistics();
-    const button = filterButton(html);
-    expect(button).not.toBeNull();
-    expect(button).toContain('aria-label="Filters"');
-    expect(button).toContain('aria-expanded="false"');
+    expect(html).not.toMatch(/aria-label="Filters/);
     expect(html).not.toContain("data-filter-count");
     expect(html).not.toContain('aria-label="Applied filters"');
-    // Exactly one — never per-category chips in the header.
-    expect(html.match(/aria-label="Filters/g)).toHaveLength(1);
-    expect(html).toContain('data-component="HeadToHeadCard"');
-  });
-
-  test("two values applied: the badge reads 2", () => {
-    const html = renderStatistics({
-      filters: TWO_VALUES,
-      filteredPoints: POINTS.slice(0, 3),
-    });
-    const button = filterButton(html);
-    expect(button).toContain('aria-label="Filters, 2 applied"');
-    expect(button).toMatch(/data-filter-count=""[^>]*>2<\/span>/);
-  });
-
-  test("the public page's canFilter={false} draws no Filter button", () => {
-    expect(filterButton(renderStatistics({ canFilter: false }))).toBeNull();
-    const active = renderStatistics({
-      canFilter: false,
-      filters: TWO_VALUES,
-      filteredPoints: POINTS.slice(0, 3),
-    });
-    expect(filterButton(active)).toBeNull();
-    expect(active).not.toContain("data-filter-count");
-  });
-});
-
-test.describe("StatisticsView › applied strip", () => {
-  test("active filters: N of M points, a removable chip per value, Clear all", () => {
-    const html = renderStatistics({
-      filters: TWO_VALUES,
-      filteredPoints: POINTS.slice(0, 3),
-    });
-    expect(html).toContain('aria-label="Applied filters"');
-    expect(html).toContain("3 of 5 points");
-    expect(html).toContain('aria-label="Remove filter: Rudy serving"');
-    expect(html).toContain('aria-label="Remove filter: Wide serve"');
-    expect(html.match(/>Clear all</g)).toHaveLength(1);
-    // The strip sits above the cards it scopes, which still draw.
-    expect(html.indexOf("3 of 5 points")).toBeLessThan(
-      html.indexOf('data-component="HeadToHeadCard"'),
-    );
-  });
-
-  test("a selected value the match cannot produce still gets a removable chip", () => {
-    const html = renderStatistics({
-      filters: filtersWith({ scorePoints: ["Ad-40"] }),
-      filteredPoints: [],
-    });
-    expect(html).toContain('aria-label="Remove filter: Ad-40"');
-    expect(html).toContain("0 of 5 points");
-  });
-
-  test("read-only (public page): chips without remove, the count still shown", () => {
-    const html = renderStatistics({
-      canFilter: false,
-      filters: TWO_VALUES,
-      filteredPoints: POINTS.slice(0, 3),
-    });
-    expect(html).toContain("3 of 5 points");
-    expect(html).toContain(">Rudy serving</span>");
-    expect(html).not.toContain("Remove filter:");
-  });
-});
-
-test.describe("StatisticsView › zero-match empty state", () => {
-  test("no point passes: the cards give way to one statement and Clear all", () => {
-    const html = renderStatistics({
-      filters: TWO_VALUES,
-      filteredPoints: [],
-    });
-    expect(html).toContain('data-testid="filtered-points-empty"');
-    expect(html).toContain("No points match these filters");
-    // One Clear all — the empty state's; the strip's steps aside.
-    expect(html.match(/>Clear all</g)).toHaveLength(1);
-    expect(html).not.toContain('data-component="HeadToHeadCard"');
-    expect(html).not.toContain('data-component="RallyLengthCard"');
-    expect(html).not.toContain('data-component="PerformanceTrackerChart"');
-    expect(html).not.toContain('data-component="PointEndingsCard"');
-    // The bar stays so one chip can be removed instead.
-    expect(filterButton(html)).not.toBeNull();
-    expect(html).toContain('aria-label="Remove filter: Rudy serving"');
-    // The insight is whole-match prose and stays.
-    expect(html).toContain('data-component="Insight"');
-  });
-
-  test("no filters: the cards draw and the zero-match empty does not", () => {
-    const html = renderStatistics({ filteredPoints: POINTS });
+    expect(html).not.toContain("Clear all");
+    expect(html).not.toContain("filtered-points-empty");
     expect(html).not.toContain("No points match these filters");
-    expect(html).toContain('data-component="RallyLengthCard"');
+    expect(html).not.toMatch(/\d+ of \d+ points/);
+    // The whole report still draws, every card included.
+    for (const part of [
+      "Insight",
+      "HeadToHeadCard",
+      "PerformanceTrackerChart",
+      "RallyLengthCard",
+      "PointEndingsCard",
+    ])
+      expect(html).toContain(`data-component="${part}"`);
+  });
+
+  test("the view, the share page and the skeleton carry no filter wiring", () => {
+    const view = readFileSync(DETAIL + "statistics-view.tsx", "utf8");
+    expect(view).not.toMatch(/canFilter|match-filters\//);
+
+    const share = readFileSync("src/app/m/[token]/page.tsx", "utf8");
+    expect(share).not.toMatch(/canFilter|MatchFiltersProvider|match-filters\//);
+
+    const pending = readFileSync(
+      "src/components/dashboard/loading/match-report-pending.tsx",
+      "utf8",
+    );
+    expect(pending).not.toMatch(/applied-filters|Filter button/);
   });
 });
 
-test.describe("applied-chips", () => {
-  test("one chip per value, in panel order; Serve/Return player is one chip", () => {
-    const chips = appliedChips(
-      filtersWith({
-        serveZone: ["T", "Wide"],
-        server: "opponent",
-        sets: [2, 1],
-        resultOutcome: ["winner"],
-        customRallyShot: [4],
-        returnContact: ["middle"],
-      }),
-      NAMES,
-    );
-    expect(chips.map((c) => c.label)).toEqual([
-      "Set 1",
-      "Set 2",
-      "Sam serving",
-      "Wide serve",
-      "T serve",
-      "Middle contact",
-      "Result: Winner",
-      "Rally shot 4",
-    ]);
-    expect(new Set(chips.map((c) => c.id)).size).toBe(chips.length);
-  });
+/* ── The cards ─────────────────────────────────────────────────────────── */
 
-  test("no filters, no chips", () => {
-    expect(appliedChips(EMPTY_MATCH_FILTERS, NAMES)).toEqual([]);
-  });
-
-  test("removing a chip removes that value and only that value", () => {
-    const filters = filtersWith({
-      server: "you",
-      serveZone: ["Wide", "T"],
-      scorePoints: ["Ad-40"],
-    });
-    const chips = appliedChips(filters, NAMES);
-    const wide = chips.find((c) => c.label === "Wide serve")!;
-    expect(removeChip(filters, wide)).toEqual({
-      ...filters,
-      serveZone: ["T"],
-    });
-    const serving = chips.find((c) => c.label === "Rudy serving")!;
-    expect(removeChip(filters, serving).server).toBeNull();
-    // The unavailable value is removable like any other.
-    const ad = chips.find((c) => c.label === "Ad-40")!;
-    expect(removeChip(filters, ad).scorePoints).toEqual([]);
-  });
-
-  test("removing every chip leaves nothing filtered", () => {
-    let filters = TWO_VALUES;
-    for (const chip of appliedChips(TWO_VALUES, NAMES)) {
-      filters = removeChip(filters, chip);
-    }
-    expect(hasActiveMatchFilters(filters)).toBe(false);
-  });
-
-  test("a stale chip (value already gone) is a no-op, never a re-add", () => {
-    const filters = filtersWith({ serveZone: ["T"] });
-    expect(removeChip(filters, { key: "serveZone", value: "Wide" })).toBe(
-      filters,
-    );
-    const noServer = filtersWith({});
-    expect(removeChip(noServer, { key: "server", value: "you" })).toBe(
-      noServer,
-    );
-  });
-});
-
-test.describe("rail-state", () => {
-  test("the Filter button toggles: open, then re-click closes", () => {
-    expect(filterRailReducer("closed", "toggle")).toBe("open");
-    expect(filterRailReducer("open", "toggle")).toBe("closing");
-    // A click mid-close reopens rather than waiting out the animation.
-    expect(filterRailReducer("closing", "toggle")).toBe("open");
-  });
-
-  test("close (Esc, Cancel, Apply) only starts from open; the animation end finishes it", () => {
-    expect(filterRailReducer("open", "close")).toBe("closing");
-    expect(filterRailReducer("closed", "close")).toBe("closed");
-    expect(filterRailReducer("closing", "close")).toBe("closing");
-    expect(filterRailReducer("closing", "closed")).toBe("closed");
-    expect(filterRailReducer("open", "closed")).toBe("open");
-  });
-
-  test("reset (the view unmounted) shuts it at once from any phase", () => {
-    for (const phase of ["open", "closing", "closed"] as const) {
-      expect(filterRailReducer(phase, "reset")).toBe("closed");
+test.describe("the four Statistics cards count every point of the match", () => {
+  test("none of them reads the applied filters", () => {
+    for (const card of [
+      "head-to-head-card.tsx",
+      "performance-tracker-chart.tsx",
+      "rally-length-card.tsx",
+      "point-endings-card.tsx",
+    ]) {
+      const source = readFileSync(DETAIL + card, "utf8");
+      expect(source, card).not.toMatch(
+        /filteredPoints|filtersActive|useSetScope|scopePoints/,
+      );
+      expect(source, card).not.toMatch(/[Ff]iltered points|"Filtered"/);
     }
   });
 
-  test("Esc closes an open rail unless something above it took the key", () => {
-    const esc = { key: "Escape", defaultPrevented: false };
-    expect(escClosesRail("open", esc)).toBe(true);
-    expect(escClosesRail("closed", esc)).toBe(false);
-    expect(escClosesRail("closing", esc)).toBe(false);
-    expect(escClosesRail("open", { ...esc, defaultPrevented: true })).toBe(
-      false,
+  test("performance tracker: the whole series, not its empty", () => {
+    const html = renderCard(
+      "performance-tracker-chart.tsx",
+      "PerformanceTrackerChart",
     );
-    expect(
-      escClosesRail("open", { key: "Enter", defaultPrevented: false }),
-    ).toBe(false);
+    expect(html).not.toContain('data-testid="performance-tracker-empty"');
+    expect(html).toContain("Momentum across 5 points");
+  });
+
+  test("rally length: every band, as a share of the match", () => {
+    const html = renderCard("rally-length-card.tsx", "RallyLengthCard");
+    expect(html).not.toContain('data-testid="rally-length-empty"');
+    // 1–4 shots: p1, p2, p5; 5–8: p3; 9+: p4.
+    expect(html).toContain("3 points, 60 percent of the match");
+    expect(html).toContain("1 points, 20 percent of the match");
+    expect(html).not.toContain("filtered");
+  });
+
+  test("point endings: tallied over the whole match", () => {
+    const html = renderCard("point-endings-card.tsx", "PointEndingsCard", {
+      props: { isDerived: false },
+    });
+    expect(html).not.toContain('data-testid="point-endings-empty"');
+    expect(html).not.toContain("filtered");
+  });
+
+  test("head to head: whole-match heading, and Watch all N counts every point", () => {
+    const html = renderCard("head-to-head-card.tsx", "HeadToHeadCard", {
+      hasPlayableVideo: true,
+    });
+    expect(html).toContain("Whole match · 5 points");
+    expect(html).not.toContain(">Filtered<");
+    expect(html).not.toContain("filtered points");
+
+    // "Total points won" opens the whole match from the label, and the
+    // points each side won from its figure — the published 3 and 2, never
+    // the zero an unmatched ?f= would leave.
+    const all = applyFilmCut(POINTS, POINTS, {}, CTX).length;
+    expect(all).toBe(5);
+    expect(html).toContain(
+      "Total points won, both players. Watch all 5 points in Video",
+    );
+    expect(html).toContain(
+      "Total points won, Stepanov: 3 of 5 won. Watch all 3 points in Video",
+    );
+    expect(html).toContain(
+      "Total points won, Okafor: 2 of 5 won. Watch all 2 points in Video",
+    );
   });
 });

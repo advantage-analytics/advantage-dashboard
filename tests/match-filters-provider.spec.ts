@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -17,8 +15,9 @@ import { createLoader } from "./fixtures/vm-modules";
 import { pt } from "./fixtures/film-point";
 
 /**
- * T4: `MatchFiltersProvider` + `useMatchFilters()`, the one filter state the
- * Statistics cards read in place of the retired set scope.
+ * T4: `MatchFiltersProvider` + `useMatchFilters()`, the Video tab's filter
+ * state. (The Statistics cards never read it — they are always the whole
+ * match; `tests/match-filters-statistics.spec.ts` holds that.)
  *
  * Offline: the URL helper is pure, and the provider is rendered through
  * `fixtures/vm-modules` (Playwright's JSX transform breaks
@@ -30,7 +29,6 @@ import { pt } from "./fixtures/film-point";
 
 const PROVIDER =
   "src/components/dashboard/matches/match-detail/match-filters/provider.tsx";
-const DETAIL = "src/components/dashboard/matches/match-detail/";
 
 /** p1/p3 served by player1, p2/p4 by player2. */
 const POINTS: MatchPoint[] = [
@@ -206,98 +204,5 @@ test.describe("MatchFiltersProvider", () => {
     const seen = probe({ youIsPlayer1: true, withProvider: false });
     expect(seen.active).toBe(false);
     expect(seen.ids).toEqual(["p1", "p2", "p3", "p4"]);
-  });
-});
-
-/* ── The cards read the filters, not the set scope ─────────────────────── */
-
-test("the four point-derived cards read useMatchFilters, not set-scope", () => {
-  for (const card of [
-    "head-to-head-card.tsx",
-    "performance-tracker-chart.tsx",
-    "rally-length-card.tsx",
-    "point-endings-card.tsx",
-  ]) {
-    const source = readFileSync(`${DETAIL}${card}`, "utf8");
-    expect(source, card).toContain("useMatchFilters()");
-    expect(source, card).not.toMatch(/useSetScope|scopePoints|\/set-scope"/);
-  }
-});
-
-/* ── Filters that match nothing ─────────────────────────────────────────── */
-
-/**
- * A filter can narrow the match to zero points. Each chart card must fall to
- * its own empty anatomy — never crash, never draw a zero-height series — and
- * say the FILTERS left nothing, not that the match recorded nothing. (The
- * page-level "No points match these filters" state is T6's.)
- */
-function renderFilteredEmpty(file: string, exportName: string): string {
-  const loader = createLoader({
-    markUnknown: true,
-    stubs: {
-      "@/components/dashboard/matches/match-data-provider": {
-        useMatchData: () => ({ points: POINTS, match: {}, statsResult: null }),
-      },
-      "@/components/dashboard/matches/match-detail/use-match-sides": {
-        useMatchSides: () => ({
-          you: { isPlayer1: true, name: "Alex Rivera" },
-          opp: { isPlayer1: false, name: "Sam Okafor" },
-          sets: [],
-        }),
-      },
-      "@/components/dashboard/matches/match-detail/match-report-context": {
-        useMatchReport: () => ({
-          meta: { hasPlayableVideo: false },
-          actions: {},
-        }),
-      },
-      "@/components/dashboard/matches/match-detail/match-filters/provider": {
-        useMatchFilters: () => ({ filteredPoints: [], filtersActive: true }),
-      },
-      "@/lib/data/match-utils": {
-        surnameLabels: (a: string, b: string) => [a, b],
-      },
-      "framer-motion": {
-        useReducedMotion: () => true,
-        motion: new Proxy({}, { get: (_, tag) => String(tag) }),
-      },
-    },
-  });
-  const exports = loader.load(`${DETAIL}${file}`) as Record<
-    string,
-    React.ComponentType<Record<string, unknown>>
-  >;
-  return renderToStaticMarkup(
-    React.createElement(exports[exportName], { isDerived: false }),
-  );
-}
-
-test.describe("filters that match no points", () => {
-  test("performance tracker: its empty, worded for the filters", () => {
-    const html = renderFilteredEmpty(
-      "performance-tracker-chart.tsx",
-      "PerformanceTrackerChart",
-    );
-    expect(html).toContain('data-testid="performance-tracker-empty"');
-    expect(html).toContain("at least two points match the filters");
-  });
-
-  test("rally length: its empty, worded for the filters", () => {
-    const html = renderFilteredEmpty(
-      "rally-length-card.tsx",
-      "RallyLengthCard",
-    );
-    expect(html).toContain('data-testid="rally-length-empty"');
-    expect(html).toContain("recorded on the filtered points");
-  });
-
-  test("point endings: its empty, worded for the filters", () => {
-    const html = renderFilteredEmpty(
-      "point-endings-card.tsx",
-      "PointEndingsCard",
-    );
-    expect(html).toContain('data-testid="point-endings-empty"');
-    expect(html).toContain("None of the filtered points");
   });
 });

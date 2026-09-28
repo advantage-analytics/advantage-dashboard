@@ -9,9 +9,10 @@ import {
 } from "./model";
 
 /**
- * The applied-filters strip's pure half — one chip per applied value, and
- * what removing one leaves — kept out of `applied-filters.tsx` so a spec can
- * hold it without React.
+ * The applied-filter chips' pure half — one chip per applied value, and what
+ * removing one leaves — kept free of React so a spec can hold it. The Video
+ * tab draws them (`film/film-list-filters.ts`, `film/point-list.tsx`); the
+ * Statistics tab has no filters.
  *
  * Chips come from the APPLIED filters alone, never from `optionAvailability`:
  * a value the match cannot produce (an `?f=` link carrying Ad-40 onto a video

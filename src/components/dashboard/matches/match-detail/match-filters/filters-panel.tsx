@@ -26,7 +26,7 @@ import {
  * The shared match filters panel — Score / Serve / Return / Result / Custom —
  * drawn from the author's two mockups and driven entirely by `model.ts`'s
  * catalog (`MATCH_FILTER_SECTIONS`, `MATCH_FILTER_OPTIONS`); no label is
- * declared here. Standalone: the Statistics and Film tabs host it.
+ * declared here. Standalone: the Film (Video) tab hosts it.
  *
  * It edits a DRAFT. Pills and Clear all only change the draft; `onApply` is
  * called by the Apply button and nothing else (`panelActions`, in
