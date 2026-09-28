@@ -41,7 +41,7 @@ export function viewPillProps(isActive: boolean): {
 /**
  * A fixed-set view switcher over one list, generalized from
  * `LifecycleChips` (`src/components/dashboard/matches/lifecycle-chips.tsx`,
- * the Matches "All · New · In progress · Estimates" row).
+ * the Matches "All · New · In progress" row).
  *
  * Status pills, not filter chips: a small number of mutually exclusive views
  * of the same rows. They carry no counts and no dots — a count belongs in
