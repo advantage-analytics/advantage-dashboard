@@ -13,6 +13,7 @@
  */
 
 import { serveCourtSide } from "./court";
+import { lastStrokeWinner } from "./winners";
 import type { SplitStepRally, SplitStepStroke } from "./types";
 
 export const POINT_FLAGS = {
@@ -24,6 +25,12 @@ export const POINT_FLAGS = {
   RESERVE_AFTER_IN: "reserve_after_in",
   /** Service court failed to alternate from the previous point in the game. */
   SERVICE_COURT_REPEAT: "service_court_repeat",
+  /**
+   * The score stream had collapsed (see `collapsedTailStart`), so the winner is
+   * the last stroke's guess, not a reading of the score. The stream agrees with
+   * that guess on roughly 80% of the points where both exist.
+   */
+  WINNER_GUESSED: "winner_guessed",
   /** No result_type could be assigned honestly. */
   RESULT_TYPE_UNKNOWN: "result_type_unknown",
 } as const;
@@ -104,16 +111,12 @@ export function flagPoint(params: {
 }): string[] {
   const { rally, winner, previousInGame, resultType } = params;
   const flags: string[] = [];
-  const last = rally.strokes[rally.strokes.length - 1];
 
   // The disagreement that matters: the score fold says one player won, the
   // last stroke's in flag implies the other. These are the points a human
   // should look at first.
-  if (winner && last) {
-    const byFlag = last.in
-      ? last.playerLabel
-      : (rally.strokes.find((s) => s.playerLabel !== last.playerLabel)
-          ?.playerLabel ?? null);
+  if (winner) {
+    const byFlag = lastStrokeWinner(rally);
     if (byFlag && byFlag !== winner) flags.push(POINT_FLAGS.WINNER_DISPUTED);
   }
 

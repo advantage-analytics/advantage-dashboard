@@ -48,8 +48,14 @@
  * 0.3.2 (2026-09-28) folds under the ad rule the vendor was told
  * (processing_jobs.ad_scoring) instead of matches.format's; only the
  * break/set/match-point flags can differ.
+ * 0.4.1 (2026-09-28) keeps a trailing run of rallies whose score stream reset
+ * to 0-0 / 0-0 / no set (collapsedTailStart in rallies.ts): they fold into the
+ * last real game and take the last stroke's guess as winner, flagged
+ * `winner_guessed`. Before it, such a match was refused for points that
+ * resolved no winner. Numbered past 0.4.0 (phantom strokes, played.ts), which
+ * was already stamped on live rows from another branch.
  */
-export const DERIVATION_VERSION = "0.3.2-unreconciled";
+export const DERIVATION_VERSION = "0.4.1-unreconciled";
 
 export type {
   RawSplitStepStroke,
@@ -87,6 +93,7 @@ export {
   playerLabels,
   opponentOf,
   rallyDuration,
+  collapsedTailStart,
   type RallyGrouping,
 } from "./rallies";
 
@@ -113,6 +120,7 @@ export { serveZone, directionZone } from "./court";
 export {
   resolvePointWinners,
   resolveWinner,
+  lastStrokeWinner,
   type PointWinner,
   type WinnerResolution,
 } from "./winners";
