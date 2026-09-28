@@ -60,8 +60,16 @@
  * review-only `second_serve_called_out` flag and stops flagging
  * `service_court_repeat` on a no-ad deciding point, where the receiver picks
  * the side.
+ * 0.5.0 (2026-09-28) reads the trajectories file for our own line calls
+ * (line-calls.ts). When the ball before a derived winner bounced outside the
+ * singles lines, the winner's stroke is dropped as a dead ball and the point
+ * becomes an error by the out ball's hitter (played.ts,
+ * `winner_to_error_by_bounce`) — an autofix on 6 of 6 from one labelled
+ * match, with its reconsideration criteria in played.ts. A near-line or
+ * confidently-out ball flags `ending_suspect_line` for review instead. A job
+ * with no trajectories file derives exactly as 0.4.2.
  */
-export const DERIVATION_VERSION = "0.4.2-unreconciled";
+export const DERIVATION_VERSION = "0.5.0-unreconciled";
 
 export type {
   RawSplitStepStroke,
@@ -150,6 +158,19 @@ export {
 
 export { flagPoint, flagStroke, POINT_FLAGS, SHOT_FLAGS } from "./flags";
 export { playedRally, type PlayedRally } from "./played";
+export {
+  lineCallsFor,
+  singlesMargin,
+  type LineCall,
+  type LineCalls,
+} from "./line-calls";
+export {
+  groupTrajectories,
+  flightSamples,
+  type TrajectoryFlight,
+  type TrajectoryRow,
+  type BallSample,
+} from "./trajectory";
 
 export { pressureFor, type PressureFlags } from "./pressure";
 

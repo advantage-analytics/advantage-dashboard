@@ -22,6 +22,7 @@ import {
   lastStrokeWinner,
   POINT_FLAGS,
   SHOT_FLAGS,
+  type LineCall,
   type PointWinner,
   type SplitStepRally,
   type SplitStepStroke,
@@ -215,6 +216,94 @@ test.describe("phantom strokes", () => {
   test("a rally with no phantom is returned untouched", () => {
     const r = rally([fault(), serve(), b()]);
     expect(playedRally(r).rally).toBe(r);
+  });
+});
+
+test.describe("dead ball after an out ball", () => {
+  // A serves, B returns, A's groundstroke lands out, and B strikes it back.
+  // The score says B won, so the vendor's last stroke reads as B's winner.
+  const serveA = () => stroke({ strokeType: "serve", strokeSide: "overhead" });
+  const returnB = () => stroke({ playerLabel: "B", strokeSide: "backhand" });
+  const outA = stroke({ strokeSide: "backhand" });
+  const deadB = () => stroke({ playerLabel: "B" });
+  const at = (margin: number, source: LineCall["source"] = "trajectory") =>
+    new Map<SplitStepStroke, LineCall>([
+      [outA, { margin, netClearance: 1.4, source }],
+    ]);
+  const build = () => rally([serveA(), returnB(), outA, deadB()]);
+
+  test("drops the dead ball, so the out ball ends the point as an error", () => {
+    const played = playedRally(build(), { winner: "B", lineCalls: at(-0.4) });
+    expect(played.deadBall).toBe(1);
+    expect(played.rally.strokes).toHaveLength(3);
+    expect(played.flags).toContain(POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE);
+    // The winner is unchanged; only how the point ended moves.
+    expect(classifyPoint(played.rally, "B")).toBe("Backhand Unforced Error");
+    expect(
+      shotResult({
+        stroke: outA,
+        index: 2,
+        rally: played.rally,
+        serveIndex: 0,
+        winner: "B",
+      }),
+    ).toBe("Out");
+  });
+
+  test("needs trajectory evidence, not the strokes file's own bounce", () => {
+    const r = build();
+    const played = playedRally(r, {
+      winner: "B",
+      lineCalls: at(-0.4, "strokes"),
+    });
+    expect(played.rally).toBe(r);
+  });
+
+  test("a ball inside the lines leaves the winner alone", () => {
+    const r = build();
+    expect(playedRally(r, { winner: "B", lineCalls: at(0.2) }).rally).toBe(r);
+  });
+
+  test("never touches a return winner: the ball before it is a serve", () => {
+    const serve = stroke({ strokeType: "serve", strokeSide: "overhead" });
+    const r = rally([serve, deadB()]);
+    const calls = new Map<SplitStepStroke, LineCall>([
+      [serve, { margin: -1, netClearance: 1.2, source: "trajectory" }],
+    ]);
+    expect(playedRally(r, { winner: "B", lineCalls: calls }).rally).toBe(r);
+  });
+
+  test("without a settled winner nothing is dropped", () => {
+    const r = build();
+    expect(playedRally(r, { winner: null, lineCalls: at(-0.4) }).rally).toBe(r);
+  });
+
+  const flagsFor = (
+    lineCalls?: Map<SplitStepStroke, LineCall>,
+    before = outA,
+  ) =>
+    flagPoint({
+      rally: rally([serveA(), returnB(), before, deadB()]),
+      winner: "B",
+      previousInGame: null,
+      resultType: "Forehand Winner",
+      lineCalls,
+    });
+
+  test("a winner after a ball near the line is flagged for review", () => {
+    expect(flagsFor(at(0.6))).toContain(POINT_FLAGS.ENDING_SUSPECT_LINE);
+    expect(flagsFor(at(1.8))).not.toContain(POINT_FLAGS.ENDING_SUSPECT_LINE);
+  });
+
+  test("a confident vendor out call on that ball is flagged too", () => {
+    const calledOut = stroke({ in: false, lineConfidence: 0.9 });
+    const unsure = stroke({ in: false, lineConfidence: 0.7 });
+    expect(flagsFor(undefined, calledOut)).toContain(
+      POINT_FLAGS.ENDING_SUSPECT_LINE,
+    );
+    expect(flagsFor(undefined, unsure)).not.toContain(
+      POINT_FLAGS.ENDING_SUSPECT_LINE,
+    );
   });
 });
 
