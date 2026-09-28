@@ -57,10 +57,17 @@ const canUpload = params.get("upload") !== "false";
 // score rows name them — against this saved roster.
 const unnamed = params.get("unnamed") === "true";
 // A tournament names (or renames) every round's opponent in its score row,
-// so it reads the same roster.
+// so it reads the same roster — the entry's school's, "Rival State" — and can
+// move to another directory school's ("Ridgeline University") from its
+// School field. `?noschool=true` opens the entry with no school at all.
 if (unnamed || tournament) {
   window.opponentRoster = ["Casey Chen", "Taylor Park", "Sam Ortiz"];
+  window.opponentRosterByKey = {
+    "rival-state": ["Casey Chen", "Taylor Park", "Sam Ortiz"],
+    ridgeline: ["Lee Park", "Ana Ruiz"],
+  };
 }
+const noSchool = params.get("noschool") === "true";
 
 function DualFlow() {
   const s1 = {
@@ -143,13 +150,16 @@ function DualFlow() {
  */
 function TournamentFlow() {
   const recorded = params.get("recorded") === "true";
-  const t1 = preset(
-    "entry-t1",
-    recorded ? "R16" : "R32",
-    "Jordan Lee",
-    "",
-    "tournament",
-  );
+  const t1 = {
+    ...preset(
+      "entry-t1",
+      recorded ? "R16" : "R32",
+      "Jordan Lee",
+      "",
+      "tournament",
+    ),
+    ...(noSchool ? { opponentProgramKey: null, opponentSchool: null } : {}),
+  };
   const t2 = preset("entry-t2", "QF", "Alex Kim", "Robin Shah", "tournament");
   const lineup: LineChoice[] = [
     { slot: "#1", playerName: t1.playerName, state: "open", preset: t1 },

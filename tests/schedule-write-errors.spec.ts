@@ -13,7 +13,7 @@ import {
   validateDualLineup,
   validateLineup,
 } from "@/lib/schedule/lineup-validation";
-import { DEFAULT_DOUBLES_GAMES_TO } from "@/lib/schedule/format";
+import { DEFAULT_DOUBLES_GAMES_TO, roundRank } from "@/lib/schedule/format";
 import { matchResultFor } from "@/lib/schedule/entry-state";
 import type { EventDetail, EventEntry } from "@/lib/schedule/types";
 import type {
@@ -26,7 +26,7 @@ function mockRequire(name: string) {
   if (name === "./entry-plan") return { lineupForfeitSide, planEntryChanges };
   if (name === "./lineup-validation")
     return { validateDualLineup, validateLineup };
-  if (name === "./format") return { DEFAULT_DOUBLES_GAMES_TO };
+  if (name === "./format") return { DEFAULT_DOUBLES_GAMES_TO, roundRank };
   if (name === "./entry-state") return { matchResultFor };
   return {};
 }

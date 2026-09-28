@@ -33,13 +33,26 @@
  * Round path moves the form to that round — the just-saved form counts as
  * its own seed, so the next round opens blank rather than carrying the score
  * that was just filed.
+ *
+ * A tournament round also asks WHOSE player the opponent is — the School
+ * field beside Round, the dual builder's directory search over
+ * `/api/programs/search` with a typed fallback. It is what points the opponent
+ * picker's roster at the right program (`useOpponentPool` reads it), and it
+ * travels with the save as `opponentSchool` + `opponentProgramKey`, onto the
+ * ENTRY: `recordResult` writes them only from the entry's latest round, so a
+ * correction of an earlier round cannot put a round-old school back.
  */
 
-import { useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";
+import { advField } from "@/lib/ui/adv-field";
+import { cn } from "@/lib/utils";
+import { useListboxNav } from "@/hooks/use-listbox-nav";
+import { divisionLabel } from "@/lib/data/programs-server";
+import { useProgramSearch } from "@/components/dashboard/schedule/static/use-program-search";
 import { recordResult, setOutcome } from "@/lib/schedule/actions";
 import {
   ROUND_ORDER,
@@ -109,6 +122,24 @@ function replaceAt(
   return next;
 }
 
+/**
+ * The opponent's school on a tournament round: the name as it will be written,
+ * and the directory key behind it — null when it was typed past the
+ * directory, which is also "no roster to offer".
+ */
+export interface OpponentSchool {
+  name: string;
+  programKey: string | null;
+}
+
+/** What the School field opens with: the entry's school, "the last round filed". */
+function seedSchool(preset: EventPreset): OpponentSchool {
+  return {
+    name: preset.opponentSchool ?? "",
+    programKey: preset.opponentProgramKey ?? null,
+  };
+}
+
 export function ScoreOnlyFlow({
   preset,
   lineup,
@@ -153,8 +184,18 @@ export function ScoreOnlyFlow({
    * form while a new round keeps the one being typed into.
    */
   const [lineSwitches, setLineSwitches] = useState(0);
+  /**
+   * A tournament round's opponent school. Held here, beside the pool it
+   * points, so one `useOpponentPool` serves every line — and reseeded on a
+   * LINE switch only: the school belongs to the entry, not to the round, so
+   * the Round control leaves it where the coach put it.
+   */
+  const [school, setSchool] = useState<OpponentSchool>(() =>
+    seedSchool(preset),
+  );
   const switchLine = (next: EventPreset) => {
     setCurrent(next);
+    setSchool(seedSchool(next));
     setLineSwitches((count) => count + 1);
   };
   /**
@@ -174,13 +215,26 @@ export function ScoreOnlyFlow({
   // every line's remount — and only when a form can name someone: some line
   // still needs a name, or this is a tournament, whose every round is named
   // (or renamed) in its own score row.
+  //
+  // A dual's school is the event's. A tournament's is whatever the School
+  // field says right now — a directory pick re-points the roster at that
+  // program in the same render, a typed school has no program and so no
+  // roster, and the event's name stands in for the prose while it is blank.
   const naming =
     current.eventKind === "tournament" ||
     lineup.some(
       (choice) => choice.preset && choice.preset.opponentName.trim() === "",
     );
-  const schoolName = current.opponentSchool ?? current.eventName ?? "";
-  const programKey = current.opponentProgramKey;
+  const schoolName =
+    (current.eventKind === "tournament"
+      ? school.name || null
+      : current.opponentSchool) ??
+    current.eventName ??
+    "";
+  const programKey =
+    current.eventKind === "tournament"
+      ? school.programKey
+      : current.opponentProgramKey;
   const pool = useOpponentPool(
     naming ? programKey : null,
     programKey ? `program:${programKey}` : `text:${schoolName}`,
@@ -307,6 +361,8 @@ export function ScoreOnlyFlow({
         preset={current}
         lineup={lineup}
         pool={pool}
+        school={school}
+        onSchoolChange={setSchool}
         initialOutcome={outcomeAt(currentKey)}
         recorded={
           tournament && current.round
@@ -384,6 +440,8 @@ function ScoreForm({
   preset,
   lineup,
   pool,
+  school,
+  onSchoolChange,
   initialOutcome,
   recorded,
   heldRounds,
@@ -403,6 +461,9 @@ function ScoreForm({
   lineup: LineChoice[];
   /** The opponent's school and saved roster, for naming a blank opponent. */
   pool: OpponentPool;
+  /** A tournament round's opponent school — the pool's source, and the save's. */
+  school: OpponentSchool;
+  onSchoolChange: (school: OpponentSchool) => void;
   initialOutcome: Pick<EntryOutcome, "kind" | "side"> | null;
   /** A tournament round that already holds a result — saving replaces it. */
   recorded: boolean;
@@ -692,7 +753,18 @@ function ScoreForm({
         setSavedOutcome(null);
       }
 
-      const result = await recordResult(plan.input);
+      // A tournament round says whose player it was against; a dual's event
+      // already does, so its input leaves both undefined and the entry's
+      // school alone.
+      const result = await recordResult(
+        tournament
+          ? {
+              ...plan.input,
+              opponentSchool: school.name.trim() || null,
+              opponentProgramKey: school.programKey,
+            }
+          : plan.input,
+      );
       if ("error" in result) {
         setError(result.error);
         return;
@@ -719,25 +791,38 @@ function ScoreForm({
     <>
       <div className={`${CONTENT_CLS} flex flex-col gap-9 pb-16`}>
         {tournament ? (
-          <div className="flex w-[280px] flex-col gap-2">
-            <span className="eyebrow">Round</span>
-            <MenuSelect
-              label="Round"
-              value={preset.round ?? undefined}
-              placeholder="Choose the round"
-              options={ROUND_ORDER.map((round) => ({
-                value: round,
-                label: round,
-                description:
-                  recorded && round === preset.round
-                    ? "Recorded — saving replaces it."
-                    : undefined,
-              }))}
-              onChange={changeRound}
-              variant="underline"
-              width={280}
-              disabled={pending}
-            />
+          <div className="flex flex-wrap items-start gap-x-8 gap-y-6">
+            <div className="flex w-[280px] flex-col gap-2">
+              <span className="eyebrow">Round</span>
+              <MenuSelect
+                label="Round"
+                value={preset.round ?? undefined}
+                placeholder="Choose the round"
+                options={ROUND_ORDER.map((round) => ({
+                  value: round,
+                  label: round,
+                  description:
+                    recorded && round === preset.round
+                      ? "Recorded — saving replaces it."
+                      : undefined,
+                }))}
+                onChange={changeRound}
+                variant="underline"
+                width={280}
+                disabled={pending}
+              />
+            </div>
+            {/* Whose player the opponent is. Above the opponent's own name
+                in reading order, because it decides which roster that name
+                is picked from. */}
+            <div className="flex w-[280px] flex-col gap-2">
+              <span className="eyebrow">School</span>
+              <SchoolField
+                value={school}
+                onChange={onSchoolChange}
+                disabled={pending}
+              />
+            </div>
           </div>
         ) : null}
 
@@ -1186,6 +1271,212 @@ function LineupForfeitNote({
   );
 }
 
+/** How many directory rows the School field offers at once. */
+const MAX_SCHOOL_ROWS = 6;
+
+/**
+ * The opponent's school on a tournament round — the dual builder's question,
+ * in a field.
+ *
+ * One underline input (`advField("underline")`, the same 34px rule as the
+ * Round control beside it) that is also the search: from two characters the
+ * directory answers under it (`useProgramSearch`, the dual builder's own
+ * source), and whatever is typed is always the last row — a club side or a
+ * school the directory never had is a real opponent, and a field that only
+ * took directory rows would make the coach lie about who they played to get
+ * past it. Enter takes the current row, a click takes that row, and leaving
+ * the field with something typed that is not the chosen school keeps the
+ * typed text as the school (with no program behind it), so nothing the coach
+ * wrote is silently dropped.
+ *
+ * What it changes is the roster the opponent picker offers, which is why it
+ * is drawn ABOVE the opponent's name: a directory school brings its saved
+ * names, a typed one brings none. The line under the field says which it is.
+ */
+function SchoolField({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: OpponentSchool;
+  onChange: (next: OpponentSchool) => void;
+  disabled: boolean;
+}) {
+  const listboxId = useId();
+  const [term, setTerm] = useState(value.name);
+  const [open, setOpen] = useState(false);
+  const results = useProgramSearch(term);
+
+  const typed = term.trim();
+  const rows = results.slice(0, MAX_SCHOOL_ROWS);
+  // The typed row: always there once something is typed, even beside an
+  // exact directory hit — "Ridgeline University" from the directory and
+  // "Ridgeline University" typed past it are different answers (one has a
+  // roster), and the coach gets to say which.
+  const typedRow = typed.length > 0;
+  const rowCount = rows.length + (typedRow ? 1 : 0);
+  const listed = open && rowCount > 0;
+
+  const commit = (next: OpponentSchool) => {
+    setTerm(next.name);
+    onChange(next);
+    setOpen(false);
+  };
+
+  const activateRow = (index: number) => {
+    const row = rows[index];
+    if (row) {
+      commit({ name: row.schoolName, programKey: row.programKey });
+    } else if (typedRow) {
+      commit({ name: typed, programKey: null });
+    }
+  };
+
+  const { activeIndex, setActiveIndex, optionId, onKeyDown } = useListboxNav({
+    count: rowCount,
+    open: listed,
+    onSelect: activateRow,
+    onDismiss: () => setOpen(false),
+    idPrefix: listboxId,
+  });
+
+  // Leaving the field is an answer too. Typed text that is not the chosen
+  // school becomes the school, typed — never a directory row the coach did
+  // not pick, and never the old value under new text.
+  const settle = () => {
+    setOpen(false);
+    if (typed === value.name.trim()) return;
+    onChange({ name: typed, programKey: null });
+  };
+
+  const directory = value.programKey !== null && value.name.trim() !== "";
+
+  return (
+    <div className="relative flex flex-col gap-1.5">
+      <input
+        value={term}
+        disabled={disabled}
+        onChange={(event) => {
+          setTerm(event.target.value);
+          setOpen(true);
+        }}
+        onBlur={settle}
+        onKeyDown={(event) => {
+          if (listed) {
+            onKeyDown(event);
+            return;
+          }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            settle();
+          }
+        }}
+        placeholder="Search programs, or type a school"
+        aria-label="Their school"
+        role="combobox"
+        aria-expanded={listed}
+        aria-controls={listed ? listboxId : undefined}
+        aria-activedescendant={listed ? optionId(activeIndex) : undefined}
+        aria-autocomplete="list"
+        // The rule under the field thickens to 2px blue on focus — the one
+        // indicator, so the field ring on top of it would be a second.
+        data-focus-ring="none"
+        className={cn(advField("underline"), "w-full min-w-0 outline-none")}
+      />
+      <span className="text-micro" style={{ color: "var(--ink-500)" }}>
+        {value.name.trim() === ""
+          ? "Decides whose roster their player is picked from."
+          : directory
+            ? "On the directory · their saved roster is offered below."
+            : "Typed · no saved roster, so their player is typed too."}
+      </span>
+
+      {listed ? (
+        <ul
+          id={listboxId}
+          role="listbox"
+          aria-label="Schools"
+          // Keeps focus in the field across a click on a row, so the click
+          // lands before the blur would have settled the typed text.
+          onMouseDown={(event) => event.preventDefault()}
+          className="absolute top-[calc(100%-18px)] left-0 z-20 flex w-[320px] max-w-[calc(100vw-32px)] flex-col gap-1 rounded-[var(--radius-dropdown)] border border-[var(--border-medium)] bg-[var(--surface-card)] p-1.5 shadow-[var(--shadow-dropdown)]"
+        >
+          {rows.map((row, index) => (
+            <SchoolOption
+              key={`${row.programKey}:${row.team}`}
+              id={optionId(index)}
+              active={activeIndex === index}
+              onHover={() => setActiveIndex(index)}
+              onClick={() => activateRow(index)}
+              title={row.schoolName}
+              note={[divisionLabel(row.division), row.conference]
+                .filter(Boolean)
+                .join(" · ")}
+            />
+          ))}
+          {typedRow ? (
+            <SchoolOption
+              id={optionId(rows.length)}
+              active={activeIndex === rows.length}
+              onHover={() => setActiveIndex(rows.length)}
+              onClick={() => activateRow(rows.length)}
+              title={`Use "${typed}" as typed`}
+              note="No program record — their player gets typed by hand."
+              divided={rows.length > 0}
+            />
+          ) : null}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+/** One row of the School field's list: a directory school, or the typed text. */
+function SchoolOption({
+  id,
+  active,
+  onHover,
+  onClick,
+  title,
+  note,
+  divided = false,
+}: {
+  id: string;
+  active: boolean;
+  onHover: () => void;
+  onClick: () => void;
+  title: string;
+  note: string;
+  divided?: boolean;
+}) {
+  return (
+    <li
+      id={id}
+      role="option"
+      aria-selected={active}
+      onMouseEnter={onHover}
+      onClick={onClick}
+      className={cn(
+        "flex cursor-pointer flex-col gap-0.5 rounded-[var(--radius-element)] px-2.5 py-2 text-left transition-colors duration-[var(--duration-hover)]",
+        active ? "bg-[var(--surface-subtle)]" : null,
+        divided && "mt-0.5 border-t border-[var(--border-hairline)] pt-2.5",
+      )}
+    >
+      <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">
+        {title}
+      </span>
+      {note ? (
+        <span
+          className="text-micro truncate"
+          style={{ color: "var(--ink-600)" }}
+        >
+          {note}
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
 /**
  * The opponent the lineup left blank, named in their score row — the lineup
  * page's own pickers, so the same names and the same rules: the typed popup
@@ -1195,7 +1486,9 @@ function LineupForfeitNote({
  * On a tournament round it is drawn even with a name in it: the popup opens
  * on the recorded name, and committing another one replaces it — saving then
  * renames that round's match and no other round's (`recordResult`'s
- * `syncEntryOpponent` leaves the entry alone on a tournament correction).
+ * `syncEntryOpponent` writes the entry only from the entry's latest round).
+ * Its roster is the School field's: pick a directory school there and the
+ * popup offers that program's saved names; type one and it is a plain field.
  */
 function OpponentInRow({
   preset,

@@ -1,6 +1,7 @@
 import { loadScheduleWriter } from "./helpers/schedule-writer";
 import { expect, test } from "@playwright/test";
 import { matchResultFor } from "@/lib/schedule/entry-state";
+import { DEFAULT_DOUBLES_GAMES_TO, roundRank } from "@/lib/schedule/format";
 import { readFileSync } from "node:fs";
 import {
   canManageTeamSchedule,
@@ -20,6 +21,10 @@ function actions(
     otherProgram?: boolean;
     eventsPolicy?: "staff" | "owner";
     discipline?: "singles" | "doubles";
+    /** A tournament instead of the dual, with these matches already on the entry. */
+    tournament?: { matches: { id: string; round: string }[] };
+    /** What `programs` answers for any key — the directory row behind a school. */
+    program?: { id: string } | null;
   } = {},
 ) {
   const writes: unknown[] = [];
@@ -36,13 +41,14 @@ function actions(
       forfeit: null,
     },
     program_events: {
-      name: "Dual",
-      kind: "dual",
+      name: options.tournament ? "Invitational" : "Dual",
+      kind: options.tournament ? "tournament" : "dual",
       starts_on: "2026-09-10",
       format: {},
     },
     program_event_outcomes: options.outcome ? [{ id: "outcome" }] : [],
-    matches: [],
+    matches: options.tournament?.matches ?? [],
+    programs: options.program ?? null,
   };
   const client = {
     async rpc(name: string, args: unknown) {
@@ -112,6 +118,7 @@ function actions(
                 },
         };
       if (name === "./entry-state") return { matchResultFor };
+      if (name === "./format") return { DEFAULT_DOUBLES_GAMES_TO, roundRank };
       if (name === "@/lib/workspace/types")
         return { canManageTeamSchedule, isProgramStaff, uploadPolicyLabel };
       return {};
@@ -205,6 +212,104 @@ test("cleared outcome leaves the score path available without processing jobs", 
     "/dashboard/team/schedule",
     "/dashboard/team/schedule/event",
   ]);
+});
+
+/** The entry write a `recordResult` made, if any. */
+function entryUpdate(writes: unknown[]) {
+  return writes.find(
+    (write): write is { table: string; method: string; value: unknown } =>
+      typeof write === "object" &&
+      write !== null &&
+      (write as { table?: string }).table === "program_event_entries" &&
+      (write as { method?: string }).method === "update",
+  );
+}
+
+test("a dual line syncs the opponent's name onto the entry and leaves its school alone", async () => {
+  const run = actions();
+  expect(await run.actions.recordResult(score)).toEqual({ matchId: "match" });
+  const update = entryUpdate(run.writes);
+  expect(update).toBeDefined();
+  expect(update!.value).toMatchObject({ opponent_labels: ["Opponent"] });
+  expect(update!.value).not.toHaveProperty("opponent_school");
+  expect(update!.value).not.toHaveProperty("opponent_program_id");
+});
+
+test.describe("a tournament round's school on the entry", () => {
+  const round = (name: string) => ({
+    ...score,
+    round: name,
+    opponentLabels: ["Lee Park"],
+    opponentSchool: "Ridgeline University",
+    opponentProgramKey: "ridgeline",
+  });
+
+  test("a first result writes the school and the resolved program id", async () => {
+    const run = actions("staff", {
+      tournament: { matches: [] },
+      program: { id: "ridgeline-id" },
+    });
+    expect(await run.actions.recordResult(round("R32"))).toEqual({
+      matchId: "match",
+    });
+    expect(run.writes).toContainEqual(
+      expect.objectContaining({ table: "matches", method: "insert" }),
+    );
+    expect(entryUpdate(run.writes)?.value).toMatchObject({
+      opponent_labels: ["Lee Park"],
+      opponent_school: "Ridgeline University",
+      opponent_program_id: "ridgeline-id",
+    });
+  });
+
+  test("a typed school writes the name and clears the program id", async () => {
+    const run = actions("staff", { tournament: { matches: [] } });
+    expect(
+      await run.actions.recordResult({
+        ...round("R32"),
+        opponentSchool: "Valley Club",
+        opponentProgramKey: null,
+      }),
+    ).toEqual({ matchId: "match" });
+    expect(entryUpdate(run.writes)?.value).toMatchObject({
+      opponent_school: "Valley Club",
+      opponent_program_id: null,
+    });
+    // Nothing to resolve, so the directory is never asked.
+    expect(run.writes).not.toContainEqual(
+      expect.objectContaining({ table: "programs" }),
+    );
+  });
+
+  test("a correction of the latest round still syncs; an earlier round never clobbers", async () => {
+    // R32 is the only round held, and the save is R32 again: a correction of
+    // the latest round, so the entry follows it.
+    const latest = actions("staff", {
+      tournament: { matches: [{ id: "match", round: "R32" }] },
+      program: { id: "ridgeline-id" },
+    });
+    expect(await latest.actions.recordResult(round("R32"))).toEqual({
+      matchId: "match",
+    });
+    expect(latest.writes).toContainEqual(
+      expect.objectContaining({ table: "matches", method: "update" }),
+    );
+    expect(entryUpdate(latest.writes)?.value).toMatchObject({
+      opponent_school: "Ridgeline University",
+      opponent_program_id: "ridgeline-id",
+    });
+
+    // R16 is already held, and the save is R32: a round-old opponent from an
+    // edit about a score. The entry keeps R16's.
+    const earlier = actions("staff", {
+      tournament: { matches: [{ id: "match-r16", round: "R16" }] },
+      program: { id: "ridgeline-id" },
+    });
+    expect(await earlier.actions.recordResult(round("R32"))).toEqual({
+      matchId: "match-r16",
+    });
+    expect(entryUpdate(earlier.writes)).toBeUndefined();
+  });
 });
 
 test("recordResult defaults college matches to Play On Lets, singles and doubles both", async () => {

@@ -524,7 +524,10 @@ test.describe("a tournament entry", () => {
     const opponent = page.getByRole("button", { name: "Casey Chen" });
     await expect(opponent).toBeVisible();
     await opponent.click();
-    const field = page.getByRole("combobox");
+    // Scoped: the School field above the score is a combobox too.
+    const field = page
+      .getByRole("dialog", { name: "Add opposing name" })
+      .getByRole("combobox");
     await expect(field).toHaveValue("Casey Chen");
     await field.fill("Taylor");
     await page.getByRole("option", { name: /Taylor Park/ }).click();
@@ -665,6 +668,182 @@ test.describe("a tournament entry", () => {
     await expect
       .poll(() => page.evaluate(() => window.routerPushes))
       .toEqual(["/dashboard/team/schedule/event-browser"]);
+  });
+});
+
+/**
+ * The directory, as `/api/programs/search` answers it: one row for "ridge",
+ * nothing for anything else — the club side typed in the tests below.
+ */
+const RIDGELINE = {
+  programKey: "ridgeline",
+  schoolName: "Ridgeline University",
+  team: "mens",
+  division: "D1",
+  conference: "Big Sky",
+  state: "MT",
+  status: "unclaimed",
+  ownerDisplay: null,
+};
+
+async function serveDirectory(page: Page) {
+  await page.route("**/api/programs/search**", async (route) => {
+    const term = new URL(route.request().url()).searchParams.get("q") ?? "";
+    await route.fulfill({
+      json: {
+        results: /ridge/i.test(term) ? [RIDGELINE] : [],
+      },
+    });
+  });
+}
+
+const schoolField = (page: Page) =>
+  page.getByRole("combobox", { name: "Their school" });
+
+test.describe("the opponent's school on a tournament round", () => {
+  test("a tournament asks the school above the opponent; a dual line does not", async ({
+    page,
+  }) => {
+    await openFlow(page, "?kind=tournament");
+    // Seeded from the entry — "the last round filed" — with its roster behind it.
+    await expect(schoolField(page)).toHaveValue("Rival State");
+    await expect(
+      page.getByText("On the directory · their saved roster is offered below."),
+    ).toBeVisible();
+    // Reading order: School, then the opponent's name in the score row.
+    const school = await schoolField(page).boundingBox();
+    const opponent = await page
+      .getByRole("button", { name: "Name their player" })
+      .boundingBox();
+    expect(school!.y).toBeLessThan(opponent!.y);
+    expect(await page.evaluate(() => window.rosterCalls)).toEqual([
+      "rival-state",
+    ]);
+
+    // A dual names its school on the event, so its lines never ask.
+    await openFlow(page, "?unnamed=true");
+    await expect(schoolField(page)).toHaveCount(0);
+    await expect(page.getByText("School", { exact: true })).toHaveCount(0);
+  });
+
+  test("a directory school re-points the picker at that school's roster, and saves with its key", async ({
+    page,
+  }) => {
+    await serveDirectory(page);
+    await openFlow(page, "?kind=tournament");
+    const field = schoolField(page);
+    await field.fill("Ridge");
+    const option = page.getByRole("option", { name: /Ridgeline University/ });
+    await expect(option).toContainText("D-I · Big Sky");
+    // The typed text is always the last row, beside the directory's.
+    await expect(
+      page.getByRole("option", { name: /Use "Ridge" as typed/ }),
+    ).toBeVisible();
+    await option.click();
+
+    await expect(field).toHaveValue("Ridgeline University");
+    await expect
+      .poll(() => page.evaluate(() => window.rosterCalls))
+      .toEqual(["rival-state", "ridgeline"]);
+
+    // Their roster now, not Rival State's.
+    await page.getByRole("button", { name: "Name their player" }).click();
+    await expect(page.getByRole("option", { name: /Lee Park/ })).toBeVisible();
+    await expect(page.getByRole("option", { name: /Casey Chen/ })).toHaveCount(
+      0,
+    );
+    await page.getByRole("option", { name: /Lee Park/ }).click();
+
+    await page.getByLabel("Jordan Lee, set 1").fill("6");
+    await page.getByLabel("Lee Park, set 1").fill("1");
+    await page.getByRole("button", { name: "Save and close" }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.actionCalls.at(-1)))
+      .toEqual({
+        action: "recordResult",
+        input: expect.objectContaining({
+          entryId: "entry-t1",
+          round: "R32",
+          opponentLabels: ["Lee Park"],
+          opponentSchool: "Ridgeline University",
+          opponentProgramKey: "ridgeline",
+        }),
+      });
+  });
+
+  test("a typed school has no roster: the opponent is plain text, and the save carries no key", async ({
+    page,
+  }) => {
+    await serveDirectory(page);
+    await openFlow(page, "?kind=tournament&noschool=true");
+    const field = schoolField(page);
+    await expect(field).toHaveValue("");
+    await expect(
+      page.getByText("Decides whose roster their player is picked from."),
+    ).toBeVisible();
+    // No school, no fetch.
+    expect(await page.evaluate(() => window.rosterCalls)).toEqual([]);
+
+    await field.fill("Valley Club");
+    await expect(
+      page.getByRole("option", { name: /Use "Valley Club" as typed/ }),
+    ).toBeVisible();
+    await field.press("Enter");
+    await expect(field).toHaveValue("Valley Club");
+    await expect(
+      page.getByText("Typed · no saved roster, so their player is typed too."),
+    ).toBeVisible();
+    expect(await page.evaluate(() => window.rosterCalls)).toEqual([]);
+
+    // The picker with nothing to pick from: a field, and Enter commits it.
+    await page.getByRole("button", { name: "Name their player" }).click();
+    const name = page
+      .getByRole("dialog", { name: "Add opposing name" })
+      .getByRole("combobox");
+    await expect(page.getByRole("option")).toHaveCount(0);
+    await name.fill("Pat Doe");
+    await name.press("Enter");
+    await expect(page.getByRole("button", { name: "Pat Doe" })).toBeVisible();
+
+    await page.getByLabel("Jordan Lee, set 1").fill("6");
+    await page.getByLabel("Pat Doe, set 1").fill("4");
+    await page.getByRole("button", { name: "Save and close" }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.actionCalls.at(-1)))
+      .toEqual({
+        action: "recordResult",
+        input: expect.objectContaining({
+          opponentLabels: ["Pat Doe"],
+          opponentSchool: "Valley Club",
+          opponentProgramKey: null,
+        }),
+      });
+    expect(await page.evaluate(() => window.savedPlayers)).toEqual([]);
+  });
+
+  test("a new two-token name against a directory school is offered to that school's roster", async ({
+    page,
+  }) => {
+    await serveDirectory(page);
+    await openFlow(page, "?kind=tournament");
+    await schoolField(page).fill("Ridge");
+    await page.getByRole("option", { name: /Ridgeline University/ }).click();
+
+    await page.getByRole("button", { name: "Name their player" }).click();
+    const name = page
+      .getByRole("dialog", { name: "Add opposing name" })
+      .getByRole("combobox");
+    await name.fill("Avery Stone");
+    await page
+      .getByRole("option", { name: /Avery Stone.*Save as a different player/ })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Avery Stone" }),
+    ).toBeVisible();
+    // To Ridgeline's key — the school chosen above, never the entry's old one.
+    await expect
+      .poll(() => page.evaluate(() => window.savedPlayers))
+      .toEqual([{ opponentProgramKey: "ridgeline", name: "Avery Stone" }]);
   });
 });
 
