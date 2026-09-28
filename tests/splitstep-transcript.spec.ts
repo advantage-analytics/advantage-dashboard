@@ -8,7 +8,9 @@ import {
   analyzeResults,
   buildTranscript,
   classifyPoint,
+  flagPoint,
   lastServeIndex,
+  playedRally,
   reconcile,
   pressureFor,
   resolvePointWinners,
@@ -131,6 +133,88 @@ test.describe("shot numbering", () => {
     expect(r.strokes.map((_, i) => shotNumber(i, serveIndex))).toEqual([
       0, 0, 1, 2,
     ]);
+  });
+});
+
+test.describe("phantom strokes", () => {
+  const fault = () => stroke({ strokeType: "serve", in: false });
+  const serve = (over: Partial<SplitStepStroke> = {}) =>
+    stroke({ strokeType: "serve", ...over });
+  const b = () => stroke({ playerLabel: "B" });
+
+  test("a stroke at a faulted first serve is dropped, not numbered 0", () => {
+    // Kept, it tied with the faulted serve at shot_number 0 and every
+    // "first non-serve row" reader took it as the point's return.
+    const played = playedRally(rally([fault(), b(), serve(), b()]));
+    const kept = played.rally;
+    const serveIndex = lastServeIndex(kept);
+    expect(kept.strokes.map((_, i) => shotNumber(i, serveIndex))).toEqual([
+      0, 1, 2,
+    ]);
+    expect(kept.strokes.map((s) => s.strokeType)).toEqual([
+      "serve",
+      "serve",
+      "groundstroke",
+    ]);
+    expect(played.phantoms).toBe(1);
+    expect(played.flags).toEqual([POINT_FLAGS.PHANTOM_STROKES_DROPPED]);
+  });
+
+  test("an out-called second serve that was played on is left alone", () => {
+    // Checked against video: 8 of 10 such points were not double faults, so
+    // the out call on a played-on second serve is not evidence.
+    const r = rally([fault(), serve({ in: false }), b()]);
+    const played = playedRally(r);
+    expect(played.rally).toBe(r);
+    expect(played.flags).toEqual([]);
+    expect(classifyPoint(played.rally, "B")).not.toBe("Double Fault");
+  });
+
+  test("a repeated serve side on a no-ad 40-40 point is not flagged", () => {
+    // Under no-ad the receiver picks the side for the deciding point, so a
+    // repeat there is the rule, not a missed point: on a hand-labelled no-ad
+    // match all four hits of this flag were 40-40.
+    const at = (score: string) =>
+      rally([serve({ playerX: 1, playerY: -12, predPointScore: score }), b()]);
+    const flagsFor = (score: string, adScoring: boolean) =>
+      flagPoint({
+        rally: at(score),
+        winner: "A",
+        previousInGame: at("30-40"),
+        resultType: "Forehand Winner",
+        adScoring,
+      });
+    const repeat = POINT_FLAGS.SERVICE_COURT_REPEAT;
+    expect(flagsFor("40-40", false)).not.toContain(repeat);
+    expect(flagsFor("40-40", true)).toContain(repeat);
+    expect(flagsFor("30-40", false)).toContain(repeat);
+  });
+
+  test("an out-called second serve with a short tail is flagged for review", () => {
+    const flagsFor = (strokes: SplitStepStroke[]) =>
+      flagPoint({
+        rally: rally(strokes),
+        winner: "B",
+        previousInGame: null,
+        resultType: "Backhand Winner",
+      });
+    const a = () => stroke({ playerLabel: "A" });
+    const flagged = POINT_FLAGS.SECOND_SERVE_CALLED_OUT;
+    expect(flagsFor([fault(), serve({ in: false }), b()])).toContain(flagged);
+    expect(flagsFor([fault(), serve({ in: false }), b(), a()])).toContain(
+      flagged,
+    );
+    // A played rally, a second serve called in, and a lone first serve: no flag.
+    expect(
+      flagsFor([fault(), serve({ in: false }), b(), a(), b()]),
+    ).not.toContain(flagged);
+    expect(flagsFor([fault(), serve(), b()])).not.toContain(flagged);
+    expect(flagsFor([serve({ in: false }), b()])).not.toContain(flagged);
+  });
+
+  test("a rally with no phantom is returned untouched", () => {
+    const r = rally([fault(), serve(), b()]);
+    expect(playedRally(r).rally).toBe(r);
   });
 });
 
@@ -507,6 +591,13 @@ test.describe("transcript", () => {
     expect(shotFlags).toContain(SHOT_FLAGS.GEOMETRY_DISCARDED);
     expect(pointFlags).toContain(POINT_FLAGS.SAME_PLAYER_CONSECUTIVE);
     expect(pointFlags).toContain(POINT_FLAGS.WINNER_DISPUTED);
+
+    // Dead balls are dropped, and the drop is recorded on the point.
+    expect(pointFlags).toContain(POINT_FLAGS.PHANTOM_STROKES_DROPPED);
+    for (const point of t.points) {
+      const zeros = point.shots.filter((s) => s.shot_number === 0);
+      for (const s of zeros) expect(s.shot_type).toMatch(/Serve$/);
+    }
   });
 });
 
