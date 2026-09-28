@@ -887,13 +887,9 @@ function keepDecidingRallies(shotsRows: CombinedRow[]): CombinedRow[] {
     String(row["Type"] ?? "").toLowerCase();
 
   const kept: CombinedRow[] = [];
-  let dropped = 0;
   for (const group of byPoint.values()) {
     const ordered = inStrikeOrder(group);
-    let last = -1;
-    for (let i = ordered.length - 1; i >= 0 && last === -1; i--) {
-      if (isServe(ordered[i])) last = i;
-    }
+    const last = ordered.findLastIndex(isServe);
     if (last === -1) {
       kept.push(...ordered);
       continue;
@@ -915,12 +911,11 @@ function keepDecidingRallies(shotsRows: CombinedRow[]): CombinedRow[] {
         }
       }
     }
-    dropped += ordered.length - deciding.length;
     kept.push(...deciding);
   }
 
   console.log(
-    `🧹 Kept ${kept.length} of ${shotsRows.length} shots (${dropped} struck outside a deciding rally)`,
+    `🧹 Kept ${kept.length} of ${shotsRows.length} shots (${shotsRows.length - kept.length} struck outside a deciding rally)`,
   );
   return kept;
 }
