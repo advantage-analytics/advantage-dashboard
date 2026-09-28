@@ -449,14 +449,18 @@ export function MatchesPageContent({
   // Unless that match's video already went in (it carries a job): then the
   // draft is stale and shows nowhere. Read off the live-merged `matches`, so a
   // job that lands while the page is open retires the draft without a refresh.
+  // Keyed on the job-carrying ids as one string, not on `matches`: a progress
+  // tick replaces that array without changing which matches carry a job, and
+  // refolding on every tick would hand every draft consumer a new reference.
+  const staleKey = matchIdsWithJob(matches).join(" ");
   const { standalone: drafts, byMatchId: foldedDrafts } = useMemo(
     () =>
       foldDrafts(
         allDrafts,
-        matches.map((m) => m.id),
-        matchIdsWithJob(matches),
+        serverMatches.map((m) => m.id),
+        staleKey ? staleKey.split(" ") : [],
       ),
-    [allDrafts, matches],
+    [allDrafts, serverMatches, staleKey],
   );
 
   // Teach the route's loading boundary this workspace's first page, so the next

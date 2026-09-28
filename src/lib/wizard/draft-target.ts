@@ -79,9 +79,9 @@ export function foldDrafts<T extends FoldableDraft>(
 ): { standalone: T[]; byMatchId: Map<string, T> } {
   const listed = new Set(matchIds);
   const stale = new Set(staleMatchIds);
-  const live = stale.size
-    ? drafts.filter((draft) => !draft.matchId || !stale.has(draft.matchId))
-    : drafts;
+  const live = drafts.filter(
+    (draft) => !draft.matchId || !stale.has(draft.matchId),
+  );
   const byMatchId = new Map<string, T>();
   for (const draft of live) {
     if (!draft.matchId || !listed.has(draft.matchId)) continue;

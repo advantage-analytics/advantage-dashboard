@@ -649,6 +649,9 @@ export async function deleteMatchDraft(id: string): Promise<void> {
   await supabase.from("match_drafts").delete().eq("id", id);
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Deletes every one of the signed-in user's drafts that target `matchId` —
  * a draft opened from a scored schedule line (`?entry=&match=`) or whose
@@ -668,6 +671,10 @@ export async function deleteMatchDraft(id: string): Promise<void> {
 export async function deleteMatchDraftsForMatch(
   matchId: string,
 ): Promise<void> {
+  // `.or()` takes a raw PostgREST filter string, so the id is interpolated,
+  // not bound. A match id is always a uuid; anything else is refused rather
+  // than smuggled into the filter.
+  if (!UUID_RE.test(matchId)) return;
   const supabase = await createClient();
   const {
     data: { user },
@@ -825,10 +832,11 @@ export async function listMatchDrafts(scope: {
     .in("id", staleIds)
     .then(
       ({ error }) => {
-        if (error) console.warn("Could not reap stale match drafts", error);
+        if (error)
+          console.warn("[wizard] could not reap stale match drafts", { error });
       },
       (error: unknown) =>
-        console.warn("Could not reap stale match drafts", error),
+        console.warn("[wizard] could not reap stale match drafts", { error }),
     );
   const stale = new Set(staleIds);
   return drafts.filter((d) => !stale.has(d.id));
