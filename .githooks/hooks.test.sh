@@ -100,6 +100,34 @@ setup; mkdir -p .githooks
 printf 'const k = "ghp_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";\n' > other.ts; git add other.ts
 run_pc; check "a credential outside the hook's own files is still rejected" $? 1
 
+# A partially staged file (`git add -p`) must not have its unstaged hunks
+# swept into the commit by the formatting pass. Regression: 1571d2bf picked up
+# another session's uncommitted task-queue append this way.
+setup; { printf 'a\n'; printf 'x\n%.0s' $(seq 1 20); printf 'z\n'; } > notes.md
+git add notes.md; git commit -qm base --no-verify
+sed -i.bak -e '1s/.*/A-staged/' -e '$s/.*/Z-unstaged/' notes.md; rm -f notes.md.bak
+git diff -U0 notes.md | awk '/^@@/{n++} n<2' > first-hunk.patch
+git apply --cached --unidiff-zero first-hunk.patch; rm -f first-hunk.patch
+run_pc && git commit -qm partial --no-verify
+if git show HEAD:notes.md | grep -q '^A-staged$' && ! git show HEAD:notes.md | grep -q 'Z-unstaged' \
+   && git diff -- notes.md | grep -q '^+Z-unstaged$'; then
+  ok "partially staged file keeps its unstaged hunk out of the commit"
+else
+  bad "partially staged file keeps its unstaged hunk out of the commit"
+fi
+
+# ...while a fully staged file is still formatted and re-staged. A stub
+# formatter stands in for prettier, which the throwaway repo does not have.
+setup; printf '{"a":1}\n' > f.json; git add f.json
+printf '#!/usr/bin/env bash\nfor f in "$@"; do printf "{ \\"a\\": 1 }\\n" > "$f"; done\n' > scripts/format-file.sh
+chmod +x scripts/format-file.sh
+run_pc
+if [ "$(git show :f.json)" = '{ "a": 1 }' ] && git diff --quiet -- f.json; then
+  ok "fully staged file is formatted and re-staged"
+else
+  bad "fully staged file is formatted and re-staged"
+fi
+
 cd "$ROOT" || exit 1; rm -rf "$TMP"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

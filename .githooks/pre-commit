@@ -57,18 +57,37 @@ fi
 # fixes the problem is one people leave enabled; one that only scolds gets
 # --no-verify'd. Routing per language lives in scripts/format-file.sh.
 if [ -x scripts/format-file.sh ]; then
+  # Only FULLY staged paths are formatted and re-staged. For a partially
+  # staged file (`git status` MM, e.g. after `git add -p`) the working copy
+  # holds hunks the author deliberately left out; formatting it and running
+  # `git add` would sweep every one of them into the commit. Those files are
+  # skipped — CI's format:check still catches them — and named so the author
+  # can format and stage them by hand.
+  #
   # Built with a read loop, not `mapfile`: macOS ships bash 3.2, where mapfile
   # does not exist. Every hook here must run on a stock Mac with no brew bash.
   files=()
+  partial=()
   while IFS= read -r f; do
-    [ -n "$f" ] && files+=("$f")
+    [ -n "$f" ] && [ -f "$f" ] || continue
+    if git diff --quiet -- "$f" 2>/dev/null; then
+      files+=("$f")
+    else
+      partial+=("$f")
+    fi
   done <<< "$staged"
-  [ ${#files[@]} -gt 0 ] && ./scripts/format-file.sh "${files[@]}" || true
-  # Re-stage only paths that were already staged AND still exist, so this
-  # never picks up unrelated working-tree edits or a file staged for deletion.
-  while IFS= read -r f; do
-    [ -f "$f" ] && ! git diff --quiet -- "$f" 2>/dev/null && git add -- "$f"
-  done <<< "$staged"
+  if [ ${#files[@]} -gt 0 ]; then
+    ./scripts/format-file.sh "${files[@]}" || true
+    # Anything that differs from the index now is the formatter's own change,
+    # because these paths had no unstaged edits a moment ago.
+    for f in "${files[@]}"; do
+      git diff --quiet -- "$f" 2>/dev/null || git add -- "$f"
+    done
+  fi
+  if [ ${#partial[@]} -gt 0 ]; then
+    printf '\npre-commit: not formatting partially staged file(s) — their unstaged hunks stay unstaged:\n' >&2
+    printf '    %s\n' "${partial[@]}" >&2
+  fi
 fi
 
 # 3 ----------------------------------------------------------- generated MAP
