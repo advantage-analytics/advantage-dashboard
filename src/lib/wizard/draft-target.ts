@@ -67,14 +67,23 @@ export interface FoldableDraft {
  * scope, deleted, not visible), and an older draft for a match that already
  * has one folded — each of those must still be reachable to resume or
  * discard. `standalone` keeps the input order.
+ *
+ * A draft whose match is in `staleMatchIds` is neither: it is dropped (see
+ * `matchIdsWithJob`). Offering "Continue upload" on a match whose video was
+ * already submitted would start a second job for one court.
  */
 export function foldDrafts<T extends FoldableDraft>(
   drafts: readonly T[],
   matchIds: Iterable<string>,
+  staleMatchIds: Iterable<string> = [],
 ): { standalone: T[]; byMatchId: Map<string, T> } {
   const listed = new Set(matchIds);
+  const stale = new Set(staleMatchIds);
+  const live = stale.size
+    ? drafts.filter((draft) => !draft.matchId || !stale.has(draft.matchId))
+    : drafts;
   const byMatchId = new Map<string, T>();
-  for (const draft of drafts) {
+  for (const draft of live) {
     if (!draft.matchId || !listed.has(draft.matchId)) continue;
     const held = byMatchId.get(draft.matchId);
     // Parsed, not compared as text: a `+00:00` and a `Z` timestamp sort
@@ -84,7 +93,31 @@ export function foldDrafts<T extends FoldableDraft>(
   }
   const folded = new Set(byMatchId.values());
   return {
-    standalone: drafts.filter((draft) => !folded.has(draft)),
+    standalone: live.filter((draft) => !folded.has(draft)),
     byMatchId,
   };
+}
+
+/** The one field of a listed match `matchIdsWithJob` reads. */
+export interface JobCarryingMatch {
+  id: string;
+  analysis?: { jobId?: string | null } | null;
+}
+
+/**
+ * The listed matches a draft can no longer fill: those whose video already
+ * went in, i.e. that carry a `processing_jobs` row (`analysis.jobId`, set in
+ * any job status — failed included). A score-only match (`manual`, no job)
+ * or one with no analysis stays open to an "Add video" draft.
+ *
+ * The server drops and reaps such drafts too (`listMatchDrafts`), but it only
+ * sees the viewer's own jobs (`processing_jobs` RLS is per-creator). This is
+ * the client's answer from the enriched `analysis`, which also covers a
+ * coach's job on a player's draft and a job the Realtime merge brings in
+ * while the page is open.
+ */
+export function matchIdsWithJob(
+  matches: readonly JobCarryingMatch[],
+): string[] {
+  return matches.filter((m) => !!m.analysis?.jobId).map((m) => m.id);
 }

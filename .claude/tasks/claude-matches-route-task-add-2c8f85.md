@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Hide and reap drafts whose match already has a video job
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/wizard/draft-target.ts, src/components/dashboard/matches/matches-page-content.tsx, src/app/dashboard/matches/(list)/page.tsx, src/lib/wizard/actions.ts, tests/matches-drafts.spec.ts, tests/fixtures/matches-drafts-harness.tsx (guess)
 - **done when:**

@@ -734,7 +734,7 @@ export async function listMatchDrafts(scope: {
     ? query.eq("program_id", scope.programId)
     : query.is("program_id", null);
   const { data } = await query;
-  return (
+  const drafts: DraftRow[] = (
     (data ?? []) as unknown as ({
       id: string;
       player_name: string | null;
@@ -754,6 +754,51 @@ export async function listMatchDrafts(scope: {
     updatedAt: row.updated_at,
     matchId: draftTargetFromColumns(row),
   }));
+
+  // A draft whose match already has a video job is stale: the video went in
+  // (the wizard submitted, then the draft outlived it), and resuming it would
+  // start a second job for one court. Drop it here and reap the row.
+  //
+  // `processing_jobs` RLS is per-creator, so this only sees the viewer's own
+  // jobs; the Matches table's `matchIdsWithJob` guard covers the rest from
+  // the enriched analysis. A failed lookup keeps every draft rather than
+  // failing the page.
+  const targetIds = [
+    ...new Set(drafts.flatMap((d) => (d.matchId ? [d.matchId] : []))),
+  ];
+  if (targetIds.length === 0) return drafts;
+  const { data: jobs, error: jobsError } = await supabase
+    .from("processing_jobs")
+    .select("match_id")
+    .in("match_id", targetIds);
+  if (jobsError || !jobs?.length) return drafts;
+  const withJob = new Set(
+    (jobs as { match_id: string | null }[]).flatMap((j) =>
+      j.match_id ? [j.match_id] : [],
+    ),
+  );
+  const staleIds = drafts
+    .filter((d) => d.matchId && withJob.has(d.matchId))
+    .map((d) => d.id);
+  if (staleIds.length === 0) return drafts;
+  // Fire-and-forget, started now rather than in `after()`: the session client
+  // reads cookies, which a Server Component's `after()` callback may not. A
+  // delete that fails or is cut off leaves a row this same filter hides again
+  // on the next visit, so nothing waits on it and nothing can fail the page.
+  void supabase
+    .from("match_drafts")
+    .delete()
+    .eq("user_id", user.id)
+    .in("id", staleIds)
+    .then(
+      ({ error }) => {
+        if (error) console.warn("Could not reap stale match drafts", error);
+      },
+      (error: unknown) =>
+        console.warn("Could not reap stale match drafts", error),
+    );
+  const stale = new Set(staleIds);
+  return drafts.filter((d) => !stale.has(d.id));
 }
 
 export type { EventSite };

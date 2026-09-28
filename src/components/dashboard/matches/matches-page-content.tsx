@@ -47,7 +47,7 @@ import { LifecycleChips, type LifecycleValue } from "./lifecycle-chips";
 import { MATCHES_PAGE_SIZE, matchesListShape } from "./match-list-layout";
 import { rememberMatchesShape } from "./matches-shape-memory";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { foldDrafts } from "@/lib/wizard/draft-target";
+import { foldDrafts, matchIdsWithJob } from "@/lib/wizard/draft-target";
 
 function providerName(id: string): string {
   return providers.find((p) => p.id === id)?.name ?? id;
@@ -424,32 +424,6 @@ export function MatchesPageContent({
   const pathname = usePathname();
   const workspaceId = useWorkspace().active.id;
 
-  // A draft that fills a listed match (an "Add video" started from a scored
-  // line) is more work on that match, not a second one: it folds onto the
-  // match's row — a Draft pill there, "Continue upload" in its drawer — and
-  // only the rest list as draft rows. Everything below that says `drafts`
-  // means the standalone ones: the rows, the stepping order, the deep link.
-  const { standalone: drafts, byMatchId: foldedDrafts } = useMemo(
-    () =>
-      foldDrafts(
-        allDrafts,
-        serverMatches.map((m) => m.id),
-      ),
-    [allDrafts, serverMatches],
-  );
-
-  // Teach the route's loading boundary this workspace's first page, so the next
-  // client-side visit draws its skeleton at the size the rows will arrive at.
-  useEffect(() => {
-    rememberMatchesShape(
-      workspaceId,
-      matchesListShape(
-        serverMatches.map((m) => m.date),
-        drafts.map((d) => d.updatedAt),
-      ),
-    );
-  }, [workspaceId, serverMatches, drafts]);
-
   // Live job state, merged over what the server rendered. Without this the bar
   // is a snapshot from page load — a long upload appears frozen, and a job that
   // finishes while the tab is open never says so.
@@ -482,6 +456,37 @@ export function MatchesPageContent({
       return { ...m, analysis: withLiveAnalysis(m.analysis, patch) };
     });
   }, [serverMatches, livePatches]);
+
+  // A draft that fills a listed match (an "Add video" started from a scored
+  // line) is more work on that match, not a second one: it folds onto the
+  // match's row — a Draft pill there, "Continue upload" in its drawer — and
+  // only the rest list as draft rows. Everything below that says `drafts`
+  // means the standalone ones: the rows, the stepping order, the deep link.
+  //
+  // Unless that match's video already went in (it carries a job): then the
+  // draft is stale and shows nowhere. Read off the live-merged `matches`, so a
+  // job that lands while the page is open retires the draft without a refresh.
+  const { standalone: drafts, byMatchId: foldedDrafts } = useMemo(
+    () =>
+      foldDrafts(
+        allDrafts,
+        matches.map((m) => m.id),
+        matchIdsWithJob(matches),
+      ),
+    [allDrafts, matches],
+  );
+
+  // Teach the route's loading boundary this workspace's first page, so the next
+  // client-side visit draws its skeleton at the size the rows will arrive at.
+  useEffect(() => {
+    rememberMatchesShape(
+      workspaceId,
+      matchesListShape(
+        serverMatches.map((m) => m.date),
+        drafts.map((d) => d.updatedAt),
+      ),
+    );
+  }, [workspaceId, serverMatches, drafts]);
 
   /* Layout is decided by the viewport alone — there is no view control any
      more. Seven columns need the width, so under 1024px the same matches render
