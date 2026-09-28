@@ -52,6 +52,9 @@ const REAL = new Set([
   "@/components/ui/empty-mark",
   "@/lib/utils",
   "@/components/dashboard/matches/match-detail/report-view",
+  // Real, not a marker: the chart cards call its `useReadoutPointer` hook,
+  // which a marker component cannot stand in for.
+  "@/components/dashboard/matches/match-detail/chart-tooltip",
 ]);
 
 function render(

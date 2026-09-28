@@ -8,7 +8,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
+import {
+  ChartTooltip,
+  useReadoutPointer,
+  type ReadoutFrame,
+  type ReadoutPointer,
+} from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
@@ -616,6 +621,8 @@ function RowTooltip({
   youName,
   oppName,
   watchable,
+  pointer,
+  frame,
 }: {
   open: boolean;
   row: H2HRow;
@@ -623,6 +630,8 @@ function RowTooltip({
   oppName: string;
   /** The row's numbers open its points in the Video tab. */
   watchable: boolean;
+  pointer: ReadoutPointer | null;
+  frame: ReadoutFrame | null;
 }) {
   const detail =
     row.note ??
@@ -635,6 +644,8 @@ function RowTooltip({
       open={open}
       align="center"
       bottomOffset={-4}
+      pointer={pointer}
+      frame={frame}
       className="gap-0.5 px-2.5 py-2"
     >
       <span className="text-[12px] font-medium text-white">{row.label}</span>
@@ -656,6 +667,8 @@ export function HeadToHeadCard() {
   const sides = useMatchSides();
   const { activeSet } = useSetScope();
   const [hovered, setHovered] = useState<string | null>(null);
+  const { boundsRef, track, clear, pointerFor, frameFor } =
+    useReadoutPointer<string>();
 
   const youStats = sides.you.stats;
   const oppStats = sides.opp.stats;
@@ -700,6 +713,7 @@ export function HeadToHeadCard() {
 
   return (
     <section
+      ref={boundsRef}
       aria-labelledby="head-to-head-heading"
       className="surface-card flex flex-col"
       style={{ padding: "18px 20px 14px" }}
@@ -780,6 +794,8 @@ export function HeadToHeadCard() {
                     current === row.label ? null : current,
                   )
                 }
+                onPointerMove={(e) => track(row.label, e)}
+                onPointerLeave={() => clear(row.label)}
               >
                 <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-600)]">
                   {row.label}
@@ -804,6 +820,8 @@ export function HeadToHeadCard() {
                   youName={youName}
                   oppName={oppName}
                   watchable={Boolean(youWatch || oppWatch)}
+                  pointer={pointerFor(row.label)}
+                  frame={frameFor(row.label)}
                 />
               </div>
             );

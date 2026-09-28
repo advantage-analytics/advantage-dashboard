@@ -12,7 +12,12 @@ import {
   useSetScope,
 } from "@/components/dashboard/matches/match-detail/set-scope";
 import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
-import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
+import {
+  ChartTooltip,
+  useReadoutPointer,
+  type ReadoutFrame,
+  type ReadoutPointer,
+} from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { cn } from "@/lib/utils";
 import { surnameLabels } from "@/lib/data/match-utils";
@@ -87,6 +92,8 @@ export function RallyLengthCard() {
   const { activeSet } = useSetScope();
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<Band["key"] | null>(null);
+  const { boundsRef, track, clear, pointerFor, frameFor } =
+    useReadoutPointer<Band["key"]>();
   const watchable = meta.hasPlayableVideo;
 
   const youIsPlayer1 = sides.you.isPlayer1;
@@ -190,6 +197,7 @@ export function RallyLengthCard() {
 
   return (
     <section
+      ref={boundsRef}
       aria-labelledby="rally-length-heading"
       className="surface-card flex min-h-0 flex-1 flex-col gap-3"
       style={{ padding: "16px 20px 14px" }}
@@ -249,6 +257,8 @@ export function RallyLengthCard() {
                 }
                 onMouseEnter={() => setHovered(band.key)}
                 onMouseLeave={() => setHovered(null)}
+                onPointerMove={(e) => track(band.key, e)}
+                onPointerLeave={() => clear(band.key)}
                 onFocus={() => setHovered(band.key)}
                 onBlur={() => setHovered(null)}
               >
@@ -260,6 +270,8 @@ export function RallyLengthCard() {
                   oppName={oppName}
                   align={isFirst ? "start" : isLast ? "end" : "center"}
                   watchable={Boolean(watch)}
+                  pointer={pointerFor(band.key)}
+                  frame={frameFor(band.key)}
                 />
 
                 {/* Fixed tones, never swapped by who led the band (47f drops
@@ -350,6 +362,8 @@ function BandTooltip({
   oppName,
   align,
   watchable,
+  pointer,
+  frame,
 }: {
   band: Band;
   open: boolean;
@@ -359,12 +373,16 @@ function BandTooltip({
   align: "start" | "center" | "end";
   /** The band opens its points in the Video tab. */
   watchable: boolean;
+  pointer: ReadoutPointer | null;
+  frame: ReadoutFrame | null;
 }) {
   return (
     <ChartTooltip
       open={open}
       align={align}
       bottomOffset={8}
+      pointer={pointer}
+      frame={frame}
       className="gap-[3px] px-[11px] py-[9px]"
     >
       <span className="text-[12px] font-medium text-white">{band.title}</span>

@@ -98,7 +98,7 @@ ready).
 
 ## T7 · Make the Statistics chart tooltip follow the cursor
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/match-detail/chart-tooltip.tsx, src/components/dashboard/matches/match-detail/chart-tooltip-position.ts (new, guess), src/components/dashboard/matches/match-detail/head-to-head-card.tsx (row hover ~line 675-706, `RowTooltip` ~540-571), src/components/dashboard/matches/match-detail/rally-length-card.tsx (~195-222, `BandTooltip` ~301-334), src/components/dashboard/matches/match-detail/point-endings-card.tsx (~310-325, `SegmentTooltip` ~354-375), tests/chart-tooltip-position.spec.ts (new, guess)
 - **done when:**

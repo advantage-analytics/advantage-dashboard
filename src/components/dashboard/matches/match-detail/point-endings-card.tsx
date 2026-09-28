@@ -11,7 +11,12 @@ import {
   scopePoints,
   useSetScope,
 } from "@/components/dashboard/matches/match-detail/set-scope";
-import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
+import {
+  ChartTooltip,
+  useReadoutPointer,
+  type ReadoutFrame,
+  type ReadoutPointer,
+} from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { surnameLabels } from "@/lib/data/match-utils";
@@ -166,6 +171,8 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
   const { activeSet } = useSetScope();
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<string | null>(null);
+  const { boundsRef, track, clear, pointerFor, frameFor } =
+    useReadoutPointer<string>();
 
   const youIsPlayer1 = sides.you.isPlayer1;
 
@@ -275,6 +282,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
 
   return (
     <section
+      ref={boundsRef}
       aria-labelledby="point-endings-heading"
       className="surface-card flex flex-col gap-3"
       style={{ padding: "16px 20px 14px" }}
@@ -375,6 +383,10 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                     }
                     onMouseEnter={() => setHovered(id)}
                     onMouseLeave={() => setHovered(null)}
+                    onPointerMove={(e: React.PointerEvent<HTMLElement>) =>
+                      track(id, e)
+                    }
+                    onPointerLeave={() => clear(id)}
                     onFocus={() => setHovered(id)}
                     onBlur={() => setHovered(null)}
                   >
@@ -384,6 +396,8 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                       detail={`${row.name} ${row.own[o.key]} · ${row.otherName} ${row.other[o.key]}`}
                       align={isFirst ? "start" : isLast ? "end" : "center"}
                       watchable={Boolean(watch)}
+                      pointer={pointerFor(id)}
+                      frame={frameFor(id)}
                     />
                   </motion.div>
                 );
@@ -422,6 +436,8 @@ function SegmentTooltip({
   detail,
   align,
   watchable,
+  pointer,
+  frame,
 }: {
   open: boolean;
   label: string;
@@ -429,12 +445,16 @@ function SegmentTooltip({
   align: "start" | "center" | "end";
   /** The segment opens its points in the Video tab. */
   watchable: boolean;
+  pointer: ReadoutPointer | null;
+  frame: ReadoutFrame | null;
 }) {
   return (
     <ChartTooltip
       open={open}
       align={align}
       bottomOffset={6}
+      pointer={pointer}
+      frame={frame}
       className="gap-0.5 px-2.5 py-2"
     >
       <span className="text-[12px] font-medium text-white">{label}</span>
