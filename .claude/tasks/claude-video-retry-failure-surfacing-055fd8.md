@@ -44,7 +44,7 @@ ready).
 
 ## T3 · Carry recovery, note and attemptsUsed through the loader, live hook and schedule data
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/lib/data/match-analysis-server.ts, src/hooks/use-live-match-analysis.ts, src/lib/data/schedule-server.ts, src/lib/schedule/types.ts, src/lib/data/match-analysis.ts (`MatchAnalysis` type), tests/match-analysis-input-rejected.spec.ts (guess)

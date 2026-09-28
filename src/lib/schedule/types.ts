@@ -8,7 +8,7 @@
  * `supabase/migrations/20260820072347_program_event_entries.sql`.
  */
 
-import type { AnalysisStatus } from "@/lib/data/match-analysis";
+import type { AnalysisStatus, RecoveryClass } from "@/lib/data/match-analysis";
 
 export type EventKind = "dual" | "tournament";
 export type EventSite = "home" | "away" | "neutral";
@@ -146,6 +146,10 @@ export interface EntryMatch {
   failNote?: string | null;
   /** The vendor refused the video itself, from the analysis map — no retry. */
   inputRejected?: boolean | null;
+  /** What can be done about a job that did not finish, from the analysis map. */
+  recovery?: RecoveryClass | null;
+  /** The stored note `showsStoredNote()` allows, from the analysis map. */
+  note?: string | null;
 }
 
 export interface EventEntry {

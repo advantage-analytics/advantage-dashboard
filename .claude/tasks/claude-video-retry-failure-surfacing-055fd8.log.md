@@ -20,3 +20,13 @@ is the runner's. Newest entries at the bottom.
 
 1. `MAX_TOTAL_ATTEMPTS`'s comment still says "Enforced here and nowhere else"; after the move "here" means `match-analysis.ts`, while enforcement stays in `resubmitJob()` — reword.
 2. `showsStoredNote("")` returns true under the literal rule; decide whether an empty code should count as no code.
+
+## T3 · Carry recovery, note and attemptsUsed through the loader, live hook and schedule data — done
+
+**gate:** mechanical pass · completion pass
+**changed:** `loadMatchAnalysis` selects the error, key and chain columns, maps the storage keys to `hasVideo`/`hasResults` and computes `attemptsUsed` with the new pure `chainAttempts()`. `jobRecoveryFacts()` + `recoveryFields()` in `match-analysis.ts` are the one path both the loader and `liveAnalysisPatch` use to set `recovery` and `note`; `withLiveAnalysis` bumps `attemptsUsed` for a newly observed resubmitted job and recomputes. `EntryMatch` carries `recovery` and `note`. `inputRejected` and `failNote` unchanged.
+**follow-ups:**
+
+1. A stalled `uploaded` row's class is decided at load or on a live event; a page left open past the 3-minute stall threshold won't switch until one happens — surfaces may want a timer recheck of `isSubmitStalled`.
+2. `withLiveAnalysis` adds at most one attempt per live row, so two resubmissions seen live in one session undercount by one until reload.
+3. The live patch still doesn't update `jobId`/`updatedAt`, so a retry from a live-observed new job acts on the page-load job id.

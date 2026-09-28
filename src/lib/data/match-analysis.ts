@@ -139,6 +139,25 @@ export interface MatchAnalysis {
    * Optional so a projection with no job row (imported, manual) need not state it.
    */
   inputRejected?: boolean;
+  /**
+   * What the player can do about a job that did not finish, from
+   * `classifyFailure()`. Undefined for a healthy or in-flight row. Set through
+   * `jobRecoveryFacts()` + `classifyFailure()` in BOTH the server loader and
+   * the realtime merge (`withLiveAnalysis`), for the reason `inputRejected`
+   * documents above.
+   */
+  recovery?: RecoveryClass;
+  /**
+   * The stored `error_message`, only when `showsStoredNote()` allows it — a
+   * vendor or submit-path explanation, never one of our raw writer strings
+   * ("Failed to fetch", Azure XML). Unlike `failNote`, which is unfiltered.
+   */
+  note?: string;
+  /**
+   * Rows in the newest job's resubmission chain, the original included —
+   * `chainAttempts()`. The ceiling input to `classifyFailure()`.
+   */
+  attemptsUsed?: number;
   verified?: boolean;
 }
 
@@ -398,6 +417,121 @@ export function classifyFailure(input: RecoveryInput): RecoveryClass | null {
  */
 export function showsStoredNote(errorCode: string | null | undefined): boolean {
   return errorCode != null && !errorCode.startsWith("DERIVATION_");
+}
+
+/**
+ * The `processing_jobs` columns recovery is decided from, as both projections
+ * hold them. The storage keys arrive as `hasVideo` / `hasResults` — the caller
+ * maps them, so a key never lands on anything bound for the client.
+ */
+export interface RecoveryRow {
+  status: string;
+  derivation_version?: string | null;
+  error_code?: string | null;
+  error_category?: string | null;
+  error_step?: string | null;
+  error_message?: string | null;
+  external_job_id?: string | null;
+  updated_at?: string | null;
+  hasVideo: boolean;
+  hasResults: boolean;
+}
+
+/** `RecoveryInput` less the chain count, which only the caller can supply. */
+export type RecoveryFacts = Omit<RecoveryInput, "attemptsUsed">;
+
+/**
+ * One job row → the classifier's inputs, with `stalledSubmit` from the same
+ * `isSubmitStalled()` the surfaces use. The ONE projection the server loader
+ * and the realtime hook share; neither builds a RecoveryInput by hand.
+ */
+export function jobRecoveryFacts(
+  row: RecoveryRow,
+  nowMs: number = Date.now(),
+): RecoveryFacts {
+  const status = resolveAnalysisStatus(row.status, row.derivation_version);
+  return {
+    dbStatus: row.status,
+    errorCode: row.error_code ?? null,
+    errorCategory: row.error_category ?? null,
+    errorStep: row.error_step ?? null,
+    hasVideo: row.hasVideo,
+    hasResults: row.hasResults,
+    stalledSubmit:
+      status !== undefined &&
+      isSubmitStalled(
+        {
+          status,
+          updatedAt: row.updated_at ?? undefined,
+          jobReference: row.external_job_id ?? undefined,
+        },
+        nowMs,
+      ),
+  };
+}
+
+/**
+ * `recovery` and `note` for one row. Both keys are always present so a patch
+ * spread over an earlier failure clears them.
+ */
+export function recoveryFields(
+  facts: RecoveryFacts,
+  attemptsUsed: number,
+  errorMessage: string | null | undefined,
+): { recovery: RecoveryClass | undefined; note: string | undefined } {
+  return {
+    recovery: classifyFailure({ ...facts, attemptsUsed }) ?? undefined,
+    note:
+      showsStoredNote(facts.errorCode) && errorMessage
+        ? errorMessage
+        : undefined,
+  };
+}
+
+/**
+ * How many rows the newest job's resubmission chain holds, the original
+ * included: its root (walked up `resubmitted_from_job_id`) plus every row
+ * descending from that root. Counted among `rows` only — the rows a loader
+ * already fetched for one match — so it costs no query.
+ *
+ * An earlier upload for the same match that no link connects is a separate
+ * chain and is not counted: it did not spend this chain's attempts. Returns 1
+ * when `newestId` is not among `rows`. Cycle-safe.
+ */
+export function chainAttempts(
+  rows: readonly { id: string; resubmitted_from_job_id?: string | null }[],
+  newestId: string,
+): number {
+  // A chain is a tree, so "root plus descendants" is exactly the rows linked
+  // to the newest one in either direction. Walking links both ways rather than
+  // up-then-down keeps a data cycle from picking two different roots.
+  const ids = new Set(rows.map((row) => row.id));
+  if (!ids.has(newestId)) return 1;
+
+  const linked = new Map<string, string[]>();
+  const link = (a: string, b: string) => {
+    const list = linked.get(a);
+    if (list) list.push(b);
+    else linked.set(a, [b]);
+  };
+  for (const row of rows) {
+    const parent = row.resubmitted_from_job_id;
+    if (parent && ids.has(parent)) {
+      link(row.id, parent);
+      link(parent, row.id);
+    }
+  }
+
+  const seen = new Set<string>([newestId]);
+  const frontier = [newestId];
+  while (frontier.length > 0) {
+    for (const next of linked.get(frontier.pop()!) ?? []) {
+      if (seen.has(next)) continue;
+      seen.add(next);
+      frontier.push(next);
+    }
+  }
+  return seen.size;
 }
 
 export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
