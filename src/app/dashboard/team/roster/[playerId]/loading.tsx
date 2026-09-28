@@ -1,4 +1,5 @@
 import { PendingBar } from "@/components/dashboard/loading/pending";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 
 /**
  * The profile's shape while its reads land — the identity row, the five-tile
@@ -68,19 +69,23 @@ export default function Loading() {
             </div>
           </div>
           <div className="flex flex-col gap-4">
-            <div
-              className="surface-card flex flex-col gap-3"
-              style={{ padding: 20 }}
-            >
-              <PendingBar className="h-2.5 w-20 rounded" />
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="flex h-8 items-center gap-3">
-                  <PendingBar className="h-2.5 w-6 rounded" />
-                  <PendingBar className="h-3 w-8 rounded" />
-                  <PendingBar className="h-2.5 flex-1 rounded" />
-                </div>
-              ))}
-            </div>
+            {/* Line history — not drawn while the Schedule is a coming-soon
+                page, matching the page (`lib/schedule/availability.ts`). */}
+            {SCHEDULE_ENABLED && (
+              <div
+                className="surface-card flex flex-col gap-3"
+                style={{ padding: 20 }}
+              >
+                <PendingBar className="h-2.5 w-20 rounded" />
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="flex h-8 items-center gap-3">
+                    <PendingBar className="h-2.5 w-6 rounded" />
+                    <PendingBar className="h-3 w-8 rounded" />
+                    <PendingBar className="h-2.5 flex-1 rounded" />
+                  </div>
+                ))}
+              </div>
+            )}
             <div
               className="surface-card flex flex-col gap-3"
               style={{ padding: "18px 20px" }}

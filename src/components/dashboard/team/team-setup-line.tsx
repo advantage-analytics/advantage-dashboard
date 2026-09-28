@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { TeamSetupProgress } from "@/lib/data/team-home-server";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 
 /**
  * "Getting set up · 1 of 3 · A dual on the schedule. Add a dual" — a quiet
@@ -24,8 +25,12 @@ import type { TeamSetupProgress } from "@/lib/data/team-home-server";
  * Renders nothing once all three are done. The line leaves once and does not
  * come back, which is what makes the populated page the end of setup rather
  * than a state somebody declares.
+ *
+ * While the Schedule is a coming-soon page (`lib/schedule/availability.ts`)
+ * the dual step is dropped — there is nowhere to add one — and the line
+ * counts two steps.
  */
-const STEPS: ReadonlyArray<{
+const ALL_STEPS: ReadonlyArray<{
   key: keyof TeamSetupProgress;
   phrase: string;
   href: string;
@@ -50,6 +55,9 @@ const STEPS: ReadonlyArray<{
     link: "Send a match",
   },
 ];
+const STEPS = ALL_STEPS.filter(
+  (step) => SCHEDULE_ENABLED || step.key !== "schedule",
+);
 
 export function TeamSetupLine({ setup }: { setup: TeamSetupProgress }) {
   const remaining = STEPS.filter((step) => !setup[step.key]);
@@ -59,7 +67,9 @@ export function TeamSetupLine({ setup }: { setup: TeamSetupProgress }) {
   const next = remaining[0];
   const sentence =
     remaining.length === STEPS.length
-      ? "Players on the roster, a dual on the schedule, a first match sent."
+      ? `${STEPS.map((step) => step.phrase)
+          .join(", ")
+          .replace(/^./, (first) => first.toUpperCase())}.`
       : `${next.phrase.charAt(0).toUpperCase()}${next.phrase.slice(1)}.`;
 
   return (

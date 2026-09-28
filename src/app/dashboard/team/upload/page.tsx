@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
 import {
   getProgramSchedule,
@@ -70,7 +71,12 @@ export default async function TeamUploadPage({
   // This is where a *player* is turned away and nowhere else: staff are
   // answered before either flag is read, so no arrangement of switches can
   // bounce a coach off their own program's upload page.
-  if (!canUploadForProgram(active)) redirect("/dashboard/team/schedule");
+  //
+  // Turned away to Team Home rather than the Schedule while the Schedule is a
+  // coming-soon page (`lib/schedule/availability.ts`): landing a player on a
+  // stub reads as a broken link.
+  if (!canUploadForProgram(active))
+    redirect(SCHEDULE_ENABLED ? "/dashboard/team/schedule" : "/dashboard/team");
 
   // Who may open this page and who may attach a match to a SCHEDULED LINE are
   // two different questions, and only the second one is authorization. The
@@ -154,7 +160,9 @@ export default async function TeamUploadPage({
       date: single.date,
       surface: single.surface,
       score: single.score,
-      eventHref: `/dashboard/team/schedule/single/${single.id}`,
+      eventHref: SCHEDULE_ENABLED
+        ? `/dashboard/team/schedule/single/${single.id}`
+        : `/dashboard/matches/${single.id}`,
     });
 
     return <UploadMatchFlow preset={preset} />;

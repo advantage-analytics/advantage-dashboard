@@ -72,6 +72,7 @@ import {
   roundKindFor,
   roundOptionsFor,
 } from "@/lib/matches/round-options";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 
 type FieldKey = "player1_name" | "player2_name" | "date";
 
@@ -605,10 +606,14 @@ export function EditMatchDialog({
         push({
           tone: "success",
           title: `Added to ${attached.eventName} · ${attached.slot ?? attached.round ?? ""}`,
-          action: {
-            label: "Open in Schedule",
-            href: `/dashboard/team/schedule/${attached.eventId}`,
-          },
+          ...(SCHEDULE_ENABLED
+            ? {
+                action: {
+                  label: "Open in Schedule",
+                  href: `/dashboard/team/schedule/${attached.eventId}`,
+                },
+              }
+            : {}),
         });
       }
 
@@ -639,13 +644,15 @@ export function EditMatchDialog({
             surface: event.surface,
           })}
         </span>
-        <Link
-          href={`/dashboard/team/schedule/${event.eventId}`}
-          className="inline-flex items-center gap-0.5 font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
-        >
-          Open
-          <ArrowUpRight className="size-3" strokeWidth={2} aria-hidden />
-        </Link>
+        {SCHEDULE_ENABLED && (
+          <Link
+            href={`/dashboard/team/schedule/${event.eventId}`}
+            className="inline-flex items-center gap-0.5 font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
+          >
+            Open
+            <ArrowUpRight className="size-3" strokeWidth={2} aria-hidden />
+          </Link>
+        )}
       </span>
     );
   } else if (match && pendingLine) {
@@ -902,8 +909,8 @@ export function EditMatchDialog({
                   event && (
                     <span>
                       The date, {event.eventKind === "dual" ? "line" : "round"}{" "}
-                      and surface come from the {event.eventKind}. Change them
-                      in Schedule.
+                      and surface come from the {event.eventKind}.
+                      {SCHEDULE_ENABLED && " Change them in Schedule."}
                     </span>
                   )
                 )}
@@ -944,7 +951,10 @@ export function EditMatchDialog({
                     onChange={(e) => setTournament(e.target.value)}
                   />
                 )}
-                {match.program_id && !picking && (
+                {/* Closed while the Schedule is a coming-soon page
+                    (`lib/schedule/availability.ts`): there is no event to
+                    add a one-off to, and nowhere to go and make one. */}
+                {SCHEDULE_ENABLED && match.program_id && !picking && (
                   <span className="flex flex-wrap items-center gap-x-2 pt-0.5 text-[11px] text-[var(--ink-500)]">
                     {loaded?.canAttach ? (
                       <>

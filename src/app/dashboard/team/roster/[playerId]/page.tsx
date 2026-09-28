@@ -13,6 +13,7 @@ import { LastMatchCard } from "@/components/dashboard/team/player-profile/last-m
 import { MatchHistoryCard } from "@/components/dashboard/team/player-profile/match-history-card";
 import { LineHistoryCard } from "@/components/dashboard/team/player-profile/line-history-card";
 import { ServePlacementCard } from "@/components/dashboard/team/player-profile/serve-placement-card";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 
 /**
  * One player's page — Platform Audit `Te` (their own) and `Te2` (a coach's
@@ -166,7 +167,10 @@ export default async function PlayerProfilePage({
             />
           </div>
           <div className="flex min-w-0 flex-col gap-4">
-            <LineHistoryCard lines={profile.lines} />
+            {/* Lines come from the schedule, and its empty state sends the
+                reader there; not drawn while the Schedule is a coming-soon
+                page (`lib/schedule/availability.ts`). */}
+            {SCHEDULE_ENABLED && <LineHistoryCard lines={profile.lines} />}
             <ServePlacementCard serve={profile.serve} subject={subject} />
           </div>
         </div>

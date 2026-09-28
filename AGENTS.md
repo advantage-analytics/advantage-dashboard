@@ -74,6 +74,10 @@ Full table in [`MAP.md`](MAP.md). Three things it does not tell you:
   `/dashboard/team/ask` and `/dashboard/opponents` render `ComingSoonPage`. Their
   shape is not settled, so there is no implementation behind them to revive — the
   loaders in `opponents-server.ts` are the exception and are live elsewhere.
+- `/dashboard/team/schedule` is the opposite case: it renders `ComingSoonPage`
+  while `SCHEDULE_ENABLED` (`src/lib/schedule/availability.ts`) is off, but the
+  whole schedule is built and kept behind it. Its sub-routes redirect to the stub
+  and every link into it is gated; that file says how to turn it back on.
 - `/request-access` is a `next.config.ts` redirect to the landing page form, not a page.
 
 ### Data flow

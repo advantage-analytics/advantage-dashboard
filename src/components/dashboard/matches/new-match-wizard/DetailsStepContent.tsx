@@ -93,6 +93,7 @@ import {
   type YourEvent,
 } from "@/lib/wizard/actions";
 import { AttachLinePicker } from "@/components/dashboard/matches/match-actions/attach-line-picker";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { rankLineOffers } from "./offer-match";
@@ -960,7 +961,11 @@ function DetailsStepContentImpl({
     [admin],
   );
   const { active: activeWorkspace } = useWorkspace();
+  // The dashboard's schedule doors — line offers, "Add to an event" — stay
+  // shut while the Schedule is a coming-soon page
+  // (`lib/schedule/availability.ts`). The admin console keeps its own.
   const canAttach =
+    SCHEDULE_ENABLED &&
     !admin &&
     workspaceKind === "team" &&
     activeWorkspace.kind === "team" &&
@@ -1037,7 +1042,14 @@ function DetailsStepContentImpl({
   // The schedule only offers in a team workspace, with no line pinned, for a
   // date. Re-asked when the date or the subject changes.
   useEffect(() => {
-    if (admin || workspaceKind !== "team" || line || !formData.date) return;
+    if (
+      !SCHEDULE_ENABLED ||
+      admin ||
+      workspaceKind !== "team" ||
+      line ||
+      !formData.date
+    )
+      return;
     let cancelled = false;
     void findLineOffers({
       scope: lookupScope,
@@ -1814,7 +1826,7 @@ function DetailsStepContentImpl({
               kind={formData.eventKind}
               events={events}
               footer={
-                workspaceKind === "team" ? (
+                SCHEDULE_ENABLED && workspaceKind === "team" ? (
                   <ScheduleFooter
                     canAttach={canAttach}
                     onAdd={() => setPickingLine(true)}

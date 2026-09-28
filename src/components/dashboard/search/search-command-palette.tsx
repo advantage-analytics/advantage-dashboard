@@ -49,6 +49,7 @@ import {
   PendingBar,
   PendingRegion,
 } from "@/components/dashboard/loading/pending";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 
 /**
  * ⌘K. Finds things, and — since it is already the fastest surface in the
@@ -76,9 +77,9 @@ import {
  * is scoped to one of them, advertising matches it then could not show.
  *
  * ── Commands ───────────────────────────────────────────────────────────────
- * Only real destinations. Statistics, Ask and Opponents are still
- * `ComingSoonPage` stubs, and a command that opens a placeholder is worse than
- * no command. Program verbs are ABSENT in a personal workspace, never
+ * Only real destinations. Statistics, Ask, Opponents and — while
+ * `SCHEDULE_ENABLED` is off — Schedule are still `ComingSoonPage` stubs, and
+ * a command that opens a placeholder is worse than no command. Program verbs are ABSENT in a personal workspace, never
  * disabled — a greyed-out "Invite a player" is a promise the workspace cannot
  * keep. Each command's hint is the route table's own label for its href, so a
  * rename in `nav.ts` reaches here without a second edit.
@@ -276,7 +277,7 @@ function actionsFor(active: Workspace): Action[] {
       icon: UserPlus,
     });
   }
-  if (canManageTeamSchedule(active)) {
+  if (SCHEDULE_ENABLED && canManageTeamSchedule(active)) {
     actions.push({
       id: "fixture",
       label: "Add a fixture",

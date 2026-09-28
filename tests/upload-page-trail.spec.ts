@@ -132,6 +132,9 @@ function loadPage() {
     },
     "@/components/dashboard/matches/new-match-wizard": { UploadMatchFlow },
     "@/components/dashboard/schedule/event-header-slot": { EventHeaderSlot },
+    // Either value leaves the trail alone; the flag only retargets the
+    // player redirect and a single match's exit link.
+    "@/lib/schedule/availability": { SCHEDULE_ENABLED: false },
   };
 
   runInNewContext(output, {
