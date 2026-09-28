@@ -7,6 +7,7 @@ import {
   useReducer,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
@@ -47,6 +48,7 @@ import type {
   LabelPointStatusResult,
   LabelShotStatusResult,
 } from "@/lib/services/labels/operations-session";
+import { playingRowAt } from "@/lib/services/labels/playback";
 import { applyPointReset, applyShotReset } from "@/lib/services/labels/reset";
 import type { CourtPoint } from "./court-geometry";
 import {
@@ -67,6 +69,11 @@ import {
 import { LabelSaveStatus } from "./label-save-status";
 import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
 import { INITIAL_SAVE_STATUS, saveStatusReducer } from "./save-status";
+import {
+  createVideoClock,
+  parsePlayingRowKey,
+  playingRowKey,
+} from "./video-clock";
 
 /**
  * `/admin/labels/[sessionId]` — board 08: the header, the band (video
@@ -92,6 +99,12 @@ import { INITIAL_SAVE_STATUS, saveStatusReducer } from "./save-status";
  * game someone else serves — and those open `LabelConfirmDialog` WITHOUT
  * writing: the write happens on the dialog's action, and Cancel changes
  * nothing. Enter marks the open point checked when focus is not in a control.
+ *
+ * The band is small — a 384 × 216 video and the court card beside it at the
+ * same height — so the points table gets the screen. As the video plays (or is scrubbed) the table marks the point and
+ * the stroke on screen (`playingRowAt`, via the video clock in
+ * video-clock.ts). The mark is only a mark: it never opens a point, selects a
+ * stroke or scrolls the table — the labeller stays in charge of all three.
  */
 export function LabelConsole({
   session,
@@ -103,6 +116,7 @@ export function LabelConsole({
   operations,
   initialConfirm = null,
   initialOpenTombstoneIds,
+  initialVideoTime = null,
   headerAction,
 }: {
   session: LabelSession;
@@ -133,6 +147,8 @@ export function LabelConsole({
   initialConfirm?: LabelConfirm | null;
   /** Tombstones expanded to their ghost row on first render. */
   initialOpenTombstoneIds?: readonly string[];
+  /** The video's position on first render, on the analysis clock — for specs. */
+  initialVideoTime?: number | null;
   /** The header's trailing link, rendered by the page. */
   headerAction?: ReactNode;
 }) {
@@ -164,6 +180,15 @@ export function LabelConsole({
   );
   const player = useRef<LabelVideoHandle>(null);
   const pendingIds = useRef(0);
+  const [clock] = useState(() => createVideoClock(initialVideoTime));
+
+  // Re-renders only when the video crosses into another row; taken from the
+  // current rows every render, so a retimed stroke moves the mark at once.
+  const playingSnapshot = () =>
+    playingRowKey(playingRowAt(points, clock.get()));
+  const playing = parsePlayingRowKey(
+    useSyncExternalStore(clock.subscribe, playingSnapshot, playingSnapshot),
+  );
 
   // A deleted point is a marker, not an open point: nothing of it on the court.
   const expanded =
@@ -668,8 +693,13 @@ export function LabelConsole({
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_500px]">
-        <LabelVideoPlayer ref={player} video={video} />
+      {/* Not sticky: `body` is its own overflow container (globals.css), so
+          `position: sticky` never engages anywhere in the admin — the header's
+          own `sticky` included. */}
+      <div data-label-band="" className="flex gap-4">
+        <div className="w-[384px] shrink-0">
+          <LabelVideoPlayer ref={player} video={video} onTime={clock.set} />
+        </div>
         <LabelCourt
           title={
             expanded ? `Court · point ${expanded.pointIndex + 1}` : "Court"
@@ -695,6 +725,8 @@ export function LabelConsole({
         operations={rowOperations}
         openTombstoneIds={openTombstones}
         onToggleTombstone={toggleTombstone}
+        playingPointId={playing?.pointId ?? null}
+        playingShotId={playing?.shotId ?? null}
       />
 
       {operable ? (

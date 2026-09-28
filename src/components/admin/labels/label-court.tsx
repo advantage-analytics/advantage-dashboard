@@ -20,15 +20,16 @@ import {
 import type { SideNames } from "./label-format";
 
 /**
- * Board 08's court card: the vertical court on its apron, with the selected
+ * Board 08's court card, cut down to sit beside the band's small video: the
+ * vertical court on its apron down the card's left edge, with the selected
  * point's strokes marked — hollow ring where the ball was hit, filled dot
  * where it landed, a dashed line between. Player 1's marks are white,
- * player 2's black, as the legend in the apron's corner says.
+ * player 2's black, as the legend beside the court says.
  *
  * With a stroke selected (and the session open), the art box is a button
  * under a crosshair: a click is converted to metres with `toCourt` and handed
  * to `onPlace` — which end it places is court-placement.ts's sequence, and
- * the line under the court says which. The selected stroke's marks carry a
+ * the prompt at the foot of the card says which. The selected stroke's marks carry a
  * `--blue` ring so the labeller can see what they are moving.
  *
  * The court palette comes from `court-art.tsx`'s exports rather than a second
@@ -82,6 +83,14 @@ function marksFor(
 
 const pct = (n: number) => `${n.toFixed(2)}%`;
 
+/**
+ * The art box: 194 × 86, the art's own 27.97 × 12.4 m proportions, so a
+ * click converts to metres without distortion. It sits in a 216px card —
+ * the video's height at the band's 384px width — which is why the marks
+ * below are drawn smaller than the film tab's.
+ */
+const COURT_BOX = "relative h-[194px] w-[86px]";
+
 export function LabelCourt({
   title,
   shots,
@@ -127,7 +136,7 @@ export function LabelCourt({
               y2={pct(mark.landed.sy)}
               stroke={mark.color}
               strokeWidth="1"
-              strokeDasharray="3 3"
+              strokeDasharray="2 2"
               opacity="0.6"
             />
           ) : null,
@@ -141,9 +150,9 @@ export function LabelCourt({
                     data-selected-ring=""
                     cx={pct(end.sx)}
                     cy={pct(end.sy)}
-                    r="7.5"
+                    r="5.5"
                     fill="none"
-                    strokeWidth="1.5"
+                    strokeWidth="1.25"
                     style={{ stroke: "var(--blue)" }}
                   />
                 ) : null,
@@ -156,10 +165,10 @@ export function LabelCourt({
               key={`${mark.id}-hit`}
               cx={pct(mark.hit.sx)}
               cy={pct(mark.hit.sy)}
-              r="4"
+              r="3"
               fill="none"
               stroke={mark.color}
-              strokeWidth="1.5"
+              strokeWidth="1.25"
             />
           ) : null,
         )}
@@ -169,7 +178,7 @@ export function LabelCourt({
               key={`${mark.id}-landed`}
               cx={pct(mark.landed.sx)}
               cy={pct(mark.landed.sy)}
-              r="3.5"
+              r="2.5"
               fill={mark.color}
               stroke={mark.outline}
               strokeWidth="0.5"
@@ -183,46 +192,12 @@ export function LabelCourt({
   return (
     <section
       aria-label="Court"
-      className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]"
+      className="flex h-[216px] w-[320px] shrink-0 overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]"
     >
-      <div className="flex h-11 items-center px-4">
-        <span className="eyebrow">{title}</span>
-      </div>
-
       <div
-        className="relative flex justify-center py-3"
+        className="flex shrink-0 items-center justify-center px-3"
         style={{ background: APRON_FILL }}
       >
-        <div className="absolute top-3 left-4 flex flex-col gap-1.5 text-[11px] text-white/90">
-          <LegendSwatch color={LINE_COLOR} ring="rgba(0,0,0,0.35)">
-            {names.p1}
-          </LegendSwatch>
-          <LegendSwatch color={DARK_MARK} ring="rgba(255,255,255,0.6)">
-            {names.p2}
-          </LegendSwatch>
-        </div>
-        <div className="absolute top-3 right-4 flex flex-col items-end gap-1.5 text-[11px] text-white/90">
-          <span className="inline-flex items-center gap-1.5">
-            Hit
-            <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true">
-              <circle
-                cx="5"
-                cy="5"
-                r="3.6"
-                fill="none"
-                stroke={LINE_COLOR}
-                strokeWidth="1.5"
-              />
-            </svg>
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            Landed
-            <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true">
-              <circle cx="5" cy="5" r="3.6" fill={LINE_COLOR} />
-            </svg>
-          </span>
-        </div>
-
         {placing ? (
           <button
             type="button"
@@ -240,36 +215,73 @@ export function LabelCourt({
                 }),
               );
             }}
-            className="relative block h-[430px] w-[191px] cursor-crosshair rounded-[var(--radius-element)] border-0 bg-transparent p-0"
+            className={cn(
+              COURT_BOX,
+              "block cursor-crosshair rounded-[var(--radius-element)] border-0 bg-transparent p-0",
+            )}
           >
             {art}
           </button>
         ) : (
-          <div
-            className="relative h-[430px] w-[191px]"
-            role="img"
-            aria-label={description}
-          >
+          <div className={COURT_BOX} role="img" aria-label={description}>
             {art}
           </div>
         )}
       </div>
 
-      <div
-        className={cn(
-          "flex h-12 items-center px-4 text-[12px]",
-          placing
-            ? "font-medium text-[var(--ink-900)]"
-            : "text-[var(--ink-600)]",
-        )}
-        data-court-prompt={placing ? "" : undefined}
-        aria-live="polite"
-      >
-        {placing
-          ? prompt
-          : placed === 0
-            ? "No strokes placed on this point"
-            : `${placed} ${placed === 1 ? "stroke" : "strokes"} placed`}
+      <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
+        <span className="eyebrow truncate">{title}</span>
+        <div className="flex flex-col gap-1.5 text-[11px] text-[var(--ink-700)]">
+          <LegendSwatch color={LINE_COLOR} ring="rgba(0,0,0,0.35)">
+            {names.p1}
+          </LegendSwatch>
+          <LegendSwatch color={DARK_MARK} ring="rgba(0,0,0,0.35)">
+            {names.p2}
+          </LegendSwatch>
+          <span className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1.5">
+              <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true">
+                <circle
+                  cx="5"
+                  cy="5"
+                  r="3.6"
+                  fill="none"
+                  strokeWidth="1.5"
+                  style={{ stroke: "var(--ink-700)" }}
+                />
+              </svg>
+              Hit
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true">
+                <circle
+                  cx="5"
+                  cy="5"
+                  r="3.6"
+                  style={{ fill: "var(--ink-700)" }}
+                />
+              </svg>
+              Landed
+            </span>
+          </span>
+        </div>
+
+        <div
+          className={cn(
+            "mt-auto text-[12px] leading-[18px]",
+            placing
+              ? "font-medium text-[var(--ink-900)]"
+              : "text-[var(--ink-600)]",
+          )}
+          data-court-prompt={placing ? "" : undefined}
+          aria-live="polite"
+        >
+          {placing
+            ? prompt
+            : placed === 0
+              ? "No strokes placed on this point"
+              : `${placed} ${placed === 1 ? "stroke" : "strokes"} placed`}
+        </div>
       </div>
     </section>
   );

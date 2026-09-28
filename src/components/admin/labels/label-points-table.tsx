@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, ClipboardList, Plus, X } from "lucide-react";
+import { Check, ChevronDown, ClipboardList, Play, Plus, X } from "lucide-react";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { StatePill } from "@/components/ui/state-pill";
 import {
@@ -93,10 +93,18 @@ import {
  * point to check or a stroke to count. The pill expands the rule to a
  * struck-through ghost of the row, with Undo.
  *
- * Stateless: which point is open, which stroke is selected, which tombstones
- * are expanded and the rows themselves are the caller's (`LabelConsole` holds
- * them), so a spec can render any state without clicking. The one exception
- * is the move menu's own open/closed.
+ * The PLAYING point and stroke — the rows the video is on — carry
+ * `data-playing="true"`: a light blue wash (on a point row only while it is
+ * closed; open, it already has its own ground) and the row number in
+ * `--blue` with a small play glyph after it. It is deliberately none of the
+ * other row states — not the open point's grey, not the selected stroke's
+ * white with hairlines, not an added stroke's ringed tint — and it changes
+ * nothing: no point opens, no stroke is selected, nothing scrolls.
+ *
+ * Stateless: which point is open, which stroke is selected, which rows are
+ * playing, which tombstones are expanded and the rows themselves are the
+ * caller's (`LabelConsole` holds them), so a spec can render any state
+ * without clicking. The one exception is the move menu's own open/closed.
  */
 export function LabelPointsTable({
   points,
@@ -111,6 +119,8 @@ export function LabelPointsTable({
   operations,
   openTombstoneIds = NO_IDS,
   onToggleTombstone,
+  playingPointId = null,
+  playingShotId = null,
 }: {
   points: readonly LabelPoint[];
   names: SideNames;
@@ -127,6 +137,10 @@ export function LabelPointsTable({
   /** Tombstones whose ghost row is showing. */
   openTombstoneIds?: ReadonlySet<string>;
   onToggleTombstone?: (id: string) => void;
+  /** The point the video is on (see `playingRowAt`); null in dead time. */
+  playingPointId?: string | null;
+  /** The stroke the video is on, inside `playingPointId`. */
+  playingShotId?: string | null;
 }) {
   const edit: EditContext = {
     editable,
@@ -139,6 +153,7 @@ export function LabelPointsTable({
     openTombstoneIds,
     onToggleTombstone,
     points,
+    playingShotId,
   };
   return (
     <TooltipProvider>
@@ -179,6 +194,7 @@ export function LabelPointsTable({
                   key={point.id}
                   point={point}
                   open={point.id === expandedPointId}
+                  playing={point.id === playingPointId}
                   onToggle={onTogglePoint}
                   edit={edit}
                 />
@@ -231,6 +247,7 @@ interface EditContext {
   onToggleTombstone?: (id: string) => void;
   /** Every row, for the move menu's neighbouring games. */
   points: readonly LabelPoint[];
+  playingShotId: string | null;
 }
 
 function sideOptions(names: SideNames): SelectOption[] {
@@ -256,11 +273,13 @@ const RESULT_OPTIONS: SelectOption[] = LABEL_SHOT_RESULTS.map((value) => ({
 function PointRow({
   point,
   open,
+  playing,
   onToggle,
   edit,
 }: {
   point: LabelPoint;
   open: boolean;
+  playing: boolean;
   onToggle?: (pointId: string) => void;
   edit: EditContext;
 }) {
@@ -278,6 +297,7 @@ function PointRow({
       <div
         data-row="point"
         data-point-id={point.id}
+        data-playing={playing ? "true" : undefined}
         onClick={(event) => {
           // A click that lands in a cell is an edit, not a toggle.
           if ((event.target as Element).closest("[data-cell]")) return;
@@ -290,6 +310,7 @@ function PointRow({
             ? "rounded-b-none bg-[var(--surface-muted)]"
             : "hover:bg-[var(--surface-muted)]",
         )}
+        style={playing && !open ? { background: PLAYING_WASH } : undefined}
       >
         {/* The row's one control. The row's own click does the same thing
             for a mouse; this is what a keyboard and a screen reader reach. */}
@@ -314,16 +335,7 @@ function PointRow({
           />
         </button>
 
-        <span
-          className={cn(
-            "tabular",
-            open
-              ? "font-medium text-[var(--ink-900)]"
-              : "text-[var(--ink-600)]",
-          )}
-        >
-          {number}
-        </span>
+        <RowNumber number={number} strong={open} playing={playing} />
         {operations ? (
           <MoveGameCell
             point={point}
@@ -458,6 +470,7 @@ function ShotRow({
   const { names, editable, onSelectShot, onPatchShot, operations } = edit;
   const added = shot.status === "added";
   const selected = shot.id === edit.selectedShotId;
+  const playing = shot.id === edit.playingShotId;
   const select = () => {
     if (!selected) onSelectShot?.(shot.id);
   };
@@ -474,6 +487,7 @@ function ShotRow({
       data-row="shot"
       data-shot-id={shot.id}
       data-selected={selected ? "" : undefined}
+      data-playing={playing ? "true" : undefined}
       onClick={select}
       onFocus={select}
       className={cn(
@@ -489,21 +503,16 @@ function ShotRow({
           ? {
               boxShadow:
                 "inset 0 0 0 1px color-mix(in srgb, var(--blue) 35%, transparent)",
-              background: "color-mix(in srgb, var(--blue) 3%, transparent)",
+              background: playing
+                ? PLAYING_WASH
+                : "color-mix(in srgb, var(--blue) 3%, transparent)",
             }
-          : undefined
+          : playing && !selected
+            ? { background: PLAYING_WASH }
+            : undefined
       }
     >
-      <span
-        className={cn(
-          "tabular",
-          selected
-            ? "font-medium text-[var(--ink-900)]"
-            : "text-[var(--ink-600)]",
-        )}
-      >
-        {number}
-      </span>
+      <RowNumber number={number} strong={selected} playing={playing} />
       <EditableCell
         {...cell}
         label={`Shot ${number} time`}
@@ -1038,6 +1047,50 @@ function PointStatus({ checked }: { checked: boolean }) {
 }
 
 /** A seeded value the labeller does not decide here: muted ink. */
+/** The playing row's ground: a light blue wash, no stripe, no ring. */
+const PLAYING_WASH = "var(--blue-tint-08)";
+
+/**
+ * A row's number. On the playing row it turns `--blue` and a small play glyph
+ * follows it — after, so the numbers down the column stay aligned.
+ */
+function RowNumber({
+  number,
+  strong,
+  playing,
+}: {
+  number: number;
+  strong: boolean;
+  playing: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "tabular inline-flex items-center gap-1",
+        playing
+          ? "font-medium text-[var(--blue)]"
+          : strong
+            ? "font-medium text-[var(--ink-900)]"
+            : "text-[var(--ink-600)]",
+      )}
+    >
+      {number}
+      {playing ? (
+        <>
+          <Play
+            className="size-2 shrink-0"
+            fill="currentColor"
+            strokeWidth={1.5}
+            aria-hidden="true"
+            data-playing-mark=""
+          />
+          <span className="sr-only">, playing</span>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
 function Calculated({ children }: { children: React.ReactNode }) {
   return (
     <span className="tabular truncate text-[var(--ink-500)]">

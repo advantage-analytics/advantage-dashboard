@@ -6,9 +6,10 @@ import type { LabelVideo } from "@/lib/services/labels/session";
 
 /**
  * The console's video: the labelled job's own file in a plain `<video>`,
- * framed like the film tab's player (16:9, 14px radius, the same dark stage).
- * Beside the court card (`xl`) the frame takes the card's height instead, so
- * the band's two halves line up and the video letterboxes inside it.
+ * on the film tab's dark stage. The frame is 16:9 at whatever width the
+ * console gives it — the band's small, fixed 384px, so the points table gets
+ * the screen — with the court card's radius, so the band's two halves read
+ * as a pair.
  *
  * Not `FilmPlayer`. That component is the film tab's — its props are the
  * attachment-refresh hook's state, the tab's point stops on the film clock
@@ -31,9 +32,21 @@ export interface LabelVideoHandle {
 
 export const LabelVideoPlayer = forwardRef<
   LabelVideoHandle,
-  { video: LabelVideo | null }
->(function LabelVideoPlayer({ video }, ref) {
+  {
+    video: LabelVideo | null;
+    /**
+     * Where the file is, on the analysis clock (the offset added back), on
+     * every `timeupdate` and every `seeking` step — the console's playing
+     * highlight. The console decides what, if anything, to re-render.
+     */
+    onTime?: (videoTime: number) => void;
+  }
+>(function LabelVideoPlayer({ video, onTime }, ref) {
   const element = useRef<HTMLVideoElement>(null);
+  const report = (event: React.SyntheticEvent<HTMLVideoElement>) => {
+    if (video)
+      onTime?.(event.currentTarget.currentTime + video.startTimeSeconds);
+  };
 
   useImperativeHandle(
     ref,
@@ -48,7 +61,7 @@ export const LabelVideoPlayer = forwardRef<
   );
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-[14px] bg-[#1A1A1C] xl:aspect-auto xl:h-full">
+    <div className="relative aspect-video w-full overflow-hidden rounded-[var(--radius-card)] bg-[#1A1A1C]">
       {video ? (
         <video
           ref={element}
@@ -56,6 +69,8 @@ export const LabelVideoPlayer = forwardRef<
           controls
           preload="metadata"
           playsInline
+          onTimeUpdate={report}
+          onSeeking={report}
           className="absolute inset-0 block h-full w-full"
         />
       ) : (

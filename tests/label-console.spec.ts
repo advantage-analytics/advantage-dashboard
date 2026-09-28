@@ -23,6 +23,7 @@ type ConsoleProps = {
   video: LabelVideo | null;
   initialExpandedPointId?: string | null;
   initialSelectedShotId?: string | null;
+  initialVideoTime?: number | null;
   onSaveShot?: (...args: unknown[]) => Promise<unknown>;
   onSavePoint?: (...args: unknown[]) => Promise<unknown>;
 };
@@ -151,9 +152,23 @@ test("the court is board 08's art, with the open point's strokes on it", () => {
   expect(
     count(
       html,
-      /<circle[^>]*fill="none"[^>]*r="4"|<circle[^>]*r="4"[^>]*fill="none"/g,
+      /<circle[^>]*fill="none"[^>]*r="3"|<circle[^>]*r="3"[^>]*fill="none"/g,
     ),
   ).toBe(3);
+});
+
+test("the band is small: a 384px video beside a court card of its height", () => {
+  const html = render({
+    session: labelSessionFixture(),
+    video: { url: "https://example.test/v.mp4?sig=x", startTimeSeconds: 0 },
+  });
+  // 384 × 216 is 16:9; the card matches it, and the court keeps the art's
+  // 12.4 × 27.97 m proportions (86 / 194 = 0.4433).
+  expect(html).toContain('data-label-band=""');
+  expect(html).toContain("w-[384px]");
+  expect(html).toMatch(/aria-label="Court"[^>]*class="[^"]*h-\[216px\]/);
+  expect(html).toContain("h-[194px] w-[86px]");
+  expect(html).not.toContain("h-[430px]");
 });
 
 test("the video is the signed file, or a quiet frame without one", () => {
@@ -321,5 +336,105 @@ test.describe("editing (T6)", () => {
     );
     expect(failed).toContain('role="alert"');
     expect(text(failed)).toBe("Not saved · write refused");
+  });
+});
+
+test.describe("the playing row", () => {
+  const PLAYING = /data-playing="true"/g;
+
+  test("marks the point and the stroke the video is on", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      // Between the return (2473.1) and the added forehand (2474.4).
+      initialVideoTime: 2473.4,
+      ...SAVES,
+    });
+    expect(count(html, PLAYING)).toBe(2);
+    expect(
+      rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P1}"`),
+    ).toContain('data-playing="true"');
+    const playing = rowMarkup(html, 'data-shot-id="s-return"');
+    expect(playing).toContain('data-playing="true"');
+    expect(playing).toContain("data-playing-mark");
+    expect(text(playing)).toContain("2 , playing 41:13.1 Vargas");
+    expect(rowMarkup(html, 'data-shot-id="s-serve"')).not.toContain(
+      "data-playing",
+    );
+    expect(rowMarkup(html, 'data-shot-id="s-added"')).not.toContain(
+      "data-playing",
+    );
+    // A mark, not a selection: nothing is selected and no editor mounts.
+    expect(html).not.toContain("data-selected");
+    expect(count(html, EDITORS)).toBe(0);
+  });
+
+  test("marks a closed point without opening it", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      // Point 2's ace.
+      initialVideoTime: 2490.5,
+    });
+    expect(count(html, PLAYING)).toBe(1);
+    expect(
+      rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P2}"`),
+    ).toContain('data-playing="true"');
+    // Point 1 stays the open one; point 2's strokes stay folded away.
+    expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
+    expect(html).not.toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
+    expect(text(html)).toContain("Court · point 1");
+  });
+
+  test("the playing stroke can also be the selected one", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      initialSelectedShotId: "s-serve",
+      initialVideoTime: 2472.0,
+      ...SAVES,
+    });
+    const row = rowMarkup(html, 'data-shot-id="s-serve"');
+    expect(row).toContain("data-selected");
+    expect(row).toContain('data-playing="true"');
+  });
+
+  test("nothing is marked before the video moves, or in dead time", () => {
+    for (const initialVideoTime of [undefined, null, 100, 2480, 9999]) {
+      const html = render({
+        session: labelSessionFixture(),
+        video: null,
+        initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+        initialVideoTime,
+      });
+      expect(count(html, PLAYING), String(initialVideoTime)).toBe(0);
+      expect(html).not.toContain("data-playing-mark");
+    }
+  });
+
+  test("the table draws whatever rows it is told are playing", () => {
+    const { LabelPointsTable } = createLoader().load(
+      "src/components/admin/labels/label-points-table.tsx",
+    ) as { LabelPointsTable: React.ComponentType<Record<string, unknown>> };
+    const session = labelSessionFixture();
+    const html = renderToStaticMarkup(
+      React.createElement(LabelPointsTable, {
+        points: session.points,
+        names: { p1: "Lee", p2: "Vargas" },
+        expandedPointId: FIXTURE_POINT_IDS.P1,
+        playingPointId: FIXTURE_POINT_IDS.P1,
+        playingShotId: "s-added",
+      }),
+    );
+    expect(count(html, PLAYING)).toBe(2);
+    expect(rowMarkup(html, 'data-shot-id="s-added"')).toContain(
+      'data-playing="true"',
+    );
+    expect(rowMarkup(html, 'data-shot-id="s-return"')).not.toContain(
+      "data-playing",
+    );
   });
 });
