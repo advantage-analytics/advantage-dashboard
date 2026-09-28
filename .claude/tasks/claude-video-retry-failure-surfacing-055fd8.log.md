@@ -112,3 +112,12 @@ is the runner's. Newest entries at the bottom.
 
 1. A platform timeout during the transcript write or the stats RPCs (which the deadline doesn't bound) leaves the row at `deriving` forever — no catch runs, and `/rederive` only claims `derivation_failed`. The webhook path shares this. Needs a sweep that resets stale `deriving` rows to `derivation_failed` / `DERIVATION_ERROR`.
 2. `deriveAndPublish` re-writes `deriving` after the claim — harmless, redundant.
+
+## T15 · Extract the webhook's results-securing step into secureResults — done
+
+**gate:** mechanical pass · completion pass (removed block compared line by line: same download timeout, upload, RPC args, logs and `processing_error` path)
+**changed:** New `splitstep/secure-results.ts` with `secureResults({ supabase, jobId, strokesUrl, objectKey, deliveryId?, timeoutMs?, logPrefix?, io })`, returning `{ resultsSecured, objectKey, bytes, body }` or `{ resultsSecured: false, error }` (the route needs `body`/`objectKey` downstream). The webhook route calls it in place of the old inline block; its diff is that replacement plus one import. `deliveryId` is optional so the reconciler can call it. `storeVendorJson` is copied (fetch made injectable) because the route still uses its own for per-frame files. New `tests/secure-results.spec.ts` (5 cases). Webhook regression script skipped: needs a running dev server and the webhook secret — left for /pr-check.
+**follow-ups:**
+
+1. Two copies of `storeVendorJson` now exist; have the route import the `secure-results.ts` one in a later change (touches frozen route lines, record under guardrails §2).
+2. Without a delivery id, a failed download has no delivery row to hold `processing_error` — T16's sweep must record the failure its own way.

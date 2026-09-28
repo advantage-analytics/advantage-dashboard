@@ -202,7 +202,7 @@ ready).
 
 ## T15 · Extract the webhook's results-securing step into secureResults
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/app/api/webhooks/splitstep/route.ts (the ~441-476 block only), src/lib/services/splitstep/secure-results.ts (new), tests/secure-results.spec.ts (new) (guess)
