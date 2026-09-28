@@ -160,7 +160,9 @@ first, since a rule may be printed in more than one place. It never changes a to
 
 Each branch has its own queue at `.claude/tasks/<branch-slug>.md` (`/` → `-`), so task
 files never conflict. `/task-add` appends; `/task-next` runs one task in a gated subagent
-and commits it. The staged ICM pipeline in `work/<slug>/` (`/feature-new`,
+and commits it. `/pr-check` is the branch gate; its Stage 3b opens every changed page in a
+headless browser as the `EYES_ON_*` verifier account (`.env.example`) and has a fresh
+`ui-verifier` agent judge the screens — unset credentials make a UI branch `not-ready`. The staged ICM pipeline in `work/<slug>/` (`/feature-new`,
 `/feature-next`) sits in front of the same queue — rules in `.claude/pipeline/CONTEXT.md`,
 spec in `docs/superpowers/specs/2026-08-30-icm-feature-pipeline-design.md`. Everything
 else about them lives in each skill's own SKILL.md and in the queue file's header.

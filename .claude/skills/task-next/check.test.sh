@@ -134,6 +134,27 @@ mkdir -p "$R/src/app/dashboard/matches" "$R/supabase/migrations"
 out=$( cd "$R" && "$BIN" surfaces 2>&1 )
 printf '%s' "$out" | grep -q "pipeline-guardrails-reviewer: needed"; ok $? "flags the dashboard surface from a staged new file"
 printf '%s' "$out" | grep -q "rls-boundary-reviewer: needed"; ok $? "flags the supabase surface from a staged new file"
+printf '%s' "$out" | grep -q "ui-verifier: needed"; ok $? "a dashboard page is also a UI surface"
+
+# UI outside the dashboard: eyes-on is due, the guardrail agents are not.
+n=$((n+1)); R=$(fixture "$n" "ui-only-branch")
+mkdir -p "$R/src/app/(auth)/login" "$R/src/components/auth"
+: >"$R/src/app/(auth)/login/page.tsx"
+: >"$R/src/components/auth/login-form.tsx"
+( cd "$R" && git add -A )
+out=$( cd "$R" && "$BIN" surfaces 2>&1 )
+printf '%s' "$out" | grep -q "ui-verifier: needed"; ok $? "flags a non-dashboard page as a UI surface"
+printf '%s' "$out" | grep -q "pipeline-guardrails-reviewer"; [ $? -ne 0 ]; ok $? "a login page does not summon the dashboard guardrail"
+printf '%s' "$out" | grep -q "no guardrail surface touched"; [ $? -ne 0 ]; ok $? "a UI-only change is not reported as no surface"
+
+# A route handler under src/app/api renders nothing — not a UI surface.
+n=$((n+1)); R=$(fixture "$n" "api-only-branch")
+mkdir -p "$R/src/app/api/thing"
+: >"$R/src/app/api/thing/route.ts"
+( cd "$R" && git add -A )
+out=$( cd "$R" && "$BIN" surfaces 2>&1 )
+printf '%s' "$out" | grep -q "rls-boundary-reviewer: needed"; ok $? "an api route is a data surface"
+printf '%s' "$out" | grep -q "ui-verifier"; [ $? -ne 0 ]; ok $? "an api route is not a UI surface"
 
 n=$((n+1)); R=$(fixture "$n" "no-surfaces-branch")
 mkdir -p "$R/src/lib/other"
