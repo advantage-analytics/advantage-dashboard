@@ -3,12 +3,24 @@ import { notFound } from "next/navigation";
 import { AdminPage } from "@/components/admin/admin-page";
 import { LabelConsole } from "@/components/admin/labels/label-console";
 import { getLabelSession } from "@/lib/data/labels-server";
-import { updateLabelPoint, updateLabelShot } from "../actions";
+import {
+  addLabelShotAction,
+  deleteLabelPointAction,
+  deleteLabelShotAction,
+  moveLabelPointAction,
+  restoreLabelPointAction,
+  restoreLabelShotAction,
+  setLabelPointCheckedAction,
+  updateLabelPoint,
+  updateLabelShot,
+} from "../actions";
 
 /**
  * Admin › Labels › one session — the hand-labelling console (board 08): the
  * header, the video + court band and the points table, every label field
- * autosaving through `updateLabelShot` / `updateLabelPoint`. The header lives
+ * autosaving through `updateLabelShot` / `updateLabelPoint`, and the row
+ * operations (delete and Undo, add a shot, move a point, mark it checked)
+ * through the rest of `../actions`. The header lives
  * in the console, beside the save line it owns; the page only supplies the
  * way back.
  *
@@ -48,6 +60,15 @@ export default async function AdminLabelSessionPage({
         video={video}
         onSaveShot={updateLabelShot}
         onSavePoint={updateLabelPoint}
+        operations={{
+          deleteShot: deleteLabelShotAction,
+          restoreShot: restoreLabelShotAction,
+          deletePoint: deleteLabelPointAction,
+          restorePoint: restoreLabelPointAction,
+          addShot: addLabelShotAction,
+          movePoint: moveLabelPointAction,
+          setChecked: setLabelPointCheckedAction,
+        }}
         headerAction={
           <Link
             href="/admin/labels"

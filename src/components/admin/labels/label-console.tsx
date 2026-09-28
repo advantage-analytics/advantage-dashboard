@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useReducer,
   useRef,
@@ -26,6 +27,26 @@ import type {
   LabelPointEditResult,
   LabelShotEditResult,
 } from "@/lib/services/labels/edit-session";
+import {
+  applyPointDelete,
+  applyPointMove,
+  applyPointRestore,
+  applyShotDelete,
+  applyShotRestore,
+  destinationServerIn,
+  moveNeedsServerSwitch,
+  planAddedShot,
+  planPointMove,
+  type LabelDeleteReason,
+  type LabelGame,
+} from "@/lib/services/labels/operations";
+import type {
+  LabelAddShotResult,
+  LabelCheckedResult,
+  LabelMovePointResult,
+  LabelPointStatusResult,
+  LabelShotStatusResult,
+} from "@/lib/services/labels/operations-session";
 import type { CourtPoint } from "./court-geometry";
 import {
   NO_PLACEMENT,
@@ -34,9 +55,14 @@ import {
   startPlacement,
   type PlacementState,
 } from "./court-placement";
+import type { LabelConfirm } from "./label-confirm";
+import { LabelConfirmDialog } from "./label-confirm-dialog";
 import { LabelCourt } from "./label-court";
 import { sideNames } from "./label-format";
-import { LabelPointsTable } from "./label-points-table";
+import {
+  LabelPointsTable,
+  type LabelRowOperations,
+} from "./label-points-table";
 import { LabelSaveStatus } from "./label-save-status";
 import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
 import { INITIAL_SAVE_STATUS, saveStatusReducer } from "./save-status";
@@ -57,6 +83,13 @@ import { INITIAL_SAVE_STATUS, saveStatusReducer } from "./save-status";
  * it, show on the court, and the video jumps to its first stroke), which
  * stroke is selected (the one a court click places — see court-placement.ts)
  * and the save line.
+ *
+ * Row operations (T7) follow the same optimistic contract through
+ * `operations`: delete and Undo, add a stroke, move a point, mark it checked.
+ * Two of them ask first — a delete always, a move only into a game someone
+ * else serves — and those open `LabelConfirmDialog` WITHOUT writing: the
+ * write happens on the dialog's action, and Cancel changes nothing. Enter
+ * marks the open point checked when focus is not in a control.
  */
 export function LabelConsole({
   session,
@@ -65,6 +98,9 @@ export function LabelConsole({
   initialSelectedShotId = null,
   onSaveShot,
   onSavePoint,
+  operations,
+  initialConfirm = null,
+  initialOpenTombstoneIds,
   headerAction,
 }: {
   session: LabelSession;
@@ -86,6 +122,15 @@ export function LabelConsole({
     pointId: string,
     patch: LabelPointPatch,
   ) => Promise<LabelPointEditResult>;
+  /**
+   * The row operations' server actions. Absent: no ✕, Undo, move menu or
+   * point footer — the rows can still be edited when the saves are given.
+   */
+  operations?: LabelConsoleOperations;
+  /** A confirm open on first render — for specs. */
+  initialConfirm?: LabelConfirm | null;
+  /** Tombstones expanded to their ghost row on first render. */
+  initialOpenTombstoneIds?: readonly string[];
   /** The header's trailing link, rendered by the page. */
   headerAction?: ReactNode;
 }) {
@@ -111,9 +156,18 @@ export function LabelConsole({
     saveStatusReducer,
     INITIAL_SAVE_STATUS,
   );
+  const [confirm, setConfirm] = useState<LabelConfirm | null>(initialConfirm);
+  const [openTombstones, setOpenTombstones] = useState<ReadonlySet<string>>(
+    () => new Set(initialOpenTombstoneIds ?? []),
+  );
   const player = useRef<LabelVideoHandle>(null);
+  const pendingIds = useRef(0);
 
-  const expanded = points.find((point) => point.id === expandedPointId) ?? null;
+  // A deleted point is a marker, not an open point: nothing of it on the court.
+  const expanded =
+    points.find(
+      (point) => point.id === expandedPointId && point.status !== "deleted",
+    ) ?? null;
   const { checked, total } = labelProgress(points);
 
   function togglePoint(pointId: string) {
@@ -213,6 +267,310 @@ export function LabelConsole({
     [points, onSavePoint],
   );
 
+  /**
+   * One row operation: apply `optimistic` to the rows at once, call the
+   * server, then `settleRows` with its answer — or put back what the
+   * operation changed (`revert`) and report the error on the save line.
+   */
+  async function runOperation<R extends object>(
+    optimistic: (rows: LabelPoint[]) => LabelPoint[],
+    call: () => Promise<R | { error: string }>,
+    settleRows: (rows: LabelPoint[], result: R) => LabelPoint[],
+    revert: (rows: LabelPoint[]) => LabelPoint[],
+  ): Promise<R | null> {
+    setPoints(optimistic);
+    dispatchSave({ type: "start" });
+    const result = await settle(call());
+    if ("error" in result) {
+      setPoints(revert);
+      dispatchSave({ type: "failure", message: result.error });
+      return null;
+    }
+    setPoints((rows) => settleRows(rows, result));
+    dispatchSave({ type: "success", at: Date.now() });
+    return result;
+  }
+
+  function deleteShot(shotId: string, reason: LabelDeleteReason) {
+    const before = findShot(points, shotId);
+    if (!before || !operations) return;
+    if (placement.shotId === shotId) setPlacement(NO_PLACEMENT);
+    void runOperation(
+      (rows) => replaceShot(rows, shotId, (s) => applyShotDelete(s, reason)),
+      () => operations.deleteShot(shotId, reason),
+      (rows) => rows,
+      (rows) => replaceShot(rows, shotId, () => before),
+    );
+  }
+
+  function restoreShot(shotId: string) {
+    const before = findShot(points, shotId);
+    if (!before || !operations) return;
+    void runOperation(
+      (rows) => replaceShot(rows, shotId, applyShotRestore),
+      () => operations.restoreShot(shotId),
+      (rows, result) =>
+        replaceShot(rows, shotId, (s) => ({ ...s, status: result.status })),
+      (rows) => replaceShot(rows, shotId, () => before),
+    );
+    closeTombstone(shotId);
+  }
+
+  function deletePoint(pointId: string) {
+    const before = points.find((point) => point.id === pointId);
+    if (!before || !operations) return;
+    if (before.shots.some((shot) => shot.id === placement.shotId)) {
+      setPlacement(NO_PLACEMENT);
+    }
+    void runOperation(
+      (rows) => replacePoint(rows, pointId, applyPointDelete),
+      () => operations.deletePoint(pointId),
+      (rows) => rows,
+      (rows) =>
+        replacePoint(rows, pointId, (p) => ({
+          ...p,
+          status: before.status,
+          statusBeforeDelete: before.statusBeforeDelete,
+        })),
+    );
+  }
+
+  function restorePoint(pointId: string) {
+    const before = points.find((point) => point.id === pointId);
+    if (!before || !operations) return;
+    void runOperation(
+      (rows) => replacePoint(rows, pointId, applyPointRestore),
+      () => operations.restorePoint(pointId),
+      (rows, result) =>
+        replacePoint(rows, pointId, (p) => ({ ...p, status: result.status })),
+      (rows) =>
+        replacePoint(rows, pointId, (p) => ({
+          ...p,
+          status: before.status,
+          statusBeforeDelete: before.statusBeforeDelete,
+        })),
+    );
+    closeTombstone(pointId);
+  }
+
+  function addShot(pointId: string, afterShotId: string | null) {
+    const point = points.find((p) => p.id === pointId);
+    if (!point || !operations) return;
+    const plan = planAddedShot(point, afterShotId);
+    if ("error" in plan) {
+      dispatchSave({ type: "start" });
+      dispatchSave({ type: "failure", message: plan.error });
+      return;
+    }
+    pendingIds.current += 1;
+    const tempId = `pending-shot-${pendingIds.current}`;
+    const draft: LabelShot = {
+      id: tempId,
+      labelPointId: pointId,
+      eventId: null,
+      afterEventId: plan.write.after_event_id,
+      status: "added",
+      statusBeforeDelete: null,
+      deleteReason: null,
+      hitter: plan.write.hitter,
+      stroke: null,
+      result: null,
+      contactX: null,
+      contactY: null,
+      landingX: null,
+      landingY: null,
+      videoTime: plan.write.video_time,
+    };
+    // The new stroke is the one a court click places next.
+    setPlacement(startPlacement(tempId));
+    void runOperation<{ shot: LabelShot }>(
+      (rows) => insertShot(rows, pointId, draft),
+      () => operations.addShot(pointId, afterShotId),
+      (rows, result) =>
+        insertShot(removeShot(rows, tempId), pointId, result.shot),
+      (rows) => removeShot(rows, tempId),
+    ).then((result) => {
+      // Hand the selection over to the saved row, or drop the failed one.
+      setPlacement((current) =>
+        current.shotId !== tempId
+          ? current
+          : result
+            ? startPlacement(result.shot.id)
+            : NO_PLACEMENT,
+      );
+    });
+  }
+
+  /** A move asks first only when someone else serves the destination. */
+  function requestMove(pointId: string, to: LabelGame) {
+    const point = points.find((p) => p.id === pointId);
+    if (!point || !operations) return;
+    const server = destinationServerIn(points, pointId, to);
+    if (server !== null && moveNeedsServerSwitch(point, server)) {
+      setConfirm({
+        kind: "move-point",
+        pointId,
+        pointNumber: point.pointIndex + 1,
+        to,
+        server,
+      });
+      return;
+    }
+    movePoint(pointId, to, false);
+  }
+
+  function movePoint(pointId: string, to: LabelGame, switchServer: boolean) {
+    const before = points.find((p) => p.id === pointId);
+    if (!before || !operations) return;
+    const plan = planPointMove(
+      before,
+      to,
+      destinationServerIn(points, pointId, to),
+      switchServer,
+    );
+    if ("error" in plan) {
+      dispatchSave({ type: "start" });
+      dispatchSave({ type: "failure", message: plan.error });
+      return;
+    }
+    void runOperation(
+      (rows) =>
+        replacePoint(rows, pointId, (p) => applyPointMove(p, plan.write)),
+      () => operations.movePoint(pointId, to, switchServer),
+      (rows, result) =>
+        replacePoint(rows, pointId, (p) => ({
+          ...p,
+          status: result.status,
+          server: result.server,
+          setNumber: result.setNumber,
+          gameNumber: result.gameNumber,
+        })),
+      (rows) =>
+        replacePoint(rows, pointId, (p) => ({
+          ...p,
+          setNumber: before.setNumber,
+          gameNumber: before.gameNumber,
+          server: before.server,
+          status: before.status,
+        })),
+    );
+  }
+
+  function setChecked(pointId: string, value: boolean) {
+    const before = points.find((p) => p.id === pointId);
+    if (!before || !operations || before.status === "deleted") return;
+    void runOperation(
+      (rows) =>
+        replacePoint(rows, pointId, (p) => ({
+          ...p,
+          checkedAt: value ? new Date().toISOString() : null,
+        })),
+      () => operations.setChecked(pointId, value),
+      (rows, result) =>
+        replacePoint(rows, pointId, (p) => ({
+          ...p,
+          checkedAt: result.checkedAt,
+        })),
+      (rows) =>
+        replacePoint(rows, pointId, (p) => ({
+          ...p,
+          checkedAt: before.checkedAt,
+        })),
+    );
+  }
+
+  function toggleTombstone(id: string) {
+    setOpenTombstones((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  function closeTombstone(id: string) {
+    setOpenTombstones((current) => {
+      if (!current.has(id)) return current;
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  function confirmed(question: LabelConfirm, reason: LabelDeleteReason | null) {
+    setConfirm(null);
+    switch (question.kind) {
+      case "delete-shot":
+        if (reason) deleteShot(question.shotId, reason);
+        return;
+      case "delete-point":
+        deletePoint(question.pointId);
+        return;
+      case "move-point":
+        movePoint(question.pointId, question.to, true);
+        return;
+    }
+  }
+
+  const operable = editable && operations !== undefined;
+  const rowOperations: LabelRowOperations | undefined = operable
+    ? {
+        onAskDeleteShot: (shotId, shotNumber, pointNumber) =>
+          setConfirm({ kind: "delete-shot", shotId, shotNumber, pointNumber }),
+        onAskDeletePoint: (pointId) => {
+          const point = points.find((p) => p.id === pointId);
+          if (!point) return;
+          setConfirm({
+            kind: "delete-point",
+            pointId,
+            pointNumber: point.pointIndex + 1,
+            shotCount: point.shots.filter((shot) => shot.status !== "deleted")
+              .length,
+          });
+        },
+        onRestoreShot: restoreShot,
+        onRestorePoint: restorePoint,
+        onMovePoint: requestMove,
+        onSetChecked: setChecked,
+        onAddShot: addShot,
+      }
+    : undefined;
+
+  // Enter marks the open point checked — but never from inside a control,
+  // where Enter already means "open this cell" or "press this button".
+  const checkOpenPoint = useRef<() => void>(() => {});
+  useEffect(() => {
+    checkOpenPoint.current = () => {
+      if (!operable || confirm || !expanded || expanded.checkedAt) return;
+      setChecked(expanded.id, true);
+    };
+  });
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.key !== "Enter" ||
+        event.defaultPrevented ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+      const target = event.target as Element | null;
+      if (
+        target?.closest?.(
+          "input, select, textarea, button, a, [role='button'], [role='menu'], [role='dialog'], [role='alertdialog'], [contenteditable='true']",
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      checkOpenPoint.current();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   // The selected stroke's number as the table shows it: live strokes, 1…n.
   const selectedNumber = useMemo(() => {
     if (!expanded || placement.shotId === null) return null;
@@ -276,9 +634,45 @@ export function LabelConsole({
         onSelectShot={selectShot}
         onPatchPoint={patchPoint}
         onPatchShot={patchShot}
+        operations={rowOperations}
+        openTombstoneIds={openTombstones}
+        onToggleTombstone={toggleTombstone}
       />
+
+      {operable ? (
+        <LabelConfirmDialog
+          confirm={confirm}
+          names={names}
+          onCancel={() => setConfirm(null)}
+          onConfirm={confirmed}
+        />
+      ) : null}
     </>
   );
+}
+
+/** The row operations' server actions, as the page hands them in. */
+export interface LabelConsoleOperations {
+  deleteShot: (
+    shotId: string,
+    reason: LabelDeleteReason,
+  ) => Promise<LabelShotStatusResult>;
+  restoreShot: (shotId: string) => Promise<LabelShotStatusResult>;
+  deletePoint: (pointId: string) => Promise<LabelPointStatusResult>;
+  restorePoint: (pointId: string) => Promise<LabelPointStatusResult>;
+  addShot: (
+    pointId: string,
+    afterShotId: string | null,
+  ) => Promise<LabelAddShotResult>;
+  movePoint: (
+    pointId: string,
+    to: LabelGame,
+    switchServer: boolean,
+  ) => Promise<LabelMovePointResult>;
+  setChecked: (
+    pointId: string,
+    checked: boolean,
+  ) => Promise<LabelCheckedResult>;
 }
 
 function defaultPoint(points: readonly LabelPoint[]): LabelPoint | null {
@@ -311,6 +705,47 @@ function updateShot(
     );
     return { ...point, shots: resort ? orderLabelShots(shots) : shots };
   });
+}
+
+function replacePoint(
+  points: readonly LabelPoint[],
+  pointId: string,
+  change: (point: LabelPoint) => LabelPoint,
+): LabelPoint[] {
+  return points.map((point) => (point.id === pointId ? change(point) : point));
+}
+
+/** `points` with one shot replaced, in place (a status change never moves it). */
+function replaceShot(
+  points: readonly LabelPoint[],
+  shotId: string,
+  change: (shot: LabelShot) => LabelShot,
+): LabelPoint[] {
+  return updateShot(points, shotId, false, change);
+}
+
+/** `points` with `shot` added to its point, in video order. */
+function insertShot(
+  points: readonly LabelPoint[],
+  pointId: string,
+  shot: LabelShot,
+): LabelPoint[] {
+  return points.map((point) =>
+    point.id === pointId
+      ? { ...point, shots: orderLabelShots([...point.shots, shot]) }
+      : point,
+  );
+}
+
+function removeShot(
+  points: readonly LabelPoint[],
+  shotId: string,
+): LabelPoint[] {
+  return points.map((point) =>
+    point.shots.some((shot) => shot.id === shotId)
+      ? { ...point, shots: point.shots.filter((shot) => shot.id !== shotId) }
+      : point,
+  );
 }
 
 /** A shot's current value for one patch column. */

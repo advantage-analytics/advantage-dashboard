@@ -58,10 +58,15 @@ create table public.label_points (
   -- Who struck the last ball.
   ended_by text check (ended_by in ('p1', 'p2')),
   status text not null default 'unchanged' check (status in ('unchanged', 'edited', 'added', 'deleted')),
+  -- The status a tombstone had before it was deleted, so Undo puts back
+  -- exactly that: `edited` cannot be re-derived once a seeded value has been
+  -- overwritten. Set on delete, cleared on restore.
+  status_before_delete text check (status_before_delete in ('unchanged', 'edited', 'added')),
   checked_at timestamptz,
   note text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  check ((status = 'deleted') = (status_before_delete is not null))
 );
 
 -- One row per vendor stroke, plus any stroke the labeller added. event_id is
@@ -78,6 +83,9 @@ create table public.label_shots (
   vendor jsonb check (vendor is null or jsonb_typeof(vendor) = 'object'),
   -- 'edited' = a labelled value differs from the vendor snapshot.
   status text not null default 'kept' check (status in ('kept', 'edited', 'added', 'deleted')),
+  -- What Undo restores: see label_points.status_before_delete. `added` could
+  -- be read off a null event_id, but `kept` vs `edited` cannot.
+  status_before_delete text check (status_before_delete in ('kept', 'edited', 'added')),
   delete_reason text check (delete_reason in (
     'dead_ball_after_fault', 'dead_ball_after_point', 'not_a_stroke', 'duplicate', 'other'
   )),
@@ -97,7 +105,8 @@ create table public.label_shots (
   -- Only a labeller-added shot lacks a vendor id; a vendor shot is never 'added'.
   check (status <> 'added' or event_id is null),
   check (event_id is not null or status in ('added', 'deleted')),
-  check (status <> 'deleted' or delete_reason is not null)
+  check (status <> 'deleted' or delete_reason is not null),
+  check ((status = 'deleted') = (status_before_delete is not null))
 );
 
 -- The comparison joins on event_id: one label row per vendor stroke per session.

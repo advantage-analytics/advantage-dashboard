@@ -295,6 +295,7 @@ interface DbPointRow {
   ending: LabelEnding | null;
   ended_by: LabelSide | null;
   status: LabelPointStatus;
+  status_before_delete: Exclude<LabelPointStatus, "deleted"> | null;
   checked_at: string | null;
 }
 interface DbShotRow {
@@ -303,6 +304,7 @@ interface DbShotRow {
   event_id: number | null;
   after_event_id: number | null;
   status: LabelShotStatus;
+  status_before_delete: Exclude<LabelShotStatus, "deleted"> | null;
   delete_reason: string | null;
   hitter: LabelSide | null;
   stroke: LabelStroke | null;
@@ -363,7 +365,7 @@ export async function getLabelSession(
       db
         .from("label_points")
         .select(
-          "id, point_index, set_number, game_number, server, serve_side, winner, ending, ended_by, status, checked_at",
+          "id, point_index, set_number, game_number, server, serve_side, winner, ending, ended_by, status, status_before_delete, checked_at",
         )
         .eq("session_id", session.id)
         .order("point_index")
@@ -374,7 +376,7 @@ export async function getLabelSession(
       db
         .from("label_shots")
         .select(
-          "id, label_point_id, event_id, after_event_id, status, delete_reason, hitter, stroke, result, contact_x, contact_y, landing_x, landing_y, video_time",
+          "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, contact_x, contact_y, landing_x, landing_y, video_time",
         )
         .eq("session_id", session.id)
         .order("id"),
@@ -424,6 +426,7 @@ export function buildLabelSession(
       eventId: row.event_id,
       afterEventId: row.after_event_id,
       status: row.status,
+      statusBeforeDelete: row.status_before_delete ?? null,
       deleteReason: row.delete_reason,
       hitter: row.hitter,
       stroke: row.stroke,
@@ -450,6 +453,7 @@ export function buildLabelSession(
       ending: row.ending,
       endedBy: row.ended_by,
       status: row.status,
+      statusBeforeDelete: row.status_before_delete ?? null,
       checkedAt: row.checked_at,
       shots: orderLabelShots(shotsByPoint.get(row.id) ?? []),
     }));

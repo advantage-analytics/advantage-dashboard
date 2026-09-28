@@ -35,6 +35,8 @@ export interface LabelShot {
   /** Where an added stroke sits in the rally. */
   afterEventId: number | null;
   status: LabelShotStatus;
+  /** A tombstone's status before it was deleted — what Undo restores. */
+  statusBeforeDelete: Exclude<LabelShotStatus, "deleted"> | null;
   deleteReason: string | null;
   hitter: LabelSide | null;
   stroke: LabelStroke | null;
@@ -59,6 +61,8 @@ export interface LabelPoint {
   ending: LabelEnding | null;
   endedBy: LabelSide | null;
   status: LabelPointStatus;
+  /** A tombstone's status before it was deleted — what Undo restores. */
+  statusBeforeDelete: Exclude<LabelPointStatus, "deleted"> | null;
   checkedAt: string | null;
   shots: LabelShot[];
 }

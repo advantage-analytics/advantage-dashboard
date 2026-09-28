@@ -99,7 +99,7 @@ ready).
 
 ## T7 · Delete/undo, add shot, move point, mark checked
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** src/app/admin/labels/actions.ts, src/components/admin/labels/* (guess)

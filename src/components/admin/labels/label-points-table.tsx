@@ -1,13 +1,34 @@
-import { Check, ChevronDown, ClipboardList } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { Check, ChevronDown, ClipboardList, Plus, X } from "lucide-react";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { StatePill } from "@/components/ui/state-pill";
+import {
+  FloatMenu,
+  FloatMenuItem,
+  FloatMenuNote,
+} from "@/components/ui/float-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
+import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import type {
   LabelPoint,
   LabelShot,
   LabelSide,
 } from "@/lib/services/labels/session";
+import {
+  destinationServerIn,
+  isLabelDeleteReason,
+  neighbourGames,
+  type LabelGame,
+} from "@/lib/services/labels/operations";
 import {
   LABEL_ENDINGS,
   LABEL_SHOT_RESULTS,
@@ -22,6 +43,7 @@ import {
   type SelectOption,
 } from "./label-cells";
 import {
+  DELETE_REASON_LABEL,
   ENDING_LABEL,
   RESULT_LABEL,
   STROKE_LABEL,
@@ -46,20 +68,30 @@ import {
  * there with `orderLabelShots`, re-sorting after a time edit). The point's
  * labelled columns (won by, ending, ended by) and every stroke value are
  * `EditableCell`s: text until hovered, selected or opened from the keyboard,
- * each change handed straight to the console to autosave. T7 turns the
- * deleted markers into expanders with Undo.
+ * each change handed straight to the console to autosave.
  *
  * Clicking a stroke (or tabbing into one) SELECTS it: the selected stroke
  * shows every field, and it is the one a court click places.
  *
+ * Row operations (T7), each only a REQUEST to the console, which owns the
+ * confirm and the write:
+ *   · the ✕ at the far right of a point or stroke row asks to delete it —
+ *     the console opens a confirm dialog, and nothing is written before it;
+ *   · the set · game cell opens a menu of the games either side, to move the
+ *     point (the console asks "switch players?" when someone else serves it);
+ *   · the open point's footer marks it checked (and Undo clears that), and
+ *     adds a stroke after the selected one, or at the end of the rally.
+ *
  * A tombstone is not drawn as a row at all. A deleted point or shot is a thin
  * red rule with a "Deleted point" / "Deleted shot" pill on it — present, so
  * the labeller can see something was removed there, but never read as a
- * point to check or a stroke to count.
+ * point to check or a stroke to count. The pill expands the rule to a
+ * struck-through ghost of the row, with Undo.
  *
- * Stateless: which point is open, which stroke is selected and the rows
- * themselves are the caller's (`LabelConsole` holds them), so a spec can
- * render any state without clicking.
+ * Stateless: which point is open, which stroke is selected, which tombstones
+ * are expanded and the rows themselves are the caller's (`LabelConsole` holds
+ * them), so a spec can render any state without clicking. The one exception
+ * is the move menu's own open/closed.
  */
 export function LabelPointsTable({
   points,
@@ -71,6 +103,9 @@ export function LabelPointsTable({
   onSelectShot,
   onPatchPoint,
   onPatchShot,
+  operations,
+  openTombstoneIds = NO_IDS,
+  onToggleTombstone,
 }: {
   points: readonly LabelPoint[];
   names: SideNames;
@@ -82,6 +117,11 @@ export function LabelPointsTable({
   onSelectShot?: (shotId: string) => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
+  /** Absent: no ✕, no Undo, no move menu, no footer — the rows are read-only. */
+  operations?: LabelRowOperations;
+  /** Tombstones whose ghost row is showing. */
+  openTombstoneIds?: ReadonlySet<string>;
+  onToggleTombstone?: (id: string) => void;
 }) {
   const edit: EditContext = {
     editable,
@@ -90,54 +130,81 @@ export function LabelPointsTable({
     onSelectShot,
     onPatchPoint,
     onPatchShot,
+    operations: editable ? operations : undefined,
+    openTombstoneIds,
+    onToggleTombstone,
+    points,
   };
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="min-w-[900px] px-6 pt-0.5 pb-1.5">
-        <div
-          className={cn(
-            POINT_GRID,
-            "min-h-[34px] border-b border-[var(--border-hairline)]",
-          )}
-        >
-          {POINT_COLUMNS.map((column, i) => (
-            <span
-              key={i}
-              className={cn(
-                "text-[12px] whitespace-nowrap",
-                column.calculated
-                  ? "text-[var(--ink-400)]"
-                  : "text-[var(--ink-500)]",
-              )}
-            >
-              {column.label}
-            </span>
-          ))}
-        </div>
+    <TooltipProvider>
+      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
+        <div className="min-w-[900px] px-6 pt-0.5 pb-1.5">
+          <div
+            className={cn(
+              POINT_GRID,
+              "min-h-[34px] border-b border-[var(--border-hairline)]",
+            )}
+          >
+            {POINT_COLUMNS.map((column, i) => (
+              <span
+                key={i}
+                className={cn(
+                  "text-[12px] whitespace-nowrap",
+                  column.calculated
+                    ? "text-[var(--ink-400)]"
+                    : "text-[var(--ink-500)]",
+                )}
+              >
+                {column.label}
+              </span>
+            ))}
+          </div>
 
-        {points.length === 0 ? (
-          <TableEmptyBody
-            icon={ClipboardList}
-            title="This session has no points"
-          />
-        ) : (
-          points.map((point) =>
-            point.status === "deleted" ? (
-              <DeletedMarker key={point.id} kind="point" />
-            ) : (
-              <PointRow
-                key={point.id}
-                point={point}
-                open={point.id === expandedPointId}
-                onToggle={onTogglePoint}
-                edit={edit}
-              />
-            ),
-          )
-        )}
+          {points.length === 0 ? (
+            <TableEmptyBody
+              icon={ClipboardList}
+              title="This session has no points"
+            />
+          ) : (
+            points.map((point) =>
+              point.status === "deleted" ? (
+                <DeletedPoint key={point.id} point={point} edit={edit} />
+              ) : (
+                <PointRow
+                  key={point.id}
+                  point={point}
+                  open={point.id === expandedPointId}
+                  onToggle={onTogglePoint}
+                  edit={edit}
+                />
+              ),
+            )
+          )}
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
+}
+
+const NO_IDS: ReadonlySet<string> = new Set();
+
+/**
+ * The row operations the table can ask for. Each is a request: the console
+ * decides whether it needs a confirm first, and does the write.
+ */
+export interface LabelRowOperations {
+  onAskDeleteShot: (
+    shotId: string,
+    shotNumber: number,
+    pointNumber: number,
+  ) => void;
+  onAskDeletePoint: (pointId: string) => void;
+  onRestoreShot: (shotId: string) => void;
+  onRestorePoint: (pointId: string) => void;
+  onMovePoint: (pointId: string, to: LabelGame) => void;
+  onSetChecked: (pointId: string, checked: boolean) => void;
+  /** After `afterShotId`, or at the end of the rally when null. */
+  onAddShot: (pointId: string, afterShotId: string | null) => void;
 }
 
 /** What every row needs to draw and save its editors. */
@@ -148,6 +215,11 @@ interface EditContext {
   onSelectShot?: (shotId: string) => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
+  operations?: LabelRowOperations;
+  openTombstoneIds: ReadonlySet<string>;
+  onToggleTombstone?: (id: string) => void;
+  /** Every row, for the move menu's neighbouring games. */
+  points: readonly LabelPoint[];
 }
 
 function sideOptions(names: SideNames): SelectOption[] {
@@ -181,10 +253,14 @@ function PointRow({
   onToggle?: (pointId: string) => void;
   edit: EditContext;
 }) {
-  const { names } = edit;
+  const { names, operations } = edit;
   const number = point.pointIndex + 1;
   const shotsId = `label-point-${point.id}-shots`;
   const liveShots = point.shots.filter((shot) => shot.status !== "deleted");
+  const setGame =
+    point.setNumber !== null && point.gameNumber !== null
+      ? `${point.setNumber} · ${point.gameNumber}`
+      : null;
 
   return (
     <>
@@ -198,7 +274,7 @@ function PointRow({
         }}
         className={cn(
           POINT_GRID,
-          "-mx-4 min-h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 text-[13px] transition-colors duration-200",
+          "group/row -mx-4 min-h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 text-[13px] transition-colors duration-200",
           open
             ? "rounded-b-none bg-[var(--surface-muted)]"
             : "hover:bg-[var(--surface-muted)]",
@@ -237,11 +313,17 @@ function PointRow({
         >
           {number}
         </span>
-        <Calculated>
-          {point.setNumber !== null && point.gameNumber !== null
-            ? `${point.setNumber} · ${point.gameNumber}`
-            : null}
-        </Calculated>
+        {operations ? (
+          <MoveGameCell
+            point={point}
+            number={number}
+            text={setGame}
+            edit={edit}
+            onMove={(to) => operations.onMovePoint(point.id, to)}
+          />
+        ) : (
+          <Calculated>{setGame}</Calculated>
+        )}
         <Calculated>{sideLabel(point.server, names)}</Calculated>
         <Calculated>{liveShots.length}</Calculated>
         <span aria-hidden="true" />
@@ -274,6 +356,15 @@ function PointRow({
           options={sideOptions(names)}
         />
         <PointStatus checked={point.checkedAt !== null} />
+        {operations ? (
+          <DeleteRowButton
+            label={`Delete point ${number}`}
+            tooltip="Delete point"
+            onClick={() => operations.onAskDeletePoint(point.id)}
+          />
+        ) : (
+          <span aria-hidden="true" />
+        )}
       </div>
 
       {open ? (
@@ -297,8 +388,11 @@ function PointRow({
               No strokes on this point
             </p>
           ) : (
-            <ShotRows shots={point.shots} edit={edit} />
+            <ShotRows point={point} edit={edit} />
           )}
+          {operations ? (
+            <PointFooter point={point} edit={edit} operations={operations} />
+          ) : null}
         </div>
       ) : null}
     </>
@@ -309,33 +403,38 @@ function PointRow({
  * The strokes, numbered 1…n among the live ones: a tombstone takes no number,
  * so the numbers are the rally as the labeller now says it went.
  */
-function ShotRows({
-  shots,
-  edit,
-}: {
-  shots: readonly LabelShot[];
-  edit: EditContext;
-}) {
+function ShotRows({ point, edit }: { point: LabelPoint; edit: EditContext }) {
   let n = 0;
-  return shots.map((shot) => {
+  const pointNumber = point.pointIndex + 1;
+  return point.shots.map((shot) => {
     if (shot.status === "deleted") {
-      return <DeletedMarker key={shot.id} kind="shot" />;
+      return <DeletedShot key={shot.id} shot={shot} edit={edit} />;
     }
     n += 1;
-    return <ShotRow key={shot.id} shot={shot} number={n} edit={edit} />;
+    return (
+      <ShotRow
+        key={shot.id}
+        shot={shot}
+        number={n}
+        pointNumber={pointNumber}
+        edit={edit}
+      />
+    );
   });
 }
 
 function ShotRow({
   shot,
   number,
+  pointNumber,
   edit,
 }: {
   shot: LabelShot;
   number: number;
+  pointNumber: number;
   edit: EditContext;
 }) {
-  const { names, editable, onSelectShot, onPatchShot } = edit;
+  const { names, editable, onSelectShot, onPatchShot, operations } = edit;
   const added = shot.status === "added";
   const selected = shot.id === edit.selectedShotId;
   const select = () => {
@@ -358,7 +457,7 @@ function ShotRow({
       onFocus={select}
       className={cn(
         SHOT_GRID,
-        "min-h-[44px] text-[13px] text-[var(--ink-900)] transition-colors duration-200",
+        "group/row min-h-[44px] text-[13px] text-[var(--ink-900)] transition-colors duration-200",
         added && "rounded-[var(--radius-element)]",
         selected
           ? "bg-[var(--surface-card)] shadow-[inset_0_1px_0_var(--border-hairline),inset_0_-1px_0_var(--border-hairline)]"
@@ -442,11 +541,22 @@ function ShotRow({
           patch({ landing_x: p?.x ?? null, landing_y: p?.y ?? null })
         }
       />
-      <span className="flex min-w-0 items-center">
+      <span className="flex min-w-0 items-center gap-2">
         {added ? (
           <StatePill>Added</StatePill>
         ) : shot.status === "edited" ? (
           <StatePill>Edited</StatePill>
+        ) : null}
+        {operations ? (
+          <DeleteRowButton
+            label={`Delete shot ${number}`}
+            tooltip="Delete shot"
+            className="ml-auto"
+            revealed={selected}
+            onClick={() =>
+              operations.onAskDeleteShot(shot.id, number, pointNumber)
+            }
+          />
         ) : null}
       </span>
     </div>
@@ -454,36 +564,393 @@ function ShotRow({
 }
 
 /**
- * A tombstone: a thin red rule carrying a small pill. Static in T5 — T7 makes
- * the pill a button that opens the struck-through row with Undo.
+ * A tombstone: a thin red rule carrying a small pill, board 08's `.dl`. The
+ * pill (and the rule) is one button that expands a struck-through ghost of
+ * the deleted row underneath, where Undo lives.
  */
-function DeletedMarker({ kind }: { kind: "point" | "shot" }) {
+function DeletedMarker({
+  kind,
+  id,
+  open,
+  onToggle,
+}: {
+  kind: "point" | "shot";
+  id: string;
+  open: boolean;
+  onToggle?: (id: string) => void;
+}) {
   const label = kind === "point" ? "Deleted point" : "Deleted shot";
   return (
     <div
       data-row={kind === "point" ? "deleted-point" : "deleted-shot"}
+      data-tombstone-id={id}
       className={cn(
-        "flex h-7 items-center gap-2",
+        "flex h-7 items-center",
         kind === "shot" ? "pr-4 pl-11" : "",
       )}
     >
-      <span
-        className="inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium whitespace-nowrap text-[var(--danger-hover)]"
-        style={{
-          background: "color-mix(in srgb, var(--danger) 8%, transparent)",
-          boxShadow:
-            "inset 0 0 0 1px color-mix(in srgb, var(--danger) 25%, transparent)",
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggle?.(id);
         }}
+        className="group/dl flex h-6 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-element)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
       >
-        {label}
-      </span>
-      <span
-        className="h-px flex-1"
-        style={{
-          background: "color-mix(in srgb, var(--danger) 35%, transparent)",
-        }}
-        aria-hidden="true"
+        <span
+          className={cn(
+            "inline-flex h-5 items-center gap-1 rounded-full px-2 text-[11px] font-medium whitespace-nowrap text-[var(--danger-hover)] transition-colors duration-200",
+          )}
+          style={{
+            background: `color-mix(in srgb, var(--danger) ${open ? 14 : 8}%, transparent)`,
+            boxShadow:
+              "inset 0 0 0 1px color-mix(in srgb, var(--danger) 25%, transparent)",
+          }}
+        >
+          {label}
+          <ChevronDown
+            className={cn(
+              "size-2.5 transition-transform duration-200",
+              open && "rotate-180",
+            )}
+            strokeWidth={2}
+            aria-hidden="true"
+          />
+        </span>
+        <span
+          className="h-px flex-1 transition-colors duration-200"
+          style={{
+            background: open
+              ? "var(--danger)"
+              : "color-mix(in srgb, var(--danger) 35%, transparent)",
+          }}
+          aria-hidden="true"
+        />
+      </button>
+    </div>
+  );
+}
+
+function DeletedShot({ shot, edit }: { shot: LabelShot; edit: EditContext }) {
+  const open = edit.openTombstoneIds.has(shot.id);
+  const { names, operations } = edit;
+  const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
+  const reason = isLabelDeleteReason(shot.deleteReason)
+    ? DELETE_REASON_LABEL[shot.deleteReason]
+    : null;
+  return (
+    <>
+      <DeletedMarker
+        kind="shot"
+        id={shot.id}
+        open={open}
+        onToggle={edit.onToggleTombstone}
       />
+      {open ? (
+        <div
+          data-row="ghost-shot"
+          data-ghost-id={shot.id}
+          className={cn(SHOT_GRID, "min-h-[40px] text-[13px] opacity-60")}
+        >
+          <span className="tabular text-[var(--ink-500)]">–</span>
+          <Ghost>{time}</Ghost>
+          <Ghost>{sideLabel(shot.hitter, names)}</Ghost>
+          <Ghost>{shot.stroke ? STROKE_LABEL[shot.stroke] : null}</Ghost>
+          <Ghost>{shot.result ? RESULT_LABEL[shot.result] : null}</Ghost>
+          <Ghost>{formatCourtPoint(shot.contactX, shot.contactY)}</Ghost>
+          <Ghost>{formatCourtPoint(shot.landingX, shot.landingY)}</Ghost>
+          <span className="flex min-w-0 items-center gap-2">
+            {reason ? (
+              <span className="truncate text-[12px] text-[var(--ink-500)]">
+                {reason}
+              </span>
+            ) : null}
+            {operations ? (
+              <UndoButton
+                label={
+                  time ? `Undo delete shot at ${time}` : "Undo delete shot"
+                }
+                className="ml-auto"
+                onClick={() => operations.onRestoreShot(shot.id)}
+              />
+            ) : null}
+          </span>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function DeletedPoint({
+  point,
+  edit,
+}: {
+  point: LabelPoint;
+  edit: EditContext;
+}) {
+  const open = edit.openTombstoneIds.has(point.id);
+  const { names, operations } = edit;
+  const liveShots = point.shots.filter((shot) => shot.status !== "deleted");
+  return (
+    <>
+      <DeletedMarker
+        kind="point"
+        id={point.id}
+        open={open}
+        onToggle={edit.onToggleTombstone}
+      />
+      {open ? (
+        <div
+          data-row="ghost-point"
+          data-ghost-id={point.id}
+          className={cn(POINT_GRID, "min-h-[44px] text-[13px] opacity-60")}
+        >
+          <span aria-hidden="true" />
+          <span className="tabular text-[var(--ink-500)]">–</span>
+          <Ghost>
+            {point.setNumber !== null && point.gameNumber !== null
+              ? `${point.setNumber} · ${point.gameNumber}`
+              : null}
+          </Ghost>
+          <Ghost>{sideLabel(point.server, names)}</Ghost>
+          <Ghost>{liveShots.length}</Ghost>
+          <span aria-hidden="true" />
+          <Ghost>{sideLabel(point.winner, names)}</Ghost>
+          <Ghost>{point.ending ? ENDING_LABEL[point.ending] : null}</Ghost>
+          <Ghost>{sideLabel(point.endedBy, names)}</Ghost>
+          <span className="flex items-center">
+            {operations ? (
+              <UndoButton
+                label={`Undo delete point ${point.pointIndex + 1}`}
+                onClick={() => operations.onRestorePoint(point.id)}
+              />
+            ) : null}
+          </span>
+          <span aria-hidden="true" />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/** A ghost row's value: struck through, muted. An empty one is a plain dash. */
+function Ghost({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="tabular truncate text-[var(--ink-500)] line-through">
+      {/* An inline-block is not struck by its parent's line-through. */}
+      {children ?? <span className="inline-block">—</span>}
+    </span>
+  );
+}
+
+/** Board 08's `.card-link`: a blue text action. */
+function UndoButton({
+  label,
+  onClick,
+  className,
+}: {
+  label: string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        "cursor-pointer rounded-[var(--radius-button)] text-[13px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        className,
+      )}
+    >
+      Undo
+    </button>
+  );
+}
+
+/**
+ * Board 08's `.xb`: the row's ✕, at its far right. Revealed on the row's
+ * hover and on focus (and on a selected stroke), 200ms. It only ASKS — the
+ * console opens the confirm; nothing is deleted from here.
+ */
+function DeleteRowButton({
+  label,
+  tooltip,
+  onClick,
+  revealed = false,
+  className,
+}: {
+  label: string;
+  tooltip: string;
+  onClick: () => void;
+  revealed?: boolean;
+  className?: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          data-delete-row=""
+          onClick={(event) => {
+            event.stopPropagation();
+            onClick();
+          }}
+          className={cn(
+            "flex size-7 shrink-0 cursor-pointer items-center justify-center justify-self-end rounded-[var(--radius-element)] text-[var(--ink-400)] transition-[opacity,color,background-color] duration-200 group-hover/row:opacity-100 hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] focus-visible:bg-[var(--surface-subtle)] focus-visible:text-[var(--danger)] focus-visible:opacity-100 focus-visible:outline-none",
+            revealed ? "opacity-100" : "opacity-0",
+            className,
+          )}
+        >
+          <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top">{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * The set · game cell, as the move control: the same muted text, and a menu
+ * of the games either side of the point (board 08's grip, "Move point N to
+ * another game"). Each game says who serves it; picking one hands it to the
+ * console, which asks "switch players?" first when that is not this point's
+ * server.
+ */
+function MoveGameCell({
+  point,
+  number,
+  text,
+  edit,
+  onMove,
+}: {
+  point: LabelPoint;
+  number: number;
+  text: string | null;
+  edit: EditContext;
+  onMove: (to: LabelGame) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const games = neighbourGames(edit.points, point.id);
+  if (games.length === 0) return <Calculated>{text}</Calculated>;
+  return (
+    // `data-cell` keeps the row from toggling; the stopPropagation catches
+    // clicks inside the menu, which portals out of the row's DOM but still
+    // bubbles through its React tree.
+    <span
+      data-cell=""
+      className="flex min-w-0"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <FloatMenu
+        open={open}
+        onOpenChange={setOpen}
+        align="start"
+        width={220}
+        label={`Move point ${number} to`}
+        trigger={
+          <button
+            type="button"
+            aria-label={`Move point ${number} to another game`}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            className="tabular -mx-1.5 cursor-pointer truncate rounded-[var(--radius-button)] px-1.5 py-0.5 text-left text-[var(--ink-500)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            {text ?? <EmptyMark label="Not set" />}
+          </button>
+        }
+      >
+        {games.map((game) => {
+          const server = destinationServerIn(edit.points, point.id, game);
+          return (
+            <FloatMenuItem
+              key={`${game.setNumber}-${game.gameNumber}`}
+              label={`Set ${game.setNumber} · Game ${game.gameNumber}`}
+              description={server ? `${edit.names[server]} serving` : undefined}
+              onSelect={() => {
+                setOpen(false);
+                onMove(game);
+              }}
+            />
+          );
+        })}
+        <FloatMenuNote>Only the games either side of this point.</FloatMenuNote>
+      </FloatMenu>
+    </span>
+  );
+}
+
+/**
+ * Under the open point's strokes: "Mark point checked ↵" (the one primary),
+ * becoming "✓ Point checked · Undo"; and "Add shot", after the selected
+ * stroke or at the end of the rally.
+ */
+function PointFooter({
+  point,
+  edit,
+  operations,
+}: {
+  point: LabelPoint;
+  edit: EditContext;
+  operations: LabelRowOperations;
+}) {
+  const live = point.shots.filter((shot) => shot.status !== "deleted");
+  const selectedIndex = live.findIndex(
+    (shot) => shot.id === edit.selectedShotId,
+  );
+  const after = selectedIndex === -1 ? null : live[selectedIndex];
+  const checked = point.checkedAt !== null;
+  return (
+    <div
+      data-point-footer={point.id}
+      className="flex items-center gap-2 pt-3 pr-4 pb-2 pl-11"
+    >
+      {checked ? (
+        <span
+          data-checked-state="checked"
+          className="inline-flex h-8 items-center gap-1.5 text-[12px] whitespace-nowrap text-[var(--ink-700)]"
+        >
+          <Check
+            className="size-[13px] text-[var(--ink-900)]"
+            strokeWidth={2}
+            aria-hidden="true"
+          />
+          Point checked
+          <UndoButton
+            label={`Undo point ${point.pointIndex + 1} checked`}
+            className="ml-1.5 text-[12px]"
+            onClick={() => operations.onSetChecked(point.id, false)}
+          />
+        </span>
+      ) : (
+        <button
+          type="button"
+          data-checked-state="unchecked"
+          onClick={() => operations.onSetChecked(point.id, true)}
+          className={advButton("primary", "sm")}
+        >
+          Mark point checked
+          <kbd
+            aria-hidden="true"
+            className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-[3px] border border-white/35 bg-white/20 px-1 text-[10px] text-white"
+          >
+            ↵
+          </kbd>
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => operations.onAddShot(point.id, after?.id ?? null)}
+        className={advButton("outline", "sm")}
+      >
+        <Plus className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+        {after ? `Add shot after shot ${selectedIndex + 1}` : "Add shot"}
+      </button>
     </div>
   );
 }

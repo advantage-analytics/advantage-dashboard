@@ -28,6 +28,7 @@ function shot(
     eventId: null,
     afterEventId: null,
     status: "kept",
+    statusBeforeDelete: null,
     deleteReason: null,
     hitter: "p1",
     stroke: null,
@@ -76,6 +77,7 @@ export const POINT_1_SHOTS: LabelShot[] = [
     stroke: "forehand",
     videoTime: 2473.6,
     status: "deleted",
+    statusBeforeDelete: "kept",
     deleteReason: "not_a_stroke",
   }),
   shot("s-added", P1, {
@@ -108,6 +110,7 @@ function point(
     ending: null,
     endedBy: null,
     status: "unchanged",
+    statusBeforeDelete: null,
     checkedAt: null,
     shots: [],
     ...fields,
@@ -146,7 +149,11 @@ export function labelSessionFixture(): LabelSession {
           }),
         ],
       }),
-      point(P3, 2, { status: "deleted", ending: "let_replayed" }),
+      point(P3, 2, {
+        status: "deleted",
+        statusBeforeDelete: "unchanged",
+        ending: "let_replayed",
+      }),
       point(P4, 3, { gameNumber: 2, server: "p2" }),
     ],
   };

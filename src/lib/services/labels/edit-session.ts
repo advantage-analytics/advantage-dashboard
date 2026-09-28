@@ -36,17 +36,23 @@ export type LabelShotEditResult =
 export type LabelPointEditResult =
   { ok: true; status: LabelPointStatus } | { error: string };
 
-interface Dependencies {
+/** What every admin-gated label write needs; specs pass fakes. */
+export interface LabelWriteDependencies {
   requireAdmin: () => Promise<{ id: string } | null>;
   createAdminClient: () => AdminClient;
 }
-const defaults: Dependencies = { requireAdmin, createAdminClient };
+type Dependencies = LabelWriteDependencies;
+export const defaultLabelWriteDependencies: Dependencies = {
+  requireAdmin,
+  createAdminClient,
+};
+const defaults = defaultLabelWriteDependencies;
 
-const ADMIN_REQUIRED = "Administrator access is required.";
+export const ADMIN_REQUIRED = "Administrator access is required.";
 const FROZEN = "This session is complete, so its labels can no longer change.";
 
 /** Refuses anything but a `labelling` session. */
-async function checkSessionOpen(
+export async function checkSessionOpen(
   supabase: AdminClient,
   sessionId: string,
 ): Promise<string | null> {

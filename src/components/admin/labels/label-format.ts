@@ -5,6 +5,7 @@ import type {
   LabelSide,
   LabelStroke,
 } from "@/lib/services/labels/session";
+import type { LabelDeleteReason } from "@/lib/services/labels/operations";
 import { surnameLabels } from "@/lib/data/match-utils";
 
 /**
@@ -37,6 +38,15 @@ export const RESULT_LABEL: Record<LabelShotResult, string> = {
   in: "In",
   out: "Out",
   net: "Net",
+};
+
+/** Why a stroke was deleted, in the delete dialog's and the ghost row's words. */
+export const DELETE_REASON_LABEL: Record<LabelDeleteReason, string> = {
+  dead_ball_after_fault: "Dead ball after a fault",
+  dead_ball_after_point: "Dead ball after the point",
+  not_a_stroke: "Not a stroke",
+  duplicate: "Duplicate",
+  other: "Other",
 };
 
 export const SERVE_SIDE_LABEL: Record<LabelServeSide, string> = {

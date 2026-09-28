@@ -125,3 +125,37 @@ Decisions:
 3. Two quick edits to the same row compute status from the row as read, so they can race (harmless while the rule never un-edits).
 4. Clicking a Hit at / Landed at cell could choose which end the next court click places.
 5. Point rows have no "Edited" marker.
+
+## T7 · Delete/undo, add shot, move point, mark checked — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:**
+
+- **Rules and services.**
+  - `operations.ts` (pure) and `operations-session.ts` (admin-checked, UPDATE/INSERT only).
+  - Operations: delete with a reason (shots), restore, add shot, move point, mark checked / unchecked.
+  - A status change only lands if the row's status hasn't changed since it was read (so another tab can't be overwritten).
+  - Actions are wrapped in `actions.ts`.
+- **Undo needs the pre-delete status.** Amended the unapplied T1 migration with `status_before_delete`, CHECK-paired to `status = 'deleted'`. Undo needs it because kept vs edited can't be derived once a value is overwritten.
+- **Delete confirmation.** `label-confirm-dialog.tsx` wraps `ConfirmDialog`: danger tone, and a required reason radio for shot deletes. The dialog wording lives in `label-confirm.ts`.
+- **Table.**
+  - ✕ at the far right of each row.
+  - Deleted markers expand to a ghost row with Undo.
+  - Clicking set · game opens the move menu, listing adjacent games with their server. A different server shows "<player> is serving this game, switch players?" with Switch players / Cancel.
+  - Open-point footer: "Mark point checked ↵" becomes "✓ Point checked · Undo", plus Add shot (after the selected shot).
+  - Enter marks the point checked.
+- **Added shots.**
+  - `after_event_id` is the nearest earlier vendor stroke.
+  - `video_time` is the midpoint of the neighbouring shots.
+  - The hitter defaults to the previous hitter's opponent.
+- **Tests.** Specs `label-operations` (29) and `label-console-operations` (13), with ConfirmDialog stubbed so tests can prove nothing is written before confirm. Browser-checked on a throwaway route, since deleted.
+
+**follow-ups:**
+
+1. After marking a point checked, move to the next unchecked point.
+2. Insert a shot at the start of a rally, and an "Add shot at playhead" option.
+3. Allow moving a point into a brand-new game.
+4. Adding or deleting a shot on a checked point doesn't clear its checked state.
+5. An added shot can't be edited while it is still saving (its temporary id is rejected).
+6. The seed still hard-deletes a half-seeded session on failure (T3, internal).
