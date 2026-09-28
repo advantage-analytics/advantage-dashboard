@@ -18,7 +18,7 @@ import {
 } from "./fixtures/live-db-pool";
 
 /**
- * `20260927230000_search_custom_programs.sql`, proven against the live
+ * `20260928004752_search_custom_programs.sql`, proven against the live
  * database.
  *
  * Custom orgs are private workspaces (20260830050000): the `programs` SELECT
