@@ -41,6 +41,7 @@ import {
 import { lastStrokeWinner, resolvePointWinners } from "./winners";
 import { collapsedTailStart } from "./rallies";
 import { playedRally } from "./played";
+import type { LineCalls } from "./line-calls";
 import { pressureFor } from "./pressure";
 import { pointScoresOf } from "./scores";
 import { bounceVideoTimes } from "./frame-clock";
@@ -193,6 +194,12 @@ export interface BuildOptions {
   adScoring?: boolean;
   /** matches.format.best_of. Decides when a set point is also a match point. */
   bestOf?: number;
+  /**
+   * Our own line calls from the trajectories file (line-calls.ts). Absent
+   * means no file: the dead-ball autofix and the near-line flag then fall back
+   * to what the strokes file alone can say.
+   */
+  lineCalls?: LineCalls;
 }
 
 export function buildTranscript(options: BuildOptions): Transcript {
@@ -203,6 +210,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     initialTopIsPlayer1,
     adScoring = true,
     bestOf = 3,
+    lineCalls,
   } = options;
 
   const gameKeyOf = new Map<number, string>();
@@ -374,7 +382,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     // Phantom strokes are removed once, here, so numbering, results,
     // result_type, flags and rally length all read the same list. Pressure and
     // the score columns read the raw rally: they come from the score stream.
-    const played = playedRally(rally);
+    const played = playedRally(rally, { winner, lineCalls });
     const kept = played.rally;
     const serveIndex = lastServeIndex(kept);
     const pressure = pressureFor({
@@ -476,6 +484,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
           previousInGame: previousRally,
           resultType,
           adScoring,
+          lineCalls,
         }),
         ...(rec.settledWinners[i]?.via === "guess"
           ? [POINT_FLAGS.WINNER_GUESSED]
