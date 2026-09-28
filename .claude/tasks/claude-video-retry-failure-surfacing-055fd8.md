@@ -112,7 +112,7 @@ ready).
 
 ## T8 · Matches list row action follows the recovery class
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T2
 - **files:** src/lib/data/match-analysis.ts (`analysisAction`), tests/match-analysis-timeline.spec.ts (guess)

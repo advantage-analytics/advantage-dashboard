@@ -62,3 +62,12 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical FAIL (`tests/schedule-dual-outcomes.spec.ts:469` "a failed analysis shows its note and offers Retry to a coach only") · completion not run
 **reason:** The change contradicts deliberate schedule-drawer behaviour pinned by that spec (T23 "footer follows the Matches drawer"): (1) the event drawer's Retry is the footer's blue primary button labelled "Retry" — `RecoveryAction` renders an outline "Retry analysis"; (2) a coach sees the job note "The video ended before the match did" — the fixture row is uncoded, so the new `showsStoredNote` rule hides it; (3) a viewer who can't edit sees only "The match page has the details.", no note, no retry promise — the task's "one body for every viewer, note whenever the class shows one" shows the retry body to everyone. Needs an author decision on which rule wins before re-running.
 **stash:** 7fceca0f51e51ceb576021c6cef67184b6b42827
+
+## T8 · Matches list row action follows the recovery class — done
+
+**gate:** mechanical pass · completion pass
+**changed:** `analysisAction()` branches on `analysis.recovery` for failed rows: `upload_again`/`fix_recording` → "Add video", `retry`/`rederive`/`wait_or_ask` → "View match", `stats_unavailable` → "View stats"; a failed row without `recovery` keeps "Start over". Two small helpers (`addVideoAction`, `viewMatchAction`) reuse the existing action shapes. No existing spec pinned `analysisAction`. Spec adds per-class assertions and the no-"Start over"-with-video check.
+**follow-ups:**
+
+1. The add-video action is the pre-existing `/dashboard/matches/new` with no match id, so it would start a new match rather than attach video to this one — `addVideoHref(matchId)` (what `RecoveryAction` uses) is probably right for a failed row.
+2. `analysisAction()` has no caller in `src` today, so none of this reaches a screen until a list-row UI uses it.

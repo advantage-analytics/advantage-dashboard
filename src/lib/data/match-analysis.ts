@@ -879,12 +879,51 @@ export interface AnalysisAction {
   hoverInk: string;
 }
 
+/** The "Add video" shape — also used for a failed row whose only move is to resend a file. */
+function addVideoAction(): AnalysisAction {
+  return {
+    label: "Add video",
+    href: "/dashboard/matches/new",
+    ink: "#888888",
+    hoverInk: "#525252",
+  };
+}
+
+/** The "View stats" / "View match" shape — a blue link into the match page. */
+function viewMatchAction(label: string, matchId: string): AnalysisAction {
+  return {
+    label,
+    href: `/dashboard/matches/${matchId}`,
+    ink: "#3B82F6",
+    hoverInk: "#2563EB",
+  };
+}
+
 /**
  * Row action, styled as a text link rather than a button.
  *
  * Null when there is genuinely nothing to offer. `processed` is the case: the
  * vendor has finished, so "Cancel" would be offering to stop work that is over,
  * and "View stats" would lead to the empty page this state exists to prevent.
+ *
+ * A failed row's action follows its `recovery` class (`classifyFailure()`)
+ * rather than a blanket "Start over": that copy sends every failure through
+ * the upload wizard as if no video had ever landed, which is only true for
+ * `upload_again`. A row with a video that simply needs retrying or rebuilding
+ * should not re-spend a video upload.
+ *
+ *   upload_again / fix_recording → Add video (the file itself needs resending)
+ *   retry / rederive             → View match (nothing to resend; the retry
+ *                                   control and any stored note live there)
+ *   stats_unavailable            → View stats (the match renders; a chart may not)
+ *   wait_or_ask                  → View match — there is no action to offer
+ *                                   (an allowance or ceiling clears on its
+ *                                   own), so this points at the page that
+ *                                   explains why rather than a dead button
+ *
+ * `recovery` absent on a failed row means the loader could not classify it
+ * (see its own doc comment) — falls back to today's "Start over" rather than
+ * guessing.
  */
 export function analysisAction(
   analysis: MatchAnalysis,
@@ -893,28 +932,30 @@ export function analysisAction(
   if (analysis.status === "processed") return null;
 
   if (isAnalysisReady(analysis.status)) {
-    return {
-      label: "View stats",
-      href: `/dashboard/matches/${matchId}`,
-      ink: "#3B82F6",
-      hoverInk: "#2563EB",
-    };
+    return viewMatchAction("View stats", matchId);
   }
   if (isAnalysisFailed(analysis.status)) {
-    return {
-      label: "Start over",
-      href: "/dashboard/matches/new",
-      ink: "#E51837",
-      hoverInk: "#C41530",
-    };
+    switch (analysis.recovery) {
+      case "upload_again":
+      case "fix_recording":
+        return addVideoAction();
+      case "retry":
+      case "rederive":
+      case "wait_or_ask":
+        return viewMatchAction("View match", matchId);
+      case "stats_unavailable":
+        return viewMatchAction("View stats", matchId);
+      default:
+        return {
+          label: "Start over",
+          href: "/dashboard/matches/new",
+          ink: "#E51837",
+          hoverInk: "#C41530",
+        };
+    }
   }
   if (analysis.status === "manual") {
-    return {
-      label: "Add video",
-      href: "/dashboard/matches/new",
-      ink: "#888888",
-      hoverInk: "#525252",
-    };
+    return addVideoAction();
   }
   return { label: "Cancel", ink: "#888888", hoverInk: "#525252" };
 }

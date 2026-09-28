@@ -2,12 +2,15 @@ import { expect, test } from "@playwright/test";
 
 import {
   ANALYSIS_LABEL,
+  analysisAction,
   isAnalysisFailed,
   isInFlight,
   isLiveUpdating,
   isWorking,
   resolveAnalysisStatus,
   withStatsPublished,
+  type MatchAnalysis,
+  type RecoveryClass,
 } from "@/lib/data/match-analysis";
 
 /**
@@ -155,5 +158,83 @@ test.describe("processed: in flight, but no update is coming", () => {
     for (const status of ["failed", "derivation_failed"] as const) {
       expect(settled(status)).toBe(false);
     }
+  });
+});
+
+/**
+ * A failed row's action follows its `recovery` class rather than a blanket
+ * "Start over". "Start over" sends the player through the upload wizard as
+ * if no video had ever landed — right for `upload_again`, but wrong for a
+ * row that already has a video and only needs a retry, a rebuild, or has
+ * nothing to press at all. Offering "Start over" there would spend a second
+ * video upload on a job that never needed one.
+ */
+test.describe("analysisAction: failed row follows the recovery class", () => {
+  const matchId = "m1";
+  const baseFailed: MatchAnalysis = {
+    status: "failed",
+    providerId: null,
+  };
+
+  test("upload_again and fix_recording get the Add video action", () => {
+    for (const recovery of ["upload_again", "fix_recording"] as const) {
+      const action = analysisAction({ ...baseFailed, recovery }, matchId);
+      expect(action?.label).toBe("Add video");
+      expect(action?.href).toBe("/dashboard/matches/new");
+    }
+  });
+
+  test("retry and rederive get a View-the-match action", () => {
+    for (const recovery of ["retry", "rederive"] as const) {
+      const action = analysisAction({ ...baseFailed, recovery }, matchId);
+      expect(action?.label).toBe("View match");
+      expect(action?.href).toBe(`/dashboard/matches/${matchId}`);
+    }
+  });
+
+  test("stats_unavailable gets View stats", () => {
+    const action = analysisAction(
+      { ...baseFailed, recovery: "stats_unavailable" },
+      matchId,
+    );
+    expect(action?.label).toBe("View stats");
+    expect(action?.href).toBe(`/dashboard/matches/${matchId}`);
+  });
+
+  test("wait_or_ask points at the match page rather than a dead button", () => {
+    // Nothing to press now — an allowance or attempt ceiling clears on its
+    // own — so this offers the page that carries the stored note, not
+    // "Start over" (which would misrepresent this as fixable by resubmitting).
+    const action = analysisAction(
+      { ...baseFailed, recovery: "wait_or_ask" },
+      matchId,
+    );
+    expect(action?.label).toBe("View match");
+    expect(action?.href).toBe(`/dashboard/matches/${matchId}`);
+  });
+
+  test('"Start over" is not returned for a failed row that has a video', () => {
+    // Any recovery class other than upload_again implies a video exists
+    // (the loader only sets upload_again when hasVideo is false). None of
+    // those classes should ever produce "Start over".
+    const classesWithVideo: RecoveryClass[] = [
+      "fix_recording",
+      "retry",
+      "rederive",
+      "stats_unavailable",
+      "wait_or_ask",
+    ];
+    for (const recovery of classesWithVideo) {
+      const action = analysisAction({ ...baseFailed, recovery }, matchId);
+      expect(action?.label).not.toBe("Start over");
+    }
+  });
+
+  test("no recovery set falls back to today's Start over", () => {
+    // The loader could not classify the row (see MatchAnalysis.recovery's
+    // doc comment) — guessing an action would be worse than the fallback.
+    const action = analysisAction(baseFailed, matchId);
+    expect(action?.label).toBe("Start over");
+    expect(action?.href).toBe("/dashboard/matches/new");
   });
 });
