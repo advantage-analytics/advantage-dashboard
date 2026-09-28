@@ -408,7 +408,7 @@ ready).
 
 ## T30 · Point analysisAction's failed-row Add video at this match
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/data/match-analysis.ts, tests/match-analysis-timeline.spec.ts
 - **done when:**

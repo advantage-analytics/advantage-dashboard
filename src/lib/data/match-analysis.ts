@@ -12,6 +12,7 @@
  * was invented; that is gone.
  */
 
+import { addVideoHref } from "@/lib/matches/add-video-href";
 import type { ProviderId } from "@/lib/services/upload";
 
 export type AnalysisStatus =
@@ -952,11 +953,15 @@ export interface AnalysisAction {
   hoverInk: string;
 }
 
-/** The "Add video" shape — also used for a failed row whose only move is to resend a file. */
-function addVideoAction(): AnalysisAction {
+/**
+ * The "Add video" shape — also used for a failed row whose only move is to
+ * resend a file. When `matchId` is given, the href opens the wizard on this
+ * match (`addVideoHref`) rather than a new one.
+ */
+function addVideoAction(matchId?: string): AnalysisAction {
   return {
     label: "Add video",
-    href: "/dashboard/matches/new",
+    href: addVideoHref(matchId ?? null),
     ink: "#888888",
     hoverInk: "#525252",
   };
@@ -985,7 +990,9 @@ function viewMatchAction(label: string, matchId: string): AnalysisAction {
  * `upload_again`. A row with a video that simply needs retrying or rebuilding
  * should not re-spend a video upload.
  *
- *   upload_again / fix_recording → Add video (the file itself needs resending)
+ *   upload_again / fix_recording → Add video, opening the wizard on this
+ *                                   match (`addVideoHref`), not a new match —
+ *                                   the file itself needs resending
  *   retry / rederive             → View match (nothing to resend; the retry
  *                                   control and any stored note live there)
  *   stats_unavailable            → View stats (the match renders; a chart may not)
@@ -1011,7 +1018,7 @@ export function analysisAction(
     switch (analysis.recovery) {
       case "upload_again":
       case "fix_recording":
-        return addVideoAction();
+        return addVideoAction(matchId);
       case "retry":
       case "rederive":
       case "wait_or_ask":

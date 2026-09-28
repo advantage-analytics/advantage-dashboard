@@ -180,7 +180,7 @@ test.describe("analysisAction: failed row follows the recovery class", () => {
     for (const recovery of ["upload_again", "fix_recording"] as const) {
       const action = analysisAction({ ...baseFailed, recovery }, matchId);
       expect(action?.label).toBe("Add video");
-      expect(action?.href).toBe("/dashboard/matches/new");
+      expect(action?.href).toBe(`/dashboard/matches/new?match=${matchId}`);
     }
   });
 

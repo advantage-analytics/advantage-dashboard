@@ -269,3 +269,8 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. A missing match renders not-found with a 200 status because the group loading.tsx streams first (pre-existing behaviour, not new here).
+
+## T30 · Point analysisAction's failed-row Add video at this match — done
+
+**gate:** mechanical PASS · completion PASS
+**changed:** `addVideoAction` takes an optional matchId and builds its href with `addVideoHref`; `analysisAction`'s upload_again / fix_recording branch passes the match id, so "Add video" opens `/dashboard/matches/new?match=<id>`. `manual` and the no-recovery "Start over" fallback keep the bare wizard URL. Doc comments updated; the timeline spec's add-video case expects `?match=m1`.
