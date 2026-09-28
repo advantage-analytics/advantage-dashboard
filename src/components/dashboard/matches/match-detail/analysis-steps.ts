@@ -18,6 +18,8 @@
 import {
   ANALYSIS_LABEL,
   formatEta,
+  isAnalysisFailed,
+  isInFlight,
   isSubmitStalled,
   uploadEtaSeconds,
   type MatchAnalysis,
@@ -25,6 +27,7 @@ import {
 } from "@/lib/data/match-analysis";
 import { UPLOADING_COPY } from "../upload-progress-copy";
 import {
+  DRAWER_NO_ACTION_BODY,
   WAIT_OR_ASK_VARIANTS,
   byClass,
   waitOrAskVariant,
@@ -63,6 +66,8 @@ export const STALLED_RETRY_COPY = {
   title: "This hasn't been sent for analysis yet",
   cardBody:
     "Your video is stored safely — the hand-off didn't go through. Trying again costs nothing but the wait; nothing needs uploading a second time.",
+  /** The peek drawers' shorter line (`Drawer-StalledRetry`). */
+  drawerBody: "Trying again costs nothing; nothing needs uploading again.",
 };
 
 // ── New wording, only where neither the wizard nor the card had any ─────────
@@ -132,7 +137,7 @@ export interface AnalysisStepsView {
 function recoveryCopy(
   recovery: RecoveryClass,
   analysis: MatchAnalysis,
-): { title: string; cardBody: string } {
+): { title: string; cardBody: string; drawerBody: string } {
   // byClass.wait_or_ask is only the allowance default; the row's error code
   // picks the variant that actually applies.
   if (recovery === "wait_or_ask") {
@@ -403,4 +408,131 @@ export function analysisStepsView(
         ],
       };
   }
+}
+
+// ── The peek drawers' compact projection ────────────────────────────────────
+
+/**
+ * The drawers' processing line (`Drawer-Processing`). The page's own line says
+ * "this page fills in", which is not true of a drawer.
+ */
+export const DRAWER_PROCESSING_NOTE =
+  "This fills in as soon as the analysis lands.";
+
+/**
+ * What a viewer who cannot act on the row reads at the stopped step — with
+ * `DRAWER_NO_ACTION_BODY` under it. One headline for every class: no stored
+ * note, and no class title that promises a retry the footer does not offer.
+ */
+export const DRAWER_NO_ACTION_TITLE = "Analysis stopped";
+
+/** A drawer step's text: one quiet line, or the step that stopped. */
+export type DrawerAnalysisStepBody = Exclude<
+  AnalysisStepBody,
+  { kind: "upload" }
+>;
+
+export interface DrawerAnalysisStepView {
+  key: AnalysisStepKey;
+  label: string;
+  state: StepState;
+  /** The floored transfer percent — the uploading step's only reading. */
+  value?: string;
+  body?: DrawerAnalysisStepBody;
+}
+
+export interface DrawerAnalysisStepsView {
+  steps: DrawerAnalysisStepView[];
+  /** The stopped step's class — the footer's `DrawerRecoveryAction` input. */
+  failure?: {
+    step: AnalysisStepKey;
+    recovery: RecoveryClass;
+    stalled: boolean;
+  };
+}
+
+/**
+ * The match page's steps, cut down for a 340px peek drawer.
+ *
+ * The same four keys, labels and states as `analysisStepsView()` — it is read
+ * from it, so the two cannot disagree — with less said at each step:
+ *
+ * - uploading: the floored percent as the step's value, and no body (no bar,
+ *   no estimate, no notes — the match page has those);
+ * - a running step: `STAGE_NOTE`'s line, except processing, which reads
+ *   `DRAWER_PROCESSING_NOTE`;
+ * - the stopped step, a stalled hand-off included: with `canAct`, headline
+ *   `note ?? title` and the class's drawer body (a stalled retry reads
+ *   `STALLED_RETRY_COPY`); without it, `DRAWER_NO_ACTION_TITLE` and
+ *   `DRAWER_NO_ACTION_BODY`, never the note.
+ *
+ * `now` is `analysisStepsView()`'s clock: `null` reads as not stalled yet.
+ * Null for a status that is neither in flight nor failed — a settled match has
+ * no analysis section in a drawer.
+ */
+export function drawerAnalysisStepsView(
+  analysis: MatchAnalysis,
+  now: number | null,
+  canAct: boolean,
+): DrawerAnalysisStepsView | null {
+  if (!isInFlight(analysis.status) && !isAnalysisFailed(analysis.status)) {
+    return null;
+  }
+  const page = analysisStepsView(analysis, now);
+
+  const steps = page.steps.map((step): DrawerAnalysisStepView => {
+    const { key, label, state, value } = step;
+    const body = step.body;
+    if (!body || body.kind === "upload") {
+      return value === undefined
+        ? { key, label, state }
+        : { key, label, state, value };
+    }
+    if (body.kind === "note") {
+      const text =
+        analysis.status === "processing" ? DRAWER_PROCESSING_NOTE : body.text;
+      return { key, label, state, body: { kind: "note", text } };
+    }
+    return {
+      key,
+      label,
+      state,
+      body: {
+        kind: "failure",
+        ...drawerStoppedCopy(body.recovery, body.stalled, analysis, canAct),
+        recovery: body.recovery,
+        stalled: body.stalled,
+      },
+    };
+  });
+
+  const stopped = steps.find((s) => s.body?.kind === "failure");
+  return {
+    steps,
+    ...(stopped?.body?.kind === "failure" && {
+      failure: {
+        step: stopped.key,
+        recovery: stopped.body.recovery,
+        stalled: stopped.body.stalled,
+      },
+    }),
+  };
+}
+
+function drawerStoppedCopy(
+  recovery: RecoveryClass,
+  stalled: boolean,
+  analysis: MatchAnalysis,
+  canAct: boolean,
+): { headline: string; body: string } {
+  if (!canAct) {
+    return { headline: DRAWER_NO_ACTION_TITLE, body: DRAWER_NO_ACTION_BODY };
+  }
+  const copy =
+    stalled && recovery === "retry"
+      ? STALLED_RETRY_COPY
+      : recoveryCopy(recovery, analysis);
+  // `note` only ever arrives filtered through showsStoredNote(); the raw
+  // `failNote` is never read here.
+  return { headline: analysis.note ?? copy.title, body: copy.drawerBody };
 }

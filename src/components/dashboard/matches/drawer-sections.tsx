@@ -13,6 +13,7 @@ import {
   isAnalysisFailed,
   isInFlight,
   type AnalysisStatus,
+  type MatchAnalysis,
   type RecoveryClass,
 } from "@/lib/data/match-analysis";
 import { addVideoHref } from "@/lib/matches/add-video-href";
@@ -28,6 +29,15 @@ import {
   byClass,
   waitOrAskVariant,
 } from "@/components/dashboard/matches/analysis-failure-copy";
+import {
+  LABEL_INK,
+  StepMark,
+} from "@/components/dashboard/shared/vertical-steps";
+import {
+  drawerAnalysisStepsView,
+  type DrawerAnalysisStepBody,
+  type DrawerAnalysisStepView,
+} from "@/components/dashboard/matches/match-detail/analysis-steps";
 
 /**
  * The body sections of a match peek drawer, lifted out of `match-drawer.tsx`
@@ -176,8 +186,11 @@ export function DrawerHeading({
  * Every failed row the loader or the live patch projects carries a class
  * (`recoveryFields()`); the fallback only covers a projection that predates
  * it — the same fallback the match page's progress card uses. Null for a row
- * that has not failed: a stalled `uploaded` row is in flight as far as the
- * drawers are concerned, and keeps the in-flight line.
+ * whose status has not failed — a stalled `uploaded` row included. A stalled
+ * hand-off is not in flight to the drawers any more: `DrawerAnalysisSteps`
+ * draws it as the stopped step (from `drawerAnalysisStepsView()`, which reads
+ * the clock this function has no access to), and the footer's action is
+ * `DrawerRecoveryAction` with `stalled` and that view's `failure.recovery`.
  */
 export function drawerRecovery(
   status: AnalysisStatus | null | undefined,
@@ -277,6 +290,134 @@ export function AnalysisNotice({
 }
 
 /**
+ * The drawers' analysis section (`Drawer-*` frames): an "Analysis" eyebrow
+ * over the match page's four steps, drawn compact — 16px marks, 12px labels,
+ * tighter rhythm — from `drawerAnalysisStepsView()`. Only the running or
+ * stopped step carries text; the stopped one sits in a single `role="alert"`,
+ * or `role="status"` for a stalled hand-off, where nothing has failed yet.
+ * The recovery action is the footer's `DrawerRecoveryAction`, not this.
+ *
+ * Draws nothing for a settled match (the view is null).
+ */
+export function DrawerAnalysisSteps({
+  analysis,
+  now,
+  canAct,
+}: {
+  analysis: MatchAnalysis | null | undefined;
+  /** The stall clock — `null` until the caller's first tick. */
+  now: number | null;
+  /** The viewer may act on this row — the drawer's own access clause. */
+  canAct: boolean;
+}) {
+  const view = analysis ? drawerAnalysisStepsView(analysis, now, canAct) : null;
+  if (!view) return null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <span className="text-[10px] leading-none font-medium tracking-[1.6px] text-[var(--ink-400)] uppercase">
+        Analysis
+      </span>
+      <ol className="flex flex-col" aria-label="Progress">
+        {view.steps.map((step, index) => (
+          <DrawerStep
+            key={step.key}
+            step={step}
+            last={index === view.steps.length - 1}
+          />
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+const DRAWER_STEP_LINE = "text-[12px] leading-[18px]";
+
+/**
+ * One compact row. Built here rather than as a `VerticalStep` size variant so
+ * the page column and the wizard keep their exact markup; the mark is the
+ * shared `StepMark`, and the label ink the shared `LABEL_INK`.
+ */
+function DrawerStep({
+  step,
+  last,
+}: {
+  step: DrawerAnalysisStepView;
+  last: boolean;
+}) {
+  return (
+    <li
+      className="flex gap-3"
+      aria-current={step.state === "now" ? "step" : undefined}
+    >
+      <div className="flex w-4 shrink-0 flex-col items-center pt-px">
+        <StepMark state={step.state} />
+        {!last && (
+          <div
+            aria-hidden="true"
+            className={cn(
+              "my-1 w-px flex-1",
+              step.state === "done"
+                ? "bg-[var(--ink-200)]"
+                : "bg-[var(--border-hairline)]",
+            )}
+          />
+        )}
+      </div>
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 flex-col gap-1",
+          last ? "" : step.body ? "pb-4" : "pb-3",
+        )}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <span
+            className={DRAWER_STEP_LINE}
+            style={{ color: LABEL_INK[step.state] }}
+          >
+            {step.label}
+          </span>
+          {step.value && (
+            <span
+              className={cn(
+                DRAWER_STEP_LINE,
+                "text-[var(--ink-700)] tabular-nums",
+              )}
+            >
+              {step.value}
+            </span>
+          )}
+        </div>
+        {step.body && <DrawerStepBody body={step.body} />}
+      </div>
+    </li>
+  );
+}
+
+function DrawerStepBody({ body }: { body: DrawerAnalysisStepBody }) {
+  if (body.kind === "note") {
+    return (
+      <p className={cn(DRAWER_STEP_LINE, "text-[var(--ink-600)]")}>
+        {body.text}
+      </p>
+    );
+  }
+  return (
+    <div
+      role={body.stalled ? "status" : "alert"}
+      className="flex flex-col gap-0.5"
+    >
+      <p className={cn(DRAWER_STEP_LINE, "font-medium text-[var(--ink-900)]")}>
+        {body.headline}
+      </p>
+      <p className={cn(DRAWER_STEP_LINE, "text-[var(--ink-600)]")}>
+        {body.body}
+      </p>
+    </div>
+  );
+}
+
+/**
  * Does a failed row's recovery class have something to press in a drawer?
  * `byClass`'s `action: null` classes (`wait_or_ask`, `stats_unavailable`)
  * have nothing, and a retry or rebuild needs a job to act on — so a caller
@@ -300,6 +441,10 @@ export function recoveryHasAction(
  * a footer never holds two primaries.
  *
  * - `retry` — "Retry", POSTed to `/api/splitstep/jobs/<jobId>/resubmit`.
+ * - `retry` on a stalled hand-off (`stalled`) — "Try again", the free
+ *   re-submission: `{ jobId }` POSTed to `/api/splitstep/jobs`, exactly the
+ *   request `RetrySubmission` makes on the match page. Nothing was sent, so
+ *   there is no vendor job to resubmit.
  * - `rederive` — "Rebuild statistics", POSTed to `…/rederive`.
  * - `upload_again` / `fix_recording` — the wizard link `byClass` names.
  *
@@ -311,13 +456,33 @@ export function DrawerRecoveryAction({
   jobId,
   matchId,
   variant,
+  stalled = false,
 }: {
   recovery: RecoveryClass | null | undefined;
   jobId: string | null | undefined;
   matchId: string;
   variant: "primary" | "outline";
+  /** A hand-off that never happened (`isSubmitStalled`), not a failed job. */
+  stalled?: boolean;
 }) {
   if (!recoveryHasAction(recovery, jobId)) return null;
+
+  if (recovery === "retry" && jobId && stalled) {
+    return (
+      <DrawerRequestButton
+        label="Try again"
+        pendingLabel="Sending…"
+        url="/api/splitstep/jobs"
+        init={{
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          // The whole payload: the route reads the rest back from the row.
+          body: JSON.stringify({ jobId }),
+        }}
+        variant={variant}
+      />
+    );
+  }
 
   if (recovery === "retry" && jobId) {
     return (
@@ -363,11 +528,14 @@ function DrawerRequestButton({
   label,
   pendingLabel,
   url,
+  init = { method: "POST" },
   variant,
 }: {
   label: string;
   pendingLabel: string;
   url: string;
+  /** The request; a bare POST unless the route wants a body. */
+  init?: RequestInit;
   variant: "primary" | "outline";
 }) {
   const router = useRouter();
@@ -382,9 +550,7 @@ function DrawerRequestButton({
         onClick={() =>
           start(async () => {
             setError(null);
-            const response = await fetch(url, { method: "POST" }).catch(
-              () => null,
-            );
+            const response = await fetch(url, init).catch(() => null);
             if (!response?.ok) {
               const payload = (await response?.json().catch(() => null)) as {
                 error?: string;

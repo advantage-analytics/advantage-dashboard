@@ -219,3 +219,12 @@ is the runner's. Newest entries at the bottom.
 3. Guardrails §3.3 still says "hero + summary", which is no longer accurate — the branch renders only the column under the app chrome.
 4. The result word uses played-set counts only (no best-of on the page), so a stopped 6-4 3-2 match reads "Won" where the wizard's best-of-aware `scoreUndecided` gives no word.
 5. `STAGE_NOTE` / `STALLED_RETRY_COPY` exports have no outside importer now.
+
+## T24 · Add the compact drawer Analysis steps and the stalled "Try again" action — done
+
+**gate:** mechanical pass · completion pass (existing AnalysisNotice / DrawerRecoveryAction spec cases unedited; drift counts at seed)
+**changed:** `analysis-steps.ts` gains `drawerAnalysisStepsView(analysis, now, canAct)` (built on `analysisStepsView`: same keys/labels/states; null when settled; uploading = floored percent only; processing reads "This fills in as soon as the analysis lands."; stopped step = `note ?? title` + class drawer body for actors, "Analysis stopped" + `DRAWER_NO_ACTION_BODY` otherwise), `STALLED_RETRY_COPY.drawerBody`, `DRAWER_PROCESSING_NOTE`, `DRAWER_NO_ACTION_TITLE`. `drawer-sections.tsx` gains `DrawerAnalysisSteps` (eyebrow + `<ol aria-label="Progress">` of 12px rows reusing `StepMark`; one `role="alert"`, `role="status"` when stalled) and a `stalled` prop on `DrawerRecoveryAction` ("Try again" → POST `/api/splitstep/jobs` `{ jobId }`). `vertical-steps.tsx` only exports `LABEL_INK`. Not mounted yet; `AnalysisNotice` stays until T26.
+**follow-ups:**
+
+1. `processed` keeps `STAGE_NOTE.processed` under its (later) stats step in the drawer, matching the page — drop it if the Drawer frames should show nothing there.
+2. For T25/T26: each drawer must keep a hydration-safe clock for the stall check, pass it as `now`, and feed the footer from the view's `failure` (`recovery`, `stalled`) — `drawerRecovery` still returns null for stalled rows.

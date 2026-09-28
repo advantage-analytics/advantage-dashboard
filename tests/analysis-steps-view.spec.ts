@@ -3,14 +3,19 @@ import { expect, test } from "@playwright/test";
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
 import {
   byClass,
+  DRAWER_NO_ACTION_BODY,
   WAIT_OR_ASK_VARIANTS,
 } from "@/components/dashboard/matches/analysis-failure-copy";
 import { UPLOADING_COPY } from "@/components/dashboard/matches/upload-progress-copy";
 import {
+  DRAWER_NO_ACTION_TITLE,
+  DRAWER_PROCESSING_NOTE,
   STAGE_NOTE,
   STALLED_RETRY_COPY,
   analysisStepsView,
+  drawerAnalysisStepsView,
   type AnalysisStepsView,
+  type DrawerAnalysisStepsView,
 } from "@/components/dashboard/matches/match-detail/analysis-steps";
 
 /**
@@ -402,5 +407,290 @@ test("every state draws the same four steps in the same order", () => {
       "analysis",
       "stats",
     ]);
+  }
+});
+
+// ── drawerAnalysisStepsView(): the peek drawers' compact projection ─────────
+
+const IN_FLIGHT_OR_FAILED: MatchAnalysis["status"][] = [
+  "uploading",
+  "uploaded",
+  "queued",
+  "processing",
+  "deriving",
+  "processed",
+  "failed",
+  "derivation_failed",
+];
+
+function drawerStopped(view: DrawerAnalysisStepsView | null) {
+  if (!view) throw new Error("no drawer view");
+  const stopped = view.steps.filter((s) => s.body?.kind === "failure");
+  expect(stopped).toHaveLength(1);
+  const [step] = stopped;
+  if (step.body?.kind !== "failure") throw new Error("unreachable");
+  expect(step.state).toBe("fail");
+  expect(view.failure).toEqual({
+    step: step.key,
+    recovery: step.body.recovery,
+    stalled: step.body.stalled,
+  });
+  return { step, body: step.body };
+}
+
+test("drawer: the same keys, labels and states as the page view, for every in-flight or failed status", () => {
+  for (const status of IN_FLIGHT_OR_FAILED) {
+    for (const updatedAt of [minutesAgo(1), minutesAgo(30)]) {
+      for (const canAct of [true, false]) {
+        const analysis: MatchAnalysis = { ...BASE, status, updatedAt };
+        const page = analysisStepsView(analysis, NOW);
+        const drawer = drawerAnalysisStepsView(analysis, NOW, canAct);
+        expect(drawer, status).not.toBeNull();
+        expect(
+          drawer!.steps.map(({ key, label, state }) => ({ key, label, state })),
+          status,
+        ).toEqual(
+          page.steps.map(({ key, label, state }) => ({ key, label, state })),
+        );
+      }
+    }
+  }
+});
+
+test("drawer: null for a status that is neither in flight nor failed", () => {
+  for (const status of ["completed", "imported", "timeline"] as const) {
+    expect(drawerAnalysisStepsView({ ...BASE, status }, NOW, true)).toBeNull();
+  }
+});
+
+test("drawer: uploading carries the floored percent as its value and no body", () => {
+  const view = drawerAnalysisStepsView(
+    {
+      ...BASE,
+      status: "uploading",
+      uploadPercent: 62.8,
+      startedAt: minutesAgo(5),
+    },
+    NOW,
+    true,
+  )!;
+  const video = view.steps[1];
+  expect(video).toEqual({
+    key: "video",
+    label: UPLOADING_COPY.steps.video,
+    state: "now",
+    value: "62%",
+  });
+  expect(view.steps.every((s) => s.body === undefined)).toBe(true);
+  expect(view.failure).toBeUndefined();
+});
+
+test("drawer: running steps read STAGE_NOTE, except processing's drawer line", () => {
+  const noteOf = (status: MatchAnalysis["status"]) =>
+    drawerAnalysisStepsView(
+      { ...BASE, status, updatedAt: minutesAgo(1) },
+      NOW,
+      true,
+    )!.steps.find((s) => s.body)?.body;
+
+  expect(noteOf("uploaded")).toEqual({
+    kind: "note",
+    text: STAGE_NOTE.uploaded,
+  });
+  expect(noteOf("queued")).toEqual({ kind: "note", text: STAGE_NOTE.queued });
+  expect(noteOf("deriving")).toEqual({
+    kind: "note",
+    text: STAGE_NOTE.deriving,
+  });
+  expect(noteOf("processing")).toEqual({
+    kind: "note",
+    text: "This fills in as soon as the analysis lands.",
+  });
+  expect(DRAWER_PROCESSING_NOTE).toBe(
+    "This fills in as soon as the analysis lands.",
+  );
+});
+
+test("drawer: a failed retry, can act — the note heads, then the class's drawer body", () => {
+  const note = "The video could not be downloaded.";
+  const withNote = drawerStopped(
+    drawerAnalysisStepsView(
+      { ...BASE, status: "failed", recovery: "retry", note },
+      NOW,
+      true,
+    ),
+  );
+  expect(withNote.step.key).toBe("analysis");
+  expect(withNote.body).toEqual({
+    kind: "failure",
+    headline: note,
+    body: byClass.retry.drawerBody,
+    recovery: "retry",
+    stalled: false,
+  });
+
+  const noNote = drawerStopped(
+    drawerAnalysisStepsView(
+      { ...BASE, status: "failed", recovery: "retry" },
+      NOW,
+      true,
+    ),
+  );
+  expect(noNote.body.headline).toBe(byClass.retry.title);
+  expect(noNote.body.body).toBe(byClass.retry.drawerBody);
+});
+
+test("drawer: every class, can act — note ?? title, and the drawer body", () => {
+  const cases = [
+    ["failed", "fix_recording", byClass.fix_recording, "analysis"],
+    ["failed", "upload_again", byClass.upload_again, "video"],
+    ["derivation_failed", "rederive", byClass.rederive, "stats"],
+    [
+      "derivation_failed",
+      "stats_unavailable",
+      byClass.stats_unavailable,
+      "stats",
+    ],
+  ] as const;
+  for (const [status, recovery, copy, key] of cases) {
+    const { step, body } = drawerStopped(
+      drawerAnalysisStepsView({ ...BASE, status, recovery }, NOW, true),
+    );
+    expect(step.key, recovery).toBe(key);
+    expect(body.headline, recovery).toBe(copy.title);
+    expect(body.body, recovery).toBe(copy.drawerBody);
+  }
+});
+
+test("drawer: wait_or_ask picks its variant from the error code", () => {
+  const { body } = drawerStopped(
+    drawerAnalysisStepsView(
+      {
+        ...BASE,
+        status: "failed",
+        recovery: "wait_or_ask",
+        errorCode: "NOT_ELIGIBLE",
+        attemptsUsed: 1,
+      },
+      NOW,
+      true,
+    ),
+  );
+  expect(body.headline).toBe(WAIT_OR_ASK_VARIANTS.permission.title);
+  expect(body.body).toBe(WAIT_OR_ASK_VARIANTS.permission.drawerBody);
+});
+
+test("drawer: a stalled retry reads the stalled title and the new drawer line", () => {
+  expect(STALLED_RETRY_COPY.drawerBody).toBe(
+    "Trying again costs nothing; nothing needs uploading again.",
+  );
+  const view = drawerAnalysisStepsView(
+    {
+      ...BASE,
+      status: "uploaded",
+      updatedAt: minutesAgo(20),
+      recovery: "retry",
+    },
+    NOW,
+    true,
+  );
+  const { step, body } = drawerStopped(view);
+  expect(step.key).toBe("analysis");
+  expect(body).toEqual({
+    kind: "failure",
+    headline: STALLED_RETRY_COPY.title,
+    body: STALLED_RETRY_COPY.drawerBody,
+    recovery: "retry",
+    stalled: true,
+  });
+  // No clock yet: not stalled, the hand-off still running.
+  const early = drawerAnalysisStepsView(
+    {
+      ...BASE,
+      status: "uploaded",
+      updatedAt: minutesAgo(20),
+      recovery: "retry",
+    },
+    null,
+    true,
+  )!;
+  expect(early.failure).toBeUndefined();
+  expect(early.steps[2].state).toBe("now");
+});
+
+test("drawer: a stalled wait_or_ask reads its variant's drawer body", () => {
+  const note = "You have used this month's analysis allowance.";
+  const { body } = drawerStopped(
+    drawerAnalysisStepsView(
+      {
+        ...BASE,
+        status: "uploaded",
+        updatedAt: minutesAgo(20),
+        recovery: "wait_or_ask",
+        errorCode: "QUOTA_EXCEEDED",
+        note,
+      },
+      NOW,
+      true,
+    ),
+  );
+  expect(body.headline).toBe(note);
+  expect(body.body).toBe(WAIT_OR_ASK_VARIANTS.allowance.drawerBody);
+  expect(body.stalled).toBe(true);
+});
+
+test("drawer: a viewer who cannot act reads 'Analysis stopped' and the details line, never the note", () => {
+  const note = "5 point(s) resolved no winner";
+  const cases: MatchAnalysis[] = [
+    { ...BASE, status: "failed", recovery: "retry", note },
+    { ...BASE, status: "failed", recovery: "fix_recording", note },
+    { ...BASE, status: "failed", recovery: "upload_again", note },
+    {
+      ...BASE,
+      status: "failed",
+      recovery: "wait_or_ask",
+      errorCode: "NOT_ELIGIBLE",
+      note,
+    },
+    { ...BASE, status: "derivation_failed", recovery: "rederive", note },
+    {
+      ...BASE,
+      status: "derivation_failed",
+      recovery: "stats_unavailable",
+      note,
+    },
+    {
+      ...BASE,
+      status: "uploaded",
+      updatedAt: minutesAgo(20),
+      recovery: "retry",
+      note,
+    },
+  ];
+  for (const analysis of cases) {
+    const view = drawerAnalysisStepsView(analysis, NOW, false);
+    const { body } = drawerStopped(view);
+    expect(DRAWER_NO_ACTION_TITLE).toBe("Analysis stopped");
+    expect(body.headline, analysis.recovery).toBe("Analysis stopped");
+    expect(body.body, analysis.recovery).toBe(DRAWER_NO_ACTION_BODY);
+    expect(JSON.stringify(view), analysis.recovery).not.toContain(note);
+  }
+});
+
+test("drawer: a raw failNote never reaches any label or body", () => {
+  const raw =
+    "Failed to fetch <Error><Code>AuthenticationFailed</Code></Error>";
+  for (const status of IN_FLIGHT_OR_FAILED) {
+    for (const updatedAt of [minutesAgo(1), minutesAgo(30)]) {
+      for (const canAct of [true, false]) {
+        const view = drawerAnalysisStepsView(
+          { ...BASE, status, failNote: raw, updatedAt },
+          NOW,
+          canAct,
+        );
+        expect(JSON.stringify(view)).not.toContain("Failed to fetch");
+        expect(JSON.stringify(view)).not.toContain("AuthenticationFailed");
+      }
+    }
   }
 });

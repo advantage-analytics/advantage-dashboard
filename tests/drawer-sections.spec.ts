@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
 
 import {
   DRAWER_NO_ACTION_BODY,
@@ -301,4 +302,267 @@ test("AnalysisNotice: an in-flight status still shows the placeholder line and n
     "Serve and pressure numbers appear here once analysis finishes.",
   );
   expect(html).not.toContain('role="alert"');
+});
+
+// ── DrawerAnalysisSteps: the compact stepper that replaces AnalysisNotice ───
+// Every AnalysisNotice case above, again, as the drawer's four steps — plus
+// the two states the notice never drew: a live upload and a stalled hand-off.
+
+const drawerParts = sections as unknown as {
+  DrawerAnalysisSteps: React.ComponentType<{
+    analysis: Record<string, unknown> | null | undefined;
+    now: number | null;
+    canAct: boolean;
+  }>;
+  DrawerRecoveryAction: (props: {
+    recovery: string | null | undefined;
+    jobId: string | null | undefined;
+    matchId: string;
+    variant: "primary" | "outline";
+    stalled?: boolean;
+  }) => React.ReactElement<{
+    label: string;
+    pendingLabel: string;
+    url: string;
+    init?: RequestInit;
+  }> | null;
+};
+
+const STEPS_NOW = Date.parse("2026-09-28T16:00:00Z");
+const stepsMinutesAgo = (m: number) =>
+  new Date(STEPS_NOW - m * 60_000).toISOString();
+
+function steps(
+  analysis: Record<string, unknown>,
+  canAct = true,
+  now: number | null = STEPS_NOW,
+): string {
+  return renderToStaticMarkup(
+    React.createElement(drawerParts.DrawerAnalysisSteps, {
+      analysis: { providerId: "splitstep", jobId: "job-1", ...analysis },
+      now,
+      canAct,
+    }),
+  );
+}
+
+function count(html: string, needle: string): number {
+  return html.split(needle).length - 1;
+}
+
+/** The text of the one `role=` element — the stopped step's headline + body. */
+function stoppedLines(html: string, role: "alert" | "status"): string[] {
+  expect(count(html, `role="${role}"`)).toBe(1);
+  const from = html.indexOf(`role="${role}"`);
+  const block = html.slice(from, html.indexOf("</div>", from));
+  return [...block.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/g)].map((m) =>
+    decode(m[1]),
+  );
+}
+
+function expectFrame(html: string) {
+  expect(html).toContain(">Analysis</span>");
+  expect(html).toContain('<ol class="flex flex-col" aria-label="Progress">');
+  expect(count(html, "<li")).toBe(4);
+  expect(html).toContain("text-[12px]");
+  expect(html).not.toContain("text-[13px]");
+  expect(html).not.toContain('role="progressbar"');
+}
+
+test("DrawerAnalysisSteps: stats_unavailable reads the shared derivation title/body in one alert", () => {
+  const html = steps({
+    status: "derivation_failed",
+    recovery: "stats_unavailable",
+    note: null,
+  });
+  expectFrame(html);
+  expect(stoppedLines(html, "alert")).toEqual([
+    byClass.stats_unavailable.title,
+    byClass.stats_unavailable.drawerBody,
+  ]);
+  expect(decode(html)).not.toContain("Retrying uses");
+  expect(decode(html)).not.toContain(DRAWER_NO_ACTION_BODY);
+});
+
+test("DrawerAnalysisSteps: retry for a viewer who can act heads with the note", () => {
+  const html = steps({ status: "failed", recovery: "retry", note: NOTE });
+  expectFrame(html);
+  expect(stoppedLines(html, "alert")).toEqual([NOTE, byClass.retry.drawerBody]);
+});
+
+test("DrawerAnalysisSteps: retry without a note falls back to the class title", () => {
+  const html = steps({ status: "failed", recovery: "retry", note: null });
+  expect(stoppedLines(html, "alert")).toEqual([
+    byClass.retry.title,
+    byClass.retry.drawerBody,
+  ]);
+});
+
+test("DrawerAnalysisSteps: a viewer who cannot act reads 'Analysis stopped' and the details line only", () => {
+  for (const recovery of [
+    "retry",
+    "fix_recording",
+    "upload_again",
+    "rederive",
+    "stats_unavailable",
+  ]) {
+    const html = steps(
+      {
+        status:
+          recovery === "stats_unavailable" || recovery === "rederive"
+            ? "derivation_failed"
+            : "failed",
+        recovery,
+        note: NOTE,
+      },
+      false,
+    );
+    const out = decode(html);
+    expect(stoppedLines(html, "alert"), recovery).toEqual([
+      "Analysis stopped",
+      DRAWER_NO_ACTION_BODY,
+    ]);
+    expect(out, recovery).not.toContain(NOTE);
+    expect(out, recovery).not.toContain("Retrying");
+  }
+});
+
+test("DrawerAnalysisSteps: fix_recording keeps the vendor's note as headline and never offers a retry", () => {
+  const note = "The video must be at least 29.9 fps.";
+  const html = steps({ status: "failed", recovery: "fix_recording", note });
+  expect(stoppedLines(html, "alert")).toEqual([
+    note,
+    byClass.fix_recording.drawerBody,
+  ]);
+  expect(decode(html)).not.toContain("Retrying uses");
+});
+
+test("DrawerAnalysisSteps: wait_or_ask picks its variant from the error code", () => {
+  const html = steps({
+    status: "failed",
+    recovery: "wait_or_ask",
+    note: null,
+    errorCode: "NOT_ELIGIBLE",
+    attemptsUsed: 1,
+  });
+  expect(stoppedLines(html, "alert")).toEqual([
+    WAIT_OR_ASK_VARIANTS.permission.title,
+    WAIT_OR_ASK_VARIANTS.permission.drawerBody,
+  ]);
+  expect(decode(html)).not.toContain(WAIT_OR_ASK_VARIANTS.allowance.title);
+});
+
+test("DrawerAnalysisSteps: upload_again with a manager — the video step stops, the footer links to the wizard, nothing says Retrying", () => {
+  const matchId = "match-123";
+  const html = steps({
+    status: "failed",
+    recovery: "upload_again",
+    note: null,
+  });
+  const footer = action({ recovery: "upload_again", matchId });
+
+  expect(stoppedLines(html, "alert")).toEqual([
+    byClass.upload_again.title,
+    byClass.upload_again.drawerBody,
+  ]);
+  expect(footer).toContain(`href="${addVideoHref(matchId)}"`);
+  expect(decode(html) + footer).not.toContain("Retrying");
+});
+
+test("DrawerAnalysisSteps: an in-flight status draws its note and no alert", () => {
+  const html = steps({ status: "processing", recovery: null, note: null });
+  expectFrame(html);
+  expect(html).not.toContain('role="alert"');
+  expect(decode(html)).toContain(
+    "This fills in as soon as the analysis lands.",
+  );
+  // The placeholder AnalysisNotice drew is deliberately not carried over.
+  expect(decode(html)).not.toContain("Serve and pressure numbers");
+});
+
+test("DrawerAnalysisSteps: uploading at 62% shows the value only — no bar, no notes", () => {
+  const html = steps({
+    status: "uploading",
+    uploadPercent: 62.7,
+    startedAt: stepsMinutesAgo(4),
+  });
+  expectFrame(html);
+  expect(html).toContain(">62%</span>");
+  expect(html).not.toMatch(/<p[ >]/);
+  expect(html).not.toContain('role="alert"');
+});
+
+test("DrawerAnalysisSteps: a stalled retry hands off in a status, not an alert", () => {
+  const html = steps({
+    status: "uploaded",
+    updatedAt: stepsMinutesAgo(20),
+    recovery: "retry",
+  });
+  expectFrame(html);
+  expect(html).not.toContain('role="alert"');
+  expect(stoppedLines(html, "status")).toEqual([
+    "This hasn't been sent for analysis yet",
+    "Trying again costs nothing; nothing needs uploading again.",
+  ]);
+});
+
+test("DrawerAnalysisSteps: a settled match draws nothing", () => {
+  expect(steps({ status: "completed" })).toBe("");
+  expect(
+    renderToStaticMarkup(
+      React.createElement(drawerParts.DrawerAnalysisSteps, {
+        analysis: null,
+        now: STEPS_NOW,
+        canAct: true,
+      }),
+    ),
+  ).toBe("");
+});
+
+test("DrawerAnalysisSteps: built on StepMark, never the progress track, no new rounded-full", () => {
+  const source = readFileSync(
+    "src/components/dashboard/matches/drawer-sections.tsx",
+    "utf8",
+  );
+  expect(source).toMatch(
+    /import \{[^}]*\bStepMark\b[^}]*\} from "@\/components\/dashboard\/shared\/vertical-steps"/,
+  );
+  expect(source).not.toContain("AnalysisProgressTrack");
+  expect(source).not.toContain("rounded-full");
+});
+
+test("DrawerRecoveryAction: a stalled retry is 'Try again', POSTing { jobId } to /api/splitstep/jobs", () => {
+  const html = action({ recovery: "retry", stalled: true });
+  expect(html).toMatch(/<button[^>]*>Try again<\/button>/);
+  expect(html).not.toContain(">Retry<");
+
+  const element = drawerParts.DrawerRecoveryAction({
+    recovery: "retry",
+    jobId: "job-1",
+    matchId: "match-1",
+    variant: "primary",
+    stalled: true,
+  });
+  expect(element?.props.pendingLabel).toBe("Sending…");
+  expect(element?.props.url).toBe("/api/splitstep/jobs");
+  expect(element?.props.init?.method).toBe("POST");
+  expect(element?.props.init?.headers).toEqual({
+    "Content-Type": "application/json",
+  });
+  expect(JSON.parse(String(element?.props.init?.body))).toEqual({
+    jobId: "job-1",
+  });
+
+  // Not stalled: the resubmit route, as before.
+  const retry = drawerParts.DrawerRecoveryAction({
+    recovery: "retry",
+    jobId: "job-1",
+    matchId: "match-1",
+    variant: "primary",
+  });
+  expect(retry?.props.label).toBe("Retry");
+  expect(retry?.props.url).toBe("/api/splitstep/jobs/job-1/resubmit");
+  // Stalled changes nothing for a class without a retry.
+  expect(action({ recovery: "wait_or_ask", stalled: true })).toBe("");
+  expect(action({ recovery: "retry", jobId: null, stalled: true })).toBe("");
 });

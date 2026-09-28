@@ -325,7 +325,7 @@ ready).
 
 ## T24 · Add the compact drawer Analysis steps and the stalled "Try again" action
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T22
 - **files:** src/components/dashboard/matches/match-detail/analysis-steps.ts, src/components/dashboard/matches/drawer-sections.tsx (new `DrawerAnalysisSteps`, `DrawerRecoveryAction`), tests/analysis-steps-view.spec.ts, tests/drawer-sections.spec.ts (guess)

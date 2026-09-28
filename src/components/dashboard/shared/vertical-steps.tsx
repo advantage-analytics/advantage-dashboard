@@ -16,8 +16,12 @@ import { cn } from "@/lib/utils";
  */
 export type StepState = "done" | "now" | "later" | "fail";
 
-/** Inline colour: DS type classes are unlayered and beat Tailwind utilities. */
-const LABEL_INK: Record<StepState, string> = {
+/**
+ * Inline colour: DS type classes are unlayered and beat Tailwind utilities.
+ * Exported so the drawers' compact rows (`DrawerAnalysisSteps`) ink their
+ * labels from the same table.
+ */
+export const LABEL_INK: Record<StepState, string> = {
   done: "var(--ink-600)",
   now: "var(--ink-900)",
   later: "var(--ink-400)",
