@@ -43,6 +43,7 @@ import {
   type RecordingSource,
 } from "./answers";
 import { guardianClassYears } from "./guardian-options";
+import { previousStep, type Step } from "./steps";
 
 /**
  * The first run — Onboarding & Team Setup screens 1.2 through 1.5 and 1.7,
@@ -54,6 +55,12 @@ import { guardianClassYears } from "./guardian-options";
  * on 1.4, 1.5 and 1.7 — each stores null for its own question and nothing
  * else; the guardian step has none, because consent is the one answer that
  * can't be deferred.
+ *
+ * Every step after the first also has a Back, because the step lives in
+ * component state rather than the URL and the browser's own Back leaves the
+ * page. Back only turns the page (`previousStep` in `steps.ts`) and clears the
+ * error line — every answer already given survives, so the step it returns to
+ * re-renders with its choice still selected — and it never writes.
  *
  * Step 1 (1.2) asks what to call the person. Both fields start empty even when
  * Google or Apple handed us a display name — the OAuth profile is often a
@@ -84,15 +91,6 @@ import { guardianClassYears } from "./guardian-options";
 
 type Persona = "play" | "coach" | "junior";
 type CollegeAnswer = "yes" | "no" | "not_yet";
-
-/**
- * 1 = name (1.2) · 2 = persona (1.3) · 3 = college question (1.4) ·
- * 4 = guardian step (3.1) · 5 = recording source (1.5) · 6 = heard about (1.7)
- *
- * 4 keeps its number so the guardian branch is untouched; the player's run is
- * 1 → 2 → 3 → 5 → 6.
- */
-type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
 const PERSONAS: {
   id: Persona;
@@ -246,6 +244,27 @@ export function OnboardingFlow() {
     setError(null);
     setStep(2);
   };
+
+  // Page-turn only: no answer is cleared and nothing is written, so this can
+  // never reach `finishOnboarding` or `finishGuardianOnboarding`.
+  const goBack = () => {
+    const previous = previousStep(step);
+    if (previous === null) return;
+    setError(null);
+    setStep(previous);
+  };
+
+  /** The quiet Back link every step after the first carries, before Skip. */
+  const backButton = (
+    <button
+      type="button"
+      disabled={isPending}
+      onClick={goBack}
+      className={CLAIM_LINK}
+    >
+      Back
+    </button>
+  );
 
   const continueFromPersona = () => {
     if (!persona) return;
@@ -497,6 +516,7 @@ export function OnboardingFlow() {
                 >
                   Continue
                 </button>
+                {backButton}
                 <span className={CLAIM_MICRO}>
                   Coaches and guardians take a different next step.
                 </span>
@@ -561,6 +581,7 @@ export function OnboardingFlow() {
                     the step before still counts, only this question goes
                     unanswered (`college` stays null, which resolves to
                     `solo` when 1.7 submits). */}
+                {backButton}
                 <button
                   type="button"
                   disabled={isPending}
@@ -609,6 +630,7 @@ export function OnboardingFlow() {
                 >
                   Continue
                 </button>
+                {backButton}
                 {/* Skip stores null — the wizard then opens with no source
                     preselected, exactly as it does today. */}
                 <button
@@ -699,6 +721,7 @@ export function OnboardingFlow() {
                       label has to branch too, or it lies on the college path. */}
                   {college === "yes" ? "Find my program" : "Go to my dashboard"}
                 </button>
+                {backButton}
                 <button
                   type="button"
                   disabled={isPending}
@@ -818,9 +841,10 @@ export function OnboardingFlow() {
                 </div>
               </div>
 
-              {/* Alone in its row — 3.1 gives Continue no companion line and
-                  no Skip: consent has no soft exit. */}
-              <div>
+              {/* 3.1 gives Continue no companion line and no Skip — consent
+                  has no soft exit. Back is the one thing beside it: a parent
+                  who tapped the wrong persona returns to 1.3 to fix it. */}
+              <ClaimActions gap={16}>
                 <button
                   type="button"
                   disabled={!guardianReady || isPending}
@@ -829,7 +853,8 @@ export function OnboardingFlow() {
                 >
                   Continue
                 </button>
-              </div>
+                {backButton}
+              </ClaimActions>
             </>
           )}
 

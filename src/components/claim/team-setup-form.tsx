@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { continueToPilotTerms } from "@/app/claim/team/actions";
+import {
+  askToJoinExistingTeam,
+  continueToPilotTerms,
+} from "@/app/claim/team/actions";
 import { CLAIM_ROLES } from "@/lib/services/programs/claim-roles";
+import type { CustomProgramSearchResult } from "@/lib/data/programs-server";
 import type { CustomOrgType } from "@/lib/services/programs/create-actions";
 import { OWNER_NAME_MAX } from "@/lib/services/programs/custom-org";
 import {
@@ -12,6 +16,7 @@ import {
   CLAIM_LABEL,
   ClaimSelect,
 } from "./claim-shell";
+import { ExistingTeamMatches, TYPE_LABEL } from "./existing-team-matches";
 
 /**
  * Onboarding & Team Setup, screen 7.2 — you name it, you own it, no
@@ -30,32 +35,8 @@ import {
  * would mean inventing a destination the schema doesn't have.
  */
 
-/** The eyebrow + title reflect the org type chosen on 7.1. */
-const TYPE_LABEL: Record<
-  CustomOrgType,
-  { eyebrow: string; title: string; placeholder: string }
-> = {
-  club: {
-    eyebrow: "Tennis club",
-    title: "Set up your club team",
-    placeholder: "Riverside Tennis Club — Juniors",
-  },
-  high_school: {
-    eyebrow: "High school",
-    title: "Set up your high school team",
-    placeholder: "Riverside High — Varsity",
-  },
-  academy: {
-    eyebrow: "Academy",
-    title: "Set up your academy team",
-    placeholder: "Baseline Academy — Performance Group",
-  },
-  other: {
-    eyebrow: "Something else",
-    title: "Set up your team",
-    placeholder: "Your team's name",
-  },
-};
+/** Long enough to stop typing, short enough not to feel laggy. */
+const DEBOUNCE_MS = 180;
 
 function reasonMessage(reason: string): string {
   switch (reason) {
@@ -81,6 +62,24 @@ function reasonMessage(reason: string): string {
   }
 }
 
+/** The refusals `askToJoinExistingTeam` can return; success never returns. */
+function askReasonMessage(reason: string): string {
+  switch (reason) {
+    case "already-member":
+      return "You're already on that team — switch to it from your workspace menu.";
+    case "already-requested":
+      return "You've already asked to join that team. Its owner has your request.";
+    case "college":
+      return "That's a college program. Find it from the college path to ask for access.";
+    case "not-found":
+      return "That team isn't on Advantage any more. Try the search again.";
+    case "no-session":
+      return "Your session expired. Sign in again to ask to join.";
+    default:
+      return "We couldn't send that request. Try again.";
+  }
+}
+
 export function TeamSetupForm({
   orgType,
   defaultOwnerName,
@@ -97,6 +96,44 @@ export function TeamSetupForm({
   const [role, setRole] = useState<string>(CLAIM_ROLES[0].value);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // The row whose "Ask to join" is in flight. Stays set through a successful
+  // ask, because success is a server redirect and the button should not come
+  // back to life while the navigation is under way.
+  const [askingId, setAskingId] = useState<string | null>(null);
+  const [, startAsk] = useTransition();
+
+  // Existing custom teams with a name like the one being typed. The debounce
+  // and the latest-request guard are `ProgramSearch`'s, so a slow early
+  // keystroke cannot overwrite a faster later one.
+  const [matches, setMatches] = useState<CustomProgramSearchResult[]>([]);
+  const latest = useRef(0);
+  const query = teamName.trim();
+  // Derived during render: below two characters there is nothing to show, and
+  // no request is made.
+  const active = query.length >= 2;
+  const visibleMatches = active ? matches : [];
+
+  useEffect(() => {
+    if (!active) return;
+
+    const id = ++latest.current;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/programs/custom-search?q=${encodeURIComponent(query)}&type=${encodeURIComponent(orgType)}`,
+        );
+        const body = (await res.json()) as {
+          results: CustomProgramSearchResult[];
+        };
+        if (id !== latest.current) return;
+        setMatches(body.results ?? []);
+      } catch {
+        if (id === latest.current) setMatches([]);
+      }
+    }, DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [query, active, orgType]);
 
   const canSubmit = teamName.trim().length >= 2 && ownerName.trim().length > 0;
 
@@ -113,6 +150,20 @@ export function TeamSetupForm({
         ownerName,
       });
       if (result && !result.ok) setError(reasonMessage(result.reason));
+    });
+  }
+
+  function askToJoin(programId: string) {
+    setError(null);
+    setAskingId(programId);
+    startAsk(async () => {
+      // The role is the 7.2 answer, validated against the allowlist on the
+      // server; the coach's address and name are the session's, never sent.
+      const result = await askToJoinExistingTeam({ programId, role });
+      if (result && !result.ok) {
+        setError(askReasonMessage(result.reason));
+        setAskingId(null);
+      }
     });
   }
 
@@ -138,6 +189,12 @@ export function TeamSetupForm({
             maxLength={120}
             autoComplete="off"
             className={CLAIM_FIELD}
+          />
+          <ExistingTeamMatches
+            rows={visibleMatches}
+            term={query}
+            onAskToJoin={askToJoin}
+            pendingProgramId={askingId}
           />
         </div>
 
@@ -183,7 +240,7 @@ export function TeamSetupForm({
         <div className="pt-1">
           <button
             type="submit"
-            disabled={!canSubmit || pending}
+            disabled={!canSubmit || pending || askingId !== null}
             className={CLAIM_BUTTON}
           >
             {pending ? (
