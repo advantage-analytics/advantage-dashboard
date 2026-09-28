@@ -264,21 +264,35 @@ test("the jump clamps to the duration the step was told, not the media's", async
   await expect.poll(() => playhead(page)).toBeCloseTo(1, 1);
 });
 
-test("the arrow keys jump the same ten seconds, and Shift jumps a minute", async ({
+test("the arrow keys jump one second, and Shift jumps ten", async ({
   page,
 }) => {
   await open(page);
   await stepRoot(page).focus();
 
+  // A plain arrow from the top of the 2s fixture must land near one second in
+  // — NOT clamped at the end — proving the plain step is 1s, not 10s.
   await page.keyboard.press("ArrowRight");
-  await expect.poll(() => playhead(page)).toBeGreaterThan(1.5);
+  await expect.poll(() => playhead(page)).toBeCloseTo(1, 1);
 
   await page.keyboard.press("ArrowLeft");
   await expect.poll(() => playhead(page)).toBeLessThan(0.1);
 
-  // A minute is past the end of anything this short; it must clamp, not fail.
+  // Ten seconds is past the end of anything this short; it must clamp, not fail.
   await page.keyboard.press("Shift+ArrowRight");
   await expect.poll(() => playhead(page)).toBeGreaterThan(1.5);
+});
+
+test("the one-second jump buttons move the playhead by a second", async ({
+  page,
+}) => {
+  await open(page);
+
+  await page.getByRole("button", { name: "Forward one second" }).click();
+  await expect.poll(() => playhead(page)).toBeCloseTo(1, 1);
+
+  await page.getByRole("button", { name: "Back one second" }).click();
+  await expect.poll(() => playhead(page)).toBeLessThan(0.1);
 });
 
 /* -------------------------------------------------------------------------

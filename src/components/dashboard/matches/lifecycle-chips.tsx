@@ -1,9 +1,9 @@
-export type LifecycleValue = "all" | "new" | "in-progress" | "estimates";
+export type LifecycleValue = "all" | "new" | "in-progress";
 
 /**
- * All · New · In progress · Estimates — the view switcher over one list.
+ * All · New · In progress — the view switcher over one list.
  *
- * Status pills, not filter chips: a fixed set of 3–4 mutually exclusive views
+ * Status pills, not filter chips: a fixed set of mutually exclusive views
  * of the same rows (Updated Design System 19f, applied on Matches in Platform
  * Audit Pb2). They carry no counts and no dots — the unread signal already
  * lives in the tray dot and the row's own New pill, so a third copy is noise;
@@ -11,10 +11,6 @@ export type LifecycleValue = "all" | "new" | "in-progress" | "estimates";
  *
  * 26px pill, hairline border; the active one takes border-medium +
  * surface-subtle + ink-900 at weight 500.
- *
- * "Estimates" is the low-confidence view. No analysis state carries that
- * marker yet (Phase 2 derivation labels stats it cannot defend), so the view
- * is empty until one does — see `isEstimate` in matches-page-content.tsx.
  */
 export function LifecycleChips({
   active,
@@ -27,7 +23,6 @@ export function LifecycleChips({
     { value: "all", label: "All" },
     { value: "new", label: "New" },
     { value: "in-progress", label: "In progress" },
-    { value: "estimates", label: "Estimates" },
   ];
 
   return (

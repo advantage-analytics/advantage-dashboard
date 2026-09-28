@@ -145,9 +145,12 @@ the work lands correct and gets stashed anyway.
 Sounding concrete is not the test — the test is whether the evidence is _in
 the diff_. When a change genuinely needs eyes on a screen, name what the diff
 must contain instead: a Playwright spec that reaches it, a committed fixture,
-a test asserting the rendered markup. Or leave it off the list and look
-yourself once the task lands. A check nobody can carry out is not extra
-rigour; it is a gate that fires on correct work.
+a test asserting the rendered markup. Or leave it off the list and give the
+task a `- **routes:**` line naming the path(s) to open — `/pr-check` Stage 3b
+hands those to `ui-verifier`, which looks at the real page in a browser once
+the branch is done ([queue-format](reference/queue-format.md)). That is where
+"looks right on screen" is checked; a `done when:` line nobody can carry out
+is not extra rigour, it is a gate that fires on correct work.
 
 **Refusal.** If the intent cannot be made observable, do not invent criteria.
 Say what is missing, ask **exactly one** clarifying question, and stop without

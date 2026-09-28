@@ -138,6 +138,8 @@ export function uploadWizardHarness(
   /** Every draft the hook asked `saveMatchDraft` to write, in order. */
   const draftSaves: { id: string }[] = [];
   const draftDeletes: string[] = [];
+  /** Every matchId the hook asked `deleteMatchDraftsForMatch` to sweep. */
+  const draftDeletesForMatch: string[] = [];
   const parses = new Map<string, ReturnType<typeof deferred<any>>>();
   const checks = new Map<string, ReturnType<typeof deferred<any>>>();
   const apiChecks = new Map<string, ReturnType<typeof deferred<any>>>();
@@ -368,6 +370,9 @@ export function uploadWizardHarness(
       deleteMatchDraft: async (id: string) => {
         draftDeletes.push(id);
       },
+      deleteMatchDraftsForMatch: async (matchId: string) => {
+        draftDeletesForMatch.push(matchId);
+      },
     },
     // Pure: the rule a draft's match is reused by (T20).
     "@/lib/wizard/draft-target": draftTarget,
@@ -495,6 +500,7 @@ export function uploadWizardHarness(
     winnerCalls,
     draftSaves,
     draftDeletes,
+    draftDeletesForMatch,
     checks,
     apiChecks,
     parses,

@@ -42,6 +42,7 @@ markers is hand-written — edit it as things move.
 | `/claim/review` | [`src/app/claim/review/page.tsx`](src/app/claim/review/page.tsx) |
 | `/claim/team/about` | [`src/app/claim/team/about/page.tsx`](src/app/claim/team/about/page.tsx) |
 | `/claim/team` | [`src/app/claim/team/page.tsx`](src/app/claim/team/page.tsx) |
+| `/claim/team/requested` | [`src/app/claim/team/requested/page.tsx`](src/app/claim/team/requested/page.tsx) |
 | `/claim/team/setup` | [`src/app/claim/team/setup/page.tsx`](src/app/claim/team/setup/page.tsx) |
 | `/claim/team/terms` | [`src/app/claim/team/terms/page.tsx`](src/app/claim/team/terms/page.tsx) |
 | `/claim/team/type` | [`src/app/claim/team/type/page.tsx`](src/app/claim/team/type/page.tsx) |

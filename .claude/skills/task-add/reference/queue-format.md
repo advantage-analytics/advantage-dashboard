@@ -121,12 +121,24 @@ exact — `task-next` parses them:
 - **model:** sonnet
 - **needs:** <T-ids that must finish first, or omit the line>
 - **files:** <best guess>
+- **routes:** <paths /pr-check's eyes-on stage should open, or omit the line>
 - **done when:**
   - [ ] <observable criterion>
   - [ ] <observable criterion>
   - [ ] <observable criterion>
 - **notes:** <context worth keeping, or omit the line>
 ```
+
+## `routes:` (optional)
+
+A `- **routes:**` line names the URL paths a human would open to see the
+task's effect — `/dashboard/matches/[matchId]`, `/dashboard/team/roster`.
+Nothing at the per-task gate reads it: `task-completion-reviewer` judges the
+diff alone. `/pr-check` Stage 3b collects these lines across the range and
+hands them to `ui-verifier`, which opens each one in a real browser. It is
+where a "check it on screen" criterion goes instead of `done when:`, where it
+would block correct work (see `task-add`'s drafting rules). `check.sh lint`
+ignores the line.
 
 ## Id numbering
 

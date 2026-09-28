@@ -10,7 +10,8 @@ import * as nextWebpack from "next/dist/compiled/webpack/webpack";
  * (`foldDrafts`, `MatchesPageContent`), on the harness in
  * `fixtures/matches-drafts-harness.tsx`: one scored match `m-scored` with a
  * video draft `d-folded` targeting it, an older `m-plain`, and a standalone
- * draft `d-new`.
+ * draft `d-new`. `?job=1` gives `m-scored` a video job, which retires
+ * `d-folded`; `?manual=1` gives it a score-only analysis, which does not.
  */
 
 const webpack = (
@@ -243,4 +244,41 @@ test("?draft= naming a folded draft lands on the match it fills", async ({
   await page.keyboard.press("ArrowUp");
   await expect(row(page, "m-scored")).toHaveAttribute("aria-current", "true");
   expect(await page.evaluate(() => location.search)).toBe("?match=m-scored");
+});
+
+test("a draft whose match already has a video job shows nowhere", async ({
+  page,
+}) => {
+  await open(page, "?job=1");
+
+  // Neither folded onto the match nor listed on its own.
+  await expect(
+    row(page, "m-scored").getByText("Draft", { exact: true }),
+  ).toHaveCount(0);
+  await expect(row(page, "d-folded")).toHaveCount(0);
+  await expect(row(page, "d-new")).toHaveCount(1);
+
+  await row(page, "m-scored").click();
+  const panel = drawer(page);
+  await expect(panel).toBeVisible();
+  await expect(
+    panel.getByRole("link", { name: "Continue upload" }),
+  ).toHaveCount(0);
+  const view = panel.getByRole("link", { name: "View match", exact: true });
+  await expect(view).toHaveAttribute("href", "/dashboard/matches/m-scored");
+  await expect(view).toHaveClass(/bg-\[var\(--blue\)\]/);
+});
+
+test("a score-only match (manual analysis, no job) still folds its draft", async ({
+  page,
+}) => {
+  await open(page, "?manual=1");
+  await expect(
+    row(page, "m-scored").getByText("Draft", { exact: true }),
+  ).toHaveCount(1);
+  await expect(row(page, "d-folded")).toHaveCount(0);
+  await row(page, "m-scored").click();
+  await expect(
+    drawer(page).getByRole("link", { name: "Continue upload" }),
+  ).toHaveAttribute("href", "/dashboard/matches/new?draft=d-folded");
 });
