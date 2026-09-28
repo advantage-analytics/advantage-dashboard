@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Refuse to resubmit an `invalid_input` failure
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/services/splitstep/resubmit-job.ts (parent select ~line 290, refusal after the `not_failed` check ~line 322, `ResubmitRefusalReason` ~line 126), src/app/api/splitstep/jobs/[jobId]/resubmit/route.ts (`REFUSAL_STATUS`, ~line 36), tests/resubmit-authorization.spec.ts (extend — `parentJob()` fixture ~line 101, pattern: the "not failed, or has no video" test ~line 684)
 - **done when:**

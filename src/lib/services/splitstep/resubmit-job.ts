@@ -126,6 +126,13 @@ export function isDownloadFailure(
 export type ResubmitRefusalReason =
   | "not_found"
   | "not_failed"
+  /**
+   * The parent's `error_category` is `invalid_input` — the vendor rejected
+   * the file itself (frame rate, resolution, etc). Retrying sends the
+   * identical blob, so it cannot succeed; the fix is a new recording, not a
+   * retry.
+   */
+  | "input_rejected"
   | "in_flight_duplicate"
   | "attempt_ceiling"
   | "already_auto_resubmitted"
@@ -243,6 +250,7 @@ interface ParentJob {
   match_id: string;
   created_by: string;
   status: string;
+  error_category: string | null;
   video_object_key: string | null;
   start_time_seconds: number | null;
   end_time_seconds: number | null;
@@ -293,7 +301,7 @@ export async function resubmitJob(params: {
   const { data: parentRow, error: parentError } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, created_by, status, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id",
+      "id, match_id, created_by, status, error_category, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id",
     )
     .eq("id", jobId)
     .maybeSingle();
@@ -325,6 +333,20 @@ export async function resubmitJob(params: {
       ok: false,
       reason: "not_failed",
       message: `Only a failed analysis can be retried; this one is ${parent.status}.`,
+    };
+  }
+
+  if (parent.error_category === "invalid_input") {
+    // The vendor rejected the file itself — a frame-rate, resolution, or
+    // similar recording defect. Resubmitting sends the identical blob, so it
+    // cannot succeed and would only spend quota. Distinct from the
+    // isDownloadFailure() auto-retry class below: this refuses before that
+    // class is even considered.
+    return {
+      ok: false,
+      reason: "input_rejected",
+      message:
+        "This video didn't meet one of the recording requirements, so retrying it would stop the same way. Upload a new recording instead.",
     };
   }
 

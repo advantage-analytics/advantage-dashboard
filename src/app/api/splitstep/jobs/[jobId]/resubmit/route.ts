@@ -36,6 +36,7 @@ const LOG = "[splitstep-resubmit-route]";
 const REFUSAL_STATUS: Record<ResubmitRefusalReason, number> = {
   not_found: 404,
   not_failed: 409,
+  input_rejected: 409,
   in_flight_duplicate: 409,
   attempt_ceiling: 409,
   already_auto_resubmitted: 409,
