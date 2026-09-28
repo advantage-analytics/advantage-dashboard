@@ -15,7 +15,11 @@ import {
   X,
 } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
-import { isAnalysisFailed, isInFlight } from "@/lib/data/match-analysis";
+import {
+  canRetryAnalysis,
+  isAnalysisFailed,
+  isInFlight,
+} from "@/lib/data/match-analysis";
 import { createClient } from "@/lib/supabase/client";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
@@ -143,10 +147,15 @@ export function MatchDrawer({
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
   const title = `${drawerSideName(match.player1.name)} vs ${drawerSideName(match.player2.name)}`;
+  // canRetryAnalysis owns the shared rule (failed vendor job, still has a job
+  // to resubmit, not an input rejection); this drawer's own access-control
+  // clause is canManage.
   const canRetry =
-    status === "failed" &&
-    Boolean(match.analysis?.jobId) &&
-    match.canManage !== false;
+    canRetryAnalysis({
+      status,
+      jobId: match.analysis?.jobId,
+      inputRejected: match.analysis?.inputRejected,
+    }) && match.canManage !== false;
   // No numbers while a match is still being worked on or has failed: the
   // score and snapshot would draw zeroes that read as "no serves".
   const settled = !inFlight && !failed;
@@ -253,6 +262,7 @@ export function MatchDrawer({
           status={status}
           failNote={match.analysis?.failNote}
           canRetry={canRetry}
+          inputRejected={match.analysis?.inputRejected}
         />
 
         {settled && snapshot && <SnapshotSection snapshot={snapshot} />}

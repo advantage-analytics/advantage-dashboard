@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
   scopePoints,
   useSetScope,
@@ -32,6 +33,10 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * every other point-derived card on this view makes (head-to-head-card.tsx
  * makes the identical `useSetScope()` / `scopePoints()` read). `useSetScope`
  * currently always answers the whole match.
+ *
+ * With a playable video, a click while a timed point is hovered opens that
+ * point in the Video tab (`actions.watchPoint`) — hovering alone never moves
+ * the video. Without one the markup is exactly the read-only chart.
  */
 
 const CHART_W = 1000;
@@ -96,6 +101,7 @@ function detectBreakIndices(points: MatchPoint[]): number[] {
 
 export function PerformanceTrackerChart() {
   const { points } = useMatchData();
+  const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
   const { activeSet } = useSetScope();
   const shouldReduceMotion = useReducedMotion();
@@ -280,6 +286,17 @@ export function PerformanceTrackerChart() {
       : `point ${hovered.pointNumber}`
     : "";
 
+  // The hovered point opens in the Video tab only when there is a video and
+  // the point carries a time to seek to — the same test `viz-focused.tsx`
+  // makes before offering its Watch point action.
+  const watchId =
+    meta.hasPlayableVideo &&
+    hovered &&
+    hovered.videoTime !== null &&
+    Number.isFinite(hovered.videoTime)
+      ? hovered.id
+      : null;
+
   const lineTransition = shouldReduceMotion
     ? { duration: 0 }
     : { duration: 0.9, ease: EASE_CHART };
@@ -426,6 +443,8 @@ export function PerformanceTrackerChart() {
             width={CHART_W}
             height={CHART_H}
             fill="transparent"
+            className={watchId ? "cursor-pointer" : undefined}
+            onClick={watchId ? () => actions.watchPoint(watchId) : undefined}
             onMouseMove={(e) => selectFromClientX(e.clientX)}
             onMouseLeave={() => setHoverIndex(null)}
           />
@@ -463,6 +482,11 @@ export function PerformanceTrackerChart() {
             <span className="mono tabular pt-px text-[10px] text-white/[0.64]">
               {monoLine}
             </span>
+            {watchId && (
+              <span className="text-[10px] text-white/[0.64]">
+                Click to watch in Video
+              </span>
+            )}
           </div>
         )}
       </div>

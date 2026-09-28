@@ -4,9 +4,12 @@ import {
   DEFAULT_FILM_FILTERS,
   FILM_FILTER_SECTIONS,
   FILM_STANDALONE_KEYS,
+  applyFilmFilters,
   countFilmOption,
   cutName,
+  describeFilmCut,
   filmFiltersEqual,
+  hasActiveFilmFilters,
   parseCut,
   serializeCut,
 } from "@/components/dashboard/matches/match-detail/film/filters/types";
@@ -130,4 +133,67 @@ test("advanced-only filters serialize to neither cut nor serve", () => {
     set: 2,
   };
   expect(serializeCut(advanced, "tab=film")).toBe("tab=film");
+});
+
+/* ── Rally length: the bounded range ──────────────────────────────────── */
+
+const rallies = [0, 1, 4, 5, 8, 9, 14].map((n) =>
+  pt({ id: `r${n}`, rallyLength: n }),
+);
+const rallyIds = (patch: Partial<typeof DEFAULT_FILM_FILTERS>) =>
+  applyFilmFilters(rallies, { ...DEFAULT_FILM_FILTERS, ...patch }, true).map(
+    (p) => p.id,
+  );
+
+test("rallyMin and rallyMax make the card's three bands, disjoint", () => {
+  const short = rallyIds({ rallyMin: 1, rallyMax: 4 });
+  const medium = rallyIds({ rallyMin: 5, rallyMax: 8 });
+  const long = rallyIds({ rallyMin: 9 });
+  expect(short).toEqual(["r1", "r4"]);
+  expect(medium).toEqual(["r5", "r8"]);
+  expect(long).toEqual(["r9", "r14"]);
+
+  // Together they cover every point with a shot count, once each; the
+  // unrecorded 0 is in none of them.
+  const all = [...short, ...medium, ...long];
+  expect(new Set(all).size).toBe(all.length);
+  expect(all.sort()).toEqual(
+    rallies
+      .filter((p) => p.rallyLength > 0)
+      .map((p) => p.id)
+      .sort(),
+  );
+});
+
+test("a max alone still drops rallies with no shot count", () => {
+  expect(rallyIds({ rallyMax: 4 })).toEqual(["r1", "r4"]);
+  expect(rallyIds({})).toContain("r0");
+});
+
+test("rallyMax is an active, compared and described axis", () => {
+  const bounded = { ...DEFAULT_FILM_FILTERS, rallyMax: 4 };
+  expect(hasActiveFilmFilters(bounded)).toBe(true);
+  expect(filmFiltersEqual(bounded, DEFAULT_FILM_FILTERS)).toBe(false);
+  expect(filmFiltersEqual(bounded, { ...bounded })).toBe(true);
+  expect(cutName(bounded, sides)).toBe("Filtered");
+
+  expect(describeFilmCut({ ...bounded, rallyMin: 1 }, sides)).toBe(
+    "Rallies of 1–4 shots",
+  );
+  expect(describeFilmCut({ ...DEFAULT_FILM_FILTERS, rallyMin: 9 }, sides)).toBe(
+    "Rallies of 9+ shots",
+  );
+  expect(describeFilmCut(bounded, sides)).toBe("Rallies of up to 4 shots");
+
+  const rally = FILM_FILTER_SECTIONS.find((s) => s.id === "rally");
+  expect(rally?.keys).toContain("rallyMax");
+});
+
+test("rallyMax has no URL form", () => {
+  expect(
+    serializeCut(
+      { ...DEFAULT_FILM_FILTERS, rallyMin: 1, rallyMax: 4 },
+      "tab=film",
+    ),
+  ).toBe("tab=film");
 });

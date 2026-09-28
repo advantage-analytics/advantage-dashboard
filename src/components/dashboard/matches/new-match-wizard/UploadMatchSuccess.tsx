@@ -22,6 +22,7 @@ import {
   VerticalStep,
   type StepState,
 } from "@/components/dashboard/shared/vertical-steps";
+import { UPLOADING_COPY } from "../upload-progress-copy";
 import type { EventPreset } from "./types";
 import type { CreatedMatch, UploadState } from "./upload-progress";
 import { formatFileSize } from "./utils";
@@ -203,7 +204,11 @@ function successView(
   removedError: string | null,
   stats: MatchStatsState,
 ): SuccessView {
-  const saved: StepView = { key: "saved", state: "done", label: "Match saved" };
+  const saved: StepView = {
+    key: "saved",
+    state: "done",
+    label: UPLOADING_COPY.steps.saved,
+  };
 
   if (removedError) {
     return {
@@ -258,7 +263,7 @@ function successView(
   const later: StepView = {
     key: "analysis",
     state: "later",
-    label: "Analysis",
+    label: UPLOADING_COPY.steps.analysis,
   };
   const pct = upload?.progress ? Math.floor(upload.progress.pct) : null;
   const uploaded: StepView = {
@@ -276,13 +281,16 @@ function successView(
     case "starting":
     case "uploading":
       return {
-        title: preparing ? "Preparing your video" : "Uploading your video",
+        // The uploading wording is shared with the match page's progress
+        // panel; "preparing" is this tab's alone (the trim never reaches the
+        // job row), so it stays here.
+        title: preparing ? "Preparing your video" : UPLOADING_COPY.title,
         steps: [
           saved,
           {
             key: "video",
             state: "now",
-            label: preparing ? "Trimming video" : "Uploading video",
+            label: preparing ? "Trimming video" : UPLOADING_COPY.steps.video,
             value: pct === null ? undefined : `${pct}%`,
           },
           later,
@@ -459,7 +467,9 @@ function stepBody(
           percent={progress?.pct ?? 0}
           live
           label={
-            progress?.stage === "preparing" ? "Video trim" : "Video upload"
+            progress?.stage === "preparing"
+              ? "Video trim"
+              : UPLOADING_COPY.trackLabel
           }
         />
         <div className="-mt-1 flex items-baseline justify-between gap-3 text-[11px] text-[var(--ink-400)] tabular-nums">
@@ -485,9 +495,9 @@ function stepBody(
             transfer, and `beforeunload` guards that. */}
         <div className="mt-1 flex flex-col gap-0.5">
           <p className={cn(NOTE, "text-[var(--ink-700)]")}>
-            Keep this tab open until the upload finishes.
+            {UPLOADING_COPY.notes.keepTabOpen}
           </p>
-          <p className={NOTE}>You can keep using the dashboard.</p>
+          <p className={NOTE}>{UPLOADING_COPY.notes.keepUsing}</p>
         </div>
       </>
     );

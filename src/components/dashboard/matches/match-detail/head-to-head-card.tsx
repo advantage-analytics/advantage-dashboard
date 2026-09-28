@@ -11,6 +11,9 @@ import {
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
+import { scopeCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
+import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
 import {
   scopeMeta,
   scopePoints,
@@ -19,6 +22,7 @@ import {
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { PlayerStatistics, StatFraction } from "@/lib/data/types";
 import { surnameLabels } from "@/lib/data/match-utils";
+import { cn } from "@/lib/utils";
 
 /**
  * The Statistics pane's head-to-head table (artboard 47f).
@@ -94,11 +98,25 @@ export interface H2HRowConfig {
   lowerIsBetter?: boolean;
   /** Why a keyless row can never carry a value. */
   note?: string;
+  /**
+   * The film cut that shows this statistic's points in the Video tab, before
+   * a side is laid over it (`sideCut`). Absent when the statistic has no
+   * point-level equivalent — service games won is a count of games, not a
+   * set of points. The cut shows what the filter model admits; on a
+   * video-derived match the aggregate is approximate, so the two counts may
+   * differ, and that is accepted.
+   */
+  cut?: Partial<FilmFilters>;
 }
 
 export const SERVE_ROWS: H2HRowConfig[] = [
-  { label: "Aces", key: "aces" },
-  { label: "Double faults", key: "doubleFaults", lowerIsBetter: true },
+  { label: "Aces", key: "aces", cut: { serve: ["ace"] } },
+  {
+    label: "Double faults",
+    key: "doubleFaults",
+    lowerIsBetter: true,
+    cut: { serve: ["double-fault"] },
+  },
   {
     label: "First serve in",
     key: "firstServeInPct",
@@ -110,12 +128,14 @@ export const SERVE_ROWS: H2HRowConfig[] = [
     key: "firstServeWinPct",
     isPercentage: true,
     fractionKey: "firstServeWinPct",
+    cut: { ball: "first" },
   },
   {
     label: "Second serve points won",
     key: "secondServeWinPct",
     isPercentage: true,
     fractionKey: "secondServeWinPct",
+    cut: { ball: "second" },
   },
   {
     label: "Break points saved",
@@ -123,6 +143,7 @@ export const SERVE_ROWS: H2HRowConfig[] = [
     isPercentage: true,
     fractionKey: "breakpointsSaved",
     fromFraction: true,
+    cut: { pressure: "break" },
   },
   {
     label: "Service games won",
@@ -165,8 +186,13 @@ export const POINT_ROWS: H2HRowConfig[] = [
     isPercentage: true,
     fractionKey: "netPointsWonPct",
   },
-  { label: "Winners", key: "winners" },
-  { label: "Unforced errors", key: "unforcedErrors", lowerIsBetter: true },
+  { label: "Winners", key: "winners", cut: { result: ["winner"] } },
+  {
+    label: "Unforced errors",
+    key: "unforcedErrors",
+    lowerIsBetter: true,
+    cut: { result: ["unforced"] },
+  },
   { label: "Total points won", key: "totalPointsWon", ofKey: "totalPoints" },
 ];
 
@@ -175,6 +201,31 @@ export const H2H_GROUPS: { title: string; configs: H2HRowConfig[] }[] = [
   { title: "Return", configs: RETURN_ROWS },
   { title: "Points", configs: POINT_ROWS },
 ];
+
+/**
+ * One value cell's cut: the row's cut with the cell's side laid over it.
+ * A serve row's side is who SERVED the point (`server`) — a player's aces are
+ * the points they served that ended in an ace. A result row's side is who
+ * WON it (`outcome`) — a player's winners are the points they won on a
+ * winner. That is the line `tallySide` below draws: aces and double faults
+ * by server, winners and errors by the player who ended the point. Unforced
+ * errors take the OTHER side's `outcome` for the same reason — the player
+ * who errs is the one who loses the point.
+ *
+ * `you`/`opp` are relative, resolved by `useMatchSides()` inside the film tab
+ * (guardrails §4); nothing here reads player order.
+ */
+export function sideCut(
+  cut: Partial<FilmFilters>,
+  side: "you" | "opp",
+): Partial<FilmFilters> {
+  if (cut.result) {
+    const erred = cut.result.includes("unforced");
+    const outcome = erred ? (side === "you" ? "opp" : "you") : side;
+    return { ...cut, outcome };
+  }
+  return { ...cut, server: side };
+}
 
 /* ── Values and the leader rule ─────────────────────────────────────────── */
 
@@ -256,6 +307,8 @@ export interface H2HRow {
   label: string;
   /** Present only on rows that can never have a value. */
   note?: string;
+  /** The config's cut, sideless — `sideCut` adds the cell's side. */
+  cut?: Partial<FilmFilters>;
   you: H2HValue;
   opp: H2HValue;
   leader: "you" | "opp" | null;
@@ -269,6 +322,7 @@ function assembleRow(
   return {
     label: config.label,
     note: config.note,
+    cut: config.cut,
     you,
     opp,
     leader: rowLeader(config, you.value, opp.value),
@@ -484,26 +538,55 @@ function ValueCell({
   emphasised,
   note,
   scoped,
+  watch,
 }: {
   value: H2HValue;
   emphasised: boolean;
   note?: string;
   scoped: boolean;
+  /**
+   * Open this cell's points in the Video tab. Passed only for a row with a
+   * cut on a match with a playable video; the em-dash cell below ignores it,
+   * since a statistic with no value has nothing to watch.
+   */
+  watch?: { onClick: () => void; label: string };
 }) {
   if (value.display) {
-    return (
-      <span className={COLUMN}>
-        <span
-          className="tabular text-[13px]"
-          style={{
-            fontWeight: emphasised ? 500 : 400,
-            color: emphasised ? "var(--ink-900)" : "var(--ink-500)",
-          }}
-        >
-          {value.display}
-        </span>
+    const figure = (
+      <span
+        className={cn(
+          "tabular text-[13px]",
+          // A clickable figure washes on hover like any control (`surface-
+          // subtle` over the row's lighter `surface-muted`), sized to the
+          // number itself; the -mr cancels the pr so the digits stay on the
+          // column's right edge, aligned with every non-clickable figure.
+          watch &&
+            "-mr-1.5 rounded-[var(--radius-cell)] py-0.5 pr-1.5 pl-1.5 transition-colors duration-200 ease-[var(--ease-primary)] group-hover/watch:bg-[var(--surface-subtle)]",
+        )}
+        style={{
+          fontWeight: emphasised ? 500 : 400,
+          color: emphasised ? "var(--ink-900)" : "var(--ink-500)",
+        }}
+      >
+        {value.display}
       </span>
     );
+    if (watch) {
+      // A bare button around the same figure: the number's own hover wash and
+      // the readout's "Click a number to watch in Video" line are the
+      // affordance. Focus is `focus.css`'s ring — nothing written here.
+      return (
+        <button
+          type="button"
+          onClick={watch.onClick}
+          aria-label={watch.label}
+          className={`${COLUMN} group/watch cursor-pointer rounded-[var(--radius-element)] border-0 bg-transparent p-0`}
+        >
+          {figure}
+        </button>
+      );
+    }
+    return <span className={COLUMN}>{figure}</span>;
   }
 
   // The card's missing-data convention (match-statistics-card.tsx): an italic
@@ -533,20 +616,30 @@ function ValueCell({
 }
 
 /**
- * The dark readout above a hovered row. It is where the fraction went when the
+ * The dark readout for a hovered row. It is where the fraction went when the
  * 9 px sub-figures came off the numbers: `62%` is the figure a reader wants at
  * a glance, `38/61` is the one they want when they doubt it.
+ *
+ * It sits to the LEFT of the two value columns, centred on the row, and never
+ * moves while the row is hovered. The numbers are what a reader looks at and
+ * what a click lands on, so the readout goes beside them rather than over
+ * them; the only thing it covers is the row's own label, which its title
+ * repeats. It is a label, not a control — the numbers are the buttons, which
+ * is why its last line names them.
  */
 function RowTooltip({
   open,
   row,
   youName,
   oppName,
+  watchable,
 }: {
   open: boolean;
   row: H2HRow;
   youName: string;
   oppName: string;
+  /** The row's numbers open its points in the Video tab. */
+  watchable: boolean;
 }) {
   const detail =
     row.note ??
@@ -557,8 +650,8 @@ function RowTooltip({
   return (
     <ChartTooltip
       open={open}
-      align="center"
-      bottomOffset={-4}
+      side="left"
+      offset={8}
       className="gap-0.5 px-2.5 py-2"
     >
       <span className="text-[12px] font-medium text-white">{row.label}</span>
@@ -567,12 +660,18 @@ function RowTooltip({
           {detail}
         </span>
       )}
+      {watchable && (
+        <span className="text-[10px] text-white/[0.64]">
+          Click a number to watch in Video
+        </span>
+      )}
     </ChartTooltip>
   );
 }
 
 export function HeadToHeadCard() {
   const { match, points } = useMatchData();
+  const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
   const { activeSet } = useSetScope();
   const [hovered, setHovered] = useState<string | null>(null);
@@ -609,7 +708,7 @@ export function HeadToHeadCard() {
   // Memoized rather than recomputed inline: the card re-renders on every row
   // hover, and `scopeMeta` allocates a scoped-points array just to count it —
   // work that has nothing to do with which row the cursor is on.
-  const meta = useMemo(
+  const scope = useMemo(
     () => scopeMeta(sides.sets, points, activeSet),
     [sides.sets, points, activeSet],
   );
@@ -633,7 +732,7 @@ export function HeadToHeadCard() {
           className="text-micro tabular whitespace-nowrap"
           style={{ color: "var(--ink-400)" }}
         >
-          {meta.label} · {meta.points} points
+          {scope.label} · {scope.points} points
         </span>
       </div>
 
@@ -672,40 +771,68 @@ export function HeadToHeadCard() {
             </span>
           </div>
 
-          {section.rows.map((row) => (
-            <div
-              key={row.label}
-              className="relative -mx-2 flex min-h-[30px] items-center rounded-[var(--radius-element)] px-2 transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-muted)]"
-              onMouseEnter={() => setHovered(row.label)}
-              onMouseLeave={() =>
-                setHovered((current) =>
-                  current === row.label ? null : current,
-                )
-              }
-            >
-              <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-600)]">
-                {row.label}
-              </span>
-              <ValueCell
-                value={row.you}
-                emphasised={row.leader === "you"}
-                note={row.note}
-                scoped={scoped}
-              />
-              <ValueCell
-                value={row.opp}
-                emphasised={row.leader === "opp"}
-                note={row.note}
-                scoped={scoped}
-              />
-              <RowTooltip
-                open={hovered === row.label}
-                row={row}
-                youName={youName}
-                oppName={oppName}
-              />
-            </div>
-          ))}
+          {section.rows.map((row) => {
+            const cut = meta.hasPlayableVideo ? row.cut : undefined;
+            // Only a cell with a figure is watchable: an em dash has no
+            // points behind it to show.
+            const watchFor = (
+              side: "you" | "opp",
+              value: H2HValue,
+              name: string,
+            ) =>
+              cut && value.display
+                ? {
+                    onClick: () =>
+                      actions.watchCut(scopeCut(sideCut(cut, side), activeSet)),
+                    label: `${row.label}, ${name} ${value.display}. Watch in Video`,
+                  }
+                : undefined;
+            const youWatch = watchFor("you", row.you, youName);
+            const oppWatch = watchFor("opp", row.opp, oppName);
+
+            return (
+              <div
+                key={row.label}
+                className="relative -mx-2 flex min-h-[30px] items-center rounded-[var(--radius-element)] px-2 transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-muted)]"
+                onMouseEnter={() => setHovered(row.label)}
+                onMouseLeave={() =>
+                  setHovered((current) =>
+                    current === row.label ? null : current,
+                  )
+                }
+              >
+                <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-600)]">
+                  {row.label}
+                </span>
+                {/* The two value columns are the readout's anchor, so it
+                    lands beside the numbers rather than off the row's far
+                    edge. */}
+                <div className="relative flex shrink-0 items-center">
+                  <ValueCell
+                    value={row.you}
+                    emphasised={row.leader === "you"}
+                    note={row.note}
+                    scoped={scoped}
+                    watch={youWatch}
+                  />
+                  <ValueCell
+                    value={row.opp}
+                    emphasised={row.leader === "opp"}
+                    note={row.note}
+                    scoped={scoped}
+                    watch={oppWatch}
+                  />
+                  <RowTooltip
+                    open={hovered === row.label}
+                    row={row}
+                    youName={youName}
+                    oppName={oppName}
+                    watchable={Boolean(youWatch || oppWatch)}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       ))}
     </section>

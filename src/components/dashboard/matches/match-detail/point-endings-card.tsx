@@ -5,6 +5,13 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
+import {
+  scopeCut,
+  watchableSegmentProps,
+} from "@/components/dashboard/matches/match-detail/film-cut-context";
+import { sideCut } from "@/components/dashboard/matches/match-detail/head-to-head-card";
+import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
 import {
   scopePoints,
   useSetScope,
@@ -48,11 +55,15 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * Scope-aware: `scopePoints(points, activeSet)` narrows the tally to the
  * selected set before bucketing, the same read every point-derived card on
  * this tab makes (rally-length-card.tsx takes the identical dependency).
+ *
+ * With a playable video each segment opens its points in the Video tab
+ * (`outcomeCut`) on click or Enter — hovering only reads. Without one the
+ * markup is exactly the read-only card.
  */
 
 const EASE_CHART = [0.2, 0, 0.4, 1] as const;
 
-type OutcomeKey = "winners" | "aces" | "unforcedErrors" | "doubleFaults";
+export type OutcomeKey = "winners" | "aces" | "unforcedErrors" | "doubleFaults";
 
 interface OutcomeMeta {
   key: OutcomeKey;
@@ -87,6 +98,32 @@ const OUTCOMES: OutcomeMeta[] = [
     opp: "var(--viz-opp-light)",
   },
 ];
+
+/** Each outcome's base cut, before a side is laid over it by `sideCut`. */
+const OUTCOME_BASE_CUT: Record<OutcomeKey, Partial<FilmFilters>> = {
+  winners: { result: ["winner"] },
+  unforcedErrors: { result: ["unforced"] },
+  doubleFaults: { serve: ["double-fault"] },
+  aces: { serve: ["ace"] },
+};
+
+/**
+ * The film cut behind one segment of one side's bar. Aces and double faults
+ * belong to whoever SERVED the point (`server`); winners to whoever WON it
+ * (`outcome`); unforced errors to whoever LOST it, so a side's errors are the
+ * points its opponent won — `outcome` is the point's winner, never the
+ * player who struck the last ball. That is exactly the line
+ * `head-to-head-card.tsx`'s `sideCut` draws, so this delegates to it rather
+ * than re-deriving the same server/outcome, you/opp rule here. `you`/`opp`
+ * are relative, resolved by `useMatchSides()` inside the film tab
+ * (guardrails §4); nothing here reads player order.
+ */
+export function outcomeCut(
+  key: OutcomeKey,
+  side: "you" | "opp",
+): Partial<FilmFilters> {
+  return sideCut(OUTCOME_BASE_CUT[key], side);
+}
 
 type Tally = Record<OutcomeKey, number>;
 
@@ -129,6 +166,7 @@ interface PointEndingsCardProps {
 
 export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
   const { points } = useMatchData();
+  const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
   const { activeSet } = useSetScope();
   const shouldReduceMotion = useReducedMotion();
@@ -211,7 +249,15 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
       </section>
     );
   }
-  const rows = [
+  const rows: {
+    id: "you" | "opp";
+    name: string;
+    otherName: string;
+    own: Tally;
+    other: Tally;
+    total: number;
+    fill: (o: OutcomeMeta) => string;
+  }[] = [
     {
       id: "you",
       name: youName,
@@ -273,11 +319,25 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                   row.total > 0 ? (row.own[o.key] / row.total) * 100 : 0;
                 const isFirst = i === 0;
                 const isLast = i === segments.length - 1;
+                const label = `${o.label}. ${row.name} ${row.own[o.key]}, ${row.otherName} ${row.other[o.key]}.`;
+                // Only with a playable video does the segment take a click;
+                // every attribute below is `undefined` otherwise, so the
+                // read-only markup is unchanged. Focus is `focus.css`'s ring.
+                const watch = meta.hasPlayableVideo
+                  ? () =>
+                      actions.watchCut(
+                        scopeCut(outcomeCut(o.key, row.id), activeSet),
+                      )
+                  : undefined;
 
                 return (
                   <motion.div
                     key={o.key}
-                    className="relative cursor-default"
+                    className={
+                      watch
+                        ? "relative cursor-pointer"
+                        : "relative cursor-default"
+                    }
                     style={{
                       background: row.fill(o),
                       borderTopLeftRadius: isFirst
@@ -308,7 +368,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                       ease: EASE_CHART,
                     }}
                     tabIndex={0}
-                    aria-label={`${o.label}. ${row.name} ${row.own[o.key]}, ${row.otherName} ${row.other[o.key]}.`}
+                    {...watchableSegmentProps(watch, label)}
                     onMouseEnter={() => setHovered(id)}
                     onMouseLeave={() => setHovered(null)}
                     onFocus={() => setHovered(id)}
@@ -319,6 +379,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                       label={o.label}
                       detail={`${row.name} ${row.own[o.key]} · ${row.otherName} ${row.other[o.key]}`}
                       align={isFirst ? "start" : isLast ? "end" : "center"}
+                      watchable={Boolean(watch)}
                     />
                   </motion.div>
                 );
@@ -356,21 +417,29 @@ function SegmentTooltip({
   label,
   detail,
   align,
+  watchable,
 }: {
   open: boolean;
   label: string;
   detail: string;
   align: "start" | "center" | "end";
+  /** The segment opens its points in the Video tab. */
+  watchable: boolean;
 }) {
   return (
     <ChartTooltip
       open={open}
       align={align}
-      bottomOffset={6}
+      offset={6}
       className="gap-0.5 px-2.5 py-2"
     >
       <span className="text-[12px] font-medium text-white">{label}</span>
       <span className="tabular text-[11px] text-white/[0.64]">{detail}</span>
+      {watchable && (
+        <span className="text-[10px] text-white/[0.64]">
+          Click to watch in Video
+        </span>
+      )}
     </ChartTooltip>
   );
 }

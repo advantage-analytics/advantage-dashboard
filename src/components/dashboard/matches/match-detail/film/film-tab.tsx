@@ -40,6 +40,10 @@ import {
   type PointFocus,
 } from "./film-timeline";
 import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
+import {
+  consumeFilmCut,
+  usePendingFilmCut,
+} from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { useAttachmentPlayback } from "./use-attachment-playback";
 import { recordMatchVideoView } from "./record-video-view";
 import {
@@ -332,6 +336,56 @@ function FilmRoom({
     const ids = new Set(filteredPoints.map((p) => p.id));
     return stops.filter((s) => ids.has(s.point.id));
   }, [stops, filteredPoints]);
+
+  /**
+   * A "watch this cut" intent from the report (T2, `film-cut-context.tsx`),
+   * in two steps because the first admitted point is only known once the
+   * filters it sets have been applied.
+   *
+   * 1. Take the pending cut: the filters become the defaults with the cut
+   *    over them (`consumeFilmCut`), the same value is remembered as the
+   *    `landing`, and the intent is CLEARED — leaving and re-entering the
+   *    Video view finds nothing pending and keeps whatever the viewer set
+   *    since. The cut effect above then mirrors `cut=`/`serve=` into the URL
+   *    as it does for any other filter change; the Advanced axes stay out.
+   * 2. Once `filters` IS that landing (identity: both were set from the same
+   *    object in one batch) and the media is playable, the shell player seeks
+   *    to the first stop the cut admits and the list holds that point. A cut
+   *    that admits no point still applies; nothing seeks and nothing is held.
+   *    A landing the viewer has already moved off (a filter change before the
+   *    media resolved) is dropped rather than honoured late.
+   *
+   * The hook returns null outside a provider, so the playback harness — which
+   * mounts this tab bare — never enters step 1. Sides are not decided here:
+   * a cut's you/opp axes resolve in `applyFilmFilters` via `youIsPlayer1`.
+   */
+  const pendingCut = usePendingFilmCut();
+  const [landing, setLanding] = useState<FilmFilters | null>(null);
+  useEffect(() => {
+    const taken = consumeFilmCut(pendingCut?.cut ?? null);
+    if (!taken || !pendingCut) return;
+    // The provider's intent arriving is the external event; this runs once
+    // per `watchCut`, never per frame.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFilters(taken.filters);
+    setLanding(taken.filters);
+    pendingCut.clear();
+  }, [pendingCut]);
+  useEffect(() => {
+    if (!landing) return;
+    if (filters !== landing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLanding(null);
+      return;
+    }
+    if (!playback.url) return;
+    const first = walkStops[0];
+    if (first) {
+      playerRef.current?.seekTo(first.start);
+      holdPoint(first.point.id);
+    }
+    setLanding(null);
+  }, [landing, filters, walkStops, playback.url, holdPoint]);
 
   const columns = useMemo(() => scoreColumns(points), [points]);
 

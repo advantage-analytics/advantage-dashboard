@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, use, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  use,
+  useCallback,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   parseReportView,
@@ -12,6 +19,8 @@ import type { BandSettings } from "@/lib/data/viz-bands";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 import type { DistanceUnit } from "@/lib/format/distance";
 import { FilmHeadProvider } from "@/components/dashboard/matches/match-detail/film-head-context";
+import { FilmCutProvider } from "@/components/dashboard/matches/match-detail/film-cut-context";
+import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
 
 /**
  * The match report's one context: state, actions and meta (settled Statistics
@@ -41,6 +50,13 @@ export interface MatchReportActions {
   selectView(view: ReportView): void;
   /** Open a timed point in the Video view. */
   watchPoint(pointId: string): void;
+  /**
+   * Open the Video view on a cut: the default filters with `cut` laid over
+   * them, the shell player on the first point it admits (T2). The film tab
+   * consumes it once (`film-cut-context.tsx`). A no-op without a playable
+   * video — there is no Video view to open, and `/m/[token]` never has one.
+   */
+  watchCut(cut: Partial<FilmFilters>): void;
   collapseInsight(): void;
   expandInsight(): void;
 }
@@ -170,6 +186,13 @@ export function MatchReportProvider({
 
   // Collapse is only this visit's state; every visit opens expanded.
   const [insight, setInsight] = useState<InsightStatus>("expanded");
+  // The "watch this cut" intent, between `watchCut` and the film tab taking
+  // it. Component state, not the URL: only `cut=`/`serve=` have a URL form
+  // (`serializeCut`), and the Advanced axes are deliberately kept out of it.
+  const [pendingCut, setPendingCut] = useState<Partial<FilmFilters> | null>(
+    null,
+  );
+  const clearPendingCut = useCallback(() => setPendingCut(null), []);
 
   const actions = useMemo<MatchReportActions>(
     () => ({
@@ -194,6 +217,14 @@ export function MatchReportProvider({
         query.delete("fullscreen");
         window.history.pushState(null, "", `${pathname}?${query.toString()}`);
       },
+      watchCut(cut) {
+        if (!hasPlayableVideo) return;
+        setPendingCut(cut);
+        const query = new URLSearchParams(window.location.search);
+        query.set("tab", "film");
+        query.delete("fullscreen");
+        window.history.pushState(null, "", `${pathname}?${query.toString()}`);
+      },
       collapseInsight() {
         setInsight("collapsed");
       },
@@ -201,7 +232,7 @@ export function MatchReportProvider({
         setInsight("expanded");
       },
     }),
-    [view, searchParams, pathname, defaultView],
+    [view, searchParams, pathname, defaultView, hasPlayableVideo],
   );
 
   const meta = useMemo<MatchReportMeta>(
@@ -246,9 +277,13 @@ export function MatchReportProvider({
 
   // The film head rides alongside, in its own context: it moves several times
   // a second and only the rail scoreboard reads it (`film-head-context.tsx`).
+  // The pending cut likewise (`film-cut-context.tsx`): only the film tab reads
+  // it, and the film subtree must not depend on this context.
   return (
     <MatchReportContext value={value}>
-      <FilmHeadProvider>{children}</FilmHeadProvider>
+      <FilmCutProvider cut={pendingCut} onClear={clearPendingCut}>
+        <FilmHeadProvider>{children}</FilmHeadProvider>
+      </FilmCutProvider>
     </MatchReportContext>
   );
 }

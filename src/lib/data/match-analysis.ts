@@ -129,6 +129,16 @@ export interface MatchAnalysis {
   /** What the engine is doing right now. Never a frame count we don't receive. */
   stageNote?: string;
   failNote?: string;
+  /**
+   * The vendor refused the video itself (`processing_jobs.error_category` is
+   * `invalid_input` — a frame rate too low, say), so resubmitting the same
+   * file cannot succeed and Retry should not be offered. Only ever true on a
+   * `failed` job. Set by `isInputRejected()` in BOTH the server loader and the
+   * realtime hook: a field one path sets and the other does not is how the
+   * match page and the matches list start disagreeing about the same row.
+   * Optional so a projection with no job row (imported, manual) need not state it.
+   */
+  inputRejected?: boolean;
   verified?: boolean;
 }
 
@@ -209,6 +219,50 @@ export function withStatsPublished(
   statsPublished: boolean,
 ): AnalysisStatus {
   return status === "completed" && !statsPublished ? "timeline" : status;
+}
+
+/**
+ * `processing_jobs.error_category` for a vendor refusal of the input itself.
+ * The one copy of the literal in `src` — compare through isInputRejected().
+ */
+export const INPUT_REJECTED_CATEGORY = "invalid_input";
+
+/**
+ * Did the vendor reject the video itself, rather than fail while analysing it?
+ *
+ * Takes the raw `processing_jobs.status`, not the resolved AnalysisStatus, so
+ * both projections call it on the row they already hold. True only for a
+ * `failed` job: `derivation_failed` is our reconciler, not the vendor, and a
+ * category left behind on a later successful row means nothing.
+ */
+export function isInputRejected(
+  dbStatus: string,
+  errorCategory: string | null | undefined,
+): boolean {
+  return dbStatus === "failed" && errorCategory === INPUT_REJECTED_CATEGORY;
+}
+
+/**
+ * Is a video-provider failure eligible for the Retry action?
+ *
+ * The one rule three surfaces (the match page's progress card, the matches
+ * drawer, the schedule line drawer) each re-derived: a job can be retried only
+ * if it is a `failed` vendor job (not `derivation_failed` — resubmitJob()
+ * refuses anything else) that still has a job to resubmit, and whose failure
+ * was not the vendor rejecting the input itself (that would fail the same way
+ * again). This is the shared part; each caller layers its own access-control
+ * clause (`canManage`, `canEdit && !doubles`) on top.
+ */
+export function canRetryAnalysis(analysis: {
+  status?: AnalysisStatus;
+  jobId?: string | null;
+  inputRejected?: boolean | null;
+}): boolean {
+  return (
+    analysis.status === "failed" &&
+    Boolean(analysis.jobId) &&
+    !analysis.inputRejected
+  );
 }
 
 export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {

@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { ScoreLineSet } from "@/lib/ui/score-format";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
+import { ANALYSIS_FAILURE_COPY } from "@/components/dashboard/matches/analysis-failure-copy";
 
 /**
  * The body sections of a match peek drawer, lifted out of `match-drawer.tsx`
@@ -168,11 +169,15 @@ export function AnalysisNotice({
   status,
   failNote,
   canRetry,
+  inputRejected,
 }: {
   status: AnalysisStatus | null | undefined;
   failNote?: string | null;
   /** The viewer can resubmit — the copy then says the video is reused. */
   canRetry: boolean;
+  /** The vendor refused the footage itself; a retry would fail the same way,
+   * so the body says what to fix instead, whatever `canRetry` says. */
+  inputRejected?: boolean;
 }) {
   if (!status) return null;
 
@@ -200,16 +205,39 @@ export function AnalysisNotice({
           strokeWidth={1.5}
           aria-hidden
         />
-        <div className="flex flex-col gap-1">
-          <p className="text-[13px] font-medium text-[var(--ink-900)]">
-            {failNote ?? "Analysis stopped"}
-          </p>
-          <p className="text-[12px] leading-[1.5] text-[var(--ink-700)]">
-            {canRetry
-              ? "Retrying uses the video you already uploaded. Nothing needs uploading again."
-              : "The match page has the details."}
-          </p>
-        </div>
+        {status === "derivation_failed" ? (
+          <div className="flex flex-col gap-1">
+            {/* The video was analyzed; what failed is matching its rallies
+            to the entered score. `canRetry` is ignored here — resubmitJob()
+            refuses this status, and the footage was read fine — and
+            `failNote` is the reconciler's reason, a muted detail line under
+            the explanation, never the headline. */}
+            <p className="text-[13px] font-medium text-[var(--ink-900)]">
+              {ANALYSIS_FAILURE_COPY.derivation_failed.title}
+            </p>
+            <p className="text-[12px] leading-[1.5] text-[var(--ink-700)]">
+              {ANALYSIS_FAILURE_COPY.derivation_failed.body}
+            </p>
+            {failNote && (
+              <p className="text-[11px] leading-[1.5] text-[#888888]">
+                {failNote}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <p className="text-[13px] font-medium text-[var(--ink-900)]">
+              {failNote ?? ANALYSIS_FAILURE_COPY.failed.title}
+            </p>
+            <p className="text-[12px] leading-[1.5] text-[var(--ink-700)]">
+              {inputRejected
+                ? ANALYSIS_FAILURE_COPY.failed.inputRejected.drawer
+                : canRetry
+                  ? ANALYSIS_FAILURE_COPY.failed.drawer.retry
+                  : ANALYSIS_FAILURE_COPY.failed.drawer.details}
+            </p>
+          </div>
+        )}
       </div>
     );
   }

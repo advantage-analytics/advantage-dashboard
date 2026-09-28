@@ -66,6 +66,14 @@ function render(
     markUnknown: true,
     stubs: new Proxy(
       {
+        // The Statistics cards read the report for `hasPlayableVideo`; a
+        // test that cares passes its own, which replaces this one.
+        "@/components/dashboard/matches/match-detail/match-report-context": {
+          useMatchReport: () => ({
+            meta: { hasPlayableVideo: false },
+            actions: {},
+          }),
+        },
         ...stubs,
         "@/components/dashboard/matches/match-data-provider": {
           useMatchData: () => ({ points, match: {}, statsResult: null }),
