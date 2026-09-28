@@ -104,7 +104,7 @@ ready).
 
 ## T8 · Choose the opponent's school on a tournament round
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **needs:** T7
 - **files:** src/components/dashboard/schedule/score-only-flow.tsx (tournament branch of `ScoreForm`/`OpponentInRow`), src/components/dashboard/schedule/static/dual-school-step.tsx (directory search over `/api/programs/search` to reuse or extract), src/lib/schedule/write-types.ts (`RecordResultInput.opponentSchool`, add program id/key), src/lib/schedule/writes-server.ts (`syncEntryOpponent` ~lines 760-780), src/lib/schedule/actions.ts (`opponentRosterForDual`, `saveOpponentPlayer`), tests/schedule-score-flow-outcomes.spec.ts, writer spec
