@@ -35,8 +35,13 @@ ids.
 | Q3 — does stroke numbering restart per rally, and do faults count? | ✅ **answered from data: yes to both**                |
 | Q13 — can point winners be derived?                                | ✅ **answered from data: yes, from the score stream** |
 | Q2 — how are lets handled?                                         | ❌ still open                                         |
-| Q4–Q7                                                              | ❌ still open, unchanged                              |
-| Q8–Q12                                                             | ❌ open                                               |
+| Q4 — webhook authentication                                        | ✅ **answered by email: `x-hmac-signature`**          |
+| Q5 — status endpoint                                               | ✅ **answered: `GET /jobs/{job_id}`**                 |
+| Q6 — queue priority                                                | ❌ not confirmed                                      |
+| Q7 — stable error codes                                            | ✅ **answered by the September 2026 API**             |
+| Q8–Q12                                                             | ❌ open (Q11 partly covered by detection scores)      |
+| Q14 — frame-rate floor                                             | 🟡 **partly answered 2026-09-28: gate is 25 fps**     |
+| Q15 — points with no resolvable winner                             | ❌ new, open                                          |
 
 **The gate has substantially lifted.** The third payload settled the question
 that mattered most: its match has a known true final score (6-4, 6-4), and
@@ -82,21 +87,28 @@ no lets occurred across two full matches — unlikely — or they are silently
 dropped. If a let _were_ emitted as an extra serve, our first/second split would
 read it as a fault and understate first-serve percentage further.
 
-### Q4 — Webhook authentication
+### Q4 — Webhook authentication **Answered by email.**
 
-Unchanged. Algorithm, header name, signing payload, rotation policy.
+The signature arrives in `x-hmac-signature`, since added to the vendor's
+published docs; `src/app/api/webhooks/splitstep/route.ts` checks it first and
+keeps a few other header names as a hedge. Rotation policy was not covered.
 
-### Q5 — Status/polling endpoint, or any way to re-request results after the 7-day SAS expiry
+### Q5 — Status/polling endpoint, or any way to re-request results after the 7-day SAS expiry **Answered: `GET {BASE_URL}/jobs/{job_id}`.**
 
-Unchanged.
+`src/lib/services/splitstep/reconcile.ts` polls it. Note `JOB_STALE` is reported
+only there, never by webhook. Whether results can be re-requested after the
+7-day SAS expiry is still unconfirmed.
 
 ### Q6 — Queue-priority parameter
 
-Unchanged.
+Not confirmed. `processing_jobs.priority` exists (`standard`), but nothing shows
+the vendor honours a priority field.
 
-### Q7 — Stable error codes instead of free-text `job_failed.message`
+### Q7 — Stable error codes instead of free-text `job_failed.message` **Answered by the September 2026 API.**
 
-Unchanged.
+`job_failed` now carries `error.code`, `error.category`, `error.step` and a
+user-facing `error.message`, e.g. `VIDEO_FRAME_RATE_TOO_LOW` /
+`invalid_input` / `trimming_video`. They are stored on `processing_jobs`.
 
 ---
 
@@ -158,6 +170,14 @@ What we still cannot confirm is behaviour on an **ad-scoring** match, because we
 have no sample of one — we do not know the setting used for the other two
 fixtures. So the question narrows to: is the `Ad` request parameter honoured, and
 what does `pred_point_score` emit at advantage when it is true?
+
+**Our-side finding, 2026-09-28 — not a vendor question.** Job `b74a1e04` (vendor
+`f9faa057-e94f-4a65-a84c-62a2aca54b80`) was sent `Ad: false`, matching its
+event's format (ITA All-American Tournament, no-ad), but its `matches.format`
+row says `ad_scoring: true`. `persist-transcript.ts` reads ad scoring from
+`matches.format`, not from what was sent, so our derivation folded a no-ad score
+stream as if it were ad scoring — which strands the 40-40 deciding point with no
+winner. The derivation should read `processing_jobs.ad_scoring` first.
 
 ### Q10 — Score orientation and string format
 
@@ -229,7 +249,7 @@ Winner indistinguishable. A `rally_end_reason` (`winner` / `out` / `net`), or
 anything marking that a player attempted and missed a shot, would unblock the
 remaining half.
 
-### Q14 — How is the frame-rate floor measured? **Blocks an accurate upload check.**
+### Q14 — How is the frame-rate floor measured? **Partly answered 2026-09-28 — floor lowered to 25; 29.97 still recommended.**
 
 A file whose own metadata reports **29.94 fps** was rejected with
 `VIDEO_FRAME_RATE_TOO_LOW` at step `trimming_video`, detail `video is 29.80 fps`,
@@ -261,9 +281,52 @@ Decided 2026-09-27, before an answer: the upload wizard **refuses** a file
 whose whole-track container average is under 29.97 (`MIN_CONTAINER_AVERAGE_FPS`),
 following the API docs' "29.97 fps (NTSC) and higher is accepted" — the band
 below that is not promised, and this file shows the vendor measures lower than
-the container. An answer to question 1 could let us narrow or relax that. A
-failure with `error_category = 'invalid_input'` is not offered a retry, since
-resubmitting the same file fails the same way.
+the container. A failure with `error_category = 'invalid_input'` is not offered
+a retry, since resubmitting the same file fails the same way.
+
+**Answer (Christian, SplitStep, 2026-09-28).** Asked by email with both jobs
+above plus the accepted one (`job_id` `f9faa057-e94f-4a65-a84c-62a2aca54b80`,
+`video_id` `599b8159-b143-44b2-b127-ce5588cc7d54`, container 29.95 fps,
+analyzed). The email asked two things: how the rate is calculated, and whether
+we should match our gate to it or keep 29.97. Reply, paraphrased: they have
+**lowered their internal threshold to 25 fps** so small differences in detected
+frame rate don't cause errors, but in practice we should **only send 29.97 fps
+or higher**, to get the best results and to avoid possibly being gated out.
+
+What that settles and what it does not:
+
+- **Question 2 — settled in practice.** Their hard gate is now 25 fps (the error
+  table's "below 29.9" is out of date). Variable-frame-rate footage above 25 is
+  not rejected, but 29.97 is the rate they stand behind.
+- **Question 1 — not answered.** How they compute the rate is still unknown; with
+  the gate at 25 it no longer decides whether a ~29.9 file is accepted.
+- **Question 3 (billing) — not asked** in the email; still open.
+
+**Decision, unchanged:** keep refusing below 29.97 (`MIN_CONTAINER_AVERAGE_FPS`).
+It is the vendor's own recommendation, and the one sub-29.97 file they accepted
+(29.95, above) was analyzed but lost five point winners and published nothing.
+If users are blocked on footage they need, the fallback is to refuse below 25
+and warn between 25 and 29.97.
+
+### Q15 — Why do some points resolve no winner? **New, 2026-09-28.**
+
+Both sub-29.97 fps matches returned score streams with points we cannot give a
+winner to, although detection scores were strong:
+
+| Vendor `job_id`                        | Container fps | Unresolved points | Game transitions valid |
+| -------------------------------------- | ------------- | ----------------- | ---------------------- |
+| `f9faa057-e94f-4a65-a84c-62a2aca54b80` | 29.95         | 5 of 134          | 23 of 28               |
+| `e42ec057-4afc-4f68-9975-3da46c5d0e83` | 29.94         | 4 of 101          | 18 of 18               |
+
+The first is partly our own bug (Q9's finding) and should be re-derived before
+asking. The second was reprocessed by the vendor on 2026-09-28 after its gate
+dropped to 25, and has no ad-scoring mismatch. Its game-score transitions are
+all clean, so its four lost points sit inside games: the point score failed to
+change between rallies, not the game boundary.
+
+Ask: does variable-frame-rate footage degrade the score stream (missed
+bounces at rally end, for example), and is there anything in the payload that
+marks a point whose score update the model was unsure of?
 
 ---
 

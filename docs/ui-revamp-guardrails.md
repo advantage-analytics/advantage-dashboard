@@ -276,8 +276,9 @@ to put a testable seam.
 >   "29.97 fps (NTSC) and higher is accepted"; genuine NTSC (30000/1001)
 >   reads 29.97 to two decimals and passes. The vendor measures lower than
 >   the container (29.80 against a 29.94 average for the same file), which is
->   why the band under 29.97 is refused rather than gambled on; how it
->   measures is still open as Q14 in `docs/splitstep-vendor-questions.md`. The
+>   why the band under 29.97 is refused rather than gambled on. Q14 in
+>   `docs/splitstep-vendor-questions.md` was answered 2026-09-28: the vendor's
+>   hard gate is now 25 fps, and it still recommends 29.97 or higher. The
 >   existing 30 fps floor on the browser sample (`MIN_VIDEO_FPS`) is unchanged.
 >
 > `job-request.ts`, the three inputs in §4, `canSubmitVideo` and the webhook are
