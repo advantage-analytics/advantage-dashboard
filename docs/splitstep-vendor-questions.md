@@ -35,8 +35,13 @@ ids.
 | Q3 — does stroke numbering restart per rally, and do faults count? | ✅ **answered from data: yes to both**                |
 | Q13 — can point winners be derived?                                | ✅ **answered from data: yes, from the score stream** |
 | Q2 — how are lets handled?                                         | ❌ still open                                         |
-| Q4–Q7                                                              | ❌ still open, unchanged                              |
-| Q8–Q12                                                             | ❌ open                                               |
+| Q4 — webhook authentication                                        | ✅ **answered by email: `x-hmac-signature`**          |
+| Q5 — status endpoint                                               | ✅ **answered: `GET /jobs/{job_id}`**                 |
+| Q6 — queue priority                                                | ❌ not confirmed                                      |
+| Q7 — stable error codes                                            | ✅ **answered by the September 2026 API**             |
+| Q8–Q12                                                             | ❌ open (Q11 partly covered by detection scores)      |
+| Q14 — frame-rate floor                                             | 🟡 **partly answered 2026-09-28: gate is 25 fps**     |
+| Q15 — points with no resolvable winner                             | ❌ new, open                                          |
 
 **The gate has substantially lifted.** The third payload settled the question
 that mattered most: its match has a known true final score (6-4, 6-4), and
@@ -82,21 +87,28 @@ no lets occurred across two full matches — unlikely — or they are silently
 dropped. If a let _were_ emitted as an extra serve, our first/second split would
 read it as a fault and understate first-serve percentage further.
 
-### Q4 — Webhook authentication
+### Q4 — Webhook authentication **Answered by email.**
 
-Unchanged. Algorithm, header name, signing payload, rotation policy.
+The signature arrives in `x-hmac-signature`, since added to the vendor's
+published docs; `src/app/api/webhooks/splitstep/route.ts` checks it first and
+keeps a few other header names as a hedge. Rotation policy was not covered.
 
-### Q5 — Status/polling endpoint, or any way to re-request results after the 7-day SAS expiry
+### Q5 — Status/polling endpoint, or any way to re-request results after the 7-day SAS expiry **Answered: `GET {BASE_URL}/jobs/{job_id}`.**
 
-Unchanged.
+`src/lib/services/splitstep/reconcile.ts` polls it. Note `JOB_STALE` is reported
+only there, never by webhook. Whether results can be re-requested after the
+7-day SAS expiry is still unconfirmed.
 
 ### Q6 — Queue-priority parameter
 
-Unchanged.
+Not confirmed. `processing_jobs.priority` exists (`standard`), but nothing shows
+the vendor honours a priority field.
 
-### Q7 — Stable error codes instead of free-text `job_failed.message`
+### Q7 — Stable error codes instead of free-text `job_failed.message` **Answered by the September 2026 API.**
 
-Unchanged.
+`job_failed` now carries `error.code`, `error.category`, `error.step` and a
+user-facing `error.message`, e.g. `VIDEO_FRAME_RATE_TOO_LOW` /
+`invalid_input` / `trimming_video`. They are stored on `processing_jobs`.
 
 ---
 
@@ -158,6 +170,14 @@ What we still cannot confirm is behaviour on an **ad-scoring** match, because we
 have no sample of one — we do not know the setting used for the other two
 fixtures. So the question narrows to: is the `Ad` request parameter honoured, and
 what does `pred_point_score` emit at advantage when it is true?
+
+**Our-side finding, 2026-09-28 — not a vendor question.** Job `b74a1e04` (vendor
+`f9faa057-e94f-4a65-a84c-62a2aca54b80`) was sent `Ad: false`, matching its
+event's format (ITA All-American Tournament, no-ad), but its `matches.format`
+row says `ad_scoring: true`. `persist-transcript.ts` reads ad scoring from
+`matches.format`, not from what was sent, so our derivation folded a no-ad score
+stream as if it were ad scoring — which strands the 40-40 deciding point with no
+winner. The derivation should read `processing_jobs.ad_scoring` first.
 
 ### Q10 — Score orientation and string format
 
@@ -287,6 +307,26 @@ It is the vendor's own recommendation, and the one sub-29.97 file they accepted
 (29.95, above) was analyzed but lost five point winners and published nothing.
 If users are blocked on footage they need, the fallback is to refuse below 25
 and warn between 25 and 29.97.
+
+### Q15 — Why do some points resolve no winner? **New, 2026-09-28.**
+
+Both sub-29.97 fps matches returned score streams with points we cannot give a
+winner to, although detection scores were strong:
+
+| Vendor `job_id`                        | Container fps | Unresolved points | Game transitions valid |
+| -------------------------------------- | ------------- | ----------------- | ---------------------- |
+| `f9faa057-e94f-4a65-a84c-62a2aca54b80` | 29.95         | 5 of 134          | 23 of 28               |
+| `e42ec057-4afc-4f68-9975-3da46c5d0e83` | 29.94         | 4 of 101          | 18 of 18               |
+
+The first is partly our own bug (Q9's finding) and should be re-derived before
+asking. The second was reprocessed by the vendor on 2026-09-28 after its gate
+dropped to 25, and has no ad-scoring mismatch. Its game-score transitions are
+all clean, so its four lost points sit inside games: the point score failed to
+change between rallies, not the game boundary.
+
+Ask: does variable-frame-rate footage degrade the score stream (missed
+bounces at rally end, for example), and is there anything in the payload that
+marks a point whose score update the model was unsure of?
 
 ---
 
