@@ -460,7 +460,7 @@ ready).
 
 ## T34 · Stalled hand-off shows as a tray failure row
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T33
 - **files:** src/components/dashboard/activity/tray-failure.ts, src/components/dashboard/activity/activity-tray.tsx, tests/activity-tray-failure.spec.ts

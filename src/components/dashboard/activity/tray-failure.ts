@@ -22,18 +22,32 @@ import {
   TRAY_REASON,
   waitOrAskVariant,
 } from "@/components/dashboard/matches/analysis-failure-copy";
+import { STEPPER_COPY } from "@/components/dashboard/matches/match-detail/analysis-steps";
 
 /**
  * Is this row one the tray's Failed section should carry?
  *
  * Exactly `matchListGroup(analysis) === "Failed"` — no re-derivation of that
- * decision here. `stats_unavailable` reads "Ready" there (the match renders
- * fine; only a chart is missing), and every in-flight status groups under
- * "In progress", so both come back `false`.
+ * decision here — with one deliberate divergence (author's choice,
+ * 2026-09-28, Direction E): an `uploaded` row carrying a `recovery` is a
+ * stalled hand-off, server-classified by the same loader that already
+ * decides `isSubmitStalled()` at read time, so `recovery` is only ever
+ * present here because the classifier already saw the stall. `matchListGroup`
+ * keeps that row under "In progress" — the matches list is not this tray's
+ * decision to change — but a stalled upload has stopped moving exactly like a
+ * failure, and the match page (T23) and both drawers (T25/T26) already draw
+ * it as stopped. No clock lives here: whether a given `uploaded` row is
+ * stalled was decided server-side before this ran, so a row that stalls while
+ * the tray is open simply flips on the next navigation.
+ *
+ * `stats_unavailable` reads "Ready" under `matchListGroup` (the match renders
+ * fine; only a chart is missing), and every other in-flight status groups
+ * under "In progress", so both still come back `false`.
  */
 export function isTrayFailure(
   analysis: Pick<MatchAnalysis, "status" | "recovery"> | null | undefined,
 ): boolean {
+  if (analysis?.status === "uploaded") return analysis.recovery != null;
   return matchListGroup(analysis) === "Failed";
 }
 
@@ -86,10 +100,21 @@ export function trayFailureAction(
  * The tray's one-line reason, drawn on a truncating row so it stays short on
  * purpose. `wait_or_ask` reads through `waitOrAskVariant` on the row's own
  * `errorCode`/`attemptsUsed`, the same disambiguation the match page uses.
+ *
+ * `status` is optional — the T32 callers that already pinned this function
+ * never carried one, and every `isTrayFailure` row this file has ever seen
+ * before T34 was a genuine `failed`/`derivation_failed` row anyway. A stalled
+ * `uploaded` row is the one case that needs it: it reads the stepper's own
+ * `STEPPER_COPY.titles.stalled` ("Couldn't send for analysis") rather than
+ * `retry`'s ordinary "Analysis stopped · retry available" — the hand-off
+ * never happened, so nothing has actually failed and retried yet.
  */
 export function trayFailureReason(
-  analysis: Pick<MatchAnalysis, "recovery" | "errorCode" | "attemptsUsed">,
+  analysis: Pick<MatchAnalysis, "recovery" | "errorCode" | "attemptsUsed"> & {
+    status?: MatchAnalysis["status"];
+  },
 ): string {
+  if (analysis.status === "uploaded") return STEPPER_COPY.titles.stalled;
   switch (analysis.recovery) {
     case "upload_again":
     case "fix_recording":

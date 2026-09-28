@@ -5,6 +5,7 @@ import {
   trayFailureAction,
   trayFailureReason,
 } from "@/components/dashboard/activity/tray-failure";
+import { STEPPER_COPY } from "@/components/dashboard/matches/match-detail/analysis-steps";
 import type { AnalysisStatus } from "@/lib/data/match-analysis";
 
 /**
@@ -17,6 +18,11 @@ import type { AnalysisStatus } from "@/lib/data/match-analysis";
  * than re-deriving it: a `stats_unavailable` row reads "Ready" there (the
  * match page renders fine; only a chart is missing), so it must never show up
  * as a tray failure, and every in-flight status groups under "In progress".
+ *
+ * T34 adds the one deliberate divergence from that pin: a stalled
+ * `uploaded` hand-off — `status: "uploaded"` carrying a server-classified
+ * `recovery` (`retry` or `wait_or_ask`) — is a tray failure even though
+ * `matchListGroup` keeps it under "In progress".
  */
 
 const MATCH_ID = "0d6c6c1e-6f7b-4c9a-9b0e-1c2f3a4b5c6d";
@@ -70,6 +76,45 @@ test.describe("isTrayFailure matches matchListGroup's Failed group exactly", () 
   test("no analysis at all is not a tray failure", () => {
     expect(isTrayFailure(null)).toBe(false);
     expect(isTrayFailure(undefined)).toBe(false);
+  });
+});
+
+test.describe("T34: a stalled uploaded hand-off is a tray failure", () => {
+  test("uploaded + retry is a tray failure", () => {
+    expect(isTrayFailure({ status: "uploaded", recovery: "retry" })).toBe(true);
+  });
+
+  test("uploaded + wait_or_ask is a tray failure", () => {
+    expect(isTrayFailure({ status: "uploaded", recovery: "wait_or_ask" })).toBe(
+      true,
+    );
+  });
+
+  test("uploaded with no recovery is still in flight, not a tray failure", () => {
+    expect(isTrayFailure({ status: "uploaded", recovery: undefined })).toBe(
+      false,
+    );
+  });
+
+  test("a stalled uploaded row's action is Open at the match page", () => {
+    expect(trayFailureAction({ recovery: "retry" }, MATCH_ID)).toEqual({
+      label: "Open",
+      href: `/dashboard/matches/${MATCH_ID}`,
+    });
+    expect(trayFailureAction({ recovery: "wait_or_ask" }, MATCH_ID)).toEqual({
+      label: "Open",
+      href: `/dashboard/matches/${MATCH_ID}`,
+    });
+  });
+
+  test("a stalled uploaded row's reason is the stepper's stalled title", () => {
+    expect(trayFailureReason({ status: "uploaded", recovery: "retry" })).toBe(
+      STEPPER_COPY.titles.stalled,
+    );
+    expect(
+      trayFailureReason({ status: "uploaded", recovery: "wait_or_ask" }),
+    ).toBe(STEPPER_COPY.titles.stalled);
+    expect(STEPPER_COPY.titles.stalled).toBe("Couldn't send for analysis");
   });
 });
 

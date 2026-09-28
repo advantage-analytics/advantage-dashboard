@@ -464,7 +464,14 @@ export function ActivityTray({
     }));
 
     return {
-      inFlight: merged.filter((item) => isInFlight(item.analysis.status)),
+      // `&& !isTrayFailure(...)`: a stalled `uploaded` hand-off is in flight by
+      // `isInFlight` alone (the status itself never changed), but T34 draws it
+      // as a `FailedRow`, not an `InFlightRow` — the two lists must stay
+      // disjoint so the row renders exactly once.
+      inFlight: merged.filter(
+        (item) =>
+          isInFlight(item.analysis.status) && !isTrayFailure(item.analysis),
+      ),
       // `isTrayFailure`, not `isAnalysisFailed`: a `stats_unavailable` row is
       // a failed status whose match renders fine — the matches list files it
       // under Ready — so it is neither a row here, nor a count in the

@@ -295,3 +295,8 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `.skills/advantage-analytics-design/reference/chrome.md` "Activity Tray (v3)" (~L93–115) still describes red circle-x rows with a bordered "Start over" and blue dots on moving rows; update it to the shipped tray.
+
+## T34 · Stalled hand-off shows as a tray failure row — done
+
+**gate:** mechanical PASS · completion PASS
+**changed:** `isTrayFailure` returns true for `uploaded` carrying a server-classified `recovery`; activity-tray.tsx's `inFlight` excludes those rows, so a stalled hand-off renders one `FailedRow` and counts as failed. `trayFailureReason` takes an optional status and returns `STEPPER_COPY.titles.stalled` for it; the action is "Open" via the existing retry / wait_or_ask branch. Spec cases added to tests/activity-tray-failure.spec.ts.
