@@ -165,6 +165,11 @@ export {
   type LineCalls,
 } from "./line-calls";
 export {
+  serversByChangeover,
+  CHANGEOVER_MIN_GAP_S,
+  CHANGEOVER_MAX_GAP_S,
+} from "./server-witness";
+export {
   groupTrajectories,
   flightSamples,
   type TrajectoryFlight,

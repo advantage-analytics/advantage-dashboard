@@ -32,6 +32,7 @@ import {
   buildTranscript,
   lineCallsFor,
   playedRally,
+  serversByChangeover,
   POINT_FLAGS,
   type DerivedPoint,
   type LineCalls,
@@ -331,6 +332,48 @@ async function main() {
   const allCalls = [...calls.values()];
   console.log(
     `\ncoverage: ${allCalls.filter((c) => c.source === "trajectory").length} trajectory bounces · ${allCalls.filter((c) => c.source === "strokes").length} strokes-file only · ${allCalls.filter((c) => c.source === null).length} none, of ${allCalls.length} strokes`,
+  );
+
+  // --- Who served: the changeover witness ---------------------------------
+  // Independent of the vendor's labels and score stream (server-witness.ts):
+  // the serving end, the wizard's top-player answer, and changeover breaks.
+  const topIsP1 =
+    job.initial_top_player_is_player1 ??
+    match?.initial_top_player_is_player1 ??
+    null;
+  const p2Label = analysis.players.find((p) => p !== player1) ?? null;
+  if (!player1 || !p2Label || topIsP1 === null) {
+    console.log(
+      "\nserver witness: no anchor (player1 or the top-player answer)",
+    );
+    return;
+  }
+  const witnessed = serversByChangeover(
+    analysis.rallies,
+    topIsP1 ? player1 : p2Label,
+    topIsP1 ? p2Label : player1,
+  );
+  let witnessRight = 0;
+  let vendorRight = 0;
+  const differ: string[] = [];
+  for (const { point, label } of rows) {
+    const w = witnessed[point.point_number - 1];
+    const witness = w === null ? "?" : nameFor(w === player1);
+    const real = truth(label, "server");
+    if (witness === real) witnessRight += 1;
+    if (serverOf(point) === real) vendorRight += 1;
+    if (witness !== serverOf(point)) {
+      differ.push(
+        `${point.point_number}(${witness === real ? "witness" : serverOf(point) === real ? "vendor" : "neither"})`,
+      );
+    }
+  }
+  console.log("\nwho served: changeover witness vs the vendor's labels");
+  console.log(
+    `  witness ${witnessRight}/${rows.length} · vendor ${vendorRight}/${rows.length}`,
+  );
+  console.log(
+    `  they differ on (who was right): ${differ.join(" ") || "none"}`,
   );
 }
 
