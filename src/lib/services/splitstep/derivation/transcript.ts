@@ -23,7 +23,7 @@ import {
   directionZone,
   serveCourtSide,
 } from "./court";
-import { flagPoint, flagStroke } from "./flags";
+import { flagPoint, flagStroke, POINT_FLAGS } from "./flags";
 import {
   ACCEPT_UNRECONCILED_FOLD,
   reconcile,
@@ -38,7 +38,10 @@ import {
   shotResult,
   type ResultType,
 } from "./result-type";
-import { resolvePointWinners } from "./winners";
+import { lastStrokeWinner, resolvePointWinners } from "./winners";
+import { collapsedTailStart } from "./rallies";
+import { playedRally } from "./played";
+import type { LineCalls } from "./line-calls";
 import { pressureFor } from "./pressure";
 import { pointScoresOf } from "./scores";
 import { bounceVideoTimes } from "./frame-clock";
@@ -100,6 +103,11 @@ export interface Transcript {
   serveGeometryRetention: number;
   /** Rallies whose last stroke was a serve, over points. */
   unreturnedServeRate: number;
+  /**
+   * Rallies whose winner is the last stroke's guess because the score stream
+   * collapsed under them (collapsedTailStart). Each carries `winner_guessed`.
+   */
+  guessedTailRallies: number[];
 }
 
 /**
@@ -186,6 +194,12 @@ export interface BuildOptions {
   adScoring?: boolean;
   /** matches.format.best_of. Decides when a set point is also a match point. */
   bestOf?: number;
+  /**
+   * Our own line calls from the trajectories file (line-calls.ts). Absent
+   * means no file: the dead-ball autofix and the near-line flag then fall back
+   * to what the strokes file alone can say.
+   */
+  lineCalls?: LineCalls;
 }
 
 export function buildTranscript(options: BuildOptions): Transcript {
@@ -196,6 +210,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     initialTopIsPlayer1,
     adScoring = true,
     bestOf = 3,
+    lineCalls,
   } = options;
 
   const gameKeyOf = new Map<number, string>();
@@ -215,6 +230,28 @@ export function buildTranscript(options: BuildOptions): Transcript {
 
   const winners = resolvePointWinners(rallies, labels);
 
+  // A collapsed score tail keeps its rallies. They fold into the game the last
+  // real rally was in (a reset key would open a phantom set), and every point
+  // from that rally on that the stream could not resolve takes the last
+  // stroke's guess. If the vendor's tail actually spanned a game change, it is
+  // one game here — the stream no longer says where that change was.
+  const tailStart = collapsedTailStart(rallies);
+  const guessedTailRallies: number[] = [];
+  if (tailStart !== null) {
+    const anchor = rallies[tailStart - 1].rallyId;
+    for (const rally of rallies.slice(tailStart)) {
+      gameKeyOf.set(rally.rallyId, gameKeyOf.get(anchor) ?? "");
+      setKeyOf.set(rally.rallyId, setKeyOf.get(anchor) ?? "");
+    }
+    for (let i = tailStart - 1; i < winners.length; i += 1) {
+      if (winners[i].winner) continue;
+      const guess = lastStrokeWinner(rallies[i], labels);
+      if (!guess) continue;
+      winners[i] = { ...winners[i], winner: guess, via: "guess" };
+      guessedTailRallies.push(winners[i].rallyId);
+    }
+  }
+
   const empty: Transcript = {
     ok: false,
     reason: null,
@@ -232,6 +269,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     winnerShare: 0,
     serveGeometryRetention: 0,
     unreturnedServeRate: 0,
+    guessedTailRallies,
   };
 
   if (!score) {
@@ -341,7 +379,12 @@ export function buildTranscript(options: BuildOptions): Transcript {
     // winner — reading the raw array here recorded every match's last point as
     // won by player2, because `winner === player1` is false for null.
     const winner = rec.settledWinners[i]?.winner ?? null;
-    const serveIndex = lastServeIndex(rally);
+    // Phantom strokes are removed once, here, so numbering, results,
+    // result_type, flags and rally length all read the same list. Pressure and
+    // the score columns read the raw rally: they come from the score stream.
+    const played = playedRally(rally, { winner, lineCalls });
+    const kept = played.rally;
+    const serveIndex = lastServeIndex(kept);
     const pressure = pressureFor({
       rally,
       labels,
@@ -350,13 +393,13 @@ export function buildTranscript(options: BuildOptions): Transcript {
       adScoring,
       bestOf,
     });
-    const resultType = winner ? classifyPoint(rally, winner) : null;
+    const resultType = winner ? classifyPoint(kept, winner) : null;
     const numbering = gameNumberOf.get(`${gameIndex}`) ?? {
       set: 1,
       game: gameIndex + 1,
     };
 
-    const last = rally.strokes[rally.strokes.length - 1];
+    const last = kept.strokes[kept.strokes.length - 1];
     if (last && last.strokeType !== "serve" && winner) {
       rallyEnders += 1;
       if (last.playerLabel === winner) winnerStruckLast += 1;
@@ -365,7 +408,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
 
     const shots: DerivedShot[] = [];
 
-    rally.strokes.forEach((stroke, index) => {
+    kept.strokes.forEach((stroke, index) => {
       const isServe = stroke.strokeType === "serve";
       if (isServe) servesSeen += 1;
 
@@ -390,7 +433,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
         shot_number: number,
         is_player1: stroke.playerLabel === player1,
         shot_type: isServe
-          ? isFirstServe || rally.serves.length === 1
+          ? isFirstServe || kept.serves.length === 1
             ? "First Serve"
             : "Second Serve"
           : strokeShotType(stroke),
@@ -401,21 +444,24 @@ export function buildTranscript(options: BuildOptions): Transcript {
         landing_x: landing?.x ?? null,
         landing_y: landing?.y ?? null,
         result: winner
-          ? shotResult({ stroke, index, rally, serveIndex, winner })
+          ? shotResult({ stroke, index, rally: kept, serveIndex, winner })
           : null,
         video_time: stroke.videoTime,
         bounce_video_time: bounceTimeOf.get(stroke) ?? null,
         zone: isServe
           ? serveZone(landing?.x ?? null)
           : directionZone(landing?.x ?? null, contact?.x ?? null),
-        flags: flagStroke({ stroke, index, rally, serveIndex }),
+        flags: flagStroke({ stroke, index, rally: kept }),
         derived: true,
       });
     });
 
+    // The clip window spans every detected stroke, dropped ones included, so
+    // the film room still shows the whole exchange.
     const first = rally.strokes[0];
+    const end = rally.strokes[rally.strokes.length - 1];
     const duration =
-      first && last ? Math.max(0, last.videoTime - first.videoTime) : null;
+      first && end ? Math.max(0, end.videoTime - first.videoTime) : null;
 
     points.push({
       point_number: points.length + 1,
@@ -423,7 +469,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
       game_number: numbering.game,
       server_is_player1: rally.server === player1,
       won_by_player1: winner === player1,
-      rally_length: rally.strokes.length - serveIndex,
+      rally_length: kept.strokes.length - serveIndex,
       result_type: resultType,
       is_break_point: pressure.isBreakPoint,
       is_set_point: pressure.isSetPoint,
@@ -431,12 +477,20 @@ export function buildTranscript(options: BuildOptions): Transcript {
       ...pointScoresOf(rally),
       video_time: first?.videoTime ?? null,
       duration,
-      flags: flagPoint({
-        rally,
-        winner,
-        previousInGame: previousRally,
-        resultType,
-      }),
+      flags: [
+        ...flagPoint({
+          rally: kept,
+          winner,
+          previousInGame: previousRally,
+          resultType,
+          adScoring,
+          lineCalls,
+        }),
+        ...(rec.settledWinners[i]?.via === "guess"
+          ? [POINT_FLAGS.WINNER_GUESSED]
+          : []),
+        ...played.flags,
+      ],
       derived: true,
       shots,
     });
@@ -454,6 +508,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     winnerShare: rallyEnders === 0 ? 0 : winnerStruckLast / rallyEnders,
     serveGeometryRetention: servesSeen === 0 ? 0 : servesKept / servesSeen,
     unreturnedServeRate: rallies.length === 0 ? 0 : unreturned / rallies.length,
+    guessedTailRallies,
   };
 }
 

@@ -323,6 +323,52 @@ to put a testable seam.
 > is written. It corrupts silently the way the §4 inputs do, one level down.
 > `DERIVATION_VERSION` is `0.3.2-unreconciled`.
 
+> **A reviewed exception, added 2026-09-28: a collapsed score tail, in
+> `derivation/rallies.ts` and `transcript.ts`.** On job 45ff4bd7 the vendor's
+> score stream reset to point 0-0 / game 0-0 / set NaN for the last four rallies
+> and never recovered, so the last real rally and every reset one resolved no
+> winner and the match was refused. `collapsedTailStart` finds such a run
+> (trailing only, and only after a real set score). `buildTranscript` keeps the
+> rallies: it folds them into the last real rally's game and set keys, and every
+> point from that rally on that the stream could not resolve takes the last
+> stroke's guess (`lastStrokeWinner`, the same rule `winner_disputed` already
+> used) with `via: "guess"` and the point flag `winner_guessed`. The guess agreed
+> with the score stream on 77 of 96 points on that match: it is an estimate,
+> and the flag says so. Every other unresolved point still refuses the match,
+> the warm-up rally included; `reconcile()`, the player1 mapping,
+> `calculate_match_stats` and the schema are untouched. `DERIVATION_VERSION` is
+> `0.4.1-unreconciled`.
+
+> **A reviewed exception, added 2026-09-28: phantom strokes, in
+> `derivation/played.ts`, `transcript.ts` and `flags.ts`.** A non-serve stroke
+> before the deciding serve (the receiver striking a faulted first serve back)
+> was written to `shots` at `shot_number` 0, tied with the faulted serve, and
+> `pickReturnShot` and the film room took it as the point's return.
+> `playedRally` now removes it before any row is built, so it never reaches
+> `shots`; the point carries `phantom_strokes_dropped` and the raw payload
+> keeps the stroke. Two flag-only changes ride with it: `second_serve_called_out`
+> (review-only; inferring a double fault from it was rejected after 2 of 10
+> checked on video were right) and no `service_court_repeat` on a no-ad 40-40
+> point, where the receiver picks the side. Winners, `result_type` rules,
+> `reconcile()`, `calculate_match_stats` and the schema are untouched.
+> `DERIVATION_VERSION` is `0.4.2-unreconciled`.
+
+> **A reviewed exception, added 2026-09-28: trajectory line calls, in
+> `derivation/trajectory.ts`, `line-calls.ts`, `played.ts`, `flags.ts`,
+> `persist-transcript.ts` and the webhook.** Derivation now reads the vendor's
+> trajectories file for its own in/out call per stroke. When the ball before a
+> derived winner bounced outside the singles lines, the winner's stroke is
+> dropped as a dead ball and the point reads as an error by the out ball's
+> hitter (`winner_to_error_by_bounce`); the point winner never changes. It is
+> an autofix on small evidence — 6 of 6 on one hand-labelled match — and
+> `played.ts` carries the criteria for keeping or demoting it, measured with
+> `scripts/splitstep-eval.ts`. A near-line ball flags `ending_suspect_line` for
+> review. To be read before derivation, the webhook now stores the
+> trajectories file (8 s clock) ahead of `deriveAndPublish`; the players file
+> still comes last. A job without a trajectories file derives as before.
+> `reconcile()`, winners, `calculate_match_stats` and the schema are untouched.
+> `DERIVATION_VERSION` is `0.5.0-unreconciled`.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 

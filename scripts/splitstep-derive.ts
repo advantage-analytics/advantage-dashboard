@@ -92,6 +92,11 @@ async function main() {
   }
   console.log(`folded sets: ${JSON.stringify(r.foldedSets)}`);
   console.log(`unresolved points: ${r.unresolvedPoints.length}`);
+  if (t.guessedTailRallies.length > 0) {
+    console.log(
+      `guessed tail rallies (score stream reset, winner_guessed): ${t.guessedTailRallies.join(", ")}`,
+    );
+  }
   console.log(
     `points ${t.points.length}   shots ${shots}   games ${r.games.length}`,
   );
