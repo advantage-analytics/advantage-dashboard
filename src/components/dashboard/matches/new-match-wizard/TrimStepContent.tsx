@@ -94,6 +94,7 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { isFormControl } from "./useWizardKeys";
 import { formatClipLength, formatClock, formatTimecode } from "./utils";
 import { FieldCaption } from "./FieldCaption";
+import { effectiveFps } from "@/lib/services/upload/validators/splitstep-validator";
 
 /** The two camera answers, by their FormData field. */
 export type CameraAnswer = "fixedCamera" | "initialTopPlayerIsPlayer1";
@@ -434,10 +435,10 @@ function TrimStepContentImpl({
 
   /**
    * One frame, when we know the rate — the sampled rate, or the container
-   * average where the browser could not sample (Firefox). Falls back to a
-   * reasonable nudge.
+   * average where the browser could not sample (Firefox), snapped the same
+   * way the validator judges it. Falls back to a reasonable nudge.
    */
-  const frameRate = probe?.fps || probe?.averageFps;
+  const frameRate = probe ? effectiveFps(probe) : null;
   const frameStep = frameRate ? 1 / frameRate : 0.1;
   // The cuts as the playhead publisher sees them, so the trailing timer can
   // ask "would this flip a Set button?" without closing over a render's

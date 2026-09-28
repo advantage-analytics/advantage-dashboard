@@ -152,8 +152,12 @@ function formatAverage(averageFps: number): string {
  * (Firefox): the sample is null there, but the container read still works, and
  * without it a 24 fps MP4 would skip the floor and fail only after upload.
  * Null only when neither is known.
+ *
+ * Exported so UI code deriving "one frame" from a probe (e.g. the trim
+ * step's frame-step calculation) uses the same fallback and snap as the
+ * validator, rather than a second copy that could drift.
  */
-function effectiveFps(probe: VideoProbe): number | null {
+export function effectiveFps(probe: VideoProbe): number | null {
   if (probe.fps !== null) return probe.fps;
   return probe.averageFps != null ? snapToStandardFps(probe.averageFps) : null;
 }
@@ -195,7 +199,6 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   // 29.97 clears the 30 floor here as well, and not only because probe.ts
   // happened to round it on the way in; the message still quotes the rate the
   // file reported, which is the number the camera's menu shows.
-  //
   if (probe.fps !== null && snapToStandardFps(probe.fps) < MIN_VIDEO_FPS) {
     return {
       success: false,
