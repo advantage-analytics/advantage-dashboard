@@ -13,6 +13,10 @@
 //   EYES_ON_EMAIL / EYES_ON_PASSWORD   the verifier account. Unset → exit 2.
 //   EYES_ON_BASE_URL                   optional. Attach to a running loopback
 //                                      dev server instead of starting one.
+//   EYES_ON_TEAM_WORKSPACE             optional. A program id the account
+//                                      belongs to; selected (by cookie) for
+//                                      every /dashboard/team path, so team
+//                                      routes do not bounce to personal Home.
 //
 // Dev server: without EYES_ON_BASE_URL the script starts `next dev` on a free
 // port and stops it on exit. Next 16 allows one dev server per checkout; if it
@@ -78,6 +82,7 @@ function loadEnv() {
     email: get("EYES_ON_EMAIL"),
     password: get("EYES_ON_PASSWORD"),
     baseUrl: get("EYES_ON_BASE_URL"),
+    teamWorkspace: get("EYES_ON_TEAM_WORKSPACE"),
   };
 }
 
@@ -230,10 +235,14 @@ async function main() {
     ...(existsSync(statePath) ? { storageState: statePath } : {}),
   });
   // Without the pin the sidebar rail starts collapsed and every frame reads
-  // narrower than the design.
+  // narrower than the design. The beta welcome dialog covers every page until
+  // dismissed; its legacy "seen" key is honoured and migrated per user
+  // (src/components/dashboard/beta-welcome-dialog.tsx), so setting it here
+  // is the same as the account having closed it once.
   await context.addInitScript(() => {
     try {
       localStorage.setItem("sidebar:pinned", "1");
+      localStorage.setItem("adv:beta-welcome-seen", "1");
     } catch {
       /* private mode */
     }
@@ -258,11 +267,13 @@ async function main() {
     p.on("pageerror", (e) =>
       bucket.consoleErrors.push(String(e).slice(0, 500)),
     );
-    p.on("requestfailed", (r) =>
-      bucket.failedRequests.push(
-        `${r.method()} ${r.url()} — ${r.failure()?.errorText ?? "failed"}`,
-      ),
-    );
+    p.on("requestfailed", (r) => {
+      const why = r.failure()?.errorText ?? "failed";
+      // A fetch the page itself cancelled (navigation, unmount) is not a
+      // failure of the page.
+      if (why === "net::ERR_ABORTED") return;
+      bucket.failedRequests.push(`${r.method()} ${r.url()} — ${why}`);
+    });
     p.on("response", (r) => {
       if (r.status() >= 400) {
         bucket.failedRequests.push(
@@ -322,6 +333,19 @@ async function main() {
       note: "",
     };
     const shotPath = join(out, entry.screenshot);
+    // The active workspace is a cookie the server re-validates against
+    // membership (src/lib/workspace/workspace-cookie.ts). Team paths get the
+    // configured program; everything else runs in the personal workspace.
+    const wantTeam = path.startsWith("/dashboard/team");
+    await context.clearCookies({ name: "advantage_workspace" });
+    if (wantTeam && env.teamWorkspace) {
+      await context.addCookies([
+        { name: "advantage_workspace", value: env.teamWorkspace, url: baseUrl },
+      ]);
+    } else if (wantTeam) {
+      entry.note =
+        "EYES_ON_TEAM_WORKSPACE unset; captured in personal workspace";
+    }
     const p = await context.newPage();
     attachCollectors(p, entry);
     try {
@@ -334,6 +358,8 @@ async function main() {
       entry.finalUrl = p.url().replace(baseUrl, "");
       entry.title = await p.title();
       if (/^\/login/.test(entry.finalUrl)) entry.note = "bounced to /login";
+      else if (wantTeam && !entry.finalUrl.startsWith("/dashboard/team"))
+        entry.note = `bounced to ${entry.finalUrl} (workspace not applied?)`;
       else if (/^\/onboarding/.test(entry.finalUrl))
         entry.note = "bounced to /onboarding (verifier account not onboarded)";
       // Same-origin links, so the agent can find a detail page's id without

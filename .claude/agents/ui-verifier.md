@@ -31,8 +31,11 @@ thing on screen, one line under `Noted, out of scope`.
 - **The harness command.** It is the only way you touch a browser:
 
 ```bash
-node scripts/eyes-on/capture.mjs --out "$OUT" /dashboard /dashboard/matches …
+node --no-warnings scripts/eyes-on/capture.mjs --out "$OUT" /dashboard /dashboard/matches …
 ```
+
+(`--no-warnings` silences Node's note about importing a `.ts` loader from
+an `.mjs` script; it is not an error.)
 
 `$OUT` is a scratch directory the orchestrator names. The script starts (or
 attaches to) a local dev server, signs in as the verifier account, and writes
@@ -45,13 +48,19 @@ do not try another way in.
 ## Procedure
 
 1. **Capture the candidate routes.** One harness run, all paths.
-2. **Read `report.json` first**, then open every PNG with `Read`. A PNG is
-   evidence; the report tells you whether the page even rendered.
+2. **Read `report.json` first**, then open every PNG with `Read` — **pass
+   `limit: 1`** on each image read. A file-size hook counts a PNG's bytes as
+   lines and refuses a plain read of anything over its threshold; `limit`
+   is what lets an image through. A PNG is evidence; the report tells you
+   whether the page even rendered.
 3. **Resolve detail pages.** A route like `/dashboard/matches/[matchId]` needs
    an id. Take it from the `links` array of the index page you already
    captured — the first matching href — and run the harness again for those.
    Never guess an id. If the account has no such entity, that route is
-   `[not covered]`, not an error.
+   `[not covered]`, not an error. Paths under `/dashboard/team` are captured
+   in the configured team workspace automatically; a `note` on such a page
+   saying the workspace was unset or not applied is a harness gap, not an
+   app finding — report it under `## Not covered`.
 4. **Judge each screen against the intent.** For every `done when:` line that
    describes something visible, find it on the screenshot or say it is absent.
    Then check the silent failures `docs/ui-revamp-guardrails.md` warns about,

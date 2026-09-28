@@ -321,11 +321,13 @@ or memory sees what is there. Do not hand it any of those. Hand it exactly:
    (`/dashboard/matches/[matchId]`); the verifier resolves an id from the
    index page's links.
 4. **The harness command and a scratch dir** —
-   `node scripts/eyes-on/capture.mjs --out "$OUT" <paths…>`, with `$OUT`
-   under the session scratchpad. The script starts (or attaches to) a dev
-   server, signs in as the `EYES_ON_*` account from `.env.local`, and writes
-   the PNGs and `report.json` the agent reads. It never prints the
-   credentials, and neither do you.
+   `node --no-warnings scripts/eyes-on/capture.mjs --out "$OUT" <paths…>`,
+   with `$OUT` under the session scratchpad. The script starts (or attaches
+   to) a dev server, signs in as the `EYES_ON_*` account from `.env.local`,
+   dismisses the beta welcome dialog, selects the `EYES_ON_TEAM_WORKSPACE`
+   program for `/dashboard/team` paths, and writes the PNGs and
+   `report.json` the agent reads. It never prints the credentials, and
+   neither do you.
 
 **Credentials unset** — the harness exits 2 and the agent's verdict is
 `unverifiable`. That is an explicit skip, named in stage 4 as
