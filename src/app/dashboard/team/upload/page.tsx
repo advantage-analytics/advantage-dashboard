@@ -18,6 +18,7 @@ import {
   presetFor,
   singleMatchPreset,
 } from "@/lib/schedule/line-choices";
+import { resolveUploadTarget } from "@/lib/schedule/upload-target";
 import { getTeamSingleMatch } from "@/lib/data/single-match-server";
 import { supportsVideo } from "@/lib/schedule/entry-state";
 import { formatEventSpan, siteLabel } from "@/lib/schedule/format";
@@ -169,79 +170,66 @@ export default async function TeamUploadPage({
   // still asks for the source.
 
   if (entryId) {
-    const groups = await getUploadQueue(active.id);
-    for (const group of groups) {
-      const entry = group.entries.find((candidate) => candidate.id === entryId);
-      if (!entry) continue;
+    // Resolved against the FULL program schedule, never `getUploadQueue`.
+    // The queue is "lines with no video yet", and this branch is the page the
+    // wizard is still mounted on after it writes the match row and its
+    // processing job: `useUploadMatchWizard` calls `router.refresh()` 300 ms
+    // after the create, this component re-runs, and the line it is uploading
+    // to has just left the queue. Gating on the queue redirected that refresh
+    // to the bare picker and unmounted the success screen ("Uploading your
+    // video") while the upload kept running with nothing showing it. The queue
+    // filter belongs to the LIST below only. Every other refusal — another
+    // program's line, a forfeit, doubles, a `?match=` of a different entry —
+    // lives in `resolveUploadTarget` and still redirects.
+    //
+    // The returned tree must stay the same shape on that refresh (fragment →
+    // EventHeaderSlot + UploadMatchFlow) so React keeps the flow mounted; its
+    // `preset` prop only seeds state, so a refresh that resolves a newly
+    // created match does not reset it.
+    const schedule = await getProgramSchedule(active.id);
+    const target = resolveUploadTarget(schedule, entryId, matchId);
+    if (target.kind === "redirect") redirect("/dashboard/team/upload");
 
-      // Doubles is score-only (decision 2026-09-22): no video analysis, no
-      // SwingVision statistics. No link on the site sends a doubles line here
-      // any more, but a hand-built URL or a stale bookmark still can, and the
-      // wizard would otherwise open with a preset `wizardUploadEligibility()`
-      // refuses on sight. Same style as the `entryId && !staff` redirect
-      // above: the URL is not honoured, the picker is.
-      if (entry.discipline !== "singles") redirect("/dashboard/team/upload");
+    const { event, entry, match, siblings } = target;
 
-      // The row that was clicked, not just the entry's first match. A
-      // tournament entry is a whole run, so `?match=` is what says which round
-      // this video belongs to.
-      const requested = matchId
-        ? entry.matches.find((candidate) => candidate.id === matchId)
-        : undefined;
+    // The whole event, not just its videoless lines: the pinned bar's
+    // Change menu lists every slot with its own state (design 10a), and the
+    // opponent picker needs the program behind the dual (11b).
+    const programs = await programNamesFor(
+      siblings
+        .map((e) => e.opponentProgramId ?? null)
+        .filter((id): id is string => Boolean(id)),
+    );
 
-      // A `?match=` the queue does not hold is NOT a reason to fall back to
-      // `entry.matches[0]`. That attached the video and the camera answers to
-      // a DIFFERENT ROUND of the same tournament run — the coach clicked R32
-      // and the file landed on Q1, with nothing on screen to show for it. The
-      // entry-not-found case two lines below already redirects; this is the
-      // same mistake one level down.
-      if (matchId && !requested) redirect("/dashboard/team/upload");
+    const preset: EventPreset = {
+      ...presetFor(event, entry, match, programs),
+      // Doubles is score-only, so the pinned bar's Change menu lists a
+      // doubles line but cannot switch the upload onto it — the same answer
+      // `resolveUploadTarget` gives a doubles URL.
+      lineup: lineupChoices(event, siblings, programs).map((choice) =>
+        choice.preset?.discipline === "doubles"
+          ? { ...choice, preset: null }
+          : choice,
+      ),
+    };
 
-      const match = requested ?? entry.matches[0] ?? null;
-
-      // The whole event, not just its videoless lines: the pinned bar's
-      // Change menu lists every slot with its own state (design 10a), and the
-      // opponent picker needs the program behind the dual (11b).
-      const schedule = await getProgramSchedule(active.id);
-      const siblings = schedule.entriesByEvent.get(group.event.id) ?? [];
-      const programs = await programNamesFor(
-        siblings
-          .map((e) => e.opponentProgramId ?? null)
-          .filter((id): id is string => Boolean(id)),
-      );
-
-      const preset: EventPreset = {
-        ...presetFor(group.event, entry, match, programs),
-        // Doubles is score-only, so the pinned bar's Change menu lists a
-        // doubles line but cannot switch the upload onto it — the same answer
-        // the `discipline !== "singles"` redirect above gives a URL.
-        lineup: lineupChoices(group.event, siblings, programs).map((choice) =>
-          choice.preset?.discipline === "doubles"
-            ? { ...choice, preset: null }
-            : choice,
-        ),
-      };
-
-      // An upload aimed at a line sits under its event, like `/edit` and
-      // `/score` beside it: "Schedule › vs Stanford › Upload video". Where the
-      // page is, not how you got here — never "… › Add score › Upload video".
-      // The header has no path check for this route (`EVENT_PAGE` covers the
-      // schedule tree only), so the static "Upload video" crumb shows for the
-      // frame before this effect publishes; the other branches keep it.
-      return (
-        <>
-          <EventHeaderSlot
-            eventId={group.event.id}
-            name={group.event.name}
-            kind={group.event.kind}
-            leaf="Upload video"
-          />
-          <UploadMatchFlow preset={preset} />
-        </>
-      );
-    }
-    // The id names a line that already has video, or one from another program.
-    redirect("/dashboard/team/upload");
+    // An upload aimed at a line sits under its event, like `/edit` and
+    // `/score` beside it: "Schedule › vs Stanford › Upload video". Where the
+    // page is, not how you got here — never "… › Add score › Upload video".
+    // The header has no path check for this route (`EVENT_PAGE` covers the
+    // schedule tree only), so the static "Upload video" crumb shows for the
+    // frame before this effect publishes; the other branches keep it.
+    return (
+      <>
+        <EventHeaderSlot
+          eventId={event.id}
+          name={event.name}
+          kind={event.kind}
+          leaf="Upload video"
+        />
+        <UploadMatchFlow preset={preset} />
+      </>
+    );
   }
 
   // A player has no line to pick, so there is nothing to preset and the queue is

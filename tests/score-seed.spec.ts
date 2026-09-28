@@ -2,7 +2,10 @@ import { expect, test } from "@playwright/test";
 
 import {
   planSave,
+  presetAtRound,
+  reseedForRound,
   savedLineUpload,
+  scoreFormDirty,
   seedScoreForm,
   type ScoreFormState,
   toRecordResultInput,
@@ -63,8 +66,8 @@ test.describe("seedScoreForm", () => {
     expect(seedScoreForm(preset({ bestOf: 5 })).playerScores).toHaveLength(5);
   });
 
-  test("a scored line seeds its sets and blanks its tiebreaks", () => {
-    // `EventPreset.score` carries game counts and no tiebreaks at all, so a
+  test("a scored line with no tiebreak arrays seeds its sets and blanks its tiebreaks", () => {
+    // A score saved before the tiebreak cells existed has neither array, so a
     // seeded breaker would be a number nobody entered.
     const state = seedScoreForm(
       preset({ score: { player1: [6, 7], player2: [4, 6] } }),
@@ -74,6 +77,44 @@ test.describe("seedScoreForm", () => {
     expect(state.opponentScores).toEqual([4, 6, null]);
     expect(state.playerTiebreaks).toEqual([null, null, null]);
     expect(state.opponentTiebreaks).toEqual([null, null, null]);
+  });
+
+  test("a recorded 7-6(5), 6-4 seeds games in the sets and the 5 in the loser's tiebreak cell", () => {
+    // Stored the way `recordResult` writes it: games in player1/player2, the
+    // breaker's points against the side that LOST the set — here the
+    // opponent (player2). Guardrails §4.3.
+    const state = seedScoreForm(
+      preset({
+        score: {
+          player1: [7, 6],
+          player2: [6, 4],
+          player1_tiebreaks: [null, null],
+          player2_tiebreaks: [5, null],
+        },
+      }),
+    );
+
+    expect(state.playerScores).toEqual([7, 6, null]);
+    expect(state.opponentScores).toEqual([6, 4, null]);
+    expect(state.playerTiebreaks).toEqual([null, null, null]);
+    expect(state.opponentTiebreaks).toEqual([5, null, null]);
+  });
+
+  test("a seeded tiebreak round-trips to the same recordResult payload", () => {
+    const scored = preset({
+      score: {
+        player1: [7, 6],
+        player2: [6, 4],
+        player1_tiebreaks: [null, null],
+        player2_tiebreaks: [5, null],
+      },
+    });
+    const input = toRecordResultInput(scored, seedScoreForm(scored));
+
+    expect(input.ourGames).toEqual([7, 6]);
+    expect(input.theirGames).toEqual([6, 4]);
+    expect(input.ourTiebreaks).toEqual([null, null]);
+    expect(input.theirTiebreaks).toEqual([5, null]);
   });
 
   test("a score longer than the format is not truncated", () => {
@@ -403,5 +444,108 @@ test.describe("the matches, Home and profile rule agrees on a stopped match", ()
   test("without one, sets decide and level is no answer", () => {
     expect(matchOutcome({ player1: [6, 6], player2: [3, 4] }, true)).toBe(true);
     expect(matchOutcome({ player1: [6, 3], player2: [3, 6] }, true)).toBeNull();
+  });
+});
+
+test.describe("changing the round on a tournament entry", () => {
+  const blank = preset({ eventKind: "tournament", round: "R16", bestOf: 3 });
+  const seeds = {
+    "entry-1": {
+      matchId: null,
+      score: null,
+      ending: null,
+      opponentName: "Rival Player",
+    },
+    "entry-1/R32": {
+      matchId: "match-r32",
+      score: {
+        player1: [6, 7],
+        player2: [3, 6],
+        player1_tiebreaks: [null, null],
+        player2_tiebreaks: [null, 4],
+      },
+      ending: null,
+      opponentName: "Casey Chen",
+    },
+  };
+
+  test("presetAtRound takes the round's own match, or the entry's blank seed", () => {
+    const r32 = presetAtRound(blank, "R32", seeds);
+    expect(r32).toMatchObject({
+      round: "R32",
+      matchId: "match-r32",
+      opponentName: "Casey Chen",
+    });
+    expect(r32.score?.player2_tiebreaks).toEqual([null, 4]);
+
+    // Leaving a recorded round never carries its match id to the next one.
+    const qf = presetAtRound(r32, "QF", seeds);
+    expect(qf).toMatchObject({
+      round: "QF",
+      matchId: null,
+      score: null,
+      opponentName: "Rival Player",
+    });
+  });
+
+  test("an untouched form reseeds from the chosen round, tiebreaks included", () => {
+    const seeded = seedScoreForm(blank);
+    const next = presetAtRound(blank, "R32", seeds);
+    const result = reseedForRound(seeded, seeded, next, null);
+
+    expect(result.kept).toBe(false);
+    expect(result.state.playerScores).toEqual([6, 7, null]);
+    expect(result.state.opponentScores).toEqual([3, 6, null]);
+    expect(result.state.opponentTiebreaks).toEqual([null, 4, null]);
+    expect(result.state.opponentName).toBe("Casey Chen");
+    expect(result.seeded).toEqual(result.state);
+  });
+
+  test("a recorded round opened full is still untouched", () => {
+    const r32 = seedScoreForm(presetAtRound(blank, "R32", seeds));
+    expect(scoreFormDirty(r32, r32)).toBe(false);
+    // Typing past the seeded length and clearing it is not an edit either.
+    expect(
+      scoreFormDirty(
+        { ...r32, playerScores: [...r32.playerScores, null] },
+        r32,
+      ),
+    ).toBe(false);
+  });
+
+  test("a typed digit, a name or an ending makes it dirty, and dirty keeps everything", () => {
+    const seeded = seedScoreForm(blank);
+    const typed: ScoreFormState = {
+      ...seeded,
+      playerScores: [6, null, null],
+      opponentScores: [4, null, null],
+      ending: "retired",
+      stoppedBy: "theirs",
+    };
+    expect(scoreFormDirty(typed, seeded)).toBe(true);
+    expect(
+      scoreFormDirty({ ...seeded, opponentName: "Someone Else" }, seeded),
+    ).toBe(true);
+    expect(scoreFormDirty({ ...seeded, ending: "defaulted" }, seeded)).toBe(
+      true,
+    );
+
+    const next = presetAtRound(blank, "R32", seeds);
+    const result = reseedForRound(typed, seeded, next, null);
+    expect(result.kept).toBe(true);
+    expect(result.state).toBe(typed);
+    expect(result.seeded).toBe(seeded);
+  });
+
+  test("an untouched form takes the chosen round's saved outcome", () => {
+    const seeded = seedScoreForm(blank);
+    const result = reseedForRound(
+      seeded,
+      seeded,
+      presetAtRound(blank, "QF", seeds),
+      { kind: "default", side: "ours" },
+    );
+    expect(result.state.ending).toBe("defaulted");
+    expect(result.state.stoppedBy).toBe("ours");
   });
 });

@@ -5,6 +5,8 @@ import { expect, test } from "@playwright/test";
 import * as jsxRuntime from "react/jsx-runtime";
 import ts from "typescript";
 
+import { resolveUploadTarget } from "@/lib/schedule/upload-target";
+
 /**
  * `/dashboard/team/upload?entry=` is an upload aimed at one line of one event,
  * so its header trail sits under that event the way `/edit` and `/score` do:
@@ -31,7 +33,19 @@ const EVENT = { id: "event-1", name: "Stanford", kind: "dual" as const };
 const SINGLES_ENTRY = {
   id: "entry-singles",
   discipline: "singles",
-  matches: [{ id: "match-1" }],
+  slot: "S1",
+  forfeit: null,
+  matches: [{ id: "match-1", round: "S1", hasVideo: false }],
+};
+
+/**
+ * The same line one `router.refresh()` after the wizard created its job: the
+ * match now has video, so the upload QUEUE no longer holds it (T4).
+ */
+const JUST_UPLOADED_ENTRY = {
+  ...SINGLES_ENTRY,
+  id: "entry-just-uploaded",
+  matches: [{ id: "match-2", round: "S1", hasVideo: true }],
 };
 
 function loadPage() {
@@ -72,8 +86,13 @@ function loadPage() {
     },
     "@/lib/data/schedule-server": {
       getUploadQueue: async () => [{ event: EVENT, entries: [SINGLES_ENTRY] }],
+      // The `?entry=` branch reads THIS, never the queue — the queue drops
+      // the just-uploaded line, the full schedule still holds it.
       getProgramSchedule: async () => ({
-        entriesByEvent: new Map([[EVENT.id, [SINGLES_ENTRY]]]),
+        events: [EVENT],
+        entriesByEvent: new Map([
+          [EVENT.id, [SINGLES_ENTRY, JUST_UPLOADED_ENTRY]],
+        ]),
       }),
       programNamesFor: async () => new Map(),
     },
@@ -85,10 +104,14 @@ function loadPage() {
       draftWorkspaceRefusal: () => "",
     },
     "@/lib/schedule/line-choices": {
-      presetFor: () => ({ entryId: SINGLES_ENTRY.id }),
+      presetFor: (_event: unknown, entry: { id: string }) => ({
+        entryId: entry.id,
+      }),
       lineupChoices: () => [],
       singleMatchPreset: () => ({ singleMatchId: "single-1" }),
     },
+    // The real resolver: it is pure, and it is the thing under test here.
+    "@/lib/schedule/upload-target": { resolveUploadTarget },
     "@/lib/data/single-match-server": {
       getTeamSingleMatch: async (_programId: string, id: string) => ({
         id,
@@ -159,6 +182,31 @@ test("a staff upload aimed at a line publishes the event's trail", async () => {
   expect(flows[0].props).toEqual({
     preset: { entryId: SINGLES_ENTRY.id, lineup: [] },
   });
+});
+
+test("a refresh after the row is written keeps the same tree (T4)", async () => {
+  // `useUploadMatchWizard` refreshes 300 ms after creating the match and its
+  // job. The line has video now and is gone from the queue; the page must
+  // still render the flow, not redirect to the picker and unmount it.
+  const visits: Record<string, string>[] = [
+    { entry: JUST_UPLOADED_ENTRY.id, match: "match-2" },
+    { entry: JUST_UPLOADED_ENTRY.id },
+  ];
+  for (const params of visits) {
+    const tree = await render(params);
+    expect(findAll(tree, EventHeaderSlot)).toHaveLength(1);
+    const flows = findAll(tree, UploadMatchFlow);
+    expect(flows).toHaveLength(1);
+    expect(flows[0].props).toEqual({
+      preset: { entryId: JUST_UPLOADED_ENTRY.id, lineup: [] },
+    });
+  }
+});
+
+test("an entry outside the program still redirects to the picker", async () => {
+  await expect(render({ entry: "not-ours" })).rejects.toThrow(
+    "redirect:/dashboard/team/upload",
+  );
 });
 
 test("the bare staff line picker publishes no slot", async () => {

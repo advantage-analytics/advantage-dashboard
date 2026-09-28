@@ -10,14 +10,16 @@ import {
   lineCoverageFrom,
   readyMatchIdsFrom,
 } from "@/lib/schedule/entry-state";
+import { nextRoundAfter } from "@/lib/schedule/tournament-run";
 import { entry } from "./fixtures/schedule-tournament-outcomes-data";
 
 /**
- * The tournament's event page (`schedule/tournament-detail.tsx`) as an
- * entry-grouped match table on the event-table kit: header, summary strip,
- * group heads, rows, pills and footer, on `fixtures/schedule-tournament-
- * outcomes-*` — one qualifying run (Q1 default won, R16 played, QF withdrawn)
- * and one main-draw entry with nothing played yet.
+ * The tournament's event page (`schedule/tournament-detail.tsx`) as one flat,
+ * date-ordered match table on the event-table kit: header, summary strip,
+ * rows (Date · Player · Draw · Round · …), pills and footer, on
+ * `fixtures/schedule-tournament-outcomes-*` — one qualifying run (Q1 default
+ * won, R16 played Sep 11, QF withdrawn) and one main-draw entry with nothing
+ * played yet, which contributes no row.
  */
 
 const webpack = (
@@ -153,14 +155,16 @@ function cell(page: Page, label: string) {
   return page.getByText(label, { exact: true }).locator("..");
 }
 
-test("renders played and outcome-only rounds in the established ladder order", async ({
+test("renders played and outcome-only rounds by date, undated rounds last", async ({
   page,
 }) => {
   await open(page);
 
+  // `compareTournamentRows`: the dated R16 first, then the outcome-only
+  // rounds (no match, no date) by `roundRank` — Q1 before QF.
   await expect(matchRows(page).locator("span.mono")).toHaveText([
-    "Q1",
     "R16",
+    "Q1",
     "QF",
   ]);
 
@@ -188,14 +192,24 @@ test("renders played and outcome-only rounds in the established ladder order", a
   await expect(row(page, "R16")).toContainText("Sep 11");
   await expect(row(page, "Q1").getByText("No date")).toHaveCount(1);
 
-  // Rows carry no actions any more. "Edit result" (each round, into the score
-  // flow at that round), "View report" and the entry's next-round "Add
-  // result" move into the match drawer, and T12 re-asserts them there.
-  await expect(matchRows(page).getByRole("link")).toHaveCount(0);
+  // Rows carry no actions. "Edit result" (each round, into the score flow at
+  // that round), "View report" and the entry's next-round "Add result" live
+  // in the match drawer. The only links in a row are the Player cell's roster
+  // names — one per row here, all Jordan Lee's.
+  const links = matchRows(page).getByRole("link");
+  await expect(links).toHaveCount(3);
+  await expect(links).toHaveText(["Jordan Lee", "Jordan Lee", "Jordan Lee"]);
+  for (const href of await links.evaluateAll((els) =>
+    els.map((el) => el.getAttribute("href")),
+  )) {
+    expect(href).toBe("/dashboard/team/roster/player-browser");
+  }
   expect(await page.evaluate(() => window.actionCalls)).toEqual([]);
 });
 
-test("the header, strip, columns, group heads and footer", async ({ page }) => {
+test("the header, strip, columns, Player/Draw/Round cells and footer", async ({
+  page,
+}) => {
   await open(page);
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -226,32 +240,24 @@ test("the header, strip, columns, group heads and footer", async ({ page }) => {
   await expect(cell(page, "First serve in")).toContainText("—");
   await expect(cell(page, "Reports")).toContainText("1 of 1ready");
 
-  await expect(page.getByRole("columnheader")).toHaveText([
-    "Date",
-    "Round",
-    "Opponent",
-    "Result",
-    "Score",
-    "Analysis",
-  ]);
+  await expect(page.getByRole("columnheader")).toHaveText([...COLUMNS]);
 
-  // The first entry's head: name linked to the roster (its lineup id is a
-  // roster player), draw words, and the run's record on the right.
-  const lee = page.getByRole("link", { name: "Jordan Lee" });
-  await expect(lee).toHaveAttribute(
-    "href",
-    "/dashboard/team/roster/player-browser",
-  );
-  const leeHead = lee.locator("../..");
-  await expect(leeHead).toContainText("Qualifying");
-  await expect(leeHead).toContainText("1–0");
+  // Each row names its player (linked to the roster: the lineup id is a
+  // roster player), the draw its round belongs to, and the round.
+  const r16 = row(page, "R16");
+  await expect(
+    r16.getByRole("link", { name: "Jordan Lee", exact: true }),
+  ).toHaveAttribute("href", "/dashboard/team/roster/player-browser");
+  await expect(r16.getByText("Main draw", { exact: true })).toHaveCount(1);
+  await expect(r16.getByText("R16", { exact: true })).toHaveCount(1);
+  await expect(
+    row(page, "Q1").getByText("Qualifying", { exact: true }),
+  ).toHaveCount(1);
 
-  // The second entry has played nothing: its head still draws, unlinked,
-  // because its lineup id resolves to nobody on the roster.
-  await expect(page.getByRole("link", { name: "Sam Park" })).toHaveCount(0);
-  const parkHead = page.getByText("Sam Park", { exact: true }).locator("..");
-  await expect(parkHead).toContainText("Main draw · Seed 1");
-  await expect(parkHead).toContainText("No matches yet");
+  // No per-entry head any more: the waiting entry has no row, and nothing
+  // outside the rows names it or says "No matches yet".
+  await expect(page.getByText("Sam Park")).toHaveCount(0);
+  await expect(page.getByText("No matches yet")).toHaveCount(0);
 
   await expect(
     page.getByText("3 matches · 2 entries · Best of 3 sets, no-ad scoring", {
@@ -273,8 +279,6 @@ test("the pills cut rows by draw, and a row click selects it", async ({
 
   await page.getByRole("button", { name: "Qualifying", exact: true }).click();
   await expect(matchRows(page).locator("span.mono")).toHaveText(["Q1"]);
-  // An entry the cut leaves empty drops out with its head.
-  await expect(page.getByText("Sam Park", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Main draw", exact: true }).click();
   await expect(matchRows(page).locator("span.mono")).toHaveText(["R16", "QF"]);
@@ -287,21 +291,25 @@ test("the pills cut rows by draw, and a row click selects it", async ({
 
 /* ── Column tracks (T24) ────────────────────────────────────────────────── */
 
+const COLUMNS = [
+  "Date",
+  "Player",
+  "Draw",
+  "Round",
+  "Opponent",
+  "Result",
+  "Score",
+  "Analysis",
+] as const;
+
 /**
- * Every heading and every Round cell fits its track, every row's Score cell
- * starts on the "Score" heading's x, and Date is the Matches table's 72px —
- * with the drawer closed and again beside it.
+ * Every heading and every Round and Draw cell fits its track, every row's
+ * Score cell starts on the "Score" heading's x, and Date is the Matches
+ * table's 72px — with the drawer closed and again beside it.
  */
 async function assertTracks(page: Page) {
   const headers = page.getByRole("columnheader");
-  await expect(headers).toHaveText([
-    "Date",
-    "Round",
-    "Opponent",
-    "Result",
-    "Score",
-    "Analysis",
-  ]);
+  await expect(headers).toHaveText([...COLUMNS]);
 
   const clipped = await headers.evaluateAll((els) =>
     els
@@ -316,16 +324,19 @@ async function assertTracks(page: Page) {
   expect(date?.width ?? 0).toBeGreaterThanOrEqual(71);
   expect(date?.width ?? 0).toBeLessThanOrEqual(73);
 
-  // Cells are the row's direct children in header order: Score is the 5th.
+  // Cells are the row's direct children in header order: Draw is the 3rd,
+  // Round the 4th, Score the 7th.
   const scoreX = (await page
     .getByRole("columnheader", { name: "Score" })
     .boundingBox())!.x;
   const rows = await matchRows(page).evaluateAll((els) =>
     els.map((el) => {
       const cells = Array.from(el.children) as HTMLElement[];
-      const round = cells[1];
+      const draw = cells[2];
+      const round = cells[3];
       return {
-        scoreX: cells[4].getBoundingClientRect().x,
+        scoreX: cells[6].getBoundingClientRect().x,
+        drawFits: draw.scrollWidth <= draw.clientWidth,
         roundFits: round.scrollWidth <= round.clientWidth,
       };
     }),
@@ -333,11 +344,12 @@ async function assertTracks(page: Page) {
   expect(rows).toHaveLength(3);
   for (const cell of rows) {
     expect(Math.abs(cell.scoreX - scoreX)).toBeLessThanOrEqual(1);
+    expect(cell.drawFits).toBe(true);
     expect(cell.roundFits).toBe(true);
   }
   await expect(matchRows(page).locator("span.mono")).toHaveText([
-    "Q1",
     "R16",
+    "Q1",
     "QF",
   ]);
 }
@@ -383,6 +395,15 @@ const GHOST_CLASS = /(^|\s)bg-transparent(\s|$)/;
 // `nextRound(entry)`: the round after the run's last match, R16.
 const NEXT = `${SCORE}?entry=tournament-entry&round=QF`;
 
+test("Add result points at the round a won last match leads to", () => {
+  // R16 is the run's last match, and won: the score flow's "Save and next
+  // round" (T9) would open the same round the event page links to.
+  const last = entry.matches.at(-1)!;
+  expect(new URLSearchParams(NEXT.split("?")[1]).get("round")).toBe(
+    nextRoundAfter(entry, last.round!, true),
+  );
+});
+
 test("a played round opens the match drawer with its report and facts", async ({
   page,
 }) => {
@@ -392,7 +413,8 @@ test("a played round opens the match drawer with its report and facts", async ({
   const panel = drawer(page);
   await expect(panel).toBeVisible();
   await expect(panel.getByText("Match", { exact: true })).toBeVisible();
-  await expect(panel.getByText("2 / 3", { exact: true })).toBeVisible();
+  // R16 is the first row in date order (the only dated round).
+  await expect(panel.getByText("1 / 3", { exact: true })).toBeVisible();
 
   const report = "/dashboard/matches/played-r16";
   await expect(panel.locator("h2 a")).toHaveAttribute("href", report);
@@ -508,22 +530,32 @@ test("a member who cannot edit sees no writes in the drawer", async ({
   await expect(
     panel.getByRole("link", { name: /^(Add|Edit) result$/ }),
   ).toHaveCount(0);
-  // Nor does the waiting entry's head offer its first result.
-  await expect(
-    page.getByRole("link", { name: "Add first result" }),
-  ).toHaveCount(0);
 });
 
-test("an entry with nothing played offers its first result from its head", async ({
+test("an entry with nothing played contributes no row", async ({ page }) => {
+  await open(page);
+  // Three rows, all Jordan Lee's run: Sam Park's entry has played nothing.
+  await expect(matchRows(page)).toHaveCount(3);
+  await expect(matchRows(page).filter({ hasText: "Sam Park" })).toHaveCount(0);
+  // The footer still counts both entries, and the header's Add result is the
+  // path to the waiting entry's first result.
+  await expect(
+    page.getByText("3 matches · 2 entries · Best of 3 sets, no-ad scoring", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Add result", exact: true }),
+  ).toHaveAttribute("href", SCORE);
+});
+
+test("zero rows and no cut: an honest empty body with no Show all", async ({
   page,
 }) => {
-  await open(page);
-  const parkHead = page.getByText("Sam Park", { exact: true }).locator("..");
-  // Main draw, nothing recorded: `nextRound` starts the run at R32.
+  await open(page, "?entries=waiting");
+  await expect(matchRows(page)).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("No results yet");
   await expect(
-    parkHead.getByRole("link", { name: "Add first result", exact: true }),
-  ).toHaveAttribute(
-    "href",
-    `${SCORE}?entry=tournament-entry-waiting&round=R32`,
-  );
+    page.getByRole("button", { name: "Show all matches" }),
+  ).toHaveCount(0);
 });

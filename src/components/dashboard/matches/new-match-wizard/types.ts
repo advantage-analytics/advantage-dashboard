@@ -464,10 +464,18 @@ export interface EventPreset {
    * Already recorded courtside, so the wizard does not ask again. `winner` is
    * set when the line stopped (retired or defaulted) — the games alone would
    * name the wrong side, so a fill keeps it.
+   *
+   * GAMES in `player1` / `player2`; tiebreak POINTS in the `_tiebreaks`
+   * arrays, stored against whoever lost the set (a 7-6(5) set is `7`/`6` with
+   * the `5` in the loser's array) — guardrails §4.3. Never mix the two. The
+   * tiebreak arrays are optional: a match scored before the tiebreak cells
+   * existed has neither.
    */
   score: {
     player1: number[];
     player2: number[];
+    player1_tiebreaks?: (number | null)[];
+    player2_tiebreaks?: (number | null)[];
     winner?: "player1" | "player2";
   } | null;
   /** How the line's match ended when it stopped — "retired" or "defaulted". */
@@ -496,6 +504,51 @@ export interface EventPreset {
    * window. Only on a preset that came from an event.
    */
   lineup?: LineChoice[];
+}
+
+/** Which line a preset fills — what tells a swap from a re-run of the seed. */
+export function presetLineKey(preset: EventPreset): string | null {
+  return preset.entryId ?? preset.matchId;
+}
+
+/**
+ * The preset to hold after the server hands `UploadMatchFlow` a fresh one, or
+ * null to keep the one it holds.
+ *
+ * The flow copies its first preset into state (the pinned bar swaps lines
+ * without leaving the page), so a later server render — the event's format
+ * edited on the schedule and the page revalidated — would otherwise be
+ * ignored, and the wizard would score the match under the old Ad/No-Ad and
+ * best-of. Only the SAME line is followed, and only its format: the result
+ * keeps the held preset's identity fields, so the hook's seed sees a re-run
+ * for the same line (nothing in `LINE_SWAP_FIELDS` is cleared, the file and a
+ * typed score stay) rather than a swap. A fresh preset for a different line —
+ * the URL still names the line the bar swapped away from — is not a reason to
+ * swap back, and is ignored. The lineup comes along so a later swap from the
+ * bar lands on the new format too.
+ *
+ * `adScoring` is copied as the event has it, `null` included — never
+ * defaulted (`docs/ui-revamp-guardrails.md` §3.1).
+ */
+export function followServerPreset(
+  held: EventPreset | null,
+  incoming: EventPreset | null | undefined,
+): EventPreset | null {
+  if (!held || !incoming) return null;
+  const line = presetLineKey(held);
+  if (line === null || line !== presetLineKey(incoming)) return null;
+  if (
+    held.bestOf === incoming.bestOf &&
+    held.adScoring === incoming.adScoring
+  ) {
+    return null;
+  }
+  return {
+    ...held,
+    bestOf: incoming.bestOf,
+    adScoring: incoming.adScoring,
+    ...(incoming.lineup ? { lineup: incoming.lineup } : {}),
+  };
 }
 
 /** One row of the pinned bar's lineup menu (design 10a). */

@@ -402,8 +402,8 @@ const BUCKEYE_ENTRIES: EventEntry[] = [
     position: 0,
     playerLabels: ["Dana Brooks"],
     // "Main draw" and "Qualifying" are the stored values, not just labels —
-    // `entry-editor.tsx:27`'s DRAWS, and what `rosterSubline()` reads to print
-    // "S1 · entered · seed 3".
+    // two of the builder's three free-text `DRAWS` (with "Prequalifying"),
+    // and what `rosterSubline()` reads to print "S1 · entered · seed 3".
     draw: "Main draw",
     seed: 3,
   }),

@@ -15,38 +15,73 @@
  * `setOutcome` have one caller here, and `planSave` decides which.
  *
  * **The reseed is the load-bearing detail.** Switching lines remounts the form
- * (`key={outcomeKey(entryId, round)}`), so the previous line's choice and
- * digits cannot survive into the next one. A shared, mutated form is how S2
- * gets S1's 6-4.
+ * (keyed on the entry plus a count of line switches), so the previous line's
+ * choice and digits cannot survive into the next one. A shared, mutated form
+ * is how S2 gets S1's 6-4.
  *
- * A tournament entry adds one question, the round, and answers it by
- * NAVIGATING (`?round=`) rather than in state: the page seeds the form from
- * whatever that round already holds, which is the only honest way to open a
- * recorded round for correction. See `score/page.tsx`.
+ * A tournament entry adds one question, the round, and answers it in state
+ * WITHOUT remounting: the page hands over every round's seed (`roundSeeds`),
+ * so an untouched form reseeds from whatever the chosen round already holds —
+ * the honest way to open a recorded round for correction — while a form the
+ * coach has typed into keeps its digits (`reseedForRound`). The URL's
+ * `?round=` follows via `history.replaceState`, so a reload reopens the same
+ * round with no server round-trip on the change itself.
+ *
+ * A round our side WON walks up that entry's draw instead of on to the next
+ * entry: the primary reads "Save and next round" (decided from the typed
+ * score before the write, by `nextRoundAfter`) and, once saved, the same
+ * Round path moves the form to that round — the just-saved form counts as
+ * its own seed, so the next round opens blank rather than carrying the score
+ * that was just filed.
+ *
+ * A round our side LOST goes the same way when the loss has a consolation
+ * draw to drop into (`nextRoundAfter(…, false)`): the primary reads "Save and
+ * start consolation" and reopens this entry at that round, blank. Not every
+ * player takes their consolation spot, so the form asks once rather than
+ * assuming — "Save — they're out" beside it saves and walks on to the next
+ * open entry as any other save does.
+ *
+ * A tournament round also asks WHOSE player the opponent is — the School
+ * field beside Round, the dual builder's directory search over
+ * `/api/programs/search` with a typed fallback. It is what points the opponent
+ * picker's roster at the right program (`useOpponentPool` reads it), and it
+ * travels with the save as `opponentSchool` + `opponentProgramKey`, onto the
+ * ENTRY: `recordResult` writes them only from the entry's latest round, so a
+ * correction of an earlier round cannot put a round-old school back.
  */
 
-import { useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";
+import { advField } from "@/lib/ui/adv-field";
+import { cn } from "@/lib/utils";
+import { useListboxNav } from "@/hooks/use-listbox-nav";
+import { divisionLabel } from "@/lib/data/programs-server";
+import { useProgramSearch } from "@/components/dashboard/schedule/static/use-program-search";
 import { recordResult, setOutcome } from "@/lib/schedule/actions";
 import {
   ROUND_ORDER,
   doublesSetLabel,
+  drawOfRound,
   splitNames,
 } from "@/lib/schedule/format";
 import {
   outcomeKey,
   planSave,
+  presetAtRound,
+  reseedForRound,
   savedLineUpload,
   scoreTyped,
   seedScoreForm,
   uploadInsteadHref,
+  type RoundSeed,
   type SavedLineUpload,
   type ScoreFormState,
 } from "@/lib/schedule/score-seed";
-import { endingMark } from "@/lib/schedule/entry-state";
+import { endingMark, resultInputWon } from "@/lib/schedule/entry-state";
+import { nextRoundAfter } from "@/lib/schedule/tournament-run";
 import {
   OpponentPopup,
   useOpponentPool,
@@ -95,13 +130,48 @@ function replaceAt(
   return next;
 }
 
+/**
+ * The opponent's school on a tournament round: the name as it will be written,
+ * and the directory key behind it — null when it was typed past the
+ * directory, which is also "no roster to offer".
+ */
+export interface OpponentSchool {
+  name: string;
+  programKey: string | null;
+}
+
+const NO_SCHOOL: OpponentSchool = { name: "", programKey: null };
+
+/**
+ * What the School field opens with.
+ *
+ * The entry's `opponent_school` is "the last round filed", so it is only an
+ * honest answer for a round that already HAS a match. A tournament round with
+ * no match of its own is a new opponent — its name opens empty (`presetFor`),
+ * and so does its school: seeding the last round's school pointed the picker
+ * at that school's roster and filed it onto the entry for somebody else.
+ */
+function seedSchool(preset: EventPreset): OpponentSchool {
+  if (preset.eventKind === "tournament" && !preset.matchId) return NO_SCHOOL;
+  return {
+    name: preset.opponentSchool ?? "",
+    programKey: preset.opponentProgramKey ?? null,
+  };
+}
+
+function sameSchool(a: OpponentSchool, b: OpponentSchool): boolean {
+  return a.name === b.name && a.programKey === b.programKey;
+}
+
 export function ScoreOnlyFlow({
   preset,
   lineup,
   outcomes,
   recordedRounds = {},
+  roundSeeds = {},
   eventHref,
   canUpload,
+  ourTeam = null,
 }: {
   /** The line the page resolved — `?entry=`, or the first line with no score. */
   preset: EventPreset;
@@ -117,6 +187,12 @@ export function ScoreOnlyFlow({
   >;
   /** Per entry, the rounds already holding a match or an outcome. Tournaments. */
   recordedRounds?: Record<string, string[]>;
+  /**
+   * Per (entry, round), keyed by `outcomeKey`, what that round opens with —
+   * its match, or the entry's blank seed under `outcomeKey(entryId, null)`.
+   * Tournaments: lets the Round control reseed without a navigation.
+   */
+  roundSeeds?: Record<string, RoundSeed>;
   /** Where Cancel and "Save and close" land. */
   eventHref: string;
   /**
@@ -124,21 +200,80 @@ export function ScoreOnlyFlow({
    * and uploading its own, so the two links into it are drawn only on a yes.
    */
   canUpload: boolean;
+  /**
+   * Our program's team. The School search offers only that team's programs —
+   * a men's program plays men's teams — the rule the dual builder's
+   * `dual-school-step.tsx` applies, so one school never lists twice.
+   */
+  ourTeam?: "mens" | "womens" | null;
 }) {
   const [current, setCurrent] = useState<EventPreset>(preset);
+  /**
+   * Bumped on every LINE switch (the Change menu, "Save and next") and never
+   * on a round change: the form's key, so a new line always opens a fresh
+   * form while a new round keeps the one being typed into.
+   */
+  const [lineSwitches, setLineSwitches] = useState(0);
+  /**
+   * A tournament round's opponent school. Held here, beside the pool it
+   * points, so one `useOpponentPool` serves every line. Reseeded on a LINE
+   * switch; on a ROUND change it follows the score's own rule
+   * (`reseedForRound`): a school the coach has not touched since it was
+   * seeded reseeds for the new round, one they chose stays where they put it.
+   */
+  const [school, setSchool] = useState<OpponentSchool>(() =>
+    seedSchool(preset),
+  );
+  /** What `school` was last seeded with — "untouched" means equal to this. */
+  const [schoolSeed, setSchoolSeed] = useState<OpponentSchool>(() =>
+    seedSchool(preset),
+  );
+  const reseedSchool = (next: OpponentSchool) => {
+    setSchool(next);
+    setSchoolSeed(next);
+  };
+  const switchLine = (next: EventPreset) => {
+    setCurrent(next);
+    reseedSchool(seedSchool(next));
+    setLineSwitches((count) => count + 1);
+  };
   /**
    * The line "Save and next line" just saved, offered in the footer with its
    * video. Held here, above the per-line remount, because the offer is about
    * the line the form has just LEFT.
    */
   const [lastSaved, setLastSaved] = useState<SavedLineUpload | null>(null);
+  /**
+   * Rounds saved this session, per entry — on top of the page's
+   * `recordedRounds`, which only a refresh brings up to date. A round just
+   * filed by "Save and next round" is recorded from that moment, so going
+   * back to it says saving replaces it.
+   */
+  const [savedRounds, setSavedRounds] = useState<Record<string, string[]>>({});
   // The opponent's saved roster, fetched once for the event rather than on
-  // every line's remount — and only when some line still needs a name.
-  const naming = lineup.some(
-    (choice) => choice.preset && choice.preset.opponentName.trim() === "",
-  );
-  const schoolName = current.opponentSchool ?? current.eventName ?? "";
-  const programKey = current.opponentProgramKey;
+  // every line's remount — and only when a form can name someone: some line
+  // still needs a name, or this is a tournament, whose every round is named
+  // (or renamed) in its own score row.
+  //
+  // A dual's school is the event's. A tournament's is whatever the School
+  // field says right now — a directory pick re-points the roster at that
+  // program in the same render, a typed school has no program and so no
+  // roster, and the event's name stands in for the prose while it is blank.
+  const naming =
+    current.eventKind === "tournament" ||
+    lineup.some(
+      (choice) => choice.preset && choice.preset.opponentName.trim() === "",
+    );
+  const schoolName =
+    (current.eventKind === "tournament"
+      ? school.name || null
+      : current.opponentSchool) ??
+    current.eventName ??
+    "";
+  const programKey =
+    current.eventKind === "tournament"
+      ? school.programKey
+      : current.opponentProgramKey;
   const pool = useOpponentPool(
     naming ? programKey : null,
     programKey ? `program:${programKey}` : `text:${schoolName}`,
@@ -201,6 +336,26 @@ export function ScoreOnlyFlow({
     ? outcomeKey(current.entryId, tournament ? current.round : null)
     : null;
 
+  /** Every round this entry holds: the page's, plus this session's saves. */
+  const heldRounds = current.entryId
+    ? Array.from(
+        new Set([
+          ...(recordedRounds[current.entryId] ?? []),
+          ...(savedRounds[current.entryId] ?? []),
+        ]),
+      )
+    : [];
+
+  /** The saved outcome under one key, this session's writes first. */
+  const outcomeAt = (
+    key: string | null,
+  ): Pick<EntryOutcome, "kind" | "side"> | null =>
+    key && Object.prototype.hasOwnProperty.call(outcomeOverrides, key)
+      ? outcomeOverrides[key]
+      : key
+        ? (outcomes[key] ?? null)
+        : null;
+
   return (
     <div className="flex min-h-[calc(100vh-44px)] flex-col">
       {/* Full bleed under the app header — chrome measuring the flow, not a
@@ -209,7 +364,7 @@ export function ScoreOnlyFlow({
 
       <PinnedLineBar
         preset={barPreset}
-        onSwitch={setCurrent}
+        onSwitch={switchLine}
         outsideHref={eventHref}
       />
 
@@ -234,34 +389,43 @@ export function ScoreOnlyFlow({
         </div>
       </div>
 
-      {/* Remounted per line. Its state is seeded once, on mount, from
+      {/* Remounted per line. Its state is seeded on mount from
           `seedScoreForm` — the single place a form's opening values are
-          decided. Without the key, switching lines would carry the previous
-          line's digits into a form that looks freshly opened. */}
+          decided — and reseeded on a round change only while untouched.
+          Without the key, switching lines would carry the previous line's
+          digits into a form that looks freshly opened. The round is NOT in
+          the key: changing it must not throw away what was typed. */}
       <ScoreForm
-        key={currentKey ?? "line"}
+        key={`${current.entryId ?? "line"}#${lineSwitches}`}
         preset={current}
         lineup={lineup}
         pool={pool}
-        initialOutcome={
-          currentKey &&
-          Object.prototype.hasOwnProperty.call(outcomeOverrides, currentKey)
-            ? outcomeOverrides[currentKey]
-            : currentKey
-              ? (outcomes[currentKey] ?? null)
-              : null
-        }
+        school={school}
+        onSchoolChange={setSchool}
+        initialOutcome={outcomeAt(currentKey)}
         recorded={
-          tournament && current.entryId && current.round
-            ? (recordedRounds[current.entryId] ?? []).includes(current.round)
+          tournament && current.round
+            ? heldRounds.includes(current.round)
             : false
         }
+        heldRounds={heldRounds}
         noun={noun}
-        scoreHref={`${eventHref}/score`}
+        onRoundChange={(round) => {
+          const next = presetAtRound(current, round, roundSeeds);
+          setCurrent(next);
+          if (sameSchool(school, schoolSeed)) reseedSchool(seedSchool(next));
+          return {
+            preset: next,
+            outcome: outcomeAt(
+              next.entryId ? outcomeKey(next.entryId, round) : null,
+            ),
+          };
+        }}
         eventHref={eventHref}
         stillOpen={stillOpen}
         nextOpen={openAfter[0]?.preset ?? null}
         canUpload={canUpload}
+        ourTeam={ourTeam}
         lastSaved={lastSaved}
         onSaved={(entryId, next, outcome, upload) => {
           setLastSaved(upload);
@@ -272,7 +436,27 @@ export function ScoreOnlyFlow({
               [currentKey]: outcome,
             }));
           }
-          if (next) setCurrent(next);
+          if (next) switchLine(next);
+        }}
+        onAdvanced={(entryId, round, outcome, upload) => {
+          // The entry stays open — it has a next round to record — so only
+          // the round just filed, its outcome and its video offer move.
+          // The next round is a NEW opponent, so the School starts blank:
+          // carrying the last opponent's school would point the picker at
+          // the wrong roster and file that school onto the entry. (A plain
+          // Round change is a correction and keeps it — see `school`.)
+          reseedSchool(NO_SCHOOL);
+          setLastSaved(upload);
+          setSavedRounds((prior) => ({
+            ...prior,
+            [entryId]: [...(prior[entryId] ?? []), round],
+          }));
+          if (currentKey) {
+            setOutcomeOverrides((prior) => ({
+              ...prior,
+              [currentKey]: outcome,
+            }));
+          }
         }}
         onCleared={(entryId) => {
           setLastSaved(null);
@@ -302,16 +486,21 @@ function ScoreForm({
   preset,
   lineup,
   pool,
+  school,
+  onSchoolChange,
   initialOutcome,
   recorded,
+  heldRounds,
   noun,
-  scoreHref,
+  onRoundChange,
   eventHref,
   stillOpen,
   nextOpen,
   canUpload,
+  ourTeam,
   lastSaved,
   onSaved,
+  onAdvanced,
   onCleared,
 }: {
   preset: EventPreset;
@@ -319,18 +508,30 @@ function ScoreForm({
   lineup: LineChoice[];
   /** The opponent's school and saved roster, for naming a blank opponent. */
   pool: OpponentPool;
+  /** A tournament round's opponent school — the pool's source, and the save's. */
+  school: OpponentSchool;
+  onSchoolChange: (school: OpponentSchool) => void;
   initialOutcome: Pick<EntryOutcome, "kind" | "side"> | null;
   /** A tournament round that already holds a result — saving replaces it. */
   recorded: boolean;
+  /** The rounds this entry already holds — where a won round leads next. */
+  heldRounds: string[];
   /** "line" on a dual, "entry" on a tournament — the footer's word. */
   noun: "line" | "entry";
-  /** This page's own path, for the Round control's navigation. */
-  scoreHref: string;
+  /**
+   * A tournament's Round control: the parent moves the line to that round and
+   * answers with its preset and saved outcome, for the reseed decision.
+   */
+  onRoundChange: (round: string) => {
+    preset: EventPreset;
+    outcome: Pick<EntryOutcome, "kind" | "side"> | null;
+  };
   eventHref: string;
   stillOpen: number;
   /** The next open line to walk to, or null when this is the last one. */
   nextOpen: EventPreset | null;
   canUpload: boolean;
+  ourTeam: "mens" | "womens" | null;
   /** The previous line's played score, still offering its video. */
   lastSaved: SavedLineUpload | null;
   onSaved: (
@@ -338,6 +539,17 @@ function ScoreForm({
     next: EventPreset | null,
     outcome: Pick<EntryOutcome, "kind" | "side"> | null,
     /** What the footer offers for the line just saved; null for an outcome. */
+    upload: SavedLineUpload | null,
+  ) => void;
+  /**
+   * A won tournament round was saved and the form is moving up the draw:
+   * the parent records the round just filed. The move itself is the Round
+   * control's own path, taken from here.
+   */
+  onAdvanced: (
+    entryId: string,
+    savedRound: string,
+    outcome: Pick<EntryOutcome, "kind" | "side"> | null,
     upload: SavedLineUpload | null,
   ) => void;
   onCleared: (entryId: string) => void;
@@ -349,9 +561,19 @@ function ScoreForm({
   const [state, setState] = useState<ScoreFormState>(() =>
     seedScoreForm(preset, initialOutcome),
   );
-  // Decided once, on mount: a name the lineup never had is named in the score
-  // row, and stays a picker while it is being chosen.
-  const [namingOpponent] = useState(() => preset.opponentName.trim() === "");
+  /** What the form was last seeded with — "untouched" is measured from it. */
+  const [seeded, setSeeded] = useState<ScoreFormState>(state);
+  // Decided once, on mount. A dual line names only what its lineup left
+  // blank — a name the lineup holds is read here and changed through Edit
+  // dual. A tournament has no lineup: each round's opponent belongs to that
+  // round's match, so its row is ALWAYS the picker — a recorded name opens
+  // in it and can be changed, and a round with no match opens on "Name their
+  // player". The form is keyed per line, never per round, so this holds
+  // across the Round control's reseeds.
+  const [namingOpponent] = useState(
+    () =>
+      preset.eventKind === "tournament" || preset.opponentName.trim() === "",
+  );
 
   const tournament = preset.eventKind === "tournament";
   const doubles = preset.discipline === "doubles";
@@ -367,17 +589,47 @@ function ScoreForm({
     value === "" ? null : Number(value);
 
   /**
-   * The Round control navigates rather than setting state: the page seeds the
-   * form from whatever the chosen round already holds, so a recorded round
-   * opens with its score in the cells and the status line says it will be
-   * replaced. Client state could only offer an empty form over a saved one.
+   * The Round control changes the round in state, never by navigating: a
+   * remount would discard what the coach typed. An untouched form reseeds
+   * from the chosen round (a recorded one opens with its score, and the
+   * footer says saving replaces it); a typed-into one keeps its digits —
+   * `reseedForRound` decides. The URL's `?round=` follows with
+   * `history.replaceState` so a reload reopens this round; no server
+   * round-trip, and nothing for the router to remount on.
    */
   const changeRound = (round: string) => {
-    const query = new URLSearchParams({
-      entry: preset.entryId ?? "",
-      round,
-    });
-    router.replace(`${scoreHref}?${query.toString()}`);
+    if (round === preset.round) return;
+    moveToRound(round, false);
+  };
+
+  /**
+   * The Round control's move, shared with "Save and next round". A form that
+   * was just written is its own seed — nothing in it is unsaved — so
+   * `reseedForRound` opens the next round from that round's seed (blank, with
+   * no opponent, for a round holding no match) rather than keeping digits
+   * that now belong to the round left behind.
+   */
+  const moveToRound = (round: string, justSaved: boolean) => {
+    setError(null);
+    const next = onRoundChange(round);
+    const decided = reseedForRound(
+      state,
+      justSaved ? state : seeded,
+      next.preset,
+      next.outcome,
+    );
+    setState(decided.state);
+    setSeeded(decided.seeded);
+    setSavedOutcome(next.outcome);
+
+    const query = new URLSearchParams(window.location.search);
+    query.set("entry", next.preset.entryId ?? "");
+    query.set("round", round);
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}?${query.toString()}`,
+    );
   };
 
   const onScoreChange = (
@@ -438,6 +690,35 @@ function ScoreForm({
     }));
   };
 
+  /**
+   * Where the primary's save goes on this entry, or null when saving walks on
+   * as it always has. Decided from the TYPED score, before anything is
+   * written, with the writer's own payload (`planSave`) and winner rule
+   * (`resultInputWon`): a tournament round played out and decided. A win
+   * walks up the draw ("Save and next round"); a loss drops into its
+   * consolation draw ("Save and start consolation"). A retirement or a
+   * default, a dual line, an undecided score, a won final, a loss with no
+   * consolation to go to — null.
+   */
+  const advance = (() => {
+    if (!tournament || !preset.round || !preset.entryId || state.ending) {
+      return null;
+    }
+    const plan = planSave(preset, state, savedOutcome);
+    if (plan.kind !== "score") return null;
+    const won = resultInputWon(plan.input);
+    if (won === null) return null;
+    const round = nextRoundAfter(
+      { draw: null, matches: heldRounds.map((round) => ({ round })) },
+      preset.round,
+      won,
+    );
+    return round ? { round, won } : null;
+  })();
+  const advanceTo = advance?.round ?? null;
+  /** A lost round with a consolation draw to drop into. */
+  const consolation = advance !== null && !advance.won;
+
   const walkOn = () => {
     if (nextOpen) onSaved(preset.entryId ?? "", nextOpen, savedOutcome, null);
     else router.push(eventHref);
@@ -471,7 +752,12 @@ function ScoreForm({
     });
   }
 
-  function save(then: "next" | "close") {
+  /**
+   * `next` is the primary: on to `advanceTo` when there is one, else the next
+   * open entry. `out` is "Save — they're out": a lost round's consolation
+   * declined, so it walks on exactly as `next` would with no advance.
+   */
+  function save(then: "next" | "close" | "out") {
     setError(null);
 
     // The server refuses this too; saying it here keeps the digits typed.
@@ -485,12 +771,20 @@ function ScoreForm({
       setError(plan.message);
       return;
     }
+    // Read now, from what was typed: the label the coach clicked promised it.
+    const goTo = then === "next" ? advanceTo : null;
+    const savedRound = preset.round;
 
     const finish = (
       outcome: Pick<EntryOutcome, "kind" | "side"> | null,
       upload: SavedLineUpload | null,
     ) => {
       router.refresh();
+      if (goTo && savedRound) {
+        onAdvanced(preset.entryId ?? "", savedRound, outcome, upload);
+        moveToRound(goTo, true);
+        return;
+      }
       if (then === "close" || !nextOpen) {
         router.push(eventHref);
         return;
@@ -519,7 +813,18 @@ function ScoreForm({
         setSavedOutcome(null);
       }
 
-      const result = await recordResult(plan.input);
+      // A tournament round says whose player it was against; a dual's event
+      // already does, so its input leaves both undefined and the entry's
+      // school alone.
+      const result = await recordResult(
+        tournament
+          ? {
+              ...plan.input,
+              opponentSchool: school.name.trim() || null,
+              opponentProgramKey: school.programKey,
+            }
+          : plan.input,
+      );
       if ("error" in result) {
         setError(result.error);
         return;
@@ -546,25 +851,46 @@ function ScoreForm({
     <>
       <div className={`${CONTENT_CLS} flex flex-col gap-9 pb-16`}>
         {tournament ? (
-          <div className="flex w-[280px] flex-col gap-2">
-            <span className="eyebrow">Round</span>
-            <MenuSelect
-              label="Round"
-              value={preset.round ?? undefined}
-              placeholder="Choose the round"
-              options={ROUND_ORDER.map((round) => ({
-                value: round,
-                label: round,
-                description:
-                  recorded && round === preset.round
-                    ? "Recorded — saving replaces it."
-                    : undefined,
-              }))}
-              onChange={changeRound}
-              variant="underline"
-              width={280}
-              disabled={pending}
-            />
+          <div className="flex flex-wrap items-start gap-x-8 gap-y-6">
+            <div className="flex w-[280px] flex-col gap-2">
+              <span className="eyebrow">Round</span>
+              {/* Every code on the ladder, in `ROUND_ORDER`, under the draw
+                  it belongs to — Prequalifying · PQ Consolation · Qualifying ·
+                  Main draw · Consolation — so two dozen codes read as five
+                  short lists. `scroll`, because the list is now taller than
+                  the room under the field on a laptop. */}
+              <MenuSelect
+                label="Round"
+                value={preset.round ?? undefined}
+                placeholder="Choose the round"
+                options={ROUND_ORDER.map((round) => ({
+                  value: round,
+                  label: round,
+                  group: drawOfRound(round) ?? undefined,
+                  description:
+                    recorded && round === preset.round
+                      ? "Recorded — saving replaces it."
+                      : undefined,
+                }))}
+                onChange={changeRound}
+                variant="underline"
+                width={280}
+                scroll
+                disabled={pending}
+              />
+            </div>
+            {/* Whose player the opponent is. Above the opponent's own name
+                in reading order, because it decides which roster that name
+                is picked from. */}
+            <div className="flex w-[280px] flex-col gap-2">
+              <span className="eyebrow">School</span>
+              <SchoolField
+                value={school}
+                onChange={onSchoolChange}
+                ourTeam={ourTeam}
+                disabled={pending}
+              />
+            </div>
           </div>
         ) : null}
 
@@ -718,11 +1044,26 @@ function ScoreForm({
             </button>
           ) : (
             <>
-              {/* Only while there IS a next line. On the last one the primary
+              {/* Only while there IS a next line (or a won round's next
+                  round, which needs no open line). On the last one the primary
                   falls back to "Save and close", and drawing the ghost too
                   would put two identically labelled buttons side by side
-                  doing the same thing — a choice that isn't one. */}
-              {nextOpen ? (
+                  doing the same thing — a choice that isn't one. A lost
+                  round with a consolation to drop into asks that question
+                  in this slot instead: its walk-on IS the declined answer. */}
+              {consolation ? (
+                // The consolation declined. A text action, not a second
+                // button: the primary is the expected answer, and this one
+                // walks on (the next open entry, or out) as any save does.
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => save("out")}
+                  className="cursor-pointer rounded-[2px] text-[13px] font-medium text-[var(--blue)] transition-colors duration-150 outline-none hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] disabled:pointer-events-none disabled:opacity-50"
+                >
+                  Save — they&apos;re out
+                </button>
+              ) : nextOpen || advanceTo ? (
                 <button
                   type="button"
                   disabled={pending}
@@ -740,9 +1081,13 @@ function ScoreForm({
               >
                 {pending
                   ? "Saving…"
-                  : nextOpen
-                    ? `Save and next ${noun}`
-                    : "Save and close"}
+                  : consolation
+                    ? "Save and start consolation"
+                    : advanceTo
+                      ? "Save and next round"
+                      : nextOpen
+                        ? `Save and next ${noun}`
+                        : "Save and close"}
               </button>
             </>
           )}
@@ -1010,11 +1355,240 @@ function LineupForfeitNote({
   );
 }
 
+/** How many directory rows the School field offers at once. */
+const MAX_SCHOOL_ROWS = 6;
+
+/**
+ * The opponent's school on a tournament round — the dual builder's question,
+ * in a field.
+ *
+ * One underline input (`advField("underline")`, the same 34px rule as the
+ * Round control beside it) that is also the search: from two characters the
+ * directory answers under it (`useProgramSearch`, the dual builder's own
+ * source), and whatever is typed is always the last row — a club side or a
+ * school the directory never had is a real opponent, and a field that only
+ * took directory rows would make the coach lie about who they played to get
+ * past it. Enter takes the current row, a click takes that row, and leaving
+ * the field with something typed that is not the chosen school keeps the
+ * typed text as the school (with no program behind it), so nothing the coach
+ * wrote is silently dropped.
+ *
+ * What it changes is the roster the opponent picker offers, which is why it
+ * is drawn ABOVE the opponent's name: a directory school brings its saved
+ * names, a typed one brings none. The line under the field says which it is.
+ */
+function SchoolField({
+  value,
+  onChange,
+  ourTeam,
+  disabled,
+}: {
+  value: OpponentSchool;
+  onChange: (next: OpponentSchool) => void;
+  ourTeam: "mens" | "womens" | null;
+  disabled: boolean;
+}) {
+  const listboxId = useId();
+  const [term, setTerm] = useState(value.name);
+  const [open, setOpen] = useState(false);
+  // Follow a school the PARENT changes (it clears the field when "Save and
+  // next round" / "Save and start consolation" opens a new opponent's
+  // round). Compared against the last value seen, during render, so typing
+  // — which never touches `value` until a commit — is left alone.
+  const [seenName, setSeenName] = useState(value.name);
+  if (value.name !== seenName) {
+    setSeenName(value.name);
+    setTerm(value.name);
+  }
+  const results = useProgramSearch(term);
+
+  const typed = term.trim();
+  // Our team's programs only: the directory lists a school once per team,
+  // and "Stanford University" twice with the same line under it is a coin
+  // toss that files the opponent onto the wrong roster.
+  const rows = results
+    .filter((row) => ourTeam === null || row.team === ourTeam)
+    .slice(0, MAX_SCHOOL_ROWS);
+  // The typed row: always there once something is typed, even beside an
+  // exact directory hit — "Ridgeline University" from the directory and
+  // "Ridgeline University" typed past it are different answers (one has a
+  // roster), and the coach gets to say which.
+  const typedRow = typed.length > 0;
+  const rowCount = rows.length + (typedRow ? 1 : 0);
+  const listed = open && rowCount > 0;
+
+  const commit = (next: OpponentSchool) => {
+    setTerm(next.name);
+    onChange(next);
+    setOpen(false);
+  };
+
+  const activateRow = (index: number) => {
+    const row = rows[index];
+    if (row) {
+      commit({ name: row.schoolName, programKey: row.programKey });
+    } else if (typedRow) {
+      commit({ name: typed, programKey: null });
+    }
+  };
+
+  const { activeIndex, setActiveIndex, optionId, onKeyDown } = useListboxNav({
+    count: rowCount,
+    open: listed,
+    onSelect: activateRow,
+    onDismiss: () => setOpen(false),
+    idPrefix: listboxId,
+  });
+
+  // Leaving the field is an answer too. Typed text that is not the chosen
+  // school becomes the school, typed — never a directory row the coach did
+  // not pick, and never the old value under new text.
+  const settle = () => {
+    setOpen(false);
+    if (typed === value.name.trim()) return;
+    onChange({ name: typed, programKey: null });
+  };
+
+  const directory = value.programKey !== null && value.name.trim() !== "";
+
+  return (
+    <div className="relative flex flex-col gap-1.5">
+      <input
+        value={term}
+        disabled={disabled}
+        onChange={(event) => {
+          setTerm(event.target.value);
+          setOpen(true);
+        }}
+        onBlur={settle}
+        onKeyDown={(event) => {
+          if (listed) {
+            onKeyDown(event);
+            return;
+          }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            settle();
+          }
+        }}
+        placeholder="Search programs, or type a school"
+        aria-label="Their school"
+        role="combobox"
+        aria-expanded={listed}
+        aria-controls={listed ? listboxId : undefined}
+        aria-activedescendant={listed ? optionId(activeIndex) : undefined}
+        aria-autocomplete="list"
+        // The rule under the field thickens to 2px blue on focus — the one
+        // indicator, so the field ring on top of it would be a second.
+        data-focus-ring="none"
+        className={cn(advField("underline"), "w-full min-w-0 outline-none")}
+      />
+      <span className="text-micro" style={{ color: "var(--ink-500)" }}>
+        {value.name.trim() === ""
+          ? "Decides whose roster their player is picked from."
+          : directory
+            ? "On the directory · their saved roster is offered below."
+            : "Typed · no saved roster, so their player is typed too."}
+      </span>
+
+      {listed ? (
+        <ul
+          id={listboxId}
+          role="listbox"
+          aria-label="Schools"
+          // Keeps focus in the field across a click on a row, so the click
+          // lands before the blur would have settled the typed text.
+          onMouseDown={(event) => event.preventDefault()}
+          className="absolute top-[calc(100%-18px)] left-0 z-20 flex w-[320px] max-w-[calc(100vw-32px)] flex-col gap-1 rounded-[var(--radius-dropdown)] border border-[var(--border-medium)] bg-[var(--surface-card)] p-1.5 shadow-[var(--shadow-dropdown)]"
+        >
+          {rows.map((row, index) => (
+            <SchoolOption
+              key={`${row.programKey}:${row.team}`}
+              id={optionId(index)}
+              active={activeIndex === index}
+              onHover={() => setActiveIndex(index)}
+              onClick={() => activateRow(index)}
+              title={row.schoolName}
+              note={[divisionLabel(row.division), row.conference]
+                .filter(Boolean)
+                .join(" · ")}
+            />
+          ))}
+          {typedRow ? (
+            <SchoolOption
+              id={optionId(rows.length)}
+              active={activeIndex === rows.length}
+              onHover={() => setActiveIndex(rows.length)}
+              onClick={() => activateRow(rows.length)}
+              title={`Use "${typed}" as typed`}
+              note="No program record — their player gets typed by hand."
+              divided={rows.length > 0}
+            />
+          ) : null}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+/** One row of the School field's list: a directory school, or the typed text. */
+function SchoolOption({
+  id,
+  active,
+  onHover,
+  onClick,
+  title,
+  note,
+  divided = false,
+}: {
+  id: string;
+  active: boolean;
+  onHover: () => void;
+  onClick: () => void;
+  title: string;
+  note: string;
+  divided?: boolean;
+}) {
+  return (
+    <li
+      id={id}
+      role="option"
+      aria-selected={active}
+      onMouseEnter={onHover}
+      onClick={onClick}
+      className={cn(
+        "flex cursor-pointer flex-col gap-0.5 rounded-[var(--radius-element)] px-2.5 py-2 text-left transition-colors duration-[var(--duration-hover)]",
+        active ? "bg-[var(--surface-subtle)]" : null,
+        divided && "mt-0.5 border-t border-[var(--border-hairline)] pt-2.5",
+      )}
+    >
+      <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">
+        {title}
+      </span>
+      {note ? (
+        <span
+          className="text-micro truncate"
+          style={{ color: "var(--ink-600)" }}
+        >
+          {note}
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
 /**
  * The opponent the lineup left blank, named in their score row — the lineup
  * page's own pickers, so the same names and the same rules: the typed popup
  * over their saved roster on a singles line, and the pick-two pair checklist
  * on a doubles line. Saving writes the name back to the lineup too.
+ *
+ * On a tournament round it is drawn even with a name in it: the popup opens
+ * on the recorded name, and committing another one replaces it — saving then
+ * renames that round's match and no other round's (`recordResult`'s
+ * `syncEntryOpponent` writes the entry only from the entry's latest round).
+ * Its roster is the School field's: pick a directory school there and the
+ * popup offers that program's saved names; type one and it is a plain field.
  */
 function OpponentInRow({
   preset,

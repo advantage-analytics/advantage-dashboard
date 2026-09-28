@@ -92,7 +92,22 @@ export interface RecordResultInput {
   /** 'R16' for a tournament. Null on a dual line, whose slot is its round. */
   round: string | null;
   opponentLabels: string[];
+  /**
+   * The opponent's school, for the ENTRY (`program_event_entries
+   * .opponent_school`). A tournament round names it — each round is against
+   * somebody else's player — and a dual leaves it undefined, since the dual
+   * itself already says who it is against. `undefined` means "don't touch";
+   * `null` means the coach cleared it.
+   */
   opponentSchool?: string | null;
+  /**
+   * `programs.program_key` when the school came out of the directory, null
+   * when it was typed (a club side, a school the directory never had).
+   * Resolved to `opponent_program_id` server-side, the way `createDual`
+   * resolves its own `opponentProgramKey` — never the uuid from the browser.
+   * `undefined` leaves the column alone.
+   */
+  opponentProgramKey?: string | null;
   /** Game counts, ours first. A 7-6 set is 7 here — never the tiebreak points. */
   ourGames: number[];
   theirGames: number[];

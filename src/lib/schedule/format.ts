@@ -290,15 +290,70 @@ export function splitNames(text: string): string[] {
 /**
  * Tournament rounds, in the order a weekend is played.
  *
- * Consolation sits at the end because it is entered after the loss that sent a
- * player there — a run reads Q1, Q2, R32, R16, then C1, which is the sequence
- * the matches actually happened in.
+ * Five draws, laid end to end in the order a player can pass through them —
+ * the flights of the ITA's own draws page (2026 ITA Men's All-American):
+ *
+ * - `PQ1`–`PQ4` **Prequalifying** — the site's R256→F flight
+ * - `PC1`–`PC4` **PQ Consolation** — its R128→F flight, entered on a
+ *   prequalifying loss
+ * - `Q1`–`Q3`   **Qualifying** — one draw here; the site's regional sections
+ *   are not modelled
+ * - `R256`–`F`  **Main draw**
+ * - `C1`–`C5`   **Consolation** — the main draw's consolation stage
+ *
+ * The non-main draws keep ORDINAL codes (Q1, C1, PQ1) rather than the site's
+ * sized ones, matching the `Q*` and `C*` convention every stored round already uses.
+ * Each consolation sits after the draw that feeds it because it is entered
+ * after the loss that sent a player there — a run reads Q1, Q2, R32, R16,
+ * then C1, which is the sequence the matches actually happened in.
  *
  * Shared by the round picker and the run's sort. `matches` has no `created_at`,
  * so this ladder IS the chronology; without it a run renders in whatever order
  * Postgres returned, and Osei's weekend read R32, Q1, Q2.
+ *
+ * `matches.round` and `program_event_entries.draw` are free text, so adding a
+ * code here needs no migration. `program_event_outcomes.round` is NOT: its
+ * check constraint still names the older thirteen codes — `OUTCOME_ROUNDS`
+ * below (mirrored in `tests/database/fixtures/admin-schedule-harness.mjs`).
  */
 export const ROUND_ORDER = [
+  "PQ1",
+  "PQ2",
+  "PQ3",
+  "PQ4",
+  "PC1",
+  "PC2",
+  "PC3",
+  "PC4",
+  "Q1",
+  "Q2",
+  "Q3",
+  "R256",
+  "R128",
+  "R64",
+  "R32",
+  "R16",
+  "QF",
+  "SF",
+  "F",
+  "C1",
+  "C2",
+  "C3",
+  "C4",
+  "C5",
+];
+
+/**
+ * The rounds `program_event_outcomes.round`'s check constraint accepts — the
+ * thirteen-code ladder from before Prequalifying, PQ Consolation, R256, C4 and
+ * C5 were added. A subset of `ROUND_ORDER`, in its order.
+ *
+ * The admin result form writes outcomes (forfeit, default, withdrawal), so it
+ * offers and validates against this list, not the whole ladder: offering PQ1
+ * there would let an admin pick a round the database then refuses. Widening it
+ * takes a migration on that constraint, which T10 deliberately did not ship.
+ */
+export const OUTCOME_ROUNDS: readonly string[] = [
   "Q1",
   "Q2",
   "Q3",
@@ -335,9 +390,18 @@ export function roundRank(round: string | null): number {
  * know still prints an honest string.
  */
 const ROUND_LONG: Record<string, string> = {
+  PQ1: "prequalifying round 1",
+  PQ2: "prequalifying round 2",
+  PQ3: "prequalifying round 3",
+  PQ4: "prequalifying round 4",
+  PC1: "PQ consolation round 1",
+  PC2: "PQ consolation round 2",
+  PC3: "PQ consolation round 3",
+  PC4: "PQ consolation round 4",
   Q1: "qualifying round 1",
   Q2: "qualifying round 2",
   Q3: "qualifying round 3",
+  R256: "the round of 256",
   R128: "the round of 128",
   R64: "the round of 64",
   R32: "the round of 32",
@@ -348,27 +412,60 @@ const ROUND_LONG: Record<string, string> = {
   C1: "consolation round 1",
   C2: "consolation round 2",
   C3: "consolation round 3",
+  C4: "consolation round 4",
+  C5: "consolation round 5",
 };
 
 export function roundLongLabel(code: string): string {
   return ROUND_LONG[code.toUpperCase()] ?? code;
 }
 
+/** The draw names `drawOfRound` answers with — and the stored values of
+ *  `program_event_entries.draw` for the three a coach can enter a player in
+ *  (the builder's `DRAWS`). */
+export const PREQUALIFYING = "Prequalifying";
+export const PQ_CONSOLATION = "PQ Consolation";
+export const QUALIFYING = "Qualifying";
+export const MAIN_DRAW = "Main draw";
+export const CONSOLATION = "Consolation";
+
 /**
  * Which draw a round belongs to — read from the ROUND, not from the entry.
  *
- * `Q*` is qualifying, `C*` is consolation, anything else is the main draw. The
- * entry's `draw` records where a player STARTED; using it to label their later
- * rounds put a qualifier's R32 under "Qualifying" and hid the fact they had
- * come through, which is the one thing the segments exist to show.
+ * `PQ*` is prequalifying, `PC*` its consolation, `Q*` qualifying, `C*` the main
+ * draw's consolation, and `R*`/`QF`/`SF`/`F` the main draw. The entry's `draw`
+ * records where a player STARTED; using it to label their later rounds put a
+ * qualifier's R32 under "Qualifying" and hid the fact they had come through,
+ * which is the one thing the segments exist to show.
  */
 export function drawOfRound(round: string | null): string | null {
   if (!round) return null;
   const upper = round.toUpperCase();
-  if (/^Q\d/.test(upper)) return "Qualifying";
-  if (/^C\d/.test(upper)) return "Consolation";
-  if (/^(R\d+|QF|SF|F)$/.test(upper)) return "Main draw";
+  if (/^PQ\d/.test(upper)) return PREQUALIFYING;
+  if (/^PC\d/.test(upper)) return PQ_CONSOLATION;
+  if (/^Q\d/.test(upper)) return QUALIFYING;
+  if (/^C\d/.test(upper)) return CONSOLATION;
+  if (/^(R\d+|QF|SF|F)$/.test(upper)) return MAIN_DRAW;
   return null;
+}
+
+/**
+ * Which draw an entry STARTED in, read loosely from the free-text
+ * `program_event_entries.draw` field: "prequal" and "qualif" rather than an
+ * exact match, since older rows spell it their own way. Prequalifying is
+ * tested first because the word contains "qualif". Anything else — empty,
+ * "Main", or a custom flight name — is "main"; the caller decides what label
+ * or starting round that maps to.
+ */
+export type StartingDrawKind = "prequalifying" | "qualifying" | "main";
+
+export function classifyStartingDraw(
+  draw: string | null | undefined,
+): StartingDrawKind {
+  const lower = (draw ?? "").toLowerCase();
+  if (lower.includes("prequal")) return "prequalifying";
+  if (lower.includes("qualif")) return "qualifying";
+  return "main";
 }
 
 /**

@@ -7,8 +7,18 @@ declare global {
     failNextScore?: string;
     failNextDelete?: string;
     opponentRoster?: string[];
+    /** A roster per program key, for a flow that can change school. Falls
+     *  back to `opponentRoster` for a key not listed. */
+    opponentRosterByKey?: Record<string, string[]>;
+    /** Every program key the roster was fetched for, in order. */
+    rosterCalls: string[];
+    /** Every "save to roster" the popup asked for, in order. */
+    savedPlayers: { opponentProgramKey: string; name: string }[];
   }
 }
+
+window.rosterCalls = [];
+window.savedPlayers = [];
 
 export async function setOutcome(input: unknown) {
   window.actionCalls.push({ action: "setOutcome", input });
@@ -50,9 +60,14 @@ export async function deleteEvent(eventId: string) {
   return { ok: true as const };
 }
 
-export async function opponentRosterForDual() {
+export async function opponentRosterForDual(opponentProgramKey: string) {
+  window.rosterCalls.push(opponentProgramKey);
+  const roster =
+    window.opponentRosterByKey?.[opponentProgramKey] ??
+    window.opponentRoster ??
+    [];
   return {
-    candidates: (window.opponentRoster ?? []).map((name, index) => ({
+    candidates: roster.map((name, index) => ({
       playerId: `roster-${index}`,
       name,
       lineupSpot: null,
@@ -61,6 +76,10 @@ export async function opponentRosterForDual() {
   };
 }
 
-export async function saveOpponentPlayer() {
+export async function saveOpponentPlayer(input: {
+  opponentProgramKey: string;
+  name: string;
+}) {
+  window.savedPlayers.push(input);
   return { saved: false };
 }
