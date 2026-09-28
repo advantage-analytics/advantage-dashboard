@@ -6,15 +6,19 @@ import type { Match } from "@/lib/data/types";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
- * The Share popover's two states (`share-match-button.tsx`), rendered
- * offline to static markup.
+ * The Share popover (`share-match-button.tsx`), rendered offline to static
+ * markup. Its first block is a two-rung access ladder drawn as check-dot
+ * radios; what sits under it follows the chosen rung.
  *
- *  - Off: the switch reads unchecked, the panel says who can see the match
- *    today, and nothing on it hands out a URL — no pill, no `mailto:`,
- *    no `/m/` — because the only link it could offer is a `/dashboard` one
- *    that bounces everyone else to sign-in.
- *  - On: the switch reads checked, the pill shows the PUBLIC `/m/<token>`
- *    link, and "Email this match" carries that same link in its body.
+ *  - Personal, private: "Only you" is chosen and nothing on the panel hands
+ *    out a URL — no pill, no `mailto:`, no `/m/` — because the only link it
+ *    could offer is a `/dashboard` one that bounces everyone else to sign-in.
+ *  - Public: "Anyone with the link" is chosen, the pill shows the PUBLIC
+ *    `/m/<token>` link, and "Email this match" carries that same link.
+ *  - Team, private: the program's rung is chosen and the pill holds the
+ *    match's `/dashboard` URL, which only a signed-in member can open.
+ *  - A teammate who cannot publish: the ladder is unavailable (aria-disabled,
+ *    never removed from the tab order) and the note names who can.
  */
 
 const passthrough = (tag: string) =>
@@ -48,6 +52,8 @@ const { SharePopoverPanel } = loader.load(
     match: Match;
     shareLink: { url: string } | null;
     canShare: boolean;
+    publicLinkOn?: boolean;
+    audience?: unknown;
     onClose: () => void;
   }>;
 };
@@ -69,52 +75,111 @@ const MATCH: Match = {
 };
 
 const PUBLIC_URL = "https://app.example.com/m/abc123";
+const TEAM_URL = "https://app.example.com/dashboard/matches/" + MATCH.id;
+const TEAM = {
+  kind: "team",
+  programName: "Meridian State",
+  teamUrl: TEAM_URL,
+  memberCount: 14,
+  faces: [
+    { name: "Alina Fischer", initials: "AF", photoUrl: null },
+    { name: "Marcus Reyes", initials: "MR", photoUrl: null },
+    { name: "Ava Watson", initials: "AW", photoUrl: null },
+  ],
+};
 
-function render(shareLink: { url: string } | null, canShare = true) {
+function render(
+  shareLink: { url: string } | null,
+  {
+    canShare = true,
+    audience,
+    publicLinkOn,
+  }: { canShare?: boolean; audience?: unknown; publicLinkOn?: boolean } = {},
+) {
   return renderToStaticMarkup(
     React.createElement(SharePopoverPanel, {
       match: MATCH,
       shareLink,
       canShare,
+      audience,
+      publicLinkOn,
       onClose: () => {},
     }),
   );
 }
 
-test("off: the switch is unchecked and no link of any kind is offered", () => {
+/** The label text of each radio, in order, with whether it is checked. */
+function rungs(html: string): { label: string; checked: boolean }[] {
+  return [...html.matchAll(/<label[^>]*>(.*?)<\/label>/g)].map((m) => ({
+    label: m[1].match(/leading-\[18px\][^>]*>([^<]*)</)?.[1] ?? "",
+    checked: /<input[^>]*checked=""/.test(m[1]),
+  }));
+}
+
+test("personal, private: Only you is chosen and no link of any kind is offered", () => {
   const html = render(null);
-  expect(html).toContain('role="switch"');
-  expect(html).toContain('aria-checked="false"');
-  expect(html).toContain("Turn this on to get a link anyone can view.");
+  expect(html).toContain('role="radiogroup"');
+  expect(rungs(html)).toEqual([
+    { label: "Only you", checked: true },
+    { label: "Anyone with the link", checked: false },
+  ]);
+  expect(html).toContain("Links show statistics only — never the video.");
   expect(html).not.toContain("mailto:");
   expect(html).not.toContain("/m/");
+  expect(html).not.toContain("/dashboard/");
   expect(html).not.toContain("Copy");
 });
 
-test("on: the switch is checked and the public link is what gets copied and mailed", () => {
+test("public: Anyone is chosen and the public link is what gets copied and mailed", () => {
   const html = render({ url: PUBLIC_URL });
-  expect(html).toContain('aria-checked="true"');
+  expect(rungs(html).map((r) => r.checked)).toEqual([false, true]);
   expect(html).toContain("app.example.com/m/abc123");
-  expect(html).toContain("Statistics only. No video.");
   expect(html).toContain("Copy");
   const mailto = html.match(/href="mailto:[^"]*"/)?.[0] ?? "";
   expect(mailto).not.toBe("");
   expect(decodeURIComponent(mailto.replace(/&amp;/g, "&"))).toContain(
     PUBLIC_URL,
   );
-  expect(html).toContain("Email this match");
+  expect(html).toContain(">Email</a>");
 });
 
-test("a viewer who cannot share sees the switch disabled and who can", () => {
-  const html = render(null, false);
-  expect(html).toMatch(
-    /role="switch"[^>]*disabled=""|disabled=""[^>]*role="switch"/,
-  );
-  expect(html).toContain(
-    "Only the player, whoever uploaded it, or a coach can share this match.",
-  );
-  expect(html).not.toContain("Turn this on");
+test("team, private: the program's rung carries the faces and the team link", () => {
+  const html = render(null, { audience: TEAM });
+  expect(rungs(html)).toEqual([
+    { label: "Meridian State", checked: true },
+    { label: "Anyone with the link", checked: false },
+  ]);
+  expect(html).toContain("+11");
+  expect(html).toContain("14 people");
+  expect(html).toContain("app.example.com/dashboard/matches/");
+  expect(html).not.toContain("/m/");
   expect(html).not.toContain("mailto:");
+});
+
+test("a teammate who cannot publish sees the ladder unavailable and who can", () => {
+  const html = render(null, { canShare: false, audience: TEAM });
+  const inputs = html.match(/<input[^>]*>/g) ?? [];
+  expect(inputs).toHaveLength(2);
+  for (const input of inputs) {
+    expect(input).toContain('aria-disabled="true"');
+    expect(input).not.toMatch(/\sdisabled=""/);
+  }
+  expect(html).toContain("Ava Watson or team staff can make a public link.");
+  expect(html).toContain("app.example.com/dashboard/matches/");
+  expect(html).not.toContain("mailto:");
+});
+
+test("a teammate is told when a public link is already on", () => {
+  const html = render(null, {
+    canShare: false,
+    audience: TEAM,
+    publicLinkOn: true,
+  });
+  expect(rungs(html).map((r) => r.checked)).toEqual([false, true]);
+  expect(html).toContain(
+    "A public link is on. Ava Watson or team staff can copy it.",
+  );
+  expect(html).not.toContain("/m/");
 });
 
 test("the email subject never carries the Unknown Event placeholder", () => {

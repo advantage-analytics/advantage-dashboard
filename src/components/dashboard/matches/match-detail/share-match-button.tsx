@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useId,
   useOptimistic,
   useState,
   useSyncExternalStore,
@@ -9,14 +10,15 @@ import {
   type ComponentProps,
   type ComponentType,
 } from "react";
-import { ArrowUpRight, Check, Copy, Mail, Share2 } from "lucide-react";
+import { ArrowUpRight, Check, Copy, Lock, Mail, Share2 } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { AdvSwitch } from "@/components/ui/adv-switch";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import {
   disableMatchShare,
   enableMatchShare,
@@ -24,7 +26,12 @@ import {
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import type { Match } from "@/lib/data/types";
-import type { MatchShareLink } from "@/lib/data/match-share-server";
+import type {
+  MatchShareLink,
+  MatchShareState,
+  ShareAudience,
+  SharePerson,
+} from "@/lib/data/match-share-server";
 import { realTournamentName } from "@/lib/data/match-share-format";
 
 type PopoverContentProps = ComponentProps<typeof PopoverContent>;
@@ -58,19 +65,11 @@ interface ShareMatchButtonProps {
   side?: PopoverContentProps["side"];
   align?: PopoverContentProps["align"];
   /**
-   * The match's public link, if one is on and this viewer may see it —
-   * `getMatchShareLink()` in `page.tsx`, RLS-scoped. Null draws the switch
-   * off. A viewer who cannot share the match (a plain teammate) never sees a
-   * link and never manages to turn one on: the action's insert is refused
-   * and the switch settles back to off.
+   * `getMatchShareState()` in `page.tsx`: the public link if one is on and
+   * this viewer may see it, whether they may change it (`can_share_match`),
+   * whether a link exists at all, and who can open the match without one.
    */
-  shareLink: MatchShareLink | null;
-  /**
-   * May this viewer turn the link on or off — `getMatchShareState`, which
-   * asks the database's `can_share_match`. False for a teammate who can open
-   * the match but not publish it: they see the switch disabled and why.
-   */
-  canShare: boolean;
+  share: MatchShareState;
 }
 
 /**
@@ -87,8 +86,7 @@ export function ShareMatchButton({
   trigger: Trigger,
   side = "bottom",
   align = "end",
-  shareLink,
-  canShare,
+  share,
 }: ShareMatchButtonProps): React.JSX.Element {
   const { match } = useMatchData();
   const [open, setOpen] = useState(false);
@@ -120,15 +118,18 @@ export function ShareMatchButton({
         align={align}
         sideOffset={8}
         className={cn(
-          // Override base popover styling to match design system Dropdown / Menu spec
-          "w-[320px] rounded-xl border border-[#E5E5EA] p-1",
-          "shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]",
+          // The menu surface (Dropdown / Menu): 12px floating radius, 4px
+          // inset, hairline edge, float shadow.
+          "w-[320px] rounded-[var(--radius-dropdown)] border border-[var(--border-medium)] bg-[var(--surface-card)] p-1",
+          "shadow-[var(--shadow-dropdown)]",
         )}
       >
         <SharePopoverPanel
           match={match}
-          shareLink={shareLink}
-          canShare={canShare}
+          shareLink={share.link}
+          canShare={share.canShare}
+          publicLinkOn={share.publicLinkOn}
+          audience={share.audience}
           onClose={() => setOpen(false)}
         />
       </PopoverContent>
@@ -211,31 +212,52 @@ export function ShareRailTrigger({
 }
 
 /**
- * The popover's body. Sharing is a switch: off, the match is visible only to
- * people who can already open it in Advantage, and the panel says so rather
- * than offering a dashboard URL that bounces everyone else to sign-in; on,
- * the public `/m/<token>` link is what gets copied, mailed and handed to the
- * native share sheet.
+ * The popover's body: who can open the match, then what to do with that.
  *
- * The switch flips optimistically and settles on the server's answer: a
- * refused insert (someone who may view but not publish) lands back on off
- * with a line saying so.
+ * The first block is a two-rung ladder drawn as check-dot radios — the
+ * product's single-choice mark — in the menu's own row geometry:
+ *
+ *   - "Only you" (personal) or the program's name (team): who can open it in
+ *     Advantage today. The team rung carries the first three faces and the
+ *     headcount.
+ *   - "Anyone with the link": the public `/m/<token>` link.
+ *
+ * Below a hairline sits whatever the chosen rung can hand out — nothing for
+ * "Only you", the `/dashboard` URL for a team (members sign in to open it),
+ * the public link plus Email and More options for "Anyone" — and under a
+ * second hairline one closing sentence: who made the link and when, or that
+ * links carry statistics only.
+ *
+ * Choosing the public rung turns the link on at once (optimistic, settling on
+ * the server's answer). Stepping back down asks first, in place of the link
+ * row: a link that has been handed out dies for everyone, and turning it on
+ * again mints a new one (`share-actions.ts`).
+ *
+ * A viewer who may open the match but not publish it (a teammate) sees the
+ * same ladder unavailable — `aria-disabled`, never `disabled`, so it stays in
+ * the tab order and announces why — with the team link to copy and a note
+ * naming who can make a public one.
  */
 export function SharePopoverPanel({
   match,
   shareLink,
   canShare,
+  publicLinkOn = shareLink !== null,
+  audience = { kind: "personal" },
   onClose,
 }: {
   match: Match;
   shareLink: MatchShareLink | null;
   canShare: boolean;
+  publicLinkOn?: boolean;
+  audience?: ShareAudience;
   onClose: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
+  const groupName = useId();
   const [canNativeShare, setCanNativeShare] = useState(false);
   const [link, setLink] = useState<MatchShareLink | null>(shareLink);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingOff, setConfirmingOff] = useState(false);
   const [pending, startTransition] = useTransition();
   const [optimisticOn, setOptimisticOn] = useOptimistic(link !== null);
 
@@ -252,35 +274,42 @@ export function SharePopoverPanel({
   }, []);
 
   const url = link?.url ?? "";
-  const displayUrl = formatDisplayUrl(url);
   const shareTitle =
     realTournamentName(match.tournamentName) ??
     `${match.player1.name} vs ${match.player2.name}`;
-  const mailtoHref = buildMailtoHref(match, url);
+  const team = audience.kind === "team" ? audience : null;
+  const locked = !canShare;
+
+  // What the ladder shows as chosen. A teammate cannot read the link row, so
+  // their answer comes from `publicLinkOn`; everyone else follows the
+  // optimistic toggle, and "Only you" is drawn chosen while its confirm is up.
+  const isPublic = locked ? publicLinkOn : confirmingOff ? false : optimisticOn;
+  const on = !locked && optimisticOn && link !== null;
+
+  function choose(next: "private" | "public") {
+    if (locked || pending) return;
+    setError(null);
+    if (next === "public") {
+      setConfirmingOff(false);
+      if (!optimisticOn) toggle(true);
+      return;
+    }
+    if (optimisticOn) setConfirmingOff(true);
+  }
 
   function toggle(next: boolean) {
-    setError(null);
     startTransition(async () => {
       setOptimisticOn(next);
       const result = next
         ? await enableMatchShare(match.id)
         : await disableMatchShare(match.id);
+      setConfirmingOff(false);
       if (!result.ok) {
         setError("Couldn't update sharing. Try again.");
         return;
       }
       setLink(result.url ? { url: result.url } : null);
     });
-  }
-
-  async function copyToClipboard() {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // silent failure
-    }
   }
 
   async function nativeShare() {
@@ -292,132 +321,360 @@ export function SharePopoverPanel({
     }
   }
 
-  const on = optimisticOn && link !== null;
+  const privateRung = team
+    ? {
+        label: team.programName,
+        description: "Everyone on the team can open it",
+        trailing: <TeamFaces faces={team.faces} count={team.memberCount} />,
+      }
+    : { label: "Only you", description: "Private to your account" };
 
-  return (
-    <div className="flex flex-col">
-      {/* The switch row: what the link does, and whether it exists. */}
-      <div className="flex flex-col gap-1.5 px-2.5 pt-2.5 pb-2">
-        <label className="flex cursor-pointer items-center gap-2.5">
-          <AdvSwitch
-            checked={optimisticOn}
-            onCheckedChange={toggle}
-            disabled={pending || !canShare}
-            label="Anyone with the link can view"
-          />
-          <span className="text-[13px] text-[var(--ink-900)]">
-            Anyone with the link can view
-          </span>
-        </label>
-        <p
-          className={cn(
-            "text-micro",
-            error ? "text-[var(--danger)]" : "text-[var(--ink-500)]",
-          )}
-          aria-live="polite"
-        >
-          {error ??
-            (on
-              ? "Statistics only. No video."
-              : canShare
-                ? "Only people who can open this match in Advantage can see it. Turn this on to get a link anyone can view."
-                : "Only the player, whoever uploaded it, or a coach can share this match.")}
+  // The row between the two hairlines, when there is one.
+  let body: React.ReactNode = null;
+  if (confirmingOff) {
+    body = (
+      <div className="flex flex-col gap-2.5 px-2.5 pt-2 pb-2.5">
+        <p className="text-[12px] leading-[17px] text-[var(--ink-700)]">
+          Turn off the link? It stops working for everyone who has it. Turning
+          it back on makes a new one.
         </p>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            autoFocus
+            onClick={() => setConfirmingOff(false)}
+            className={advButton("ghost", "sm")}
+          >
+            Keep link
+          </button>
+          <button
+            type="button"
+            onClick={() => toggle(false)}
+            disabled={pending}
+            className={advButton("danger-solid", "sm")}
+          >
+            Turn off
+          </button>
+        </div>
       </div>
-
-      {on && (
-        <>
-          {/* Divider — inset, doesn't span edges */}
-          <div className="mx-2 my-1 h-px bg-[var(--border-hairline)]" />
-
-          {/* URL pill + Copy button */}
-          <div className="flex items-center gap-2 px-2 pt-1 pb-2">
-            <div
-              className={cn(
-                "flex h-8 min-w-0 flex-1 items-center px-2.5",
-                "rounded-[6px] border border-[#EAECF0] bg-[#F5F5F5]",
-              )}
-            >
-              <span className="truncate text-[12px] leading-none text-[#71717A]">
-                {displayUrl}
-              </span>
-            </div>
+    );
+  } else if (on) {
+    body = (
+      <ActionBlock>
+        <UrlRow url={url} />
+        {/* The other ways out, one row of equal halves under the link — the
+            same 32px and edges as Copy, so the link row stays the lead. */}
+        <div className="flex gap-2">
+          <a
+            href={buildMailtoHref(match, url)}
+            className={cn(SECONDARY_BUTTON, "flex-1")}
+          >
+            <Mail
+              className="size-3.5 text-[var(--nav-fg)]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            Email
+          </a>
+          {canNativeShare && (
             <button
               type="button"
-              onClick={copyToClipboard}
-              autoFocus
-              aria-live="polite"
-              className={cn(
-                "inline-flex h-8 shrink-0 items-center gap-1 rounded-[6px] px-3 text-[12px] font-medium",
-                "border border-[#EAECF0] bg-white text-[#525252]",
-                "hover:bg-[#F5F5F5] hover:text-[var(--ink-900)] active:bg-[var(--ink-200)]",
-                "transition-[background-color,transform,color] duration-150 ease-out active:scale-[0.97]",
-                "focus-visible:outline-none",
-              )}
+              onClick={nativeShare}
+              className={cn(SECONDARY_BUTTON, "flex-1")}
             >
-              {copied ? (
-                <>
-                  <Check
-                    className="size-3.5"
-                    strokeWidth={2}
-                    aria-hidden="true"
-                  />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy
-                    className="size-3.5"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                  Copy
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Divider — inset, doesn't span edges */}
-          <div className="mx-2 my-1 h-px bg-[#E5E5EA]" />
-
-          {/* Item rows */}
-          <div className="flex flex-col">
-            <a
-              href={mailtoHref}
-              className={cn(
-                "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--ink-900)]",
-                "hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[var(--ink-200)]",
-                "transition-colors duration-100",
-              )}
-            >
-              <Mail
-                className="size-3.5 text-[#8A8A8E]"
+              <ArrowUpRight
+                className="size-3.5 text-[var(--nav-fg)]"
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
-              <span className="flex-1">Email this match</span>
-            </a>
-            {canNativeShare && (
-              <button
-                type="button"
-                onClick={nativeShare}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-[var(--ink-900)]",
-                  "hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[var(--ink-200)]",
-                  "transition-colors duration-100",
-                )}
-              >
-                <ArrowUpRight
-                  className="size-3.5 text-[#8A8A8E]"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                <span className="flex-1">More options…</span>
-              </button>
-            )}
-          </div>
+              More options
+            </button>
+          )}
+        </div>
+      </ActionBlock>
+    );
+  } else if (team && (locked || !isPublic)) {
+    body = (
+      <ActionBlock>
+        <UrlRow url={team.teamUrl} />
+      </ActionBlock>
+    );
+  }
+
+  // The closing sentence.
+  const playerName = getMatchSides(match).you.name;
+  let note: React.ReactNode;
+  if (error) {
+    note = <span className="text-[var(--danger)]">{error}</span>;
+  } else if (locked) {
+    note = (
+      <>
+        <Lock
+          className="size-[11px] shrink-0 text-[var(--ink-400)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+        {publicLinkOn
+          ? `A public link is on. ${playerName} or team staff can copy it.`
+          : `${playerName} or team staff can make a public link.`}
+      </>
+    );
+  } else if (on && link?.madeBy) {
+    note = (
+      <>
+        <PersonAvatar
+          initials={link.madeBy.initials}
+          photoUrl={link.madeBy.photoUrl}
+          className="size-[18px] bg-[var(--ink-200)] text-[9px]"
+        />
+        {`Made ${link.madeOn ? `${link.madeOn} ` : ""}by ${
+          link.madeBy.isViewer ? "you" : link.madeBy.name
+        } · statistics only`}
+      </>
+    );
+  } else if (team && !isPublic) {
+    note = "Teammates sign in to open this link.";
+  } else {
+    note = "Links show statistics only — never the video.";
+  }
+
+  return (
+    <div className="flex flex-col">
+      <div
+        role="radiogroup"
+        aria-label="Who can open this match"
+        aria-disabled={locked || undefined}
+        className="flex flex-col"
+      >
+        <AccessOption
+          name={groupName}
+          chosen={!isPublic}
+          locked={locked}
+          onChoose={() => choose("private")}
+          {...privateRung}
+        />
+        <AccessOption
+          name={groupName}
+          chosen={isPublic}
+          locked={locked}
+          onChoose={() => choose("public")}
+          label="Anyone with the link"
+          description="No sign-in needed"
+        />
+      </div>
+
+      {body && (
+        <>
+          <MenuDivider />
+          {body}
         </>
       )}
+
+      <MenuDivider />
+      <p
+        aria-live="polite"
+        className="text-micro flex items-center gap-2 px-2.5 pt-1.5 pb-2 leading-[15px] text-[var(--ink-500)]"
+      >
+        {note}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The panel's one button shape: 32px, bordered, card surface, 12/500 — Copy,
+ * Email and More options all wear it, so the only thing that separates them
+ * is where they sit. Copy's label is darker: it is the lead action.
+ */
+const SECONDARY_BUTTON = cn(
+  "inline-flex h-8 items-center justify-center gap-1.5 rounded-[var(--radius-button)] px-2.5 text-[12px] font-medium",
+  "border border-[var(--border-medium)] bg-[var(--surface-card)] text-[var(--ink-700)]",
+  "hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] active:bg-[var(--ink-200)]",
+  "transition-[background-color,transform,color] duration-150 ease-out active:scale-[0.97] motion-reduce:active:scale-100",
+);
+
+/**
+ * The block between the hairlines. Its 10px side inset puts every edge in it
+ * — the pill, Copy, the send buttons — on the same verticals as the radio
+ * dots and the note above and below.
+ */
+function ActionBlock({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 px-2.5 pt-2 pb-2.5">{children}</div>
+  );
+}
+
+/** The inset hairline between the menu's groups. */
+function MenuDivider() {
+  return <div className="mx-2.5 my-1 h-px bg-[var(--border-medium)]" />;
+}
+
+/**
+ * One rung of the access ladder: a native radio (arrow keys, grouping and
+ * announcement for free), drawn as the DS check-dot — 14px, a hairline ring
+ * at rest, solid Signal Blue with a white check when chosen. The chosen row
+ * takes no fill of its own; the dot is the one colour that says "chosen".
+ *
+ * The ring sits on the row, not the hidden input (the wrapper-ring pattern):
+ * `data-focus-ring="none"` on the input, `has-[input:focus-visible]` on the
+ * label.
+ */
+function AccessOption({
+  name,
+  label,
+  description,
+  trailing,
+  chosen,
+  locked,
+  onChoose,
+}: {
+  name: string;
+  label: string;
+  description: string;
+  trailing?: React.ReactNode;
+  chosen: boolean;
+  locked: boolean;
+  onChoose: () => void;
+}) {
+  return (
+    <label
+      className={cn(
+        "flex items-start gap-2.5 rounded-[var(--radius-element)] px-2.5 py-2",
+        "has-[input:focus-visible]:shadow-[var(--focus-ring)]",
+        locked
+          ? "cursor-default"
+          : "cursor-pointer transition-colors duration-100 hover:bg-[var(--surface-subtle)]",
+      )}
+    >
+      <input
+        type="radio"
+        name={name}
+        checked={chosen}
+        onChange={onChoose}
+        aria-disabled={locked || undefined}
+        data-focus-ring="none"
+        className="sr-only"
+      />
+      <span
+        aria-hidden="true"
+        className={cn(
+          "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border transition-colors duration-150",
+          chosen
+            ? "border-[var(--blue)] bg-[var(--blue)]"
+            : locked
+              ? "border-[var(--ink-200)]"
+              : "border-[var(--ink-300)]",
+          chosen && locked && "opacity-50",
+        )}
+      >
+        {chosen && (
+          <Check className="size-[9px] text-white" strokeWidth={2.5} />
+        )}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-px">
+        <span
+          className={cn(
+            "text-[13px] leading-[18px]",
+            locked && !chosen
+              ? "text-[var(--ink-500)]"
+              : "text-[var(--ink-900)]",
+          )}
+        >
+          {label}
+        </span>
+        <span className="text-micro leading-[15px] text-[var(--ink-500)]">
+          {description}
+        </span>
+      </span>
+      {trailing}
+    </label>
+  );
+}
+
+/**
+ * Who the team rung means, at a glance: the first three members overlapped on
+ * a 2px white ring, then "+N" for the rest. The count is read out once, as
+ * words; the faces are glyphs for it.
+ */
+function TeamFaces({
+  faces,
+  count,
+}: {
+  faces: SharePerson[];
+  count: number | null;
+}) {
+  if (faces.length === 0) return null;
+  const rest = count !== null ? count - faces.length : 0;
+  return (
+    <span className="flex shrink-0 items-center gap-1.5 self-center">
+      <span className="flex">
+        {faces.map((face, i) => (
+          <PersonAvatar
+            key={`${face.initials}-${i}`}
+            initials={face.initials}
+            photoUrl={face.photoUrl}
+            className={cn(
+              "size-[22px] bg-[var(--ink-200)] text-[9px] ring-2 ring-[var(--surface-card)]",
+              i > 0 && "-ml-1.5",
+            )}
+          />
+        ))}
+      </span>
+      {rest > 0 && (
+        <span
+          aria-hidden="true"
+          className="text-micro text-[var(--ink-500)] tabular-nums"
+        >
+          +{rest}
+        </span>
+      )}
+      {count !== null && <span className="sr-only">{count} people</span>}
+    </span>
+  );
+}
+
+/** The link to hand out, in a grey pill, with Copy beside it. */
+function UrlRow({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyToClipboard() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // silent failure
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex h-8 min-w-0 flex-1 items-center rounded-[var(--radius-button)] border border-[var(--border-medium)] bg-[var(--surface-subtle)] px-2.5">
+        <span className="truncate text-[12px] leading-none text-[var(--ink-600)]">
+          {formatDisplayUrl(url)}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={copyToClipboard}
+        aria-live="polite"
+        className={cn(
+          SECONDARY_BUTTON,
+          "w-[76px] shrink-0 gap-1 text-[var(--ink-900)]",
+        )}
+      >
+        {copied ? (
+          <>
+            <Check className="size-3.5" strokeWidth={2} aria-hidden="true" />
+            Copied
+          </>
+        ) : (
+          <>
+            <Copy className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+            Copy
+          </>
+        )}
+      </button>
     </div>
   );
 }

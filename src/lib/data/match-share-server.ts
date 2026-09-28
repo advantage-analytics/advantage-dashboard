@@ -24,6 +24,8 @@ import { siteUrl } from "@/lib/site-url";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
 import { getInitials } from "@/lib/data/match-utils";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
+import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import {
   realTournamentName,
   sharedMatchWinner,
@@ -59,15 +61,53 @@ import type { Match } from "@/lib/data/types";
  * the dashboard already reads through the admin client.
  */
 
+/** A person drawn in the Share popover: a face and a name. */
+export interface SharePerson {
+  name: string;
+  initials: string;
+  photoUrl: string | null;
+}
+
 export interface MatchShareLink {
   /** The absolute public URL, from `siteUrl()` — the one to copy and mail. */
   url: string;
+  /**
+   * Who turned the link on and when ("Sep 26"), for the popover's closing
+   * note. Null right after the viewer turns it on — the action hands back
+   * the URL alone, and the page's revalidation fills these in a beat later —
+   * and when the maker's account is gone or has no name.
+   */
+  madeBy?: (SharePerson & { isViewer: boolean }) | null;
+  madeOn?: string | null;
 }
 
 /** `${siteUrl()}/m/${token}` — one spelling, shared by the loader and the actions. */
 export function matchShareUrl(token: string): string {
   return `${siteUrl()}/m/${encodeURIComponent(token)}`;
 }
+
+/**
+ * Who can open the match inside Advantage today — the first rung of the
+ * popover's access choice. Decided by the MATCH's program, not the active
+ * workspace: `matches` RLS lets every member of `program_id` read it, and
+ * nobody else but its uploader and seated players.
+ */
+export type ShareAudience =
+  | { kind: "personal" }
+  | {
+      kind: "team";
+      /** `programs.school_name` — the workspace's own name. */
+      programName: string;
+      /**
+       * The match's `/dashboard` URL. Only a signed-in member of the program
+       * can open it, which is exactly what the team rung promises.
+       */
+      teamUrl: string;
+      /** Seats on the program, or null when the roster could not be read. */
+      memberCount: number | null;
+      /** The first few members, owner and coaches first, for the face stack. */
+      faces: SharePerson[];
+    };
 
 /** What the Share popover needs to know about this viewer and this match. */
 export interface MatchShareState {
@@ -78,30 +118,105 @@ export interface MatchShareState {
    * (`can_share_match`: the uploader, either seated player, or program
    * staff), asked rather than re-derived here, so the popover and the RLS
    * policies can never disagree. A plain teammate can open the match but
-   * not publish it; the popover shows them the switch disabled and says why,
-   * instead of letting them flip it into an error.
+   * not publish it; the popover shows them the choice unavailable and says
+   * who can, instead of letting them flip it into an error.
    */
   canShare: boolean;
+  /**
+   * Whether a public link exists at all — true whenever `link` is set, and
+   * also for a teammate who may not read the link row itself. Without it,
+   * the teammate's panel would mark "Meridian State" as the chosen rung on a
+   * match that is in fact public. Carries no token.
+   */
+  publicLinkOn: boolean;
+  audience: ShareAudience;
+}
+
+/** "Sep 26" — the note's date. */
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 /**
- * The match's share state for the signed-in viewer. RLS-scoped on both
- * reads: a viewer who cannot share reads no link row and `can_share_match`
- * answers false. A failed read degrades to "no link, cannot share" — the
- * quiet, safe reading — rather than failing the page.
+ * The team rung's facts: the program's name, how many seats it has and the
+ * first three faces. `program_roster` and `program_member_avatars` both
+ * answer any member of the program, so a player sees the same stack a coach
+ * does. A failed roster read keeps the rung and drops the count and faces.
+ */
+async function loadTeamAudience(
+  supabase: SupabaseClient,
+  matchId: string,
+  programId: string,
+): Promise<ShareAudience> {
+  const [programResult, rosterResult, avatars] = await Promise.all([
+    supabase
+      .from("programs")
+      .select("school_name")
+      .eq("id", programId)
+      .maybeSingle(),
+    supabase.rpc("program_roster", { p_program_id: programId }),
+    getMemberAvatarUrls(supabase, programId),
+  ]);
+  if (rosterResult.error) {
+    console.error("[match-share] could not read the team roster", {
+      programId,
+      message: rosterResult.error.message,
+    });
+  }
+  const roster = (rosterResult.data ?? []) as {
+    user_id: string;
+    display_name: string | null;
+    email: string | null;
+  }[];
+  return {
+    kind: "team",
+    programName:
+      (programResult.data?.school_name as string | undefined) ?? "Team",
+    teamUrl: `${siteUrl()}/dashboard/matches/${encodeURIComponent(matchId)}`,
+    memberCount: rosterResult.error ? null : roster.length,
+    faces: roster.slice(0, 3).map((member) => {
+      const name = member.display_name ?? member.email?.split("@")[0] ?? "";
+      return {
+        name,
+        initials: getInitials(name),
+        photoUrl: avatars.get(member.user_id) ?? null,
+      };
+    }),
+  };
+}
+
+/**
+ * The match's share state for the signed-in viewer. The link row and the
+ * permission are RLS-scoped: a viewer who cannot share reads no link row and
+ * `can_share_match` answers false. Two reads go through the service role,
+ * each only after the viewer's own `matches` read proved they can open the
+ * match: the name of whoever made the link (the public page prints it to
+ * anyone anyway), and — for a viewer who cannot read the link row — whether
+ * one exists. A failed read degrades to "no link, cannot share, personal" —
+ * the quiet, safe reading — rather than failing the page.
  */
 export async function getMatchShareState(
   matchId: string,
 ): Promise<MatchShareState> {
   const supabase = await createClient();
-  const [linkResult, canShareResult] = await Promise.all([
-    supabase
-      .from("match_share_links")
-      .select("token")
-      .eq("match_id", matchId)
-      .maybeSingle(),
-    supabase.rpc("can_share_match", { p_match_id: matchId }),
-  ]);
+  const [linkResult, canShareResult, matchResult, workspace] =
+    await Promise.all([
+      supabase
+        .from("match_share_links")
+        .select("token, created_by, created_at")
+        .eq("match_id", matchId)
+        .maybeSingle(),
+      supabase.rpc("can_share_match", { p_match_id: matchId }),
+      supabase
+        .from("matches")
+        .select("program_id")
+        .eq("id", matchId)
+        .maybeSingle(),
+      getWorkspaceContext(),
+    ]);
   if (linkResult.error) {
     console.error("[match-share] could not read the share link", {
       matchId,
@@ -114,11 +229,84 @@ export async function getMatchShareState(
       message: canShareResult.error.message,
     });
   }
+  if (matchResult.error) {
+    console.error("[match-share] could not read the match's program", {
+      matchId,
+      message: matchResult.error.message,
+    });
+  }
+  const canShare = canShareResult.data === true;
+  const visible = Boolean(matchResult.data);
+  const programId =
+    (matchResult.data?.program_id as string | null | undefined) ?? null;
   const token = linkResult.data?.token as string | undefined;
+  const createdBy = (linkResult.data?.created_by as string | null) ?? null;
+  const createdAt = linkResult.data?.created_at as string | undefined;
+  const viewer = workspace?.viewer ?? null;
+
+  const [audience, madeBy, linkExists] = await Promise.all([
+    programId
+      ? loadTeamAudience(supabase, matchId, programId)
+      : Promise.resolve<ShareAudience>({ kind: "personal" }),
+    resolveLinkMaker(token ? createdBy : null, viewer),
+    // Only a viewer who could not read the row needs asking, and only once
+    // they have shown they can open the match.
+    !token && !canShare && visible
+      ? lazyAdminClient()
+          .from("match_share_links")
+          .select("match_id")
+          .eq("match_id", matchId)
+          .maybeSingle()
+          .then(({ data }) => Boolean(data))
+      : Promise.resolve(false),
+  ]);
+
   return {
-    link: token ? { url: matchShareUrl(token) } : null,
-    canShare: canShareResult.data === true,
+    link: token
+      ? {
+          url: matchShareUrl(token),
+          madeBy,
+          madeOn: createdAt ? shortDate(createdAt) : null,
+        }
+      : null,
+    canShare,
+    publicLinkOn: Boolean(token) || linkExists,
+    audience,
   };
+}
+
+/** The link's maker: the viewer from their own session, anyone else by id. */
+async function resolveLinkMaker(
+  makerId: string | null,
+  viewer: {
+    id: string;
+    name: string;
+    initials: string;
+    avatarUrl: string | null;
+  } | null,
+): Promise<(SharePerson & { isViewer: boolean }) | null> {
+  if (!makerId) return null;
+  if (viewer && makerId === viewer.id) {
+    return {
+      name: viewer.name,
+      initials: viewer.initials,
+      photoUrl: viewer.avatarUrl,
+      isViewer: true,
+    };
+  }
+  const person = await resolveSharedBy(
+    lazyAdminClient(),
+    makerId,
+    new Date().toISOString(),
+  );
+  return person
+    ? {
+        name: person.name,
+        initials: person.initials,
+        photoUrl: person.photoUrl,
+        isViewer: false,
+      }
+    : null;
 }
 
 /** Who turned the link on, for the rail's footer. */
