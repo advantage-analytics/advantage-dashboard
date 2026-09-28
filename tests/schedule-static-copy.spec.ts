@@ -1044,9 +1044,9 @@ test.describe("/dashboard/team/schedule/new/tournament · 3c", () => {
     drawn(builder, file, "options={SITES}");
     // RETIRED 'Bo3 · ad' — the Format cell is the dual's `MenuSelect` over the
     //   dual's `FORMATS` now, so the words live in `dual-build-step.tsx` (see
-    //   the dual block above). The default is still best of 3, AD scoring —
-    //   the opposite of the dual's — looked up by option name:
-    drawn(builder, file, '"bo3-ad"');
+    //   the dual block above). T1 changed the default to best of 3, NO-ad —
+    //   the same as the dual's — looked up by option name:
+    drawn(builder, file, '"bo3-no-ad"');
     drawn(builder, file, "note={draft.format.scoring}");
 
     // RETIRED '3 Big Ten programs are in this field — matches against them

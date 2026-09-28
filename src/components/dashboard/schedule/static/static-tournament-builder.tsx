@@ -235,8 +235,15 @@ export interface TournamentDraftSeed {
   carry?: TournamentEntryInput[];
 }
 
-/** The `FORMATS` row an option name names, or `3c`'s own. Never a parse. */
-function formatFor(value: EventFormatValue | undefined): TournamentFormat {
+/**
+ * The `FORMATS` row an option name names, or `3c`'s own default. Never a
+ * parse — see `TournamentFormat`'s header. Exported so a spec can assert the
+ * default and an edited seed's format resolve to the right `{ bestOf,
+ * adScoring }` row without rendering the builder or decoding a string.
+ */
+export function formatFor(
+  value: EventFormatValue | undefined,
+): TournamentFormat {
   if (!value) return DEFAULT_FORMAT;
   return FORMATS.find((option) => option.value === value) ?? DEFAULT_FORMAT;
 }
@@ -1371,9 +1378,10 @@ type TournamentFormat = DualFormat;
  */
 const FORMAT_OPTIONS = formatOptions(FORMATS);
 
-/** What `3c` draws in the Format cell: best of 3, ad scoring. */
+/** What `3c` draws in the Format cell: best of 3, no-ad — the same default the
+ *  dual builder opens on (`dual-build-step.tsx`'s own `DEFAULT_FORMAT`). */
 const DEFAULT_FORMAT =
-  FORMATS.find((format) => format.value === "bo3-ad") ?? FORMATS[0];
+  FORMATS.find((format) => format.value === "bo3-no-ad") ?? FORMATS[0];
 
 /** What `3c` draws in the Site cell, and the usual answer for a tournament. */
 const DEFAULT_SITE: EventSite = "neutral";

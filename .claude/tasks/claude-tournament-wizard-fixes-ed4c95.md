@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Default the tournament builder's format to No-Ad
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/schedule/static/static-tournament-builder.tsx (guess: `DEFAULT_FORMAT` ~line 1375), tests/schedule-static-copy.spec.ts or a new tests/tournament-format-default.spec.ts
 - **done when:**
