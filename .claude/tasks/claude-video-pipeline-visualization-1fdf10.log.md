@@ -14,3 +14,13 @@ is the runner's. Newest entries at the bottom.
 1. Match/job delete cascades to labels — confirm that's wanted, or switch to `on delete set null`.
 2. `final_score` must be a JSON array (one `{p1, p2}` per set); T5–T7 must write that shape.
 3. A deleted shot must carry `delete_reason` in the same update (T7); T3 can rely on the one-open-session index and re-select on a unique violation.
+
+## T2 · Carry vendor event and rally ids through the transcript — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `derivation/transcript.ts` — `DerivedShot.event_id` (from `stroke.eventId`) and `DerivedPoint.rally_id` (from `rally.rallyId`), both non-null numbers documented as join keys, not columns. `persist-transcript.ts` untouched: its point/shot inserts already list columns explicitly. New spec in `tests/splitstep-transcript.spec.ts` asserts non-null, unique event ids equal to the parsed strokes, and rally ids in order. `DERIVATION_VERSION` unchanged.
+
+**follow-ups:**
+
+1. `event_id` is unique only within one vendor payload; T1's key `(session_id, event_id)` already scopes it per session (one job), so no change needed — keep it that way.

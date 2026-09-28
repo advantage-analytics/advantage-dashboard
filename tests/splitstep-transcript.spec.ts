@@ -9,6 +9,7 @@ import {
   buildTranscript,
   classifyPoint,
   lastServeIndex,
+  parseStrokes,
   reconcile,
   pressureFor,
   resolvePointWinners,
@@ -466,6 +467,46 @@ test.describe("transcript", () => {
     );
     const games = new Set(t.points.map((p) => p.game_number));
     expect(games.size).toBe(Math.max(...games));
+  });
+
+  test("every shot carries its vendor event_id and every point its rally_id", () => {
+    const { strokes } = parseStrokes(clean);
+    const a = analyzeResults(clean);
+    const winners = resolvePointWinners(a.rallies, a.players);
+    const key = keysFor(a.rallies);
+    const probe = reconcile({
+      winners,
+      labels: a.players,
+      score: { player1: [], player2: [] },
+      gameKeyOf: (id) => key.get(id)?.game ?? "",
+      setKeyOf: (id) => key.get(id)?.set ?? "",
+    });
+    const [p1, p2] = a.players;
+    const t = buildTranscript({
+      rallies: a.rallies,
+      labels: a.players,
+      score: {
+        player1: probe.foldedSets.map((s) => s[p1] ?? 0),
+        player2: probe.foldedSets.map((s) => s[p2] ?? 0),
+      },
+      initialTopIsPlayer1: null,
+    });
+    expect(t.ok).toBe(true);
+
+    // The join key back to the vendor stroke: present on every shot, unique
+    // across the match, and one shot per parsed stroke — phantoms included.
+    const eventIds = t.points.flatMap((p) => p.shots.map((s) => s.event_id));
+    for (const id of eventIds) {
+      expect(id).not.toBeNull();
+      expect(typeof id).toBe("number");
+    }
+    expect(new Set(eventIds).size).toBe(eventIds.length);
+    expect(eventIds.length).toBe(strokes.length);
+    expect(new Set(eventIds)).toEqual(new Set(strokes.map((s) => s.eventId)));
+
+    expect(t.points.map((p) => p.rally_id)).toEqual(
+      a.rallies.map((r) => r.rallyId),
+    );
   });
 
   test("flags record the contradictions rather than hiding them", () => {

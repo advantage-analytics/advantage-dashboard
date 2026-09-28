@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Carry vendor event and rally ids through the transcript
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/services/splitstep/derivation/transcript.ts, src/lib/services/splitstep/persist-transcript.ts, tests/splitstep-transcript.spec.ts (guess)
 - **done when:**
