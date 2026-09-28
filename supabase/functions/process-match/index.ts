@@ -1021,6 +1021,13 @@ function buildShotInserts(
       }
     }
 
+    // Placement is one rule for every provider: calculate_match_stats counts
+    // `zone` rather than re-deriving it, so this is where it is decided. Key
+    // on the stroke, not the shot number: every SwingVision serve sits at shot
+    // 1, but so do some feeds and groundstrokes, and those need a direction.
+    const contactX = toFloatOrNull(row["Hit (x)"]);
+    const landingX = toFloatOrNull(row["Bounce (x)"]);
+
     inserts.push({
       point_id: pointId,
       shot_number: toInt(row["Shot"]),
@@ -1028,57 +1035,56 @@ function buildShotInserts(
       shot_type: shotType,
       spin_type: safeString(row["Spin"]),
       speed_mph: toFloatOrNull(row["Speed (MPH)"]),
-      contact_x: toFloatOrNull(row["Hit (x)"]),
+      contact_x: contactX,
       contact_y: toFloatOrNull(row["Hit (y)"]),
-      landing_x: toFloatOrNull(row["Bounce (x)"]),
+      landing_x: landingX,
       landing_y: toFloatOrNull(row["Bounce (y)"]),
       result: safeString(row["Result"]),
       video_time: toVideoTimeOrNull(row["Video Time"]),
-      zone: null, // computed below
+      zone:
+        stroke?.toLowerCase() === "serve"
+          ? serveZone(landingX)
+          : directionZone(landingX, contactX),
     });
   }
 
-  // Compute zone for each shot
-  // Serves: based on landing_x thresholds
-  // Non-serves: compare landing_x to previous shot's contact_x
-  const byPoint = new Map<string, typeof inserts>();
-  for (const insert of inserts) {
-    const group = byPoint.get(insert.point_id) ?? [];
-    group.push(insert);
-    byPoint.set(insert.point_id, group);
-  }
-
-  for (const shots of byPoint.values()) {
-    shots.sort((a, b) => a.shot_number - b.shot_number);
-    for (let i = 0; i < shots.length; i++) {
-      const shot = shots[i];
-      if (shot.landing_x == null) continue;
-
-      if (shot.shot_number === 1) {
-        // Serve zone
-        const absX = Math.abs(shot.landing_x);
-        if (absX >= 2.74) shot.zone = "Wide";
-        else if (absX >= 1.37) shot.zone = "Body";
-        else shot.zone = "T";
-      } else {
-        // Non-serve zone
-        if (Math.abs(shot.landing_x) <= 1.0) {
-          shot.zone = "Middle";
-        } else {
-          const prev = shots[i - 1];
-          if (prev?.contact_x != null) {
-            if (Math.sign(shot.landing_x) !== Math.sign(prev.contact_x)) {
-              shot.zone = "Crosscourt";
-            } else {
-              shot.zone = "Down the Line";
-            }
-          }
-        }
-      }
-    }
-  }
-
   return inserts;
+}
+
+/**
+ * Service-box third a serve landed in, from its distance off the centre line
+ * (the singles half-width is 4.115 m). Twin of `serveZone()` in
+ * src/lib/services/splitstep/derivation/court.ts — change both together.
+ */
+function serveZone(landingX: number | null): "T" | "Body" | "Wide" | null {
+  if (landingX === null) return null;
+  const from = Math.abs(landingX);
+  if (from < 1.37) return "T";
+  if (from < 2.74) return "Body";
+  return "Wide";
+}
+
+/**
+ * Direction of a non-serve from where ITS OWN hitter struck it to where it
+ * landed: crosscourt when the ball crosses the centre line, down the line
+ * when it stays on the hitter's side, Middle within 1.0 m of the line. The
+ * export's x is one fixed court frame for both ends, so no flip is needed.
+ *
+ * This used to read the PREVIOUS shot's contact — the opponent's position,
+ * not this hitter's — and so inverted most SwingVision directions. Twin of
+ * `directionZone()` in src/lib/services/splitstep/derivation/court.ts —
+ * change both together.
+ */
+function directionZone(
+  landingX: number | null,
+  contactX: number | null,
+): "Crosscourt" | "Middle" | "Down the Line" | null {
+  if (landingX === null) return null;
+  if (Math.abs(landingX) <= 1.0) return "Middle";
+  if (contactX === null || contactX === 0) return null;
+  return Math.sign(contactX) !== Math.sign(landingX)
+    ? "Crosscourt"
+    : "Down the Line";
 }
 
 function pointKey(setNumber: number, gameNumber: number, pointNumber: number) {
