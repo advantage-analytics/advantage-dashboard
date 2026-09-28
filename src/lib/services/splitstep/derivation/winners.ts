@@ -18,6 +18,12 @@
  * depending on who is serving. Every comparison below therefore *absolutizes*
  * to `{label: value}` before comparing. Comparing the raw strings reports a
  * change on every single game.
+ *
+ * Tiebreaks are the one place the server changes INSIDE a game — every two
+ * points — and the raw game-score string flips with it ("7-5" → "5-7") while
+ * the absolute game count stands still. Before 2026-09-27 every such point fell
+ * through all three rules and resolved no winner, so every match with a
+ * tiebreak was refused (job b74a1e04 was the first). Rule 2 below reads those.
  */
 
 import type { SplitStepRally } from "./types";
@@ -35,7 +41,7 @@ export interface WinnerResolution {
   /** Player label that won, or null when no rule resolved it. */
   winner: string | null;
   /** Which rule fired, for the flag trail and for debugging. */
-  via: "ladder" | "game" | "set" | "final" | null;
+  via: "ladder" | "tiebreak" | "game" | "set" | "final" | null;
 }
 
 /** Split a server-relative score string into [serverValue, returnerValue]. */
@@ -89,6 +95,19 @@ function soleIncrement(
   return risers.length === 1 && steady.length === 1 ? risers[0] : null;
 }
 
+/**
+ * `soleIncrement` over an already-absolutized point-score pair, read as the
+ * ladder or as plain integers. Shared by rule 1 (which tries both readings)
+ * and rule 2 (which only ever needs the integer one).
+ */
+function pointSoleIncrement(
+  before: Record<string, string> | null,
+  after: Record<string, string> | null,
+  useLadder: boolean,
+): string | null {
+  return soleIncrement(numeric(before, useLadder), numeric(after, useLadder));
+}
+
 function otherLabel(label: string, labels: string[]): string | null {
   const others = labels.filter((l) => l !== label);
   return others.length === 1 ? others[0] : null;
@@ -128,16 +147,12 @@ export function resolveWinner(
     const before = absolutize(from.predPointScore, server, returner);
     const after = absolutize(to.predPointScore, nextServer, nextReturner);
     for (const useLadder of [true, false]) {
-      const winner = soleIncrement(
-        numeric(before, useLadder),
-        numeric(after, useLadder),
-      );
+      const winner = pointSoleIncrement(before, after, useLadder);
       if (winner) return { winner, via: "ladder" };
     }
     return { winner: null, via: null };
   }
 
-  // 2. The point that closed a game: exactly one side's game count rises.
   const gameBefore = numeric(
     absolutize(from.predGameScore, server, returner),
     false,
@@ -146,10 +161,32 @@ export function resolveWinner(
     absolutize(to.predGameScore, nextServer, nextReturner),
     false,
   );
+
+  // 2. A tiebreak serve rotation: the server changed but the absolute game
+  //    count did not, so the game is still open. Tiebreak point scores are
+  //    plain integers, and absolutized they climb by one exactly as rule 1
+  //    expects. Integer reading only: the 0/15/30/40 ladder never rises by
+  //    exactly one as a number, so a stale game score across an ordinary game
+  //    change cannot fire this.
+  if (
+    server !== nextServer &&
+    gameBefore &&
+    gameAfter &&
+    labels.every((l) => gameBefore[l] === gameAfter[l])
+  ) {
+    const winner = pointSoleIncrement(
+      absolutize(from.predPointScore, server, returner),
+      absolutize(to.predPointScore, nextServer, nextReturner),
+      false,
+    );
+    if (winner) return { winner, via: "tiebreak" };
+  }
+
+  // 3. The point that closed a game: exactly one side's game count rises.
   const byGame = soleIncrement(gameBefore, gameAfter);
   if (byGame) return { winner: byGame, via: "game" };
 
-  // 3. The point that closed a set: the game score resets, so the rise shows up
+  // 4. The point that closed a set: the game score resets, so the rise shows up
   //    in the set score instead.
   const setBefore = numeric(
     absolutize(from.predSetScore, server, returner),

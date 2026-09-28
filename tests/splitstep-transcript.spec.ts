@@ -12,6 +12,7 @@ import {
   reconcile,
   pressureFor,
   resolvePointWinners,
+  resolveWinner,
   scoreIsSelfMirroring,
   shotNumber,
   shotResult,
@@ -287,12 +288,14 @@ test.describe("reconciliation", () => {
     ]);
   });
 
-  test("degraded: refused, because five points resolve no winner at all", () => {
-    // This is the designed outcome, not a gap. The payload's tiebreak
-    // fragments into pseudo-games and its warm-up rally carries a "nan-nan"
-    // set score, so five points mid-match cannot be attributed. Publishing a
-    // transcript with five unknown points would put five specific false claims
-    // on the timeline with nothing marking which.
+  test("degraded: refused, because the warm-up rally resolves no winner", () => {
+    // This is the designed outcome, not a gap. The payload's warm-up rally
+    // carries a "nan-nan" set score, so it cannot be attributed, and a
+    // transcript with an unknown point puts a specific false claim on the
+    // timeline with nothing marking which. Its tiebreak used to add four more
+    // unresolved points; those now resolve across the serve rotation (see
+    // "resolveWinner: tiebreak serve rotation"), so the warm-up rally is the
+    // only mid-match point left.
     const a = analyzeResults(degraded);
     const winners = resolvePointWinners(a.rallies, a.players);
     const key = keysFor(a.rallies);
@@ -304,8 +307,11 @@ test.describe("reconciliation", () => {
       setKeyOf: (id) => key.get(id)?.set ?? "",
     });
     expect(out.ok).toBe(false);
-    expect(out.reason).toMatch(/resolved no winner/);
-    expect(out.unresolvedPoints.length).toBeGreaterThan(1);
+    expect(out.reason).toBe("1 point(s) resolved no winner");
+    expect(out.unresolvedPoints).toEqual([
+      a.rallies[0].rallyId,
+      a.rallies[a.rallies.length - 1].rallyId,
+    ]);
   });
 
   test("a fold that misses the entered score is marked unreconciled, never ok", () => {
@@ -586,6 +592,121 @@ test.describe("pressure points", () => {
     // With a set already won, best-of-3 makes it match point too.
     expect(mk({ A: 5, B: 4 }, { A: 1, B: 0 }).isMatchPoint).toBe(true);
     expect(mk({ A: 5, B: 4 }, { A: 0, B: 0 }).isMatchPoint).toBe(false);
+  });
+});
+
+/**
+ * A tiebreak changes server every two points without closing a game, and the
+ * server-relative game string flips with it. Each case is one point and its
+ * successor, both opening on a serve, with scores written server-first the way
+ * the vendor writes them.
+ */
+test.describe("resolveWinner: tiebreak serve rotation", () => {
+  const LABELS = ["A", "B"];
+  const pointAt = (server: string, game: string, point: string) =>
+    rally([
+      stroke({
+        playerLabel: server,
+        strokeType: "serve",
+        predGameScore: game,
+        predPointScore: point,
+      }),
+    ]);
+
+  test("resolves the point before a rotation from the absolute point score", () => {
+    // A serves at 1-1; B then serves at "1-2" (B 1, A 2), so A won it.
+    expect(
+      resolveWinner(
+        pointAt("A", "6-6", "1-1"),
+        pointAt("B", "6-6", "1-2"),
+        LABELS,
+      ),
+    ).toEqual({ winner: "A", via: "tiebreak" });
+    // Same point, B wins it: B serves next at "2-1" (B 2, A 1).
+    expect(
+      resolveWinner(
+        pointAt("A", "6-6", "1-1"),
+        pointAt("B", "6-6", "2-1"),
+        LABELS,
+      ),
+    ).toEqual({ winner: "B", via: "tiebreak" });
+  });
+
+  test("reads through the game string flipping with the server", () => {
+    // Job b74a1e04's stream: the vendor's game count sat at A 7 / B 5 for the
+    // whole tiebreak, rendered "7-5" when A served and "5-7" when B did.
+    // Rally 125: A serves at 0-0, B then serves at "0-1" (B 0, A 1).
+    expect(
+      resolveWinner(
+        pointAt("A", "7-5", "0-0"),
+        pointAt("B", "5-7", "0-1"),
+        LABELS,
+      ),
+    ).toEqual({ winner: "A", via: "tiebreak" });
+  });
+
+  test("an ordinary game change still resolves on the game count", () => {
+    // A holds from 40-15 at 2-1; B serves next at "1-3" (B 1, A 3).
+    expect(
+      resolveWinner(
+        pointAt("A", "2-1", "40-15"),
+        pointAt("B", "1-3", "0-0"),
+        LABELS,
+      ),
+    ).toEqual({ winner: "A", via: "game" });
+  });
+
+  test("a stale game score across a real game change stays unresolved", () => {
+    // The vendor missed the game closing, so the count reads 2-2 on both
+    // sides of a server change. 40-15 → 0-0 is not a one-point climb for
+    // either player, so nothing may be inferred from it.
+    expect(
+      resolveWinner(
+        pointAt("A", "2-2", "40-15"),
+        pointAt("B", "2-2", "0-0"),
+        LABELS,
+      ),
+    ).toEqual({ winner: null, via: null });
+  });
+
+  test("a rotation where both or neither side climbed stays unresolved", () => {
+    // "2-2" after A served at 1-1: both players rose, which one point cannot do.
+    expect(
+      resolveWinner(
+        pointAt("A", "6-6", "1-1"),
+        pointAt("B", "6-6", "2-2"),
+        LABELS,
+      ),
+    ).toEqual({ winner: null, via: null });
+    // Unchanged: the vendor repeated the score.
+    expect(
+      resolveWinner(
+        pointAt("A", "6-6", "1-1"),
+        pointAt("B", "6-6", "1-1"),
+        LABELS,
+      ),
+    ).toEqual({ winner: null, via: null });
+  });
+
+  test("degraded fixture: its 6-6 tiebreak resolves point by point", () => {
+    // The payload's first-set tiebreak, 6-6 at rally 69. Every rotation point
+    // matches the absolute point trail: A takes the first, B the rest.
+    const a = analyzeResults(degraded);
+    const winners = resolvePointWinners(a.rallies, a.players);
+    const rotations = winners.filter((w) => w.via === "tiebreak");
+    expect(rotations.map((w) => w.rallyId)).toEqual([69, 71, 73, 75]);
+    expect(rotations.map((w) => w.winner)).toEqual([
+      "Player A",
+      "Player B",
+      "Player B",
+      "Player B",
+    ]);
+  });
+
+  test("clean fixture has no tiebreak, so nothing resolves by rotation", () => {
+    const a = analyzeResults(clean);
+    const winners = resolvePointWinners(a.rallies, a.players);
+    expect(winners.some((w) => w.via === "tiebreak")).toBe(false);
   });
 });
 
