@@ -306,6 +306,23 @@ to put a testable seam.
 > on b74a1e04 no assignment fit, because game boundaries, not winners, were
 > what disagreed with the entered score.
 
+> **A reviewed exception, added 2026-09-28: the ad-scoring rule the derivation
+> folds under, in `persist-transcript.ts`.** `buildTranscriptForJob` passed
+> `matches.format.ad_scoring` into `buildTranscript`, but the vendor scores the
+> video under `processing_jobs.ad_scoring` — the `Ad` it was sent, written from
+> the request object itself in `jobs/handler.ts` and `resubmit-job.ts`, both of
+> which already read the job first. When the two disagree the transcript labels
+> every 40-40 under rules the vendor never scored under (job b74a1e04 went up
+> `Ad:false` for a no-ad event while its match row says ad). It now reads the
+> job's value when it is a boolean, then the match format, then ad — the same
+> order as `initialTopIsPlayer1` — via `resolveAdScoring`, and the job select
+> fetches `ad_scoring`. Ad scoring reaches only `pressureFor`, so what can
+> change is `is_break_point` / `is_set_point` / `is_match_point` on deciding
+> points; point winners, `reconcile()`, the fold, the player1 mapping and
+> `calculate_match_stats` are untouched, no schema changed and no `matches` row
+> is written. It corrupts silently the way the §4 inputs do, one level down.
+> `DERIVATION_VERSION` is `0.3.2-unreconciled`.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 

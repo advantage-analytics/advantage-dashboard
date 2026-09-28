@@ -42,6 +42,8 @@ interface JobRow {
   results_object_key: string | null;
   start_time_seconds: number | string | null;
   initial_top_player_is_player1: boolean | null;
+  /** What the vendor was told (`Ad`), written from the request object itself. */
+  ad_scoring: boolean | null;
 }
 
 interface MatchRow {
@@ -49,6 +51,24 @@ interface MatchRow {
   score: MatchScore | null;
   initial_top_player_is_player1: boolean | null;
   format: { ad_scoring?: boolean; best_of?: number } | null;
+}
+
+/**
+ * The ad-scoring rule to fold a job's score stream under.
+ *
+ * The job's value first: `processing_jobs.ad_scoring` is written from the exact
+ * request object just before the vendor POST, so it is what the vendor was
+ * told. `matches.format` can disagree with it — a match row whose format says
+ * ad while its no-ad event's video went up as `Ad:false` — and folding under the
+ * match's rule then labels 40-40 by rules the vendor never scored under. The
+ * match record is the fallback for a job that predates the column, then ad.
+ * Same order as `initialTopIsPlayer1` below and the submit/resubmit paths.
+ */
+export function resolveAdScoring(
+  jobAdScoring: boolean | null | undefined,
+  matchFormat: { ad_scoring?: boolean } | null,
+): boolean {
+  return jobAdScoring ?? matchFormat?.ad_scoring ?? true;
 }
 
 /**
@@ -70,7 +90,7 @@ export async function buildTranscriptForJob(params: {
   const { data: job, error: jobError } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, results_object_key, start_time_seconds, initial_top_player_is_player1",
+      "id, match_id, results_object_key, start_time_seconds, initial_top_player_is_player1, ad_scoring",
     )
     .eq("id", jobId)
     .single<JobRow>();
@@ -126,10 +146,10 @@ export async function buildTranscriptForJob(params: {
     score: match.score,
     initialTopIsPlayer1:
       job.initial_top_player_is_player1 ?? match.initial_top_player_is_player1,
-    // Threaded from the match record rather than assumed: under no-ad, 40-40 is
-    // a deciding point and BOTH players hold game point, so defaulting to ad
-    // scoring would drop the most pressured point in the match.
-    adScoring: match.format?.ad_scoring ?? true,
+    // Under no-ad, 40-40 is a deciding point and BOTH players hold game point,
+    // so the wrong rule drops (or invents) the most pressured point in a game.
+    // See resolveAdScoring for why the job's value beats the match record's.
+    adScoring: resolveAdScoring(job.ad_scoring, match.format),
     bestOf: match.format?.best_of ?? 3,
   });
 
