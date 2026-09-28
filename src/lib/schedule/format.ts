@@ -450,6 +450,25 @@ export function drawOfRound(round: string | null): string | null {
 }
 
 /**
+ * Which draw an entry STARTED in, read loosely from the free-text
+ * `program_event_entries.draw` field: "prequal" and "qualif" rather than an
+ * exact match, since older rows spell it their own way. Prequalifying is
+ * tested first because the word contains "qualif". Anything else — empty,
+ * "Main", or a custom flight name — is "main"; the caller decides what label
+ * or starting round that maps to.
+ */
+export type StartingDrawKind = "prequalifying" | "qualifying" | "main";
+
+export function classifyStartingDraw(
+  draw: string | null | undefined,
+): StartingDrawKind {
+  const lower = (draw ?? "").toLowerCase();
+  if (lower.includes("prequal")) return "prequalifying";
+  if (lower.includes("qualif")) return "qualifying";
+  return "main";
+}
+
+/**
  * "Sat, Sep 20" — the schedule drawer's date glyph (design `Tc2`), which
  * words the day differently from the row beside it ("Sat 20 Sep"). Both are
  * the design's; this one carries the comma and puts the month first.

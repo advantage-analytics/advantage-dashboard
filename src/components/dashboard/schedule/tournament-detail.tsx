@@ -59,9 +59,13 @@ import {
 } from "@/lib/schedule/entry-state";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
 import {
+  classifyStartingDraw,
   drawOfRound,
   formatEventShortDay,
   formatEventSpanWithYear,
+  MAIN_DRAW,
+  PREQUALIFYING,
+  QUALIFYING,
   roundRank,
   siteTitle,
   surfaceTitle,
@@ -859,9 +863,10 @@ export function tournamentRows(entry: EventEntry): TournamentRow[] {
  */
 function homeDraw(entry: EventEntry): string {
   const draw = (entry.draw ?? "").trim();
-  if (!draw || draw.toLowerCase() === "main") return "Main draw";
-  if (draw.toLowerCase().includes("prequal")) return "Prequalifying";
-  if (draw.toLowerCase().includes("qualif")) return "Qualifying";
+  if (!draw || draw.toLowerCase() === "main") return MAIN_DRAW;
+  const kind = classifyStartingDraw(draw);
+  if (kind === "prequalifying") return PREQUALIFYING;
+  if (kind === "qualifying") return QUALIFYING;
   return draw;
 }
 

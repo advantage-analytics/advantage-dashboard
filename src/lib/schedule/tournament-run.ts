@@ -11,6 +11,7 @@
 
 import { matchWon } from "./entry-state";
 import {
+  classifyStartingDraw,
   CONSOLATION,
   drawOfRound,
   MAIN_DRAW,
@@ -52,9 +53,9 @@ export type RunRounds = {
 export function nextRound(entry: RunRounds): string {
   const last = entry.matches[entry.matches.length - 1]?.round;
   if (!last) {
-    const draw = entry.draw?.toLowerCase() ?? "";
-    if (draw.includes("prequal")) return "PQ1";
-    return draw.includes("qualif") ? "Q1" : "R32";
+    const kind = classifyStartingDraw(entry.draw);
+    if (kind === "prequalifying") return "PQ1";
+    return kind === "qualifying" ? "Q1" : "R32";
   }
   const index = ROUND_ORDER.indexOf(last);
   return index >= 0 && index < ROUND_ORDER.length - 1

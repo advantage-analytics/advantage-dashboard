@@ -167,13 +167,19 @@ export function supportsVideo(
   );
 }
 
+/**
+ * The app's one rule for turning a `scoreWinner` verdict into "did we win":
+ * a retirement or a default's stored winner (the side that stopped may be
+ * ahead — 3-6, 2-1 ret. is the other player's line), then sets. Player1 is
+ * always ours.
+ */
+function weWon(winner: ReturnType<typeof scoreWinner>): boolean | null {
+  return winner === null ? null : winner === "player1";
+}
+
 /** Did we win this match? Null when it has no score, or the sets are level. */
 export function matchWon(match: EntryMatch): boolean | null {
-  // The app's one rule: a retirement or a default's stored winner (the side
-  // that stopped may be ahead — 3-6, 2-1 ret. is the other player's line),
-  // then sets.
-  const winner = scoreWinner(match.score);
-  return winner === null ? null : winner === "player1";
+  return weWon(scoreWinner(match.score));
 }
 
 /**
@@ -188,14 +194,15 @@ export function matchWon(match: EntryMatch): boolean | null {
 export function resultInputWon(
   input: Pick<RecordResultInput, "ourGames" | "theirGames" | "ending">,
 ): boolean | null {
-  const winner = scoreWinner({
-    player1: input.ourGames,
-    player2: input.theirGames,
-    ...(input.ending
-      ? { winner: input.ending.side === "ours" ? "player2" : "player1" }
-      : {}),
-  });
-  return winner === null ? null : winner === "player1";
+  return weWon(
+    scoreWinner({
+      player1: input.ourGames,
+      player2: input.theirGames,
+      ...(input.ending
+        ? { winner: input.ending.side === "ours" ? "player2" : "player1" }
+        : {}),
+    }),
+  );
 }
 
 /**
