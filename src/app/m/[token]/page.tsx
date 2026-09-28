@@ -162,7 +162,9 @@ export default async function SharedMatchPage({
                 </MatchReportTitleRow>
 
                 <MatchReportWhen view="statistics">
-                  <StatisticsView />
+                  {/* No Filter button and no chip removal on a shared
+                      report: an incoming `?f=` is shown, read-only. */}
+                  <StatisticsView canFilter={false} />
                 </MatchReportWhen>
               </MatchReportPane>
             </MatchReportFrame>

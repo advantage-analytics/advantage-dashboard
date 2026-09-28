@@ -6,6 +6,11 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
 import { PerformanceTrackerChart } from "@/components/dashboard/matches/match-detail/performance-tracker-chart";
 import { PointEndingsCard } from "@/components/dashboard/matches/match-detail/point-endings-card";
 import { RallyLengthCard } from "@/components/dashboard/matches/match-detail/rally-length-card";
+import {
+  FilteredPointsEmpty,
+  MatchFiltersBar,
+} from "@/components/dashboard/matches/match-detail/match-filters/applied-filters";
+import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { StatisticsEmpty } from "@/components/dashboard/matches/match-detail/statistics-empty";
 import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-detail/unpublished-stats-notice";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
@@ -22,7 +27,7 @@ import { cn } from "@/lib/utils";
  * video-derived match was removed on 2026-09-27: it only ever said "Coming
  * soon" over a disabled button, and nothing used it.
  *
- * Takes no props: `statsPublished` and `isDerived` are `meta` on
+ * No data props (`canFilter` is the only one): `statsPublished` and `isDerived` are `meta` on
  * `useMatchReport()`, decided once in `page.tsx`, so this view cannot be
  * handed a different answer than the rail or the title row got.
  *
@@ -49,11 +54,30 @@ import { cn } from "@/lib/utils";
  * The insight card is withheld too: with points it draws its own empty when
  * there is no summary, but a view with nothing says so once, not per card.
  * A match still analysing never gets here: `page.tsx` shows progress instead.
+ *
+ * ── Filters (T6) ─────────────────────────────────────────────────────────
+ * `MatchFiltersBar` sits between the insight and the widgets row: directly
+ * above the cards it scopes, and below the insight, which is whole-match
+ * prose the filters do not touch. It holds the one Filter button (which opens
+ * the filters rail at the frame's right edge — `filter-rail.tsx`) and, while
+ * a cut is applied, "N of M points" plus a removable chip per value. The
+ * title row's facts line stays whole-match: it describes the match, not the
+ * cut, and sits above every view.
+ *
+ * A cut that keeps no point replaces the widgets row with
+ * `FilteredPointsEmpty` — one statement and a Clear all — rather than four
+ * cards each drawing nothing. The bar stays, so one chip can go instead.
+ *
+ * `canFilter` is the page's call: the public `/m/[token]` report passes
+ * `false`, which drops the Filter button and the chips' remove; an incoming
+ * `?f=` is still honoured there, read-only.
  */
-export function StatisticsView() {
+export function StatisticsView({ canFilter = true }: { canFilter?: boolean }) {
   const { meta } = useMatchReport();
   const { points } = useMatchData();
+  const { filteredPoints, filtersActive } = useMatchFilters();
   const hasPoints = points.length > 0;
+  const noPointsInCut = filtersActive && filteredPoints.length === 0;
 
   return (
     <>
@@ -64,6 +88,12 @@ export function StatisticsView() {
       )}
 
       {hasPoints ? <MatchReport.Insight /> : <StatisticsEmpty />}
+
+      {hasPoints && <MatchFiltersBar canFilter={canFilter} />}
+
+      {hasPoints && noPointsInCut && (
+        <FilteredPointsEmpty canFilter={canFilter} />
+      )}
 
       {/* F1: 436px + 416px in the 868px pane. The head-to-head's slot takes
           what the fixed column leaves. Under 720px of pane (the `@container`
@@ -78,7 +108,7 @@ export function StatisticsView() {
           top-aligned content reads worse than uneven columns. The
           head-to-head card keeps its natural height; its slot stretches,
           invisibly. */}
-      {hasPoints && (
+      {hasPoints && !noPointsInCut && (
         <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row">
           {meta.statsPublished && (
             <div className="min-w-0 flex-1">

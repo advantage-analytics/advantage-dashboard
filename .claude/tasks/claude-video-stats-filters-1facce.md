@@ -84,7 +84,7 @@ ready).
 
 ## T6 · Wire filters into the Statistics tab
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T5
 - **files:** src/components/dashboard/matches/match-detail/statistics-view.tsx, a new applied-chips component in match-filters/, src/app/m/[token]/page.tsx (guess)

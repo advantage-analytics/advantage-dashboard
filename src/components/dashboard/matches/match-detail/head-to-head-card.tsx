@@ -993,9 +993,11 @@ export function HeadToHeadCard() {
     return byRow;
   }, [meta.hasPlayableVideo, scopedPoints, youIsPlayer1]);
 
-  // "Whole match · 148 points", or "Filtered · 32 of 148 points".
+  // "Whole match · 148 points", or just "Filtered": the Statistics view's
+  // filter bar, directly above this card, already says "32 of 148 points",
+  // and the same count twice one glance apart is noise.
   const scopeLine = filtersActive
-    ? `Filtered · ${scopedPoints.length} of ${points.length} points`
+    ? "Filtered"
     : `Whole match · ${points.length} points`;
 
   if (sections.length === 0) return null;

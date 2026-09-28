@@ -17,6 +17,10 @@ import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/re
 import { MatchReportCompareButton } from "@/components/dashboard/matches/match-detail/report-compare-button";
 import { MatchReportMoreMenu } from "@/components/dashboard/matches/match-detail/report-more-menu";
 import { MatchReportInsight } from "@/components/dashboard/matches/match-detail/report-insight-card";
+import {
+  FilterRail,
+  FilterRailProvider,
+} from "@/components/dashboard/matches/match-detail/match-filters/filter-rail";
 import { cn } from "@/lib/utils";
 // Parts that live in their own files: one import line here and one entry in
 // the `MatchReport` object at the bottom. Those files read `useMatchReport`
@@ -48,8 +52,22 @@ export { MatchReportProvider };
  * `MatchReportFrame` and friends; client components can use either.
  */
 
+/**
+ * The frame also owns the filters rail (`match-filters/filter-rail.tsx`): its
+ * state wraps the rail and the pane together, because the Filter button lives
+ * inside the pane (the Statistics view) and the rail is the frame's third
+ * column, after the pane, so the pane reflows beside it. Shut, the rail draws
+ * nothing and the frame is its two columns.
+ */
 export function MatchReportFrame({ children }: { children: ReactNode }) {
-  return <div className="flex min-h-0 flex-1 items-stretch">{children}</div>;
+  return (
+    <FilterRailProvider>
+      <div className="flex min-h-0 flex-1 items-stretch">
+        {children}
+        <FilterRail />
+      </div>
+    </FilterRailProvider>
+  );
 }
 
 export function MatchReportRail({ children }: { children: ReactNode }) {

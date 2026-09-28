@@ -58,3 +58,14 @@ Implementer's own calls:
 2. T6: add the page-level "No points match these filters" state when `filtersActive && filteredPoints.length === 0`.
 3. T6: head-to-head's published sections still render when filtered, with unsupported rows as em dashes; consider an explanatory note.
 4. T6: `report-facts.tsx` still prints whole-match points and games; decide whether it should follow the filters.
+
+## T6 · Wire filters into the Statistics tab — done
+
+**gate:** mechanical pass; completion pass. Widget states: loading ✓ (the Statistics skeleton in `match-report-pending.tsx` gains the Filter-button row, so nothing shifts); empty ✓ (`FilteredPointsEmpty` reads "No points match these filters" with a single Clear all; the bar and insight stay); error unchanged. Browser-checked by the implementer in a throwaway `src/app/dev-preview` route (deleted): the rail opens at 340px and reflows the pane, re-click and Esc close it with focus returned, Apply writes `?f=`, chip removal updates the URL and badge, and `?f=sc.Ad-40_sv.y` gives removable chips, "0 of 40 points" and the empty state.
+**changed:** New in `match-filters/`: `applied-chips.ts` (`appliedChips`, `removeChip`; one chip per applied value, including values the match can't produce, and `server` as a single "Rudy serving" chip), `rail-state.ts` (`filterRailReducer`, `escClosesRail`), `filter-rail.tsx` (`FilterRailProvider`, `useFilterRail`, `useFilterRailHost`, `FilterRail` using the roster's CSS width-keyframe shell, keyed `FiltersPanel` with whole-match availability, Apply → `setFilters` then close), and `applied-filters.tsx` (`MatchFiltersBar`: one Filter button with a count badge plus chips and "N of M points"; `FilteredPointsEmpty`). `MatchReportFrame` mounts the rail as a third column (score rail │ pane │ filters). `StatisticsView` gains `canFilter` (default true); `/m/[token]` passes false, so there is no button and the chips have no remove, but "N of M" and Clear all remain. The head-to-head scope line now reads just "Filtered". Spec: `tests/match-filters-statistics.spec.ts` (17 tests).
+**follow-ups:**
+
+1. DESIGN-SYSTEM CONFLICT for the author: SKILL.md's Banned list and `reference/tables.md` rule 6 ban accumulating filter chips and say the applied strip is "never chips, never a badge". The task's criteria asked for both. Either record an exception for match-report filters in the design system, or change the design.
+2. T7: the Film tab should call `useFilterRailHost()` from its own Filter button and reuse `MatchFiltersBar`/`FilteredPointsEmpty`; the rail is frame-level and free of `next/navigation`.
+3. On a narrow pane the filter rail plus the 300px score rail squeeze the pane; there is no mobile rule yet (the roster drawer is `hidden lg:block`).
+4. `FiltersPanel`'s header has no side padding while its sections do (16px vs 32px inside the rail); consider aligning them.
