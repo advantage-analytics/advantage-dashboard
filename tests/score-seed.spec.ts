@@ -2,7 +2,10 @@ import { expect, test } from "@playwright/test";
 
 import {
   planSave,
+  presetAtRound,
+  reseedForRound,
   savedLineUpload,
+  scoreFormDirty,
   seedScoreForm,
   type ScoreFormState,
   toRecordResultInput,
@@ -441,5 +444,108 @@ test.describe("the matches, Home and profile rule agrees on a stopped match", ()
   test("without one, sets decide and level is no answer", () => {
     expect(matchOutcome({ player1: [6, 6], player2: [3, 4] }, true)).toBe(true);
     expect(matchOutcome({ player1: [6, 3], player2: [3, 6] }, true)).toBeNull();
+  });
+});
+
+test.describe("changing the round on a tournament entry", () => {
+  const blank = preset({ eventKind: "tournament", round: "R16", bestOf: 3 });
+  const seeds = {
+    "entry-1": {
+      matchId: null,
+      score: null,
+      ending: null,
+      opponentName: "Rival Player",
+    },
+    "entry-1/R32": {
+      matchId: "match-r32",
+      score: {
+        player1: [6, 7],
+        player2: [3, 6],
+        player1_tiebreaks: [null, null],
+        player2_tiebreaks: [null, 4],
+      },
+      ending: null,
+      opponentName: "Casey Chen",
+    },
+  };
+
+  test("presetAtRound takes the round's own match, or the entry's blank seed", () => {
+    const r32 = presetAtRound(blank, "R32", seeds);
+    expect(r32).toMatchObject({
+      round: "R32",
+      matchId: "match-r32",
+      opponentName: "Casey Chen",
+    });
+    expect(r32.score?.player2_tiebreaks).toEqual([null, 4]);
+
+    // Leaving a recorded round never carries its match id to the next one.
+    const qf = presetAtRound(r32, "QF", seeds);
+    expect(qf).toMatchObject({
+      round: "QF",
+      matchId: null,
+      score: null,
+      opponentName: "Rival Player",
+    });
+  });
+
+  test("an untouched form reseeds from the chosen round, tiebreaks included", () => {
+    const seeded = seedScoreForm(blank);
+    const next = presetAtRound(blank, "R32", seeds);
+    const result = reseedForRound(seeded, seeded, next, null);
+
+    expect(result.kept).toBe(false);
+    expect(result.state.playerScores).toEqual([6, 7, null]);
+    expect(result.state.opponentScores).toEqual([3, 6, null]);
+    expect(result.state.opponentTiebreaks).toEqual([null, 4, null]);
+    expect(result.state.opponentName).toBe("Casey Chen");
+    expect(result.seeded).toEqual(result.state);
+  });
+
+  test("a recorded round opened full is still untouched", () => {
+    const r32 = seedScoreForm(presetAtRound(blank, "R32", seeds));
+    expect(scoreFormDirty(r32, r32)).toBe(false);
+    // Typing past the seeded length and clearing it is not an edit either.
+    expect(
+      scoreFormDirty(
+        { ...r32, playerScores: [...r32.playerScores, null] },
+        r32,
+      ),
+    ).toBe(false);
+  });
+
+  test("a typed digit, a name or an ending makes it dirty, and dirty keeps everything", () => {
+    const seeded = seedScoreForm(blank);
+    const typed: ScoreFormState = {
+      ...seeded,
+      playerScores: [6, null, null],
+      opponentScores: [4, null, null],
+      ending: "retired",
+      stoppedBy: "theirs",
+    };
+    expect(scoreFormDirty(typed, seeded)).toBe(true);
+    expect(
+      scoreFormDirty({ ...seeded, opponentName: "Someone Else" }, seeded),
+    ).toBe(true);
+    expect(scoreFormDirty({ ...seeded, ending: "defaulted" }, seeded)).toBe(
+      true,
+    );
+
+    const next = presetAtRound(blank, "R32", seeds);
+    const result = reseedForRound(typed, seeded, next, null);
+    expect(result.kept).toBe(true);
+    expect(result.state).toBe(typed);
+    expect(result.seeded).toBe(seeded);
+  });
+
+  test("an untouched form takes the chosen round's saved outcome", () => {
+    const seeded = seedScoreForm(blank);
+    const result = reseedForRound(
+      seeded,
+      seeded,
+      presetAtRound(blank, "QF", seeds),
+      { kind: "default", side: "ours" },
+    );
+    expect(result.state.ending).toBe("defaulted");
+    expect(result.state.stoppedBy).toBe("ours");
   });
 });

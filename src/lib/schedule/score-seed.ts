@@ -120,6 +120,102 @@ export function seedScoreForm(
 }
 
 /**
+ * What one tournament round of an entry opens with: its match (when the round
+ * holds one) and the opponent named on it. Everything else on the preset —
+ * players, format, event — is the entry's and does not change with the round.
+ */
+export type RoundSeed = Pick<
+  EventPreset,
+  "matchId" | "score" | "ending" | "opponentName"
+>;
+
+/**
+ * The preset for the same entry at another round, answered in client state.
+ *
+ * `roundSeeds` is the page's per-(entry, round) map, keyed by `outcomeKey`:
+ * one seed per round that holds a match, plus the entry's blank seed under
+ * `outcomeKey(entryId, null)` for a round that holds none. A round missing
+ * from both falls back to a blank match with the preset's own opponent name —
+ * never to the round being left, whose `matchId` would make a save overwrite
+ * the wrong round.
+ */
+export function presetAtRound(
+  preset: EventPreset,
+  round: string,
+  roundSeeds: Record<string, RoundSeed>,
+): EventPreset {
+  const entryId = preset.entryId ?? "";
+  const seed: RoundSeed = roundSeeds[outcomeKey(entryId, round)] ??
+    roundSeeds[outcomeKey(entryId, null)] ?? {
+      matchId: null,
+      score: null,
+      ending: null,
+      opponentName: preset.opponentName,
+    };
+  return {
+    ...preset,
+    matchId: seed.matchId,
+    score: seed.score,
+    ending: seed.ending ?? null,
+    opponentName: seed.opponentName,
+    round,
+  };
+}
+
+function sameCells(a: (number | null)[], b: (number | null)[]): boolean {
+  // A cell typed past the seeded length and then cleared leaves a trailing
+  // null behind; that is still the seed, not an edit.
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i += 1) {
+    if ((a[i] ?? null) !== (b[i] ?? null)) return false;
+  }
+  return true;
+}
+
+/**
+ * Has the coach changed anything since the form was last seeded?
+ *
+ * Any cell, the opponent's name, how it ended or who stopped — compared with
+ * the state the form was seeded with, not with "empty": a recorded round
+ * opens full, and that is still untouched.
+ */
+export function scoreFormDirty(
+  state: ScoreFormState,
+  seeded: ScoreFormState,
+): boolean {
+  return !(
+    state.opponentName === seeded.opponentName &&
+    state.ending === seeded.ending &&
+    state.stoppedBy === seeded.stoppedBy &&
+    sameCells(state.playerScores, seeded.playerScores) &&
+    sameCells(state.opponentScores, seeded.opponentScores) &&
+    sameCells(state.playerTiebreaks, seeded.playerTiebreaks) &&
+    sameCells(state.opponentTiebreaks, seeded.opponentTiebreaks)
+  );
+}
+
+/**
+ * The form after the Round control changes, decided in one place.
+ *
+ * - **Untouched:** reseed from the chosen round, so a recorded round opens
+ *   with its saved games and tiebreaks — the correction case.
+ * - **Typed into:** keep every digit, the name and the ending. The coach
+ *   picked the wrong round before typing, or is filing the score they just
+ *   typed under the right one; either way throwing it away is the bug.
+ *   `seeded` stays as it was, so the form stays dirty until saved.
+ */
+export function reseedForRound(
+  state: ScoreFormState,
+  seeded: ScoreFormState,
+  next: EventPreset,
+  nextOutcome: Pick<EntryOutcome, "kind" | "side"> | null,
+): { state: ScoreFormState; seeded: ScoreFormState; kept: boolean } {
+  if (scoreFormDirty(state, seeded)) return { state, seeded, kept: true };
+  const fresh = seedScoreForm(next, nextOutcome);
+  return { state: fresh, seeded: fresh, kept: false };
+}
+
+/**
  * The `recordResult` payload for one line's typed score.
  *
  * Only the sets that were played are sent, counted from whichever cells have

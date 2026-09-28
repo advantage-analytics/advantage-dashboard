@@ -79,7 +79,7 @@ ready).
 
 ## T6 · Change round on "The result." without losing what was typed
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/schedule/score-only-flow.tsx (`changeRound` ~line 375, `ScoreForm` state), src/app/dashboard/team/schedule/[eventId]/score/page.tsx (props it seeds), src/lib/schedule/score-seed.ts (a pure "reseed on round change" helper), tests/fixtures/schedule-score-flow-outcomes-harness.tsx + tests/schedule-score-flow-outcomes.spec.ts, tests/score-seed.spec.ts
 - **done when:**

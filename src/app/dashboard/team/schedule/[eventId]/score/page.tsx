@@ -9,7 +9,7 @@ import { getEventDetail, programNamesFor } from "@/lib/data/schedule-server";
 import { entryState, outcomeForRound } from "@/lib/schedule/entry-state";
 import { roundRank } from "@/lib/schedule/format";
 import { lineupChoices, presetFor } from "@/lib/schedule/line-choices";
-import { outcomeKey } from "@/lib/schedule/score-seed";
+import { outcomeKey, type RoundSeed } from "@/lib/schedule/score-seed";
 import { nextRound } from "@/lib/schedule/tournament-run";
 import { ScoreOnlyFlow } from "@/components/dashboard/schedule/score-only-flow";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
@@ -34,11 +34,14 @@ import type { EventPreset } from "@/components/dashboard/matches/new-match-wizar
  * refused at the end.
  *
  * A tournament entry is a whole run with one match per round, so the round is
- * a real question here where a dual line's slot answers it. It is asked in
- * the URL (`?round=`), not in client state: `recordResult` de-duplicates on
- * (entry, round) and UPDATES a round it already holds, so the form for a
- * recorded round must open with that round's score in it — which only the
- * server can seed. The flow's Round control navigates back here.
+ * a real question here where a dual line's slot answers it. `?round=` picks
+ * the round the page opens on; after that the flow's Round control answers it
+ * in client state. `recordResult` de-duplicates on (entry, round) and UPDATES
+ * a round it already holds, so a recorded round must open with its score in
+ * it: the page hands every round's seed over (`roundSeeds`) and an untouched
+ * form reseeds from it, while a typed-into one keeps its digits. The flow
+ * keeps `?round=` in step with `history.replaceState`, so a reload lands here
+ * on the same round.
  */
 export default async function ScoreEventPage({
   params,
@@ -128,6 +131,34 @@ export default async function ScoreEventPage({
     }),
   );
 
+  // What each round of each tournament entry opens with, keyed like
+  // `outcomes`: a seed per round that holds a match, and the entry's blank
+  // seed under `outcomeKey(id, null)` for a round that holds none. Built
+  // through `presetFor` so the client reseed cannot disagree with the preset
+  // this page seeds on load.
+  const seedOf = (value: EventPreset): RoundSeed => ({
+    matchId: value.matchId,
+    score: value.score,
+    ending: value.ending ?? null,
+    opponentName: value.opponentName,
+  });
+  const roundSeeds: Record<string, RoundSeed> = tournament
+    ? Object.fromEntries(
+        scoreable.flatMap((candidate) => [
+          [
+            outcomeKey(candidate.id, null),
+            seedOf(presetFor(event, candidate, null, programs, null)),
+          ],
+          ...candidate.matches
+            .filter((item) => item.round !== null)
+            .map((item) => [
+              outcomeKey(candidate.id, item.round),
+              seedOf(presetFor(event, candidate, item, programs, item.round)),
+            ]),
+        ]),
+      )
+    : {};
+
   // Every round an entry already holds something for — a match or an
   // outcome — so the Round control can say so before a coach overwrites it.
   const recordedRounds = Object.fromEntries(
@@ -148,16 +179,20 @@ export default async function ScoreEventPage({
         kind={event.kind}
         leaf="Add score"
       />
-      {/* Keyed on the URL's answer: the flow seeds its current line once, so
-          a Round change (a `router.replace` back here) must remount it. */}
+      {/* Keyed on the URL's entry: the flow seeds its current line once, so
+          arriving on another line remounts it. The round is deliberately NOT
+          in the key — the Round control rewrites `?round=` in place, and a
+          later `router.refresh()` must not remount the form and drop what was
+          typed. */}
       <ScoreOnlyFlow
-        key={`${entry.id}:${round ?? ""}`}
+        key={entry.id}
         preset={preset}
         lineup={lineupChoices(event, entries, programs, {
           includeNonPlayed: true,
         })}
         outcomes={outcomes}
         recordedRounds={recordedRounds}
+        roundSeeds={roundSeeds}
         eventHref={`/dashboard/team/schedule/${eventId}`}
         canUpload={canUploadForProgram(active)}
       />

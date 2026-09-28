@@ -353,21 +353,109 @@ test.describe("an opponent the lineup left blank", () => {
 });
 
 test.describe("a tournament entry", () => {
-  test("asks the round, and changing it reloads the flow at that round", async ({
+  test("asks the round, and changing it keeps what was typed without navigating", async ({
     page,
   }) => {
     await openFlow(page, "?kind=tournament");
     await expect(page.getByText("Entry 1 of 2", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Round" })).toContainText(
-      "R32",
-    );
+    const round = page.getByRole("button", { name: "Round" });
+    await expect(round).toContainText("R32");
 
-    await page.getByRole("button", { name: "Round" }).click();
-    await page.getByRole("menuitemradio", { name: /^QF/ }).click();
-    expect(await page.evaluate(() => window.routerReplaces)).toEqual([
-      "/dashboard/team/schedule/event-browser/score?entry=entry-t1&round=QF",
-    ]);
+    await page.getByLabel("Jordan Lee, set 1").fill("6");
+    await page.getByLabel("Opponent, set 1").fill("4");
+    await stopped(page, "Retired", "Jordan Lee");
+
+    await round.click();
+    await page.getByRole("menuitemradio", { name: /^R16/ }).click();
+
+    await expect(round).toContainText("R16");
+    await expect(page.getByLabel("Jordan Lee, set 1")).toHaveValue("6");
+    await expect(page.getByLabel("Opponent, set 1")).toHaveValue("4");
+    await expect(page.getByText("Who retired?")).toBeVisible();
+    await expect(
+      page.getByRole("radio", { name: "Jordan Lee", exact: true }),
+    ).toBeChecked();
+    // No navigation: the router is never asked, the URL follows in place.
+    expect(await page.evaluate(() => window.routerReplaces ?? [])).toEqual([]);
+    const query = new URLSearchParams(
+      await page.evaluate(() => window.location.search),
+    );
+    expect(query.get("entry")).toBe("entry-t1");
+    expect(query.get("round")).toBe("R16");
     expect(await page.evaluate(() => window.actionCalls)).toEqual([]);
+  });
+
+  test("an untouched form reseeds from a recorded round and says it replaces it", async ({
+    page,
+  }) => {
+    await openFlow(page, "?kind=tournament&recorded=true");
+    const round = page.getByRole("button", { name: "Round" });
+    await expect(round).toContainText("R16");
+    await expect(page.getByLabel("Jordan Lee, set 1")).toHaveValue("");
+    await expect(
+      page.getByText("Replaces the R32 result already recorded."),
+    ).toHaveCount(0);
+
+    await round.click();
+    await page.getByRole("menuitemradio", { name: /^R32/ }).click();
+
+    await expect(round).toContainText("R32");
+    await expect(page.getByLabel("Jordan Lee, set 1")).toHaveValue("6");
+    await expect(page.getByLabel("Casey Chen, set 1")).toHaveValue("3");
+    await expect(
+      page.getByLabel("Jordan Lee, set 2", { exact: true }),
+    ).toHaveValue("7");
+    await expect(
+      page.getByLabel("Casey Chen, set 2", { exact: true }),
+    ).toHaveValue("6");
+    await expect(page.getByLabel("Casey Chen, set 2 tiebreak")).toHaveValue(
+      "4",
+    );
+    await expect(
+      page.getByText("Replaces the R32 result already recorded."),
+    ).toBeVisible();
+    expect(
+      new URLSearchParams(
+        await page.evaluate(() => window.location.search),
+      ).get("round"),
+    ).toBe("R32");
+  });
+
+  test("a typed-into form keeps its digits on a recorded round, and saves under the round shown", async ({
+    page,
+  }) => {
+    await openFlow(page, "?kind=tournament&recorded=true");
+    const round = page.getByRole("button", { name: "Round" });
+    await page.getByLabel("Jordan Lee, set 1").fill("6");
+    await page.getByLabel("Casey Chen, set 1").fill("2");
+
+    await round.click();
+    await page.getByRole("menuitemradio", { name: /^R32/ }).click();
+
+    await expect(round).toContainText("R32");
+    await expect(page.getByLabel("Jordan Lee, set 1")).toHaveValue("6");
+    await expect(page.getByLabel("Casey Chen, set 1")).toHaveValue("2");
+    await expect(
+      page.getByText("Replaces the R32 result already recorded."),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Save and close" }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.actionCalls.at(-1)))
+      .toEqual({
+        action: "recordResult",
+        input: expect.objectContaining({
+          entryId: "entry-t1",
+          round: "R32",
+          ourGames: [6],
+          theirGames: [2],
+        }),
+      });
+    expect(
+      new URLSearchParams(
+        await page.evaluate(() => window.location.search),
+      ).get("round"),
+    ).toBe("R32");
   });
 
   test("a legacy withdrawal reopens as Retired and a score replaces it", async ({

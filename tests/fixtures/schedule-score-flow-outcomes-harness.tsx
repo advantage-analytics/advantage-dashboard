@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { ScoreOnlyFlow } from "@/components/dashboard/schedule/score-only-flow";
+import type { RoundSeed } from "@/lib/schedule/score-seed";
 import type {
   EventPreset,
   LineChoice,
@@ -122,20 +123,65 @@ function DualFlow() {
  * A tournament: two entries listed by position, each preset at a round. The
  * second has a saved outcome at QF, the round `?saved=true` opens on — the
  * page would have seeded that from `?round=QF`.
+ *
+ * `?recorded=true` gives the first entry a played R32 (6-3 7-6(4), against
+ * Casey Chen) and opens it at R16 instead, the way `?round=R16` would: the
+ * Round control's way back to a recorded round, seeded from `roundSeeds` the
+ * way the page builds them.
  */
 function TournamentFlow() {
-  const t1 = preset("entry-t1", "R32", "Jordan Lee", "", "tournament");
+  const recorded = params.get("recorded") === "true";
+  const t1 = preset(
+    "entry-t1",
+    recorded ? "R16" : "R32",
+    "Jordan Lee",
+    recorded ? "Casey Chen" : "",
+    "tournament",
+  );
   const t2 = preset("entry-t2", "QF", "Alex Kim", "Robin Shah", "tournament");
   const lineup: LineChoice[] = [
     { slot: "#1", playerName: t1.playerName, state: "open", preset: t1 },
     { slot: "#2", playerName: t2.playerName, state: "result", preset: t2 },
   ];
+  const roundSeeds: Record<string, RoundSeed> = {
+    "entry-t1": {
+      matchId: null,
+      score: null,
+      ending: null,
+      opponentName: t1.opponentName,
+    },
+    "entry-t2": {
+      matchId: null,
+      score: null,
+      ending: null,
+      opponentName: t2.opponentName,
+    },
+    ...(recorded
+      ? {
+          "entry-t1/R32": {
+            matchId: "match-t1-r32",
+            score: {
+              player1: [6, 7],
+              player2: [3, 6],
+              player1_tiebreaks: [null, null],
+              player2_tiebreaks: [null, 4],
+            },
+            ending: null,
+            opponentName: "Casey Chen",
+          },
+        }
+      : {}),
+  };
   return (
     <ScoreOnlyFlow
       preset={saved ? t2 : t1}
       lineup={lineup}
       outcomes={{ "entry-t2/QF": { kind: "withdrawal", side: "theirs" } }}
-      recordedRounds={{ "entry-t2": ["R32", "QF"] }}
+      recordedRounds={{
+        "entry-t2": ["R32", "QF"],
+        ...(recorded ? { "entry-t1": ["R32"] } : {}),
+      }}
+      roundSeeds={roundSeeds}
       eventHref="/dashboard/team/schedule/event-browser"
       canUpload={canUpload}
     />

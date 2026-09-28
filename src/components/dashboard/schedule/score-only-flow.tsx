@@ -15,14 +15,17 @@
  * `setOutcome` have one caller here, and `planSave` decides which.
  *
  * **The reseed is the load-bearing detail.** Switching lines remounts the form
- * (`key={outcomeKey(entryId, round)}`), so the previous line's choice and
- * digits cannot survive into the next one. A shared, mutated form is how S2
- * gets S1's 6-4.
+ * (keyed on the entry plus a count of line switches), so the previous line's
+ * choice and digits cannot survive into the next one. A shared, mutated form
+ * is how S2 gets S1's 6-4.
  *
- * A tournament entry adds one question, the round, and answers it by
- * NAVIGATING (`?round=`) rather than in state: the page seeds the form from
- * whatever that round already holds, which is the only honest way to open a
- * recorded round for correction. See `score/page.tsx`.
+ * A tournament entry adds one question, the round, and answers it in state
+ * WITHOUT remounting: the page hands over every round's seed (`roundSeeds`),
+ * so an untouched form reseeds from whatever the chosen round already holds —
+ * the honest way to open a recorded round for correction — while a form the
+ * coach has typed into keeps its digits (`reseedForRound`). The URL's
+ * `?round=` follows via `history.replaceState`, so a reload reopens the same
+ * round with no server round-trip on the change itself.
  */
 
 import { useMemo, useState, useTransition } from "react";
@@ -39,10 +42,13 @@ import {
 import {
   outcomeKey,
   planSave,
+  presetAtRound,
+  reseedForRound,
   savedLineUpload,
   scoreTyped,
   seedScoreForm,
   uploadInsteadHref,
+  type RoundSeed,
   type SavedLineUpload,
   type ScoreFormState,
 } from "@/lib/schedule/score-seed";
@@ -100,6 +106,7 @@ export function ScoreOnlyFlow({
   lineup,
   outcomes,
   recordedRounds = {},
+  roundSeeds = {},
   eventHref,
   canUpload,
 }: {
@@ -117,6 +124,12 @@ export function ScoreOnlyFlow({
   >;
   /** Per entry, the rounds already holding a match or an outcome. Tournaments. */
   recordedRounds?: Record<string, string[]>;
+  /**
+   * Per (entry, round), keyed by `outcomeKey`, what that round opens with —
+   * its match, or the entry's blank seed under `outcomeKey(entryId, null)`.
+   * Tournaments: lets the Round control reseed without a navigation.
+   */
+  roundSeeds?: Record<string, RoundSeed>;
   /** Where Cancel and "Save and close" land. */
   eventHref: string;
   /**
@@ -126,6 +139,16 @@ export function ScoreOnlyFlow({
   canUpload: boolean;
 }) {
   const [current, setCurrent] = useState<EventPreset>(preset);
+  /**
+   * Bumped on every LINE switch (the Change menu, "Save and next") and never
+   * on a round change: the form's key, so a new line always opens a fresh
+   * form while a new round keeps the one being typed into.
+   */
+  const [lineSwitches, setLineSwitches] = useState(0);
+  const switchLine = (next: EventPreset) => {
+    setCurrent(next);
+    setLineSwitches((count) => count + 1);
+  };
   /**
    * The line "Save and next line" just saved, offered in the footer with its
    * video. Held here, above the per-line remount, because the offer is about
@@ -201,6 +224,16 @@ export function ScoreOnlyFlow({
     ? outcomeKey(current.entryId, tournament ? current.round : null)
     : null;
 
+  /** The saved outcome under one key, this session's writes first. */
+  const outcomeAt = (
+    key: string | null,
+  ): Pick<EntryOutcome, "kind" | "side"> | null =>
+    key && Object.prototype.hasOwnProperty.call(outcomeOverrides, key)
+      ? outcomeOverrides[key]
+      : key
+        ? (outcomes[key] ?? null)
+        : null;
+
   return (
     <div className="flex min-h-[calc(100vh-44px)] flex-col">
       {/* Full bleed under the app header — chrome measuring the flow, not a
@@ -209,7 +242,7 @@ export function ScoreOnlyFlow({
 
       <PinnedLineBar
         preset={barPreset}
-        onSwitch={setCurrent}
+        onSwitch={switchLine}
         outsideHref={eventHref}
       />
 
@@ -234,30 +267,34 @@ export function ScoreOnlyFlow({
         </div>
       </div>
 
-      {/* Remounted per line. Its state is seeded once, on mount, from
+      {/* Remounted per line. Its state is seeded on mount from
           `seedScoreForm` — the single place a form's opening values are
-          decided. Without the key, switching lines would carry the previous
-          line's digits into a form that looks freshly opened. */}
+          decided — and reseeded on a round change only while untouched.
+          Without the key, switching lines would carry the previous line's
+          digits into a form that looks freshly opened. The round is NOT in
+          the key: changing it must not throw away what was typed. */}
       <ScoreForm
-        key={currentKey ?? "line"}
+        key={`${current.entryId ?? "line"}#${lineSwitches}`}
         preset={current}
         lineup={lineup}
         pool={pool}
-        initialOutcome={
-          currentKey &&
-          Object.prototype.hasOwnProperty.call(outcomeOverrides, currentKey)
-            ? outcomeOverrides[currentKey]
-            : currentKey
-              ? (outcomes[currentKey] ?? null)
-              : null
-        }
+        initialOutcome={outcomeAt(currentKey)}
         recorded={
           tournament && current.entryId && current.round
             ? (recordedRounds[current.entryId] ?? []).includes(current.round)
             : false
         }
         noun={noun}
-        scoreHref={`${eventHref}/score`}
+        onRoundChange={(round) => {
+          const next = presetAtRound(current, round, roundSeeds);
+          setCurrent(next);
+          return {
+            preset: next,
+            outcome: outcomeAt(
+              next.entryId ? outcomeKey(next.entryId, round) : null,
+            ),
+          };
+        }}
         eventHref={eventHref}
         stillOpen={stillOpen}
         nextOpen={openAfter[0]?.preset ?? null}
@@ -272,7 +309,7 @@ export function ScoreOnlyFlow({
               [currentKey]: outcome,
             }));
           }
-          if (next) setCurrent(next);
+          if (next) switchLine(next);
         }}
         onCleared={(entryId) => {
           setLastSaved(null);
@@ -305,7 +342,7 @@ function ScoreForm({
   initialOutcome,
   recorded,
   noun,
-  scoreHref,
+  onRoundChange,
   eventHref,
   stillOpen,
   nextOpen,
@@ -324,8 +361,14 @@ function ScoreForm({
   recorded: boolean;
   /** "line" on a dual, "entry" on a tournament — the footer's word. */
   noun: "line" | "entry";
-  /** This page's own path, for the Round control's navigation. */
-  scoreHref: string;
+  /**
+   * A tournament's Round control: the parent moves the line to that round and
+   * answers with its preset and saved outcome, for the reseed decision.
+   */
+  onRoundChange: (round: string) => {
+    preset: EventPreset;
+    outcome: Pick<EntryOutcome, "kind" | "side"> | null;
+  };
   eventHref: string;
   stillOpen: number;
   /** The next open line to walk to, or null when this is the last one. */
@@ -349,6 +392,8 @@ function ScoreForm({
   const [state, setState] = useState<ScoreFormState>(() =>
     seedScoreForm(preset, initialOutcome),
   );
+  /** What the form was last seeded with — "untouched" is measured from it. */
+  const [seeded, setSeeded] = useState<ScoreFormState>(state);
   // Decided once, on mount: a name the lineup never had is named in the score
   // row, and stays a picker while it is being chosen.
   const [namingOpponent] = useState(() => preset.opponentName.trim() === "");
@@ -367,17 +412,31 @@ function ScoreForm({
     value === "" ? null : Number(value);
 
   /**
-   * The Round control navigates rather than setting state: the page seeds the
-   * form from whatever the chosen round already holds, so a recorded round
-   * opens with its score in the cells and the status line says it will be
-   * replaced. Client state could only offer an empty form over a saved one.
+   * The Round control changes the round in state, never by navigating: a
+   * remount would discard what the coach typed. An untouched form reseeds
+   * from the chosen round (a recorded one opens with its score, and the
+   * footer says saving replaces it); a typed-into one keeps its digits —
+   * `reseedForRound` decides. The URL's `?round=` follows with
+   * `history.replaceState` so a reload reopens this round; no server
+   * round-trip, and nothing for the router to remount on.
    */
   const changeRound = (round: string) => {
-    const query = new URLSearchParams({
-      entry: preset.entryId ?? "",
-      round,
-    });
-    router.replace(`${scoreHref}?${query.toString()}`);
+    if (round === preset.round) return;
+    setError(null);
+    const next = onRoundChange(round);
+    const decided = reseedForRound(state, seeded, next.preset, next.outcome);
+    setState(decided.state);
+    setSeeded(decided.seeded);
+    setSavedOutcome(next.outcome);
+
+    const query = new URLSearchParams(window.location.search);
+    query.set("entry", next.preset.entryId ?? "");
+    query.set("round", round);
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}?${query.toString()}`,
+    );
   };
 
   const onScoreChange = (
