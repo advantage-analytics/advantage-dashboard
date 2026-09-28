@@ -1433,6 +1433,14 @@ export function useUploadMatchWizard({
             : prev.courtType,
           bestOf: String(preset.bestOf),
           adScoring: preset.adScoring ?? undefined,
+          // College matches (dual or tournament lines) play lets out by
+          // default — see recordResult's format.play_on_lets. A personal
+          // upload never reaches this branch, so DEFAULT_FORM_DATA's `false`
+          // stands for it.
+          playOnLets:
+            preset.eventKind === "dual" || preset.eventKind === "tournament"
+              ? true
+              : prev.playOnLets,
           matchType:
             preset.eventKind === "dual"
               ? "Dual Match"

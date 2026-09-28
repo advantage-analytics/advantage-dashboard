@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Default lets to Play On for college matches
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/schedule/writes-server.ts (`recordResult` format literals ~lines 852 and 858), src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (preset seed ~line 1435), tests/schedule-write-errors.spec.ts or tests/schedule-outcome-actions.spec.ts (writer fakes), tests/upload-score-state.spec.ts or tests/upload-line-offers.spec.ts (hook fixture)
 - **done when:**

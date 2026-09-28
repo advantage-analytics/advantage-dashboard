@@ -19,6 +19,7 @@ function actions(
     outcome?: boolean;
     otherProgram?: boolean;
     eventsPolicy?: "staff" | "owner";
+    discipline?: "singles" | "doubles";
   } = {},
 ) {
   const writes: unknown[] = [];
@@ -31,7 +32,7 @@ function actions(
       slot: "S1",
       player_labels: ["Player"],
       player_user_ids: [],
-      discipline: "singles",
+      discipline: options.discipline ?? "singles",
       forfeit: null,
     },
     program_events: {
@@ -204,6 +205,23 @@ test("cleared outcome leaves the score path available without processing jobs", 
     "/dashboard/team/schedule",
     "/dashboard/team/schedule/event",
   ]);
+});
+
+test("recordResult defaults college matches to Play On Lets, singles and doubles both", async () => {
+  for (const discipline of ["singles", "doubles"] as const) {
+    const run = actions("staff", { discipline });
+    expect(await run.actions.recordResult(score)).toEqual({ matchId: "match" });
+    const insert = run.writes.find(
+      (write): write is { table: string; method: string; value: unknown } =>
+        typeof write === "object" &&
+        write !== null &&
+        (write as { table?: string }).table === "matches",
+    );
+    expect(insert).toBeDefined();
+    expect(
+      (insert!.value as { format: Record<string, unknown> }).format,
+    ).toMatchObject({ play_on_lets: true });
+  }
 });
 
 test("all extracted writes retain member policy authorization before touching inputs", async () => {

@@ -849,13 +849,13 @@ export function createScheduleWriter(
             ad_scoring: format.doubles
               ? (format.doubles.ad_scoring ?? null)
               : (format.ad_scoring ?? null),
-            play_on_lets: false,
+            play_on_lets: true,
             games_to: doublesGamesTo,
           }
         : {
             best_of: format.best_of ?? 3,
             ad_scoring: format.ad_scoring ?? null,
-            play_on_lets: false,
+            play_on_lets: true,
           },
       score: scorePayload,
       // The context string: "Final Score", or how a stopped match ended. Who won
