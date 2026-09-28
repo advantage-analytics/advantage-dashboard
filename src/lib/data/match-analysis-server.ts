@@ -16,7 +16,6 @@ import {
   type MatchAnalysis,
   chainAttempts,
   importedAnalysis,
-  isInputRejected,
   jobRecoveryFacts,
   manualAnalysis,
   pipelinePercent,
@@ -183,7 +182,6 @@ export async function loadMatchAnalysis(
       jobReference: row.external_job_id ?? undefined,
       window: formatWindow(row.billable_seconds),
       failNote: row.error_message ?? undefined,
-      inputRejected: isInputRejected(row.status, row.error_category),
       attemptsUsed,
       ...recoveryFields(facts, attemptsUsed, row.error_message),
     });

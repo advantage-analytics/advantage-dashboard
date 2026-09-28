@@ -180,3 +180,11 @@ is the runner's. Newest entries at the bottom.
 1. The event drawer now also offers Rebuild statistics and the upload link, not just Retry — check in eyes-on.
 2. The Matches drawer now hides the stored note and class body from viewers who can't manage the match (before, they saw `failNote` as the headline).
 3. Stash `7fceca0f51e51ceb576021c6cef67184b6b42827` (blocked: T7) is superseded and can be dropped.
+
+## T10 · Retire inputRejected and the old copy keys — done
+
+**gate:** mechanical pass (first run failed once on `film-playback-refresh.spec.ts:1465`, untouched by this task; it passed 78/78 alone and the full re-run passed) · completion pass (every string confirmed byte-identical)
+**changed:** Removed `MatchAnalysis.inputRejected`, `EntryMatch.inputRejected` and the live-patch field; `canRetryAnalysis()` now checks `recovery !== "fix_recording"`. `isInputRejected` and `INPUT_REJECTED_CATEGORY` stay (the classifier's rule 4). `ANALYSIS_FAILURE_COPY` is deleted: its strings now live as literals in `byClass`, plus a new `DRAWER_NO_ACTION_BODY` ("The match page has the details.") used by `drawer-sections.tsx`. Specs updated mechanically. `failNote` kept (ops email still reads it).
+**follow-ups:**
+
+1. `canRetryAnalysis()` has no callers in `src`; consider removing it.

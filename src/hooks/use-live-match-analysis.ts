@@ -24,7 +24,6 @@ import { createClient } from "@/lib/supabase/client";
 import {
   type MatchAnalysis,
   type RecoveryFacts,
-  isInputRejected,
   jobRecoveryFacts,
   pipelinePercent,
   recoveryFields,
@@ -85,7 +84,6 @@ export type LiveAnalysisPatch = Pick<
   | "progressPercent"
   | "uploadPercent"
   | "failNote"
-  | "inputRejected"
   | "recovery"
   | "note"
   | "errorCode"
@@ -104,9 +102,10 @@ export type LiveAnalysisPatch = Pick<
  * override. Pure, and exported so it can be tested without a socket.
  *
  * Returns undefined for a status the UI has no word for; the caller warns and
- * skips. `inputRejected` is set on EVERY patch, not only failed ones, so a
- * later non-failed row (a resubmission) resets it to false rather than leaving
- * the previous refusal merged over the server render.
+ * skips. `recovery` is set on EVERY patch (via `recoveryFields`), not only
+ * failed ones, so a later non-failed row (a resubmission) resets it to
+ * undefined rather than leaving the previous refusal merged over the server
+ * render.
  */
 export function liveAnalysisPatch(
   row: Pick<LiveJobRow, "status"> & Partial<LiveJobRow>,
@@ -141,7 +140,6 @@ export function liveAnalysisPatch(
     // first live event landed.
     startedAt: row.created_at,
     failNote: row.error_message ?? undefined,
-    inputRejected: isInputRejected(row.status, row.error_category),
     // Decided with `attemptsUsed` (default 1) so the patch reads correctly on
     // its own; `withLiveAnalysis` re-decides it against the base chain count.
     ...recoveryFields(facts, attemptsUsed, errorMessage),

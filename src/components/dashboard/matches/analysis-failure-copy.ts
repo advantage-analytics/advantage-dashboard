@@ -1,50 +1,5 @@
 import type { RecoveryClass } from "@/lib/data/match-analysis";
 
-/**
- * What a failed analysis says, per failure status.
- *
- * The two statuses are different failures and must not share copy:
- *
- * - `failed` — the video provider could not analyze the video. A retry
- *   resubmits the same upload, and a new recording is a real way out.
- * - `derivation_failed` — the video was analyzed fine, but the rallies it
- *   found could not be reconciled with the final score the player entered.
- *   Retrying the video or re-shooting it would not help, so this copy offers
- *   neither.
- *
- * Customer-facing strings only: never name the vendor here (guardrails §2).
- */
-export const ANALYSIS_FAILURE_COPY = {
-  derivation_failed: {
-    title: "Analyzed, but the score couldn't be read cleanly",
-    body: "The rallies found in your video couldn't be matched point by point to the final score you entered, so no statistics were saved for this match.",
-  },
-  failed: {
-    /** Headline when the job carries no end-user message of its own. */
-    title: "Analysis stopped",
-    /** The match page's progress card. */
-    body: "Retrying uses the video you already uploaded — nothing needs uploading again. If it keeps failing, trim to a window where the camera stays fixed, or upload a new recording.",
-    uploadLink: "Upload a new recording",
-    /** The matches drawer: with a retry available, and without. */
-    drawer: {
-      retry:
-        "Retrying uses the video you already uploaded. Nothing needs uploading again.",
-      details: "The match page has the details.",
-    },
-    /**
-     * `failed` jobs where the video itself didn't meet a recording
-     * requirement (bad fps, resolution, etc). Retrying would resubmit the
-     * same unusable video and fail the same way, so this offers no retry —
-     * only a new recording.
-     */
-    inputRejected: {
-      body: "This video didn't meet one of the recording requirements, so analyzing it again would stop the same way. Upload a new recording that meets them.",
-      drawer:
-        "This video didn't meet one of the recording requirements. Upload a new recording that meets them.",
-    },
-  },
-} as const;
-
 /** Shape every `byClass` entry (and each `WAIT_OR_ASK_VARIANTS` entry) follows. */
 interface RecoveryCopy {
   title: string;
@@ -111,28 +66,56 @@ export function waitOrAskVariant(
 }
 
 /**
+ * The failed-row drawer's body when the viewer has no action to take
+ * (`canAct` is false) — a fixed line pointing them at the match page rather
+ * than repeating the class's own drawer copy. Named apart from `byClass` so
+ * `drawer-sections.tsx` can reach it without depending on any one class.
+ */
+export const DRAWER_NO_ACTION_BODY = "The match page has the details.";
+
+/**
  * Per-`RecoveryClass` copy for the retry/recovery surfaces (T4, design §2,
- * plan step 3). `retry`, `fix_recording` and `stats_unavailable` reference
- * the strings above by property access rather than repeating them, so a
- * later edit to `ANALYSIS_FAILURE_COPY` flows through automatically.
+ * plan step 3).
+ *
+ * The two failed-job classes below are different failures and must not
+ * share copy:
+ *
+ * - `retry` — the video provider could not analyze the video. A retry
+ *   resubmits the same upload, and a new recording is a real way out.
+ * - `stats_unavailable` — the video was analyzed fine, but the rallies it
+ *   found could not be reconciled with the final score the player entered.
+ *   Retrying the video or re-shooting it would not help, so this copy offers
+ *   neither.
+ *
+ * Customer-facing strings only: never name the vendor here (guardrails §2).
  */
 export const byClass: Record<RecoveryClass, RecoveryCopy> = {
   retry: {
-    title: ANALYSIS_FAILURE_COPY.failed.title,
-    cardBody: ANALYSIS_FAILURE_COPY.failed.body,
-    drawerBody: ANALYSIS_FAILURE_COPY.failed.drawer.retry,
+    title: "Analysis stopped",
+    cardBody:
+      "Retrying uses the video you already uploaded — nothing needs uploading again. If it keeps failing, trim to a window where the camera stays fixed, or upload a new recording.",
+    drawerBody:
+      "Retrying uses the video you already uploaded. Nothing needs uploading again.",
     action: "Retry analysis",
   },
+  // `failed` jobs where the video itself didn't meet a recording requirement
+  // (bad fps, resolution, etc). Retrying would resubmit the same unusable
+  // video and fail the same way, so this offers no retry — only a new
+  // recording.
   fix_recording: {
-    title: ANALYSIS_FAILURE_COPY.failed.title,
-    cardBody: ANALYSIS_FAILURE_COPY.failed.inputRejected.body,
-    drawerBody: ANALYSIS_FAILURE_COPY.failed.inputRejected.drawer,
-    action: ANALYSIS_FAILURE_COPY.failed.uploadLink,
+    title: "Analysis stopped",
+    cardBody:
+      "This video didn't meet one of the recording requirements, so analyzing it again would stop the same way. Upload a new recording that meets them.",
+    drawerBody:
+      "This video didn't meet one of the recording requirements. Upload a new recording that meets them.",
+    action: "Upload a new recording",
   },
   stats_unavailable: {
-    title: ANALYSIS_FAILURE_COPY.derivation_failed.title,
-    cardBody: ANALYSIS_FAILURE_COPY.derivation_failed.body,
-    drawerBody: ANALYSIS_FAILURE_COPY.derivation_failed.body,
+    title: "Analyzed, but the score couldn't be read cleanly",
+    cardBody:
+      "The rallies found in your video couldn't be matched point by point to the final score you entered, so no statistics were saved for this match.",
+    drawerBody:
+      "The rallies found in your video couldn't be matched point by point to the final score you entered, so no statistics were saved for this match.",
     action: null,
   },
   upload_again: {

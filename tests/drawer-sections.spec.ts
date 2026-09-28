@@ -3,7 +3,7 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
-  ANALYSIS_FAILURE_COPY,
+  DRAWER_NO_ACTION_BODY,
   WAIT_OR_ASK_VARIANTS,
   byClass,
 } from "@/components/dashboard/matches/analysis-failure-copy";
@@ -186,13 +186,11 @@ test("AnalysisNotice: stats_unavailable reads the shared derivation title/body, 
   const out = decode(html);
 
   expect(html).toContain('role="alert"');
-  expect(out).toContain(ANALYSIS_FAILURE_COPY.derivation_failed.title);
-  expect(out).toContain(ANALYSIS_FAILURE_COPY.derivation_failed.body);
+  expect(out).toContain(byClass.stats_unavailable.title);
+  expect(out).toContain(byClass.stats_unavailable.cardBody);
   expect(out).not.toContain("The match page has the details");
   expect(out).not.toContain("Retrying uses");
-  expect(alertHeadline(html)).toBe(
-    ANALYSIS_FAILURE_COPY.derivation_failed.title,
-  );
+  expect(alertHeadline(html)).toBe(byClass.stats_unavailable.title);
   expect(out).not.toContain(NOTE);
 });
 
@@ -204,7 +202,7 @@ test("AnalysisNotice: retry for a viewer who can act heads with the note and rea
   expect(out).toContain(
     "Retrying uses the video you already uploaded. Nothing needs uploading again.",
   );
-  expect(out).not.toContain("The match page has the details.");
+  expect(out).not.toContain(DRAWER_NO_ACTION_BODY);
 });
 
 test("AnalysisNotice: retry without a note falls back to the class title", () => {
@@ -233,7 +231,7 @@ test("AnalysisNotice: a viewer who cannot act reads the class title and the deta
     expect(alertHeadline(html), recovery).toBe(
       byClass[recovery as keyof typeof byClass].title,
     );
-    expect(out, recovery).toContain("The match page has the details.");
+    expect(out, recovery).toContain(DRAWER_NO_ACTION_BODY);
     expect(out, recovery).not.toContain(NOTE);
     expect(out, recovery).not.toContain("Retrying");
   }
@@ -246,9 +244,9 @@ test("AnalysisNotice: fix_recording keeps the vendor's note as headline and neve
   const out = decode(html);
 
   expect(alertHeadline(html)).toContain(note);
-  expect(out).toContain(ANALYSIS_FAILURE_COPY.failed.inputRejected.drawer);
+  expect(out).toContain(byClass.fix_recording.drawerBody);
   expect(out).not.toContain("Retrying uses");
-  expect(out).not.toContain("The match page has the details.");
+  expect(out).not.toContain(DRAWER_NO_ACTION_BODY);
   expect(action({ recovery: "fix_recording" })).not.toContain("Retry");
 });
 

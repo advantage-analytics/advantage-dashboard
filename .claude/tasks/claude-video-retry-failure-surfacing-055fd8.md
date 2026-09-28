@@ -138,7 +138,7 @@ ready).
 
 ## T10 · Retire inputRejected and the old copy keys
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T6, T7, T8
 - **files:** src/lib/data/match-analysis.ts, src/lib/data/match-analysis-server.ts, src/hooks/use-live-match-analysis.ts, src/lib/schedule/types.ts, src/lib/data/schedule-server.ts, src/components/dashboard/matches/analysis-failure-copy.ts, affected specs (guess)

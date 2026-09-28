@@ -274,7 +274,6 @@ export async function readScheduleWithClient(
       sourceProvider: match.source_provider ?? null,
       jobId: analysis?.jobId ?? null,
       failNote: analysis?.failNote ?? null,
-      inputRejected: analysis?.inputRejected ?? null,
       recovery: analysis?.recovery ?? null,
       note: analysis?.note ?? null,
       errorCode: analysis?.errorCode ?? null,

@@ -130,21 +130,17 @@ export interface MatchAnalysis {
   stageNote?: string;
   failNote?: string;
   /**
-   * The vendor refused the video itself (`processing_jobs.error_category` is
-   * `invalid_input` — a frame rate too low, say), so resubmitting the same
-   * file cannot succeed and Retry should not be offered. Only ever true on a
-   * `failed` job. Set by `isInputRejected()` in BOTH the server loader and the
-   * realtime hook: a field one path sets and the other does not is how the
-   * match page and the matches list start disagreeing about the same row.
-   * Optional so a projection with no job row (imported, manual) need not state it.
-   */
-  inputRejected?: boolean;
-  /**
    * What the player can do about a job that did not finish, from
-   * `classifyFailure()`. Undefined for a healthy or in-flight row. Set through
-   * `jobRecoveryFacts()` + `classifyFailure()` in BOTH the server loader and
-   * the realtime merge (`withLiveAnalysis`), for the reason `inputRejected`
-   * documents above.
+   * `classifyFailure()`. Undefined for a healthy or in-flight row. A vendor
+   * refusal of the video itself (`processing_jobs.error_category` is
+   * `invalid_input` — a frame rate too low, say) classifies as
+   * `fix_recording`, so resubmitting the same file cannot succeed and Retry
+   * should not be offered (see `isInputRejected()`, consumed inside
+   * `classifyFailure()`). Set through `jobRecoveryFacts()` +
+   * `classifyFailure()` in BOTH the server loader and the realtime merge
+   * (`withLiveAnalysis`) — a field one path sets and the other does not is
+   * how the match page and the matches list start disagreeing about the same
+   * row.
    */
   recovery?: RecoveryClass;
   /**
@@ -281,12 +277,12 @@ export function isInputRejected(
 export function canRetryAnalysis(analysis: {
   status?: AnalysisStatus;
   jobId?: string | null;
-  inputRejected?: boolean | null;
+  recovery?: RecoveryClass | null;
 }): boolean {
   return (
     analysis.status === "failed" &&
     Boolean(analysis.jobId) &&
-    !analysis.inputRejected
+    analysis.recovery !== "fix_recording"
   );
 }
 

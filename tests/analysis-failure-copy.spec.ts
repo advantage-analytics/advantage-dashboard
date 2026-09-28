@@ -13,7 +13,7 @@ import {
   type RecoveryRow,
 } from "@/lib/data/match-analysis";
 import {
-  ANALYSIS_FAILURE_COPY,
+  DRAWER_NO_ACTION_BODY,
   byClass,
   WAIT_OR_ASK_VARIANTS,
   waitOrAskVariant,
@@ -150,9 +150,9 @@ test("stats_unavailable (derivation_failed): its own title and body, no raw reco
   const out = decode(html);
 
   expect(html).toContain('role="alert"');
-  expect(out).toContain(ANALYSIS_FAILURE_COPY.derivation_failed.title);
-  expect(out).toContain(ANALYSIS_FAILURE_COPY.derivation_failed.body);
-  expect(ANALYSIS_FAILURE_COPY.derivation_failed.title).toBe(
+  expect(out).toContain(byClass.stats_unavailable.title);
+  expect(out).toContain(byClass.stats_unavailable.cardBody);
+  expect(byClass.stats_unavailable.title).toBe(
     "Analyzed, but the score couldn't be read cleanly",
   );
 
@@ -162,7 +162,7 @@ test("stats_unavailable (derivation_failed): its own title and body, no raw reco
   expect(out).not.toContain("Retrying uses");
 
   const headline = alertHeadline(html);
-  expect(headline).toBe(ANALYSIS_FAILURE_COPY.derivation_failed.title);
+  expect(headline).toBe(byClass.stats_unavailable.title);
   expect(headline).not.toContain(NOTE);
 
   // The reconciler talking to itself is no longer a detail line on the card:
@@ -182,13 +182,13 @@ test("retry (failed): note headline, retry body, RetryAnalysis, no upload link",
 
   expect(alertHeadline(html)).toBe(NOTE);
   expect(out).toContain("Retrying uses");
-  expect(out).toContain(ANALYSIS_FAILURE_COPY.failed.body);
+  expect(out).toContain(byClass.retry.cardBody);
   expect(html).toContain('data-component="RetryAnalysis"');
   // RecoveryAction offers one action per class; for retry that is the retry
   // button, not the new-recording link (the body still names that way out).
   expect(out).not.toContain("Upload a new recording");
   expect(html).not.toContain('data-component="Link"');
-  expect(out).not.toContain(ANALYSIS_FAILURE_COPY.derivation_failed.title);
+  expect(out).not.toContain(byClass.stats_unavailable.title);
 
   expect(html).not.toMatch(/splitstep|swingvision/i);
 });
@@ -204,7 +204,7 @@ test("fix_recording (failed, input rejected): note headline, input-rejected body
   const out = decode(html);
 
   expect(alertHeadline(html)).toBe(note);
-  expect(out).toContain(ANALYSIS_FAILURE_COPY.failed.inputRejected.body);
+  expect(out).toContain(byClass.fix_recording.cardBody);
   expect(out).toContain("Upload a new recording");
 
   expect(html).not.toContain('data-component="RetryAnalysis"');
@@ -338,33 +338,22 @@ test("stalled uncoded row keeps the not-sent framing and the free resubmit", () 
 });
 
 test("the copy module carries the failed strings verbatim and never names the vendor", () => {
-  expect(ANALYSIS_FAILURE_COPY.failed.title).toBe("Analysis stopped");
+  expect(byClass.retry.title).toBe("Analysis stopped");
   expect(
-    ANALYSIS_FAILURE_COPY.failed.body.startsWith(
+    byClass.retry.cardBody.startsWith(
       "Retrying uses the video you already uploaded — nothing needs uploading again.",
     ),
   ).toBe(true);
-  expect(ANALYSIS_FAILURE_COPY.failed.uploadLink).toBe(
-    "Upload a new recording",
+  expect(byClass.fix_recording.action).toBe("Upload a new recording");
+  expect(byClass.retry.drawerBody).toBe(
+    "Retrying uses the video you already uploaded. Nothing needs uploading again.",
   );
-  expect(ANALYSIS_FAILURE_COPY.failed.drawer).toEqual({
-    retry:
-      "Retrying uses the video you already uploaded. Nothing needs uploading again.",
-    details: "The match page has the details.",
-  });
+  expect(DRAWER_NO_ACTION_BODY).toBe("The match page has the details.");
 
-  expect(ANALYSIS_FAILURE_COPY.failed.inputRejected.body).not.toMatch(
-    /Retrying/,
-  );
-  expect(ANALYSIS_FAILURE_COPY.failed.inputRejected.drawer).not.toMatch(
-    /Retrying/,
-  );
-  expect(ANALYSIS_FAILURE_COPY.failed.inputRejected.body).toMatch(
-    /recording requirement/,
-  );
-  expect(ANALYSIS_FAILURE_COPY.failed.inputRejected.drawer).toMatch(
-    /new recording/,
-  );
+  expect(byClass.fix_recording.cardBody).not.toMatch(/Retrying/);
+  expect(byClass.fix_recording.drawerBody).not.toMatch(/Retrying/);
+  expect(byClass.fix_recording.cardBody).toMatch(/recording requirement/);
+  expect(byClass.fix_recording.drawerBody).toMatch(/new recording/);
 
   const source = readFileSync(resolve(process.cwd(), COPY), "utf8");
   expect(source).not.toMatch(/splitstep|swingvision/i);
@@ -440,23 +429,23 @@ test("byClass new-class copy matches the plan", () => {
   expect(byClass.rederive.action).toBe("Rebuild statistics");
 
   expect(byClass.retry.action).toBe("Retry analysis");
-  expect(byClass.retry.cardBody).toBe(ANALYSIS_FAILURE_COPY.failed.body);
+  expect(byClass.retry.cardBody).toBe(
+    "Retrying uses the video you already uploaded — nothing needs uploading again. If it keeps failing, trim to a window where the camera stays fixed, or upload a new recording.",
+  );
   expect(byClass.retry.drawerBody).toBe(
-    ANALYSIS_FAILURE_COPY.failed.drawer.retry,
+    "Retrying uses the video you already uploaded. Nothing needs uploading again.",
   );
 
   expect(byClass.fix_recording.cardBody).toBe(
-    ANALYSIS_FAILURE_COPY.failed.inputRejected.body,
+    "This video didn't meet one of the recording requirements, so analyzing it again would stop the same way. Upload a new recording that meets them.",
   );
-  expect(byClass.fix_recording.action).toBe(
-    ANALYSIS_FAILURE_COPY.failed.uploadLink,
-  );
+  expect(byClass.fix_recording.action).toBe("Upload a new recording");
 
   expect(byClass.stats_unavailable.cardBody).toBe(
-    ANALYSIS_FAILURE_COPY.derivation_failed.body,
+    "The rallies found in your video couldn't be matched point by point to the final score you entered, so no statistics were saved for this match.",
   );
   expect(byClass.stats_unavailable.drawerBody).toBe(
-    ANALYSIS_FAILURE_COPY.derivation_failed.body,
+    byClass.stats_unavailable.cardBody,
   );
   expect(byClass.stats_unavailable.action).toBeNull();
 });

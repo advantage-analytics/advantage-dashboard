@@ -144,8 +144,6 @@ export interface EntryMatch {
   jobId?: string | null;
   /** The failed job's note, from the analysis map. */
   failNote?: string | null;
-  /** The vendor refused the video itself, from the analysis map — no retry. */
-  inputRejected?: boolean | null;
   /** What can be done about a job that did not finish, from the analysis map. */
   recovery?: RecoveryClass | null;
   /** The stored note `showsStoredNote()` allows, from the analysis map. */

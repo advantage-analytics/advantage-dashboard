@@ -19,13 +19,14 @@ import { createLoader } from "./fixtures/vm-modules";
 /**
  * A job the vendor refused outright (`error_category = invalid_input`, e.g.
  * VIDEO_FRAME_RATE_TOO_LOW) cannot succeed on a resubmit of the same file, so
- * `MatchAnalysis.inputRejected` tells the UI to hide Retry.
+ * `classifyFailure()` puts it in the `fix_recording` recovery class, which
+ * tells the UI to hide Retry (`canRetryAnalysis()`).
  *
  * Both projections — the server loader and the realtime hook — decide it
- * through `isInputRejected()`, so the matches list and the match page cannot
- * disagree about the same row. The hook is loaded through `fixtures/vm-modules`
- * with the browser Supabase client stubbed, so its pure `liveAnalysisPatch()`
- * runs without a socket.
+ * through `isInputRejected()` (consumed inside `classifyFailure()`), so the
+ * matches list and the match page cannot disagree about the same row. The
+ * hook is loaded through `fixtures/vm-modules` with the browser Supabase
+ * client stubbed, so its pure `liveAnalysisPatch()` runs without a socket.
  */
 
 const HOOK = "src/hooks/use-live-match-analysis.ts";
@@ -42,7 +43,7 @@ test("isInputRejected: only a vendor `failed` job with the invalid_input categor
   expect(isInputRejected("completed", "invalid_input")).toBe(false);
 });
 
-test("liveAnalysisPatch sets inputRejected on every patch, through the same predicate", () => {
+test("liveAnalysisPatch classifies an input rejection as fix_recording on every patch, through the same predicate", () => {
   const loader = createLoader({
     stubs: {
       "@/lib/supabase/client": {
@@ -76,11 +77,11 @@ test("liveAnalysisPatch sets inputRejected on every patch, through the same pred
 
   const rejected = liveAnalysisPatch(row);
   expect(rejected?.status).toBe("failed");
-  expect(rejected?.inputRejected).toBe(true);
+  expect(rejected?.recovery).toBe("fix_recording");
 
   expect(
-    liveAnalysisPatch({ ...row, error_category: "internal" })?.inputRejected,
-  ).toBe(false);
+    liveAnalysisPatch({ ...row, error_category: "internal" })?.recovery,
+  ).toBe("retry");
 
   // A later non-failed row (a resubmission) resets it rather than leaving the
   // earlier refusal merged over the server render.
@@ -90,7 +91,7 @@ test("liveAnalysisPatch sets inputRejected on every patch, through the same pred
     error_message: null,
   });
   expect(resubmitted).toBeDefined();
-  expect(resubmitted?.inputRejected).toBe(false);
+  expect(resubmitted?.recovery).toBeUndefined();
 });
 
 /**

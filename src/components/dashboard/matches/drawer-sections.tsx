@@ -23,7 +23,7 @@ import type { ScoreLineSet } from "@/lib/ui/score-format";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import {
-  ANALYSIS_FAILURE_COPY,
+  DRAWER_NO_ACTION_BODY,
   WAIT_OR_ASK_VARIANTS,
   byClass,
   waitOrAskVariant,
@@ -266,9 +266,7 @@ export function AnalysisNotice({
             {canAct ? (note ?? copy.title) : copy.title}
           </p>
           <p className="text-[12px] leading-[1.5] text-[var(--ink-700)]">
-            {canAct
-              ? copy.drawerBody
-              : ANALYSIS_FAILURE_COPY.failed.drawer.details}
+            {canAct ? copy.drawerBody : DRAWER_NO_ACTION_BODY}
           </p>
         </div>
       </div>
@@ -349,7 +347,7 @@ export function DrawerRecoveryAction({
         href={addVideoHref(matchId)}
         className={cn(advButton(variant, "md"), "w-full")}
       >
-        {byClass[recovery].action ?? ANALYSIS_FAILURE_COPY.failed.uploadLink}
+        {byClass[recovery].action}
       </Link>
     );
   }
