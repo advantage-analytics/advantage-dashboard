@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Add the label tables migration
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<timestamp>_label_sessions.sql (guess)
 - **done when:**
