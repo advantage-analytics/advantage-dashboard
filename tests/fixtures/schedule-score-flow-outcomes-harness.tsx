@@ -68,6 +68,11 @@ if (unnamed || tournament) {
   };
 }
 const noSchool = params.get("noschool") === "true";
+// Our program's team, for the School search's team filter. Absent = no filter.
+const ourTeam =
+  params.get("team") === "mens" || params.get("team") === "womens"
+    ? (params.get("team") as "mens" | "womens")
+    : null;
 
 function DualFlow() {
   const s1 = {
@@ -207,6 +212,7 @@ function TournamentFlow() {
       roundSeeds={roundSeeds}
       eventHref="/dashboard/team/schedule/event-browser"
       canUpload={canUpload}
+      ourTeam={ourTeam}
     />
   );
 }

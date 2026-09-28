@@ -195,6 +195,7 @@ export default async function ScoreEventPage({
         roundSeeds={roundSeeds}
         eventHref={`/dashboard/team/schedule/${eventId}`}
         canUpload={canUploadForProgram(active)}
+        ourTeam={active.team ?? null}
       />
     </>
   );

@@ -872,6 +872,34 @@ async function serveDirectory(page: Page) {
 const schoolField = (page: Page) =>
   page.getByRole("combobox", { name: "Their school" });
 
+test("the School search offers only our team's program for a school fielding both", async ({
+  page,
+}) => {
+  // The directory lists a school once per team. Two identical "Stanford
+  // University" rows were a coin toss that filed the opponent onto the wrong
+  // roster, so a men's program sees the men's row only.
+  await page.route("**/api/programs/search**", async (route) => {
+    const row = { ...RIDGELINE, schoolName: "Stanford University" };
+    await route.fulfill({
+      json: {
+        results: [
+          { ...row, programKey: "stanford-m", team: "mens" },
+          { ...row, programKey: "stanford-w", team: "womens" },
+        ],
+      },
+    });
+  });
+  await openFlow(page, "?kind=tournament&noschool=true&team=mens");
+  await schoolField(page).fill("Stanford");
+  await expect(
+    page.getByRole("option", { name: /^Stanford University/ }),
+  ).toHaveCount(1);
+  await page.getByRole("option", { name: /^Stanford University/ }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.rosterCalls))
+    .toContain("stanford-m");
+});
+
 test.describe("the opponent's school on a tournament round", () => {
   test("a tournament asks the school above the opponent; a dual line does not", async ({
     page,

@@ -156,6 +156,7 @@ export function ScoreOnlyFlow({
   roundSeeds = {},
   eventHref,
   canUpload,
+  ourTeam = null,
 }: {
   /** The line the page resolved — `?entry=`, or the first line with no score. */
   preset: EventPreset;
@@ -184,6 +185,12 @@ export function ScoreOnlyFlow({
    * and uploading its own, so the two links into it are drawn only on a yes.
    */
   canUpload: boolean;
+  /**
+   * Our program's team. The School search offers only that team's programs —
+   * a men's program plays men's teams — the rule the dual builder's
+   * `dual-school-step.tsx` applies, so one school never lists twice.
+   */
+  ourTeam?: "mens" | "womens" | null;
 }) {
   const [current, setCurrent] = useState<EventPreset>(preset);
   /**
@@ -393,6 +400,7 @@ export function ScoreOnlyFlow({
         stillOpen={stillOpen}
         nextOpen={openAfter[0]?.preset ?? null}
         canUpload={canUpload}
+        ourTeam={ourTeam}
         lastSaved={lastSaved}
         onSaved={(entryId, next, outcome, upload) => {
           setLastSaved(upload);
@@ -464,6 +472,7 @@ function ScoreForm({
   stillOpen,
   nextOpen,
   canUpload,
+  ourTeam,
   lastSaved,
   onSaved,
   onAdvanced,
@@ -497,6 +506,7 @@ function ScoreForm({
   /** The next open line to walk to, or null when this is the last one. */
   nextOpen: EventPreset | null;
   canUpload: boolean;
+  ourTeam: "mens" | "womens" | null;
   /** The previous line's played score, still offering its video. */
   lastSaved: SavedLineUpload | null;
   onSaved: (
@@ -852,6 +862,7 @@ function ScoreForm({
               <SchoolField
                 value={school}
                 onChange={onSchoolChange}
+                ourTeam={ourTeam}
                 disabled={pending}
               />
             </div>
@@ -1344,10 +1355,12 @@ const MAX_SCHOOL_ROWS = 6;
 function SchoolField({
   value,
   onChange,
+  ourTeam,
   disabled,
 }: {
   value: OpponentSchool;
   onChange: (next: OpponentSchool) => void;
+  ourTeam: "mens" | "womens" | null;
   disabled: boolean;
 }) {
   const listboxId = useId();
@@ -1365,7 +1378,12 @@ function SchoolField({
   const results = useProgramSearch(term);
 
   const typed = term.trim();
-  const rows = results.slice(0, MAX_SCHOOL_ROWS);
+  // Our team's programs only: the directory lists a school once per team,
+  // and "Stanford University" twice with the same line under it is a coin
+  // toss that files the opponent onto the wrong roster.
+  const rows = results
+    .filter((row) => ourTeam === null || row.team === ourTeam)
+    .slice(0, MAX_SCHOOL_ROWS);
   // The typed row: always there once something is typed, even beside an
   // exact directory hit — "Ridgeline University" from the directory and
   // "Ridgeline University" typed past it are different answers (one has a
