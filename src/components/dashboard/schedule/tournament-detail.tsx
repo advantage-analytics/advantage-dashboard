@@ -852,10 +852,15 @@ export function tournamentRows(entry: EventEntry): TournamentRow[] {
   }));
 }
 
-/** Where the entry started, in the pill's words. A flight label stays as typed. */
+/**
+ * Where the entry started, in `drawOfRound`'s words. A flight label stays as
+ * typed. Prequalifying is tested before qualifying because the word contains
+ * "qualif" — the loose match is for older free-text spellings.
+ */
 function homeDraw(entry: EventEntry): string {
   const draw = (entry.draw ?? "").trim();
   if (!draw || draw.toLowerCase() === "main") return "Main draw";
+  if (draw.toLowerCase().includes("prequal")) return "Prequalifying";
   if (draw.toLowerCase().includes("qualif")) return "Qualifying";
   return draw;
 }
@@ -881,10 +886,11 @@ function rowCut(row: TournamentRow): ResultCut | null {
 }
 
 /**
- * The furthest main-draw or qualifying round any entry reached, and whose it
- * was ("R16", "Brooks, Reid"). Consolation rounds sit after the final in
- * `ROUND_ORDER` but are not a deeper run, so they never count. Null when no
- * recognised round has been played.
+ * The furthest main-draw, qualifying or prequalifying round any entry reached,
+ * and whose it was ("R16", "Brooks, Reid"). Consolation rounds — the main
+ * draw's, which sit after the final in `ROUND_ORDER`, and prequalifying's —
+ * are not a deeper run, so they never count. Null when no recognised round has
+ * been played.
  */
 function deepestRun(
   entries: EventEntry[],
@@ -897,7 +903,7 @@ function deepestRun(
     for (const match of entry.matches) {
       const rank = roundRank(match.round);
       if (rank === Number.MAX_SAFE_INTEGER) continue;
-      if (drawOfRound(match.round) === "Consolation") continue;
+      if (drawOfRound(match.round)?.endsWith("Consolation")) continue;
       if (rank > (furthest.get(entry.id) ?? -1)) furthest.set(entry.id, rank);
       if (round === null || rank > best) {
         best = rank;

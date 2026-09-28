@@ -1062,6 +1062,52 @@ test.describe("/dashboard/team/schedule/new/tournament · 3c", () => {
 
     drawn(builder, file, '"Main draw"');
     drawn(builder, file, '"Qualifying"');
+    // T10: the row's draw menu offers exactly three stored values, in the
+    // order the flights are played — Prequalifying, Qualifying, Main draw.
+    // The consolations are not places a coach enters anyone.
+    drawn(builder, file, '"Prequalifying"');
+    drawn(
+      builder,
+      file,
+      "const DRAWS: readonly string[] = [PREQUALIFYING, QUALIFYING, MAIN_DRAW];",
+    );
+    const menuOrder = [
+      "value: PREQUALIFYING",
+      "value: QUALIFYING",
+      "value: MAIN_DRAW",
+    ].map((option) => builder.indexOf(option));
+    expect(menuOrder.every((at) => at >= 0)).toBe(true);
+    expect([...menuOrder].sort((x, y) => x - y)).toEqual(menuOrder);
+    expect(
+      builder
+        // The code half of `screen()`, not its text echo after the newline.
+        .split("\n")[0]
+        .match(/value: [A-Z_]+,/g)
+        ?.filter((v) =>
+          /PREQUALIFYING|QUALIFYING|MAIN_DRAW|CONSOLATION/.test(v),
+        ),
+    ).toEqual([
+      "value: PREQUALIFYING,",
+      "value: QUALIFYING,",
+      "value: MAIN_DRAW,",
+    ]);
+    // The flow's read side of the same rule lists the same three.
+    drawn(
+      flow,
+      "new-tournament-flow.tsx",
+      '"Prequalifying", "Qualifying", "Main draw"',
+    );
+    // Stored free text, not an enum — no migration — and each value names the
+    // ITA flight it mirrors. A comment, so read from the raw source.
+    const raw = readFileSync(path.join(SCREENS, file), "utf8");
+    const drawsDoc = raw.slice(
+      raw.lastIndexOf("/**", raw.indexOf("const DRAWS:")),
+      raw.indexOf("const DRAWS:"),
+    );
+    expect(drawsDoc).toContain("FREE-TEXT STORED values");
+    expect(drawsDoc).toContain("no migration");
+    expect(drawsDoc).toContain("ITA");
+    expect(drawsDoc).toContain('"Prequalifying" is its Prequalifying flight');
     // The field step is two tables now — Entries, then Roster — in the app's
     // own words ("Player" as the roster table and a dual's detail say it,
     // "Entries" as the event drawer does). RETIRED 'Unseeded', 'Seed

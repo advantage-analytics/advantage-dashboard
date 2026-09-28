@@ -10,7 +10,14 @@
  */
 
 import { matchWon } from "./entry-state";
-import { drawOfRound, ROUND_ORDER, roundLongLabel, roundRank } from "./format";
+import {
+  drawOfRound,
+  MAIN_DRAW,
+  QUALIFYING,
+  ROUND_ORDER,
+  roundLongLabel,
+  roundRank,
+} from "./format";
 import type { EntryMatch, EventEntry } from "./types";
 
 /**
@@ -32,11 +39,19 @@ export type RunRounds = {
  * never the default: `recordResult` de-duplicates on (entry, round) and would
  * UPDATE the recorded quarter-final with the semi-final's score, losing the
  * earlier result with no error.
+ *
+ * A fresh entry opens on the first round of the draw it was entered in —
+ * "Prequalifying" at PQ1, "Qualifying" at Q1, anything else at R32. Read
+ * loosely ("prequal", "qualif") because `program_event_entries.draw` is free
+ * text and older rows spell it their own way; prequalifying is tested first
+ * since the word contains "qualif".
  */
 export function nextRound(entry: RunRounds): string {
   const last = entry.matches[entry.matches.length - 1]?.round;
   if (!last) {
-    return entry.draw?.toLowerCase().includes("qualif") ? "Q1" : "R32";
+    const draw = entry.draw?.toLowerCase() ?? "";
+    if (draw.includes("prequal")) return "PQ1";
+    return draw.includes("qualif") ? "Q1" : "R32";
   }
   const index = ROUND_ORDER.indexOf(last);
   return index >= 0 && index < ROUND_ORDER.length - 1
@@ -44,9 +59,6 @@ export function nextRound(entry: RunRounds): string {
     : last;
 }
 
-/** `drawOfRound`'s names for the two draws a qualifier crosses. */
-const QUALIFYING = "Qualifying";
-const MAIN_DRAW = "Main draw";
 /** Where a fresh main-draw run starts — the same default `nextRound` uses. */
 const MAIN_DRAW_START = "R32";
 
@@ -64,7 +76,9 @@ const MAIN_DRAW_START = "R32";
  *   main-draw round after the furthest one the entry already holds, or the
  *   run's usual main-draw start (R32, as `nextRound` opens a fresh entry)
  *   when it holds none. Null when the ladder defines no main draw, and for
- *   any other draw (the last consolation round) — there is nowhere to go.
+ *   any other draw — the last consolation round, and the last prequalifying
+ *   or PQ-consolation round too: where a prequalifier goes next is a loss
+ *   question (T11), not answered here.
  * - **An unrecognised round** has no ladder position: null.
  *
  * A LOSS — until T11 decides where a loss goes — answers what it always has:
@@ -105,7 +119,8 @@ export function nextRoundAfter(
 
 /**
  * An entry's matches bucketed by the draw each round belongs to, in the order
- * the draws were first entered.
+ * the draws were first entered — so a prequalifier's PQ2 → PC1 → PC2 is two
+ * segments, "Prequalifying" then "PQ Consolation".
  *
  * Moved verbatim from `tournament-detail.tsx` — signature and rule unchanged.
  * The draw comes from `drawOfRound(match.round)` and falls back to the entry's

@@ -154,11 +154,17 @@ test("new tournament preserves real draft inclusion, draw, seed, and singles ide
       "The athlete must qualify before entering the main bracket.",
     ),
   ).toBeVisible();
-  await expect(page.getByRole("menuitemradio")).toHaveCount(2);
+  // Where an entry can START: Prequalifying, Qualifying, Main draw (T10).
+  // A consolation draw is reached by losing, never entered.
+  await expect(page.getByRole("menuitemradio")).toHaveCount(3);
+  await expect(
+    page.getByRole("menuitemradio", { name: /^Prequalifying/ }),
+  ).toHaveCount(1);
   await expect(
     page.getByRole("menuitemradio", { name: /Consolation/ }),
   ).toHaveCount(0);
-  await page.getByRole("menuitemradio", { name: /Qualifying/ }).click();
+  // Anchored: "Prequalifying" also contains "qualifying".
+  await page.getByRole("menuitemradio", { name: /^Qualifying/ }).click();
 
   await page.getByRole("button", { name: "Create tournament" }).click();
   await expect

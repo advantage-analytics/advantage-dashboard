@@ -405,6 +405,52 @@ test.describe("a tournament entry", () => {
     expect(await page.evaluate(() => window.actionCalls)).toEqual([]);
   });
 
+  /**
+   * T10: the ladder runs to two dozen codes across five draws, so the menu
+   * writes each draw over its own rounds — in `ROUND_ORDER`, which is the
+   * order the draws are played. Read off the DOM in document order, so a
+   * heading that drifted away from its rounds fails here.
+   */
+  test("lists every round under its draw heading, in ladder order", async ({
+    page,
+  }) => {
+    await openFlow(page, "?kind=tournament");
+    await page.getByRole("button", { name: "Round", exact: true }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu).toBeVisible();
+
+    const groups = await menu.evaluate((root) => {
+      const out: { draw: string; rounds: string[] }[] = [];
+      for (const el of root.querySelectorAll("p, [role=menuitemradio]")) {
+        if (el.tagName === "P") {
+          out.push({ draw: el.textContent ?? "", rounds: [] });
+        } else {
+          out
+            .at(-1)
+            ?.rounds.push(el.querySelector("span span")?.textContent ?? "");
+        }
+      }
+      return out;
+    });
+
+    expect(groups).toEqual([
+      { draw: "Prequalifying", rounds: ["PQ1", "PQ2", "PQ3", "PQ4"] },
+      { draw: "PQ Consolation", rounds: ["PC1", "PC2", "PC3", "PC4"] },
+      { draw: "Qualifying", rounds: ["Q1", "Q2", "Q3"] },
+      {
+        draw: "Main draw",
+        rounds: ["R256", "R128", "R64", "R32", "R16", "QF", "SF", "F"],
+      },
+      { draw: "Consolation", rounds: ["C1", "C2", "C3", "C4", "C5"] },
+    ]);
+
+    // A grouped round still picks like any other row.
+    await page.getByRole("menuitemradio", { name: /^PC1/ }).click();
+    await expect(
+      page.getByRole("button", { name: "Round", exact: true }),
+    ).toContainText("PC1");
+  });
+
   test("an untouched form reseeds from a recorded round and says it replaces it", async ({
     page,
   }) => {

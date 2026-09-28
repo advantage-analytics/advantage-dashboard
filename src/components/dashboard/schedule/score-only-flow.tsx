@@ -57,6 +57,7 @@ import { recordResult, setOutcome } from "@/lib/schedule/actions";
 import {
   ROUND_ORDER,
   doublesSetLabel,
+  drawOfRound,
   splitNames,
 } from "@/lib/schedule/format";
 import {
@@ -794,6 +795,11 @@ function ScoreForm({
           <div className="flex flex-wrap items-start gap-x-8 gap-y-6">
             <div className="flex w-[280px] flex-col gap-2">
               <span className="eyebrow">Round</span>
+              {/* Every code on the ladder, in `ROUND_ORDER`, under the draw
+                  it belongs to — Prequalifying · PQ Consolation · Qualifying ·
+                  Main draw · Consolation — so two dozen codes read as five
+                  short lists. `scroll`, because the list is now taller than
+                  the room under the field on a laptop. */}
               <MenuSelect
                 label="Round"
                 value={preset.round ?? undefined}
@@ -801,6 +807,7 @@ function ScoreForm({
                 options={ROUND_ORDER.map((round) => ({
                   value: round,
                   label: round,
+                  group: drawOfRound(round) ?? undefined,
                   description:
                     recorded && round === preset.round
                       ? "Recorded — saving replaces it."
@@ -809,6 +816,7 @@ function ScoreForm({
                 onChange={changeRound}
                 variant="underline"
                 width={280}
+                scroll
                 disabled={pending}
               />
             </div>

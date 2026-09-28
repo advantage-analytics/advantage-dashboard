@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  OUTCOME_ROUNDS,
   ROUND_ORDER,
   drawOfRound,
   roundLongLabel,
+  roundRank,
 } from "@/lib/schedule/format";
 import {
   compareTournamentRows,
@@ -68,6 +70,131 @@ function entry(
   };
 }
 
+/**
+ * T10: the ladder, in the order a weekend is played — the ITA draws page's
+ * flights laid end to end. Pinned whole, because every sorter on the event page
+ * and the drawer reads this array as the chronology.
+ */
+test.describe("ROUND_ORDER and drawOfRound", () => {
+  test("runs PQ, PQ consolation, qualifying, main draw, consolation", () => {
+    expect(ROUND_ORDER).toEqual([
+      "PQ1",
+      "PQ2",
+      "PQ3",
+      "PQ4",
+      "PC1",
+      "PC2",
+      "PC3",
+      "PC4",
+      "Q1",
+      "Q2",
+      "Q3",
+      "R256",
+      "R128",
+      "R64",
+      "R32",
+      "R16",
+      "QF",
+      "SF",
+      "F",
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+    ]);
+  });
+
+  test("maps each code to its draw, read from the round", () => {
+    const draws = Object.fromEntries(
+      ROUND_ORDER.map((round) => [round, drawOfRound(round)]),
+    );
+    expect(draws).toEqual({
+      PQ1: "Prequalifying",
+      PQ2: "Prequalifying",
+      PQ3: "Prequalifying",
+      PQ4: "Prequalifying",
+      PC1: "PQ Consolation",
+      PC2: "PQ Consolation",
+      PC3: "PQ Consolation",
+      PC4: "PQ Consolation",
+      Q1: "Qualifying",
+      Q2: "Qualifying",
+      Q3: "Qualifying",
+      R256: "Main draw",
+      R128: "Main draw",
+      R64: "Main draw",
+      R32: "Main draw",
+      R16: "Main draw",
+      QF: "Main draw",
+      SF: "Main draw",
+      F: "Main draw",
+      C1: "Consolation",
+      C2: "Consolation",
+      C3: "Consolation",
+      C4: "Consolation",
+      C5: "Consolation",
+    });
+    // Case-blind, and nothing for a code the ladder does not know.
+    expect(drawOfRound("pq2")).toBe("Prequalifying");
+    expect(drawOfRound("pc1")).toBe("PQ Consolation");
+    expect(drawOfRound("S1")).toBeNull();
+    expect(drawOfRound(null)).toBeNull();
+  });
+
+  /**
+   * Every round stored before T10 is one of the thirteen older codes. New
+   * codes were only ever inserted around them, so any run made of them sorts
+   * exactly as it did — Osei's weekend still reads Q1, Q2, R32, R16, C1.
+   */
+  test("roundRank sorts the pre-T10 rounds exactly as before", () => {
+    const before = [
+      "Q1",
+      "Q2",
+      "Q3",
+      "R128",
+      "R64",
+      "R32",
+      "R16",
+      "QF",
+      "SF",
+      "F",
+      "C1",
+      "C2",
+      "C3",
+    ];
+    expect([...OUTCOME_ROUNDS]).toEqual(before);
+    const shuffled = [...before].reverse();
+    expect(shuffled.sort((a, b) => roundRank(a) - roundRank(b))).toEqual(
+      before,
+    );
+    const osei = ["C1", "R32", "Q2", "R16", "Q1"];
+    expect(osei.sort((a, b) => roundRank(a) - roundRank(b))).toEqual([
+      "Q1",
+      "Q2",
+      "R32",
+      "R16",
+      "C1",
+    ]);
+    // An unknown round still sorts last.
+    expect(roundRank("Final 4")).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  test("the new codes sit where they are played", () => {
+    const run = ["R32", "PC2", "Q1", "PQ3", "C4", "R256", "PQ1", "C5"];
+    expect(run.sort((a, b) => roundRank(a) - roundRank(b))).toEqual([
+      "PQ1",
+      "PQ3",
+      "PC2",
+      "Q1",
+      "R256",
+      "R32",
+      "C4",
+      "C5",
+    ]);
+  });
+});
+
 test.describe("roundLongLabel", () => {
   /**
    * Every code in `ROUND_ORDER`, spelled out. The article is part of the label
@@ -75,9 +202,18 @@ test.describe("roundLongLabel", () => {
    * the whole reason the mapping is a table rather than a template.
    */
   const EXPECTED: Record<string, string> = {
+    PQ1: "prequalifying round 1",
+    PQ2: "prequalifying round 2",
+    PQ3: "prequalifying round 3",
+    PQ4: "prequalifying round 4",
+    PC1: "PQ consolation round 1",
+    PC2: "PQ consolation round 2",
+    PC3: "PQ consolation round 3",
+    PC4: "PQ consolation round 4",
     Q1: "qualifying round 1",
     Q2: "qualifying round 2",
     Q3: "qualifying round 3",
+    R256: "the round of 256",
     R128: "the round of 128",
     R64: "the round of 64",
     R32: "the round of 32",
@@ -88,6 +224,8 @@ test.describe("roundLongLabel", () => {
     C1: "consolation round 1",
     C2: "consolation round 2",
     C3: "consolation round 3",
+    C4: "consolation round 4",
+    C5: "consolation round 5",
   };
 
   test("maps every round in ROUND_ORDER", () => {
@@ -168,6 +306,25 @@ test.describe("groupByDraw", () => {
     expect(segments[0].matches).toHaveLength(2);
   });
 
+  test("a prequalifier's PQ2 → PC1 → PC2 is two segments", () => {
+    const run = entry(
+      [
+        match("m1", "PQ2", "them"),
+        match("m2", "PC1", "us"),
+        match("m3", "PC2", "us"),
+      ],
+      "Prequalifying",
+    );
+    const segments = groupByDraw(run);
+    expect(segments.map((segment) => segment.draw)).toEqual([
+      "Prequalifying",
+      "PQ Consolation",
+    ]);
+    expect(
+      segments.map((segment) => segment.matches.map((m) => m.round)),
+    ).toEqual([["PQ2"], ["PC1", "PC2"]]);
+  });
+
   test("falls back to the entry draw when the round says nothing", () => {
     const run = entry([match("m1", null, "us")], "Flight B");
     expect(groupByDraw(run).map((segment) => segment.draw)).toEqual([
@@ -204,7 +361,16 @@ test.describe("nextRound", () => {
 
   test("a fresh main-draw entry starts at R32, a qualifier at Q1", () => {
     expect(nextRound(runOf([]))).toBe("R32");
+    expect(nextRound(runOf([], "Main draw"))).toBe("R32");
     expect(nextRound(runOf([], "Qualifying"))).toBe("Q1");
+  });
+
+  test("a fresh prequalifying entry starts at PQ1", () => {
+    // Tested before "qualif", which the word also contains.
+    expect(nextRound(runOf([], "Prequalifying"))).toBe("PQ1");
+    // Free text: an older spelling still reads as its draw.
+    expect(nextRound(runOf([], "prequal"))).toBe("PQ1");
+    expect(nextRound(runOf([], "Flight B"))).toBe("R32");
   });
 
   test("the round after the last one recorded", () => {
@@ -255,8 +421,17 @@ test.describe("nextRoundAfter", () => {
   });
 
   test("the last consolation round and an unknown round lead nowhere", () => {
-    expect(nextRoundAfter(run(["C3"]), "C3", true)).toBeNull();
+    expect(nextRoundAfter(run(["C3"]), "C3", true)).toBe("C4");
+    expect(nextRoundAfter(run(["C5"]), "C5", true)).toBeNull();
     expect(nextRoundAfter(run(["Final 4"]), "Final 4", true)).toBeNull();
+  });
+
+  test("prequalifying and its consolation step within their own draw only", () => {
+    expect(nextRoundAfter(run(["PQ1"]), "PQ1", true)).toBe("PQ2");
+    expect(nextRoundAfter(run(["PC3"]), "PC3", true)).toBe("PC4");
+    // Where a prequalifier goes after their last round is T11's question.
+    expect(nextRoundAfter(run(["PQ4"]), "PQ4", true)).toBeNull();
+    expect(nextRoundAfter(run(["PC4"]), "PC4", true)).toBeNull();
   });
 
   test("a loss answers what nextRound always has (until T11)", () => {
