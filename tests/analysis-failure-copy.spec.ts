@@ -28,7 +28,10 @@ const COPY = "src/components/dashboard/matches/analysis-failure-copy.ts";
 
 type Props = { analysis: MatchAnalysis; matchId: string };
 
-function render(status: MatchAnalysis["status"]): string {
+function render(
+  status: MatchAnalysis["status"],
+  overrides: Partial<MatchAnalysis> = {},
+): string {
   const loader = createLoader({
     markUnknown: true,
     stubs: {
@@ -50,6 +53,7 @@ function render(status: MatchAnalysis["status"]): string {
     status,
     failNote: "5 point(s) resolved no winner",
     jobId: "job-1",
+    ...overrides,
   } as MatchAnalysis;
   return renderToStaticMarkup(
     React.createElement(MatchAnalysisProgress, { analysis, matchId: "m1" }),
@@ -117,6 +121,25 @@ test("failed: unchanged — failNote headline, retry body, RetryAnalysis and the
   expect(html).not.toMatch(/splitstep|swingvision/i);
 });
 
+test("failed + inputRejected: failNote headline, input-rejected body, no retry, still the new-recording link", () => {
+  const failNote = "The video must be at least 29.9 fps.";
+  const html = render("failed", {
+    inputRejected: true,
+    jobId: "job-1",
+    failNote,
+  } as Partial<MatchAnalysis>);
+  const out = decode(html);
+
+  expect(alertHeadline(html)).toBe(failNote);
+  expect(out).toContain(ANALYSIS_FAILURE_COPY.failed.inputRejected.body);
+  expect(out).toContain("Upload a new recording");
+
+  expect(html).not.toContain('data-component="RetryAnalysis"');
+  expect(out).not.toContain("Retrying uses");
+
+  expect(html).not.toMatch(/splitstep|swingvision/i);
+});
+
 test("the copy module carries the failed strings verbatim and never names the vendor", () => {
   expect(ANALYSIS_FAILURE_COPY.failed.title).toBe("Analysis stopped");
   expect(
@@ -132,6 +155,19 @@ test("the copy module carries the failed strings verbatim and never names the ve
       "Retrying uses the video you already uploaded. Nothing needs uploading again.",
     details: "The match page has the details.",
   });
+
+  expect(ANALYSIS_FAILURE_COPY.failed.inputRejected.body).not.toMatch(
+    /Retrying/,
+  );
+  expect(ANALYSIS_FAILURE_COPY.failed.inputRejected.drawer).not.toMatch(
+    /Retrying/,
+  );
+  expect(ANALYSIS_FAILURE_COPY.failed.inputRejected.body).toMatch(
+    /recording requirement/,
+  );
+  expect(ANALYSIS_FAILURE_COPY.failed.inputRejected.drawer).toMatch(
+    /new recording/,
+  );
 
   const source = readFileSync(resolve(process.cwd(), COPY), "utf8");
   expect(source).not.toMatch(/splitstep|swingvision/i);

@@ -61,3 +61,9 @@ is the runner's. Newest entries at the bottom.
 - **gate:** mechanical GATE PASS; completion review `VERDICT: pass`, all five criteria met, no scope creep.
 - **changed:** `match-analysis.ts` — `INPUT_REJECTED_CATEGORY` and `isInputRejected(dbStatus, errorCategory)` (additions only; existing predicates untouched), `MatchAnalysis.inputRejected?`. `match-analysis-server.ts` selects `error_category` and projects through `isInputRejected`. `use-live-match-analysis.ts` — per-row projection extracted into exported pure `liveAnalysisPatch(row)` (sets `inputRejected` on every patch, so a later non-failed row resets it); `LiveJobRow` exported with `error_category`. `EntryMatch.inputRejected` (null for no job) copied in `schedule-server.ts`. New offline spec `tests/match-analysis-input-rejected.spec.ts` (truth table + live patch, incl. reset-on-resubmit).
 - **follow-ups:** 1. Once `claude/match-analysis-failure-retry-8769f3` merges, its own copy of the `"invalid_input"` literal should import `INPUT_REJECTED_CATEGORY`.
+
+## T11 · Progress card: no retry for an input-rejected failure — done
+
+- **gate:** mechanical GATE PASS; completion review `VERDICT: pass`, all four criteria met, no scope creep.
+- **changed:** `analysis-failure-copy.ts` — `failed.inputRejected: { body, drawer }` (no "Retrying"; both name a recording requirement and point to a new recording; card body is the task's suggested text). `match-analysis-progress.tsx` — in the `failed` branch the body swaps to `failed.inputRejected.body` and `<RetryAnalysis>` additionally requires `!analysis.inputRejected`; the failNote headline and the "Upload a new recording" link are unchanged. `tests/analysis-failure-copy.spec.ts` — `render()` takes optional `MatchAnalysis` overrides; new input-rejected case; module assertions on the new strings; T8's `failed` case unchanged.
+- **follow-ups:** none — T12 consumes `failed.inputRejected.drawer` (a single string, no retry/no-retry pair).

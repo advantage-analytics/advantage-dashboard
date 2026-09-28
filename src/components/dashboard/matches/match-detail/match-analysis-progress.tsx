@@ -252,15 +252,22 @@ export function MatchAnalysisProgress({
                       {analysis.failNote ?? ANALYSIS_FAILURE_COPY.failed.title}
                     </p>
                     <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
-                      {ANALYSIS_FAILURE_COPY.failed.body}
+                      {analysis.inputRejected
+                        ? ANALYSIS_FAILURE_COPY.failed.inputRejected.body
+                        : ANALYSIS_FAILURE_COPY.failed.body}
                     </p>
                     {/* Gated on the literal status, not the broader `failed`
                     (which also covers derivation_failed): resubmitJob()
                     refuses anything but a video-provider failure on purpose,
-                    so showing this button elsewhere would always 409. */}
-                    {analysis.jobId && analysis.status === "failed" && (
-                      <RetryAnalysis jobId={analysis.jobId} />
-                    )}
+                    so showing this button elsewhere would always 409. An
+                    input-rejected video failed on its own recording
+                    requirements, so retrying would resubmit the same unusable
+                    file and fail the same way — no retry button for it. */}
+                    {analysis.jobId &&
+                      analysis.status === "failed" &&
+                      !analysis.inputRejected && (
+                        <RetryAnalysis jobId={analysis.jobId} />
+                      )}
                     {/* The "upload a new recording" the copy above offers. The
                     route re-checks the match and sends anything it can't take
                     somewhere that can. */}

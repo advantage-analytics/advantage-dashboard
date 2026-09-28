@@ -151,7 +151,7 @@ ready).
 
 ## T11 · Progress card: no retry for an input-rejected failure
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T8, T10
 - **files:** src/components/dashboard/matches/analysis-failure-copy.ts, src/components/dashboard/matches/match-detail/match-analysis-progress.tsx (the `failed` branch of the alert), tests/analysis-failure-copy.spec.ts (extend)

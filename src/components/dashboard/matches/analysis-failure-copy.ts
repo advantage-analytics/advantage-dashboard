@@ -29,5 +29,16 @@ export const ANALYSIS_FAILURE_COPY = {
         "Retrying uses the video you already uploaded. Nothing needs uploading again.",
       details: "The match page has the details.",
     },
+    /**
+     * `failed` jobs where the video itself didn't meet a recording
+     * requirement (bad fps, resolution, etc). Retrying would resubmit the
+     * same unusable video and fail the same way, so this offers no retry —
+     * only a new recording.
+     */
+    inputRejected: {
+      body: "This video didn't meet one of the recording requirements, so analyzing it again would stop the same way. Upload a new recording that meets them.",
+      drawer:
+        "This video didn't meet one of the recording requirements. Upload a new recording that meets them.",
+    },
   },
 } as const;
