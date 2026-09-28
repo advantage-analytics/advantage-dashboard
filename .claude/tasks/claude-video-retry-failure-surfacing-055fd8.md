@@ -293,3 +293,75 @@ ready).
   - [ ] A `--cleanup` mode deletes exactly the rows the script created (identified by a marker it writes), and a dry run of `--cleanup` lists them
   - [ ] `npx tsc --noEmit` passes
 - **notes:** Plan Test strategy. **Author decision required before promoting to `todo`:** this writes to the production database. Nothing depends on it; `/pr-check` Stage 3b can run without it on the real rows the verifier can see, at lower coverage.
+
+## T22 · Reshape AnalysisSteps into the wizard's card-free column and show it on /design
+
+- **status:** todo
+- **model:** opus
+- **files:** src/components/dashboard/matches/match-detail/analysis-steps.ts, src/components/dashboard/matches/match-detail/analysis-steps-card.tsx (rename allowed, e.g. analysis-steps-column.tsx), src/components/dashboard/matches/new-match-wizard/UploadMatchSuccess.tsx (MatchLine extraction only), src/components/dashboard/matches/match-line.tsx (new), src/components/dashboard/matches/match-detail/match-analysis-progress.tsx (copy imports only), src/app/design/analysis-steps-preview.tsx, tests/analysis-steps-column.spec.ts (new) (guess)
+- **routes:** /design
+- **done when:**
+  - [ ] `AnalysisSteps` renders a wrapper with `max-w-[488px]`, `px-6` and `pt-[clamp(64px,18vh,176px)]`, an `<h1>` title with `text-[24px]` + `font-light` + `tracking-[-0.3px]`, a 13px `--ink-600` match line "{player} vs {opponent} · Won|Lost <ScoreLine>", then the four `VerticalStep` rows from `analysisStepsView` — and none of `--radius-card`, `--shadow-card`, `--border-card`, an "Analysis" eyebrow `<h2>`, or a `<dl>` of Video/Window/Job/Stage facts
+  - [ ] The match line is one shared component (plain props: player, opponent, `won: boolean | null`, sets) imported by both `UploadMatchSuccess.tsx` and `AnalysisSteps`; the wizard's file-local `MatchLine` is gone and the markup it renders is unchanged
+  - [ ] `STAGE_NOTE` and `STALLED_RETRY_COPY` are declared only in `analysis-steps.ts` (`grep -rn "Turning detected strokes into points\|This hasn't been sent for analysis yet" src` hits only that file) and `match-analysis-progress.tsx` imports both; the "Verbatim. That file still owns them" comment is gone
+  - [ ] `AnalysisSteps` keeps `MatchAnalysisProgress`'s live behaviour: it merges `useLiveMatchAnalysis` patches through `withLiveAnalysis` gated on `isLiveUpdating` of the server status, and its clock starts null and is only ever set from an interval (never during render)
+  - [ ] A new vm-modules spec (`tests/fixtures/vm-modules.ts`) renders `AnalysisSteps` for uploading, processing, failed retry, failed upload_again and stalled retry: each render has exactly one `<h1>`, four `<li`, the failure headline and the `RecoveryAction` markup inside the failing `<li>`, and no "Window"/"Job" text; `/design`'s `AnalysisStepsPreview` renders every VARIANT through the new column with a fixed match line and no card wrapper; `npx tsc --noEmit` passes
+- **notes:** Approved design 2026-09-28 (artifact https://claude.ai/artifact/Fn78DpgqH2PbRDGeEM5qtt, `Page-*` frames); baseline preview 1decda0c. Does not mount anything on the match page (T23). `tests/analysis-steps-view.spec.ts` must pass unedited — the view model does not change here. Never read `failNote`. The upload ETA stays the measured-progress projection `uploadEtaSeconds`; no other estimate. Read `.skills/advantage-analytics-design/SKILL.md` and `docs/ui-revamp-guardrails.md` first; buttons stay `RecoveryAction`/`advButton()`, no `rounded-full` except `StepMark`'s own.
+
+## T23 · Mount the column on the match page and retire MatchAnalysisProgress
+
+- **status:** todo
+- **model:** opus
+- **needs:** T22
+- **files:** src/app/dashboard/matches/(detail)/[matchId]/page.tsx (the `if (isAwaitingAnalysis)` branch, ~300-335), src/components/dashboard/matches/match-detail/match-analysis-progress.tsx (delete), tests/analysis-failure-copy.spec.ts, tests/uploading-progress-parity.spec.ts, tests/match-film-entry.spec.ts, docs/ui-revamp-guardrails.md (§3.3 wording) (guess)
+- **routes:** /dashboard/matches/[matchId]
+- **done when:**
+  - [ ] The `if (isAwaitingAnalysis)` branch returns T22's column with `analysis`, `matchId`, and a match line built from `getMatchSides(match, statsResult)` (viewer's side first, result stated from the viewer's side); the source slice from that `if` to `<MarkReportSeen` contains none of `MatchReportRail`, `MatchReportScoreboard`, `ShareMatchButton`, `FilmTab`, `MatchReportViewSwitcher`
+  - [ ] The `statsUnavailable` and `isAwaitingAnalysis` declarations are byte-identical to before; `match-film-entry.spec.ts`'s "a stats_unavailable match is let past the short-circuit, and only it" test passes unedited, and its "the analysing short-circuit still returns before any Film entry" test changes only the `<MatchAnalysisProgress` marker to the new component (gate-before, `<FilmTab`-after, condition-string and no-FilmTab/no-switcher checks all kept)
+  - [ ] `match-analysis-progress.tsx` is deleted and `grep -rn "MatchAnalysisProgress" src tests docs/ui-revamp-guardrails.md` finds nothing; §3.3 names the new component with the rest of its gate wording unchanged
+  - [ ] `analysis-failure-copy.spec.ts`'s panel cases (stats_unavailable, retry, fix_recording, upload_again with `<?xml`, 45ff4bd7, e6e8dea4, stalled quota, stalled permission, stalled uncoded) render the new component and keep every assertion (headline, body, action or its absence, no `<?xml`, no `RetryActionButton` marker where there is none today, no raw `failNote`); `uploading-progress-parity.spec.ts` points `PANEL` at the new file and keeps its title, step order, floored-percent, both-notes and one-copy-module checks — the only loosened assertion is the step count 3 → 4 (the Stats step)
+  - [ ] `npx tsc --noEmit` passes
+- **notes:** Guardrails §3.3: the gate stays; only what it renders changes. stats_unavailable keeps T17's full page. On this branch only the app chrome (icon rail + header) shows; the normal report and its rail return once stats are ready. Layout's `MatchDataProvider` untouched; `MatchReportProvider` can be dropped from this branch if nothing inside needs it. The match line's side orientation is attribution-sensitive — use the scoreboard's source (`getMatchSides`), never raw `player1`/`player2`. `tests/report-empty-states.spec.ts` does not reference these components and needs no change.
+
+## T24 · Add the compact drawer Analysis steps and the stalled "Try again" action
+
+- **status:** todo
+- **model:** opus
+- **needs:** T22
+- **files:** src/components/dashboard/matches/match-detail/analysis-steps.ts, src/components/dashboard/matches/drawer-sections.tsx (new `DrawerAnalysisSteps`, `DrawerRecoveryAction`), tests/analysis-steps-view.spec.ts, tests/drawer-sections.spec.ts (guess)
+- **done when:**
+  - [ ] A pure drawer projection in `analysis-steps.ts` takes `(analysis, now, canAct)` and returns the same four step keys, labels and states as `analysisStepsView` (null for a status that is not in flight, failed or stalled); the uploading step's value is the floored percent with no body; the running step's note is `STAGE_NOTE`'s line, except processing, which reads "This fills in as soon as the analysis lands."
+  - [ ] Its stopped step, stalled included: with `canAct`, headline `note ?? title` and the class's `drawerBody` (wait_or_ask via `waitOrAskVariant`; a stalled retry uses `STALLED_RETRY_COPY.title` and a new `STALLED_RETRY_COPY.drawerBody` "Trying again costs nothing; nothing needs uploading again."); without `canAct`, "Analysis stopped" and `DRAWER_NO_ACTION_BODY` and no note — `tests/analysis-steps-view.spec.ts` asserts each, and that a raw `failNote` never appears
+  - [ ] `DrawerAnalysisSteps` in `drawer-sections.tsx` renders an "Analysis" eyebrow and an `<ol aria-label="Progress">` of 12px labels using `StepMark` from `vertical-steps.tsx`; the stopped step's text sits in exactly one `role="alert"` element (`role="status"` for a stalled hand-off); it imports no `AnalysisProgressTrack` and adds no `rounded-full`
+  - [ ] `DrawerRecoveryAction` takes `stalled`: a stalled `retry` renders "Try again" (pending "Sending…") and POSTs `/api/splitstep/jobs` with body `{ jobId }` — the request `RetrySubmission` makes; non-stalled Retry, Rebuild statistics and the upload link are unchanged
+  - [ ] `tests/drawer-sections.spec.ts` renders `DrawerAnalysisSteps` for every existing `AnalysisNotice` case (stats_unavailable, retry with and without note, cannot-act — now "Analysis stopped" + the details line, no note, no "Retrying" — fix_recording, the wait_or_ask variant, upload_again with a manager, in-flight with no alert) plus uploading at 62% (value only, no progress bar) and stalled retry; the existing `AnalysisNotice` and `DrawerRecoveryAction` cases pass unedited; `npx tsc --noEmit` passes
+- **notes:** Artifact `Drawer-*` frames (Processing, Uploading, StalledRetry, ViewerNoAction); the two new strings are verbatim from `Drawer-Processing` and `Drawer-StalledRetry`. The in-flight placeholder "Serve and pressure numbers appear here once analysis finishes." is deliberately not carried over, but the "no alert while in flight" assertion is. `AnalysisNotice` stays until T26 so both drawers keep compiling. Update `drawerRecovery`'s doc comment (it says a stalled row is in-flight for drawers). The planner proposed fable (T7, opus, was blocked once on this drawer rule); routed to opus because fable was over its spend limit on 2026-09-28 — escalate if this blocks.
+
+## T25 · Matches drawer draws the Analysis steps
+
+- **status:** todo
+- **model:** opus
+- **needs:** T24
+- **files:** src/components/dashboard/matches/match-drawer.tsx (guess)
+- **routes:** /dashboard/matches
+- **done when:**
+  - [ ] `match-drawer.tsx` renders `DrawerAnalysisSteps` from `match.analysis` with `canAct = match.canManage !== false` in `AnalysisNotice`'s place, and no longer imports `AnalysisNotice`
+  - [ ] The footer keeps its order and variants: View match (primary, or ghost beside Continue upload), Continue upload, then `DrawerRecoveryAction` as `outline` for `canAct` — never two primaries
+  - [ ] For a stalled `uploaded` row (`isSubmitStalled`) and `canAct`, `DrawerRecoveryAction` gets `stalled` and the row's class (retry when it has none) and renders the outline "Try again"; a stalled row whose class has no action (wait_or_ask), or a viewer who cannot act, gets no action
+  - [ ] `npx tsc --noEmit` passes and `tests/matches-drafts.spec.ts` passes unedited
+- **notes:** T7's footer rule stands: View match primary, recovery outline under it. Live patches already reach `match.analysis` through `matches-page-content.tsx`.
+
+## T26 · Schedule event drawer draws the Analysis steps; retire AnalysisNotice
+
+- **status:** todo
+- **model:** opus
+- **needs:** T24, T25
+- **files:** src/components/dashboard/schedule/event-line-drawer.tsx, src/lib/schedule/types.ts (`EntryMatch`), src/lib/data/schedule-server.ts (~261-281), src/components/dashboard/matches/drawer-sections.tsx, tests/drawer-sections.spec.ts (guess)
+- **routes:** /dashboard/team/schedule/[eventId]
+- **done when:**
+  - [ ] `EntryMatch` gains optional `updatedAt`, `jobReference` and `uploadPercent`, set in `schedule-server.ts` from the same analysis map it reads `jobId` and `recovery` from
+  - [ ] `event-line-drawer.tsx` renders `DrawerAnalysisSteps` for a played singles line with `canAct = canEdit` in `AnalysisNotice`'s place; doubles lines keep their score-only note and draw no steps
+  - [ ] For a viewer with `canEdit`, a stalled hand-off counts toward `showRecovery`, so "Try again" takes the footer primary and View match drops to ghost (T7's rule); the failed-row footer is unchanged
+  - [ ] `tests/schedule-dual-outcomes.spec.ts` passes with no edit to it or to `tests/fixtures/schedule-dual-outcomes-data.ts`, and `tests/schedule-tournament-outcomes.spec.ts` and `tests/event-table.spec.ts` pass
+  - [ ] `AnalysisNotice` is deleted from `drawer-sections.tsx` with its spec cases (T24 already carries their assertions against `DrawerAnalysisSteps`); `grep -rn "AnalysisNotice" src tests` finds nothing; `npx tsc --noEmit` passes
+- **notes:** `schedule-dual-outcomes.spec.ts` uses strict `getByRole("alert")`, so the drawer must hold exactly one alert. For a coach it must contain both "The video ended before the match did" and "Retrying uses the video you already", and Retry must be the footer's `PRIMARY_CLASS` button labelled exactly "Retry". For a player it must contain "The match page has the details." without the note, with no Retry and View match primary. The S4 fixture has no `updatedAt`, so it is never stalled. The planner proposed fable (T7, opus, was blocked once on this spec); routed to opus because fable was over its spend limit on 2026-09-28 — escalate if this blocks.
