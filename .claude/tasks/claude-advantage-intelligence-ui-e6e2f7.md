@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Lengthen the Advantage Intelligence summary the generator writes
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/functions/generate-insights/index.ts (prompt at ~line 351), tests/generate-insights-prompt.spec.ts (new, guess — or a new case in tests/generate-insights-guards.spec.ts), tests/insight-text.spec.ts, src/components/dashboard/matches/match-detail/report-insight-card.tsx (doc comment only)
 - **done when:**
