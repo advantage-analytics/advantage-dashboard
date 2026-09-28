@@ -70,7 +70,7 @@ ready).
 
 ## T5 · Add the RecoveryAction component
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T2, T4
 - **files:** src/components/dashboard/matches/match-detail/recovery-action.tsx (new), tests/recovery-action.spec.ts (new; pattern tests/drawer-sections.spec.ts + tests/fixtures/vm-modules.ts) (guess)

@@ -38,3 +38,11 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `byClass.wait_or_ask` is only the allowance default — surfaces (T6, T7, T19) must pick the variant through `waitOrAskVariant()` + `WAIT_OR_ASK_VARIANTS`, not read `byClass.wait_or_ask` directly.
+
+## T5 · Add the RecoveryAction component — done
+
+**gate:** mechanical pass · completion pass (widget-states: action control, no data region; loading = RetryActionButton's pending label; `return null` kept for classes with no action)
+**changed:** New `match-detail/recovery-action.tsx`: `retry` → `RetrySubmission` (stalled) or `RetryAnalysis` (failed, `/resubmit`); `rederive` → `RetryActionButton` on `/rederive`; `upload_again` / `fix_recording` → `advButton()` link to `addVideoHref(matchId)` (primary sm on the card, outline md in a drawer); other classes render nothing. Labels come from `byClass`. `tests/recovery-action.spec.ts` covers each class (8 tests).
+**follow-ups:**
+
+1. The `drawer` variant has no caller until T7; its outline/md styling mirrors `match-drawer.tsx`'s `RetryButton` and is unverified in a real drawer, while `retry` in a drawer still renders the card-sized `RetryAnalysis` — T7 should check both.
