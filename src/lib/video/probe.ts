@@ -10,6 +10,8 @@
  * for analysis must never take that path.
  */
 
+import { readAverageFrameRate } from "@/lib/video/container-frame-rate";
+
 /** Metadata read from a local video file. */
 export interface VideoProbe {
   width: number;
@@ -17,6 +19,12 @@ export interface VideoProbe {
   durationSeconds: number;
   /** Measured frame rate, or null when the browser cannot report one. */
   fps: number | null;
+  /**
+   * Whole-track average frame rate from the container index (MP4/MOV only),
+   * to 2 decimals — or null/absent when it could not be read. Unlike `fps` it
+   * is never snapped, so a variable-rate 29.94 average stays 29.94.
+   */
+  averageFps?: number | null;
   mimeType: string;
   sizeBytes: number;
 }
@@ -168,6 +176,9 @@ function measureFps(video: FrameCallbackVideo): Promise<number | null> {
  * surface it.
  */
 export async function probeVideo(file: File): Promise<VideoProbe> {
+  // Started first and awaited last, so the container read runs alongside the
+  // metadata load and frame sample instead of after them. It never rejects.
+  const averageFpsPromise = readAverageFrameRate(file).catch(() => null);
   const objectUrl = URL.createObjectURL(file);
   const video = document.createElement("video") as FrameCallbackVideo;
 
@@ -216,12 +227,14 @@ export async function probeVideo(file: File): Promise<VideoProbe> {
     }
 
     const fps = await measureFps(video);
+    const averageFps = await averageFpsPromise;
 
     return {
       width,
       height,
       durationSeconds,
       fps,
+      averageFps,
       mimeType: file.type,
       sizeBytes: file.size,
     };

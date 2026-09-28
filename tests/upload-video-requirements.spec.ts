@@ -20,6 +20,7 @@ import { expect, test } from "@playwright/test";
 import {
   checkVideoFileBasics,
   evaluateVideoProbe,
+  formatProbeFps,
 } from "@/lib/services/upload/validators/splitstep-validator";
 import { videoExtensionFor } from "@/lib/services/splitstep/object-keys";
 import {
@@ -186,6 +187,46 @@ test.describe("frame-rate boundary", () => {
 
   test("the preferred rate passes with nothing to say", () => {
     expect(evaluateVideoProbe(probe()).warnings).toBeUndefined();
+  });
+
+  test("a whole-track average under 29.96 warns once, naming the average", () => {
+    // Job 45ff4bd7: probe read 30, container average 29.94, vendor refused.
+    const input = probe({ fps: 30, averageFps: 29.94 });
+    const result = evaluateVideoProbe(input);
+    expect(result.success).toBe(true);
+    expect(result.warnings).toHaveLength(1);
+    const warning = result.warnings![0];
+    expect(warning).toContain("29.94 fps");
+    expect(warning).toContain("variable");
+    expect(warning).toContain(PROVIDER_DISPLAY_NAME);
+    expect(warning).toContain("constant 30 fps");
+    expect(warning).not.toMatch(/splitstep|swingvision/i);
+    expect(formatProbeFps(input)).toBe("29.94 fps");
+  });
+
+  test("constant-rate footage and an unknown average never get the VFR warning", () => {
+    const cases: Array<[Partial<VideoProbe>, string]> = [
+      [{ fps: 30, averageFps: 29.97 }, "30 fps"],
+      [{ fps: 30, averageFps: 30 }, "30 fps"],
+      [{ fps: 60, averageFps: 59.94 }, "60 fps"],
+      [{ fps: 30, averageFps: null }, "30 fps"],
+      [{ fps: 30 }, "30 fps"],
+    ];
+    for (const [overrides, shown] of cases) {
+      const input = probe(overrides);
+      const result = evaluateVideoProbe(input);
+      expect(result.success).toBe(true);
+      for (const warning of result.warnings ?? []) {
+        expect(warning).not.toContain("constant 30 fps");
+      }
+      expect(formatProbeFps(input)).toBe(shown);
+    }
+  });
+
+  test("the average never rescues a rate under the floor", () => {
+    expect(evaluateVideoProbe(probe({ fps: 24, averageFps: 24 })).success).toBe(
+      false,
+    );
   });
 });
 

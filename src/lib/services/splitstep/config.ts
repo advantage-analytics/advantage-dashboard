@@ -52,6 +52,18 @@ export const MIN_VIDEO_HEIGHT = 1080;
 /** Frame-rate floor. Hard, same reason as resolution. */
 export const MIN_VIDEO_FPS = 30;
 
+/**
+ * Whole-track average frame rate below which the wizard warns (never blocks).
+ *
+ * The vendor rejects below 29.9 fps by its own measurement, and that is not
+ * ours: job 45ff4bd7 was rejected at a 29.94 container average (the vendor
+ * reported 29.80 for the same file). 29.96 catches that file while sitting
+ * just under genuine 29.97 (30000/1001), so constant-rate NTSC, 30 and 60 fps
+ * footage never warns. Compared against `VideoProbe.averageFps`, never the
+ * snapped `fps`.
+ */
+export const FRAME_RATE_WARN_BELOW_FPS = 29.96;
+
 /** Vendor's recommended frame rate. Below this we warn but do not block. */
 export const RECOMMENDED_VIDEO_FPS = 60;
 

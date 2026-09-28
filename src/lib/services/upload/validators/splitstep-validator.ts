@@ -30,6 +30,20 @@
  * the vendor might still refuse is left to the vendor, which is the party that
  * actually knows.
  *
+ * ── The variable-frame-rate warning band ────────────────────────────────────
+ * Job 45ff4bd7 (2026-09-28) was rejected as too slow although the probe read
+ * it as 30: its whole-track container average is 29.94 fps (the vendor's own
+ * figure was 29.80), and a 20-frame sample snapped within 2% cannot tell that
+ * from genuine 29.97. So the probe also carries `averageFps`, the whole-track
+ * average from the MP4/MOV index, and a file that passes the gate with an
+ * average below `FRAME_RATE_WARN_BELOW_FPS` (set just under 30000/1001,
+ * so constant 29.97/30/60 footage never trips it) gets one warning naming the
+ * average and suggesting a constant 30 fps export. It warns and does not
+ * block, because the vendor's formula differs from ours and nobody knows its
+ * exact boundary until the vendor answers Q14 in
+ * docs/splitstep-vendor-questions.md. A null average (non-MP4/MOV, read
+ * failed or timed out) changes nothing.
+ *
  * Likewise the container allowlist is exactly `ACCEPTED_VIDEO_EXTENSIONS` —
  * not the message's MP4 preference being enforced (.mov, .m4v, .avi, .mkv and
  * .webm are all accepted; the message names MP4 only as the best-performing
@@ -49,6 +63,7 @@ import {
 } from "@/lib/video/probe";
 import {
   ACCEPTED_VIDEO_EXTENSIONS,
+  FRAME_RATE_WARN_BELOW_FPS,
   MAX_VIDEO_SIZE_BYTES,
   MIN_TRIM_DURATION_SECONDS,
   MIN_VIDEO_FPS,
@@ -120,6 +135,30 @@ export function checkVideoFileBasics(file: {
 }
 
 /**
+ * Does this probe's whole-track average sit in the variable-frame-rate warning
+ * band? Only meaningful for a probe that has already cleared the gate.
+ */
+function averageInWarnBand(probe: VideoProbe): probe is VideoProbe & {
+  averageFps: number;
+} {
+  return (
+    probe.averageFps != null && probe.averageFps < FRAME_RATE_WARN_BELOW_FPS
+  );
+}
+
+/**
+ * The frame rate to show beside a checked video: the whole-track average to 2
+ * decimals when the variable-frame-rate warning applies (so the fact agrees
+ * with the warning under it), the probe's snapped rate otherwise, and null
+ * when the rate is unknown.
+ */
+export function formatProbeFps(probe: VideoProbe): string | null {
+  if (probe.fps === null) return null;
+  if (averageInWarnBand(probe)) return `${probe.averageFps.toFixed(2)} fps`;
+  return `${probe.fps} fps`;
+}
+
+/**
  * The checks that need decoded metadata.
  *
  * The frame-rate comparison snaps first, so the 30 floor sees 30 for NTSC
@@ -170,6 +209,13 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
     // if it is wrong. Without the last clause this reads as permission.
     warnings.push(
       `This browser can't measure frame rate. Analysis still needs at least ${MIN_VIDEO_FPS} fps — check your camera setting, because ${PROVIDER_DISPLAY_NAME} can still reject the video after it uploads.`,
+    );
+  } else if (averageInWarnBand(probe)) {
+    // Replaces the 60 fps nudge below: one frame-rate line per file, and this
+    // one is the one that can cost the upload. Warn, never block — see the
+    // module comment.
+    warnings.push(
+      `This recording averages ${probe.averageFps.toFixed(2)} fps, which usually means a variable frame rate, and ${PROVIDER_DISPLAY_NAME} may reject it. Exporting at a constant 30 fps avoids that.`,
     );
   } else if (probe.fps < RECOMMENDED_VIDEO_FPS) {
     warnings.push(

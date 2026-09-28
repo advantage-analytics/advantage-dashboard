@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Warn in the wizard when the whole-track frame rate is below 29.96
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/lib/services/splitstep/config.ts (beside `MIN_VIDEO_FPS` ~line 53), src/lib/video/probe.ts (`VideoProbe`, `probeVideo`), src/lib/services/upload/validators/splitstep-validator.ts (`evaluateVideoProbe` warning channel ~lines 165-178, module header), src/components/dashboard/matches/new-match-wizard/FileStepContent.tsx (`videoFacts`, ~line 346), tests/upload-video-requirements.spec.ts (extend the "frame-rate boundary" describe)
