@@ -1,11 +1,23 @@
 "use client";
 
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
-import { AnalysisSteps } from "@/components/dashboard/matches/match-detail/analysis-steps-card";
+import { AnalysisSteps } from "@/components/dashboard/matches/match-detail/analysis-steps-column";
+import type { MatchLineProps } from "@/components/dashboard/matches/match-line";
 
 /** A fixed clock, so every variant renders the same on every load. */
 const NOW = Date.parse("2026-09-28T16:00:00Z");
 const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString();
+
+/** One fixed match line for every variant — the column's own, not a card's. */
+const MATCH: MatchLineProps = {
+  player: "Maya Chen",
+  opponent: "Sofia Alvarez",
+  won: true,
+  sets: [
+    { player1: 6, player2: 4 },
+    { player1: 7, player2: 6, player1Tiebreak: 7, player2Tiebreak: 5 },
+  ],
+};
 
 const BASE: MatchAnalysis = {
   status: "uploading",
@@ -182,12 +194,13 @@ export function AnalysisStepsPreview() {
   return (
     <section id="analysis-stepper" className="mt-16">
       <h2 className="text-[14px] font-medium text-[var(--ink-900)]">
-        Match analysis card — stepper
+        Match analysis — stepper column
       </h2>
       <p className="mt-1 max-w-[60ch] text-[12px] leading-[1.6] text-[var(--ink-600)]">
-        Every state of the card on a match page while its analysis is in flight
-        or has failed, drawn as the upload wizard&apos;s stepper. Fixed inputs;
-        the actions render but are not wired to a real job.
+        Every state of a match page while its analysis is in flight or has
+        failed, drawn as the upload wizard&apos;s final screen: the same
+        card-free column, title, match line and stepper. Fixed inputs and a
+        fixed clock; the actions render but are not wired to a real job.
       </p>
       <div className="mt-6 grid max-w-[1120px] grid-cols-1 gap-x-10 gap-y-12 lg:grid-cols-2">
         {VARIANTS.map((v) => (
@@ -196,7 +209,8 @@ export function AnalysisStepsPreview() {
             <AnalysisSteps
               analysis={v.analysis}
               matchId="00000000-0000-4000-8000-000000000000"
-              now={NOW}
+              match={MATCH}
+              snapshotAt={NOW}
             />
           </div>
         ))}

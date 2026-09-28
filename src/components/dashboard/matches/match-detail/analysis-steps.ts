@@ -31,27 +31,32 @@ import {
 } from "../analysis-failure-copy";
 import type { StepState } from "@/components/dashboard/shared/vertical-steps";
 
-// ── Copy carried over from match-analysis-progress.tsx ──────────────────────
-// Verbatim. That file still owns them while it renders the live card; when the
-// card switches to this stepper, it should import these rather than keep a
-// second copy.
+// ── Stage copy ──────────────────────────────────────────────────────────────
+// The one declaration. `match-analysis-progress.tsx` imports both rather than
+// keep a second copy, so the live card and this stepper cannot drift apart.
 
 const STORED_NOTE = "Your video is stored. Nothing else is needed from you.";
 
 /** Reassurance per stage. Every line has to be true of the pipeline as built. */
 export const STAGE_NOTE = {
+  // No `uploading` line: that state renders the wizard's stepper and notes.
+  // Same line for both: from the player's side there is no difference between
+  // "stored, not yet submitted" and "submitted, waiting" — neither needs them.
   uploaded: STORED_NOTE,
   queued: STORED_NOTE,
   processing:
     "Nothing needs to stay open — this page fills in as soon as the analysis lands.",
   deriving: "Turning detected strokes into points and shots. Almost there.",
+  // Deliberately not "almost there". This state waits on work that is gated, so
+  // the honest version says what is done and does not promise when the rest is.
   processed:
     "Your video came back analyzed and is saved. Turning it into your match stats is still in progress.",
 } as const;
 
 /**
  * A stalled submit that is simply retryable. Kept apart from `byClass.retry`,
- * whose copy is about a vendor job that failed: here the hand-off never
+ * whose copy is about a vendor job that failed ("if it keeps failing, trim…"):
+ * here the hand-off never
  * happened, so nothing has failed yet.
  */
 export const STALLED_RETRY_COPY = {
@@ -188,11 +193,14 @@ const STATS_LATER: AnalysisStepView = {
  * Every card state, decided in one place from the analysis row.
  *
  * `now` is the clock `isSubmitStalled()` and the upload estimate read; pass the
- * same value the caller renders with so the two cannot disagree.
+ * same value the caller renders with so the two cannot disagree. `null` is a
+ * clock not yet started — the component's first render, before its interval
+ * has ticked (the server has no "now" the client would agree with) — and reads
+ * as "not stalled yet, no estimate yet": both are claims only a clock can make.
  */
 export function analysisStepsView(
   analysis: MatchAnalysis,
-  now: number,
+  now: number | null,
 ): AnalysisStepsView {
   switch (analysis.status) {
     case "uploading": {
@@ -200,7 +208,8 @@ export function analysisStepsView(
       // transfer that has not finished.
       const measured = analysis.uploadPercent;
       const pct = measured === undefined ? undefined : Math.floor(measured);
-      const etaSeconds = uploadEtaSeconds(analysis, now);
+      const etaSeconds =
+        now === null ? undefined : uploadEtaSeconds(analysis, now);
       return {
         title: UPLOADING_COPY.title,
         steps: [
@@ -223,7 +232,7 @@ export function analysisStepsView(
     }
 
     case "uploaded": {
-      if (isSubmitStalled(analysis, now)) {
+      if (now !== null && isSubmitStalled(analysis, now)) {
         const recovery: RecoveryClass = analysis.recovery ?? "retry";
         return {
           title: STEPPER_COPY.titles.stalled,

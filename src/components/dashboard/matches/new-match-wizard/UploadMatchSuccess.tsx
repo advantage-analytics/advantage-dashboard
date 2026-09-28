@@ -12,7 +12,10 @@ import { ExternalLink } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { formatEta } from "@/lib/data/match-analysis";
-import { ScoreLine } from "@/components/dashboard/score-line";
+import {
+  MatchLine,
+  PAGE_STEPPER_TITLE,
+} from "@/components/dashboard/matches/match-line";
 import {
   useMatchStatsReady,
   type MatchStatsState,
@@ -87,13 +90,15 @@ export function UploadMatchSuccess({
     <div className="mx-auto w-full max-w-[488px] px-6 pt-[clamp(64px,18vh,176px)] pb-24">
       <div className="animate-fadeIn flex flex-col">
         <div className="flex flex-col gap-2">
-          <h1
-            className="text-[24px] leading-[1.2] font-light tracking-[-0.3px] text-[var(--ink-900)]"
-            style={{ textWrap: "balance" }}
-          >
+          <h1 className={PAGE_STEPPER_TITLE} style={{ textWrap: "balance" }}>
             {view.title}
           </h1>
-          <MatchLine match={match} />
+          <MatchLine
+            player={match.playerName}
+            opponent={match.opponentName}
+            won={match.won}
+            sets={match.sets}
+          />
         </div>
 
         <ol className="mt-9 flex flex-col" aria-label="Progress">
@@ -378,22 +383,6 @@ const QUIET_LINK =
   "inline-flex h-9 items-center gap-1.5 text-[13px] text-[var(--ink-700)] transition-colors duration-200 hover:text-[var(--ink-900)] focus-visible:outline-none";
 
 const NOTE = "text-[12px] leading-[1.55] text-[var(--ink-600)]";
-
-function MatchLine({ match }: { match: CreatedMatch }) {
-  const result = match.won === null ? null : match.won ? "Won" : "Lost";
-  return (
-    <p className="text-[13px] text-[var(--ink-600)]">
-      {match.playerName} vs {match.opponentName}
-      {match.sets.length > 0 && (
-        <>
-          {" · "}
-          {result && `${result} `}
-          <ScoreLine sets={match.sets} />
-        </>
-      )}
-    </p>
-  );
-}
 
 function stepBody(
   key: StepKey,

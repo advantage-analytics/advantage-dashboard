@@ -198,3 +198,12 @@ is the runner's. Newest entries at the bottom.
 1. To seed: `npx tsx scripts/eyes-on/seed-failure-classes.ts --write`; to remove: `... --cleanup --write`.
 2. The eyes-on pass must not click actions on seeded rows: "Try again" on the stalled row POSTs `/api/splitstep/jobs`, which may reserve quota and call the vendor with a nonexistent blob.
 3. A second `--write` resets the wait_or_ask row's `updated_at`; it reads as stalled again after 3 minutes.
+
+## T22 · Reshape AnalysisSteps into the wizard's card-free column and show it on /design — done
+
+**gate:** mechanical pass (first run failed on `design-drift.spec.ts`: a second off-scale `text-[24px]` copied from the wizard title; fixed in-run with one shared `PAGE_STEPPER_TITLE` constant, count back to its seed of 4) · completion pass
+**changed:** `analysis-steps-card.tsx` renamed to `analysis-steps-column.tsx` and rewritten as the wizard's card-free column: `max-w-[488px] px-6 pt-[clamp(64px,18vh,176px)]`, an `<h1>` using `PAGE_STEPPER_TITLE`, the shared `MatchLine`, then the four `VerticalStep` rows — no card chrome, eyebrow or facts row. `MatchLine` and `PAGE_STEPPER_TITLE` moved to `matches/match-line.tsx` and are used by the wizard too (its markup unchanged). `STAGE_NOTE` / `STALLED_RETRY_COPY` now live only in `analysis-steps.ts`. The column owns live updates (`useLiveMatchAnalysis` / `withLiveAnalysis`) and a null-initialised 10 s clock; `analysisStepsView` treats `now: null` as "not stalled, no estimate"; an optional `snapshotAt` fixes the clock for /design and specs. /design renders every variant through the column. New `tests/analysis-steps-column.spec.ts`; `analysis-steps-view.spec.ts` unedited.
+**follow-ups:**
+
+1. An already-stalled row shows "Sending for analysis" for up to 10 s before the first tick flips it to "Couldn't send for analysis" — T23 may want an immediate first tick for `uploaded`.
+2. Each /design variant carries the full-page top padding, so the preview grid is very tall.

@@ -296,7 +296,7 @@ ready).
 
 ## T22 · Reshape AnalysisSteps into the wizard's card-free column and show it on /design
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/match-detail/analysis-steps.ts, src/components/dashboard/matches/match-detail/analysis-steps-card.tsx (rename allowed, e.g. analysis-steps-column.tsx), src/components/dashboard/matches/new-match-wizard/UploadMatchSuccess.tsx (MatchLine extraction only), src/components/dashboard/matches/match-line.tsx (new), src/components/dashboard/matches/match-detail/match-analysis-progress.tsx (copy imports only), src/app/design/analysis-steps-preview.tsx, tests/analysis-steps-column.spec.ts (new) (guess)
 - **routes:** /design

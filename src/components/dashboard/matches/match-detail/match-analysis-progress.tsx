@@ -40,6 +40,7 @@ import {
 } from "../analysis-failure-copy";
 import { VerticalStep } from "@/components/dashboard/shared/vertical-steps";
 import { RecoveryAction } from "./recovery-action";
+import { STAGE_NOTE, STALLED_RETRY_COPY } from "./analysis-steps";
 import {
   useLiveMatchAnalysis,
   withLiveAnalysis,
@@ -48,34 +49,9 @@ import {
 const CARD =
   "rounded-[14px] border border-[#F3F3F3] bg-white shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]";
 
-const STORED_NOTE = "Your video is stored. Nothing else is needed from you.";
-
-/** Reassurance per stage. Every line has to be true of the pipeline as built. */
-const STAGE_NOTE: Partial<Record<MatchAnalysis["status"], string>> = {
-  // No `uploading` line: that state renders the wizard's stepper and notes.
-  // Same line for both: from the player's side there is no difference between
-  // "stored, not yet submitted" and "submitted, waiting" — neither needs them.
-  uploaded: STORED_NOTE,
-  queued: STORED_NOTE,
-  processing:
-    "Nothing needs to stay open — this page fills in as soon as the analysis lands.",
-  deriving: "Turning detected strokes into points and shots. Almost there.",
-  // Deliberately not "almost there". This state waits on work that is gated, so
-  // the honest version says what is done and does not promise when the rest is.
-  processed:
-    "Your video came back analyzed and is saved. Turning it into your match stats is still in progress.",
-};
-
-/**
- * A stalled submit that is simply retryable. Kept apart from `byClass.retry`,
- * whose copy is about a vendor job that failed ("if it keeps failing, trim…"):
- * here the hand-off never happened, so nothing has failed yet.
- */
-const STALLED_RETRY_COPY = {
-  title: "This hasn't been sent for analysis yet",
-  cardBody:
-    "Your video is stored safely — the hand-off didn't go through. Trying again costs nothing but the wait; nothing needs uploading a second time.",
-};
+/** Keyed by any status; only the stages `STAGE_NOTE` names carry a line. */
+const stageNote = (status: MatchAnalysis["status"]): string | undefined =>
+  (STAGE_NOTE as Partial<Record<MatchAnalysis["status"], string>>)[status];
 
 /** The card's title + body for a recovery class. */
 function recoveryCopy(
@@ -320,7 +296,7 @@ export function MatchAnalysisProgress({
                 </div>
               </div>
             ) : (
-              STAGE_NOTE[analysis.status] && (
+              stageNote(analysis.status) && (
                 <div className="mt-6 flex items-start gap-2 border-t border-[#F3F3F3] pt-4">
                   <Info
                     className="mt-px size-3.5 shrink-0 text-[#CCCCCC]"
@@ -328,7 +304,7 @@ export function MatchAnalysisProgress({
                     aria-hidden="true"
                   />
                   <p className="text-[12px] leading-[1.5] text-[#888888]">
-                    {STAGE_NOTE[analysis.status]}
+                    {stageNote(analysis.status)}
                   </p>
                 </div>
               )
