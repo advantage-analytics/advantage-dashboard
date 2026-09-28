@@ -228,7 +228,7 @@ ready).
 
 ## T17 · A stats-unavailable match renders its page instead of the progress card
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/app/dashboard/matches/(detail)/[matchId]/page.tsx (short-circuit ~226-227, ~268-307), src/components/dashboard/matches/match-detail/match-report-context.tsx, src/components/dashboard/matches/match-detail/statistics-view.tsx, tests/match-film-entry.spec.ts (guess)

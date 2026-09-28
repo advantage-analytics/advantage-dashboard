@@ -775,6 +775,26 @@ test("the analysing short-circuit still returns before any Film entry", () => {
   expect(shortCircuit).not.toContain("MatchReportViewSwitcher");
 });
 
+test("a stats_unavailable match is let past the short-circuit, and only it", () => {
+  // Product decision 2026-09-27: a deterministic derivation refusal must not
+  // block the match behind the progress card. The gate's own condition keeps
+  // every other in-flight or failed class, and the exemption is scoped to a
+  // failed status so a stale class cannot wave an in-flight job through.
+  const decl = PAGE.slice(
+    PAGE.indexOf("const isAwaitingAnalysis ="),
+    PAGE.indexOf("if (data.points === null"),
+  );
+  expect(decl).toContain(
+    "isInFlight(analysis.status) || isAnalysisFailed(analysis.status)",
+  );
+  expect(decl).toContain("!statsUnavailable");
+  expect(PAGE).toMatch(
+    /const statsUnavailable =\s*isAnalysisFailed\(analysis\.status\) &&\s*analysis\.recovery === "stats_unavailable";/,
+  );
+  // And the report is told, so Statistics draws its note instead of stats.
+  expect(PAGE).toContain("statsUnavailable={statsUnavailable}");
+});
+
 test("the capability is resolved on the server and handed down", () => {
   expect(PAGE).toContain("getMatchFilmEntry(matchId)");
   // `unit` joined in the Units follow-up: film shot speeds read in mph or

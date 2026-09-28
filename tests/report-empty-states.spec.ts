@@ -176,6 +176,59 @@ test.describe("StatisticsView", () => {
   });
 });
 
+test.describe("StatisticsView — stats_unavailable", () => {
+  const file = DETAIL + "statistics-view.tsx";
+  const copy = createLoader().load(
+    "src/components/dashboard/matches/analysis-failure-copy.ts",
+  ) as typeof import("../src/components/dashboard/matches/analysis-failure-copy");
+  const stubs = {
+    "@/components/dashboard/matches/match-detail/match-report-context": {
+      useMatchReport: () => ({
+        meta: {
+          statsPublished: false,
+          statsUnavailable: true,
+          isDerived: true,
+        },
+      }),
+    },
+    "@/components/dashboard/matches/match-detail/match-report": {
+      MatchReport: { Insight: marker("Insight") },
+    },
+    // The real copy, so the note is checked against the strings the progress
+    // card and drawer use rather than a restatement of them.
+    "@/components/dashboard/matches/analysis-failure-copy": copy,
+  };
+  const SECTIONS = [
+    "Insight",
+    "StatisticsEmpty",
+    "UnpublishedStatsNotice",
+    "HeadToHeadCard",
+    "PerformanceTrackerChart",
+    "RallyLengthCard",
+    "PointEndingsCard",
+  ];
+
+  for (const [label, pts] of [
+    ["no points", [] as MatchPoint[]],
+    ["with points", [point()]],
+  ] as const) {
+    test(`${label}: the note in the notice slot, and no stat section`, () => {
+      const html = render(file, "StatisticsView", [...pts], stubs);
+      expect(html).toContain('data-testid="stats-unavailable-notice"');
+      expect(html).toContain(
+        "Analyzed, but the score couldn&#x27;t be read cleanly",
+      );
+      expect(html).toContain("so no statistics were saved for this match.");
+      expect(html).toContain(
+        copy.byClass.stats_unavailable.title.replace(/'/g, "&#x27;"),
+      );
+      for (const name of SECTIONS) {
+        expect(html).not.toContain(`data-component="${name}"`);
+      }
+    });
+  }
+});
+
 test.describe("MatchReportInsight", () => {
   const file = DETAIL + "report-insight-card.tsx";
   const stubs = (summary: string | null) => ({

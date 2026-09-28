@@ -132,3 +132,15 @@ is the runner's. Newest entries at the bottom.
 2. The 40 s derivation budget assumes a 60 s limit for `after()` work on the Vercel plan — unmeasured; a kill mid-derivation leaves the row at `deriving` (same stale-`deriving` gap as T14 follow-up 1).
 3. A process death after results are saved but before derivation leaves `results_object_key` set with no derivation — no longer selected by this sweep, and `/rederive` only accepts `derivation_failed`.
 4. Only tested with fakes: the live DB has no stuck completed-without-results rows today.
+
+## T17 · A stats-unavailable match renders its page instead of the progress card — done
+
+**gate:** mechanical pass · completion pass (widget-states: the new state is an honest "not available" note — no skeleton, sample data or zeroes; loading/error untouched)
+**changed:** `page.tsx` computes `statsUnavailable = isAnalysisFailed(status) && recovery === "stats_unavailable"` and exempts only that from the short-circuit (original condition kept verbatim; every other in-flight/failed state still short-circuits), passing it to the report provider. `MatchReportMeta.statsUnavailable` (optional, defaults false, so `/m/[token]` is unchanged). `statistics-view.tsx` returns early with a `StatsUnavailableNotice` (UnpublishedStatsNotice's shell, `byClass.stats_unavailable` copy) and no stat section, insight or empty state. Per-region check: rail scoreboard, facts, Visualizations (`VizEmpty`) and Film (empty / "no points detected") draw no zeroes. Specs: new gate assertion in `match-film-entry.spec.ts` (source-order test unedited); `report-empty-states.spec.ts` gains the render with and without points.
+**follow-ups:**
+
+1. Wording in two empty states is wrong for these matches (no zeroes drawn): Film's "No points were detected … Camera placement is the usual reason" and `VizEmpty`'s "They arrive with a video analysed by Advantage Intelligence" — both could read `meta.statsUnavailable`.
+2. `StatsUnavailableNotice` duplicates `UnpublishedStatsNotice`'s markup; give the latter optional title/body props.
+3. `page.tsx`'s comment above `jobAnalysis` ("Failures take the same path") is now slightly stale (T20 amends guardrails §3.3).
+4. `/m/[token]` never sets `statsUnavailable` — decide whether a shared stats-unavailable match shows the note.
+5. Eyes-on owed: open live job b74a1e04's match.

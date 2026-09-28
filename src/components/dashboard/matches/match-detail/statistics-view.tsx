@@ -1,5 +1,8 @@
 "use client";
 
+import { Info } from "lucide-react";
+
+import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
 import { HeadToHeadCard } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import { MatchReport } from "@/components/dashboard/matches/match-detail/match-report";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
@@ -49,11 +52,29 @@ import { cn } from "@/lib/utils";
  * The insight card is withheld too: with points it draws its own empty when
  * there is no summary, but a view with nothing says so once, not per card.
  * A match still analysing never gets here: `page.tsx` shows progress instead.
+ *
+ * One failure does get here (product decision 2026-09-27): a
+ * `stats_unavailable` match — the video was analysed but our derivation
+ * refused the data, so no statistics were saved and a retry cannot change
+ * that. `page.tsx` renders the match rather than the progress card and sets
+ * `meta.statsUnavailable`; this view then draws one quiet note in the
+ * notice's slot and NOTHING else — no insight, no widgets row, no
+ * `StatisticsEmpty` (whose "arrive with a video analysed by Advantage
+ * Intelligence" would be false here). Any points the match carries are not
+ * charted: a stat section over a refused derivation reads as a fact.
  */
 export function StatisticsView() {
   const { meta } = useMatchReport();
   const { points } = useMatchData();
   const hasPoints = points.length > 0;
+
+  if (meta.statsUnavailable) {
+    return (
+      <div className="shrink-0">
+        <StatsUnavailableNotice />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -103,5 +124,40 @@ export function StatisticsView() {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * The `stats_unavailable` note: `UnpublishedStatsNotice`'s shell (the same
+ * card, icon, type and tokens — no new colour), carrying the failure copy's
+ * own title and body so the match page and the progress card/drawer never
+ * word the same fact two ways. An honest statement in place of the stat
+ * sections: no skeleton, no sample figure, no action — nothing on this match
+ * would change on a retry.
+ */
+function StatsUnavailableNotice() {
+  const copy = byClass.stats_unavailable;
+  return (
+    <section
+      aria-label="Statistics unavailable"
+      data-testid="stats-unavailable-notice"
+      className="surface-card overflow-hidden"
+    >
+      <div className="flex items-start gap-3 px-5 py-4 sm:px-6 sm:py-5">
+        <Info
+          aria-hidden
+          className="mt-0.5 h-4 w-4 shrink-0 text-[#3B82F6]"
+          strokeWidth={1.5}
+        />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <p className="text-[13px] leading-[19.5px] font-medium text-[var(--color-text-primary)]">
+            {copy.title}
+          </p>
+          <p className="text-[12px] leading-[19.8px] font-normal text-[var(--color-text-body)]">
+            {copy.cardBody}
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }

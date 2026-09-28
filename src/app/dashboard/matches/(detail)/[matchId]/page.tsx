@@ -223,8 +223,21 @@ export default async function MatchDetailPage({ params }: PageProps) {
     ...jobAnalysis,
     status: withStatsPublished(jobAnalysis.status, statsPublished),
   };
+  // The one failure that does NOT stop the page (product decision
+  // 2026-09-27): our derivation deterministically refused the vendor's data
+  // (`derivation_failed` classified `stats_unavailable`, e.g. points that
+  // resolved no winner). Nothing will change on a retry, and the match itself
+  // — score, details, any playable video — is fine, so it renders like any
+  // other match and the Statistics view says, once, that no statistics were
+  // saved (`meta.statsUnavailable`) instead of drawing a stat section. Scoped
+  // to a failed status so a stale class can never wave an in-flight job past
+  // the gate. Every other in-flight or failed class still short-circuits.
+  const statsUnavailable =
+    isAnalysisFailed(analysis.status) &&
+    analysis.recovery === "stats_unavailable";
   const isAwaitingAnalysis =
-    isInFlight(analysis.status) || isAnalysisFailed(analysis.status);
+    (isInFlight(analysis.status) || isAnalysisFailed(analysis.status)) &&
+    !statsUnavailable;
 
   // A failed points read is "no answer", not a match with no points: rendering
   // on would draw a zero-point report that looks like a real one. Thrown here,
@@ -320,6 +333,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         canCompare={hasComparisonBaseline(kpiHistory)}
         isDerived={isDerived}
         statsPublished={statsPublished}
+        statsUnavailable={statsUnavailable}
         hasPlayableVideo={Boolean(video)}
         // "Match report opens at" (Settings › Preferences), clamped to an
         // available view.

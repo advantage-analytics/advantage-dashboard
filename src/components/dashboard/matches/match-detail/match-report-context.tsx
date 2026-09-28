@@ -71,6 +71,15 @@ export interface MatchReportMeta {
   isDerived: boolean;
   /** Both `match_stats` rows present. */
   statsPublished: boolean;
+  /**
+   * The analysis failed in a way that leaves the match viewable but with no
+   * statistics at all — `recovery === "stats_unavailable"` on a failed job
+   * (our derivation refused the vendor's data; retrying cannot change it).
+   * `page.tsx` lets such a match past the short-circuit, and the Statistics
+   * view draws one quiet note in place of every stat section. Defaults to
+   * `false`; `/m/[token]` never sets it.
+   */
+  statsUnavailable: boolean;
   /** A playable match video was resolved on the server. */
   hasPlayableVideo: boolean;
   /**
@@ -149,8 +158,10 @@ export function useMatchReport(): MatchReportContextValue {
 
 export interface MatchReportProviderProps extends Omit<
   MatchReportMeta,
-  "readOnly"
+  "readOnly" | "statsUnavailable"
 > {
+  /** See `MatchReportMeta.statsUnavailable`. Defaults to `false`. */
+  statsUnavailable?: boolean;
   /** See `MatchReportMeta.readOnly`. Defaults to `false`. */
   readOnly?: boolean;
   /**
@@ -167,6 +178,7 @@ export function MatchReportProvider({
   canCompare,
   isDerived,
   statsPublished,
+  statsUnavailable = false,
   hasPlayableVideo,
   savedViews,
   workspaceRole,
@@ -242,6 +254,7 @@ export function MatchReportProvider({
       canCompare,
       isDerived,
       statsPublished,
+      statsUnavailable,
       hasPlayableVideo,
       savedViews,
       workspaceRole,
@@ -258,6 +271,7 @@ export function MatchReportProvider({
       canCompare,
       isDerived,
       statsPublished,
+      statsUnavailable,
       hasPlayableVideo,
       savedViews,
       workspaceRole,
