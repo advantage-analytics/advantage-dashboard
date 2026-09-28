@@ -247,3 +247,12 @@ is the runner's. Newest entries at the bottom.
 1. `drawerRecovery` has no caller in `src` now — delete it with its spec case.
 2. No spec covers the event drawer's stalled "Try again" footer (the protected fixture has no stalled row) — a separate fixture would pin it.
 3. `useStallClock` lives in `match-drawer.tsx` and the event drawer imports it from there; a tiny shared hooks module would be a cleaner home.
+
+## T27 · Share the match page's layout decision and add a cached status hint — done
+
+**gate:** mechanical PASS · completion PASS
+**changed:** `match-analysis.ts` exports `isStatsUnavailable` and `matchPageKind` ("steps" | "report"); page.tsx derives `statsUnavailable` / `isAwaitingAnalysis` from them on its post-reconcile analysis. New `match-page-hint-server.ts` exports `getMatchPageHint`, a `cache()`d cookie-client loader (no reap/reconcile) returning `{ analysis, kind }` or null. match-film-entry.spec.ts pins the relocated literals against match-analysis.ts; new match-page-layout.spec.ts pins the truth table. Deviation: live `matches` has no `verification_status`, so the hint selects `verified` and maps it as `transformDbMatchToMatch` does (reviewer verified against live schema).
+**follow-ups:**
+
+1. `getMatchPageHint` has no caller yet; T29 is its first consumer and should document the reap/reconcile drift.
+2. T27's criterion names a non-existent `verification_status` column; correct any later task text that repeats it.

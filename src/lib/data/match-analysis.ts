@@ -824,6 +824,45 @@ export function isAnalysisReady(status: AnalysisStatus): boolean {
 }
 
 /**
+ * The one failure that does NOT stop the match page (product decision
+ * 2026-09-27, guardrails §3.3): our derivation deterministically refused the
+ * vendor's data (`derivation_failed` classified `stats_unavailable`, e.g.
+ * points that resolved no winner). Nothing changes on a retry, and the match
+ * itself — score, details, any playable video — is fine, so it renders like
+ * any other match and the Statistics view says, once, that no statistics were
+ * saved. Scoped to a failed status so a stale class can never wave an
+ * in-flight job past the gate.
+ */
+export function isStatsUnavailable({
+  status,
+  recovery,
+}: Pick<MatchAnalysis, "status" | "recovery">): boolean {
+  return isAnalysisFailed(status) && recovery === "stats_unavailable";
+}
+
+/** What the match page draws: the Analysis steps column, or the report. */
+export type MatchPageKind = "steps" | "report";
+
+/**
+ * The match page's layout decision (guardrails §3.3), as a pure function so
+ * the page and its route skeleton answer from one predicate (§3.2's lesson —
+ * two surfaces that each re-derived a row's state disagreed once).
+ *
+ * `"steps"` for every in-flight or failed status — every stat section would
+ * draw zeroes, and the reason it stopped is more use than a page of them —
+ * except the one `isStatsUnavailable` exemption. Everything else is the report.
+ */
+export function matchPageKind({
+  status,
+  recovery,
+}: Pick<MatchAnalysis, "status" | "recovery">): MatchPageKind {
+  return (isInFlight(status) || isAnalysisFailed(status)) &&
+    !isStatsUnavailable({ status, recovery })
+    ? "steps"
+    : "report";
+}
+
+/**
  * The matches list's own lifecycle grouping — "In progress" / "Ready" /
  * "Failed" / "No video" — kept as a named export so the list's decision is a
  * pure function a spec can pin, not inline logic in the list component.

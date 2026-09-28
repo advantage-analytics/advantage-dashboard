@@ -368,7 +368,7 @@ ready).
 
 ## T27 · Share the match page's layout decision and add a cached status hint
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/match-analysis.ts (shared pure predicates), src/lib/data/match-page-hint-server.ts (new, guess), src/app/dashboard/matches/(detail)/[matchId]/page.tsx, tests/match-film-entry.spec.ts, tests/match-page-layout.spec.ts (new, guess)
 - **done when:**
