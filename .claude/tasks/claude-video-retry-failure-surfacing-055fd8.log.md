@@ -46,3 +46,13 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The `drawer` variant has no caller until T7; its outline/md styling mirrors `match-drawer.tsx`'s `RetryButton` and is unverified in a real drawer, while `retry` in a drawer still renders the card-sized `RetryAnalysis` — T7 should check both.
+
+## T6 · Match page progress card renders the recovery class — done
+
+**gate:** mechanical pass · completion pass (widget-states: only the failed/stalled branches changed; loading, in-flight and milestone states untouched)
+**changed:** `match-analysis-progress.tsx`'s failed block and stalled branch render the class copy (`note ?? title`, card body; `wait_or_ask` picks its variant through `waitOrAskVariant`) and `<RecoveryAction variant="card">`; the raw `failNote` is no longer rendered and the direct `RetryAnalysis`/`RetrySubmission`/`addVideoHref`/`inputRejected` usages are gone. A stalled uncoded row keeps the "hasn't been sent" wording (local `STALLED_RETRY_COPY`). Minimal additive change outside `files:`: `MatchAnalysis.errorCode`, set in the shared `recoveryFields()`, plus its live-patch type line and one spec assertion. Two old assertions flipped by design: the derivation reconciler note is now absent, and a `retry` row no longer also shows "Upload a new recording" (one action per class).
+**follow-ups:**
+
+1. `waitOrAskVariant` picks by error code alone; a failed row at the attempt ceiling that carried a quota/eligibility code would get allowance/permission copy — check `attemptsUsed >= MAX_TOTAL_ATTEMPTS` first.
+2. `STALLED_RETRY_COPY` lives in the card; move it into `analysis-failure-copy.ts` if T7's drawers need the same wording.
+3. Eyes-on: confirm on screen that a `retry` card losing its secondary "Upload a new recording" link reads right.

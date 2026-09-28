@@ -5,7 +5,13 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { MatchAnalysis, RecoveryClass } from "@/lib/data/match-analysis";
+import {
+  jobRecoveryFacts,
+  recoveryFields,
+  type MatchAnalysis,
+  type RecoveryClass,
+  type RecoveryRow,
+} from "@/lib/data/match-analysis";
 import {
   ANALYSIS_FAILURE_COPY,
   byClass,
@@ -15,16 +21,17 @@ import {
 import { createLoader, marker } from "./fixtures/vm-modules";
 
 /**
- * The match page's failure alert says different things for the two failure
- * statuses. `failed` is a video-provider failure: retry the same upload, or
- * upload a new recording. `derivation_failed` means the video was analyzed
- * but its rallies could not be reconciled with the entered score — neither a
- * retry nor a new recording helps, so neither is offered, and the
- * reconciler's reason is a muted detail line rather than the headline.
+ * The match page's failure alert and stalled notice render the row's
+ * recovery class (`byClass`, T4): headline `note ?? title`, the class's card
+ * body, and `RecoveryAction` (T5) for whatever there is to press. The raw
+ * `failNote` (unfiltered `error_message`) is never rendered here — a stored
+ * note reaches the card only through `showsStoredNote()`.
  *
  * `MatchAnalysisProgress` is rendered offline through `fixtures/vm-modules`
- * with the Realtime hook, `next/link` and the add-video route stubbed; every
- * other unknown import (the retry buttons among them) becomes a marker.
+ * with the Realtime hook, `next/link` and the add-video route stubbed. The
+ * real `RecoveryAction` runs; its three buttons (`RetryAnalysis`,
+ * `RetrySubmission`, `RetryActionButton`) are markers, so a marker in the
+ * markup means that action rendered.
  */
 
 const PANEL =
@@ -32,6 +39,12 @@ const PANEL =
 const COPY = "src/components/dashboard/matches/analysis-failure-copy.ts";
 
 type Props = { analysis: MatchAnalysis; matchId: string };
+
+const RETRY_MARKERS = [
+  'data-component="RetryAnalysis"',
+  'data-component="RetrySubmission"',
+  'data-component="RetryActionButton"',
+];
 
 function render(
   status: MatchAnalysis["status"],
@@ -44,11 +57,22 @@ function render(
         useLiveMatchAnalysis: () => new Map(),
         withLiveAnalysis: (a: MatchAnalysis) => a,
       },
-      "next/link": ({ children }: { children: React.ReactNode }) =>
-        React.createElement("a", { "data-component": "Link" }, children),
-      "@/lib/matches/add-video-href": { addVideoHref: (id: string) => id },
+      "next/link": ({
+        children,
+        href,
+      }: {
+        children: React.ReactNode;
+        href: string;
+      }) =>
+        React.createElement("a", { "data-component": "Link", href }, children),
+      "@/lib/matches/add-video-href": {
+        addVideoHref: (id: string) => `/add-video/${id}`,
+      },
       "./retry-analysis": { RetryAnalysis: marker("RetryAnalysis") },
       "./retry-submission": { RetrySubmission: marker("RetrySubmission") },
+      "./retry-action-button": {
+        RetryActionButton: marker("RetryActionButton"),
+      },
     },
   });
   const { MatchAnalysisProgress } = loader.load(PANEL) as {
@@ -65,25 +89,64 @@ function render(
   );
 }
 
+/**
+ * A card-level `MatchAnalysis` built from a live `processing_jobs` row the
+ * way the loader builds it: `jobRecoveryFacts` → `recoveryFields`, with the
+ * unfiltered `error_message` as `failNote`.
+ */
+function fromRow(
+  row: Omit<RecoveryRow, "hasVideo" | "hasResults"> & {
+    hasVideo?: boolean;
+    hasResults?: boolean;
+  },
+  attemptsUsed = 1,
+): Partial<MatchAnalysis> {
+  const facts = jobRecoveryFacts({
+    hasVideo: true,
+    hasResults: false,
+    ...row,
+  });
+  return {
+    jobId: "job-1",
+    updatedAt: row.updated_at ?? undefined,
+    failNote: row.error_message ?? undefined,
+    attemptsUsed,
+    ...recoveryFields(facts, attemptsUsed, row.error_message),
+  };
+}
+
 function decode(html: string): string {
   return html
     .replace(/&#x27;|&#39;/g, "'")
     .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&");
 }
 
-/** The first `<p>` inside the `role="alert"` block — the alert's headline. */
-function alertHeadline(html: string): string {
-  const alert = html.slice(html.indexOf('role="alert"'));
-  const match = alert.match(/<p\b[^>]*>([\s\S]*?)<\/p>/);
-  if (!match) throw new Error("no <p> inside role=alert");
+/** The first `<p>` inside a `role=…` block — that block's headline. */
+function headlineOf(html: string, role: "alert" | "status"): string {
+  const block = html.slice(html.indexOf(`role="${role}"`));
+  const match = block.match(/<p\b[^>]*>([\s\S]*?)<\/p>/);
+  if (!match) throw new Error(`no <p> inside role=${role}`);
   return decode(match[1]);
+}
+
+const alertHeadline = (html: string) => headlineOf(html, "alert");
+
+function expectNoRetry(html: string): void {
+  for (const m of RETRY_MARKERS) expect(html).not.toContain(m);
 }
 
 const NOTE = "5 point(s) resolved no winner";
 
-test("derivation_failed: its own title and body, failNote as a muted detail, no retry or new-video link", () => {
-  const html = render("derivation_failed");
+test("stats_unavailable (derivation_failed): its own title and body, no raw reconciler note, no retry or new-video link", () => {
+  // DERIVATION_* codes never pass showsStoredNote(), so `note` is undefined.
+  const html = render("derivation_failed", {
+    recovery: "stats_unavailable",
+    note: undefined,
+    failNote: NOTE,
+  });
   const out = decode(html);
 
   expect(html).toContain('role="alert"');
@@ -94,6 +157,7 @@ test("derivation_failed: its own title and body, failNote as a muted detail, no 
   );
 
   expect(html).not.toContain('data-component="RetryAnalysis"');
+  expectNoRetry(html);
   expect(out).not.toContain("Upload a new recording");
   expect(out).not.toContain("Retrying uses");
 
@@ -101,48 +165,176 @@ test("derivation_failed: its own title and body, failNote as a muted detail, no 
   expect(headline).toBe(ANALYSIS_FAILURE_COPY.derivation_failed.title);
   expect(headline).not.toContain(NOTE);
 
-  // Present, but only after the body, on its own muted line.
-  expect(out.indexOf(NOTE)).toBeGreaterThan(
-    out.indexOf(ANALYSIS_FAILURE_COPY.derivation_failed.body),
-  );
-  expect(html).toMatch(
-    /<p class="[^"]*text-\[11px\][^"]*text-\[#888888\][^"]*">5 point\(s\) resolved no winner<\/p>/,
-  );
+  // The reconciler talking to itself is no longer a detail line on the card:
+  // failNote is never rendered, and showsStoredNote() keeps it out of `note`.
+  expect(out).not.toContain(NOTE);
 
   expect(html).not.toMatch(/splitstep|swingvision/i);
 });
 
-test("failed: unchanged — failNote headline, retry body, RetryAnalysis and the new-recording link", () => {
-  const html = render("failed");
+test("retry (failed): note headline, retry body, RetryAnalysis, no upload link", () => {
+  const html = render("failed", {
+    recovery: "retry",
+    note: NOTE,
+    failNote: NOTE,
+  });
   const out = decode(html);
 
   expect(alertHeadline(html)).toBe(NOTE);
   expect(out).toContain("Retrying uses");
   expect(out).toContain(ANALYSIS_FAILURE_COPY.failed.body);
   expect(html).toContain('data-component="RetryAnalysis"');
-  expect(out).toContain("Upload a new recording");
+  // RecoveryAction offers one action per class; for retry that is the retry
+  // button, not the new-recording link (the body still names that way out).
+  expect(out).not.toContain("Upload a new recording");
+  expect(html).not.toContain('data-component="Link"');
   expect(out).not.toContain(ANALYSIS_FAILURE_COPY.derivation_failed.title);
 
   expect(html).not.toMatch(/splitstep|swingvision/i);
 });
 
-test("failed + inputRejected: failNote headline, input-rejected body, no retry, still the new-recording link", () => {
-  const failNote = "The video must be at least 29.9 fps.";
+test("fix_recording (failed, input rejected): note headline, input-rejected body, no retry, still the new-recording link", () => {
+  const note = "The video must be at least 29.9 fps.";
   const html = render("failed", {
-    inputRejected: true,
+    recovery: "fix_recording",
     jobId: "job-1",
-    failNote,
-  } as Partial<MatchAnalysis>);
+    note,
+    failNote: note,
+  });
   const out = decode(html);
 
-  expect(alertHeadline(html)).toBe(failNote);
+  expect(alertHeadline(html)).toBe(note);
   expect(out).toContain(ANALYSIS_FAILURE_COPY.failed.inputRejected.body);
   expect(out).toContain("Upload a new recording");
 
   expect(html).not.toContain('data-component="RetryAnalysis"');
+  expectNoRetry(html);
   expect(out).not.toContain("Retrying uses");
 
   expect(html).not.toMatch(/splitstep|swingvision/i);
+});
+
+const AZURE_XML =
+  '<?xml version="1.0" encoding="utf-8"?><Error><Code>AuthorizationFailure</Code><Message>This request is not authorized to perform this operation.</Message></Error>';
+
+test("upload_again: an uncoded failed row with Azure XML and no video shows the class title and the upload link, never the XML", () => {
+  const fields = fromRow({
+    status: "failed",
+    error_code: null,
+    error_message: AZURE_XML,
+    hasVideo: false,
+  });
+  expect(fields.recovery).toBe("upload_again");
+  expect(fields.note).toBeUndefined();
+
+  const html = render("failed", fields);
+  const out = decode(html);
+
+  expect(alertHeadline(html)).toBe(byClass.upload_again.title);
+  expect(out).toContain(byClass.upload_again.cardBody);
+  expect(html).toMatch(
+    /<a data-component="Link" href="\/add-video\/m1"[^>]*>Upload the video again<\/a>/,
+  );
+  expect(byClass.upload_again.action).toBe("Upload the video again");
+
+  expect(out).not.toContain("<?xml");
+  expect(out).not.toContain("AuthorizationFailure");
+  expect(html).not.toContain('data-component="RetryActionButton"');
+  expectNoRetry(html);
+});
+
+test("45ff4bd7 (frame rate rejected): the vendor note stays the headline, no retry", () => {
+  const note = "The video must be at least 29.9 fps.";
+  const fields = fromRow({
+    status: "failed",
+    error_code: "VIDEO_FRAME_RATE_TOO_LOW",
+    error_category: "invalid_input",
+    error_step: "trimming_video",
+    error_message: note,
+  });
+  expect(fields.recovery).toBe("fix_recording");
+
+  const html = render("failed", fields);
+  const out = decode(html);
+
+  expect(alertHeadline(html)).toBe(note);
+  expect(out).toContain(byClass.fix_recording.cardBody);
+  expect(out).toContain("Upload a new recording");
+  expectNoRetry(html);
+});
+
+test("e6e8dea4 (internal error while downloading): renders the retry action", () => {
+  const note = "An unexpected error occurred while processing the job.";
+  const fields = fromRow({
+    status: "failed",
+    error_code: "INTERNAL_ERROR",
+    error_category: "internal",
+    error_step: "downloading_video",
+    error_message: note,
+  });
+  expect(fields.recovery).toBe("retry");
+
+  const html = render("failed", fields);
+  const out = decode(html);
+
+  expect(alertHeadline(html)).toBe(note);
+  expect(out).toContain(byClass.retry.cardBody);
+  expect(html).toContain('data-component="RetryAnalysis"');
+});
+
+test("stalled quota row: the stored note, the allowance body, no retry", () => {
+  const note =
+    "This match needs 2 hr 3 min of analysis but only 2 hr is left this month.";
+  const updatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const fields = fromRow({
+    status: "uploaded",
+    error_code: "QUOTA_EXCEEDED",
+    error_message: note,
+    updated_at: updatedAt,
+  });
+  expect(fields.recovery).toBe("wait_or_ask");
+  expect(fields.errorCode).toBe("QUOTA_EXCEEDED");
+
+  const html = render("uploaded", fields);
+  const out = decode(html);
+
+  expect(html).not.toContain('role="alert"');
+  expect(headlineOf(html, "status")).toBe(note);
+  expect(out).toContain(WAIT_OR_ASK_VARIANTS.allowance.cardBody);
+  expect(out).not.toContain("This hasn't been sent for analysis yet");
+  expectNoRetry(html);
+});
+
+test("stalled permission row picks the permission variant from its error code", () => {
+  const updatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const html = render("uploaded", {
+    ...fromRow({
+      status: "uploaded",
+      error_code: "NOT_ELIGIBLE",
+      updated_at: updatedAt,
+    }),
+  });
+  const out = decode(html);
+
+  expect(headlineOf(html, "status")).toBe(
+    WAIT_OR_ASK_VARIANTS.permission.title,
+  );
+  expect(out).toContain(WAIT_OR_ASK_VARIANTS.permission.cardBody);
+  expectNoRetry(html);
+});
+
+test("stalled uncoded row keeps the not-sent framing and the free resubmit", () => {
+  const updatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const fields = fromRow({ status: "uploaded", updated_at: updatedAt });
+  expect(fields.recovery).toBe("retry");
+
+  const html = render("uploaded", fields);
+
+  expect(headlineOf(html, "status")).toBe(
+    "This hasn't been sent for analysis yet",
+  );
+  expect(html).toContain('data-component="RetrySubmission"');
+  expect(html).not.toContain('data-component="RetryAnalysis"');
 });
 
 test("the copy module carries the failed strings verbatim and never names the vendor", () => {

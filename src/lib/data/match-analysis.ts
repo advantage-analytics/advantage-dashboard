@@ -154,6 +154,12 @@ export interface MatchAnalysis {
    */
   note?: string;
   /**
+   * The row's raw `processing_jobs.error_code`, set beside `recovery` and
+   * `note` by `recoveryFields()` so the loader and the live patch both carry
+   * it. Input to `waitOrAskVariant()` only — never rendered.
+   */
+  errorCode?: string;
+  /**
    * Rows in the newest job's resubmission chain, the original included —
    * `chainAttempts()`. The ceiling input to `classifyFailure()`.
    */
@@ -471,20 +477,25 @@ export function jobRecoveryFacts(
 }
 
 /**
- * `recovery` and `note` for one row. Both keys are always present so a patch
- * spread over an earlier failure clears them.
+ * `recovery`, `note` and `errorCode` for one row. All keys are always present
+ * so a patch spread over an earlier failure clears them.
  */
 export function recoveryFields(
   facts: RecoveryFacts,
   attemptsUsed: number,
   errorMessage: string | null | undefined,
-): { recovery: RecoveryClass | undefined; note: string | undefined } {
+): {
+  recovery: RecoveryClass | undefined;
+  note: string | undefined;
+  errorCode: string | undefined;
+} {
   return {
     recovery: classifyFailure({ ...facts, attemptsUsed }) ?? undefined,
     note:
       showsStoredNote(facts.errorCode) && errorMessage
         ? errorMessage
         : undefined,
+    errorCode: facts.errorCode ?? undefined,
   };
 }
 

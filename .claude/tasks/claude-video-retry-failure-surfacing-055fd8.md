@@ -84,7 +84,7 @@ ready).
 
 ## T6 · Match page progress card renders the recovery class
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3, T4, T5
 - **files:** src/components/dashboard/matches/match-detail/match-analysis-progress.tsx, tests/analysis-failure-copy.spec.ts (guess)

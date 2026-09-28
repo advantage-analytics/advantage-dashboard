@@ -336,6 +336,8 @@ test("liveAnalysisPatch carries recovery and note through the shared classifier"
   );
   expect(quota?.recovery).toBe("wait_or_ask");
   expect(quota?.note).toBe("Your team has used this month's video allowance.");
+  // errorCode rides along so waitOrAskVariant() can pick the allowance copy.
+  expect(quota?.errorCode).toBe("QUOTA_EXCEEDED");
 
   // The same row, not yet past the stall threshold → no recovery at all.
   expect(

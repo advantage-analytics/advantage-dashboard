@@ -16,13 +16,10 @@
  */
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { addVideoHref } from "@/lib/matches/add-video-href";
 import { TriangleAlert, Info } from "lucide-react";
 import {
   ANALYSIS_LABEL,
   PIPELINE_STAGES,
-  canRetryAnalysis,
   formatEta,
   isAnalysisFailed,
   isLiveUpdating,
@@ -32,13 +29,17 @@ import {
   stageFillPercent,
   stageIndexFor,
   type MatchAnalysis,
+  type RecoveryClass,
 } from "@/lib/data/match-analysis";
 import { AnalysisProgressTrack } from "../analysis-progress-track";
 import { UPLOADING_COPY } from "../upload-progress-copy";
-import { ANALYSIS_FAILURE_COPY } from "../analysis-failure-copy";
+import {
+  WAIT_OR_ASK_VARIANTS,
+  byClass,
+  waitOrAskVariant,
+} from "../analysis-failure-copy";
 import { VerticalStep } from "@/components/dashboard/shared/vertical-steps";
-import { RetrySubmission } from "./retry-submission";
-import { RetryAnalysis } from "./retry-analysis";
+import { RecoveryAction } from "./recovery-action";
 import {
   useLiveMatchAnalysis,
   withLiveAnalysis,
@@ -64,6 +65,32 @@ const STAGE_NOTE: Partial<Record<MatchAnalysis["status"], string>> = {
   processed:
     "Your video came back analyzed and is saved. Turning it into your match stats is still in progress.",
 };
+
+/**
+ * A stalled submit that is simply retryable. Kept apart from `byClass.retry`,
+ * whose copy is about a vendor job that failed ("if it keeps failing, trim…"):
+ * here the hand-off never happened, so nothing has failed yet.
+ */
+const STALLED_RETRY_COPY = {
+  title: "This hasn't been sent for analysis yet",
+  cardBody:
+    "Your video is stored safely — the hand-off didn't go through. Trying again costs nothing but the wait; nothing needs uploading a second time.",
+};
+
+/** The card's title + body for a recovery class. */
+function recoveryCopy(
+  recovery: RecoveryClass,
+  analysis: MatchAnalysis,
+): { title: string; cardBody: string } {
+  // byClass.wait_or_ask is only the allowance default; the row's error code
+  // picks the variant that actually applies.
+  if (recovery === "wait_or_ask") {
+    return WAIT_OR_ASK_VARIANTS[
+      waitOrAskVariant(analysis.errorCode, analysis.attemptsUsed ?? 1)
+    ];
+  }
+  return byClass[recovery];
+}
 
 interface MatchAnalysisProgressProps {
   analysis: MatchAnalysis;
@@ -93,6 +120,17 @@ export function MatchAnalysisProgress({
   // An `uploaded` job that never got submitted. Computed from the merged
   // analysis, so a live patch moving it on clears the state without a reload.
   const stalled = isSubmitStalled(analysis);
+  // Every failed row the loader or live patch projects carries a class; the
+  // fallbacks only cover a projection that predates it.
+  const failedClass: RecoveryClass =
+    analysis.recovery ??
+    (analysis.status === "derivation_failed" ? "stats_unavailable" : "retry");
+  const failedCopy = recoveryCopy(failedClass, analysis);
+  const stalledClass: RecoveryClass = analysis.recovery ?? "retry";
+  const stalledCopy =
+    stalledClass === "retry"
+      ? STALLED_RETRY_COPY
+      : recoveryCopy(stalledClass, analysis);
   // Two different numbers. The stage bars are positions on the pipeline axis;
   // the headline is what the person is actually watching, which during a
   // transfer is their own bytes rather than a quarter-weighted pipeline figure.
@@ -223,64 +261,31 @@ export function MatchAnalysisProgress({
                   strokeWidth={1.5}
                   aria-hidden="true"
                 />
-                {analysis.status === "derivation_failed" ? (
-                  <div>
-                    {/* The video was analyzed; what failed is matching its
-                    rallies to the entered score. `failNote` here is the
-                    reconciler's reason — detail, not a headline — so it sits
-                    under the explanation, muted. No retry and no new-video
-                    link: resubmitJob() refuses this status, and the footage
-                    was read fine. */}
-                    <p className="text-[13px] font-medium text-[#0D0D0D]">
-                      {ANALYSIS_FAILURE_COPY.derivation_failed.title}
-                    </p>
-                    <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
-                      {ANALYSIS_FAILURE_COPY.derivation_failed.body}
-                    </p>
-                    {analysis.failNote && (
-                      <p className="mt-1.5 text-[11px] leading-[1.5] text-[#888888]">
-                        {analysis.failNote}
-                      </p>
-                    )}
+                <div>
+                  {/* Headline = the row's stored note when showsStoredNote()
+                  let one through (a vendor or submit-path explanation), else
+                  the class title. Never `failNote`: that is the unfiltered
+                  error_message, which can be a raw writer string ("Failed to
+                  fetch", Azure XML) or the reconciler talking to itself. */}
+                  <p className="text-[13px] font-medium text-[#0D0D0D]">
+                    {analysis.note ?? failedCopy.title}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
+                    {failedCopy.cardBody}
+                  </p>
+                  {/* RecoveryAction owns the retry-vs-link-vs-nothing
+                  decision. Its link carries no margin of its own; the retry
+                  button brings its own. */}
+                  <div className="[&>a]:mt-3">
+                    <RecoveryAction
+                      recovery={failedClass}
+                      jobId={analysis.jobId}
+                      matchId={matchId}
+                      variant="card"
+                      stalled={false}
+                    />
                   </div>
-                ) : (
-                  <div>
-                    {/* `failNote` is error_message — for a provider failure
-                    that is the vendor's designated end-user string
-                    (error.message), never the raw internals, which stay in
-                    the delivery ledger. */}
-                    <p className="text-[13px] font-medium text-[#0D0D0D]">
-                      {analysis.failNote ?? ANALYSIS_FAILURE_COPY.failed.title}
-                    </p>
-                    <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
-                      {analysis.inputRejected
-                        ? ANALYSIS_FAILURE_COPY.failed.inputRejected.body
-                        : ANALYSIS_FAILURE_COPY.failed.body}
-                    </p>
-                    {/* canRetryAnalysis is gated on the literal status, not the
-                    broader `failed` (which also covers derivation_failed):
-                    resubmitJob() refuses anything but a video-provider
-                    failure on purpose, so showing this button elsewhere would
-                    always 409. An input-rejected video failed on its own
-                    recording requirements, so retrying would resubmit the
-                    same unusable file and fail the same way — no retry
-                    button for it. */}
-                    {analysis.jobId && canRetryAnalysis(analysis) && (
-                      <RetryAnalysis jobId={analysis.jobId} />
-                    )}
-                    {/* The "upload a new recording" the copy above offers. The
-                    route re-checks the match and sends anything it can't take
-                    somewhere that can. */}
-                    {analysis.status === "failed" && (
-                      <Link
-                        href={addVideoHref(matchId)}
-                        className="mt-3 inline-block text-[12px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
-                      >
-                        {ANALYSIS_FAILURE_COPY.failed.uploadLink}
-                      </Link>
-                    )}
-                  </div>
-                )}
+                </div>
               </div>
             ) : stalled ? (
               /* Ahead of STAGE_NOTE, because for this state that note says "your
@@ -297,15 +302,21 @@ export function MatchAnalysisProgress({
                   aria-hidden="true"
                 />
                 <div>
+                  {/* A stored note (the allowance refusal, say) outranks the
+                  fixed headline: it is the one line that says why. */}
                   <p className="text-[13px] font-medium text-[#0D0D0D]">
-                    This hasn&apos;t been sent for analysis yet
+                    {analysis.note ?? stalledCopy.title}
                   </p>
                   <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
-                    Your video is stored safely — the hand-off didn&apos;t go
-                    through. Trying again costs nothing but the wait; nothing
-                    needs uploading a second time.
+                    {stalledCopy.cardBody}
                   </p>
-                  {analysis.jobId && <RetrySubmission jobId={analysis.jobId} />}
+                  <RecoveryAction
+                    recovery={stalledClass}
+                    jobId={analysis.jobId}
+                    matchId={matchId}
+                    variant="card"
+                    stalled
+                  />
                 </div>
               </div>
             ) : (

@@ -88,6 +88,7 @@ export type LiveAnalysisPatch = Pick<
   | "inputRejected"
   | "recovery"
   | "note"
+  | "errorCode"
   | "jobReference"
   | "startedAt"
 > & {
