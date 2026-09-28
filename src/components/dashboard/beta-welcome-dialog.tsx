@@ -11,7 +11,7 @@ import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
-import { PAID_PLANS_BEGIN } from "@/lib/user/plan";
+import { PAID_PLANS_BEGIN, workspaceTier } from "@/lib/user/plan";
 
 /**
  * One flag per account, not per browser. A single browser-wide key meant a
@@ -37,10 +37,16 @@ export interface BetaWelcomeTerms {
   hours: number;
   /** A verified college program's name, when the allowance is the program's. */
   programName?: string | null;
+  /**
+   * Which free programme this is, from `workspaceTier()` — a team workspace is
+   * in the pilot, so the tag and the welcome say Pilot, matching the header
+   * pill that reopens this dialog. Beta when omitted.
+   */
+  tier?: "beta" | "pilot";
 }
 
 /**
- * "Welcome to the Advantage beta" — the account's terms, once, on the first
+ * "Welcome to the Advantage beta" (or pilot) — the account's terms, once, on the first
  * dashboard visit.
  *
  * Deliberately louder than a settings dialog: it is the one moment the
@@ -63,6 +69,11 @@ export function BetaWelcomeDialog({
   terms: BetaWelcomeTerms;
 }) {
   const primaryRef = useRef<HTMLAnchorElement>(null);
+  const tier = terms.tier ?? "beta";
+  // A club or academy team has no verified program name, but its hours are
+  // still the team's, not the viewer's own.
+  const recipient =
+    terms.programName ?? (tier === "pilot" ? "your team" : "your account");
   const rows = [
     { label: "SwingVision imports", value: "Unlimited" },
     { label: "Match reports and stats", value: "Included" },
@@ -96,7 +107,7 @@ export function BetaWelcomeDialog({
                 className="h-[18px] w-auto brightness-0 invert"
               />
               <span className="inline-flex h-[20px] items-center rounded-full bg-white/20 px-2 text-[10px] font-medium tracking-[0.08em] text-white uppercase">
-                Beta
+                {tier === "pilot" ? "Pilot" : "Beta"}
               </span>
               <span className="flex-1" />
               <DialogPrimitive.Close
@@ -113,8 +124,7 @@ export function BetaWelcomeDialog({
               we build.
             </DialogPrimitive.Title>
             <DialogPrimitive.Description className="relative mt-3 max-w-[40ch] text-[13px] leading-[1.6] text-white/90">
-              Welcome to the Advantage beta. Here is what{" "}
-              {terms.programName ? terms.programName : "your account"} gets
+              Welcome to the Advantage {tier}. Here is what {recipient} gets
               every month.
             </DialogPrimitive.Description>
 
@@ -131,7 +141,9 @@ export function BetaWelcomeDialog({
               <span className="pb-1 text-right text-[11px] leading-[1.45] text-white/90">
                 {terms.programName
                   ? "Shared by the program"
-                  : "About one full match"}
+                  : tier === "pilot"
+                    ? "Shared by the team"
+                    : "About one full match"}
                 <br />
                 Resets on the 1st
               </span>
@@ -204,6 +216,7 @@ export function useBetaWelcomeTerms(): BetaWelcomeTerms {
       active.kind === "team" && active.orgType === "college"
         ? active.name
         : null,
+    tier: workspaceTier(active),
   };
 }
 

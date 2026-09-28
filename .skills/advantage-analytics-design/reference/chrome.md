@@ -319,6 +319,27 @@ Person row = 22px avatar +
 above a hairline, dashed-ring avatar. Section labels are quiet sentence case
 (11px ink-400) — no uppercase eyebrows inside menus, no nested menus.
 
+**A choice that stays on screen takes the check-dot, not `ChosenCheck`**
+(2026-09-28, in-repo — the match report's Share popover). A menu row picks a
+value and the menu closes, so its mark is the right-edge `ChosenCheck`. A
+popover whose choice stays open beside what that choice does — the Share
+panel's "Only you / Anyone with the link" ladder, with the link, Copy and the
+send buttons under it — is a small dialog, and single choice in a dialog is the
+v3 check-dot `Radio`: 14px, hairline ring at rest, solid Signal Blue with a
+white 9px check when chosen, on the **left** of the row. Everything else is
+the menu's own vocabulary: the `FloatMenu` surface (320px, 4px inset), 8px
+rows with the `--surface-subtle` hover wash and no standing fill on the chosen
+one, inset hairlines between groups, and one closing 11px ink-500 sentence.
+**Where choosing a rung does something** (the Share ladder mints a public
+link), the rungs are `role="radio"` buttons, not native radios: a native group
+selects on arrow, so a keystroke meant to reach Copy would publish the match.
+Arrows move focus only (roving tabindex, the chosen rung holds the tab stop);
+click, Enter or Space chooses. A viewer who may not change it gets
+`aria-disabled` rows — never `disabled` — plus a note naming who can. A trailing face stack (22px avatars overlapped 6px on a
+2px card ring, then `+N` in 11px ink-500) may sit on a rung that names a
+group of people. _Shipped:_ `matches/match-detail/share-match-button.tsx`
+(`AccessOption`, `TeamFaces`).
+
 ---
 
 ### Glyph Registry (v3)

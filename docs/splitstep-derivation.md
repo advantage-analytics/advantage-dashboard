@@ -89,8 +89,9 @@ x_ours = x_vendor;
 y_ours = y_vendor + 11.885; // metersToCourtFrame()
 ```
 
-Confirmed twice: `calculate_match_stats` compares `abs(landing_x)` to 2.74/1.37
-(the singles half-width in thirds) and computes `23.77 - contact_y`; and live
+Confirmed twice: `serveZone()` compares `abs(landing_x)` to 2.74/1.37 (the
+singles half-width in thirds) and `calculate_match_stats` computes
+`23.77 - contact_y`; and live
 SwingVision in-serve `landing_y` occupies 5.49–11.87 and 11.93–18.29, the two
 service boxes to the centimetre.
 
@@ -101,12 +102,45 @@ numerically identical, so nothing fails.
 
 ### A faulted serve takes `shot_number` 0
 
-Deciding serve is 1, return is 2. `calculate_match_stats` joins
+Deciding serve is 1, return is 2. `calculate_match_stats` used to join
 `serve.shot_number = 1` to `ret.shot_number = 2` with **no** `shot_type` or
-`result` filter, so two rows at 1 fan the join out. Live production shows 1,550
-returns producing 2,534 joined rows, 170 counted as _both_ Crosscourt and Down
-the Line. SwingVision itself puts both serves at 1 — do not copy it. `0` is
-already this database's convention for pre-point rows (`Feed`).
+`result` filter, so two rows at 1 fanned the join out (1,550 returns produced
+2,534 joined rows, 170 counted as _both_ Crosscourt and Down the Line). The
+join is gone since 2026-09-28 (see below), but `ret.shot_number = 2` still
+means "the return" everywhere else. SwingVision itself puts both serves at 1 —
+do not copy it. `0` is already this database's convention for pre-point rows
+(`Feed`).
+
+### Placement is `shots.zone`, one rule
+
+`calculate_match_stats` counts `serve_wide/body/t` and
+`return_cross_court/down_the_line/middle` from `shots.zone`; it does not
+re-derive them from coordinates. The zone is decided once, where the shot is
+written: `serveZone()` / `directionZone()` in `court.ts` here, and their twins
+in `supabase/functions/process-match` for SwingVision. Direction reads the
+shot's OWN contact against its landing. A new placement (Inside-In,
+Inside-Out) therefore arrives through `shots.zone` alone — widen
+`shots_zone_check` and count the new value.
+
+Return direction also skips a shot 2 hit by the **server**
+(`ret.is_player1 <> p.server_is_player1`): the vendor missed the real return
+(7% of video points, 2% of SwingVision), and that ball is the server's next
+shot, not a return. `return_contact_*` is a different measure (`contact_y`)
+and still counts every shot 2.
+
+### A shot 2 struck by the SERVER is not a return
+
+The vendor sometimes misses the returner's stroke, and then shot 2 is the
+server's next ball: 38 of 570 points on 2026-09-28, every one a far-side server
+whose near-side return is missing (serve to "shot 2" 1.9–3.0 s, against
+0.5–1.2 s for a real return). Every return stat therefore requires
+`is_player1 <> points.server_is_player1` — direction since `20260928153631`,
+contact and returns-in since `20260928160625`. That the server struck again
+proves the return landed in, so `backfill_returns_in_and_net_points` credits the
+returner with it (scoped to `source_provider = 'splitstep'`); contact has no
+position to credit and only skips it. Numbering is left alone: renumbering to
+leave shot 2 empty would still credit nobody and needs a version bump and a
+rebuild.
 
 ### Score strings are SERVER-RELATIVE
 
@@ -183,8 +217,17 @@ fold, **never by string-matching `pred_player_id`** against `matches.player1_nam
 advisory: the one match with ground truth grades `low` yet reproduces its score
 exactly.
 
-Of three real payloads, **only one passes Gate 1**. Ad-scoring matches and match
-tiebreaks are refused by design.
+Of three real payloads, **only one passes Gate 1**. Ad-scoring matches are
+refused by design.
+
+**Tiebreaks (2026-09-27).** Tiebreak points now resolve: `winners.ts` rule 2 reads
+the absolutized integer point score across a serve rotation when the absolute game
+count is unchanged (`via: "tiebreak"`). Before this, the last point before every
+rotation resolved no winner and every tiebreak match was refused outright. The fold
+still keys games on the server, so a tiebreak folds as several pseudo-games and the
+match cannot reproduce `matches.score`. Under the Gate 1 bypass below it is written
+unreconciled, and it would be refused again if the gate returned, until the fold
+learns to keep a tiebreak as one game.
 
 > **Gate 1 temporarily bypassed (2026-09-02).** `ACCEPT_UNRECONCILED_FOLD` in
 > `derivation/reconcile.ts` is `true`: a fold that misses the entered score is still
@@ -192,7 +235,8 @@ tiebreaks are refused by design.
 > or failing that from whichever mapping folds closest to the score (a tie is still a
 > refusal). `Reconciliation.ok` stays `false` on that path and `player1Source` records
 > how player1 was chosen; `derive-and-publish` logs `grade: unreconciled`. Rows carry
-> `DERIVATION_VERSION = 0.3.0-unreconciled` and must be rebuilt when the gate returns.
+> `DERIVATION_VERSION = 0.3.x-unreconciled` (0.3.1 since the tiebreak rule) and must
+> be rebuilt when the gate returns.
 > The unresolved-points gate is untouched.
 
 ---

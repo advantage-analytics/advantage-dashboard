@@ -75,11 +75,11 @@ test.describe("the row configuration", () => {
     expect(config.isPercentage).toBe(true);
   });
 
-  test("return winners has no source at all", () => {
+  test("return winners has no published source — it is counted from points", () => {
     const config = byConfig("Return winners");
     expect(config.key).toBeUndefined();
     expect(config.fractionKey).toBeUndefined();
-    expect(config.note).toBeTruthy();
+    expect(config.fromPoints).toBe("returnWinners");
   });
 });
 
@@ -209,7 +209,7 @@ test.describe("the Serve group", () => {
 });
 
 test.describe("the Return group", () => {
-  test("return winners is always an em dash, however much else is known", () => {
+  test("the published figures alone never produce return winners", () => {
     // Deliberately given every figure a wrong implementation might reach for.
     const rich = side({
       winners: 31,
@@ -226,8 +226,6 @@ test.describe("the Return group", () => {
     expect(row.opp.display).toBe("");
     expect(row.you.value).toBeNull();
     expect(row.leader).toBeNull();
-    // And it says why rather than falling through to the generic "No data".
-    expect(row.note).toBe("Not recorded by any source yet");
 
     // The row still exists — the frame draws four rows here.
     expect(rows).toHaveLength(4);

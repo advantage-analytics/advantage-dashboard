@@ -43,6 +43,9 @@ const VIEWPORT = { width: 1440, height: 900 };
 /** A cold `next dev` compiles each route on first hit. */
 const NAV_TIMEOUT = 90_000;
 const SETTLE_TIMEOUT = 20_000;
+// How long a dev server's own "Local:" line must go unchallenged by Next 16's
+// "existing server" refusal before it is trusted (see startDevServer).
+const DEV_SERVER_GRACE_MS = 3_000;
 
 function usage(msg) {
   if (msg) console.error(`capture: ${msg}`);
@@ -124,12 +127,14 @@ function startDevServer(port) {
     });
     const log = [];
     let settled = false;
+    let graceTimer;
     const stop = () => {
       if (!child.killed) child.kill("SIGTERM");
     };
     const finish = (url) => {
       if (settled) return;
       settled = true;
+      clearTimeout(graceTimer);
       done({ url, stop });
     };
     const onLine = (line) => {
@@ -145,10 +150,17 @@ function startDevServer(port) {
         finish(existing[1]);
         return;
       }
+      // Next 16 prints this server's own "Local:" line, and even "Ready",
+      // BEFORE it notices another dev server for the checkout and exits. So
+      // "Local:" is only a candidate: take it after a grace period in which
+      // no "existing server" line arrived. Only the first one counts — the
+      // refusal block repeats a "Local:" line naming the other server.
       const local = line.match(
         /Local:\s+(http:\/\/(?:localhost|127\.0\.0\.1):\d+)/,
       );
-      if (local) finish(local[1]);
+      if (local && graceTimer === undefined) {
+        graceTimer = setTimeout(() => finish(local[1]), DEV_SERVER_GRACE_MS);
+      }
     };
     const wire = (stream) => {
       let buf = "";
@@ -166,6 +178,7 @@ function startDevServer(port) {
     child.on("exit", (code) => {
       if (settled) return;
       settled = true;
+      clearTimeout(graceTimer);
       fail(
         new Error(
           `next dev exited (${code}) before it was ready:\n${log.slice(-20).join("\n")}`,
@@ -191,6 +204,35 @@ const slugOf = (p) =>
     .replace(/^\//, "")
     .replace(/[^A-Za-z0-9._-]+/g, "_")
     .replace(/^_+|_+$/g, "") || "root";
+
+/**
+ * Fill the login form once React owns it.
+ *
+ * The inputs are controlled (`useState("")` in `login-form.tsx`). Typed into
+ * before hydration, the DOM holds the value but React's state does not, and
+ * hydration resets the field to empty — the submit then goes out with no
+ * email ("Please fill out this field."), which reads as bad credentials.
+ * So: wait for the page to settle, fill, and check the values survived,
+ * refilling if a late hydration wiped them.
+ */
+async function fillSignIn(page) {
+  await page
+    .waitForLoadState("networkidle", { timeout: SETTLE_TIMEOUT })
+    .catch(() => {});
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await page.fill("#login-email", env.email);
+    await page.fill("#login-password", env.password);
+    await page.waitForTimeout(300);
+    const [email, password] = await Promise.all([
+      page.inputValue("#login-email"),
+      page.inputValue("#login-password"),
+    ]);
+    if (email === env.email && password === env.password) return;
+    await page.waitForTimeout(500 * attempt);
+  }
+  // Fall through and submit anyway: the sign-in failure path screenshots
+  // the form, which says more than an error thrown from here would.
+}
 
 /** Wait until React's streamed Suspense boundaries have all resolved. */
 async function settle(page) {
@@ -294,8 +336,7 @@ async function main() {
     timeout: NAV_TIMEOUT,
   });
   if (/\/login(\?|$)/.test(page.url())) {
-    await page.fill("#login-email", env.email);
-    await page.fill("#login-password", env.password);
+    await fillSignIn(page);
     await page.click('button[type="submit"]');
     try {
       await page.waitForURL(/\/dashboard/, { timeout: NAV_TIMEOUT });

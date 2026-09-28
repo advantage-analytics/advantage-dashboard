@@ -20,10 +20,58 @@ const VARIANTS: readonly {
   {
     id: "program",
     label: "College program",
-    terms: { hours: 75, programName: "Northfield University" },
+    terms: {
+      hours: 75,
+      programName: "Northfield University",
+      tier: "pilot",
+    },
     usedHours: 31,
   },
+  {
+    id: "club",
+    label: "Club team",
+    terms: { hours: 2, tier: "pilot" },
+    usedHours: 0.5,
+  },
 ];
+
+/**
+ * Every state the header pill can be in for a variant: the skeleton while the
+ * first read is in flight, the figure, out of hours (a program's own, or an
+ * individual's shared open-beta band), and a failed read's bare tag.
+ */
+function pillStates(variant: (typeof VARIANTS)[number]): {
+  label: string;
+  hours: React.ComponentProps<typeof HeaderPreview>["hours"];
+}[] {
+  const cap = variant.terms.hours * 3600;
+  return [
+    { label: "Loading", hours: "loading" },
+    {
+      label: "Loaded",
+      hours: {
+        remainingSeconds: cap - variant.usedHours * 3600,
+        capSeconds: cap,
+        bandFull: false,
+      },
+    },
+    {
+      label: "Out of hours — own allowance spent",
+      hours: { remainingSeconds: 0, capSeconds: cap, bandFull: false },
+    },
+    // An individual whose own hours are untouched, after the shared open-beta
+    // ceiling has run out for the month.
+    ...(variant.terms.tier === "pilot"
+      ? []
+      : [
+          {
+            label: "Out of hours — shared beta hours spent",
+            hours: { remainingSeconds: 0, capSeconds: cap, bandFull: true },
+          },
+        ]),
+    { label: "Read failed", hours: null },
+  ];
+}
 
 /**
  * The beta welcome dialog, open, in each variant the dashboard can show, and
@@ -36,7 +84,7 @@ export function DesignPreview() {
   return (
     <main className="min-h-screen bg-[var(--surface-page)] px-14 py-10">
       <h1 className="text-[16px] font-medium text-[var(--ink-900)]">
-        Beta welcome dialog
+        Beta and pilot welcome dialog
       </h1>
       <p className="mt-1 max-w-[60ch] text-[12px] leading-[1.6] text-[var(--ink-600)]">
         Shown once per account on its first dashboard visit. Pick a variant to
@@ -65,32 +113,25 @@ export function DesignPreview() {
         Reopening it from the header
       </h2>
       <p className="mt-1 max-w-[60ch] text-[12px] leading-[1.6] text-[var(--ink-600)]">
-        The Beta pill leads the header&apos;s controls with this month&apos;s
-        video hours left. Click it to reopen the dialog.
+        The Beta pill (Pilot for a team) leads the header&apos;s controls with
+        this month&apos;s video hours left. Click it to reopen the dialog. Hover
+        one for its tooltip.
       </p>
       <div className="mt-5 max-w-[960px]">
         <div className="flex flex-col gap-4">
-          <HeaderPreview
-            hours={{
-              remainingSeconds:
-                (variant.terms.hours - variant.usedHours) * 3600,
-              capSeconds: variant.terms.hours * 3600,
-              bandFull: false,
-            }}
-            onOpenBeta={() => setOpen(true)}
-          />
-          {/* An individual whose own hours are untouched, after the shared
-              open-beta ceiling has run out for the month. */}
-          {!variant.terms.programName && (
-            <HeaderPreview
-              hours={{
-                remainingSeconds: 0,
-                capSeconds: variant.terms.hours * 3600,
-                bandFull: true,
-              }}
-              onOpenBeta={() => setOpen(true)}
-            />
-          )}
+          {pillStates(variant).map((state) => (
+            <div key={state.label} className="flex flex-col gap-1.5">
+              <span className="text-[11px] text-[var(--ink-500)]">
+                {state.label}
+              </span>
+              <HeaderPreview
+                tier={variant.terms.tier ?? "beta"}
+                hours={state.hours}
+                resetsOn="Oct 1"
+                onOpenBeta={() => setOpen(true)}
+              />
+            </div>
+          ))}
         </div>
       </div>
 

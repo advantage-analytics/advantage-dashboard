@@ -79,6 +79,21 @@ test.describe("court conversion", () => {
     expect(directionZone(3.0, 0)).toBeNull();
   });
 
+  test("the zone boundaries fall where calculate_match_stats counts them", () => {
+    expect(serveZone(1.37)).toBe("Body");
+    expect(serveZone(-2.74)).toBe("Wide");
+    expect(serveZone(null)).toBeNull();
+    expect(directionZone(1.0, -3.0)).toBe("Middle");
+    expect(directionZone(-1.01, 3.0)).toBe("Crosscourt");
+  });
+
+  test("a return off a T serve is read from where the receiver stood", () => {
+    // Live 0db449ab, point 1-4-19: the serve bounced at +0.13 but the receiver
+    // hit from -1.43 to +1.52. Reading the serve's side called it down the
+    // line; the ball crossed the centre line.
+    expect(directionZone(1.52, -1.43)).toBe("Crosscourt");
+  });
+
   test("the far player's direction reads the same as the near player's", () => {
     // The frame never flips by end: a far-end hitter at x = +3 driving the
     // ball to x = -3 has crossed the centre line exactly as a near-end one has.

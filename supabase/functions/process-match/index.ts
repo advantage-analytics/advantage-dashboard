@@ -480,7 +480,9 @@ async function processMatchToDb({
   });
 
   const pointsRows = combined.Points ?? [];
-  const shotsRows = combined.Shots ?? [];
+  // Before anything reads a shot: a point's Shots rows can hold every ball
+  // struck since the previous point, and only its deciding rally is the point.
+  const shotsRows = keepDecidingRallies(combined.Shots ?? []);
   const gamesRows = combined.Games ?? [];
   const setsRows = combined.Sets ?? [];
   const statsRows = combined.Stats ?? [];
@@ -846,6 +848,107 @@ function buildGameScoreMap(
 }
 
 /**
+ * The Shots rows that belong to their point. SwingVision files every ball
+ * struck since the previous point under the NEXT point's Set/Game/Point —
+ * feeds and knock-ups, a let, a first serve the players called out and played
+ * on anyway — so one point's rows can hold several rallies, each numbered from
+ * shot 1. Merged, they counted dead serves as first serves, dead shot 2s as
+ * returns and dead volleys as net points, and stretched rally_length. The
+ * export itself says which rally counts: the Points row has no entry for the
+ * others, its Serve State names the deciding serve, and its Type column reads
+ * `none` on every dead ball.
+ *
+ * Kept, per point: every shot from the last serve up to the first feed after
+ * it (a feed is the next point's ball on its way to the server, filed under
+ * this one) and, before a second serve, the latest earlier first serve — the
+ * fault. Its Result is forced to "Out" when the tracker called it in, since
+ * the point was replayed on a second serve. Everything else is dropped. A
+ * point with no serve is kept whole: there is nothing to tell its rallies
+ * apart by.
+ */
+function keepDecidingRallies(shotsRows: CombinedRow[]): CombinedRow[] {
+  const byPoint = new Map<string, CombinedRow[]>();
+  for (const row of shotsRows) {
+    const key = pointKey(
+      toInt(row["Set"]),
+      toInt(row["Game"]),
+      toInt(row["Point"]),
+    );
+    const group = byPoint.get(key) ?? [];
+    group.push(row);
+    byPoint.set(key, group);
+  }
+
+  const isServe = (row: CombinedRow) =>
+    safeString(row["Stroke"])?.toLowerCase() === "serve";
+  const isFeed = (row: CombinedRow) =>
+    safeString(row["Stroke"])?.toLowerCase() === "feed";
+  const serveType = (row: CombinedRow) =>
+    String(row["Type"] ?? "").toLowerCase();
+
+  const kept: CombinedRow[] = [];
+  for (const group of byPoint.values()) {
+    const ordered = inStrikeOrder(group);
+    const last = ordered.findLastIndex(isServe);
+    if (last === -1) {
+      kept.push(...ordered);
+      continue;
+    }
+
+    let end = last + 1;
+    while (end < ordered.length && !isFeed(ordered[end])) end++;
+    const deciding = ordered.slice(last, end);
+    if (serveType(ordered[last]) === "second_serve") {
+      for (let i = last - 1; i >= 0; i--) {
+        const fault = ordered[i];
+        if (isServe(fault) && serveType(fault) === "first_serve") {
+          deciding.unshift(
+            safeString(fault["Result"])?.toLowerCase() === "in"
+              ? { ...fault, Result: "Out" }
+              : fault,
+          );
+          break;
+        }
+      }
+    }
+    kept.push(...deciding);
+  }
+
+  console.log(
+    `🧹 Kept ${kept.length} of ${shotsRows.length} shots (${shotsRows.length - kept.length} struck outside a deciding rally)`,
+  );
+  return kept;
+}
+
+/**
+ * A point's rows in the order they were struck: by Video Time when every row
+ * has one, else by the wall-clock Start Time (some exports carry no Video
+ * Time), else as the sheet lists them. Start Time is a bare HH:MM:SS, so a
+ * point that spans midnight has its early-morning rows moved a day on.
+ */
+function inStrikeOrder(rows: CombinedRow[]): CombinedRow[] {
+  const readAll = (column: string) => {
+    const times = rows.map((row) => toVideoTimeOrNull(row[column]));
+    return times.every((t) => t !== null) ? (times as number[]) : null;
+  };
+  let times = readAll("Video Time");
+  if (!times) {
+    const clock = readAll("Start Time");
+    if (clock && Math.max(...clock) - Math.min(...clock) > 12 * 3600) {
+      times = clock.map((t) => (t < 12 * 3600 ? t + 24 * 3600 : t));
+    } else {
+      times = clock;
+    }
+  }
+  if (!times) return rows;
+  const order = times as number[];
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => order[a.index] - order[b.index] || a.index - b.index)
+    .map(({ row }) => row);
+}
+
+/**
  * Build a map of rally lengths from the Shots sheet.
  * Key: "set-game-point" -> Value: max shot_number in that point
  * Uses MAX(shot_number) so serve faults and feeds (shot_number=0) don't inflate the count.
@@ -1011,8 +1114,9 @@ function buildShotInserts(
     // Determine shot_type from "Stroke" column
     // If stroke is "Serve", check "Type" column for first/second serve
     const stroke = safeString(row["Stroke"]);
+    const isServe = stroke?.toLowerCase() === "serve";
     let shotType: string | null = stroke;
-    if (stroke?.toLowerCase() === "serve") {
+    if (isServe) {
       const serveType = String(row["Type"] ?? "").toLowerCase();
       if (serveType === "first_serve") {
         shotType = "First Serve";
@@ -1021,6 +1125,13 @@ function buildShotInserts(
       }
     }
 
+    // Placement is one rule for every provider: calculate_match_stats counts
+    // `zone` rather than re-deriving it, so this is where it is decided. Key
+    // on the stroke, not the shot number: every SwingVision serve sits at shot
+    // 1, but so do some feeds and groundstrokes, and those need a direction.
+    const contactX = toFloatOrNull(row["Hit (x)"]);
+    const landingX = toFloatOrNull(row["Bounce (x)"]);
+
     inserts.push({
       point_id: pointId,
       shot_number: toInt(row["Shot"]),
@@ -1028,57 +1139,53 @@ function buildShotInserts(
       shot_type: shotType,
       spin_type: safeString(row["Spin"]),
       speed_mph: toFloatOrNull(row["Speed (MPH)"]),
-      contact_x: toFloatOrNull(row["Hit (x)"]),
+      contact_x: contactX,
       contact_y: toFloatOrNull(row["Hit (y)"]),
-      landing_x: toFloatOrNull(row["Bounce (x)"]),
+      landing_x: landingX,
       landing_y: toFloatOrNull(row["Bounce (y)"]),
       result: safeString(row["Result"]),
       video_time: toVideoTimeOrNull(row["Video Time"]),
-      zone: null, // computed below
+      zone: isServe ? serveZone(landingX) : directionZone(landingX, contactX),
     });
   }
 
-  // Compute zone for each shot
-  // Serves: based on landing_x thresholds
-  // Non-serves: compare landing_x to previous shot's contact_x
-  const byPoint = new Map<string, typeof inserts>();
-  for (const insert of inserts) {
-    const group = byPoint.get(insert.point_id) ?? [];
-    group.push(insert);
-    byPoint.set(insert.point_id, group);
-  }
-
-  for (const shots of byPoint.values()) {
-    shots.sort((a, b) => a.shot_number - b.shot_number);
-    for (let i = 0; i < shots.length; i++) {
-      const shot = shots[i];
-      if (shot.landing_x == null) continue;
-
-      if (shot.shot_number === 1) {
-        // Serve zone
-        const absX = Math.abs(shot.landing_x);
-        if (absX >= 2.74) shot.zone = "Wide";
-        else if (absX >= 1.37) shot.zone = "Body";
-        else shot.zone = "T";
-      } else {
-        // Non-serve zone
-        if (Math.abs(shot.landing_x) <= 1.0) {
-          shot.zone = "Middle";
-        } else {
-          const prev = shots[i - 1];
-          if (prev?.contact_x != null) {
-            if (Math.sign(shot.landing_x) !== Math.sign(prev.contact_x)) {
-              shot.zone = "Crosscourt";
-            } else {
-              shot.zone = "Down the Line";
-            }
-          }
-        }
-      }
-    }
-  }
-
   return inserts;
+}
+
+/**
+ * Service-box third a serve landed in, from its distance off the centre line
+ * (the singles half-width is 4.115 m). Twin of `serveZone()` in
+ * src/lib/services/splitstep/derivation/court.ts — change both together.
+ */
+function serveZone(landingX: number | null): "T" | "Body" | "Wide" | null {
+  if (landingX === null) return null;
+  const from = Math.abs(landingX);
+  if (from < 1.37) return "T";
+  if (from < 2.74) return "Body";
+  return "Wide";
+}
+
+/**
+ * Direction of a non-serve from where ITS OWN hitter struck it to where it
+ * landed: crosscourt when the ball crosses the centre line, down the line
+ * when it stays on the hitter's side, Middle within 1.0 m of the line. The
+ * export's x is one fixed court frame for both ends, so no flip is needed.
+ *
+ * This used to read the PREVIOUS shot's contact — the opponent's position,
+ * not this hitter's — and so inverted most SwingVision directions. Twin of
+ * `directionZone()` in src/lib/services/splitstep/derivation/court.ts —
+ * change both together.
+ */
+function directionZone(
+  landingX: number | null,
+  contactX: number | null,
+): "Crosscourt" | "Middle" | "Down the Line" | null {
+  if (landingX === null) return null;
+  if (Math.abs(landingX) <= 1.0) return "Middle";
+  if (contactX === null || contactX === 0) return null;
+  return Math.sign(contactX) !== Math.sign(landingX)
+    ? "Crosscourt"
+    : "Down the Line";
 }
 
 function pointKey(setNumber: number, gameNumber: number, pointNumber: number) {

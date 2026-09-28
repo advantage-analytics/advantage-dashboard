@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Check, CirclePlay } from "lucide-react";
 
 import {
   Tooltip,
@@ -13,7 +13,12 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { scopeCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
-import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
+import {
+  countFilmOption,
+  DEFAULT_FILM_FILTERS,
+  isReturnWinner,
+  type FilmFilters,
+} from "@/components/dashboard/matches/match-detail/film/filters/types";
 import {
   scopeMeta,
   scopePoints,
@@ -107,21 +112,44 @@ export interface H2HRowConfig {
    * differ, and that is accepted.
    */
   cut?: Partial<FilmFilters>;
+  /**
+   * Whose points a value cell's cut takes (`sideCut`). Absent keeps the
+   * default: a result row's side is who won (or, for errors, lost) the point,
+   * every other row's is who served it. Return rows are the returner's, so
+   * their side is the one NOT serving; total points won is the winner's.
+   */
+  sideBy?: CutSide;
+  /** What the cut's points are, plural — "break points". Screen-reader copy. */
+  noun?: string;
+  /** What the fraction's first number counts — "9 of 12 saved". */
+  verb?: string;
+  /**
+   * A statistic no provider publishes, counted from the points themselves
+   * (`tallySide`) for the whole match as well as for one set.
+   */
+  fromPoints?: "returnWinners";
 }
 
 export const SERVE_ROWS: H2HRowConfig[] = [
-  { label: "Aces", key: "aces", cut: { serve: ["ace"] } },
+  { label: "Aces", key: "aces", cut: { serve: ["ace"] }, noun: "aces" },
   {
     label: "Double faults",
     key: "doubleFaults",
     lowerIsBetter: true,
     cut: { serve: ["double-fault"] },
+    noun: "double faults",
   },
   {
+    // The first serves that landed: a point is "played on a first serve"
+    // (`ball: "first"`) exactly when the first serve went in, so this opens
+    // the numerator — the same points as the row below.
     label: "First serve in",
     key: "firstServeInPct",
     isPercentage: true,
     fractionKey: "firstServeInPct",
+    cut: { ball: "first" },
+    noun: "first-serve points",
+    verb: "in",
   },
   {
     label: "First serve points won",
@@ -129,6 +157,8 @@ export const SERVE_ROWS: H2HRowConfig[] = [
     isPercentage: true,
     fractionKey: "firstServeWinPct",
     cut: { ball: "first" },
+    noun: "first-serve points",
+    verb: "won",
   },
   {
     label: "Second serve points won",
@@ -136,6 +166,8 @@ export const SERVE_ROWS: H2HRowConfig[] = [
     isPercentage: true,
     fractionKey: "secondServeWinPct",
     cut: { ball: "second" },
+    noun: "second-serve points",
+    verb: "won",
   },
   {
     label: "Break points saved",
@@ -144,12 +176,15 @@ export const SERVE_ROWS: H2HRowConfig[] = [
     fractionKey: "breakpointsSaved",
     fromFraction: true,
     cut: { pressure: "break" },
+    noun: "break points",
+    verb: "saved",
   },
   {
     label: "Service games won",
     key: "serviceGamesWonPct",
     isPercentage: true,
     fractionKey: "serviceGamesWonPct",
+    verb: "won",
   },
 ];
 
@@ -159,41 +194,77 @@ export const RETURN_ROWS: H2HRowConfig[] = [
     key: "firstReturnWonPct",
     isPercentage: true,
     fractionKey: "firstReturnWonPct",
+    cut: { ball: "first" },
+    sideBy: "returner",
+    noun: "first-serve returns",
+    verb: "won",
   },
   {
     label: "Second serve returns won",
     key: "secondReturnWonPct",
     isPercentage: true,
     fractionKey: "secondReturnWonPct",
+    cut: { ball: "second" },
+    sideBy: "returner",
+    noun: "second-serve returns",
+    verb: "won",
   },
   {
     label: "Break points converted",
     key: "breakpointsWonPct",
     isPercentage: true,
     fractionKey: "breakpointsWonPct",
+    cut: { pressure: "break" },
+    sideBy: "returner",
+    noun: "break points",
+    verb: "converted",
   },
-  // Drawn by the frame, backed by nothing: neither SwingVision nor the video
-  // pipeline records which winners were struck off a return. The row keeps its
-  // place and says so rather than borrowing `winners`, which would read as a
-  // return figure and be a total.
-  { label: "Return winners", note: "Not recorded by any source yet" },
+  // No provider publishes it, but every point carries its return: a return
+  // that landed, a rally of at most two shots and a winner the returner won
+  // (`isReturnWinner`). Counted from the points, never borrowed from
+  // `winners`, which would read as a return figure and be a total.
+  {
+    label: "Return winners",
+    fromPoints: "returnWinners",
+    cut: { returns: ["winner"] },
+    sideBy: "winner",
+    noun: "return winners",
+  },
 ];
 
 export const POINT_ROWS: H2HRowConfig[] = [
+  // No cut: the film filter model has no net-approach axis to open.
   {
     label: "Net points won",
     key: "netPointsWonPct",
     isPercentage: true,
     fractionKey: "netPointsWonPct",
+    verb: "won",
   },
-  { label: "Winners", key: "winners", cut: { result: ["winner"] } },
+  {
+    label: "Winners",
+    key: "winners",
+    cut: { result: ["winner"] },
+    noun: "winners",
+  },
   {
     label: "Unforced errors",
     key: "unforcedErrors",
     lowerIsBetter: true,
     cut: { result: ["unforced"] },
+    noun: "unforced errors",
   },
-  { label: "Total points won", key: "totalPointsWon", ofKey: "totalPoints" },
+  {
+    // The row opens the whole (scoped) match; a value opens the points that
+    // side won.
+    label: "Total points won",
+    key: "totalPointsWon",
+    ofKey: "totalPoints",
+    cut: {},
+    sideBy: "winner",
+    noun: "points",
+    verb: "won",
+  },
 ];
 
 export const H2H_GROUPS: { title: string; configs: H2HRowConfig[] }[] = [
@@ -201,6 +272,11 @@ export const H2H_GROUPS: { title: string; configs: H2HRowConfig[] }[] = [
   { title: "Return", configs: RETURN_ROWS },
   { title: "Points", configs: POINT_ROWS },
 ];
+
+/** Every row's config, flattened once — `H2H_GROUPS` is fixed at module load. */
+const ALL_H2H_CONFIGS: H2HRowConfig[] = H2H_GROUPS.flatMap(
+  (group) => group.configs,
+);
 
 /**
  * One value cell's cut: the row's cut with the cell's side laid over it.
@@ -215,13 +291,27 @@ export const H2H_GROUPS: { title: string; configs: H2HRowConfig[] }[] = [
  * `you`/`opp` are relative, resolved by `useMatchSides()` inside the film tab
  * (guardrails §4); nothing here reads player order.
  */
+export type CutSide = "returner" | "winner";
+
+function flipSide(side: "you" | "opp"): "you" | "opp" {
+  return side === "you" ? "opp" : "you";
+}
+
 export function sideCut(
   cut: Partial<FilmFilters>,
   side: "you" | "opp",
+  by?: CutSide,
 ): Partial<FilmFilters> {
+  // A return statistic belongs to the player receiving serve, so the side is
+  // the one NOT serving: your first-serve returns are the opponent's first
+  // serves.
+  if (by === "returner") {
+    return { ...cut, server: flipSide(side) };
+  }
+  if (by === "winner") return { ...cut, outcome: side };
   if (cut.result) {
     const erred = cut.result.includes("unforced");
-    const outcome = erred ? (side === "you" ? "opp" : "you") : side;
+    const outcome = erred ? flipSide(side) : side;
     return { ...cut, outcome };
   }
   return { ...cut, server: side };
@@ -309,6 +399,9 @@ export interface H2HRow {
   note?: string;
   /** The config's cut, sideless — `sideCut` adds the cell's side. */
   cut?: Partial<FilmFilters>;
+  sideBy?: CutSide;
+  noun?: string;
+  verb?: string;
   you: H2HValue;
   opp: H2HValue;
   leader: "you" | "opp" | null;
@@ -323,6 +416,9 @@ function assembleRow(
     label: config.label,
     note: config.note,
     cut: config.cut,
+    sideBy: config.sideBy,
+    noun: config.noun,
+    verb: config.verb,
     you,
     opp,
     leader: rowLeader(config, you.value, opp.value),
@@ -372,13 +468,20 @@ interface DerivedSide {
   mediumRally: Tally;
   longRally: Tally;
   allPoints: Tally;
+  /** Points this side returned that ended on its winning return. */
+  returnWinners: number;
+  /** Points this side returned whose return shot was recorded at all. */
+  returnsRecorded: number;
 }
 
 function emptyTally(): Tally {
   return { won: 0, total: 0 };
 }
 
-function tallySide(points: MatchPoint[], isPlayer1: boolean): DerivedSide {
+export function tallySide(
+  points: MatchPoint[],
+  isPlayer1: boolean,
+): DerivedSide {
   const d: DerivedSide = {
     aces: 0,
     doubleFaults: 0,
@@ -392,6 +495,8 @@ function tallySide(points: MatchPoint[], isPlayer1: boolean): DerivedSide {
     mediumRally: emptyTally(),
     longRally: emptyTally(),
     allPoints: emptyTally(),
+    returnWinners: 0,
+    returnsRecorded: 0,
   };
   const me = isPlayer1 ? "player1" : "player2";
 
@@ -421,6 +526,10 @@ function tallySide(points: MatchPoint[], isPlayer1: boolean): DerivedSide {
         d.breakPointsAgainst.total += 1;
         if (iWon) d.breakPointsAgainst.won += 1;
       }
+      if (p.secondShotResult) d.returnsRecorded += 1;
+      // The returner has to have won it: a two-shot "winner" the server won
+      // is a mislabelled shot, not a return winner.
+      if (iWon && isReturnWinner(p)) d.returnWinners += 1;
     }
 
     // `calculate_match_stats` buckets these with LIKE '%Winner%' and
@@ -469,6 +578,11 @@ function derivedValue(
   config: H2HRowConfig,
   d: DerivedSide,
 ): DerivedValue | null {
+  // 0 is a measurement only where returns were recorded; with none, a zero
+  // would say "no return winners" about points nobody looked at.
+  if (config.fromPoints === "returnWinners") {
+    return d.returnsRecorded > 0 ? { value: d.returnWinners } : null;
+  }
   switch (config.key) {
     case "aces":
       return { value: d.aces };
@@ -500,7 +614,8 @@ function derivedSideValue(
   // Aces on a video-derived match are the case that matters: derivation never
   // emits "Ace", so counting them here would print a confident 0 where the
   // published card correctly prints an em dash.
-  if (published.display === "") return NO_VALUE;
+  // A statistic only the points carry has no published figure to defer to.
+  if (published.display === "" && !config.fromPoints) return NO_VALUE;
 
   const derived = derivedValue(config, d);
   if (!derived) return NO_VALUE;
@@ -513,6 +628,37 @@ function derivedSideValue(
   };
 }
 
+/** One row, recomputed from `youDerived`/`oppDerived` in place of `published`. */
+function deriveRow(
+  config: H2HRowConfig,
+  published: H2HRow,
+  youDerived: DerivedSide,
+  oppDerived: DerivedSide,
+): H2HRow {
+  return assembleRow(
+    config,
+    derivedSideValue(config, youDerived, published.you),
+    derivedSideValue(config, oppDerived, published.opp),
+  );
+}
+
+/**
+ * The whole-match rows: the published figures, except the statistics only the
+ * points carry, which are counted from every point in scope.
+ */
+export function withPointRows(
+  configs: H2HRowConfig[],
+  published: H2HRow[],
+  youDerived: DerivedSide,
+  oppDerived: DerivedSide,
+): H2HRow[] {
+  return configs.map((config, i) =>
+    config.fromPoints
+      ? deriveRow(config, published[i], youDerived, oppDerived)
+      : published[i],
+  );
+}
+
 function buildDerivedRows(
   configs: H2HRowConfig[],
   published: H2HRow[],
@@ -520,11 +666,7 @@ function buildDerivedRows(
   oppDerived: DerivedSide,
 ): H2HRow[] {
   return configs.map((config, i) =>
-    assembleRow(
-      config,
-      derivedSideValue(config, youDerived, published[i].you),
-      derivedSideValue(config, oppDerived, published[i].opp),
-    ),
+    deriveRow(config, published[i], youDerived, oppDerived),
   );
 }
 
@@ -533,56 +675,215 @@ function buildDerivedRows(
 /** Both value columns and both name cells; the artboard's 64 px, right-aligned. */
 const COLUMN = "flex w-[64px] shrink-0 items-center justify-end gap-1";
 
+const EASE = "duration-200 ease-[var(--ease-primary)]";
+
+/**
+ * What the cursor (or keyboard focus) is on. The label is the "both players"
+ * target and each number is one player's, so the hover says which of the two
+ * a click will open before it happens. One hover state at a time: the label
+ * washes the row, a number washes only itself — never both at once.
+ */
+type Zone = "row" | "you" | "opp";
+
+interface HoverTarget {
+  row: string;
+  zone: Zone;
+}
+
+/**
+ * A value's fraction in words: `9/12` → `9 of 12`, and a count published with
+ * an `of N` detail (total points won) → `68 of 148`. `null` when the value has
+ * no fraction behind it.
+ */
+export function fractionWords(value: H2HValue): string | null {
+  const { detail, display } = value;
+  if (!detail || !display) return null;
+  if (detail.startsWith("of ")) return `${display} ${detail}`;
+  const [made, attempts] = detail.split("/");
+  return attempts === undefined ? detail : `${made} of ${attempts}`;
+}
+
+/** The click-through a readout offers: the scope's point count, in Video. */
+export function watchLine(count: number): string {
+  // "Watch all 1" reads as a miscount; one point is just "it".
+  return count === 1 ? "Watch it in Video" : `Watch all ${count} in Video`;
+}
+
+/** The same click, for a screen reader, which has no readout title to lean on. */
+export function watchLabel(count: number, noun: string): string {
+  return count === 1
+    ? "Watch it in Video"
+    : `Watch all ${count} ${noun} in Video`;
+}
+
+interface ReadoutLine {
+  name: string;
+  value: string;
+  /** The opponent recedes, as it does in the Rally length readout. */
+  muted?: boolean;
+}
+
+/**
+ * The dark readout, in three tiers: which statistic (title), the evidence
+ * behind the figures (a name/value line per player, in the card's column
+ * order), then what a click opens, set off by a hairline so it reads as a
+ * consequence rather than more data. Inter tabular throughout — a fraction is
+ * a statistic, and Roboto Mono is for machine values.
+ *
+ * It opens ABOVE its anchor, never over the numbers: for the label it starts at
+ * the label's left edge, for a number it ends at that number's right edge. The
+ * 168 px floor is the Data Tooltip spec's compact width, and keeps the box
+ * from changing size as the cursor crosses from the label to a number.
+ */
+function Readout({
+  open,
+  align,
+  title,
+  lines,
+  note,
+  action,
+}: {
+  open: boolean;
+  align: "start" | "end";
+  title: string;
+  lines: ReadoutLine[];
+  note?: string;
+  action?: string | null;
+}) {
+  // A title alone repeats the label the cursor is already on — "Aces" over
+  // "Aces" — so a readout with nothing else to say does not open.
+  const hasEvidence = lines.length > 0 || Boolean(note);
+  if (!hasEvidence && !action) return null;
+  return (
+    <ChartTooltip
+      open={open}
+      align={align}
+      offset={6}
+      className="min-w-[168px] gap-1 px-3 py-2.5 text-left"
+    >
+      <span className="text-[12px] leading-4 font-medium text-white">
+        {title}
+      </span>
+      {lines.length > 0 && (
+        <span className="flex flex-col gap-px">
+          {lines.map((line) => (
+            <span
+              key={line.name}
+              className={cn(
+                "tabular flex justify-between gap-6 text-[11px] leading-[15px]",
+                line.muted ? "text-white/[0.78]" : "text-white",
+              )}
+            >
+              <span>{line.name}</span>
+              <span>{line.value}</span>
+            </span>
+          ))}
+        </span>
+      )}
+      {note && (
+        <span className="text-[11px] leading-[15px] text-white/[0.64]">
+          {note}
+        </span>
+      )}
+      {action && (
+        <span
+          className={cn(
+            "tabular flex items-center gap-1.5 text-[11px] leading-[15px] text-white/[0.86]",
+            // The hairline divides evidence from the action; with no evidence
+            // (a count row) there is nothing to divide it from.
+            hasEvidence && "mt-[5px] border-t border-white/10 pt-[7px]",
+          )}
+        >
+          <CirclePlay
+            aria-hidden="true"
+            className="h-3 w-3 shrink-0"
+            strokeWidth={1.5}
+          />
+          {action}
+        </span>
+      )}
+    </ChartTooltip>
+  );
+}
+
+/** Hover and focus wiring for one target — keyboard gets what the mouse gets. */
+interface TargetHandlers {
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  onFocus: () => void;
+  onBlur: () => void;
+}
+
 function ValueCell({
   value,
   emphasised,
   note,
   scoped,
+  washed,
   watch,
+  zero,
+  readout,
 }: {
   value: H2HValue;
   emphasised: boolean;
   note?: string;
   scoped: boolean;
+  /** The cursor or focus is on this figure. */
+  washed: boolean;
   /**
-   * Open this cell's points in the Video tab. Passed only for a row with a
-   * cut on a match with a playable video; the em-dash cell below ignores it,
-   * since a statistic with no value has nothing to watch.
+   * Open this cell's points in the Video tab. Passed only for a figure with
+   * points behind it on a match with a playable video; the em-dash cell below
+   * ignores it, since a statistic with no value has nothing to watch.
    */
-  watch?: { onClick: () => void; label: string };
+  watch?: { onClick: () => void; label: string; handlers: TargetHandlers };
+  /**
+   * A measured zero — nothing to watch, but still worth a hover that says so
+   * ("No aces in this match"). It hovers, focuses and washes exactly as a
+   * watchable figure does; it just has no click.
+   */
+  zero?: { label: string; handlers: TargetHandlers };
+  readout?: ReactNode;
 }) {
   if (value.display) {
     const figure = (
       <span
         className={cn(
           "tabular text-[13px]",
-          // A clickable figure washes on hover like any control (`surface-
-          // subtle` over the row's lighter `surface-muted`), sized to the
-          // number itself; the -mr cancels the pr so the digits stay on the
-          // column's right edge, aligned with every non-clickable figure.
-          watch &&
-            "-mr-1.5 rounded-[var(--radius-cell)] py-0.5 pr-1.5 pl-1.5 transition-colors duration-200 ease-[var(--ease-primary)] group-hover/watch:bg-[var(--surface-subtle)]",
+          // The wash is sized to the number itself; the -mr cancels the pr so
+          // the digits stay on the column's right edge, aligned with every
+          // figure that has no wash.
+          `-mr-1.5 rounded-[var(--radius-cell)] px-1.5 py-0.5 transition-colors ${EASE}`,
         )}
         style={{
           fontWeight: emphasised ? 500 : 400,
           color: emphasised ? "var(--ink-900)" : "var(--ink-500)",
+          backgroundColor: washed ? "var(--surface-subtle)" : "transparent",
         }}
       >
         {value.display}
       </span>
     );
-    if (watch) {
-      // A bare button around the same figure: the number's own hover wash and
-      // the readout's "Click a number to watch in Video" line are the
-      // affordance. Focus is `focus.css`'s ring — nothing written here.
+    const target = watch ?? zero;
+    if (target) {
+      // One element for both, so a zero is the same hit area, wash and focus
+      // ring as the figure beside it. A zero is a button with nothing to do —
+      // `aria-disabled` says so and keeps it reachable by Tab, which
+      // `disabled` would not. Focus is `focus.css`'s ring — nothing written
+      // here.
       return (
         <button
           type="button"
-          onClick={watch.onClick}
-          aria-label={watch.label}
-          className={`${COLUMN} group/watch cursor-pointer rounded-[var(--radius-element)] border-0 bg-transparent p-0`}
+          onClick={watch?.onClick}
+          aria-disabled={watch ? undefined : true}
+          aria-label={target.label}
+          {...target.handlers}
+          className={cn(
+            `${COLUMN} relative self-stretch rounded-[var(--radius-element)] border-0 bg-transparent p-0`,
+            watch ? "cursor-pointer" : "cursor-default",
+          )}
         >
           {figure}
+          {readout}
         </button>
       );
     }
@@ -615,58 +916,11 @@ function ValueCell({
   );
 }
 
-/**
- * The dark readout for a hovered row. It is where the fraction went when the
- * 9 px sub-figures came off the numbers: `62%` is the figure a reader wants at
- * a glance, `38/61` is the one they want when they doubt it.
- *
- * It sits to the LEFT of the two value columns, centred on the row, and never
- * moves while the row is hovered. The numbers are what a reader looks at and
- * what a click lands on, so the readout goes beside them rather than over
- * them; the only thing it covers is the row's own label, which its title
- * repeats. It is a label, not a control — the numbers are the buttons, which
- * is why its last line names them.
- */
-function RowTooltip({
-  open,
-  row,
-  youName,
-  oppName,
-  watchable,
-}: {
-  open: boolean;
-  row: H2HRow;
-  youName: string;
-  oppName: string;
-  /** The row's numbers open its points in the Video tab. */
-  watchable: boolean;
-}) {
-  const detail =
-    row.note ??
-    (row.you.detail || row.opp.detail
-      ? `${youName} ${row.you.detail ?? "—"} · ${oppName} ${row.opp.detail ?? "—"}`
-      : null);
-
-  return (
-    <ChartTooltip
-      open={open}
-      side="left"
-      offset={8}
-      className="gap-0.5 px-2.5 py-2"
-    >
-      <span className="text-[12px] font-medium text-white">{row.label}</span>
-      {detail && (
-        <span className="mono tabular text-[10px] text-white/[0.64]">
-          {detail}
-        </span>
-      )}
-      {watchable && (
-        <span className="text-[10px] text-white/[0.64]">
-          Click a number to watch in Video
-        </span>
-      )}
-    </ChartTooltip>
-  );
+/** How many points each of a row's three targets opens. */
+interface RowCounts {
+  both: number;
+  you: number;
+  opp: number;
 }
 
 export function HeadToHeadCard() {
@@ -674,7 +928,7 @@ export function HeadToHeadCard() {
   const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
   const { activeSet } = useSetScope();
-  const [hovered, setHovered] = useState<string | null>(null);
+  const [hover, setHover] = useState<HoverTarget | null>(null);
 
   const youStats = sides.you.stats;
   const oppStats = sides.opp.stats;
@@ -688,22 +942,52 @@ export function HeadToHeadCard() {
 
   const sections = useMemo(() => {
     if (!youStats || !oppStats) return [];
-    const youDerived =
-      activeSet === null ? null : tallySide(scopedPoints, youIsPlayer1);
-    const oppDerived =
-      activeSet === null ? null : tallySide(scopedPoints, !youIsPlayer1);
+    // Tallied whole-match too: the statistics only the points carry (return
+    // winners) have no published figure to fall back on.
+    const youDerived = tallySide(scopedPoints, youIsPlayer1);
+    const oppDerived = tallySide(scopedPoints, !youIsPlayer1);
 
     return H2H_GROUPS.map((group) => {
       const published = buildStatRows(group.configs, youStats, oppStats);
       return {
         title: group.title,
         rows:
-          youDerived && oppDerived
+          activeSet !== null
             ? buildDerivedRows(group.configs, published, youDerived, oppDerived)
-            : published,
+            : withPointRows(group.configs, published, youDerived, oppDerived),
       };
     });
   }, [youStats, oppStats, youIsPlayer1, activeSet, scopedPoints]);
+
+  // The exact points each target opens, counted through the Video tab's own
+  // filter so the readout's "Watch all 12" is what the tab will show — on a
+  // video-derived match that can differ from the published figure, and the
+  // readout says the true count rather than borrowing the statistic's. Each
+  // of `both`/`you`/`opp` is its own count() call — see the comment below on
+  // why `both` is not simply `you + opp`.
+  const counts = useMemo(() => {
+    const byRow = new Map<string, RowCounts>();
+    if (!meta.hasPlayableVideo) return byRow;
+    const count = (cut: Partial<FilmFilters>) =>
+      countFilmOption(
+        points,
+        DEFAULT_FILM_FILTERS,
+        youIsPlayer1,
+        scopeCut(cut, activeSet),
+      );
+    for (const config of ALL_H2H_CONFIGS) {
+      if (!config.cut) continue;
+      // `both` is counted, not summed: the Return winners filter also admits
+      // the rare two-shot "winner" the server won, which neither side's cut
+      // does, and the readout must say what the tab will actually list.
+      byRow.set(config.label, {
+        both: count(config.cut),
+        you: count(sideCut(config.cut, "you", config.sideBy)),
+        opp: count(sideCut(config.cut, "opp", config.sideBy)),
+      });
+    }
+    return byRow;
+  }, [meta.hasPlayableVideo, points, activeSet, youIsPlayer1]);
 
   // Memoized rather than recomputed inline: the card re-renders on every row
   // hover, and `scopeMeta` allocates a scoped-points array just to count it —
@@ -716,6 +1000,23 @@ export function HeadToHeadCard() {
   if (sections.length === 0) return null;
 
   const scoped = activeSet !== null;
+
+  const target = (row: string, zone: Zone): TargetHandlers => ({
+    onMouseEnter: () => setHover({ row, zone }),
+    // Leaving a number hands the hover back to its row, which the cursor is
+    // still inside; leaving the label is the row's own mouseleave.
+    onMouseLeave: () =>
+      zone === "row"
+        ? undefined
+        : setHover((current) =>
+            current?.row === row ? { row, zone: "row" } : current,
+          ),
+    onFocus: () => setHover({ row, zone }),
+    onBlur: () =>
+      setHover((current) =>
+        current?.row === row && current.zone === zone ? null : current,
+      ),
+  });
 
   return (
     <section
@@ -772,64 +1073,230 @@ export function HeadToHeadCard() {
           </div>
 
           {section.rows.map((row) => {
-            const cut = meta.hasPlayableVideo ? row.cut : undefined;
-            // Only a cell with a figure is watchable: an em dash has no
-            // points behind it to show.
-            const watchFor = (
-              side: "you" | "opp",
-              value: H2HValue,
-              name: string,
-            ) =>
-              cut && value.display
+            const rowCounts = row.cut ? counts.get(row.label) : undefined;
+            const noun = row.noun ?? "points";
+            // One lookup per side, built once, in place of a
+            // `side === "you" ? youX : oppX` ternary at every use below.
+            const perSide = {
+              you: { name: youName, fraction: fractionWords(row.you) },
+              opp: { name: oppName, fraction: fractionWords(row.opp) },
+            };
+            // A figure is watchable only when points stand behind it: an em
+            // dash has none, and neither does a cut the filter finds empty.
+            const cellWatch = (side: "you" | "opp") => {
+              const value = row[side];
+              const n = rowCounts?.[side] ?? 0;
+              if (!value.display || n === 0) return undefined;
+              const { name, fraction } = perSide[side];
+              const inWords = fraction
+                ? [fraction, row.verb].filter(Boolean).join(" ")
+                : null;
+              // "74 of 138 won" already carries the figure; "44%" does not.
+              const figure = !inWords
+                ? value.display
+                : value.detail?.startsWith("of ")
+                  ? inWords
+                  : `${value.display}, ${inWords}`;
+              return {
+                onClick: () =>
+                  actions.watchCut(
+                    scopeCut(sideCut(row.cut!, side, row.sideBy), activeSet),
+                  ),
+                label: `${row.label}, ${name}: ${figure}. ${watchLabel(n, noun)}`,
+                handlers: target(row.label, side),
+              };
+            };
+            const youWatch = cellWatch("you");
+            const oppWatch = cellWatch("opp");
+            // A count of zero with nothing to open still answers a hover. Only
+            // a count: 0% of 3 break points is three break points, not none.
+            const isZeroCount = (side: "you" | "opp") =>
+              row[side].display === "0";
+            const inScope =
+              activeSet === null ? "in this match" : `in set ${activeSet}`;
+            const cellZero = (side: "you" | "opp", watchable: boolean) =>
+              !watchable && isZeroCount(side) && row.noun
                 ? {
-                    onClick: () =>
-                      actions.watchCut(scopeCut(sideCut(cut, side), activeSet)),
-                    label: `${row.label}, ${name} ${value.display}. Watch in Video`,
+                    label: `${row.label}, ${perSide[side].name}: 0. No ${row.noun} ${inScope}`,
+                    handlers: target(row.label, side),
                   }
                 : undefined;
-            const youWatch = watchFor("you", row.you, youName);
-            const oppWatch = watchFor("opp", row.opp, oppName);
+            const youZero = cellZero("you", Boolean(youWatch));
+            const oppZero = cellZero("opp", Boolean(oppWatch));
+            const zeroBySide = { you: youZero, opp: oppZero };
+            const rowWatchable =
+              !!rowCounts &&
+              rowCounts.both > 0 &&
+              Boolean(row.you.display || row.opp.display);
+            // Mirrors `cellWatch`'s shape so the row's own target — "both
+            // players" — is built the same way as each player's.
+            const rowWatch = rowWatchable
+              ? {
+                  onClick: () =>
+                    actions.watchCut(scopeCut(row.cut!, activeSet)),
+                  label: `${row.label}, both players. ${watchLabel(rowCounts!.both, noun)}`,
+                  handlers: target(row.label, "row"),
+                }
+              : undefined;
+
+            const active = hover?.row === row.label ? hover.zone : null;
+            // The label's hover is "both players" only when the label is a
+            // target; on a row with nothing to open it just reads.
+            const bothLit = active === "row" && rowWatchable;
+            const rowLines: ReadoutLine[] =
+              perSide.you.fraction || perSide.opp.fraction
+                ? [
+                    { name: youName, value: perSide.you.fraction ?? "—" },
+                    {
+                      name: oppName,
+                      value: perSide.opp.fraction ?? "—",
+                      muted: true,
+                    },
+                  ]
+                : [];
+            const cellReadout = (side: "you" | "opp", watchable: boolean) => {
+              const { name, fraction } = perSide[side];
+              const title = `${row.label} · ${name}`;
+              if (!watchable) {
+                if (!zeroBySide[side]) return null;
+                return (
+                  <Readout
+                    open={active === side}
+                    align="end"
+                    title={title}
+                    lines={[]}
+                    note={`No ${row.noun} ${inScope}`}
+                  />
+                );
+              }
+              return (
+                <Readout
+                  open={active === side}
+                  align="end"
+                  title={title}
+                  lines={
+                    fraction
+                      ? [
+                          {
+                            name: [fraction, row.verb]
+                              .filter(Boolean)
+                              .join(" "),
+                            value: "",
+                          },
+                        ]
+                      : []
+                  }
+                  action={watchLine(rowCounts![side])}
+                />
+              );
+            };
+            // Both players at a measured zero: the label answers the way each
+            // zero does, rather than going silent between them.
+            const bothZero =
+              !rowWatchable &&
+              Boolean(row.noun) &&
+              isZeroCount("you") &&
+              isZeroCount("opp");
+            const rowReadout = (
+              <Readout
+                open={active === "row"}
+                align="start"
+                title={row.label}
+                lines={rowLines}
+                note={bothZero ? `No ${row.noun} ${inScope}` : row.note}
+                action={rowWatchable ? watchLine(rowCounts!.both) : null}
+              />
+            );
 
             return (
               <div
                 key={row.label}
-                className="relative -mx-2 flex min-h-[30px] items-center rounded-[var(--radius-element)] px-2 transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-muted)]"
-                onMouseEnter={() => setHovered(row.label)}
+                className={cn(
+                  "relative -mx-2 flex min-h-[30px] items-center rounded-[var(--radius-element)] px-2 transition-colors",
+                  EASE,
+                  // Hovering a number styles that number alone: the row wash
+                  // belongs to the label's hover (or a row with no targets).
+                  active === "row" && "bg-[var(--surface-muted)]",
+                )}
+                onMouseEnter={() =>
+                  setHover((current) =>
+                    current?.row === row.label
+                      ? current
+                      : { row: row.label, zone: "row" },
+                  )
+                }
                 onMouseLeave={() =>
-                  setHovered((current) =>
-                    current === row.label ? null : current,
+                  setHover((current) =>
+                    current?.row === row.label ? null : current,
                   )
                 }
               >
-                <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-600)]">
-                  {row.label}
-                </span>
-                {/* The two value columns are the readout's anchor, so it
-                    lands beside the numbers rather than off the row's far
-                    edge. */}
-                <div className="relative flex shrink-0 items-center">
-                  <ValueCell
-                    value={row.you}
-                    emphasised={row.leader === "you"}
-                    note={row.note}
-                    scoped={scoped}
-                    watch={youWatch}
-                  />
-                  <ValueCell
-                    value={row.opp}
-                    emphasised={row.leader === "opp"}
-                    note={row.note}
-                    scoped={scoped}
-                    watch={oppWatch}
-                  />
-                  <RowTooltip
-                    open={hovered === row.label}
-                    row={row}
-                    youName={youName}
-                    oppName={oppName}
-                    watchable={Boolean(youWatch || oppWatch)}
-                  />
-                </div>
+                {rowWatch ? (
+                  <button
+                    type="button"
+                    onClick={rowWatch.onClick}
+                    aria-label={rowWatch.label}
+                    {...rowWatch.handlers}
+                    className={cn(
+                      "relative flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 self-stretch border-0 bg-transparent p-0 pr-3 text-left text-[12px] transition-colors",
+                      EASE,
+                      bothLit
+                        ? "text-[var(--ink-900)]"
+                        : "text-[var(--ink-600)]",
+                    )}
+                  >
+                    <span className="min-w-0 truncate">{row.label}</span>
+                    <CirclePlay
+                      aria-hidden="true"
+                      strokeWidth={1.5}
+                      className={cn(
+                        "h-3 w-3 shrink-0 text-[var(--ink-900)] transition-[opacity,transform] motion-reduce:transform-none",
+                        EASE,
+                        bothLit
+                          ? "translate-x-0 opacity-100"
+                          : "-translate-x-1 opacity-0",
+                      )}
+                    />
+                    {rowReadout}
+                  </button>
+                ) : (
+                  <span
+                    // Focusable only when it has something to say, so a
+                    // keyboard gets the same empty state a hover does.
+                    {...(bothZero && {
+                      tabIndex: 0,
+                      role: "note",
+                      "aria-label": `${row.label}: no ${row.noun} ${inScope}`,
+                      ...target(row.label, "row"),
+                    })}
+                    className="relative flex min-w-0 flex-1 items-center self-stretch rounded-[var(--radius-element)]"
+                  >
+                    <span className="min-w-0 truncate text-[12px] text-[var(--ink-600)]">
+                      {row.label}
+                    </span>
+                    {rowReadout}
+                  </span>
+                )}
+                <ValueCell
+                  value={row.you}
+                  emphasised={row.leader === "you"}
+                  note={row.note}
+                  scoped={scoped}
+                  washed={active === "you" && Boolean(youWatch || youZero)}
+                  watch={youWatch}
+                  zero={youZero}
+                  readout={cellReadout("you", Boolean(youWatch))}
+                />
+                <ValueCell
+                  value={row.opp}
+                  emphasised={row.leader === "opp"}
+                  note={row.note}
+                  scoped={scoped}
+                  washed={active === "opp" && Boolean(oppWatch || oppZero)}
+                  watch={oppWatch}
+                  zero={oppZero}
+                  readout={cellReadout("opp", Boolean(oppWatch))}
+                />
               </div>
             );
           })}

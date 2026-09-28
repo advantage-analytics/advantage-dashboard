@@ -35,8 +35,11 @@
  * variable-rate file like 45ff4bd7's (29.94) or b74a1e04's (29.95, accepted but
  * unreadable) is refused before a byte uploads. Either rate can
  * refuse; neither rescues the other. A null average (another container, a
- * failed or slow read) leaves the sample to decide, as before. How the vendor
- * computes its number is still open as Q14 in docs/splitstep-vendor-questions.md.
+ * failed or slow read) leaves the sample to decide, as before. The vendor
+ * answered Q14 on 2026-09-28 (docs/splitstep-vendor-questions.md): its own hard
+ * gate is now 25 fps, but it asks for 29.97 or higher for best results and to
+ * avoid being gated out — so 29.97 stays our floor. How it computes its number
+ * is still unknown.
  *
  * Likewise the container allowlist is exactly `ACCEPTED_VIDEO_EXTENSIONS` —
  * not the message's MP4 preference being enforced (.mov, .m4v, .avi, .mkv and

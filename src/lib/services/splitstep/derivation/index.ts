@@ -43,8 +43,13 @@
  * (ACCEPT_UNRECONCILED_FOLD in reconcile.ts) and the suppression call is
  * commented out in derive-and-publish.ts. Rows written under this tag were NOT
  * verified against the entered score and must be rebuilt when the gate returns.
+ * 0.3.1 (2026-09-27) resolves tiebreak points across a serve rotation
+ * (winners.ts rule 2); before it, every match with a tiebreak was refused.
+ * 0.3.2 (2026-09-28) folds under the ad rule the vendor was told
+ * (processing_jobs.ad_scoring) instead of matches.format's; only the
+ * break/set/match-point flags can differ.
  */
-export const DERIVATION_VERSION = "0.3.0-unreconciled";
+export const DERIVATION_VERSION = "0.3.2-unreconciled";
 
 export type {
   RawSplitStepStroke,

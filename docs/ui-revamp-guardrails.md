@@ -276,12 +276,52 @@ to put a testable seam.
 >   "29.97 fps (NTSC) and higher is accepted"; genuine NTSC (30000/1001)
 >   reads 29.97 to two decimals and passes. The vendor measures lower than
 >   the container (29.80 against a 29.94 average for the same file), which is
->   why the band under 29.97 is refused rather than gambled on; how it
->   measures is still open as Q14 in `docs/splitstep-vendor-questions.md`. The
+>   why the band under 29.97 is refused rather than gambled on. Q14 in
+>   `docs/splitstep-vendor-questions.md` was answered 2026-09-28: the vendor's
+>   hard gate is now 25 fps, and it still recommends 29.97 or higher. The
 >   existing 30 fps floor on the browser sample (`MIN_VIDEO_FPS`) is unchanged.
 >
 > `job-request.ts`, the three inputs in §4, `canSubmitVideo` and the webhook are
 > untouched.
+
+> **A reviewed exception, added 2026-09-27: tiebreak point winners, in
+> `derivation/winners.ts`.** A tiebreak changes server every two points without
+> closing a game, and the vendor's server-relative game string flips with it
+> ("7-5" → "5-7"). `resolveWinner` only read the point ladder when the raw game
+> string and the server were both unchanged, so the last point before every
+> serve rotation fell through to the game and set rules, saw no change, and
+> resolved no winner — `reconcile()` refused every match with a tiebreak
+> ("N point(s) resolved no winner"; job b74a1e04 was the first). A new rule 2
+> fires only when the server changed and the ABSOLUTE game count did not, and
+> resolves by a one-point climb in the absolutized integer point score, with
+> `via: "tiebreak"`. The 0/15/30/40 ladder never climbs by one as a number, so
+> a stale game score across an ordinary game change cannot trigger it. Nothing
+> else moved: `reconcile()`, the fold's game keys, the player1 mapping, the
+> unresolved-points gate and `calculate_match_stats` are untouched, and no
+> schema changed. `DERIVATION_VERSION` is `0.3.1-unreconciled`. Known limit:
+> the fold still keys games on the server, so a tiebreak folds as several
+> pseudo-games and a tiebreak match cannot reconcile — it publishes through
+> `ACCEPT_UNRECONCILED_FOLD` with `ok = false`, never as verified. A 2^n search
+> over unresolved winners against `matches.score` was considered and rejected:
+> on b74a1e04 no assignment fit, because game boundaries, not winners, were
+> what disagreed with the entered score.
+
+> **A reviewed exception, added 2026-09-28: the ad-scoring rule the derivation
+> folds under, in `persist-transcript.ts`.** `buildTranscriptForJob` passed
+> `matches.format.ad_scoring` into `buildTranscript`, but the vendor scores the
+> video under `processing_jobs.ad_scoring` — the `Ad` it was sent, written from
+> the request object itself in `jobs/handler.ts` and `resubmit-job.ts`, both of
+> which already read the job first. When the two disagree the transcript labels
+> every 40-40 under rules the vendor never scored under (job b74a1e04 went up
+> `Ad:false` for a no-ad event while its match row says ad). It now reads the
+> job's value when it is a boolean, then the match format, then ad — the same
+> order as `initialTopIsPlayer1` — via `resolveAdScoring`, and the job select
+> fetches `ad_scoring`. Ad scoring reaches only `pressureFor`, so what can
+> change is `is_break_point` / `is_set_point` / `is_match_point` on deciding
+> points; point winners, `reconcile()`, the fold, the player1 mapping and
+> `calculate_match_stats` are untouched, no schema changed and no `matches` row
+> is written. It corrupts silently the way the §4 inputs do, one level down.
+> `DERIVATION_VERSION` is `0.3.2-unreconciled`.
 
 > **A reviewed exception, added 2026-09-28: video failure recovery, from
 > `claude/video-retry-failure-surfacing-055fd8`.** A stuck or failed video job

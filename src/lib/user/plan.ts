@@ -30,6 +30,18 @@ export function isProPlan(plan: string | null | undefined): boolean {
 }
 
 /**
+ * Which free programme a workspace is on: every team workspace is in the
+ * pilot, a personal one is in the beta. One answer for the two places that
+ * name it — the Plan strip below and the header pill — so they cannot call the
+ * same workspace two different things.
+ */
+export function workspaceTier(
+  active: Pick<Workspace, "kind">,
+): "beta" | "pilot" {
+  return active.kind === "team" ? "pilot" : "beta";
+}
+
+/**
  * The Plan strip's facts — Plan / Squad (team only) / Member since — built
  * once so Settings › Plan and its loading skeleton (`SettingsPlanPending`)
  * cannot say two different things while a request is still in flight. The
@@ -40,7 +52,7 @@ export function planFacts(
   active: Pick<Workspace, "kind" | "team">,
   viewer: Pick<Viewer, "plan" | "memberSince">,
 ): { label: string; value: string }[] {
-  const isTeam = active.kind === "team";
+  const isTeam = workspaceTier(active) === "pilot";
   const facts = [
     {
       label: "Plan",
