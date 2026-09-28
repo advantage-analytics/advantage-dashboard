@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Head-to-head rows open their points in the Video tab
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/components/dashboard/matches/match-detail/head-to-head-card.tsx, tests/head-to-head-cuts.spec.ts — guess
