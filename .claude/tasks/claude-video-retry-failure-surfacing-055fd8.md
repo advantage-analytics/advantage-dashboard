@@ -124,7 +124,7 @@ ready).
 
 ## T9 · Group stats-unavailable matches under Ready in the matches list
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T3
 - **files:** src/components/dashboard/matches/matches-page-content.tsx (grouping only, ~117-122), a spec for the grouping helper (guess)

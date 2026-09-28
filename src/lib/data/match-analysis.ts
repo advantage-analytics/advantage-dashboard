@@ -828,6 +828,44 @@ export function isAnalysisReady(status: AnalysisStatus): boolean {
 }
 
 /**
+ * The matches list's own lifecycle grouping — "In progress" / "Ready" /
+ * "Failed" / "No video" — kept as a named export so the list's decision is a
+ * pure function a spec can pin, not inline logic in the list component.
+ *
+ * Deliberately NOT `isAnalysisFailed(status)` alone. Product decision
+ * 2026-09-27: a `derivation_failed` row classified `stats_unavailable` (our
+ * derivation refused the data — see `classifyFailure`) must not read as a
+ * failed match. The match page still renders; the stats section is what's
+ * missing, and only that section says so. Every other failed row — including
+ * `derivation_failed` classified `rederive`, a real crash — still groups
+ * under Failed.
+ */
+export function matchListGroup(
+  analysis: Pick<MatchAnalysis, "status" | "recovery"> | null | undefined,
+): string | null {
+  const status = analysis?.status;
+  if (!status) return null;
+  if (analysis?.recovery === "stats_unavailable") return "Ready";
+  if (isInFlight(status)) return "In progress";
+  if (isAnalysisFailed(status)) return "Failed";
+  if (status === "manual") return "No video";
+  return "Ready";
+}
+
+/**
+ * The matches list's own status word for a row — `ANALYSIS_LABEL` with one
+ * override, mirroring `matchListGroup`'s decision: a `stats_unavailable` row
+ * reads "Stats unavailable" (the same word `manual` already uses), never
+ * `ANALYSIS_LABEL.derivation_failed`'s "Stats failed".
+ */
+export function matchListStatusLabel(
+  analysis: Pick<MatchAnalysis, "status" | "recovery">,
+): string {
+  if (analysis.recovery === "stats_unavailable") return "Stats unavailable";
+  return ANALYSIS_LABEL[analysis.status];
+}
+
+/**
  * How long an `uploaded` job may sit before we stop calling it healthy.
  *
  * Auto-submit fires within seconds of the terminal `status: 'uploaded'` write,

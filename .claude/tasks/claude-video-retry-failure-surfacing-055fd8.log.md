@@ -71,3 +71,8 @@ is the runner's. Newest entries at the bottom.
 
 1. The add-video action is the pre-existing `/dashboard/matches/new` with no match id, so it would start a new match rather than attach video to this one — `addVideoHref(matchId)` (what `RecoveryAction` uses) is probably right for a failed row.
 2. `analysisAction()` has no caller in `src` today, so none of this reaches a screen until a list-row UI uses it.
+
+## T9 · Group stats-unavailable matches under Ready in the matches list — done
+
+**gate:** mechanical pass · completion pass (widget-states: grouping/label logic only; no loading, empty or error state touched)
+**changed:** New pure helpers `matchListGroup()` and `matchListStatusLabel()` in `match-analysis.ts`: a `stats_unavailable` row groups under Ready and reads "Stats unavailable". `matches-page-content.tsx`'s `analysisGroup` delegates to `matchListGroup` (import + function body only), so the Analysis filter chips and row filtering stay consistent. The row's status word is rendered by `RowLifecycle` in `row-state.tsx` (outside `files:`, required), which now uses both helpers — this also applies on the schedule's dual/tournament detail, which share `RowLifecycle`. `isAnalysisFailed` and `ANALYSIS_LABEL` unchanged. New `tests/matches-list-grouping.spec.ts`. No existing spec pinned the old grouping.

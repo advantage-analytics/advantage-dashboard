@@ -19,10 +19,10 @@ import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { draftHref, type DraftRowData } from "./draft-row";
 import {
-  isAnalysisFailed,
   isAnalysisReady,
   isInFlight,
   isLiveUpdating,
+  matchListGroup,
 } from "@/lib/data/match-analysis";
 import {
   useLiveMatchAnalysis,
@@ -107,15 +107,11 @@ const FILTER_KEYS: FilterKey[] = [
 /**
  * Collapses the nine job statuses into the four buckets a player actually
  * filters by. This is the analysis queue's filter, folded into the chip row
- * that was already here.
+ * that was already here. The grouping decision itself lives in
+ * `matchListGroup()` (`match-analysis.ts`), which a spec can pin directly.
  */
 function analysisGroup(match: DisplayMatch): string | null {
-  const status = match.analysis?.status;
-  if (!status) return null;
-  if (isInFlight(status)) return "In progress";
-  if (isAnalysisFailed(status)) return "Failed";
-  if (status === "manual") return "No video";
-  return "Ready";
+  return matchListGroup(match.analysis);
 }
 
 const ANALYSIS_GROUP_ORDER = ["In progress", "Ready", "Failed", "No video"];
