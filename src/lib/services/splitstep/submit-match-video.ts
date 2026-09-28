@@ -4,12 +4,18 @@ import {
   uploadFileInBlocks,
 } from "@/lib/services/upload/azure-block-upload";
 import { markJobUploaded } from "@/lib/services/splitstep/mark-job-uploaded";
+import { refusalCodeFor } from "@/lib/services/splitstep/refusal-code";
 import { remuxedJobWindow } from "@/lib/video/trim-plan";
 import {
   TrimCancelledError,
   discardPreparedVideo,
   prepareVideoForUpload,
 } from "@/lib/video/trim";
+
+// Re-exported so callers (and the spec covering it) can import the
+// submit-refusal → error_code mapping from this file too; see
+// `refusal-code.ts` for what it does and why it lives separately.
+export { refusalCodeFor };
 
 /**
  * Getting one match's video to Advantage Intelligence.
@@ -404,6 +410,11 @@ export async function uploadAndSubmitVideo({
     // Reported separately from the transfer, and deliberately does NOT mark the
     // job failed. The bytes are safely in Azure and the row still says
     // `uploaded`, which is both true and retryable.
+    // Set from the response as soon as it arrives, so the catch block below
+    // can tell a 502 (handler already marked the row `failed`, vendor text
+    // and all) apart from every other refusal (row stays `uploaded`). Stays
+    // null on a network-level failure, where there is no response at all.
+    let submitStatus: number | null = null;
     try {
       const submitRes = await fetch("/api/splitstep/jobs", {
         method: "POST",
@@ -415,6 +426,7 @@ export async function uploadAndSubmitVideo({
           fixedCamera: answers.fixedCamera,
         }),
       });
+      submitStatus = submitRes.status;
 
       const submitPayload = await submitRes.json().catch(() => null);
 
@@ -450,14 +462,26 @@ export async function uploadAndSubmitVideo({
         message,
       );
 
-      // Recorded, not fatal. Status stays `uploaded`.
-      await supabase
-        .from("processing_jobs")
-        .update({
-          error_message: message,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", jobId);
+      // A 502 means the handler's own vendor-POST failure path already ran:
+      // it marked the row `failed` with the vendor's own error text. Writing
+      // here would stomp that with this generic message, so skip it — the
+      // row's `error_message` stays whatever the handler wrote.
+      if (submitStatus !== 502) {
+        // Recorded, not fatal. Status stays `uploaded`. Always write
+        // error_code — including null — so a stale code from an earlier
+        // refusal (e.g. QUOTA_EXCEEDED) doesn't survive onto a later refusal
+        // that doesn't carry one (e.g. 409) and mislead classifyFailure().
+        const code =
+          submitStatus !== null ? refusalCodeFor(submitStatus) : null;
+        await supabase
+          .from("processing_jobs")
+          .update({
+            error_message: message,
+            error_code: code,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", jobId);
+      }
 
       onEvent?.({ matchId, kind: "submit_failed", error: message });
     }

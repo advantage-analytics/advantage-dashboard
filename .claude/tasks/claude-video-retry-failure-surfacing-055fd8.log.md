@@ -84,3 +84,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `resubmit-job.ts` (server, `src/lib/services`) now imports `byClass` from `src/components/dashboard/matches/analysis-failure-copy.ts`. It's plain TS with no React, so it works, but the copy module might belong under `src/lib` if more server code starts reading it (T19's email will).
+
+## T12 · Stalled uploaded rows record a refusal code and keep the handler's reason — done
+
+**gate:** mechanical pass · completion pass (real block read, not the spec's replica; nothing outside the refusal block changed)
+**changed:** New pure `refusalCodeFor(status)` in `splitstep/refusal-code.ts` (429/403/422/503 → QUOTA_EXCEEDED / NOT_ELIGIBLE / INVALID_METADATA / NOT_CONFIGURED, else null), re-exported from `submit-match-video.ts`. The auto-submit refusal block now captures the response status, writes `error_code` on every non-502 refusal (null clears a stale code — fixed in-run after the first draft only wrote non-null codes), and skips its write entirely on a 502 so the handler's vendor text survives. No `status` in any update. New `tests/submit-refusal-code.spec.ts`.
+**follow-ups:**
+
+1. The spec's write-path cases test an inlined replica of the refusal block, not `uploadAndSubmitVideo` itself (it imports browser-only upload/trim modules); a harness for the real function would make them load-bearing.
+2. The free "Try again" (`RetrySubmission`) POSTs `/api/splitstep/jobs` from the button, not through this block, so a refusal there records no code or message — a stalled row retried from the match page keeps its previous reason.

@@ -163,7 +163,7 @@ ready).
 
 ## T12 · Stalled uploaded rows record a refusal code and keep the handler's reason
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** src/lib/services/splitstep/submit-match-video.ts (~443-462), tests/submit-refusal-code.spec.ts (new) (guess)
