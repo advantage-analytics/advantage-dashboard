@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Read a video's whole-track average frame rate from its container
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/video/container-frame-rate.ts (new), tests/container-frame-rate.spec.ts (new) — patterns: `src/lib/video/trim.worker.ts` (`Input` + `BlobSource`), `src/lib/match-video/media-inspection.ts` (format list, `dispose()` in `finally`)
 - **done when:**
