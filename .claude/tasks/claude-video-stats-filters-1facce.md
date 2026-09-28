@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Add court-half, shot-direction and spin helpers for match filters
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/match-detail/match-filters/shot-geometry.ts, match-filters/spin.ts, tests/match-filters-geometry.spec.ts (guess)
 - **done when:**
