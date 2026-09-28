@@ -1011,8 +1011,9 @@ function buildShotInserts(
     // Determine shot_type from "Stroke" column
     // If stroke is "Serve", check "Type" column for first/second serve
     const stroke = safeString(row["Stroke"]);
+    const isServe = stroke?.toLowerCase() === "serve";
     let shotType: string | null = stroke;
-    if (stroke?.toLowerCase() === "serve") {
+    if (isServe) {
       const serveType = String(row["Type"] ?? "").toLowerCase();
       if (serveType === "first_serve") {
         shotType = "First Serve";
@@ -1041,10 +1042,7 @@ function buildShotInserts(
       landing_y: toFloatOrNull(row["Bounce (y)"]),
       result: safeString(row["Result"]),
       video_time: toVideoTimeOrNull(row["Video Time"]),
-      zone:
-        stroke?.toLowerCase() === "serve"
-          ? serveZone(landingX)
-          : directionZone(landingX, contactX),
+      zone: isServe ? serveZone(landingX) : directionZone(landingX, contactX),
     });
   }
 
