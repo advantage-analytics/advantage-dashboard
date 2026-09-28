@@ -56,3 +56,25 @@ Decisions:
 2. `serve_side` isn't prefilled — could come from `serveCourtSide` on the deciding serve.
 3. Raw strokes the parse layer drops are never seeded, so a labeller can't mark them; consider seeding them.
 4. T4 can use `{ existing }` from `seedLabelSession` to show "resumed" vs "new".
+
+## T4 · Label session list and "Start labelling" — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:**
+
+- `src/lib/data/labels-server.ts`: `listLabelJobs()`, admin-checked and using the service role. It lists completed splitstep jobs with players, point counts, the open or latest session, and an "N of M checked" count that excludes deleted points.
+- New components in `src/components/admin/labels/`:
+  - `labels-table.tsx` and `labels-table-layout.ts`, following the requests-table pattern.
+  - `start-labelling-button.tsx`, which calls `seedLabelSessionAction` and then `router.push`, and shows errors inline.
+- `/admin/labels` page.
+- A placeholder `/admin/labels/[sessionId]` page, for T5 to replace.
+- A "Labels" tab in `admin-header.tsx`.
+- `MAP.md` regenerated.
+- `npm run build` passes.
+
+**follow-ups:**
+
+1. A job whose latest session is `complete` shows "Continue" but the action would seed a new session — may want a third state once real use shows it.
+2. No pagination on the jobs list (fine at current volume).
+3. The page errors or shows nothing until the label migration is applied live.

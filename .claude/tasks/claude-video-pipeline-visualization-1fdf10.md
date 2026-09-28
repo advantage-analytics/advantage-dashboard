@@ -57,7 +57,7 @@ ready).
 
 ## T4 · Label session list and "Start labelling"
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T3
 - **files:** src/app/admin/labels/page.tsx, src/lib/data/labels-server.ts, MAP.md (guess)
