@@ -548,6 +548,33 @@ test.describe("a server preset for the same line with a new format", () => {
     expect(h.current.formData.playOnLets).toBe(false);
   });
 
+  test("a resumed draft keeps its saved Lets, and a re-sync keeps a newer toggle", async () => {
+    const lineA = line({ adScoring: true });
+    const draft: MatchDraft = {
+      id: "draft-lets",
+      step: "trim",
+      stepCount: 4,
+      stepIndex: 2,
+      provider: "splitstep",
+      formData: { ...DEFAULT_FORM_DATA, playOnLets: false },
+      fileName: "court-one.mp4",
+      preset: lineA,
+      attachedLine: null,
+      updatedAt: "2026-09-20T00:00:00.000Z",
+    };
+    const h = await answeredOnLineA({ lineA, draft });
+    // The draft's own answer stands on its first seed, not the Play On default.
+    expect(h.current.formData.playOnLets).toBe(false);
+    h.current.handleInputChange("playOnLets", true);
+    h.render();
+    expect(h.current.formData.playOnLets).toBe(true);
+
+    // A same-line re-sync must not put the draft's saved answer back.
+    await swapTo(h, followServerPreset(lineA, line({ adScoring: false }))!);
+    expect(h.current.formData.adScoring).toBe(false);
+    expect(h.current.formData.playOnLets).toBe(true);
+  });
+
   test("a best-of edit reaches formData, and an unset Ad/No-Ad reads as unset", async () => {
     const lineA = line({ adScoring: true, bestOf: 3 });
     const h = await answeredOnLineA({ lineA });

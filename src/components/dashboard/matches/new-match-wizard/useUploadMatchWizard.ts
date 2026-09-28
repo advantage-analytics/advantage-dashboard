@@ -1478,7 +1478,12 @@ export function useUploadMatchWizard({
             defaultLets &&
             (preset.eventKind === "dual" || preset.eventKind === "tournament")
               ? true
-              : base.playOnLets,
+              : // A resumed draft's saved answer on its first seed; after that
+                // the live value — `base` re-spreads the draft, which would
+                // put the draft's answer back over a newer toggle.
+                firstSeed
+                ? base.playOnLets
+                : prev.playOnLets,
           matchType:
             preset.eventKind === "dual"
               ? "Dual Match"
