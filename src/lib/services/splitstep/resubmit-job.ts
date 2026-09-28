@@ -96,32 +96,20 @@ import { uploadEligibility } from "@/lib/workspace/upload-eligibility";
 import type { RosterIdentity } from "@/lib/workspace/upload-eligibility";
 import type { Workspace } from "@/lib/workspace/types";
 
-const LOG = "[splitstep-resubmit]";
+import {
+  isDownloadFailure,
+  MAX_TOTAL_ATTEMPTS,
+} from "@/lib/data/match-analysis";
 
-/** 1 original + 2 resubmissions. Enforced here and nowhere else. */
-export const MAX_TOTAL_ATTEMPTS = 3;
+// Defined in match-analysis.ts so client code can classify with them (this
+// file pulls in @azure/storage-blob); re-exported so the webhook route, the
+// jobs route and the reconciler keep importing them from here.
+export { isDownloadFailure, MAX_TOTAL_ATTEMPTS };
+
+const LOG = "[splitstep-resubmit]";
 
 /** Statuses that mean "this row will never move again on its own". */
 const TERMINAL_STATUSES = ["failed", "completed", "derivation_failed"];
-
-/**
- * The ONE failure class the system retries on its own.
- *
- * A download failure with a valid SAS means the file, submission and metadata
- * are all good — retrying is nearly free and nearly always works. Step
- * outranks code because the one real failure arrived as INTERNAL_ERROR at
- * step 'downloading_video'; a bare INTERNAL_ERROR elsewhere says "contact
- * support", video-quality rejections can never succeed on retry, and unknown
- * codes surface without retrying. Exported so the webhook route and the
- * reconciler classify with the same rule — this is the load-bearing line,
- * and two copies of it is how one site silently widens the retry class.
- */
-export function isDownloadFailure(
-  errorCode: string | null,
-  errorStep: string | null,
-): boolean {
-  return errorStep === "downloading_video" || errorCode === "VIDEO_UNREACHABLE";
-}
 
 export type ResubmitRefusalReason =
   | "not_found"

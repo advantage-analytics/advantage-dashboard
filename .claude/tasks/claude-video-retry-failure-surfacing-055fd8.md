@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Add the pure recovery classifier beside isInputRejected
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/lib/data/match-analysis.ts, src/lib/services/splitstep/resubmit-job.ts (move-out only), tests/match-analysis-input-rejected.spec.ts (guess)

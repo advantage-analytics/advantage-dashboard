@@ -265,6 +265,141 @@ export function canRetryAnalysis(analysis: {
   );
 }
 
+// `isDownloadFailure` and `MAX_TOTAL_ATTEMPTS` live here rather than in
+// `resubmit-job.ts` because classifyFailure() needs them and this file is
+// imported by client components — resubmit-job.ts pulls in
+// `@azure/storage-blob`. It re-exports both, so its importers are unchanged.
+
+/** 1 original + 2 resubmissions. Enforced here and nowhere else. */
+export const MAX_TOTAL_ATTEMPTS = 3;
+
+/**
+ * The ONE failure class the system retries on its own.
+ *
+ * A download failure with a valid SAS means the file, submission and metadata
+ * are all good — retrying is nearly free and nearly always works. Step
+ * outranks code because the one real failure arrived as INTERNAL_ERROR at
+ * step 'downloading_video'; a bare INTERNAL_ERROR elsewhere says "contact
+ * support", video-quality rejections can never succeed on retry, and unknown
+ * codes surface without retrying. Exported so the webhook route and the
+ * reconciler classify with the same rule — this is the load-bearing line,
+ * and two copies of it is how one site silently widens the retry class.
+ */
+export function isDownloadFailure(
+  errorCode: string | null,
+  errorStep: string | null,
+): boolean {
+  return errorStep === "downloading_video" || errorCode === "VIDEO_UNREACHABLE";
+}
+
+/**
+ * What a player can do about a job that did not finish. One class per row,
+ * decided by classifyFailure(); the copy and the action for each live in
+ * `analysis-failure-copy.ts`.
+ *
+ *   retry             Retry analysis (failed row) / Try again (stalled submit)
+ *   upload_again      the video never landed — send it again
+ *   fix_recording     the vendor rejected the file itself — a new recording
+ *   wait_or_ask       nothing to press now: allowance, eligibility, or the
+ *                     attempt ceiling
+ *   rederive          our statistics build crashed — rebuild, no vendor call
+ *   stats_unavailable our statistics build refused the data — the match renders
+ */
+export type RecoveryClass =
+  | "retry"
+  | "upload_again"
+  | "fix_recording"
+  | "wait_or_ask"
+  | "rederive"
+  | "stats_unavailable";
+
+/** The row facts classifyFailure() reads — plain values, no DB types. */
+export interface RecoveryInput {
+  /** Raw `processing_jobs.status`, not the resolved AnalysisStatus. */
+  dbStatus: string;
+  errorCode: string | null | undefined;
+  errorCategory: string | null | undefined;
+  errorStep: string | null | undefined;
+  /** Does the source video exist to resend? */
+  hasVideo: boolean;
+  /** Did the vendor deliver results? */
+  hasResults: boolean;
+  /** Rows in this job's resubmission chain, the original included. */
+  attemptsUsed: number;
+  /** An `uploaded` row past the submit threshold — the caller's isSubmitStalled(). */
+  stalledSubmit: boolean;
+}
+
+/**
+ * Codes a submit is refused with that clear on their own (allowance resets,
+ * eligibility is granted) rather than on a retry.
+ */
+const SUBMIT_WAIT_CODES = new Set([
+  "QUOTA_EXCEEDED",
+  "NOT_ELIGIBLE",
+  "NO_BILLING_WORKSPACE",
+]);
+
+/**
+ * Sort a job that did not finish into what the player can do about it.
+ *
+ * First matching rule wins, and the order is the design:
+ *   1. stalled `uploaded` → wait_or_ask for a refusal that clears on its own,
+ *      else retry (a free resubmit — nothing was spent)
+ *   2. `failed` with no video → upload_again, before any code rule: there is
+ *      nothing to resend
+ *   3. `failed` download failure → retry (the auto-retry class stays a subset)
+ *   4. `failed` input rejection → fix_recording
+ *   5. `failed` otherwise → retry
+ *   6. `derivation_failed` → rederive for a crash, stats_unavailable for a
+ *      refusal or no code
+ *
+ * Both `failed` retries (3 and 5) become wait_or_ask once the chain has used
+ * MAX_TOTAL_ATTEMPTS, since resubmitJob() refuses past the ceiling and no
+ * button should offer what the route will refuse.
+ *
+ * Returns null for any other row — healthy, in flight, or `uploaded` but not
+ * yet stalled.
+ */
+export function classifyFailure(input: RecoveryInput): RecoveryClass | null {
+  const errorCode = input.errorCode ?? null;
+
+  if (input.dbStatus === "uploaded") {
+    if (!input.stalledSubmit) return null;
+    return errorCode && SUBMIT_WAIT_CODES.has(errorCode)
+      ? "wait_or_ask"
+      : "retry";
+  }
+
+  if (input.dbStatus === "failed") {
+    if (!input.hasVideo) return "upload_again";
+    const retry: RecoveryClass =
+      input.attemptsUsed >= MAX_TOTAL_ATTEMPTS ? "wait_or_ask" : "retry";
+    if (isDownloadFailure(errorCode, input.errorStep ?? null)) return retry;
+    if (isInputRejected(input.dbStatus, input.errorCategory)) {
+      return "fix_recording";
+    }
+    return retry;
+  }
+
+  if (input.dbStatus === "derivation_failed") {
+    return errorCode === "DERIVATION_ERROR" ? "rederive" : "stats_unavailable";
+  }
+
+  return null;
+}
+
+/**
+ * Is the row's stored `error_code` note worth showing the player?
+ *
+ * `DERIVATION_*` notes are our reconciler talking to itself ("5 point(s)
+ * resolved no winner"); every other code carries a message from the vendor or
+ * the submit path that explains the state.
+ */
+export function showsStoredNote(errorCode: string | null | undefined): boolean {
+  return errorCode != null && !errorCode.startsWith("DERIVATION_");
+}
+
 export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
   uploading: "Uploading",
   uploaded: "Uploaded",
