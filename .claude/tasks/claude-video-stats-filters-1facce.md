@@ -43,7 +43,7 @@ ready).
 
 ## T3 · Build the shared MatchFilters model and predicates
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T2
 - **files:** src/components/dashboard/matches/match-detail/match-filters/model.ts, tests/match-filters-model.spec.ts (guess)

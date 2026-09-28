@@ -20,3 +20,20 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. T3 should build `ctx.hands` as `playerHands(match).playerN`, falling back to `inferHand(points, isPlayer1)` when that is null; that composition does not exist yet.
+
+## T3 · Build the shared MatchFilters model and predicates — done
+
+**gate:** mechanical pass; completion pass
+**changed:** New pure `match-filters/model.ts`: `MatchFilters`, `EMPTY_MATCH_FILTERS`, `applyMatchFilters`/`matchesPoint`, `buildFilterContext` (`playerHands`, falling back to `inferHand`), `optionAvailability`, `serializeMatchFilters`/`parseMatchFilters` (compact `_`/`.` form), `activeFilterCount`, `filtersEqual`, `toggleMatchFilter`, `MATCH_FILTER_OPTIONS`/`SECTIONS`/`KEYS`. New `match-filters/score.ts` holds `courtSideOf`, `isDeucePoint`/`isGamePoint` and the score parsing moved out of `film/filters/types.ts` (which now imports and re-exports them; no behaviour change), plus `courtSidesOf` and `normalizePointScore`. `tests/match-filters-model.spec.ts` has 25 tests.
+Implementer's own calls:
+
+- Service Winner and double fault are credited to the SERVER. On the live data the last shot row is usually the returner's (377/421 service winners, 81 double faults).
+- Every point of a 6-6 game is treated as a tiebreak, so it never matches the Points grid. This could misfire in advantage sets.
+- A winner with no shot rows goes to the point winner; an error goes to the point loser.
+- A return contact exactly 1.0 m behind the baseline is Middle.
+- A Result player picked alone narrows nothing; it only sets the point of view.
+  **follow-ups:**
+
+1. `point-endings-card.tsx` and head-to-head's derived path credit Service Winners to `p.player` (usually the returner), so their winner counts will disagree with the new filter's Winner count. This matters when T7 maps the "Winners" cut.
+2. `applyFilmFilters` could use `courtSidesOf` instead of its own game walk (moot once T8 deletes it).
+3. T5 decides whether a group with at most one available option is hidden (the plan says a one-set match shows no Sets group).

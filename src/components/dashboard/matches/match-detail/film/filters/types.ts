@@ -1,6 +1,16 @@
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { MatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 
+import {
+  courtSideOf,
+  isDeucePoint,
+  isGamePoint,
+} from "../../match-filters/score";
+
+// Moved to `match-filters/score.ts` (shared with the match filters); re-exported
+// so `film-filters.tsx` and the film specs keep importing it from here.
+export { courtSideOf };
+
 /**
  * The film filter model: the cut types, the predicates and the sentence that
  * describes a cut. Pure logic, no React — the report tab's panel, the quick
@@ -106,30 +116,6 @@ export function hasActiveFilmFilters(f: FilmFilters): boolean {
 
 /* ── Predicates ─────────────────────────────────────────────────────────── */
 
-function scoreParts(point: MatchPoint): [string, string] | null {
-  const parts = (point.pointScore ?? "").split("-");
-  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
-  return [parts[0], parts[1]];
-}
-
-/** 40-40 (and the parser's rarer AD-AD) — nobody is a point from the game. */
-function isDeucePoint(point: MatchPoint): boolean {
-  const parts = scoreParts(point);
-  if (!parts) return false;
-  const [a, b] = parts;
-  return (a === "40" && b === "40") || (a === "AD" && b === "AD");
-}
-
-/** Somebody wins the game with this point: an advantage, or exactly one 40. */
-function isGamePoint(point: MatchPoint): boolean {
-  const parts = scoreParts(point);
-  if (!parts) return false;
-  const [a, b] = parts;
-  if (a === "AD" && b === "AD") return false;
-  if (a === "AD" || b === "AD") return true;
-  return (a === "40") !== (b === "40");
-}
-
 function isWinnerResult(point: MatchPoint): boolean {
   return /winner$/i.test(point.resultType.trim());
 }
@@ -223,41 +209,6 @@ function matchesShot(point: MatchPoint, key: ShotKey): boolean {
         (point.rallyLength === 4 && /error$/i.test(point.resultType.trim()))
       );
   }
-}
-
-const RUNG: Record<string, number> = {
-  "0": 0,
-  "15": 1,
-  "30": 2,
-  "40": 3,
-  AD: 4,
-};
-
-/**
- * Which service court a point was played from.
- *
- * Tennis alternates courts every point of a game, starting in the deuce
- * court, so with a real point score the answer is the parity of the rungs
- * (0-0, 15-15, 30-0 and 40-40 are deuce; 15-0, 30-15, AD-40 are ad). Without
- * one, the point's index within its game gives the same parity — a let or a
- * replayed point would shift it, which is the accepted approximation.
- */
-export function courtSideOf(
-  point: MatchPoint,
-  indexInGame: number,
-  hasPointScore: boolean,
-): "deuce" | "ad" {
-  if (hasPointScore) {
-    const parts = point.pointScore
-      .split("-")
-      .map((p) => p.trim().toUpperCase());
-    const a = RUNG[parts[0] ?? ""];
-    const b = RUNG[parts[1] ?? ""];
-    if (a !== undefined && b !== undefined) {
-      return (a + b) % 2 === 0 ? "deuce" : "ad";
-    }
-  }
-  return indexInGame % 2 === 0 ? "deuce" : "ad";
 }
 
 function matchesFilm(
