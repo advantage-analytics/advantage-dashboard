@@ -6,7 +6,11 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
-import { scopeCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
+import {
+  scopeCut,
+  watchableSegmentProps,
+} from "@/components/dashboard/matches/match-detail/film-cut-context";
+import { sideCut } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
 import {
   scopePoints,
@@ -95,30 +99,30 @@ const OUTCOMES: OutcomeMeta[] = [
   },
 ];
 
+/** Each outcome's base cut, before a side is laid over it by `sideCut`. */
+const OUTCOME_BASE_CUT: Record<OutcomeKey, Partial<FilmFilters>> = {
+  winners: { result: ["winner"] },
+  unforcedErrors: { result: ["unforced"] },
+  doubleFaults: { serve: ["double-fault"] },
+  aces: { serve: ["ace"] },
+};
+
 /**
  * The film cut behind one segment of one side's bar. Aces and double faults
  * belong to whoever SERVED the point (`server`); winners to whoever WON it
  * (`outcome`); unforced errors to whoever LOST it, so a side's errors are the
  * points its opponent won — `outcome` is the point's winner, never the
- * player who struck the last ball. The same line `head-to-head-card.tsx`'s
- * `sideCut` draws. `you`/`opp` are relative, resolved by `useMatchSides()`
- * inside the film tab (guardrails §4); nothing here reads player order.
+ * player who struck the last ball. That is exactly the line
+ * `head-to-head-card.tsx`'s `sideCut` draws, so this delegates to it rather
+ * than re-deriving the same server/outcome, you/opp rule here. `you`/`opp`
+ * are relative, resolved by `useMatchSides()` inside the film tab
+ * (guardrails §4); nothing here reads player order.
  */
 export function outcomeCut(
   key: OutcomeKey,
   side: "you" | "opp",
 ): Partial<FilmFilters> {
-  const other = side === "you" ? "opp" : "you";
-  switch (key) {
-    case "winners":
-      return { result: ["winner"], outcome: side };
-    case "unforcedErrors":
-      return { result: ["unforced"], outcome: other };
-    case "doubleFaults":
-      return { serve: ["double-fault"], server: side };
-    case "aces":
-      return { serve: ["ace"], server: side };
-  }
+  return sideCut(OUTCOME_BASE_CUT[key], side);
 }
 
 type Tally = Record<OutcomeKey, number>;
@@ -364,19 +368,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                       ease: EASE_CHART,
                     }}
                     tabIndex={0}
-                    role={watch ? "button" : undefined}
-                    aria-label={watch ? `${label} Watch in Video` : label}
-                    onClick={watch}
-                    onKeyDown={
-                      watch
-                        ? (e: React.KeyboardEvent) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              watch();
-                            }
-                          }
-                        : undefined
-                    }
+                    {...watchableSegmentProps(watch, label)}
                     onMouseEnter={() => setHovered(id)}
                     onMouseLeave={() => setHovered(null)}
                     onFocus={() => setHovered(id)}

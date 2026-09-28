@@ -6,7 +6,10 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
-import { scopeCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
+import {
+  scopeCut,
+  watchableSegmentProps,
+} from "@/components/dashboard/matches/match-detail/film-cut-context";
 import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
 import {
   scopePoints,
@@ -238,19 +241,7 @@ export function RallyLengthCard() {
                     : "2px solid var(--surface-card)",
                 }}
                 tabIndex={0}
-                role={watch ? "button" : undefined}
-                aria-label={watch ? `${label} Watch in Video` : label}
-                onClick={watch}
-                onKeyDown={
-                  watch
-                    ? (e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          watch();
-                        }
-                      }
-                    : undefined
-                }
+                {...watchableSegmentProps(watch, label)}
                 onMouseEnter={() => setHovered(band.key)}
                 onMouseLeave={() => setHovered(null)}
                 onFocus={() => setHovered(band.key)}

@@ -242,6 +242,29 @@ export function isInputRejected(
   return dbStatus === "failed" && errorCategory === INPUT_REJECTED_CATEGORY;
 }
 
+/**
+ * Is a video-provider failure eligible for the Retry action?
+ *
+ * The one rule three surfaces (the match page's progress card, the matches
+ * drawer, the schedule line drawer) each re-derived: a job can be retried only
+ * if it is a `failed` vendor job (not `derivation_failed` — resubmitJob()
+ * refuses anything else) that still has a job to resubmit, and whose failure
+ * was not the vendor rejecting the input itself (that would fail the same way
+ * again). This is the shared part; each caller layers its own access-control
+ * clause (`canManage`, `canEdit && !doubles`) on top.
+ */
+export function canRetryAnalysis(analysis: {
+  status?: AnalysisStatus;
+  jobId?: string | null;
+  inputRejected?: boolean | null;
+}): boolean {
+  return (
+    analysis.status === "failed" &&
+    Boolean(analysis.jobId) &&
+    !analysis.inputRejected
+  );
+}
+
 export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
   uploading: "Uploading",
   uploaded: "Uploaded",

@@ -30,6 +30,7 @@ import { scoreHref } from "@/lib/schedule/score-seed";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
+  canRetryAnalysis,
   isAnalysisFailed,
   isAnalysisReady,
   isInFlight,
@@ -208,16 +209,18 @@ export function EventLineDrawer({
     canScore && nextResultHref && resultLink?.label !== "Add result"
       ? nextResultHref
       : null;
-  // A failed singles analysis the coach can resubmit. `status` is the line's
-  // match's own — the in-flight and ready states never offer it, and nor does
-  // an input-rejected video, which would fail the same way again.
+  // A failed singles analysis the coach can resubmit. canRetryAnalysis owns
+  // the shared rule; `!doubles && canEdit` is this drawer's own
+  // access-control clause.
   const retryJobId =
     !doubles &&
     canEdit &&
-    played?.status === "failed" &&
-    !played.inputRejected &&
-    played.jobId
-      ? played.jobId
+    canRetryAnalysis({
+      status: played?.status,
+      jobId: played?.jobId,
+      inputRejected: played?.inputRejected,
+    })
+      ? (played?.jobId ?? null)
       : null;
   // The first follow-up on offer is the footer's one primary; "View match"
   // is primary only when there is none (the Matches drawer's rule).

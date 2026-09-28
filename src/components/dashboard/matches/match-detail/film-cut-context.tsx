@@ -99,3 +99,36 @@ export function usePendingFilmCut(): PendingFilmCut | null {
   const clear = use(ClearCutContext);
   return useMemo(() => (cut && clear ? { cut, clear } : null), [cut, clear]);
 }
+
+/**
+ * A chart segment's click/keyboard wiring, when it opens a film cut.
+ *
+ * `watch` is `undefined` whenever there's no playable video, in which case
+ * every attribute here is `undefined` too, so the segment renders as inert,
+ * read-only markup. Shared by `point-endings-card.tsx` and
+ * `rally-length-card.tsx` — both bars behave identically here, only their
+ * segment shape and fill differ.
+ */
+export function watchableSegmentProps(
+  watch: (() => void) | undefined,
+  label: string,
+): {
+  role: "button" | undefined;
+  "aria-label": string;
+  onClick: (() => void) | undefined;
+  onKeyDown: ((e: React.KeyboardEvent) => void) | undefined;
+} {
+  return {
+    role: watch ? "button" : undefined,
+    "aria-label": watch ? `${label} Watch in Video` : label,
+    onClick: watch,
+    onKeyDown: watch
+      ? (e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            watch();
+          }
+        }
+      : undefined,
+  };
+}

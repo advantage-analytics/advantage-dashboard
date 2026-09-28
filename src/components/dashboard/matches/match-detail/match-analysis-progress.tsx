@@ -22,6 +22,7 @@ import { TriangleAlert, Info } from "lucide-react";
 import {
   ANALYSIS_LABEL,
   PIPELINE_STAGES,
+  canRetryAnalysis,
   formatEta,
   isAnalysisFailed,
   isLiveUpdating,
@@ -256,18 +257,17 @@ export function MatchAnalysisProgress({
                         ? ANALYSIS_FAILURE_COPY.failed.inputRejected.body
                         : ANALYSIS_FAILURE_COPY.failed.body}
                     </p>
-                    {/* Gated on the literal status, not the broader `failed`
-                    (which also covers derivation_failed): resubmitJob()
-                    refuses anything but a video-provider failure on purpose,
-                    so showing this button elsewhere would always 409. An
-                    input-rejected video failed on its own recording
-                    requirements, so retrying would resubmit the same unusable
-                    file and fail the same way — no retry button for it. */}
-                    {analysis.jobId &&
-                      analysis.status === "failed" &&
-                      !analysis.inputRejected && (
-                        <RetryAnalysis jobId={analysis.jobId} />
-                      )}
+                    {/* canRetryAnalysis is gated on the literal status, not the
+                    broader `failed` (which also covers derivation_failed):
+                    resubmitJob() refuses anything but a video-provider
+                    failure on purpose, so showing this button elsewhere would
+                    always 409. An input-rejected video failed on its own
+                    recording requirements, so retrying would resubmit the
+                    same unusable file and fail the same way — no retry
+                    button for it. */}
+                    {analysis.jobId && canRetryAnalysis(analysis) && (
+                      <RetryAnalysis jobId={analysis.jobId} />
+                    )}
                     {/* The "upload a new recording" the copy above offers. The
                     route re-checks the match and sends anything it can't take
                     somewhere that can. */}
