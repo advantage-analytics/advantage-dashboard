@@ -68,6 +68,7 @@ import {
   VideoProbeSummary,
   DEFAULT_FORM_DATA,
   STEP_ORDER_BY_KIND,
+  presetLineKey,
   type EventPreset,
   type LineOffer,
   type MatchDraft,
@@ -233,11 +234,6 @@ function presetTiebreaks(
     playerTiebreaks: row(score.player1_tiebreaks),
     opponentTiebreaks: row(score.player2_tiebreaks),
   };
-}
-
-/** Which line a preset fills — what tells a swap from a re-run of the seed. */
-function presetLineKey(preset: EventPreset): string | null {
-  return preset.entryId ?? preset.matchId;
 }
 
 /** Name, size and mtime — enough to tell one picked recording from another. */

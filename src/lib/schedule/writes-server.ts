@@ -322,6 +322,17 @@ export function createScheduleWriter(
     revalidatePath(`/dashboard/team/schedule/${eventId}`);
   }
 
+  /**
+   * An edit to the event itself — its format above all. The upload wizard's
+   * line preset carries the event's `best_of` / `ad_scoring`, so a wizard
+   * opened on one of its lines has to re-read them or it scores the next
+   * match under the format the coach just changed.
+   */
+  function revalidateEventEdit(eventId: string): void {
+    revalidateEvent(eventId);
+    revalidatePath("/dashboard/team/upload");
+  }
+
   /** Which side a submitted line's "No player" forfeits, if either. */
   function lineupSideOf(line: LineupLineInput): OutcomeSide | null {
     if (line.noPlayer) return "ours";
@@ -522,7 +533,7 @@ export function createScheduleWriter(
     );
     if (forfeitFailure) return forfeitFailure;
 
-    revalidateEvent(detail.event.id);
+    revalidateEventEdit(detail.event.id);
     return { eventId: detail.event.id };
   }
 
@@ -582,7 +593,7 @@ export function createScheduleWriter(
     );
     if (failure) return failure;
 
-    revalidateEvent(detail.event.id);
+    revalidateEventEdit(detail.event.id);
     return { eventId: detail.event.id };
   }
 

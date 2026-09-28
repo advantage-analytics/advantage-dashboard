@@ -16,7 +16,11 @@ import {
 import { DEFAULT_DOUBLES_GAMES_TO } from "@/lib/schedule/format";
 import { matchResultFor } from "@/lib/schedule/entry-state";
 import type { EventDetail, EventEntry } from "@/lib/schedule/types";
-import type { LineupLineInput, UpdateDualInput } from "@/lib/schedule/actions";
+import type {
+  LineupLineInput,
+  UpdateDualInput,
+  UpdateTournamentInput,
+} from "@/lib/schedule/actions";
 
 function mockRequire(name: string) {
   if (name === "./entry-plan") return { lineupForfeitSide, planEntryChanges };
@@ -220,5 +224,99 @@ test("updateDual's entry delete maps a console-owned foreign key to the console 
   });
   expect(deleteCalls).toEqual([
     { table: "program_event_entries", ids: ["entry-S1"] },
+  ]);
+});
+
+/**
+ * An event edit can change its format, and the upload wizard's line preset
+ * carries that format — so both edit writers refresh `/dashboard/team/upload`
+ * as well as the schedule, or a wizard reopened on one of the event's lines
+ * keeps scoring under the old Ad/No-Ad and best-of.
+ */
+function eventEditWriter(kind: "dual" | "tournament") {
+  const refreshed: string[] = [];
+  const detail: EventDetail = {
+    event: {
+      id: "event",
+      programId: "program",
+      kind,
+      name: "Event",
+      startsOn: "2026-09-10",
+      endsOn: "2026-09-12",
+      site: "home",
+      surface: "hard",
+      host: null,
+      format: { bestOf: 3, adScoring: true },
+    },
+    entries: [],
+  };
+  const client = {
+    from() {
+      const q: Record<string, unknown> = {};
+      for (const method of ["update", "delete", "insert", "in", "eq"])
+        q[method] = () => q;
+      q.then = (resolve: (value: unknown) => unknown) =>
+        Promise.resolve({ error: null }).then(resolve);
+      return q;
+    },
+    rpc: async () => ({ data: null, error: null }),
+  };
+  const service = writer.createScheduleWriter(
+    { programId: "program", userId: "coach" },
+    {
+      createClient: async () => client as never,
+      getEventDetail: async () => detail,
+      revalidatePath: (path: string) => {
+        refreshed.push(path);
+      },
+    },
+  );
+  return { service, refreshed };
+}
+
+test("updateTournament refreshes the upload wizard alongside the schedule", async () => {
+  const { service, refreshed } = eventEditWriter("tournament");
+  const input: UpdateTournamentInput = {
+    eventId: "event",
+    name: "Fall Invitational",
+    startsOn: "2026-09-10",
+    endsOn: "2026-09-12",
+    site: "home",
+    surface: "hard",
+    host: null,
+    bestOf: 3,
+    adScoring: false,
+    entries: [],
+  };
+
+  expect(await service.updateTournament(input)).toEqual({ eventId: "event" });
+  expect(refreshed).toEqual([
+    "/dashboard/team/schedule",
+    "/dashboard/team/schedule/event",
+    "/dashboard/team/upload",
+  ]);
+});
+
+test("updateDual refreshes the upload wizard alongside the schedule", async () => {
+  const { service, refreshed } = eventEditWriter("dual");
+  const input: UpdateDualInput = {
+    eventId: "event",
+    date: "2026-09-10",
+    startsAtTime: null,
+    site: "home",
+    surface: "hard",
+    bestOf: 3,
+    adScoring: false,
+    doublesGamesTo: 6,
+    doublesAdScoring: false,
+    // No slot carries an id, so every line plans as an insert.
+    lines: lineupWith("none"),
+  };
+
+  expect(await service.updateDual(input)).toEqual({ eventId: "event" });
+  expect(refreshed).toEqual([
+    "/dashboard/team/schedule",
+    "/dashboard/team/schedule/event",
+    "/dashboard/team/upload",
   ]);
 });

@@ -67,7 +67,7 @@ ready).
 
 ## T5 · Re-sync the wizard's line preset when the event's format changes
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx (`useState(initialPreset)` ~line 84), src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (preset seed effect ~1333-1460), src/lib/schedule/writes-server.ts (`updateTournament`/`updateDual` revalidation ~line 321), tests/upload-score-state.spec.ts or tests/upload-line-offers.spec.ts, writer spec
 - **done when:**

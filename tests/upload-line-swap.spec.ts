@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
 import {
   DEFAULT_FORM_DATA,
+  followServerPreset,
   type EventPreset,
   type MatchDraft,
 } from "@/components/dashboard/matches/new-match-wizard/types";
@@ -426,5 +428,122 @@ test.describe("a PinnedLineBar line swap", () => {
     // The seed re-spreads `draft.formData` on every run, so a swap puts the
     // draft's 30 s window back over the 120 s one set since.
     expect(h.current.formData.videoStartSeconds).toBe(120);
+  });
+});
+
+/**
+ * T5 — the event's format edited while a wizard is open on one of its lines.
+ *
+ * `updateTournament` / `updateDual` revalidate `/dashboard/team/upload`, so the
+ * page re-renders and hands `UploadMatchFlow` a fresh preset for the same
+ * line. The flow follows it through `followServerPreset` (its `setPreset`),
+ * which is modelled here the same way the swap is: mutate `h.props.preset` to
+ * what the flow would hold, re-render.
+ */
+test.describe("a server preset for the same line with a new format", () => {
+  test("followServerPreset takes the format and keeps the held line", () => {
+    const held = line({ adScoring: true, bestOf: 3 });
+    const fresh = line({
+      adScoring: false,
+      bestOf: 1,
+      lineup: [
+        { slot: "S2", playerName: "Sam Ortiz", state: "open", preset: LINE_B },
+      ],
+    });
+
+    const followed = followServerPreset(held, fresh);
+    expect(followed).toEqual({
+      ...held,
+      adScoring: false,
+      bestOf: 1,
+      lineup: fresh.lineup,
+    });
+  });
+
+  test("followServerPreset keeps what it holds when nothing about the format moved", () => {
+    const held = line({ adScoring: true });
+    // A fresh object from a re-render with the same data is not a change.
+    expect(followServerPreset(held, line({ adScoring: true }))).toBeNull();
+    expect(followServerPreset(held, null)).toBeNull();
+    expect(followServerPreset(null, line())).toBeNull();
+  });
+
+  test("followServerPreset never swaps lines — a different line is ignored", () => {
+    // The bar swapped to line B; the URL (and so the server's preset) still
+    // names line A. The flow keeps line B rather than swapping back.
+    expect(
+      followServerPreset(LINE_B, line({ adScoring: true, bestOf: 1 })),
+    ).toBeNull();
+  });
+
+  test("followServerPreset copies an unset Ad/No-Ad as unset, never false", () => {
+    const followed = followServerPreset(
+      line({ adScoring: true }),
+      line({ adScoring: null }),
+    );
+    expect(followed?.adScoring).toBeNull();
+  });
+
+  test("UploadMatchFlow follows a fresh initialPreset through followServerPreset", () => {
+    // No DOM harness renders the flow, so pin the wiring: the prop is compared
+    // with the last one seen and the held preset replaced only by what
+    // `followServerPreset` returns.
+    const flow = readFileSync(
+      "src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx",
+      "utf8",
+    );
+    expect(flow).toMatch(/if \(initialPreset !== seenInitialPreset\) \{/);
+    expect(flow).toMatch(
+      /const followed = followServerPreset\(preset, initialPreset\);\s*if \(followed\) setPreset\(followed\);/,
+    );
+  });
+
+  test("an Ad to No-Ad edit reaches formData without clearing the file or the typed score", async () => {
+    const lineA = line({ adScoring: true });
+    const h = await answeredOnLineA({ lineA });
+    expect(h.current.formData.adScoring).toBe(true);
+    h.current.handleScoreChange("player", 0, "6");
+    h.render();
+    h.current.handleScoreChange("opponent", 0, "4");
+    h.render();
+    const typed = {
+      playerScores: [...h.current.formData.playerScores],
+      opponentScores: [...h.current.formData.opponentScores],
+    };
+    expect(recorded(typed.playerScores)).toEqual([6]);
+
+    const followed = followServerPreset(lineA, line({ adScoring: false }));
+    expect(followed).not.toBeNull();
+    await swapTo(h, followed!);
+
+    const f = h.current.formData;
+    // The Scoring read cell renders "No-Ad" from exactly this.
+    expect(f.adScoring).toBe(false);
+    expect(f.bestOf).toBe("3");
+    expect(f.playerScores).toEqual(typed.playerScores);
+    expect(f.opponentScores).toEqual(typed.opponentScores);
+    expect(h.current.uploadedFile?.name).toBe("court-one.mp4");
+    // A re-run for the same line, not a swap: the answers about its players
+    // and the camera stay.
+    expect(f.initialTopPlayerIsPlayer1).toBe(true);
+    expect(f.playerHand).toBe("left");
+    expect(f.opponentPlayerId).toBe("opp-jordan");
+    expect(f.videoStartSeconds).toBe(120);
+  });
+
+  test("a best-of edit reaches formData, and an unset Ad/No-Ad reads as unset", async () => {
+    const lineA = line({ adScoring: true, bestOf: 3 });
+    const h = await answeredOnLineA({ lineA });
+
+    const followed = followServerPreset(
+      lineA,
+      line({ adScoring: null, bestOf: 1 }),
+    );
+    await swapTo(h, followed!);
+
+    expect(h.current.formData.bestOf).toBe("1");
+    // Guardrails §3.1: undefined, never a defaulted false.
+    expect(h.current.formData.adScoring).toBeUndefined();
+    expect(h.current.uploadedFile?.name).toBe("court-one.mp4");
   });
 });
