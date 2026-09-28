@@ -12,3 +12,11 @@ is the runner's. Newest entries at the bottom.
 1. The wizard should refuse or redirect when a resumed `?draft=` targets a match that already has a job, so a deep link cannot start a second job (adjacent to T2).
 2. A coach's stale draft on a player's match is hidden client-side but never reaped, because per-creator RLS hides the job from the server lookup; a SECURITY DEFINER RPC or `visible_match_ids()` would let the server reap those too.
 3. The reap delete runs during render rather than in `after()` (the session client needs cookies, which `after()` in a Server Component may not have); a service-role client inside `after()` would make deletion reliable on Vercel.
+
+## T2 · Wizard submit deletes every draft targeting the match — done
+
+**gate:** mechanical — PASS (lint, typecheck, full suite). completion — `VERDICT: pass`.
+**changed:** `actions.ts` — new `deleteMatchDraftsForMatch(matchId)` deletes the signed-in user's `match_drafts` rows where `payload->preset->>matchId` or `payload->attachedLine->>matchId` equals the id (`.eq("user_id", …).or(…)`). `useUploadMatchWizard.ts` — one fire-and-forget call after the shared match write path (covers both `reusingMatch` and insert), beside the kept `deleteMatchDraft(draftId)`. Mocks: `matches-page-actions-browser-mock.ts` gains a no-op export; `upload-wizard-hook.ts` gains a handler plus a `draftDeletesForMatch` tracking array.
+**follow-ups:**
+
+1. No spec asserts the new call end-to-end: add a case to `tests/upload-draft-resume.spec.ts` where a wizard opened via `?entry=&match=` (draftId null) submits and `draftDeletesForMatch` records the match id.

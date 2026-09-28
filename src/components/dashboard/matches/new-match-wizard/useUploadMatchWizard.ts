@@ -73,7 +73,11 @@ import {
   type MatchDraft,
   type IdentityMatchStatus,
 } from "./types";
-import { deleteMatchDraft, saveMatchDraft } from "@/lib/wizard/actions";
+import {
+  deleteMatchDraft,
+  deleteMatchDraftsForMatch,
+  saveMatchDraft,
+} from "@/lib/wizard/actions";
 import { draftTargetMatchId } from "@/lib/wizard/draft-target";
 import { playedSets, scoreSetsFrom } from "@/lib/ui/score-format";
 import type { CreatedMatch } from "./upload-progress";
@@ -3345,6 +3349,10 @@ export function useUploadMatchWizard({
         // The draft, if one was saved, is done with. Best-effort: a row left
         // behind is a stale Resume in the list, not a wrong match.
         if (draftId) void deleteMatchDraft(draftId).catch(() => undefined);
+        // Any other draft targeting this match (e.g. an earlier "Save draft"
+        // for the same schedule line, opened again with draftId === null) is
+        // done with too — see deleteMatchDraftsForMatch's doc comment.
+        void deleteMatchDraftsForMatch(matchId).catch(() => undefined);
         // Store the real matchId (recent-activity reads this back as the id to poll for
         // processing completion). Storing a literal "true" made the first-upload poll
         // target a bogus id and never detect completion.

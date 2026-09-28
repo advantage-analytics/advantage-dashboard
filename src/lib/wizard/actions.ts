@@ -650,6 +650,39 @@ export async function deleteMatchDraft(id: string): Promise<void> {
 }
 
 /**
+ * Deletes every one of the signed-in user's drafts that target `matchId` —
+ * a draft opened from a scored schedule line (`?entry=&match=`) or whose
+ * details step accepted a line offer, per `draftTargetMatchId()`
+ * (`src/lib/wizard/draft-target.ts`).
+ *
+ * `handleCreateMatch` calls this right after the match row write succeeds,
+ * alongside the existing `deleteMatchDraft(draftId)`: that call only removes
+ * the draft the wizard was resuming (`draftId`), which is null when the
+ * wizard was opened straight from the schedule line. Without this, an
+ * earlier "Save draft" for the same line survives the submit as a stale row.
+ *
+ * RLS (`(select auth.uid()) = user_id`) already scopes deletes to the
+ * caller's own rows; the explicit `user_id` filter here matches
+ * `listMatchDrafts`'s pattern rather than relying on RLS alone.
+ */
+export async function deleteMatchDraftsForMatch(
+  matchId: string,
+): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  await supabase
+    .from("match_drafts")
+    .delete()
+    .eq("user_id", user.id)
+    .or(
+      `payload->preset->>matchId.eq.${matchId},payload->attachedLine->>matchId.eq.${matchId}`,
+    );
+}
+
+/**
  * A draft as it comes back off the row, carrying the workspace it was saved
  * under alongside its payload.
  *

@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Wizard submit deletes every draft targeting the match
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/wizard/actions.ts, src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (guess)
 - **done when:**
