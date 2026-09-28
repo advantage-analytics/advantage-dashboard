@@ -66,9 +66,10 @@ export interface CourtPosition {
  *
  * NOT normalized. The integration spec's §4.2 says these columns are 0-1, and
  * an earlier `metersToNormalized()` here implemented that. Both are wrong, and
- * wrong in the silent direction: `calculate_match_stats` compares
- * `abs(landing_x)` against 2.74 and 1.37 and computes `23.77 - contact_y`, so
- * normalized input puts every serve under 1.37 (100% "T", zero Wide and Body),
+ * wrong in the silent direction: `serveZone()` compares `abs(landing_x)`
+ * against 2.74 and 1.37, `directionZone()` against 1.0, and
+ * `calculate_match_stats` computes `23.77 - contact_y`, so normalized input
+ * puts every serve under 1.37 (100% "T", zero Wide and Body),
  * every return under 1.0 (100% "Middle") and every contact under 11.885 (100%
  * "inside"). Three stat families read zero with nothing erroring.
  *
@@ -150,11 +151,11 @@ export function isInServiceBox(
  * Serve placement bucket from a landing x, in the database's court frame.
  *
  * The thresholds are not arbitrary and must not be re-tuned: they are the
- * singles half-width in thirds (4.115/3 = 1.372, 2*4.115/3 = 2.743), and
- * `calculate_match_stats` hard-codes 1.37 and 2.74 to compute `serve_t`,
- * `serve_body` and `serve_wide` independently from the same column. If
- * `shots.zone` and those three ever disagree, one of them is lying to a coach
- * and nothing says which.
+ * singles half-width in thirds (4.115/3 = 1.372, 2*4.115/3 = 2.743).
+ * `calculate_match_stats` counts `serve_t`, `serve_body` and `serve_wide`
+ * from the `shots.zone` this writes — it no longer re-derives them from the
+ * coordinates — so placement is one rule. SwingVision's zones come from the
+ * twin in supabase/functions/process-match; change both together.
  *
  * Returns a value from the `shots_zone_check` constraint, or null when the
  * landing is unknown.
@@ -172,19 +173,24 @@ export function serveZone(
 /**
  * Direction bucket for a non-serve, from where it was struck to where it landed.
  *
- * A landing within 1.0 m of the centre line is Middle regardless of direction,
- * as `calculate_match_stats` reads it. Otherwise the ball is crosscourt when it
- * crosses the centre line — hitter and bounce on opposite sides of x = 0 — and
- * down the line when it stays on the hitter's side. Inside-out and inside-in
- * are the same two answers struck from the backhand corner, so they need no
- * bucket of their own.
+ * A landing within 1.0 m of the centre line is Middle regardless of direction.
+ * Otherwise the ball is crosscourt when it crosses the centre line — hitter
+ * and bounce on opposite sides of x = 0 — and down the line when it stays on
+ * the hitter's side. Inside-out and inside-in are the same two answers struck
+ * from the backhand corner, so they need no bucket of their own yet.
  *
  * Both x values are metres about the centre line in the one fixed frame
  * (`metersToCourtFrame`), which does not flip with the hitter's end, so the
  * rule reads the same for the near and the far player. It used to compare the
- * landing against the SERVE's landing instead, which is only right for the
- * return: from the third shot on, the far player's crosscourt and
- * down-the-line came out swapped about as often as not.
+ * landing against the SERVE's landing instead, which is only a proxy for where
+ * the receiver stood: it misread returns off T serves, and from the third
+ * shot on swapped the far player's crosscourt and down-the-line about as
+ * often as not. Checked against SwingVision's own Direction labels, this rule
+ * agrees on 98% of in-play rally shots.
+ *
+ * `calculate_match_stats` counts return direction from the zone this writes,
+ * and SwingVision's zones come from the twin in
+ * supabase/functions/process-match — change both together.
  *
  * Returns null when the hitter stood on the centre line or either position is
  * missing — "unmeasured", never a guess.

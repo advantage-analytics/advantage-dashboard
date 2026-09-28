@@ -116,7 +116,19 @@ function exportWorkbook(): Promise<Buffer<ArrayBuffer>> {
   return (cachedWorkbook ??= buildWorkbook());
 }
 
-async function buildWorkbook(): Promise<Buffer<ArrayBuffer>> {
+type ShotRow = readonly (string | number | null)[];
+
+// prettier-ignore
+const EXPORT_SHOTS: readonly ShotRow[] = [
+  [1, 1, 1, 1, HOST, "Serve", "first_serve", "Flat", 98.2, 0.3, 0.1, 3.1, 17.9, "In", 12.5],
+  [1, 1, 2, 1, HOST, "Serve", "first_serve", "Slice", 92, -0.4, 0.2, -1, 18.2, "In", 20],
+  [1, 1, 2, 2, GUEST, "Forehand", null, "Topspin", 65, -1.2, 22, 2, 5, "In", 21],
+  [1, 1, 2, 3, HOST, "Forehand", null, "Topspin", 70, 2.1, 1.5, -3, 20, "Out", 22.4],
+];
+
+async function buildWorkbook(
+  shotRows: readonly ShotRow[] = EXPORT_SHOTS,
+): Promise<Buffer<ArrayBuffer>> {
   const workbook = new ExcelJS.Workbook();
 
   const settings = workbook.addWorksheet("Settings");
@@ -182,14 +194,7 @@ async function buildWorkbook(): Promise<Buffer<ArrayBuffer>> {
     "Result",
     "Video Time",
   ]);
-  // prettier-ignore
-  shots.addRow([1, 1, 1, 1, HOST, "Serve", "first_serve", "Flat", 98.2, 0.3, 0.1, 3.1, 17.9, "In", 12.5]);
-  // prettier-ignore
-  shots.addRow([1, 1, 2, 1, HOST, "Serve", "first_serve", "Slice", 92, -0.4, 0.2, -1, 18.2, "In", 20]);
-  // prettier-ignore
-  shots.addRow([1, 1, 2, 2, GUEST, "Forehand", null, "Topspin", 65, -1.2, 22, 2, 5, "In", 21]);
-  // prettier-ignore
-  shots.addRow([1, 1, 2, 3, HOST, "Forehand", null, "Topspin", 70, 2.1, 1.5, -3, 20, "Out", 22.4]);
+  for (const row of shotRows) shots.addRow([...row]);
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
@@ -554,6 +559,42 @@ test("a real export lands points, shots and stats through one RPC, then the invo
     idOf.get(2),
   ]);
   expect(shots.map((s) => s.is_player1)).toEqual([true, true, false, true]);
+});
+
+test("each shot's zone is placed from its own hitter's contact, never the opponent's", async () => {
+  // One fixed court frame: the host serves from the near deuce (+x), the
+  // guest receives on the far deuce (-x). Every rally shot below would read
+  // the other way from the PREVIOUS hitter's contact, which the zone once used.
+  // prettier-ignore
+  const rows: ShotRow[] = [
+    [1, 1, 1, 1, HOST, "Serve", "first_serve", "Flat", 110, 0.5, -0.3, 3.1, 17.9, "In", 12.5],
+    // SwingVision numbers some non-serves 1 too: a stroke, so a direction.
+    [1, 1, 1, 1, GUEST, "Feed", null, "Flat", 30, -2.5, 24, 2.2, 6, "In", 12],
+    [1, 1, 2, 1, HOST, "Serve", "first_serve", "Slice", 92, 0.5, -0.3, -2, 18.2, "In", 20],
+    [1, 1, 2, 2, GUEST, "Forehand", null, "Topspin", 65, -2.2, 24.5, 3, 4, "In", 21],
+    [1, 1, 2, 3, HOST, "Backhand", null, "Slice", 60, 3.1, 0.4, 2.5, 20, "In", 22],
+    [1, 1, 2, 4, GUEST, "Forehand", null, "Topspin", 66, 2.4, 23, 0.6, 5, "In", 23],
+    [1, 1, 2, 5, HOST, "Forehand", null, "Topspin", 70, null, null, -3, 19, "In", 24],
+    [1, 1, 2, 6, GUEST, "Backhand", null, "Flat", 64, 0, 24, 3, 6, "Out", 25],
+  ];
+  const { status, argsOf } = await invoke({
+    bearer: SERVICE_ROLE_KEY,
+    body: { matchId: MATCH, fileNames: [OWN_FILE] },
+    workbook: await buildWorkbook(rows),
+  });
+  expect(status).toBe(200);
+  const [args] = argsOf("import_match_rows");
+  const shots = args.p_shots as Record<string, unknown>[];
+  expect(shots.map((s) => [s.shot_number, s.zone])).toEqual([
+    [1, "Wide"], // |3.1| >= 2.74
+    [1, "Crosscourt"], // a feed at shot 1 is not a serve
+    [1, "Body"], // 1.37 <= |-2| < 2.74
+    [2, "Crosscourt"], // struck at -2.2, lands at +3: crosses the line
+    [3, "Down the Line"], // struck at +3.1, lands at +2.5: stays on its side
+    [4, "Middle"], // within 1.0 m of the centre line, whatever the direction
+    [5, null], // no contact: unmeasured, never a guess
+    [6, null], // struck on the centre line itself
+  ]);
 });
 
 test("the RPC's unique_violation is answered 409 with the pre-check's body and nothing is invoked", async () => {

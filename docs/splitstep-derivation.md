@@ -89,8 +89,9 @@ x_ours = x_vendor;
 y_ours = y_vendor + 11.885; // metersToCourtFrame()
 ```
 
-Confirmed twice: `calculate_match_stats` compares `abs(landing_x)` to 2.74/1.37
-(the singles half-width in thirds) and computes `23.77 - contact_y`; and live
+Confirmed twice: `serveZone()` compares `abs(landing_x)` to 2.74/1.37 (the
+singles half-width in thirds) and `calculate_match_stats` computes
+`23.77 - contact_y`; and live
 SwingVision in-serve `landing_y` occupies 5.49–11.87 and 11.93–18.29, the two
 service boxes to the centimetre.
 
@@ -101,12 +102,31 @@ numerically identical, so nothing fails.
 
 ### A faulted serve takes `shot_number` 0
 
-Deciding serve is 1, return is 2. `calculate_match_stats` joins
+Deciding serve is 1, return is 2. `calculate_match_stats` used to join
 `serve.shot_number = 1` to `ret.shot_number = 2` with **no** `shot_type` or
-`result` filter, so two rows at 1 fan the join out. Live production shows 1,550
-returns producing 2,534 joined rows, 170 counted as _both_ Crosscourt and Down
-the Line. SwingVision itself puts both serves at 1 — do not copy it. `0` is
-already this database's convention for pre-point rows (`Feed`).
+`result` filter, so two rows at 1 fanned the join out (1,550 returns produced
+2,534 joined rows, 170 counted as _both_ Crosscourt and Down the Line). The
+join is gone since 2026-09-28 (see below), but `ret.shot_number = 2` still
+means "the return" everywhere else. SwingVision itself puts both serves at 1 —
+do not copy it. `0` is already this database's convention for pre-point rows
+(`Feed`).
+
+### Placement is `shots.zone`, one rule
+
+`calculate_match_stats` counts `serve_wide/body/t` and
+`return_cross_court/down_the_line/middle` from `shots.zone`; it does not
+re-derive them from coordinates. The zone is decided once, where the shot is
+written: `serveZone()` / `directionZone()` in `court.ts` here, and their twins
+in `supabase/functions/process-match` for SwingVision. Direction reads the
+shot's OWN contact against its landing. A new placement (Inside-In,
+Inside-Out) therefore arrives through `shots.zone` alone — widen
+`shots_zone_check` and count the new value.
+
+Return direction also skips a shot 2 hit by the **server**
+(`ret.is_player1 <> p.server_is_player1`): the vendor missed the real return
+(7% of video points, 2% of SwingVision), and that ball is the server's next
+shot, not a return. `return_contact_*` is a different measure (`contact_y`)
+and still counts every shot 2.
 
 ### Score strings are SERVER-RELATIVE
 

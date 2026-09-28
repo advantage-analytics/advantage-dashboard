@@ -357,6 +357,27 @@ function calculateSetPoint(gameScore, pointScore) {
 **Match Point Logic:**
 A point is a match point when it's a set point for a player who has won `setsToWin - 1` sets. The function tracks WHO has the set point (host vs guest), not just that someone does.
 
+### Shot Placement (`shots.zone`)
+
+Every shot's zone is decided here, once, and `calculate_match_stats` only
+counts it (`serve_wide/body/t`, `return_cross_court/down_the_line/middle`):
+
+- **Serve** (the `Stroke` is `Serve`, whatever its shot number):
+  `|Bounce (x)| < 1.37` → `T`, `< 2.74` → `Body`, else `Wide`.
+- **Every other stroke**: `|Bounce (x)| <= 1.0` → `Middle`; otherwise
+  `Crosscourt` when the shot's OWN `Hit (x)` and `Bounce (x)` sit on opposite
+  sides of the centre line, `Down the Line` when on the same side; null when
+  the hit is missing or exactly 0.
+
+The export's x is one fixed court frame for both ends — no per-player flip.
+`serveZone()` / `directionZone()` here are twins of the video derivation's in
+`src/lib/services/splitstep/derivation/court.ts`; change both together. Until
+2026-09-28 non-serves read the PREVIOUS shot's hit (the opponent), which
+inverted most directions; `20260928153433_swingvision_shot_zone_own_contact`
+backfilled every SwingVision shot. The export's own `Direction` column
+(cross court / down the line / inside out / inside in) is not read; it agrees
+with this rule on 98% of in-play rally shots.
+
 ### Match Stats Calculation
 
 `import_match_rows` calls the `calculate_match_stats(p_match_id)` Postgres function in the same transaction as the points and shots inserts; it aggregates data from the `points` and `shots` tables.
