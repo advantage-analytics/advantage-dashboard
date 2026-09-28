@@ -98,7 +98,7 @@ ready).
 
 ## T7 · Move the Film tab onto the shared model and rewrite watch cuts
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T5
 - **files:** film/film-tab.tsx, film/film-advanced-panel.tsx, film/film-quick-filters.tsx, film-cut-context.tsx, match-report-context.tsx, head-to-head-card.tsx, rally-length-card.tsx, point-endings-card.tsx (guess)

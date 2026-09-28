@@ -13,39 +13,124 @@ import {
   type H2HRowConfig,
 } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import {
-  DEFAULT_FILM_FILTERS,
-  type FilmFilters,
-} from "@/components/dashboard/matches/match-detail/film/filters/types";
+  applyFilmCut,
+  FILM_CUT_EXTRA_KEYS,
+  type FilmCut,
+} from "@/components/dashboard/matches/match-detail/film-cut-context";
+import {
+  applyMatchFilters,
+  EMPTY_MATCH_FILTERS,
+  MATCH_FILTER_KEYS,
+  type MatchFilterContext,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 
 /**
  * The head-to-head rows that open their points in the Video tab (Advantage
- * Intelligence UI T3).
+ * Intelligence UI T3; the cuts moved onto the shared match filters in T7).
  *
  * Pure and offline. What goes wrong here never shows on the card: a cut with
- * a misspelt key is spread over the defaults by `mergeFilmCut` and silently
- * ignored, so the Video tab opens on every point and looks like it worked. A
- * row that gains or loses a cut changes what a click does with nothing drawn
- * differently. So the table is pinned exactly, and every key is checked
- * against the filter model's own defaults.
+ * a misspelt key is silently ignored, so the Video tab opens on every point
+ * and looks like it worked. A row that gains or loses a cut changes what a
+ * click does with nothing drawn differently. So the table is pinned exactly,
+ * every key is checked against the shared filters' own keys (plus the
+ * Film-only extras), and each cell's cut is checked to open exactly the
+ * points its figure counts.
  */
 
 const ALL_ROWS: H2HRowConfig[] = H2H_GROUPS.flatMap((group) => group.configs);
 
-const EXPECTED_CUTS: Record<string, Partial<FilmFilters>> = {
-  Aces: { serve: ["ace"] },
-  "Double faults": { serve: ["double-fault"] },
-  "First serve in": { ball: "first" },
-  "First serve points won": { ball: "first" },
-  "Second serve points won": { ball: "second" },
-  "Break points saved": { pressure: "break" },
-  "First serve returns won": { ball: "first" },
-  "Second serve returns won": { ball: "second" },
-  "Break points converted": { pressure: "break" },
-  "Return winners": { returns: ["winner"] },
-  Winners: { result: ["winner"] },
-  "Unforced errors": { result: ["unforced"] },
+const EXPECTED_CUTS: Record<string, FilmCut> = {
+  Aces: { resultOutcome: ["winner"], ending: "ace" },
+  "Double faults": { resultOutcome: ["error"], resultShot: ["Serve"] },
+  "First serve in": { serveType: ["first"] },
+  "First serve points won": { serveType: ["first"] },
+  "Second serve points won": { serveType: ["second"] },
+  "Break points saved": { scoreType: ["breakpoint"] },
+  "First serve returns won": { serveType: ["first"] },
+  "Second serve returns won": { serveType: ["second"] },
+  "Break points converted": { scoreType: ["breakpoint"] },
+  "Return winners": { ending: "return-winner" },
+  Winners: { resultOutcome: ["winner"], ending: "winner" },
+  "Unforced errors": { resultOutcome: ["error"], ending: "unforced-error" },
   "Total points won": {},
 };
+
+/** What one cell of each row sends, for "you" — the opponent's mirrors it. */
+const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
+  Aces: { resultOutcome: ["winner"], ending: "ace", resultPlayer: "you" },
+  "Double faults": {
+    resultOutcome: ["error"],
+    resultShot: ["Serve"],
+    resultPlayer: "you",
+  },
+  "First serve in": { serveType: ["first"], server: "you" },
+  "First serve points won": {
+    serveType: ["first"],
+    server: "you",
+    resultOutcome: ["won"],
+    resultPlayer: "you",
+  },
+  "Second serve points won": {
+    serveType: ["second"],
+    server: "you",
+    resultOutcome: ["won"],
+    resultPlayer: "you",
+  },
+  "Break points saved": {
+    scoreType: ["breakpoint"],
+    server: "you",
+    resultOutcome: ["won"],
+    resultPlayer: "you",
+  },
+  // Your first-serve returns are the opponent's first serves.
+  "First serve returns won": {
+    serveType: ["first"],
+    server: "opponent",
+    resultOutcome: ["won"],
+    resultPlayer: "you",
+  },
+  "Second serve returns won": {
+    serveType: ["second"],
+    server: "opponent",
+    resultOutcome: ["won"],
+    resultPlayer: "you",
+  },
+  "Break points converted": {
+    scoreType: ["breakpoint"],
+    server: "opponent",
+    resultOutcome: ["won"],
+    resultPlayer: "you",
+  },
+  "Return winners": {
+    ending: "return-winner",
+    server: "opponent",
+    resultOutcome: ["won"],
+    resultPlayer: "you",
+  },
+  Winners: { resultOutcome: ["winner"], ending: "winner", resultPlayer: "you" },
+  "Unforced errors": {
+    resultOutcome: ["error"],
+    ending: "unforced-error",
+    resultPlayer: "you",
+  },
+  "Total points won": { resultOutcome: ["won"], resultPlayer: "you" },
+};
+
+function youCut(row: H2HRowConfig): FilmCut {
+  return sideCut(row.cut!, "you", row.sideBy, row.sideWon);
+}
+function oppCut(row: H2HRowConfig): FilmCut {
+  return sideCut(row.cut!, "opp", row.sideBy, row.sideWon);
+}
+
+/** A cut with every "you" swapped for "opponent" and back. */
+function mirrored(cut: FilmCut): FilmCut {
+  const flip = (v: unknown) =>
+    v === "you" ? "opponent" : v === "opponent" ? "you" : v;
+  return Object.fromEntries(
+    Object.entries(cut).map(([k, v]) => [k, flip(v)]),
+  ) as FilmCut;
+}
 
 test.describe("head-to-head cuts", () => {
   test("the cut table is exactly the configured mapping", () => {
@@ -53,6 +138,15 @@ test.describe("head-to-head cuts", () => {
       ALL_ROWS.filter((row) => row.cut).map((row) => [row.label, row.cut]),
     );
     expect(actual).toEqual(EXPECTED_CUTS);
+  });
+
+  test("each cell's cut is exactly the configured side mapping", () => {
+    for (const row of ALL_ROWS.filter((r) => r.cut)) {
+      expect(youCut(row), row.label).toEqual(EXPECTED_YOU_CUTS[row.label]);
+      expect(oppCut(row), row.label).toEqual(
+        mirrored(EXPECTED_YOU_CUTS[row.label]),
+      );
+    }
   });
 
   test("rows without a point-level equivalent carry no cut", () => {
@@ -66,93 +160,38 @@ test.describe("head-to-head cuts", () => {
     }
   });
 
-  test("every cut uses only keys of DEFAULT_FILM_FILTERS", () => {
-    const known = new Set(Object.keys(DEFAULT_FILM_FILTERS));
+  test("every cut uses only MatchFilters keys and the Film-only extras", () => {
+    const known = new Set<string>([
+      ...MATCH_FILTER_KEYS,
+      ...FILM_CUT_EXTRA_KEYS,
+    ]);
     for (const row of ALL_ROWS) {
       if (!row.cut) continue;
       for (const key of Object.keys(row.cut)) {
         expect(known.has(key), `${row.label} → ${key}`).toBe(true);
       }
       // And for the per-cell cut the card actually sends.
-      for (const side of ["you", "opp"] as const) {
-        for (const key of Object.keys(sideCut(row.cut, side, row.sideBy))) {
-          expect(known.has(key), `${row.label} (${side}) → ${key}`).toBe(true);
+      for (const cut of [youCut(row), oppCut(row)]) {
+        for (const key of Object.keys(cut)) {
+          expect(known.has(key), `${row.label} → ${key}`).toBe(true);
         }
       }
     }
   });
 
-  test("serve rows take the side as the server", () => {
-    for (const label of [
-      "Aces",
-      "Double faults",
-      "First serve points won",
-      "Second serve points won",
-      "Break points saved",
-    ]) {
-      const cut = EXPECTED_CUTS[label];
-      expect(sideCut(cut, "you")).toEqual({ ...cut, server: "you" });
-      expect(sideCut(cut, "opp")).toEqual({ ...cut, server: "opp" });
-    }
-  });
-
-  test("return rows take the side as the player NOT serving", () => {
-    // Your first-serve returns are the opponent's first serves.
-    for (const label of [
-      "First serve returns won",
-      "Second serve returns won",
-      "Break points converted",
-    ]) {
-      const row = byConfig(label);
-      expect(row.sideBy, label).toBe("returner");
-      expect(sideCut(row.cut!, "you", row.sideBy)).toEqual({
-        ...row.cut,
-        server: "opp",
-      });
-      expect(sideCut(row.cut!, "opp", row.sideBy)).toEqual({
-        ...row.cut,
-        server: "you",
-      });
-    }
-  });
-
-  test("total points won takes the side as the point's winner", () => {
-    const row = byConfig("Total points won");
-    expect(sideCut(row.cut!, "you", row.sideBy)).toEqual({ outcome: "you" });
-    expect(sideCut(row.cut!, "opp", row.sideBy)).toEqual({ outcome: "opp" });
-  });
-
-  test("result rows take the side as the point's outcome", () => {
-    // A winner is struck by the player who wins the point.
-    expect(sideCut({ result: ["winner"] }, "you")).toEqual({
-      result: ["winner"],
-      outcome: "you",
-    });
-    expect(sideCut({ result: ["winner"] }, "opp")).toEqual({
-      result: ["winner"],
-      outcome: "opp",
-    });
-    // An unforced error is made by the player who LOSES the point, so the
-    // viewer's errors are the points the opponent won.
-    expect(sideCut({ result: ["unforced"] }, "you")).toEqual({
-      result: ["unforced"],
-      outcome: "opp",
-    });
-    expect(sideCut({ result: ["unforced"] }, "opp")).toEqual({
-      result: ["unforced"],
-      outcome: "you",
-    });
-  });
-
   test("sideCut never mutates the configured cut", () => {
-    const row = ALL_ROWS.find((r) => r.label === "Aces");
-    sideCut(row!.cut!, "you");
-    expect(row!.cut).toEqual({ serve: ["ace"] });
+    const row = ALL_ROWS.find((r) => r.label === "Break points saved")!;
+    youCut(row);
+    expect(row.cut).toEqual({ scoreType: ["breakpoint"] });
   });
 
-  test("built rows carry their config's cut", () => {
+  test("built rows carry their config's cut and side rule", () => {
     const rows = buildStatRows(ALL_ROWS, { fractions: {} }, { fractions: {} });
-    rows.forEach((row, i) => expect(row.cut).toEqual(ALL_ROWS[i].cut));
+    rows.forEach((row, i) => {
+      expect(row.cut).toEqual(ALL_ROWS[i].cut);
+      expect(row.sideBy).toEqual(ALL_ROWS[i].sideBy);
+      expect(row.sideWon).toEqual(ALL_ROWS[i].sideWon);
+    });
   });
 });
 
@@ -161,6 +200,251 @@ function byConfig(label: string): H2HRowConfig {
   if (!row) throw new Error(`no row labelled "${label}"`);
   return row;
 }
+
+/* ── A click opens exactly the points the figure counts ─────────────────── */
+
+const CTX: MatchFilterContext = {
+  youIsPlayer1: true,
+  hands: { player1: null, player2: null },
+};
+
+function p(overrides: Partial<MatchPoint> & { id: string }): MatchPoint {
+  return {
+    pointNumber: 1,
+    setNumber: 1,
+    gameNumber: 1,
+    setScore: "0-0",
+    gameScore: "0-0",
+    pointScore: "0-0",
+    resultType: "",
+    eventType: "",
+    description: "",
+    player: "player1",
+    wonByPlayer1: true,
+    serverIsPlayer1: true,
+    isBreakPoint: false,
+    isSetPoint: false,
+    isMatchPoint: false,
+    rallyLength: 5,
+    duration: null,
+    videoTime: 10,
+    saved: false,
+    savedBy: [],
+    ...overrides,
+  };
+}
+
+// Player 1 is "you". A mix of every bucket, served and returned by both.
+const MATCH: MatchPoint[] = [
+  p({
+    id: "ace-you",
+    resultType: "Ace",
+    rallyLength: 1,
+    lastShotType: "First Serve",
+  }),
+  p({
+    id: "ace-opp",
+    resultType: "Ace",
+    serverIsPlayer1: false,
+    wonByPlayer1: false,
+    player: "player2",
+    rallyLength: 1,
+    lastShotType: "First Serve",
+  }),
+  // An unreturned serve on a video match: a winner, never an ace.
+  p({
+    id: "sw-you",
+    resultType: "Service Winner",
+    rallyLength: 1,
+    lastShotType: "First Serve",
+  }),
+  p({
+    id: "df-you",
+    resultType: "Double Fault",
+    wonByPlayer1: false,
+    rallyLength: 0,
+    lastShotType: "Second Serve",
+  }),
+  p({
+    id: "df-opp",
+    resultType: "Double Fault",
+    serverIsPlayer1: false,
+    wonByPlayer1: true,
+    player: "player2",
+    rallyLength: 0,
+    lastShotType: "Second Serve",
+  }),
+  p({ id: "fw-you", resultType: "Forehand Winner", lastShotType: "Forehand" }),
+  p({
+    id: "bw-opp",
+    resultType: "Backhand Winner",
+    wonByPlayer1: false,
+    player: "player2",
+    lastShotType: "Backhand",
+  }),
+  p({
+    id: "ue-you",
+    resultType: "Forehand Unforced Error",
+    wonByPlayer1: false,
+    lastShotType: "Forehand",
+  }),
+  p({
+    id: "fe-you",
+    resultType: "Backhand Forced Error",
+    wonByPlayer1: false,
+    lastShotType: "Backhand",
+  }),
+  p({
+    id: "bp-saved",
+    isBreakPoint: true,
+    firstShotType: "First Serve",
+    resultType: "Forehand Winner",
+    lastShotType: "Forehand",
+  }),
+  p({
+    id: "bp-lost",
+    isBreakPoint: true,
+    firstShotType: "Second Serve",
+    wonByPlayer1: false,
+    resultType: "Backhand Winner",
+    player: "player2",
+    lastShotType: "Backhand",
+  }),
+  // The opponent serves, you return a winner.
+  p({
+    id: "rw-you",
+    serverIsPlayer1: false,
+    firstShotType: "Second Serve",
+    secondShotResult: "In",
+    rallyLength: 2,
+    resultType: "Backhand Winner",
+    lastShotType: "Backhand",
+  }),
+  // A mislabelled two-shot "winner" the server won: no one's return winner.
+  p({
+    id: "rw-mislabel",
+    serverIsPlayer1: false,
+    wonByPlayer1: false,
+    player: "player2",
+    secondShotResult: "In",
+    rallyLength: 2,
+    resultType: "Forehand Winner",
+    lastShotType: "Forehand",
+  }),
+  p({ id: "first-in-won", firstShotType: "First Serve" }),
+  p({
+    id: "first-in-lost",
+    firstShotType: "First Serve",
+    wonByPlayer1: false,
+  }),
+];
+
+const count = (cut: FilmCut) => applyFilmCut(MATCH, MATCH, cut, CTX).length;
+
+test.describe("a cell opens exactly the points its figure counts", () => {
+  const you = tallySide(MATCH, true);
+  const opp = tallySide(MATCH, false);
+
+  test("aces are the Ace bucket by the server — never a service winner", () => {
+    const row = byConfig("Aces");
+    expect(count(youCut(row))).toBe(you.aces);
+    expect(count(oppCut(row))).toBe(opp.aces);
+    // Result › Winner + Serve alone would have taken the service winner too.
+    const plain = applyMatchFilters(
+      MATCH,
+      {
+        ...EMPTY_MATCH_FILTERS,
+        resultOutcome: ["winner"],
+        resultShot: ["Serve"],
+        resultPlayer: "you",
+      },
+      CTX,
+    ).map((pt) => pt.id);
+    expect(plain).toContain("sw-you");
+    expect(
+      applyFilmCut(MATCH, MATCH, youCut(row), CTX).map((pt) => pt.id),
+    ).toEqual(["ace-you"]);
+  });
+
+  test("double faults are the server's error on a serve", () => {
+    const row = byConfig("Double faults");
+    expect(count(youCut(row))).toBe(you.doubleFaults);
+    expect(count(oppCut(row))).toBe(opp.doubleFaults);
+  });
+
+  test("winners leave the aces on their own line", () => {
+    const row = byConfig("Winners");
+    const ids = applyFilmCut(MATCH, MATCH, youCut(row), CTX).map((pt) => pt.id);
+    expect(ids).not.toContain("ace-you");
+    expect(ids).toEqual(["sw-you", "fw-you", "bp-saved", "rw-you"]);
+  });
+
+  test("unforced errors leave the forced ones out", () => {
+    const row = byConfig("Unforced errors");
+    expect(count(youCut(row))).toBe(you.unforcedErrors);
+    expect(count(oppCut(row))).toBe(opp.unforcedErrors);
+    const ids = applyFilmCut(MATCH, MATCH, youCut(row), CTX).map((pt) => pt.id);
+    expect(ids).toEqual(["ue-you"]);
+  });
+
+  test("won rows open the points that side won", () => {
+    expect(count(youCut(byConfig("Break points saved")))).toBe(
+      you.breakPointsFaced.won,
+    );
+    expect(count(oppCut(byConfig("Break points converted")))).toBe(
+      opp.breakPointsAgainst.won,
+    );
+    expect(count(youCut(byConfig("Total points won")))).toBe(you.allPoints.won);
+    expect(count(oppCut(byConfig("Total points won")))).toBe(opp.allPoints.won);
+    // The row itself ("both players") opens every point the row is about.
+    expect(count(byConfig("Break points saved").cut!)).toBe(2);
+    expect(count(byConfig("Total points won").cut!)).toBe(MATCH.length);
+  });
+
+  test("return winners agree with the count, which Result › Return could not", () => {
+    const row = byConfig("Return winners");
+    expect(count(youCut(row))).toBe(you.returnWinners);
+    expect(count(oppCut(row))).toBe(opp.returnWinners);
+    expect(you.returnWinners).toBe(1);
+    // `both` also admits the mislabelled two-shot winner, as it always has.
+    expect(count(row.cut!)).toBe(2);
+    // The shared vocabulary finds the return from shot rows, which these
+    // points (like any import without them) do not carry — so it cannot
+    // agree, and the row keeps the Film-only `return-winner` ending.
+    const viaResult = applyMatchFilters(
+      MATCH,
+      {
+        ...EMPTY_MATCH_FILTERS,
+        server: "opponent",
+        resultShot: ["Return"],
+        resultOutcome: ["winner"],
+        resultPlayer: "you",
+      },
+      CTX,
+    );
+    expect(viaResult.length).not.toBe(you.returnWinners);
+  });
+
+  test("the count is taken over the shared filters' points", () => {
+    // Set 1 only, through the shared filters: the cut is laid over them.
+    const all = [
+      ...MATCH,
+      p({ id: "ace-set2", setNumber: 2, resultType: "Ace", rallyLength: 1 }),
+    ];
+    const shared = applyMatchFilters(
+      all,
+      { ...EMPTY_MATCH_FILTERS, sets: [1] },
+      CTX,
+    );
+    const row = byConfig("Aces");
+    expect(applyFilmCut(all, all, youCut(row), CTX).map((pt) => pt.id)).toEqual(
+      ["ace-you", "ace-set2"],
+    );
+    expect(
+      applyFilmCut(all, shared, youCut(row), CTX).map((pt) => pt.id),
+    ).toEqual(["ace-you"]);
+  });
+});
 
 test.describe("the readout's words", () => {
   test("a fraction reads as made of attempts", () => {

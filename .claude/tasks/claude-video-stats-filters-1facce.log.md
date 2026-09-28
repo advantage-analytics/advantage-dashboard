@@ -69,3 +69,20 @@ Implementer's own calls:
 2. T7: the Film tab should call `useFilterRailHost()` from its own Filter button and reuse `MatchFiltersBar`/`FilteredPointsEmpty`; the rail is frame-level and free of `next/navigation`.
 3. On a narrow pane the filter rail plus the 300px score rail squeeze the pane; there is no mobile rule yet (the roster drawer is `hidden lg:block`).
 4. `FiltersPanel`'s header has no side padding while its sections do (16px vs 32px inside the rail); consider aligning them.
+
+## T7 · Move the Film tab onto the shared model and rewrite watch cuts — done
+
+**gate:** mechanical pass; completion pass. Widget states: loading unchanged; empty ✓ (the Film list's empty sentence comes from `filmListSentence` and names the shared filters, cut and saved toggle); error unchanged. Not checked in a browser: neither the chip strip nor the dark `FiltersPanel` in the film room has been seen on screen.
+**changed:** `film-cut-context.tsx` rewritten: `FilmCut = Partial<MatchFilters>` plus Film-only extras (`rallyMin`, `rallyMax`, `ending`: ace | winner | unforced-error | return-winner); a pending cut is `{ cut, label }`; `applyFilmCut` and `isReturnWinner` moved here; `scopeCut`/`mergeFilmCut` removed. New `film/film-list-filters.ts` holds `FilmListFilters` (shared + Film-only cut + savedOnly), `filmListPoints`, `landFilmCut` (returns `shared` by identity, so a cut never reaches the provider or `?f=`), the chips and sentence, the quick-menu mapping and the legacy URL helpers (`cut=break` → shared Breakpoint, `serve=you|opp` → shared server, `cut=saved` → local toggle; only legacy values are stripped). `film-tab.tsx` reads `useMatchFilters()` and passes one `filmFilters` object to both `PointList` mounts. The Advanced panel is a thin host for the shared `FiltersPanel` (new `tone="dark"` for the film room, where Clear all is white/70 → white); its old option table is deleted. The head-to-head, point-endings and rally-length cuts are rewritten, and hover counts and clicks share `applyFilmCut` over the shared filtered points. `watchCut(cut, label)`. The four named specs and the `PointList` harnesses are updated.
+Behaviour changes (author should know):
+
+- "…won / saved / converted" cells now open only the points that side WON (before, the denominator), matching the figure shown.
+- Winners and errors are attributed by the shared model's `winnerHitBy`/`errorMadeBy`.
+- Double faults are Error + Serve.
+- Landing a cut turns "Saved only" off.
+- Return winners stays a Film-only ending: expressed as Shot Return + Winner it disagreed with `isReturnWinner` on the spec fixtures.
+  **follow-ups:**
+
+1. T8: `film/film-this-point.tsx:10` imports `lastNameOf` from `./film-filters`; switch it to `./film-list-filters`. `tests/film-filters-model.spec.ts` is the only remaining user of `DEFAULT_FILM_FILTERS`, `applyFilmFilters`, `countFilmOption`, `filmFiltersEqual`, `FILM_FILTER_SECTIONS`, `cutName`, `describeFilmCut`, `hasActiveFilmFilters`, `parseCut` and `serializeCut`. Stale comments remain at `film/film-room-prefs.ts:13` and `match-filters/score.ts:79`. The copy of `isReturnWinner` in `types.ts` has no importers, and `groupsFor` has none either.
+2. Move the legacy-URL translation into `provider.tsx`, so an old `?cut=break` link that lands on Statistics is translated too (today that only happens once Film mounts).
+3. Check chip wrapping on screen in the 320px column with many shared filters applied.

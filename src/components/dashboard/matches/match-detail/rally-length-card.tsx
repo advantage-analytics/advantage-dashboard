@@ -6,10 +6,9 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
-  scopeCut,
   watchableSegmentProps,
+  type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
-import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
@@ -65,12 +64,13 @@ const BAND_META: { key: Band["key"]; title: string; label: string }[] = [
 ];
 
 /**
- * The film cut that shows each band's points in the Video tab. Long is sent
- * with an explicit `rallyMax: null` so a leftover upper bound from an earlier
- * cut can never narrow it. The filter model drops shot-count-less points from
- * any bounded range, exactly as the bucketing below does.
+ * The film cut that shows each band's points in the Video tab — a Film-only
+ * rally-length cut (`FilmCutExtras`), as the shared match filters have no
+ * rally-length group. Long is sent with an explicit `rallyMax: null` so an
+ * upper bound can never carry over. The cut drops shot-count-less points
+ * from any bounded range, exactly as the bucketing below does.
  */
-export const RALLY_BAND_CUTS: Record<Band["key"], Partial<FilmFilters>> = {
+export const RALLY_BAND_CUTS: Record<Band["key"], FilmCut> = {
   short: { rallyMin: 1, rallyMax: 4 },
   medium: { rallyMin: 5, rallyMax: 8 },
   long: { rallyMin: 9, rallyMax: null },
@@ -212,12 +212,7 @@ export function RallyLengthCard() {
             // attribute below is `undefined` otherwise, so the read-only
             // markup is unchanged. Focus is `focus.css`'s ring.
             const watch = watchable
-              ? () =>
-                  actions.watchCut(
-                    // T7 moves cuts onto `MatchFilters`; until then the
-                    // Video tab has no set scope to carry.
-                    scopeCut(RALLY_BAND_CUTS[band.key], null),
-                  )
+              ? () => actions.watchCut(RALLY_BAND_CUTS[band.key], band.title)
               : undefined;
 
             return (

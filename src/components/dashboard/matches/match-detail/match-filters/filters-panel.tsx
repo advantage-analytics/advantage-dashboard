@@ -41,6 +41,12 @@ import {
  * action, not an outlined pill; the Result row is labelled "Shot" (the mockup
  * reads "Zone"); Outcome reads "Winner" (the mockup reads "Winnner").
  *
+ * `tone="dark"` is the same panel inside the fullscreen film room's points
+ * drawer (T7): it opens the design system's `.dark` token scope, so every
+ * `--ink-*`/`--border-*`/`--surface-*` below resolves to its dark twin with
+ * no second set of classes, and "Clear all" takes the film room's dark-tone
+ * clear (white/70 → white) — blue over the film is the progress rule's.
+ *
  * No `next/navigation` here — the offline spec loads this file through
  * `createLoader()`.
  */
@@ -53,6 +59,7 @@ export function FiltersPanel({
   onCancel,
   defaultOpen,
   className,
+  tone = "light",
 }: {
   /** The applied filters — the draft starts here. */
   filters: MatchFilters;
@@ -66,6 +73,8 @@ export function FiltersPanel({
   /** Sections open on first draw; defaults to those holding a filter, else the first. */
   defaultOpen?: readonly MatchFilterSectionId[];
   className?: string;
+  /** Paint only. "dark" is the fullscreen film room's drawer. */
+  tone?: "light" | "dark";
 }) {
   const titleId = useId();
   const [draft, setDraft] = useState<MatchFilters>(filters);
@@ -90,7 +99,11 @@ export function FiltersPanel({
   return (
     <section
       aria-labelledby={titleId}
-      className={cn("flex min-h-0 flex-col", className)}
+      className={cn(
+        "flex min-h-0 flex-col",
+        tone === "dark" && "dark",
+        className,
+      )}
     >
       <div className="flex shrink-0 items-center justify-between gap-3 pb-3">
         <h2 id={titleId} className="text-title">
@@ -99,7 +112,12 @@ export function FiltersPanel({
         <button
           type="button"
           onClick={actions.clear}
-          className="shrink-0 cursor-pointer text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          className={cn(
+            "shrink-0 cursor-pointer text-[12px] font-medium whitespace-nowrap transition-colors duration-[var(--duration-hover)]",
+            tone === "dark"
+              ? "text-white/70 hover:text-white"
+              : "text-[var(--blue)] hover:text-[var(--blue-hover)]",
+          )}
         >
           Clear all
         </button>

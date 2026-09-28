@@ -15,7 +15,9 @@ import {
   Bookmark,
   ChevronDown,
   ChevronUp,
+  CirclePlay,
   PanelRightClose,
+  X,
 } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
@@ -36,15 +38,17 @@ import {
   type FollowAffordance,
   type PointFocus,
 } from "./film-timeline";
-import type { FilmSectionId } from "./filters/types";
 import { scoreColumns, youFirstScore } from "./film-score";
+import { removeChip } from "../match-filters/applied-chips";
 import {
-  DEFAULT_FILM_FILTERS,
-  describeFilmCut,
-  hasActiveFilmFilters,
+  filmListActive,
+  filmListChips,
+  filmListSentence,
+  INERT_FILM_LIST_FILTERS,
   lastNameOf,
-  type FilmFilters,
-} from "./film-filters";
+  type FilmListChip,
+  type FilmListFilters,
+} from "./film-list-filters";
 
 /**
  * The Film room's point list (artboard 46c, lines 845–1131).
@@ -229,14 +233,18 @@ interface PointListProps {
   allPoints: MatchPoint[];
   /** The applied cut: what actually renders, and the count's numerator. */
   visiblePoints: MatchPoint[];
-  filters: FilmFilters;
-  onFiltersChange: (filters: FilmFilters) => void;
-  /** Advanced takes this column; the state is the film tab's, so it and the
-   *  open sections survive the list re-rendering. */
+  /**
+   * The list's three filter layers and their writers — the shared match
+   * filters, a statistic's cut and the saved toggle (`film-list-filters.ts`).
+   * `film-tab.tsx` hands the SAME object to this column and to the room's
+   * drawer. Absent, nothing is filtered and the controls change nothing (a
+   * fixture that mounts the list alone). Stable identity, please.
+   */
+  filmFilters?: FilmListFilters;
+  /** Advanced takes this column; the state is the host's, so it survives the
+   *  list re-rendering. */
   advancedOpen: boolean;
   onAdvancedOpenChange: (open: boolean) => void;
-  openSections: FilmSectionId[];
-  onOpenSectionsChange: (next: FilmSectionId[]) => void;
   /** Point whose window contains the playhead, and how far through it is. */
   activePointId: string | null;
   /** Film-clock window of the playing point; its rule reads `--film-t`. */
@@ -311,12 +319,9 @@ interface GameGroup {
 export const PointList = memo(function PointList({
   allPoints,
   visiblePoints,
-  filters,
-  onFiltersChange,
+  filmFilters = INERT_FILM_LIST_FILTERS,
   advancedOpen,
   onAdvancedOpenChange,
-  openSections,
-  onOpenSectionsChange,
   activePointId,
   activeStart,
   activeEnd,
@@ -344,7 +349,7 @@ export const PointList = memo(function PointList({
   // as yours at a glance; the opponent's rows keep their initials.
   const { active: workspace } = useWorkspace();
 
-  const filtered = hasActiveFilmFilters(filters);
+  const filtered = filmListActive(filmFilters);
 
   // `useMatchSides()` returns a fresh object each render, so the memo keys off
   // the three primitives it actually reads rather than the object identity.
@@ -397,7 +402,7 @@ export const PointList = memo(function PointList({
     return out;
   }, [visiblePoints, youIsPlayer1, youName, oppName, showGameScore]);
 
-  const clearAll = () => onFiltersChange(DEFAULT_FILM_FILTERS);
+  const clearAll = filmFilters.clearAll;
 
   // The DISPLAYED point's shots, and nobody else's: the feed the room hands
   // over covers the whole film, and one open well at a time is the rule —
@@ -615,27 +620,21 @@ export const PointList = memo(function PointList({
         // commits the draft and returns to the list, Close returns without
         // touching the cut. No popover, no overlay.
         <FilmAdvancedPanel
-          points={allPoints}
-          sides={sides}
-          filters={filters}
-          onApply={(next) => {
-            onFiltersChange(next);
-            onAdvancedOpenChange(false);
-          }}
+          filters={filmFilters.shared}
+          onApply={filmFilters.setShared}
           onClose={() => onAdvancedOpenChange(false)}
-          openSections={openSections}
-          onOpenSectionsChange={onOpenSectionsChange}
           tone={tone}
         />
       ) : (
         <>
-          {/* The header IS the applied-filter strip (handoff P1/P2, frame E):
-          one 28px trigger naming the cut, a 22px clear beside it once a cut
-          is on, and `matched / total` on the right. No Saved pill, no chips
-          row, no second strip anywhere in the column — the words and the
-          count are the only report of what is applied.
+          {/* The header (handoff P1/P2, frame E): one 28px trigger naming the
+          cut, a 22px clear beside it once anything is on, and
+          `matched / total` on the right. Under it, only while something is
+          applied, one chip per applied layer (T7): the shared filters' chips,
+          the statistic's cut as its own chip (it clears only the cut) and
+          the saved toggle.
 
-          It sits OUTSIDE the scroller and outside the zero-state branch
+          Both sit OUTSIDE the scroller and outside the zero-state branch
           below, so the frame the column always has stays drawn while the
           rows are empty (P5: furniture, never a skeleton). */}
           <div className={t.header}>
@@ -644,8 +643,7 @@ export const PointList = memo(function PointList({
             menu — and its Advanced row swaps the panel into this column in
             both. */}
             <FilmQuickFilters
-              filters={filters}
-              onFiltersChange={onFiltersChange}
+              filmFilters={filmFilters}
               sides={sides}
               tone={tone}
               onOpenAdvanced={() => onAdvancedOpenChange(true)}
@@ -693,9 +691,20 @@ export const PointList = memo(function PointList({
             )}
           </div>
 
+          {filtered && (
+            <FilmChipStrip
+              filmFilters={filmFilters}
+              names={{
+                you: sides.you.shortName,
+                opponent: sides.opp.shortName,
+              }}
+              tone={tone}
+            />
+          )}
+
           {groups.length === 0 ? (
             <EmptyList
-              filters={filters}
+              filmFilters={filmFilters}
               sides={sides}
               hasAnyPoints={allPoints.length > 0}
               hasAnySaved={allPoints.some((p) => p.saved)}
@@ -1399,6 +1408,79 @@ const ShotWellRow = memo(function ShotWellRow({
   );
 });
 
+/* ── Applied chips ────────────────────────────────────────── */
+
+/** The chip strip's paint, per tone. The chips are the same in both. */
+const CHIP_TONE = {
+  light: {
+    row: "mx-1 flex flex-wrap items-center gap-1.5 pt-2.5 pb-0.5",
+    chip: "inline-flex h-6 max-w-full min-w-0 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-[var(--border-field)] pr-1.5 pl-2.5 text-[12px] whitespace-nowrap text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+    icon: "size-3 shrink-0 text-[var(--ink-400)]",
+    cutIcon: "size-3 shrink-0 text-[var(--ink-500)]",
+  },
+  dark: {
+    row: "flex flex-wrap items-center gap-1.5 px-2.5 pt-2.5 pb-0.5",
+    chip: "inline-flex h-6 max-w-full min-w-0 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-white/15 pr-1.5 pl-2.5 text-[12px] whitespace-nowrap text-white/70 transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+    icon: "size-3 shrink-0 text-white/45",
+    cutIcon: "size-3 shrink-0 text-white/55",
+  },
+} satisfies Record<FilmListTone, Record<string, string>>;
+
+/**
+ * One removable chip per applied value, in reading order: saved, the
+ * statistic's cut, then the shared filters (`filmListChips`). Each chip
+ * removes only its own layer — the cut chip clears the cut and leaves the
+ * shared filters, which the Statistics tab also reads, exactly as they were.
+ * The cut chip leads with the same play glyph the card's "Watch in Video"
+ * readout draws, so it reads as "the statistic you opened", not as one more
+ * filter value.
+ */
+function FilmChipStrip({
+  filmFilters,
+  names,
+  tone,
+}: {
+  filmFilters: FilmListFilters;
+  names: { you: string; opponent: string };
+  tone: FilmListTone;
+}) {
+  const t = CHIP_TONE[tone];
+  const chips = filmListChips(filmFilters, names);
+  const remove = (chip: FilmListChip) => {
+    if (chip.kind === "saved") filmFilters.setSavedOnly(false);
+    else if (chip.kind === "cut") filmFilters.clearCut();
+    else filmFilters.setShared(removeChip(filmFilters.shared, chip.chip));
+  };
+  return (
+    <div role="group" aria-label="Applied filters" className={t.row}>
+      {chips.map((chip) => (
+        <button
+          key={chip.id}
+          type="button"
+          data-chip-kind={chip.kind}
+          aria-label={
+            chip.kind === "cut"
+              ? `Remove statistic cut: ${chip.label}`
+              : `Remove filter: ${chip.label}`
+          }
+          onClick={() => remove(chip)}
+          className={t.chip}
+        >
+          {chip.kind === "cut" && (
+            <CirclePlay
+              className={t.cutIcon}
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+          )}
+          <span className="min-w-0 truncate">{chip.label}</span>
+          <X className={t.icon} strokeWidth={1.5} aria-hidden="true" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ── Empty states ─────────────────────────────────────────── */
 
 /**
@@ -1421,14 +1503,14 @@ const ShotWellRow = memo(function ShotWellRow({
  * the list says the same thing wherever it is read; only the paint changes.
  */
 function EmptyList({
-  filters,
+  filmFilters,
   sides,
   hasAnyPoints,
   hasAnySaved,
   onClear,
   tone,
 }: {
-  filters: FilmFilters;
+  filmFilters: FilmListFilters;
   sides: MatchSides;
   hasAnyPoints: boolean;
   hasAnySaved: boolean;
@@ -1450,7 +1532,7 @@ function EmptyList({
 
   // Saved only, and the match has no saved point at all — not a cut that hid
   // them, which is the branch below. Teaches the gesture once, here.
-  if (filters.savedOnly && !hasAnySaved) {
+  if (filmFilters.savedOnly && !hasAnySaved) {
     return (
       <EmptyBody
         title="You haven’t saved a point yet"
@@ -1468,7 +1550,10 @@ function EmptyList({
   return (
     <EmptyBody
       title="No points match this cut"
-      body={`Nothing in this match matched this cut — ${describeFilmCut(filters, sides)}.`}
+      body={`Nothing in this match matched this cut — ${filmListSentence(
+        filmFilters,
+        { you: sides.you.shortName, opponent: sides.opp.shortName },
+      )}.`}
       action="Clear the cut"
       onAction={onClear}
       tone={tone}

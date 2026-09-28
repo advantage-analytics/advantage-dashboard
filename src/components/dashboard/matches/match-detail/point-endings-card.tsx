@@ -6,11 +6,10 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
-  scopeCut,
   watchableSegmentProps,
+  type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { sideCut } from "@/components/dashboard/matches/match-detail/head-to-head-card";
-import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { EmptyMark } from "@/components/ui/empty-mark";
@@ -95,30 +94,32 @@ const OUTCOMES: OutcomeMeta[] = [
   },
 ];
 
-/** Each outcome's base cut, before a side is laid over it by `sideCut`. */
-const OUTCOME_BASE_CUT: Record<OutcomeKey, Partial<FilmFilters>> = {
-  winners: { result: ["winner"] },
-  unforcedErrors: { result: ["unforced"] },
-  doubleFaults: { serve: ["double-fault"] },
-  aces: { serve: ["ace"] },
+/**
+ * Each outcome's base cut, before a side is laid over it by `sideCut` — the
+ * shared filters' Result › Outcome, narrowed by a Film-only `ending` where
+ * Outcome alone would admit points this card counts in another segment (see
+ * `FilmCutEnding`). The four are exclusive, like the tally below: a double
+ * fault is Error + Serve, which no unforced error is.
+ */
+const OUTCOME_BASE_CUT: Record<OutcomeKey, FilmCut> = {
+  winners: { resultOutcome: ["winner"], ending: "winner" },
+  unforcedErrors: { resultOutcome: ["error"], ending: "unforced-error" },
+  doubleFaults: { resultOutcome: ["error"], resultShot: ["Serve"] },
+  aces: { resultOutcome: ["winner"], ending: "ace" },
 };
 
 /**
- * The film cut behind one segment of one side's bar. Aces and double faults
- * belong to whoever SERVED the point (`server`); winners to whoever WON it
- * (`outcome`); unforced errors to whoever LOST it, so a side's errors are the
- * points its opponent won — `outcome` is the point's winner, never the
- * player who struck the last ball. That is exactly the line
- * `head-to-head-card.tsx`'s `sideCut` draws, so this delegates to it rather
- * than re-deriving the same server/outcome, you/opp rule here. `you`/`opp`
- * are relative, resolved by `useMatchSides()` inside the film tab
- * (guardrails §4); nothing here reads player order.
+ * The film cut behind one segment of one side's bar: the side is Result ›
+ * Player, the point of view Outcome reads — whoever hit the winner or made
+ * the error, and the server for an ace or a double fault. That is exactly
+ * the line `head-to-head-card.tsx`'s `sideCut(…, "player")` draws for the
+ * same four rows, so this delegates to it rather than re-deriving it here.
+ * `you`/`opp` are relative, resolved through the filter context's
+ * `youIsPlayer1` inside the film tab (guardrails §4); nothing here reads
+ * player order.
  */
-export function outcomeCut(
-  key: OutcomeKey,
-  side: "you" | "opp",
-): Partial<FilmFilters> {
-  return sideCut(OUTCOME_BASE_CUT[key], side);
+export function outcomeCut(key: OutcomeKey, side: "you" | "opp"): FilmCut {
+  return sideCut(OUTCOME_BASE_CUT[key], side, "player");
 }
 
 type Tally = Record<OutcomeKey, number>;
@@ -315,9 +316,8 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                 const watch = meta.hasPlayableVideo
                   ? () =>
                       actions.watchCut(
-                        // T7 moves cuts onto `MatchFilters`; until then
-                        // the Video tab has no set scope to carry.
-                        scopeCut(outcomeCut(o.key, row.id), null),
+                        outcomeCut(o.key, row.id),
+                        `${o.label} · ${row.name}`,
                       )
                   : undefined;
 
