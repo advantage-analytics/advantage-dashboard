@@ -57,7 +57,7 @@ ready).
 
 ## T4 · Key ANALYSIS_FAILURE_COPY by recovery class
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T2
 - **files:** src/components/dashboard/matches/analysis-failure-copy.ts, tests/analysis-failure-copy.spec.ts (guess)

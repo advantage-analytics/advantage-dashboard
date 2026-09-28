@@ -5,8 +5,13 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { MatchAnalysis } from "@/lib/data/match-analysis";
-import { ANALYSIS_FAILURE_COPY } from "@/components/dashboard/matches/analysis-failure-copy";
+import type { MatchAnalysis, RecoveryClass } from "@/lib/data/match-analysis";
+import {
+  ANALYSIS_FAILURE_COPY,
+  byClass,
+  WAIT_OR_ASK_VARIANTS,
+  waitOrAskVariant,
+} from "@/components/dashboard/matches/analysis-failure-copy";
 import { createLoader, marker } from "./fixtures/vm-modules";
 
 /**
@@ -171,4 +176,116 @@ test("the copy module carries the failed strings verbatim and never names the ve
 
   const source = readFileSync(resolve(process.cwd(), COPY), "utf8");
   expect(source).not.toMatch(/splitstep|swingvision/i);
+});
+
+/**
+ * `byClass` keys every `RecoveryClass` (T4). These tests walk the exported
+ * copy objects recursively rather than asserting exact string literals for
+ * every field, so a later wording tweak doesn't need a matching test edit —
+ * only the banned-term and "Retrying" checks pin exact behavior.
+ */
+
+const RECOVERY_CLASSES: RecoveryClass[] = [
+  "retry",
+  "upload_again",
+  "fix_recording",
+  "wait_or_ask",
+  "rederive",
+  "stats_unavailable",
+];
+
+const BANNED_TERMS =
+  /splitstep|swingvision|edge function|failed to fetch|<\?xml/i;
+
+/** Collect every string value found anywhere inside `value`. */
+function collectStrings(value: unknown, out: string[] = []): string[] {
+  if (typeof value === "string") {
+    out.push(value);
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectStrings(item, out);
+  } else if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectStrings(item, out);
+  }
+  return out;
+}
+
+test("byClass has an entry for every RecoveryClass", () => {
+  for (const cls of RECOVERY_CLASSES) {
+    const entry = byClass[cls];
+    expect(entry, `byClass.${cls}`).toBeTruthy();
+    expect(typeof entry.title).toBe("string");
+    expect(typeof entry.cardBody).toBe("string");
+    expect(typeof entry.drawerBody).toBe("string");
+    expect(entry.action === null || typeof entry.action === "string").toBe(
+      true,
+    );
+  }
+  expect(Object.keys(byClass).sort()).toEqual([...RECOVERY_CLASSES].sort());
+});
+
+test("byClass and WAIT_OR_ASK_VARIANTS never name the vendor or leak internal error text", () => {
+  const strings = [
+    ...collectStrings(byClass),
+    ...collectStrings(WAIT_OR_ASK_VARIANTS),
+  ];
+  for (const s of strings) {
+    expect(s, s).not.toMatch(BANNED_TERMS);
+  }
+});
+
+test("upload_again and fix_recording never say Retrying", () => {
+  expect(byClass.upload_again.cardBody).not.toMatch(/Retrying/);
+  expect(byClass.upload_again.drawerBody).not.toMatch(/Retrying/);
+  expect(byClass.fix_recording.cardBody).not.toMatch(/Retrying/);
+  expect(byClass.fix_recording.drawerBody).not.toMatch(/Retrying/);
+});
+
+test("byClass new-class copy matches the plan", () => {
+  expect(byClass.upload_again.title).toBe("The video didn't finish uploading");
+  expect(byClass.upload_again.action).toBe("Upload the video again");
+
+  expect(byClass.rederive.title).toBe("Statistics didn't finish building");
+  expect(byClass.rederive.action).toBe("Rebuild statistics");
+
+  expect(byClass.retry.action).toBe("Retry analysis");
+  expect(byClass.retry.cardBody).toBe(ANALYSIS_FAILURE_COPY.failed.body);
+  expect(byClass.retry.drawerBody).toBe(
+    ANALYSIS_FAILURE_COPY.failed.drawer.retry,
+  );
+
+  expect(byClass.fix_recording.cardBody).toBe(
+    ANALYSIS_FAILURE_COPY.failed.inputRejected.body,
+  );
+  expect(byClass.fix_recording.action).toBe(
+    ANALYSIS_FAILURE_COPY.failed.uploadLink,
+  );
+
+  expect(byClass.stats_unavailable.cardBody).toBe(
+    ANALYSIS_FAILURE_COPY.derivation_failed.body,
+  );
+  expect(byClass.stats_unavailable.drawerBody).toBe(
+    ANALYSIS_FAILURE_COPY.derivation_failed.body,
+  );
+  expect(byClass.stats_unavailable.action).toBeNull();
+});
+
+test("WAIT_OR_ASK_VARIANTS has the three variants, and permission tells the player to ask their team's owner", () => {
+  expect(Object.keys(WAIT_OR_ASK_VARIANTS).sort()).toEqual([
+    "allowance",
+    "ceiling",
+    "permission",
+  ]);
+  expect(WAIT_OR_ASK_VARIANTS.permission.cardBody).toMatch(/team's owner/);
+  expect(WAIT_OR_ASK_VARIANTS.allowance.action).toBeNull();
+  expect(WAIT_OR_ASK_VARIANTS.permission.action).toBeNull();
+  expect(WAIT_OR_ASK_VARIANTS.ceiling.action).toBeNull();
+});
+
+test("waitOrAskVariant maps error codes to the three variants", () => {
+  expect(waitOrAskVariant("QUOTA_EXCEEDED", 1)).toBe("allowance");
+  expect(waitOrAskVariant("NOT_ELIGIBLE", 1)).toBe("permission");
+  expect(waitOrAskVariant("NO_BILLING_WORKSPACE", 1)).toBe("permission");
+  expect(waitOrAskVariant("SOME_OTHER_CODE", 3)).toBe("ceiling");
+  expect(waitOrAskVariant(null, 3)).toBe("ceiling");
+  expect(waitOrAskVariant(undefined, 3)).toBe("ceiling");
 });

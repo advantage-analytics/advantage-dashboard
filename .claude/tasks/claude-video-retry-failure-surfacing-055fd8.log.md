@@ -30,3 +30,11 @@ is the runner's. Newest entries at the bottom.
 1. A stalled `uploaded` row's class is decided at load or on a live event; a page left open past the 3-minute stall threshold won't switch until one happens — surfaces may want a timer recheck of `isSubmitStalled`.
 2. `withLiveAnalysis` adds at most one attempt per live row, so two resubmissions seen live in one session undercount by one until reload.
 3. The live patch still doesn't update `jobId`/`updatedAt`, so a retry from a live-observed new job acts on the page-load job id.
+
+## T4 · Key ANALYSIS_FAILURE_COPY by recovery class — done
+
+**gate:** mechanical pass · completion pass
+**changed:** `analysis-failure-copy.ts` exports `byClass` (typed `Record<RecoveryClass, RecoveryCopy>`); `retry`, `fix_recording` and `stats_unavailable` reference the existing `failed.*` / `failed.inputRejected` / `derivation_failed` strings by property access. New `upload_again` and `rederive` copy, plus `WAIT_OR_ASK_VARIANTS` (allowance / permission / ceiling) and a pure `waitOrAskVariant(errorCode, attemptsUsed)`. Spec adds the class-coverage, banned-string and no-"Retrying" checks; old keys untouched.
+**follow-ups:**
+
+1. `byClass.wait_or_ask` is only the allowance default — surfaces (T6, T7, T19) must pick the variant through `waitOrAskVariant()` + `WAIT_OR_ASK_VARIANTS`, not read `byClass.wait_or_ask` directly.
