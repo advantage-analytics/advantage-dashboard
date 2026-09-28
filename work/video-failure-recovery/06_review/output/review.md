@@ -1,6 +1,6 @@
 # Review — video-failure-recovery
 
-Sign-off: pending
+Sign-off: approved
 
 Gate: `/pr-check`, run over the branch range
 `f473ce0b...HEAD` (merge-base with `splitstep-integration`). The working
