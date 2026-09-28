@@ -34,7 +34,26 @@ export type PersistOutcome =
       pointsWritten: number;
       shotsWritten: number;
     }
-  | { ok: false; reason: string; transcript: Transcript | null };
+  | {
+      ok: false;
+      reason: string;
+      transcript: Transcript | null;
+      failure: PersistFailure;
+    };
+
+/**
+ * Why a persist did not land, for the caller to record on the job.
+ *
+ * `"refused"` — deterministic: the inputs cannot produce a trustworthy
+ * transcript (it did not reconcile, the job holds no results, the match
+ * already carries another provider's rows). Running it again gives the same
+ * answer. `"error"` — the transcript may be fine but a read or write failed
+ * on the way (a Supabase or Storage error, an exception); a rebuild can
+ * succeed. Stated at each return rather than inferred from `transcript`,
+ * because a DB error before the build (job read, results download) also
+ * leaves `transcript` null.
+ */
+export type PersistFailure = "refused" | "error";
 
 interface JobRow {
   id: string;
@@ -63,6 +82,8 @@ export async function buildTranscriptForJob(params: {
 }): Promise<{
   transcript: Transcript | null;
   reason: string | null;
+  /** Set whenever `transcript` is null or not ok; see {@link PersistFailure}. */
+  failure: PersistFailure | null;
   job: JobRow | null;
 }> {
   const { supabase, jobId } = params;
@@ -79,11 +100,17 @@ export async function buildTranscriptForJob(params: {
     return {
       transcript: null,
       reason: `job not found: ${jobError?.message}`,
+      failure: "error",
       job: null,
     };
   }
   if (!job.results_object_key) {
-    return { transcript: null, reason: "job has no stored results", job };
+    return {
+      transcript: null,
+      reason: "job has no stored results",
+      failure: "refused",
+      job,
+    };
   }
 
   const { data: match, error: matchError } = await supabase
@@ -96,6 +123,7 @@ export async function buildTranscriptForJob(params: {
     return {
       transcript: null,
       reason: `match not found: ${matchError?.message}`,
+      failure: "error",
       job,
     };
   }
@@ -108,6 +136,7 @@ export async function buildTranscriptForJob(params: {
     return {
       transcript: null,
       reason: `could not read results: ${readError?.message ?? "no data"}`,
+      failure: "error",
       job,
     };
   }
@@ -133,7 +162,12 @@ export async function buildTranscriptForJob(params: {
     bestOf: match.format?.best_of ?? 3,
   });
 
-  return { transcript, reason: transcript.reason, job };
+  return {
+    transcript,
+    reason: transcript.reason,
+    failure: transcript.ok ? null : "refused",
+    job,
+  };
 }
 
 /**
@@ -151,7 +185,7 @@ export async function persistTranscript(params: {
   const { supabase, jobId, dryRun = false } = params;
 
   try {
-    const { transcript, reason, job } = await buildTranscriptForJob({
+    const { transcript, reason, failure, job } = await buildTranscriptForJob({
       supabase,
       jobId,
     });
@@ -162,6 +196,7 @@ export async function persistTranscript(params: {
         ok: false,
         reason: reason ?? "transcript could not be built",
         transcript,
+        failure: failure ?? "refused",
       };
     }
 
@@ -190,6 +225,7 @@ export async function persistTranscript(params: {
         ok: false,
         reason: `could not check existing points: ${importedError.message}`,
         transcript,
+        failure: "error",
       };
     }
     if ((importedCount ?? 0) > 0) {
@@ -197,6 +233,7 @@ export async function persistTranscript(params: {
         ok: false,
         reason: `match already holds ${importedCount} imported point(s); refusing to mix providers`,
         transcript,
+        failure: "refused",
       };
     }
 
@@ -214,6 +251,7 @@ export async function persistTranscript(params: {
         ok: false,
         reason: `could not clear previous rows: ${deleteError.message}`,
         transcript,
+        failure: "error",
       };
     }
 
@@ -248,6 +286,7 @@ export async function persistTranscript(params: {
         ok: false,
         reason: `points insert failed: ${pointsError?.message}`,
         transcript,
+        failure: "error",
       };
     }
 
@@ -291,6 +330,7 @@ export async function persistTranscript(params: {
         ok: false,
         reason: "internal: a point lost its id during insert",
         transcript,
+        failure: "error",
       };
     }
 
@@ -307,6 +347,7 @@ export async function persistTranscript(params: {
         ok: false,
         reason: `shots insert failed: ${shotsError.message}`,
         transcript,
+        failure: "error",
       };
     }
 
@@ -335,6 +376,6 @@ export async function persistTranscript(params: {
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     console.error(`${LOG} threw`, { jobId, reason });
-    return { ok: false, reason, transcript: null };
+    return { ok: false, reason, transcript: null, failure: "error" };
   }
 }

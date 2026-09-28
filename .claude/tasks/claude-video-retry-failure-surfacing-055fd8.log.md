@@ -93,3 +93,13 @@ is the runner's. Newest entries at the bottom.
 
 1. The spec's write-path cases test an inlined replica of the refusal block, not `uploadAndSubmitVideo` itself (it imports browser-only upload/trim modules); a harness for the real function would make them load-bearing.
 2. The free "Try again" (`RetrySubmission`) POSTs `/api/splitstep/jobs` from the button, not through this block, so a refusal there records no code or message — a stalled row retried from the match page keeps its previous reason.
+
+## T13 · Derivation failures carry a code; unreconciled folds are recorded — done
+
+**gate:** mechanical pass · completion pass
+**changed:** `deriveAndPublish()` writes `error_code` on every failure: persist refusals split by a new required `failure: "refused" | "error"` field on `persistTranscript`'s (and `buildTranscriptForJob`'s) failure returns — deterministic refusals (no winner, no stored results, provider mix, transcript not built) → `DERIVATION_REFUSED`, DB read/write errors surfaced the same way → `DERIVATION_ERROR`; RPC errors and throws → `DERIVATION_ERROR`; success clears `error_code`. New `recordUnreconciledFold()` merges `fold: { reconciled: false, reason }` into `derivation_quality` after `completed` is written, keeping existing keys and never failing the derivation. `persist-transcript.ts`'s writes unchanged. RPC call sites untouched. New `tests/derive-and-publish-codes.spec.ts` (9 cases).
+**follow-ups:**
+
+1. "job not found" / "match not found" map to `DERIVATION_ERROR` (rebuildable) — right for a failed read, but a truly deleted row will just fail again on rebuild.
+2. An invalid-JSON results file throws inside the build and lands as `DERIVATION_ERROR` though it is deterministic; mark it refused explicitly if that matters.
+3. The fold merge is read-modify-write; switch to an atomic jsonb `||` RPC if another writer of `derivation_quality` ever runs concurrently.

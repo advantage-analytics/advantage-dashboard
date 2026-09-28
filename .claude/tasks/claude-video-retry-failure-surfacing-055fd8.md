@@ -176,7 +176,7 @@ ready).
 
 ## T13 · Derivation failures carry a code; unreconciled folds are recorded
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/lib/services/splitstep/derive-and-publish.ts, tests/derive-and-publish-codes.spec.ts (new; fake supabase in the style of tests/resubmit-authorization.spec.ts) (guess)
