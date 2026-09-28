@@ -108,6 +108,20 @@ returns producing 2,534 joined rows, 170 counted as _both_ Crosscourt and Down
 the Line. SwingVision itself puts both serves at 1 — do not copy it. `0` is
 already this database's convention for pre-point rows (`Feed`).
 
+### A shot 2 struck by the SERVER is not a return
+
+The vendor sometimes misses the returner's stroke, and then shot 2 is the
+server's next ball: 38 of 570 points on 2026-09-28, every one a far-side server
+whose near-side return is missing (serve to "shot 2" 1.9–3.0 s, against
+0.5–1.2 s for a real return). Every return stat therefore requires
+`is_player1 <> points.server_is_player1` — direction since `20260928153631`,
+contact and returns-in since `20260928160625`. That the server struck again
+proves the return landed in, so `backfill_returns_in_and_net_points` credits the
+returner with it (scoped to `source_provider = 'splitstep'`); contact has no
+position to credit and only skips it. Numbering is left alone: renumbering to
+leave shot 2 empty would still credit nobody and needs a version bump and a
+rebuild.
+
 ### Score strings are SERVER-RELATIVE
 
 `pred_point_score`, `pred_game_score` and `pred_set_score` flip every time the
