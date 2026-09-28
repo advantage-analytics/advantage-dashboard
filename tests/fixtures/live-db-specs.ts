@@ -21,6 +21,8 @@ export const LIVE_DB_SPECS = [
   "admin-program-rpcs.spec.ts",
   "admin-routes.spec.ts",
   "admin-self-promotion.spec.ts",
+  "custom-org-join-request.spec.ts",
+  "custom-program-search-rls.spec.ts",
   "join-requests-staff-read.spec.ts",
   "leave-program.spec.ts",
   "match-share-browser.spec.ts",

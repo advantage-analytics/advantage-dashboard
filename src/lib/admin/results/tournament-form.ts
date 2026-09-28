@@ -1,5 +1,5 @@
 import { draftResult, type DualResultDraft } from "./dual-form";
-import { ROUND_ORDER } from "@/lib/schedule/format";
+import { OUTCOME_ROUNDS } from "@/lib/schedule/format";
 import { isValidDateString } from "@/lib/admin/validation";
 import type { AdminTournamentSubmissionInput } from "./types";
 import type { CreateTournamentInput } from "@/lib/schedule/write-types";
@@ -63,7 +63,7 @@ export function validateTournamentDraft(
     errors.push("Choose this player’s existing entry.");
   if (!d.playerId || !d.playerLabel.trim())
     errors.push("Choose an eligible player.");
-  if (!ROUND_ORDER.includes(d.round)) errors.push("Choose a round.");
+  if (!OUTCOME_ROUNDS.includes(d.round)) errors.push("Choose a round.");
   if (entry?.saved[d.round] || entry?.forfeit)
     errors.push(
       "This recorded result is read-only. Choose an unrecorded round.",

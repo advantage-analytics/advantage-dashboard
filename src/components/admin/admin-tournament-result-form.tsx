@@ -18,7 +18,7 @@ import type { AdminUploadContext } from "@/lib/data/admin-upload-server";
 import {
   EVENT_FORMATS,
   formatLabel,
-  ROUND_ORDER,
+  OUTCOME_ROUNDS,
   roundLongLabel,
 } from "@/lib/schedule/format";
 import { AdminResultReview } from "./admin-result-review";
@@ -96,7 +96,9 @@ export function AdminTournamentResultForm({
   if (initialContext) {
     initial.tournament = initialContext.tournament;
     initial.score = emptyScore(initial.tournament.bestOf);
-    initial.round = ROUND_ORDER.includes(initialRound) ? initialRound : "R16";
+    initial.round = OUTCOME_ROUNDS.includes(initialRound)
+      ? initialRound
+      : "R16";
     const entry = initialContext.entries.find((e) => e.id === initialEntry);
     if (entry) {
       initial.entryId = entry.id;
@@ -510,7 +512,7 @@ export function AdminTournamentResultForm({
                   })
                 }
               >
-                {ROUND_ORDER.map((r) => (
+                {OUTCOME_ROUNDS.map((r) => (
                   <option key={r} value={r}>
                     {r} · {roundLongLabel(r)}
                   </option>

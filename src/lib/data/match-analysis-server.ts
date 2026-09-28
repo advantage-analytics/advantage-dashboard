@@ -15,6 +15,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   type MatchAnalysis,
   importedAnalysis,
+  isInputRejected,
   manualAnalysis,
   pipelinePercent,
   resolveAnalysisStatus,
@@ -28,6 +29,8 @@ interface JobRow {
   status: string;
   upload_progress_percent: number | null;
   error_message: string | null;
+  /** The vendor's failure class; `invalid_input` means the video was refused. */
+  error_category: string | null;
   billable_seconds: number | null;
   external_job_id: string | null;
   created_at: string;
@@ -88,7 +91,7 @@ export async function loadMatchAnalysis(
   const { data, error } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, status, upload_progress_percent, error_message, billable_seconds, external_job_id, created_at, updated_at, derivation_version",
+      "id, match_id, status, upload_progress_percent, error_message, error_category, billable_seconds, external_job_id, created_at, updated_at, derivation_version",
     )
     .in("match_id", matchIds)
     // Newest first, so the reduce below keeps the latest attempt per match.
@@ -141,6 +144,7 @@ export async function loadMatchAnalysis(
       jobReference: row.external_job_id ?? undefined,
       window: formatWindow(row.billable_seconds),
       failNote: row.error_message ?? undefined,
+      inputRejected: isInputRejected(row.status, row.error_category),
     });
   }
 

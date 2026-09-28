@@ -8,6 +8,11 @@
  * rather than "we're still working". This panel carries the same vocabulary as
  * the Analysis column in the matches list, so a player who clicked through from
  * there sees the words they just read.
+ *
+ * While the video is still uploading it reads as the wizard's "Uploading your
+ * video" screen instead — same title, same three steps, same notes, from the
+ * one copy module both import — because a player who taps "View match"
+ * mid-upload arrives here straight from that screen.
  */
 
 import { useEffect, useState } from "react";
@@ -17,6 +22,7 @@ import { TriangleAlert, Info } from "lucide-react";
 import {
   ANALYSIS_LABEL,
   PIPELINE_STAGES,
+  canRetryAnalysis,
   formatEta,
   isAnalysisFailed,
   isLiveUpdating,
@@ -28,6 +34,9 @@ import {
   type MatchAnalysis,
 } from "@/lib/data/match-analysis";
 import { AnalysisProgressTrack } from "../analysis-progress-track";
+import { UPLOADING_COPY } from "../upload-progress-copy";
+import { ANALYSIS_FAILURE_COPY } from "../analysis-failure-copy";
+import { VerticalStep } from "@/components/dashboard/shared/vertical-steps";
 import { RetrySubmission } from "./retry-submission";
 import { RetryAnalysis } from "./retry-analysis";
 import {
@@ -42,8 +51,7 @@ const STORED_NOTE = "Your video is stored. Nothing else is needed from you.";
 
 /** Reassurance per stage. Every line has to be true of the pipeline as built. */
 const STAGE_NOTE: Partial<Record<MatchAnalysis["status"], string>> = {
-  uploading:
-    "Keep this tab open until the transfer finishes. Everything after it runs on our side.",
+  // No `uploading` line: that state renders the wizard's stepper and notes.
   // Same line for both: from the player's side there is no difference between
   // "stored, not yet submitted" and "submitted, waiting" — neither needs them.
   uploaded: STORED_NOTE,
@@ -129,161 +137,192 @@ export function MatchAnalysisProgress({
       </div>
 
       <div className={`${CARD} p-6`}>
-        {/* Headline state */}
-        <div className="flex items-baseline justify-between gap-4">
-          <p
-            className="text-[16px] font-normal tracking-[-0.4px]"
-            style={{ color: failed ? "#E51837" : "#3B82F6" }}
-          >
-            {ANALYSIS_LABEL[analysis.status]}
-          </p>
-          {measured !== undefined && (
-            <div className="flex flex-col items-end gap-0.5">
-              <p className="text-[28px] leading-none font-light tracking-[-0.5px] text-[#3B82F6] tabular-nums">
-                {Math.round(measured)}%
+        {uploading ? (
+          <UploadingSteps uploadPercent={measured} etaSeconds={etaSeconds} />
+        ) : (
+          <>
+            {/* Headline state */}
+            <div className="flex items-baseline justify-between gap-4">
+              <p
+                className="text-[16px] font-normal tracking-[-0.4px]"
+                style={{ color: failed ? "#E51837" : "#3B82F6" }}
+              >
+                {ANALYSIS_LABEL[analysis.status]}
               </p>
-              {/* Derived from elapsed time against percent moved, so it is
+              {measured !== undefined && (
+                <div className="flex flex-col items-end gap-0.5">
+                  <p className="text-[28px] leading-none font-light tracking-[-0.5px] text-[#3B82F6] tabular-nums">
+                    {Math.round(measured)}%
+                  </p>
+                  {/* Derived from elapsed time against percent moved, so it is
                   available on any device rather than only the tab doing the
                   uploading. Absent until there is enough of the transfer to
                   project from. */}
-              {etaSeconds !== undefined && (
-                <p className="text-[11px] text-[#AAAAAA] tabular-nums">
-                  {formatEta(etaSeconds)}
-                </p>
+                  {etaSeconds !== undefined && (
+                    <p className="text-[11px] text-[#AAAAAA] tabular-nums">
+                      {formatEta(etaSeconds)}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
 
-        {/* Four milestones */}
-        <div className="mt-5 flex gap-2">
-          {PIPELINE_STAGES.map((stage, index) => {
-            const isDone = index < currentIndex;
-            const isCurrent = index === currentIndex;
-            const failedHere = isCurrent && failed;
-            // A milestone the job already cleared is full, whatever the
-            // percentage says — a failure carries no percentage at all, and
-            // without this the stages it passed would render empty.
-            const fill =
-              isDone || failedHere ? 100 : stageFillPercent(index, percent);
-            return (
+            {/* Four milestones */}
+            <div className="mt-5 flex gap-2">
+              {PIPELINE_STAGES.map((stage, index) => {
+                const isDone = index < currentIndex;
+                const isCurrent = index === currentIndex;
+                const failedHere = isCurrent && failed;
+                // A milestone the job already cleared is full, whatever the
+                // percentage says — a failure carries no percentage at all, and
+                // without this the stages it passed would render empty.
+                const fill =
+                  isDone || failedHere ? 100 : stageFillPercent(index, percent);
+                return (
+                  <div
+                    key={stage.label}
+                    className={`flex min-w-0 flex-1 flex-col gap-2 ${
+                      isDone || isCurrent ? "opacity-100" : "opacity-45"
+                    }`}
+                  >
+                    <AnalysisProgressTrack
+                      percent={fill}
+                      // Only the stage actually being worked carries the sheen —
+                      // sheening cleared stages would say four things are running.
+                      live={isCurrent && !failed && isWorking(analysis.status)}
+                      tone={failedHere ? "#E51837" : "#3B82F6"}
+                    />
+                    <span
+                      className="truncate text-[12px]"
+                      style={{
+                        color: failedHere
+                          ? "#E51837"
+                          : isCurrent
+                            ? "#3B82F6"
+                            : "#0D0D0D",
+                      }}
+                    >
+                      {stage.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Failure detail, or the reassurance line for a healthy job */}
+            {failed ? (
               <div
-                key={stage.label}
-                className={`flex min-w-0 flex-1 flex-col gap-2 ${
-                  isDone || isCurrent ? "opacity-100" : "opacity-45"
-                }`}
+                className="mt-6 flex items-start gap-2.5 rounded-[10px] border border-[rgba(229,24,55,0.2)] bg-[rgba(229,24,55,0.04)] px-3.5 py-3"
+                role="alert"
               >
-                <AnalysisProgressTrack
-                  percent={fill}
-                  // Only the stage actually being worked carries the sheen —
-                  // sheening cleared stages would say four things are running.
-                  live={isCurrent && !failed && isWorking(analysis.status)}
-                  tone={failedHere ? "#E51837" : "#3B82F6"}
-                />
-                <span
-                  className="truncate text-[12px]"
-                  style={{
-                    color: failedHere
-                      ? "#E51837"
-                      : isCurrent
-                        ? "#3B82F6"
-                        : "#0D0D0D",
-                  }}
-                >
-                  {stage.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Failure detail, or the reassurance line for a healthy job */}
-        {failed ? (
-          <div
-            className="mt-6 flex items-start gap-2.5 rounded-[10px] border border-[rgba(229,24,55,0.2)] bg-[rgba(229,24,55,0.04)] px-3.5 py-3"
-            role="alert"
-          >
-            {/* Not `CircleX` — reserved for `ResultMark`'s won/lost glyph
+                {/* Not `CircleX` — reserved for `ResultMark`'s won/lost glyph
                 elsewhere in the matches list. `TriangleAlert` matches
                 `needs-attention.tsx`'s own icon for a failed analysis job. */}
-            <TriangleAlert
-              className="mt-0.5 size-[15px] shrink-0 text-[#E51837]"
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-            <div>
-              {/* `failNote` is error_message — for a provider failure that is
-                  the vendor's designated end-user string (error.message),
-                  never the raw internals, which stay in the delivery ledger. */}
-              <p className="text-[13px] font-medium text-[#0D0D0D]">
-                {analysis.failNote ?? "Analysis stopped"}
-              </p>
-              <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
-                Retrying uses the video you already uploaded — nothing needs
-                uploading again. If it keeps failing, trim to a window where the
-                camera stays fixed, or upload a new recording.
-              </p>
-              {/* Gated on the literal status, not the broader `failed` (which
-                  also covers derivation_failed): resubmitJob() refuses
-                  anything but a video-provider failure on purpose — a
-                  derivation failure already has its results and needs a
-                  derivation re-run, not a new video submission — so showing
-                  this button there would be a button that always 409s. */}
-              {analysis.jobId && analysis.status === "failed" && (
-                <RetryAnalysis jobId={analysis.jobId} />
-              )}
-              {/* The "upload a new recording" the copy above offers. The
-                  route re-checks the match and sends anything it can't take
-                  somewhere that can. */}
-              {analysis.status === "failed" && (
-                <Link
-                  href={addVideoHref(matchId)}
-                  className="mt-3 inline-block text-[12px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
-                >
-                  Upload a new recording
-                </Link>
-              )}
-            </div>
-          </div>
-        ) : stalled ? (
-          /* Ahead of STAGE_NOTE, because for this state that note says "your
+                <TriangleAlert
+                  className="mt-0.5 size-[15px] shrink-0 text-[#E51837]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                {analysis.status === "derivation_failed" ? (
+                  <div>
+                    {/* The video was analyzed; what failed is matching its
+                    rallies to the entered score. `failNote` here is the
+                    reconciler's reason — detail, not a headline — so it sits
+                    under the explanation, muted. No retry and no new-video
+                    link: resubmitJob() refuses this status, and the footage
+                    was read fine. */}
+                    <p className="text-[13px] font-medium text-[#0D0D0D]">
+                      {ANALYSIS_FAILURE_COPY.derivation_failed.title}
+                    </p>
+                    <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
+                      {ANALYSIS_FAILURE_COPY.derivation_failed.body}
+                    </p>
+                    {analysis.failNote && (
+                      <p className="mt-1.5 text-[11px] leading-[1.5] text-[#888888]">
+                        {analysis.failNote}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    {/* `failNote` is error_message — for a provider failure
+                    that is the vendor's designated end-user string
+                    (error.message), never the raw internals, which stay in
+                    the delivery ledger. */}
+                    <p className="text-[13px] font-medium text-[#0D0D0D]">
+                      {analysis.failNote ?? ANALYSIS_FAILURE_COPY.failed.title}
+                    </p>
+                    <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
+                      {analysis.inputRejected
+                        ? ANALYSIS_FAILURE_COPY.failed.inputRejected.body
+                        : ANALYSIS_FAILURE_COPY.failed.body}
+                    </p>
+                    {/* canRetryAnalysis is gated on the literal status, not the
+                    broader `failed` (which also covers derivation_failed):
+                    resubmitJob() refuses anything but a video-provider
+                    failure on purpose, so showing this button elsewhere would
+                    always 409. An input-rejected video failed on its own
+                    recording requirements, so retrying would resubmit the
+                    same unusable file and fail the same way — no retry
+                    button for it. */}
+                    {analysis.jobId && canRetryAnalysis(analysis) && (
+                      <RetryAnalysis jobId={analysis.jobId} />
+                    )}
+                    {/* The "upload a new recording" the copy above offers. The
+                    route re-checks the match and sends anything it can't take
+                    somewhere that can. */}
+                    {analysis.status === "failed" && (
+                      <Link
+                        href={addVideoHref(matchId)}
+                        className="mt-3 inline-block text-[12px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
+                      >
+                        {ANALYSIS_FAILURE_COPY.failed.uploadLink}
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : stalled ? (
+              /* Ahead of STAGE_NOTE, because for this state that note says "your
              video is stored, nothing else is needed from you" — true of the
              bytes, false about the analysis, and the reason this state could
              sit unnoticed indefinitely. */
-          <div
-            className="mt-6 flex items-start gap-2.5 rounded-[10px] border border-[var(--border-field)] bg-[var(--surface-page)] px-3.5 py-3"
-            role="status"
-          >
-            <Info
-              className="mt-0.5 size-[15px] shrink-0 text-[#888888]"
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-            <div>
-              <p className="text-[13px] font-medium text-[#0D0D0D]">
-                This hasn&apos;t been sent for analysis yet
-              </p>
-              <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
-                Your video is stored safely — the hand-off didn&apos;t go
-                through. Trying again costs nothing but the wait; nothing needs
-                uploading a second time.
-              </p>
-              {analysis.jobId && <RetrySubmission jobId={analysis.jobId} />}
-            </div>
-          </div>
-        ) : (
-          STAGE_NOTE[analysis.status] && (
-            <div className="mt-6 flex items-start gap-2 border-t border-[#F3F3F3] pt-4">
-              <Info
-                className="mt-px size-3.5 shrink-0 text-[#CCCCCC]"
-                strokeWidth={1.75}
-                aria-hidden="true"
-              />
-              <p className="text-[12px] leading-[1.5] text-[#888888]">
-                {STAGE_NOTE[analysis.status]}
-              </p>
-            </div>
-          )
+              <div
+                className="mt-6 flex items-start gap-2.5 rounded-[10px] border border-[var(--border-field)] bg-[var(--surface-page)] px-3.5 py-3"
+                role="status"
+              >
+                <Info
+                  className="mt-0.5 size-[15px] shrink-0 text-[#888888]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="text-[13px] font-medium text-[#0D0D0D]">
+                    This hasn&apos;t been sent for analysis yet
+                  </p>
+                  <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
+                    Your video is stored safely — the hand-off didn&apos;t go
+                    through. Trying again costs nothing but the wait; nothing
+                    needs uploading a second time.
+                  </p>
+                  {analysis.jobId && <RetrySubmission jobId={analysis.jobId} />}
+                </div>
+              </div>
+            ) : (
+              STAGE_NOTE[analysis.status] && (
+                <div className="mt-6 flex items-start gap-2 border-t border-[#F3F3F3] pt-4">
+                  <Info
+                    className="mt-px size-3.5 shrink-0 text-[#CCCCCC]"
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                  />
+                  <p className="text-[12px] leading-[1.5] text-[#888888]">
+                    {STAGE_NOTE[analysis.status]}
+                  </p>
+                </div>
+              )
+            )}
+          </>
         )}
 
         {/* Job record */}
@@ -306,5 +345,74 @@ export function MatchAnalysisProgress({
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * The `uploading` state, mirroring the wizard's "Uploading your video" screen.
+ *
+ * Every string comes from `UPLOADING_COPY`, the module `UploadMatchSuccess`
+ * reads too. What differs is only what this page cannot know: it has the job
+ * row's percentage and a projected ETA, not the tab's byte counts or its
+ * Cancel handle.
+ */
+function UploadingSteps({
+  uploadPercent,
+  etaSeconds,
+}: {
+  uploadPercent: number | undefined;
+  etaSeconds: number | undefined;
+}): React.JSX.Element {
+  // Floored, like the wizard: a rounded 99.6 would read "100%" on a transfer
+  // that has not finished.
+  const pct =
+    uploadPercent === undefined ? undefined : Math.floor(uploadPercent);
+  return (
+    <>
+      <p className="text-[16px] font-normal tracking-[-0.4px] text-[var(--ink-900)]">
+        {UPLOADING_COPY.title}
+      </p>
+      <ol className="mt-5 flex flex-col" aria-label="Progress">
+        <VerticalStep
+          label={UPLOADING_COPY.steps.saved}
+          state="done"
+          last={false}
+        />
+        <VerticalStep
+          label={UPLOADING_COPY.steps.video}
+          state="now"
+          value={pct === undefined ? undefined : `${pct}%`}
+          last={false}
+        >
+          <AnalysisProgressTrack
+            percent={uploadPercent ?? 0}
+            live
+            label={UPLOADING_COPY.trackLabel}
+          />
+          {/* Derived from elapsed time against percent moved, so it is
+              available on any device rather than only the tab doing the
+              uploading. Absent until there is enough of the transfer to
+              project from. */}
+          {etaSeconds !== undefined && (
+            <p className="-mt-1 text-[11px] text-[var(--ink-400)] tabular-nums">
+              {formatEta(etaSeconds)}
+            </p>
+          )}
+          <div className="mt-1 flex flex-col gap-0.5">
+            <p className="text-[12px] leading-[1.55] text-[var(--ink-700)]">
+              {UPLOADING_COPY.notes.keepTabOpen}
+            </p>
+            <p className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
+              {UPLOADING_COPY.notes.keepUsing}
+            </p>
+          </div>
+        </VerticalStep>
+        <VerticalStep
+          label={UPLOADING_COPY.steps.analysis}
+          state="later"
+          last
+        />
+      </ol>
+    </>
   );
 }

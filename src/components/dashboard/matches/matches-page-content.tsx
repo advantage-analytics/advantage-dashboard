@@ -37,7 +37,6 @@ import { DRAWER_ATTR, MatchDrawer } from "./match-drawer";
 import { DraftDrawer } from "./draft-drawer";
 import { matchRowId } from "./match-card-list";
 import { MATCH_DRAWER_SLOT_ID } from "./match-drawer-slot";
-import type { MatchAnalysis } from "@/lib/data/match-analysis";
 import {
   MatchesFilterPanel,
   type FilterOption,
@@ -47,7 +46,7 @@ import { LifecycleChips, type LifecycleValue } from "./lifecycle-chips";
 import { MATCHES_PAGE_SIZE, matchesListShape } from "./match-list-layout";
 import { rememberMatchesShape } from "./matches-shape-memory";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { foldDrafts } from "@/lib/wizard/draft-target";
+import { foldDrafts, matchIdsWithJob } from "@/lib/wizard/draft-target";
 
 function providerName(id: string): string {
   return providers.find((p) => p.id === id)?.name ?? id;
@@ -120,21 +119,6 @@ function analysisGroup(match: DisplayMatch): string | null {
 }
 
 const ANALYSIS_GROUP_ORDER = ["In progress", "Ready", "Failed", "No video"];
-
-/**
- * The "Estimates" view — statistics the engine published but could not defend
- * at full confidence, to be read as "Estimate · Review data" in the row.
- *
- * No analysis state carries that marker yet: Phase 2 derivation withholds the
- * aggregates it cannot stand behind (`timeline`) rather than publishing them
- * flagged, so today nothing qualifies and the view is honestly empty. The
- * predicate exists so the pill is wired to the fact the moment a low-confidence
- * flag lands on `MatchAnalysis`, instead of to a status list that would need
- * re-deriving then.
- */
-function isEstimate(_analysis: MatchAnalysis | undefined): boolean {
-  return false;
-}
 
 interface ActiveFilter {
   key: FilterKey;
@@ -359,7 +343,6 @@ function SortDropdown({
 const LIFECYCLE_NOUN: Record<Exclude<LifecycleValue, "all">, string> = {
   new: "new matches",
   "in-progress": "matches in progress",
-  estimates: "estimates",
 };
 
 /**
@@ -424,32 +407,6 @@ export function MatchesPageContent({
   const pathname = usePathname();
   const workspaceId = useWorkspace().active.id;
 
-  // A draft that fills a listed match (an "Add video" started from a scored
-  // line) is more work on that match, not a second one: it folds onto the
-  // match's row — a Draft pill there, "Continue upload" in its drawer — and
-  // only the rest list as draft rows. Everything below that says `drafts`
-  // means the standalone ones: the rows, the stepping order, the deep link.
-  const { standalone: drafts, byMatchId: foldedDrafts } = useMemo(
-    () =>
-      foldDrafts(
-        allDrafts,
-        serverMatches.map((m) => m.id),
-      ),
-    [allDrafts, serverMatches],
-  );
-
-  // Teach the route's loading boundary this workspace's first page, so the next
-  // client-side visit draws its skeleton at the size the rows will arrive at.
-  useEffect(() => {
-    rememberMatchesShape(
-      workspaceId,
-      matchesListShape(
-        serverMatches.map((m) => m.date),
-        drafts.map((d) => d.updatedAt),
-      ),
-    );
-  }, [workspaceId, serverMatches, drafts]);
-
   // Live job state, merged over what the server rendered. Without this the bar
   // is a snapshot from page load — a long upload appears frozen, and a job that
   // finishes while the tab is open never says so.
@@ -482,6 +439,41 @@ export function MatchesPageContent({
       return { ...m, analysis: withLiveAnalysis(m.analysis, patch) };
     });
   }, [serverMatches, livePatches]);
+
+  // A draft that fills a listed match (an "Add video" started from a scored
+  // line) is more work on that match, not a second one: it folds onto the
+  // match's row — a Draft pill there, "Continue upload" in its drawer — and
+  // only the rest list as draft rows. Everything below that says `drafts`
+  // means the standalone ones: the rows, the stepping order, the deep link.
+  //
+  // Unless that match's video already went in (it carries a job): then the
+  // draft is stale and shows nowhere. Read off the live-merged `matches`, so a
+  // job that lands while the page is open retires the draft without a refresh.
+  // Keyed on the job-carrying ids as one string, not on `matches`: a progress
+  // tick replaces that array without changing which matches carry a job, and
+  // refolding on every tick would hand every draft consumer a new reference.
+  const staleKey = matchIdsWithJob(matches).join(" ");
+  const { standalone: drafts, byMatchId: foldedDrafts } = useMemo(
+    () =>
+      foldDrafts(
+        allDrafts,
+        serverMatches.map((m) => m.id),
+        staleKey ? staleKey.split(" ") : [],
+      ),
+    [allDrafts, serverMatches, staleKey],
+  );
+
+  // Teach the route's loading boundary this workspace's first page, so the next
+  // client-side visit draws its skeleton at the size the rows will arrive at.
+  useEffect(() => {
+    rememberMatchesShape(
+      workspaceId,
+      matchesListShape(
+        serverMatches.map((m) => m.date),
+        drafts.map((d) => d.updatedAt),
+      ),
+    );
+  }, [workspaceId, serverMatches, drafts]);
 
   /* Layout is decided by the viewport alone — there is no view control any
      more. Seven columns need the width, so under 1024px the same matches render
@@ -522,7 +514,7 @@ export function MatchesPageContent({
   });
   const [lifecycle, setLifecycle] = useState<LifecycleValue>(() => {
     const v = searchParams.get("lifecycle");
-    return v === "new" || v === "in-progress" || v === "estimates" ? v : "all";
+    return v === "new" || v === "in-progress" ? v : "all";
   });
   const readyMatchIds = useMemo(
     () =>
@@ -613,8 +605,6 @@ export function MatchesPageContent({
       result = result.filter(
         (m) => !!m.analysis && isInFlight(m.analysis.status),
       );
-    } else if (lifecycle === "estimates") {
-      result = result.filter((m) => isEstimate(m.analysis));
     }
 
     return result;

@@ -16,15 +16,16 @@ import type { DraftRowData } from "@/components/dashboard/matches/draft-row";
  * - `m-plain` — an older scored match, no draft.
  * - `d-new` — a draft that will create a match; it lists as its own row.
  *
- * `?scope=team` mounts the team table. Everything else on the URL
+ * `?scope=team` mounts the team table. `?job=1` gives `m-scored` a video job
+ * (`analysis.jobId`), which makes `d-folded` stale: it shows nowhere.
+ * `?manual=1` gives it a score-only analysis instead, which folds as usual.
+ * Everything else on the URL
  * (`?match=`, `?draft=`) reaches the page through the navigation mock's
  * `useSearchParams()`, as it would from Next.
  */
 
-const scope =
-  new URLSearchParams(window.location.search).get("scope") === "team"
-    ? "team"
-    : "personal";
+const params = new URLSearchParams(window.location.search);
+const scope = params.get("scope") === "team" ? "team" : "personal";
 
 const WORKSPACE: WorkspaceContextValue = {
   active: {
@@ -85,8 +86,19 @@ function match(
   };
 }
 
+const scored = match("m-scored", "Avery Stone", "2026-09-20", "player1");
+if (params.get("job") === "1") {
+  scored.analysis = {
+    status: "queued",
+    jobId: "job-1",
+    providerId: "splitstep",
+  };
+} else if (params.get("manual") === "1") {
+  scored.analysis = { status: "manual", providerId: null };
+}
+
 const MATCHES: DisplayMatch[] = [
-  match("m-scored", "Avery Stone", "2026-09-20", "player1"),
+  scored,
   match("m-plain", "Riley Chen", "2026-09-10", "player2"),
 ];
 

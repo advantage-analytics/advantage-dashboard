@@ -173,6 +173,26 @@ test.describe("presetFor · the preset one entry builds", () => {
     expect(preset.opponentProgramKey).toBe("rival-state");
     expect(preset.opponentSchool).toBe("Rival State");
   });
+
+  test("forwards the match's tiebreak arrays unchanged beside its games", () => {
+    const scored: EntryMatch = {
+      ...match("m-tb"),
+      score: {
+        player1: [7, 6],
+        player2: [6, 4],
+        player1_tiebreaks: [null, null],
+        player2_tiebreaks: [5, null],
+      },
+    };
+    const line = entry({ position: 0, matches: [scored] });
+
+    expect(presetFor(EVENT, line, scored, PROGRAMS).score).toEqual({
+      player1: [7, 6],
+      player2: [6, 4],
+      player1_tiebreaks: [null, null],
+      player2_tiebreaks: [5, null],
+    });
+  });
 });
 
 test.describe("tournament entries · for the score flow", () => {
@@ -240,5 +260,27 @@ test.describe("tournament entries · for the score flow", () => {
 
     const dualLine = entry({ position: 2 });
     expect(presetFor(EVENT, dualLine, null, PROGRAMS, "QF").round).toBe("S3");
+  });
+
+  test("a round with no match of its own names no opponent; a dual line still falls back to its lineup", () => {
+    // The entry's labels are "the last round filed" — R32's opponent here.
+    const filed = run(0, ["R32"], { opponentLabels: ["Last Round Opponent"] });
+    expect(
+      presetFor(TOURNAMENT, filed, null, PROGRAMS, "R16").opponentName,
+    ).toBe("");
+    // A round that holds a match names that match's opponent.
+    expect(
+      presetFor(TOURNAMENT, filed, filed.matches[0], PROGRAMS, "R32")
+        .opponentName,
+    ).toBe("Rival Player");
+    // The next-round row the Change menu presets opens empty too.
+    const [choice] = lineupChoices(TOURNAMENT, [filed], PROGRAMS);
+    expect(choice.preset).toMatchObject({ round: "R16", opponentName: "" });
+
+    // A dual line's entry labels ARE its opponent — the lineup named them.
+    const dualLine = entry({ position: 0, opponentLabels: ["Lineup Name"] });
+    expect(presetFor(EVENT, dualLine, null, PROGRAMS).opponentName).toBe(
+      "Lineup Name",
+    );
   });
 });

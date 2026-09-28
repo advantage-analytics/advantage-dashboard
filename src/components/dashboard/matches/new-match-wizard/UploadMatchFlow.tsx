@@ -19,7 +19,7 @@ import { AdminFileSubmissionStatus } from "./AdminFileSubmissionStatus";
 import { useAdminWizardMode } from "./admin-mode";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderId } from "@/lib/services/upload";
-import type { EventPreset, MatchDraft } from "./types";
+import { followServerPreset, type EventPreset, type MatchDraft } from "./types";
 import type { RosterSubject, VideoUploadEvent } from "./useUploadMatchWizard";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { PinnedLineBar } from "./PinnedLineBar";
@@ -88,6 +88,17 @@ export function UploadMatchFlow({
   const [preset, setPreset] = useState<EventPreset | null>(
     initialPreset ?? draft?.preset ?? null,
   );
+  // A later server render for the same line — the event's format edited and
+  // `/dashboard/team/upload` revalidated — carries the new Ad/No-Ad and
+  // best-of. Followed during render (the prop is compared with the last one
+  // seen, not mirrored by an effect), for the held line only: see
+  // `followServerPreset`.
+  const [seenInitialPreset, setSeenInitialPreset] = useState(initialPreset);
+  if (initialPreset !== seenInitialPreset) {
+    setSeenInitialPreset(initialPreset);
+    const followed = followServerPreset(preset, initialPreset);
+    if (followed) setPreset(followed);
+  }
   // A team upload came from a line and goes back to it. A personal one has the
   // matches list, which is where its match will appear.
   const EXIT_HREF = admin?.exitHref ?? preset?.eventHref ?? PERSONAL_EXIT_HREF;

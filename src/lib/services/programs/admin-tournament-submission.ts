@@ -2,7 +2,7 @@ import { requireAdmin } from "./admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAdminUploadContext } from "@/lib/data/admin-upload-server";
 import { validateAdminLineResult } from "./admin-dual-submission";
-import { ROUND_ORDER } from "@/lib/schedule/format";
+import { OUTCOME_ROUNDS } from "@/lib/schedule/format";
 import {
   isUuid as uuid,
   isObject as object,
@@ -32,7 +32,7 @@ export function validateAdminTournamentSubmission(v: unknown): string | null {
     !uuid(v.itemId) ||
     !uuid(v.programId) ||
     typeof v.round !== "string" ||
-    !ROUND_ORDER.includes(v.round) ||
+    !OUTCOME_ROUNDS.includes(v.round) ||
     !validateAdminLineResult(v.result, "S1")
   )
     return "Provide a valid operation, tournament round and score or outcome.";

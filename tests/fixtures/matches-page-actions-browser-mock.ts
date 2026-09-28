@@ -13,6 +13,8 @@ export async function deleteMatchDraft(): Promise<{ error: string | null }> {
   return { error: null };
 }
 
+export async function deleteMatchDraftsForMatch(): Promise<void> {}
+
 export function profileHref(playerId: string): string {
   return `/dashboard/team/roster/${playerId}`;
 }

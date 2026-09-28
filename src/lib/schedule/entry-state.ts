@@ -22,6 +22,7 @@ import type {
   OutcomeKind,
   ResolvedOutcome,
 } from "./types";
+import type { RecordResultInput } from "./write-types";
 
 /** Exact round lookup: a tournament result never leaks into a sibling round. */
 export function outcomeForRound(
@@ -166,13 +167,42 @@ export function supportsVideo(
   );
 }
 
+/**
+ * The app's one rule for turning a `scoreWinner` verdict into "did we win":
+ * a retirement or a default's stored winner (the side that stopped may be
+ * ahead — 3-6, 2-1 ret. is the other player's line), then sets. Player1 is
+ * always ours.
+ */
+function weWon(winner: ReturnType<typeof scoreWinner>): boolean | null {
+  return winner === null ? null : winner === "player1";
+}
+
 /** Did we win this match? Null when it has no score, or the sets are level. */
 export function matchWon(match: EntryMatch): boolean | null {
-  // The app's one rule: a retirement or a default's stored winner (the side
-  // that stopped may be ahead — 3-6, 2-1 ret. is the other player's line),
-  // then sets.
-  const winner = scoreWinner(match.score);
-  return winner === null ? null : winner === "player1";
+  return weWon(scoreWinner(match.score));
+}
+
+/**
+ * Would this `recordResult` payload be a match we won — asked BEFORE it is
+ * written, so the score flow can word its button from the typed score.
+ *
+ * The payload is turned into the score `recordResult` stores (player1 is
+ * always ours; a stopped match's `winner` is the side that did not stop) and
+ * read with `matchWon`'s own rule, so the button and every reader afterwards
+ * agree on who took it.
+ */
+export function resultInputWon(
+  input: Pick<RecordResultInput, "ourGames" | "theirGames" | "ending">,
+): boolean | null {
+  return weWon(
+    scoreWinner({
+      player1: input.ourGames,
+      player2: input.theirGames,
+      ...(input.ending
+        ? { winner: input.ending.side === "ours" ? "player2" : "player1" }
+        : {}),
+    }),
+  );
 }
 
 /**

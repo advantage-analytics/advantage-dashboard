@@ -229,6 +229,42 @@ Winner indistinguishable. A `rally_end_reason` (`winner` / `out` / `net`), or
 anything marking that a player attempted and missed a shot, would unblock the
 remaining half.
 
+### Q14 — How is the frame-rate floor measured? **Blocks an accurate upload check.**
+
+A file whose own metadata reports **29.94 fps** was rejected with
+`VIDEO_FRAME_RATE_TOO_LOW` at step `trimming_video`, detail `video is 29.80 fps`,
+message "The video must be at least 29.9 fps." (vendor `job_id`
+`e42ec057-4afc-4f68-9975-3da46c5d0e83`, `video_id`
+`1e7f4043-fa4e-4740-89f6-65f09050ab5a`, 2026-09-28). The file was sent
+untouched: the selected window was the whole clip, so our remux was skipped.
+
+So the number the vendor measures is not the number the container declares, and
+our upload check cannot predict the verdict. Our check samples a few frames in
+the browser and treats anything near 29.97 as passing (see the header of
+`src/lib/services/upload/validators/splitstep-validator.ts`, which also records
+that the vendor guide says both "29.97 fps accepted" and "rejected below 29.9").
+
+Ask:
+
+1. How is the rate in the error computed — decoded frames over the video
+   stream's duration, over the container's duration, the stream's declared
+   average, or something else? Is it measured on the whole file or on the
+   requested `start_time`–`end_time` window?
+2. Is the 29.9 floor applied to that computed value? Is variable-frame-rate
+   footage (common from phones, and what a 29.94 average usually indicates)
+   rejected by design, or only when its average falls below 29.9?
+3. Is a job rejected at this step billed? Ours reserved 5,306 seconds and
+   released the reservation on failure; we need to know whether the vendor
+   invoices it.
+
+Decided 2026-09-27, before an answer: the upload wizard **refuses** a file
+whose whole-track container average is under 29.97 (`MIN_CONTAINER_AVERAGE_FPS`),
+following the API docs' "29.97 fps (NTSC) and higher is accepted" — the band
+below that is not promised, and this file shows the vendor measures lower than
+the container. An answer to question 1 could let us narrow or relax that. A
+failure with `error_category = 'invalid_input'` is not offered a retry, since
+resubmitting the same file fails the same way.
+
 ---
 
 ## 5. What can and cannot be written to the database

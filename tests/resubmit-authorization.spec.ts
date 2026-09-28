@@ -103,6 +103,7 @@ function parentJob(overrides: Row = {}): Row {
     match_id: "m-1",
     created_by: VIEWER,
     status: "failed",
+    error_category: null,
     video_object_key: VIDEO_KEY,
     start_time_seconds: 90,
     end_time_seconds: 5271.5,
@@ -540,7 +541,8 @@ test("a manual team retry with no session client is undecided, never passed", as
 // ── The contract sits before the child row, the reservation and the vendor ─
 
 test("an eligible manual retry inserts the child, reserves for it, then submits", async () => {
-  const h = harness({});
+  // error_category: "internal" — not "invalid_input" — must not be refused.
+  const h = harness({ job: parentJob({ error_category: "internal" }) });
   const r = await manual(h);
   expect(r.ok).toBe(true);
   if (!r.ok) return;
@@ -688,6 +690,30 @@ test("a parent that is not failed, or has no video, is refused before the contra
   expectRefused(noVideo, await manual(noVideo), "video_unavailable");
   expect(running.rosterReads).toEqual([]);
   expect(noVideo.rosterReads).toEqual([]);
+});
+
+test("an invalid_input failure is refused before the video check, on both paths", async () => {
+  const manualH = harness({
+    job: parentJob({ error_category: "invalid_input" }),
+  });
+  const manualResult = await manual(manualH);
+  expectRefused(manualH, manualResult, "input_rejected");
+  expect(manualResult.ok).toBe(false);
+  if (!manualResult.ok) {
+    expect(manualResult.message).toContain("same way");
+    expect(manualResult.message).toContain("new recording");
+    expect(manualResult.message).not.toMatch(/splitstep|swingvision/i);
+  }
+  expect(manualH.rosterReads).toEqual([]);
+  expect(manualH.sent).toEqual([]);
+
+  const autoH = harness({
+    job: parentJob({ error_category: "invalid_input" }),
+  });
+  const autoResult = await auto(autoH);
+  expectRefused(autoH, autoResult, "input_rejected");
+  expect(autoH.rosterReads).toEqual([]);
+  expect(autoH.sent).toEqual([]);
 });
 
 test("a source blob that is gone → video_unavailable, nothing spent", async () => {

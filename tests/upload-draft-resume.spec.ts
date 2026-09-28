@@ -339,9 +339,17 @@ test.describe("draftTargetMatchId (T20)", () => {
  * An in-memory `match_drafts` behind a mocked server client: `upsert` stores
  * the row, `select` projects it — including PostgREST's `alias:col->a->>b`
  * JSON paths, so the list's select string is what is actually exercised.
+ * Rows are kept per table, so `processing_jobs` (read by `listMatchDrafts`)
+ * is empty unless a test seeds it through `table()`.
  */
 function draftsDatabase() {
-  const rows = new Map<string, Record<string, unknown>>();
+  const store = new Map<string, Map<string, Record<string, unknown>>>();
+  function table(name: string) {
+    let held = store.get(name);
+    if (!held) store.set(name, (held = new Map()));
+    return held;
+  }
+  const rows = table("match_drafts");
   const tables: string[] = [];
   const selects: string[] = [];
 
@@ -366,15 +374,21 @@ function draftsDatabase() {
     return out;
   }
 
-  function builder(table: string) {
+  function builder(name: string) {
+    const rows = table(name);
     let columns = "*";
     let upserted: Record<string, unknown> | null = null;
-    const filters: [string, unknown][] = [];
+    let deleting = false;
+    const filters: ((row: Record<string, unknown>) => boolean)[] = [];
     const result = () => {
-      const matched = [...rows.values()].filter((row) =>
-        filters.every(([col, v]) => row[col] === v),
+      const matched = [...rows.entries()].filter(([, row]) =>
+        filters.every((keep) => keep(row)),
       );
-      return matched.map((row) => project(row, columns));
+      if (deleting) {
+        for (const [key] of matched) rows.delete(key);
+        return null;
+      }
+      return matched.map(([, row]) => project(row, columns));
     };
     const chain: Record<string, unknown> = {
       upsert(row: Record<string, unknown>) {
@@ -387,23 +401,30 @@ function draftsDatabase() {
         selects.push(cols);
         return chain;
       },
+      delete() {
+        deleting = true;
+        return chain;
+      },
       eq(col: string, v: unknown) {
-        filters.push([col, v]);
+        filters.push((row) => row[col] === v);
         return chain;
       },
       is(col: string, v: unknown) {
-        filters.push([col, v]);
+        filters.push((row) => row[col] === v);
+        return chain;
+      },
+      in(col: string, values: unknown[]) {
+        filters.push((row) => values.includes(row[col]));
         return chain;
       },
       order: () => chain,
       maybeSingle: async () => ({
-        data: upserted ? project(upserted, columns) : (result()[0] ?? null),
+        data: upserted ? project(upserted, columns) : (result()?.[0] ?? null),
         error: null,
       }),
       then: (resolve: (value: unknown) => void) =>
         resolve({ data: result(), error: null }),
     };
-    void table;
     return chain;
   }
 
@@ -414,7 +435,7 @@ function draftsDatabase() {
       return builder(table);
     },
   };
-  return { client, rows, tables, selects };
+  return { client, rows, table, tables, selects };
 }
 
 function loadActions(db: ReturnType<typeof draftsDatabase>) {

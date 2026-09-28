@@ -25,6 +25,7 @@ import {
 } from "@/lib/schedule/opponent-history";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
+import { useProgramSearch } from "@/components/dashboard/schedule/static/use-program-search";
 
 /**
  * Everything `/dashboard/team/schedule/new/dual` reads, for both of its steps.
@@ -207,7 +208,9 @@ export function DualSchoolStep({
   } = useNewDualData();
 
   const [term, setTerm] = useState("");
-  const [results, setResults] = useState<ProgramSearchResult[]>([]);
+  // `/api/programs/search`, debounced and aborted per keystroke — the hook is
+  // the one copy of that search, shared with the score page's School field.
+  const results = useProgramSearch(term);
   const [picked, setPicked] = useState<ProgramSearchResult | null>(null);
 
   /**
@@ -236,37 +239,6 @@ export function DualSchoolStep({
   const [conference, setConference] = useState<string>(home.conference);
 
   const histories = useMemo(() => new Map(historyEntries), [historyEntries]);
-
-  useEffect(() => {
-    const query = term.trim();
-    // Clearing below the threshold belongs to the input handler, not here — a
-    // synchronous setState in this effect cascades a render per keystroke.
-    if (query.length < 2) return;
-
-    // Debounced and aborted on the next keystroke: the route is cached for
-    // five minutes, but a request per character still queues them.
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      try {
-        const response = await fetch(
-          `/api/programs/search?q=${encodeURIComponent(query)}`,
-          { signal: controller.signal },
-        );
-        if (!response.ok) return;
-        const body = (await response.json()) as {
-          results: ProgramSearchResult[];
-        };
-        setResults(body.results);
-      } catch {
-        // An aborted fetch is the normal case here, not a failure worth showing.
-      }
-    }, 180);
-
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [term]);
 
   const query = term.trim().toLowerCase();
 
@@ -420,7 +392,6 @@ export function DualSchoolStep({
             const next = event.target.value;
             setTerm(next);
             setPicked(null);
-            if (next.trim().length < 2) setResults([]);
           }}
           onKeyDown={(event) => {
             if (event.key !== "Enter") return;
