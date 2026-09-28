@@ -99,6 +99,13 @@ const RESULTS_FETCH_TIMEOUT_MS = 25_000;
 const FRAME_DATA_FETCH_TIMEOUT_MS = 20_000;
 
 /**
+ * Tighter clock for the trajectories file when it is fetched ahead of
+ * derivation (~4 MB). Past it, derivation runs on the strokes file alone and
+ * the url stays on the row, as for any other per-frame miss.
+ */
+const TRAJECTORIES_BEFORE_DERIVE_TIMEOUT_MS = 8_000;
+
+/**
  * Headers the signature might arrive in.
  *
  * `x-hmac-signature` is the vendor's answer, given by email and since added to
@@ -470,6 +477,24 @@ export async function POST(request: NextRequest) {
         // Gated on resultsSecured rather than on this delivery having done the
         // download, so a redelivery still grades a job whose first attempt
         // stored the analysis but failed to grade it.
+        //
+        // The trajectories file first, though: derivation reads it for its own
+        // line calls (derivation/line-calls.ts), so it has to be in the bucket
+        // before deriveAndPublish runs. It is ~4 MB on a bounded fetch clock;
+        // a miss only means this derivation falls back to the strokes file.
+        await storeFrameData({
+          supabase,
+          jobId,
+          timeoutMs: TRAJECTORIES_BEFORE_DERIVE_TIMEOUT_MS,
+          files: [
+            {
+              kind: "trajectories",
+              url: trajectoriesUrl,
+              objectKey: trajectoriesKey,
+            },
+          ],
+        });
+
         if (jobId && resultsSecured) {
           await gradeResults({
             supabase,
@@ -492,23 +517,16 @@ export async function POST(request: NextRequest) {
           await deriveAndPublish({ supabase, jobId, deadline });
         }
 
-        // The per-frame files, last of all. Nothing reads them yet — they are
-        // kept so metrics can be built on them without waiting another week for
-        // a vendor url — so they must never delay derivation, which is what the
-        // user is waiting on, and they run in whatever budget is left. Each is
-        // best-effort with its own clock; a miss is logged with the recovery
-        // path and the url stays on the job row.
+        // The players file, last of all. Nothing in derivation reads it yet —
+        // it is kept so metrics can be built on it without waiting another
+        // week for a vendor url — and at ~50 MB it must never delay the
+        // derivation the user is waiting on, so it runs in whatever budget is
+        // left. Best-effort with its own clock; a miss is logged with the
+        // recovery path and the url stays on the job row.
         await storeFrameData({
           supabase,
           jobId,
-          files: [
-            { kind: "players", url: playersUrl, objectKey: playersKey },
-            {
-              kind: "trajectories",
-              url: trajectoriesUrl,
-              objectKey: trajectoriesKey,
-            },
-          ],
+          files: [{ kind: "players", url: playersUrl, objectKey: playersKey }],
         });
 
         // Ball paths, after the trajectories file they are derived from is in
@@ -744,8 +762,15 @@ async function storeFrameData(params: {
     url: string | null;
     objectKey: string;
   }>;
+  /** Per-file fetch clock. Defaults to FRAME_DATA_FETCH_TIMEOUT_MS. */
+  timeoutMs?: number;
 }): Promise<void> {
-  const { supabase, jobId, files } = params;
+  const {
+    supabase,
+    jobId,
+    files,
+    timeoutMs = FRAME_DATA_FETCH_TIMEOUT_MS,
+  } = params;
 
   await Promise.all(
     files
@@ -755,7 +780,7 @@ async function storeFrameData(params: {
           supabase,
           url: url as string,
           objectKey,
-          timeoutMs: FRAME_DATA_FETCH_TIMEOUT_MS,
+          timeoutMs,
         });
 
         if (!stored.ok) {

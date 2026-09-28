@@ -19,7 +19,10 @@ import {
   analyzeResults,
   buildTranscript,
   DERIVATION_VERSION,
+  lineCallsFor,
+  type LineCalls,
   type MatchScore,
+  type SplitStepStroke,
   type Transcript,
 } from "./derivation";
 import { RESULTS_BUCKET } from "./config";
@@ -63,6 +66,8 @@ interface JobRow {
   initial_top_player_is_player1: boolean | null;
   /** What the vendor was told (`Ad`), written from the request object itself. */
   ad_scoring: boolean | null;
+  /** The per-frame ball file, when the webhook stored one. */
+  trajectories_object_key: string | null;
 }
 
 interface MatchRow {
@@ -111,7 +116,7 @@ export async function buildTranscriptForJob(params: {
   const { data: job, error: jobError } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, results_object_key, start_time_seconds, initial_top_player_is_player1, ad_scoring",
+      "id, match_id, results_object_key, start_time_seconds, initial_top_player_is_player1, ad_scoring, trajectories_object_key",
     )
     .eq("id", jobId)
     .single<JobRow>();
@@ -180,6 +185,12 @@ export async function buildTranscriptForJob(params: {
     // See resolveAdScoring for why the job's value beats the match record's.
     adScoring: resolveAdScoring(job.ad_scoring, match.format),
     bestOf: match.format?.best_of ?? 3,
+    lineCalls: await lineCallsForJob({
+      supabase,
+      jobId: job.id,
+      objectKey: job.trajectories_object_key,
+      strokes: analysis.strokes,
+    }),
   });
 
   return {
@@ -397,5 +408,36 @@ export async function persistTranscript(params: {
     const reason = err instanceof Error ? err.message : String(err);
     console.error(`${LOG} threw`, { jobId, reason });
     return { ok: false, reason, transcript: null, failure: "error" };
+  }
+}
+
+/**
+ * Our own line calls for a job, from its stored trajectories file.
+ *
+ * Best-effort by design: a job with no file, or one that fails to download or
+ * parse, derives exactly as it did before trajectories were read — only from
+ * the strokes file. Logged, never thrown, so it cannot refuse a match.
+ */
+async function lineCallsForJob(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  jobId: string;
+  objectKey: string | null;
+  strokes: SplitStepStroke[];
+}): Promise<LineCalls | undefined> {
+  const { supabase, jobId, objectKey, strokes } = params;
+  if (!objectKey) return undefined;
+  try {
+    const { data, error } = await supabase.storage
+      .from(RESULTS_BUCKET)
+      .download(objectKey);
+    if (error || !data) throw new Error(error?.message ?? "no data");
+    return lineCallsFor(strokes, JSON.parse(await data.text()));
+  } catch (err) {
+    console.error(`${LOG} trajectories unreadable, deriving without them`, {
+      jobId,
+      objectKey,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return undefined;
   }
 }

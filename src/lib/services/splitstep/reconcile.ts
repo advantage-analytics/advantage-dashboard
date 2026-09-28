@@ -400,7 +400,9 @@ interface UndeliveredJob {
  * secureResults → gradeResults → deriveAndPublish, the same three calls in the
  * same order, gated on the results being secured exactly as the webhook gates
  * them. (The webhook's per-frame files and ball paths are not repeated: they
- * are best-effort, read by nothing yet, and their urls stay on the row.)
+ * are best-effort and their urls stay on the row. Without the trajectories
+ * file a recovered derivation takes the strokes-only fallback for line calls,
+ * exactly as a webhook whose trajectories fetch missed does.)
  *
  * ── Claiming, and what "a second attempt" means ─────────────────────────────
  * Two page reads can sweep the same row. Each row is CLAIMED before any work

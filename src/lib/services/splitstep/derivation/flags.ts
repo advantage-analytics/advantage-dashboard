@@ -9,17 +9,31 @@
  *
  * Codes are stable strings; they land in `points.flags` / `shots.flags` and are
  * queried by containment. Adding one is additive, so this list is expected to
- * grow.
+ * grow. A code is never renamed once written, even when what it means turns
+ * out to be different; the doc comment says what it measures instead.
+ *
+ * Measured meanings come from the one hand-labelled match so far (Ace v
+ * Goodman, match 1415029e, 87 points, 2026-09-28). Re-run
+ * scripts/splitstep-eval.ts against each newly labelled match and update them.
  */
 
 import { serveCourtSide } from "./court";
 import { lastStrokeWinner } from "./winners";
+import type { LineCalls } from "./line-calls";
 import type { SplitStepRally, SplitStepStroke } from "./types";
 
 export const POINT_FLAGS = {
-  /** Score fold and the last stroke's `in` flag name different winners. */
+  /**
+   * Score fold and the last stroke's `in` flag name different winners.
+   * Measured: read it as "how the point ended is suspect". On the labelled
+   * match it fired 22 times; the winner was wrong on 4, the ending on 12.
+   */
   WINNER_DISPUTED: "winner_disputed",
-  /** Two consecutive strokes credited to one player — impossible in singles. */
+  /**
+   * Two consecutive strokes credited to one player — impossible in singles.
+   * Measured: usually a stroke the vendor never detected, not a mislabelled
+   * hitter (the labeller noted a missed shot on 5 of its 12 hits).
+   */
   SAME_PLAYER_CONSECUTIVE: "same_player_consecutive",
   /** A serve flagged in, yet another serve followed it. Let? Ball on? */
   RESERVE_AFTER_IN: "reserve_after_in",
@@ -31,7 +45,11 @@ export const POINT_FLAGS = {
    * that guess on roughly 80% of the points where both exist.
    */
   WINNER_GUESSED: "winner_guessed",
-  /** No result_type could be assigned honestly. */
+  /**
+   * No result_type could be assigned honestly. Measured: both hits on the
+   * labelled match were points the server actually won (an ace, a return
+   * error the vendor never detected) — too few to act on.
+   */
   RESULT_TYPE_UNKNOWN: "result_type_unknown",
   /** Strokes at a faulted serve were removed before the rows were built. */
   PHANTOM_STROKES_DROPPED: "phantom_strokes_dropped",
@@ -41,7 +59,30 @@ export const POINT_FLAGS = {
    * 2 of 10 such points were double faults, so it never changes result_type.
    */
   SECOND_SERVE_CALLED_OUT: "second_serve_called_out",
+  /**
+   * The ball before a derived winner bounced outside the singles lines (per
+   * the trajectories file), so the last stroke was dropped as a dead ball and
+   * the point reads as an error. An autofix on small evidence: see played.ts.
+   */
+  WINNER_TO_ERROR_BY_BOUNCE: "winner_to_error_by_bounce",
+  /**
+   * Review-only. A derived winner whose previous ball landed within
+   * ENDING_SUSPECT_MARGIN_M of a line, or that the vendor called out with high
+   * line confidence. Measured: 12 of 14 such winners were really errors when
+   * the ball was within 1 m.
+   */
+  ENDING_SUSPECT_LINE: "ending_suspect_line",
 } as const;
+
+/** How close to a line the ball before a winner must land to be suspect. */
+const ENDING_SUSPECT_MARGIN_M = 1;
+
+/**
+ * `line_confidence` only takes about three values (0.5, 0.7, 0.9) and mostly
+ * echoes the call. An out call at 0.9 near the end of a point was right 12 of
+ * 12 on the labelled match; at 0.5–0.7 it was noise mid-rally.
+ */
+const CONFIDENT_OUT_CALL = 0.85;
 
 /** Strokes after a second serve that can still be the returner at a dead ball. */
 const MAX_DEAD_TAIL = 2;
@@ -116,6 +157,8 @@ export function flagPoint(params: {
   resultType: string | null;
   /** processing_jobs.ad_scoring. Defaults to ad, as buildTranscript does. */
   adScoring?: boolean;
+  /** Our own line calls; without them only the vendor's call is consulted. */
+  lineCalls?: LineCalls;
 }): string[] {
   const {
     rally,
@@ -123,8 +166,29 @@ export function flagPoint(params: {
     previousInGame,
     resultType,
     adScoring = true,
+    lineCalls,
   } = params;
   const flags: string[] = [];
+
+  // A winner the ball before it says may have been an error. The autofix in
+  // played.ts has already taken the balls that clearly landed out; this is
+  // the near-line band it leaves for a person.
+  const last = rally.strokes[rally.strokes.length - 1];
+  const before = rally.strokes[rally.strokes.length - 2];
+  if (
+    winner &&
+    last &&
+    before &&
+    last.strokeType !== "serve" &&
+    before.strokeType !== "serve" &&
+    last.playerLabel === winner
+  ) {
+    const margin = lineCalls?.get(before)?.margin ?? null;
+    const nearLine = margin !== null && margin < ENDING_SUSPECT_MARGIN_M;
+    const confidentOut =
+      !before.in && (before.lineConfidence ?? 0) >= CONFIDENT_OUT_CALL;
+    if (nearLine || confidentOut) flags.push(POINT_FLAGS.ENDING_SUSPECT_LINE);
+  }
 
   // The disagreement that matters: the score fold says one player won, the
   // last stroke's in flag implies the other. These are the points a human
