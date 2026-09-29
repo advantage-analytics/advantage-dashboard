@@ -70,7 +70,7 @@ ready).
 
 ## T5 · Compare-and-set claim on `/api/splitstep/jobs` submit
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/app/api/splitstep/jobs/handler.ts, src/app/api/splitstep/jobs/route.ts, tests/job-submission-authorization.spec.ts (guess)
 - **done when:**

@@ -36,6 +36,12 @@ import {
  * game counts, trim-derived billing), bill the MATCH's workspace whichever
  * one is active, and — criterion 4 — a refusal leaves an `uploaded` job
  * untouched while a failure past the reservation still marks it `failed`.
+ *
+ * T5 adds the claim: `claimSubmitting` is the compare-and-set that turns
+ * `uploaded` into `submitting` before quota is reserved. The fake records
+ * every call in `claims` and answers from the fixture; two calls against one
+ * harness whose claim succeeds once must spend and send exactly once, and a
+ * reservation refused after a won claim must hand the row back to `uploaded`.
  */
 
 const VIEWER = "u-coach";
@@ -137,6 +143,8 @@ interface Harness {
   sent: SplitStepJobRequest[];
   /** Every job-row patch, in order. */
   patches: Array<{ jobId: string; patch: SubmitJobPatch }>;
+  /** Every `claimSubmitting` call — the CAS, recorded apart from the patches. */
+  claims: Array<{ jobId: string; patch: SubmitJobPatch }>;
   rosterReads: string[];
   minted: string[];
   retired: string[];
@@ -155,12 +163,15 @@ function harness(input: {
   reservation?: QuotaReservation;
   vendor?: { ok: boolean; status: number; text: string };
   mintThrows?: boolean;
+  /** The claim write failed outright — neither won nor lost. */
+  claimError?: string;
 }): Harness {
   const h: Harness = {
     reserved: [],
     released: [],
     sent: [],
     patches: [],
+    claims: [],
     rosterReads: [],
     minted: [],
     retired: [],
@@ -210,6 +221,12 @@ function harness(input: {
       updateJob: async (jobId, patch) => {
         h.patches.push({ jobId, patch });
         return { error: null };
+      },
+      claimSubmitting: async (jobId, patch) => {
+        h.claims.push({ jobId, patch });
+        if (input.claimError)
+          return { claimed: false, error: input.claimError };
+        return { claimed: true, error: null };
       },
       mintVendorUrl: async ({ objectKey }) => {
         if (input.mintThrows) throw new Error("AZURE_STORAGE_ACCOUNT is unset");
@@ -272,14 +289,16 @@ async function call(h: Harness, body: unknown = FIRST_SUBMIT) {
 
 /**
  * The denial contract, and criterion 4 in one place: nothing reserved,
- * nothing sent, and the job row NOT written — not `submitting`, not `failed`,
- * not even an `attempt_count` bump. An `uploaded` job stays `uploaded`.
+ * nothing sent, and the job row NOT written — not claimed, not `submitting`,
+ * not `failed`, not even an `attempt_count` bump. An `uploaded` job stays
+ * `uploaded`.
  */
 function expectDenied(h: Harness, status: number, result: { status: number }) {
   expect(result.status).toBe(status);
   expect(h.reserved).toEqual([]);
   expect(h.sent).toEqual([]);
   expect(h.minted).toEqual([]);
+  expect(h.claims).toEqual([]);
   expect(h.patches).toEqual([]);
   expect(h.released).toEqual([]);
 }
@@ -410,7 +429,7 @@ test("the trim window is what is sent AND what is billed, rounded up", async () 
   expect(h.reserved).toEqual([
     { jobId: "j-1", workspaceId: PROGRAM, seconds: 5182 },
   ]);
-  expect(h.patches[0].patch.billable_seconds).toBe(5182);
+  expect(h.claims[0].patch.billable_seconds).toBe(5182);
 });
 
 test("a retry takes the three answers from the row, most-specific-first", async () => {
@@ -439,14 +458,14 @@ test("an accepted submission records what was sent, then queued, and schedules a
   expect(r.status).toBe(200);
   expect(r.json.externalJobId).toBe("vendor-778912d7");
   expect(r.json.status).toBe("queued");
-  expect(h.patches.map((p) => p.patch.status)).toEqual([
-    "submitting",
-    "queued",
-  ]);
+  // The claim IS the `submitting` write (T5): one CAS carrying the answers,
+  // then the plain `queued` patch once the vendor holds the job.
+  expect(h.claims.map((c) => c.patch.status)).toEqual(["submitting"]);
+  expect(h.patches.map((p) => p.patch.status)).toEqual(["queued"]);
   // Counted, not pinned.
-  expect(h.patches[0].patch.attempt_count).toBe(3);
-  expect(h.patches[0].patch.initial_top_player_is_player1).toBe(true);
-  expect(h.patches[1].patch.external_job_id).toBe("vendor-778912d7");
+  expect(h.claims[0].patch.attempt_count).toBe(3);
+  expect(h.claims[0].patch.initial_top_player_is_player1).toBe(true);
+  expect(h.patches[0].patch.external_job_id).toBe("vendor-778912d7");
   expect(h.minted).toEqual(["videos/u-coach/m-1/original.mp4"]);
   expect(h.scheduled).toEqual([
     { jobId: "j-1", externalJobId: "vendor-778912d7" },
@@ -657,10 +676,11 @@ test("a permission refusal from reserveQuota → 403 in its own words, nothing s
   expect(r.json.error).toMatch(/still being confirmed/);
   expect(h.reserved).toHaveLength(1);
   expect(h.sent).toEqual([]);
-  expect(h.patches).toEqual([]);
+  // The claim was won before the ledger answered, so the row is handed back.
+  expect(h.patches).toEqual([{ jobId: "j-1", patch: { status: "uploaded" } }]);
 });
 
-test("an exhausted allowance → 429, nothing sent, the job untouched", async () => {
+test("an exhausted allowance → 429, nothing sent, the job handed back", async () => {
   const h = harness({
     reservation: {
       ok: false,
@@ -673,8 +693,69 @@ test("an exhausted allowance → 429, nothing sent, the job untouched", async ()
   expect(r.status).toBe(429);
   expect(h.reserved).toHaveLength(1);
   expect(h.sent).toEqual([]);
-  expect(h.patches).toEqual([]);
+  expect(h.patches).toEqual([{ jobId: "j-1", patch: { status: "uploaded" } }]);
   expect(h.released).toEqual([]);
+});
+
+// ── The claim (T5): one winner, and a won claim never strands the row ─────
+
+test("two submits for one job: the claim admits one, the other is 409 with nothing spent", async () => {
+  const h = harness({});
+  let claimed = false;
+  h.deps.claimSubmitting = async (jobId, patch) => {
+    h.claims.push({ jobId, patch });
+    if (claimed) return { claimed: false, error: null };
+    claimed = true;
+    return { claimed: true, error: null };
+  };
+  const results = await Promise.all([call(h), call(h)]);
+  expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+  const lost = results.find((r) => r.status === 409)!;
+  // The sentence the wizard shows — `submit-match-video.ts` reads `error`.
+  expect(lost.json.error).toBe("This match is already being submitted.");
+  expect(h.claims).toHaveLength(2);
+  expect(h.reserved).toHaveLength(1);
+  expect(h.minted).toHaveLength(1);
+  expect(h.sent).toHaveLength(1);
+  // The loser wrote nothing: no revert, no `failed` — the row belongs to the
+  // winner, whose one `queued` patch is the only one.
+  expect(h.patches.map((p) => p.patch.status)).toEqual(["queued"]);
+  expect(h.released).toEqual([]);
+});
+
+test("a reservation refused after a won claim ends with the row back at uploaded", async () => {
+  const h = harness({
+    reservation: {
+      ok: false,
+      usedSeconds: 7000,
+      capSeconds: 7200,
+      message: "This match needs 86 min of analysis but only 3 min is left.",
+    },
+  });
+  const r = await call(h);
+  expect(r.status).toBe(429);
+  expect(h.claims.map((c) => c.patch.status)).toEqual(["submitting"]);
+  expect(h.reserved).toHaveLength(1);
+  expect(h.patches.at(-1)).toEqual({
+    jobId: "j-1",
+    patch: { status: "uploaded" },
+  });
+  expect(h.minted).toEqual([]);
+  expect(h.sent).toEqual([]);
+  expect(h.released).toEqual([]);
+});
+
+test("a claim write that fails outright → 503, nothing spent and no blind revert", async () => {
+  const h = harness({ claimError: "connection reset" });
+  const r = await call(h);
+  expect(r.status).toBe(503);
+  expect(r.json.error).toMatch(/Try again/);
+  expect(h.claims).toHaveLength(1);
+  expect(h.reserved).toEqual([]);
+  expect(h.sent).toEqual([]);
+  // Not reverted: this request holds no claim, and an `uploaded` write here
+  // could tread on a submission that does.
+  expect(h.patches).toEqual([]);
 });
 
 // ── Past the reservation: the existing lifecycle, unchanged ───────────────
@@ -686,10 +767,9 @@ test("a vendor rejection past the reservation hands quota back and marks the job
   expect(h.sent).toHaveLength(1);
   expect(h.released).toEqual(["j-1"]);
   expect(h.retired).toEqual(["j-1"]);
-  expect(h.patches.map((p) => p.patch.status)).toEqual([
-    "submitting",
-    "failed",
-  ]);
+  // `submitting` was the claim; the only plain patch is the `failed` mark.
+  expect(h.claims.map((c) => c.patch.status)).toEqual(["submitting"]);
+  expect(h.patches.map((p) => p.patch.status)).toEqual(["failed"]);
   expect(h.scheduled).toEqual([]);
 });
 
@@ -800,8 +880,22 @@ test("admin quota refusal restores uploaded for retry without sending to vendor"
     message: "Monthly cap",
   });
   expect((await call(h)).status).toBe(429);
+  // The console's claim is the RPC, never the CAS.
+  expect(h.claims).toEqual([]);
   expect(h.patches).toEqual([{ jobId: "j-1", patch: { status: "uploaded" } }]);
   expect(h.sent).toEqual([]);
+});
+
+test("an admin submission records the answers by plain update once the RPC holds the claim", async () => {
+  const h = adminHarness();
+  expect((await call(h)).status).toBe(200);
+  expect(h.claims).toEqual([]);
+  expect(h.patches.map((p) => p.patch.status)).toEqual([
+    "submitting",
+    "queued",
+  ]);
+  expect(h.patches[0].patch.attempt_count).toBe(1);
+  expect(h.patches[0].patch.initial_top_player_is_player1).toBe(true);
 });
 
 test("accepted admin vendor POST with lost queued write retains quota for reconciliation", async () => {

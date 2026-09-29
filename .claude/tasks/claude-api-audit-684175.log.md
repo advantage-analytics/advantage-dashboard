@@ -40,3 +40,13 @@ is the runner's. Newest entries at the bottom.
 1. Grep `docs/` for webhook descriptions that still say result files follow redirects.
 2. `route.ts` and `secure-results.ts` still each carry their own `storeVendorJson` — fold into one.
 3. `.env.example` says a refusal "lands in processing_error"; true for the strokes file only — per-frame refusals land in the log line.
+
+## T5 · Compare-and-set claim on `/api/splitstep/jobs` submit — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** Non-admin submits now claim the job with a compare-and-set (`update … set status='submitting', <answers> where id=… and status='uploaded'`) before reserving quota; a lost claim answers 409 "This match is already being submitted." with nothing reserved, minted or sent; a claim write error answers 503 with no blind revert. A refused reservation reverts the row to `uploaded` for every caller. Admin path unchanged in shape: live `admin_video_access('claim')` already sets `submitting` itself (verified read-only), so it keeps `claimAdminVideo` + a plain answers write. Spec gains the claim fake, updated patch orders, and cases for double submit, refused-after-claim, claim error, and admin-no-CAS (47 pass).
+**follow-ups:**
+
+1. Non-admin `queued` write error is still unchecked at the end of the try (pre-existing): 200 with the row left at `submitting`; the admin branch answers 503 there.
+2. `docs/ui-revamp-guardrails.md`'s submit-route refusal contract could note the claim and the revert-on-refused-reservation for every caller.
+3. A refused reservation after a won claim leaves the answers + bumped `attempt_count` on the reverted `uploaded` row (harmless today — no reader gates on `attempt_count`).
