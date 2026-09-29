@@ -209,7 +209,7 @@ ready).
 
 ## T16 · Offline 401 specs for home-insight, team-insight and hours-left
 
-- **status:** doing
+- **status:** done
 - **model:** sonnet
 - **files:** tests/insight-routes-auth.spec.ts (new), src/app/api/home-insight/route.ts, src/app/api/team-insight/route.ts, src/app/api/splitstep/hours-left/route.ts (guess)
 - **done when:**

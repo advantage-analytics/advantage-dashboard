@@ -93,3 +93,12 @@ is the runner's. Newest entries at the bottom.
 1. Behaviour change: a claim RPC answering a non-boolean with no error now maps to `unavailable` (account deletion shows "We could not verify…") instead of `protected`.
 2. `eventContextFor` in the same route still discards its read error — a failed read looks like "no event" and unlocks event-owned fields in the dialog.
 3. Account deletion and the console abandon flow still show `error.message`; they could switch on `PurgeRefusedError.kind`. `tests/admin-match-delete-protection.spec.ts` could assert `kind`.
+
+## T16 · Offline 401 specs for home-insight, team-insight and hours-left — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** Implemented in parallel in an isolated worktree (commit e070dcbd), brought over here. New `tests/insight-routes-auth.spec.ts` (4 cases): home-insight 401, team-insight 401 (no workspace) and 404 "Not a program" (personal), hours-left 401 `{ error: "Not signed in" }`; every case asserts the LLM adapter, quota peek, admin client and data loaders were never reached. No route code changed.
+**follow-ups:**
+
+1. Signed-in cases: team workspace with no matches → 204; LLM adapter error → 500; hours-left `peekQuota` throws → 503.
+2. Tighten the insight 401 assertions to the body shape once T12's error convention lands.
