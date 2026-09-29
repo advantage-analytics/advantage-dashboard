@@ -186,7 +186,9 @@ async function openaiStream(
 ): Promise<AsyncIterable<string>> {
   const posthog = getPostHogClient();
   const request = {
-    model: "gemini-2.5-flash-lite",
+    // 2.5 models are closed to new Google Cloud projects, so a key from one
+    // is refused with a 404 on 2.5-flash-lite. Same model as generate-insights.
+    model: "gemini-3.5-flash-lite",
     stream: true as const,
     messages: [
       { role: "system" as const, content: systemPrompt },
