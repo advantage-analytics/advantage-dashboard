@@ -33,7 +33,7 @@ ready).
 
 ## T2 · Align derivation docs and classifier comments with the widget-level ace rule
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** docs/splitstep-derivation.md (§4 Trust tiers, lines ~176–200); src/lib/services/splitstep/derivation/result-type.ts (header docblock, lines ~60–65); src/components/dashboard/matches/match-detail/point-endings-card.tsx (the "ACES ON A DERIVED MATCH" paragraph, lines ~42–49, which says the head-to-head splits on the same line)

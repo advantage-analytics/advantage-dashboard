@@ -37,7 +37,8 @@ import { surnameLabels } from "@/lib/data/match-utils";
  *   unforced errs  `result_type LIKE '%Unforced Error%'`
  * Aces and double faults belong to the server structurally; winners and
  * unforced errors belong to whoever struck the decisive shot (`points.player`).
- * `head-to-head-card.tsx` splits them on exactly the same line.
+ * `head-to-head-card.tsx` splits winners and errors on the same line; aces differ
+ * on splitstep (this card drops the Aces segment, Head to head counts unreturned serves).
  *
  * ACES ON A DERIVED MATCH. `suppress_derived_match_stats()` nulls
  * `match_stats.aces` for every `source_provider = 'splitstep'` match because

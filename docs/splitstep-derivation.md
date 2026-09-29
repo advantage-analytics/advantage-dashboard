@@ -188,6 +188,8 @@ as multi-stroke rallies (measured unreturned-serve rate 1.9% / 3.5% / 6.0%
 against a real-tennis floor near 15%). That is a **vendor defect**, not something
 derivation can correct.
 
+The Head to head card is the one exception, at widget level only: since T1, `head-to-head-card.tsx` on a splitstep match counts an unreturned In serve won by the server (`rallyLength === 1`, server won the point) as an ace from the points table and subtracts those same points from Winners. It never touches `match_stats`, which stays suppressed.
+
 `suppress_derived_match_stats(match_id)` enforces it, scoped to
 `source_provider = 'splitstep'`.
 
