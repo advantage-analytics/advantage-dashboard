@@ -1,11 +1,12 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import Link from "next/link";
 import { Maximize2 } from "lucide-react";
 import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
 import { heatFloorTintRgba } from "./court-geometry";
-import { VIZ_PILL_RADIUS } from "./viz-labels";
+import { fitPillCount, VIZ_PILL_RADIUS } from "./viz-labels";
 import type { Chart, Cut, VizDot, VizBandZones, VizResult } from "./viz-model";
 import type { VizState } from "./viz-url";
 import { viewIdentityKey } from "./viz-url";
@@ -97,6 +98,89 @@ export function TileFullscreenGlyph({
     >
       <Maximize2 className="h-3 w-3" strokeWidth={1.6} aria-hidden="true" />
     </button>
+  );
+}
+
+const PILL_CLASS = `inline-flex h-5 shrink-0 items-center ${VIZ_PILL_RADIUS} border px-[7px] text-[10px] font-medium whitespace-nowrap`;
+const PILL_STYLE = {
+  backgroundColor: "var(--surface-subtle)",
+  borderColor: "var(--border-hairline)",
+  color: "var(--ink-700)",
+} as const;
+/** `gap-1.5` on the pill row, in px — `fitPillCount` needs the number. */
+const PILL_GAP_PX = 6;
+
+function Pill({ label }: { label: string }) {
+  return (
+    <span className={PILL_CLASS} style={PILL_STYLE}>
+      {label}
+    </span>
+  );
+}
+
+/**
+ * One pill-height row that never wraps and never slices a pill: it measures
+ * every pill (and the widest possible "+n") in an invisible twin row, then
+ * draws as many whole pills as fit with the rest folded into "+n"
+ * (`fitPillCount`, `viz-labels.tsx`). Re-measured on every resize of the
+ * row, so the same tile folds to "1st · +2" in a narrow grid column and
+ * unfolds when the column widens. Before the first measurement (SSR and the
+ * initial paint) every pill is drawn and the row's `overflow-hidden` clips —
+ * `useLayoutEffect` replaces that before the browser paints. `h-5` pins the
+ * row's height so the card can never grow with the filter count.
+ */
+function PillRow({ pills }: { pills: string[] }) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(pills.length);
+
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const measure = measureRef.current;
+    if (!row || !measure) return;
+    const compute = () => {
+      const items = Array.from(measure.children) as HTMLElement[];
+      const pillWidths = items
+        .slice(0, pills.length)
+        .map((el) => el.offsetWidth);
+      const moreWidth = items[pills.length]?.offsetWidth ?? 0;
+      setVisible(
+        fitPillCount(pillWidths, moreWidth, PILL_GAP_PX, row.clientWidth),
+      );
+    };
+    compute();
+    const observer = new ResizeObserver(compute);
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [pills]);
+
+  const hidden = pills.length - visible;
+
+  return (
+    <div
+      ref={rowRef}
+      className="relative flex h-5 min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden"
+    >
+      {pills.slice(0, visible).map((pill) => (
+        <Pill key={pill} label={pill} />
+      ))}
+      {hidden > 0 && (
+        <span className={PILL_CLASS} style={PILL_STYLE}>
+          <span aria-hidden="true">{`+${hidden}`}</span>
+          <span className="sr-only">{pills.slice(visible).join(", ")}</span>
+        </span>
+      )}
+      <div
+        ref={measureRef}
+        aria-hidden="true"
+        className="pointer-events-none invisible absolute top-0 left-0 flex flex-nowrap items-center gap-1.5"
+      >
+        {pills.map((pill) => (
+          <Pill key={pill} label={pill} />
+        ))}
+        <Pill label={`+${pills.length}`} />
+      </div>
+    </div>
   );
 }
 
@@ -276,33 +360,22 @@ export function CourtTile({
         {overlay}
       </div>
       <div className="flex flex-col gap-2 px-4 pt-[14px] pb-[15px]">
-        <span className="flex min-w-0 items-center gap-1.5">
-          {nameSlot ?? (
-            <p
-              className="truncate text-[16px] leading-tight font-normal"
-              style={{ letterSpacing: "-0.2px", color: "var(--ink-900)" }}
-            >
-              {name}
-            </p>
-          )}
-          {nameAdornment}
-        </span>
+        {/* The mono count sits on the NAME row, not the pill row: at
+            three-column widths the pills plus the count overran the card
+            and the last pill wrapped, making that one tile taller than its
+            neighbours. The name truncates; the count never shrinks. */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            {pills.map((pill) => (
-              <span
-                key={pill}
-                className={`inline-flex h-5 items-center ${VIZ_PILL_RADIUS} border px-[7px] text-[10px] font-medium whitespace-nowrap`}
-                style={{
-                  backgroundColor: "var(--surface-subtle)",
-                  borderColor: "var(--border-hairline)",
-                  color: "var(--ink-700)",
-                }}
+          <span className="flex min-w-0 items-center gap-1.5">
+            {nameSlot ?? (
+              <p
+                className="truncate text-[16px] leading-tight font-normal"
+                style={{ letterSpacing: "-0.2px", color: "var(--ink-900)" }}
               >
-                {pill}
-              </span>
-            ))}
-          </div>
+                {name}
+              </p>
+            )}
+            {nameAdornment}
+          </span>
           <span
             className="shrink-0 font-mono text-[11px] tabular-nums"
             style={{ color: "var(--ink-500)" }}
@@ -310,6 +383,7 @@ export function CourtTile({
             {countLabel}
           </span>
         </div>
+        <PillRow pills={pills} />
       </div>
     </>
   );

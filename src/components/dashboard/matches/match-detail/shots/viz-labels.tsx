@@ -162,16 +162,32 @@ export const VIZ_TILE_GRID_CLASS =
   "grid grid-cols-1 gap-4 @min-[420px]:grid-cols-2 @min-[720px]:grid-cols-3";
 
 /**
- * At most `max` pill labels, with a trailing `"+n"` standing in for the
- * rest — `saved-views-band.tsx`'s tile pill row, so a view with many active
- * filters still draws a fixed-height tile rather than growing with the
- * filter count. Pure and unrelated to `activeFilterEntries` (`viz-url.ts`),
- * which decides WHICH labels apply; this only decides how many of an
- * already-resolved list to show.
+ * How many of `pillWidths` fit on ONE line of `available` px, folding the
+ * rest into a trailing "+n" pill of `moreWidth` px — `court-tile.tsx`'s pill
+ * row, which measures its pills and calls this on every resize so a saved
+ * view with many active filters (or a wide trio in a narrow grid column)
+ * still draws a fixed-height tile with whole pills, never a wrapped second
+ * line or a pill sliced by the overflow clip. Returns `pillWidths.length`
+ * when everything fits (no "+n" needed); otherwise the largest prefix that
+ * fits alongside the "+n" pill, which can be 0 (only "+n" is drawn).
  */
-export function truncatePillLabels(labels: string[], max = 3): string[] {
-  if (labels.length <= max) return labels;
-  return [...labels.slice(0, max), `+${labels.length - max}`];
+export function fitPillCount(
+  pillWidths: readonly number[],
+  moreWidth: number,
+  gap: number,
+  available: number,
+): number {
+  const widthOf = (count: number, withMore: boolean): number => {
+    let total = 0;
+    for (let i = 0; i < count; i++) total += (i > 0 ? gap : 0) + pillWidths[i];
+    if (withMore) total += (count > 0 ? gap : 0) + moreWidth;
+    return total;
+  };
+  if (widthOf(pillWidths.length, false) <= available) return pillWidths.length;
+  for (let n = pillWidths.length - 1; n > 0; n--) {
+    if (widthOf(n, true) <= available) return n;
+  }
+  return 0;
 }
 
 /**
