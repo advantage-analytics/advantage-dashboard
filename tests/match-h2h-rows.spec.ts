@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+import type { MatchPoint } from "@/lib/data/match-points-server";
+
 import {
+  DERIVED_POINT_ROWS,
+  DERIVED_SERVE_ROWS,
   H2H_GROUPS,
   POINT_ROWS,
   RETURN_ROWS,
@@ -10,6 +14,8 @@ import {
   hasReadout,
   rowLeader,
   rowReadout,
+  tallySide,
+  withPointRows,
   type H2HRow,
   type H2HRowConfig,
   type H2HStats,
@@ -179,8 +185,9 @@ test.describe("the Serve group", () => {
   });
 
   test("a withheld statistic stays an em dash and wins nothing", () => {
-    // `aces: null` is what a video-derived match carries — the column is
-    // suppressed, not zero.
+    // `aces: null` is a suppressed column, not zero. (A video-derived match
+    // no longer reads `aces` at all — its Aces row is counted from the
+    // points, see "on an Advantage Intelligence match" below.)
     const rows = buildStatRows(
       SERVE_ROWS,
       side({ aces: null }),
@@ -378,5 +385,146 @@ test.describe("hover readouts, with and without video", () => {
   test("an em dash has no readout — it keeps its own tooltip", () => {
     const [missing] = buildStatRows(SERVE_ROWS, side(), side());
     expect(figureReadout(missing, "you", "Ace", noVideo)).toBeNull();
+  });
+});
+
+/* ── Advantage Intelligence: unreturned serves are aces ─────────────────── */
+
+function pt(overrides: Partial<MatchPoint> & { id: string }): MatchPoint {
+  return {
+    pointNumber: 1,
+    setNumber: 1,
+    gameNumber: 1,
+    setScore: "0-0",
+    gameScore: "0-0",
+    pointScore: "0-0",
+    resultType: "",
+    eventType: "",
+    description: "",
+    player: "player1",
+    wonByPlayer1: true,
+    serverIsPlayer1: true,
+    isBreakPoint: false,
+    isSetPoint: false,
+    isMatchPoint: false,
+    rallyLength: 5,
+    duration: null,
+    videoTime: null,
+    saved: false,
+    savedBy: [],
+    ...overrides,
+  };
+}
+
+// Player 1 is "you". What the derivation writes: every unreturned serve is a
+// "Service Winner", never an "Ace".
+const DERIVED_MATCH: MatchPoint[] = [
+  pt({ id: "sw-you-1", resultType: "Service Winner", rallyLength: 1 }),
+  pt({ id: "sw-you-2", resultType: "Service Winner", rallyLength: 1 }),
+  pt({
+    id: "sw-opp",
+    resultType: "Service Winner",
+    rallyLength: 1,
+    serverIsPlayer1: false,
+    wonByPlayer1: false,
+    player: "player2",
+  }),
+  pt({
+    id: "df-you",
+    resultType: "Double Fault",
+    rallyLength: 0,
+    wonByPlayer1: false,
+  }),
+  pt({ id: "fw-you", resultType: "Forehand Winner", rallyLength: 5 }),
+];
+
+function derivedRows(
+  configs: H2HRowConfig[],
+  you: H2HStats,
+  opp: H2HStats,
+  points: MatchPoint[] = DERIVED_MATCH,
+): H2HRow[] {
+  return withPointRows(
+    configs,
+    buildStatRows(configs, you, opp),
+    tallySide(points, true),
+    tallySide(points, false),
+  );
+}
+
+test.describe("on an Advantage Intelligence match", () => {
+  test("tallySide counts unreturned serves the server won, for the server", () => {
+    expect(tallySide(DERIVED_MATCH, true).unreturnedServes).toBe(2);
+    expect(tallySide(DERIVED_MATCH, false).unreturnedServes).toBe(1);
+  });
+
+  test("aces are the unreturned serves, not the published column", () => {
+    const rows = derivedRows(
+      DERIVED_SERVE_ROWS,
+      side({ aces: null, doubleFaults: 1 }),
+      side({ aces: null, doubleFaults: 0 }),
+    );
+    const aces = byLabel(rows, "Aces");
+    expect(aces.you.display).toBe("2");
+    expect(aces.opp.display).toBe("1");
+    expect(aces.leader).toBe("you");
+    // Double faults stay published.
+    expect(byLabel(rows, "Double faults").you.display).toBe("1");
+    expect(byLabel(rows, "Double faults").opp.display).toBe("0");
+  });
+
+  test("the default configs still read aces from the published column", () => {
+    const rows = derivedRows(
+      SERVE_ROWS,
+      side({ aces: null }),
+      side({ aces: null }),
+    );
+    expect(byLabel(rows, "Aces").you.display).toBe("");
+    expect(byLabel(rows, "Aces").opp.display).toBe("");
+    expect(byLabel(rows, "Aces").leader).toBeNull();
+  });
+
+  test("winners are the published figure less that side's unreturned serves", () => {
+    const rows = derivedRows(
+      DERIVED_POINT_ROWS,
+      side({ winners: 18 }),
+      side({ winners: 0 }),
+    );
+    expect(byLabel(rows, "Winners").you.display).toBe("16");
+    // Never below zero.
+    expect(byLabel(rows, "Winners").opp.display).toBe("0");
+    // Nothing published is nothing to subtract from.
+    const missing = derivedRows(DERIVED_POINT_ROWS, side(), side());
+    expect(byLabel(missing, "Winners").you.display).toBe("");
+  });
+
+  test("double faults are read as published, not counted", () => {
+    const config = DERIVED_SERVE_ROWS.find((c) => c.label === "Double faults");
+    expect(config?.key).toBe("doubleFaults");
+    expect(config?.fromPoints).toBeUndefined();
+  });
+
+  test("a service winner with a stroke in between stays a winner", () => {
+    // Structural rule: rally length one, won by the server — not the label.
+    const points = [
+      pt({ id: "sw-long", resultType: "Service Winner", rallyLength: 3 }),
+    ];
+    expect(tallySide(points, true).unreturnedServes).toBe(0);
+    const rows = derivedRows(
+      DERIVED_POINT_ROWS,
+      side({ winners: 1 }),
+      side({ winners: 0 }),
+      points,
+    );
+    expect(byLabel(rows, "Winners").you.display).toBe("1");
+  });
+
+  test("the derived groups keep the same fifteen rows in the same order", () => {
+    expect(DERIVED_SERVE_ROWS.map((c) => c.label)).toEqual(
+      SERVE_ROWS.map((c) => c.label),
+    );
+    expect(DERIVED_POINT_ROWS.map((c) => c.label)).toEqual(
+      POINT_ROWS.map((c) => c.label),
+    );
   });
 });

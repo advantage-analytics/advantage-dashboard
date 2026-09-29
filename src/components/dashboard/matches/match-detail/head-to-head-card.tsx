@@ -15,6 +15,7 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
 import {
   applyFilmCut,
   isReturnWinner,
+  isUnreturnedServe,
   sideCut,
   type CutSide,
   type FilmCut,
@@ -128,10 +129,17 @@ export interface H2HRowConfig {
   /** What the fraction's first number counts — "9 of 12 saved". */
   verb?: string;
   /**
-   * A statistic no provider publishes, counted from the points themselves
-   * (`tallySide`) over the whole match.
+   * A statistic counted from the points themselves (`tallySide`) over the
+   * whole match rather than read as published:
+   *
+   * - `returnWinners` — no provider publishes it.
+   * - `unreturnedServes` — the derived Aces row: an Advantage Intelligence
+   *   match publishes no aces at all (see `DERIVED_SERVE_ROWS`).
+   * - `winnersLessUnreturned` — the derived Winners row: the published
+   *   `winners` (read through `key`) less the side's unreturned serves,
+   *   which that figure already counts.
    */
-  fromPoints?: "returnWinners";
+  fromPoints?: "returnWinners" | "unreturnedServes" | "winnersLessUnreturned";
 }
 
 export const SERVE_ROWS: H2HRowConfig[] = [
@@ -312,6 +320,65 @@ const ALL_H2H_CONFIGS: H2HRowConfig[] = H2H_GROUPS.flatMap(
   (group) => group.configs,
 );
 
+/* ── Advantage Intelligence (video-derived) rows ────────────────────────────
+   The derivation (`lib/services/splitstep/derivation/result-type.ts`
+   `classifyPoint()`) never emits "Ace": every unreturned serve is a "Service
+   Winner", so the published `aces` is 0 and the published `winners`
+   (LIKE '%Winner%') already counts those points. Product decision
+   (2026-09-29): on these matches an unreturned serve the server won IS an
+   ace. So two rows swap, at the widget alone — `match_stats` is untouched. */
+
+/**
+ * The derived Aces row: every unreturned serve the side won, counted from the
+ * points (`isUnreturnedServe` — a one-shot rally won by the server). The rule
+ * is structural, not the "Service Winner" label, so a service winner with an
+ * intermediate stroke (rally length above one) stays a winner. The cut is the
+ * Film-only `unreturned-serve` ending, the very predicate the tally counts.
+ */
+const DERIVED_ACES_ROW: H2HRowConfig = {
+  label: "Aces",
+  fromPoints: "unreturnedServes",
+  cut: { resultOutcome: ["winner"], ending: "unreturned-serve" },
+  sideBy: "player",
+  noun: "aces",
+};
+
+/**
+ * The derived Winners row: the published `winners` less the side's
+ * unreturned serves, now counted as aces. Its cut is the `rally-winner`
+ * ending — the winner bucket without them — so it never opens a point the
+ * derived Aces row does. Double faults stay published: the derivation does
+ * emit "Double Fault" on a lost second serve.
+ */
+const DERIVED_WINNERS_ROW: H2HRowConfig = {
+  label: "Winners",
+  key: "winners",
+  fromPoints: "winnersLessUnreturned",
+  cut: { resultOutcome: ["winner"], ending: "rally-winner" },
+  sideBy: "player",
+  noun: "winners",
+};
+
+export const DERIVED_SERVE_ROWS: H2HRowConfig[] = SERVE_ROWS.map((config) =>
+  config.label === "Aces" ? DERIVED_ACES_ROW : config,
+);
+
+export const DERIVED_POINT_ROWS: H2HRowConfig[] = POINT_ROWS.map((config) =>
+  config.label === "Winners" ? DERIVED_WINNERS_ROW : config,
+);
+
+/** `H2H_GROUPS` for an Advantage Intelligence match (`meta.isDerived`). */
+export const DERIVED_H2H_GROUPS: { title: string; configs: H2HRowConfig[] }[] =
+  [
+    { title: "Serve", configs: DERIVED_SERVE_ROWS },
+    { title: "Return", configs: RETURN_ROWS },
+    { title: "Points", configs: DERIVED_POINT_ROWS },
+  ];
+
+const ALL_DERIVED_H2H_CONFIGS: H2HRowConfig[] = DERIVED_H2H_GROUPS.flatMap(
+  (group) => group.configs,
+);
+
 // `CutSide`/`sideCut` — one value cell's cut, the row's cut with the cell's
 // side laid over it — now live in `film-cut-context.tsx` beside `FilmCut`
 // itself, since `point-endings-card.tsx` composes a cut the same way.
@@ -447,8 +514,9 @@ export function buildStatRows(
 /* ── Point-derived statistics ───────────────────────────────────────────────
    The card is always the whole match: its figures are the published
    `match_stats` numbers (`buildStatRows`). The match filters live on the
-   Video tab only and never reach this card. The one exception is a
-   statistic no provider publishes (`fromPoints` — return winners), which is
+   Video tab only and never reach this card. The exceptions are the
+   `fromPoints` rows — a statistic no provider publishes (return winners),
+   and on an Advantage Intelligence match its aces and winners — which are
    counted here from every point of the match. */
 
 interface Tally {
@@ -475,6 +543,11 @@ interface DerivedSide {
   returnWinners: number;
   /** Points this side returned whose return shot was recorded at all. */
   returnsRecorded: number;
+  /**
+   * Points this side served that were never returned and it won
+   * (`isUnreturnedServe`) — the derived Aces row.
+   */
+  unreturnedServes: number;
 }
 
 function emptyTally(): Tally {
@@ -500,6 +573,7 @@ export function tallySide(
     allPoints: emptyTally(),
     returnWinners: 0,
     returnsRecorded: 0,
+    unreturnedServes: 0,
   };
   const me = isPlayer1 ? "player1" : "player2";
 
@@ -522,6 +596,7 @@ export function tallySide(
       // attributed by who served rather than by who struck last.
       if (result === "ace") d.aces += 1;
       if (result === "double fault") d.doubleFaults += 1;
+      if (isUnreturnedServe(p)) d.unreturnedServes += 1;
     } else {
       d.returnPoints.total += 1;
       if (iWon) d.returnPoints.won += 1;
@@ -564,20 +639,43 @@ export function tallySide(
 
 /**
  * A `fromPoints` statistic's value, or `null` when the points cannot support
- * it. 0 is a measurement only where returns were recorded; with none, a zero
- * would say "no return winners" about points nobody looked at.
+ * it. `published` is the side's published figure for the same row (read
+ * through the config's `key`), which the Winners subtraction starts from.
+ *
+ * - Return winners: 0 is a measurement only where returns were recorded;
+ *   with none, a zero would say "no return winners" about points nobody
+ *   looked at.
+ * - Unreturned serves: likewise only where the side served at all.
+ * - Winners less unreturned serves: nothing published is nothing to
+ *   subtract from; never below 0.
  */
-function derivedValue(config: H2HRowConfig, d: DerivedSide): number | null {
-  if (config.fromPoints === "returnWinners") {
-    return d.returnsRecorded > 0 ? d.returnWinners : null;
+function derivedValue(
+  config: H2HRowConfig,
+  d: DerivedSide,
+  published: H2HValue,
+): number | null {
+  switch (config.fromPoints) {
+    case "returnWinners":
+      return d.returnsRecorded > 0 ? d.returnWinners : null;
+    case "unreturnedServes":
+      return d.servicePoints.total > 0 ? d.unreturnedServes : null;
+    case "winnersLessUnreturned":
+      return published.value === null
+        ? null
+        : Math.max(0, published.value - d.unreturnedServes);
+    default:
+      return null;
   }
-  return null;
 }
 
 const NO_VALUE: H2HValue = { value: null, display: "" };
 
-function derivedSideValue(config: H2HRowConfig, d: DerivedSide): H2HValue {
-  const value = derivedValue(config, d);
+function derivedSideValue(
+  config: H2HRowConfig,
+  d: DerivedSide,
+  published: H2HValue,
+): H2HValue {
+  const value = derivedValue(config, d, published);
   if (value === null) return NO_VALUE;
   return { value, display: statDisplay(value, config.isPercentage) };
 }
@@ -585,13 +683,14 @@ function derivedSideValue(config: H2HRowConfig, d: DerivedSide): H2HValue {
 /** One `fromPoints` row, counted from `youDerived`/`oppDerived`. */
 function deriveRow(
   config: H2HRowConfig,
+  published: H2HRow,
   youDerived: DerivedSide,
   oppDerived: DerivedSide,
 ): H2HRow {
   return assembleRow(
     config,
-    derivedSideValue(config, youDerived),
-    derivedSideValue(config, oppDerived),
+    derivedSideValue(config, youDerived, published.you),
+    derivedSideValue(config, oppDerived, published.opp),
   );
 }
 
@@ -607,7 +706,7 @@ export function withPointRows(
 ): H2HRow[] {
   return configs.map((config, i) =>
     config.fromPoints
-      ? deriveRow(config, youDerived, oppDerived)
+      ? deriveRow(config, published[i], youDerived, oppDerived)
       : published[i],
   );
 }
@@ -1053,6 +1152,13 @@ export function HeadToHeadCard() {
   const youIsPlayer1 = sides.you.isPlayer1;
   const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
 
+  // An Advantage Intelligence match counts its aces from the points
+  // (`DERIVED_H2H_GROUPS`). `meta.isDerived` is set by the dashboard and by
+  // the /m/[token] share page alike. The table and the counts below iterate
+  // the SAME configs, so a cell's "Watch all N" and its click open one cut.
+  const isDerived = meta.isDerived;
+  const groups = isDerived ? DERIVED_H2H_GROUPS : H2H_GROUPS;
+
   const sections = useMemo(() => {
     if (!youStats || !oppStats) return [];
     // Tallied whole-match too: the statistics only the points carry (return
@@ -1060,14 +1166,14 @@ export function HeadToHeadCard() {
     const youDerived = tallySide(points, youIsPlayer1);
     const oppDerived = tallySide(points, !youIsPlayer1);
 
-    return H2H_GROUPS.map((group) => {
+    return groups.map((group) => {
       const published = buildStatRows(group.configs, youStats, oppStats);
       return {
         title: group.title,
         rows: withPointRows(group.configs, published, youDerived, oppDerived),
       };
     });
-  }, [youStats, oppStats, youIsPlayer1, points]);
+  }, [groups, youStats, oppStats, youIsPlayer1, points]);
 
   // The exact points each target opens, counted with the Video tab's own
   // predicate — `applyFilmCut` over EVERY point of the match, the same whole
@@ -1081,7 +1187,8 @@ export function HeadToHeadCard() {
     if (!meta.hasPlayableVideo) return byRow;
     const count = (cut: FilmCut) =>
       applyFilmCut(points, points, cut, context).length;
-    for (const config of ALL_H2H_CONFIGS) {
+    const configs = isDerived ? ALL_DERIVED_H2H_CONFIGS : ALL_H2H_CONFIGS;
+    for (const config of configs) {
       if (!config.cut) continue;
       // `both` is counted, not summed: a row's own cut carries no side, so
       // it also admits what neither side's does — the rare two-shot "winner"
@@ -1094,7 +1201,7 @@ export function HeadToHeadCard() {
       });
     }
     return byRow;
-  }, [meta.hasPlayableVideo, points, context]);
+  }, [meta.hasPlayableVideo, isDerived, points, context]);
 
   if (sections.length === 0) return null;
 

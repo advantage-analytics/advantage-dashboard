@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
 import {
+  DERIVED_H2H_GROUPS,
   H2H_GROUPS,
   buildStatRows,
   fractionWords,
@@ -15,6 +16,7 @@ import {
 import {
   applyFilmCut,
   FILM_CUT_EXTRA_KEYS,
+  isUnreturnedServe,
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
@@ -560,5 +562,110 @@ test.describe("return winners", () => {
       returnPoint({ resultType: "Service Winner" }),
     ]);
     expect(row.you.display).toBe("0");
+  });
+});
+
+/* ── Advantage Intelligence: the derived Aces and Winners cuts ──────────── */
+
+const DERIVED_ROWS: H2HRowConfig[] = DERIVED_H2H_GROUPS.flatMap(
+  (group) => group.configs,
+);
+
+function derivedConfig(label: string): H2HRowConfig {
+  const row = DERIVED_ROWS.find((r) => r.label === label);
+  if (!row) throw new Error(`no derived row labelled "${label}"`);
+  return row;
+}
+
+test.describe("derived (Advantage Intelligence) cuts", () => {
+  const derivedAces = derivedConfig("Aces");
+  const derivedWinners = derivedConfig("Winners");
+
+  test("the derived Aces row opens the unreturned-serve ending by player", () => {
+    expect(derivedAces.cut).toEqual({
+      resultOutcome: ["winner"],
+      ending: "unreturned-serve",
+    });
+    expect(derivedAces.sideBy).toBe("player");
+    expect(derivedWinners.cut).toEqual({
+      resultOutcome: ["winner"],
+      ending: "rally-winner",
+    });
+    expect(derivedWinners.sideBy).toBe("player");
+  });
+
+  test("the derived Aces cut opens exactly the points the tally counts", () => {
+    for (const [who, isP1] of [
+      ["you", true],
+      ["opp", false],
+    ] as const) {
+      const opened = applyFilmCut(
+        MATCH,
+        MATCH,
+        sideCut(derivedAces.cut!, who, "player"),
+        CTX,
+      );
+      expect(opened.length, who).toBe(tallySide(MATCH, isP1).unreturnedServes);
+      expect(opened.every(isUnreturnedServe), who).toBe(true);
+    }
+    expect(
+      applyFilmCut(
+        MATCH,
+        MATCH,
+        sideCut(derivedAces.cut!, "you", "player"),
+        CTX,
+      ).map((pt) => pt.id),
+    ).toEqual(["ace-you", "sw-you"]);
+  });
+
+  test("the derived Winners cut never shares a point with the derived Aces cut", () => {
+    const aces = new Set(
+      applyFilmCut(MATCH, MATCH, derivedAces.cut!, CTX).map((pt) => pt.id),
+    );
+    expect(aces.size).toBeGreaterThan(0);
+    const winners = applyFilmCut(MATCH, MATCH, derivedWinners.cut!, CTX).map(
+      (pt) => pt.id,
+    );
+    for (const id of winners) expect(aces.has(id), id).toBe(false);
+    // And per side.
+    for (const who of ["you", "opp"] as const) {
+      const a = new Set(
+        applyFilmCut(
+          MATCH,
+          MATCH,
+          sideCut(derivedAces.cut!, who, "player"),
+          CTX,
+        ).map((pt) => pt.id),
+      );
+      for (const pt of applyFilmCut(
+        MATCH,
+        MATCH,
+        sideCut(derivedWinners.cut!, who, "player"),
+        CTX,
+      )) {
+        expect(a.has(pt.id), `${who} ${pt.id}`).toBe(false);
+      }
+    }
+  });
+
+  test("every derived cut uses only MatchFilters keys and the Film-only extras", () => {
+    const known = new Set<string>([
+      ...MATCH_FILTER_KEYS,
+      ...FILM_CUT_EXTRA_KEYS,
+    ]);
+    expect(FILM_CUT_EXTRA_KEYS).toEqual(["rallyMin", "rallyMax", "ending"]);
+    for (const row of DERIVED_ROWS) {
+      if (!row.cut) continue;
+      for (const key of Object.keys(row.cut)) {
+        expect(known.has(key), `${row.label} → ${key}`).toBe(true);
+      }
+    }
+  });
+
+  test("the SwingVision ace ending still admits only resultType Ace", () => {
+    // sw-you is an unreturned serve too, but not an Ace.
+    expect(
+      applyFilmCut(MATCH, MATCH, byConfig("Aces").cut!, CTX).map((pt) => pt.id),
+    ).toEqual(["ace-you", "ace-opp"]);
   });
 });
