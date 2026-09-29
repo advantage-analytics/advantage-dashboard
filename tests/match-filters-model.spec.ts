@@ -29,6 +29,8 @@ const CTX: MatchFilterContext = {
   hands: { player1: "right", player2: "right" },
 };
 const FLIPPED: MatchFilterContext = { ...CTX, youIsPlayer1: false };
+/** An Advantage Intelligence (video-derived) match. */
+const DERIVED: MatchFilterContext = { ...CTX, isDerived: true };
 
 /** Where a player stands behind each baseline, in the stored frame. */
 const LOW_END_Y = -0.5;
@@ -304,20 +306,92 @@ function rally(
   return shots;
 }
 
-test("Won/Lost are from the Result player's point of view, you when none is set", () => {
+test("Won/Lost are from YOUR side (youIsPlayer1), whatever Hit by says", () => {
+  // Both points end on Rudy's racket, so Hit by "opponent" admits them and
+  // the outcome alone decides — it never flips to Rudy's point of view.
   const points = [
-    pt({ id: "p1-won", wonByPlayer1: true }),
-    pt({ id: "p2-won", wonByPlayer1: false }),
+    pt({
+      id: "p1-won",
+      wonByPlayer1: true,
+      player: "player2",
+      lastShotType: "Backhand",
+    }),
+    pt({
+      id: "p2-won",
+      wonByPlayer1: false,
+      player: "player2",
+      lastShotType: "Forehand",
+    }),
   ];
   expect(run(points, { resultOutcome: ["won"] })).toEqual(["p1-won"]);
   expect(run(points, { resultOutcome: ["lost"] })).toEqual(["p2-won"]);
   expect(run(points, { resultOutcome: ["won"] }, FLIPPED)).toEqual(["p2-won"]);
+  expect(run(points, { resultOutcome: ["lost"] }, FLIPPED)).toEqual(["p1-won"]);
   expect(
     run(points, { resultPlayer: "opponent", resultOutcome: ["won"] }),
-  ).toEqual(["p2-won"]);
+  ).toEqual(["p1-won"]);
   expect(
     run(points, { resultPlayer: "opponent", resultOutcome: ["lost"] }),
-  ).toEqual(["p1-won"]);
+  ).toEqual(["p2-won"]);
+  expect(
+    run(points, { resultPlayer: "opponent", resultOutcome: ["won"] }, FLIPPED),
+  ).toEqual([]);
+  expect(
+    run(points, { resultPlayer: "you", resultOutcome: ["won"] }, FLIPPED),
+  ).toEqual(["p2-won"]);
+});
+
+test("Hit by alone is the last shot's hitter; with Shot, Ending or Missed it is that group's own attribution", () => {
+  const points = [
+    // Your service winner: the last row is Rudy's return into the net.
+    pt({
+      id: "you-service-winner",
+      resultType: "Service Winner",
+      serverIsPlayer1: true,
+      wonByPlayer1: true,
+      shots: rally("Forehand", 2, "Net"),
+    }),
+    // Rudy's backhand winner on shot 4.
+    pt({
+      id: "rudy-bh-winner",
+      resultType: "Backhand Winner",
+      wonByPlayer1: false,
+      shots: rally("Backhand", 4, "In"),
+    }),
+    // Your forehand on shot 5, from the loader's last-shot fields alone.
+    pt({
+      id: "you-fh-no-rows",
+      resultType: "Forehand Winner",
+      player: "player1",
+      lastShotType: "Forehand",
+    }),
+    // No shot rows and no last shot type: nobody to attribute it to.
+    pt({ id: "no-final-shot", resultType: "" }),
+  ];
+  // Alone: whoever struck the last ball — the missed return is Rudy's.
+  expect(run(points, { resultPlayer: "you" })).toEqual(["you-fh-no-rows"]);
+  expect(run(points, { resultPlayer: "opponent" })).toEqual([
+    "you-service-winner",
+    "rudy-bh-winner",
+  ]);
+  expect(run(points, { resultPlayer: "you" }, FLIPPED)).toEqual([
+    "you-service-winner",
+    "rudy-bh-winner",
+  ]);
+  // With Ending picked, a service winner is the server's — yours.
+  expect(
+    run(points, { resultPlayer: "you", resultEnding: ["winner"] }),
+  ).toEqual(["you-service-winner", "you-fh-no-rows"]);
+  expect(
+    run(points, { resultPlayer: "opponent", resultEnding: ["winner"] }),
+  ).toEqual(["rudy-bh-winner"]);
+  // With Shot picked, the final shot's hitter still has to be that player.
+  expect(run(points, { resultPlayer: "you", resultShot: ["Return"] })).toEqual(
+    [],
+  );
+  expect(
+    run(points, { resultPlayer: "opponent", resultShot: ["Return"] }),
+  ).toEqual(["you-service-winner"]);
 });
 
 test("Winner = the POV player hit a winner, ace or service winner", () => {
@@ -357,17 +431,17 @@ test("Winner = the POV player hit a winner, ace or service winner", () => {
     }),
     pt({ id: "error", resultType: "Forehand Unforced Error" }),
   ];
-  expect(run(points, { resultOutcome: ["winner"] })).toEqual([
+  expect(run(points, { resultEnding: ["winner"] })).toEqual([
     "you-fh-winner",
     "rudy-bh-winner",
     "rudy-ace",
     "you-service-winner",
   ]);
   expect(
-    run(points, { resultPlayer: "you", resultOutcome: ["winner"] }),
+    run(points, { resultPlayer: "you", resultEnding: ["winner"] }),
   ).toEqual(["you-fh-winner", "you-service-winner"]);
   expect(
-    run(points, { resultPlayer: "opponent", resultOutcome: ["winner"] }),
+    run(points, { resultPlayer: "opponent", resultEnding: ["winner"] }),
   ).toEqual(["rudy-bh-winner", "rudy-ace"]);
 });
 
@@ -428,17 +502,17 @@ test("Error = the POV player made the error, incl. double faults and a null resu
       shots: rally("Forehand", 3, "In"),
     }),
   ];
-  expect(run(points, { resultOutcome: ["error"] })).toEqual([
+  expect(run(points, { resultEnding: ["error"] })).toEqual([
     "rudy-ue",
     "you-fe",
     "you-df",
     "null-rudy-out",
   ]);
+  expect(run(points, { resultPlayer: "you", resultEnding: ["error"] })).toEqual(
+    ["you-fe", "you-df"],
+  );
   expect(
-    run(points, { resultPlayer: "you", resultOutcome: ["error"] }),
-  ).toEqual(["you-fe", "you-df"]);
-  expect(
-    run(points, { resultPlayer: "opponent", resultOutcome: ["error"] }),
+    run(points, { resultPlayer: "opponent", resultEnding: ["error"] }),
   ).toEqual(["rudy-ue", "null-rudy-out"]);
 });
 
@@ -663,11 +737,181 @@ test("buildFilterContext: the match row's hand first, else inferred from forehan
   const match = {
     player1: { hand: "Right" },
     player2: { hand: null },
-  } as unknown as Pick<Match, "player1" | "player2">;
+  } as unknown as Pick<Match, "player1" | "player2" | "sourceProvider">;
   expect(buildFilterContext(match, lefty, true)).toEqual({
     youIsPlayer1: true,
     hands: { player1: "right", player2: "left" },
+    isDerived: false,
   });
+  // The same row from Advantage Intelligence is a derived match.
+  expect(
+    buildFilterContext({ ...match, sourceProvider: "splitstep" }, lefty, true),
+  ).toEqual({
+    youIsPlayer1: true,
+    hands: { player1: "right", player2: "left" },
+    isDerived: true,
+  });
+});
+
+/* ── Serve › Result, Return › Result, Result › Missed / Rally length ────── */
+
+test("Serve › Result is ONE option per point: result type first, then the return's result", () => {
+  const points = [
+    pt({ id: "ace", resultType: "Ace", rallyLength: 1 }),
+    pt({ id: "sw", resultType: "Service Winner", rallyLength: 1 }),
+    pt({ id: "re", resultType: "Forehand Error", secondShotResult: "Net" }),
+    pt({ id: "ip", resultType: "Forehand Winner", secondShotResult: "In" }),
+    pt({ id: "df", resultType: "Double Fault", rallyLength: 0 }),
+    // Neither a serve result type nor a recorded return.
+    pt({ id: "none", resultType: "Forehand Winner" }),
+  ];
+  expect(run(points, { serveResult: ["ace"] })).toEqual(["ace"]);
+  expect(run(points, { serveResult: ["service-winner"] })).toEqual(["sw"]);
+  expect(run(points, { serveResult: ["return-error"] })).toEqual(["re"]);
+  expect(run(points, { serveResult: ["in-play"] })).toEqual(["ip"]);
+  expect(run(points, { serveResult: ["double-fault"] })).toEqual(["df"]);
+  // "none" matches no option, so every option together leaves it out.
+  expect(
+    run(points, {
+      serveResult: [
+        "ace",
+        "service-winner",
+        "return-error",
+        "in-play",
+        "double-fault",
+      ],
+    }),
+  ).toEqual(["ace", "sw", "re", "ip", "df"]);
+
+  // The chain: a service winner whose return row reads Out is a service
+  // winner only, never a return error as well.
+  const swOut = [
+    pt({
+      id: "sw-out",
+      resultType: "Service Winner",
+      secondShotResult: "Out",
+    }),
+  ];
+  expect(run(swOut, { serveResult: ["service-winner"] })).toEqual(["sw-out"]);
+  for (const other of [
+    "ace",
+    "return-error",
+    "in-play",
+    "double-fault",
+  ] as const) {
+    expect(run(swOut, { serveResult: [other] })).toEqual([]);
+  }
+});
+
+test("Serve › Result on a derived match: Ace = an unreturned serve the server won, never the result type", () => {
+  // The same six points as above. "ace" and "sw" are both one-shot rallies
+  // won by the server (the fixture's default winner and server are both
+  // player1); "df" is a zero-shot rally, the rest four-shot rallies.
+  const points = [
+    pt({ id: "ace", resultType: "Ace", rallyLength: 1 }),
+    pt({ id: "sw", resultType: "Service Winner", rallyLength: 1 }),
+    pt({ id: "re", resultType: "Forehand Error", secondShotResult: "Net" }),
+    pt({ id: "ip", resultType: "Forehand Winner", secondShotResult: "In" }),
+    pt({ id: "df", resultType: "Double Fault", rallyLength: 0 }),
+    pt({ id: "none", resultType: "Forehand Winner" }),
+  ];
+  expect(run(points, { serveResult: ["ace"] }, DERIVED)).toEqual(["ace", "sw"]);
+  expect(run(points, { serveResult: ["service-winner"] }, DERIVED)).toEqual([]);
+  expect(run(points, { serveResult: ["double-fault"] }, DERIVED)).toEqual([
+    "df",
+  ]);
+
+  // A service winner with an intermediate stroke is not an unreturned serve:
+  // it stays a service winner, and is no ace.
+  const withStroke = [
+    ...points,
+    pt({ id: "sw-3", resultType: "Service Winner", rallyLength: 3 }),
+  ];
+  expect(run(withStroke, { serveResult: ["service-winner"] }, DERIVED)).toEqual(
+    ["sw-3"],
+  );
+  expect(run(withStroke, { serveResult: ["ace"] }, DERIVED)).not.toContain(
+    "sw-3",
+  );
+});
+
+test("Return › Result: winner = isReturnWinner, error = return Out/Net, in play = landed otherwise", () => {
+  const points = [
+    // A two-shot rally ended by the returner's backhand winner.
+    pt({
+      id: "ret-winner",
+      resultType: "Backhand Winner",
+      secondShotResult: "In",
+      rallyLength: 2,
+    }),
+    // The return landed and the rally went on to six shots.
+    pt({
+      id: "ret-in",
+      resultType: "Forehand Winner",
+      secondShotResult: "In",
+      rallyLength: 6,
+    }),
+    pt({
+      id: "ret-out",
+      resultType: "Backhand Error",
+      secondShotResult: "Out",
+      rallyLength: 2,
+    }),
+    pt({ id: "ret-none", resultType: "Forehand Winner", rallyLength: 4 }),
+  ];
+  expect(run(points, { returnResult: ["winner"] })).toEqual(["ret-winner"]);
+  expect(run(points, { returnResult: ["in-play"] })).toEqual(["ret-in"]);
+  expect(run(points, { returnResult: ["error"] })).toEqual(["ret-out"]);
+  expect(
+    run(points, { returnResult: ["winner", "error", "in-play"] }),
+  ).not.toContain("ret-none");
+});
+
+test("Result › Missed reads the LAST shot row, by the Result player when one is set", () => {
+  const points = [
+    // Your forehand, the last row, went out (lower-case on purpose).
+    pt({ id: "you-out", shots: rally("Forehand", 5, "out") }),
+    // The opponent's backhand, the last row, found the net.
+    pt({ id: "opp-net", shots: rally("Backhand", 4, "Net") }),
+    // An earlier row was Out, but the last row landed.
+    pt({
+      id: "last-in",
+      shots: [
+        shot({ shotNumber: 1, shotType: "First Serve", result: "Out" }),
+        shot({ shotNumber: 2, isPlayer1: false, result: "In" }),
+      ],
+    }),
+    // No shot rows at all — no last shot to read.
+    pt({ id: "no-rows", lastShotType: "Forehand" }),
+  ];
+  expect(run(points, { resultMissed: ["Out"] })).toEqual(["you-out"]);
+  expect(run(points, { resultMissed: ["Net"] })).toEqual(["opp-net"]);
+  expect(run(points, { resultMissed: ["Out", "Net"] })).toEqual([
+    "you-out",
+    "opp-net",
+  ]);
+  expect(
+    run(points, { resultPlayer: "you", resultMissed: ["Out", "Net"] }),
+  ).toEqual(["you-out"]);
+  expect(
+    run(points, { resultPlayer: "opponent", resultMissed: ["Out", "Net"] }),
+  ).toEqual(["opp-net"]);
+  // Seats follow youIsPlayer1.
+  expect(
+    run(points, { resultPlayer: "you", resultMissed: ["Out", "Net"] }, FLIPPED),
+  ).toEqual(["opp-net"]);
+});
+
+test("Result › Rally length uses the rally-length card's bands: 1–4, 5–8, 9+", () => {
+  const lengths = [0, 1, 4, 5, 8, 9, 11];
+  const points = lengths.map((n) => pt({ id: `r${n}`, rallyLength: n }));
+  expect(run(points, { resultRallyLength: ["short"] })).toEqual(["r1", "r4"]);
+  expect(run(points, { resultRallyLength: ["medium"] })).toEqual(["r5", "r8"]);
+  expect(run(points, { resultRallyLength: ["long"] })).toEqual(["r9", "r11"]);
+  // 0 = no shot count recorded: in no band.
+  expect(
+    run(points, { resultRallyLength: ["short", "medium", "long"] }),
+  ).not.toContain("r0");
 });
 
 /* ── Option availability ────────────────────────────────────────────────── */
@@ -700,6 +944,23 @@ test("optionAvailability reports options with zero points across the WHOLE match
   expect([...again.serveZone]).toEqual([...av.serveZone]);
 });
 
+test("optionAvailability hides Serve › Result's Ace when the match has none", () => {
+  const points = [
+    pt({ id: "sw", resultType: "Service Winner", rallyLength: 1 }),
+    pt({ id: "df", resultType: "Double Fault", rallyLength: 0 }),
+  ];
+  const av = optionAvailability(points, CTX);
+  expect(av.serveResult.has("ace")).toBe(false);
+  expect(av.serveResult.has("service-winner")).toBe(true);
+  expect(av.serveResult.has("double-fault")).toBe(true);
+
+  // On a derived match the one-shot service winner IS an ace, so Ace shows
+  // and Service Winner has nothing left.
+  const derived = optionAvailability(points, DERIVED);
+  expect(derived.serveResult.has("ace")).toBe(true);
+  expect(derived.serveResult.has("service-winner")).toBe(false);
+});
+
 /* ── Counting, equality, URL ────────────────────────────────────────────── */
 
 const EVERYTHING: MatchFilters = {
@@ -711,13 +972,24 @@ const EVERYTHING: MatchFilters = {
   serveType: ["first", "second"],
   serveSpin: ["Flat", "Slice", "Kick"],
   serveZone: ["Wide", "Body", "T"],
+  serveResult: [
+    "ace",
+    "service-winner",
+    "return-error",
+    "in-play",
+    "double-fault",
+  ],
   returnType: ["Forehand", "Backhand"],
   returnSpin: ["Topspin", "Slice"],
   returnZone: ["Down the Line", "Middle", "Crosscourt"],
   returnContact: ["inside", "middle", "neutral"],
+  returnResult: ["winner", "error", "in-play"],
+  resultOutcome: ["won", "lost"],
   resultPlayer: "you",
   resultShot: ["Serve", "Return", "Forehand", "Backhand", "Volley", "Overhead"],
-  resultOutcome: ["won", "lost", "winner", "error"],
+  resultEnding: ["winner", "error"],
+  resultMissed: ["Out", "Net"],
+  resultRallyLength: ["short", "medium", "long"],
   customPlayer: "opponent",
   customSide: ["deuce", "ad"],
   customDirection: ["Crosscourt", "Down the Line", "Inside Out", "Inside In"],
@@ -772,6 +1044,30 @@ test("parse of garbage is EMPTY and never throws", () => {
       f({ server: "opponent", serveZone: ["Wide"], sets: [2] }),
     ),
   ).toBe(true);
+});
+
+test("an older link's Winner/Error under Outcome (xo.wn, xo.er) parse as Ending; serialize writes xe", () => {
+  expect(parseMatchFilters("xo.w.wn")).toEqual(
+    f({ resultOutcome: ["won"], resultEnding: ["winner"] }),
+  );
+  expect(parseMatchFilters("xo.er")).toEqual(f({ resultEnding: ["error"] }));
+  // A moved token joins what the new group already holds, once.
+  expect(parseMatchFilters("xe.wn_xo.wn.er")).toEqual(
+    f({ resultEnding: ["winner", "error"] }),
+  );
+  // …and in either order: a legacy token moved in earlier is never overwritten.
+  expect(parseMatchFilters("xo.wn_xe.er").resultEnding).toEqual([
+    "winner",
+    "error",
+  ]);
+  expect(
+    serializeMatchFilters(
+      f({ resultOutcome: ["won"], resultEnding: ["winner", "error"] }),
+    ),
+  ).toBe("xo.w_xe.wn.er");
+  expect(serializeMatchFilters(parseMatchFilters("xo.w.wn"))).toBe(
+    "xo.w_xe.wn",
+  );
 });
 
 test("activeFilterCount counts chosen options; filtersEqual ignores order", () => {

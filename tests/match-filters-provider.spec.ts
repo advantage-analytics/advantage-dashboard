@@ -107,6 +107,8 @@ interface Seen {
   ids: string[];
   active: boolean;
   serialized: string;
+  /** `useMatchFilters().context.isDerived`. */
+  isDerived: boolean | undefined;
 }
 
 /** Render `Probe` under the provider (or bare) and read what the hook saw. */
@@ -114,13 +116,21 @@ function probe(options: {
   youIsPlayer1: boolean;
   initialQuery?: string | string[];
   withProvider?: boolean;
+  /** The stubbed match row's `sourceProvider`; absent when omitted. */
+  sourceProvider?: string;
 }): Seen {
   const loader = createLoader({
     stubs: {
       "@/components/dashboard/matches/match-data-provider": {
         useMatchData: () => ({
           points: POINTS,
-          match: { player1: { hand: "right" }, player2: { hand: "left" } },
+          match: {
+            player1: { hand: "right" },
+            player2: { hand: "left" },
+            ...(options.sourceProvider === undefined
+              ? {}
+              : { sourceProvider: options.sourceProvider }),
+          },
           statsResult: null,
         }),
       },
@@ -142,14 +152,21 @@ function probe(options: {
       filters: MatchFilters;
       filteredPoints: MatchPoint[];
       filtersActive: boolean;
+      context: { isDerived?: boolean };
     };
   };
-  const seen: Seen = { ids: [], active: false, serialized: "" };
+  const seen: Seen = {
+    ids: [],
+    active: false,
+    serialized: "",
+    isDerived: undefined,
+  };
   function Probe() {
     const value = mod.useMatchFilters();
     seen.ids = value.filteredPoints.map((p) => p.id);
     seen.active = value.filtersActive;
     seen.serialized = serializeMatchFilters(value.filters);
+    seen.isDerived = value.context.isDerived;
     return null;
   }
   const tree =
@@ -205,4 +222,24 @@ test.describe("MatchFiltersProvider", () => {
     expect(seen.active).toBe(false);
     expect(seen.ids).toEqual(["p1", "p2", "p3", "p4"]);
   });
+
+  // Serve › Result's Ace reads `context.isDerived`, so both the provider and
+  // the no-provider fallback (`/m/[token]`) must read it off the match row.
+  for (const withProvider of [true, false]) {
+    const where = withProvider ? "under the provider" : "without a provider";
+
+    test(`context.isDerived is true for an Advantage Intelligence match, ${where}`, () => {
+      const seen = probe({
+        youIsPlayer1: true,
+        withProvider,
+        sourceProvider: "splitstep",
+      });
+      expect(seen.isDerived).toBe(true);
+    });
+
+    test(`context.isDerived is false for a match with no source provider, ${where}`, () => {
+      const seen = probe({ youIsPlayer1: true, withProvider });
+      expect(seen.isDerived).toBe(false);
+    });
+  }
 });

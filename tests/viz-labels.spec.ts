@@ -1,35 +1,27 @@
 import { expect, test } from "@playwright/test";
 import {
-  truncatePillLabels,
+  fitPillCount,
   legendItemsFor,
 } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 
-test("truncatePillLabels passes a short list through unchanged", () => {
-  expect(truncatePillLabels(["Won", "Break points"])).toEqual([
-    "Won",
-    "Break points",
-  ]);
+test("fitPillCount returns the full count when every pill fits", () => {
+  expect(fitPillCount([30, 60, 70], 30, 6, 200)).toBe(3);
+  expect(fitPillCount([30, 60, 70], 30, 6, 172)).toBe(3);
 });
 
-test("truncatePillLabels passes a list exactly at the max through unchanged", () => {
-  expect(truncatePillLabels(["a", "b", "c"])).toEqual(["a", "b", "c"]);
+test("fitPillCount folds the tail into a +n pill that must also fit", () => {
+  // 30 + 6 + 60 = 96 fits, but 96 + 6 + 30 (the "+n") = 132 does not, so
+  // only the first pill stays: 30 + 6 + 30 = 66.
+  expect(fitPillCount([30, 60, 70], 30, 6, 130)).toBe(1);
+  expect(fitPillCount([30, 60, 70], 30, 6, 132)).toBe(2);
 });
 
-test("truncatePillLabels caps at 3 by default and appends a +n summary", () => {
-  expect(truncatePillLabels(["a", "b", "c", "d", "e"])).toEqual([
-    "a",
-    "b",
-    "c",
-    "+2",
-  ]);
+test("fitPillCount draws only the +n pill when nothing else fits", () => {
+  expect(fitPillCount([80, 90], 30, 6, 100)).toBe(0);
 });
 
-test("truncatePillLabels honors a custom max", () => {
-  expect(truncatePillLabels(["a", "b", "c", "d"], 1)).toEqual(["a", "+3"]);
-});
-
-test("truncatePillLabels on an empty list stays empty", () => {
-  expect(truncatePillLabels([])).toEqual([]);
+test("fitPillCount on an empty list stays empty", () => {
+  expect(fitPillCount([], 30, 6, 200)).toBe(0);
 });
 
 /**

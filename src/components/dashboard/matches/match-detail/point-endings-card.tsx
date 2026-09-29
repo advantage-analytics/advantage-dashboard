@@ -37,7 +37,9 @@ import { surnameLabels } from "@/lib/data/match-utils";
  *   unforced errs  `result_type LIKE '%Unforced Error%'`
  * Aces and double faults belong to the server structurally; winners and
  * unforced errors belong to whoever struck the decisive shot (`points.player`).
- * `head-to-head-card.tsx` splits them on exactly the same line.
+ * `head-to-head-card.tsx` splits winners and errors on the same line; aces
+ * differ on splitstep (this card drops the Aces segment, Head to head counts
+ * unreturned serves).
  *
  * ACES ON A DERIVED MATCH. `suppress_derived_match_stats()` nulls
  * `match_stats.aces` for every `source_provider = 'splitstep'` match because
@@ -97,30 +99,35 @@ const OUTCOMES: OutcomeMeta[] = [
 
 /**
  * Each outcome's base cut, before a side is laid over it by `sideCut` — the
- * shared filters' Result › Outcome, narrowed by a Film-only `ending` where
- * Outcome alone would admit points this card counts in another segment (see
- * `FilmCutEnding`). The four are exclusive, like the tally below: a double
- * fault is Error + Serve, which no unforced error is.
+ * shared filters' Result › Ending, narrowed by a Film-only `ending` where
+ * Ending alone would admit points this card counts in another segment (see
+ * `FilmCutEnding`); aces are Serve › Result "Ace", exact on its own. The four
+ * are exclusive, like the tally below: a double fault is Error + Serve, which
+ * no unforced error is.
  */
 const OUTCOME_BASE_CUT: Record<OutcomeKey, FilmCut> = {
-  winners: { resultOutcome: ["winner"], ending: "winner" },
-  unforcedErrors: { resultOutcome: ["error"], ending: "unforced-error" },
-  doubleFaults: { resultOutcome: ["error"], resultShot: ["Serve"] },
-  aces: { resultOutcome: ["winner"], ending: "ace" },
+  winners: { resultEnding: ["winner"], ending: "winner" },
+  unforcedErrors: { resultEnding: ["error"], ending: "unforced-error" },
+  doubleFaults: { resultEnding: ["error"], resultShot: ["Serve"] },
+  aces: { serveResult: ["ace"] },
 };
 
 /**
- * The film cut behind one segment of one side's bar: the side is Result ›
- * Player, the point of view Outcome reads — whoever hit the winner or made
- * the error, and the server for an ace or a double fault. That is exactly
- * the line `head-to-head-card.tsx`'s `sideCut(…, "player")` draws for the
- * same four rows, so this delegates to it rather than re-deriving it here.
- * `you`/`opp` are relative, resolved through the filter context's
- * `youIsPlayer1` inside the film tab (guardrails §4); nothing here reads
- * player order.
+ * The film cut behind one segment of one side's bar. Aces are the SERVER's
+ * (Serve › Player); the other three are Result › Hit by, the point of view
+ * Ending reads — whoever hit the winner or made the error, the server for a
+ * double fault. That is exactly the line `head-to-head-card.tsx`'s `sideCut`
+ * draws for the same four rows, so this delegates to it rather than
+ * re-deriving it here. `you`/`opp` are relative, resolved through the filter
+ * context's `youIsPlayer1` inside the film tab (guardrails §4); nothing here
+ * reads player order.
  */
 export function outcomeCut(key: OutcomeKey, side: "you" | "opp"): FilmCut {
-  return sideCut(OUTCOME_BASE_CUT[key], side, "player");
+  return sideCut(
+    OUTCOME_BASE_CUT[key],
+    side,
+    key === "aces" ? "server" : "player",
+  );
 }
 
 type Tally = Record<OutcomeKey, number>;

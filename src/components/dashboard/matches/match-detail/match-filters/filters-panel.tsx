@@ -58,6 +58,9 @@ import {
  * no second set of classes, and "Clear all" takes the film room's dark-tone
  * clear (white/70 → white) — blue over the film is the progress rule's.
  *
+ * A Statistics cut's Film-only remainder (`filmCut`) is named, not editable:
+ * one read-only line between the header and the sections.
+ *
  * No `next/navigation` here — the offline spec loads this file through
  * `createLoader()`.
  */
@@ -72,6 +75,7 @@ export function FiltersPanel({
   total,
   className,
   tone = "light",
+  filmCut = null,
 }: {
   /** The applied filters — the draft starts here. */
   filters: MatchFilters;
@@ -89,6 +93,13 @@ export function FiltersPanel({
   className?: string;
   /** Paint only. "dark" is the fullscreen film room's drawer. */
   tone?: "light" | "dark";
+  /**
+   * The label of a Statistics cut's Film-only remainder (rally-length band,
+   * ending) that is in force but has no pill here — the host passes it only
+   * while such extras apply, `null` otherwise. Drawn as one read-only line
+   * that explains the part of the footer count the pills do not.
+   */
+  filmCut?: string | null;
 }) {
   const titleId = useId();
   const names = { you: youName, opponent: oppName };
@@ -136,6 +147,17 @@ export function FiltersPanel({
           </button>
         </ChromeTooltip>
       </div>
+
+      {filmCut && (
+        // Read-only: no button, no aria-pressed. The strip's Clear is what
+        // removes it, so nothing here can be toggled.
+        <p
+          data-film-cut=""
+          className="text-micro shrink-0 border-b border-[var(--border-hairline)] px-5 py-2.5"
+        >
+          {`${filmCut} · from Statistics — the strip's Clear removes it`}
+        </p>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {sections.length === 0 ? (
