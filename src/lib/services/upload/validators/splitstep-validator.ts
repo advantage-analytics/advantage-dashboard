@@ -146,16 +146,6 @@ function averageBelow(
   return probe.averageFps != null && probe.averageFps < threshold;
 }
 
-/** Below the floor the wizard refuses at. See the module comment. */
-const averageBelowAccepted = (probe: VideoProbe): probe is ProbeWithAverage =>
-  averageBelow(probe, MIN_CONTAINER_AVERAGE_FPS);
-
-/** Below the vendor's recommended rate; true for the refused band too. */
-const averageBelowRecommended = (
-  probe: VideoProbe,
-): probe is ProbeWithAverage =>
-  averageBelow(probe, RECOMMENDED_CONTAINER_AVERAGE_FPS);
-
 /** An average to at most two decimals, without trailing zeros: 29.94, 24. */
 function formatAverage(averageFps: number): string {
   return `${Number(averageFps.toFixed(2))} fps`;
@@ -185,7 +175,8 @@ export function effectiveFps(probe: VideoProbe): number | null {
  * effective rate otherwise, and null when the rate is unknown.
  */
 export function formatProbeFps(probe: VideoProbe): string | null {
-  if (averageBelowRecommended(probe)) return formatAverage(probe.averageFps);
+  if (averageBelow(probe, RECOMMENDED_CONTAINER_AVERAGE_FPS))
+    return formatAverage(probe.averageFps);
   const fps = effectiveFps(probe);
   return fps === null ? null : `${fps} fps`;
 }
@@ -234,7 +225,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   // The container average, in every browser — a variable-rate MP4 can open
   // at 30 (what the sample sees) and average well under it (what the vendor
   // measures), or open at 29.2 and average 29.94.
-  if (averageBelowAccepted(probe)) {
+  if (averageBelow(probe, MIN_CONTAINER_AVERAGE_FPS)) {
     return {
       success: false,
       error: `This recording averages ${formatAverage(probe.averageFps)}, which usually means a variable frame rate. ${PROVIDER_DISPLAY_NAME} needs at least ${MIN_CONTAINER_AVERAGE_FPS} fps, so export it at a constant 30 fps and pick it again.`,
@@ -264,7 +255,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
     warnings.push(
       `This browser can't measure frame rate. Analysis still needs at least ${MIN_VIDEO_FPS} fps — check your camera setting, because ${PROVIDER_DISPLAY_NAME} can still reject the video after it uploads.`,
     );
-  } else if (averageBelowRecommended(probe)) {
+  } else if (averageBelow(probe, RECOMMENDED_CONTAINER_AVERAGE_FPS)) {
     // The band the refusal above lets through. One line, not two: this
     // subsumes the 60 fps nudge below, which would only repeat "faster is
     // better" under a warning that already says so.
