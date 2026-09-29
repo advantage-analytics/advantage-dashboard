@@ -105,3 +105,57 @@ ready).
   - [ ] `grep -rn "featured-match-card\|match-event-header\|FeaturedMatchCard\|MatchEventHeader" src tests scripts` returns no matches after the change (docs/ux-overhaul-brief.md:299 is a point-in-time brief and is intentionally left untouched).
   - [ ] `npm run typecheck` passes and the diff touches no file other than the two deletions (plus MAP.md if the generator changes it).
 - **notes:** Origin: T5 log follow-up #3. Re-run the grep before deleting.
+
+## T8 · Clear `round` on both event detaches
+
+- **status:** todo
+- **model:** fable
+- **files:** supabase/migrations/<ts>_detach_clears_round.sql (new), tests/schedule-event-delete-db.spec.ts, tests/detach-match-db.spec.ts, docs/ui-revamp-guardrails.md (guess)
+- **done when:**
+  - [ ] A new migration `create or replace`s `schedule_private.guard_event_delete()` and `public.detach_match_from_event_line(uuid)` with bodies identical to the live ones except that each detach UPDATE reads `set event_entry_id = null, tournament_name = null, round = null`; `matches_block_client_regraft` is not in the diff.
+  - [ ] `tests/schedule-event-delete-db.spec.ts`'s detach assertion also checks `round is null`, and `tests/detach-match-db.spec.ts` asserts `round is null` after the detach and adds a dual-line case (`round = 'S1'`) ending with `round is null` and the entry's slot untouched.
+  - [ ] In `docs/ui-revamp-guardrails.md`, both the event-delete and `detach_match_from_event_line` paragraphs say the detach touches only `event_entry_id`, `tournament_name` and `round`, and that `date`, `match_type` and `court_type` stay; the never-list is unchanged.
+  - [ ] The migration file is named with the version live recorded for it (`list_migrations` shows it).
+- **notes:** Author's decision: round is cleared for both dual and tournament. `guard_schedule_result` / `guard_reserved_schedule_result` return early when the new `event_entry_id` is null. Read live bodies with `pg_get_functiondef` first.
+
+## T9 · Choose the round inside "Add to an event"
+
+- **status:** todo
+- **model:** opus
+- **files:** src/lib/schedule/attach-line-state.ts, src/components/dashboard/matches/match-actions/attach-line-picker.tsx, src/components/dashboard/matches/match-actions/edit-match-event.tsx, src/components/dashboard/matches/match-actions/edit-match-dialog.tsx, tests/edit-match-dialog-logic.spec.ts, tests/edit-match-event.spec.ts (guess)
+- **routes:** /dashboard/matches
+- **done when:**
+  - [ ] In `attachLineGroups` with `mode: "attach"`, a tournament line whose `round` is null is `state: "available"`, `reason: null`, and every `AttachLine` carries `takenRounds: string[]` (normalized codes of the entry's match and outcome rounds); with `mode: "upload"` it is still `needsRound` / "Set the round first". `tests/edit-match-dialog-logic.spec.ts` updates the ~line 285 case, keeps `roundTaken` for a preset round, and asserts `takenRounds`.
+  - [ ] In `LineRow`, an available tournament line with `round === null` shows "Choose a round" in the tail instead of "Awaiting result".
+  - [ ] `edit-match-event.tsx` exports `EventRoundField({ value, takenRounds, onChange, disabled, error })`: label "Round", underline `MenuSelect`, placeholder "Not set", options = `roundOptionsFor("tournament")` minus `takenRounds`, `error` under it in `var(--danger)`. The dialog renders it in the event section when `pendingLine.eventKind === "tournament"`, and the header line and the "Saving makes this the result for …" sentence read the dialog's `round` state.
+  - [ ] Save with a pending tournament line and an empty round sends no request and shows `fieldErrors.round` "Choose the round."; with a round set, the existing PATCH + `attachMatchToLine` path runs unchanged.
+  - [ ] `tests/edit-match-event.spec.ts` renders `EventRoundField` with `takenRounds: ["QF"]` and asserts the markup lacks "Quarterfinal", contains "Semifinal", and renders the error text when given.
+- **notes:** `attach_match_to_event_line`'s "That round already has a result." stays the backstop. Follow `.skills/advantage-analytics-design/SKILL.md`; no new icon.
+
+## T10 · `set_match_round_on_line` RPC + regraft guard on `round`
+
+- **status:** todo
+- **model:** fable
+- **files:** supabase/migrations/<ts>_set_match_round_on_line.sql (new), tests/set-match-round-db.spec.ts (new), docs/ui-revamp-guardrails.md (guess)
+- **done when:**
+  - [ ] Migration creates `public.set_match_round_on_line(p_match_id uuid, p_round text) returns jsonb`, SECURITY DEFINER, `search_path ''`, mirroring `attach_match_to_event_line`: 42501 when the caller is not `created_by` or can't manage the schedule; 23514 for no event ("This match is not on an event."), a dual line ("A dual line's round is its slot."), a blank round ("Set the round."), or a round held by another match on the entry ("That round already has a result."); otherwise, under marker `advantage.round_match_id`, updates only `round` and logs `match.round_changed` (`match_id`, `entry_id`, `event_id`, `from`, `to`); the audit CHECK is re-created from the live allowlist plus the new verb; `revoke … from public, anon` / `grant execute … to authenticated`.
+  - [ ] The `matches_block_client_regraft` trigger is re-created as `BEFORE INSERT OR UPDATE OF program_id, event_entry_id, player1_id, source_provider, analysis_method, round`, and the function (otherwise the live body verbatim) refuses a client UPDATE changing `round` while the match stays on a line, unless `advantage.round_match_id = old.id::text`; a round change on an unlinked match and every existing branch are unchanged.
+  - [ ] `tests/set-match-round-db.spec.ts` (shape of `tests/detach-match-db.spec.ts`) covers: creator+manager `SF → F` succeeds with an audit row; a round held by another match → 23514; a round with a saved outcome → 23514; a bare client round update on a linked match → 42501; the same on an unlinked match succeeds.
+  - [ ] `docs/ui-revamp-guardrails.md` gains a fifth reviewed-exception paragraph on the attach exception's terms (tournament lines only, only `round`, audit-logged, bare client UPDATE refused).
+  - [ ] The migration file is named with the version live recorded for it (`list_migrations` shows it).
+- **notes:** No unique index on `matches(event_entry_id, round)` — the admin console's reserved-result flow is out of scope. Adding `round` to the trigger's column list is DDL on the trigger.
+
+## T11 · Editable Round for a match on a tournament line
+
+- **status:** todo
+- **model:** opus
+- **needs:** T9, T10
+- **files:** src/app/api/matches/[matchId]/route.ts, src/lib/schedule/attach-line.ts, src/components/dashboard/matches/match-actions/edit-match-dialog.tsx, src/components/dashboard/matches/match-actions/edit-match-event.tsx, tests/edit-match-event.spec.ts (guess)
+- **routes:** /dashboard/matches, /dashboard/team/schedule/[eventId]
+- **done when:**
+  - [ ] GET `/api/matches/[matchId]` returns `canEditRound: boolean` (match on a line, `event.eventKind === "tournament"`, and the same `runsSchedule` that gates `canDetach`) and `event.takenRounds: string[]` (the entry's other matches' rounds and its outcome rounds).
+  - [ ] For a linked tournament match with `canEditRound`, the event section renders `EventRoundField` preset to the stored round (stored round not excluded), and the sentence reads "The date and surface come from the tournament. Change them in Schedule."; a dual match or `canEditRound: false` renders today's locked copy and no select.
+  - [ ] Save on a linked tournament match with a changed round calls a new `setMatchRoundOnLine({ matchId, round })` server action in `attach-line.ts` (rpc `set_match_round_on_line`, error passed through, revalidates the same paths as `attachMatchToLine` plus `/dashboard/team/schedule/${eventId}`) after the PATCH; the PATCH still carries no `round` for a linked match; an empty round refuses Save with "Choose the round.".
+  - [ ] The RPC's refusal is shown verbatim in the dialog's `error` slot and the dialog stays open.
+  - [ ] `tests/edit-match-event.spec.ts` asserts the tournament sentence with and without `canEditRound`, and that the dialog calls `setMatchRoundOnLine` only for a linked tournament match.
+- **notes:** The Schedule tournament page keys rows on `matches.round`, so a changed round moves the match to that round's row. Dual lines stay locked.
