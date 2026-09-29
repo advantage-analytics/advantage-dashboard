@@ -6,7 +6,10 @@ import {
   RETURN_ROWS,
   SERVE_ROWS,
   buildStatRows,
+  figureReadout,
+  hasReadout,
   rowLeader,
+  rowReadout,
   type H2HRow,
   type H2HRowConfig,
   type H2HStats,
@@ -286,5 +289,94 @@ test.describe("orientation", () => {
         byLabel(asOpp, label).opp.display,
       );
     }
+  });
+});
+
+test.describe("hover readouts, with and without video", () => {
+  // Every figure answers a hover the same way whether or not the match has a
+  // playable video; only the footer changes. Without video, a figure that
+  // would have offered "Watch all N in Video" says "No video attached"
+  // instead, and one that never could (a zero, a row with no cut) says
+  // nothing extra.
+  const rows = buildStatRows(
+    [...SERVE_ROWS, ...POINT_ROWS],
+    side({
+      aces: 3,
+      winners: 12,
+      netPointsWonPct: 60,
+      fractions: { netPointsWonPct: { made: 6, attempts: 10 } },
+    }),
+    side({
+      aces: 0,
+      winners: 0,
+      netPointsWonPct: 50,
+      fractions: { netPointsWonPct: { made: 4, attempts: 8 } },
+    }),
+  );
+  const aces = byLabel(rows, "Aces");
+  const net = byLabel(rows, "Net points won");
+  const noVideo = { hasVideo: false, count: 0, noVideoLine: true };
+  const shareLink = { hasVideo: false, count: 0, noVideoLine: false };
+  const videoNoPoints = { hasVideo: true, count: 0, noVideoLine: false };
+
+  test("without video, a figure on a row with a cut gets the no-video footer", () => {
+    const readout = figureReadout(aces, "you", "Ace", noVideo);
+    expect(hasReadout(readout)).toBe(true);
+    expect(readout?.footer).toEqual({ kind: "no-video" });
+  });
+
+  test("a zero keeps its empty state and no footer, with or without video", () => {
+    for (const scope of [noVideo, videoNoPoints]) {
+      const readout = figureReadout(aces, "opp", "Opp", scope);
+      expect(readout?.note).toBe("No aces in this match");
+      expect(readout?.footer).toBeUndefined();
+    }
+  });
+
+  test("with video and points behind it, a figure gets the watch footer", () => {
+    const readout = figureReadout(aces, "you", "Ace", {
+      ...videoNoPoints,
+      count: 3,
+    });
+    expect(readout?.footer).toEqual({ kind: "watch", count: 3 });
+    expect(readout?.note).toBeUndefined();
+  });
+
+  test("a row with no cut shows its fraction and no footer either way", () => {
+    for (const scope of [noVideo, videoNoPoints]) {
+      const readout = figureReadout(net, "you", "Ace", scope);
+      expect(readout?.lines.map((line) => line.name)).toEqual(["6 of 10 won"]);
+      expect(readout?.footer).toBeUndefined();
+    }
+  });
+
+  test("the label follows the same footer rule", () => {
+    expect(rowReadout(aces, "Ace", "Opp", noVideo).footer).toEqual({
+      kind: "no-video",
+    });
+    expect(
+      rowReadout(aces, "Ace", "Opp", { ...videoNoPoints, count: 3 }).footer,
+    ).toEqual({ kind: "watch", count: 3 });
+    expect(rowReadout(net, "Ace", "Opp", noVideo).footer).toBeUndefined();
+    expect(hasReadout(rowReadout(net, "Ace", "Opp", noVideo))).toBe(true);
+  });
+
+  test("a read-only share link never says no video — it may have one", () => {
+    // /m/[token] never shows video, whatever the match has, so the readout
+    // keeps its evidence and drops the footer rather than state something
+    // false.
+    const figure = figureReadout(aces, "you", "Ace", shareLink);
+    expect(figure?.footer).toBeUndefined();
+    expect(rowReadout(aces, "Ace", "Opp", shareLink).footer).toBeUndefined();
+    const fraction = figureReadout(net, "you", "Ace", shareLink);
+    expect(hasReadout(fraction)).toBe(true);
+    expect(figureReadout(aces, "opp", "Opp", shareLink)?.note).toBe(
+      "No aces in this match",
+    );
+  });
+
+  test("an em dash has no readout — it keeps its own tooltip", () => {
+    const [missing] = buildStatRows(SERVE_ROWS, side(), side());
+    expect(figureReadout(missing, "you", "Ace", noVideo)).toBeNull();
   });
 });
