@@ -83,3 +83,13 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. "Keep as one-off" after choosing a round in the event section leaves that round in Details (same state) — harmless.
+
+## T10 · `set_match_round_on_line` RPC + regraft guard on `round` — done
+
+**gate:** mechanical GATE PASS; completion `VERDICT: pass`.
+**changed:** `supabase/migrations/20260929215610_set_match_round_on_line.sql`, applied live via `apply_migration`: new SECURITY DEFINER `set_match_round_on_line(uuid, text)` (tournament lines only, taken-round refusal, `match.round_changed` audit, same-round no-op); `matches_block_client_regraft` trigger now also fires on `round` and refuses a client round change on a match that stays on a line unless `advantage.round_match_id` is set. Opt-in spec `tests/set-match-round-db.spec.ts`; fifth guardrails exception. Rolled-back live probe: a client round change on an unlinked match still passes.
+**follow-ups:**
+
+1. The three DB specs (detach, event-delete, set-round) have never run — they need the local container.
+2. A partial unique index on `matches(event_entry_id, round)` would make the taken-round rule race-proof beyond the entry lock.
+3. The author deleted "ITA All-American Tournament" from the app at 21:15 UTC — it detached 1 match (audit row), before T8 made detaches clear `round`.

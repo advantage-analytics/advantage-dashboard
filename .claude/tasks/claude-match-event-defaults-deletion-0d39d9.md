@@ -134,7 +134,7 @@ ready).
 
 ## T10 · `set_match_round_on_line` RPC + regraft guard on `round`
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<ts>_set_match_round_on_line.sql (new), tests/set-match-round-db.spec.ts (new), docs/ui-revamp-guardrails.md (guess)
 - **done when:**
