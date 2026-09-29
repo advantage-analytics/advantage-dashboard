@@ -8,10 +8,22 @@ import { SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE } from "@/lib/admin/uploads/typ
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+/**
+ * A refusal answers its own status — 401 no session, 403 not an admin, 400 a
+ * bad request — and the body stays `{ ok, message }`, all the wizard reads.
+ */
+function answer(
+  result:
+    { ok: true } | { ok: false; status: 400 | 401 | 403; message: string },
+) {
+  if (result.ok) return NextResponse.json(result);
+  const { status, ...body } = result;
+  return NextResponse.json(body, { status });
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const result = await submitAdminMatchFile(await request.formData());
-    return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+    return answer(await submitAdminMatchFile(await request.formData()));
   } catch {
     return NextResponse.json(
       {
@@ -23,9 +35,10 @@ export async function POST(request: NextRequest) {
   }
 }
 export async function GET(request: NextRequest) {
-  const result = await getAdminMatchFileStatus(
-    request.nextUrl.searchParams.get("operationId") ?? "",
-    request.nextUrl.searchParams.get("itemId") ?? "",
+  return answer(
+    await getAdminMatchFileStatus(
+      request.nextUrl.searchParams.get("operationId") ?? "",
+      request.nextUrl.searchParams.get("itemId") ?? "",
+    ),
   );
-  return NextResponse.json(result, { status: result.ok ? 200 : 400 });
 }

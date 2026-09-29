@@ -220,6 +220,10 @@ this branch's queue, then stop.`
 - Never hand-format `supabase/migrations/` or `src/styles/design-system/colors.css`.
   `.prettierignore` documents every exclusion and why.
 - No global state library — Context + server-side fetching only.
+- API routes answer refusals as `{ error, code?, detail? }` through `errorResponse()` /
+  `jsonResponse()` in `src/lib/services/match-video/http.ts`: `error` is the sentence
+  clients show, `code` the slug they branch on, and `detail` is dropped in production.
+  Convert a hand-rolled route when you next touch it, never in bulk.
 - `@azure/storage-blob` signs vendor SAS URLs and **must never reach a client bundle**;
   it, `exceljs` and the LLM SDKs are `serverExternalPackages` in `next.config.ts`.
 

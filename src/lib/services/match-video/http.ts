@@ -328,15 +328,34 @@ export function jsonResponse(body: unknown, status = 200): NextResponse {
 }
 
 /**
- * A JSON refusal. `error` carries the sentence — the field every existing
- * client of this app's routes already reads — and `code` the stable slug a
- * new client branches on. `detail` is for logs and tests.
+ * `detail` slugs a browser client branches on, so they survive the production
+ * gate below. `finalizing` is how `attachment-upload.ts` tells a 409
+ * `pending_attempt_conflict` held by another tab's completion lease (wait it
+ * out) from every other conflict (fail). Add a slug here only when a client
+ * reads it; everything else stays out of production bodies.
+ */
+const PUBLIC_DETAILS: ReadonlySet<string> = new Set(["finalizing"]);
+
+/**
+ * A JSON refusal: `{ error, code, detail? }`. `error` carries the sentence —
+ * the field every existing client of this app's routes already reads — and
+ * `code` the stable slug a new client branches on. `detail` is for logs and
+ * tests: it can carry a SQLSTATE detail or a storage cause
+ * (`rpc-errors.ts`), so a production response omits it unless the slug is
+ * one of the `PUBLIC_DETAILS` above. `NODE_ENV` is read per call, not at
+ * module load, so a spec can flip it.
  */
 export function errorResponse(
   error: MatchVideoHttpError | MatchVideoError,
 ): NextResponse {
+  const showDetail =
+    process.env.NODE_ENV !== "production" || PUBLIC_DETAILS.has(error.detail);
   return NextResponse.json(
-    { error: error.message, code: error.code, detail: error.detail },
+    {
+      error: error.message,
+      code: error.code,
+      ...(showDetail ? { detail: error.detail } : {}),
+    },
     { status: error.status, headers: NO_STORE },
   );
 }

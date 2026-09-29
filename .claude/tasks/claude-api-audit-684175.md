@@ -158,7 +158,7 @@ ready).
 
 ## T12 · House error shape: no `detail` in production, admin 401/403
 
-- **status:** doing
+- **status:** done
 - **model:** opus
 - **files:** src/lib/services/match-video/http.ts, src/app/api/splitstep/jobs/handler.ts, src/lib/services/programs/admin-video-submission.ts, src/lib/services/programs/admin-guard.ts, src/app/api/admin/uploads/file/route.ts, src/app/api/admin/uploads/video/route.ts, AGENTS.md, tests/error-response-shape.spec.ts (new) (guess)
 - **done when:**

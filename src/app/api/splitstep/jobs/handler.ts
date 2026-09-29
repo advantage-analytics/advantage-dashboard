@@ -810,8 +810,15 @@ export async function handleSubmitJob(
       });
     }
 
+    // The vendor's (or the minter's) own text stays in the log line above:
+    // it can name storage accounts or echo the payload, and the client needs
+    // only the 502 — `submit-match-video.ts` keys its "don't overwrite the
+    // failed row" branch on the status, not the body.
     return NextResponse.json(
-      { error: "Could not submit this match for analysis.", detail: message },
+      {
+        error: "Could not submit this match for analysis.",
+        code: "vendor_rejected",
+      },
       { status: 502 },
     );
   }

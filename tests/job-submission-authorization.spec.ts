@@ -814,6 +814,12 @@ test("a vendor rejection past the reservation hands quota back and marks the job
   const h = harness({ vendor: { ok: false, status: 500, text: "boom" } });
   const r = await call(h);
   expect(r.status).toBe(502);
+  // The vendor's own text goes to the log, never back to the browser.
+  expect(r.json).toEqual({
+    error: "Could not submit this match for analysis.",
+    code: "vendor_rejected",
+  });
+  expect(JSON.stringify(r.json)).not.toContain("boom");
   expect(h.sent).toHaveLength(1);
   expect(h.released).toEqual(["j-1"]);
   expect(h.retired).toEqual(["j-1"]);

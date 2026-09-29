@@ -6,5 +6,9 @@ export async function POST(request: Request) {
   const result = await submitAdminMatchVideo(
     await request.json().catch(() => null),
   );
-  return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+  if (result.ok) return NextResponse.json(result);
+  // 401 no session, 403 not an admin, 400 a bad request; the body stays
+  // `{ ok, message }`, which is all the wizard reads.
+  const { status, ...body } = result;
+  return NextResponse.json(body, { status });
 }

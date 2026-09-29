@@ -18,13 +18,21 @@ import { createClient } from "@/lib/supabase/server";
  * loader inside it — and nothing in a request writes `is_admin` between those
  * reads, so the second and third are the same answer. The cache is
  * per-request: every server action is its own request and still re-checks.
+ *
+ * Two answers, not one: `{ ok: false, status: 401 }` is "no session" and
+ * `{ ok: false, status: 403 }` is "signed in, not an admin", so an API route
+ * can answer the status HTTP means. Server actions that only need yes/no use
+ * `requireAdmin()` below, which is this with the reason dropped.
  */
-export const requireAdmin = cache(async (): Promise<{ id: string } | null> => {
+export type AdminCheck =
+  { ok: true; id: string } | { ok: false; status: 401 | 403 };
+
+export const checkAdmin = cache(async (): Promise<AdminCheck> => {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return null;
+  if (!user) return { ok: false, status: 401 };
 
   const { data } = await supabase
     .from("users")
@@ -32,7 +40,15 @@ export const requireAdmin = cache(async (): Promise<{ id: string } | null> => {
     .eq("id", user.id)
     .maybeSingle();
 
-  return data?.is_admin ? { id: user.id } : null;
+  return data?.is_admin
+    ? { ok: true, id: user.id }
+    : { ok: false, status: 403 };
+});
+
+/** `checkAdmin()` as yes/no: the actor, or `null` for either refusal. */
+export const requireAdmin = cache(async (): Promise<{ id: string } | null> => {
+  const check = await checkAdmin();
+  return check.ok ? { id: check.id } : null;
 });
 
 /**

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { submitAdminMatchVideo } from "@/lib/services/programs/admin-video-submission";
 import type { AdminUploadContext } from "@/lib/data/admin-upload-server";
+import type { AdminCheck } from "@/lib/services/programs/admin-guard";
 const id = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const input = {
@@ -24,12 +25,22 @@ const input = {
   adScoring: true,
   fixedCamera: false,
 };
-function harness(authorized = true, program = id(3)) {
+/**
+ * `authorized`: `true` an admin session, `false` a signed-in non-admin (403),
+ * `401` no session at all.
+ */
+function harness(
+  authorized: boolean | 401 = true,
+  program = id(3),
+  rpcError: string | null = null,
+) {
   const calls: { name: string; args: Record<string, unknown> }[] = [];
   const client = {
     rpc: async (name: string, args: Record<string, unknown>) => {
       calls.push({ name, args });
-      return { data: { match_id: id(5), job_id: id(6) }, error: null };
+      return rpcError
+        ? { data: null, error: { message: rpcError } }
+        : { data: { match_id: id(5), job_id: id(6) }, error: null };
     },
     from: () => ({
       select: () => ({
@@ -49,7 +60,10 @@ function harness(authorized = true, program = id(3)) {
     }),
   };
   const deps = {
-    requireAdmin: async () => (authorized ? { id: id(9) } : null),
+    checkAdmin: async (): Promise<AdminCheck> =>
+      authorized === true
+        ? { ok: true, id: id(9) }
+        : { ok: false, status: authorized === 401 ? 401 : 403 },
     createAdminClient: () =>
       client as unknown as ReturnType<
         typeof import("@/lib/supabase/admin").createAdminClient
@@ -96,6 +110,34 @@ test("nonadmins and forged actors cannot reach privileged mutation", async () =>
     (await submitAdminMatchVideo({ ...input, actorId: id(8) }, admin.deps)).ok,
   ).toBe(false);
   expect(admin.calls).toEqual([]);
+});
+test("refusals carry the status the route answers: 401 no session, 403 not an admin, 400 a bad request", async () => {
+  const anonymous = harness(401);
+  expect(await submitAdminMatchVideo(input, anonymous.deps)).toEqual({
+    ok: false,
+    status: 401,
+    message: "Administrator access is required.",
+  });
+  const member = harness(false);
+  expect(await submitAdminMatchVideo(input, member.deps)).toMatchObject({
+    ok: false,
+    status: 403,
+  });
+  const bad = harness();
+  expect(
+    await submitAdminMatchVideo({ ...input, startSeconds: -1 }, bad.deps),
+  ).toMatchObject({ ok: false, status: 400 });
+  expect([anonymous.calls, member.calls, bad.calls]).toEqual([[], [], []]);
+});
+test("a refused reservation answers a sentence, never the RPC's own text", async () => {
+  const h = harness(true, id(3), 'duplicate key value violates "secret_idx"');
+  const answer = await submitAdminMatchVideo(input, h.deps);
+  expect(answer).toEqual({
+    ok: false,
+    status: 400,
+    message: "Could not reserve this video.",
+  });
+  expect(JSON.stringify(answer)).not.toContain("secret_idx");
 });
 test("invalid or missing video answers refuse before job admission", async () => {
   for (const changes of [

@@ -111,3 +111,14 @@ is the runner's. Newest entries at the bottom.
 
 1. No spec pins `reserveQuota`/`reservePooled` throwing `QuotaReserveError` with the right `code` directly (only typecheck) — a small stubbed-rpc spec would.
 2. Webhook/reconciler auto-retry callers treat `quota_unavailable` as a plain decline (logged only), same as `submit_failed`.
+
+## T12 · House error shape: no `detail` in production, admin 401/403 — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** Implemented in parallel in an isolated worktree (commit 641b386b), brought over here (merged cleanly onto T10). `errorResponse()` drops `detail` in production except the one public value `finalizing` (`PUBLIC_DETAILS`) — `attachment-upload.ts` waits on a 409 `pending_attempt_conflict` with `detail === "finalizing"`, so a blanket drop would fail a second tab's upload; reviewer confirmed the dependency. The jobs 502 answers `{ error: "Could not submit this match for analysis.", code: "vendor_rejected" }` (vendor text only in the log); admin video reservation failure answers "Could not reserve this video." New `checkAdmin()` (401 no session / 403 not admin); `requireAdmin()` keeps its actor-or-null contract as a wrapper (~100 callers). Admin upload routes answer `result.status` (body still `{ ok, message }`). AGENTS.md Conventions bullet added. New `tests/error-response-shape.spec.ts`; admin specs updated. `tests/admin-routes.spec.ts`'s two new 401/403 cases are live-DB/env-gated and were not run.
+**follow-ups:**
+
+1. The admin video wizard no longer shows _why_ a reservation failed (it used to append the RPC slug) — map the slugs to sentences like `admin-file-submission.ts`'s `refusals` table.
+2. Vendor text is still stored in `processing_jobs.error_message` by the same catch — check whether any UI shows that column.
+3. A thrown video-URL mint also answers `code: "vendor_rejected"` (same catch).
+4. Admin video reservation RPC failure answers 400; arguably a 5xx.
