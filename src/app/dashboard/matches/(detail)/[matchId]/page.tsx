@@ -13,15 +13,15 @@ import { hasComparisonBaseline } from "@/lib/data/match-stats-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canEditBandsFor } from "@/lib/workspace/types";
 import {
-  isAnalysisFailed,
-  isInFlight,
+  isStatsUnavailable,
+  matchPageKind,
   withStatsPublished,
 } from "@/lib/data/match-analysis";
 import {
   analysisFor,
   loadMatchAnalysis,
 } from "@/lib/data/match-analysis-server";
-import { MatchAnalysisProgress } from "@/components/dashboard/matches/match-detail/match-analysis-progress";
+import { AnalysisSteps } from "@/components/dashboard/matches/match-detail/analysis-steps-column";
 import { MarkReportSeen } from "@/components/dashboard/matches/match-detail/mark-report-seen";
 
 // The report's parts, by their named exports rather than the `MatchReport`
@@ -62,6 +62,7 @@ import {
   VisualizationsPanePending,
 } from "@/components/dashboard/loading/match-report-pending";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { playedSets } from "@/lib/ui/score-format";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMatchFilmEntry } from "@/lib/data/match-film-entry-server";
 
@@ -229,8 +230,18 @@ export default async function MatchDetailPage({
     ...jobAnalysis,
     status: withStatsPublished(jobAnalysis.status, statsPublished),
   };
-  const isAwaitingAnalysis =
-    isInFlight(analysis.status) || isAnalysisFailed(analysis.status);
+  // The one failure that does NOT stop the page — a `derivation_failed` our
+  // derivation deterministically refused (`stats_unavailable`) — and the gate
+  // itself are decided by `match-analysis.ts`'s shared predicates, not here, so
+  // the route's skeleton (via `match-page-hint-server.ts`) and this page answer
+  // from one function (guardrails §3.2/§3.3). Fed this page's own
+  // post-reconcile `analysis`: the hint is a skeleton's guess, never this gate's
+  // input. The layout's hint is read before this page's reap/reconcile, so a
+  // stale hint can change only which skeleton flashes, never what the page
+  // renders. A stats-unavailable match renders like any other and the Statistics
+  // view says, once, that no statistics were saved (`meta.statsUnavailable`).
+  const statsUnavailable = isStatsUnavailable(analysis);
+  const isAwaitingAnalysis = matchPageKind(analysis) === "steps";
 
   // A failed points read is "no answer", not a match with no points: rendering
   // on would draw a zero-point report that looks like a real one. Thrown here,
@@ -271,43 +282,32 @@ export default async function MatchDetailPage({
   );
 
   if (isAwaitingAnalysis) {
-    // Guardrails §3.3 — the short-circuit gate. The scoreboard renders fine
-    // from `match` (the score the player entered); the pane holds the pipeline
-    // state and nothing else. No view switcher — there are no views yet — no
-    // title row, and no stat section that would draw zeroes
-    // (spec › Decisions 9).
+    // Guardrails §3.3 — the short-circuit gate. The page is the upload
+    // wizard's final screen: a centred, card-free column with the title, the
+    // match line and the stepper, under the app chrome alone. No rail, no view
+    // switcher — there are no views yet — no title row, and no stat section
+    // that would draw zeroes (spec › Decisions 9). The report and its rail
+    // return once the stats are ready.
+    //
+    // The match line is oriented by `sides` (guardrails §4), never by raw
+    // player1/player2: the viewer's side first, sets already you-first, and the
+    // result from the viewer's seat. `match.won` is what the scoreboard shows;
+    // a score whose played sets are level decides nobody — a stopped or
+    // unfinished match — and gets no result word, as the wizard's own line.
+    const lineSets = playedSets(sides.sets);
+    const setsYou = lineSets.filter((s) => s.player1 > s.player2).length;
+    const setsOpp = lineSets.filter((s) => s.player2 > s.player1).length;
     return (
-      <MatchReportProvider
+      <AnalysisSteps
+        analysis={analysis}
         matchId={matchId}
-        summary={null}
-        canCompare={false}
-        isDerived={isDerived}
-        statsPublished={false}
-        hasPlayableVideo={false}
-        // No view switcher on this branch — ShotsTab never renders — so an
-        // empty list here costs nothing and skips fetching saved views before
-        // the match even has anything to visualize.
-        savedViews={[]}
-        workspaceRole={workspaceRole}
-        workspaceKind={workspaceKind}
-        workspaceName={workspaceName}
-        // Same reasoning as `savedViews` above — `ShotsTab` never renders on
-        // this branch, so the default is enough and skips the query.
-        bandSettings={DEFAULT_BANDS}
-        canEditBands={canEditBands}
-        unit={unit}
-      >
-        <MatchReportFrame>
-          <MatchReportRail>
-            <MatchReportScoreboard />
-            <MatchReportSpacer />
-            {share}
-          </MatchReportRail>
-          <MatchReportPane>
-            <MatchAnalysisProgress analysis={analysis} matchId={matchId} />
-          </MatchReportPane>
-        </MatchReportFrame>
-      </MatchReportProvider>
+        match={{
+          player: sides.you.name,
+          opponent: sides.opp.name,
+          won: setsYou === setsOpp ? null : match.won,
+          sets: lineSets,
+        }}
+      />
     );
   }
 
@@ -330,6 +330,8 @@ export default async function MatchDetailPage({
           canCompare={hasComparisonBaseline(kpiHistory)}
           isDerived={isDerived}
           statsPublished={statsPublished}
+          statsUnavailable={statsUnavailable}
+          foldUnreconciled={data.foldUnreconciled}
           hasPlayableVideo={Boolean(video)}
           // "Match report opens at" (Settings › Preferences), clamped to an
           // available view.

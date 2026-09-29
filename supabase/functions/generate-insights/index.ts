@@ -4,6 +4,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_KEY");
+/**
+ * gemini-2.5-flash is closed to new Google Cloud projects ("limiting access to
+ * the 2.5 models to users who have actively used them in the past"), so the
+ * paid key moved in 2026-09-28 was refused with a 404. 3.5 Flash-Lite is
+ * Google's pick for new projects and costs the same per token.
+ */
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -76,7 +83,7 @@ async function captureGeminiGeneration({
           $ai_trace_id: traceId,
           $ai_session_id: null,
           $ai_span_name: "generate_match_insights",
-          $ai_model: "gemini-2.5-flash",
+          $ai_model: GEMINI_MODEL,
           $ai_provider: "gemini",
           // No $ai_input / $ai_output_choices: the prompt and reply carry
           // player first names and stats, so only usage is recorded — the
@@ -342,7 +349,7 @@ serve(async (req) => {
       required: ["player1", "player2"],
     };
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
     // 5. Build the prompt asking for insights on both players
     const prompt = `

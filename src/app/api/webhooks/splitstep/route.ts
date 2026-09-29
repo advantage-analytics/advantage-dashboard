@@ -57,6 +57,7 @@ import {
   resubmitJob,
 } from "@/lib/services/splitstep/resubmit-job";
 import { gradeResults } from "@/lib/services/splitstep/grade-results";
+import { secureResults } from "@/lib/services/splitstep/secure-results";
 import { deriveAndPublish } from "@/lib/services/splitstep/derive-and-publish";
 import { deriveAndStoreBallPaths } from "@/lib/services/splitstep/ball-paths-store";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
@@ -446,40 +447,23 @@ export async function POST(request: NextRequest) {
         let storedKey = record.results_object_key ?? resultsKey;
 
         if (strokesUrl) {
-          const stored = await storeVendorJson({
+          // Download, store, finalize and log — extracted to secure-results.ts
+          // so the reconciler can run the same step without a delivery.
+          const secured = await secureResults({
             supabase,
-            url: strokesUrl,
+            deliveryId,
+            jobId,
+            strokesUrl,
             objectKey: resultsKey,
             timeoutMs: RESULTS_FETCH_TIMEOUT_MS,
-            // Kept in memory for the grading step below, which would otherwise
-            // read it straight back out of storage.
-            returnBody: true,
+            logPrefix: LOG,
           });
 
-          await supabase.rpc("finalize_splitstep_results", {
-            p_delivery_id: deliveryId,
-            p_job_id: jobId,
-            p_results_object_key: stored.ok ? stored.objectKey : null,
-            p_error: stored.ok ? null : stored.error,
-          });
+          resultsSecured = secured.resultsSecured;
 
-          resultsSecured = stored.ok;
-
-          if (stored.ok) {
-            resultsBody = stored.body;
-            storedKey = stored.objectKey;
-            pipelineLog.info(`${LOG} results stored`, {
-              jobId,
-              objectKey: stored.objectKey,
-              bytes: stored.bytes,
-            });
-          } else {
-            // Loud, because nothing retries this. The url is on the job row
-            // (`sas_url`) and stays valid for days — it can be fetched by hand.
-            pipelineLog.error(
-              `${LOG} results download FAILED — recover from the stored strokes url (processing_jobs.sas_url)`,
-              { deliveryId, jobId, error: stored.error },
-            );
+          if (secured.resultsSecured) {
+            resultsBody = secured.body;
+            storedKey = secured.objectKey;
           }
         }
 

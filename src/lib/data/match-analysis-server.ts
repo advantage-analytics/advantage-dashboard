@@ -14,10 +14,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   type MatchAnalysis,
+  chainAttempts,
   importedAnalysis,
-  isInputRejected,
+  jobRecoveryFacts,
   manualAnalysis,
   pipelinePercent,
+  recoveryFields,
   resolveAnalysisStatus,
 } from "./match-analysis";
 import { formatClock } from "@/components/dashboard/matches/new-match-wizard/utils";
@@ -31,6 +33,16 @@ interface JobRow {
   error_message: string | null;
   /** The vendor's failure class; `invalid_input` means the video was refused. */
   error_category: string | null;
+  error_code: string | null;
+  error_step: string | null;
+  /**
+   * Storage keys, read ONLY to become `hasVideo` / `hasResults` below. Never
+   * copied onto `MatchAnalysis`: this loader's output crosses to the client.
+   */
+  video_object_key: string | null;
+  results_object_key: string | null;
+  /** The parent in a resubmission chain — what `chainAttempts()` walks. */
+  resubmitted_from_job_id: string | null;
   billable_seconds: number | null;
   external_job_id: string | null;
   created_at: string;
@@ -91,7 +103,7 @@ export async function loadMatchAnalysis(
   const { data, error } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, status, upload_progress_percent, error_message, error_category, billable_seconds, external_job_id, created_at, updated_at, derivation_version",
+      "id, match_id, status, upload_progress_percent, error_message, error_category, error_code, error_step, video_object_key, results_object_key, resubmitted_from_job_id, billable_seconds, external_job_id, created_at, updated_at, derivation_version",
     )
     .in("match_id", matchIds)
     // Newest first, so the reduce below keeps the latest attempt per match.
@@ -107,25 +119,51 @@ export async function loadMatchAnalysis(
     return out;
   }
 
+  // Every row per match, so the newest job's chain can be counted without a
+  // second query. Still newest-first within each list.
+  const rowsByMatch = new Map<string, JobRow[]>();
   for (const row of (data ?? []) as JobRow[]) {
-    // First row wins: the query is newest-first, so a resubmitted match shows
-    // its current attempt rather than a stale one.
-    if (out.has(row.match_id)) continue;
+    const list = rowsByMatch.get(row.match_id);
+    if (list) list.push(row);
+    else rowsByMatch.set(row.match_id, [row]);
+  }
 
-    const status = resolveAnalysisStatus(row.status, row.derivation_version);
-    if (!status) {
+  for (const [matchId, rows] of rowsByMatch) {
+    // First mappable row wins: the query is newest-first, so a resubmitted
+    // match shows its current attempt rather than a stale one. A row the UI
+    // has no word for is warned about and skipped, falling through to the
+    // next-newest, as it did before rows were grouped.
+    let row: JobRow | undefined;
+    let status: ReturnType<typeof resolveAnalysisStatus>;
+    for (const candidate of rows) {
+      status = resolveAnalysisStatus(
+        candidate.status,
+        candidate.derivation_version,
+      );
+      if (status) {
+        row = candidate;
+        break;
+      }
       console.warn("[match-analysis] unmapped processing_jobs.status", {
-        status: row.status,
+        status: candidate.status,
       });
-      continue;
     }
+    if (!row || !status) continue;
 
     const uploadPercent =
       status === "uploading" && row.upload_progress_percent !== null
         ? row.upload_progress_percent
         : undefined;
 
-    out.set(row.match_id, {
+    const attemptsUsed = chainAttempts(rows, row.id);
+    // The keys become booleans here and go no further.
+    const facts = jobRecoveryFacts({
+      ...row,
+      hasVideo: row.video_object_key !== null,
+      hasResults: row.results_object_key !== null,
+    });
+
+    out.set(matchId, {
       status,
       progressPercent: pipelinePercent(status, uploadPercent),
       // Only the upload has a real number. The vendor sends status transitions
@@ -144,7 +182,8 @@ export async function loadMatchAnalysis(
       jobReference: row.external_job_id ?? undefined,
       window: formatWindow(row.billable_seconds),
       failNote: row.error_message ?? undefined,
-      inputRejected: isInputRejected(row.status, row.error_category),
+      attemptsUsed,
+      ...recoveryFields(facts, attemptsUsed, row.error_message),
     });
   }
 

@@ -23,13 +23,17 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import {
   type MatchAnalysis,
-  isInputRejected,
+  type RecoveryFacts,
+  jobRecoveryFacts,
   pipelinePercent,
+  recoveryFields,
   resolveAnalysisStatus,
 } from "@/lib/data/match-analysis";
 
 /** The columns a live update can change. Everything else comes from the server render. */
 export interface LiveJobRow {
+  /** `processing_jobs.id` — tells a resubmission apart from the server-rendered job. */
+  id: string;
   match_id: string;
   status: string;
   upload_progress_percent: number | null;
@@ -47,6 +51,31 @@ export interface LiveJobRow {
    * than fetching.
    */
   derivation_version: string | null;
+  /** When the row last moved — the stall clock for `isSubmitStalled`. */
+  updated_at: string | null;
+  error_code: string | null;
+  error_step: string | null;
+  /**
+   * On the wire because the payload is the whole row. Read only to become the
+   * `hasVideo` / `hasResults` recovery inputs; never stored on a patch.
+   */
+  video_object_key: string | null;
+  results_object_key: string | null;
+  /** Set on a resubmission — the one chain fact a realtime row carries. */
+  resubmitted_from_job_id: string | null;
+}
+
+/**
+ * What `withLiveAnalysis` needs to re-decide `recovery` against the base
+ * analysis's chain count. Booleans and codes only — no storage key.
+ */
+export interface LiveRecoveryBasis {
+  /** The live row's job id, compared with the base analysis's `jobId`. */
+  jobId: string | undefined;
+  /** The live row is a resubmission (`resubmitted_from_job_id` set). */
+  resubmitted: boolean;
+  facts: RecoveryFacts;
+  errorMessage: string | null;
 }
 
 export type LiveAnalysisPatch = Pick<
@@ -55,22 +84,33 @@ export type LiveAnalysisPatch = Pick<
   | "progressPercent"
   | "uploadPercent"
   | "failNote"
-  | "inputRejected"
+  | "recovery"
+  | "note"
+  | "errorCode"
   | "jobReference"
   | "startedAt"
->;
+> & {
+  /**
+   * Consumed by `withLiveAnalysis` and never merged onto the analysis. Absent
+   * on a projection that is not a live patch (the activity tray's server item).
+   */
+  recoveryBasis?: LiveRecoveryBasis;
+};
 
 /**
  * Project one realtime `processing_jobs` row onto the fields a live update may
  * override. Pure, and exported so it can be tested without a socket.
  *
  * Returns undefined for a status the UI has no word for; the caller warns and
- * skips. `inputRejected` is set on EVERY patch, not only failed ones, so a
- * later non-failed row (a resubmission) resets it to false rather than leaving
- * the previous refusal merged over the server render.
+ * skips. `recovery` is set on EVERY patch (via `recoveryFields`), not only
+ * failed ones, so a later non-failed row (a resubmission) resets it to
+ * undefined rather than leaving the previous refusal merged over the server
+ * render.
  */
 export function liveAnalysisPatch(
   row: Pick<LiveJobRow, "status"> & Partial<LiveJobRow>,
+  attemptsUsed: number = 1,
+  nowMs: number = Date.now(),
 ): LiveAnalysisPatch | undefined {
   const status = resolveAnalysisStatus(row.status, row.derivation_version);
   if (!status) return undefined;
@@ -80,6 +120,18 @@ export function liveAnalysisPatch(
       ? row.upload_progress_percent
       : undefined;
 
+  // The same projection the server loader uses. The keys become booleans here
+  // and are not stored.
+  const facts = jobRecoveryFacts(
+    {
+      ...row,
+      hasVideo: row.video_object_key != null,
+      hasResults: row.results_object_key != null,
+    },
+    nowMs,
+  );
+  const errorMessage = row.error_message ?? null;
+
   return {
     status,
     progressPercent: pipelinePercent(status, uploadPercent),
@@ -88,8 +140,16 @@ export function liveAnalysisPatch(
     // first live event landed.
     startedAt: row.created_at,
     failNote: row.error_message ?? undefined,
-    inputRejected: isInputRejected(row.status, row.error_category),
+    // Decided with `attemptsUsed` (default 1) so the patch reads correctly on
+    // its own; `withLiveAnalysis` re-decides it against the base chain count.
+    ...recoveryFields(facts, attemptsUsed, errorMessage),
     jobReference: row.external_job_id ?? undefined,
+    recoveryBasis: {
+      jobId: row.id,
+      resubmitted: row.resubmitted_from_job_id != null,
+      facts,
+      errorMessage,
+    },
   };
 }
 
@@ -222,10 +282,33 @@ export function useLiveMatchAnalysis(
  * that serializes a narrower projection than the full `MatchAnalysis` — the
  * header activity tray reads four of its fields, not eleven — can still use
  * this rather than hand-rolling the same spread.
+ *
+ * A realtime row carries no chain, so `recovery` is re-decided here from the
+ * base analysis's `attemptsUsed` — plus one when the live row is a different
+ * job that was resubmitted from another (a retry the server render predates).
  */
-export function withLiveAnalysis<T extends LiveAnalysisPatch>(
-  analysis: T,
-  patch: LiveAnalysisPatch | undefined,
-): T {
-  return patch ? { ...analysis, ...patch } : analysis;
+export function withLiveAnalysis<
+  T extends Omit<LiveAnalysisPatch, "recoveryBasis"> &
+    Pick<MatchAnalysis, "jobId" | "attemptsUsed">,
+>(analysis: T, patch: LiveAnalysisPatch | undefined): T {
+  if (!patch) return analysis;
+  const { recoveryBasis, ...fields } = patch;
+  if (!recoveryBasis) return { ...analysis, ...fields };
+
+  const base = analysis.attemptsUsed ?? 1;
+  const attemptsUsed =
+    recoveryBasis.resubmitted && recoveryBasis.jobId !== analysis.jobId
+      ? base + 1
+      : base;
+
+  return {
+    ...analysis,
+    ...fields,
+    attemptsUsed,
+    ...recoveryFields(
+      recoveryBasis.facts,
+      attemptsUsed,
+      recoveryBasis.errorMessage,
+    ),
+  };
 }

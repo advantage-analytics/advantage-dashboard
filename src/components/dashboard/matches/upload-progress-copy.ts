@@ -2,8 +2,8 @@
  * The words for "a video is uploading", shared by the two screens that say it.
  *
  * The wizard's success screen (`new-match-wizard/UploadMatchSuccess.tsx`) shows
- * them from the tab doing the transfer; the match page's progress panel
- * (`match-detail/match-analysis-progress.tsx`) shows them from the job row while
+ * them from the tab doing the transfer; the match page's analysis column
+ * (`match-detail/analysis-steps-column.tsx`) shows them from the job row while
  * its status is `uploading`. A player who follows "View match" mid-upload lands
  * on the second after reading the first, so the two must read the same — and
  * the only way they cannot drift is one copy both import.

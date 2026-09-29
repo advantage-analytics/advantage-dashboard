@@ -23,8 +23,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   type MatchAnalysis,
+  chainAttempts,
   isWorking,
+  jobRecoveryFacts,
   pipelinePercent,
+  recoveryFields,
   resolveAnalysisStatus,
 } from "./match-analysis";
 import { shortName } from "./match-utils";
@@ -47,15 +50,30 @@ import {
 const MAX_ITEMS = 50;
 
 /**
- * The four fields the tray renders.
+ * The fields the tray renders, plus what a failed row's action is decided on.
  *
  * Narrower than `MatchAnalysis` because every item crosses the server/client
  * boundary on each dashboard navigation. It still satisfies `LiveAnalysisPatch`,
  * so the shared `withLiveAnalysis` merge works on it unchanged.
+ *
+ * `recovery` is the failed row's class (`classifyFailure()`), decided here
+ * because the tray only subscribes to live patches while something is
+ * live-updating — a failure that settled before the page loaded never gets a
+ * patch. `jobId` / `attemptsUsed` let `withLiveAnalysis` re-decide it after a
+ * live resubmit. `errorCode` is the code only (e.g. `QUOTA_EXCEEDED`), input
+ * to `waitOrAskVariant()`. Deliberately absent: `note`, `failNote`, any error
+ * message, and any storage key.
  */
 export type ActivityAnalysis = Pick<
   MatchAnalysis,
-  "status" | "progressPercent" | "uploadPercent" | "startedAt"
+  | "status"
+  | "progressPercent"
+  | "uploadPercent"
+  | "startedAt"
+  | "recovery"
+  | "jobId"
+  | "attemptsUsed"
+  | "errorCode"
 >;
 
 export interface ActivityItem {
@@ -173,11 +191,25 @@ function titleFor(player1: string | null, player2: string | null): string {
 }
 
 interface JobRow {
+  id: string;
   match_id: string;
   status: string;
   upload_progress_percent: number | null;
   derivation_version: string | null;
   created_at: string;
+  updated_at: string;
+  error_code: string | null;
+  error_category: string | null;
+  error_step: string | null;
+  /**
+   * Storage keys, read ONLY to become `hasVideo` / `hasResults` below. Never
+   * copied onto an item: the feed crosses to the client.
+   */
+  video_object_key: string | null;
+  results_object_key: string | null;
+  /** The parent in a resubmission chain — what `chainAttempts()` walks. */
+  resubmitted_from_job_id: string | null;
+  external_job_id: string | null;
   matches: {
     player1_name: string | null;
     player2_name: string | null;
@@ -200,7 +232,9 @@ export async function getActivityFeed(
   let query = supabase
     .from("processing_jobs")
     .select(
-      "match_id, status, upload_progress_percent, derivation_version, created_at, matches!inner(player1_name, player2_name, program_id)",
+      // The recovery columns mirror `loadMatchAnalysis`'s, less
+      // `error_message`: the tray renders no note, so the message is not read.
+      "id, match_id, status, upload_progress_percent, derivation_version, created_at, updated_at, error_code, error_category, error_step, video_object_key, results_object_key, resubmitted_from_job_id, external_job_id, matches!inner(player1_name, player2_name, program_id)",
     )
     .order("created_at", { ascending: false })
     .limit(MAX_ITEMS);
@@ -223,10 +257,26 @@ export async function getActivityFeed(
     return { items: [] };
   }
 
+  const rows = (data ?? []) as unknown as JobRow[];
+
+  // Every fetched row per match, so the current attempt's resubmission chain
+  // can be counted without a second query — `loadMatchAnalysis`'s grouping.
+  // The count only sees rows inside the `MAX_ITEMS` window: a chain whose
+  // older attempts fell past row 50 counts short, and a third attempt could
+  // then read `retry` where the match page says `wait_or_ask`. The route
+  // still refuses past the ceiling, so the cost is one button that answers
+  // with a refusal.
+  const rowsByMatch = new Map<string, JobRow[]>();
+  for (const row of rows) {
+    const list = rowsByMatch.get(row.match_id);
+    if (list) list.push(row);
+    else rowsByMatch.set(row.match_id, [row]);
+  }
+
   const items: ActivityItem[] = [];
   const seen = new Set<string>();
 
-  for (const row of (data ?? []) as unknown as JobRow[]) {
+  for (const row of rows) {
     // Newest first, so the first row for a match is its current attempt. A
     // resubmitted match must not appear twice in the tray.
     if (seen.has(row.match_id)) continue;
@@ -245,6 +295,23 @@ export async function getActivityFeed(
         ? row.upload_progress_percent
         : undefined;
 
+    const attemptsUsed = chainAttempts(
+      rowsByMatch.get(row.match_id) ?? [row],
+      row.id,
+    );
+    // The same projection `loadMatchAnalysis` and the live patch use. The keys
+    // become booleans here and go no further; the message is passed as null
+    // and `note` dropped, since the tray prints neither.
+    const { recovery, errorCode } = recoveryFields(
+      jobRecoveryFacts({
+        ...row,
+        hasVideo: row.video_object_key !== null,
+        hasResults: row.results_object_key !== null,
+      }),
+      attemptsUsed,
+      null,
+    );
+
     items.push({
       matchId: row.match_id,
       title: titleFor(
@@ -259,6 +326,10 @@ export async function getActivityFeed(
         // processing would be invented.
         uploadPercent,
         startedAt: row.created_at,
+        recovery,
+        jobId: row.id,
+        attemptsUsed,
+        errorCode,
       },
       at: row.created_at,
     });

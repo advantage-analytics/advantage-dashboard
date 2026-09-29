@@ -1424,7 +1424,7 @@ const ShotWellRow = memo(function ShotWellRow({
  * room's drawer where the rows start: no icon circle, no
  * skeleton rows, no sample point. The header above stays drawn in all three.
  * "Analysis still running" is deliberately absent — `matches/[matchId]/page.tsx`
- * short-circuits the whole pane to `MatchAnalysisProgress` while a match is
+ * short-circuits the whole page to `AnalysisSteps` while a match is
  * analysing, so this list can never be in that state.
  *
  * All three are the same three in the drawer, word for word. A cut that empties

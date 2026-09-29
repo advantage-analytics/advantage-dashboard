@@ -2,9 +2,10 @@ import { AnalysisProgressTrack } from "./analysis-progress-track";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
   ANALYSIS_LABEL,
-  isAnalysisFailed,
   isInFlight,
   isSubmitStalled,
+  matchListGroup,
+  matchListStatusLabel,
   type MatchAnalysis,
 } from "@/lib/data/match-analysis";
 
@@ -85,7 +86,10 @@ export function RowLifecycle({
     );
   }
 
-  if (isAnalysisFailed(status)) {
+  // Follows the list's own grouping decision, not isAnalysisFailed() alone:
+  // a `derivation_failed` row classified `stats_unavailable` must not read as
+  // Failed (product decision 2026-09-27, matchListGroup() in match-analysis.ts).
+  if (matchListGroup(analysis) === "Failed") {
     return (
       <StatusChip dot={false} tone="loss">
         Failed
@@ -95,7 +99,7 @@ export function RowLifecycle({
 
   return (
     <StatusChip dot={false} tone="neutral">
-      {status === "manual" ? "Not analyzed" : ANALYSIS_LABEL[status]}
+      {status === "manual" ? "Not analyzed" : matchListStatusLabel(analysis)}
     </StatusChip>
   );
 }

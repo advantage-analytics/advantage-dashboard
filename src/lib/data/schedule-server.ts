@@ -273,8 +273,14 @@ export async function readScheduleWithClient(
       duration: formatDuration(match.duration ?? undefined) || null,
       sourceProvider: match.source_provider ?? null,
       jobId: analysis?.jobId ?? null,
+      updatedAt: analysis?.updatedAt ?? null,
+      jobReference: analysis?.jobReference ?? null,
+      uploadPercent: analysis?.uploadPercent ?? null,
       failNote: analysis?.failNote ?? null,
-      inputRejected: analysis?.inputRejected ?? null,
+      recovery: analysis?.recovery ?? null,
+      note: analysis?.note ?? null,
+      errorCode: analysis?.errorCode ?? null,
+      attemptsUsed: analysis?.attemptsUsed ?? null,
     };
     const list = matchesByEntry.get(match.event_entry_id);
     if (list) list.push(entryMatch);

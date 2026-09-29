@@ -16,8 +16,12 @@ import { cn } from "@/lib/utils";
  */
 export type StepState = "done" | "now" | "later" | "fail";
 
-/** Inline colour: DS type classes are unlayered and beat Tailwind utilities. */
-const LABEL_INK: Record<StepState, string> = {
+/**
+ * Inline colour: DS type classes are unlayered and beat Tailwind utilities.
+ * Exported so the drawers' compact rows (`DrawerAnalysisSteps`) ink their
+ * labels from the same table.
+ */
+export const LABEL_INK: Record<StepState, string> = {
   done: "var(--ink-600)",
   now: "var(--ink-900)",
   later: "var(--ink-400)",
@@ -90,13 +94,43 @@ export function VerticalStep({
   );
 }
 
-export function StepMark({ state }: { state: StepState }) {
+/**
+ * The mark's two sizes. `default` is the 16px stepper mark every existing
+ * caller draws; `compact` is 14px, for a row whose leading column is 14px —
+ * the activity tray's `Lead` — with the glyph scaled to match (10px → 9px).
+ * Only the box and the glyph change; colours, borders and the screen-reader
+ * words are the same mark. Template strings, not `cn`, so the default size's
+ * class strings stay byte-for-byte what every existing caller already drew.
+ */
+export type StepMarkSize = "default" | "compact";
+
+const MARK_BOX: Record<StepMarkSize, string> = {
+  default: "size-4",
+  compact: "size-[14px]",
+};
+
+const MARK_GLYPH: Record<StepMarkSize, string> = {
+  default: "size-2.5",
+  compact: "size-[9px]",
+};
+
+export function StepMark({
+  state,
+  size = "default",
+}: {
+  state: StepState;
+  size?: StepMarkSize;
+}) {
+  const box = MARK_BOX[size];
+  const glyph = MARK_GLYPH[size];
   switch (state) {
     case "done":
       return (
-        <span className="flex size-4 items-center justify-center rounded-full bg-[var(--ink-100)]">
+        <span
+          className={`flex ${box} items-center justify-center rounded-full bg-[var(--ink-100)]`}
+        >
           <Check
-            className="size-2.5 text-[var(--ink-600)]"
+            className={`${glyph} text-[var(--ink-600)]`}
             strokeWidth={2.25}
             aria-hidden="true"
           />
@@ -107,7 +141,7 @@ export function StepMark({ state }: { state: StepState }) {
       // Ink, not blue: blue stays on the bar and the one button.
       return (
         <span
-          className="size-4 animate-spin rounded-full border-[1.5px] border-[var(--ink-200)] border-t-[var(--ink-900)] motion-reduce:animate-none"
+          className={`${box} animate-spin rounded-full border-[1.5px] border-[var(--ink-200)] border-t-[var(--ink-900)] motion-reduce:animate-none`}
           role="status"
         >
           <span className="sr-only">In progress:</span>
@@ -115,9 +149,11 @@ export function StepMark({ state }: { state: StepState }) {
       );
     case "fail":
       return (
-        <span className="flex size-4 items-center justify-center rounded-full bg-[rgba(229,24,55,0.08)]">
+        <span
+          className={`flex ${box} items-center justify-center rounded-full bg-[rgba(229,24,55,0.08)]`}
+        >
           <X
-            className="size-2.5 text-[var(--danger)]"
+            className={`${glyph} text-[var(--danger)]`}
             strokeWidth={2.25}
             aria-hidden="true"
           />
@@ -127,7 +163,9 @@ export function StepMark({ state }: { state: StepState }) {
     case "later":
       // Dashed means waiting for something real.
       return (
-        <span className="size-4 rounded-full border-[1.5px] border-dashed border-[var(--ink-300)]">
+        <span
+          className={`${box} rounded-full border-[1.5px] border-dashed border-[var(--ink-300)]`}
+        >
           <span className="sr-only">Not started:</span>
         </span>
       );
