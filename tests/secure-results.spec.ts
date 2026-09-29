@@ -17,7 +17,10 @@ import { createLoader } from "./fixtures/vm-modules";
 
 const JOB = "job-1";
 const DELIVERY = "del-1";
-const URL_ = "https://vendor.example.test/strokes.json?sig=abc";
+// On the vendor's account: the fetch is host-allowlisted (result-url-policy.ts)
+// and that guard has its own spec, secure-results-host-guard.spec.ts.
+const URL_ =
+  "https://splitstepclientvideos.blob.core.windows.net/out/job/strokes.json?sig=abc";
 const KEY = "results/user-1/match-1/job-1.json";
 const LOG = "[splitstep-webhook]";
 
@@ -55,7 +58,7 @@ function load() {
       logs.push({ level, message, detail });
     };
   const loader = createLoader({
-    globals: { Error, Blob, AbortSignal },
+    globals: { Error, Blob, AbortSignal, URL },
     stubs: {
       "./pipeline-log": {
         pipelineLog: {

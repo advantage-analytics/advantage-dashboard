@@ -58,6 +58,10 @@ import {
 import { parseWebhookPayload } from "@/lib/services/splitstep/webhook-payload";
 import { selectDeliveryStorageKeys } from "@/lib/services/splitstep/delivery-storage-keys";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
+import {
+  isAllowedResultUrl,
+  resultUrlHostname,
+} from "@/lib/services/splitstep/result-url-policy";
 import { releaseQuota } from "@/lib/services/splitstep/quota";
 import {
   isDownloadFailure,
@@ -554,6 +558,12 @@ export async function POST(request: NextRequest) {
  * straight back out of storage. The per-frame files are tens of megabytes and
  * nothing here reads them, so they go through as a Blob and are never decoded
  * into a string at all.
+ *
+ * The URL is checked against the result-host allowlist before anything is
+ * fetched (result-url-policy.ts): the payload is untrusted input and this is
+ * the server making a request it names. A refusal is an ordinary `ok: false`,
+ * so the caller logs the same recovery path it does for any other miss; the
+ * line here names the host only, never the signed URL.
  */
 async function storeVendorJson(params: {
   supabase: ReturnType<typeof createAdminClient>;
@@ -567,13 +577,23 @@ async function storeVendorJson(params: {
 > {
   const { supabase, url, objectKey, timeoutMs, returnBody = false } = params;
 
+  if (!isAllowedResultUrl(url)) {
+    const hostname = resultUrlHostname(url);
+    pipelineLog.error(`${LOG} result url host not allowed — not fetched`, {
+      objectKey,
+      hostname,
+    });
+    return { ok: false, error: `result url host not allowed: ${hostname}` };
+  }
+
   let body: Blob;
   let text: string | undefined;
   try {
     const response = await fetch(url, {
       signal: AbortSignal.timeout(timeoutMs),
-      // No credentials — the URL carries its own.
-      redirect: "follow",
+      // No credentials — the URL carries its own. A redirect is refused rather
+      // than followed: the allowlist above was checked against THIS host.
+      redirect: "error",
     });
 
     if (!response.ok) {

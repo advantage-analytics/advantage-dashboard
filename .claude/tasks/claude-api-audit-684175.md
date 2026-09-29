@@ -57,7 +57,7 @@ ready).
 
 ## T4 · Host allowlist and no-redirect on vendor result fetches
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/lib/services/splitstep/result-url-policy.ts (new), src/lib/services/splitstep/secure-results.ts, src/app/api/webhooks/splitstep/route.ts, .env.example, tests/result-url-policy.spec.ts (new), tests/secure-results-host-guard.spec.ts (new) (guess)
 - **done when:**

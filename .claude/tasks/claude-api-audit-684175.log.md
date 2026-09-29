@@ -30,3 +30,13 @@ is the runner's. Newest entries at the bottom.
 
 1. **Wrong-mail edge (new with this gate):** any delivery landing on a row already `failed` now enters the branch — e.g. a late `job_processing` for a parent job that was auto-resubmitted after a download failure (no mail was sent then). It carries no error fields, so `retryable` is false and the user gets an "analysis failed" email while the retry runs. Tighten to `payload.nextStatus === "failed" && record.job_status === "failed"` (strict subset of old and new gates). Quota/resubmit side effects stay idempotent either way.
 2. The completed branch still keys on `payload.nextStatus === "completed"`; its downloads are guarded by `already_stored` and per-file keys. Could take the same row gate (completed/deriving/derivation_failed).
+
+## T4 · Host allowlist and no-redirect on vendor result fetches — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** New pure `src/lib/services/splitstep/result-url-policy.ts` (`isAllowedResultUrl`, `defaultResultHosts`, helper `resultUrlHostname`): https + exact hostname match against the vendor host, `${AZURE_STORAGE_ACCOUNT}.blob.core.windows.net` and `SPLITSTEP_RESULT_HOSTS`. Both `storeVendorJson` copies (secure-results.ts, webhook route) refuse a disallowed host before fetching (hostname-only error log) and fetch with `redirect: "error"`. `.env.example` documents `SPLITSTEP_RESULT_HOSTS`. New specs `tests/result-url-policy.spec.ts`, `tests/secure-results-host-guard.spec.ts`; `tests/secure-results.spec.ts` fixture moved onto the vendor host and given `URL` in its vm globals (required by the allowlist).
+**follow-ups:**
+
+1. Grep `docs/` for webhook descriptions that still say result files follow redirects.
+2. `route.ts` and `secure-results.ts` still each carry their own `storeVendorJson` — fold into one.
+3. `.env.example` says a refusal "lands in processing_error"; true for the strokes file only — per-frame refusals land in the log line.
