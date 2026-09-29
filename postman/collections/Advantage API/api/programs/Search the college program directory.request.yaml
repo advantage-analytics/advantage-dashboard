@@ -1,0 +1,18 @@
+$kind: http-request
+description: 'Public — the claim flow runs before an account exists. Up to 8 rows; a term under two characters answers `{"results": []}` without a query. A failed search also answers an empty list. `intent=join` returns the redacted player view (no owner, one `onAdvantage` boolean); any other value is the coach view. Cached publicly for five minutes per URL.'
+url: "{{baseUrl}}/api/programs/search?q=<string>&intent=<string>"
+method: GET
+headers:
+  Accept: application/json
+queryParams:
+  - key: q
+    value: <string>
+    disabled: false
+    description: Search term, matched anywhere in the school name or abbreviation.
+  - key: intent
+    value: <string>
+    disabled: false
+    description: "`join` for the redacted player view; anything else is the coach view."
+settings: {}
+examples: ./.resources/Search the college program directory.resources/examples
+order: 1000

@@ -1,0 +1,32 @@
+$kind: http-example
+name: "A decided refusal: the caller holds no workspace the match belongs to, the upload contract refuses the row (program status, role, line, athlete), the allowance is not open to this caller (`reserveQuota()`'s permission refusal, which carries `usedSeconds` and `capSeconds` of 0), or an admin-console video operation does not line up with this job."
+request:
+  url: "{{baseUrl}}/api/splitstep/jobs"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "jobId": "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f",
+        "initialTopPlayerIsPlayer1": true,
+        "adScoring": true,
+        "fixedCamera": true
+      }
+response:
+  statusCode: 403
+  statusText: Forbidden
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "You do not have access to the workspace this match belongs to."
+      }
+order: 4000

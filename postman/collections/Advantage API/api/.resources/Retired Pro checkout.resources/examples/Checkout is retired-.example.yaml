@@ -1,0 +1,26 @@
+$kind: http-example
+name: Checkout is retired.
+request:
+  url: "{{baseUrl}}/api/create-checkout-session"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 410
+  statusText: Gone
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "Advantage is free during the beta, so there is nothing to buy right now."
+      }
+order: 1000

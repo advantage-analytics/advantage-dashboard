@@ -1,0 +1,31 @@
+$kind: http-example
+name: The job is not rebuildable, or a rebuild already holds it.
+request:
+  url: "{{baseUrl}}/api/splitstep/jobs/:jobId/rederive"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  pathVariables:
+    - key: jobId
+      value: <uuid>
+      disabled: false
+      description: (Required) A `processing_jobs` id. A value that is not a UUID answers 404 "Job not found", the same as a missing job or someone else's.
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 409
+  statusText: Conflict
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "This match isn't waiting on a statistics rebuild."
+      }
+order: 4000

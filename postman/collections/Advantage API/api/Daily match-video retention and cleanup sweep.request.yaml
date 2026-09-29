@@ -1,0 +1,13 @@
+$kind: http-request
+description: "Scheduled by `vercel.json` at 05:00 UTC. Expires videos a year unwatched, warns those 30 days from it, then sweeps retired and abandoned attachments out of storage. The bearer check runs first and fails closed: an unset or blank `CRON_SECRET` refuses every request, and no step — nor the service-role client — runs until it matches. The three steps are independent: a failed expire or warn step is reported as a 500 but the sweep still runs. A 200 can still count rows that failed and were backed off."
+url: "{{baseUrl}}/api/cron/cleanup-match-videos"
+method: GET
+headers:
+  Accept: application/json
+auth:
+  type: bearer
+  credentials:
+    token: "{{bearerToken}}"
+settings: {}
+examples: ./.resources/Daily match-video retention and cleanup sweep.resources/examples
+order: 7000

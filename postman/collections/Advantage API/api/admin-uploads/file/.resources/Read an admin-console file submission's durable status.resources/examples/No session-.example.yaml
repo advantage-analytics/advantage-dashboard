@@ -1,0 +1,30 @@
+$kind: http-example
+name: No session.
+request:
+  url: "{{baseUrl}}/api/admin/uploads/file?operationId=8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d&itemId=9b0c1d2e-3f4a-4b6c-9d7e-8f9a0b1c2d3e"
+  method: GET
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  queryParams:
+    operationId: 8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d
+    itemId: 9b0c1d2e-3f4a-4b6c-9d7e-8f9a0b1c2d3e
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 401
+  statusText: Unauthorized
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "ok": false,
+        "message": "Administrator access is required."
+      }
+order: 3000

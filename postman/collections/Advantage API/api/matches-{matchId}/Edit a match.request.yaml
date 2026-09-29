@@ -1,0 +1,57 @@
+$kind: http-request
+description: "Partial update of the caller's own match. The rules live in `normalizeMatchPatch` (`src/lib/matches/patch-match.ts`): a match on a scheduled event line refuses the event-owned fields, an analysed match keeps its format fixed, and a team match's player must come from the program roster (the saved name is the roster's, never the client's). `private` is forced to `true` on every save during the beta."
+url: "{{baseUrl}}/api/matches/:matchId"
+method: PATCH
+headers:
+  Content-Type: application/json
+  Accept: application/json
+pathVariables:
+  - key: matchId
+    value: <uuid>
+    disabled: false
+    description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+body:
+  type: json
+  content: |-
+    {
+      "tournament_name": "<string,null>",
+      "round": "<string,null>",
+      "date": "2024-01-01",
+      "match_type": "<string,null>",
+      "court_type": "<string,null>",
+      "player1_id": "<string>",
+      "player1_name": "<string>",
+      "player2_name": "<string>",
+      "player_hand": "<string>",
+      "opponent_hand": "<string>",
+      "player_backhand": "<string>",
+      "opponent_backhand": "<string>",
+      "format": {
+        "best_of": 0,
+        "ad_scoring": "<boolean,null>",
+        "play_on_lets": "<boolean,null>",
+        "games_to": 0
+      },
+      "score": {
+        "player1": [
+          0,
+          0
+        ],
+        "player2": [
+          0,
+          0
+        ],
+        "player1_tiebreaks": [
+          "<integer,null>",
+          "<integer,null>"
+        ],
+        "player2_tiebreaks": [
+          "<integer,null>",
+          "<integer,null>"
+        ],
+        "winner": "<string,null>"
+      }
+    }
+settings: {}
+examples: ./.resources/Edit a match.resources/examples
+order: 2000

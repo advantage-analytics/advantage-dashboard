@@ -1,0 +1,14 @@
+$kind: http-request
+description: For anyone who can see the match (RLS visibility, not ownership). The stored file is returned verbatim; a match with no file answers 200 with `{"version":1,"strokes":[]}`, never 404.
+url: "{{baseUrl}}/api/matches/:matchId/ball-paths"
+method: GET
+headers:
+  Accept: application/json
+pathVariables:
+  - key: matchId
+    value: <uuid>
+    disabled: false
+    description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+settings: {}
+examples: ./.resources/Read the derived ball paths for a match.resources/examples
+order: 4000

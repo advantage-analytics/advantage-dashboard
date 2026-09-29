@@ -1,0 +1,46 @@
+$kind: http-example
+name: The uploaded file cannot be played, or cannot be aligned to the match.
+request:
+  url: "{{baseUrl}}/api/matches/:matchId/video/uploads/:attachmentId/complete"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  pathVariables:
+    - key: matchId
+      value: <uuid>
+      disabled: false
+      description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+    - key: attachmentId
+      value: <uuid>
+      disabled: false
+      description: (Required) The upload attempt's id, as returned by the reservation. A value that is not a UUID answers 404 `match_not_found`.
+  body:
+    type: json
+    content: |-
+      {
+        "confirmedVideoTimeSeconds": 63.5,
+        "expectedActive": null
+      }
+response:
+  statusCode: 422
+  statusText: Unprocessable Entity (WebDAV) (RFC 4918)
+  headers:
+    - key: Cache-Control
+      value: string
+      disabled: false
+      description: Every answer carries a credential or is per-caller, so none is cacheable.
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "This video cannot be played. Export it as an MP4 with H.264 video and try again.",
+        "code": "unsupported_media",
+        "detail": "extension"
+      }
+order: 9000

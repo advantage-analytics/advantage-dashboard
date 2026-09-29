@@ -72,6 +72,10 @@ src/styles/design-system/colors.css
 # Any future generated file belongs here for the same reason.
 MAP.md
 
+# postman/collections/ is written by `npm run api:collection` (postman spec generate
+# collection) from openapi/advantage-api.yaml; a reformat fights the generator.
+postman/collections/
+
 # supabase/email-templates/*.html are written by scripts/build_email_templates.py.
 # Two reasons beyond "it is generated": the next generator run would clobber any
 # formatting anyway, and src/lib/services/email/shell.ts is a HAND-COPY of this

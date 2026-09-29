@@ -1,0 +1,51 @@
+$kind: collection
+description: |
+  Every path here is a Next.js route handler in `src/app/api/`. The handler
+  code is the source of truth: each status code below is one the handler, or
+  the module it delegates to, returns as a literal.
+
+  **Authentication.** Signed-in routes read the Supabase session from its
+  cookie (`cookieAuth`) through `createClient()`; there is no bearer token.
+  `/api/programs/search` is the only public browser route in this file.
+
+  **Machine callers.** The rule above is about browser routes. The vendor
+  and Stripe webhooks and the cleanup cron carry no session: they
+  authenticate with `splitstepHmac`, `stripeSignature` and `cronBearer`.
+  Two further operations take no credential at all — the vendor webhook's
+  GET liveness check and the retired `/api/create-checkout-session`, which
+  answers 410 to everyone. The admin upload routes use the session and
+  additionally require `users.is_admin`.
+
+  **Same origin.** Every mutation under `/api/matches/{matchId}/video`
+  also requires a request from a page this deployment served
+  (`checkSameOrigin`): a cross-site `Sec-Fetch-Site`, a missing `Origin`, or
+  an `Origin` that is neither the request's own nor the configured site URL
+  is refused with `403 cross_origin` before anything else runs. Those
+  routes also require `Content-Type: application/json` and cap the body at
+  4096 bytes (`413 request_too_large`).
+
+  **Errors.** Three envelopes, by route family:
+
+  - the video routes answer `ErrorResponse` with a stable `code` (see
+    `MatchVideoErrorCode` in `src/lib/match-video/types.ts` and the
+    transport codes in `src/lib/services/match-video/http.ts`) and send
+    `Cache-Control: private, no-store` on every answer;
+  - `/api/matches/{matchId}` answers `ErrorResponse` with `error` only, plus
+    `field` on a validation refusal;
+  - `/api/upload` and `/api/validate-file` answer `{ success: false, error }`.
+
+  The routes added in part 2 keep to the same shapes with three additions:
+  the video-analysis routes answer `ErrorResponse`, with the allowance
+  figures, the builder's `details` or the resubmit `reason` beside `error`
+  where the handler adds them; the admin upload routes answer
+  `{ ok: false, message }`; and the two insight routes answer plain text.
+variables:
+  baseUrl: https://app.advantage-analytics.com
+auth:
+  - id: b75d8fb6-3c0f-48cf-84f8-02c4f41eba20
+    type: apikey
+    name: apikey auth
+    credentials:
+      key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: "{{apiKey}}"
+      in: header

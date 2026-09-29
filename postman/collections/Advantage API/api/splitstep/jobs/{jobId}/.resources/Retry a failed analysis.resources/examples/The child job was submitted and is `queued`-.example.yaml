@@ -1,0 +1,33 @@
+$kind: http-example
+name: The child job was submitted and is `queued`.
+request:
+  url: "{{baseUrl}}/api/splitstep/jobs/:jobId/resubmit"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  pathVariables:
+    - key: jobId
+      value: <uuid>
+      disabled: false
+      description: (Required) A `processing_jobs` id. A value that is not a UUID answers 404 "Job not found", the same as a missing job or someone else's.
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "jobId": "4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a",
+        "externalJobId": "ss-job-81f2d7",
+        "status": "queued"
+      }
+order: 1000

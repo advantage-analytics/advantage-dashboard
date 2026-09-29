@@ -1,0 +1,18 @@
+$kind: http-request
+description: 'Signed-in only. Lets a coach about to create a club, high school or academy find one a colleague already made. Up to 8 rows; a term under two characters, or a failed search, answers `{"results": []}`. Never cached.'
+url: "{{baseUrl}}/api/programs/custom-search?q=<string>&type=<string>"
+method: GET
+headers:
+  Accept: application/json
+queryParams:
+  - key: q
+    value: <string>
+    disabled: false
+    description: Search term, matched against the org name.
+  - key: type
+    value: <string>
+    disabled: false
+    description: Narrow to one custom org type. Any other value searches every type.
+settings: {}
+examples: ./.resources/Search existing custom orgs.resources/examples
+order: 2000

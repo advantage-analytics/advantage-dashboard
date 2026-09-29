@@ -196,7 +196,7 @@ ready).
 
 ## T15 · Generate and commit the v3 Postman collection
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T14
 - **files:** postman/collections/advantage-api.postman_collection.json (new), package.json, .prettierignore (guess)

@@ -1,0 +1,55 @@
+$kind: http-example
+name: The operation holds a match and a job to upload into.
+request:
+  url: "{{baseUrl}}/api/admin/uploads/video"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "operationId": "8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d",
+        "itemId": "9b0c1d2e-3f4a-4b6c-9d7e-8f9a0b1c2d3e",
+        "programId": "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a",
+        "playerId": "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+        "opponentName": "Sam Chen",
+        "score": {
+          "player1": [
+            6,
+            6
+          ],
+          "player2": [
+            3,
+            4
+          ]
+        },
+        "date": "2026-09-12",
+        "courtType": "Outdoor Hard Court",
+        "bestOf": 3,
+        "startSeconds": 42.5,
+        "endSeconds": 5224.5,
+        "initialTopPlayerIsPlayer1": true,
+        "adScoring": true,
+        "fixedCamera": true
+      }
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "ok": true,
+        "operationId": "8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d",
+        "itemId": "9b0c1d2e-3f4a-4b6c-9d7e-8f9a0b1c2d3e",
+        "matchId": "5b0f4c1e-8a7d-4b43-9f7e-1c2d3e4f5a6b",
+        "jobId": "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f"
+      }
+order: 1000

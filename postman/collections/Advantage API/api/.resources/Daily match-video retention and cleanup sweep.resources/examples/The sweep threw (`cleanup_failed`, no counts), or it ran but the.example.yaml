@@ -1,0 +1,32 @@
+$kind: http-example
+name: The sweep threw (`cleanup_failed`, no counts), or it ran but the batch claim was refused (`claim_failed`) or the expire or warn step threw (`expiry_failed` / `warning_failed`) — those three carry the full report beside `error`.
+request:
+  url: "{{baseUrl}}/api/cron/cleanup-match-videos"
+  method: GET
+  headers:
+    - key: Authorization
+      value: Bearer <token>
+      description: "Added as a part of security scheme: bearer"
+    - key: Accept
+      value: application/json
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 500
+  statusText: Internal Server Error
+  headers:
+    - key: Cache-Control
+      value: string
+      disabled: false
+      description: Every answer carries a credential or is per-caller, so none is cacheable.
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "ok": false,
+        "error": "cleanup_failed"
+      }
+order: 3000

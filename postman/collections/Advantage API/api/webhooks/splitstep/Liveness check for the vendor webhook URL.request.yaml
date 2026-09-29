@@ -1,0 +1,9 @@
+$kind: http-request
+description: Lets the endpoint URL be confirmed reachable before anything is wired. Unauthenticated, and says nothing a holder of the URL does not already know.
+url: "{{baseUrl}}/api/webhooks/splitstep"
+method: GET
+headers:
+  Accept: application/json
+settings: {}
+examples: ./.resources/Liveness check for the vendor webhook URL.resources/examples
+order: 1000

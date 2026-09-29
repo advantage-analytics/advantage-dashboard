@@ -1,0 +1,36 @@
+$kind: http-example
+name: The delivery is recorded. Results download, grading, derivation, quota release and any automatic retry run after this answer.
+request:
+  url: "{{baseUrl}}/api/webhooks/splitstep"
+  method: POST
+  headers:
+    - key: x-hmac-signature
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "job_id": "ss-job-81f2c0",
+        "event": "job_completed",
+        "status": "completed",
+        "strokes_url": "https://vendor.blob.core.windows.net/results/ss-job-81f2c0/strokes.json?sv=2025-01-05&sp=r&sig=REDACTED",
+        "players_url": "https://vendor.blob.core.windows.net/results/ss-job-81f2c0/players.json?sv=2025-01-05&sp=r&sig=REDACTED",
+        "trajectories_url": null,
+        "trimmed_video_url": "https://vendor.blob.core.windows.net/results/ss-job-81f2c0/trimmed.mp4?sv=2025-01-05&sp=r&sig=REDACTED"
+      }
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "received": true,
+        "deliveryId": "6e7f8a9b-0c1d-4e2f-8a3b-4c5d6e7f8a9b"
+      }
+order: 1000

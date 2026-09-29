@@ -1,0 +1,17 @@
+$kind: http-request
+description: "Returns a `cw` SAS for exactly one blob name and records that name on the match's live job before the bytes move. The same questions the submit route asks — the match's workspace, the upload contract, the video permission and (as a read, failing open) the allowance — are asked here first, because the step after the credential is a multi-gigabyte transfer. Nothing is reserved; `/api/splitstep/jobs` remains the authority. The URL is a credential: never log it."
+url: "{{baseUrl}}/api/splitstep/upload-url"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "matchId": "<uuid>",
+      "fileName": "<string>"
+    }
+settings: {}
+examples: ./.resources/Mint a write-only upload URL for a match video.resources/examples
+order: 2000

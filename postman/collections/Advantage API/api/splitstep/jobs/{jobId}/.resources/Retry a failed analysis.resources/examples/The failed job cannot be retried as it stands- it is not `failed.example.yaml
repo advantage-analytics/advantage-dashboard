@@ -1,0 +1,32 @@
+$kind: http-example
+name: "The failed job cannot be retried as it stands: it is not `failed` (`not_failed`), the vendor rejected the recording itself (`input_rejected`), another analysis for the match is live (`in_flight_duplicate`), the chain is at its three-attempt ceiling (`attempt_ceiling`), or the source video is missing or could not be checked (`video_unavailable`). `already_auto_resubmitted` maps here too but only the webhook's automatic path can produce it."
+request:
+  url: "{{baseUrl}}/api/splitstep/jobs/:jobId/resubmit"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  pathVariables:
+    - key: jobId
+      value: <uuid>
+      disabled: false
+      description: (Required) A `processing_jobs` id. A value that is not a UUID answers 404 "Job not found", the same as a missing job or someone else's.
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 409
+  statusText: Conflict
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "Only a failed analysis can be retried; this one is completed.",
+        "reason": "not_failed"
+      }
+order: 5000

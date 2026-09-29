@@ -1,0 +1,26 @@
+$kind: http-example
+name: The usage ledger could not be read.
+request:
+  url: "{{baseUrl}}/api/splitstep/hours-left"
+  method: GET
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 503
+  statusText: Service Unavailable
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "Could not read usage"
+      }
+order: 3000

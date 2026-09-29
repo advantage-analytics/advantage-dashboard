@@ -148,3 +148,13 @@ is the runner's. Newest entries at the bottom.
 2. `/api/admin/uploads/video` has no try/catch — a throw is an unshaped Next 500 (the file route catches).
 3. `/api/webhooks/stripe` throws at module load when `STRIPE_WEBHOOK_SECRET` is unset, so every request 500s before the handler.
 4. `hours-left` sends `Cache-Control: no-store` (not `private, no-store` like the video routes).
+
+## T15 · Generate and commit the v3 Postman collection — done
+
+**gate:** mechanical first run GATE FAIL (full-suite test flake — 4343 passed, exit 1); re-run: `npx playwright test` exit 0, 4346 passed; lint ok; typecheck ok; `npm run api:collection:lint` "No issues found. Scanned: 31" · completion VERDICT: pass
+**changed:** `package.json` gains `api:collection` (`postman spec generate collection openapi/advantage-api.yaml -n "Advantage API" --force`, local mode) and `api:collection:lint`. The CLI (1.67.0) has no output-path/format flag in local mode and always writes a v3 collection as a YAML directory, so the committed artifact is `postman/collections/Advantage API/` (31 requests = 31 spec operations, `Paths` folders, 179 examples) rather than the single `advantage-api.postman_collection.json` the criterion named — reviewer judged the intent met. `.prettierignore` excludes `postman/collections/`. No cloud id, workspace or API key in any file; no `--workspace`/`--api-key` in the scripts.
+**follow-ups:**
+
+1. Regeneration also writes `.postman/workflows.yaml` (spec→collection sync link, relative paths) — deleted here; add `.postman/` to `.gitignore` or commit it if `postman collection sync` is wanted.
+2. The collection's auth block `id` is a random UUID that changes on every regeneration (one-line diff noise).
+3. The collection models the Supabase auth cookie as an `apikey` header named `sb-pouxujkhtbvkdwbzfvka-auth-token` (from the spec's `cookieAuth`).

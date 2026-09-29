@@ -1,0 +1,42 @@
+$kind: http-example
+name: "The request never reached the attachment domain: a non-JSON content type, an unreadable or malformed body, a body that is not an object, or a missing, mistyped or unexpected field. `detail` names the cause."
+request:
+  url: "{{baseUrl}}/api/matches/:matchId/video/uploads/:attachmentId/renew"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  pathVariables:
+    - key: matchId
+      value: <uuid>
+      disabled: false
+      description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+    - key: attachmentId
+      value: <uuid>
+      disabled: false
+      description: (Required) The upload attempt's id, as returned by the reservation. A value that is not a UUID answers 404 `match_not_found`.
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 400
+  statusText: Bad Request
+  headers:
+    - key: Cache-Control
+      value: string
+      disabled: false
+      description: Every answer carries a credential or is per-caller, so none is cacheable.
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "This request is not valid.",
+        "code": "invalid_request",
+        "detail": "unexpected_field:offsetSeconds"
+      }
+order: 2000

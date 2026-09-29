@@ -1,0 +1,50 @@
+$kind: http-request
+description: Validates and parses the workbook, stores it under `_admin-console/{operationId}/{itemId}/{sha256}.xlsx` (never overwritten), records it through `admin_submit_match_file` and, when the attempt is `queued`, dispatches `process-match`. Players, score and actor come from the file and the session, never the form. Either a prepared match (`matchId` + `fingerprint`) or a new one (`playerId`, `date`, `matchType`, `courtType`). Retry-safe on the same operation and file. Answers the durable status, as GET does.
+url: "{{baseUrl}}/api/admin/uploads/file"
+method: POST
+headers:
+  Content-Type: multipart/form-data
+  Accept: application/json
+body:
+  type: formdata
+  content:
+    - type: file
+      key: file
+      src: ""
+      contentType: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      description: (Required) The SwingVision .xlsx export.
+    - type: text
+      key: operationId
+      value: <uuid>
+      description: "(Required) "
+    - type: text
+      key: itemId
+      value: <uuid>
+      description: "(Required) "
+    - type: text
+      key: programId
+      value: <uuid>
+      description: "(Required) "
+    - type: text
+      key: matchId
+      value: <uuid>
+    - type: text
+      key: fingerprint
+      value: <string>
+    - type: text
+      key: playerId
+      value: <uuid>
+    - type: text
+      key: date
+      value: <date>
+    - type: text
+      key: matchType
+      value: <string>
+      description: " (This can only be one of Singles,Doubles)"
+    - type: text
+      key: courtType
+      value: <string>
+      description: A court label `adminUploadCourt()` accepts, or empty.
+settings: {}
+examples: ./.resources/Submit a SwingVision .xlsx from the admin console.resources/examples
+order: 2000

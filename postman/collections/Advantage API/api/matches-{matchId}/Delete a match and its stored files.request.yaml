@@ -1,0 +1,14 @@
+$kind: http-request
+description: Purges the match's storage first (`purgeMatchStorage`), then deletes the row. A match recorded or analysed through the admin console is refused with 409; a purge that cannot run is a retryable 503.
+url: "{{baseUrl}}/api/matches/:matchId"
+method: DELETE
+headers:
+  Accept: application/json
+pathVariables:
+  - key: matchId
+    value: <uuid>
+    disabled: false
+    description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+settings: {}
+examples: ./.resources/Delete a match and its stored files.resources/examples
+order: 3000
