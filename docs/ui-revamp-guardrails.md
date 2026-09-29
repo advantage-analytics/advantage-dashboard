@@ -138,20 +138,23 @@ be. Doubles teams and existing users depend on it.
 > Allowed on the attach exception's terms: a single explicit action by an
 > owner or coach who runs that program's schedule (`delete_schedule_event`);
 > scoped to the matches on the lines of the one event being deleted; only
-> from a line to no line; touching **only** `event_entry_id` and
-> `tournament_name` — **never** `score`, `format`, `player1_id` or
+> from a line to no line; touching **only** `event_entry_id`,
+> `tournament_name` and `round` (`date`, `match_type` and `court_type` stay —
+> they hold without a line; a round only means something inside the line
+> that gave it) — **never** `score`, `format`, `player1_id` or
 > `program_id`, and nothing under `match_stats`, `points` or `shots`; and
 > audit-logged to `program_audit_log` as `event.deleted` with
 > `detached_matches`, counted before the detach. A bare client UPDATE that
-> nulls `event_entry_id` is refused exactly as before. Migration:
-> `supabase/migrations/20260929210705_event_delete_detaches_under_client.sql`.
+> nulls `event_entry_id` is refused exactly as before. Migrations:
+> `supabase/migrations/20260929210705_event_delete_detaches_under_client.sql`,
+> then `round` added to the detach in `20260929213016_detach_clears_round.sql`.
 >
 > The same exception covers `detach_match_from_event_line`, added the same
 > day: the single-match inverse of `attach_match_to_event_line`, from the
 > Edit Match dialog. It is allowed on the attach exception's terms exactly —
 > a single explicit action by the match's own uploader, who must also run
 > that program's schedule; scoped to one match; only from a line to no line;
-> touching **only** `event_entry_id` and `tournament_name` (`round`, `date`,
+> touching **only** `event_entry_id`, `tournament_name` and `round` (`date`,
 > `match_type` and `court_type` stay — they describe the match, not the
 > line) — **never** `score`, `format`, `player1_id` or `program_id`, and
 > nothing under `match_stats`, `points` or `shots`; and audit-logged to
@@ -159,8 +162,9 @@ be. Doubles teams and existing users depend on it.
 > ids. The regraft trigger accepts the move only while a second
 > transaction-local marker names that one match, so a bare client UPDATE
 > stays refused; a saved outcome on the line does not block the detach and
-> is left untouched. Migration:
-> `supabase/migrations/20260929210741_detach_match_from_event_line.sql`.
+> is left untouched. Migrations:
+> `supabase/migrations/20260929210741_detach_match_from_event_line.sql`,
+> then `round` added to the detach in `20260929213016_detach_clears_round.sql`.
 
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >

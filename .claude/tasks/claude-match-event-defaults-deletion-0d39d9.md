@@ -108,7 +108,7 @@ ready).
 
 ## T8 · Clear `round` on both event detaches
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<ts>_detach_clears_round.sql (new), tests/schedule-event-delete-db.spec.ts, tests/detach-match-db.spec.ts, docs/ui-revamp-guardrails.md (guess)
 - **done when:**

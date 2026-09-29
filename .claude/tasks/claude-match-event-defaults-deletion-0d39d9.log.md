@@ -67,3 +67,11 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical GATE PASS; completion `VERDICT: pass` (criterion 3 widened by the author in chat to allow the drift seed change).
 **changed:** Restored stash eb0fb2d7: `featured-match-card.tsx` and `match-event-header.tsx` deleted (no importers). `scripts/check-design-drift.mjs` `defaultPalette` seed 1 → 0 — the deleted files held the last Tailwind default-palette class. MAP.md unchanged.
+
+## T8 · Clear `round` on both event detaches — done
+
+**gate:** mechanical GATE PASS; completion `VERDICT: pass`.
+**changed:** `supabase/migrations/20260929213016_detach_clears_round.sql` — `guard_event_delete` and `detach_match_from_event_line` now also set `round = null` (dual and tournament); applied live via `apply_migration` (version 20260929213016) and the file named to match. Both DB specs assert `round is null`; `detach-match-db.spec.ts` gains a dual-line case. Guardrails paragraphs updated.
+**follow-ups:**
+
+1. The T1/T2 migration headers still say the round stays; the new migration's header supersedes them (applied migrations aren't edited).

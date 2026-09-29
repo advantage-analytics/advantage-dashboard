@@ -88,12 +88,12 @@ test.describe("event deletion database boundary (local opt-in only)", () => {
       `begin; ${setup} update public.program_members set role='staff' where program_id='${program}'; ${actor} ${denied(`delete from public.program_events where id='${event}';`, "42501")} rollback;`,
     );
     // Recorded matches, forfeits and outcomes no longer block deletion: the
-    // match survives detached (line and tournament name cleared), outcomes
-    // cascade, and the audit counts matches.
+    // match survives detached (line, tournament name and round cleared),
+    // outcomes cascade, and the audit counts matches.
     const match = randomUUID();
     for (const [dependency, detached] of [
       [
-        `insert into public.matches(id,event_entry_id,score,tournament_name) values('${match}','${entry}','{"sets":[[6,0],[6,0]]}','Delete fixture');`,
+        `insert into public.matches(id,event_entry_id,score,tournament_name,round) values('${match}','${entry}','{"sets":[[6,0],[6,0]]}','Delete fixture','S1');`,
         "1",
       ],
       [
@@ -108,7 +108,7 @@ test.describe("event deletion database boundary (local opt-in only)", () => {
       sql(`begin; ${setup} ${dependency} ${actor}
         do $$ begin if (${remove.replace(/;$/, "")}) <> '${event}' then raise exception 'Wrong deleted id'; end if; end $$; reset role;
         do $$ begin if (select count(*) from public.program_events where id='${event}') <> 0 then raise exception 'Event survived'; end if;
-        if ${detached === "1" ? `not exists(select 1 from public.matches where id='${match}' and event_entry_id is null and tournament_name is null)` : `exists(select 1 from public.matches where event_entry_id='${entry}')`} then raise exception 'Match not detached'; end if;
+        if ${detached === "1" ? `not exists(select 1 from public.matches where id='${match}' and event_entry_id is null and tournament_name is null and round is null)` : `exists(select 1 from public.matches where event_entry_id='${entry}')`} then raise exception 'Match not detached'; end if;
         if exists(select 1 from public.program_event_outcomes where event_id='${event}') then raise exception 'Outcome survived'; end if;
         if (select details->>'detached_matches' from public.program_audit_log where subject_id='${event}' and actor_user_id='${user}' and action='event.deleted') is distinct from '${detached}' then raise exception 'Wrong detached count'; end if; end $$; rollback;`);
     }

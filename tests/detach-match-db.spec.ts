@@ -3,8 +3,9 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
 /**
- * `20260929210741_detach_match_from_event_line.sql`, proven against a
- * database that has it applied. Same shape as
+ * `20260929210741_detach_match_from_event_line.sql` and the follow-up that
+ * clears `round` on both detaches (`20260929213016_detach_clears_round.sql`), proven
+ * against a database that has them applied. Same shape as
  * `schedule-event-delete-db.spec.ts`: explicit operator opt-in to the one
  * verified disposable local container, psql over docker, every case inside a
  * transaction that rolls back. Never a host, a connection string or a remote
@@ -85,11 +86,34 @@ test.describe("detach a match from its event line (local opt-in only)", () => {
         if r->>'match_id' <> '${match}' or r->>'entry_id' <> '${entry}' or r->>'event_id' <> '${event}' or r->>'event_kind' <> 'tournament' or r->>'event_name' <> 'Detach fixture' then raise exception 'Wrong return: %', r; end if;
       end $$; reset role;
       do $$ begin
-        if not exists(select 1 from public.matches where id='${match}' and event_entry_id is null and tournament_name is null and program_id='${program}' and round='Semifinal' and score='{"sets":[[6,0],[6,0]]}'::jsonb) then raise exception 'Match not detached, or more than the line was touched'; end if;
+        if not exists(select 1 from public.matches where id='${match}' and event_entry_id is null and tournament_name is null and round is null and program_id='${program}' and score='{"sets":[[6,0],[6,0]]}'::jsonb) then raise exception 'Match not detached, or more than the line was touched'; end if;
         if (select count(*) from public.program_audit_log where program_id='${program}' and subject_id='${match}' and actor_user_id='${creator}' and action='match.detached'
             and details->>'match_id'='${match}' and details->>'entry_id'='${entry}' and details->>'event_id'='${event}') <> 1 then raise exception 'Wrong audit state'; end if;
         if (select count(*) from public.program_event_outcomes where entry_id='${entry}' and round='Final' and kind='default' and side='ours') <> 1 then raise exception 'Outcome touched'; end if;
         if not exists(select 1 from public.program_event_entries where id='${entry}') then raise exception 'Entry lost'; end if;
+      end $$; rollback;`);
+  });
+
+  test("a dual line: round is cleared too, the entry's slot is untouched", () => {
+    // `round` on a dual is the singles/doubles slot label ("S1"). It only
+    // means something on the line, so the detach clears it for duals exactly
+    // as for tournaments; the line keeps its own `slot`.
+    const dualEvent = randomUUID(),
+      dualEntry = randomUUID(),
+      dualMatch = randomUUID();
+    sql(`begin; ${setup}
+      insert into public.program_events(id,program_id,kind,name,starts_on,ends_on,site)
+      values('${dualEvent}','${program}','dual','Dual fixture','2026-09-12','2026-09-12','away');
+      insert into public.program_event_entries(id,event_id,program_id,discipline,slot) values('${dualEntry}','${dualEvent}','${program}','singles','1');
+      insert into public.matches(id,program_id,created_by,event_entry_id,round,score,tournament_name) values('${dualMatch}','${program}','${creator}','${dualEntry}','S1','{"sets":[[6,1],[6,1]]}','Dual fixture');
+      ${actor}
+      do $$ declare r jsonb; begin
+        r := public.detach_match_from_event_line('${dualMatch}');
+        if r->>'event_kind' <> 'dual' or r->>'entry_id' <> '${dualEntry}' then raise exception 'Wrong return: %', r; end if;
+      end $$; reset role;
+      do $$ begin
+        if not exists(select 1 from public.matches where id='${dualMatch}' and event_entry_id is null and tournament_name is null and round is null and program_id='${program}' and score='{"sets":[[6,1],[6,1]]}'::jsonb) then raise exception 'Dual match not detached, or more than the line was touched'; end if;
+        if not exists(select 1 from public.program_event_entries where id='${dualEntry}' and slot='1' and discipline='singles') then raise exception 'Entry slot touched'; end if;
       end $$; rollback;`);
   });
 
@@ -131,7 +155,7 @@ test.describe("detach a match from its event line (local opt-in only)", () => {
     sql(`begin; ${setup} delete from public.program_event_outcomes where entry_id='${entry}'; ${actor}
       do $$ begin if (select public.delete_schedule_event('${program}','${event}')) <> '${event}' then raise exception 'Wrong deleted id'; end if; end $$; reset role;
       do $$ begin
-        if not exists(select 1 from public.matches where id='${match}' and event_entry_id is null and tournament_name is null) then raise exception 'Match not detached'; end if;
+        if not exists(select 1 from public.matches where id='${match}' and event_entry_id is null and tournament_name is null and round is null) then raise exception 'Match not detached'; end if;
         if (select details->>'detached_matches' from public.program_audit_log where subject_id='${event}' and action='event.deleted') is distinct from '1' then raise exception 'Wrong detached count'; end if;
       end $$; rollback;`);
   });
