@@ -261,35 +261,38 @@ since added to their published docs. It leads `SIGNATURE_HEADERS`.
 
 The rest of that list (`x-splitstep-signature`, `x-webhook-signature`, `x-signature`,
 `x-signature-256`, `x-hub-signature-256`, `signature`, `x-webhook-secret`, `x-api-key`,
-`authorization`) stays, for two reasons. It is still a cheap hedge until a real delivery
-confirms the documented name in practice. And the same array is the **redaction set**
+`authorization`) stays, for two reasons. It was a cheap hedge until real deliveries confirmed the
+documented name (they have, since 2026-08-09). And the same array is the **redaction set**
 for `safeHeaders()` — dropping `authorization` or `x-api-key` from it would start
 writing credential values into `splitstep_webhook_deliveries`, which is worse than
 carrying a few dead candidates.
 
 Three outcomes, and the asymmetry is deliberate:
 
-| Situation                                                             | Result                                                               | Why                                                      |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------- |
-| A candidate header matches the HMAC                                   | accept, `signature_verified = true`                                  |                                                          |
-| A candidate header carries the **raw secret** rather than a signature | accept, `signature_verified = false`, warn                           | proves they hold the secret; says nothing about the body |
-| A candidate header is present and **wrong**                           | **401**                                                              | a real failure, not an unknown-header problem            |
-| **No** candidate header found                                         | accept, `signature_verified = false`, log every header name received | see below                                                |
+| Situation                                                             | Result                                     | Why                                                      |
+| --------------------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------- |
+| A candidate header matches the HMAC                                   | accept, `signature_verified = true`        |                                                          |
+| A candidate header carries the **raw secret** rather than a signature | accept, `signature_verified = false`, warn | proves they hold the secret; says nothing about the body |
+| A candidate header is present and **wrong**                           | **401**                                    | a real failure, not an unknown-header problem            |
+| **No** candidate header found                                         | **401**, log every header name received    | see below                                                |
 
-Rejecting on "no signature found" is the tempting default and it is wrong here. The
-vendor has **no retry policy and a 30s connection timeout**, so a delivery we refuse is
-gone permanently — there is no second attempt to fix it on. Combined with a header name
-nobody has written down, fail-closed risks discarding valid results because we looked
-in the wrong place. The log that fires in this case prints the full set of header names
-received, which is exactly what identifies the right one.
+A missing signature is refused once `SPLITSTEP_WEBHOOK_SECRET` is set. It used to be
+accepted: the vendor has **no retry policy and a 30s connection timeout**, so a delivery
+we refuse is gone permanently, and while the header name was unconfirmed, fail-closed
+risked discarding valid results because we looked in the wrong place. That reason is
+spent — every live delivery since 2026-08-09 has verified through `X-HMAC-Signature` —
+so the default flipped to fail-closed (the check lives in
+`src/lib/services/splitstep/webhook-auth.ts`). The refusal still logs the full set of
+header names received, which is what identifies the right one if the vendor ever moves
+it.
 
-> **Flip this before real athlete video goes through.** Set
-> `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true` as soon as one real delivery has confirmed
-> `X-HMAC-Signature` in practice. Leaving it fail-open past the first successful
-> delivery is the single largest security debt in this integration.
+> **Pilot-only escape hatch.** `SPLITSTEP_WEBHOOK_ALLOW_UNSIGNED=true` accepts a delivery
+> with no signature header (`signature_verified = false`, warned). Never leave it on in
+> production. `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE` is no longer read — fail-closed is
+> the default, not an opt-in.
 >
-> Do **not** collapse `SIGNATURE_HEADERS` to one entry when you do — it doubles as the
-> redaction set, as above.
+> Do **not** collapse `SIGNATURE_HEADERS` to one entry — it doubles as the redaction
+> set, as above.
 
 If `SPLITSTEP_WEBHOOK_SECRET` is unset entirely, the route runs unsigned and accepts
 anything, logging a warning on every delivery.
@@ -672,7 +675,7 @@ branch. The three that block Phase 2 are **Q8** (what `in` means on a serve), **
 | `AZURE_STORAGE_CONTAINER`                | Vercel, **per environment**    | `advantage-videos`                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `NEXT_PUBLIC_SITE_URL`                   | Vercel, **per environment**    | builds the vendor's WebhookUrl. One value shared across Production and Preview means a preview hands them the production origin, where the route does not exist                                                                                                                                                                                                                                                                                |
 | `SPLITSTEP_WEBHOOK_SECRET`               | Vercel                         | HMAC key, **issued by the vendor**. Unset = unsigned mode, which accepts anything                                                                                                                                                                                                                                                                                                                                                              |
-| `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE`    | Vercel                         | `true` = fail-closed on a missing signature. **Set this once a real delivery confirms `X-HMAC-Signature`**                                                                                                                                                                                                                                                                                                                                     |
+| `SPLITSTEP_WEBHOOK_ALLOW_UNSIGNED`       | Vercel                         | `true` = accept a delivery with no signature header while the secret is set. **Pilot-only; never in production.** Unset = fail-closed, the default. (Replaces `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE`, which is no longer read — a leftover value is harmless)                                                                                                                                                                                   |
 | `SPLITSTEP_API_URL`, `SPLITSTEP_API_KEY` | Vercel, **Preview only today** | key issued by the vendor. Production submissions 503 until set there                                                                                                                                                                                                                                                                                                                                                                           |
 | `CRON_SECRET`                            | Vercel                         | any long random string, checked as `Authorization: Bearer <secret>`, fail closed. Protects `/api/cron/cleanup-match-videos` (see `docs/match-video-attachments.md`), not this pipeline. Not yet set in Vercel                                                                                                                                                                                                                                  |
 
