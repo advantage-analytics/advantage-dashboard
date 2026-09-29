@@ -56,6 +56,10 @@ const REAL = new Set([
   // component's copy, not a marker's `data-component` span.
   "@/components/dashboard/matches/match-detail/unpublished-stats-notice",
   "@/components/dashboard/matches/new-match-wizard/styles",
+  // The cards bucket rally lengths through the filter model's bands (one
+  // source for the card, the head-to-head tally and the Rally length pills);
+  // it is pure — no React, no next/navigation — so it loads for real.
+  "@/components/dashboard/matches/match-detail/match-filters/model",
 ]);
 
 function render(
