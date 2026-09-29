@@ -280,6 +280,11 @@ to put a testable seam.
 >   `docs/splitstep-vendor-questions.md` was answered 2026-09-28: the vendor's
 >   hard gate is now 25 fps, and it still recommends 29.97 or higher. The
 >   existing 30 fps floor on the browser sample (`MIN_VIDEO_FPS`) is unchanged.
+>   **Revised 2026-09-29:** `MIN_CONTAINER_AVERAGE_FPS` is 29.9 (the vendor's
+>   documented rejection line) and a new `RECOMMENDED_CONTAINER_AVERAGE_FPS`
+>   (29.97) bounds a band that uploads with one warning instead of a refusal —
+>   both sub-29.97 jobs publish on derivation 0.6.0, and phone footage at
+>   29.94 was being turned away. Reasoning under Q14 in the vendor-questions doc.
 >
 > `job-request.ts`, the three inputs in §4, `canSubmitVideo` and the webhook are
 > untouched.
