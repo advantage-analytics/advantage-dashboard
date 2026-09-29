@@ -64,9 +64,21 @@ import {
  *   most two shots and it ended on a winner that is not a service winner.
  *   Result › Shot "Return" needs shot rows to find the return, and the
  *   statistic is read off the point's own serve/return columns.
+ * - `unreturned-serve` — `isUnreturnedServe`: a one-shot rally the server
+ *   won. On an Advantage Intelligence match the head-to-head card counts these
+ *   as aces (the derivation labels every one "Service Winner" and never
+ *   "Ace"), so its derived Aces row opens exactly these.
+ * - `rally-winner` — the `winner` bucket less every unreturned serve: the
+ *   derived Winners row, once its aces have moved to their own line. The two
+ *   derived rows never share a point.
  */
 export type FilmCutEnding =
-  "ace" | "winner" | "unforced-error" | "return-winner";
+  | "ace"
+  | "winner"
+  | "unforced-error"
+  | "return-winner"
+  | "unreturned-serve"
+  | "rally-winner";
 
 /** What a cut adds that `MatchFilters` cannot say. Film only. */
 export interface FilmCutExtras {
@@ -145,6 +157,21 @@ export function isReturnWinner(point: MatchPoint): boolean {
   );
 }
 
+/**
+ * The serve was never returned and the server won the point: a one-shot
+ * rally won by whoever served. Structural on purpose — rally length and the
+ * point's winner, never the "Service Winner" label — so a service winner
+ * with an intermediate stroke (rally length above one) is not one. The
+ * head-to-head card's derived Aces row counts exactly these (`tallySide`),
+ * and the `unreturned-serve` ending admits exactly these. A double fault is
+ * never one: the server lost it.
+ */
+export function isUnreturnedServe(point: MatchPoint): boolean {
+  return (
+    point.rallyLength === 1 && point.wonByPlayer1 === point.serverIsPlayer1
+  );
+}
+
 function matchesEnding(point: MatchPoint, ending: FilmCutEnding): boolean {
   const result = (point.resultType ?? "").trim().toLowerCase();
   switch (ending) {
@@ -156,6 +183,10 @@ function matchesEnding(point: MatchPoint, ending: FilmCutEnding): boolean {
       return result.includes("unforced error");
     case "return-winner":
       return isReturnWinner(point);
+    case "unreturned-serve":
+      return isUnreturnedServe(point);
+    case "rally-winner":
+      return result.includes("winner") && !isUnreturnedServe(point);
   }
 }
 

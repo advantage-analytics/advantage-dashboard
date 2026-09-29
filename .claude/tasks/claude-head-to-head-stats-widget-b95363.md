@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Count unreturned serves as aces in Head to head on Advantage Intelligence matches
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/match-detail/film-cut-context.tsx (new `isUnreturnedServe()` predicate and a new `FilmCutEnding` value, beside `isReturnWinner`); src/components/dashboard/matches/match-detail/head-to-head-card.tsx (`tallySide`, `H2HRowConfig.fromPoints`, `derivedValue`, a derived-config swap in `HeadToHeadCard` gated on `useMatchReport().meta.isDerived`); tests/head-to-head-cuts.spec.ts; tests/match-h2h-rows.spec.ts (guesses from the import chain — the card already reads `meta` from `useMatchReport()`, so no new prop or provider is needed)
 - **routes:** /dashboard/matches/1e7f4043-fa4e-4740-89f6-65f09050ab5a?tab=statistics
