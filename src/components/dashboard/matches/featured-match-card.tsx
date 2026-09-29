@@ -24,7 +24,10 @@ export function FeaturedMatchCard({
       <div className="absolute top-4 right-4 z-10 opacity-100 transition-opacity duration-200 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
         <MatchActionsMenu
           matchId={match.id}
-          matchLabel={match.tournamentName}
+          matchLabel={
+            match.tournamentName ??
+            `${match.player1.name} vs ${match.player2.name}`
+          }
         />
       </div>
       <Link

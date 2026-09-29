@@ -64,7 +64,8 @@ export interface MatchStats {
 
 export interface EventGroup {
   id: string;
-  tournamentName: string;
+  /** Null when the group's matches were filed with no event. */
+  tournamentName: string | null;
   date: string;
   matchType: string | null;
   courtType: string | null;
@@ -209,7 +210,7 @@ function groupMatchesIntoEvents(
     if (mapped.length === 0) continue;
     events.push({
       id: first.id,
-      tournamentName: first.tournament_name ?? "Unknown event",
+      tournamentName: first.tournament_name,
       date: formatDisplayDate(first.date),
       matchType: first.match_type ?? null,
       courtType: first.court_type ?? null,

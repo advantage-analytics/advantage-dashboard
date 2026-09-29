@@ -187,7 +187,10 @@ export function MatchDrawer({
           <MatchActionsMenu
             key={match.id}
             matchId={match.id}
-            matchLabel={match.tournamentName}
+            matchLabel={
+              match.tournamentName ??
+              `${match.player1.name} vs ${match.player2.name}`
+            }
           />
         )
       }
@@ -254,7 +257,9 @@ export function MatchDrawer({
               {schedule?.site ? capitalize(schedule.site) : "Not specified"}
             </DrawerFact>
             <DrawerFact label="Event" icon={<Trophy />}>
-              {match.tournamentName || schedule?.name || "Not specified"}
+              {match.tournamentName || schedule?.name || (
+                <span style={{ color: "var(--ink-400)" }}>No event</span>
+              )}
               {match.round && (
                 <span className="ml-1 text-[11px] text-[var(--ink-500)]">
                   {match.round}

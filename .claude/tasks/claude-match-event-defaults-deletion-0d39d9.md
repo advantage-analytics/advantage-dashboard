@@ -71,7 +71,7 @@ ready).
 
 ## T5 · Render a match with no event as "No event"
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4
 - **files:** src/lib/data/matches-list-types.ts, src/lib/data/match-detail-server.ts, src/lib/data/home-recent-data.ts, src/components/dashboard/matches/match-card-list.tsx, src/components/dashboard/matches/match-drawer.tsx (guess)

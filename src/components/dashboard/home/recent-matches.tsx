@@ -290,9 +290,18 @@ export default function RecentMatches({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE_OUT }}
       >
-        <p className="text-[12px] font-medium text-[var(--ink-900)]">
-          {event.tournamentName}
-        </p>
+        {event.tournamentName ? (
+          <p className="text-[12px] font-medium text-[var(--ink-900)]">
+            {event.tournamentName}
+          </p>
+        ) : (
+          <p
+            className="text-[12px] font-medium"
+            style={{ color: "var(--ink-400)" }}
+          >
+            No event
+          </p>
+        )}
         <MatchMetadataRow
           date={event.date}
           matchType={event.matchType ?? undefined}

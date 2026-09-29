@@ -75,7 +75,10 @@ export function MatchCardGallery({
         {match.canManage !== false && (
           <MatchActionsMenu
             matchId={match.id}
-            matchLabel={match.tournamentName}
+            matchLabel={
+              match.tournamentName ??
+              `${match.player1.name} vs ${match.player2.name}`
+            }
           />
         )}
       </div>
