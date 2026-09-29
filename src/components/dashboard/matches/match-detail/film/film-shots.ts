@@ -1,6 +1,7 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import { isFeedShotType, isServeShotType } from "@/lib/data/serve-return-shots";
 
+import { shotDirection, type Hand } from "../match-filters/shot-geometry";
 import {
   REACHED_EPSILON_SECONDS,
   toFilmTime,
@@ -277,10 +278,16 @@ export function shotTypeLabel(
  * A shot's eight cells (handoff H1 §B, frame `E-route-P1-P2.html`).
  *
  * `MatchShot` carries only `shotType`, `spinType`, `speedMph`, `zone` and
- * `result`, so two columns are derived rather than read: Stroke reads "Serve"
- * for either serve row, and "Type" is {@link shotTypeLabel} — the shot's job
- * in the rally, keyed on `shotType` plus the point's return
- * ({@link pointReturnShotId}), never on `order`.
+ * `result`, so three columns are derived rather than read: Stroke reads
+ * "Serve" for either serve row, "Type" is {@link shotTypeLabel} — the shot's
+ * job in the rally, keyed on `shotType` plus the point's return
+ * ({@link pointReturnShotId}), never on `order` — and Placement is
+ * `shotDirection(shot, hand)` (`shot-geometry.ts`), the same rule the Custom ›
+ * Direction filter selects by: `shots.zone` only ever stores Crosscourt /
+ * Middle / Down the Line, and a forehand struck from the hitter's backhand
+ * half reads Inside Out / Inside In here in the browser. With no `hand`, or
+ * for a backhand, the stored zone prints as it is; Middle and a serve's zone
+ * still print as stored.
  *
  * Nothing unmeasured is ever rendered as `0` or as an empty cell — a null
  * speed, spin, placement, stroke or result is {@link UNMEASURED}, because a
@@ -297,9 +304,13 @@ export function shotRowCells(
   /** The point's return ({@link pointReturnShotId}); callers that never draw
    * the Type cell may leave it out. */
   returnShotId: string | null = null,
+  /** The hitter's hand (`handOf` in `match-filters/model.ts`), for the
+   * Inside-Out / Inside-In renaming. Unknown = the stored zone as is. */
+  hand: Hand | null = null,
 ): ShotRowCells {
   const shotType = shot.shotType?.trim() ?? "";
   const isServe = isServeRow(shotType);
+  const direction = shotDirection(shot, hand);
 
   return {
     order: String(order),
@@ -307,7 +318,7 @@ export function shotRowCells(
     spin: shot.spinType ? sentenceCase(shot.spinType) : UNMEASURED,
     stroke: isServe ? "Serve" : shotType ? sentenceCase(shotType) : UNMEASURED,
     type: shotTypeLabel(shot, returnShotId),
-    placement: shot.zone ? shot.zone : UNMEASURED,
+    placement: direction ?? (shot.zone ? shot.zone : UNMEASURED),
     mph: shot.speedMph == null ? UNMEASURED : String(Math.round(shot.speedMph)),
     result: shot.result ? shot.result : UNMEASURED,
   };
