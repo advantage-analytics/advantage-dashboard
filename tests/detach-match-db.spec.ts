@@ -64,7 +64,7 @@ insert into public.program_members(program_id,user_id,role) values('${program}',
 insert into public.program_events(id,program_id,kind,name,starts_on,ends_on,site)
 values('${event}','${program}','tournament','Detach fixture','2026-09-10','2026-09-11','home');
 insert into public.program_event_entries(id,event_id,program_id,discipline) values('${entry}','${event}','${program}','singles');
-insert into public.program_event_outcomes(entry_id,event_id,program_id,event_kind,round,kind,side,actor_user_id) values('${entry}','${event}','${program}','tournament','Final','default','ours','${creator}');
+insert into public.program_event_outcomes(entry_id,event_id,program_id,event_kind,round,kind,side,actor_user_id) values('${entry}','${event}','${program}','tournament','F','default','ours','${creator}');
 insert into public.matches(id,program_id,created_by,event_entry_id,round,score,tournament_name) values('${match}','${program}','${creator}','${entry}','Semifinal','{"sets":[[6,0],[6,0]]}','Detach fixture');`;
 const detach = `select public.detach_match_from_event_line('${match}');`;
 function denied(statement: string, code: string) {
@@ -89,7 +89,7 @@ test.describe("detach a match from its event line (local opt-in only)", () => {
         if not exists(select 1 from public.matches where id='${match}' and event_entry_id is null and tournament_name is null and round is null and program_id='${program}' and score='{"sets":[[6,0],[6,0]]}'::jsonb) then raise exception 'Match not detached, or more than the line was touched'; end if;
         if (select count(*) from public.program_audit_log where program_id='${program}' and subject_id='${match}' and actor_user_id='${creator}' and action='match.detached'
             and details->>'match_id'='${match}' and details->>'entry_id'='${entry}' and details->>'event_id'='${event}') <> 1 then raise exception 'Wrong audit state'; end if;
-        if (select count(*) from public.program_event_outcomes where entry_id='${entry}' and round='Final' and kind='default' and side='ours') <> 1 then raise exception 'Outcome touched'; end if;
+        if (select count(*) from public.program_event_outcomes where entry_id='${entry}' and round='F' and kind='default' and side='ours') <> 1 then raise exception 'Outcome touched'; end if;
         if not exists(select 1 from public.program_event_entries where id='${entry}') then raise exception 'Entry lost'; end if;
       end $$; rollback;`);
   });
