@@ -29,7 +29,7 @@
 import type { SplitStepRally } from "./types";
 
 /** Rungs of a standard game, plus AD for ad-scoring matches. */
-const LADDER: Record<string, number> = {
+export const LADDER: Record<string, number> = {
   "0": 0,
   "15": 1,
   "30": 2,

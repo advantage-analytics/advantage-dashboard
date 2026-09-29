@@ -196,7 +196,7 @@ export interface BuildOptions {
   bestOf?: number;
   /**
    * Our own line calls from the trajectories file (line-calls.ts). Absent
-   * means no file: the dead-ball autofix and the near-line flag then fall back
+   * means no file: the dead-ball and near-line flags then fall back
    * to what the strokes file alone can say.
    */
   lineCalls?: LineCalls;

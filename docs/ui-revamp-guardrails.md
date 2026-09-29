@@ -450,13 +450,12 @@ to put a testable seam.
 > `derivation/trajectory.ts`, `line-calls.ts`, `played.ts`, `flags.ts`,
 > `persist-transcript.ts` and the webhook.** Derivation now reads the vendor's
 > trajectories file for its own in/out call per stroke. When the ball before a
-> derived winner bounced outside the singles lines, the winner's stroke is
-> dropped as a dead ball and the point reads as an error by the out ball's
-> hitter (`winner_to_error_by_bounce`); the point winner never changes. It is
-> an autofix on small evidence — 6 of 6 on one hand-labelled match — and
-> `played.ts` carries the criteria for keeping or demoting it, measured with
-> `scripts/splitstep-eval.ts`. A near-line ball flags `ending_suspect_line` for
-> review. To be read before derivation, the webhook now stores the
+> derived winner bounced outside the singles lines, the point is flagged
+> `winner_to_error_by_bounce` for review. It shipped as an autofix that dropped
+> the winner's stroke (6 of 6 on one hand-labelled match) and was demoted to a
+> flag in 0.6.0 (2026-09-29) at 14 of 18 across three; `played.ts` carries the
+> criteria, measured with `scripts/splitstep-eval.ts`. A near-line ball flags
+> `ending_suspect_line` for review. To be read before derivation, the webhook now stores the
 > trajectories file (8 s clock) ahead of `deriveAndPublish`; the players file
 > still comes last. A job without a trajectories file derives as before.
 > `reconcile()`, winners, `calculate_match_stats` and the schema are untouched.

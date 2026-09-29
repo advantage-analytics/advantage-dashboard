@@ -18,7 +18,7 @@
  * Point i+1 is rally i, as in transcript.ts; a first-stroke time more than
  * 1.5 s from the label's time is reported, because then the join is wrong.
  *
- * This is the tool the autofix in derivation/played.ts is reconsidered with:
+ * This is the tool the dead-ball rule in derivation/played.ts is reconsidered with:
  * re-run it on every newly labelled match.
  *
  * Requires in .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
@@ -257,7 +257,7 @@ async function main() {
     `  problems with no flag: ${silent.map((s) => s.point.point_number).join(",") || "none"}`,
   );
 
-  // --- The dead-ball autofix and the near-line flag -----------------------
+  // --- The dead-ball flag and the near-line flag --------------------------
   const scoreRule = (code: string) => {
     const hit = rows.filter(({ point }) => point.flags.includes(code));
     const right = hit.filter(({ label }) => ERRORS.has(truth(label, "ending")));

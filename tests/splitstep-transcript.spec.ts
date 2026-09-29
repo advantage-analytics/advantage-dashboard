@@ -11,6 +11,7 @@ import {
   flagPoint,
   lastServeIndex,
   playedRally,
+  pointsPlayed,
   reconcile,
   pressureFor,
   resolvePointWinners,
@@ -219,7 +220,7 @@ test.describe("phantom strokes", () => {
   });
 });
 
-test.describe("dead ball after an out ball", () => {
+test.describe("winner after an out ball", () => {
   // A serves, B returns, A's groundstroke lands out, and B strikes it back.
   // The score says B won, so the vendor's last stroke reads as B's winner.
   const serveA = () => stroke({ strokeType: "serve", strokeSide: "overhead" });
@@ -232,50 +233,39 @@ test.describe("dead ball after an out ball", () => {
     ]);
   const build = () => rally([serveA(), returnB(), outA, deadB()]);
 
-  test("drops the dead ball, so the out ball ends the point as an error", () => {
-    const played = playedRally(build(), { winner: "B", lineCalls: at(-0.4) });
-    expect(played.deadBall).toBe(1);
-    expect(played.rally.strokes).toHaveLength(3);
-    expect(played.flags).toContain(POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE);
-    // The winner is unchanged; only how the point ended moves.
-    expect(classifyPoint(played.rally, "B")).toBe("Backhand Unforced Error");
-    expect(
-      shotResult({
-        stroke: outA,
-        index: 2,
-        rally: played.rally,
-        serveIndex: 0,
-        winner: "B",
-      }),
-    ).toBe("Out");
-  });
+  const BOUNCE = POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE;
+  const bounceFlagged = (
+    r: SplitStepRally,
+    winner: string | null,
+    lineCalls: Map<SplitStepStroke, LineCall>,
+  ) => playedRally(r, { winner, lineCalls }).flags.includes(BOUNCE);
 
-  test("needs trajectory evidence, not the strokes file's own bounce", () => {
+  test("flags the dead ball for review but keeps the vendor's rally (demoted 0.6.0)", () => {
     const r = build();
-    const played = playedRally(r, {
-      winner: "B",
-      lineCalls: at(-0.4, "strokes"),
-    });
+    const played = playedRally(r, { winner: "B", lineCalls: at(-0.4) });
+    expect(played.flags).toContain(BOUNCE);
+    // Nothing is dropped: 14 of 18 on video was not enough to rewrite points.
     expect(played.rally).toBe(r);
   });
 
-  test("a ball inside the lines leaves the winner alone", () => {
-    const r = build();
-    expect(playedRally(r, { winner: "B", lineCalls: at(0.2) }).rally).toBe(r);
+  test("needs trajectory evidence, not the strokes file's own bounce", () => {
+    expect(bounceFlagged(build(), "B", at(-0.4, "strokes"))).toBe(false);
   });
 
-  test("never touches a return winner: the ball before it is a serve", () => {
+  test("a ball inside the lines is not flagged", () => {
+    expect(bounceFlagged(build(), "B", at(0.2))).toBe(false);
+  });
+
+  test("never flags a return winner: the ball before it is a serve", () => {
     const serve = stroke({ strokeType: "serve", strokeSide: "overhead" });
-    const r = rally([serve, deadB()]);
     const calls = new Map<SplitStepStroke, LineCall>([
       [serve, { margin: -1, netClearance: 1.2, source: "trajectory" }],
     ]);
-    expect(playedRally(r, { winner: "B", lineCalls: calls }).rally).toBe(r);
+    expect(bounceFlagged(rally([serve, deadB()]), "B", calls)).toBe(false);
   });
 
-  test("without a settled winner nothing is dropped", () => {
-    const r = build();
-    expect(playedRally(r, { winner: null, lineCalls: at(-0.4) }).rally).toBe(r);
+  test("without a settled winner nothing is flagged", () => {
+    expect(bounceFlagged(build(), null, at(-0.4))).toBe(false);
   });
 
   const flagsFor = (
@@ -1127,5 +1117,78 @@ test.describe("collapsed score tail", () => {
       expect(p.set_number).toBe(lastReal.set_number);
       expect(p.game_number).toBe(lastReal.game_number);
     }
+  });
+});
+
+test.describe("score flags: tiebreak off 6-6, score vs serve side", () => {
+  // Serving from the negative-y end: positive x is the deuce court.
+  const pointAt = (
+    over: Partial<SplitStepStroke>,
+    adScoring = true,
+  ): string[] =>
+    flagPoint({
+      rally: rally([
+        stroke({ strokeType: "serve", playerY: -12, playerX: 1, ...over }),
+        stroke({ playerLabel: "B", playerY: 12 }),
+      ]),
+      winner: "A",
+      previousInGame: null,
+      resultType: "Forehand Winner",
+      adScoring,
+    });
+  const isTiebreak = (over: Partial<SplitStepStroke>) =>
+    pointAt(over).includes(POINT_FLAGS.TIEBREAK_SCORE_OFF_SIX_ALL);
+  const sideMismatch = (over: Partial<SplitStepStroke>, adScoring = true) =>
+    pointAt(over, adScoring).includes(POINT_FLAGS.SCORE_SIDE_MISMATCH);
+
+  test("tiebreak point scores away from 6-6 are flagged", () => {
+    // Quan v Harazaki: the stream read 7-5 in games and scored "2-5".
+    expect(isTiebreak({ predGameScore: "7-5", predPointScore: "2-5" })).toBe(
+      true,
+    );
+    expect(isTiebreak({ predGameScore: "6-6", predPointScore: "2-5" })).toBe(
+      false,
+    );
+    // A match tiebreak in place of the third set starts at 0-0 games.
+    expect(
+      isTiebreak({
+        predGameScore: "0-0",
+        predPointScore: "3-4",
+        predSetScore: "1-1",
+      }),
+    ).toBe(false);
+    // An ordinary game score is never a tiebreak, whatever the game count.
+    expect(isTiebreak({ predGameScore: "7-5", predPointScore: "15-30" })).toBe(
+      false,
+    );
+  });
+
+  test("points played decide the side, in a game and in a tiebreak", () => {
+    expect(pointsPlayed("0-0")).toBe(0);
+    expect(pointsPlayed("0-15")).toBe(1);
+    expect(pointsPlayed("40-40")).toBe(6);
+    expect(pointsPlayed("AD-40")).toBe(7);
+    expect(pointsPlayed("3-2")).toBe(5);
+    expect(pointsPlayed("nan")).toBeNull();
+  });
+
+  test("a 0-15 point served from the deuce court is flagged", () => {
+    expect(sideMismatch({ predPointScore: "0-15", playerX: 1 })).toBe(true);
+    expect(sideMismatch({ predPointScore: "0-15", playerX: -1 })).toBe(false);
+    expect(sideMismatch({ predPointScore: "15-15", playerX: 1 })).toBe(false);
+    // A tiebreak reads the same way: 3-2 is the sixth point, the ad court.
+    expect(sideMismatch({ predPointScore: "3-2", playerX: 1 })).toBe(true);
+  });
+
+  test("no flag at the centre mark, without a position, or on a no-ad 40-40", () => {
+    expect(sideMismatch({ predPointScore: "0-15", playerX: 0.1 })).toBe(false);
+    expect(sideMismatch({ predPointScore: "0-15", playerX: null })).toBe(false);
+    // The receiver picks the side for the deciding point under no-ad.
+    expect(sideMismatch({ predPointScore: "40-40", playerX: -1 }, false)).toBe(
+      false,
+    );
+    expect(sideMismatch({ predPointScore: "40-40", playerX: -1 }, true)).toBe(
+      true,
+    );
   });
 });

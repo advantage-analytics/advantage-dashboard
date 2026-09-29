@@ -68,8 +68,15 @@
  * match, with its reconsideration criteria in played.ts. A near-line or
  * confidently-out ball flags `ending_suspect_line` for review instead. A job
  * with no trajectories file derives exactly as 0.4.2.
+ * 0.6.0 (2026-09-29) demotes `winner_to_error_by_bounce` to a review flag:
+ * two more labelled matches took it to 14 of 18, under the 90% line
+ * played.ts set in advance, so the dead ball is no longer dropped and the
+ * vendor's ending stands. Adds two review flags on the score stream (flags.ts):
+ * `tiebreak_score_off_six_all` (tiebreak point scores while games are not
+ * 6-6 — Quan v Harazaki's real 5-7 set) and `score_side_mismatch` (points
+ * played in the game say one court, the server's stance says the other).
  */
-export const DERIVATION_VERSION = "0.5.0-unreconciled";
+export const DERIVATION_VERSION = "0.6.0-unreconciled";
 
 export type {
   RawSplitStepStroke,
@@ -156,7 +163,13 @@ export {
   type ShotResult,
 } from "./result-type";
 
-export { flagPoint, flagStroke, POINT_FLAGS, SHOT_FLAGS } from "./flags";
+export {
+  flagPoint,
+  flagStroke,
+  pointsPlayed,
+  POINT_FLAGS,
+  SHOT_FLAGS,
+} from "./flags";
 export { playedRally, type PlayedRally } from "./played";
 export {
   lineCallsFor,
