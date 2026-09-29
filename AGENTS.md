@@ -214,6 +214,9 @@ this branch's queue, then stop.`
   fails any other PR into it. If a tool reports `main` as the default branch, the clone's
   `origin/HEAD` is stale: `git remote set-head origin splitstep-integration`.
 - `MAP.md` is generated — run `npm run map` after adding a route, or `npm test` fails.
+- **Vercel previews are opt-in**: only `main` and `splitstep-integration` build on
+  push; a `[preview]` tag in the commit message builds any other branch (only when the
+  user asks). A "Canceled" Vercel check on a PR is expected, not a failure.
 - Never hand-format `supabase/migrations/` or `src/styles/design-system/colors.css`.
   `.prettierignore` documents every exclusion and why.
 - No global state library — Context + server-side fetching only.
