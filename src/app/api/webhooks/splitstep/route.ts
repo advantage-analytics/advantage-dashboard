@@ -458,7 +458,16 @@ export async function POST(request: NextRequest) {
   // `derivation_failed` leaves it there, and must release no quota, send no
   // failure mail and trigger no resubmit. Keying on `payload.nextStatus` did
   // all three for any delivery that merely claimed a failure.
-  if (record.job_status === "failed" && record.matched_job_id) {
+  //
+  // The payload must still say failed too. A late `job_processing` landing on
+  // a row that is already `failed` carries no error fields, so it would read
+  // as non-retryable and mail "analysis failed" over a job that was quietly
+  // auto-resubmitted — the mail that failure deliberately never sent.
+  if (
+    payload.nextStatus === "failed" &&
+    record.job_status === "failed" &&
+    record.matched_job_id
+  ) {
     const failedJobId = record.matched_job_id;
     // Read once outside after(): the auto-retry decision keys on THIS
     // delivery's error fields, not on whatever the row says by the time the

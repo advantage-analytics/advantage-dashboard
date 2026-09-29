@@ -217,4 +217,21 @@ test.describe("splitstep webhook — failed branch gated on the job row", () => 
     expect(calls.resubmitJob[0]).toMatchObject({ jobId: JOB, auto: true });
     expect(calls.notifyAnalysisOutcome).toEqual([]);
   });
+
+  test("late job_processing on a row already failed → no release, no mail, no resubmit", async () => {
+    // The parent of an auto-resubmit: its download failure sent no mail. A
+    // straggling status delivery for it must not send one now.
+    const { calls, deliver } = loadRoute(record("failed"));
+
+    const res = await deliver({
+      event: "job_processing",
+      job_id: EXTERNAL_JOB,
+    });
+
+    expect(res.status).toBe(200);
+    expect(calls.rpc[0].args.p_next_status).toBe("processing");
+    expect(calls.releaseQuota).toEqual([]);
+    expect(calls.notifyAnalysisOutcome).toEqual([]);
+    expect(calls.resubmitJob).toEqual([]);
+  });
 });
