@@ -18,7 +18,10 @@ import {
   type CutSide,
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
-import { isReturnWinner } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import {
+  isReturnWinner,
+  rallyLengthBandOf,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { PlayerStatistics, StatFraction } from "@/lib/data/types";
@@ -546,12 +549,13 @@ export function tallySide(
     }
 
     // rallyLength is 0 when the source recorded none — not a one-shot rally.
+    const bandKey = rallyLengthBandOf(p.rallyLength);
     const band =
-      p.rallyLength >= 9
+      bandKey === "long"
         ? d.longRally
-        : p.rallyLength >= 5
+        : bandKey === "medium"
           ? d.mediumRally
-          : p.rallyLength >= 1
+          : bandKey === "short"
             ? d.shortRally
             : null;
     if (band) {

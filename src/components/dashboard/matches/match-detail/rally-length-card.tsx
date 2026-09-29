@@ -12,6 +12,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
+import { rallyLengthBandOf } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { cn } from "@/lib/utils";
 import { surnameLabels } from "@/lib/data/match-utils";
@@ -101,9 +102,8 @@ export function RallyLengthCard() {
 
     let shotSum = 0;
     for (const p of points) {
-      if (p.rallyLength < 1) continue;
-      const key: Band["key"] =
-        p.rallyLength >= 9 ? "long" : p.rallyLength >= 5 ? "medium" : "short";
+      const key = rallyLengthBandOf(p.rallyLength);
+      if (!key) continue;
       counters[key].count += 1;
       if (p.wonByPlayer1 === youIsPlayer1) counters[key].youWon += 1;
       shotSum += p.rallyLength;

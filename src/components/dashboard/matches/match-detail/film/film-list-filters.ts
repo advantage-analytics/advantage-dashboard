@@ -11,13 +11,13 @@ import {
   applyMatchFilters,
   EMPTY_MATCH_FILTERS,
   filtersEqual,
-  MATCH_FILTER_KEYS,
   type MatchFilterContext,
   type MatchFilters,
   type PlayerSide,
 } from "../match-filters/model";
 import {
   filmCutExtras,
+  overlayCutFilters,
   matchesFilmCutExtras,
   type FilmCutIntent,
   type FilmCutRemainder,
@@ -125,12 +125,7 @@ export function landFilmCut(
   shared: MatchFilters,
   intent: FilmCutIntent,
 ): { shared: MatchFilters; remainder: FilmCutRemainder | null } {
-  const next: Record<string, unknown> = { ...shared };
-  for (const key of MATCH_FILTER_KEYS) {
-    const value = intent.cut[key];
-    if (value !== undefined) next[key] = value;
-  }
-  const landed = next as unknown as MatchFilters;
+  const landed = overlayCutFilters(shared, intent.cut);
   const extras = filmCutExtras(intent.cut);
   return {
     shared: filtersEqual(landed, shared) ? shared : landed,

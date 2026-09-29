@@ -94,13 +94,21 @@ export interface FilmCutIntent {
   label: string;
 }
 
-/** The cut's `MatchFilters` part, over the empty filters. */
-export function filmCutFilters(cut: FilmCut): MatchFilters {
-  const out: Record<string, unknown> = { ...EMPTY_MATCH_FILTERS };
+/** `base` with every `MatchFilters` key the cut sets replaced by the cut's. */
+export function overlayCutFilters(
+  base: MatchFilters,
+  cut: FilmCut,
+): MatchFilters {
+  const out: Record<string, unknown> = { ...base };
   for (const key of MATCH_FILTER_KEYS) {
     if (cut[key] !== undefined) out[key] = cut[key];
   }
   return out as unknown as MatchFilters;
+}
+
+/** The cut's `MatchFilters` part, over the empty filters. */
+export function filmCutFilters(cut: FilmCut): MatchFilters {
+  return overlayCutFilters(EMPTY_MATCH_FILTERS, cut);
 }
 
 /**
@@ -115,10 +123,6 @@ export function filmCutExtras(cut: FilmCut): FilmCutExtras | null {
     if (value !== undefined && value !== null) out[key] = value;
   }
   return Object.keys(out).length > 0 ? (out as FilmCutExtras) : null;
-}
-
-function hasExtras(cut: FilmCut): boolean {
-  return filmCutExtras(cut) !== null;
 }
 
 /**
@@ -143,10 +147,15 @@ export interface LandedFilmCut extends FilmCutRemainder {
 /** Whether a cut narrows anything at all. `{}` (a whole-match row) does not. */
 export function hasFilmCut(cut: FilmCut | null | undefined): boolean {
   if (!cut) return false;
-  return hasActiveMatchFilters(filmCutFilters(cut)) || hasExtras(cut);
+  return (
+    hasActiveMatchFilters(filmCutFilters(cut)) || filmCutExtras(cut) !== null
+  );
 }
 
-function matchesEnding(point: MatchPoint, ending: FilmCutEnding): boolean {
+function matchesFilmCutEnding(
+  point: MatchPoint,
+  ending: FilmCutEnding,
+): boolean {
   const result = (point.resultType ?? "").trim().toLowerCase();
   switch (ending) {
     case "winner":
@@ -159,7 +168,7 @@ function matchesEnding(point: MatchPoint, ending: FilmCutEnding): boolean {
 /** Whether one point passes the cut's Film-only extras. */
 export function matchesFilmCutExtras(point: MatchPoint, cut: FilmCut): boolean {
   const ending = cut.ending ?? null;
-  if (ending !== null && !matchesEnding(point, ending)) return false;
+  if (ending !== null && !matchesFilmCutEnding(point, ending)) return false;
   return true;
 }
 
