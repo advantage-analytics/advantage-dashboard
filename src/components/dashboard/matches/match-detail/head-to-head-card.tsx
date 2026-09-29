@@ -666,6 +666,162 @@ interface ReadoutLine {
 }
 
 /**
+ * What a click on the target would do. `watch` opens `count` points in Video;
+ * `no-video` holds the same slot on a match with no playable video, so a
+ * statistic reads the same with or without one — only the action is gone.
+ */
+type ReadoutFooter = { kind: "watch"; count: number } | { kind: "no-video" };
+
+const NO_VIDEO_LINE = "No video attached";
+
+/** Everything one readout says. */
+interface ReadoutContent {
+  title: string;
+  lines: ReadoutLine[];
+  note?: string;
+  footer?: ReadoutFooter;
+}
+
+/**
+ * Whether a readout has anything to say. A title alone repeats the label the
+ * cursor is already on — "Aces" over "Aces" — so it does not count.
+ */
+export function hasReadout(
+  content: ReadoutContent | null,
+): content is ReadoutContent {
+  if (!content) return false;
+  return content.lines.length > 0 || Boolean(content.note || content.footer);
+}
+
+const IN_SCOPE = "in this match";
+
+/** A measured zero count. Only a count: 0% of 3 break points is not "none". */
+function isZeroCount(value: H2HValue): boolean {
+  return value.display === "0";
+}
+
+/** A figure's fraction in words with its verb: `11 of 25 won`, or null. */
+function fractionPhrase(row: H2HRow, value: H2HValue): string | null {
+  const fraction = fractionWords(value);
+  return fraction ? [fraction, row.verb].filter(Boolean).join(" ") : null;
+}
+
+/** One side's figure in words: `44%, 11 of 25 won`, `68 of 148 won`, `3`. */
+function figureWords(row: H2HRow, side: "you" | "opp"): string {
+  const value = row[side];
+  const inWords = fractionPhrase(row, value);
+  // "74 of 138 won" already carries the figure; "44%" does not.
+  if (!inWords) return value.display;
+  return value.detail?.startsWith("of ")
+    ? inWords
+    : `${value.display}, ${inWords}`;
+}
+
+interface ReadoutScope {
+  /** The match has a playable video, so its cuts can be opened. */
+  hasVideo: boolean;
+  /** How many points the target's cut opens (0 without video). */
+  count: number;
+  /**
+   * Whether "No video attached" is true to say. False on a read-only share
+   * link (`meta.readOnly`), which never shows video even when the match has
+   * one — the readout carries its evidence alone there.
+   */
+  noVideoLine: boolean;
+}
+
+/**
+ * One figure's readout, or `null` for an em dash (which keeps its own "No
+ * data" tooltip). The same shape with or without video: the evidence (its
+ * fraction, or "No aces in this match" for a zero) is always there, and the
+ * footer is the watch line when the cut has points, "No video attached" when
+ * it would have had a watch line but the match has no video (never on a
+ * read-only share link), and nothing on a statistic with no cut.
+ */
+export function figureReadout(
+  row: H2HRow,
+  side: "you" | "opp",
+  name: string,
+  { hasVideo, count, noVideoLine }: ReadoutScope,
+): ReadoutContent | null {
+  const value = row[side];
+  if (!value.display) return null;
+  const title = `${row.label} · ${name}`;
+  const phrase = fractionPhrase(row, value);
+  const lines: ReadoutLine[] = phrase ? [{ name: phrase, value: "" }] : [];
+
+  if (hasVideo && row.cut && count > 0) {
+    return { title, lines, footer: { kind: "watch", count } };
+  }
+  const note =
+    isZeroCount(value) && row.noun ? `No ${row.noun} ${IN_SCOPE}` : undefined;
+  // A zero has nothing to watch with or without a video, so it says so and
+  // nothing more.
+  const footer: ReadoutFooter | undefined =
+    noVideoLine && row.cut && !note ? { kind: "no-video" } : undefined;
+  return { title, lines, note, footer };
+}
+
+/**
+ * The label's readout — "both players". The per-side fractions, then the same
+ * footer rule a figure follows, over the row's own sideless cut.
+ */
+export function rowReadout(
+  row: H2HRow,
+  youName: string,
+  oppName: string,
+  { hasVideo, count, noVideoLine }: ReadoutScope,
+): ReadoutContent {
+  const title = row.label;
+  const hasFigure = Boolean(row.you.display || row.opp.display);
+  const youFraction = fractionWords(row.you);
+  const oppFraction = fractionWords(row.opp);
+  const lines: ReadoutLine[] =
+    youFraction || oppFraction
+      ? [
+          { name: youName, value: youFraction ?? "—" },
+          { name: oppName, value: oppFraction ?? "—", muted: true },
+        ]
+      : [];
+
+  if (hasVideo && row.cut && count > 0 && hasFigure) {
+    return { title, lines, note: row.note, footer: { kind: "watch", count } };
+  }
+  // Both players at a measured zero: the label answers the way each zero
+  // does, rather than going silent between them.
+  const bothZero =
+    Boolean(row.noun) && isZeroCount(row.you) && isZeroCount(row.opp);
+  const note = bothZero ? `No ${row.noun} ${IN_SCOPE}` : row.note;
+  const footer: ReadoutFooter | undefined =
+    noVideoLine && row.cut && hasFigure && !bothZero
+      ? { kind: "no-video" }
+      : undefined;
+  return { title, lines, note, footer };
+}
+
+/** A readout's note and no-video line as a sentence (the lines excluded). */
+function tailWords(content: ReadoutContent): string {
+  return [
+    content.note,
+    content.footer?.kind === "no-video" ? NO_VIDEO_LINE : undefined,
+  ]
+    .filter(Boolean)
+    .join(". ");
+}
+
+/** A readout as one sentence, for a target that has no click to name. */
+function readoutWords(content: ReadoutContent): string {
+  return [
+    content.lines
+      .map((line) => [line.name, line.value].filter(Boolean).join(" "))
+      .join("; "),
+    tailWords(content),
+  ]
+    .filter(Boolean)
+    .join(". ");
+}
+
+/**
  * The dark readout, in three tiers: which statistic (title), the evidence
  * behind the figures (a name/value line per player, in the card's column
  * order), then what a click opens, set off by a hairline so it reads as a
@@ -680,22 +836,16 @@ interface ReadoutLine {
 function Readout({
   open,
   align,
-  title,
-  lines,
-  note,
-  action,
+  content,
 }: {
   open: boolean;
   align: "start" | "end";
-  title: string;
-  lines: ReadoutLine[];
-  note?: string;
-  action?: string | null;
+  content: ReadoutContent | null;
 }) {
-  // A title alone repeats the label the cursor is already on — "Aces" over
-  // "Aces" — so a readout with nothing else to say does not open.
+  // A readout with nothing past its title does not open (`hasReadout`).
+  if (!hasReadout(content)) return null;
+  const { title, lines, note, footer } = content;
   const hasEvidence = lines.length > 0 || Boolean(note);
-  if (!hasEvidence && !action) return null;
   return (
     <ChartTooltip
       open={open}
@@ -727,21 +877,28 @@ function Readout({
           {note}
         </span>
       )}
-      {action && (
+      {footer && (
         <span
           className={cn(
-            "tabular flex items-center gap-1.5 text-[11px] leading-[15px] text-white/[0.86]",
+            "tabular flex items-center gap-1.5 text-[11px] leading-[15px]",
+            footer.kind === "watch" ? "text-white/[0.86]" : "text-white/[0.64]",
             // The hairline divides evidence from the action; with no evidence
             // (a count row) there is nothing to divide it from.
             hasEvidence && "mt-[5px] border-t border-white/10 pt-[7px]",
           )}
         >
-          <CirclePlay
-            aria-hidden="true"
-            className="h-3 w-3 shrink-0"
-            strokeWidth={1.5}
-          />
-          {action}
+          {footer.kind === "watch" ? (
+            <>
+              <CirclePlay
+                aria-hidden="true"
+                className="h-3 w-3 shrink-0"
+                strokeWidth={1.5}
+              />
+              {watchLine(footer.count)}
+            </>
+          ) : (
+            NO_VIDEO_LINE
+          )}
         </span>
       )}
     </ChartTooltip>
@@ -756,13 +913,38 @@ interface TargetHandlers {
   onBlur: () => void;
 }
 
+/**
+ * One figure's target: its click (absent when there is nothing to open), its
+ * screen-reader sentence and its hover wiring.
+ */
+interface FigureTarget {
+  onClick?: () => void;
+  label: string;
+  handlers: TargetHandlers;
+}
+
+/**
+ * The figure's box, and its wash. On a target it is the button itself, so the
+ * hit area is exactly the grey wash — no wider than the number. The -mr
+ * cancels the pr so the digits stay on the column's right edge, aligned with
+ * every figure that has no box.
+ */
+const FIGURE = `tabular -mr-1.5 rounded-[var(--radius-cell)] px-1.5 py-0.5 text-[13px] transition-colors ${EASE}`;
+
+/**
+ * The label target's stretched box: its `::after` covers the whole row, so the
+ * hit area is exactly the row's wash. The ring moves onto it (with
+ * `data-focus-ring="none"` on the element) so focus draws the same box.
+ */
+const STRETCHED =
+  "after:absolute after:inset-0 after:rounded-[var(--radius-element)] after:content-[''] focus-visible:after:[box-shadow:var(--focus-ring)]";
+
 function ValueCell({
   value,
   emphasised,
   note,
   washed,
-  watch,
-  zero,
+  target,
   readout,
 }: {
   value: H2HValue;
@@ -771,67 +953,59 @@ function ValueCell({
   /** The cursor or focus is on this figure. */
   washed: boolean;
   /**
-   * Open this cell's points in the Video tab. Passed only for a figure with
-   * points behind it on a match with a playable video; the em-dash cell below
-   * ignores it, since a statistic with no value has nothing to watch.
+   * The figure as a hover target. Every figure with a readout is one, video
+   * or not; it clicks through only when its cut has points to open in Video.
+   * The em-dash cell below ignores it — it keeps its own "No data" tooltip.
    */
-  watch?: { onClick: () => void; label: string; handlers: TargetHandlers };
-  /**
-   * A measured zero — nothing to watch, but still worth a hover that says so
-   * ("No aces in this match"). It hovers, focuses and washes exactly as a
-   * watchable figure does; it just has no click.
-   */
-  zero?: { label: string; handlers: TargetHandlers };
+  target?: FigureTarget;
   readout?: ReactNode;
 }) {
   if (value.display) {
-    const figure = (
-      <span
-        className={cn(
-          "tabular text-[13px]",
-          // The wash is sized to the number itself; the -mr cancels the pr so
-          // the digits stay on the column's right edge, aligned with every
-          // figure that has no wash.
-          `-mr-1.5 rounded-[var(--radius-cell)] px-1.5 py-0.5 transition-colors ${EASE}`,
-        )}
-        style={{
-          fontWeight: emphasised ? 500 : 400,
-          color: emphasised ? "var(--ink-900)" : "var(--ink-500)",
-          backgroundColor: washed ? "var(--surface-subtle)" : "transparent",
-        }}
-      >
-        {value.display}
-      </span>
-    );
-    const target = watch ?? zero;
+    const style: React.CSSProperties = {
+      fontWeight: emphasised ? 500 : 400,
+      color: emphasised ? "var(--ink-900)" : "var(--ink-500)",
+      backgroundColor: washed ? "var(--surface-subtle)" : "transparent",
+    };
     if (target) {
-      // One element for both, so a zero is the same hit area, wash and focus
-      // ring as the figure beside it. A zero is a button with nothing to do —
-      // `aria-disabled` says so and keeps it reachable by Tab, which
-      // `disabled` would not. Focus is `focus.css`'s ring — nothing written
-      // here.
+      // One element for every figure, so a figure with nothing to open is
+      // the same hit area, wash and focus ring as one that plays. With no
+      // click it is a button with nothing to do — `aria-disabled` says so and
+      // keeps it reachable by Tab, which `disabled` would not. `relative z-[1]`
+      // lifts it over the row's stretched target. Focus is `focus.css`'s
+      // ring — nothing written here.
       return (
-        <button
-          type="button"
-          onClick={watch?.onClick}
-          aria-disabled={watch ? undefined : true}
-          aria-label={target.label}
-          {...target.handlers}
-          className={cn(
-            `${COLUMN} relative self-stretch rounded-[var(--radius-element)] border-0 bg-transparent p-0`,
-            watch ? "cursor-pointer" : "cursor-default",
-          )}
-        >
-          {figure}
-          {readout}
-        </button>
+        <span className={COLUMN}>
+          <button
+            type="button"
+            onClick={target.onClick}
+            aria-disabled={target.onClick ? undefined : true}
+            aria-label={target.label}
+            {...target.handlers}
+            className={cn(
+              FIGURE,
+              "relative z-[1] border-0",
+              target.onClick ? "cursor-pointer" : "cursor-default",
+            )}
+            style={style}
+          >
+            {value.display}
+            {readout}
+          </button>
+        </span>
       );
     }
-    return <span className={COLUMN}>{figure}</span>;
+    return (
+      <span className={COLUMN}>
+        <span className={FIGURE} style={style}>
+          {value.display}
+        </span>
+      </span>
+    );
   }
 
   // The card's missing-data convention (match-statistics-card.tsx): an italic
-  // em dash that says why on hover, never a zero.
+  // em dash that says why on hover, never a zero. Lifted over the row's
+  // stretched target so its tooltip still gets the hover.
   return (
     <span className={COLUMN}>
       <Tooltip>
@@ -839,7 +1013,7 @@ function ValueCell({
           <span
             tabIndex={0}
             aria-label="No data recorded for this stat"
-            className="tabular cursor-help text-[13px] font-light text-[var(--color-text-muted)] italic"
+            className="tabular relative z-[1] cursor-help text-[13px] font-light text-[var(--color-text-muted)] italic"
           >
             —
           </span>
@@ -924,7 +1098,7 @@ export function HeadToHeadCard() {
 
   if (sections.length === 0) return null;
 
-  const target = (row: string, zone: Zone): TargetHandlers => ({
+  const handlersFor = (row: string, zone: Zone): TargetHandlers => ({
     onMouseEnter: () => setHover({ row, zone }),
     // Leaving a number hands the hover back to its row, which the cursor is
     // still inside; leaving the label is the row's own mouseleave.
@@ -998,136 +1172,92 @@ export function HeadToHeadCard() {
           {section.rows.map((row) => {
             const rowCounts = row.cut ? counts.get(row.label) : undefined;
             const noun = row.noun ?? "points";
-            // One lookup per side, built once, in place of a
-            // `side === "you" ? youX : oppX` ternary at every use below.
-            const perSide = {
-              you: { name: youName, fraction: fractionWords(row.you) },
-              opp: { name: oppName, fraction: fractionWords(row.opp) },
+            const names = { you: youName, opp: oppName };
+            const hasVideo = meta.hasPlayableVideo;
+            const noVideoLine = !hasVideo && !meta.readOnly;
+
+            // One figure's readout and target. Every figure with something
+            // to say hovers the same way; only a cut with points behind it on
+            // a match with a playable video clicks through.
+            const cell = (side: "you" | "opp") => {
+              const name = names[side];
+              const content = figureReadout(row, side, name, {
+                hasVideo,
+                noVideoLine,
+                count: rowCounts?.[side] ?? 0,
+              });
+              if (!hasReadout(content)) {
+                return { content: null, target: undefined };
+              }
+              const figure = `${row.label}, ${name}: ${figureWords(row, side)}`;
+              const { footer } = content;
+              const target: FigureTarget =
+                footer?.kind === "watch"
+                  ? {
+                      onClick: () =>
+                        actions.watchCut(
+                          sideCut(row.cut!, side, row.sideBy, row.sideWon),
+                          `${row.label} · ${name}`,
+                        ),
+                      label: `${figure}. ${watchLabel(footer.count, noun)}`,
+                      handlers: handlersFor(row.label, side),
+                    }
+                  : {
+                      label: [figure, tailWords(content)]
+                        .filter(Boolean)
+                        .join(". "),
+                      handlers: handlersFor(row.label, side),
+                    };
+              return { content, target };
             };
-            // A figure is watchable only when points stand behind it: an em
-            // dash has none, and neither does a cut the filter finds empty.
-            const cellWatch = (side: "you" | "opp") => {
-              const value = row[side];
-              const n = rowCounts?.[side] ?? 0;
-              if (!value.display || n === 0) return undefined;
-              const { name, fraction } = perSide[side];
-              const inWords = fraction
-                ? [fraction, row.verb].filter(Boolean).join(" ")
-                : null;
-              // "74 of 138 won" already carries the figure; "44%" does not.
-              const figure = !inWords
-                ? value.display
-                : value.detail?.startsWith("of ")
-                  ? inWords
-                  : `${value.display}, ${inWords}`;
-              return {
-                onClick: () =>
-                  actions.watchCut(
-                    sideCut(row.cut!, side, row.sideBy, row.sideWon),
-                    `${row.label} · ${name}`,
-                  ),
-                label: `${row.label}, ${name}: ${figure}. ${watchLabel(n, noun)}`,
-                handlers: target(row.label, side),
-              };
-            };
-            const youWatch = cellWatch("you");
-            const oppWatch = cellWatch("opp");
-            // A count of zero with nothing to open still answers a hover. Only
-            // a count: 0% of 3 break points is three break points, not none.
-            const isZeroCount = (side: "you" | "opp") =>
-              row[side].display === "0";
-            const inScope = "in this match";
-            const cellZero = (side: "you" | "opp", watchable: boolean) =>
-              !watchable && isZeroCount(side) && row.noun
-                ? {
-                    label: `${row.label}, ${perSide[side].name}: 0. No ${row.noun} ${inScope}`,
-                    handlers: target(row.label, side),
-                  }
-                : undefined;
-            const youZero = cellZero("you", Boolean(youWatch));
-            const oppZero = cellZero("opp", Boolean(oppWatch));
-            const zeroBySide = { you: youZero, opp: oppZero };
-            const rowWatchable =
-              !!rowCounts &&
-              rowCounts.both > 0 &&
-              Boolean(row.you.display || row.opp.display);
-            // Mirrors `cellWatch`'s shape so the row's own target — "both
-            // players" — is built the same way as each player's.
-            const rowWatch = rowWatchable
-              ? {
-                  onClick: () => actions.watchCut(row.cut!, row.label),
-                  label: `${row.label}, both players. ${watchLabel(rowCounts!.both, noun)}`,
-                  handlers: target(row.label, "row"),
-                }
-              : undefined;
+            const you = cell("you");
+            const opp = cell("opp");
+
+            const rowContent = rowReadout(row, youName, oppName, {
+              hasVideo,
+              noVideoLine,
+              count: rowCounts?.both ?? 0,
+            });
+            const rowHasReadout = hasReadout(rowContent);
+            const rowFooter = rowContent.footer;
+            const rowWatchable = rowFooter?.kind === "watch";
 
             const active = hover?.row === row.label ? hover.zone : null;
-            // The label's hover is "both players" only when the label is a
-            // target; on a row with nothing to open it just reads.
-            const bothLit = active === "row" && rowWatchable;
-            const rowLines: ReadoutLine[] =
-              perSide.you.fraction || perSide.opp.fraction
-                ? [
-                    { name: youName, value: perSide.you.fraction ?? "—" },
-                    {
-                      name: oppName,
-                      value: perSide.opp.fraction ?? "—",
-                      muted: true,
-                    },
-                  ]
-                : [];
-            const cellReadout = (side: "you" | "opp", watchable: boolean) => {
-              const { name, fraction } = perSide[side];
-              const title = `${row.label} · ${name}`;
-              if (!watchable) {
-                if (!zeroBySide[side]) return null;
-                return (
-                  <Readout
-                    open={active === side}
-                    align="end"
-                    title={title}
-                    lines={[]}
-                    note={`No ${row.noun} ${inScope}`}
-                  />
-                );
-              }
-              return (
-                <Readout
-                  open={active === side}
-                  align="end"
-                  title={title}
-                  lines={
-                    fraction
-                      ? [
-                          {
-                            name: [fraction, row.verb]
-                              .filter(Boolean)
-                              .join(" "),
-                            value: "",
-                          },
-                        ]
-                      : []
-                  }
-                  action={watchLine(rowCounts![side])}
-                />
-              );
-            };
-            // Both players at a measured zero: the label answers the way each
-            // zero does, rather than going silent between them.
-            const bothZero =
-              !rowWatchable &&
-              Boolean(row.noun) &&
-              isZeroCount("you") &&
-              isZeroCount("opp");
-            const rowReadout = (
+            // One hover at a time: the label (and any part of the row that
+            // is not a figure) washes the row; a figure washes itself alone.
+            // A row with nothing to say does not wash.
+            const rowLit = active === "row" && rowHasReadout;
+            const readout = (
               <Readout
                 open={active === "row"}
                 align="start"
-                title={row.label}
-                lines={rowLines}
-                note={bothZero ? `No ${row.noun} ${inScope}` : row.note}
-                action={rowWatchable ? watchLine(rowCounts!.both) : null}
+                content={rowContent}
               />
+            );
+            // The label's target is stretched over the whole row by its
+            // `::after`, so the hit area is exactly the row's wash; the figures
+            // sit above it (`z-[1]`) with their own. The target itself stays
+            // unpositioned so the `::after` resolves against the row, and the
+            // readout anchors to the label text instead. The ring moves onto
+            // the `::after` too, so focus draws the same box the wash does.
+            const label = (
+              <span className="relative flex min-w-0 items-center gap-1.5">
+                <span className="min-w-0 truncate">{row.label}</span>
+                {rowWatchable && (
+                  <CirclePlay
+                    aria-hidden="true"
+                    strokeWidth={1.5}
+                    className={cn(
+                      "h-3 w-3 shrink-0 text-[var(--ink-900)] transition-[opacity,transform] motion-reduce:transform-none",
+                      EASE,
+                      rowLit
+                        ? "translate-x-0 opacity-100"
+                        : "-translate-x-1 opacity-0",
+                    )}
+                  />
+                )}
+                {readout}
+              </span>
             );
 
             return (
@@ -1136,9 +1266,7 @@ export function HeadToHeadCard() {
                 className={cn(
                   "relative -mx-2 flex min-h-[30px] items-center rounded-[var(--radius-element)] px-2 transition-colors",
                   EASE,
-                  // Hovering a number styles that number alone: the row wash
-                  // belongs to the label's hover (or a row with no targets).
-                  active === "row" && "bg-[var(--surface-muted)]",
+                  rowLit && "bg-[var(--surface-muted)]",
                 )}
                 onMouseEnter={() =>
                   setHover((current) =>
@@ -1153,69 +1281,70 @@ export function HeadToHeadCard() {
                   )
                 }
               >
-                {rowWatch ? (
+                {rowWatchable ? (
                   <button
                     type="button"
-                    onClick={rowWatch.onClick}
-                    aria-label={rowWatch.label}
-                    {...rowWatch.handlers}
+                    onClick={() => actions.watchCut(row.cut!, row.label)}
+                    aria-label={`${row.label}, both players. ${watchLabel(rowFooter.count, noun)}`}
+                    data-focus-ring="none"
+                    {...handlersFor(row.label, "row")}
                     className={cn(
-                      "relative flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 self-stretch border-0 bg-transparent p-0 pr-3 text-left text-[12px] transition-colors",
+                      "flex min-w-0 flex-1 cursor-pointer items-center self-stretch border-0 bg-transparent p-0 pr-3 text-left text-[12px] transition-colors",
                       EASE,
-                      bothLit
+                      STRETCHED,
+                      rowLit
                         ? "text-[var(--ink-900)]"
                         : "text-[var(--ink-600)]",
                     )}
                   >
-                    <span className="min-w-0 truncate">{row.label}</span>
-                    <CirclePlay
-                      aria-hidden="true"
-                      strokeWidth={1.5}
-                      className={cn(
-                        "h-3 w-3 shrink-0 text-[var(--ink-900)] transition-[opacity,transform] motion-reduce:transform-none",
-                        EASE,
-                        bothLit
-                          ? "translate-x-0 opacity-100"
-                          : "-translate-x-1 opacity-0",
-                      )}
-                    />
-                    {rowReadout}
+                    {label}
                   </button>
                 ) : (
                   <span
                     // Focusable only when it has something to say, so a
-                    // keyboard gets the same empty state a hover does.
-                    {...(bothZero && {
+                    // keyboard gets the same readout a hover does.
+                    {...(rowHasReadout && {
                       tabIndex: 0,
                       role: "note",
-                      "aria-label": `${row.label}: no ${row.noun} ${inScope}`,
-                      ...target(row.label, "row"),
+                      "aria-label": `${row.label}. ${readoutWords(rowContent)}`,
+                      "data-focus-ring": "none",
+                      ...handlersFor(row.label, "row"),
                     })}
-                    className="relative flex min-w-0 flex-1 items-center self-stretch rounded-[var(--radius-element)]"
+                    className={cn(
+                      "flex min-w-0 flex-1 items-center self-stretch pr-3 text-[12px] text-[var(--ink-600)]",
+                      rowHasReadout && STRETCHED,
+                    )}
                   >
-                    <span className="min-w-0 truncate text-[12px] text-[var(--ink-600)]">
-                      {row.label}
-                    </span>
-                    {rowReadout}
+                    {label}
                   </span>
                 )}
                 <ValueCell
                   value={row.you}
                   emphasised={row.leader === "you"}
                   note={row.note}
-                  washed={active === "you" && Boolean(youWatch || youZero)}
-                  watch={youWatch}
-                  zero={youZero}
-                  readout={cellReadout("you", Boolean(youWatch))}
+                  washed={active === "you" && Boolean(you.target)}
+                  target={you.target}
+                  readout={
+                    <Readout
+                      open={active === "you"}
+                      align="end"
+                      content={you.content}
+                    />
+                  }
                 />
                 <ValueCell
                   value={row.opp}
                   emphasised={row.leader === "opp"}
                   note={row.note}
-                  washed={active === "opp" && Boolean(oppWatch || oppZero)}
-                  watch={oppWatch}
-                  zero={oppZero}
-                  readout={cellReadout("opp", Boolean(oppWatch))}
+                  washed={active === "opp" && Boolean(opp.target)}
+                  target={opp.target}
+                  readout={
+                    <Readout
+                      open={active === "opp"}
+                      align="end"
+                      content={opp.content}
+                    />
+                  }
                 />
               </div>
             );
