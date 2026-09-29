@@ -132,7 +132,7 @@ ready).
 
 ## T10 · Quota RPC throws are handled inside the try blocks
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5, T6
 - **files:** src/lib/services/splitstep/quota.ts, src/app/api/splitstep/jobs/handler.ts, src/lib/services/splitstep/resubmit-job.ts, src/app/api/splitstep/jobs/[jobId]/resubmit/route.ts, tests/job-submission-authorization.spec.ts, tests/resubmit-authorization.spec.ts (guess)
@@ -158,7 +158,7 @@ ready).
 
 ## T12 · House error shape: no `detail` in production, admin 401/403
 
-- **status:** todo
+- **status:** doing
 - **model:** opus
 - **files:** src/lib/services/match-video/http.ts, src/app/api/splitstep/jobs/handler.ts, src/lib/services/programs/admin-video-submission.ts, src/lib/services/programs/admin-guard.ts, src/app/api/admin/uploads/file/route.ts, src/app/api/admin/uploads/video/route.ts, AGENTS.md, tests/error-response-shape.spec.ts (new) (guess)
 - **done when:**
@@ -171,7 +171,7 @@ ready).
 
 ## T13 · OpenAPI 3.1 spec, part 1: match, video, upload, programs routes + lint script
 
-- **status:** todo
+- **status:** doing
 - **model:** opus
 - **files:** openapi/advantage-api.yaml (new), package.json, MAP.md (hand-written section only), src/app/api/matches/[matchId]/**, src/app/api/upload/route.ts, src/app/api/validate-file/route.ts, src/app/api/programs/**, src/lib/services/match-video/http.ts (guess)
 - **done when:**

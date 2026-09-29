@@ -102,3 +102,12 @@ is the runner's. Newest entries at the bottom.
 
 1. Signed-in cases: team workspace with no matches → 204; LLM adapter error → 500; hours-left `peekQuota` throws → 503.
 2. Tighten the insight 401 assertions to the body shape once T12's error convention lands.
+
+## T10 · Quota RPC throws are handled inside the try blocks — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** Implemented in parallel in an isolated worktree (commit bfc674b4), brought over here. `quota.ts` exports `QuotaReserveError` (carries the SQLSTATE `code`) thrown by `reserveQuota()`/`reservePooled()`. `handleSubmitJob` catches a throwing reservation after the claim: 23505 (T6's index) → 409 "This match has already been submitted for analysis.", anything else → 503 "Could not reserve analysis time. Try again."; both hand the claim back (`uploaded`) and never mint, send, release or mark failed. `resubmitJob` wraps `reserveForChild` in a try: a throw deletes the child row and returns `quota_unavailable` (503 in `REFUSAL_STATUS`). Specs cover 08006/23505/no-code throws and the resubmit orphan cleanup.
+**follow-ups:**
+
+1. No spec pins `reserveQuota`/`reservePooled` throwing `QuotaReserveError` with the right `code` directly (only typecheck) — a small stubbed-rpc spec would.
+2. Webhook/reconciler auto-retry callers treat `quota_unavailable` as a plain decline (logged only), same as `submit_failed`.

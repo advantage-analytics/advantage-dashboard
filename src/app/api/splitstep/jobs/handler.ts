@@ -596,17 +596,10 @@ export async function handleSubmitJob(
     }
   }
 
-  const reservation = await deps.reserveQuota({
-    jobId: job.id,
-    userId,
-    workspace: billingWorkspace,
-    seconds: billableSeconds,
-  });
-
-  if (!reservation.ok) {
-    // The claim is held and nothing was spent: hand the row back to
-    // `uploaded`, the state "Try again" picks up from. Best effort — a failed
-    // revert is logged, and `isSubmitStalled()` still surfaces the row.
+  // The claim is held and nothing was spent: hand the row back to `uploaded`,
+  // the state "Try again" picks up from. Best effort — a failed revert is
+  // logged, and `isSubmitStalled()` still surfaces the row.
+  const handClaimBack = async () => {
     const reverted = await deps.updateJob(job.id, { status: "uploaded" });
     if (reverted.error) {
       pipelineLog.error(`${LOG} could not hand the claim back`, {
@@ -614,6 +607,45 @@ export async function handleSubmitJob(
         error: reverted.error,
       });
     }
+  };
+
+  // Its own try, not the one below: that catch releases a reservation and
+  // marks the job `failed`, and a reservation RPC that threw holds nothing to
+  // release — the job is as retryable as it was a moment ago. Outside any try,
+  // the throw was a bare 500 with the row stranded at `submitting`.
+  let reservation: QuotaReservation;
+  try {
+    reservation = await deps.reserveQuota({
+      jobId: job.id,
+      userId,
+      workspace: billingWorkspace,
+      seconds: billableSeconds,
+    });
+  } catch (err) {
+    // `QuotaReserveError.code`, read by shape so a stub need not import it.
+    const code = (err as { code?: unknown } | null)?.code;
+    pipelineLog.error(`${LOG} quota reservation failed`, {
+      jobId: job.id,
+      code: typeof code === "string" ? code : null,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    await handClaimBack();
+    // 23505 is `processing_usage`'s unique index on `job_id`: this job already
+    // holds a reservation, so another submission got here first.
+    if (code === "23505") {
+      return NextResponse.json(
+        { error: "This match has already been submitted for analysis." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json(
+      { error: "Could not reserve analysis time. Try again." },
+      { status: 503 },
+    );
+  }
+
+  if (!reservation.ok) {
+    await handClaimBack();
     pipelineLog.info(
       `${LOG} refused — ${reservation.permission ? "not permitted" : "monthly cap"}`,
       {

@@ -669,6 +669,32 @@ test("a quota refusal removes the child and leaves the parent failed", async () 
   expect(h.db.tables.processing_jobs.map((j) => j.id)).toEqual(["j-parent"]);
 });
 
+test("a reservation RPC that throws removes the child → quota_unavailable, nothing released or sent", async () => {
+  const h = harness({});
+  h.io.reserveQuota = async ({ jobId, workspace, seconds }) => {
+    h.reserved.push({ jobId, workspaceId: workspace.id, seconds });
+    throw Object.assign(
+      new Error("Could not reserve processing quota: connection reset"),
+      { code: "08006" },
+    );
+  };
+  const r = await manual(h);
+  expect(r.ok).toBe(false);
+  if (r.ok) return;
+  expect(r.reason).toBe("quota_unavailable");
+  expect(r.message).toBe("Could not reserve analysis time. Try again.");
+  expect(h.reserved).toHaveLength(1);
+  // The child was inserted, then deleted — no live `uploaded` orphan left for
+  // `processing_jobs_one_live_per_match` to block the next retry on.
+  const child = h.db.inserts[0].row;
+  expect(h.db.row("processing_jobs", child.id)).toBeUndefined();
+  expect(h.db.tables.processing_jobs.map((j) => j.id)).toEqual(["j-parent"]);
+  expect(h.db.row("processing_jobs", "j-parent")?.status).toBe("failed");
+  expect(h.released).toEqual([]);
+  expect(h.minted).toEqual([]);
+  expect(h.sent).toEqual([]);
+});
+
 test("only a failure PAST the reservation marks the child failed — never the contract", async () => {
   const h = harness({ vendor: { ok: false, status: 500, text: "boom" } });
   const r = await manual(h);

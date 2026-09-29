@@ -745,6 +745,56 @@ test("a reservation refused after a won claim ends with the row back at uploaded
   expect(h.released).toEqual([]);
 });
 
+/** A harness whose `reserveQuota` rejects the way the RPC's error surfaces. */
+function throwingReservation(code: string | null) {
+  const h = harness({});
+  h.deps.reserveQuota = async ({ jobId, workspace, seconds }) => {
+    h.reserved.push({ jobId, workspaceId: workspace.id, seconds });
+    // Shaped like `QuotaReserveError` without importing quota.ts's runtime.
+    throw Object.assign(
+      new Error("Could not reserve processing quota: boom"),
+      code ? { code } : {},
+    );
+  };
+  return h;
+}
+
+test("a reservation RPC that throws → 503, the row handed back, vendor unreached", async () => {
+  const h = throwingReservation("08006");
+  const r = await call(h);
+  expect(r.status).toBe(503);
+  expect(r.json.error).toBe("Could not reserve analysis time. Try again.");
+  expect(h.claims.map((c) => c.patch.status)).toEqual(["submitting"]);
+  expect(h.reserved).toHaveLength(1);
+  // Reverted, never `failed`: nothing was reserved, so nothing is released.
+  expect(h.patches).toEqual([{ jobId: "j-1", patch: { status: "uploaded" } }]);
+  expect(h.released).toEqual([]);
+  expect(h.minted).toEqual([]);
+  expect(h.sent).toEqual([]);
+  expect(h.retired).toEqual([]);
+});
+
+test("a reservation that throws 23505 (job already reserved) → 409, the row handed back", async () => {
+  const h = throwingReservation("23505");
+  const r = await call(h);
+  expect(r.status).toBe(409);
+  expect(r.json.error).toBe(
+    "This match has already been submitted for analysis.",
+  );
+  expect(h.patches).toEqual([{ jobId: "j-1", patch: { status: "uploaded" } }]);
+  expect(h.released).toEqual([]);
+  expect(h.minted).toEqual([]);
+  expect(h.sent).toEqual([]);
+});
+
+test("a reservation that throws with no code at all → 503", async () => {
+  const h = throwingReservation(null);
+  const r = await call(h);
+  expect(r.status).toBe(503);
+  expect(h.patches.at(-1)?.patch.status).toBe("uploaded");
+  expect(h.sent).toEqual([]);
+});
+
 test("a claim write that fails outright → 503, nothing spent and no blind revert", async () => {
   const h = harness({ claimError: "connection reset" });
   const r = await call(h);

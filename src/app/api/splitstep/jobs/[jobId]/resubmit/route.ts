@@ -42,6 +42,8 @@ const REFUSAL_STATUS: Record<ResubmitRefusalReason, number> = {
   already_auto_resubmitted: 409,
   video_unavailable: 409,
   quota: 429,
+  // No answer from the reservation RPC — not a refusal, so "try again".
+  quota_unavailable: 503,
   not_configured: 503,
   invalid_metadata: 422,
   submit_failed: 502,
