@@ -131,3 +131,66 @@ test("realTournamentName still reads the legacy placeholder as no event", () => 
   expect(realTournamentName(null)).toBeNull();
   expect(realTournamentName("Spring Invitational")).toBe("Spring Invitational");
 });
+
+/** ---- Command palette (⌘K) ---- */
+
+const paletteLoader = createLoader({
+  markUnknown: true,
+  stubs: {
+    "next/navigation": { useRouter: () => ({ push() {} }) },
+    "@/lib/supabase/client": { createClient: () => null },
+  },
+});
+
+const PALETTE_ROWS = [
+  { tournament_name: null as string | null },
+  { tournament_name: "Spring Invitational" },
+];
+
+function paletteMatch(tournamentName: string | null) {
+  return {
+    type: "match",
+    data: {
+      id: "m1",
+      opponentName: "Sam Ortiz",
+      tournamentName,
+      score: [],
+      date: "Sep 20",
+      outcome: null,
+      hasScore: false,
+      workspaceName: null,
+    },
+  };
+}
+
+test("palette match row with no event reads a muted 'No event'", () => {
+  const { ResultRow } = paletteLoader.load(
+    "src/components/dashboard/search/search-command-palette.tsx",
+  ) as { ResultRow: React.ComponentType<Record<string, unknown>> };
+  const none = render(
+    React.createElement(ResultRow, { item: paletteMatch(null) }),
+  );
+  expect(none).toMatch(
+    /<span[^>]*style="color:var\(--ink-400\)"[^>]*>No event<\/span>/,
+  );
+  expect(none).not.toContain("Unknown event");
+
+  const named = render(
+    React.createElement(ResultRow, {
+      item: paletteMatch("Spring Invitational"),
+    }),
+  );
+  expect(named).toContain("Spring Invitational");
+  expect(named).not.toContain("No event");
+});
+
+test("palette Events group holds only named events", () => {
+  const { countEvents } = paletteLoader.load(
+    "src/components/dashboard/search/event-counts.ts",
+  ) as {
+    countEvents: (rows: typeof PALETTE_ROWS) => Map<string, number>;
+  };
+  expect([...countEvents(PALETTE_ROWS).entries()]).toEqual([
+    ["Spring Invitational", 1],
+  ]);
+});

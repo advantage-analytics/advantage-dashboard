@@ -51,3 +51,8 @@ is the runner's. Newest entries at the bottom.
 
 1. The button errors ("function not found") until 20260929170100 is applied live.
 2. Eyes-on: a team match on an event, signed in as a schedule manager; check Esc in the confirm closes only the confirm.
+
+## T6 · Palette: muted "No event" on match rows, no fake Events entry — done
+
+**gate:** mechanical GATE PASS; completion `VERDICT: pass`. widget-states: palette loading/empty/error paths untouched.
+**changed:** `search-command-palette.tsx` — `MatchResult.tournamentName` is `string | null`, match rows show muted "No event" (`var(--ink-400)`), "Unknown event" gone; Events group built by new pure `countEvents()` (`search/event-counts.ts`), which skips null-event rows. `ResultRow` exported for the spec; two new tests in `tests/match-no-event.spec.ts`.

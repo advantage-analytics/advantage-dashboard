@@ -85,7 +85,7 @@ ready).
 
 ## T6 · Palette: muted "No event" on match rows, no fake Events entry
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/search/search-command-palette.tsx, tests/match-no-event.spec.ts (guess; may be a new offline spec if the palette cannot be loaded there)
 - **done when:**
