@@ -145,6 +145,91 @@ function isServeRow(shotType: string): boolean {
 }
 
 /**
+ * A point's rally, numbered the way the match was played rather than the way
+ * the rows were stored.
+ *
+ * - {@link RallyNumbering.numbers}: shot id → its number. Every serve row
+ *   ({@link isServeRow}) is 1 — a faulted first serve and the serve that
+ *   was played both start the point — and every shot after the LAST serve
+ *   counts on from it: the return is 2, the next shot 3. A non-serve row
+ *   stored ahead of the last serve (a Feed, an untyped row) belongs to the
+ *   serve, not the rally, and is 1 as well. With no serve row at all the
+ *   shots are 1..n in the order given.
+ * - {@link RallyNumbering.count}: the shots from the last serve on — the
+ *   rally's length, the total a "shot 2 of 4" readout is out of. Every shot
+ *   when there is no serve.
+ * - {@link RallyNumbering.openerId}: the shot that opened the rally — the last
+ *   serve (the one that was played: a second serve when there is one, else
+ *   the last serve row), or with no serve the first shot. It is
+ *   the one "shot 1" the "This point" card draws in the darker ink.
+ *
+ * Works from the point's FULL `shots` (`MatchPoint.shots`, already in
+ * `shot_number` order), never the timed-only feed ({@link shotStops}): an
+ * untimed serve still decides where the rally starts. Look a displayed shot
+ * up by id. `shot_number` itself is never read — Advantage Intelligence
+ * stores a faulted serve at 0 and older SwingVision Feed rows are 0 too — and
+ * neither is `rally_length`, which is 0 when the source never recorded it.
+ */
+export interface RallyNumbering {
+  numbers: ReadonlyMap<string, number>;
+  count: number;
+  openerId: string | null;
+}
+
+export function rallyNumbering(
+  shots: readonly MatchShot[] | undefined,
+): RallyNumbering {
+  const list = shots ?? [];
+  const lastServe = list.findLastIndex((s) =>
+    isServeRow(s.shotType?.trim() ?? ""),
+  );
+  // No serve: the rally is every shot, and it starts at the first one.
+  const start = Math.max(lastServe, 0);
+  const numbers = new Map<string, number>();
+  list.forEach((s, i) => {
+    numbers.set(s.id, Math.max(i - start, 0) + 1);
+  });
+  // The opener is the played serve: a row typed second, when there is one.
+  // SwingVision stores both serves at shot_number 1 and the loader breaks
+  // that tie by uuid, so "the last serve row" is the faulted one about half
+  // the time. Stored order is only the fallback (one serve, or bare "Serve").
+  const secondServe = list.find((s) => {
+    const type = s.shotType?.trim() ?? "";
+    return isServeRow(type) && /second|2nd/i.test(type);
+  });
+  return {
+    numbers,
+    count: list.length - start,
+    openerId: secondServe?.id ?? list[start]?.id ?? null,
+  };
+}
+
+/**
+ * A shot row's accessible name. Two serves can both read "1", so a serve row
+ * names which one it was — "Shot 1, first serve" / "Shot 1, second serve" —
+ * and the two rows never share a name; any other row names its stroke.
+ */
+export function shotRowAriaLabel(cells: ShotRowCells): string {
+  const what =
+    cells.stroke === "Serve"
+      ? `${cells.type.toLowerCase()} serve`
+      : cells.stroke;
+  return `Shot ${cells.order}, ${what}, ${cells.player}, ${cells.placement}, ${cells.result} — jump to this shot`;
+}
+
+/**
+ * The "This point" card's Stroke ink: the darker ink marks the shot that
+ * opened the rally ({@link RallyNumbering.openerId}) — the deciding serve —
+ * and never a faulted first serve that also reads "1".
+ */
+export function isRallyOpener(
+  shotId: string,
+  numbering: RallyNumbering,
+): boolean {
+  return shotId === numbering.openerId;
+}
+
+/**
  * The point's return: its first TYPED shot that is neither a serve nor a
  * Feed — `pickReturnShot`'s rule (`serve-return-shots.ts`), widened by the
  * same bare `Serve` fallback as {@link isServeRow}, and narrowed to shots the
@@ -205,7 +290,8 @@ export function shotTypeLabel(
  */
 export function shotRowCells(
   shot: MatchShot,
-  /** 1-based place in the rally — the row number only. */
+  /** The shot's number in the rally ({@link rallyNumbering}) — the row
+   * number only. Both serves of a faulted first serve are 1. */
   order: number,
   playerName: string,
   /** The point's return ({@link pointReturnShotId}); callers that never draw
@@ -228,9 +314,11 @@ export function shotRowCells(
 }
 
 // T9: row 1 arrives with no delay, each row after it 25ms later, capped at
-// row 9 — so a long rally still finishes arriving inside 200ms. Used as the
-// mount-driven `animationDelay` for `film-shot-row-in` (`film-this-point.tsx`,
-// `point-list.tsx`); its cap and reduced-motion opt-out live in globals.css.
+// row 9 — so a long rally still finishes arriving inside 200ms. `order` is
+// the row's place in the LIST, not its rally number, which two serves share.
+// Used as the mount-driven `animationDelay` for `film-shot-row-in`
+// (`film-this-point.tsx`, `point-list.tsx`); its cap and reduced-motion
+// opt-out live in globals.css.
 export function shotRowRevealDelay(order: number): number {
   return Math.min(order - 1, 8) * 25;
 }

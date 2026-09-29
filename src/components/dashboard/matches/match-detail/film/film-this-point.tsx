@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
@@ -9,7 +9,10 @@ import { cn } from "@/lib/utils";
 
 import { lastNameOf } from "./film-list-filters";
 import {
+  isRallyOpener,
   pointReturnShotId,
+  rallyNumbering,
+  shotRowAriaLabel,
   shotRowCells,
   shotRowRevealDelay,
   UNMEASURED,
@@ -75,6 +78,9 @@ export const FilmThisPoint = memo(function FilmThisPoint({
   // Over ALL the point's shots, timed or not: the return is a role in the
   // rally, and an untimed serve row still decides which shot it is.
   const returnShotId = pointReturnShotId(point?.shots);
+  // The same for the rally's numbers and its length: both serves read 1 and
+  // the return 2, whichever of them the film has a time for.
+  const numbering = useMemo(() => rallyNumbering(point?.shots), [point]);
 
   return (
     <section
@@ -140,6 +146,8 @@ export const FilmThisPoint = memo(function FilmThisPoint({
               key={stop.shot.id}
               stop={stop}
               order={i + 1}
+              rallyNumber={numbering.numbers.get(stop.shot.id) ?? i + 1}
+              isOpener={isRallyOpener(stop.shot.id, numbering)}
               returnShotId={returnShotId}
               playerName={lastNameOf(
                 stop.shot.isPlayer1 === youIsPlayer1
@@ -155,7 +163,7 @@ export const FilmThisPoint = memo(function FilmThisPoint({
 
       <div className="mx-3 mt-2.5 flex shrink-0 items-center gap-2.5 border-t border-[var(--border-hairline)] pt-3 pb-1">
         <span className="text-micro tabular">
-          {shots.length} {shots.length === 1 ? "shot" : "shots"}
+          {numbering.count} {numbering.count === 1 ? "shot" : "shots"}
           {seconds != null ? ` · ${seconds}s` : ""}
         </span>
         {ended && (
@@ -227,28 +235,34 @@ function StepButton({
 const ShotRow = memo(function ShotRow({
   stop,
   order,
+  rallyNumber,
+  isOpener,
   returnShotId,
   playerName,
   isActive,
   onSelect,
 }: {
   stop: ShotStop;
-  /** Position in the rally, 1-based. */
+  /** Place in this list, 1-based — the reveal stagger only. */
   order: number;
+  /** The shot's number in the rally (`rallyNumbering`): what the # cell prints. */
+  rallyNumber: number;
+  /** The shot that opened the rally — the deciding serve — drawn darker. */
+  isOpener: boolean;
   /** The point's return, from all its shots (timed or not), for Type. */
   returnShotId: string | null;
   playerName: string;
   isActive: boolean;
   onSelect: (stop: ShotStop) => void;
 }) {
-  const cells = shotRowCells(stop.shot, order, playerName, returnShotId);
+  const cells = shotRowCells(stop.shot, rallyNumber, playerName, returnShotId);
 
   return (
     <button
       type="button"
       data-shot-id={stop.shot.id}
       aria-current={isActive ? "true" : undefined}
-      aria-label={`${cells.order}. ${cells.player} ${cells.stroke}, ${cells.placement}, ${cells.result} — jump to this shot`}
+      aria-label={shotRowAriaLabel(cells)}
       onClick={() => onSelect(stop)}
       // T9: the same reveal the room's shot well draws, on the shell's own
       // row height. Mount-driven — rows are keyed by `shot.id`, so the card
@@ -273,7 +287,7 @@ const ShotRow = memo(function ShotRow({
       <Cell className={WIDE_ONLY} ink="var(--ink-600)">
         {cells.spin}
       </Cell>
-      <Cell ink={order === 1 ? "var(--ink-900)" : "var(--ink-700)"}>
+      <Cell ink={isOpener ? "var(--ink-900)" : "var(--ink-700)"}>
         {cells.stroke}
       </Cell>
       <Cell className={WIDE_ONLY} ink="var(--ink-700)">

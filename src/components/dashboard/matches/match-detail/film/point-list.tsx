@@ -30,7 +30,13 @@ import { filmProgressWidth } from "./film-clock";
 import { FilmAdvancedPanel } from "./film-advanced-panel";
 import { reducedMotionNow } from "./film-motion";
 import { FilmQuickFilters } from "./film-quick-filters";
-import { shotRowCells, shotRowRevealDelay, type ShotStop } from "./film-shots";
+import {
+  rallyNumbering,
+  shotRowAriaLabel,
+  shotRowCells,
+  shotRowRevealDelay,
+  type ShotStop,
+} from "./film-shots";
 import {
   followAffordance,
   type FollowAffordance,
@@ -1294,6 +1300,11 @@ function ShotWell({
   oppLastName: string;
   onSelectShot: (stop: ShotStop) => void;
 }) {
+  // The well is one point's timed shots; its numbers come from that point's
+  // FULL shot list, so both serves read 1 and the return 2 even when a serve
+  // was never timed.
+  const point = stops[0]?.point;
+  const numbering = useMemo(() => rallyNumbering(point?.shots), [point]);
   return (
     // Two elements, not one: the outer grid is what `film-shot-well-open`
     // (globals.css) unfolds — its single row track grows from 0fr to 1fr on
@@ -1308,6 +1319,7 @@ function ShotWell({
             key={stop.shot.id}
             stop={stop}
             order={i + 1}
+            rallyNumber={numbering.numbers.get(stop.shot.id) ?? i + 1}
             playerName={
               stop.shot.isPlayer1 === youIsPlayer1 ? youLastName : oppLastName
             }
@@ -1339,25 +1351,28 @@ const SHOT_COLUMNS =
 const ShotWellRow = memo(function ShotWellRow({
   stop,
   order,
+  rallyNumber,
   playerName,
   isLit,
   onSelect,
 }: {
   stop: ShotStop;
-  /** 1-based place in the rally. */
+  /** Place in the well, 1-based — the reveal stagger only. */
   order: number;
+  /** The shot's number in the rally (`rallyNumbering`): what the # cell prints. */
+  rallyNumber: number;
   playerName: string;
   isLit: boolean;
   onSelect: (stop: ShotStop) => void;
 }) {
-  const cells = shotRowCells(stop.shot, order, playerName);
+  const cells = shotRowCells(stop.shot, rallyNumber, playerName);
 
   return (
     <button
       type="button"
       data-shot-id={stop.shot.id}
       aria-current={isLit ? "true" : undefined}
-      aria-label={`${cells.order}. ${cells.player} ${cells.stroke}, ${cells.placement}, ${cells.result} — jump to this shot`}
+      aria-label={shotRowAriaLabel(cells)}
       onClick={() => onSelect(stop)}
       // T9: the rally reveals itself as a rally. Mount-driven — the rows are
       // keyed by `shot.id`, so stepping to another point mounts a fresh set
