@@ -82,3 +82,26 @@ ready).
   - [ ] `realTournamentName()` and the `/m/[token]` share page behave as before (existing spec unchanged or extended).
   - [ ] An offline spec renders a list row and the drawer with `tournament_name: null` and asserts the "No event" text.
 - **notes:** Muted "No event" is the interpretation of "default should be no event"; follow `.skills/advantage-analytics-design/SKILL.md` for the muted token.
+
+## T6 · Palette: muted "No event" on match rows, no fake Events entry
+
+- **status:** todo
+- **model:** sonnet
+- **files:** src/components/dashboard/search/search-command-palette.tsx, tests/match-no-event.spec.ts (guess; may be a new offline spec if the palette cannot be loaded there)
+- **done when:**
+  - [ ] `MatchResult.tournamentName` is `string | null`, and the match-result mapping (line ~563) passes `m.tournament_name` through; the string `"Unknown event"` no longer appears anywhere in `search-command-palette.tsx`.
+  - [ ] The match row (line ~1135) renders the literal text "No event" with `color: var(--ink-400)` when `tournamentName` is null, and the real name in the existing style otherwise.
+  - [ ] In the `eventCounts` loop (line ~579), rows with a null `tournament_name` are skipped, so the Events group never contains an entry named "Unknown event" or "No event"; opponent counting for those rows is unchanged.
+  - [ ] An offline spec asserts, for a fixture with one null-event match and one named-event match, that the row markup contains "No event" and the events list contains only the named event (via an extracted pure helper or renderToStaticMarkup through `tests/fixtures/vm-modules.ts` `createLoader()`).
+- **notes:** Interpretation: an event group is a searchable event name, so eventless matches simply do not appear in it. Follow the muted pattern already used in `match-card-list.tsx`. If the mapping logic is hard to load offline, extract it to a small pure function (never a `foo.ts` beside `foo.tsx` of the same basename).
+
+## T7 · Delete unused featured-match-card and match-event-header
+
+- **status:** todo
+- **model:** sonnet
+- **files:** src/components/dashboard/matches/featured-match-card.tsx, src/components/dashboard/matches/match-event-header.tsx, MAP.md (only if `npm run map` changes it)
+- **done when:**
+  - [ ] Both files are deleted in the diff.
+  - [ ] `grep -rn "featured-match-card\|match-event-header\|FeaturedMatchCard\|MatchEventHeader" src tests scripts` returns no matches after the change (docs/ux-overhaul-brief.md:299 is a point-in-time brief and is intentionally left untouched).
+  - [ ] `npm run typecheck` passes and the diff touches no file other than the two deletions (plus MAP.md if the generator changes it).
+- **notes:** Origin: T5 log follow-up #3. Re-run the grep before deleting.
