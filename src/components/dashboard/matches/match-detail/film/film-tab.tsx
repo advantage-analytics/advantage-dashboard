@@ -42,6 +42,7 @@ import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/
 import { usePendingFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import {
+  FILTER_RAIL_ID,
   FilterRail,
   FilterRailProvider,
   useFilterRailHost,
@@ -647,9 +648,12 @@ function FilmRoom({
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
+      // The filters drawer is an `<aside>`, not a dialog, and focuses its own
+      // container on open — without its id here, Space would play the film
+      // behind it, the arrows would step points and S would save one.
       if (
         target?.closest(
-          "input, textarea, select, [contenteditable], [role=dialog], [data-radix-popper-content-wrapper]",
+          `input, textarea, select, [contenteditable], [role=dialog], [data-radix-popper-content-wrapper], #${FILTER_RAIL_ID}`,
         )
       ) {
         return;

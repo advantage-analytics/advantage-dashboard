@@ -174,6 +174,8 @@ export function FilterRail(props: FilterRailProps) {
   // positioned inside that pane it was laid out in the scrolled content and
   // slid off with the cards. Only ever open after a click, so reading the
   // DOM here never runs on the server. Context still flows through a portal.
+  // Without a host (no `MatchReportFrame` ancestor — an offline harness that
+  // mounts `FilmTab` on its own) it renders in place instead of vanishing.
   const host =
     typeof document === "undefined"
       ? null

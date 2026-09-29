@@ -51,10 +51,9 @@ export { MatchReportProvider };
 
 /**
  * `relative` + the id make this the Video tab's filters drawer's anchor: the
- * drawer portals here (`match-filters/filter-rail.tsx`) so it pins to the
- * frame's right edge. Inside `#match-report-pane` it would scroll away with
- * the cards — that pane is the page's one scroll container, and its
- * `@container` contains even `fixed` descendants.
+ * drawer portals here. See `match-filters/filter-rail.tsx`'s "Placement" note
+ * for why (short-viewport overflow inside `#match-report-pane`, and why
+ * `fixed` is no escape from it either).
  */
 
 export function MatchReportFrame({ children }: { children: ReactNode }) {

@@ -149,4 +149,12 @@ test.describe("filters drawer placement", () => {
     );
     expect(MATCH_REPORT_FRAME_ID).toBe("match-report-frame");
   });
+
+  // The drawer focuses its own container on open; the Video tab's
+  // window-level shortcuts (Space plays, arrows step, S saves) must not fire
+  // from inside it.
+  test("the Video tab's shortcuts stand down while focus is in the drawer", () => {
+    const film = read("film/film-tab.tsx");
+    expect(film).toContain("#${FILTER_RAIL_ID}");
+  });
 });
