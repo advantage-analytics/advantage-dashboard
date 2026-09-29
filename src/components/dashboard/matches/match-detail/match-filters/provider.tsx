@@ -21,6 +21,7 @@ import {
   EMPTY_MATCH_FILTERS,
   filtersEqual,
   hasActiveMatchFilters,
+  isDerivedMatch,
   MATCH_FILTERS_PARAM,
   matchFiltersQuery,
   optionAvailability,
@@ -225,12 +226,10 @@ export function useMatchFilters(): MatchFiltersValue {
   // Read unconditionally (hook order), used only when there is no provider.
   // The fallback's context carries no hands: nothing is filtered, so nothing
   // ever consults them, and building them would walk every shot per card.
-  // `isDerived` is cheap and read off the same row `buildFilterContext`
-  // reads, so a card that tests an option against this context (a cut) sees
-  // the match as the provider would.
+  // `isDerived` is cheap, and a cut tested against this context needs it.
   const { match, points } = useMatchData();
   const youIsPlayer1 = useMatchSides().you.isPlayer1;
-  const isDerived = match.sourceProvider === "splitstep";
+  const isDerived = isDerivedMatch(match);
   const fallback = useMemo<MatchFiltersValue>(
     () => ({
       filters: EMPTY_MATCH_FILTERS,

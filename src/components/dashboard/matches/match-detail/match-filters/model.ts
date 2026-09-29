@@ -413,13 +413,16 @@ export interface MatchFilterContext {
   /** Each seat's stroke hand, for Custom › Direction's Inside-Out/Inside-In. */
   hands: { player1: Hand | null; player2: Hand | null };
   /**
-   * An Advantage Intelligence (video-derived) match —
-   * `match.sourceProvider === "splitstep"`, the same test both report pages
-   * make for `meta.isDerived`. Absent reads as NOT derived: a SwingVision
-   * match. Serve › Result reads it (`serveResultOf`): a derived match's
-   * unreturned serves are its aces. Read it as `ctx.isDerived === true`.
+   * An Advantage Intelligence (video-derived) match (`isDerivedMatch`).
+   * Absent reads as NOT derived: a SwingVision match. Serve › Result reads it
+   * (`serveResultOf`).
    */
   isDerived?: boolean;
+}
+
+/** A video-derived (Advantage Intelligence) match, off the match row. */
+export function isDerivedMatch(match: Pick<Match, "sourceProvider">): boolean {
+  return match.sourceProvider === "splitstep";
 }
 
 /**
@@ -440,7 +443,7 @@ export function buildFilterContext(
       player1: stored.player1 ?? inferHand(points, true),
       player2: stored.player2 ?? inferHand(points, false),
     },
-    isDerived: match.sourceProvider === "splitstep",
+    isDerived: isDerivedMatch(match),
   };
 }
 
@@ -551,10 +554,9 @@ export function returnContactOf(
  * rally won by whoever served. Structural on purpose — rally length and the
  * point's winner, never the "Service Winner" label — so a service winner
  * with an intermediate stroke (rally length above one) is not one. The
- * head-to-head card's derived Aces row counts exactly these (`tallySide`),
- * and on a derived match Serve › Result "Ace" — that row's cut — admits
- * exactly these (`serveResultOf`); the `rally-winner` Film-only ending leaves
- * them out. A double fault is never one: the server lost it.
+ * head-to-head card's derived Aces tally and Serve › Result "Ace" on a
+ * derived match are this one predicate, laid by the server — keep them so.
+ * A double fault is never one: the server lost it.
  */
 export function isUnreturnedServe(point: MatchPoint): boolean {
   return (
@@ -580,11 +582,7 @@ export function serveResultOf(
   ctx: MatchFilterContext,
 ): ServeResult | null {
   const rt = lower(point.resultType);
-  if (ctx.isDerived === true) {
-    if (isUnreturnedServe(point)) return "ace";
-  } else if (rt === "ace") {
-    return "ace";
-  }
+  if (ctx.isDerived ? isUnreturnedServe(point) : rt === "ace") return "ace";
   if (rt === "service winner") return "service-winner";
   if (rt === "double fault") return "double-fault";
   const ret = point.secondShotResult;
@@ -1302,8 +1300,11 @@ const KEY_BY_CODE = new Map<string, MatchFilterKey>(
 /**
  * Tokens an older link may still carry, and the group they now belong to.
  * Winner/Error lived under Result › Outcome (`xo.wn`, `xo.er`) until Ending
- * became its own group; a shared `?f=` link keeps meaning what it meant.
- * Read only — `serializeMatchFilters` writes the current form.
+ * became its own group; those tokens move there. Won/Lost (`xo.w`, `xo.l`)
+ * are NOT remapped: they now read from your side, where an older link with
+ * a Result player read from that player's — an accepted break, since the
+ * filter model shipped days before this change. Read only —
+ * `serializeMatchFilters` writes the current form.
  */
 const LEGACY_TOKENS: Readonly<
   Record<string, Readonly<Record<string, [MatchFilterKey, unknown]>>>
