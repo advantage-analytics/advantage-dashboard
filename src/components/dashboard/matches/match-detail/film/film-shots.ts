@@ -318,7 +318,7 @@ export function shotRowCells(
     spin: shot.spinType ? sentenceCase(shot.spinType) : UNMEASURED,
     stroke: isServe ? "Serve" : shotType ? sentenceCase(shotType) : UNMEASURED,
     type: shotTypeLabel(shot, returnShotId),
-    placement: direction ?? (shot.zone ? shot.zone : UNMEASURED),
+    placement: direction ?? (shot.zone || UNMEASURED),
     mph: shot.speedMph == null ? UNMEASURED : String(Math.round(shot.speedMph)),
     result: shot.result ? shot.result : UNMEASURED,
   };
