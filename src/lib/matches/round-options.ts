@@ -86,6 +86,19 @@ export function normalizeRound(
   return LONG_TO_CODE[trimmed.toLowerCase()] ?? trimmed;
 }
 
+/** Distinct round codes across rows; rows with no round drop out. */
+export function takenRoundCodes(
+  rows: readonly { round: string | null }[],
+): string[] {
+  return [
+    ...new Set(
+      rows
+        .map((item) => normalizeRound(item.round))
+        .filter((value): value is string => value !== null),
+    ),
+  ];
+}
+
 type RoundKind = "tournament" | "dual" | null;
 
 /** Which list a match type draws from; Practice and unset have no round. */

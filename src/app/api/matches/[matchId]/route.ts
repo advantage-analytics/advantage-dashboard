@@ -12,7 +12,7 @@ import {
 } from "@/lib/matches/patch-match";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
-import { normalizeRound } from "@/lib/matches/round-options";
+import { takenRoundCodes } from "@/lib/matches/round-options";
 import {
   rosterPlayerOptions,
   type RosterFullRow,
@@ -144,16 +144,10 @@ async function eventContextFor(
     } | null;
   } | null;
   if (!row?.event) return null;
-  const takenRounds = [
-    ...new Set(
-      [
-        ...((others ?? []) as { round: string | null }[]),
-        ...((outcomes ?? []) as { round: string | null }[]),
-      ]
-        .map((item) => normalizeRound(item.round))
-        .filter((value): value is string => value !== null),
-    ),
-  ];
+  const takenRounds = takenRoundCodes([
+    ...((others ?? []) as { round: string | null }[]),
+    ...((outcomes ?? []) as { round: string | null }[]),
+  ]);
   return {
     eventId: row.event.id,
     eventName: row.event.name,

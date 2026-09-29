@@ -11,7 +11,7 @@
  */
 
 import { normalizedPersonName } from "@/lib/data/person-name";
-import { normalizeRound } from "@/lib/matches/round-options";
+import { normalizeRound, takenRoundCodes } from "@/lib/matches/round-options";
 import { matchForRound, resolveEntryResult } from "@/lib/schedule/entry-state";
 import type { EventEntry, EventKind, ProgramEvent } from "@/lib/schedule/types";
 
@@ -165,16 +165,10 @@ function lineFor(
     reason = "Other player";
   }
 
-  const takenRounds = [
-    ...new Set(
-      [
-        ...entry.matches.map((item) => item.round),
-        ...(entry.outcomes ?? []).map((item) => item.round),
-      ]
-        .map((value) => normalizeRound(value))
-        .filter((value): value is string => value !== null),
-    ),
-  ];
+  const takenRounds = takenRoundCodes([
+    ...entry.matches,
+    ...(entry.outcomes ?? []),
+  ]);
 
   const formatDiffers =
     event.format.bestOf !== match.bestOf ||
