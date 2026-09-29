@@ -6,10 +6,6 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
-import {
-  scopePoints,
-  useSetScope,
-} from "@/components/dashboard/matches/match-detail/set-scope";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { surnameLabels } from "@/lib/data/match-utils";
@@ -29,10 +25,9 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * below the line and colour it as the opponent's — a chart that reads as its
  * own mirror image, with nothing on screen indicating the flip.
  *
- * Scope-aware: the series is `scopePoints(points, activeSet)`, the same read
- * every other point-derived card on this view makes (head-to-head-card.tsx
- * makes the identical `useSetScope()` / `scopePoints()` read). `useSetScope`
- * currently always answers the whole match.
+ * Whole match, always: the series is every point in `useMatchData().points`,
+ * the same read every other point-derived card on this view makes. The match
+ * filters live on the Video tab only and never narrow a Statistics card.
  *
  * With a playable video, a click while a timed point is hovered opens that
  * point in the Video tab (`actions.watchPoint`) — hovering alone never moves
@@ -103,7 +98,6 @@ export function PerformanceTrackerChart() {
   const { points } = useMatchData();
   const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
-  const { activeSet } = useSetScope();
   const shouldReduceMotion = useReducedMotion();
   const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
 
@@ -119,30 +113,22 @@ export function PerformanceTrackerChart() {
 
   const youIsPlayer1 = sides.you.isPlayer1;
 
-  // Narrow to the chosen set through the shared helper — the same read every
-  // point-derived card on this tab makes, so the chip selection moves them in
-  // step. `null` is the whole match.
-  const scopedPoints = useMemo(
-    () => scopePoints(points, activeSet),
-    [points, activeSet],
-  );
-
   const samples: Sample[] = useMemo(() => {
     const out: Sample[] = [];
     let diff = 0;
-    for (const p of scopedPoints) {
+    for (const p of points) {
       diff += p.wonByPlayer1 === youIsPlayer1 ? 1 : -1;
       out.push({ diff, setNumber: p.setNumber });
     }
     return out;
-  }, [scopedPoints, youIsPlayer1]);
+  }, [points, youIsPlayer1]);
 
-  // Points that ended a game the server lost, as indices into the scoped
-  // series. The 47f chart draws no break verticals, so this feeds only the
-  // hover annotation's "Break of serve" line; a Set keeps that lookup O(1).
+  // Points that ended a game the server lost, as indices into the series.
+  // The 47f chart draws no break verticals, so this feeds only the hover
+  // annotation's "Break of serve" line; a Set keeps that lookup O(1).
   const breakIndexSet = useMemo(
-    () => new Set(detectBreakIndices(scopedPoints)),
-    [scopedPoints],
+    () => new Set(detectBreakIndices(points)),
+    [points],
   );
 
   // `match-points-server.ts` coerces a null `game_score`/`point_score` to
@@ -249,7 +235,7 @@ export function PerformanceTrackerChart() {
     );
   }
 
-  const hovered = hoverIndex === null ? null : scopedPoints[hoverIndex];
+  const hovered = hoverIndex === null ? null : points[hoverIndex];
   const hoveredDiff = hoverIndex === null ? 0 : samples[hoverIndex].diff;
   const hoverCoord = hoverIndex === null ? null : geometry.coords[hoverIndex];
 
@@ -319,7 +305,7 @@ export function PerformanceTrackerChart() {
       <div
         className="relative"
         role="figure"
-        aria-label={`Momentum across ${scopedPoints.length} points. ${sides.you.name} above the midline, ${sides.opp.name} below.`}
+        aria-label={`Momentum across ${points.length} points. ${sides.you.name} above the midline, ${sides.opp.name} below.`}
       >
         {/* Which half is the viewer's: the label sits on a plain card-colour
             backing (not the `surface-card` class, which also adds a border
@@ -496,7 +482,7 @@ export function PerformanceTrackerChart() {
           <div
             key={s.setNumber}
             className="flex justify-center"
-            style={{ width: `${(s.count / scopedPoints.length) * 100}%` }}
+            style={{ width: `${(s.count / points.length) * 100}%` }}
           >
             <span
               className="tabular text-[10px] whitespace-nowrap"

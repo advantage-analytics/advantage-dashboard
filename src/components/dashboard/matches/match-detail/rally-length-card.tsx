@@ -7,14 +7,9 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
-  scopeCut,
   watchableSegmentProps,
+  type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
-import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
-import {
-  scopePoints,
-  useSetScope,
-} from "@/components/dashboard/matches/match-detail/set-scope";
 import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { EmptyMark } from "@/components/ui/empty-mark";
@@ -36,9 +31,10 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * rally — so those points fall outside all three bands, exactly as
  * `head-to-head-card.tsx` treats them.
  *
- * Scope-aware: `scopePoints(points, activeSet)` narrows the bands the same
- * way every other point-derived card on this tab does
- * (performance-tracker-chart.tsx makes the identical read).
+ * Whole match, always: the bands are counted over every point in
+ * `useMatchData().points`, the same read every other point-derived card on
+ * this tab makes (performance-tracker-chart.tsx makes the identical read).
+ * The match filters live on the Video tab only.
  *
  * With a playable video each band opens its points in the Video tab
  * (`RALLY_BAND_CUTS`) on click or Enter — hovering only reads. Without one
@@ -69,12 +65,13 @@ const BAND_META: { key: Band["key"]; title: string; label: string }[] = [
 ];
 
 /**
- * The film cut that shows each band's points in the Video tab. Long is sent
- * with an explicit `rallyMax: null` so a leftover upper bound from an earlier
- * cut can never narrow it. The filter model drops shot-count-less points from
- * any bounded range, exactly as the bucketing below does.
+ * The film cut that shows each band's points in the Video tab — a Film-only
+ * rally-length cut (`FilmCutExtras`), as the match filters have no
+ * rally-length group. Long is sent with an explicit `rallyMax: null` so an
+ * upper bound can never carry over. The cut drops shot-count-less points
+ * from any bounded range, exactly as the bucketing below does.
  */
-export const RALLY_BAND_CUTS: Record<Band["key"], Partial<FilmFilters>> = {
+export const RALLY_BAND_CUTS: Record<Band["key"], FilmCut> = {
   short: { rallyMin: 1, rallyMax: 4 },
   medium: { rallyMin: 5, rallyMax: 8 },
   long: { rallyMin: 9, rallyMax: null },
@@ -85,24 +82,15 @@ function pct(part: number, whole: number): number {
 }
 
 export function RallyLengthCard() {
-  const { points } = useMatchData();
   const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
-  const { activeSet } = useSetScope();
+  const { points } = useMatchData();
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<Band["key"] | null>(null);
   const watchable = meta.hasPlayableVideo;
 
   const youIsPlayer1 = sides.you.isPlayer1;
   const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
-
-  // Narrow to the chosen set through the shared helper — the same read every
-  // point-derived card on this tab makes, so the chip selection moves them
-  // in step. `null` is the whole match.
-  const scopedPoints = useMemo(
-    () => scopePoints(points, activeSet),
-    [points, activeSet],
-  );
 
   const { bands, total, avgShots } = useMemo(() => {
     const counters: Record<Band["key"], { count: number; youWon: number }> = {
@@ -112,7 +100,7 @@ export function RallyLengthCard() {
     };
 
     let shotSum = 0;
-    for (const p of scopedPoints) {
+    for (const p of points) {
       if (p.rallyLength < 1) continue;
       const key: Band["key"] =
         p.rallyLength >= 9 ? "long" : p.rallyLength >= 5 ? "medium" : "short";
@@ -134,7 +122,7 @@ export function RallyLengthCard() {
         oppWon: counters[meta.key].count - counters[meta.key].youWon,
       })),
     };
-  }, [scopedPoints, youIsPlayer1]);
+  }, [points, youIsPlayer1]);
 
   const visible = bands.filter((b) => b.count > 0);
   // Nothing in this match carries a shot count — a bar of three empty bands
@@ -220,10 +208,7 @@ export function RallyLengthCard() {
             // attribute below is `undefined` otherwise, so the read-only
             // markup is unchanged. Focus is `focus.css`'s ring.
             const watch = watchable
-              ? () =>
-                  actions.watchCut(
-                    scopeCut(RALLY_BAND_CUTS[band.key], activeSet),
-                  )
+              ? () => actions.watchCut(RALLY_BAND_CUTS[band.key], band.title)
               : undefined;
 
             return (

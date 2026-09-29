@@ -3569,3 +3569,94 @@ test("T28: under reduced motion the room fades out", async ({ page }) => {
   expect(rooms).toHaveLength(1);
   expectOpacityFadeOut(rooms[0]);
 });
+
+/* -------------------------------------------------------------------------
+ * The filter strip and the filters drawer (video-stats-filters)
+ * ---------------------------------------------------------------------- */
+
+const STRIP = "[data-film-filter-strip]";
+const FILTERS_DRAWER = "#match-filters-rail";
+
+test("an applied filter reads as one sentence in a strip ABOVE the list, never chips inside it", async ({
+  page,
+}) => {
+  await open(page, "filters-strip");
+  const list = page.locator(SHELL_LIST);
+  // Nothing applied: no strip at all.
+  await expect(page.locator(STRIP)).toHaveCount(0);
+
+  await list.getByRole("button", { name: "All points" }).click();
+  await page
+    .getByRole("menu", { name: "Point filters" })
+    .getByText("Saved only")
+    .click();
+
+  const strip = page.locator(STRIP);
+  await expect(strip).toHaveCount(1);
+  await expect(strip).toContainText("Saved");
+  await expect(strip).toContainText("1 of 4 points");
+  await expect(strip.getByRole("button")).toHaveText("Clear filter");
+  // Page level: outside the point list's card, and the card has no chips
+  // and no header "Clear all" of its own.
+  await expect(list.locator(STRIP)).toHaveCount(0);
+  await expect(
+    list.getByRole("group", { name: "Applied filters" }),
+  ).toHaveCount(0);
+  await expect(list.getByRole("button", { name: "Clear all" })).toHaveCount(0);
+
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect(page.locator(STRIP)).toHaveCount(0);
+  await expect(list.locator("[data-point-id]")).toHaveCount(4);
+});
+
+test("Advanced filters… opens the 340px drawer over the list, counting the draft by the list's rule", async ({
+  page,
+}) => {
+  await open(page, "filters-drawer");
+  const list = page.locator(SHELL_LIST);
+  const menu = page.getByRole("menu", { name: "Point filters" });
+
+  // Saved only on, so the drawer's count has a Film-only layer to honour.
+  await list.getByRole("button", { name: "All points" }).click();
+  await menu.getByText("Saved only").click();
+
+  const trigger = list.getByRole("button", { name: "Saved only" });
+  await trigger.click();
+  await menu.getByText("Advanced filters…").click();
+
+  // The drawer, not the old in-column panel.
+  const drawer = page.locator(FILTERS_DRAWER);
+  await expect(drawer).toBeVisible();
+  await expect(
+    list.getByRole("region", { name: "Advanced filters" }),
+  ).toHaveCount(0);
+  await expect.poll(async () => (await drawer.boundingBox())?.width).toBe(340);
+  // Focus moves in on open.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (sel) =>
+          document.querySelector(sel)?.contains(document.activeElement) ??
+          false,
+        FILTERS_DRAWER,
+      ),
+    )
+    .toBe(true);
+  // The draft is the applied filters (none) under the saved toggle: 1 of 4.
+  await expect(drawer).toContainText("1 of 4 points");
+  await expect(
+    drawer.getByRole("button", { name: "Show 1 point" }),
+  ).toBeDisabled();
+
+  // Esc closes it and hands focus back to the trigger.
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+
+  // Re-picking "Advanced filters…" reopens it; the X closes it.
+  await trigger.click();
+  await menu.getByText("Advanced filters…").click();
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole("button", { name: "Close filters" }).click();
+  await expect(drawer).toHaveCount(0);
+});

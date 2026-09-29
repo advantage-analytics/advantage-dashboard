@@ -36,15 +36,14 @@ import {
   type FollowAffordance,
   type PointFocus,
 } from "./film-timeline";
-import type { FilmSectionId } from "./filters/types";
 import { scoreColumns, youFirstScore } from "./film-score";
 import {
-  DEFAULT_FILM_FILTERS,
-  describeFilmCut,
-  hasActiveFilmFilters,
+  filmListActive,
+  filmListSentence,
+  INERT_FILM_LIST_FILTERS,
   lastNameOf,
-  type FilmFilters,
-} from "./film-filters";
+  type FilmListFilters,
+} from "./film-list-filters";
 
 /**
  * The Film room's point list (artboard 46c, lines 845–1131).
@@ -229,14 +228,29 @@ interface PointListProps {
   allPoints: MatchPoint[];
   /** The applied cut: what actually renders, and the count's numerator. */
   visiblePoints: MatchPoint[];
-  filters: FilmFilters;
-  onFiltersChange: (filters: FilmFilters) => void;
-  /** Advanced takes this column; the state is the film tab's, so it and the
-   *  open sections survive the list re-rendering. */
-  advancedOpen: boolean;
-  onAdvancedOpenChange: (open: boolean) => void;
-  openSections: FilmSectionId[];
-  onOpenSectionsChange: (next: FilmSectionId[]) => void;
+  /**
+   * The list's three filter layers and their writers — the shared match
+   * filters, a statistic's cut and the saved toggle (`film-list-filters.ts`).
+   * `film-tab.tsx` hands the SAME object to this column and to the room's
+   * drawer. Absent, nothing is filtered and the controls change nothing (a
+   * fixture that mounts the list alone). Stable identity, please.
+   */
+  filmFilters?: FilmListFilters;
+  /**
+   * The report column's "Advanced filters…": opens the 340px filters drawer
+   * over this column (`FilterRail`). Given, the quick menu's Advanced row
+   * calls it and nothing swaps into the column.
+   */
+  onOpenFilters?: () => void;
+  /** The quick-filters trigger's element, for the drawer's focus return. */
+  filtersTriggerRef?: (element: HTMLButtonElement | null) => void;
+  /**
+   * Without `onOpenFilters` (the fullscreen room's drawer), Advanced takes
+   * this column instead; the state is the host's, so it survives the list
+   * re-rendering.
+   */
+  advancedOpen?: boolean;
+  onAdvancedOpenChange?: (open: boolean) => void;
   /** Point whose window contains the playhead, and how far through it is. */
   activePointId: string | null;
   /** Film-clock window of the playing point; its rule reads `--film-t`. */
@@ -311,12 +325,11 @@ interface GameGroup {
 export const PointList = memo(function PointList({
   allPoints,
   visiblePoints,
-  filters,
-  onFiltersChange,
-  advancedOpen,
-  onAdvancedOpenChange,
-  openSections,
-  onOpenSectionsChange,
+  filmFilters = INERT_FILM_LIST_FILTERS,
+  onOpenFilters,
+  filtersTriggerRef,
+  advancedOpen = false,
+  onAdvancedOpenChange = NOOP,
   activePointId,
   activeStart,
   activeEnd,
@@ -344,7 +357,7 @@ export const PointList = memo(function PointList({
   // as yours at a glance; the opponent's rows keep their initials.
   const { active: workspace } = useWorkspace();
 
-  const filtered = hasActiveFilmFilters(filters);
+  const filtered = filmListActive(filmFilters);
 
   // `useMatchSides()` returns a fresh object each render, so the memo keys off
   // the three primitives it actually reads rather than the object identity.
@@ -397,7 +410,7 @@ export const PointList = memo(function PointList({
     return out;
   }, [visiblePoints, youIsPlayer1, youName, oppName, showGameScore]);
 
-  const clearAll = () => onFiltersChange(DEFAULT_FILM_FILTERS);
+  const clearAll = filmFilters.clearAll;
 
   // The DISPLAYED point's shots, and nobody else's: the feed the room hands
   // over covers the whole film, and one open well at a time is the rule —
@@ -610,30 +623,24 @@ export const PointList = memo(function PointList({
   return (
     <section aria-label="Point list" className={t.root} style={t.rootStyle}>
       {advancedOpen ? (
-        // Advanced takes the list's own column, in this same section and on
-        // this same tone (frame R4: never a modal over the film): Apply
-        // commits the draft and returns to the list, Close returns without
-        // touching the cut. No popover, no overlay.
+        // The room's drawer: Advanced takes the list's own column, in this
+        // same section and on this same tone (frame R4: never a modal over
+        // the film). "Show N points" commits the draft and returns to the
+        // list, the X returns without touching the cut. The report column
+        // opens the filters drawer instead (`onOpenFilters`).
         <FilmAdvancedPanel
-          points={allPoints}
-          sides={sides}
-          filters={filters}
-          onApply={(next) => {
-            onFiltersChange(next);
-            onAdvancedOpenChange(false);
-          }}
+          filmFilters={filmFilters}
           onClose={() => onAdvancedOpenChange(false)}
-          openSections={openSections}
-          onOpenSectionsChange={onOpenSectionsChange}
           tone={tone}
         />
       ) : (
         <>
-          {/* The header IS the applied-filter strip (handoff P1/P2, frame E):
-          one 28px trigger naming the cut, a 22px clear beside it once a cut
-          is on, and `matched / total` on the right. No Saved pill, no chips
-          row, no second strip anywhere in the column — the words and the
-          count are the only report of what is applied.
+          {/* The header (handoff P1/P2, frame E): one 28px trigger naming the
+          cut and `matched / total` on the right. No chips under it — the
+          design system bans accumulating filter chips (tables.md, Data
+          Table rule 6): in the report the cut is stated in words by the
+          filter strip ABOVE the video and this column (film-tab.tsx), and
+          the room's drawer keeps its header "Clear all".
 
           It sits OUTSIDE the scroller and outside the zero-state branch
           below, so the frame the column always has stays drawn while the
@@ -641,23 +648,25 @@ export const PointList = memo(function PointList({
           <div className={t.header}>
             {/* The quick menu owns the trigger and already branches on tone —
             `light` is the in-shell set of tokens, `dark` is the room's own
-            menu — and its Advanced row swaps the panel into this column in
-            both. */}
+            menu. Its Advanced row opens the filters drawer where the host
+            gives one, else swaps the panel into this column. */}
             <FilmQuickFilters
-              filters={filters}
-              onFiltersChange={onFiltersChange}
+              filmFilters={filmFilters}
               sides={sides}
               tone={tone}
-              onOpenAdvanced={() => onAdvancedOpenChange(true)}
+              triggerRef={filtersTriggerRef}
+              onOpenAdvanced={
+                onOpenFilters ?? (() => onAdvancedOpenChange(true))
+              }
             />
 
-            {/* One control clears every axis at once, Advanced included. Drawn
-            only while something is applied, so the resting header is the
-            trigger and the count and nothing else. A text action, no glyph:
-            an X beside a "Filters" trigger reads as "close the menu", and the
-            word already names it. Blue on the light tone like every other
-            clear in the app; white on the dark one, where blue is progress. */}
-            {filtered && (
+            {/* The room's drawer only: one control clears every axis at once,
+            Advanced included, drawn only while something is applied. A text
+            action, no glyph: an X beside a "Filters" trigger reads as "close
+            the menu". White, where blue is progress. The report column has
+            no clear here — the filter strip above it carries "Clear filter",
+            and a second one a few inches away would be two answers. */}
+            {filtered && tone === "dark" && (
               <button type="button" onClick={clearAll} className={t.clear}>
                 Clear all
               </button>
@@ -695,7 +704,7 @@ export const PointList = memo(function PointList({
 
           {groups.length === 0 ? (
             <EmptyList
-              filters={filters}
+              filmFilters={filmFilters}
               sides={sides}
               hasAnyPoints={allPoints.length > 0}
               hasAnySaved={allPoints.some((p) => p.saved)}
@@ -1411,7 +1420,8 @@ const ShotWellRow = memo(function ShotWellRow({
  * - any other cut that matches nothing is a FILTER result, which states the
  *   cut in words so the body and the header's count agree.
  *
- * Left-aligned and top-weighted, matching the frame: no icon circle, no
+ * Centred in the report column (the "States" frame), left-aligned in the
+ * room's drawer where the rows start: no icon circle, no
  * skeleton rows, no sample point. The header above stays drawn in all three.
  * "Analysis still running" is deliberately absent — `matches/[matchId]/page.tsx`
  * short-circuits the whole page to `AnalysisSteps` while a match is
@@ -1421,14 +1431,14 @@ const ShotWellRow = memo(function ShotWellRow({
  * the list says the same thing wherever it is read; only the paint changes.
  */
 function EmptyList({
-  filters,
+  filmFilters,
   sides,
   hasAnyPoints,
   hasAnySaved,
   onClear,
   tone,
 }: {
-  filters: FilmFilters;
+  filmFilters: FilmListFilters;
   sides: MatchSides;
   hasAnyPoints: boolean;
   hasAnySaved: boolean;
@@ -1450,7 +1460,7 @@ function EmptyList({
 
   // Saved only, and the match has no saved point at all — not a cut that hid
   // them, which is the branch below. Teaches the gesture once, here.
-  if (filters.savedOnly && !hasAnySaved) {
+  if (filmFilters.savedOnly && !hasAnySaved) {
     return (
       <EmptyBody
         title="You haven’t saved a point yet"
@@ -1462,14 +1472,19 @@ function EmptyList({
     );
   }
 
-  // Every other applied cut. The body states the cut rather than a generic
-  // sentence, so it can never say "too narrow" about a cut the viewer can
-  // read differently from what is actually applied.
+  // Every other applied cut. The body states the cut — the filter strip's
+  // own sentence — rather than a generic line, so it can never say "too
+  // narrow" about a cut the viewer can read differently from what is
+  // actually applied. The report column draws no action: the strip above
+  // carries "Clear filter". The room's drawer has no strip, so it keeps one.
   return (
     <EmptyBody
-      title="No points match this cut"
-      body={`Nothing in this match matched this cut — ${describeFilmCut(filters, sides)}.`}
-      action="Clear the cut"
+      title="No points match these filters"
+      body={`Nothing in this match matched: ${filmListSentence(filmFilters, {
+        you: sides.you.shortName,
+        opponent: sides.opp.shortName,
+      })}.`}
+      action={tone === "dark" ? "Clear the cut" : undefined}
       onAction={onClear}
       tone={tone}
     />
@@ -1479,7 +1494,8 @@ function EmptyList({
 /** The zero state's paint, per tone. The copy above is the same in both. */
 const EMPTY_TONE = {
   light: {
-    root: "flex flex-col gap-[7px] px-3 pt-[22px] pb-5",
+    // Centred in the card (the approved "States" frame).
+    root: "flex flex-col items-center gap-1.5 px-7 pt-[22px] pb-6 text-center",
     title: "text-[13px] text-[var(--ink-900)]",
     body: "max-w-[40ch] text-[11px] leading-[1.55]",
     bodyStyle: { color: "var(--ink-500)" } as const,

@@ -1,17 +1,29 @@
 import { expect, test } from "@playwright/test";
 
 import {
-  DEFAULT_FILM_FILTERS,
-  applyFilmFilters,
-  courtSideOf,
-  describeFilmCut,
-} from "@/components/dashboard/matches/match-detail/film/film-filters";
+  filmDraftCount,
+  filmListName,
+  filmListPoints,
+  filmListSentence,
+  NO_FILM_LOCAL_FILTERS,
+  type FilmLocalFilters,
+} from "@/components/dashboard/matches/match-detail/film/film-list-filters";
+import type { FilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
+import {
+  applyMatchFilters,
+  EMPTY_MATCH_FILTERS,
+  type MatchFilters,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 
 import { pt } from "./fixtures/film-point";
 
 /**
- * The fullscreen film room's filter axes. They share one `FilmFilters` value
- * with the report tab, so these cover only the fields the fullscreen adds.
+ * The fullscreen film room's filter axes, in the T7 vocabulary. The room's
+ * drawer and the report column draw one `PointList` over ONE
+ * `FilmListFilters` value, so these cover the axes the room's old model
+ * carried — server, saved, set, rally length, how the point ended, the shot
+ * that ended it and the service court — as the shared `MatchFilters`, the
+ * Film-only saved toggle and a statistic's Film-only rally cut.
  */
 
 const points = [
@@ -55,75 +67,127 @@ const points = [
   }),
 ];
 const ids = (list: { id: string }[]) => list.map((p) => p.id);
-const cut = (f: Partial<typeof DEFAULT_FILM_FILTERS>, youIsPlayer1 = true) =>
-  ids(
-    applyFilmFilters(points, { ...DEFAULT_FILM_FILTERS, ...f }, youIsPlayer1),
+
+/** The Film list for `shared` + Film-only layers, as `film-tab.tsx` builds it. */
+function list(
+  shared: Partial<MatchFilters>,
+  local: Partial<FilmLocalFilters> = {},
+  youIsPlayer1 = true,
+): string[] {
+  const ctx = { youIsPlayer1, hands: { player1: null, player2: null } };
+  const sharedPoints = applyMatchFilters(
+    points,
+    { ...EMPTY_MATCH_FILTERS, ...shared },
+    ctx,
   );
+  return ids(
+    filmListPoints(
+      points,
+      sharedPoints,
+      { ...NO_FILM_LOCAL_FILTERS, ...local },
+      ctx,
+    ),
+  );
+}
+const cut = (c: FilmCut) => ({ cut: { cut: c, label: "Cut" } });
 
 test("server, saved, set and rally length", () => {
-  expect(cut({ server: "you" })).toEqual(["a", "b"]);
-  expect(cut({ server: "you" }, false)).toEqual(["c", "d"]);
-  expect(cut({ savedOnly: true })).toEqual(["b"]);
-  expect(cut({ set: 2 })).toEqual(["c", "d"]);
-  expect(cut({ rallyMin: 5 })).toEqual(["b", "c"]);
-});
-
-test("ended-with is one OR group across serve and rally endings", () => {
-  expect(cut({ ended: ["ace", "unforced"] })).toEqual(["a", "c"]);
-  expect(cut({ ended: ["winner", "double-fault"] })).toEqual(["b", "d"]);
-});
-
-test("shot reads the last shot; serve +1 is a +1 winner or a forced fourth-ball error", () => {
-  expect(cut({ shot: ["forehand"] })).toEqual(["c"]);
-  const plusOne = [
-    pt({ id: "w3", rallyLength: 3, resultType: "Forehand Winner" }),
-    pt({ id: "e3", rallyLength: 3, resultType: "Forehand Unforced Error" }),
-    pt({ id: "e4", rallyLength: 4, resultType: "Backhand Forced Error" }),
-    pt({ id: "w4", rallyLength: 4, resultType: "Backhand Winner" }),
-    pt({ id: "ace", rallyLength: 1, resultType: "Ace" }),
-  ];
+  expect(list({ server: "you" })).toEqual(["a", "b"]);
+  expect(list({ server: "you" }, {}, false)).toEqual(["c", "d"]);
+  expect(list({}, { savedOnly: true })).toEqual(["b"]);
+  expect(list({ sets: [2] })).toEqual(["c", "d"]);
+  // Rally length is a statistic's Film-only cut, not a shared filter.
+  expect(list({}, cut({ rallyMin: 5 }))).toEqual(["b", "c"]);
+  // Every layer ANDs: the shared set, the rally cut and the saved toggle.
   expect(
-    ids(
-      applyFilmFilters(
-        plusOne,
-        { ...DEFAULT_FILM_FILTERS, shot: ["serve-plus-one"] },
-        true,
-      ),
-    ),
-  ).toEqual(["w3", "e4"]);
+    list({ sets: [1] }, { ...cut({ rallyMin: 5 }), savedOnly: true }),
+  ).toEqual(["b"]);
 });
 
-test("court side from the score when there is one, else from position in the game", () => {
-  expect(courtSideOf(pt({ id: "x", pointScore: "30-30" }), 5, true)).toBe(
-    "deuce",
-  );
-  expect(courtSideOf(pt({ id: "x", pointScore: "AD-40" }), 0, true)).toBe("ad");
-  expect(courtSideOf(pt({ id: "x" }), 0, false)).toBe("deuce");
-  expect(courtSideOf(pt({ id: "x" }), 3, false)).toBe("ad");
+test("how the point ended is Result › Outcome, one OR group", () => {
+  expect(list({ resultOutcome: ["winner"] })).toEqual(["a", "b"]);
+  expect(list({ resultOutcome: ["error"] })).toEqual(["c", "d"]);
+  expect(list({ resultOutcome: ["winner", "error"] })).toEqual([
+    "a",
+    "b",
+    "c",
+    "d",
+  ]);
+});
+
+test("the shot that ended it is Result › Shot", () => {
+  expect(list({ resultShot: ["Forehand"] })).toEqual(["c"]);
+  expect(list({ resultShot: ["Serve"] })).toEqual(["a", "d"]);
+});
+
+test("the service court comes from the score when the match has one", () => {
   // d carries a real score, so the whole match reads court from scores:
   // a, b, c are "0-0" (deuce), d is 15-0 (ad).
-  expect(cut({ court: "ad" })).toEqual(["d"]);
+  expect(list({ court: "ad" })).toEqual(["d"]);
+  expect(list({ court: "deuce" })).toEqual(["a", "b", "c"]);
 });
 
-test("the cut in words", () => {
-  const sides = {
-    you: { name: "Timofey Stepanov" },
-    opp: { name: "Giacomo Revelli" },
-  } as Parameters<typeof describeFilmCut>[1];
-  expect(describeFilmCut(DEFAULT_FILM_FILTERS, sides)).toBe("All points");
+test("the cut in words — the trigger and the zero state", () => {
+  const names = { you: "Stepanov", opponent: "Revelli" };
+  const none = { cut: null, savedOnly: false };
+  expect(filmListName({ shared: EMPTY_MATCH_FILTERS, ...none }, names)).toBe(
+    "All points",
+  );
   expect(
-    describeFilmCut(
+    filmListName(
       {
-        ...DEFAULT_FILM_FILTERS,
+        shared: { ...EMPTY_MATCH_FILTERS, server: "opponent" },
+        cut: null,
         savedOnly: true,
-        set: 2,
-        server: "opp",
-        ended: ["winner", "ace"],
-        shot: ["forehand"],
       },
-      sides,
+      names,
+    ),
+  ).toBe("Saved only · Revelli serving");
+  expect(
+    filmListSentence(
+      {
+        shared: {
+          ...EMPTY_MATCH_FILTERS,
+          sets: [2],
+          server: "opponent",
+          resultOutcome: ["winner"],
+        },
+        cut: {
+          cut: { rallyMin: 9, rallyMax: null },
+          label: "Long rallies · 9+ shots",
+        },
+        savedOnly: true,
+      },
+      names,
     ),
   ).toBe(
-    "Saved points, set 2, Revelli serving, winners or aces, ended on forehands",
+    "Revelli serving · set 2 · winners · long rallies · 9+ shots, from Statistics · saved",
   );
+});
+
+test("the filters drawer's count is the list's own rule over the DRAFT", () => {
+  const ctx = { youIsPlayer1: true, hands: { player1: null, player2: null } };
+  const draft = (f: Partial<MatchFilters>) => ({
+    ...EMPTY_MATCH_FILTERS,
+    ...f,
+  });
+  // The draft alone, as the list would show it once applied.
+  expect(filmDraftCount(points, draft({}), NO_FILM_LOCAL_FILTERS, ctx)).toBe(4);
+  expect(
+    filmDraftCount(
+      points,
+      draft({ server: "you" }),
+      NO_FILM_LOCAL_FILTERS,
+      ctx,
+    ),
+  ).toBe(list({ server: "you" }).length);
+  // The Film-only layers still hold: the statistic's cut and the saved toggle.
+  const local: FilmLocalFilters = {
+    cut: { cut: { rallyMin: 5, rallyMax: null }, label: "Long rallies" },
+    savedOnly: false,
+  };
+  expect(filmDraftCount(points, draft({ sets: [1] }), local, ctx)).toBe(1);
+  expect(
+    filmDraftCount(points, draft({}), { ...local, savedOnly: true }, ctx),
+  ).toBe(1);
 });

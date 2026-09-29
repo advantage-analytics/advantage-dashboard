@@ -7,29 +7,38 @@ import {
   outcomeCut,
   type OutcomeKey,
 } from "@/components/dashboard/matches/match-detail/point-endings-card";
-import { sideCut } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import {
-  DEFAULT_FILM_FILTERS,
-  type FilmFilters,
-} from "@/components/dashboard/matches/match-detail/film/filters/types";
+  H2H_GROUPS,
+  sideCut,
+} from "@/components/dashboard/matches/match-detail/head-to-head-card";
+import {
+  FILM_CUT_EXTRA_KEYS,
+  filmCutFilters,
+  type FilmCut,
+} from "@/components/dashboard/matches/match-detail/film-cut-context";
+import {
+  EMPTY_MATCH_FILTERS,
+  MATCH_FILTER_KEYS,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
  * The rally-length bands, point-endings segments and performance tracker that
- * open their points in the Video tab (Advantage Intelligence UI T5).
+ * open their points in the Video tab (Advantage Intelligence UI T5; the cuts
+ * moved onto the shared match filters in T7).
  *
  * Pure and offline. As in `head-to-head-cuts.spec.ts`, what goes wrong here
- * never shows on the card: a misspelt key is spread over the defaults and
- * silently ignored, and a swapped side opens the opponent's points. So the
- * tables are pinned exactly, every key is checked against the filter
- * model's defaults, and the two render paths are checked — read-only markup
- * without a video, a button with a "Watch in Video" cue with one.
+ * never shows on the card: a misspelt key is silently ignored, and a swapped
+ * side opens the opponent's points. So the tables are pinned exactly, every
+ * key is checked against the shared filters' keys plus the Film-only extras,
+ * and the two render paths are checked — read-only markup without a video,
+ * a button with a "Watch in Video" cue with one.
  */
 
-const known = new Set(Object.keys(DEFAULT_FILM_FILTERS));
+const known = new Set<string>([...MATCH_FILTER_KEYS, ...FILM_CUT_EXTRA_KEYS]);
 
-function expectKnownKeys(cut: Partial<FilmFilters>, what: string) {
+function expectKnownKeys(cut: FilmCut, what: string) {
   for (const key of Object.keys(cut))
     expect(known.has(key), `${what} → ${key}`).toBe(true);
 }
@@ -48,9 +57,14 @@ test.describe("rally-length cuts", () => {
     expect(RALLY_BAND_CUTS.long.rallyMax).toBeNull();
   });
 
-  test("every band cut uses only keys of DEFAULT_FILM_FILTERS", () => {
+  test("every band cut uses only known keys", () => {
     for (const [band, cut] of Object.entries(RALLY_BAND_CUTS))
       expectKnownKeys(cut, band);
+  });
+
+  test("a band is a Film-only rally-length cut — nothing in the shared filters", () => {
+    for (const cut of Object.values(RALLY_BAND_CUTS))
+      expect(filmCutFilters(cut)).toEqual(EMPTY_MATCH_FILTERS);
   });
 });
 
@@ -63,62 +77,59 @@ test.describe("point-endings cuts", () => {
   ];
 
   test("the viewer's row", () => {
+    // Every segment's side is Result › Player — who hit the winner or made
+    // the error (the server, for an ace or a double fault).
     expect(outcomeCut("winners", "you")).toEqual({
-      result: ["winner"],
-      outcome: "you",
+      resultOutcome: ["winner"],
+      ending: "winner",
+      resultPlayer: "you",
     });
-    // The player who errs loses the point, and `outcome` is the winner.
     expect(outcomeCut("unforcedErrors", "you")).toEqual({
-      result: ["unforced"],
-      outcome: "opp",
+      resultOutcome: ["error"],
+      ending: "unforced-error",
+      resultPlayer: "you",
     });
     expect(outcomeCut("doubleFaults", "you")).toEqual({
-      serve: ["double-fault"],
-      server: "you",
+      resultOutcome: ["error"],
+      resultShot: ["Serve"],
+      resultPlayer: "you",
     });
     expect(outcomeCut("aces", "you")).toEqual({
-      serve: ["ace"],
-      server: "you",
+      resultOutcome: ["winner"],
+      ending: "ace",
+      resultPlayer: "you",
     });
   });
 
   test("the opponent's row is the viewer's with the sides swapped", () => {
-    expect(outcomeCut("winners", "opp")).toEqual({
-      result: ["winner"],
-      outcome: "opp",
-    });
-    expect(outcomeCut("unforcedErrors", "opp")).toEqual({
-      result: ["unforced"],
-      outcome: "you",
-    });
-    expect(outcomeCut("doubleFaults", "opp")).toEqual({
-      serve: ["double-fault"],
-      server: "opp",
-    });
-    expect(outcomeCut("aces", "opp")).toEqual({
-      serve: ["ace"],
-      server: "opp",
-    });
+    for (const key of KEYS)
+      expect(outcomeCut(key, "opp"), key).toEqual({
+        ...outcomeCut(key, "you"),
+        resultPlayer: "opponent",
+      });
   });
 
-  test("every segment cut uses only keys of DEFAULT_FILM_FILTERS", () => {
+  test("every segment cut uses only known keys", () => {
     for (const key of KEYS)
       for (const side of ["you", "opp"] as const)
         expectKnownKeys(outcomeCut(key, side), `${key} (${side})`);
   });
 
   test("agrees with the head-to-head card's cut for the same statistic", () => {
-    const h2h: Record<OutcomeKey, Partial<FilmFilters>> = {
-      winners: { result: ["winner"] },
-      unforcedErrors: { result: ["unforced"] },
-      doubleFaults: { serve: ["double-fault"] },
-      aces: { serve: ["ace"] },
+    const LABEL: Record<OutcomeKey, string> = {
+      winners: "Winners",
+      unforcedErrors: "Unforced errors",
+      doubleFaults: "Double faults",
+      aces: "Aces",
     };
-    for (const key of KEYS)
+    const rows = H2H_GROUPS.flatMap((g) => g.configs);
+    for (const key of KEYS) {
+      const row = rows.find((r) => r.label === LABEL[key])!;
       for (const side of ["you", "opp"] as const)
         expect(outcomeCut(key, side), `${key} (${side})`).toEqual(
-          sideCut(h2h[key], side),
+          sideCut(row.cut!, side, row.sideBy, row.sideWon),
         );
+    }
   });
 });
 
@@ -205,10 +216,6 @@ function render(
           opp: { isPlayer1: false, name: "Sam Okafor" },
           sets: [],
         }),
-      },
-      "@/components/dashboard/matches/match-detail/set-scope": {
-        useSetScope: () => ({ activeSet: null, selectable: [] }),
-        scopePoints: (p: MatchPoint[]) => p,
       },
       "@/lib/data/match-utils": {
         surnameLabels: (a: string, b: string) => [a, b],

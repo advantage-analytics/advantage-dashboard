@@ -10,7 +10,7 @@
  *
  * The URL only ever carries `fullscreen=1`, written on enter and stripped on
  * exit — never honoured on load (spec: "Settled mismatches" § URL). Modeled
- * on `serializeCut` (`film/filters/types.ts`).
+ * on `serializeMatchFilters` (`match-filters/model.ts`).
  */
 
 /* ── Storage keys ───────────────────────────────────────────────────────── */

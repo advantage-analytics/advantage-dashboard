@@ -46,11 +46,11 @@ import {
 } from "./film-court-card";
 import { ANCHOR_LABEL, SETTLE_CLASS, useCornerDrag } from "./use-corner-drag";
 import {
-  cutName,
-  hasActiveFilmFilters,
+  filmListActive,
+  filmListName,
   lastNameOf,
-  type FilmFilters,
-} from "./film-filters";
+  type FilmListFilters,
+} from "./film-list-filters";
 import { FOCUSABLE_SELECTOR, nextFocusTarget } from "./film-focus-trap";
 import { FILM_REFUSAL_COPY } from "./film-refusal-copy";
 import { FilmRoomDrawer } from "./film-room-drawer";
@@ -187,8 +187,8 @@ export interface FilmFullscreenProps {
   columns: BoardColumns;
   allPoints: MatchPoint[];
   visiblePoints: MatchPoint[];
-  filters: FilmFilters;
-  onFiltersChange: (filters: FilmFilters) => void;
+  /** The list's filter layers, handed to the drawer's list untouched. */
+  filmFilters: FilmListFilters;
   onToggleSaved: (pointId: string) => void;
   /**
    * Follow-or-hold (T17 design), owned by `FilmRoom` so it outlives this
@@ -650,8 +650,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   ]);
   const courtTitle =
     courtMode === "match"
-      ? hasActiveFilmFilters(p.filters)
-        ? cutName(p.filters, sides)
+      ? filmListActive(p.filmFilters)
+        ? filmListName(p.filmFilters, {
+            you: lastNameOf(sides.you.name),
+            opponent: lastNameOf(sides.opp.name),
+          })
         : "Whole match"
       : "This point";
   // The point's caption counts the shots the card can draw and number — the
@@ -1659,8 +1662,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 onCollapse={collapsePanel}
                 allPoints={p.allPoints}
                 visiblePoints={p.visiblePoints}
-                filters={p.filters}
-                onFiltersChange={p.onFiltersChange}
+                filmFilters={p.filmFilters}
                 // Between points no row is lit, and the progress rule belongs
                 // to the row that is (R7) — so both read the playing point,
                 // never the last one reached.

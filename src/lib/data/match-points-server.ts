@@ -43,6 +43,15 @@ export interface MatchPoint {
   setScore: string;
   gameScore: string;
   pointScore: string;
+  /**
+   * `points.point_score`, untouched — no `?? "0-0"` fallback, unlike
+   * `pointScore` above. The match filters (T3) need to tell a genuinely
+   * unknown score apart from a real "0-0", which the defaulted field cannot
+   * do. Optional so existing full `MatchPoint` object literals in fixtures
+   * (e.g. `tests/fixtures/film-shot-row-reveal-harness.tsx`) stay valid
+   * without every one of them being touched.
+   */
+  pointScoreRaw?: string | null;
   resultType: string;
   eventType: string;
   description: string;
@@ -373,6 +382,7 @@ export async function getMatchPointsFromSupabase(
       setScore: point.set_score ?? "0-0",
       gameScore: point.game_score ?? "0-0",
       pointScore: point.point_score ?? "0-0",
+      pointScoreRaw: point.point_score,
       resultType,
       eventType: buildEventType(resultType),
       description: buildDescription(resultType, firstShot, lastShot, point),

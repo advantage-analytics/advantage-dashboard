@@ -7,7 +7,7 @@ import type { MatchPoint } from "@/lib/data/match-points-server";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { cn } from "@/lib/utils";
 
-import { lastNameOf } from "./film-filters";
+import { lastNameOf } from "./film-list-filters";
 import {
   pointReturnShotId,
   shotRowCells,

@@ -12,18 +12,14 @@ import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
-import { scopeCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
-  countFilmOption,
-  DEFAULT_FILM_FILTERS,
+  applyFilmCut,
   isReturnWinner,
-  type FilmFilters,
-} from "@/components/dashboard/matches/match-detail/film/filters/types";
-import {
-  scopeMeta,
-  scopePoints,
-  useSetScope,
-} from "@/components/dashboard/matches/match-detail/set-scope";
+  sideCut,
+  type CutSide,
+  type FilmCut,
+} from "@/components/dashboard/matches/match-detail/film-cut-context";
+import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { PlayerStatistics, StatFraction } from "@/lib/data/types";
 import { surnameLabels } from "@/lib/data/match-utils";
@@ -104,50 +100,70 @@ export interface H2HRowConfig {
   /** Why a keyless row can never carry a value. */
   note?: string;
   /**
-   * The film cut that shows this statistic's points in the Video tab, before
-   * a side is laid over it (`sideCut`). Absent when the statistic has no
+   * The film cut that shows this statistic's points in the Video tab — the
+   * row's own "both players" cut, before a side is laid over it (`sideCut`).
+   * A `Partial<MatchFilters>` plus Film-only extras (`FilmCut`), ANDed over
+   * the shared filters in Film only. Absent when the statistic has no
    * point-level equivalent — service games won is a count of games, not a
    * set of points. The cut shows what the filter model admits; on a
    * video-derived match the aggregate is approximate, so the two counts may
    * differ, and that is accepted.
    */
-  cut?: Partial<FilmFilters>;
+  cut?: FilmCut;
   /**
-   * Whose points a value cell's cut takes (`sideCut`). Absent keeps the
-   * default: a result row's side is who won (or, for errors, lost) the point,
-   * every other row's is who served it. Return rows are the returner's, so
-   * their side is the one NOT serving; total points won is the winner's.
+   * Whose points a value cell's cut takes (`sideCut`). Absent is the server:
+   * a player's serve rows are the points they served. Return rows are the
+   * returner's, so their side is the one NOT serving; result rows (aces,
+   * double faults, winners, errors) are the Result player's — the one who hit
+   * the winner or made the error.
    */
   sideBy?: CutSide;
+  /**
+   * The cell opens the points its side WON, not every point the row is
+   * about: "74 of 100 won" opens the 74 (Result › Won, from that side).
+   */
+  sideWon?: boolean;
   /** What the cut's points are, plural — "break points". Screen-reader copy. */
   noun?: string;
   /** What the fraction's first number counts — "9 of 12 saved". */
   verb?: string;
   /**
    * A statistic no provider publishes, counted from the points themselves
-   * (`tallySide`) for the whole match as well as for one set.
+   * (`tallySide`) over the whole match.
    */
   fromPoints?: "returnWinners";
 }
 
 export const SERVE_ROWS: H2HRowConfig[] = [
-  { label: "Aces", key: "aces", cut: { serve: ["ace"] }, noun: "aces" },
   {
+    // Result › Winner by the server, narrowed to the "Ace" bucket: Winner
+    // alone would add every service winner, which the report counts as a
+    // winner (and which is every unreturned serve on a video match).
+    label: "Aces",
+    key: "aces",
+    cut: { resultOutcome: ["winner"], ending: "ace" },
+    sideBy: "player",
+    noun: "aces",
+  },
+  {
+    // A point can only end on the server's own serve error when it is a
+    // double fault, so Error + Serve IS the double-fault bucket.
     label: "Double faults",
     key: "doubleFaults",
     lowerIsBetter: true,
-    cut: { serve: ["double-fault"] },
+    cut: { resultOutcome: ["error"], resultShot: ["Serve"] },
+    sideBy: "player",
     noun: "double faults",
   },
   {
     // The first serves that landed: a point is "played on a first serve"
-    // (`ball: "first"`) exactly when the first serve went in, so this opens
-    // the numerator — the same points as the row below.
+    // (Serve type First) exactly when the first serve went in, so this opens
+    // the numerator.
     label: "First serve in",
     key: "firstServeInPct",
     isPercentage: true,
     fractionKey: "firstServeInPct",
-    cut: { ball: "first" },
+    cut: { serveType: ["first"] },
     noun: "first-serve points",
     verb: "in",
   },
@@ -156,7 +172,8 @@ export const SERVE_ROWS: H2HRowConfig[] = [
     key: "firstServeWinPct",
     isPercentage: true,
     fractionKey: "firstServeWinPct",
-    cut: { ball: "first" },
+    cut: { serveType: ["first"] },
+    sideWon: true,
     noun: "first-serve points",
     verb: "won",
   },
@@ -165,7 +182,8 @@ export const SERVE_ROWS: H2HRowConfig[] = [
     key: "secondServeWinPct",
     isPercentage: true,
     fractionKey: "secondServeWinPct",
-    cut: { ball: "second" },
+    cut: { serveType: ["second"] },
+    sideWon: true,
     noun: "second-serve points",
     verb: "won",
   },
@@ -175,7 +193,8 @@ export const SERVE_ROWS: H2HRowConfig[] = [
     isPercentage: true,
     fractionKey: "breakpointsSaved",
     fromFraction: true,
-    cut: { pressure: "break" },
+    cut: { scoreType: ["breakpoint"] },
+    sideWon: true,
     noun: "break points",
     verb: "saved",
   },
@@ -194,8 +213,9 @@ export const RETURN_ROWS: H2HRowConfig[] = [
     key: "firstReturnWonPct",
     isPercentage: true,
     fractionKey: "firstReturnWonPct",
-    cut: { ball: "first" },
+    cut: { serveType: ["first"] },
     sideBy: "returner",
+    sideWon: true,
     noun: "first-serve returns",
     verb: "won",
   },
@@ -204,8 +224,9 @@ export const RETURN_ROWS: H2HRowConfig[] = [
     key: "secondReturnWonPct",
     isPercentage: true,
     fractionKey: "secondReturnWonPct",
-    cut: { ball: "second" },
+    cut: { serveType: ["second"] },
     sideBy: "returner",
+    sideWon: true,
     noun: "second-serve returns",
     verb: "won",
   },
@@ -214,26 +235,32 @@ export const RETURN_ROWS: H2HRowConfig[] = [
     key: "breakpointsWonPct",
     isPercentage: true,
     fractionKey: "breakpointsWonPct",
-    cut: { pressure: "break" },
+    cut: { scoreType: ["breakpoint"] },
     sideBy: "returner",
+    sideWon: true,
     noun: "break points",
     verb: "converted",
   },
   // No provider publishes it, but every point carries its return: a return
   // that landed, a rally of at most two shots and a winner the returner won
   // (`isReturnWinner`). Counted from the points, never borrowed from
-  // `winners`, which would read as a return figure and be a total.
+  // `winners`, which would read as a return figure and be a total. The cut
+  // is the Film-only `return-winner` ending: Result › Shot "Return" finds the
+  // return from shot rows, which a point without them does not carry, so it
+  // could not agree with this count. A cell adds "returned by, and won by,
+  // that side" — exactly `tallySide`'s rule.
   {
     label: "Return winners",
     fromPoints: "returnWinners",
-    cut: { returns: ["winner"] },
-    sideBy: "winner",
+    cut: { ending: "return-winner" },
+    sideBy: "returner",
+    sideWon: true,
     noun: "return winners",
   },
 ];
 
 export const POINT_ROWS: H2HRowConfig[] = [
-  // No cut: the film filter model has no net-approach axis to open.
+  // No cut: the match filters have no net-approach axis to open.
   {
     label: "Net points won",
     key: "netPointsWonPct",
@@ -244,14 +271,20 @@ export const POINT_ROWS: H2HRowConfig[] = [
   {
     label: "Winners",
     key: "winners",
-    cut: { result: ["winner"] },
+    // Result › Winner narrowed to the "winner" bucket, which leaves aces on
+    // their own line as the published figure does.
+    cut: { resultOutcome: ["winner"], ending: "winner" },
+    sideBy: "player",
     noun: "winners",
   },
   {
     label: "Unforced errors",
     key: "unforcedErrors",
     lowerIsBetter: true,
-    cut: { result: ["unforced"] },
+    // Result › Error covers forced errors too, and a video match does not
+    // separate them — the Film-only "unforced error" bucket narrows it.
+    cut: { resultOutcome: ["error"], ending: "unforced-error" },
+    sideBy: "player",
     noun: "unforced errors",
   },
   {
@@ -261,7 +294,8 @@ export const POINT_ROWS: H2HRowConfig[] = [
     key: "totalPointsWon",
     ofKey: "totalPoints",
     cut: {},
-    sideBy: "winner",
+    sideBy: "player",
+    sideWon: true,
     noun: "points",
     verb: "won",
   },
@@ -278,44 +312,12 @@ const ALL_H2H_CONFIGS: H2HRowConfig[] = H2H_GROUPS.flatMap(
   (group) => group.configs,
 );
 
-/**
- * One value cell's cut: the row's cut with the cell's side laid over it.
- * A serve row's side is who SERVED the point (`server`) — a player's aces are
- * the points they served that ended in an ace. A result row's side is who
- * WON it (`outcome`) — a player's winners are the points they won on a
- * winner. That is the line `tallySide` below draws: aces and double faults
- * by server, winners and errors by the player who ended the point. Unforced
- * errors take the OTHER side's `outcome` for the same reason — the player
- * who errs is the one who loses the point.
- *
- * `you`/`opp` are relative, resolved by `useMatchSides()` inside the film tab
- * (guardrails §4); nothing here reads player order.
- */
-export type CutSide = "returner" | "winner";
-
-function flipSide(side: "you" | "opp"): "you" | "opp" {
-  return side === "you" ? "opp" : "you";
-}
-
-export function sideCut(
-  cut: Partial<FilmFilters>,
-  side: "you" | "opp",
-  by?: CutSide,
-): Partial<FilmFilters> {
-  // A return statistic belongs to the player receiving serve, so the side is
-  // the one NOT serving: your first-serve returns are the opponent's first
-  // serves.
-  if (by === "returner") {
-    return { ...cut, server: flipSide(side) };
-  }
-  if (by === "winner") return { ...cut, outcome: side };
-  if (cut.result) {
-    const erred = cut.result.includes("unforced");
-    const outcome = erred ? flipSide(side) : side;
-    return { ...cut, outcome };
-  }
-  return { ...cut, server: side };
-}
+// `CutSide`/`sideCut` — one value cell's cut, the row's cut with the cell's
+// side laid over it — now live in `film-cut-context.tsx` beside `FilmCut`
+// itself, since `point-endings-card.tsx` composes a cut the same way.
+// Re-exported here so this module's own call sites are unchanged.
+export type { CutSide };
+export { sideCut };
 
 /* ── Values and the leader rule ─────────────────────────────────────────── */
 
@@ -398,8 +400,9 @@ export interface H2HRow {
   /** Present only on rows that can never have a value. */
   note?: string;
   /** The config's cut, sideless — `sideCut` adds the cell's side. */
-  cut?: Partial<FilmFilters>;
+  cut?: FilmCut;
   sideBy?: CutSide;
+  sideWon?: boolean;
   noun?: string;
   verb?: string;
   you: H2HValue;
@@ -417,6 +420,7 @@ function assembleRow(
     note: config.note,
     cut: config.cut,
     sideBy: config.sideBy,
+    sideWon: config.sideWon,
     noun: config.noun,
     verb: config.verb,
     you,
@@ -440,13 +444,12 @@ export function buildStatRows(
   );
 }
 
-/* ── Per-set derivation ─────────────────────────────────────────────────────
-   `useSetScope()` narrows the pane to one set. The published `match_stats`
-   numbers are whole-match only, so the scoped view is recomputed from `points`
-   — and only for the statistics a `MatchPoint` genuinely carries. Everything
-   else shows the same em dash the card already uses for missing data, because
-   a plausible-looking number computed from fields that cannot support it is
-   the one failure mode nothing downstream can catch. */
+/* ── Point-derived statistics ───────────────────────────────────────────────
+   The card is always the whole match: its figures are the published
+   `match_stats` numbers (`buildStatRows`). The match filters live on the
+   Video tab only and never reach this card. The one exception is a
+   statistic no provider publishes (`fromPoints` — return winners), which is
+   counted here from every point of the match. */
 
 interface Tally {
   won: number;
@@ -559,92 +562,42 @@ export function tallySide(
   return d;
 }
 
-interface DerivedValue {
-  value: number | null;
-  detail?: string;
-}
-
-function pctValue(t: Tally): DerivedValue {
-  if (t.total === 0) return { value: null };
-  return { value: (t.won / t.total) * 100, detail: `${t.won}/${t.total}` };
-}
-
 /**
- * The scoped value for one statistic, or `null` when a `MatchPoint` cannot
- * support it for a single set — first/second serve splits, net play and any
- * game-level count all need information the point rows do not carry.
+ * A `fromPoints` statistic's value, or `null` when the points cannot support
+ * it. 0 is a measurement only where returns were recorded; with none, a zero
+ * would say "no return winners" about points nobody looked at.
  */
-function derivedValue(
-  config: H2HRowConfig,
-  d: DerivedSide,
-): DerivedValue | null {
-  // 0 is a measurement only where returns were recorded; with none, a zero
-  // would say "no return winners" about points nobody looked at.
+function derivedValue(config: H2HRowConfig, d: DerivedSide): number | null {
   if (config.fromPoints === "returnWinners") {
-    return d.returnsRecorded > 0 ? { value: d.returnWinners } : null;
+    return d.returnsRecorded > 0 ? d.returnWinners : null;
   }
-  switch (config.key) {
-    case "aces":
-      return { value: d.aces };
-    case "doubleFaults":
-      return { value: d.doubleFaults };
-    case "winners":
-      return { value: d.winners };
-    case "unforcedErrors":
-      return { value: d.unforcedErrors };
-    case "totalPointsWon":
-      return { value: d.allPoints.won, detail: `of ${d.allPoints.total}` };
-    case "breakpointsSaved":
-      return pctValue(d.breakPointsFaced);
-    case "breakpointsWonPct":
-      return pctValue(d.breakPointsAgainst);
-    default:
-      return null;
-  }
+  return null;
 }
 
 const NO_VALUE: H2HValue = { value: null, display: "" };
 
-function derivedSideValue(
-  config: H2HRowConfig,
-  d: DerivedSide,
-  published: H2HValue,
-): H2HValue {
-  // A statistic the provider withheld whole-match stays withheld per set.
-  // Aces on a video-derived match are the case that matters: derivation never
-  // emits "Ace", so counting them here would print a confident 0 where the
-  // published card correctly prints an em dash.
-  // A statistic only the points carry has no published figure to defer to.
-  if (published.display === "" && !config.fromPoints) return NO_VALUE;
-
-  const derived = derivedValue(config, d);
-  if (!derived) return NO_VALUE;
-
-  const display = statDisplay(derived.value, config.isPercentage);
-  return {
-    value: derived.value,
-    display,
-    detail: display ? derived.detail : undefined,
-  };
+function derivedSideValue(config: H2HRowConfig, d: DerivedSide): H2HValue {
+  const value = derivedValue(config, d);
+  if (value === null) return NO_VALUE;
+  return { value, display: statDisplay(value, config.isPercentage) };
 }
 
-/** One row, recomputed from `youDerived`/`oppDerived` in place of `published`. */
+/** One `fromPoints` row, counted from `youDerived`/`oppDerived`. */
 function deriveRow(
   config: H2HRowConfig,
-  published: H2HRow,
   youDerived: DerivedSide,
   oppDerived: DerivedSide,
 ): H2HRow {
   return assembleRow(
     config,
-    derivedSideValue(config, youDerived, published.you),
-    derivedSideValue(config, oppDerived, published.opp),
+    derivedSideValue(config, youDerived),
+    derivedSideValue(config, oppDerived),
   );
 }
 
 /**
  * The whole-match rows: the published figures, except the statistics only the
- * points carry, which are counted from every point in scope.
+ * points carry, which are counted from every point of the match.
  */
 export function withPointRows(
   configs: H2HRowConfig[],
@@ -654,19 +607,8 @@ export function withPointRows(
 ): H2HRow[] {
   return configs.map((config, i) =>
     config.fromPoints
-      ? deriveRow(config, published[i], youDerived, oppDerived)
+      ? deriveRow(config, youDerived, oppDerived)
       : published[i],
-  );
-}
-
-function buildDerivedRows(
-  configs: H2HRowConfig[],
-  published: H2HRow[],
-  youDerived: DerivedSide,
-  oppDerived: DerivedSide,
-): H2HRow[] {
-  return configs.map((config, i) =>
-    deriveRow(config, published[i], youDerived, oppDerived),
   );
 }
 
@@ -818,7 +760,6 @@ function ValueCell({
   value,
   emphasised,
   note,
-  scoped,
   washed,
   watch,
   zero,
@@ -827,7 +768,6 @@ function ValueCell({
   value: H2HValue;
   emphasised: boolean;
   note?: string;
-  scoped: boolean;
   /** The cursor or focus is on this figure. */
   washed: boolean;
   /**
@@ -909,7 +849,7 @@ function ValueCell({
           sideOffset={6}
           className="px-2.5 py-1.5 text-[11px] leading-[14px]"
         >
-          {note ?? (scoped ? "Not measurable for a single set" : "No data")}
+          {note ?? "No data"}
         </TooltipContent>
       </Tooltip>
     </span>
@@ -927,7 +867,11 @@ export function HeadToHeadCard() {
   const { match, points } = useMatchData();
   const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
-  const { activeSet } = useSetScope();
+  // Only the filter CONTEXT (you/opp seat and hands), never the applied
+  // filters: it is what the Video tab resolves a cut with, so the counts
+  // below say what the tab will list. The card itself is always the whole
+  // match — the match filters live on the Video tab alone.
+  const { context } = useMatchFilters();
   const [hover, setHover] = useState<HoverTarget | null>(null);
 
   const youStats = sides.you.stats;
@@ -935,71 +879,50 @@ export function HeadToHeadCard() {
   const youIsPlayer1 = sides.you.isPlayer1;
   const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
 
-  const scopedPoints = useMemo(
-    () => scopePoints(points, activeSet),
-    [points, activeSet],
-  );
-
   const sections = useMemo(() => {
     if (!youStats || !oppStats) return [];
     // Tallied whole-match too: the statistics only the points carry (return
     // winners) have no published figure to fall back on.
-    const youDerived = tallySide(scopedPoints, youIsPlayer1);
-    const oppDerived = tallySide(scopedPoints, !youIsPlayer1);
+    const youDerived = tallySide(points, youIsPlayer1);
+    const oppDerived = tallySide(points, !youIsPlayer1);
 
     return H2H_GROUPS.map((group) => {
       const published = buildStatRows(group.configs, youStats, oppStats);
       return {
         title: group.title,
-        rows:
-          activeSet !== null
-            ? buildDerivedRows(group.configs, published, youDerived, oppDerived)
-            : withPointRows(group.configs, published, youDerived, oppDerived),
+        rows: withPointRows(group.configs, published, youDerived, oppDerived),
       };
     });
-  }, [youStats, oppStats, youIsPlayer1, activeSet, scopedPoints]);
+  }, [youStats, oppStats, youIsPlayer1, points]);
 
-  // The exact points each target opens, counted through the Video tab's own
-  // filter so the readout's "Watch all 12" is what the tab will show — on a
-  // video-derived match that can differ from the published figure, and the
-  // readout says the true count rather than borrowing the statistic's. Each
-  // of `both`/`you`/`opp` is its own count() call — see the comment below on
-  // why `both` is not simply `you + opp`.
+  // The exact points each target opens, counted with the Video tab's own
+  // predicate — `applyFilmCut` over EVERY point of the match, the same whole
+  // match the card's figures describe — so the readout's "Watch all 12" is
+  // the cut's own size. On a video-derived match that can differ from the
+  // published figure, and the readout says the true count rather than
+  // borrowing the statistic's. Each of `both`/`you`/`opp` is its own count —
+  // see the comment below on why `both` is not simply `you + opp`.
   const counts = useMemo(() => {
     const byRow = new Map<string, RowCounts>();
     if (!meta.hasPlayableVideo) return byRow;
-    const count = (cut: Partial<FilmFilters>) =>
-      countFilmOption(
-        points,
-        DEFAULT_FILM_FILTERS,
-        youIsPlayer1,
-        scopeCut(cut, activeSet),
-      );
+    const count = (cut: FilmCut) =>
+      applyFilmCut(points, points, cut, context).length;
     for (const config of ALL_H2H_CONFIGS) {
       if (!config.cut) continue;
-      // `both` is counted, not summed: the Return winners filter also admits
-      // the rare two-shot "winner" the server won, which neither side's cut
-      // does, and the readout must say what the tab will actually list.
+      // `both` is counted, not summed: a row's own cut carries no side, so
+      // it also admits what neither side's does — the rare two-shot "winner"
+      // the server won on Return winners, every point a won-row's sides did
+      // not win — and the readout must say what the tab will actually list.
       byRow.set(config.label, {
         both: count(config.cut),
-        you: count(sideCut(config.cut, "you", config.sideBy)),
-        opp: count(sideCut(config.cut, "opp", config.sideBy)),
+        you: count(sideCut(config.cut, "you", config.sideBy, config.sideWon)),
+        opp: count(sideCut(config.cut, "opp", config.sideBy, config.sideWon)),
       });
     }
     return byRow;
-  }, [meta.hasPlayableVideo, points, activeSet, youIsPlayer1]);
-
-  // Memoized rather than recomputed inline: the card re-renders on every row
-  // hover, and `scopeMeta` allocates a scoped-points array just to count it —
-  // work that has nothing to do with which row the cursor is on.
-  const scope = useMemo(
-    () => scopeMeta(sides.sets, points, activeSet),
-    [sides.sets, points, activeSet],
-  );
+  }, [meta.hasPlayableVideo, points, context]);
 
   if (sections.length === 0) return null;
-
-  const scoped = activeSet !== null;
 
   const target = (row: string, zone: Zone): TargetHandlers => ({
     onMouseEnter: () => setHover({ row, zone }),
@@ -1033,7 +956,7 @@ export function HeadToHeadCard() {
           className="text-micro tabular whitespace-nowrap"
           style={{ color: "var(--ink-400)" }}
         >
-          {scope.label} · {scope.points} points
+          Whole match · {points.length} points
         </span>
       </div>
 
@@ -1100,7 +1023,8 @@ export function HeadToHeadCard() {
               return {
                 onClick: () =>
                   actions.watchCut(
-                    scopeCut(sideCut(row.cut!, side, row.sideBy), activeSet),
+                    sideCut(row.cut!, side, row.sideBy, row.sideWon),
+                    `${row.label} · ${name}`,
                   ),
                 label: `${row.label}, ${name}: ${figure}. ${watchLabel(n, noun)}`,
                 handlers: target(row.label, side),
@@ -1112,8 +1036,7 @@ export function HeadToHeadCard() {
             // a count: 0% of 3 break points is three break points, not none.
             const isZeroCount = (side: "you" | "opp") =>
               row[side].display === "0";
-            const inScope =
-              activeSet === null ? "in this match" : `in set ${activeSet}`;
+            const inScope = "in this match";
             const cellZero = (side: "you" | "opp", watchable: boolean) =>
               !watchable && isZeroCount(side) && row.noun
                 ? {
@@ -1132,8 +1055,7 @@ export function HeadToHeadCard() {
             // players" — is built the same way as each player's.
             const rowWatch = rowWatchable
               ? {
-                  onClick: () =>
-                    actions.watchCut(scopeCut(row.cut!, activeSet)),
+                  onClick: () => actions.watchCut(row.cut!, row.label),
                   label: `${row.label}, both players. ${watchLabel(rowCounts!.both, noun)}`,
                   handlers: target(row.label, "row"),
                 }
@@ -1281,7 +1203,6 @@ export function HeadToHeadCard() {
                   value={row.you}
                   emphasised={row.leader === "you"}
                   note={row.note}
-                  scoped={scoped}
                   washed={active === "you" && Boolean(youWatch || youZero)}
                   watch={youWatch}
                   zero={youZero}
@@ -1291,7 +1212,6 @@ export function HeadToHeadCard() {
                   value={row.opp}
                   emphasised={row.leader === "opp"}
                   note={row.note}
-                  scoped={scoped}
                   washed={active === "opp" && Boolean(oppWatch || oppZero)}
                   watch={oppWatch}
                   zero={oppZero}

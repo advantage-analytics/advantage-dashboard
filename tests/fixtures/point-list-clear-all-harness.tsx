@@ -3,22 +3,27 @@ import { createRoot } from "react-dom/client";
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { PointList } from "@/components/dashboard/matches/match-detail/film/point-list";
-import { DEFAULT_FILM_FILTERS } from "@/components/dashboard/matches/match-detail/film/film-filters";
+import {
+  INERT_FILM_LIST_FILTERS,
+  type FilmListFilters,
+} from "@/components/dashboard/matches/match-detail/film/film-list-filters";
+import { EMPTY_MATCH_FILTERS } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { Match } from "@/lib/data/types";
 import type { WorkspaceContextValue } from "@/lib/workspace/types";
 
 /**
  * T8: the header's "Clear all" is a labelled text button, not a bare glyph,
- * and it is drawn only while a cut is applied (`hasActiveFilmFilters`).
+ * and it is drawn only while something is applied (`filmListActive`). It is
+ * the fullscreen room's drawer's (`tone="dark"`): the report column states
+ * the cut in the filter strip above it, which carries "Clear filter".
  *
  * Two `PointList`s are mounted side by side, in separate root divs so the
- * spec can address each header independently: one with
- * `DEFAULT_FILM_FILTERS` (no button), one with `pressure: "break"` applied
- * (exactly one button, clicking it hands `onFiltersChange` the
- * `DEFAULT_FILM_FILTERS` object). Each root's `onFiltersChange` records its
- * argument on the container's `data-cleared-with` attribute as JSON, so the
- * spec can assert on the exact object without a live React state loop.
+ * spec can address each header independently: one with nothing applied (no
+ * button), one with the shared Score › Breakpoint applied (exactly one
+ * button, and clicking it calls the list filters' `clearAll`). Each root's
+ * `clearAll` records itself on the container's `data-cleared` attribute, so
+ * the spec can assert it ran without a live React state loop.
  */
 
 const WORKSPACE: WorkspaceContextValue = {
@@ -101,10 +106,7 @@ function point(overrides: Partial<MatchPoint> & { id: string }): MatchPoint {
 
 const POINTS: MatchPoint[] = [point({ id: "only-point" })];
 
-function mount(
-  containerId: string,
-  filters: typeof DEFAULT_FILM_FILTERS,
-): void {
+function mount(containerId: string, filmFilters: FilmListFilters): void {
   const container = document.getElementById(containerId)!;
   const root = createRoot(container);
   root.render(
@@ -113,14 +115,13 @@ function mount(
         <PointList
           allPoints={POINTS}
           visiblePoints={POINTS}
-          filters={filters}
-          onFiltersChange={(next) => {
-            container.dataset.clearedWith = JSON.stringify(next);
+          filmFilters={{
+            ...filmFilters,
+            clearAll: () => {
+              container.dataset.cleared = "true";
+            },
           }}
-          advancedOpen={false}
-          onAdvancedOpenChange={() => {}}
-          openSections={[]}
-          onOpenSectionsChange={() => {}}
+          tone="dark"
           activePointId={null}
           activeStart={0}
           activeEnd={0}
@@ -132,7 +133,10 @@ function mount(
   );
 }
 
-mount("no-filters-root", DEFAULT_FILM_FILTERS);
-mount("with-filters-root", { ...DEFAULT_FILM_FILTERS, pressure: "break" });
+mount("no-filters-root", INERT_FILM_LIST_FILTERS);
+mount("with-filters-root", {
+  ...INERT_FILM_LIST_FILTERS,
+  shared: { ...EMPTY_MATCH_FILTERS, scoreType: ["breakpoint"] },
+});
 
 document.documentElement.dataset.hydrated = "true";

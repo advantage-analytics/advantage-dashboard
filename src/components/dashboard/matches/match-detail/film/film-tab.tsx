@@ -24,7 +24,6 @@ import { FilmExpiryNotice } from "./film-expiry-notice";
 import { FilmUnavailableState } from "./film-unavailable-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
-import { parseCut, serializeCut, type FilmSectionId } from "./filters/types";
 import { roomParam } from "./film-room-prefs";
 import { scoreColumns } from "./film-score";
 import {
@@ -40,17 +39,29 @@ import {
   type PointFocus,
 } from "./film-timeline";
 import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
+import { usePendingFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
+import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import {
-  consumeFilmCut,
-  usePendingFilmCut,
-} from "@/components/dashboard/matches/match-detail/film-cut-context";
+  FILTER_RAIL_ID,
+  FilterRail,
+  FilterRailProvider,
+  useFilterRailHost,
+} from "@/components/dashboard/matches/match-detail/match-filters/filter-rail";
+import type { MatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import { FilmFilterStrip } from "./film-filter-strip";
 import { useAttachmentPlayback } from "./use-attachment-playback";
 import { recordMatchVideoView } from "./record-video-view";
 import {
-  DEFAULT_FILM_FILTERS,
-  applyFilmFilters,
-  type FilmFilters,
-} from "./film-filters";
+  filmDraftCount,
+  filmListPoints,
+  landFilmCut,
+  NO_FILM_LOCAL_FILTERS,
+  parseLegacyFilmQuery,
+  stripLegacyFilmQuery,
+  withLegacyFilters,
+  type FilmListFilters,
+  type FilmLocalFilters,
+} from "./film-list-filters";
 
 // The room is a screenful of its own — the overlay, the drawer, the transport
 // and the track — and most visits to a match never open it. Loading it on the
@@ -103,7 +114,15 @@ export function FilmTab({
    */
   unit: DistanceUnit;
 }) {
-  if (video) return <FilmRoom video={video} entry={entry} unit={unit} />;
+  // The filters drawer's open state lives with the room, so a switch to
+  // another view (which unmounts this tab) always leaves it shut.
+  if (video) {
+    return (
+      <FilterRailProvider>
+        <FilmRoom video={video} entry={entry} unit={unit} />
+      </FilterRailProvider>
+    );
+  }
   const view = filmEntryView(entry);
   if (view === "empty") return <FilmEmptyState entry={entry} />;
   if (view === "expired") return <FilmExpiredState entry={entry} />;
@@ -148,36 +167,103 @@ function FilmRoom({
   const clockRef = useRef<HTMLDivElement>(null);
 
   // `useSearchParams()` can be null outside a Next router (the playback
-  // harness mounts this with a bare createRoot); parseCut tolerates that.
+  // harness mounts this with a bare createRoot); the legacy parse tolerates
+  // that.
   const searchParams = useSearchParams();
-  const [filters, setFilters] = useState<FilmFilters>(() => ({
-    ...DEFAULT_FILM_FILTERS,
-    ...parseCut(searchParams),
+
+  /*
+   * The list's filters, in three layers ANDed together (T7,
+   * `film-list-filters.ts`):
+   *
+   * - `shared` — the report's `MatchFilters`, held by `MatchFiltersProvider`
+   *   ABOVE the view switch and mirrored to `?f=` there. The quick menu and
+   *   the Advanced panel write it, and the Statistics tab reads the same
+   *   state. Film no longer keeps a filter model of its own.
+   * - `local.cut` — a statistic's cut, Film only: named in the filter
+   *   strip, never written to the shared state or the URL.
+   * - `local.savedOnly` — the viewer's bookmarks, Film only.
+   *
+   * The local layers live here, and `MatchReportWhen` unmounts this view on a
+   * switch, so they reset when the viewer leaves Video; the shared filters
+   * do not.
+   */
+  const {
+    filters: shared,
+    setFilters: setShared,
+    clearFilters,
+    filteredPoints: sharedPoints,
+    context: filterContext,
+  } = useMatchFilters();
+  const [local, setLocal] = useState<FilmLocalFilters>(() => ({
+    ...NO_FILM_LOCAL_FILTERS,
+    savedOnly: parseLegacyFilmQuery(searchParams)?.savedOnly ?? false,
   }));
-  // Mirror the quick cut into the URL so a reload or a shared link reopens the
-  // same cut. Native history, no router call: Next keeps `useSearchParams` in
-  // sync with `replaceState` and nothing refetches, so the film neither pauses
-  // nor reloads. Pattern from
-  // node_modules/next/dist/docs/01-app/02-guides/single-page-applications.md
-  // ("Using the native History API"). `serializeCut` is the only writer, so
-  // Advanced axes never reach the URL and `tab=film` etc. are carried through.
-  // Reads `window.location.search` (not the hook) so it never races a stale
-  // snapshot, skips when already equal, and has no cleanup so unmount leaves
-  // the query string alone.
+  // Old links carry the pre-T7 quick cut as `cut=break|saved` and
+  // `serve=you|opp`. They still open the same cut: Break points and the
+  // server fold into the shared filters (which then mirror to `?f=`), saved
+  // seeded `local` above — and the two params are stripped, as `?f=` owns
+  // them now. Native history, no router call: Next keeps `useSearchParams`
+  // in sync with `replaceState` and nothing refetches, so the film neither
+  // pauses nor reloads (node_modules/next/dist/docs/01-app/02-guides/
+  // single-page-applications.md, "Using the native History API"). `null`
+  // state, as `MatchFiltersProvider` explains. Reads `window.location.search`
+  // rather than the hook, so once stripped this is a no-op.
   useEffect(() => {
-    const current = window.location.search.replace(/^\?/, "");
-    const next = serializeCut(filters, current);
-    if (next === current) return;
+    const legacy = parseLegacyFilmQuery(
+      new URLSearchParams(window.location.search),
+    );
+    if (!legacy) return;
+    setShared(withLegacyFilters(shared, legacy));
+    const next = stripLegacyFilmQuery(
+      window.location.search.replace(/^\?/, ""),
+    );
     window.history.replaceState(
       null,
       "",
       `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`,
     );
-  }, [filters]);
-  // Advanced lives in the list column and its section state outlives the
-  // panel, so a reopen finds the sections as they were left.
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [openSections, setOpenSections] = useState<FilmSectionId[]>([]);
+  }, [shared, setShared]);
+  const setSavedOnly = useCallback(
+    (savedOnly: boolean) =>
+      setLocal((prev) =>
+        prev.savedOnly === savedOnly ? prev : { ...prev, savedOnly },
+      ),
+    [],
+  );
+  const clearCut = useCallback(
+    () =>
+      setLocal((prev) => (prev.cut === null ? prev : { ...prev, cut: null })),
+    [],
+  );
+  const clearAll = useCallback(() => {
+    clearFilters();
+    setLocal(NO_FILM_LOCAL_FILTERS);
+  }, [clearFilters]);
+  // ONE object for both `PointList` mounts — this column and the room's
+  // drawer — so the two can never show different cuts.
+  const filmFilters = useMemo<FilmListFilters>(
+    () => ({
+      shared,
+      setShared,
+      cut: local.cut,
+      clearCut,
+      savedOnly: local.savedOnly,
+      setSavedOnly,
+      clearAll,
+    }),
+    [shared, setShared, local, clearCut, setSavedOnly, clearAll],
+  );
+  // Stable across a playback tick (`currentTime` re-renders this component
+  // ~4x/second) so `FilmFilterStrip`'s own `memo` actually skips re-rendering
+  // it between filter changes.
+  const filmStripNames = useMemo(
+    () => ({ you: sides.you.shortName, opponent: sides.opp.shortName }),
+    [sides.you.shortName, sides.opp.shortName],
+  );
+  // "Advanced filters…" opens the 340px filters drawer over the list column
+  // (`FilterRail`, rendered at the end of this view). The room's own drawer
+  // keeps its in-column panel.
+  const filterRail = useFilterRailHost();
   const [currentTime, setCurrentTime] = useState(0);
   const [room, setRoom] = useState<{ time: number; playing: boolean } | null>(
     null,
@@ -206,8 +292,6 @@ function FilmRoom({
     const id = globalThis.setTimeout(warm, 1500);
     return () => globalThis.clearTimeout(id);
   }, []);
-
-  const youIsPlayer1 = sides.you.isPlayer1;
 
   /**
    * The credential, and the clock it implies.
@@ -311,9 +395,19 @@ function FilmRoom({
     resumeApplied();
   }, [resume, resumeApplied]);
 
+  // The list, ↑/↓ and prev/next all walk this: the shared filters' points
+  // AND the statistic's cut AND the saved toggle — the one predicate the
+  // report's cards count "Watch all N" with, so N is what lands here.
   const filteredPoints = useMemo(
-    () => applyFilmFilters(points, filters, youIsPlayer1),
-    [points, filters, youIsPlayer1],
+    () => filmListPoints(points, sharedPoints, local, filterContext),
+    [points, sharedPoints, local, filterContext],
+  );
+  // The filters drawer's live count: what this list would show if the draft
+  // replaced the shared filters, under the same cut and saved toggle.
+  const countForDraft = useCallback(
+    (draft: MatchFilters) =>
+      filmDraftCount(points, draft, local, filterContext),
+    [points, local, filterContext],
   );
 
   // A cut change that removes the held point leaves no row to hold: back to
@@ -342,13 +436,13 @@ function FilmRoom({
    * in two steps because the first admitted point is only known once the
    * filters it sets have been applied.
    *
-   * 1. Take the pending cut: the filters become the defaults with the cut
-   *    over them (`consumeFilmCut`), the same value is remembered as the
+   * 1. Take the pending cut: it becomes the Film-only `local.cut`, laid OVER
+   *    the shared filters, which it never touches (`landFilmCut` hands
+   *    `shared` back as the same object); the saved toggle goes off, since
+   *    the card counted every point. The same value is remembered as the
    *    `landing`, and the intent is CLEARED — leaving and re-entering the
-   *    Video view finds nothing pending and keeps whatever the viewer set
-   *    since. The cut effect above then mirrors `cut=`/`serve=` into the URL
-   *    as it does for any other filter change; the Advanced axes stay out.
-   * 2. Once `filters` IS that landing (identity: both were set from the same
+   *    Video view finds nothing pending.
+   * 2. Once `local` IS that landing (identity: both were set from the same
    *    object in one batch) and the media is playable, the shell player seeks
    *    to the first stop the cut admits and the list holds that point. A cut
    *    that admits no point still applies; nothing seeks and nothing is held.
@@ -357,23 +451,24 @@ function FilmRoom({
    *
    * The hook returns null outside a provider, so the playback harness — which
    * mounts this tab bare — never enters step 1. Sides are not decided here:
-   * a cut's you/opp axes resolve in `applyFilmFilters` via `youIsPlayer1`.
+   * a cut's you/opponent fields resolve through the filter context's
+   * `youIsPlayer1` (`useMatchSides()`, guardrails §4).
    */
   const pendingCut = usePendingFilmCut();
-  const [landing, setLanding] = useState<FilmFilters | null>(null);
+  const [landing, setLanding] = useState<FilmLocalFilters | null>(null);
   useEffect(() => {
-    const taken = consumeFilmCut(pendingCut?.cut ?? null);
-    if (!taken || !pendingCut) return;
+    if (!pendingCut) return;
+    const next = landFilmCut({ shared, local }, pendingCut.intent).local;
     // The provider's intent arriving is the external event; this runs once
     // per `watchCut`, never per frame.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setFilters(taken.filters);
-    setLanding(taken.filters);
+    setLocal(next);
+    setLanding(next);
     pendingCut.clear();
-  }, [pendingCut]);
+  }, [pendingCut, shared, local]);
   useEffect(() => {
     if (!landing) return;
-    if (filters !== landing) {
+    if (local !== landing) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLanding(null);
       return;
@@ -385,7 +480,7 @@ function FilmRoom({
       holdPoint(first.point.id);
     }
     setLanding(null);
-  }, [landing, filters, walkStops, playback.url, holdPoint]);
+  }, [landing, local, walkStops, playback.url, holdPoint]);
 
   const columns = useMemo(() => scoreColumns(points), [points]);
 
@@ -553,9 +648,12 @@ function FilmRoom({
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
+      // The filters drawer is an `<aside>`, not a dialog, and focuses its own
+      // container on open — without its id here, Space would play the film
+      // behind it, the arrows would step points and S would save one.
       if (
         target?.closest(
-          "input, textarea, select, [contenteditable], [role=dialog], [data-radix-popper-content-wrapper]",
+          `input, textarea, select, [contenteditable], [role=dialog], [data-radix-popper-content-wrapper], #${FILTER_RAIL_ID}`,
         )
       ) {
         return;
@@ -743,6 +841,15 @@ function FilmRoom({
           expiresAt={expiry.expiresAt}
         />
       )}
+      {/* The cut in words, above the video and the list (never inside the
+          list's card), while anything is applied — the Matches page's
+          strip, v3's Data Table rule 6. */}
+      <FilmFilterStrip
+        filmFilters={filmFilters}
+        names={filmStripNames}
+        shown={filteredPoints.length}
+        total={points.length}
+      />
       <div
         ref={clockRef}
         className="flex min-h-0 flex-1 flex-col gap-4 @min-[720px]:flex-row"
@@ -801,16 +908,13 @@ function FilmRoom({
             <PointList
               allPoints={points}
               // Neither list is split into Points/Saved tabs any more: "Saved
-              // only" is an axis of the cut itself (`filters.savedOnly`), so
+              // only" is a layer of the list's filters (`local.savedOnly`), so
               // both render exactly what the filters admit — this column and
-              // the room's drawer off the very same array.
+              // the room's drawer off the very same array and filter object.
               visiblePoints={filteredPoints}
-              filters={filters}
-              onFiltersChange={setFilters}
-              advancedOpen={advancedOpen}
-              onAdvancedOpenChange={setAdvancedOpen}
-              openSections={openSections}
-              onOpenSectionsChange={setOpenSections}
+              filmFilters={filmFilters}
+              onOpenFilters={filterRail.toggle}
+              filtersTriggerRef={filterRail.registerTrigger}
               activePointId={active?.stop.point.id ?? null}
               activeStart={active?.stop.start ?? 0}
               activeEnd={active?.stop.end ?? 0}
@@ -855,8 +959,7 @@ function FilmRoom({
             // column draws (`PointList tone="dark"`), so it is handed the same
             // filter-applied points rather than a tab-scoped slice of its own.
             visiblePoints={filteredPoints}
-            filters={filters}
-            onFiltersChange={setFilters}
+            filmFilters={filmFilters}
             onToggleSaved={handleToggleSaved}
             // The room derives its own displayed point from its own playhead
             // — `displayedPointId` here is the shell's, and the shell's clock
@@ -870,6 +973,11 @@ function FilmRoom({
           />
         )}
       </div>
+
+      {/* The filters drawer: 340px over the list column, anchored to the
+          report pane's right edge — its absolute box resolves to the pane
+          (see filter-rail.tsx › Placement), so nothing here reflows. */}
+      <FilterRail countFor={countForDraft} />
     </div>
   );
 }

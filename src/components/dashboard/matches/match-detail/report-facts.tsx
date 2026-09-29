@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Calendar, CircleCheck, Swords } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { shortMonthDate } from "@/components/dashboard/matches/match-detail/format-clock";
-import { scopeMeta } from "@/components/dashboard/matches/match-detail/set-scope";
+import { totalGames } from "@/components/dashboard/matches/match-detail/set-scope";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { savedViewsCountFact } from "@/lib/data/saved-views-logic";
 import { cn } from "@/lib/utils";
@@ -26,8 +26,8 @@ const FACT_ICON = "size-[13px] shrink-0 text-[var(--ink-700)]";
  * name takes that slot with the tournament icon.
  *
  * The games count is the sum of both players' games, taken from the score
- * through `scopeMeta` (the whole-match scope): a total has no side to get
- * wrong (guardrails §4 governs who a figure belongs to, not a sum of both).
+ * through `totalGames`: a total has no side to get wrong (guardrails §4
+ * governs who a figure belongs to, not a sum of both).
  *
  * Task 9 step 4: the same fact also names how many saved views the
  * Visualizations tab holds, via `savedViewsCountFact` (`saved-views-logic.ts`)
@@ -39,7 +39,7 @@ export function MatchReportFacts() {
   const { match, points } = useMatchData();
   const { meta } = useMatchReport();
 
-  const { games } = scopeMeta(match.score.sets, points, null);
+  const games = totalGames(match.score.sets);
   const savedViewCount = meta.savedViews.length;
 
   return (
