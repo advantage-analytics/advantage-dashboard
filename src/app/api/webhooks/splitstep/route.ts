@@ -44,7 +44,10 @@
  * is recording the envelope, which is what makes everything else recoverable.
  */
 
-import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
+import {
+  pipelineLog,
+  redactSignedUrls,
+} from "@/lib/services/splitstep/pipeline-log";
 import { NextRequest, NextResponse, after } from "next/server";
 import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -145,7 +148,7 @@ export async function POST(request: NextRequest) {
   pipelineLog.info(`${LOG} received`, {
     bytes: rawBody.length,
     contentType: request.headers.get("content-type"),
-    body: rawBody.slice(0, 4000),
+    body: redactSignedUrls(rawBody).slice(0, 4000),
   });
 
   // 2. Authenticate. Must run against the exact bytes received — the HMAC is

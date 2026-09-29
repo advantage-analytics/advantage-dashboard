@@ -12,3 +12,12 @@ is the runner's. Newest entries at the bottom.
 1. `docs/video-pipeline-overview.md:287,675` and `docs/ui-revamp-guardrails.md:27` still say to set `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true` — now inert; update to the fail-closed default + `ALLOW_UNSIGNED` hatch.
 2. `SPLITSTEP_WEBHOOK_ALLOW_UNSIGNED=true` left on in Vercel only surfaces as a per-delivery warn — consider `pipelineLog.error` or a health assertion.
 3. The route's 401 branch is covered by reading only; a route-level spec (T3's harness) could assert the HTTP response.
+
+## T2 · Redact SAS query strings from the webhook's console log — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** `pipeline-log.ts` exports pure `redactSignedUrls()` (query of every `http(s)://…?…` → `?[redacted]`, scheme/host/path kept, stops at quotes so JSON still parses); the webhook's `received` log now logs `redactSignedUrls(rawBody).slice(0, 4000)`. `p_raw_body` stays raw. New offline spec `tests/pipeline-log-redaction.spec.ts` (3 cases). Reviewer's `&`-escape concern checked live: vendor bodies use a literal `&` before `sig=`, so real SAS URLs are fully redacted.
+**follow-ups:**
+
+1. Other `pipelineLog` calls that log vendor response bodies or error text could also carry SAS URLs to the console — audit them and apply `redactSignedUrls`.
+2. The regex stops a query at a backslash; if the vendor ever JSON-escapes `&` as `&`, the tail (incl. `sig=`) would survive — add a spec case if that shape appears.

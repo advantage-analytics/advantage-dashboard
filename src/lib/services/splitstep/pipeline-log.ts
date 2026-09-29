@@ -28,6 +28,19 @@ const DROPPED_KEYS = new Set(["body", "rawBody"]);
 const MAX_VALUE_LENGTH = 500;
 const SENSITIVE = /https?:\/\/|[?&]sig=/i;
 
+/**
+ * Blanks the query string of every http(s) URL in `text`, keeping scheme, host
+ * and path so a log line still names which blob was delivered. A SAS token
+ * (`sv=…&se=…&sig=…`) lives entirely in the query, so this is what keeps the
+ * signature out of the console line, which `write()` prints verbatim.
+ */
+export function redactSignedUrls(text: string): string {
+  return text.replace(
+    /(https?:\/\/[^\s"'<>?\\]*)\?[^\s"'<>\\]*/gi,
+    "$1?[redacted]",
+  );
+}
+
 function safeString(value: string): string {
   if (SENSITIVE.test(value)) return "[redacted]";
   return value.length > MAX_VALUE_LENGTH

@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Redact SAS query strings from the webhook's console log
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/services/splitstep/pipeline-log.ts, src/app/api/webhooks/splitstep/route.ts, tests/pipeline-log-redaction.spec.ts (new) (guess)
 - **done when:**
