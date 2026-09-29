@@ -1297,7 +1297,14 @@ export function parseMatchFilters(input: unknown): MatchFilters {
       if (!values.includes(value)) values.push(value);
     }
     if (values.length === 0) continue;
-    out[key] = isSingleKey(key) ? values[0] : values;
+    if (isSingleKey(key)) {
+      out[key] = values[0];
+      continue;
+    }
+    // Merge, never overwrite: a legacy token may already have moved a value
+    // into this key from an earlier group (`xo.wn_xe.er` must keep both).
+    const held = out[key] as readonly unknown[];
+    out[key] = [...held, ...values.filter((v) => !held.includes(v))];
   }
   return out as unknown as MatchFilters;
 }

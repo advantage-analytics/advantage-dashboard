@@ -1006,6 +1006,11 @@ test("an older link's Winner/Error under Outcome (xo.wn, xo.er) parse as Ending;
   expect(parseMatchFilters("xe.wn_xo.wn.er")).toEqual(
     f({ resultEnding: ["winner", "error"] }),
   );
+  // …and in either order: a legacy token moved in earlier is never overwritten.
+  expect(parseMatchFilters("xo.wn_xe.er").resultEnding).toEqual([
+    "winner",
+    "error",
+  ]);
   expect(
     serializeMatchFilters(
       f({ resultOutcome: ["won"], resultEnding: ["winner", "error"] }),
