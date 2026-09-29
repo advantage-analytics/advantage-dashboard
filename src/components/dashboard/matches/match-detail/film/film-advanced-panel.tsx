@@ -26,10 +26,11 @@ import type { FilmListTone } from "./point-list";
  * "Show N points" writes the shared filters and returns to the list; the X
  * returns without touching them. The panel's draft seeds on mount, so it is
  * keyed on the applied filters: a quick pick made while it is open re-seeds
- * it rather than leaving a stale draft. A statistic's cut and "Saved only"
- * are not in here — they are Film-only layers, never part of `MatchFilters`
- * — but the footer's count honours them (`filmDraftCount`), so "Show 9
- * points" is exactly what the list will show.
+ * it rather than leaving a stale draft. A landed statistic's `MatchFilters`
+ * half IS in here (its pills pressed); its Film-only remainder and "Saved
+ * only" are not — never part of `MatchFilters` — but the footer's count
+ * honours them (`filmDraftCount`), so "Show 9 points" is exactly what the
+ * list will show.
  *
  * `tone="dark"` opens the design system's `.dark` token scope inside the
  * room's 320px sheet.
@@ -52,11 +53,11 @@ export function FilmAdvancedPanel({
   const { context } = useMatchFilters();
   const { points, availability, youName, oppName, total } =
     useFiltersPanelData();
-  const { shared, setShared, cut, savedOnly } = filmFilters;
+  const { shared, setShared, remainder, savedOnly } = filmFilters;
   const countFor = useCallback(
     (draft: MatchFilters) =>
-      filmDraftCount(points, draft, { cut, savedOnly }, context),
-    [points, cut, savedOnly, context],
+      filmDraftCount(points, draft, { remainder, savedOnly }, context),
+    [points, remainder, savedOnly, context],
   );
 
   return (
@@ -75,6 +76,7 @@ export function FilmAdvancedPanel({
         oppName={oppName}
         countFor={countFor}
         total={total}
+        filmCut={remainder?.label ?? null}
         onApply={(next) => {
           setShared(next);
           onClose();

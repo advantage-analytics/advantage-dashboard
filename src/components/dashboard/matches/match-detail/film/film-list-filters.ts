@@ -10,25 +10,33 @@ import {
   activeFilterCount,
   applyMatchFilters,
   EMPTY_MATCH_FILTERS,
+  filtersEqual,
   type MatchFilterContext,
   type MatchFilters,
   type PlayerSide,
 } from "../match-filters/model";
 import {
-  applyFilmCut,
-  hasFilmCut,
+  filmCutExtras,
+  overlayCutFilters,
+  matchesFilmCutExtras,
   type FilmCutIntent,
+  type FilmCutRemainder,
+  type LandedFilmCut,
 } from "../film-cut-context";
 
 /**
- * What the Film tab's point list is filtered by (T7), in three layers ANDed
+ * What the Film tab's point list is filtered by, in three layers ANDed
  * together:
  *
  * 1. `shared` — the match report's `MatchFilters` (`MatchFiltersProvider`),
- *    the same state the Statistics tab reads and `?f=` mirrors. Film edits it
- *    through the quick menu and the filters drawer (`FiltersPanel`).
- * 2. `cut` — a statistic's one-off cut (`film-cut-context.tsx`), Film only:
- *    named in the filter strip, never written to the shared state.
+ *    mirrored to `?f=`. Film edits it through the quick menu and the filters
+ *    drawer (`FiltersPanel`), and a statistic's cut LANDS its `MatchFilters`
+ *    half here (`landFilmCut`), so the drawer shows those pills pressed.
+ * 2. `remainder` — what of a landed cut `MatchFilters` cannot say (its
+ *    `FilmCutExtras`) and the statistic's label, Film only: named in the
+ *    filter strip, never a pill. Held by `MatchFiltersProvider` beside the
+ *    shared filters, above the view switch, so leaving Video and coming back
+ *    never keeps the shared half while silently dropping the extras.
  * 3. `savedOnly` — the viewer's bookmarks, a Film-only local toggle: it is
  *    about the viewer, not about the tennis, so it is not a match filter.
  *
@@ -36,31 +44,34 @@ import {
  * and the film subtree stays loadable offline.
  */
 
-/** The Film-only half of the list's filters — held by `film-tab.tsx`. */
+/**
+ * The Film-only half of the list's filters — the pure input the tab
+ * assembles from the provider's remainder and its own `savedOnly`.
+ */
 export interface FilmLocalFilters {
-  cut: FilmCutIntent | null;
+  remainder: FilmCutRemainder | null;
   savedOnly: boolean;
 }
 
 export const NO_FILM_LOCAL_FILTERS: FilmLocalFilters = Object.freeze({
-  cut: null,
+  remainder: null,
   savedOnly: false,
 });
 
 /**
  * Everything the list's header, quick menu and filter strip need: the three layers
- * and the one writer for each. `film-tab.tsx` builds ONE of these and hands
- * the same object to both `PointList` mounts (the report column and the
- * fullscreen room's drawer), so the two can never show different cuts.
+ * and the writers. `film-tab.tsx` builds ONE of these and hands the same
+ * object to both `PointList` mounts (the report column and the fullscreen
+ * room's drawer), so the two can never show different cuts.
  */
 export interface FilmListFilters {
   shared: MatchFilters;
   setShared: (next: MatchFilters) => void;
-  cut: FilmCutIntent | null;
-  clearCut: () => void;
+  /** A landed cut's Film-only remainder, `null` when none is in force. */
+  remainder: LandedFilmCut | null;
   savedOnly: boolean;
   setSavedOnly: (next: boolean) => void;
-  /** All three layers at once — the header's and the zero state's "Clear all". */
+  /** All three layers at once — the strip's, the header's and the zero state's "Clear all". */
   clearAll: () => void;
 }
 
@@ -70,53 +81,65 @@ const noop = () => {};
 export const INERT_FILM_LIST_FILTERS: FilmListFilters = Object.freeze({
   shared: EMPTY_MATCH_FILTERS,
   setShared: noop,
-  cut: null,
-  clearCut: noop,
+  remainder: null,
   savedOnly: false,
   setSavedOnly: noop,
   clearAll: noop,
 });
 
 /**
- * The Film list's points: the shared filters' points (`sharedPoints`, i.e.
- * `useMatchFilters().filteredPoints`) AND the statistic's cut AND, when on,
- * the saved toggle. `points` is the whole match in match order, which the
- * cut's own `MatchFilters` half is evaluated over. Nothing Film-only applied
- * returns `sharedPoints` itself.
+ * The Film list's points: `sharedPoints` — `applyMatchFilters(points,
+ * shared)`, i.e. `useMatchFilters().filteredPoints` — AND the remainder's
+ * extras (`matchesFilmCutExtras`) AND, when on, the saved toggle. Nothing
+ * else: a landed cut's `MatchFilters` keys are evaluated through `shared`
+ * alone, so un-setting one in the drawer widens the list. Nothing Film-only
+ * applied returns `sharedPoints` itself.
  */
 export function filmListPoints(
-  points: MatchPoint[],
   sharedPoints: MatchPoint[],
   local: FilmLocalFilters,
-  ctx: MatchFilterContext,
 ): MatchPoint[] {
-  const cut = applyFilmCut(points, sharedPoints, local.cut?.cut ?? null, ctx);
-  return local.savedOnly ? cut.filter((p) => p.saved) : cut;
+  const extras = local.remainder?.extras ?? null;
+  if (!extras && !local.savedOnly) return sharedPoints;
+  return sharedPoints.filter(
+    (point) =>
+      (!extras || matchesFilmCutExtras(point, extras)) &&
+      (!local.savedOnly || point.saved),
+  );
 }
 
 /**
- * Land a statistic's cut: the cut becomes the Film-only lens and the saved
- * toggle goes off (the card counted every point, bookmarked or not). `shared`
- * comes back as the SAME object — a cut is never written to the shared
- * filters. An empty cut (`{}`, a whole-match row) lands as no cut at all.
+ * Land a statistic's cut. `shared` comes back with every `MatchFilters` key
+ * the cut sets REPLACED by the cut's value — the clicked figure's own groups
+ * win, rather than intersecting with whatever was picked there — and every
+ * other key untouched, so any other applied group still ANDs and the list
+ * never exceeds the card's count. (The same object back when that changes
+ * nothing.) `remainder` holds ONLY the cut's `FilmCutExtras` and its label,
+ * or is `null` when the cut has no extras: a pure cut is just pills.
+ *
+ * The caller writes `shared` through `setShared`, holds the remainder with
+ * `landed: shared` beside it, and turns the saved toggle off (the card
+ * counted every point, bookmarked or not).
  */
 export function landFilmCut(
-  state: { shared: MatchFilters; local: FilmLocalFilters },
+  shared: MatchFilters,
   intent: FilmCutIntent,
-): { shared: MatchFilters; local: FilmLocalFilters } {
+): { shared: MatchFilters; remainder: FilmCutRemainder | null } {
+  const landed = overlayCutFilters(shared, intent.cut);
+  const extras = filmCutExtras(intent.cut);
   return {
-    shared: state.shared,
-    local: { cut: hasFilmCut(intent.cut) ? intent : null, savedOnly: false },
+    shared: filtersEqual(landed, shared) ? shared : landed,
+    remainder: extras ? { label: intent.label, extras } : null,
   };
 }
 
 /** Whether any of the three layers is on. */
 export function filmListActive(f: {
   shared: MatchFilters;
-  cut: FilmCutIntent | null;
+  remainder: FilmCutRemainder | null;
   savedOnly: boolean;
 }): boolean {
-  return activeFilterCount(f.shared) > 0 || f.cut !== null || f.savedOnly;
+  return activeFilterCount(f.shared) > 0 || f.remainder !== null || f.savedOnly;
 }
 
 /* ── The quick menu's vocabulary ─────────────────────────────────────────── */
@@ -172,14 +195,18 @@ function quickOnly(shared: MatchFilters): boolean {
 /**
  * The quick-menu trigger's name for what is applied: the menu's own labels
  * where the menu could have made it ("Break points · Reid serving"),
- * "Filtered" once a cut or any other group is involved, "All points" when
- * nothing is.
+ * "Filtered" once a cut's remainder or any other group is involved, "All
+ * points" when nothing is.
  */
 export function filmListName(
-  f: { shared: MatchFilters; cut: FilmCutIntent | null; savedOnly: boolean },
+  f: {
+    shared: MatchFilters;
+    remainder: FilmCutRemainder | null;
+    savedOnly: boolean;
+  },
   names: PhraseNames,
 ): string {
-  if (f.cut !== null || !quickOnly(f.shared)) return "Filtered";
+  if (f.remainder !== null || !quickOnly(f.shared)) return "Filtered";
   const show = quickShow(f);
   const showName =
     show === "saved" ? "Saved only" : show === "break" ? "Break points" : null;
@@ -209,19 +236,27 @@ function midSentence(label: string, names: PhraseNames): string {
  * Every applied layer in words, for the filter strip above the video and the
  * zero state (the design system bans accumulating chips — tables.md, Data
  * Table rule 6 — so the cut reads as one sentence): the shared filters
- * (`appliedPhrases`, rally order), then the statistic's cut ("…, from
- * Statistics"), then "saved" — joined with " · " and capitalised once.
- * "G. Revelli serving · second serve · break point". "All points" when
- * nothing is applied.
+ * (`appliedPhrases`, rally order — a landed cut's `MatchFilters` half reads
+ * here, like any other pick), then the statistic's label ("…, from
+ * Statistics") ONLY while its Film-only extras are in force — a pure cut is
+ * all shared phrases already and names nothing twice — then "saved"; joined
+ * with " · " and capitalised once. "G. Revelli serving · second serve ·
+ * break point". "All points" when nothing is applied.
  */
 export function filmListSentence(
-  f: { shared: MatchFilters; cut: FilmCutIntent | null; savedOnly: boolean },
+  f: {
+    shared: MatchFilters;
+    remainder: FilmCutRemainder | null;
+    savedOnly: boolean;
+  },
   names: PhraseNames,
 ): string {
   const parts = appliedPhrases(f.shared, names);
-  if (f.cut) {
+  if (f.remainder) {
     const label =
-      parts.length === 0 ? f.cut.label : midSentence(f.cut.label, names);
+      parts.length === 0
+        ? f.remainder.label
+        : midSentence(f.remainder.label, names);
     parts.push(`${label}, from Statistics`);
   }
   if (f.savedOnly) parts.push("saved");
@@ -229,16 +264,21 @@ export function filmListSentence(
 }
 
 /**
- * The strip's one action. Every layer clears at once ("Clear filter"), but
- * when the ONLY thing applied is a statistic's cut the viewer arrived from a
- * number on the Statistics tab, and the way out reads "Back to all points".
+ * The strip's one action. Every layer clears at once either way; it reads
+ * "Back to all points" while the viewer is still exactly where a
+ * statistic's cut put them — a remainder in force, the shared filters equal
+ * to the ones its landing wrote (`remainder.landed`), and the saved toggle
+ * still off as the landing left it — and "Clear filter" once they have
+ * changed anything since.
  */
 export function filmStripAction(f: {
   shared: MatchFilters;
-  cut: FilmCutIntent | null;
+  remainder: LandedFilmCut | null;
   savedOnly: boolean;
 }): "Clear filter" | "Back to all points" {
-  return f.cut !== null && !f.savedOnly && activeFilterCount(f.shared) === 0
+  return f.remainder !== null &&
+    !f.savedOnly &&
+    filtersEqual(f.shared, f.remainder.landed)
     ? "Back to all points"
     : "Clear filter";
 }
@@ -247,8 +287,7 @@ export function filmStripAction(f: {
  * How many points the list would show if `draft` replaced the shared filters
  * — the filters drawer's live footer count ("9 of 114 points") and its
  * "Show 9 points". The list's own rule (`filmListPoints`): the draft's points
- * AND the statistic's cut AND, when on, the saved toggle, over the whole
- * match in match order.
+ * AND the remainder's extras AND, when on, the saved toggle.
  */
 export function filmDraftCount(
   points: MatchPoint[],
@@ -256,12 +295,7 @@ export function filmDraftCount(
   local: FilmLocalFilters,
   ctx: MatchFilterContext,
 ): number {
-  return filmListPoints(
-    points,
-    applyMatchFilters(points, draft, ctx),
-    local,
-    ctx,
-  ).length;
+  return filmListPoints(applyMatchFilters(points, draft, ctx), local).length;
 }
 
 /**

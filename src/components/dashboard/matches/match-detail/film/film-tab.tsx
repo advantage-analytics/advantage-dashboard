@@ -47,7 +47,11 @@ import {
   FilterRailProvider,
   useFilterRailHost,
 } from "@/components/dashboard/matches/match-detail/match-filters/filter-rail";
-import type { MatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import {
+  filtersEqual,
+  type MatchFilters,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
+import type { LandedFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { FilmFilterStrip } from "./film-filter-strip";
 import { useAttachmentPlayback } from "./use-attachment-playback";
 import { recordMatchVideoView } from "./record-video-view";
@@ -55,7 +59,6 @@ import {
   filmDraftCount,
   filmListPoints,
   landFilmCut,
-  NO_FILM_LOCAL_FILTERS,
   parseLegacyFilmQuery,
   stripLegacyFilmQuery,
   withLegacyFilters,
@@ -172,20 +175,18 @@ function FilmRoom({
   const searchParams = useSearchParams();
 
   /*
-   * The list's filters, in three layers ANDed together (T7,
-   * `film-list-filters.ts`):
+   * The list's filters, in three layers ANDed together
+   * (`film-list-filters.ts`):
    *
    * - `shared` — the report's `MatchFilters`, held by `MatchFiltersProvider`
-   *   ABOVE the view switch and mirrored to `?f=` there. The quick menu and
-   *   the Advanced panel write it, and the Statistics tab reads the same
-   *   state. Film no longer keeps a filter model of its own.
-   * - `local.cut` — a statistic's cut, Film only: named in the filter
-   *   strip, never written to the shared state or the URL.
-   * - `local.savedOnly` — the viewer's bookmarks, Film only.
-   *
-   * The local layers live here, and `MatchReportWhen` unmounts this view on a
-   * switch, so they reset when the viewer leaves Video; the shared filters
-   * do not.
+   *   ABOVE the view switch and mirrored to `?f=` there. The quick menu, the
+   *   Advanced panel and a landed statistic's cut write it.
+   * - `remainder` — a landed cut's Film-only extras and label, held by the
+   *   same provider beside `shared`, so the two survive a trip to Statistics
+   *   and back together.
+   * - `savedOnly` — the viewer's bookmarks, Film only, and the one layer
+   *   held here: `MatchReportWhen` unmounts this view on a switch, so it
+   *   resets when the viewer leaves Video.
    */
   const {
     filters: shared,
@@ -193,15 +194,21 @@ function FilmRoom({
     clearFilters,
     filteredPoints: sharedPoints,
     context: filterContext,
+    filmRemainder: remainder,
+    setFilmRemainder,
   } = useMatchFilters();
-  const [local, setLocal] = useState<FilmLocalFilters>(() => ({
-    ...NO_FILM_LOCAL_FILTERS,
-    savedOnly: parseLegacyFilmQuery(searchParams)?.savedOnly ?? false,
-  }));
+  const [savedOnly, setSavedOnly] = useState<boolean>(
+    () => parseLegacyFilmQuery(searchParams)?.savedOnly ?? false,
+  );
+  // The pure input shape the list's rules take.
+  const local = useMemo<FilmLocalFilters>(
+    () => ({ remainder, savedOnly }),
+    [remainder, savedOnly],
+  );
   // Old links carry the pre-T7 quick cut as `cut=break|saved` and
   // `serve=you|opp`. They still open the same cut: Break points and the
   // server fold into the shared filters (which then mirror to `?f=`), saved
-  // seeded `local` above — and the two params are stripped, as `?f=` owns
+  // seeded `savedOnly` above — and the two params are stripped, as `?f=` owns
   // them now. Native history, no router call: Next keeps `useSearchParams`
   // in sync with `replaceState` and nothing refetches, so the film neither
   // pauses nor reloads (node_modules/next/dist/docs/01-app/02-guides/
@@ -223,35 +230,23 @@ function FilmRoom({
       `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`,
     );
   }, [shared, setShared]);
-  const setSavedOnly = useCallback(
-    (savedOnly: boolean) =>
-      setLocal((prev) =>
-        prev.savedOnly === savedOnly ? prev : { ...prev, savedOnly },
-      ),
-    [],
-  );
-  const clearCut = useCallback(
-    () =>
-      setLocal((prev) => (prev.cut === null ? prev : { ...prev, cut: null })),
-    [],
-  );
   const clearAll = useCallback(() => {
     clearFilters();
-    setLocal(NO_FILM_LOCAL_FILTERS);
-  }, [clearFilters]);
+    setFilmRemainder(null);
+    setSavedOnly(false);
+  }, [clearFilters, setFilmRemainder]);
   // ONE object for both `PointList` mounts — this column and the room's
   // drawer — so the two can never show different cuts.
   const filmFilters = useMemo<FilmListFilters>(
     () => ({
       shared,
       setShared,
-      cut: local.cut,
-      clearCut,
-      savedOnly: local.savedOnly,
+      remainder,
+      savedOnly,
       setSavedOnly,
       clearAll,
     }),
-    [shared, setShared, local, clearCut, setSavedOnly, clearAll],
+    [shared, setShared, remainder, savedOnly, clearAll],
   );
   // Stable across a playback tick (`currentTime` re-renders this component
   // ~4x/second) so `FilmFilterStrip`'s own `memo` actually skips re-rendering
@@ -396,14 +391,15 @@ function FilmRoom({
   }, [resume, resumeApplied]);
 
   // The list, ↑/↓ and prev/next all walk this: the shared filters' points
-  // AND the statistic's cut AND the saved toggle — the one predicate the
-  // report's cards count "Watch all N" with, so N is what lands here.
+  // AND the remainder's extras AND the saved toggle. A landed cut is the
+  // same two predicates the report's cards count "Watch all N" with, so N
+  // is what lands here when nothing else is applied.
   const filteredPoints = useMemo(
-    () => filmListPoints(points, sharedPoints, local, filterContext),
-    [points, sharedPoints, local, filterContext],
+    () => filmListPoints(sharedPoints, local),
+    [sharedPoints, local],
   );
   // The filters drawer's live count: what this list would show if the draft
-  // replaced the shared filters, under the same cut and saved toggle.
+  // replaced the shared filters, under the same remainder and saved toggle.
   const countForDraft = useCallback(
     (draft: MatchFilters) =>
       filmDraftCount(points, draft, local, filterContext),
@@ -436,18 +432,23 @@ function FilmRoom({
    * in two steps because the first admitted point is only known once the
    * filters it sets have been applied.
    *
-   * 1. Take the pending cut: it becomes the Film-only `local.cut`, laid OVER
-   *    the shared filters, which it never touches (`landFilmCut` hands
-   *    `shared` back as the same object); the saved toggle goes off, since
-   *    the card counted every point. The same value is remembered as the
-   *    `landing`, and the intent is CLEARED — leaving and re-entering the
-   *    Video view finds nothing pending.
-   * 2. Once `local` IS that landing (identity: both were set from the same
-   *    object in one batch) and the media is playable, the shell player seeks
-   *    to the first stop the cut admits and the list holds that point. A cut
-   *    that admits no point still applies; nothing seeks and nothing is held.
-   *    A landing the viewer has already moved off (a filter change before the
-   *    media resolved) is dropped rather than honoured late.
+   * 1. Take the pending cut and land it (`landFilmCut`): its `MatchFilters`
+   *    keys REPLACE those keys of the shared filters, written through
+   *    `setShared` (so the drawer's pills show them pressed and `?f=`
+   *    carries them); its extras and label become the provider's remainder,
+   *    replacing any earlier one, with `landed` = the shared filters just
+   *    written; the saved toggle goes off, since the card counted every
+   *    point. The same values are remembered as the `landing`, and the
+   *    intent is CLEARED — leaving and re-entering the Video view finds
+   *    nothing pending.
+   * 2. Once the applied state IS that landing (the remainder by identity,
+   *    the shared filters by value — the provider keeps its old object for
+   *    an equal set — and saved off) and the media is playable, the shell
+   *    player seeks to the first stop the list admits and the list holds
+   *    that point. A cut that admits no point still applies; nothing seeks
+   *    and nothing is held. A landing the viewer has already moved off (a
+   *    filter change before the media resolved) is dropped rather than
+   *    honoured late.
    *
    * The hook returns null outside a provider, so the playback harness — which
    * mounts this tab bare — never enters step 1. Sides are not decided here:
@@ -455,20 +456,32 @@ function FilmRoom({
    * `youIsPlayer1` (`useMatchSides()`, guardrails §4).
    */
   const pendingCut = usePendingFilmCut();
-  const [landing, setLanding] = useState<FilmLocalFilters | null>(null);
+  const [landing, setLanding] = useState<{
+    shared: MatchFilters;
+    remainder: LandedFilmCut | null;
+  } | null>(null);
   useEffect(() => {
     if (!pendingCut) return;
-    const next = landFilmCut({ shared, local }, pendingCut.intent).local;
+    const next = landFilmCut(shared, pendingCut.intent);
+    const landedRemainder: LandedFilmCut | null = next.remainder
+      ? { ...next.remainder, landed: next.shared }
+      : null;
+    setShared(next.shared);
+    setFilmRemainder(landedRemainder);
     // The provider's intent arriving is the external event; this runs once
     // per `watchCut`, never per frame.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLocal(next);
-    setLanding(next);
+    setSavedOnly(false);
+    setLanding({ shared: next.shared, remainder: landedRemainder });
     pendingCut.clear();
-  }, [pendingCut, shared, local]);
+  }, [pendingCut, shared, setShared, setFilmRemainder]);
   useEffect(() => {
     if (!landing) return;
-    if (local !== landing) {
+    if (
+      landing.remainder !== remainder ||
+      savedOnly ||
+      !filtersEqual(landing.shared, shared)
+    ) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLanding(null);
       return;
@@ -480,7 +493,15 @@ function FilmRoom({
       holdPoint(first.point.id);
     }
     setLanding(null);
-  }, [landing, local, walkStops, playback.url, holdPoint]);
+  }, [
+    landing,
+    remainder,
+    savedOnly,
+    shared,
+    walkStops,
+    playback.url,
+    holdPoint,
+  ]);
 
   const columns = useMemo(() => scoreColumns(points), [points]);
 

@@ -7,6 +7,7 @@ import {
   applyMatchFilters,
   EMPTY_MATCH_FILTERS,
   hasActiveMatchFilters,
+  isUnreturnedServe,
   MATCH_FILTER_KEYS,
   type MatchFilterContext,
   type MatchFilters,
@@ -20,20 +21,25 @@ import {
  *
  * The report's parts ask for a cut through `MatchReportActions.watchCut`; the
  * provider switches the URL to `?tab=film` and parks the cut here. The film
- * tab, once mounted, takes it, lays it OVER the shared match filters, seeks to
- * the first admitted point and CLEARS the intent — so it is honoured exactly
- * once. Leaving and re-entering the Video view finds nothing pending.
+ * tab, once mounted, takes it, lands it in the shared match filters (plus
+ * the Film-only remainder), seeks to the first admitted point and CLEARS the
+ * intent — so it is honoured exactly once. Leaving and re-entering the Video view finds nothing pending.
  *
  * ── What a cut is ────────────────────────────────────────────────────────
  * A `FilmCut` is a `Partial<MatchFilters>` — the same vocabulary as the
  * Video tab's filters — plus a few Film-only extras for what that vocabulary
- * cannot say without changing a count (`FilmCutExtras`). In Film it is ANDed
- * on top of the shared filters (`applyFilmCut`), named in the Video tab's
- * filter strip ("…, from Statistics"), and never written to `MatchFiltersProvider`: the Statistics tab and
- * the `?f=` URL know nothing about it. A card counts its "Watch all N" with
- * the very same predicate over the WHOLE match (`applyFilmCut(points,
- * points, …)`), since Statistics is never filtered; with no Video filter
- * applied, the points a click opens are exactly the points the card counted.
+ * cannot say without changing a count (`FilmCutExtras`). Landing splits it
+ * (`landFilmCut`, `film/film-list-filters.ts`): the `MatchFilters` half is
+ * WRITTEN into the shared filters (`MatchFiltersProvider`, mirrored to
+ * `?f=`), key by key, so the filters drawer's pills show it pressed — the
+ * Statistics tab is always the whole match, so nothing there moves. The
+ * extras are the `FilmCutRemainder`: never pills (Result › Ending "error"
+ * would widen "Unforced errors", "winner" fold the aces into "Winners"),
+ * held beside the shared filters above the view switch and named in the
+ * Video tab's filter strip ("…, from Statistics"). A card counts its "Watch
+ * all N" with `applyFilmCut` over the WHOLE match (`applyFilmCut(points,
+ * points, …)`); with no other Video filter applied, the points a click opens
+ * are exactly the points the card counted.
  *
  * Its own context, like `film-head-context.tsx`, for the same two reasons: the
  * film subtree must not depend on `useMatchReport()` (`film-tab.tsx`'s header
@@ -42,55 +48,41 @@ import {
  *
  * Only the cut travels. Which player "you" is stays with the filter context
  * (`MatchFilterContext.youIsPlayer1`, from `useMatchSides()`, guardrails §4):
- * a cut's `server`/`resultPlayer` are you/opponent-relative and are resolved
- * there, never here.
+ * a cut's `server`/`resultPlayer` are you/opponent-relative, and its
+ * `resultOutcome` is read from the viewer's side; all are resolved there,
+ * never here.
  */
 
 /* ── The cut ─────────────────────────────────────────────────────────────── */
 
 /**
  * A result-type bucket the report's own tallies count by, which the shared
- * Result › Outcome cannot separate. Film only.
+ * Result › Ending cannot separate. Film only.
  *
- * - `ace` — `resultType` "Ace". Result › Winner (+ Serve) also admits every
- *   unreturned serve the video pipeline writes as "Service Winner", which the
- *   report counts as a winner, never an ace.
  * - `winner` — `resultType` containing "winner" (the published
  *   `LIKE '%Winner%'`), which leaves aces out: the report counts them on their
- *   own line, and Result › Winner would fold them back in.
- * - `unforced-error` — `resultType` containing "unforced error". Result › Error
- *   covers forced errors too, and video matches do not separate the two.
- * - `return-winner` — `isReturnWinner`: the return landed, the rally was at
- *   most two shots and it ended on a winner that is not a service winner.
- *   Result › Shot "Return" needs shot rows to find the return, and the
- *   statistic is read off the point's own serve/return columns.
- * - `unreturned-serve` — `isUnreturnedServe`: a one-shot rally the server
- *   won. On an Advantage Intelligence match the head-to-head card counts these
- *   as aces (the derivation labels every one "Service Winner" and never
- *   "Ace"), so its derived Aces row opens exactly these.
- * - `rally-winner` — the `winner` bucket less every unreturned serve: the
- *   derived Winners row, once its aces have moved to their own line. The two
- *   derived rows never share a point.
+ *   own line, and Result › Ending "winner" would fold them back in
+ *   (`winnerHitBy` credits an ace to the server as a winner).
+ * - `unforced-error` — `resultType` containing "unforced error". Result ›
+ *   Ending "error" covers forced errors too, and video matches do not
+ *   separate the two.
+ * - `rally-winner` — the `winner` bucket less every unreturned serve
+ *   (`isUnreturnedServe`): the derived Winners row on an Advantage
+ *   Intelligence match, whose unreturned serves are counted as aces on their
+ *   own line. Pills cannot say "winners minus unreturned serves" — Result ›
+ *   Ending "winner" credits every "Service Winner" to the server — so this
+ *   one stays Film-only. It never shares a point with the derived Aces row.
+ *
+ * Aces — published or derived — return winners and the rally bands are exact
+ * shared filters (Serve › Result "Ace", Return › Result "Winner", Result ›
+ * Rally length), so their cuts are pure and land entirely as pills. On a
+ * derived match Serve › Result "Ace" IS `isUnreturnedServe` (`serveResultOf`
+ * reads `MatchFilterContext.isDerived`), so the same pill serves both.
  */
-export type FilmCutEnding =
-  | "ace"
-  | "winner"
-  | "unforced-error"
-  | "return-winner"
-  | "unreturned-serve"
-  | "rally-winner";
+export type FilmCutEnding = "winner" | "unforced-error" | "rally-winner";
 
 /** What a cut adds that `MatchFilters` cannot say. Film only. */
 export interface FilmCutExtras {
-  /**
-   * Rallies of at least this many shots. With `rallyMax` a closed band — the
-   * rally-length card's Short (1–4) and Medium (5–8). Either bound set drops
-   * points with no recorded shot count (`rallyLength === 0`), as that card
-   * does.
-   */
-  rallyMin?: number | null;
-  /** Rallies of at most this many shots, or no upper bound. */
-  rallyMax?: number | null;
   /** One of the report's own result-type buckets (see `FilmCutEnding`). */
   ending?: FilmCutEnding | null;
 }
@@ -99,11 +91,7 @@ export interface FilmCutExtras {
 export type FilmCut = Partial<MatchFilters> & FilmCutExtras;
 
 /** The extras' keys — every other key of a `FilmCut` is a `MatchFilters` key. */
-export const FILM_CUT_EXTRA_KEYS: readonly (keyof FilmCutExtras)[] = [
-  "rallyMin",
-  "rallyMax",
-  "ending",
-];
+export const FILM_CUT_EXTRA_KEYS: readonly (keyof FilmCutExtras)[] = ["ending"];
 
 /**
  * A cut on its way to the Video tab, and the words the filter strip reads —
@@ -115,76 +103,74 @@ export interface FilmCutIntent {
   label: string;
 }
 
-/** The cut's `MatchFilters` part, over the empty filters. */
-export function filmCutFilters(cut: FilmCut): MatchFilters {
-  const out: Record<string, unknown> = { ...EMPTY_MATCH_FILTERS };
+/** `base` with every `MatchFilters` key the cut sets replaced by the cut's. */
+export function overlayCutFilters(
+  base: MatchFilters,
+  cut: FilmCut,
+): MatchFilters {
+  const out: Record<string, unknown> = { ...base };
   for (const key of MATCH_FILTER_KEYS) {
     if (cut[key] !== undefined) out[key] = cut[key];
   }
   return out as unknown as MatchFilters;
 }
 
-function hasExtras(cut: FilmCut): boolean {
-  return (
-    (cut.rallyMin ?? null) !== null ||
-    (cut.rallyMax ?? null) !== null ||
-    (cut.ending ?? null) !== null
-  );
+/** The cut's `MatchFilters` part, over the empty filters. */
+export function filmCutFilters(cut: FilmCut): MatchFilters {
+  return overlayCutFilters(EMPTY_MATCH_FILTERS, cut);
+}
+
+/**
+ * The cut's Film-only extras that are actually set (a `null` bound is no
+ * bound), or `null` when it has none — a "pure" cut, every key of which is a
+ * shared filter.
+ */
+export function filmCutExtras(cut: FilmCut): FilmCutExtras | null {
+  const out: Record<string, unknown> = {};
+  for (const key of FILM_CUT_EXTRA_KEYS) {
+    const value = cut[key];
+    if (value !== undefined && value !== null) out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? (out as FilmCutExtras) : null;
+}
+
+/**
+ * What stays Film-only once a cut has landed: its extras and the statistic's
+ * label the filter strip names them by. No `MatchFilters` key — landing
+ * wrote that half into the shared filters, the only place it is evaluated.
+ */
+export interface FilmCutRemainder {
+  label: string;
+  extras: FilmCutExtras;
+}
+
+/**
+ * A remainder as `MatchFiltersProvider` holds it, above the view switch:
+ * plus `landed`, the shared filters its landing wrote — the strip reads
+ * "Back to all points" only while the shared filters still equal it.
+ */
+export interface LandedFilmCut extends FilmCutRemainder {
+  landed: MatchFilters;
 }
 
 /** Whether a cut narrows anything at all. `{}` (a whole-match row) does not. */
 export function hasFilmCut(cut: FilmCut | null | undefined): boolean {
   if (!cut) return false;
-  return hasActiveMatchFilters(filmCutFilters(cut)) || hasExtras(cut);
-}
-
-/**
- * The point ended on a winning return: the head-to-head card's Return winners
- * row counts exactly these (adding that the returner won the point), and the
- * `return-winner` ending admits exactly these. One definition, so the figure
- * and the points a click opens cannot drift apart. Moved here from
- * `film/filters/types.ts` (T7), whose model T8 deletes.
- */
-export function isReturnWinner(point: MatchPoint): boolean {
-  const result = point.secondShotResult;
-  const type = (point.resultType ?? "").trim();
   return (
-    result === "In" &&
-    point.rallyLength > 0 &&
-    point.rallyLength <= 2 &&
-    /winner$/i.test(type) &&
-    type !== "Service Winner"
+    hasActiveMatchFilters(filmCutFilters(cut)) || filmCutExtras(cut) !== null
   );
 }
 
-/**
- * The serve was never returned and the server won the point: a one-shot
- * rally won by whoever served. Structural on purpose — rally length and the
- * point's winner, never the "Service Winner" label — so a service winner
- * with an intermediate stroke (rally length above one) is not one. The
- * head-to-head card's derived Aces row counts exactly these (`tallySide`),
- * and the `unreturned-serve` ending admits exactly these. A double fault is
- * never one: the server lost it.
- */
-export function isUnreturnedServe(point: MatchPoint): boolean {
-  return (
-    point.rallyLength === 1 && point.wonByPlayer1 === point.serverIsPlayer1
-  );
-}
-
-function matchesEnding(point: MatchPoint, ending: FilmCutEnding): boolean {
+function matchesFilmCutEnding(
+  point: MatchPoint,
+  ending: FilmCutEnding,
+): boolean {
   const result = (point.resultType ?? "").trim().toLowerCase();
   switch (ending) {
-    case "ace":
-      return result === "ace";
     case "winner":
       return result.includes("winner");
     case "unforced-error":
       return result.includes("unforced error");
-    case "return-winner":
-      return isReturnWinner(point);
-    case "unreturned-serve":
-      return isUnreturnedServe(point);
     case "rally-winner":
       return result.includes("winner") && !isUnreturnedServe(point);
   }
@@ -192,31 +178,23 @@ function matchesEnding(point: MatchPoint, ending: FilmCutEnding): boolean {
 
 /** Whether one point passes the cut's Film-only extras. */
 export function matchesFilmCutExtras(point: MatchPoint, cut: FilmCut): boolean {
-  const min = cut.rallyMin ?? null;
-  const max = cut.rallyMax ?? null;
-  if (min !== null || max !== null) {
-    // 0 is "no shot count recorded", not a one-shot rally, so it belongs to
-    // no bounded range — the same exclusion rally-length-card.tsx makes.
-    if (point.rallyLength < 1) return false;
-    if (min !== null && point.rallyLength < min) return false;
-    if (max !== null && point.rallyLength > max) return false;
-  }
   const ending = cut.ending ?? null;
-  if (ending !== null && !matchesEnding(point, ending)) return false;
+  if (ending !== null && !matchesFilmCutEnding(point, ending)) return false;
   return true;
 }
 
 /**
  * The cut laid over `base`: the points of `base` the cut also admits, in
- * `base`'s order. `base` is the Video list's shared filters' result
- * (`useMatchFilters().filteredPoints`), or the whole match for a Statistics
- * card's count; `points` is the WHOLE match in match
- * order, because the cut's `MatchFilters` part is evaluated over it (a
- * service court is a running count within each game, so it cannot be read
- * off a filtered subset). No cut, or an empty one, is `base` itself.
+ * `base`'s order. `base` is the whole match for a Statistics card's count;
+ * `points` is the WHOLE match in match order, because the cut's
+ * `MatchFilters` part is evaluated over it (a service court is a running
+ * count within each game, so it cannot be read off a filtered subset). No
+ * cut, or an empty one, is `base` itself.
  *
- * The one predicate behind the Film list, ↑/↓, and every card's "Watch all N"
- * count — so the count and the list cannot disagree.
+ * Every card's "Watch all N" count. The Film list never calls it: a landed
+ * cut's `MatchFilters` half is in the shared filters and its extras are
+ * `matchesFilmCutExtras` — the same two predicates this ANDs, so with
+ * nothing else applied the count and the list cannot disagree.
  */
 export function applyFilmCut(
   points: MatchPoint[],
@@ -246,11 +224,17 @@ export function applyFilmCut(
  *   player's first-serve points are the ones they served.
  * - `returner`: the side RETURNED it, so Serve › Player is the other one —
  *   your first-serve returns are the opponent's first serves.
- * - `player`: the side is Result › Player, the point of view Result › Outcome
+ * - `player`: the side is Result › Hit by, the point of view Result › Ending
  *   reads — whoever hit the winner or made the error (a double fault is the
  *   server's, an ace the server's).
  *
- * `won` adds Result › Won from that side, so "74 of 100 won" opens the 74.
+ * `won` adds Result › Outcome, which is always read from the VIEWER's side:
+ * "Won" for you, "Lost" for the opponent — the opponent's 26 of 100 are the
+ * points you lost. It never writes Hit by, since a point won from a side is
+ * that side's whoever struck the last ball (the opponent's error is still
+ * your point); so under `won` a `player` side is the outcome alone, and a
+ * `server`/`returner` side still narrows to the points that side served or
+ * returned.
  *
  * `you`/`opp` are relative, resolved through the filter context's
  * `youIsPlayer1` inside the film tab (guardrails §4); nothing here reads
@@ -276,10 +260,12 @@ export function sideCut(
   const who = playerSide(side);
   const attributed: FilmCut =
     by === "player"
-      ? { ...cut, resultPlayer: who }
+      ? won
+        ? cut
+        : { ...cut, resultPlayer: who }
       : { ...cut, server: by === "returner" ? otherSide(side) : who };
   return won
-    ? { ...attributed, resultOutcome: ["won"], resultPlayer: who }
+    ? { ...attributed, resultOutcome: [side === "you" ? "won" : "lost"] }
     : attributed;
 }
 

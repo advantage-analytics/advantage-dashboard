@@ -58,7 +58,19 @@ export type ReturnZone = "Down the Line" | "Middle" | "Crosscourt";
 export type ReturnContact = "inside" | "middle" | "neutral";
 export type ResultShot =
   "Serve" | "Return" | "Forehand" | "Backhand" | "Volley" | "Overhead";
-export type ResultOutcome = "won" | "lost" | "winner" | "error";
+/** Result › Outcome — always from YOUR side (`youIsPlayer1`). */
+export type ResultOutcome = "won" | "lost";
+/** Result › Ending — the point ended on a winner or an error. */
+export type ResultEnding = "winner" | "error";
+/** How the serve ended up — at most one per point (`serveResultOf`). */
+export type ServeResult =
+  "ace" | "service-winner" | "return-error" | "in-play" | "double-fault";
+/** How the return ended up (`returnResultOf`). */
+export type ReturnResult = "winner" | "error" | "in-play";
+/** Where the point's last shot missed (`point.shots`' last row). */
+export type ResultMissed = "Out" | "Net";
+/** `rally-length-card.tsx`'s bands, by the same keys. */
+export type RallyLengthBand = "short" | "medium" | "long";
 
 export type { CourtHalf, ReturnSpin, ServeSpin, ShotDirection };
 
@@ -77,16 +89,28 @@ export interface MatchFilters {
   readonly serveType: readonly ServeType[];
   readonly serveSpin: readonly ServeSpin[];
   readonly serveZone: readonly ServeZone[];
+  readonly serveResult: readonly ServeResult[];
   /* Return */
   readonly returnType: readonly ReturnStroke[];
   readonly returnSpin: readonly ReturnSpin[];
   readonly returnZone: readonly ReturnZone[];
   readonly returnContact: readonly ReturnContact[];
+  readonly returnResult: readonly ReturnResult[];
   /* Result */
-  /** The point-of-view player for Shot and Outcome. */
+  /** Won or lost from your side — never the Result player's. */
+  readonly resultOutcome: readonly ResultOutcome[];
+  /**
+   * Hit by: who struck the point's last shot. Alone it is `finalShotOf`'s
+   * hitter; with Shot, Ending or Missed chosen it is that group's point of
+   * view instead (a service winner is the server's, whatever the last row).
+   */
   readonly resultPlayer: PlayerSide | null;
   readonly resultShot: readonly ResultShot[];
-  readonly resultOutcome: readonly ResultOutcome[];
+  /** The winner or error the point ended on, by the Result player when set. */
+  readonly resultEnding: readonly ResultEnding[];
+  /** The last shot's miss, hit by the Result player when one is set. */
+  readonly resultMissed: readonly ResultMissed[];
+  readonly resultRallyLength: readonly RallyLengthBand[];
   /* Custom — every chosen group must hold on ONE shot */
   readonly customPlayer: PlayerSide | null;
   readonly customSide: readonly CourtHalf[];
@@ -126,13 +150,18 @@ export const MATCH_FILTER_KEYS: readonly MatchFilterKey[] = [
   "serveType",
   "serveSpin",
   "serveZone",
+  "serveResult",
   "returnType",
   "returnSpin",
   "returnZone",
   "returnContact",
+  "returnResult",
+  "resultOutcome",
   "resultPlayer",
   "resultShot",
-  "resultOutcome",
+  "resultEnding",
+  "resultMissed",
+  "resultRallyLength",
   "customPlayer",
   "customSide",
   "customDirection",
@@ -148,13 +177,18 @@ export const EMPTY_MATCH_FILTERS: MatchFilters = Object.freeze({
   serveType: [],
   serveSpin: [],
   serveZone: [],
+  serveResult: [],
   returnType: [],
   returnSpin: [],
   returnZone: [],
   returnContact: [],
+  returnResult: [],
+  resultOutcome: [],
   resultPlayer: null,
   resultShot: [],
-  resultOutcome: [],
+  resultEnding: [],
+  resultMissed: [],
+  resultRallyLength: [],
   customPlayer: null,
   customSide: [],
   customDirection: [],
@@ -212,6 +246,13 @@ export const MATCH_FILTER_OPTIONS: {
     { value: "Body", label: "Body" },
     { value: "T", label: "T" },
   ],
+  serveResult: [
+    { value: "ace", label: "Ace" },
+    { value: "service-winner", label: "Service winner" },
+    { value: "return-error", label: "Return error" },
+    { value: "in-play", label: "In play" },
+    { value: "double-fault", label: "Double fault" },
+  ],
   returnType: [
     { value: "Forehand", label: "Forehand" },
     { value: "Backhand", label: "Backhand" },
@@ -226,9 +267,18 @@ export const MATCH_FILTER_OPTIONS: {
     { value: "Crosscourt", label: "Crosscourt" },
   ],
   returnContact: [
-    { value: "inside", label: "Inside" },
-    { value: "middle", label: "Middle" },
-    { value: "neutral", label: "Neutral" },
+    { value: "inside", label: "Inside the baseline" },
+    { value: "middle", label: "On the baseline" },
+    { value: "neutral", label: "Deep" },
+  ],
+  returnResult: [
+    { value: "winner", label: "Winner" },
+    { value: "error", label: "Error" },
+    { value: "in-play", label: "In play" },
+  ],
+  resultOutcome: [
+    { value: "won", label: "Won" },
+    { value: "lost", label: "Lost" },
   ],
   resultPlayer: PLAYER_OPTIONS,
   resultShot: [
@@ -239,11 +289,18 @@ export const MATCH_FILTER_OPTIONS: {
     { value: "Volley", label: "Volley" },
     { value: "Overhead", label: "Overhead" },
   ],
-  resultOutcome: [
-    { value: "won", label: "Won" },
-    { value: "lost", label: "Lost" },
+  resultEnding: [
     { value: "winner", label: "Winner" },
     { value: "error", label: "Error" },
+  ],
+  resultMissed: [
+    { value: "Out", label: "Out" },
+    { value: "Net", label: "Net" },
+  ],
+  resultRallyLength: [
+    { value: "short", label: "Short 1–4" },
+    { value: "medium", label: "Medium 5–8" },
+    { value: "long", label: "Long 9+" },
   ],
   customPlayer: PLAYER_OPTIONS,
   customSide: SIDE_OPTIONS,
@@ -299,6 +356,7 @@ export const MATCH_FILTER_SECTIONS: readonly {
       { key: "serveType", label: "Type" },
       { key: "serveSpin", label: "Spin" },
       { key: "serveZone", label: "Zone" },
+      { key: "serveResult", label: "Result" },
     ],
   },
   {
@@ -315,26 +373,34 @@ export const MATCH_FILTER_SECTIONS: readonly {
       { key: "returnType", label: "Type" },
       { key: "returnSpin", label: "Spin" },
       { key: "returnZone", label: "Zone" },
-      { key: "returnContact", label: "Contact" },
+      {
+        key: "returnContact",
+        label: "Contact depth",
+        note: "from the baseline",
+      },
+      { key: "returnResult", label: "Result" },
     ],
   },
   {
     id: "result",
     label: "Result",
     groups: [
-      { key: "resultPlayer", label: "Player" },
+      { key: "resultOutcome", label: "Outcome", note: "from your side" },
+      { key: "resultPlayer", label: "Hit by", note: "the last shot" },
       { key: "resultShot", label: "Shot" },
-      { key: "resultOutcome", label: "Outcome" },
+      { key: "resultEnding", label: "Ending" },
+      { key: "resultMissed", label: "Missed" },
+      { key: "resultRallyLength", label: "Rally length" },
     ],
   },
   {
     id: "custom",
     label: "Custom",
     groups: [
-      { key: "customPlayer", label: "Choose player" },
+      { key: "customPlayer", label: "Hit by" },
       { key: "customSide", label: "Side" },
       { key: "customDirection", label: "Direction" },
-      { key: "customRallyShot", label: "Rally shot" },
+      { key: "customRallyShot", label: "Hit", note: "1 = the serve" },
     ],
   },
 ];
@@ -346,15 +412,27 @@ export interface MatchFilterContext {
   youIsPlayer1: boolean;
   /** Each seat's stroke hand, for Custom › Direction's Inside-Out/Inside-In. */
   hands: { player1: Hand | null; player2: Hand | null };
+  /**
+   * An Advantage Intelligence (video-derived) match (`isDerivedMatch`).
+   * Absent reads as NOT derived: a SwingVision match. Serve › Result reads it
+   * (`serveResultOf`).
+   */
+  isDerived?: boolean;
+}
+
+/** A video-derived (Advantage Intelligence) match, off the match row. */
+export function isDerivedMatch(match: Pick<Match, "sourceProvider">): boolean {
+  return match.sourceProvider === "splitstep";
 }
 
 /**
  * The filters' context for one match: the match row's hands
  * (`playerHands`, already seat-correct — no swap here) and, where a row has
- * none, the hand inferred from that seat's forehands (`inferHand`).
+ * none, the hand inferred from that seat's forehands (`inferHand`); and
+ * whether the match is derived from video (`isDerived`), off the same row.
  */
 export function buildFilterContext(
-  match: Pick<Match, "player1" | "player2">,
+  match: Pick<Match, "player1" | "player2" | "sourceProvider">,
   points: readonly Pick<MatchPoint, "shots">[],
   youIsPlayer1: boolean,
 ): MatchFilterContext {
@@ -365,6 +443,7 @@ export function buildFilterContext(
       player1: stored.player1 ?? inferHand(points, true),
       player2: stored.player2 ?? inferHand(points, false),
     },
+    isDerived: isDerivedMatch(match),
   };
 }
 
@@ -470,6 +549,91 @@ export function returnContactOf(
   return "neutral";
 }
 
+/**
+ * The serve was never returned and the server won the point: a one-shot
+ * rally won by whoever served. Structural on purpose — rally length and the
+ * point's winner, never the "Service Winner" label — so a service winner
+ * with an intermediate stroke (rally length above one) is not one. The
+ * head-to-head card's derived Aces tally and Serve › Result "Ace" on a
+ * derived match are this one predicate, laid by the server — keep them so.
+ * A double fault is never one: the server lost it.
+ */
+export function isUnreturnedServe(point: MatchPoint): boolean {
+  return (
+    point.rallyLength === 1 && point.wonByPlayer1 === point.serverIsPlayer1
+  );
+}
+
+/**
+ * Serve › Result — a priority chain, so a point lands in at most one option:
+ * the point's own result type first (Ace, Service Winner, Double Fault),
+ * else how the return came back (`secondShotResult` Out/Net = a return
+ * error, In = in play), else none. A service winner whose return row reads
+ * Out is a service winner only.
+ *
+ * On a derived match (`ctx.isDerived`) "Ace" is structural instead:
+ * `isUnreturnedServe`, and never the result type — the derivation labels
+ * every unreturned serve "Service Winner" and never "Ace", and the
+ * head-to-head card counts these as its Aces. So an unreturned serve is an
+ * ace there and not a service winner; the rest of the chain is unchanged.
+ */
+export function serveResultOf(
+  point: MatchPoint,
+  ctx: MatchFilterContext,
+): ServeResult | null {
+  const rt = lower(point.resultType);
+  if (ctx.isDerived ? isUnreturnedServe(point) : rt === "ace") return "ace";
+  if (rt === "service winner") return "service-winner";
+  if (rt === "double fault") return "double-fault";
+  const ret = point.secondShotResult;
+  if (ret === "Out" || ret === "Net") return "return-error";
+  if (ret === "In") return "in-play";
+  return null;
+}
+
+/**
+ * The point ended on a winning return: the head-to-head card's Return winners
+ * row counts exactly these (adding that the returner won the point), and its
+ * cut, Return › Result "Winner", admits exactly these. One definition, so the
+ * figure and the points a click opens cannot drift apart.
+ */
+export function isReturnWinner(point: MatchPoint): boolean {
+  const result = point.secondShotResult;
+  const type = (point.resultType ?? "").trim();
+  return (
+    result === "In" &&
+    point.rallyLength > 0 &&
+    point.rallyLength <= 2 &&
+    /winner$/i.test(type) &&
+    type !== "Service Winner"
+  );
+}
+
+/**
+ * Return › Result: a winning return (`isReturnWinner`), a missed one
+ * (`secondShotResult` Out/Net), or one that landed and the rally went on.
+ * None when the return's result was not recorded.
+ */
+export function returnResultOf(point: MatchPoint): ReturnResult | null {
+  if (isReturnWinner(point)) return "winner";
+  const ret = point.secondShotResult;
+  if (ret === "Out" || ret === "Net") return "error";
+  if (ret === "In") return "in-play";
+  return null;
+}
+
+/**
+ * `rally-length-card.tsx`'s band of a rally length — 1–4 short, 5–8 medium,
+ * 9+ long. Null below 1: 0 is "no shot count recorded", which that card
+ * leaves out of every band.
+ */
+export function rallyLengthBandOf(rallyLength: number): RallyLengthBand | null {
+  if (!(rallyLength >= 1)) return null;
+  if (rallyLength >= 9) return "long";
+  if (rallyLength >= 5) return "medium";
+  return "short";
+}
+
 function strokeOf(shotType: string | null | undefined): ResultShot | null {
   const t = lower(shotType);
   if (t.includes("overhead") || t.includes("smash")) return "Overhead";
@@ -526,6 +690,22 @@ function lastShotOf(point: MatchPoint): MatchShot | undefined {
 }
 
 /**
+ * Result › Missed: the point's LAST shot row went Out or into the Net
+ * (either case), and — when a Result player is set — that player hit it.
+ * Without shot rows there is no last shot, so nothing matches.
+ */
+function matchesMissed(
+  point: MatchPoint,
+  missed: ResultMissed,
+  pov: boolean | null,
+): boolean {
+  const last = lastShotOf(point);
+  if (!last) return false;
+  if (lower(last.result) !== missed.toLowerCase()) return false;
+  return pov === null || last.isPlayer1 === pov;
+}
+
+/**
  * Who hit the point's winner (true = player1), or null when it did not end
  * on one. Aces and service winners are the SERVER's — structurally, as in
  * `head-to-head-card.tsx`/`point-endings-card.tsx` for aces; for a service
@@ -561,27 +741,30 @@ export function errorMadeBy(point: MatchPoint): boolean | null {
   return null;
 }
 
+/**
+ * Result › Outcome is read from YOUR side and nowhere else (guardrails §4:
+ * attribution follows `youIsPlayer1` exactly) — the Result player never
+ * flips it, so "Hit by the opponent · Won" is the points you won that ended
+ * on the opponent's racket.
+ */
 function matchesOutcome(
   point: MatchPoint,
   outcome: ResultOutcome,
-  pov: boolean | null,
   youIsPlayer1: boolean,
 ): boolean {
-  switch (outcome) {
-    // Won/Lost need a point of view; with no Result player it is you.
-    case "won":
-      return point.wonByPlayer1 === (pov ?? youIsPlayer1);
-    case "lost":
-      return point.wonByPlayer1 !== (pov ?? youIsPlayer1);
-    case "winner": {
-      const by = winnerHitBy(point);
-      return by !== null && (pov === null || by === pov);
-    }
-    case "error": {
-      const by = errorMadeBy(point);
-      return by !== null && (pov === null || by === pov);
-    }
-  }
+  return outcome === "won"
+    ? point.wonByPlayer1 === youIsPlayer1
+    : point.wonByPlayer1 !== youIsPlayer1;
+}
+
+/** Result › Ending, by the Result player (`pov`) when one is set. */
+function matchesEnding(
+  point: MatchPoint,
+  ending: ResultEnding,
+  pov: boolean | null,
+): boolean {
+  const by = ending === "winner" ? winnerHitBy(point) : errorMadeBy(point);
+  return by !== null && (pov === null || by === pov);
 }
 
 function hasCustom(f: MatchFilters): boolean {
@@ -672,6 +855,12 @@ export function matchesPoint(
   if (f.serveZone.length > 0 && !anyOf(f.serveZone, serveZoneOf(point))) {
     return false;
   }
+  if (
+    f.serveResult.length > 0 &&
+    !anyOf(f.serveResult, serveResultOf(point, ctx))
+  ) {
+    return false;
+  }
 
   /* Return */
   if (f.returnType.length > 0 && !anyOf(f.returnType, returnStrokeOf(point))) {
@@ -692,19 +881,54 @@ export function matchesPoint(
   ) {
     return false;
   }
+  if (
+    f.returnResult.length > 0 &&
+    !anyOf(f.returnResult, returnResultOf(point))
+  ) {
+    return false;
+  }
 
-  /* Result — from the point of view of the Result player */
+  /* Result — Outcome from your side; the rest from the Result player's */
+  if (
+    f.resultOutcome.length > 0 &&
+    !f.resultOutcome.some((o) => matchesOutcome(point, o, ctx.youIsPlayer1))
+  ) {
+    return false;
+  }
   const pov = f.resultPlayer === null ? null : seatOf(f.resultPlayer, ctx);
+  // Hit by on its own: the last shot's hitter. With Shot, Ending or Missed
+  // chosen it applies through that group's own attribution instead, so a
+  // service winner stays the server's although its last row is the missed
+  // return.
+  if (
+    pov !== null &&
+    f.resultShot.length === 0 &&
+    f.resultEnding.length === 0 &&
+    f.resultMissed.length === 0
+  ) {
+    const final = finalShotOf(point);
+    if (!final || final.isPlayer1 !== pov) return false;
+  }
   if (f.resultShot.length > 0) {
     const final = finalShotOf(point);
     if (!final || !anyOf(f.resultShot, final.kind)) return false;
     if (pov !== null && final.isPlayer1 !== pov) return false;
   }
   if (
-    f.resultOutcome.length > 0 &&
-    !f.resultOutcome.some((o) =>
-      matchesOutcome(point, o, pov, ctx.youIsPlayer1),
-    )
+    f.resultEnding.length > 0 &&
+    !f.resultEnding.some((e) => matchesEnding(point, e, pov))
+  ) {
+    return false;
+  }
+  if (
+    f.resultMissed.length > 0 &&
+    !f.resultMissed.some((m) => matchesMissed(point, m, pov))
+  ) {
+    return false;
+  }
+  if (
+    f.resultRallyLength.length > 0 &&
+    !anyOf(f.resultRallyLength, rallyLengthBandOf(point.rallyLength))
   ) {
     return false;
   }
@@ -912,6 +1136,16 @@ const URL_CODEC: {
       ["T", "t"],
     ],
   },
+  serveResult: {
+    key: "vr",
+    codes: [
+      ["ace", "a"],
+      ["service-winner", "sw"],
+      ["return-error", "re"],
+      ["in-play", "ip"],
+      ["double-fault", "df"],
+    ],
+  },
   returnType: {
     key: "rt",
     codes: [
@@ -942,6 +1176,21 @@ const URL_CODEC: {
       ["neutral", "n"],
     ],
   },
+  returnResult: {
+    key: "rr",
+    codes: [
+      ["winner", "w"],
+      ["error", "e"],
+      ["in-play", "ip"],
+    ],
+  },
+  resultOutcome: {
+    key: "xo",
+    codes: [
+      ["won", "w"],
+      ["lost", "l"],
+    ],
+  },
   resultPlayer: { key: "xp", codes: PLAYER_CODES },
   resultShot: {
     key: "xs",
@@ -954,13 +1203,26 @@ const URL_CODEC: {
       ["Overhead", "oh"],
     ],
   },
-  resultOutcome: {
-    key: "xo",
+  resultEnding: {
+    key: "xe",
     codes: [
-      ["won", "w"],
-      ["lost", "l"],
       ["winner", "wn"],
       ["error", "er"],
+    ],
+  },
+  resultMissed: {
+    key: "xm",
+    codes: [
+      ["Out", "o"],
+      ["Net", "n"],
+    ],
+  },
+  resultRallyLength: {
+    key: "xr",
+    codes: [
+      ["short", "s"],
+      ["medium", "m"],
+      ["long", "l"],
     ],
   },
   customPlayer: { key: "cp", codes: PLAYER_CODES },
@@ -1036,6 +1298,21 @@ const KEY_BY_CODE = new Map<string, MatchFilterKey>(
 );
 
 /**
+ * Tokens an older link may still carry, and the group they now belong to.
+ * Winner/Error lived under Result › Outcome (`xo.wn`, `xo.er`) until Ending
+ * became its own group; those tokens move there. Won/Lost (`xo.w`, `xo.l`)
+ * are NOT remapped: they now read from your side, where an older link with
+ * a Result player read from that player's — an accepted break, since the
+ * filter model shipped days before this change. Read only —
+ * `serializeMatchFilters` writes the current form.
+ */
+const LEGACY_TOKENS: Readonly<
+  Record<string, Readonly<Record<string, [MatchFilterKey, unknown]>>>
+> = {
+  xo: { wn: ["resultEnding", "winner"], er: ["resultEnding", "error"] },
+};
+
+/**
  * The filters in a serialized string. Tolerant: unknown keys, unknown option
  * codes and malformed groups are dropped, a single-choice group keeps its
  * first valid option, and anything unparsable is EMPTY. Never throws.
@@ -1060,10 +1337,26 @@ export function parseMatchFilters(input: unknown): MatchFilters {
           ([, t]) => t === token,
         )?.[0];
       }
-      if (value !== undefined && !values.includes(value)) values.push(value);
+      if (value === undefined) {
+        const moved = LEGACY_TOKENS[code ?? ""]?.[token];
+        if (moved) {
+          const [toKey, toValue] = moved;
+          const held = out[toKey] as readonly unknown[];
+          if (!held.includes(toValue)) out[toKey] = [...held, toValue];
+        }
+        continue;
+      }
+      if (!values.includes(value)) values.push(value);
     }
     if (values.length === 0) continue;
-    out[key] = isSingleKey(key) ? values[0] : values;
+    if (isSingleKey(key)) {
+      out[key] = values[0];
+      continue;
+    }
+    // Merge, never overwrite: a legacy token may already have moved a value
+    // into this key from an earlier group (`xo.wn_xe.er` must keep both).
+    const held = out[key] as readonly unknown[];
+    out[key] = [...held, ...values.filter((v) => !held.includes(v))];
   }
   return out as unknown as MatchFilters;
 }

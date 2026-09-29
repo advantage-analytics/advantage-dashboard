@@ -13,6 +13,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import {
   FILM_CUT_EXTRA_KEYS,
+  filmCutExtras,
   filmCutFilters,
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
@@ -44,17 +45,12 @@ function expectKnownKeys(cut: FilmCut, what: string) {
 }
 
 test.describe("rally-length cuts", () => {
-  test("the band table is exactly Short 1–4, Medium 5–8, Long 9+", () => {
+  test("the band table is exactly Result › Rally length, band by band", () => {
     expect(RALLY_BAND_CUTS).toEqual({
-      short: { rallyMin: 1, rallyMax: 4 },
-      medium: { rallyMin: 5, rallyMax: 8 },
-      long: { rallyMin: 9, rallyMax: null },
+      short: { resultRallyLength: ["short"] },
+      medium: { resultRallyLength: ["medium"] },
+      long: { resultRallyLength: ["long"] },
     });
-  });
-
-  test("Long clears the upper bound explicitly, so a leftover max cannot carry over", () => {
-    expect("rallyMax" in RALLY_BAND_CUTS.long).toBe(true);
-    expect(RALLY_BAND_CUTS.long.rallyMax).toBeNull();
   });
 
   test("every band cut uses only known keys", () => {
@@ -62,9 +58,14 @@ test.describe("rally-length cuts", () => {
       expectKnownKeys(cut, band);
   });
 
-  test("a band is a Film-only rally-length cut — nothing in the shared filters", () => {
-    for (const cut of Object.values(RALLY_BAND_CUTS))
-      expect(filmCutFilters(cut)).toEqual(EMPTY_MATCH_FILTERS);
+  test("a band lands entirely in the shared filters — no Film-only extras", () => {
+    for (const [band, cut] of Object.entries(RALLY_BAND_CUTS)) {
+      expect(filmCutFilters(cut), band).toEqual({
+        ...EMPTY_MATCH_FILTERS,
+        resultRallyLength: [band],
+      });
+      expect(filmCutExtras(cut), band).toBeNull();
+    }
   });
 });
 
@@ -77,36 +78,46 @@ test.describe("point-endings cuts", () => {
   ];
 
   test("the viewer's row", () => {
-    // Every segment's side is Result › Player — who hit the winner or made
-    // the error (the server, for an ace or a double fault).
+    // A segment's side is Result › Hit by — who hit the winner or made the
+    // error (the server, for a double fault) — except an ace, which is
+    // Serve › Result "Ace" by the server (Serve › Player).
     expect(outcomeCut("winners", "you")).toEqual({
-      resultOutcome: ["winner"],
+      resultEnding: ["winner"],
       ending: "winner",
       resultPlayer: "you",
     });
     expect(outcomeCut("unforcedErrors", "you")).toEqual({
-      resultOutcome: ["error"],
+      resultEnding: ["error"],
       ending: "unforced-error",
       resultPlayer: "you",
     });
     expect(outcomeCut("doubleFaults", "you")).toEqual({
-      resultOutcome: ["error"],
+      resultEnding: ["error"],
       resultShot: ["Serve"],
       resultPlayer: "you",
     });
     expect(outcomeCut("aces", "you")).toEqual({
-      resultOutcome: ["winner"],
-      ending: "ace",
-      resultPlayer: "you",
+      serveResult: ["ace"],
+      server: "you",
     });
   });
 
   test("the opponent's row is the viewer's with the sides swapped", () => {
-    for (const key of KEYS)
+    for (const key of KEYS) {
+      const you = outcomeCut(key, "you");
+      const side = "server" in you ? "server" : "resultPlayer";
       expect(outcomeCut(key, "opp"), key).toEqual({
-        ...outcomeCut(key, "you"),
-        resultPlayer: "opponent",
+        ...you,
+        [side]: "opponent",
       });
+    }
+  });
+
+  test("the Aces segment is a pure cut — every key a shared filter", () => {
+    const shared = new Set<string>(MATCH_FILTER_KEYS);
+    for (const side of ["you", "opp"] as const)
+      for (const key of Object.keys(outcomeCut("aces", side)))
+        expect(shared.has(key), `aces (${side}) → ${key}`).toBe(true);
   });
 
   test("every segment cut uses only known keys", () => {

@@ -154,6 +154,7 @@ test.describe("FiltersPanel markup", () => {
       "Type",
       "Spin",
       "Zone",
+      "Result",
     ]);
     expect(groupLabels("return")).toEqual([
       "Player",
@@ -161,16 +162,30 @@ test.describe("FiltersPanel markup", () => {
       "Type",
       "Spin",
       "Zone",
-      "Contact",
+      "Contact depth",
+      "Result",
     ]);
-    // The Result row is "Shot" (the mockup's "Zone" was a typo).
-    expect(groupLabels("result")).toEqual(["Player", "Shot", "Outcome"]);
+    // Outcome is from your side and Hit by is the last shot's hitter — two
+    // groups, since "Player" used to mean both. The Result row is "Shot"
+    // (the mockup's "Zone" was a typo).
+    expect(groupLabels("result")).toEqual([
+      "Outcome",
+      "Hit by",
+      "Shot",
+      "Ending",
+      "Missed",
+      "Rally length",
+    ]);
     expect(groupLabels("custom")).toEqual([
-      "Choose player",
+      "Hit by",
       "Side",
       "Direction",
-      "Rally shot",
+      "Hit",
     ]);
+    expect(text(sectionHtml(html, "return"))).toContain("from the baseline");
+    expect(text(sectionHtml(html, "result"))).toContain("from your side");
+    expect(text(sectionHtml(html, "result"))).toContain("the last shot");
+    expect(text(sectionHtml(html, "custom"))).toContain("1 = the serve");
 
     const score = pillLabels(sectionHtml(html, "score"));
     expect(score).toEqual(
@@ -195,6 +210,8 @@ test.describe("FiltersPanel markup", () => {
 
     const result = pillLabels(sectionHtml(html, "result"));
     expect(result).toEqual([
+      "Won",
+      "Lost",
       "Rudy Quan",
       "Federico Gomez",
       "Serve",
@@ -203,10 +220,13 @@ test.describe("FiltersPanel markup", () => {
       "Backhand",
       "Volley",
       "Overhead",
-      "Won",
-      "Lost",
       "Winner",
       "Error",
+      "Out",
+      "Net",
+      "Short 1–4",
+      "Medium 5–8",
+      "Long 9+",
     ]);
     expect(text(html)).not.toContain("Winnner");
 
@@ -307,7 +327,7 @@ test.describe("FiltersPanel markup", () => {
   test("a section holding an applied filter starts open; the rest start closed", () => {
     const html = render(fullAvailability(), {
       ...EMPTY_MATCH_FILTERS,
-      resultOutcome: ["winner"],
+      resultEnding: ["winner"],
     });
     const expanded = sectionHeaders(html).map((h) => [h.title, h.expanded]);
     expect(Object.fromEntries(expanded)).toEqual({
@@ -317,6 +337,37 @@ test.describe("FiltersPanel markup", () => {
       Result: "true",
       Custom: "false",
     });
+  });
+});
+
+test.describe("FiltersPanel film cut line", () => {
+  test("a landed remainder's label reads as one read-only line between the header and the sections", () => {
+    const html = render(fullAvailability(), EMPTY_MATCH_FILTERS, {
+      filmCut: "Short rallies · 1–4 shots",
+    });
+    const line = html.match(/<p[^>]*data-film-cut=""[^>]*>([^<]*)<\/p>/);
+    expect(line).not.toBeNull();
+    expect(text(line![1])).toBe(
+      "Short rallies · 1–4 shots · from Statistics — the strip's Clear removes it",
+    );
+    // Read-only: nothing in the line to press.
+    expect(line![0]).not.toContain("<button");
+    expect(line![0]).not.toContain("aria-pressed");
+    // Between the header and the sections.
+    expect(html.indexOf("data-film-cut")).toBeGreaterThan(
+      html.indexOf("Filters"),
+    );
+    expect(html.indexOf("data-film-cut")).toBeLessThan(
+      html.indexOf("data-section="),
+    );
+  });
+
+  test("filmCut={null} or absent draws no line", () => {
+    const withNull = render(fullAvailability(), EMPTY_MATCH_FILTERS, {
+      filmCut: null,
+    });
+    expect(withNull).not.toContain("data-film-cut");
+    expect(render(fullAvailability())).not.toContain("data-film-cut");
   });
 });
 
@@ -420,7 +471,7 @@ test.describe("FiltersPanel draft", () => {
     const filters = {
       ...EMPTY_MATCH_FILTERS,
       server: "you" as const,
-      resultOutcome: ["winner"] as const,
+      resultEnding: ["winner"] as const,
     };
     const shown = panelSections(fullAvailability(), {
       you: "a",
