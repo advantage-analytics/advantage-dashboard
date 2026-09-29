@@ -666,7 +666,10 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // The point's caption is the rally's length (`rallyNumbering`, from the
   // point's full shot list) — the same total the readout's "shot 3 of 7" is
   // out of — so the two can never disagree about how long the rally was.
-  const rallyShots = rallyNumbering(activePoint?.shots).count;
+  const rallyShots = useMemo(
+    () => rallyNumbering(activePoint?.shots).count,
+    [activePoint],
+  );
   const courtCaption =
     courtMode === "match"
       ? `${p.visiblePoints.length} points`

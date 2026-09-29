@@ -159,7 +159,8 @@ function isServeRow(shotType: string): boolean {
  *   rally's length, the total a "shot 2 of 4" readout is out of. Every shot
  *   when there is no serve.
  * - {@link RallyNumbering.openerId}: the shot that opened the rally — the last
- *   serve (the one that was played), or with no serve the first shot. It is
+ *   serve (the one that was played: a second serve when there is one, else
+ *   the last serve row), or with no serve the first shot. It is
  *   the one "shot 1" the "This point" card draws in the darker ink.
  *
  * Works from the point's FULL `shots` (`MatchPoint.shots`, already in
@@ -179,20 +180,27 @@ export function rallyNumbering(
   shots: readonly MatchShot[] | undefined,
 ): RallyNumbering {
   const list = shots ?? [];
-  let lastServe = -1;
-  list.forEach((s, i) => {
-    if (isServeRow(s.shotType?.trim() ?? "")) lastServe = i;
-  });
+  const lastServe = list.findLastIndex((s) =>
+    isServeRow(s.shotType?.trim() ?? ""),
+  );
   // No serve: the rally is every shot, and it starts at the first one.
   const start = Math.max(lastServe, 0);
   const numbers = new Map<string, number>();
   list.forEach((s, i) => {
-    numbers.set(s.id, lastServe === -1 ? i + 1 : Math.max(i - start, 0) + 1);
+    numbers.set(s.id, Math.max(i - start, 0) + 1);
+  });
+  // The opener is the played serve: a row typed second, when there is one.
+  // SwingVision stores both serves at shot_number 1 and the loader breaks
+  // that tie by uuid, so "the last serve row" is the faulted one about half
+  // the time. Stored order is only the fallback (one serve, or bare "Serve").
+  const secondServe = list.find((s) => {
+    const type = s.shotType?.trim() ?? "";
+    return isServeRow(type) && /second|2nd/i.test(type);
   });
   return {
     numbers,
     count: list.length - start,
-    openerId: list[start]?.id ?? null,
+    openerId: secondServe?.id ?? list[start]?.id ?? null,
   };
 }
 

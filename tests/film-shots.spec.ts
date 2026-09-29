@@ -300,6 +300,12 @@ test("rally numbers: SwingVision's two serves both at shot_number 1", () => {
   ];
   expect(numbersOf(swingvision)).toEqual([1, 1, 2]);
   expect(rallyNumbering(swingvision).count).toBe(2);
+  // The two serves tie on shot_number and the loader breaks the tie by id,
+  // so the second serve can come back first. It is still the rally's opener.
+  const swapped = [swingvision[1], swingvision[0], swingvision[2]];
+  expect(numbersOf(swapped)).toEqual([1, 1, 2]);
+  expect(rallyNumbering(swapped)).toMatchObject({ count: 2, openerId: "b2" });
+  expect(rallyNumbering(swingvision).openerId).toBe("b2");
   // A one-serve point: the serve is 1 and the rally is every shot.
   const oneServe = swingvision.slice(1);
   expect(numbersOf(oneServe)).toEqual([1, 2]);
