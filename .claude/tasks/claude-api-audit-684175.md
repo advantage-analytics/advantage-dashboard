@@ -119,7 +119,7 @@ ready).
 
 ## T9 · Harden `/api/matches/[matchId]` ids, bodies, and error mapping
 
-- **status:** doing
+- **status:** done
 - **model:** opus
 - **files:** src/app/api/matches/[matchId]/route.ts, src/lib/services/matches/purge-match-storage.ts, tests/match-delete-claim-release.spec.ts, tests/match-route-guards.spec.ts (new) (guess)
 - **done when:**

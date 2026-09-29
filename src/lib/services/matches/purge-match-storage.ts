@@ -34,6 +34,35 @@ export interface PurgeMatchStorageOptions {
   ) => Promise<{ data: unknown; error: { message: string } | null }>;
 }
 
+/**
+ * Why `purgeMatchStorage` refused before touching any object — thrown only by
+ * the purge-claim guard, and always before a claim is taken.
+ *
+ *   • `protected` — the claim RPC answered `false`: the admin console recorded
+ *     or analysed one of these matches, so it may not be deleted here.
+ *   • `unavailable` — the guard could not be checked (the RPC failed, or
+ *     answered outside its boolean contract). Retrying may succeed.
+ *
+ * `message` is written for the account-deletion flow, which shows it as is.
+ * HTTP callers map `kind` to their own status and sentence instead; `cause`
+ * carries the raw RPC error for logs and must never reach a response.
+ */
+export class PurgeRefusedError extends Error {
+  readonly kind: "protected" | "unavailable";
+  readonly cause: unknown;
+
+  constructor(
+    kind: "protected" | "unavailable",
+    message: string,
+    cause?: unknown,
+  ) {
+    super(message);
+    this.name = "PurgeRefusedError";
+    this.kind = kind;
+    this.cause = cause;
+  }
+}
+
 /** What the results lane reads off a `processing_jobs` row. */
 interface ResultsKeyRow {
   id?: unknown;
@@ -181,12 +210,20 @@ export async function purgeMatchStorage(
     });
   const { data: protectedMatch, error: protectionError } =
     await claimPurge(matchIds);
-  if (protectionError || protectedMatch !== true) {
-    throw new Error(
-      protectionError
-        ? "We could not verify whether these matches can be deleted. Try again."
-        : "Matches recorded or analyzed through the admin console cannot be deleted here.",
-    );
+  if (protectedMatch !== true || protectionError) {
+    // Only an explicit `false` from a clean read is the console's refusal.
+    // An error, or any answer outside the RPC's boolean contract, means the
+    // guard could not be checked — not that the match is protected.
+    throw protectedMatch === false && !protectionError
+      ? new PurgeRefusedError(
+          "protected",
+          "Matches recorded or analyzed through the admin console cannot be deleted here.",
+        )
+      : new PurgeRefusedError(
+          "unavailable",
+          "We could not verify whether these matches can be deleted. Try again.",
+          protectionError,
+        );
   }
 
   // Both storage cleanups key off the same rows, so they are read once here

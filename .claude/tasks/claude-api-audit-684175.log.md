@@ -83,3 +83,13 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. Audit other routes for un-awaited `functions.invoke` calls outside `after()`.
+
+## T9 · Harden `/api/matches/[matchId]` ids, bodies, and error mapping — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** Implemented in parallel in an isolated worktree (commit 5a6fab26), brought over here. GET/PATCH/DELETE answer 404 for a non-UUID id before any Supabase call; PATCH answers 400 "Invalid JSON body" for a non-object body; a failed `processing_jobs` read (`analysisFor`) is now a 500 on GET and PATCH instead of "not analysed"; a roster RPC error is a 500 "Could not load the roster". New exported `PurgeRefusedError` (`protected` | `unavailable`): DELETE maps `protected` → 409, everything else → 503 "Match deletion is unavailable. Try again.", never forwarding `error.message`. New `tests/match-route-guards.spec.ts`; `match-delete-claim-release.spec.ts` covers both mappings. `tests/account-deletion-retention.spec.ts` is live-DB and was not run (offline `admin-account-delete-protection.spec.ts` covers the caller and passes).
+**follow-ups:**
+
+1. Behaviour change: a claim RPC answering a non-boolean with no error now maps to `unavailable` (account deletion shows "We could not verify…") instead of `protected`.
+2. `eventContextFor` in the same route still discards its read error — a failed read looks like "no event" and unlocks event-owned fields in the dialog.
+3. Account deletion and the console abandon flow still show `error.message`; they could switch on `PurgeRefusedError.kind`. `tests/admin-match-delete-protection.spec.ts` could assert `kind`.
