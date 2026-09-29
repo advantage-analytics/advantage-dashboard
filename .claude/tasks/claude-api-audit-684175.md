@@ -83,7 +83,7 @@ ready).
 
 ## T6 · Unique partial index on `processing_usage(job_id)`
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<live-version>_processing_usage_job_id_unique.sql (new), tests/database/processing-usage-job-id-unique.test.mjs (new) (guess)
 - **done when:**

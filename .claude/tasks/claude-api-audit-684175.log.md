@@ -50,3 +50,12 @@ is the runner's. Newest entries at the bottom.
 1. Non-admin `queued` write error is still unchecked at the end of the try (pre-existing): 200 with the row left at `submitting`; the admin branch answers 503 there.
 2. `docs/ui-revamp-guardrails.md`'s submit-route refusal contract could note the claim and the revert-on-refused-reservation for every caller.
 3. A refused reservation after a won claim leaves the answers + bumped `attempt_count` on the reverted `uploaded` row (harmless today — no reader gates on `attempt_count`).
+
+## T6 · Unique partial index on `processing_usage(job_id)` — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) + `npm run test:database` 25/25 · completion VERDICT: pass
+**changed:** Unique index `processing_usage_job_id_key on public.processing_usage (job_id) where job_id is not null` **applied live** (prod `pouxujkhtbvkdwbzfvka`, migration version **20260929220437**, `processing_usage_job_id_unique`) after read-only checks: 0 duplicate job_ids (6 rows), and all three inserting RPCs (`reserve_processing_quota`, `reserve_individual_quota`, `reserve_individual_pool_quota`) insert at most one row per job — every retry reserves under a child job id; `admin_reserve_video_quota` already refuses any existing row. Migration file named to the live version; new PGlite spec `tests/database/processing-usage-job-id-unique.test.mjs`.
+**follow-ups:**
+
+1. `processing_usage.job_id` is `not null` live, so the `where job_id is not null` predicate is vacuous (kept for shape consistency); `admin-team-server.ts:683` comments that the column "is nullable" — stale.
+2. The migration header (~58 lines) could be trimmed at `/pr-check`'s simplify pass.
