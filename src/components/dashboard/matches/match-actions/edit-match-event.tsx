@@ -2,6 +2,8 @@
 
 import { Plus } from "lucide-react";
 import { SettingsUnderlineInput } from "@/components/dashboard/settings/settings-card";
+import { MenuSelect } from "@/components/ui/menu-select";
+import { roundOptionsFor } from "@/lib/matches/round-options";
 
 /**
  * The Edit Match dialog's two event rows, split out so they render offline
@@ -117,6 +119,51 @@ export function EventField({
               add it to an event.
             </span>
           )}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The Round of a tournament line picked in "Add to an event". The attach takes
+ * the match's own round (`attach_match_to_event_line`), so it is chosen here,
+ * beside the line, rather than back in Details. Rounds the entry already has a
+ * result for are left out; the RPC's "That round already has a result." stays
+ * the backstop.
+ */
+export function EventRoundField({
+  value,
+  takenRounds,
+  onChange,
+  disabled,
+  error,
+}: {
+  value: string;
+  takenRounds: readonly string[];
+  onChange: (next: string) => void;
+  disabled?: boolean;
+  error?: string;
+}) {
+  const options = roundOptionsFor("tournament").filter(
+    (option) => !takenRounds.includes(option.value),
+  );
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <span className="text-[11px] text-[var(--ink-600)]">Round</span>
+      <MenuSelect
+        label="Round"
+        variant="underline"
+        placeholder="Not set"
+        value={value || undefined}
+        width={220}
+        options={options}
+        disabled={disabled}
+        onChange={onChange}
+      />
+      {error && (
+        <span className="text-[11px]" style={{ color: "var(--danger)" }}>
+          {error}
         </span>
       )}
     </div>

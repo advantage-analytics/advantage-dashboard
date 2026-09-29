@@ -56,6 +56,7 @@ import { AttachLinePicker } from "./attach-line-picker";
 import {
   EventField,
   eventFieldValue,
+  EventRoundField,
   LinkedEventLine,
 } from "./edit-match-event";
 import { EditMatchPending } from "@/components/dashboard/loading/edit-match-pending";
@@ -80,7 +81,7 @@ import {
   roundOptionsFor,
 } from "@/lib/matches/round-options";
 
-type FieldKey = "player1_name" | "player2_name" | "date";
+type FieldKey = "player1_name" | "player2_name" | "date" | "round";
 
 interface RawMatch {
   id: string;
@@ -489,7 +490,8 @@ export function EditMatchDialog({
 
   const focusField = (key: FieldKey) => {
     if (key === "date") dateRef.current?.focus();
-    else (key === "player1_name" ? p1Ref : p2Ref).current?.focus();
+    else if (key !== "round")
+      (key === "player1_name" ? p1Ref : p2Ref).current?.focus();
   };
 
   function startChange() {
@@ -500,6 +502,15 @@ export function EditMatchDialog({
 
   function pickLine(line: AttachLine) {
     changeFrom.current = null;
+    clearFieldError("round");
+    // A tournament line takes a ladder round; a dual's slot or a stored
+    // "Week 4" would sit in its Round menu as a value it can't show.
+    if (
+      line.eventKind === "tournament" &&
+      !roundFits(normalizeRound(round), "tournament")
+    ) {
+      setRound("");
+    }
     setPendingLine(line);
     setPicking(false);
   }
@@ -517,6 +528,11 @@ export function EditMatchDialog({
     // A tournament keeps the match's own round, and its date when that falls
     // in the event (`attach_match_to_event_line`), so those still save.
     const tournamentLine = pendingLine?.eventKind === "tournament";
+    // The attach refuses a tournament line without the match's round; ask here.
+    if (tournamentLine && !round) {
+      setFieldErrors({ round: "Choose the round." });
+      return;
+    }
     const dateSent = detailsSent || tournamentLine;
     if (dateSent && !date) {
       setFieldErrors({ date: "Enter the date." });
@@ -666,6 +682,11 @@ export function EditMatchDialog({
   }
 
   // ── Header ────────────────────────────────────────────────────────────────
+  /** A tournament line's round is the one chosen in the dialog; a dual's is its slot. */
+  const pendingLineRound =
+    pendingLine?.eventKind === "tournament"
+      ? round || null
+      : (pendingLine?.round ?? null);
   let description: React.ReactNode = "Correct the score, players and details.";
   if (match && event) {
     description = (
@@ -697,7 +718,7 @@ export function EditMatchDialog({
             eventName: pendingLine.eventName,
             eventKind: pendingLine.eventKind,
             slot: pendingLine.slot,
-            round: pendingLine.round,
+            round: pendingLineRound,
             date:
               pendingLine.eventKind === "dual" || !pendingLine.sameDay
                 ? pendingLine.startsOn
@@ -926,14 +947,32 @@ export function EditMatchDialog({
                   </p>
                 </div>
               )}
+              {pendingLine?.eventKind === "tournament" && (
+                <div className="grid grid-cols-2 gap-x-4">
+                  <EventRoundField
+                    value={round}
+                    takenRounds={pendingLine.takenRounds}
+                    onChange={(next) => {
+                      setRound(next);
+                      clearFieldError("round");
+                    }}
+                    disabled={saving}
+                    error={fieldErrors.round}
+                  />
+                </div>
+              )}
               <div className="flex flex-col gap-1 text-[12px] leading-[1.5] text-[var(--ink-500)]">
                 {formatSentence && <span>{formatSentence}</span>}
                 {pendingLine ? (
                   <span>
                     Saving makes this the result for{" "}
-                    {lineName(pendingLine).toLowerCase().startsWith("singles")
-                      ? `singles line ${pendingLine.slot?.slice(1)}`
-                      : lineName(pendingLine)}
+                    {pendingLine.eventKind === "tournament"
+                      ? (pendingLineRound ?? "the round you choose")
+                      : lineName(pendingLine)
+                            .toLowerCase()
+                            .startsWith("singles")
+                        ? `singles line ${pendingLine.slot?.slice(1)}`
+                        : lineName(pendingLine)}
                     .{" "}
                     {pendingLine.eventKind === "dual"
                       ? "The date, line and surface will come from the dual."

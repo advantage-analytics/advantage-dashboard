@@ -103,6 +103,94 @@ test("after the detach, the reloaded match draws an empty, editable Event field"
   expect(html).not.toContain("Remove from event");
 });
 
+test.describe("the Round of a tournament line picked without one", () => {
+  type RoundFieldProps = {
+    value: string;
+    takenRounds: readonly string[];
+    onChange: (next: string) => void;
+    disabled?: boolean;
+    error?: string;
+  };
+  // The real MenuSelect draws its options only while open, so a stub lays
+  // every option out as text for the markup to be read.
+  const listing = createLoader({
+    stubs: {
+      "@/components/ui/menu-select": {
+        MenuSelect: (props: {
+          label: string;
+          value: string | undefined;
+          placeholder?: string;
+          variant?: string;
+          options: readonly { value: string; label: string }[];
+        }) =>
+          React.createElement(
+            "div",
+            {
+              "data-menu": props.label,
+              "data-variant": props.variant,
+              "data-value": props.value ?? "",
+            },
+            React.createElement("span", null, props.placeholder),
+            ...props.options.map((option) =>
+              React.createElement("span", { key: option.value }, option.label),
+            ),
+          ),
+      },
+    },
+  });
+  const { EventRoundField } = listing.load(
+    "src/components/dashboard/matches/match-actions/edit-match-event.tsx",
+  ) as { EventRoundField: React.ComponentType<RoundFieldProps> };
+  const render = (props: Partial<RoundFieldProps> = {}) =>
+    renderToStaticMarkup(
+      React.createElement(EventRoundField, {
+        value: "",
+        takenRounds: ["QF"],
+        onChange: noop,
+        ...props,
+      }),
+    );
+
+  test("an underline Round menu without the rounds the entry already has", () => {
+    const html = render();
+    expect(html).toContain(">Round</span>");
+    expect(html).toContain('data-menu="Round"');
+    expect(html).toContain('data-variant="underline"');
+    expect(html).toContain("Not set");
+    expect(html).not.toContain("Quarterfinal");
+    expect(html).toContain("Semifinal");
+    expect(html).toContain("Round of 16");
+    expect(html).not.toContain("var(--danger)");
+  });
+
+  test("the error sits under it in the danger ink", () => {
+    const html = render({ error: "Choose the round." });
+    expect(html).toMatch(
+      /<span[^>]*style="color:var\(--danger\)"[^>]*>Choose the round\.<\/span>/,
+    );
+  });
+
+  test("the real menu shows Not set until a round is chosen", () => {
+    const { EventRoundField: Real } = loader.load(
+      "src/components/dashboard/matches/match-actions/edit-match-event.tsx",
+    ) as { EventRoundField: React.ComponentType<RoundFieldProps> };
+    const empty = renderToStaticMarkup(
+      React.createElement(Real, { value: "", takenRounds: [], onChange: noop }),
+    );
+    expect(empty).toContain('aria-label="Round"');
+    expect(empty).toContain("Not set");
+    const chosen = renderToStaticMarkup(
+      React.createElement(Real, {
+        value: "SF",
+        takenRounds: ["QF"],
+        onChange: noop,
+      }),
+    );
+    expect(chosen).toContain("Semifinal");
+    expect(chosen).not.toContain("Quarterfinal");
+  });
+});
+
 test.describe("wiring", () => {
   const read = (path: string) => readFileSync(resolve(path), "utf8");
   const dialog = read(
@@ -129,5 +217,21 @@ test.describe("wiring", () => {
     expect(dialog).toContain("setDetachError(detached.error);");
     expect(dialog).toContain("title: `Removed from ${detached.eventName}`");
     expect(dialog).toContain("[matchId, open, reloadKey]");
+  });
+
+  test("a pending tournament line takes its round in the event section", () => {
+    expect(dialog).toContain('pendingLine?.eventKind === "tournament" && (');
+    expect(dialog).toContain("takenRounds={pendingLine.takenRounds}");
+    expect(dialog).toContain("error={fieldErrors.round}");
+    // No round: nothing is sent, and the field says so.
+    expect(dialog).toMatch(
+      /if \(tournamentLine && !round\) \{\s*setFieldErrors\(\{ round: "Choose the round\." \}\);\s*return;\s*\}/,
+    );
+    const guard = dialog.indexOf("if (tournamentLine && !round)");
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(dialog.indexOf("await fetch(`/api/matches/"));
+    // The header and the closing sentence read the dialog's round.
+    expect(dialog).toContain("round: pendingLineRound,");
+    expect(dialog).toContain('(pendingLineRound ?? "the round you choose")');
   });
 });

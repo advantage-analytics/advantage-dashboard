@@ -75,3 +75,11 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The T1/T2 migration headers still say the round stays; the new migration's header supersedes them (applied migrations aren't edited).
+
+## T9 · Choose the round inside "Add to an event" — done
+
+**gate:** mechanical GATE PASS; completion `VERDICT: pass`. widget-states: dialog loading/empty/error paths unchanged; adds a field-level error only.
+**changed:** `attachLineGroups` (attach mode) leaves roundless tournament lines available and every line carries `takenRounds`; upload mode unchanged. Picker tail reads "Choose a round". New `EventRoundField` in `edit-match-event.tsx`, shown in the dialog's event section for a pending tournament line (taken rounds filtered out); Save refuses an empty round with "Choose the round."; picking a tournament line resets a non-tournament round. Specs updated/added.
+**follow-ups:**
+
+1. "Keep as one-off" after choosing a round in the event section leaves that round in Details (same state) — harmless.

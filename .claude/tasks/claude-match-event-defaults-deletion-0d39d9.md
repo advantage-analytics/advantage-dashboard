@@ -120,7 +120,7 @@ ready).
 
 ## T9 · Choose the round inside "Add to an event"
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/schedule/attach-line-state.ts, src/components/dashboard/matches/match-actions/attach-line-picker.tsx, src/components/dashboard/matches/match-actions/edit-match-event.tsx, src/components/dashboard/matches/match-actions/edit-match-dialog.tsx, tests/edit-match-dialog-logic.spec.ts, tests/edit-match-event.spec.ts (guess)
 - **routes:** /dashboard/matches
