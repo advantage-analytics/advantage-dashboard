@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Add detach_match_from_event_line RPC
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** supabase/migrations/<ts>_detach_match_from_event_line.sql (new), tests/detach-match-db.spec.ts (new), docs/ui-revamp-guardrails.md (guess)

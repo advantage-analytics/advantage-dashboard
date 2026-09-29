@@ -32,3 +32,13 @@ is the runner's. Newest entries at the bottom.
 1. After applying live, delete event `bc14ddbf-16ba-4359-a762-9c846d4882a9` from the app and confirm its match shows "No event".
 2. Add a negative spec case: a bare client `update matches set event_entry_id = null` must still raise 42501.
 3. `20260923021801_event_delete_detaches_matches.sql` header still says the FK does the detaching — a pointer to the new migration would help.
+
+## T2 · Add detach_match_from_event_line RPC — done
+
+**gate:** mechanical GATE PASS; completion `VERDICT: pass` (last criterion under the author's amendment: not applied live).
+**changed:** New `supabase/migrations/20260929170100_detach_match_from_event_line.sql` (applies after T1's): re-creates `program_audit_log_action_check` from the live allowlist + `match.detached`; `matches_block_client_regraft` = T1's body plus a `advantage.detach_match_id` branch gated on `can_manage_program_schedule`; new SECURITY DEFINER `detach_match_from_event_line(uuid)` mirroring the live attach RPC, audit-logged, grants to `authenticated` only. New opt-in local-container spec `tests/detach-match-db.spec.ts` (not run — Docker down). Guardrails exception extended. **NOT applied to live.**
+**follow-ups:**
+
+1. Apply 20260929170000 then 20260929170100 live. If another audit verb lands live first, add it to the re-created CHECK.
+2. Run the spec against the local container (`DETACH_MATCH_LOCAL_CONTAINER=…`) — the SQL has not been parsed by Postgres yet.
+3. A match with `program_id` null on a line cannot be detached (matches the attach rule) — confirm that's wanted.

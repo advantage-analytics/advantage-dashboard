@@ -145,6 +145,22 @@ be. Doubles teams and existing users depend on it.
 > `detached_matches`, counted before the detach. A bare client UPDATE that
 > nulls `event_entry_id` is refused exactly as before. Migration:
 > `supabase/migrations/20260929170000_event_delete_detaches_under_client.sql`.
+>
+> The same exception covers `detach_match_from_event_line`, added the same
+> day: the single-match inverse of `attach_match_to_event_line`, from the
+> Edit Match dialog. It is allowed on the attach exception's terms exactly —
+> a single explicit action by the match's own uploader, who must also run
+> that program's schedule; scoped to one match; only from a line to no line;
+> touching **only** `event_entry_id` and `tournament_name` (`round`, `date`,
+> `match_type` and `court_type` stay — they describe the match, not the
+> line) — **never** `score`, `format`, `player1_id` or `program_id`, and
+> nothing under `match_stats`, `points` or `shots`; and audit-logged to
+> `program_audit_log` as `match.detached` with the match, entry and event
+> ids. The regraft trigger accepts the move only while a second
+> transaction-local marker names that one match, so a bare client UPDATE
+> stays refused; a saved outcome on the line does not block the detach and
+> is left untouched. Migration:
+> `supabase/migrations/20260929170100_detach_match_from_event_line.sql`.
 
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
