@@ -6,27 +6,35 @@ import {
   playedSetCount,
 } from "@/components/dashboard/matches/new-match-wizard/utils";
 
-// A best-of-3 form always holds three sets, so a match that ended in two kept a
-// blank third set that `buildMatchData` saved as 0-0 (Ace v Goodman 6-2 6-2 0-0,
-// Emon v Roger 5-7 1-6 0-0). The trailing unentered sets are dropped instead.
+// A best-of-3 form always holds three sets; a match that ended in two must not
+// be saved with a blank third set read as 0-0.
+
+const NO_TIEBREAKS = [null, null, null];
 
 const form = (
   playerScores: (number | null)[],
   opponentScores: (number | null)[],
+  playerTiebreaks: (number | null)[] = NO_TIEBREAKS,
+  opponentTiebreaks: (number | null)[] = NO_TIEBREAKS,
 ) => ({
   ...DEFAULT_FORM_DATA,
   playerName: "Ace",
   opponentName: "Goodman",
   playerScores,
   opponentScores,
-  playerTiebreaks: [null, null, null],
-  opponentTiebreaks: [null, null, null],
+  playerTiebreaks,
+  opponentTiebreaks,
 });
 
-const saved = (p: (number | null)[], o: (number | null)[]) => {
+const saved = (
+  p: (number | null)[],
+  o: (number | null)[],
+  pt?: (number | null)[],
+  ot?: (number | null)[],
+) => {
   const winner = { id: null, name: "Ace", scores: [] };
   const loser = { id: null, name: "Goodman", scores: [] };
-  return buildMatchData("m1", form(p, o), winner, loser, false, {
+  return buildMatchData("m1", form(p, o, pt, ot), winner, loser, false, {
     userId: "u1",
     sourceProvider: "splitstep",
     analysisMethod: "video",
@@ -40,6 +48,19 @@ test.describe("played sets — no blank third set", () => {
       player2: [2, 2],
       player1_tiebreaks: [null, null],
       player2_tiebreaks: [null, null],
+    });
+  });
+
+  test("a tiebreak stays with its own set after the trim", () => {
+    // 7-6(5), 6-4 in a best-of-3: the loser's 5 is on the first set, player2's
+    // side, and still is once the blank third set is gone.
+    expect(
+      saved([7, 6, null], [6, 4, null], [null, null, null], [5, null, null]),
+    ).toMatchObject({
+      player1: [7, 6],
+      player2: [6, 4],
+      player1_tiebreaks: [null, null],
+      player2_tiebreaks: [5, null],
     });
   });
 
@@ -58,7 +79,6 @@ test.describe("played sets — no blank third set", () => {
   });
 
   test("nothing entered keeps every set, as before", () => {
-    expect(playedSetCount([null, null, null], [null, null, null])).toBe(3);
     expect(saved([null, null, null], [null, null, null])).toMatchObject({
       player1: [0, 0, 0],
       player2: [0, 0, 0],
@@ -69,5 +89,6 @@ test.describe("played sets — no blank third set", () => {
     expect(playedSetCount([6, 6, null], [2, 2, null])).toBe(2);
     expect(playedSetCount([6, null, null], [2, null, null])).toBe(1);
     expect(playedSetCount([6, null, 6], [2, null, 3])).toBe(3);
+    expect(playedSetCount([null, null, null], [null, null, null])).toBe(3);
   });
 });

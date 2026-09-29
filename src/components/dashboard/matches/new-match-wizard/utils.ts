@@ -3,7 +3,7 @@
  */
 
 import { FormData, WinnerLoserResult, MatchData, UploadedFile } from "./types";
-import { retiredWinner } from "./score-state";
+import { lastEnteredSet, retiredWinner } from "./score-state";
 
 /**
  * Get the number of sets to display/edit.
@@ -32,24 +32,17 @@ export function getAdjustedScores(
 }
 
 /**
- * How many sets were actually played: the adjusted rows with their trailing
- * unentered sets dropped. The form always holds `bestOf` sets, so a best-of-3
- * that ended in two carries a blank third set, and `buildMatchData` turns
- * blanks into 0 — every two-set match was saved with a 0-0 third set, which
- * the score line shows and derivation reconciles against. A set where either
- * side has a value is kept. Nothing entered at all keeps every set, as
- * before. `patch-match.ts` trims the same way when a score is edited.
+ * How many sets to keep: the adjusted rows minus their trailing sets where
+ * neither side entered anything, so a best-of-3 that ended in two is not saved
+ * with a 0-0 third set. Nothing entered at all keeps every set.
  */
 export function playedSetCount(
   player: readonly (number | null)[],
   opponent: readonly (number | null)[],
 ): number {
-  const all = Math.max(player.length, opponent.length);
-  let sets = all;
-  while (sets > 0 && player[sets - 1] == null && opponent[sets - 1] == null) {
-    sets--;
-  }
-  return sets === 0 ? all : sets;
+  return (
+    lastEnteredSet(player, opponent) || Math.max(player.length, opponent.length)
+  );
 }
 
 /**

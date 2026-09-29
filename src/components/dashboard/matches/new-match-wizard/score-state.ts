@@ -168,6 +168,18 @@ export function scoreColumns(
   };
 }
 
+/** Index just past the last set either side entered; 0 when nothing is. */
+export function lastEnteredSet(
+  player: readonly (number | null)[],
+  opponent: readonly (number | null)[],
+): number {
+  let sets = Math.max(player.length, opponent.length);
+  while (sets > 0 && player[sets - 1] == null && opponent[sets - 1] == null) {
+    sets--;
+  }
+  return sets;
+}
+
 /**
  * The first set nobody has won — where "No, I'll finish the score" sends the
  * cursor. A set can only be open once every set before it is finished, so this

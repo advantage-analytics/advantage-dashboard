@@ -695,10 +695,6 @@ export interface UseUploadMatchWizardReturn {
   handleCreateMatch: () => Promise<void>;
 }
 
-// Helper to get current date in YYYY-MM-DD format.
-// Use LOCAL date components (not toISOString, which is UTC) so the default date matches
-// the user's local day — otherwise an evening upload behind UTC defaults to tomorrow.
-
 /**
  * The admin video route's score: the adjusted rows without the trailing sets
  * nobody entered (`playedSetCount`), so a two-set best-of-3 is not stored with
@@ -724,6 +720,9 @@ function adminVideoScore(formData: MatchFormData) {
   };
 }
 
+// Helper to get current date in YYYY-MM-DD format.
+// Use LOCAL date components (not toISOString, which is UTC) so the default date matches
+// the user's local day — otherwise an evening upload behind UTC defaults to tomorrow.
 /**
  * The schedule's surface ("hard", "clay", "grass", or a court option already
  * spelled out) to the value the details step's Court field stores.
