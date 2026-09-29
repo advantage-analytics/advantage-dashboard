@@ -337,13 +337,15 @@ const ALL_H2H_CONFIGS: H2HRowConfig[] = H2H_GROUPS.flatMap(
  * points (`isUnreturnedServe` — a one-shot rally won by the server). The rule
  * is structural, not the "Service Winner" label, so a service winner with an
  * intermediate stroke (rally length above one) stays a winner. The cut is the
- * Film-only `unreturned-serve` ending, the very predicate the tally counts.
+ * SwingVision Aces row's own pure pill, Serve › Result "Ace" by the server:
+ * on a derived match (`MatchFilterContext.isDerived`) that pill IS
+ * `isUnreturnedServe`, the very predicate the tally counts.
  */
 const DERIVED_ACES_ROW: H2HRowConfig = {
   label: "Aces",
   fromPoints: "unreturnedServes",
-  cut: { resultEnding: ["winner"], ending: "unreturned-serve" },
-  sideBy: "player",
+  cut: { serveResult: ["ace"] },
+  sideBy: "server",
   noun: "aces",
 };
 

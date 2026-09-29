@@ -66,20 +66,20 @@ import {
  * - `unforced-error` — `resultType` containing "unforced error". Result ›
  *   Ending "error" covers forced errors too, and video matches do not
  *   separate the two.
- * - `unreturned-serve` — `isUnreturnedServe`: a one-shot rally the server
- *   won. On an Advantage Intelligence match the head-to-head card counts these
- *   as aces (the derivation labels every one "Service Winner" and never
- *   "Ace"), so its derived Aces row opens exactly these.
- * - `rally-winner` — the `winner` bucket less every unreturned serve: the
- *   derived Winners row, once its aces have moved to their own line. The two
- *   derived rows never share a point.
+ * - `rally-winner` — the `winner` bucket less every unreturned serve
+ *   (`isUnreturnedServe`): the derived Winners row on an Advantage
+ *   Intelligence match, whose unreturned serves are counted as aces on their
+ *   own line. Pills cannot say "winners minus unreturned serves" — Result ›
+ *   Ending "winner" credits every "Service Winner" to the server — so this
+ *   one stays Film-only. It never shares a point with the derived Aces row.
  *
- * Published aces, return winners and the rally bands are exact shared
- * filters (Serve › Result "Ace", Return › Result "Winner", Result › Rally
- * length), so their cuts are pure and land entirely as pills.
+ * Aces — published or derived — return winners and the rally bands are exact
+ * shared filters (Serve › Result "Ace", Return › Result "Winner", Result ›
+ * Rally length), so their cuts are pure and land entirely as pills. On a
+ * derived match Serve › Result "Ace" IS `isUnreturnedServe` (`serveResultOf`
+ * reads `MatchFilterContext.isDerived`), so the same pill serves both.
  */
-export type FilmCutEnding =
-  "winner" | "unforced-error" | "unreturned-serve" | "rally-winner";
+export type FilmCutEnding = "winner" | "unforced-error" | "rally-winner";
 
 /** What a cut adds that `MatchFilters` cannot say. Film only. */
 export interface FilmCutExtras {
@@ -171,8 +171,6 @@ function matchesFilmCutEnding(
       return result.includes("winner");
     case "unforced-error":
       return result.includes("unforced error");
-    case "unreturned-serve":
-      return isUnreturnedServe(point);
     case "rally-winner":
       return result.includes("winner") && !isUnreturnedServe(point);
   }

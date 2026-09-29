@@ -117,7 +117,7 @@ ready).
 
 ## T8 · Make the derived Aces row a pure Serve › Result pill by the server
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7
 - **files:** src/components/dashboard/matches/match-detail/head-to-head-card.tsx, film-cut-context.tsx, tests/head-to-head-cuts.spec.ts, tests/film-cut-intent.spec.ts, tests/stat-widget-cuts.spec.ts (guess)

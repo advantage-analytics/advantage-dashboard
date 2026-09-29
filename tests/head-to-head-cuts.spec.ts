@@ -16,6 +16,7 @@ import {
 import {
   applyFilmCut,
   FILM_CUT_EXTRA_KEYS,
+  filmCutExtras,
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
@@ -592,16 +593,20 @@ function derivedConfig(label: string): H2HRowConfig {
   return row;
 }
 
+/**
+ * The model on an Advantage Intelligence match, as `useMatchFilters()` builds
+ * it there (`match.sourceProvider === "splitstep"`): Serve › Result "Ace" is
+ * `isUnreturnedServe`.
+ */
+const DERIVED_CTX: MatchFilterContext = { ...CTX, isDerived: true };
+
 test.describe("derived (Advantage Intelligence) cuts", () => {
   const derivedAces = derivedConfig("Aces");
   const derivedWinners = derivedConfig("Winners");
 
-  test("the derived Aces row opens the unreturned-serve ending by player", () => {
-    expect(derivedAces.cut).toEqual({
-      resultEnding: ["winner"],
-      ending: "unreturned-serve",
-    });
-    expect(derivedAces.sideBy).toBe("player");
+  test("the derived Aces row opens Serve › Result Ace by the server", () => {
+    expect(derivedAces.cut).toEqual({ serveResult: ["ace"] });
+    expect(derivedAces.sideBy).toBe("server");
     expect(derivedWinners.cut).toEqual({
       resultEnding: ["winner"],
       ending: "rally-winner",
@@ -617,8 +622,8 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
       const opened = applyFilmCut(
         MATCH,
         MATCH,
-        sideCut(derivedAces.cut!, who, "player"),
-        CTX,
+        sideCut(derivedAces.cut!, who, "server"),
+        DERIVED_CTX,
       );
       expect(opened.length, who).toBe(tallySide(MATCH, isP1).unreturnedServes);
       expect(opened.every(isUnreturnedServe), who).toBe(true);
@@ -627,36 +632,49 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
       applyFilmCut(
         MATCH,
         MATCH,
-        sideCut(derivedAces.cut!, "you", "player"),
-        CTX,
+        sideCut(derivedAces.cut!, "you", "server"),
+        DERIVED_CTX,
       ).map((pt) => pt.id),
     ).toEqual(["ace-you", "sw-you"]);
   });
 
+  test("the derived Aces cut is pure: it lands entirely as pills", () => {
+    expect(filmCutExtras(derivedAces.cut!)).toBeNull();
+    const known = new Set<string>(MATCH_FILTER_KEYS);
+    for (const key of Object.keys(sideCut(derivedAces.cut!, "you", "server"))) {
+      expect(known.has(key), key).toBe(true);
+    }
+  });
+
   test("the derived Winners cut never shares a point with the derived Aces cut", () => {
     const aces = new Set(
-      applyFilmCut(MATCH, MATCH, derivedAces.cut!, CTX).map((pt) => pt.id),
+      applyFilmCut(MATCH, MATCH, derivedAces.cut!, DERIVED_CTX).map(
+        (pt) => pt.id,
+      ),
     );
     expect(aces.size).toBeGreaterThan(0);
-    const winners = applyFilmCut(MATCH, MATCH, derivedWinners.cut!, CTX).map(
-      (pt) => pt.id,
-    );
+    const winners = applyFilmCut(
+      MATCH,
+      MATCH,
+      derivedWinners.cut!,
+      DERIVED_CTX,
+    ).map((pt) => pt.id);
     for (const id of winners) expect(aces.has(id), id).toBe(false);
-    // And per side.
+    // And per side, each by its own row's side rule.
     for (const who of ["you", "opp"] as const) {
       const a = new Set(
         applyFilmCut(
           MATCH,
           MATCH,
-          sideCut(derivedAces.cut!, who, "player"),
-          CTX,
+          sideCut(derivedAces.cut!, who, derivedAces.sideBy),
+          DERIVED_CTX,
         ).map((pt) => pt.id),
       );
       for (const pt of applyFilmCut(
         MATCH,
         MATCH,
-        sideCut(derivedWinners.cut!, who, "player"),
-        CTX,
+        sideCut(derivedWinners.cut!, who, derivedWinners.sideBy),
+        DERIVED_CTX,
       )) {
         expect(a.has(pt.id), `${who} ${pt.id}`).toBe(false);
       }
@@ -682,5 +700,15 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
     expect(
       applyFilmCut(MATCH, MATCH, byConfig("Aces").cut!, CTX).map((pt) => pt.id),
     ).toEqual(["ace-you", "ace-opp"]);
+  });
+
+  test("the SwingVision and derived Aces cuts are one pill, differing only by context", () => {
+    expect(byConfig("Aces").cut).toEqual(derivedAces.cut);
+    // Under the derived context every unreturned serve is an ace.
+    expect(
+      applyFilmCut(MATCH, MATCH, byConfig("Aces").cut!, DERIVED_CTX).map(
+        (pt) => pt.id,
+      ),
+    ).toEqual(["ace-you", "ace-opp", "sw-you"]);
   });
 });

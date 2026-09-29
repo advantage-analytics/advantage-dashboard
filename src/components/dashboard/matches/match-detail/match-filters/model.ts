@@ -552,9 +552,9 @@ export function returnContactOf(
  * point's winner, never the "Service Winner" label — so a service winner
  * with an intermediate stroke (rally length above one) is not one. The
  * head-to-head card's derived Aces row counts exactly these (`tallySide`),
- * the `unreturned-serve` Film-only ending admits exactly these, and on a
- * derived match Serve › Result "Ace" admits exactly these
- * (`serveResultOf`). A double fault is never one: the server lost it.
+ * and on a derived match Serve › Result "Ace" — that row's cut — admits
+ * exactly these (`serveResultOf`); the `rally-winner` Film-only ending leaves
+ * them out. A double fault is never one: the server lost it.
  */
 export function isUnreturnedServe(point: MatchPoint): boolean {
   return (

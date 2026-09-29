@@ -13,6 +13,7 @@ import {
   type FilmCutIntent,
   type LandedFilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
+import { DERIVED_H2H_GROUPS } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import { appliedPhrases } from "@/components/dashboard/matches/match-detail/match-filters/applied-words";
 import { RALLY_BAND_CUTS } from "@/components/dashboard/matches/match-detail/rally-length-card";
 import {
@@ -35,6 +36,7 @@ import {
   MATCH_FILTER_KEYS,
   MATCH_FILTER_OPTIONS,
   matchFiltersQuery,
+  optionAvailability,
   parseMatchFilters,
   serializeMatchFilters,
   type MatchFilterAvailability,
@@ -378,6 +380,76 @@ test("a landed '1st serve points won' cell presses exactly its pills in the draw
     "result › Outcome › Won",
   ]);
   expect(html.match(/aria-pressed="true"/g)).toHaveLength(4);
+});
+
+test("a landed derived 'Aces' cell presses exactly its pills in the drawer", () => {
+  // Advantage Intelligence: the derived Aces row is Serve › Result "Ace" by
+  // the server — a pure cut, so it lands wholly as pills and leaves nothing
+  // Film-only to name.
+  const derivedAces = DERIVED_H2H_GROUPS.flatMap((g) => g.configs).find(
+    (row) => row.label === "Aces",
+  )!;
+  const DERIVED_CTX: MatchFilterContext = { ...ctx(), isDerived: true };
+  const landing = landFilmCut(
+    EMPTY_MATCH_FILTERS,
+    intent(sideCut(derivedAces.cut!, "you", "server"), "Aces · Alex"),
+  );
+  expect(landing.remainder).toBeNull();
+  // One unreturned serve by player 1 ("you"): the derivation's label for it.
+  const fixture = [
+    pt({
+      id: "sw",
+      resultType: "Service Winner",
+      eventType: "Service Winner",
+      rallyLength: 1,
+      serverIsPlayer1: true,
+      wonByPlayer1: true,
+    }),
+  ];
+  const html = renderToStaticMarkup(
+    React.createElement(FiltersPanel, {
+      filters: landing.shared,
+      availability: optionAvailability(fixture, DERIVED_CTX),
+      youName: "Alex Reid",
+      oppName: "Sam Alvarez",
+      onApply: () => {},
+      onClose: () => {},
+      countFor: () => 1,
+      total: 1,
+      filmCut: null,
+    }),
+  );
+  // The landing sets exactly two shared filters: Serve › Player and Serve ›
+  // Result "Ace".
+  expect(
+    MATCH_FILTER_KEYS.filter(
+      (key) =>
+        !filtersEqual(
+          { ...EMPTY_MATCH_FILTERS, [key]: landing.shared[key] },
+          EMPTY_MATCH_FILTERS,
+        ),
+    ),
+  ).toEqual(["server", "serveResult"]);
+  // Return › Player is the same `server` filter drawn inverted (see the
+  // 1st-serve case above), so "you served" also presses the opponent as the
+  // returner — it is not a third filter.
+  expect(
+    pills(html)
+      .filter((p) => p.pressed)
+      .map((p) => p.name),
+  ).toEqual([
+    "serve › Player › Alex Reid",
+    "serve › Result › Ace",
+    "return › Player › Sam Alvarez",
+  ]);
+  expect(html.match(/aria-pressed="true"/g)).toHaveLength(3);
+  expect(html).not.toContain("data-film-cut");
+  expect(
+    filmListSentence(
+      { shared: landing.shared, remainder: null, savedOnly: false },
+      { you: "Alex", opponent: "Sam" },
+    ),
+  ).not.toContain("from Statistics");
 });
 
 test("the strip states the cut in words — the shared filters, then the statistic's extras, then saved", () => {
