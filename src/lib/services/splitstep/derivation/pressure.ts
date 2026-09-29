@@ -77,7 +77,11 @@ function winsGame(mine: number, theirs: number, adScoring: boolean): boolean {
   return !adScoring && mine === 3 && theirs === 3;
 }
 
-/** Would winning this game win the set? Standard sets only; tiebreaks are refused upstream. */
+/**
+ * Would winning this game win the set? Standard sets only. Tiebreak points
+ * are derived (winners.ts rule 2) but their integer scores never reach here as
+ * rungs, so they carry no pressure flags.
+ */
 function winsSet(mine: number, theirs: number): boolean {
   const after = mine + 1;
   if (after < 6) return false;

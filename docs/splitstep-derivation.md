@@ -63,10 +63,30 @@ fixture and against a real payload with identical output.
 | `reconcile.ts`   | Folds winners forward, checks against `matches.score`, decides player1                              |
 | `result-type.ts` | `result_type`, `shots.result`, shot numbering                                                       |
 | `pressure.ts`    | Break / set / match points                                                                          |
-| `flags.ts`       | Per-row data-quality flags                                                                          |
+| `flags.ts`       | Per-row data-quality flags — review only; none of them changes a row (table below)                  |
+| `played.ts`      | Drops phantom strokes at a faulted serve; flags a possible dead ball after an out ball              |
+| `line-calls.ts`  | Our own in/out call per stroke, from the trajectories file (`trajectory.ts` parses it)              |
 | `quality.ts`     | 7 checks → `high`/`medium`/`low`                                                                    |
 | `transcript.ts`  | Assembles database-shaped rows                                                                      |
 | `index.ts`       | Public surface, `analyzeResults()`, `DERIVATION_VERSION`                                            |
+
+Point flags, all review-only since 0.6.0 (`points.flags`; scored against hand labels by
+`scripts/splitstep-eval.ts`):
+
+| Flag                         | Fires when                                                                        |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| `winner_disputed`            | The score fold and the last stroke's `in` flag name different winners             |
+| `same_player_consecutive`    | Two strokes in a row by one player — usually a missed stroke                      |
+| `reserve_after_in`           | A serve called in, then another serve                                             |
+| `service_court_repeat`       | The serve side did not alternate from the previous point in the game              |
+| `score_side_mismatch`        | Points played in the game say one court, the server stood on the other            |
+| `tiebreak_score_off_six_all` | Tiebreak point scores while the game score is not 6-6 (the game count drifted)    |
+| `winner_guessed`             | Collapsed score tail: the winner is the last stroke's guess                       |
+| `result_type_unknown`        | No honest `result_type`                                                           |
+| `phantom_strokes_dropped`    | Strokes at a faulted serve were removed (the one row change `played.ts` makes)    |
+| `second_serve_called_out`    | Out-called second serve with a short tail — a possible double fault               |
+| `winner_to_error_by_bounce`  | The ball before a winner bounced out (trajectories) — demoted from autofix, 0.6.0 |
+| `ending_suspect_line`        | The ball before a winner landed within 1 m of a line, or was confidently out      |
 
 Only `persist-transcript.ts` and `derive-and-publish.ts` (one level up) touch the
 database.
@@ -229,6 +249,14 @@ match cannot reproduce `matches.score`. Under the Gate 1 bypass below it is writ
 unreconciled, and it would be refused again if the gate returned, until the fold
 learns to keep a tiebreak as one game.
 
+**Score-stream flags (0.6.0, 2026-09-29).** `tiebreak_score_off_six_all` marks
+integer (tiebreak) point scores while the game score is not 6-6, or 0-0 in a deciding
+match tiebreak: on Quan v Harazaki the stream ran two games ahead and scored the last
+10 points of a real 5-7 set as a tiebreak. `score_side_mismatch` compares the parity of
+points played in the game with the server's stance (`serveCourtSide`, ignoring the
+0.3 m around the centre mark); it fires in runs from the point a score went off by one
+to the end of that game, and cannot see an even offset. Both are review-only.
+
 **Collapsed score tail (2026-09-28).** When the score stream resets to 0-0 / 0-0 /
 no set at the end of a match and never recovers (job 45ff4bd7), those rallies are
 kept, folded into the last real game, and their winners are guessed from the last
@@ -241,7 +269,7 @@ trailing reset qualifies; any other unresolved point still refuses the match.
 > or failing that from whichever mapping folds closest to the score (a tie is still a
 > refusal). `Reconciliation.ok` stays `false` on that path and `player1Source` records
 > how player1 was chosen; `derive-and-publish` logs `grade: unreconciled`. Rows carry
-> `DERIVATION_VERSION = 0.x-unreconciled` (0.3.1 since the tiebreak rule, 0.4.1 since the collapsed-tail rule, 0.4.2 since phantom strokes are dropped, 0.5.0 since trajectory line calls) and must
+> `DERIVATION_VERSION = 0.x-unreconciled` (0.3.1 since the tiebreak rule, 0.4.1 since the collapsed-tail rule, 0.4.2 since phantom strokes are dropped, 0.5.0 since trajectory line calls, 0.6.0 since the dead-ball autofix was demoted to a flag) and must
 > be rebuilt when the gate returns.
 > The unresolved-points gate is untouched.
 

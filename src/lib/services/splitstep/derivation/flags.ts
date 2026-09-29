@@ -61,8 +61,9 @@ export const POINT_FLAGS = {
   SECOND_SERVE_CALLED_OUT: "second_serve_called_out",
   /**
    * The ball before a derived winner bounced outside the singles lines (per
-   * the trajectories file), so the last stroke was dropped as a dead ball and
-   * the point reads as an error. An autofix on small evidence: see played.ts.
+   * the trajectories file), so the last stroke may be a dead ball and the
+   * point an error. Review-only since 0.6.0: as an autofix it was right 14 of
+   * 18 times on video — see played.ts.
    */
   WINNER_TO_ERROR_BY_BOUNCE: "winner_to_error_by_bounce",
   /**
@@ -72,6 +73,22 @@ export const POINT_FLAGS = {
    * the ball was within 1 m.
    */
   ENDING_SUSPECT_LINE: "ending_suspect_line",
+  /**
+   * Tiebreak point scores (plain integers, not 0/15/30/40) while the game
+   * score is not 6-6. A tiebreak cannot start anywhere else, so the vendor's
+   * game count has drifted. Found on Quan v Harazaki (b74a1e04): the stream
+   * read 3-6 at the set's 10th game, kept going, and scored the last 10
+   * points of a real 5-7 set as a tiebreak. A deciding-set match tiebreak
+   * (0-0 in set 3 or later) is allowed.
+   */
+  TIEBREAK_SCORE_OFF_SIX_ALL: "tiebreak_score_off_six_all",
+  /**
+   * The server stood on the wrong side for the score. Points already played
+   * in the game (or tiebreak) decide it — even from the deuce court, odd from
+   * the ad court — so a 0-15 point served from the deuce court means the
+   * score or the serve position is wrong. Skipped on a no-ad deciding point.
+   */
+  SCORE_SIDE_MISMATCH: "score_side_mismatch",
 } as const;
 
 /** How close to a line the ball before a winner must land to be suspect. */
@@ -83,6 +100,12 @@ const ENDING_SUSPECT_MARGIN_M = 1;
  * 12 on the labelled match; at 0.5–0.7 it was noise mid-rally.
  */
 const CONFIDENT_OUT_CALL = 0.85;
+
+/**
+ * Servers stand close to the centre mark, so a stance this near x = 0 says
+ * nothing about the side; `score_side_mismatch` ignores it.
+ */
+const SIDE_DEAD_ZONE_M = 0.3;
 
 /** Strokes after a second serve that can still be the returner at a dead ball. */
 const MAX_DEAD_TAIL = 2;
@@ -170,9 +193,9 @@ export function flagPoint(params: {
   } = params;
   const flags: string[] = [];
 
-  // A winner the ball before it says may have been an error. The autofix in
-  // played.ts has already taken the balls that clearly landed out; this is
-  // the near-line band it leaves for a person.
+  // A winner the ball before it says may have been an error: near a line, or
+  // called out with confidence. A ball the trajectories put clearly out also
+  // gets `winner_to_error_by_bounce` from played.ts; both are for a person.
   const last = rally.strokes[rally.strokes.length - 1];
   const before = rally.strokes[rally.strokes.length - 2];
   if (
@@ -237,9 +260,77 @@ export function flagPoint(params: {
     }
   }
 
+  const opening = rally.strokes[0];
+  if (opening && tiebreakOffSixAll(opening)) {
+    flags.push(POINT_FLAGS.TIEBREAK_SCORE_OFF_SIX_ALL);
+  }
+
+  const serve = rally.serves[0];
+  if (serve && !(!adScoring && isDecidingPoint(rally))) {
+    const played = pointsPlayed(opening?.predPointScore ?? null);
+    const side = serveCourtSide(serve.playerX, serve.playerY);
+    const offCentre = Math.abs(serve.playerX ?? 0) >= SIDE_DEAD_ZONE_M;
+    if (played !== null && side && offCentre) {
+      const expected = played % 2 === 0 ? "deuce" : "ad";
+      if (side !== expected) flags.push(POINT_FLAGS.SCORE_SIDE_MISMATCH);
+    }
+  }
+
   if (!resultType) flags.push(POINT_FLAGS.RESULT_TYPE_UNKNOWN);
 
   return flags;
+}
+
+/** 0/15/30/40/AD as points won; anything else is not a game score. */
+const RUNGS: Record<string, number> = {
+  "0": 0,
+  "15": 1,
+  "30": 2,
+  "40": 3,
+  AD: 4,
+};
+
+function scoreParts(score: string | null): [string, string] | null {
+  const parts = (score ?? "").split("-").map((p) => p.trim().toUpperCase());
+  return parts.length === 2 && parts.every((p) => p !== "")
+    ? [parts[0], parts[1]]
+    : null;
+}
+
+/**
+ * Points already played in the game or tiebreak, from the point score before
+ * the point: 0/15/30/40/AD read as a game (40-40 is 6, AD-40 is 7), plain
+ * integers as a tiebreak. Only the parity is used, and it is the same rule in
+ * both — the first point is served from the deuce court and the side
+ * alternates every point. Null when the score cannot be read.
+ */
+export function pointsPlayed(score: string | null): number | null {
+  const parts = scoreParts(score);
+  if (!parts) return null;
+  const [a, b] = parts;
+  if (a in RUNGS && b in RUNGS) return RUNGS[a] + RUNGS[b];
+  const x = Number(a);
+  const y = Number(b);
+  return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0
+    ? x + y
+    : null;
+}
+
+/** Integer point score before the point, outside 6-6 and a match tiebreak. */
+function tiebreakOffSixAll(
+  opening: SplitStepRally["strokes"][number],
+): boolean {
+  const point = scoreParts(opening.predPointScore);
+  if (!point || (point[0] in RUNGS && point[1] in RUNGS)) return false;
+  if (pointsPlayed(opening.predPointScore) === null) return false;
+  const games = scoreParts(opening.predGameScore);
+  if (!games) return false;
+  if (games[0] === "6" && games[1] === "6") return false;
+  // A match tiebreak in place of the deciding set starts at 0-0 games.
+  const sets = scoreParts(opening.predSetScore);
+  const setsPlayed = sets ? Number(sets[0]) + Number(sets[1]) : NaN;
+  if (games[0] === "0" && games[1] === "0" && setsPlayed >= 2) return false;
+  return true;
 }
 
 /** 40-40 before the point — under no-ad, the receiver picks the side. */
