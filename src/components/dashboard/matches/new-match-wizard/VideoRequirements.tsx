@@ -75,7 +75,7 @@ export function VideoRequirements() {
         <b className="font-medium text-[var(--ink-900)]">1080p minimum</b>
         {" · "}
         <b className="font-medium text-[var(--ink-900)]">30 fps minimum</b>
-        {" (29.97 fps accepted) · "}
+        {" (29.97 fps recommended) · "}
         <b className="font-medium text-[var(--ink-900)]">60 fps preferred</b>
       </span>
 

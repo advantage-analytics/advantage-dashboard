@@ -56,27 +56,48 @@ export const MIN_VIDEO_FPS = 30;
  * Whole-track container average frame rate below which the wizard refuses a
  * video before upload.
  *
- * The vendor's recommendation, confirmed by email on 2026-09-28 (Q14 in
- * docs/splitstep-vendor-questions.md): send 29.97 fps or higher. Its own hard
- * gate is now 25 fps, so this is stricter than what it would reject — on
- * purpose, for the reasons below.
+ * 29.5 sits between the two numbers the vendor has given: its API docs
+ * (https://splitstep.ai/api-docs.html, checked 2026-09-27) print "rejected
+ * below 29.9 fps" in their error table, and its actual hard gate has since
+ * dropped to 25 fps (email, 2026-09-28, Q14 in
+ * docs/splitstep-vendor-questions.md). Nothing at or above this is rejected
+ * after upload; the band between here and `RECOMMENDED_CONTAINER_AVERAGE_FPS`
+ * is admitted with a warning instead.
  *
- * The vendor's API docs (https://splitstep.ai/api-docs.html, checked
- * 2026-09-27) guarantee "29.97 fps (NTSC) and higher is accepted" and reject
- * below 29.9 fps by the vendor's own measurement — which reads lower than the
- * container: job 45ff4bd7 averaged 29.94 in its container, the vendor measured
- * 29.80, and it was rejected. A second file averaging 29.95 was accepted but
- * its score stream lost five points and it published nothing (job b74a1e04).
- * So anything under the documented 29.97 is refused before upload.
+ * Why 29.5 and not 29.9: measured on 2026-09-29, four full-length phone
+ * recordings whose encoded rate says 29.97, 30 or 59.94 average 29.74, 29.78,
+ * 29.80 and 29.94 over the whole track — a dropped frame every few seconds,
+ * ordinary for a phone on a hot day. 29.9 refused three of them. 29.5 admits
+ * footage that lost up to about 1.6% of its frames and still refuses a file
+ * that is genuinely variable-rate (a 24 or 25 fps export, a recording that
+ * halved its rate under load).
+ *
+ * Until 2026-09-29 this sat at 29.97, refusing that band outright, on the
+ * grounds that the vendor measures lower than the container (job 45ff4bd7
+ * averaged 29.94, the vendor read 29.80) and that the one accepted 29.95 file
+ * (job b74a1e04) published nothing. Both of those jobs now publish on
+ * derivation 0.6.0 with grades no worse than constant-30 footage, and a
+ * tournament's worth of phone recordings at 29.94–29.95 was being refused —
+ * so the refusal moved down to the documented rejection line.
  *
  * Compared against `VideoProbe.averageFps` (MP4/MOV only, rounded to two
  * decimals by container-frame-rate.ts), never the snapped `fps`. Genuine NTSC
  * is 30000/1001 = 29.97003; over a match-length recording a short final frame
- * moves the average by around 1e-5, so it still rounds to 29.97 and passes.
- * Reaching 29.96 takes dozens of missing frames — the variable-rate case this
- * refuses.
+ * moves the average by around 1e-5, so it still rounds to 29.97. Reaching
+ * 29.49 takes thousands of missing frames — the variable-rate case this refuses.
  */
-export const MIN_CONTAINER_AVERAGE_FPS = 29.97;
+export const MIN_CONTAINER_AVERAGE_FPS = 29.5;
+
+/**
+ * Container average below which the wizard warns but does not block.
+ *
+ * The vendor's own recommendation, by email on 2026-09-28: send 29.97 fps or
+ * higher for best results. Between `MIN_CONTAINER_AVERAGE_FPS` and this the
+ * file uploads, the warning says tracking may be less accurate, and the file
+ * row shows the two-decimal average so the number the warning quotes is the
+ * one on screen.
+ */
+export const RECOMMENDED_CONTAINER_AVERAGE_FPS = 29.97;
 
 /** Vendor's recommended frame rate. Below this we warn but do not block. */
 export const RECOMMENDED_VIDEO_FPS = 60;
