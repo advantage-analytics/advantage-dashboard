@@ -20,6 +20,9 @@ import {
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { Workspace } from "@/lib/workspace/types";
+import { handOf } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
+import type { Hand } from "@/components/dashboard/matches/match-detail/match-filters/shot-geometry";
 import type { MatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
@@ -1305,6 +1308,9 @@ function ShotWell({
   // was never timed.
   const point = stops[0]?.point;
   const numbering = useMemo(() => rallyNumbering(point?.shots), [point]);
+  // The hands the Direction filter uses, so a row it keeps as Inside Out is
+  // labelled Inside Out here too.
+  const { context: filterContext } = useMatchFilters();
   return (
     // Two elements, not one: the outer grid is what `film-shot-well-open`
     // (globals.css) unfolds — its single row track grows from 0fr to 1fr on
@@ -1320,6 +1326,7 @@ function ShotWell({
             stop={stop}
             order={i + 1}
             rallyNumber={numbering.numbers.get(stop.shot.id) ?? i + 1}
+            hand={handOf(stop.shot.isPlayer1, filterContext)}
             playerName={
               stop.shot.isPlayer1 === youIsPlayer1 ? youLastName : oppLastName
             }
@@ -1352,6 +1359,7 @@ const ShotWellRow = memo(function ShotWellRow({
   stop,
   order,
   rallyNumber,
+  hand,
   playerName,
   isLit,
   onSelect,
@@ -1361,11 +1369,13 @@ const ShotWellRow = memo(function ShotWellRow({
   order: number;
   /** The shot's number in the rally (`rallyNumbering`): what the # cell prints. */
   rallyNumber: number;
+  /** The hitter's hand, for Placement's Inside-Out / Inside-In. */
+  hand: Hand | null;
   playerName: string;
   isLit: boolean;
   onSelect: (stop: ShotStop) => void;
 }) {
-  const cells = shotRowCells(stop.shot, rallyNumber, playerName);
+  const cells = shotRowCells(stop.shot, rallyNumber, playerName, null, hand);
 
   return (
     <button

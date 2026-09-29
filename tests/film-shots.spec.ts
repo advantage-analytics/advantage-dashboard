@@ -263,6 +263,38 @@ test("nothing unmeasured is ever rendered as a zero", () => {
   expect(shotRowCells({ ...blank, speedMph: 0 }, 4, "Lee").mph).toBe("0");
 });
 
+test("Placement is the Direction filter's rule: Inside Out / Inside In need a hand", () => {
+  // A right-hander's forehand struck from the ad half (their backhand side),
+  // facing +y from the low-y end: x < 0 is ad.
+  const adForehand = (zone: string) =>
+    shot("io", 3, { shotType: "Forehand", zone, contactX: -2, contactY: 3 });
+  const cells = (s: ReturnType<typeof shot>, hand: "right" | "left" | null) =>
+    shotRowCells(s, 3, "Lee", null, hand).placement;
+
+  expect(cells(adForehand("Crosscourt"), "right")).toBe("Inside Out");
+  expect(cells(adForehand("Down the Line"), "right")).toBe("Inside In");
+  // From the forehand side it is the stored zone.
+  expect(cells(adForehand("Crosscourt"), "left")).toBe("Crosscourt");
+  // No hand: the stored zone, never a guess.
+  expect(cells(adForehand("Crosscourt"), null)).toBe("Crosscourt");
+  // A backhand from the same spot is never Inside-*.
+  expect(
+    cells({ ...adForehand("Crosscourt"), shotType: "Backhand" }, "right"),
+  ).toBe("Crosscourt");
+  // Middle, a serve and an unmeasured zone print as stored.
+  expect(cells(adForehand("Middle"), "right")).toBe("Middle");
+  expect(
+    cells({ ...adForehand("Crosscourt"), shotType: "First Serve" }, "right"),
+  ).toBe("Crosscourt");
+  expect(cells({ ...adForehand("Crosscourt"), zone: null }, "right")).toBe("—");
+  // The accessible name carries the same word.
+  expect(
+    shotRowAriaLabel(
+      shotRowCells(adForehand("Crosscourt"), 3, "Lee", null, "right"),
+    ),
+  ).toContain("Inside Out");
+});
+
 /** Rally numbers in the list's own order. */
 const numbersOf = (shots: ReturnType<typeof shot>[]) => {
   const { numbers } = rallyNumbering(shots);
