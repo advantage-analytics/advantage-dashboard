@@ -7,7 +7,6 @@ import {
   applyMatchFilters,
   EMPTY_MATCH_FILTERS,
   hasActiveMatchFilters,
-  isReturnWinner,
   MATCH_FILTER_KEYS,
   type MatchFilterContext,
   type MatchFilters,
@@ -33,12 +32,13 @@ import {
  * WRITTEN into the shared filters (`MatchFiltersProvider`, mirrored to
  * `?f=`), key by key, so the filters drawer's pills show it pressed — the
  * Statistics tab is always the whole match, so nothing there moves. The
- * extras are the `FilmCutRemainder`: never pills (Result › Error would widen
- * "Unforced errors", Result › Winner "Aces"), held beside the shared filters
- * above the view switch and named in the Video tab's filter strip ("…, from
- * Statistics"). A card counts its "Watch all N" with `applyFilmCut` over the
- * WHOLE match (`applyFilmCut(points, points, …)`); with no other Video filter
- * applied, the points a click opens are exactly the points the card counted.
+ * extras are the `FilmCutRemainder`: never pills (Result › Ending "error"
+ * would widen "Unforced errors", "winner" fold the aces into "Winners"),
+ * held beside the shared filters above the view switch and named in the
+ * Video tab's filter strip ("…, from Statistics"). A card counts its "Watch
+ * all N" with `applyFilmCut` over the WHOLE match (`applyFilmCut(points,
+ * points, …)`); with no other Video filter applied, the points a click opens
+ * are exactly the points the card counted.
  *
  * Its own context, like `film-head-context.tsx`, for the same two reasons: the
  * film subtree must not depend on `useMatchReport()` (`film-tab.tsx`'s header
@@ -58,33 +58,22 @@ import {
  * A result-type bucket the report's own tallies count by, which the shared
  * Result › Ending cannot separate. Film only.
  *
- * - `ace` — `resultType` "Ace". Result › Winner (+ Serve) also admits every
- *   unreturned serve the video pipeline writes as "Service Winner", which the
- *   report counts as a winner, never an ace.
  * - `winner` — `resultType` containing "winner" (the published
  *   `LIKE '%Winner%'`), which leaves aces out: the report counts them on their
- *   own line, and Result › Winner would fold them back in.
- * - `unforced-error` — `resultType` containing "unforced error". Result › Error
- *   covers forced errors too, and video matches do not separate the two.
- * - `return-winner` — `isReturnWinner`: the return landed, the rally was at
- *   most two shots and it ended on a winner that is not a service winner.
- *   Result › Shot "Return" needs shot rows to find the return, and the
- *   statistic is read off the point's own serve/return columns.
+ *   own line, and Result › Ending "winner" would fold them back in
+ *   (`winnerHitBy` credits an ace to the server as a winner).
+ * - `unforced-error` — `resultType` containing "unforced error". Result ›
+ *   Ending "error" covers forced errors too, and video matches do not
+ *   separate the two.
+ *
+ * Aces, return winners and the rally bands are exact shared filters (Serve ›
+ * Result "Ace", Return › Result "Winner", Result › Rally length), so their
+ * cuts are pure and land entirely as pills.
  */
-export type FilmCutEnding =
-  "ace" | "winner" | "unforced-error" | "return-winner";
+export type FilmCutEnding = "winner" | "unforced-error";
 
 /** What a cut adds that `MatchFilters` cannot say. Film only. */
 export interface FilmCutExtras {
-  /**
-   * Rallies of at least this many shots. With `rallyMax` a closed band — the
-   * rally-length card's Short (1–4) and Medium (5–8). Either bound set drops
-   * points with no recorded shot count (`rallyLength === 0`), as that card
-   * does.
-   */
-  rallyMin?: number | null;
-  /** Rallies of at most this many shots, or no upper bound. */
-  rallyMax?: number | null;
   /** One of the report's own result-type buckets (see `FilmCutEnding`). */
   ending?: FilmCutEnding | null;
 }
@@ -93,11 +82,7 @@ export interface FilmCutExtras {
 export type FilmCut = Partial<MatchFilters> & FilmCutExtras;
 
 /** The extras' keys — every other key of a `FilmCut` is a `MatchFilters` key. */
-export const FILM_CUT_EXTRA_KEYS: readonly (keyof FilmCutExtras)[] = [
-  "rallyMin",
-  "rallyMax",
-  "ending",
-];
+export const FILM_CUT_EXTRA_KEYS: readonly (keyof FilmCutExtras)[] = ["ending"];
 
 /**
  * A cut on its way to the Video tab, and the words the filter strip reads —
@@ -161,38 +146,18 @@ export function hasFilmCut(cut: FilmCut | null | undefined): boolean {
   return hasActiveMatchFilters(filmCutFilters(cut)) || hasExtras(cut);
 }
 
-/**
- * The point ended on a winning return — defined in the shared model beside
- * Return › Result "Winner", which admits exactly these; re-exported here so
- * the head-to-head card and the `return-winner` ending read one definition.
- */
-export { isReturnWinner };
-
 function matchesEnding(point: MatchPoint, ending: FilmCutEnding): boolean {
   const result = (point.resultType ?? "").trim().toLowerCase();
   switch (ending) {
-    case "ace":
-      return result === "ace";
     case "winner":
       return result.includes("winner");
     case "unforced-error":
       return result.includes("unforced error");
-    case "return-winner":
-      return isReturnWinner(point);
   }
 }
 
 /** Whether one point passes the cut's Film-only extras. */
 export function matchesFilmCutExtras(point: MatchPoint, cut: FilmCut): boolean {
-  const min = cut.rallyMin ?? null;
-  const max = cut.rallyMax ?? null;
-  if (min !== null || max !== null) {
-    // 0 is "no shot count recorded", not a one-shot rally, so it belongs to
-    // no bounded range — the same exclusion rally-length-card.tsx makes.
-    if (point.rallyLength < 1) return false;
-    if (min !== null && point.rallyLength < min) return false;
-    if (max !== null && point.rallyLength > max) return false;
-  }
   const ending = cut.ending ?? null;
   if (ending !== null && !matchesEnding(point, ending)) return false;
   return true;

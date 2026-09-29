@@ -99,28 +99,33 @@ const OUTCOMES: OutcomeMeta[] = [
  * Each outcome's base cut, before a side is laid over it by `sideCut` — the
  * shared filters' Result › Ending, narrowed by a Film-only `ending` where
  * Ending alone would admit points this card counts in another segment (see
- * `FilmCutEnding`). The four are exclusive, like the tally below: a double
- * fault is Error + Serve, which no unforced error is.
+ * `FilmCutEnding`); aces are Serve › Result "Ace", exact on its own. The four
+ * are exclusive, like the tally below: a double fault is Error + Serve, which
+ * no unforced error is.
  */
 const OUTCOME_BASE_CUT: Record<OutcomeKey, FilmCut> = {
   winners: { resultEnding: ["winner"], ending: "winner" },
   unforcedErrors: { resultEnding: ["error"], ending: "unforced-error" },
   doubleFaults: { resultEnding: ["error"], resultShot: ["Serve"] },
-  aces: { resultEnding: ["winner"], ending: "ace" },
+  aces: { serveResult: ["ace"] },
 };
 
 /**
- * The film cut behind one segment of one side's bar: the side is Result ›
- * Hit by, the point of view Ending reads — whoever hit the winner or made
- * the error, and the server for an ace or a double fault. That is exactly
- * the line `head-to-head-card.tsx`'s `sideCut(…, "player")` draws for the
- * same four rows, so this delegates to it rather than re-deriving it here.
- * `you`/`opp` are relative, resolved through the filter context's
- * `youIsPlayer1` inside the film tab (guardrails §4); nothing here reads
- * player order.
+ * The film cut behind one segment of one side's bar. Aces are the SERVER's
+ * (Serve › Player); the other three are Result › Hit by, the point of view
+ * Ending reads — whoever hit the winner or made the error, the server for a
+ * double fault. That is exactly the line `head-to-head-card.tsx`'s `sideCut`
+ * draws for the same four rows, so this delegates to it rather than
+ * re-deriving it here. `you`/`opp` are relative, resolved through the filter
+ * context's `youIsPlayer1` inside the film tab (guardrails §4); nothing here
+ * reads player order.
  */
 export function outcomeCut(key: OutcomeKey, side: "you" | "opp"): FilmCut {
-  return sideCut(OUTCOME_BASE_CUT[key], side, "player");
+  return sideCut(
+    OUTCOME_BASE_CUT[key],
+    side,
+    key === "aces" ? "server" : "player",
+  );
 }
 
 type Tally = Record<OutcomeKey, number>;

@@ -547,10 +547,9 @@ export function serveResultOf(point: MatchPoint): ServeResult | null {
 
 /**
  * The point ended on a winning return: the head-to-head card's Return winners
- * row counts exactly these (adding that the returner won the point), the Film
- * cut's `return-winner` ending and Return › Result "Winner" admit exactly
- * these. One definition, so the figure and the points a click opens cannot
- * drift apart. Re-exported from `film-cut-context.tsx` under the same name.
+ * row counts exactly these (adding that the returner won the point), and its
+ * cut, Return › Result "Winner", admits exactly these. One definition, so the
+ * figure and the points a click opens cannot drift apart.
  */
 export function isReturnWinner(point: MatchPoint): boolean {
   const result = point.secondShotResult;

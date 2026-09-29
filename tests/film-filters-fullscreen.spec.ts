@@ -23,9 +23,9 @@ import { pt } from "./fixtures/film-point";
  * drawer and the report column draw one `PointList` over ONE
  * `FilmListFilters` value, so these cover the axes the room's old model
  * carried — server, saved, set, rally length, how the point ended, the shot
- * that ended it and the service court — as the shared `MatchFilters`, the
- * Film-only saved toggle and a landed statistic's Film-only remainder (its
- * rally-length extras).
+ * that ended it and the service court — as the shared `MatchFilters` (rally
+ * length is Result › Rally length), the Film-only saved toggle and a landed
+ * statistic's Film-only remainder (its `ending` extra).
  */
 
 const points = [
@@ -95,11 +95,22 @@ test("server, saved, set and rally length", () => {
   expect(list({ server: "you" }, {}, false)).toEqual(["c", "d"]);
   expect(list({}, { savedOnly: true })).toEqual(["b"]);
   expect(list({ sets: [2] })).toEqual(["c", "d"]);
-  // Rally length is a landed statistic's Film-only extra, not a shared filter.
-  expect(list({}, extras({ rallyMin: 5 }))).toEqual(["b", "c"]);
-  // Every layer ANDs: the shared set, the rally extra and the saved toggle.
+  // Rally length is Result › Rally length, a shared filter: b is 9 shots
+  // (long), c is 5 (medium).
+  expect(list({ resultRallyLength: ["medium", "long"] })).toEqual(["b", "c"]);
+  // Every layer ANDs: the shared set and band, a landed statistic's
+  // Film-only ending and the saved toggle.
   expect(
-    list({ sets: [1] }, { ...extras({ rallyMin: 5 }), savedOnly: true }),
+    list(
+      { sets: [1], resultRallyLength: ["medium", "long"] },
+      { ...extras({ ending: "winner" }), savedOnly: true },
+    ),
+  ).toEqual(["b"]);
+  expect(
+    list(
+      { resultRallyLength: ["medium", "long"] },
+      extras({ ending: "winner" }),
+    ),
   ).toEqual(["b"]);
 });
 
@@ -150,17 +161,18 @@ test("the cut in words — the trigger and the zero state", () => {
           sets: [2],
           server: "opponent",
           resultEnding: ["winner"],
+          resultRallyLength: ["long"],
         },
         remainder: {
-          extras: { rallyMin: 9 },
-          label: "Long rallies · 9+ shots",
+          extras: { ending: "winner" },
+          label: "Winners · Revelli",
         },
         savedOnly: true,
       },
       names,
     ),
   ).toBe(
-    "Revelli serving · set 2 · winners · long rallies · 9+ shots, from Statistics · saved",
+    "Revelli serving · set 2 · winners · long rally (9+) · winners · Revelli, from Statistics · saved",
   );
   // A pure cut (every key a shared filter) lands no remainder, so the strip
   // reads its shared phrases alone and names nothing twice.
@@ -193,11 +205,14 @@ test("the filters drawer's count is the list's own rule over the DRAFT", () => {
   // The Film-only layers still hold: the remainder's extras and the saved
   // toggle.
   const local: FilmLocalFilters = {
-    remainder: { extras: { rallyMin: 5 }, label: "Long rallies" },
+    remainder: { extras: { ending: "winner" }, label: "Winners" },
     savedOnly: false,
   };
-  expect(filmDraftCount(points, draft({ sets: [1] }), local, ctx)).toBe(1);
+  const band = { resultRallyLength: ["medium", "long"] } as const;
   expect(
-    filmDraftCount(points, draft({}), { ...local, savedOnly: true }, ctx),
+    filmDraftCount(points, draft({ ...band, sets: [1] }), local, ctx),
+  ).toBe(1);
+  expect(
+    filmDraftCount(points, draft(band), { ...local, savedOnly: true }, ctx),
   ).toBe(1);
 });

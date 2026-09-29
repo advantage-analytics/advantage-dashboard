@@ -40,7 +40,7 @@ import {
 const ALL_ROWS: H2HRowConfig[] = H2H_GROUPS.flatMap((group) => group.configs);
 
 const EXPECTED_CUTS: Record<string, FilmCut> = {
-  Aces: { resultEnding: ["winner"], ending: "ace" },
+  Aces: { serveResult: ["ace"] },
   "Double faults": { resultEnding: ["error"], resultShot: ["Serve"] },
   "First serve in": { serveType: ["first"] },
   "First serve points won": { serveType: ["first"] },
@@ -49,7 +49,7 @@ const EXPECTED_CUTS: Record<string, FilmCut> = {
   "First serve returns won": { serveType: ["first"] },
   "Second serve returns won": { serveType: ["second"] },
   "Break points converted": { scoreType: ["breakpoint"] },
-  "Return winners": { ending: "return-winner" },
+  "Return winners": { returnResult: ["winner"] },
   Winners: { resultEnding: ["winner"], ending: "winner" },
   "Unforced errors": { resultEnding: ["error"], ending: "unforced-error" },
   "Total points won": {},
@@ -62,7 +62,8 @@ const EXPECTED_CUTS: Record<string, FilmCut> = {
  * opponent's error ended.
  */
 const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
-  Aces: { resultEnding: ["winner"], ending: "ace", resultPlayer: "you" },
+  // An ace is the server's: Serve › Player, never Hit by.
+  Aces: { serveResult: ["ace"], server: "you" },
   "Double faults": {
     resultEnding: ["error"],
     resultShot: ["Serve"],
@@ -101,7 +102,7 @@ const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
     resultOutcome: ["won"],
   },
   "Return winners": {
-    ending: "return-winner",
+    returnResult: ["winner"],
     server: "opponent",
     resultOutcome: ["won"],
   },
@@ -370,6 +371,14 @@ test.describe("a cell opens exactly the points its figure counts", () => {
     expect(
       applyFilmCut(MATCH, MATCH, youCut(row), CTX).map((pt) => pt.id),
     ).toEqual(["ace-you"]);
+    // A pure cut: every key of the cell's cut is a shared filter, so it
+    // lands entirely as pills with no Film-only remainder.
+    const shared = new Set<string>(MATCH_FILTER_KEYS);
+    for (const cut of [youCut(row), oppCut(row)]) {
+      for (const key of Object.keys(cut)) {
+        expect(shared.has(key), `Aces → ${key}`).toBe(true);
+      }
+    }
   });
 
   test("double faults are the server's error on a serve", () => {
@@ -383,6 +392,14 @@ test.describe("a cell opens exactly the points its figure counts", () => {
     const ids = applyFilmCut(MATCH, MATCH, youCut(row), CTX).map((pt) => pt.id);
     expect(ids).not.toContain("ace-you");
     expect(ids).toEqual(["sw-you", "fw-you", "bp-saved", "rw-you"]);
+    // Why the row keeps its Film-only `winner` ending: Result › Ending
+    // "winner" by you alone credits your ace to you as a winner.
+    const endingAlone = applyMatchFilters(
+      MATCH,
+      { ...EMPTY_MATCH_FILTERS, resultEnding: ["winner"], resultPlayer: "you" },
+      CTX,
+    ).map((pt) => pt.id);
+    expect(endingAlone).toContain("ace-you");
   });
 
   test("unforced errors leave the forced ones out", () => {
@@ -407,28 +424,20 @@ test.describe("a cell opens exactly the points its figure counts", () => {
     expect(count(byConfig("Total points won").cut!)).toBe(MATCH.length);
   });
 
-  test("return winners agree with the count, which Result › Return could not", () => {
+  test("return winners agree with the count through Return › Result", () => {
     const row = byConfig("Return winners");
     expect(count(youCut(row))).toBe(you.returnWinners);
     expect(count(oppCut(row))).toBe(opp.returnWinners);
     expect(you.returnWinners).toBe(1);
     // `both` also admits the mislabelled two-shot winner, as it always has.
     expect(count(row.cut!)).toBe(2);
-    // The shared vocabulary finds the return from shot rows, which these
-    // points (like any import without them) do not carry — so it cannot
-    // agree, and the row keeps the Film-only `return-winner` ending.
-    const viaResult = applyMatchFilters(
-      MATCH,
-      {
-        ...EMPTY_MATCH_FILTERS,
-        server: "opponent",
-        resultShot: ["Return"],
-        resultEnding: ["winner"],
-        resultPlayer: "you",
-      },
-      CTX,
-    );
-    expect(viaResult.length).not.toBe(you.returnWinners);
+    // A pure cut: no key outside the shared filters.
+    const shared = new Set<string>(MATCH_FILTER_KEYS);
+    for (const cut of [row.cut!, youCut(row), oppCut(row)]) {
+      for (const key of Object.keys(cut)) {
+        expect(shared.has(key), `Return winners → ${key}`).toBe(true);
+      }
+    }
   });
 
   test("the count is taken over the shared filters' points", () => {

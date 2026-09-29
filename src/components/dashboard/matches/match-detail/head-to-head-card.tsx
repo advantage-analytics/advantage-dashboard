@@ -14,11 +14,11 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
   applyFilmCut,
-  isReturnWinner,
   sideCut,
   type CutSide,
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
+import { isReturnWinner } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { PlayerStatistics, StatFraction } from "@/lib/data/types";
@@ -112,10 +112,10 @@ export interface H2HRowConfig {
   cut?: FilmCut;
   /**
    * Whose points a value cell's cut takes (`sideCut`). Absent is the server:
-   * a player's serve rows are the points they served. Return rows are the
-   * returner's, so their side is the one NOT serving; result rows (aces,
-   * double faults, winners, errors) are the Result player's — the one who hit
-   * the winner or made the error.
+   * a player's serve rows (aces included) are the points they served. Return
+   * rows are the returner's, so their side is the one NOT serving; result
+   * rows (double faults, winners, errors) are the Result player's — the one
+   * who hit the winner or made the error.
    */
   sideBy?: CutSide;
   /**
@@ -137,13 +137,13 @@ export interface H2HRowConfig {
 
 export const SERVE_ROWS: H2HRowConfig[] = [
   {
-    // Result › Ending Winner by the server, narrowed to the "Ace" bucket:
-    // Winner alone would add every service winner, which the report counts
-    // as a winner (and which is every unreturned serve on a video match).
+    // Serve › Result "Ace" by the server: exactly `resultType` "Ace", which
+    // leaves out the service winners the report counts as winners (every
+    // unreturned serve on a video match).
     label: "Aces",
     key: "aces",
-    cut: { resultEnding: ["winner"], ending: "ace" },
-    sideBy: "player",
+    cut: { serveResult: ["ace"] },
+    sideBy: "server",
     noun: "aces",
   },
   {
@@ -246,14 +246,13 @@ export const RETURN_ROWS: H2HRowConfig[] = [
   // that landed, a rally of at most two shots and a winner the returner won
   // (`isReturnWinner`). Counted from the points, never borrowed from
   // `winners`, which would read as a return figure and be a total. The cut
-  // is the Film-only `return-winner` ending: Result › Shot "Return" finds the
-  // return from shot rows, which a point without them does not carry, so it
-  // could not agree with this count. A cell adds "returned by, and won by,
-  // that side" — exactly `tallySide`'s rule.
+  // is Return › Result "Winner", which admits exactly `isReturnWinner`; a
+  // cell adds "returned by, and won by, that side" — exactly `tallySide`'s
+  // rule.
   {
     label: "Return winners",
     fromPoints: "returnWinners",
-    cut: { ending: "return-winner" },
+    cut: { returnResult: ["winner"] },
     sideBy: "returner",
     sideWon: true,
     noun: "return winners",
@@ -272,8 +271,9 @@ export const POINT_ROWS: H2HRowConfig[] = [
   {
     label: "Winners",
     key: "winners",
-    // Result › Ending Winner narrowed to the "winner" bucket, which leaves
-    // aces on their own line as the published figure does.
+    // Result › Ending Winner narrowed to the Film-only "winner" bucket, which
+    // leaves aces on their own line as the published figure does — Ending
+    // "winner" alone admits them (`winnerHitBy` credits an ace to the server).
     cut: { resultEnding: ["winner"], ending: "winner" },
     sideBy: "player",
     noun: "winners",

@@ -88,7 +88,7 @@ ready).
 
 ## T6 · Move Aces, Return winners and rally bands off the Film-only extras
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T4, T5
 - **files:** src/components/dashboard/matches/match-detail/film-cut-context.tsx, head-to-head-card.tsx, point-endings-card.tsx, rally-length-card.tsx, tests/head-to-head-cuts.spec.ts, tests/stat-widget-cuts.spec.ts, tests/film-cut-intent.spec.ts, tests/film-filters-fullscreen.spec.ts (guess)

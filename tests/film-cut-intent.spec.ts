@@ -14,6 +14,7 @@ import {
   type LandedFilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { appliedPhrases } from "@/components/dashboard/matches/match-detail/match-filters/applied-words";
+import { RALLY_BAND_CUTS } from "@/components/dashboard/matches/match-detail/rally-length-card";
 import {
   filmListName,
   filmListSentence,
@@ -86,7 +87,13 @@ const points = [
     wonByPlayer1: true,
     serverIsPlayer1: true,
   }),
-  pt({ id: "b", isBreakPoint: false, wonByPlayer1: true, rallyLength: 11 }),
+  pt({
+    id: "b",
+    isBreakPoint: false,
+    wonByPlayer1: true,
+    rallyLength: 11,
+    resultType: "Backhand Unforced Error",
+  }),
   pt({
     id: "c",
     isBreakPoint: true,
@@ -101,8 +108,7 @@ test("a cut's MatchFilters half is laid over the empty filters", () => {
   const cut = {
     scoreType: ["breakpoint"] as const,
     server: "opponent" as const,
-    rallyMin: 1,
-    ending: "ace" as const,
+    ending: "unforced-error" as const,
   };
   expect(filmCutFilters(cut)).toEqual({
     ...EMPTY_MATCH_FILTERS,
@@ -110,18 +116,17 @@ test("a cut's MatchFilters half is laid over the empty filters", () => {
     server: "opponent",
   });
   // The extras never leak into the MatchFilters half.
-  expect(Object.keys(filmCutFilters(cut))).not.toContain("rallyMin");
   expect(Object.keys(filmCutFilters(cut))).not.toContain("ending");
   expect(hasFilmCut(cut)).toBe(true);
   expect(hasFilmCut({})).toBe(false);
-  expect(hasFilmCut({ rallyMax: null, ending: null })).toBe(false);
+  expect(hasFilmCut({ ending: null })).toBe(false);
   expect(hasFilmCut(null)).toBe(false);
-  // The extras alone, null bounds dropped; none at all is null.
-  expect(filmCutExtras(cut)).toEqual({ rallyMin: 1, ending: "ace" });
-  expect(filmCutExtras({ rallyMin: 9, rallyMax: null })).toEqual({
-    rallyMin: 9,
-  });
+  // The extras alone, a null ending dropped; none at all is null.
+  expect(filmCutExtras(cut)).toEqual({ ending: "unforced-error" });
+  expect(filmCutExtras({ ending: "winner" })).toEqual({ ending: "winner" });
   expect(filmCutExtras({ scoreType: ["breakpoint"], ending: null })).toBeNull();
+  // The only extra left is the ending.
+  expect(FILM_CUT_EXTRA_KEYS).toEqual(["ending"]);
 });
 
 test("the Film list is applyMatchFilters(shared) AND the remainder's extras AND saved", () => {
@@ -132,8 +137,12 @@ test("the Film list is applyMatchFilters(shared) AND the remainder's extras AND 
   const sharedPoints = applyMatchFilters(points, shared, ctx());
   expect(ids(sharedPoints)).toEqual(["a", "c"]);
 
-  // A landed rally band: the extras AND the shared points, nothing else.
-  const band = landFilmCut(shared, intent({ rallyMin: 5 }, "Long-ish"));
+  // A landed Film-only ending: the extras AND the shared points, nothing
+  // else.
+  const band = landFilmCut(
+    shared,
+    intent({ ending: "unforced-error" }, "Unforced errors"),
+  );
   expect(band.shared).toBe(shared);
   const local = { ...NO_FILM_LOCAL_FILTERS, remainder: band.remainder };
   expect(
@@ -180,25 +189,26 @@ test("the Film list is applyMatchFilters(shared) AND the remainder's extras AND 
 });
 
 test("un-setting a landed cut's serveType widens the list to every point the extras admit", () => {
+  const UE = "Forehand Unforced Error";
   const served = [
-    pt({ id: "f5", firstShotType: "First Serve", rallyLength: 5 }),
-    pt({ id: "s6", firstShotType: "Second Serve", rallyLength: 6 }),
-    pt({ id: "f2", firstShotType: "First Serve", rallyLength: 2 }),
-    pt({ id: "s8", firstShotType: "Second Serve", rallyLength: 8 }),
-    pt({ id: "f11", firstShotType: "First Serve", rallyLength: 11 }),
+    pt({ id: "f5", firstShotType: "First Serve", resultType: UE }),
+    pt({ id: "s6", firstShotType: "Second Serve", resultType: UE }),
+    pt({ id: "f2", firstShotType: "First Serve" }),
+    pt({ id: "s8", firstShotType: "Second Serve", resultType: UE }),
+    pt({ id: "f11", firstShotType: "First Serve", resultType: "Ace" }),
   ];
   const landed = landFilmCut(
     EMPTY_MATCH_FILTERS,
     intent(
-      { serveType: ["first"], rallyMin: 5, rallyMax: 8 },
-      "Medium rallies",
+      { serveType: ["first"], ending: "unforced-error" },
+      "Unforced errors",
     ),
   );
-  // The serve type is a shared filter now; the band is the remainder.
+  // The serve type is a shared filter now; the ending is the remainder.
   expect(landed.shared.serveType).toEqual(["first"]);
   expect(landed.remainder).toEqual({
-    label: "Medium rallies",
-    extras: { rallyMin: 5, rallyMax: 8 },
+    label: "Unforced errors",
+    extras: { ending: "unforced-error" },
   });
   const local = { remainder: landed.remainder, savedOnly: false };
   const listOf = (shared: MatchFilters) =>
@@ -217,25 +227,21 @@ test("un-setting a landed cut's serveType widens the list to every point the ext
 });
 
 test("a rally band admits only recorded rallies inside it", () => {
-  const listed = applyFilmCut(
-    points,
-    points,
-    { rallyMin: 1, rallyMax: 4 },
-    ctx(),
-  );
-  // b is 11 shots; a, c keep the fixture's 4; d is 2.
-  expect(ids(listed)).toEqual(["a", "c", "d"]);
-  const long = applyFilmCut(
-    points,
-    points,
-    { rallyMin: 9, rallyMax: null },
-    ctx(),
-  );
-  expect(ids(long)).toEqual(["b"]);
-  const unrecorded = [pt({ id: "z", rallyLength: 0 })];
-  expect(
-    applyFilmCut(unrecorded, unrecorded, { rallyMin: 1, rallyMax: 4 }, ctx()),
-  ).toEqual([]);
+  const rallies = [
+    pt({ id: "four", rallyLength: 4 }),
+    pt({ id: "eleven", rallyLength: 11 }),
+    pt({ id: "none", rallyLength: 0 }),
+  ];
+  const band = (key: keyof typeof RALLY_BAND_CUTS) =>
+    ids(applyFilmCut(rallies, rallies, RALLY_BAND_CUTS[key], ctx()));
+  // 4 shots is short; 11 is long; 0 ("no shot count recorded") is in none.
+  expect(band("short")).toEqual(["four"]);
+  expect(band("medium")).toEqual([]);
+  expect(band("long")).toEqual(["eleven"]);
+  // The band is a shared filter, so the cut lands no Film-only remainder.
+  for (const cut of Object.values(RALLY_BAND_CUTS)) {
+    expect(filmCutExtras(cut)).toBeNull();
+  }
 });
 
 test("landing a cut writes its MatchFilters half to the shared filters, key by key", () => {
@@ -247,7 +253,7 @@ test("landing a cut writes its MatchFilters half to the shared filters, key by k
   };
   const before = serializeMatchFilters(shared);
   const cut = intent(
-    { scoreType: ["breakpoint"], server: "opponent", rallyMin: 5 },
+    { scoreType: ["breakpoint"], server: "opponent", ending: "unforced-error" },
     "Break points saved · Reid",
   );
   const landed = landFilmCut(shared, cut);
@@ -272,7 +278,7 @@ test("landing a cut writes its MatchFilters half to the shared filters, key by k
   // The remainder holds ONLY the extras and the label — no MatchFilters key.
   expect(landed.remainder).toEqual({
     label: "Break points saved · Reid",
-    extras: { rallyMin: 5 },
+    extras: { ending: "unforced-error" },
   });
   expect(Object.keys(landed.remainder!).sort()).toEqual(["extras", "label"]);
   for (const key of Object.keys(landed.remainder!.extras)) {
@@ -382,15 +388,15 @@ test("the strip states the cut in words — the shared filters, then the statist
   };
   const aces = held(
     before,
-    intent({ server: "you", ending: "ace" }, "Aces · Reid"),
+    intent({ server: "you", ending: "winner" }, "Winners · Reid"),
   );
   // The cut's shared half reads as shared phrases; the label names only the
   // extras still in force.
   expect(filmListSentence({ ...aces, savedOnly: false }, names)).toBe(
-    "Reid serving · break point · aces · Reid, from Statistics",
+    "Reid serving · break point · winners · Reid, from Statistics",
   );
   expect(filmListSentence({ ...aces, savedOnly: true }, names)).toBe(
-    "Reid serving · break point · aces · Reid, from Statistics · saved",
+    "Reid serving · break point · winners · Reid, from Statistics · saved",
   );
   // Exactly where the landing put the viewer: the way back out.
   expect(filmStripAction({ ...aces, savedOnly: false })).toBe(
@@ -434,10 +440,10 @@ test("the strip states the cut in words — the shared filters, then the statist
   // Extras alone: the label leads.
   const band = held(
     EMPTY_MATCH_FILTERS,
-    intent({ rallyMin: 1, rallyMax: 4 }, "Short rallies · 1–4 shots"),
+    intent({ ending: "unforced-error" }, "Unforced errors · Reid"),
   );
   expect(filmListSentence({ ...band, savedOnly: false }, names)).toBe(
-    "Short rallies · 1–4 shots, from Statistics",
+    "Unforced errors · Reid, from Statistics",
   );
   expect(filmStripAction({ ...band, savedOnly: false })).toBe(
     "Back to all points",
@@ -504,7 +510,10 @@ test("the quick menu writes the shared filters; Saved only stays Film-only", () 
     filmListName(
       {
         shared: EMPTY_MATCH_FILTERS,
-        remainder: { label: "Long rallies", extras: { rallyMin: 9 } },
+        remainder: {
+          label: "Unforced errors",
+          extras: { ending: "unforced-error" },
+        },
         savedOnly: false,
       },
       names,

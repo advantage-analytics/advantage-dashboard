@@ -65,16 +65,16 @@ const BAND_META: { key: Band["key"]; title: string; label: string }[] = [
 ];
 
 /**
- * The film cut that shows each band's points in the Video tab — a Film-only
- * rally-length cut (`FilmCutExtras`), as the match filters have no
- * rally-length group. Long is sent with an explicit `rallyMax: null` so an
- * upper bound can never carry over. The cut drops shot-count-less points
- * from any bounded range, exactly as the bucketing below does.
+ * The film cut that shows each band's points in the Video tab — Result ›
+ * Rally length, whose bands (`rallyLengthBandOf`) are this card's by the same
+ * keys. A pure cut: it lands entirely as a pill. Shot-count-less points
+ * (`rallyLength` 0) are in no band there, exactly as the bucketing below
+ * leaves them out.
  */
 export const RALLY_BAND_CUTS: Record<Band["key"], FilmCut> = {
-  short: { rallyMin: 1, rallyMax: 4 },
-  medium: { rallyMin: 5, rallyMax: 8 },
-  long: { rallyMin: 9, rallyMax: null },
+  short: { resultRallyLength: ["short"] },
+  medium: { resultRallyLength: ["medium"] },
+  long: { resultRallyLength: ["long"] },
 };
 
 function pct(part: number, whole: number): number {
