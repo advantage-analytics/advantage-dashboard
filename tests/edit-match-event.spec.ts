@@ -15,6 +15,8 @@ import { createLoader } from "./fixtures/vm-modules";
  *     text with no icon, beside the "Change them in Schedule" copy
  *   - after the detach the reloaded match draws an empty, editable Event field
  *   - the dialog confirms, calls `detach_match_from_event_line` and toasts
+ *   - a match on a tournament line with `canEditRound` changes its round in
+ *     the dialog, through `set_match_round_on_line`; a dual stays locked
  */
 
 const loader = createLoader();
@@ -25,6 +27,7 @@ const { LinkedEventLine, EventField, eventFieldValue, EVENT_ACTION_CLS } =
     LinkedEventLine: React.ComponentType<{
       eventKind: "dual" | "tournament";
       canDetach: boolean;
+      canEditRound?: boolean;
       onRemove: () => void;
       disabled?: boolean;
     }>;
@@ -70,6 +73,36 @@ test.describe("a match on a line", () => {
     );
     expect(html).not.toContain("Remove from event");
     expect(html).not.toContain("<button");
+  });
+
+  const tournament = (canEditRound: boolean, eventKind = "tournament") =>
+    renderToStaticMarkup(
+      React.createElement(LinkedEventLine, {
+        eventKind: eventKind as "dual" | "tournament",
+        canDetach: false,
+        canEditRound,
+        onRemove: noop,
+      }),
+    );
+
+  test("a tournament line with canEditRound: the round is left out of the sentence", () => {
+    const html = tournament(true);
+    expect(html).toContain(
+      "The date and surface come from the tournament. Change them in Schedule.",
+    );
+    expect(html).not.toContain("round");
+  });
+
+  test("a tournament line without canEditRound: today's locked copy", () => {
+    expect(tournament(false)).toContain(
+      "The date, round and surface come from the tournament. Change them in Schedule.",
+    );
+  });
+
+  test("a dual line stays locked even with canEditRound", () => {
+    expect(tournament(true, "dual")).toContain(
+      "The date, line and surface come from the dual. Change them in Schedule.",
+    );
   });
 });
 
@@ -200,7 +233,7 @@ test.describe("wiring", () => {
   const action = read("src/lib/schedule/attach-line.ts");
 
   test("the GET route returns canDetach beside canAttach", () => {
-    expect(route).toContain("canAttach, canDetach });");
+    expect(route).toMatch(/canAttach,\s*canDetach,\s*canEditRound,?\s*\}\);/);
     expect(route).toMatch(
       /const detachable = !!match\.program_id && !!match\.event_entry_id;/,
     );
@@ -233,5 +266,81 @@ test.describe("wiring", () => {
     // The header and the closing sentence read the dialog's round.
     expect(dialog).toContain("round: pendingLineRound,");
     expect(dialog).toContain('(pendingLineRound ?? "the round you choose")');
+  });
+
+  test("the GET route gates canEditRound like canDetach, for tournaments only", () => {
+    expect(route).toMatch(
+      /const canEditRound =\s*detachable && event\?\.eventKind === "tournament" && runsSchedule;/,
+    );
+    // The line's other matches and its outcomes, never this match.
+    expect(route).toContain('.neq("id", matchId)');
+    expect(route).toContain('.from("program_event_outcomes")');
+    expect(route).toMatch(/takenRounds,\s*\};/);
+  });
+
+  test("the round action calls set_match_round_on_line and passes its refusal through", () => {
+    const start = action.indexOf("export async function setMatchRoundOnLine(");
+    expect(start).toBeGreaterThan(-1);
+    const body = action.slice(start);
+    expect(body).toContain('supabase.rpc("set_match_round_on_line"');
+    expect(body).toContain("p_round: normalizeRound(input.round)");
+    expect(body).toContain("return { ok: false, error: error.message };");
+    for (const path of [
+      'revalidatePath("/dashboard");',
+      'revalidatePath("/dashboard/matches");',
+      "revalidatePath(`/dashboard/matches/${input.matchId}`);",
+      'revalidatePath("/dashboard/team/schedule");',
+      "revalidatePath(`/dashboard/team/schedule/${row.event_id}`);",
+    ])
+      expect(body).toContain(path);
+  });
+
+  test("the dialog calls setMatchRoundOnLine only for a linked tournament match", () => {
+    // Editable only on a tournament line the viewer may change.
+    expect(dialog).toMatch(
+      /const lineRoundEditable =\s*linked && event\?\.eventKind === "tournament" && !!loaded\?\.canEditRound;/,
+    );
+    expect(dialog).toContain(
+      'const lineRoundChanged = lineRoundEditable && round !== (storedRound ?? "");',
+    );
+    // One call site, gated on the change, after the PATCH.
+    const calls = dialog.match(/await setMatchRoundOnLine\(/g) ?? [];
+    expect(calls).toHaveLength(1);
+    const call = dialog.indexOf(
+      "await setMatchRoundOnLine({ matchId, round })",
+    );
+    expect(dialog.lastIndexOf("if (lineRoundChanged) {", call)).toBeGreaterThan(
+      dialog.indexOf("await fetch(`/api/matches/${matchId}`, {"),
+    );
+    // Its refusal is the error slot's text, and the dialog stays open.
+    expect(dialog).toMatch(
+      /if \(!moved\.ok\) \{[\s\S]*?setError\(moved\.error\);\s*setSaving\(false\);\s*router\.refresh\(\);\s*return;/,
+    );
+    // No round: nothing is sent.
+    expect(dialog).toMatch(
+      /if \(lineRoundEditable && !round\) \{\s*setFieldErrors\(\{ round: "Choose the round\." \}\);\s*return;\s*\}/,
+    );
+    // The field, preset to the stored round, which is never listed as taken.
+    expect(dialog).toContain("{lineRoundEditable && event && (");
+    expect(dialog).toContain("(taken) => taken !== storedRound");
+    expect(dialog).toContain("canEditRound={lineRoundEditable}");
+  });
+
+  test("the PATCH of a linked match never carries round", () => {
+    // Round goes in the body only for an unlinked match or a pending line.
+    expect(dialog).toContain("const detailsSent = !linked && !pendingLine;");
+    expect(dialog).toContain(
+      'const tournamentLine = pendingLine?.eventKind === "tournament";',
+    );
+    const patch = dialog.slice(
+      dialog.indexOf("const body: Record<string, unknown> = {"),
+      dialog.indexOf("await fetch(`/api/matches/${matchId}`, {"),
+    );
+    const rounds = patch.match(/\bround:/g) ?? [];
+    expect(rounds).toHaveLength(2);
+    expect(patch).toMatch(/if \(detailsSent\) \{[\s\S]*?round: roundKind/);
+    expect(patch).toMatch(
+      /if \(tournamentLine\) \{[\s\S]*?round: round \|\| null/,
+    );
   });
 });

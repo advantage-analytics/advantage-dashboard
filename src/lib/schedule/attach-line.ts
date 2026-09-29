@@ -236,3 +236,55 @@ export async function detachMatchFromLine(input: {
     eventKind: row.event_kind,
   };
 }
+
+export type SetRoundResult =
+  | {
+      ok: true;
+      eventId: string;
+      eventName: string;
+      from: string | null;
+      round: string;
+    }
+  | { ok: false; error: string };
+
+/**
+ * The Edit Match dialog's Round for a match already on a tournament line:
+ * `set_match_round_on_line`
+ * (`supabase/migrations/20260929215610_set_match_round_on_line.sql`), the only
+ * path the database accepts for changing it — the regraft guard refuses a
+ * bare UPDATE. It re-checks the uploader and the schedule role, refuses dual
+ * lines and rounds the line already holds, and writes the audit row. It
+ * compares rounds verbatim, so the code from `normalizeRound` is sent, as the
+ * attach stores it. Its refusals are sentences, shown as they come.
+ */
+export async function setMatchRoundOnLine(input: {
+  matchId: string;
+  round: string;
+}): Promise<SetRoundResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("set_match_round_on_line", {
+    p_match_id: input.matchId,
+    p_round: normalizeRound(input.round) ?? "",
+  });
+  if (error) return { ok: false, error: error.message };
+
+  const row = data as {
+    event_id: string;
+    event_name: string;
+    from: string | null;
+    round: string;
+  };
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/matches");
+  revalidatePath(`/dashboard/matches/${input.matchId}`);
+  revalidatePath("/dashboard/team/schedule");
+  revalidatePath(`/dashboard/team/schedule/${row.event_id}`);
+
+  return {
+    ok: true,
+    eventId: row.event_id,
+    eventName: row.event_name,
+    from: row.from,
+    round: row.round,
+  };
+}

@@ -49,6 +49,7 @@ import {
 import {
   attachMatchToLine,
   detachMatchFromLine,
+  setMatchRoundOnLine,
   findAttachableLines,
 } from "@/lib/schedule/attach-line";
 import { lineName, type AttachLine } from "@/lib/schedule/attach-line-state";
@@ -114,6 +115,8 @@ interface EventContext {
   endsOn: string;
   surface: string | null;
   format: { best_of?: number; ad_scoring?: boolean | null } | null;
+  /** Rounds the line holds without this match, as codes. */
+  takenRounds: string[];
 }
 
 interface Loaded {
@@ -123,6 +126,11 @@ interface Loaded {
   canAttach: boolean;
   /** On a line, and the viewer may take it off (`detach_match_from_event_line`). */
   canDetach: boolean;
+  /**
+   * On a tournament line, and the viewer may change its round
+   * (`set_match_round_on_line`). Never for a dual: its round is its slot.
+   */
+  canEditRound: boolean;
 }
 
 const FORM_ID = "edit-match-form";
@@ -363,6 +371,9 @@ export function EditMatchDialog({
   const formatEditable = !!match && !linked && !analyzed && !pendingLine;
   const roundKind = roundKindFor(matchType || null);
   const storedRound = normalizeRound(match?.round ?? null);
+  /** A match already on a tournament line whose round this viewer may change. */
+  const lineRoundEditable =
+    linked && event?.eventKind === "tournament" && !!loaded?.canEditRound;
   /**
    * Details edited before a line was picked that Save won't send — the event
    * owns them — so the dialog says which are lost. A tournament keeps the
@@ -533,6 +544,13 @@ export function EditMatchDialog({
       setFieldErrors({ round: "Choose the round." });
       return;
     }
+    // On a tournament line already: the PATCH never carries the round (the
+    // line owns it), so a changed one goes through `set_match_round_on_line`.
+    if (lineRoundEditable && !round) {
+      setFieldErrors({ round: "Choose the round." });
+      return;
+    }
+    const lineRoundChanged = lineRoundEditable && round !== (storedRound ?? "");
     const dateSent = detailsSent || tournamentLine;
     if (dateSent && !date) {
       setFieldErrors({ date: "Enter the date." });
@@ -620,6 +638,17 @@ export function EditMatchDialog({
         return;
       }
 
+      if (lineRoundChanged) {
+        const moved = await setMatchRoundOnLine({ matchId, round });
+        if (!moved.ok) {
+          // The rest saved; the round didn't. The refusal is a sentence.
+          setError(moved.error);
+          setSaving(false);
+          router.refresh();
+          return;
+        }
+      }
+
       if (pendingLine) {
         const attached = await attachMatchToLine({
           matchId,
@@ -696,7 +725,8 @@ export function EditMatchDialog({
             eventName: event.eventName,
             eventKind: event.eventKind,
             slot: event.slot,
-            round: match.round,
+            // An editable round reads the dialog's choice, as a pending line does.
+            round: lineRoundEditable ? round || null : match.round,
             date: dayOf(match.date) || event.startsOn,
             surface: event.surface,
           })}
@@ -961,6 +991,22 @@ export function EditMatchDialog({
                   />
                 </div>
               )}
+              {lineRoundEditable && event && (
+                <div className="grid grid-cols-2 gap-x-4">
+                  <EventRoundField
+                    value={round}
+                    takenRounds={event.takenRounds.filter(
+                      (taken) => taken !== storedRound,
+                    )}
+                    onChange={(next) => {
+                      setRound(next);
+                      clearFieldError("round");
+                    }}
+                    disabled={saving || detaching}
+                    error={fieldErrors.round}
+                  />
+                </div>
+              )}
               <div className="flex flex-col gap-1 text-[12px] leading-[1.5] text-[var(--ink-500)]">
                 {formatSentence && <span>{formatSentence}</span>}
                 {pendingLine ? (
@@ -983,6 +1029,7 @@ export function EditMatchDialog({
                     <LinkedEventLine
                       eventKind={event.eventKind}
                       canDetach={!!loaded?.canDetach}
+                      canEditRound={lineRoundEditable}
                       onRemove={() => {
                         setDetachError(null);
                         setRemoving(true);

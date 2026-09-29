@@ -93,3 +93,13 @@ is the runner's. Newest entries at the bottom.
 1. The three DB specs (detach, event-delete, set-round) have never run — they need the local container.
 2. A partial unique index on `matches(event_entry_id, round)` would make the taken-round rule race-proof beyond the entry lock.
 3. The author deleted "ITA All-American Tournament" from the app at 21:15 UTC — it detached 1 match (audit row), before T8 made detaches clear `round`.
+
+## T11 · Editable Round for a match on a tournament line — done
+
+**gate:** mechanical GATE PASS; completion `VERDICT: pass`. widget-states: dialog loading/empty/error paths unchanged.
+**changed:** GET `/api/matches/[matchId]` returns `canEditRound` and `event.takenRounds`. New `setMatchRoundOnLine` server action (rpc `set_match_round_on_line`, normalized code, error passed through, revalidates schedule paths). The Edit Match dialog shows `EventRoundField` for a linked tournament match the viewer can manage; Save PATCHes the rest, then calls the RPC only when the round changed; a refusal stays in the dialog's error slot. `LinkedEventLine` copy: "The date and surface come from the tournament. Change them in Schedule."
+**follow-ups:**
+
+1. A round refusal after a successful PATCH shows only the RPC sentence — consider the attach path's "Your other changes were saved, but …" prefix.
+2. `EventRoundField` has no legacy option for a stored round like "Week 4" (shows "Not set"; saving leaves it untouched).
+3. Eyes-on: a tournament match on a line, as a schedule manager — change the round and confirm the row moves on `/dashboard/team/schedule/[eventId]`.

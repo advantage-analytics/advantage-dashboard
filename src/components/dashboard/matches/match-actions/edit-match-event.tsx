@@ -27,24 +27,29 @@ export function eventFieldValue(match: {
 /**
  * The closing line for a match on a scheduled line. The event owns the date,
  * the line or round and the surface; `canDetach` adds the one way to take this
- * match off it (`detach_match_from_event_line`).
+ * match off it (`detach_match_from_event_line`). On a tournament line with
+ * `canEditRound` the round is the match's own, chosen in the dialog
+ * (`set_match_round_on_line`), so the sentence leaves it out.
  */
 export function LinkedEventLine({
   eventKind,
   canDetach,
+  canEditRound = false,
   onRemove,
   disabled,
 }: {
   eventKind: "dual" | "tournament";
   canDetach: boolean;
+  canEditRound?: boolean;
   onRemove: () => void;
   disabled?: boolean;
 }) {
   return (
     <>
       <span>
-        The date, {eventKind === "dual" ? "line" : "round"} and surface come
-        from the {eventKind}. Change them in Schedule.
+        {eventKind === "tournament" && canEditRound
+          ? "The date and surface come from the tournament. Change them in Schedule."
+          : `The date, ${eventKind === "dual" ? "line" : "round"} and surface come from the ${eventKind}. Change them in Schedule.`}
       </span>
       {canDetach && (
         <span>
@@ -126,11 +131,12 @@ export function EventField({
 }
 
 /**
- * The Round of a tournament line picked in "Add to an event". The attach takes
- * the match's own round (`attach_match_to_event_line`), so it is chosen here,
- * beside the line, rather than back in Details. Rounds the entry already has a
- * result for are left out; the RPC's "That round already has a result." stays
- * the backstop.
+ * The Round of a tournament line — one picked in "Add to an event", or the
+ * one the match is already on. The attach takes the match's own round
+ * (`attach_match_to_event_line`), and `set_match_round_on_line` changes it
+ * later, so it is chosen here, beside the line, rather than back in Details.
+ * Rounds the entry already has a result for are left out (never the match's
+ * own); the RPCs' "That round already has a result." stays the backstop.
  */
 export function EventRoundField({
   value,

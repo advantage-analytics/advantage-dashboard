@@ -12,6 +12,7 @@ import {
 } from "@/lib/matches/patch-match";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
+import { normalizeRound } from "@/lib/matches/round-options";
 import {
   rosterPlayerOptions,
   type RosterFullRow,
@@ -29,7 +30,8 @@ const BETA_FORCE_PRIVATE = true;
  * GET carries what the dialog decides its layout from, not just the editable
  * columns: whether the match was analyzed (format is then fixed), the event
  * line it sits on (E1 — the event owns date, round, type and surface), and
- * whether this viewer may attach a one-off team match to a line.
+ * whether this viewer may attach a one-off team match to a line, take it off
+ * one, or change its round on a tournament line.
  *
  * PATCH rules live in `normalizeMatchPatch` (`src/lib/matches/patch-match.ts`).
  */
@@ -59,6 +61,12 @@ export interface MatchEventContext {
   site: string;
   surface: string | null;
   format: { best_of?: number; ad_scoring?: boolean | null } | null;
+  /**
+   * Rounds the line already holds without this match — its other matches'
+   * and its outcomes' — as round codes. The Round menu leaves them out;
+   * `set_match_round_on_line` refuses them either way.
+   */
+  takenRounds: string[];
 }
 
 function unauthorized() {
@@ -101,14 +109,26 @@ async function analysisFor(supabase: Supabase, matchId: string) {
 async function eventContextFor(
   supabase: Supabase,
   entryId: string,
+  matchId: string,
 ): Promise<MatchEventContext | null> {
-  const { data } = await supabase
-    .from("program_event_entries")
-    .select(
-      "slot, discipline, event:program_events(id, name, kind, starts_on, ends_on, site, surface, format)",
-    )
-    .eq("id", entryId)
-    .maybeSingle();
+  const [{ data }, { data: others }, { data: outcomes }] = await Promise.all([
+    supabase
+      .from("program_event_entries")
+      .select(
+        "slot, discipline, event:program_events(id, name, kind, starts_on, ends_on, site, surface, format)",
+      )
+      .eq("id", entryId)
+      .maybeSingle(),
+    supabase
+      .from("matches")
+      .select("round")
+      .eq("event_entry_id", entryId)
+      .neq("id", matchId),
+    supabase
+      .from("program_event_outcomes")
+      .select("round")
+      .eq("entry_id", entryId),
+  ]);
   const row = data as {
     slot: string | null;
     discipline: string;
@@ -124,6 +144,16 @@ async function eventContextFor(
     } | null;
   } | null;
   if (!row?.event) return null;
+  const takenRounds = [
+    ...new Set(
+      [
+        ...((others ?? []) as { round: string | null }[]),
+        ...((outcomes ?? []) as { round: string | null }[]),
+      ]
+        .map((item) => normalizeRound(item.round))
+        .filter((value): value is string => value !== null),
+    ),
+  ];
   return {
     eventId: row.event.id,
     eventName: row.event.name,
@@ -135,6 +165,7 @@ async function eventContextFor(
     site: row.event.site,
     surface: row.event.surface,
     format: row.event.format,
+    takenRounds,
   };
 }
 
@@ -184,7 +215,7 @@ export async function GET(
   const [analysis, event, workspace] = await Promise.all([
     analysisFor(supabase, matchId),
     match.event_entry_id
-      ? eventContextFor(supabase, match.event_entry_id)
+      ? eventContextFor(supabase, match.event_entry_id, matchId)
       : Promise.resolve(null),
     attachable || detachable ? getWorkspaceContext() : Promise.resolve(null),
   ]);
@@ -196,8 +227,20 @@ export async function GET(
     canManageTeamSchedule(active);
   const canAttach = attachable && runsSchedule;
   const canDetach = detachable && runsSchedule;
+  // A tournament line's round is the match's own, changed through
+  // `set_match_round_on_line` on the detach's terms; a dual line's round is
+  // its slot, and the line decides it.
+  const canEditRound =
+    detachable && event?.eventKind === "tournament" && runsSchedule;
 
-  return NextResponse.json({ match, analysis, event, canAttach, canDetach });
+  return NextResponse.json({
+    match,
+    analysis,
+    event,
+    canAttach,
+    canDetach,
+    canEditRound,
+  });
 }
 
 export async function PATCH(

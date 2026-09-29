@@ -147,7 +147,7 @@ ready).
 
 ## T11 · Editable Round for a match on a tournament line
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T9, T10
 - **files:** src/app/api/matches/[matchId]/route.ts, src/lib/schedule/attach-line.ts, src/components/dashboard/matches/match-actions/edit-match-dialog.tsx, src/components/dashboard/matches/match-actions/edit-match-event.tsx, tests/edit-match-event.spec.ts (guess)
