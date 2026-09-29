@@ -3206,10 +3206,6 @@ export function useUploadMatchWizard({
           formData.opponentName,
         );
 
-        const eventName =
-          formData.eventName ||
-          `${formData.playerName} vs ${formData.opponentName}`;
-
         // Give the opponent an identity, when the uploader named their program.
         //
         // Best-effort and never blocking: `contribute_opponent_player` refuses
@@ -3295,8 +3291,10 @@ export function useUploadMatchWizard({
         const matchData = buildMatchData(
           matchId,
           {
+            // eventName goes through as typed: an empty Event field saves no
+            // event (null), never a synthesised "P1 vs P2" title. A preset or
+            // attached line has already put its name into formData.eventName.
             ...formData,
-            eventName,
             // An early-end answer left over from before the score was
             // finished would label a decided match "Retired".
             result: stopped ? formData.result : decidedResult,

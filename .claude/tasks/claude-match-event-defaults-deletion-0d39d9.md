@@ -60,7 +60,7 @@ ready).
 
 ## T4 · Wizard saves no event instead of "P1 vs P2"
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts, tests/wizard-event-default.spec.ts (new) (guess)
 - **done when:**
