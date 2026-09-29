@@ -53,7 +53,7 @@ import {
   tileCountLabel,
   EMPTY_VIZ_FILTERS,
 } from "./viz-model";
-import { truncatePillLabels, VIZ_TILE_GRID_CLASS } from "./viz-labels";
+import { VIZ_TILE_GRID_CLASS } from "./viz-labels";
 import { buildDefaultTiles, type DefaultTile } from "./default-tiles";
 
 // M3: `variant="wall"` never renders a default tile (`viz-wall.tsx` builds
@@ -208,7 +208,8 @@ export function SavedViewsBand({
       filters: view.filters,
       viewId: null,
     });
-    const pills = truncatePillLabels(entries.map((entry) => entry.label));
+    // Every active filter, unfolded — `CourtTile` folds by measured width.
+    const pills = entries.map((entry) => entry.label);
     const countLabel = tileCountLabel(result);
     const href = hrefFor({
       cut: view.cut,
