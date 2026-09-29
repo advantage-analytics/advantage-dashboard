@@ -23,10 +23,10 @@ const subtitle =
  */
 export default function BrandPanel() {
   return (
-    <div className="brand-mesh-gradient relative isolate flex h-full flex-1 flex-col items-start justify-between px-[64px] pt-[32px] pb-[40px] *:relative">
+    <div className="brand-mesh-gradient relative isolate flex h-full flex-1 flex-col items-start justify-between px-[64px] pt-[32px] pb-[40px]">
       {/* The landing hero's live dot grid over the same mesh, so the auth
           panel reads as the marketing site continued. */}
-      <LiveDots className="absolute!" />
+      <LiveDots className="-z-10" />
       <a
         href={MARKETING_SITE_URL}
         aria-label="Advantage Analytics — Home"
