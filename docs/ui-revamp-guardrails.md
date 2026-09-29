@@ -144,7 +144,7 @@ be. Doubles teams and existing users depend on it.
 > audit-logged to `program_audit_log` as `event.deleted` with
 > `detached_matches`, counted before the detach. A bare client UPDATE that
 > nulls `event_entry_id` is refused exactly as before. Migration:
-> `supabase/migrations/20260929170000_event_delete_detaches_under_client.sql`.
+> `supabase/migrations/20260929210705_event_delete_detaches_under_client.sql`.
 >
 > The same exception covers `detach_match_from_event_line`, added the same
 > day: the single-match inverse of `attach_match_to_event_line`, from the
@@ -160,7 +160,7 @@ be. Doubles teams and existing users depend on it.
 > transaction-local marker names that one match, so a bare client UPDATE
 > stays refused; a saved outcome on the line does not block the detach and
 > is left untouched. Migration:
-> `supabase/migrations/20260929170100_detach_match_from_event_line.sql`.
+> `supabase/migrations/20260929210741_detach_match_from_event_line.sql`.
 
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >

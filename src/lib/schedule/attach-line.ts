@@ -204,7 +204,7 @@ export type DetachResult =
 /**
  * The Edit Match dialog's "Remove from event": takes the match off its line
  * through `detach_match_from_event_line`
- * (`supabase/migrations/20260929170100_detach_match_from_event_line.sql`),
+ * (`supabase/migrations/20260929210741_detach_match_from_event_line.sql`),
  * the only single-match path off a line the database accepts. It re-checks
  * the uploader and the schedule role and writes the audit row; its refusals
  * are sentences, shown as they come.

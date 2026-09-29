@@ -54,7 +54,7 @@ const user = randomUUID(),
 // `request.jwt.claim.sub` set, the trigger treated the session as trusted and
 // the one-match deletion below passed against the pre-migration trigger, which
 // in production refused the FK's entry → NULL move with 42501
-// (20260929170000_event_delete_detaches_under_client.sql).
+// (20260929210705_event_delete_detaches_under_client.sql).
 const actor = `set local role authenticated; select set_config('request.jwt.claim.sub','${user}',true); select set_config('request.jwt.claims','{"role":"authenticated","sub":"${user}"}',true);`;
 const setup = `insert into auth.users(id,email) values('${user}','${user}@test.invalid');
 insert into public.programs(id,school_name) values('${program}','Delete fixture');

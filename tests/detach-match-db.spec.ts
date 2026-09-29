@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
 /**
- * `20260929170100_detach_match_from_event_line.sql`, proven against a
+ * `20260929210741_detach_match_from_event_line.sql`, proven against a
  * database that has it applied. Same shape as
  * `schedule-event-delete-db.spec.ts`: explicit operator opt-in to the one
  * verified disposable local container, psql over docker, every case inside a

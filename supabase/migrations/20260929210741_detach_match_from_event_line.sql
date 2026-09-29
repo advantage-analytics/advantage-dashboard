@@ -4,7 +4,7 @@
 -- no line → a line; the reverse had no path at all. A match filed on the
 -- wrong dual line, or on a tournament it did not belong to, could only be
 -- fixed by deleting it — which loses the video analysis — or by deleting the
--- whole event, which detaches every match on it (20260929170000). This adds
+-- whole event, which detaches every match on it (20260929210705). This adds
 -- the single-match inverse on the attach exception's terms: one explicit
 -- action by the match's own uploader, who must also run that program's
 -- schedule, routed through one checked function that writes the audit row.
@@ -21,7 +21,7 @@
 -- block taking the match *off*, and the outcome row itself is untouched.
 --
 -- `matches_block_client_regraft` below is T1's body from
--- 20260929170000_event_delete_detaches_under_client.sql, plus the
+-- 20260929210705_event_delete_detaches_under_client.sql, plus the
 -- `advantage.detach_match_id` branch; `attach_match_to_event_line` was read
 -- live with pg_get_functiondef on 2026-09-29 and mirrored. The migrations
 -- folder lags the database. Reviewed exception recorded in
