@@ -10,7 +10,15 @@ info:
 
     **Authentication.** Signed-in routes read the Supabase session from its
     cookie (`cookieAuth`) through `createClient()`; there is no bearer token.
-    `/api/programs/search` is the only public route in this file.
+    `/api/programs/search` is the only public browser route in this file.
+
+    **Machine callers.** The rule above is about browser routes. The vendor
+    and Stripe webhooks and the cleanup cron carry no session: they
+    authenticate with `splitstepHmac`, `stripeSignature` and `cronBearer`.
+    Two further operations take no credential at all — the vendor webhook's
+    GET liveness check and the retired `/api/create-checkout-session`, which
+    answers 410 to everyone. The admin upload routes use the session and
+    additionally require `users.is_admin`.
 
     **Same origin.** Every mutation under `/api/matches/{matchId}/video`
     also requires a request from a page this deployment served
@@ -29,6 +37,12 @@ info:
     - `/api/matches/{matchId}` answers `ErrorResponse` with `error` only, plus
       `field` on a validation refusal;
     - `/api/upload` and `/api/validate-file` answer `{ success: false, error }`.
+
+    The routes added in part 2 keep to the same shapes with three additions:
+    the video-analysis routes answer `ErrorResponse`, with the allowance
+    figures, the builder's `details` or the resubmit `reason` beside `error`
+    where the handler adds them; the admin upload routes answer
+    `{ ok: false, message }`; and the two insight routes answer plain text.
 servers:
   - url: https://app.advantage-analytics.com
     description: Production
@@ -50,6 +64,22 @@ tags:
     description: The match wizard's SwingVision .xlsx validation and upload.
   - name: Programs
     description: Program directory typeaheads for the claim and setup flows.
+  - name: Video analysis
+    description: >-
+      Advantage Intelligence — the upload credential, submission, retry,
+      statistics rebuild and allowance reading of a match video's analysis.
+      Decisions live in each route's `handler.ts` and in
+      `src/lib/services/splitstep/`.
+  - name: Webhooks
+    description: Machine callers that sign their deliveries instead of holding a session.
+  - name: Cron
+    description: Scheduled jobs, called by Vercel Cron with `CRON_SECRET`.
+  - name: Insights
+    description: The Focus cards' streamed one-sentence claims.
+  - name: Admin uploads
+    description: The admin console's file and video submissions.
+  - name: Billing
+    description: Checkout, retired for the beta.
 paths:
   /api/matches/{matchId}:
     parameters:
@@ -1256,6 +1286,1254 @@ paths:
               example:
                 error: Unauthorized
 
+  /api/splitstep/jobs:
+    post:
+      tags: [Video analysis]
+      operationId: submitAnalysisJob
+      summary: Submit an uploaded match video for analysis
+      description: >-
+        Spends a workspace's video allowance and hands the job to the
+        Advantage Intelligence vendor. The upload wizard calls it the moment a
+        transfer finishes; the `processing_jobs` row and the Azure blob
+        already exist. The ladder (`handler.ts`): sign-in → body → job id →
+        deployment config → the caller's own job → submittable → match →
+        the three vendor answers → payload build → the match's billing
+        workspace → the upload contract → a compare-and-set claim
+        (`uploaded → submitting`) → quota reservation → vendor URL → vendor
+        POST. Every refusal before the claim leaves the row `uploaded`; a
+        refused or failed reservation hands the claim back to `uploaded`; only
+        a failure past the reservation marks the job `failed` (502). Billed to
+        the MATCH's workspace, never the active one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitJobRequest"
+            examples:
+              firstSubmit:
+                summary: The wizard's first submit carries the three answers
+                value:
+                  jobId: 3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f
+                  initialTopPlayerIsPlayer1: true
+                  adScoring: true
+                  fixedCamera: true
+              retry:
+                summary: A retry sends none; the job or match row supplies them
+                value:
+                  jobId: 3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f
+      responses:
+        "200":
+          description: The vendor accepted the job; the row is `queued`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmitJobResponse"
+              example:
+                jobId: 3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f
+                externalJobId: ss-job-81f2c0
+                status: queued
+                billableSeconds: 5182
+                usedSeconds: 5182
+                capSeconds: 7200
+        "400":
+          description: >-
+            The body is not JSON, has no `jobId`, or neither the body, the job
+            row nor the match row records which player starts at the top of
+            the frame (refused, never defaulted).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidJson:
+                  value:
+                    error: Invalid JSON body
+                noJobId:
+                  value:
+                    error: jobId is required
+                noOrientation:
+                  value:
+                    error: initialTopPlayerIsPlayer1 is required and must be a boolean
+        "401":
+          $ref: "#/components/responses/SplitstepNotSignedIn"
+        "403":
+          description: >-
+            A decided refusal: the caller holds no workspace the match
+            belongs to, the upload contract refuses the row (program status,
+            role, line, athlete), the allowance is not open to this caller
+            (`reserveQuota()`'s permission refusal, which carries
+            `usedSeconds` and `capSeconds` of 0), or an admin-console video
+            operation does not line up with this job.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                noBillingWorkspace:
+                  $ref: "#/components/examples/NoBillingWorkspace"
+                notOnRoster:
+                  $ref: "#/components/examples/AthleteNotOnRoster"
+                pendingApproval:
+                  $ref: "#/components/examples/PendingApproval"
+                notPermitted:
+                  summary: The allowance is not open to this player
+                  value:
+                    error: Sending video for Stanford Women's Tennis isn't switched on for your account. A coach can turn on "Can send video" on your roster row.
+                    usedSeconds: 0
+                    capSeconds: 0
+                adminUnavailable:
+                  summary: The admin-console video check threw
+                  value:
+                    error: This video operation is unavailable.
+                adminMismatch:
+                  summary: The admin-console operation names another match or job
+                  value:
+                    error: Video operation mismatch
+        "404":
+          $ref: "#/components/responses/SplitstepJobNotFound"
+        "409":
+          description: >-
+            The job is not in a state a submission accepts, or another
+            submission holds it. Nothing was spent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                alreadySubmitted:
+                  summary: The job already has a vendor id, or already holds a reservation (23505)
+                  value:
+                    error: This match has already been submitted for analysis.
+                stillUploading:
+                  value:
+                    error: The video is still uploading. Try again once it finishes.
+                wrongStatus:
+                  summary: Any status other than `uploaded` or `uploading`
+                  value:
+                    error: This job is failed and cannot be submitted.
+                noVideo:
+                  value:
+                    error: No video is attached to this job.
+                noTrim:
+                  value:
+                    error: This job has no trim window set.
+                claimLost:
+                  summary: A concurrent POST won the compare-and-set claim
+                  value:
+                    error: This match is already being submitted.
+                adminAnswers:
+                  summary: An admin-console job sent answers that differ from the saved ones
+                  value:
+                    error: Use this operation's saved video answers.
+                adminClaim:
+                  summary: The admin-console claim was refused
+                  value:
+                    error: This video is already being submitted or is no longer eligible.
+        "422":
+          description: >-
+            `buildSplitStepJobRequest()` refused the payload — a doubles match,
+            a trim that disagrees with the score, or a missing vendor answer.
+            Nothing was spent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobNotAnalysableResponse"
+              example:
+                error: This match cannot be analysed yet.
+                details:
+                  - Video analysis supports singles matches only.
+        "429":
+          $ref: "#/components/responses/QuotaExhausted"
+        "500":
+          description: The job or its match could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                job:
+                  value:
+                    error: Could not load the job
+                match:
+                  value:
+                    error: Could not load the match for this job.
+        "502":
+          description: >-
+            Past the reservation: the vendor URL could not be minted, the
+            vendor refused the POST, or its answer carried no job id. The
+            reservation is handed back and the job is marked `failed`. The
+            vendor's own text stays in the server log.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Could not submit this match for analysis.
+                code: vendor_rejected
+        "503":
+          description: >-
+            Try again: analysis is not configured on this deployment, the
+            roster or program status could not be read, the claim write
+            failed, the reservation RPC gave no answer, or (admin console
+            only) the vendor accepted the job but its `queued` status could
+            not be saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notConfigured:
+                  $ref: "#/components/examples/AnalysisNotConfigured"
+                rosterUnknown:
+                  $ref: "#/components/examples/RosterUnknown"
+                claimFailed:
+                  value:
+                    error: Could not start the submission. Try again.
+                reservationFailed:
+                  value:
+                    error: Could not reserve analysis time. Try again.
+                adminReconcile:
+                  value:
+                    error: The provider accepted this video, but its status could not be saved. Administrator reconciliation is required.
+
+  /api/splitstep/jobs/{jobId}/resubmit:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    post:
+      tags: [Video analysis]
+      operationId: resubmitAnalysisJob
+      summary: Retry a failed analysis
+      description: >-
+        The "Retry analysis" button. Ownership and the billing workspace are
+        resolved here from the session; everything else — terminal state,
+        attempt ceiling, duplicate guard, blob existence, the upload contract,
+        quota and the vendor POST — is `resubmitJob()`, shared with the
+        webhook's automatic retry. A success is a NEW child job. No body is
+        read. Every refusal from `resubmitJob()` answers `{ error, reason }`
+        with the status `REFUSAL_STATUS` maps `reason` to.
+      responses:
+        "200":
+          description: The child job was submitted and is `queued`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResubmitJobResponse"
+              example:
+                jobId: 4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a
+                externalJobId: ss-job-81f2d7
+                status: queued
+        "401":
+          $ref: "#/components/responses/SplitstepNotSignedIn"
+        "403":
+          description: >-
+            The caller holds no workspace the match belongs to, or the upload
+            contract refuses the row (`not_eligible`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResubmitRefusalResponse"
+              examples:
+                noBillingWorkspace:
+                  $ref: "#/components/examples/NoBillingWorkspace"
+                notEligible:
+                  summary: not_eligible
+                  value:
+                    error: That player isn't on Stanford Women's Tennis's roster, so the match can't be recorded for them.
+                    reason: not_eligible
+        "404":
+          description: >-
+            The id is not a UUID, the job or its match does not exist, the
+            job is not the caller's, or its uploader's account is gone
+            (`not_found`). Indistinguishable on purpose.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResubmitRefusalResponse"
+              examples:
+                route:
+                  summary: Answered by the route
+                  value:
+                    error: Job not found
+                notFound:
+                  summary: not_found
+                  value:
+                    error: Job not found.
+                    reason: not_found
+        "409":
+          description: >-
+            The failed job cannot be retried as it stands: it is not
+            `failed` (`not_failed`), the vendor rejected the recording itself
+            (`input_rejected`), another analysis for the match is live
+            (`in_flight_duplicate`), the chain is at its three-attempt ceiling
+            (`attempt_ceiling`), or the source video is missing or could not
+            be checked (`video_unavailable`). `already_auto_resubmitted` maps
+            here too but only the webhook's automatic path can produce it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResubmitRefusalResponse"
+              examples:
+                notFailed:
+                  summary: not_failed
+                  value:
+                    error: Only a failed analysis can be retried; this one is completed.
+                    reason: not_failed
+                inputRejected:
+                  summary: input_rejected
+                  value:
+                    error: This video didn't meet one of the recording requirements, so retrying it would stop the same way. Upload a new recording instead.
+                    reason: input_rejected
+                inFlight:
+                  summary: in_flight_duplicate
+                  value:
+                    error: An analysis for this match is already in progress.
+                    reason: in_flight_duplicate
+                ceiling:
+                  summary: attempt_ceiling
+                  value:
+                    error: This match has been attempted the maximum number of times. Contact support if the analysis keeps failing.
+                    reason: attempt_ceiling
+                videoGone:
+                  summary: video_unavailable
+                  value:
+                    error: The original video is no longer stored, so this analysis cannot be retried. Upload the match again.
+                    reason: video_unavailable
+        "422":
+          description: >-
+            The match cannot be rebuilt into a vendor request
+            (`invalid_metadata`): it could not be read, it has no orientation
+            answer, or the builder refused it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResubmitRefusalResponse"
+              example:
+                error: This match is missing its camera-orientation answer and cannot be retried automatically.
+                reason: invalid_metadata
+        "429":
+          description: >-
+            The reservation was refused (`quota`) — for the manual path, the
+            allowance is spent or not open to this caller. The child row is
+            removed. Unlike `/api/splitstep/jobs`, a permission refusal here is
+            also 429, and the body carries no figures.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResubmitRefusalResponse"
+              example:
+                error: This match needs 1 hr 35 min of analysis but only 20 min is left in your monthly allowance (2 hr). It resets at the start of next month; a shorter trim will fit sooner.
+                reason: quota
+        "500":
+          description: The job could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Could not load the job
+        "502":
+          description: >-
+            `submit_failed`: the retry history, the live-job check or the
+            child insert failed, or the vendor refused the POST (the child is
+            then marked `failed` and its reservation handed back).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResubmitRefusalResponse"
+              examples:
+                vendor:
+                  value:
+                    error: Could not submit the retry to the analysis provider.
+                    reason: submit_failed
+                history:
+                  value:
+                    error: Could not read this job’s retry history.
+                    reason: submit_failed
+        "503":
+          description: >-
+            Try again: the match read failed (answered by the route, before
+            any billing workspace is chosen), analysis is not configured
+            (`not_configured`), the reservation RPC gave no answer
+            (`quota_unavailable`), or the roster or program status could not
+            be read (`eligibility_unknown`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResubmitRefusalResponse"
+              examples:
+                matchRead:
+                  summary: Answered by the route
+                  value:
+                    error: Could not load the match. Try again.
+                notConfigured:
+                  summary: not_configured
+                  value:
+                    error: Analysis is not configured on this deployment.
+                    reason: not_configured
+                quotaUnavailable:
+                  summary: quota_unavailable
+                  value:
+                    error: Could not reserve analysis time. Try again.
+                    reason: quota_unavailable
+                eligibilityUnknown:
+                  summary: eligibility_unknown
+                  value:
+                    error: We couldn't load Stanford Women's Tennis's roster. Try again.
+                    reason: eligibility_unknown
+
+  /api/splitstep/jobs/{jobId}/rederive:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    post:
+      tags: [Video analysis]
+      operationId: rederiveAnalysisJob
+      summary: Rebuild a job's statistics from delivered results
+      description: >-
+        The "Rebuild statistics" button on a `derivation_failed` job whose
+        build crashed. Re-runs `deriveAndPublish()` on the stored vendor
+        results: no vendor call, no allowance, no attempt counted. A
+        compare-and-set claim (`derivation_failed → deriving`) keeps two
+        clicks from both deriving. No body is read.
+      responses:
+        "200":
+          description: The statistics were rebuilt and the job is `completed`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RederiveResponse"
+              example:
+                jobId: 3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f
+                status: completed
+        "401":
+          $ref: "#/components/responses/SplitstepNotSignedIn"
+        "404":
+          $ref: "#/components/responses/SplitstepJobNotFound"
+        "409":
+          description: The job is not rebuildable, or a rebuild already holds it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notWaiting:
+                  summary: Not `derivation_failed`
+                  value:
+                    error: This match isn't waiting on a statistics rebuild.
+                notRederive:
+                  summary: The failure is not one a rebuild fixes
+                  value:
+                    error: The statistics can't be rebuilt for this match.
+                noResults:
+                  value:
+                    error: The analysis results for this match are no longer available to rebuild from.
+                claimLost:
+                  summary: Another click won the claim
+                  value:
+                    error: The statistics are already rebuilding.
+        "500":
+          description: >-
+            The job could not be read, the claim write failed, or the rebuild
+            itself failed — the row is then back at `derivation_failed` and
+            the body says so.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RederiveFailedResponse"
+              examples:
+                load:
+                  value:
+                    error: Could not load the job
+                claim:
+                  value:
+                    error: Could not start the rebuild
+                derive:
+                  value:
+                    error: The statistics could not be rebuilt.
+                    status: derivation_failed
+
+  /api/splitstep/upload-url:
+    post:
+      tags: [Video analysis]
+      operationId: createAnalysisUploadUrl
+      summary: Mint a write-only upload URL for a match video
+      description: >-
+        Returns a `cw` SAS for exactly one blob name and records that name on
+        the match's live job before the bytes move. The same questions the
+        submit route asks — the match's workspace, the upload contract, the
+        video permission and (as a read, failing open) the allowance — are
+        asked here first, because the step after the credential is a
+        multi-gigabyte transfer. Nothing is reserved; `/api/splitstep/jobs`
+        remains the authority. The URL is a credential: never log it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadUrlRequest"
+            example:
+              matchId: 5b0f4c1e-8a7d-4b43-9f7e-1c2d3e4f5a6b
+              fileName: spring-open-r16.mp4
+      responses:
+        "200":
+          description: A write-only URL for the named blob.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadUrlResponse"
+              example:
+                uploadUrl: https://example.blob.core.windows.net/splitstep-videos/videos/0e9a2b7c-4d1f-4a8e-9b3c-2f1e0d9c8b7a/5b0f4c1e-8a7d-4b43-9f7e-1c2d3e4f5a6b/original.mp4?sv=2025-01-05&sp=cw&sig=REDACTED
+                videoObjectKey: videos/0e9a2b7c-4d1f-4a8e-9b3c-2f1e0d9c8b7a/5b0f4c1e-8a7d-4b43-9f7e-1c2d3e4f5a6b/original.mp4
+                expiresAt: "2026-09-29T21:00:00.000Z"
+        "400":
+          description: The body is not JSON, a field is missing, or the file is not an accepted container.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidJson:
+                  value:
+                    error: Invalid JSON body
+                missing:
+                  value:
+                    error: matchId and fileName are required
+                container:
+                  value:
+                    error: 'Unsupported video container for "match.avi". Expected one of .mp4, .mov, .m4v, .mkv, .webm.'
+        "401":
+          $ref: "#/components/responses/SplitstepNotSignedIn"
+        "403":
+          description: >-
+            The caller holds no workspace the match belongs to, the upload
+            contract refuses the row, the workspace's video allowance is not
+            open to this caller (`explainVideoRefusal()`), or the admin-console
+            video check threw.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                noBillingWorkspace:
+                  $ref: "#/components/examples/NoBillingWorkspace"
+                notOnRoster:
+                  $ref: "#/components/examples/AthleteNotOnRoster"
+                pendingApproval:
+                  $ref: "#/components/examples/PendingApproval"
+                notPermitted:
+                  summary: A player whose "Can send video" is off
+                  value:
+                    error: Sending video for Stanford Women's Tennis isn't switched on for your account. A coach can turn on "Can send video" on your roster row.
+                adminUnavailable:
+                  value:
+                    error: No such video operation
+        "404":
+          description: >-
+            `matchId` is not a UUID, the match does not exist, or it is not
+            the caller's. Indistinguishable on purpose.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: No such match
+        "409":
+          description: >-
+            Admin console only: the blob name could not be recorded on the
+            operation's job. (For an ordinary upload that failure is logged
+            and the URL is still returned.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Could not reserve the video upload
+        "429":
+          $ref: "#/components/responses/QuotaExhausted"
+        "500":
+          description: The match could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Could not load match
+        "503":
+          description: >-
+            Try again: the roster or program status could not be read, or
+            Azure storage is not configured on this deployment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                rosterUnknown:
+                  $ref: "#/components/examples/RosterUnknown"
+                storage:
+                  value:
+                    error: Video upload is not configured on this deployment.
+
+  /api/splitstep/hours-left:
+    get:
+      tags: [Video analysis]
+      operationId: getVideoHoursLeft
+      summary: Video analysis time left this month
+      description: >-
+        For the header's Beta pill: the ACTIVE workspace's remaining seconds
+        from `peekQuota()` — for an individual, the tighter of their own cap
+        and the shared beta band. Advisory; `reserveQuota()` still decides at
+        submit. `workspaceId` lets the pill drop an answer for a workspace it
+        has since left.
+      responses:
+        "200":
+          description: The active workspace's figures.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HoursLeft"
+              examples:
+                personal:
+                  summary: An individual with time left
+                  value:
+                    workspaceId: 0e9a2b7c-4d1f-4a8e-9b3c-2f1e0d9c8b7a
+                    remainingSeconds: 1200
+                    capSeconds: 7200
+                    bandFull: false
+                bandFull:
+                  summary: The shared beta band ran out first
+                  value:
+                    workspaceId: 0e9a2b7c-4d1f-4a8e-9b3c-2f1e0d9c8b7a
+                    remainingSeconds: 0
+                    capSeconds: 7200
+                    bandFull: true
+        "401":
+          $ref: "#/components/responses/SplitstepNotSignedIn"
+        "503":
+          description: The usage ledger could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Could not read usage
+
+  /api/webhooks/splitstep:
+    get:
+      tags: [Webhooks]
+      operationId: splitstepWebhookLiveness
+      summary: Liveness check for the vendor webhook URL
+      description: >-
+        Lets the endpoint URL be confirmed reachable before anything is
+        wired. Unauthenticated, and says nothing a holder of the URL does not
+        already know.
+      security: []
+      responses:
+        "200":
+          description: The endpoint is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SplitstepWebhookLiveness"
+              example:
+                endpoint: splitstep-webhook
+                status: ready
+                method: POST
+    post:
+      tags: [Webhooks]
+      operationId: receiveSplitstepWebhook
+      summary: Receive a vendor job-state delivery
+      description: >-
+        The Advantage Intelligence vendor POSTs here when a job changes state
+        (`job_queued`, `job_processing`, `job_completed`, `job_failed`). The
+        shape is verify → record → 200 → everything else in `after()`: the
+        vendor has a 30 s timeout and no retry policy, so the only work before
+        the answer is recording the envelope, which is what makes the rest
+        recoverable by hand.
+
+
+        **Authentication** (`webhook-auth.ts`). With
+        `SPLITSTEP_WEBHOOK_SECRET` set the endpoint fails closed: the
+        signature (`x-hmac-signature`, see `splitstepHmac`) must match, and a
+        delivery with no signature header is refused too — unless
+        `SPLITSTEP_WEBHOOK_ALLOW_UNSIGNED=true`, the pilot escape hatch, which
+        accepts it recorded `signature_verified = false`. A header carrying
+        the raw shared secret instead of an HMAC is accepted but recorded
+        unverified. With no secret configured at all the endpoint is open and
+        logs a warning on every delivery.
+
+
+        A delivery that matches no job is still recorded and answers 200 — a
+        retry would orphan identically.
+      security:
+        - splitstepHmac: []
+      requestBody:
+        required: true
+        description: >-
+          Read as raw bytes and verified before any parsing; the HMAC is over
+          exactly these bytes. Any body is recorded verbatim — a non-JSON or
+          unrecognised one yields null fields, never a refusal.
+          `parseWebhookPayload()` matches field names with case and
+          punctuation ignored and walks nested objects.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SplitstepWebhookPayload"
+            examples:
+              completed:
+                summary: job_completed (September 2026 API)
+                value:
+                  job_id: ss-job-81f2c0
+                  event: job_completed
+                  status: completed
+                  strokes_url: https://vendor.blob.core.windows.net/results/ss-job-81f2c0/strokes.json?sv=2025-01-05&sp=r&sig=REDACTED
+                  players_url: https://vendor.blob.core.windows.net/results/ss-job-81f2c0/players.json?sv=2025-01-05&sp=r&sig=REDACTED
+                  trajectories_url: null
+                  trimmed_video_url: https://vendor.blob.core.windows.net/results/ss-job-81f2c0/trimmed.mp4?sv=2025-01-05&sp=r&sig=REDACTED
+              failed:
+                summary: job_failed with a structured error
+                value:
+                  job_id: ss-job-81f2c0
+                  event: job_failed
+                  status: failed
+                  error:
+                    code: INTERNAL_ERROR
+                    category: internal
+                    step: downloading_video
+                    message: We could not download the video. Please try again.
+      responses:
+        "200":
+          description: >-
+            The delivery is recorded. Results download, grading, derivation,
+            quota release and any automatic retry run after this answer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SplitstepWebhookAck"
+              example:
+                received: true
+                deliveryId: 6e7f8a9b-0c1d-4e2f-8a3b-4c5d6e7f8a9b
+        "400":
+          description: The request body could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Unreadable body
+        "401":
+          description: >-
+            A secret is configured and the signature did not match, or no
+            signature header was sent and `SPLITSTEP_WEBHOOK_ALLOW_UNSIGNED`
+            is not `true`. One body for every cause; the reason is a server
+            log line.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Unauthorized
+        "500":
+          description: >-
+            `record_splitstep_webhook` failed, so the envelope is not durable.
+            The record call is idempotent, so a redelivery costs nothing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Failed to record delivery
+
+  /api/webhooks/stripe:
+    post:
+      tags: [Webhooks]
+      operationId: receiveStripeWebhook
+      summary: Receive a Stripe event
+      description: >-
+        Verifies the `Stripe-Signature` header against
+        `STRIPE_WEBHOOK_SECRET` over the raw body, then acts on
+        `checkout.session.completed` only: the user named by
+        `metadata.user_id` (or `client_reference_id`) is moved to Pro. Every
+        other event type answers 200 untouched. Kept after checkout was
+        retired, for receipts and any checkout already open. The module
+        throws at load when `STRIPE_WEBHOOK_SECRET` is unset, so on such a
+        deployment every request fails before this handler runs.
+      security:
+        - stripeSignature: []
+      requestBody:
+        required: true
+        description: A Stripe `Event` object, verified as raw bytes.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StripeEvent"
+            example:
+              id: evt_1Q2w3E4r5T6y7U8i
+              object: event
+              type: checkout.session.completed
+              data:
+                object:
+                  id: cs_test_a1B2c3D4
+                  object: checkout.session
+                  client_reference_id: 0e9a2b7c-4d1f-4a8e-9b3c-2f1e0d9c8b7a
+                  metadata:
+                    user_id: 0e9a2b7c-4d1f-4a8e-9b3c-2f1e0d9c8b7a
+      responses:
+        "200":
+          description: The event was handled, or needed nothing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StripeWebhookAck"
+              examples:
+                handled:
+                  value:
+                    received: true
+                alreadyPro:
+                  summary: The user was already on Pro
+                  value:
+                    received: true
+                    message: Already Pro
+        "400":
+          description: >-
+            No `Stripe-Signature` header, a signature that does not verify
+            (the Stripe SDK's message follows `Webhook Error: `), or a
+            completed checkout with no user id on it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                noSignature:
+                  value:
+                    error: No signature
+                badSignature:
+                  value:
+                    error: "Webhook Error: No signatures found matching the expected signature for payload."
+                noUser:
+                  value:
+                    error: No user ID
+        "404":
+          description: The session's user id names no `users` row.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: User not found
+        "500":
+          description: The plan update failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Failed to update user plan
+
+  /api/cron/cleanup-match-videos:
+    get:
+      tags: [Cron]
+      operationId: runMatchVideoCleanup
+      summary: Daily match-video retention and cleanup sweep
+      description: >-
+        Scheduled by `vercel.json` at 05:00 UTC. Expires videos a year
+        unwatched, warns those 30 days from it, then sweeps retired and
+        abandoned attachments out of storage. The bearer check runs first and
+        fails closed: an unset or blank `CRON_SECRET` refuses every request,
+        and no step — nor the service-role client — runs until it matches.
+        The three steps are independent: a failed expire or warn step is
+        reported as a 500 but the sweep still runs. A 200 can still count
+        rows that failed and were backed off.
+      security:
+        - cronBearer: []
+      responses:
+        "200":
+          description: Every step ran.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CleanupCronBody"
+              example:
+                ok: true
+                reason: cron
+                expired: 1
+                warned: 2
+                emailed: 2
+                claimed: 4
+                outcomes:
+                  cleaned_up: 3
+                  staged_shed: 0
+                  rescheduled: 1
+                  lease_lost: 0
+                  version_changed: 0
+                  failed: 0
+                  unsettled: 0
+                rpcFailures: 0
+                durationMs: 1843
+        "401":
+          description: >-
+            `CRON_SECRET` is unset, or the `Authorization` header is missing,
+            not a bearer, empty or wrong. One body for every cause.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CleanupCronError"
+              example:
+                ok: false
+                error: unauthorized
+        "500":
+          description: >-
+            The sweep threw (`cleanup_failed`, no counts), or it ran but the
+            batch claim was refused (`claim_failed`) or the expire or warn
+            step threw (`expiry_failed` / `warning_failed`) — those three
+            carry the full report beside `error`.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/CleanupCronError"
+                  - $ref: "#/components/schemas/CleanupCronFailedRun"
+              examples:
+                sweepThrew:
+                  value:
+                    ok: false
+                    error: cleanup_failed
+                warnFailed:
+                  value:
+                    ok: false
+                    reason: cron
+                    expired: 0
+                    warned: 0
+                    emailed: 0
+                    claimed: 2
+                    outcomes:
+                      cleaned_up: 2
+                      staged_shed: 0
+                      rescheduled: 0
+                      lease_lost: 0
+                      version_changed: 0
+                      failed: 0
+                      unsettled: 0
+                    rpcFailures: 0
+                    durationMs: 912
+                    error: warning_failed
+
+  /api/home-insight:
+    post:
+      tags: [Insights]
+      operationId: streamHomeInsight
+      summary: Stream the personal Focus card's claim line
+      description: >-
+        One sentence of at most eight words, no digits, streamed as plain
+        text from `getLLMStream()`. Every figure the prompt uses is
+        recomputed server-side for the signed-in player; no body is read.
+        Answers 204 when the player has no matches, rather than inventing a
+        claim. A stream that fails after the first byte errors the body, not
+        the status.
+      responses:
+        "200":
+          $ref: "#/components/responses/InsightStream"
+        "204":
+          description: No matches recorded, so there is nothing to claim.
+        "401":
+          $ref: "#/components/responses/TextUnauthorized"
+        "500":
+          $ref: "#/components/responses/InsightLlmError"
+
+  /api/team-insight:
+    post:
+      tags: [Insights]
+      operationId: streamTeamInsight
+      summary: Stream Team Home's Focus card claim line
+      description: >-
+        Team Home's counterpart to `/api/home-insight`, about the ACTIVE team
+        workspace's squad rather than the viewer. Same contract: one
+        sentence, plain-text stream, 204 when there is no analysed dual
+        match or no insight to make. The program comes from the workspace
+        cookie through `getWorkspaceContext()`; no body is read.
+      responses:
+        "200":
+          $ref: "#/components/responses/InsightStream"
+        "204":
+          description: No analysed dual match this season, so there is nothing to claim.
+        "401":
+          $ref: "#/components/responses/TextUnauthorized"
+        "404":
+          description: The active workspace is personal, which has no squad.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Not a program
+        "500":
+          $ref: "#/components/responses/InsightLlmError"
+
+  /api/admin/uploads/file:
+    get:
+      tags: [Admin uploads]
+      operationId: getAdminMatchFileStatus
+      summary: Read an admin-console file submission's durable status
+      description: >-
+        Admin only (`users.is_admin`), and only for an operation this admin
+        started. The wizard reads it after a submit whose answer was lost.
+      parameters:
+        - name: operationId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d
+        - name: itemId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 9b0c1d2e-3f4a-4b6c-9d7e-8f9a0b1c2d3e
+      responses:
+        "200":
+          $ref: "#/components/responses/AdminFileStatus"
+        "400":
+          description: The ids are malformed, the operation is not this admin's, or nothing was submitted for it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRefusal"
+              examples:
+                invalid:
+                  value:
+                    ok: false
+                    message: Invalid operation.
+                unavailable:
+                  value:
+                    ok: false
+                    message: This operation is unavailable.
+                none:
+                  value:
+                    ok: false
+                    message: No file has been submitted for this operation yet.
+        "401":
+          $ref: "#/components/responses/AdminUnauthenticated"
+        "403":
+          $ref: "#/components/responses/AdminForbidden"
+    post:
+      tags: [Admin uploads]
+      operationId: submitAdminMatchFile
+      summary: Submit a SwingVision .xlsx from the admin console
+      description: >-
+        Validates and parses the workbook, stores it under
+        `_admin-console/{operationId}/{itemId}/{sha256}.xlsx` (never
+        overwritten), records it through `admin_submit_match_file` and, when
+        the attempt is `queued`, dispatches `process-match`. Players, score
+        and actor come from the file and the session, never the form. Either
+        a prepared match (`matchId` + `fingerprint`) or a new one (`playerId`,
+        `date`, `matchType`, `courtType`). Retry-safe on the same operation
+        and file. Answers the durable status, as GET does.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AdminFileSubmitRequest"
+            encoding:
+              file:
+                contentType: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+            example:
+              file: (binary)
+              operationId: 8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d
+              itemId: 9b0c1d2e-3f4a-4b6c-9d7e-8f9a0b1c2d3e
+              programId: 2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a
+              playerId: 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f
+              date: "2026-09-12"
+              matchType: Singles
+              courtType: Outdoor Hard Court
+      responses:
+        "200":
+          $ref: "#/components/responses/AdminFileStatus"
+        "400":
+          description: >-
+            An unknown or repeated form field, a malformed id, a workbook that
+            fails validation or parsing, or a refusal from
+            `admin_submit_match_file`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRefusal"
+              examples:
+                fields:
+                  value:
+                    ok: false
+                    message: Invalid file submission.
+                ids:
+                  value:
+                    ok: false
+                    message: Provide a valid program, operation, athlete or prepared match, and file.
+                players:
+                  value:
+                    ok: false
+                    message: The export needs named players and complete numeric set scores.
+                existing:
+                  summary: Refused by the RPC (existing-analysis)
+                  value:
+                    ok: false
+                    message: This match already has analysis or an attached file.
+                store:
+                  value:
+                    ok: false
+                    message: Could not store this file safely. Retry with the same file and operation.
+        "401":
+          $ref: "#/components/responses/AdminUnauthenticated"
+        "403":
+          $ref: "#/components/responses/AdminForbidden"
+        "500":
+          description: >-
+            The handler threw after the file may already have been stored and
+            recorded. The wizard matches this exact sentence and checks the
+            operation's status (GET) before any retry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRefusal"
+              example:
+                ok: false
+                message: Submission response was interrupted. Check this operation before retrying with the same file.
+
+  /api/admin/uploads/video:
+    post:
+      tags: [Admin uploads]
+      operationId: submitAdminMatchVideo
+      summary: Reserve an admin-console match video for analysis
+      description: >-
+        Admin only. Validates the trim window and the three vendor answers,
+        builds the vendor request to prove it would be accepted, and reserves
+        the operation through `admin_submit_match_video`, which returns the
+        match and job the upload then targets (`/api/splitstep/upload-url`,
+        then `/api/splitstep/jobs`). For a prepared match (`matchId` +
+        `fingerprint`) the players, score and details come from the recorded
+        match and must not be sent; otherwise `playerId`, `opponentName`,
+        `score`, `date`, `courtType` and `bestOf` describe a new singles
+        match. Unknown keys are refused.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminVideoSubmitRequest"
+            examples:
+              newMatch:
+                summary: A new singles match
+                value:
+                  operationId: 8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d
+                  itemId: 9b0c1d2e-3f4a-4b6c-9d7e-8f9a0b1c2d3e
+                  programId: 2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a
+                  playerId: 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f
+                  opponentName: Sam Chen
+                  score:
+                    player1: [6, 6]
+                    player2: [3, 4]
+                  date: "2026-09-12"
+                  courtType: Outdoor Hard Court
+                  bestOf: 3
+                  startSeconds: 42.5
+                  endSeconds: 5224.5
+                  initialTopPlayerIsPlayer1: true
+                  adScoring: true
+                  fixedCamera: true
+              preparedMatch:
+                summary: A recorded match, identified by its fingerprint
+                value:
+                  operationId: 8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d
+                  itemId: 9b0c1d2e-3f4a-4b6c-9d7e-8f9a0b1c2d3e
+                  programId: 2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a
+                  matchId: 5b0f4c1e-8a7d-4b43-9f7e-1c2d3e4f5a6b
+                  fingerprint: 0f1e2d3c4b5a69788796a5b4c3d2e1f0
+                  startSeconds: 42.5
+                  endSeconds: 5224.5
+                  initialTopPlayerIsPlayer1: false
+                  adScoring: false
+                  fixedCamera: true
+      responses:
+        "200":
+          description: The operation holds a match and a job to upload into.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVideoSubmitted"
+              example:
+                ok: true
+                operationId: 8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d
+                itemId: 9b0c1d2e-3f4a-4b6c-9d7e-8f9a0b1c2d3e
+                matchId: 5b0f4c1e-8a7d-4b43-9f7e-1c2d3e4f5a6b
+                jobId: 3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f
+        "400":
+          description: >-
+            The body is not a JSON object, a field is missing, unknown or
+            malformed, the program is not this admin's or not active, the
+            match or score is unusable, the vendor request builder refused
+            it, or the reservation RPC did.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRefusal"
+              examples:
+                body:
+                  value:
+                    ok: false
+                    message: Invalid video submission.
+                fields:
+                  value:
+                    ok: false
+                    message: Provide a valid operation, program, trim window and all three video answers.
+                replacements:
+                  value:
+                    ok: false
+                    message: An attachment uses the recorded players, score and match details. Do not supply replacements.
+                inactive:
+                  value:
+                    ok: false
+                    message: This program must be active before submitting video.
+                reserve:
+                  value:
+                    ok: false
+                    message: Could not reserve this video.
+        "401":
+          $ref: "#/components/responses/AdminUnauthenticated"
+        "403":
+          $ref: "#/components/responses/AdminForbidden"
+
+  /api/create-checkout-session:
+    post:
+      tags: [Billing]
+      operationId: createCheckoutSession
+      summary: Retired Pro checkout
+      deprecated: true
+      description: >-
+        Retired 2026-09-25: nothing is sold during the beta. Always answers
+        410, before any session is read, so an old tab or a hand-made request
+        cannot buy the old Pro plan. `/api/webhooks/stripe` stays.
+      security: []
+      responses:
+        "410":
+          description: Checkout is retired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Advantage is free during the beta, so there is nothing to buy right now.
+
 components:
   securitySchemes:
     cookieAuth:
@@ -1267,6 +2545,37 @@ components:
         `sb-<project-ref>-auth-token` (the production project ref is shown;
         another project uses its own). A large session is split into
         `.0`, `.1`, … chunks. `src/proxy.ts` refreshes it on every request.
+
+    cronBearer:
+      type: http
+      scheme: bearer
+      description: >-
+        `Authorization: Bearer <CRON_SECRET>`, as Vercel Cron sends it. The
+        scheme word is matched case-insensitively; the credential is compared
+        as SHA-256 digests (`authorizeCronRequest()` in
+        `src/lib/services/match-video/cleanup-schedule.ts`). An unset or blank
+        `CRON_SECRET` refuses every request.
+    splitstepHmac:
+      type: apiKey
+      in: header
+      name: x-hmac-signature
+      description: >-
+        `base64(HMAC-SHA256(SPLITSTEP_WEBHOOK_SECRET, raw_body))`, computed
+        over the exact bytes received (`verifyWebhookAuth()` in
+        `src/lib/services/splitstep/webhook-auth.ts`). Also looked for, as a
+        hedge, under `x-splitstep-signature`, `x-webhook-signature`,
+        `x-signature`, `x-signature-256`, `x-hub-signature-256`, `signature`,
+        `x-webhook-secret`, `x-api-key` and `authorization` (a `Bearer `
+        prefix is stripped). Every one of those headers is redacted before
+        the delivery is recorded.
+    stripeSignature:
+      type: apiKey
+      in: header
+      name: Stripe-Signature
+      description: >-
+        Stripe's webhook signature, verified by
+        `stripe.webhooks.constructEvent()` against `STRIPE_WEBHOOK_SECRET`
+        over the raw body.
 
   parameters:
     MatchId:
@@ -1290,6 +2599,18 @@ components:
         format: uuid
       example: 9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b
 
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      description: >-
+        A `processing_jobs` id. A value that is not a UUID answers 404 "Job
+        not found", the same as a missing job or someone else's.
+      schema:
+        type: string
+        format: uuid
+      example: 3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f
+
   headers:
     CacheControlPrivate:
       description: Every answer carries a credential or is per-caller, so none is cacheable.
@@ -1302,6 +2623,12 @@ components:
         type: integer
         minimum: 1
       example: 2
+
+    CacheControlNoStore:
+      description: Per-workspace figures that go stale with every upload.
+      schema:
+        type: string
+        const: no-store
 
   requestBodies:
     NoMetadata:
@@ -1479,6 +2806,117 @@ components:
             storageUnavailable:
               $ref: "#/components/examples/StorageUnavailable"
 
+    SplitstepNotSignedIn:
+      description: No session.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: Not signed in
+    SplitstepJobNotFound:
+      description: >-
+        The id is not a UUID, the job does not exist, or it is not the
+        caller's. Indistinguishable on purpose.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: Job not found
+    QuotaExhausted:
+      description: >-
+        The video fits nowhere in what is left this month — the workspace's
+        own allowance or, for an individual, the shared beta band. Waiting
+        for the month to roll over (or a shorter trim) changes the answer.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/QuotaRefusalResponse"
+          examples:
+            account:
+              summary: The workspace's own allowance
+              value:
+                error: This match needs 1 hr 35 min of analysis but only 20 min is left in your monthly allowance (2 hr). It resets at the start of next month; a shorter trim will fit sooner.
+                usedSeconds: 6000
+                capSeconds: 7200
+            openBeta:
+              summary: The open-beta ceiling
+              value:
+                error: This month's free beta video analysis is fully booked. It reopens at the start of next month, and you can still import SwingVision matches in the meantime.
+                usedSeconds: 360000
+                capSeconds: 360000
+    TextUnauthorized:
+      description: No session.
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: Unauthorized
+    InsightStream:
+      description: >-
+        The claim line, streamed as it is generated. The body is one sentence
+        of plain text with no markup, sent as `text/plain; charset=utf-8` by
+        `textStreamResponse()`.
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: Second serves are deciding your losses.
+    InsightLlmError:
+      description: The LLM adapter could not start a stream.
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: LLM error
+    AdminUnauthenticated:
+      description: No session.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminRefusal"
+          example:
+            ok: false
+            message: Administrator access is required.
+    AdminForbidden:
+      description: Signed in, but `users.is_admin` is not true.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminRefusal"
+          example:
+            ok: false
+            message: Administrator access is required.
+    AdminFileStatus:
+      description: The operation's durable file-attempt status.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminFileStatus"
+          examples:
+            queued:
+              summary: Stored, not yet processing
+              value:
+                ok: true
+                operationId: 8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d
+                itemId: 9b0c1d2e-3f4a-4b6c-9d7e-8f9a0b1c2d3e
+                matchId: 5b0f4c1e-8a7d-4b43-9f7e-1c2d3e4f5a6b
+                fileId: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                state: queued
+                retryable: true
+                message: File saved. Retry this operation with the same file to start processing.
+            completed:
+              value:
+                ok: true
+                operationId: 8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d
+                itemId: 9b0c1d2e-3f4a-4b6c-9d7e-8f9a0b1c2d3e
+                matchId: 5b0f4c1e-8a7d-4b43-9f7e-1c2d3e4f5a6b
+                fileId: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                state: completed
+                retryable: false
+                message: Analysis completed.
+
   examples:
     Unauthenticated:
       summary: unauthenticated
@@ -1600,6 +3038,27 @@ components:
         error: Something went wrong on our side. Try again in a moment.
         code: internal_error
         detail: unhandled
+
+    NoBillingWorkspace:
+      summary: The caller holds no workspace the match belongs to
+      value:
+        error: You do not have access to the workspace this match belongs to.
+    AthleteNotOnRoster:
+      summary: The athlete on the row is not on the program's roster
+      value:
+        error: That player isn't on Stanford Women's Tennis's roster, so the match can't be recorded for them.
+    PendingApproval:
+      summary: The program's claim is still under review
+      value:
+        error: Your team is still being confirmed. Video analysis opens as soon as it is; SwingVision imports work now.
+    AnalysisNotConfigured:
+      summary: Vendor settings missing on this deployment
+      value:
+        error: Analysis is not configured on this deployment.
+    RosterUnknown:
+      summary: The roster read failed, so the contract could not decide
+      value:
+        error: We couldn't load Stanford Women's Tennis's roster. Try again.
 
   schemas:
     ErrorResponse:
@@ -2317,3 +3776,584 @@ components:
               ownerDisplay:
                 type: [string, "null"]
                 description: '"Elena V." when the owner has a name.'
+
+    SubmitJobRequest:
+      type: object
+      required: [jobId]
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        initialTopPlayerIsPlayer1:
+          type: boolean
+          description: >-
+            Which player is at the TOP of the frame in the video's first
+            frame — camera-relative, not player1/player2 by seat. Wrong, and
+            every statistic is attributed to the wrong player. Optional: when
+            absent, the job row's saved answer is used, then the match row's;
+            if neither has one the request is refused with 400.
+        adScoring:
+          type: boolean
+          description: Optional; falls back to the job row, then the match's `format.ad_scoring`.
+        fixedCamera:
+          type: boolean
+          description: Optional; falls back to the job row, then the match row.
+    SubmitJobResponse:
+      type: object
+      required:
+        [jobId, externalJobId, status, billableSeconds, usedSeconds, capSeconds]
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        externalJobId:
+          type: string
+          description: The vendor's job id; webhook deliveries are matched on it.
+        status:
+          type: string
+          const: queued
+        billableSeconds:
+          type: integer
+          minimum: 0
+          description: The trim window, rounded up. What was reserved.
+        usedSeconds:
+          type: integer
+          minimum: 0
+          description: The billing workspace's month total after this reservation.
+        capSeconds:
+          type: integer
+          minimum: 0
+    QuotaRefusalResponse:
+      description: >-
+        An `ErrorResponse` carrying the figures the refusal was made on — the
+        limit that said no, which for an individual may be the shared band
+        rather than their own allowance.
+      allOf:
+        - $ref: "#/components/schemas/ErrorResponse"
+        - type: object
+          required: [usedSeconds, capSeconds]
+          properties:
+            usedSeconds:
+              type: integer
+              minimum: 0
+            capSeconds:
+              type: integer
+              minimum: 0
+    JobNotAnalysableResponse:
+      description: An `ErrorResponse` with the request builder's reasons.
+      allOf:
+        - $ref: "#/components/schemas/ErrorResponse"
+        - type: object
+          required: [details]
+          properties:
+            details:
+              type: array
+              items:
+                type: string
+    ResubmitRefusalReason:
+      type: string
+      description: >-
+        `ResubmitRefusalReason` (`src/lib/services/splitstep/resubmit-job.ts`).
+        The route's `REFUSAL_STATUS` maps each to its status: `not_found` 404;
+        `not_failed`, `input_rejected`, `in_flight_duplicate`,
+        `attempt_ceiling`, `already_auto_resubmitted`, `video_unavailable`
+        409; `quota` 429; `quota_unavailable`, `not_configured`,
+        `eligibility_unknown` 503; `invalid_metadata` 422; `submit_failed`
+        502; `not_eligible` 403.
+      enum:
+        - not_found
+        - not_failed
+        - input_rejected
+        - in_flight_duplicate
+        - attempt_ceiling
+        - already_auto_resubmitted
+        - video_unavailable
+        - quota
+        - quota_unavailable
+        - not_configured
+        - invalid_metadata
+        - submit_failed
+        - not_eligible
+        - eligibility_unknown
+    ResubmitRefusalResponse:
+      description: >-
+        An `ErrorResponse` with the refusal's `reason`. The route's own
+        refusals — sign-in, the id, the job and match reads, the billing
+        workspace — carry `error` only.
+      allOf:
+        - $ref: "#/components/schemas/ErrorResponse"
+        - type: object
+          properties:
+            reason:
+              $ref: "#/components/schemas/ResubmitRefusalReason"
+    ResubmitJobResponse:
+      type: object
+      required: [jobId, externalJobId, status]
+      properties:
+        jobId:
+          type: string
+          format: uuid
+          description: The NEW child job's id, not the failed one's.
+        externalJobId:
+          type: string
+        status:
+          type: string
+          const: queued
+    RederiveResponse:
+      type: object
+      required: [jobId, status]
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          const: completed
+    RederiveFailedResponse:
+      description: >-
+        An `ErrorResponse`; a rebuild that ran and failed adds the status the
+        row was settled at.
+      allOf:
+        - $ref: "#/components/schemas/ErrorResponse"
+        - type: object
+          properties:
+            status:
+              type: string
+              const: derivation_failed
+    UploadUrlRequest:
+      type: object
+      required: [matchId, fileName]
+      properties:
+        matchId:
+          type: string
+          format: uuid
+          description: A match the caller created. A value that is not a UUID answers 404.
+        fileName:
+          type: string
+          minLength: 1
+          description: >-
+            Only its extension is used — it must end in .mp4, .mov, .m4v,
+            .mkv or .webm, and names the blob's container.
+    UploadUrlResponse:
+      type: object
+      required: [uploadUrl, videoObjectKey, expiresAt]
+      properties:
+        uploadUrl:
+          type: string
+          format: uri
+          description: >-
+            Create-and-write SAS (`sp=cw`) for exactly one blob. A credential:
+            never log it.
+        videoObjectKey:
+          type: string
+          description: "`videos/{userId}/{matchId}/original.{ext}`"
+        expiresAt:
+          type: string
+          format: date-time
+    HoursLeft:
+      type: object
+      description: "`HoursLeft` in `src/lib/services/splitstep/quota.ts`."
+      required: [workspaceId, remainingSeconds, capSeconds, bandFull]
+      properties:
+        workspaceId:
+          type: string
+          format: uuid
+          description: The active workspace the figures belong to.
+        remainingSeconds:
+          type: integer
+          minimum: 0
+          description: >-
+            Seconds left this month — for an individual, from the tighter of
+            their own cap and the shared beta band.
+        capSeconds:
+          type: integer
+          minimum: 0
+          description: >-
+            The workspace's OWN monthly figure, the ring's denominator —
+            never the band's.
+        bandFull:
+          type: boolean
+          description: True when the shared beta band, not the account, has run out.
+    SplitstepWebhookLiveness:
+      type: object
+      required: [endpoint, status, method]
+      properties:
+        endpoint:
+          type: string
+          const: splitstep-webhook
+        status:
+          type: string
+          const: ready
+        method:
+          type: string
+          const: POST
+    SplitstepWebhookPayload:
+      type: object
+      description: >-
+        The vendor's job-state envelope. No field is required and none is
+        refused: `parseWebhookPayload()` finds each by name (case and
+        punctuation ignored, nested objects walked), so `strokes_url`,
+        `strokesUrl` and `StrokesUrl` are one key. Unknown fields are kept in
+        the recorded raw body.
+      additionalProperties: true
+      properties:
+        job_id:
+          type: string
+          description: The vendor's job id, matched against `processing_jobs.external_job_id`.
+        event:
+          type: string
+          description: "`job_queued`, `job_processing`, `job_completed` or `job_failed`."
+        status:
+          type: string
+        MatchID:
+          type: string
+          description: Our match id, when echoed; the fallback match for an early delivery.
+        strokes_url:
+          type: [string, "null"]
+          format: uri
+          description: >-
+            Short-lived SAS for the stroke-by-stroke results JSON, on
+            completion. Called `sas_url` before September 2026; both are read.
+        players_url:
+          type: [string, "null"]
+          format: uri
+        trajectories_url:
+          type: [string, "null"]
+          format: uri
+        trimmed_video_url:
+          type: [string, "null"]
+          format: uri
+          description: Recorded on the job row; never downloaded.
+        error:
+          type: object
+          description: The structured failure, on `job_failed`.
+          properties:
+            code:
+              type: string
+            category:
+              type: string
+            step:
+              type: string
+            message:
+              type: string
+              description: The vendor's end-user sentence, stored as `error_message`.
+    SplitstepWebhookAck:
+      type: object
+      required: [received, deliveryId]
+      properties:
+        received:
+          type: boolean
+          const: true
+        deliveryId:
+          type: string
+          description: The `splitstep_webhook_deliveries` row the envelope was recorded as.
+    StripeEvent:
+      type: object
+      description: >-
+        A Stripe `Event`. Only `checkout.session.completed` is acted on; its
+        `data.object` is a Checkout Session whose `metadata.user_id` (or
+        `client_reference_id`) names the user.
+      required: [id, type, data]
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          const: event
+        type:
+          type: string
+        data:
+          type: object
+          required: [object]
+          properties:
+            object:
+              type: object
+    StripeWebhookAck:
+      type: object
+      required: [received]
+      properties:
+        received:
+          type: boolean
+          const: true
+        message:
+          type: string
+          const: Already Pro
+    CleanupOutcomes:
+      type: object
+      description: Rows by outcome (`CleanupRowOutcome`), every key always present.
+      required:
+        [
+          cleaned_up,
+          staged_shed,
+          rescheduled,
+          lease_lost,
+          version_changed,
+          failed,
+          unsettled,
+        ]
+      properties:
+        cleaned_up:
+          type: integer
+          minimum: 0
+        staged_shed:
+          type: integer
+          minimum: 0
+        rescheduled:
+          type: integer
+          minimum: 0
+        lease_lost:
+          type: integer
+          minimum: 0
+        version_changed:
+          type: integer
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+        unsettled:
+          type: integer
+          minimum: 0
+    CleanupCronBody:
+      type: object
+      description: "`CleanupCronBody` — counts only; no keys, no ids."
+      required:
+        [
+          ok,
+          reason,
+          expired,
+          warned,
+          emailed,
+          claimed,
+          outcomes,
+          rpcFailures,
+          durationMs,
+        ]
+      properties:
+        ok:
+          type: boolean
+        reason:
+          type: string
+          const: cron
+        expired:
+          type: integer
+          minimum: 0
+          description: Videos retired as `expired` this run.
+        warned:
+          type: integer
+          minimum: 0
+          description: Videos stamped as 30 days from expiry this run.
+        emailed:
+          type: integer
+          minimum: 0
+          description: Of `warned`, how many were emailed.
+        claimed:
+          type: integer
+          minimum: 0
+        outcomes:
+          $ref: "#/components/schemas/CleanupOutcomes"
+        rpcFailures:
+          type: integer
+          minimum: 0
+          description: Rows whose settle the database refused (`rpc_<SQLSTATE>`).
+        durationMs:
+          type: integer
+          minimum: 0
+    CleanupCronFailedRun:
+      description: A run that completed with a failed step, reported in full.
+      allOf:
+        - $ref: "#/components/schemas/CleanupCronBody"
+        - type: object
+          required: [ok, error]
+          properties:
+            ok:
+              type: boolean
+              const: false
+            error:
+              type: string
+              enum: [claim_failed, expiry_failed, warning_failed]
+    CleanupCronError:
+      type: object
+      required: [ok, error]
+      properties:
+        ok:
+          type: boolean
+          const: false
+        error:
+          type: string
+          enum: [unauthorized, cleanup_failed]
+    AdminRefusal:
+      type: object
+      description: The admin upload routes' refusal. The status carries the kind.
+      required: [ok, message]
+      properties:
+        ok:
+          type: boolean
+          const: false
+        message:
+          type: string
+    AdminFileStatus:
+      type: object
+      required:
+        [ok, operationId, itemId, matchId, fileId, state, retryable, message]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        operationId:
+          type: string
+          format: uuid
+        itemId:
+          type: string
+          format: uuid
+        matchId:
+          type: [string, "null"]
+          format: uuid
+        fileId:
+          type: [string, "null"]
+        state:
+          type: string
+          enum: [queued, processing, completed, failed]
+        retryable:
+          type: boolean
+          description: True only while `queued` — resubmit the same file to start processing.
+        message:
+          type: string
+    AdminFileSubmitRequest:
+      type: object
+      description: >-
+        Each field at most once; any other field is refused. A prepared match
+        sends `matchId` + `fingerprint`; a new match sends `playerId`, `date`,
+        `matchType` and `courtType` instead.
+      required: [file, operationId, itemId, programId]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: The SwingVision .xlsx export.
+        operationId:
+          type: string
+          format: uuid
+        itemId:
+          type: string
+          format: uuid
+        programId:
+          type: string
+          format: uuid
+        matchId:
+          type: string
+          format: uuid
+        fingerprint:
+          type: string
+          pattern: "^[a-f0-9]{32}$"
+        playerId:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        matchType:
+          type: string
+          enum: [Singles, Doubles]
+        courtType:
+          type: string
+          description: A court label `adminUploadCourt()` accepts, or empty.
+    AdminVideoSubmitRequest:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          operationId,
+          itemId,
+          programId,
+          startSeconds,
+          endSeconds,
+          initialTopPlayerIsPlayer1,
+          adScoring,
+          fixedCamera,
+        ]
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        itemId:
+          type: string
+          format: uuid
+        programId:
+          type: string
+          format: uuid
+        matchId:
+          type: [string, "null"]
+          format: uuid
+          description: A recorded singles match in this program. Requires `fingerprint`.
+        fingerprint:
+          type: string
+          pattern: "^[a-f0-9]{32}$"
+        playerId:
+          type: string
+          format: uuid
+          description: New match only — a roster athlete.
+        opponentName:
+          type: string
+        score:
+          type: object
+          required: [player1, player2]
+          properties:
+            player1:
+              type: array
+              items:
+                type: [integer, "null"]
+                minimum: 0
+            player2:
+              type: array
+              items:
+                type: [integer, "null"]
+                minimum: 0
+            player1_tiebreaks:
+              type: array
+              items:
+                type: [integer, "null"]
+                minimum: 0
+            player2_tiebreaks:
+              type: array
+              items:
+                type: [integer, "null"]
+                minimum: 0
+        date:
+          type: string
+          format: date
+        courtType:
+          type: [string, "null"]
+        bestOf:
+          type: integer
+          enum: [1, 3, 5]
+        startSeconds:
+          type: number
+          description: Trim start, in video seconds.
+        endSeconds:
+          type: number
+          description: Trim end, in video seconds.
+        initialTopPlayerIsPlayer1:
+          type: boolean
+        adScoring:
+          type: boolean
+        fixedCamera:
+          type: boolean
+    AdminVideoSubmitted:
+      type: object
+      required: [ok, operationId, itemId, matchId, jobId]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        operationId:
+          type: string
+          format: uuid
+        itemId:
+          type: string
+          format: uuid
+        matchId:
+          type: string
+          format: uuid
+        jobId:
+          type: string
+          format: uuid

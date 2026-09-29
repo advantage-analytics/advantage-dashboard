@@ -183,7 +183,7 @@ ready).
 
 ## T14 · OpenAPI 3.1 spec, part 2: splitstep, webhooks, cron, insight, admin, checkout
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T13
 - **files:** openapi/advantage-api.yaml, src/app/api/splitstep/**, src/app/api/webhooks/**, src/app/api/cron/cleanup-match-videos/route.ts, src/app/api/home-insight/route.ts, src/app/api/team-insight/route.ts, src/app/api/admin/uploads/**, src/app/api/create-checkout-session/route.ts (guess)

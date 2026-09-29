@@ -137,3 +137,14 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
 **changed:** `/api/splitstep/jobs`, `/jobs/[jobId]/rederive` and `/jobs/[jobId]/resubmit` answer 404 "Job not found" for a non-UUID job id, and `/api/splitstep/upload-url` answers its existing 404 "No such match" for a non-UUID match id — each after sign-in and before the first read (no more 500 from a Postgres 22P02). Fixture ids in the three named specs (and `tests/resubmit-route-billing.spec.ts`, which would otherwise hit the guard) became UUIDs; each gained a 404 case asserting the load was never reached.
+
+## T14 · OpenAPI 3.1 spec, part 2: splitstep, webhooks, cron, insight, admin, checkout — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) + `npm run api:lint` "No issues found" + Prettier · completion VERDICT: pass
+**changed:** `openapi/advantage-api.yaml` gains the remaining 13 routes (all 26 now documented) with statuses re-read from the current handlers (post T1/T5/T7/T10/T11/T12), security schemes `cronBearer`, `splitstepHmac` (`x-hmac-signature`, base64 HMAC-SHA256 of the raw body; fail-closed + `ALLOW_UNSIGNED` hatch described), `stripeSignature`; insight routes as `text/plain` streams (204/401/500); checkout as deprecated 410. Six tags + two `info.description` paragraphs added; runner reworded "only public route" → "only public browser route". 309 examples ajv-validated. `hours-left` documents the code's real body `{ workspaceId, remainingSeconds, capSeconds, bandFull }` (the criterion's `usedSeconds` example did not match the code).
+**follow-ups:**
+
+1. `resubmit` answers 429 with no figures for a quota permission refusal, where `/api/splitstep/jobs` answers 403 with `usedSeconds`/`capSeconds` — drift between the two routes.
+2. `/api/admin/uploads/video` has no try/catch — a throw is an unshaped Next 500 (the file route catches).
+3. `/api/webhooks/stripe` throws at module load when `STRIPE_WEBHOOK_SECRET` is unset, so every request 500s before the handler.
+4. `hours-left` sends `Cache-Control: no-store` (not `private, no-store` like the video routes).
