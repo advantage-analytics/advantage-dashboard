@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Land a statistic's cut into the shared filters so the drawer's pills are pressed
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/match-detail/film/film-list-filters.ts, film/film-tab.tsx, match-filters/provider.tsx (or match-report-context.tsx), film-cut-context.tsx, tests/film-cut-intent.spec.ts, tests/film-filters-fullscreen.spec.ts (guess)
 - **routes:** /dashboard/matches/[matchId]

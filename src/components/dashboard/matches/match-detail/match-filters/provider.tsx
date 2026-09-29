@@ -12,6 +12,7 @@ import {
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import type { LandedFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
 import {
@@ -63,6 +64,15 @@ import {
  * Back/Forward restore the `?f=` of the entry they land on (`popstate`), so
  * the Video list never disagrees with the address bar.
  *
+ * ── A landed statistic's remainder ───────────────────────────────────────
+ * A Statistics figure's cut lands its `MatchFilters` half in `filters`
+ * (`landFilmCut`, `film/film-list-filters.ts`); what `MatchFilters` cannot
+ * say — its `FilmCutExtras` and label, the `LandedFilmCut` — is held HERE
+ * too, for the same reason: were it kept in the film tab, leaving Video and
+ * coming back would keep the shared half and silently drop the extras,
+ * widening the list past the figure. It is Film-only: never mirrored to the
+ * URL, never read by Statistics.
+ *
  * ── Player attribution (docs/ui-revamp-guardrails.md §4) ─────────────────
  * The filters are you/opponent-relative and resolve to a seat through
  * `useMatchSides().you.isPlayer1` — the exact read every card on this page
@@ -86,6 +96,14 @@ export interface MatchFiltersValue {
   filtersActive: boolean;
   /** The context `filteredPoints` was computed with (option availability). */
   context: MatchFilterContext;
+  /**
+   * A landed statistic's Film-only remainder (its extras, label and the
+   * shared filters its landing wrote), or `null`. Only the Video view reads
+   * or writes it.
+   */
+  filmRemainder: LandedFilmCut | null;
+  /** Replace the remainder — a new landing — or drop it (`null`). */
+  setFilmRemainder: (next: LandedFilmCut | null) => void;
 }
 
 const MatchFiltersContext = createContext<MatchFiltersValue | null>(null);
@@ -122,6 +140,9 @@ export function MatchFiltersProvider({
   );
   const [filters, setFiltersState] = useState<MatchFilters>(() =>
     parseMatchFilters(firstValue(initialQuery)),
+  );
+  const [filmRemainder, setFilmRemainder] = useState<LandedFilmCut | null>(
+    null,
   );
 
   const setFilters = useCallback((next: MatchFilters) => {
@@ -172,8 +193,18 @@ export function MatchFiltersProvider({
       filteredPoints,
       filtersActive,
       context,
+      filmRemainder,
+      setFilmRemainder,
     }),
-    [filters, setFilters, clearFilters, filteredPoints, filtersActive, context],
+    [
+      filters,
+      setFilters,
+      clearFilters,
+      filteredPoints,
+      filtersActive,
+      context,
+      filmRemainder,
+    ],
   );
 
   return <MatchFiltersContext value={value}>{children}</MatchFiltersContext>;
@@ -204,6 +235,8 @@ export function useMatchFilters(): MatchFiltersValue {
       filteredPoints: points,
       filtersActive: false,
       context: { youIsPlayer1, hands: { player1: null, player2: null } },
+      filmRemainder: null,
+      setFilmRemainder: noop,
     }),
     [points, youIsPlayer1],
   );

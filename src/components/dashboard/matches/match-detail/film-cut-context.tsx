@@ -20,19 +20,23 @@ import {
  *
  * The report's parts ask for a cut through `MatchReportActions.watchCut`; the
  * provider switches the URL to `?tab=film` and parks the cut here. The film
- * tab, once mounted, takes it, lays it OVER the shared match filters, seeks to
- * the first admitted point and CLEARS the intent — so it is honoured exactly
- * once. Leaving and re-entering the Video view finds nothing pending.
+ * tab, once mounted, takes it, lands it in the shared match filters (plus
+ * the Film-only remainder), seeks to the first admitted point and CLEARS the
+ * intent — so it is honoured exactly once. Leaving and re-entering the Video view finds nothing pending.
  *
  * ── What a cut is ────────────────────────────────────────────────────────
  * A `FilmCut` is a `Partial<MatchFilters>` — the same vocabulary as the
  * Video tab's filters — plus a few Film-only extras for what that vocabulary
- * cannot say without changing a count (`FilmCutExtras`). In Film it is ANDed
- * on top of the shared filters (`applyFilmCut`), named in the Video tab's
- * filter strip ("…, from Statistics"), and never written to `MatchFiltersProvider`: the Statistics tab and
- * the `?f=` URL know nothing about it. A card counts its "Watch all N" with
- * the very same predicate over the WHOLE match (`applyFilmCut(points,
- * points, …)`), since Statistics is never filtered; with no Video filter
+ * cannot say without changing a count (`FilmCutExtras`). Landing splits it
+ * (`landFilmCut`, `film/film-list-filters.ts`): the `MatchFilters` half is
+ * WRITTEN into the shared filters (`MatchFiltersProvider`, mirrored to
+ * `?f=`), key by key, so the filters drawer's pills show it pressed — the
+ * Statistics tab is always the whole match, so nothing there moves. The
+ * extras are the `FilmCutRemainder`: never pills (Result › Error would widen
+ * "Unforced errors", Result › Winner "Aces"), held beside the shared filters
+ * above the view switch and named in the Video tab's filter strip ("…, from
+ * Statistics"). A card counts its "Watch all N" with `applyFilmCut` over the
+ * WHOLE match (`applyFilmCut(points, points, …)`); with no other Video filter
  * applied, the points a click opens are exactly the points the card counted.
  *
  * Its own context, like `film-head-context.tsx`, for the same two reasons: the
@@ -112,12 +116,41 @@ export function filmCutFilters(cut: FilmCut): MatchFilters {
   return out as unknown as MatchFilters;
 }
 
+/**
+ * The cut's Film-only extras that are actually set (a `null` bound is no
+ * bound), or `null` when it has none — a "pure" cut, every key of which is a
+ * shared filter.
+ */
+export function filmCutExtras(cut: FilmCut): FilmCutExtras | null {
+  const out: Record<string, unknown> = {};
+  for (const key of FILM_CUT_EXTRA_KEYS) {
+    const value = cut[key];
+    if (value !== undefined && value !== null) out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? (out as FilmCutExtras) : null;
+}
+
 function hasExtras(cut: FilmCut): boolean {
-  return (
-    (cut.rallyMin ?? null) !== null ||
-    (cut.rallyMax ?? null) !== null ||
-    (cut.ending ?? null) !== null
-  );
+  return filmCutExtras(cut) !== null;
+}
+
+/**
+ * What stays Film-only once a cut has landed: its extras and the statistic's
+ * label the filter strip names them by. No `MatchFilters` key — landing
+ * wrote that half into the shared filters, the only place it is evaluated.
+ */
+export interface FilmCutRemainder {
+  label: string;
+  extras: FilmCutExtras;
+}
+
+/**
+ * A remainder as `MatchFiltersProvider` holds it, above the view switch:
+ * plus `landed`, the shared filters its landing wrote — the strip reads
+ * "Back to all points" only while the shared filters still equal it.
+ */
+export interface LandedFilmCut extends FilmCutRemainder {
+  landed: MatchFilters;
 }
 
 /** Whether a cut narrows anything at all. `{}` (a whole-match row) does not. */
@@ -177,15 +210,16 @@ export function matchesFilmCutExtras(point: MatchPoint, cut: FilmCut): boolean {
 
 /**
  * The cut laid over `base`: the points of `base` the cut also admits, in
- * `base`'s order. `base` is the Video list's shared filters' result
- * (`useMatchFilters().filteredPoints`), or the whole match for a Statistics
- * card's count; `points` is the WHOLE match in match
- * order, because the cut's `MatchFilters` part is evaluated over it (a
- * service court is a running count within each game, so it cannot be read
- * off a filtered subset). No cut, or an empty one, is `base` itself.
+ * `base`'s order. `base` is the whole match for a Statistics card's count;
+ * `points` is the WHOLE match in match order, because the cut's
+ * `MatchFilters` part is evaluated over it (a service court is a running
+ * count within each game, so it cannot be read off a filtered subset). No
+ * cut, or an empty one, is `base` itself.
  *
- * The one predicate behind the Film list, ↑/↓, and every card's "Watch all N"
- * count — so the count and the list cannot disagree.
+ * Every card's "Watch all N" count. The Film list never calls it: a landed
+ * cut's `MatchFilters` half is in the shared filters and its extras are
+ * `matchesFilmCutExtras` — the same two predicates this ANDs, so with
+ * nothing else applied the count and the list cannot disagree.
  */
 export function applyFilmCut(
   points: MatchPoint[],
