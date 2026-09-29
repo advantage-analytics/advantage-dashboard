@@ -33,7 +33,7 @@ ready).
 
 ## T2 · Name a Film-only cut inside the filters drawer
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** src/components/dashboard/matches/match-detail/match-filters/filters-panel.tsx, match-filters/filter-rail.tsx, film/film-advanced-panel.tsx, tests/match-filters-panel.spec.ts (guess)

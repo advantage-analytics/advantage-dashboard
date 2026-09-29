@@ -320,6 +320,37 @@ test.describe("FiltersPanel markup", () => {
   });
 });
 
+test.describe("FiltersPanel film cut line", () => {
+  test("a landed remainder's label reads as one read-only line between the header and the sections", () => {
+    const html = render(fullAvailability(), EMPTY_MATCH_FILTERS, {
+      filmCut: "Short rallies · 1–4 shots",
+    });
+    const line = html.match(/<p[^>]*data-film-cut=""[^>]*>([^<]*)<\/p>/);
+    expect(line).not.toBeNull();
+    expect(text(line![1])).toBe(
+      "Short rallies · 1–4 shots · from Statistics — the strip's Clear removes it",
+    );
+    // Read-only: nothing in the line to press.
+    expect(line![0]).not.toContain("<button");
+    expect(line![0]).not.toContain("aria-pressed");
+    // Between the header and the sections.
+    expect(html.indexOf("data-film-cut")).toBeGreaterThan(
+      html.indexOf("Filters"),
+    );
+    expect(html.indexOf("data-film-cut")).toBeLessThan(
+      html.indexOf("data-section="),
+    );
+  });
+
+  test("filmCut={null} or absent draws no line", () => {
+    const withNull = render(fullAvailability(), EMPTY_MATCH_FILTERS, {
+      filmCut: null,
+    });
+    expect(withNull).not.toContain("data-film-cut");
+    expect(render(fullAvailability())).not.toContain("data-film-cut");
+  });
+});
+
 test.describe("FiltersPanel draft", () => {
   const serveGroup = MATCH_FILTER_SECTIONS.find((s) => s.id === "serve")!
     .groups[0];

@@ -76,6 +76,7 @@ export function FilmAdvancedPanel({
         oppName={oppName}
         countFor={countFor}
         total={total}
+        filmCut={remainder?.label ?? null}
         onApply={(next) => {
           setShared(next);
           onClose();
