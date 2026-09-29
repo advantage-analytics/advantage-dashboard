@@ -86,6 +86,7 @@ import {
   determineWinner,
   buildMatchData,
   getAdjustedScores,
+  playedSetCount,
   formatFileSize,
   clearStorageData,
   loadFormDataFromStorage,
@@ -697,6 +698,32 @@ export interface UseUploadMatchWizardReturn {
 // Helper to get current date in YYYY-MM-DD format.
 // Use LOCAL date components (not toISOString, which is UTC) so the default date matches
 // the user's local day — otherwise an evening upload behind UTC defaults to tomorrow.
+
+/**
+ * The admin video route's score: the adjusted rows without the trailing sets
+ * nobody entered (`playedSetCount`), so a two-set best-of-3 is not stored with
+ * a blank third set.
+ */
+function adminVideoScore(formData: MatchFormData) {
+  const player1 = getAdjustedScores(
+    formData.playerScores,
+    formData.bestOf,
+    formData.numberOfSets,
+  );
+  const player2 = getAdjustedScores(
+    formData.opponentScores,
+    formData.bestOf,
+    formData.numberOfSets,
+  );
+  const sets = playedSetCount(player1, player2);
+  return {
+    player1: player1.slice(0, sets),
+    player2: player2.slice(0, sets),
+    player1_tiebreaks: formData.playerTiebreaks.slice(0, sets),
+    player2_tiebreaks: formData.opponentTiebreaks.slice(0, sets),
+  };
+}
+
 /**
  * The schedule's surface ("hard", "clay", "grass", or a court option already
  * spelled out) to the value the details step's Court field stores.
@@ -3017,20 +3044,7 @@ export function useUploadMatchWizard({
                   : {
                       opponentName: formData.opponentName,
                       bestOf: Number(formData.bestOf),
-                      score: {
-                        player1: getAdjustedScores(
-                          formData.playerScores,
-                          formData.bestOf,
-                          formData.numberOfSets,
-                        ),
-                        player2: getAdjustedScores(
-                          formData.opponentScores,
-                          formData.bestOf,
-                          formData.numberOfSets,
-                        ),
-                        player1_tiebreaks: formData.playerTiebreaks,
-                        player2_tiebreaks: formData.opponentTiebreaks,
-                      },
+                      score: adminVideoScore(formData),
                     }),
                 startSeconds: formData.videoStartSeconds,
                 endSeconds: formData.videoEndSeconds,

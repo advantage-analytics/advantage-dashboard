@@ -32,6 +32,27 @@ export function getAdjustedScores(
 }
 
 /**
+ * How many sets were actually played: the adjusted rows with their trailing
+ * unentered sets dropped. The form always holds `bestOf` sets, so a best-of-3
+ * that ended in two carries a blank third set, and `buildMatchData` turns
+ * blanks into 0 — every two-set match was saved with a 0-0 third set, which
+ * the score line shows and derivation reconciles against. A set where either
+ * side has a value is kept. Nothing entered at all keeps every set, as
+ * before. `patch-match.ts` trims the same way when a score is edited.
+ */
+export function playedSetCount(
+  player: readonly (number | null)[],
+  opponent: readonly (number | null)[],
+): number {
+  const all = Math.max(player.length, opponent.length);
+  let sets = all;
+  while (sets > 0 && player[sets - 1] == null && opponent[sets - 1] == null) {
+    sets--;
+  }
+  return sets === 0 ? all : sets;
+}
+
+/**
  * Determine the winner and loser based on set scores
  */
 export function determineWinner(
@@ -147,8 +168,13 @@ export function buildMatchData(
     formData.numberOfSets,
   );
 
-  const playerScoresNum = adjustedPlayerScores.map((s) => s ?? 0);
-  const opponentScoresNum = adjustedOpponentScores.map((s) => s ?? 0);
+  const sets = playedSetCount(adjustedPlayerScores, adjustedOpponentScores);
+  const playerScoresNum = adjustedPlayerScores
+    .slice(0, sets)
+    .map((s) => s ?? 0);
+  const opponentScoresNum = adjustedOpponentScores
+    .slice(0, sets)
+    .map((s) => s ?? 0);
 
   return {
     id: matchId,
@@ -180,8 +206,8 @@ export function buildMatchData(
     score: {
       player1: playerScoresNum,
       player2: opponentScoresNum,
-      player1_tiebreaks: adjustedPlayerTiebreaks,
-      player2_tiebreaks: adjustedOpponentTiebreaks,
+      player1_tiebreaks: adjustedPlayerTiebreaks.slice(0, sets),
+      player2_tiebreaks: adjustedOpponentTiebreaks.slice(0, sets),
       // Reads the result the caller settled on, so an early-end answer left
       // over from before the score was finished never names a winner.
       ...(formData.result === "Retired" && formData.retiredSide
