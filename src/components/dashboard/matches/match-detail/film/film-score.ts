@@ -72,7 +72,7 @@ export interface Board {
   rows: [BoardRow, BoardRow];
   /** Index into `sets` of the column currently in play. */
   liveSet: number;
-  /** The game the board is showing, 1-based — what the foot names between points. */
+  /** The game the board is showing, 1-based within its set — what the foot names between points. */
   gameNumber: number;
   /** "30–40", SERVER-first like tennis calls it, for the point line; null when unknown. */
   pointLine: string | null;
