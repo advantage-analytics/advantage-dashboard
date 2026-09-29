@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Number film shots from the deciding serve
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-shots.ts, film/film-this-point.tsx, film/point-list.tsx, film/film-fullscreen.tsx, film/film-court.ts, tests/film-shots.spec.ts, tests/film-court.spec.ts
 - **routes:** /dashboard/matches/[matchId]?tab=film

@@ -1,5 +1,6 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 
+import { rallyNumbering } from "./film-shots";
 import { REACHED_EPSILON_SECONDS } from "./film-timeline";
 
 /**
@@ -197,7 +198,11 @@ export interface CourtMark {
    * end-change case, which projects the shot out before comparing).
    */
   shot: MatchShot;
-  /** 1-based place in its point's rally, and the rally's shot count. */
+  /**
+   * The shot's number in its point's rally, and the rally's length — both
+   * `rallyNumbering`'s, so a faulted first serve and the second serve are
+   * both shot 1 and the return is shot 2.
+   */
   order: number;
   rallyShots: number;
   /**
@@ -302,7 +307,7 @@ function bouncePosition(
 function detailOf(
   shot: MatchShot,
   youIsPlayer1: boolean,
-  /** 1-based place in the rally, and the rally's length. */
+  /** Rally number and rally length, from `rallyNumbering`. */
   order: number,
   rallyShots: number,
 ) {
@@ -433,6 +438,12 @@ export function pointMarks(
     youIsPlayer1: boolean;
     filmTime: number;
     view?: CourtView;
+    /**
+     * The point's FULL shot list (`MatchPoint.shots`), timed or not — what
+     * the marks are numbered from, since an untimed serve still decides where
+     * the rally starts. Left out, the timed shots number themselves.
+     */
+    pointShots?: readonly MatchShot[];
   },
 ): CourtMark[] {
   const { youIsPlayer1, filmTime } = opts;
@@ -443,13 +454,19 @@ export function pointMarks(
   const youLow =
     opts.view === "camera" ? true : youAreAtLowEnd(plain, youIsPlayer1);
   if (youLow === null) return [];
+  const numbering = rallyNumbering(opts.pointShots ?? plain);
 
   const out: CourtMark[] = [];
   let liveIndex = -1;
   let liveAt = -Infinity;
 
   shots.forEach((timed, i) => {
-    const detail = detailOf(timed.shot, youIsPlayer1, i + 1, shots.length);
+    const detail = detailOf(
+      timed.shot,
+      youIsPlayer1,
+      numbering.numbers.get(timed.shot.id) ?? i + 1,
+      numbering.count,
+    );
 
     const contactOpacity = markOpacity(filmTime, timed.contactTime);
     if (contactOpacity > 0) {
@@ -496,13 +513,19 @@ export function matchMarks(
     const shots = point.shots ?? [];
     const youLow = youAreAtLowEnd(shots, opts.youIsPlayer1);
     if (youLow === null) continue;
+    const numbering = rallyNumbering(shots);
     shots.forEach((shot, i) => {
       const mark = bounceMark(
         shot,
         youLow,
         opts.youIsPlayer1,
         1,
-        detailOf(shot, opts.youIsPlayer1, i + 1, shots.length),
+        detailOf(
+          shot,
+          opts.youIsPlayer1,
+          numbering.numbers.get(shot.id) ?? i + 1,
+          numbering.count,
+        ),
       );
       if (mark) out.push({ ...mark, pointId: point.id });
     });

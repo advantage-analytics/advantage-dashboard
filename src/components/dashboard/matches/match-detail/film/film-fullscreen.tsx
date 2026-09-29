@@ -79,7 +79,11 @@ import {
   roomMotionPath,
   type Rect,
 } from "./film-motion";
-import { activeShotAt, shotStops as buildShotStops } from "./film-shots";
+import {
+  activeShotAt,
+  rallyNumbering,
+  shotStops as buildShotStops,
+} from "./film-shots";
 import {
   activeStopAt,
   setSegments,
@@ -636,9 +640,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         youIsPlayer1: sides.you.isPlayer1,
         filmTime: currentTime,
         view: courtView,
+        pointShots: activePoint?.shots,
       },
     );
   }, [
+    activePoint,
     bounceTimes,
     courtView,
     courtOn,
@@ -657,13 +663,14 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
           })
         : "Whole match"
       : "This point";
-  // The point's caption counts the shots the card can draw and number — the
-  // same total the readout's "shot 3 of 7" is out of — so the two can never
-  // disagree about how long the rally was.
+  // The point's caption is the rally's length (`rallyNumbering`, from the
+  // point's full shot list) — the same total the readout's "shot 3 of 7" is
+  // out of — so the two can never disagree about how long the rally was.
+  const rallyShots = rallyNumbering(activePoint?.shots).count;
   const courtCaption =
     courtMode === "match"
       ? `${p.visiblePoints.length} points`
-      : `${pointShotStops.length} shots`;
+      : `${rallyShots} ${rallyShots === 1 ? "shot" : "shots"}`;
 
   /* ── The board's column ──────────────────────────────────────────────── */
 

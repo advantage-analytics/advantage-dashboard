@@ -421,6 +421,59 @@ test("a mark carries the shot its readout describes", () => {
   ).toMatchObject({ order: 1, rallyShots: 5, hitter: "opp" });
 });
 
+test("a faulted first serve: marks are numbered from the deciding serve", () => {
+  // Advantage Intelligence stores the fault at shot_number 0 and the serve
+  // that was played at 1 — neither number is read; the shot types are.
+  const fault: MatchShot = {
+    ...shot("f1", false, [0.4, 24.3], [-1.4, 6.2], "Out"),
+    shotType: "First Serve",
+    shotNumber: 0,
+  };
+  const played: MatchShot[] = [
+    fault,
+    { ...RALLY[0], shotType: "Second Serve", shotNumber: 1 },
+    { ...RALLY[1], shotNumber: 2 },
+    { ...RALLY[2], shotNumber: 3 },
+    { ...RALLY[3], shotNumber: 4 },
+  ];
+  const numbered = (marks: readonly CourtMark[]) =>
+    [...new Map(marks.map((m) => [m.shotId, m])).values()].map((m) => [
+      m.shotId,
+      m.order,
+      m.rallyShots,
+    ]);
+  const expected = [
+    ["f1", 1, 4],
+    ["s1", 1, 4],
+    ["s2", 2, 4],
+    ["s3", 3, 4],
+    ["s4", 4, 4],
+  ];
+
+  // Point mode, every shot timed: the readout says "shot 2 of 4" on the return.
+  const point = pointMarks(timed(played), {
+    youIsPlayer1: true,
+    filmTime: 14.2,
+  });
+  expect(numbered(point)).toEqual(expected);
+  expect(bounceOf(point, "s2")).toMatchObject({ order: 2, rallyShots: 4 });
+
+  // An untimed fault still decides the numbers: the timed shots are drawn and
+  // the point's full list numbers them.
+  const untimedFault = pointMarks(timed(played.slice(1)), {
+    youIsPlayer1: true,
+    filmTime: 13.2,
+    pointShots: played,
+  });
+  expect(numbered(untimedFault)).toEqual(expected.slice(1));
+
+  // Match mode numbers each point from its own full list.
+  const match = matchMarks([pt({ id: "p1", shots: played })], {
+    youIsPlayer1: true,
+  });
+  expect(numbered(match)).toEqual(expected);
+});
+
 test("the readout hangs opposite the mark and stays in frame", () => {
   // A mark on the left is read on the right, and one on the right on the left.
   expect(readoutPlacement(17, 50).side).toBe("right");
