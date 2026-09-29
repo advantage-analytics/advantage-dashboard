@@ -5,6 +5,10 @@ import {
   type MatchFilterKey,
   type MatchFilters,
   type PlayerSide,
+  type RallyLengthBand,
+  type ResultMissed,
+  type ReturnResult,
+  type ServeResult,
 } from "./model";
 
 /**
@@ -56,6 +60,28 @@ function article(word: string): string {
   return /^[aeiou]/i.test(word) ? `an ${word}` : `a ${word}`;
 }
 
+const SERVE_RESULT_PHRASE: Record<ServeResult, string> = {
+  ace: "ace",
+  "service-winner": "service winner",
+  "return-error": "return error",
+  "in-play": "serve returned",
+  "double-fault": "double fault",
+};
+const RETURN_RESULT_PHRASE: Record<ReturnResult, string> = {
+  winner: "return winner",
+  error: "missed return",
+  "in-play": "return in play",
+};
+const RESULT_MISSED_PHRASE: Record<ResultMissed, string> = {
+  Out: "missed out",
+  Net: "missed in the net",
+};
+const RALLY_LENGTH_PHRASE: Record<RallyLengthBand, string> = {
+  short: "short rally (1–4)",
+  medium: "medium rally (5–8)",
+  long: "long rally (9+)",
+};
+
 /**
  * How each group reads in the sentence. A bare option label is ambiguous
  * across groups ("slice" is a serve spin and a return spin; "middle" is a
@@ -76,6 +102,8 @@ const PHRASE: {
   serveType: (option) => lower(option),
   serveSpin: (option) => `${lower(option)} serve`,
   serveZone: (option) => `${lower(option)} serve`,
+  serveResult: (option, value) =>
+    SERVE_RESULT_PHRASE[value as ServeResult] ?? lower(option),
   returnType: (option) => `${lower(option)} return`,
   returnSpin: (option) => `${lower(option)} return`,
   returnZone: (option) => `${lower(option)} return`,
@@ -85,6 +113,8 @@ const PHRASE: {
       : value === "middle"
         ? "contact on the baseline"
         : "deep contact",
+  returnResult: (option, value) =>
+    RETURN_RESULT_PHRASE[value as ReturnResult] ?? lower(option),
   resultPlayer: (_, value, names) => `${playerName(value, names)}’s result`,
   resultShot: (option) => `ends on ${article(lower(option))}`,
   resultOutcome: (_, value) =>
@@ -95,6 +125,10 @@ const PHRASE: {
         : value === "winner"
           ? "winners"
           : "errors",
+  resultMissed: (option, value) =>
+    RESULT_MISSED_PHRASE[value as ResultMissed] ?? lower(option),
+  resultRallyLength: (option, value) =>
+    RALLY_LENGTH_PHRASE[value as RallyLengthBand] ?? lower(option),
   customPlayer: (_, value, names) => `a shot by ${playerName(value, names)}`,
   customSide: (option) => `from the ${lower(option)} side`,
   customDirection: (option) => `${lower(option)} shot`,
@@ -134,16 +168,20 @@ export const SENTENCE_KEYS: readonly MatchFilterKey[] = [
   "serveType",
   "serveSpin",
   "serveZone",
+  "serveResult",
   "returnType",
   "returnSpin",
   "returnZone",
   "returnContact",
+  "returnResult",
   "sets",
   "scoreType",
   "scorePoints",
   "resultPlayer",
   "resultShot",
   "resultOutcome",
+  "resultMissed",
+  "resultRallyLength",
   "customPlayer",
   "customSide",
   "customDirection",

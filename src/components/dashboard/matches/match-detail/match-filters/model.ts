@@ -59,6 +59,15 @@ export type ReturnContact = "inside" | "middle" | "neutral";
 export type ResultShot =
   "Serve" | "Return" | "Forehand" | "Backhand" | "Volley" | "Overhead";
 export type ResultOutcome = "won" | "lost" | "winner" | "error";
+/** How the serve ended up — at most one per point (`serveResultOf`). */
+export type ServeResult =
+  "ace" | "service-winner" | "return-error" | "in-play" | "double-fault";
+/** How the return ended up (`returnResultOf`). */
+export type ReturnResult = "winner" | "error" | "in-play";
+/** Where the point's last shot missed (`point.shots`' last row). */
+export type ResultMissed = "Out" | "Net";
+/** `rally-length-card.tsx`'s bands, by the same keys. */
+export type RallyLengthBand = "short" | "medium" | "long";
 
 export type { CourtHalf, ReturnSpin, ServeSpin, ShotDirection };
 
@@ -77,16 +86,21 @@ export interface MatchFilters {
   readonly serveType: readonly ServeType[];
   readonly serveSpin: readonly ServeSpin[];
   readonly serveZone: readonly ServeZone[];
+  readonly serveResult: readonly ServeResult[];
   /* Return */
   readonly returnType: readonly ReturnStroke[];
   readonly returnSpin: readonly ReturnSpin[];
   readonly returnZone: readonly ReturnZone[];
   readonly returnContact: readonly ReturnContact[];
+  readonly returnResult: readonly ReturnResult[];
   /* Result */
   /** The point-of-view player for Shot and Outcome. */
   readonly resultPlayer: PlayerSide | null;
   readonly resultShot: readonly ResultShot[];
   readonly resultOutcome: readonly ResultOutcome[];
+  /** The last shot's miss, hit by the Result player when one is set. */
+  readonly resultMissed: readonly ResultMissed[];
+  readonly resultRallyLength: readonly RallyLengthBand[];
   /* Custom — every chosen group must hold on ONE shot */
   readonly customPlayer: PlayerSide | null;
   readonly customSide: readonly CourtHalf[];
@@ -126,13 +140,17 @@ export const MATCH_FILTER_KEYS: readonly MatchFilterKey[] = [
   "serveType",
   "serveSpin",
   "serveZone",
+  "serveResult",
   "returnType",
   "returnSpin",
   "returnZone",
   "returnContact",
+  "returnResult",
   "resultPlayer",
   "resultShot",
   "resultOutcome",
+  "resultMissed",
+  "resultRallyLength",
   "customPlayer",
   "customSide",
   "customDirection",
@@ -148,13 +166,17 @@ export const EMPTY_MATCH_FILTERS: MatchFilters = Object.freeze({
   serveType: [],
   serveSpin: [],
   serveZone: [],
+  serveResult: [],
   returnType: [],
   returnSpin: [],
   returnZone: [],
   returnContact: [],
+  returnResult: [],
   resultPlayer: null,
   resultShot: [],
   resultOutcome: [],
+  resultMissed: [],
+  resultRallyLength: [],
   customPlayer: null,
   customSide: [],
   customDirection: [],
@@ -212,6 +234,13 @@ export const MATCH_FILTER_OPTIONS: {
     { value: "Body", label: "Body" },
     { value: "T", label: "T" },
   ],
+  serveResult: [
+    { value: "ace", label: "Ace" },
+    { value: "service-winner", label: "Service winner" },
+    { value: "return-error", label: "Return error" },
+    { value: "in-play", label: "In play" },
+    { value: "double-fault", label: "Double fault" },
+  ],
   returnType: [
     { value: "Forehand", label: "Forehand" },
     { value: "Backhand", label: "Backhand" },
@@ -230,6 +259,11 @@ export const MATCH_FILTER_OPTIONS: {
     { value: "middle", label: "On the baseline" },
     { value: "neutral", label: "Deep" },
   ],
+  returnResult: [
+    { value: "winner", label: "Winner" },
+    { value: "error", label: "Error" },
+    { value: "in-play", label: "In play" },
+  ],
   resultPlayer: PLAYER_OPTIONS,
   resultShot: [
     { value: "Serve", label: "Serve" },
@@ -244,6 +278,15 @@ export const MATCH_FILTER_OPTIONS: {
     { value: "lost", label: "Lost" },
     { value: "winner", label: "Winner" },
     { value: "error", label: "Error" },
+  ],
+  resultMissed: [
+    { value: "Out", label: "Out" },
+    { value: "Net", label: "Net" },
+  ],
+  resultRallyLength: [
+    { value: "short", label: "Short 1–4" },
+    { value: "medium", label: "Medium 5–8" },
+    { value: "long", label: "Long 9+" },
   ],
   customPlayer: PLAYER_OPTIONS,
   customSide: SIDE_OPTIONS,
@@ -299,6 +342,7 @@ export const MATCH_FILTER_SECTIONS: readonly {
       { key: "serveType", label: "Type" },
       { key: "serveSpin", label: "Spin" },
       { key: "serveZone", label: "Zone" },
+      { key: "serveResult", label: "Result" },
     ],
   },
   {
@@ -320,6 +364,7 @@ export const MATCH_FILTER_SECTIONS: readonly {
         label: "Contact depth",
         note: "from the baseline",
       },
+      { key: "returnResult", label: "Result" },
     ],
   },
   {
@@ -329,6 +374,8 @@ export const MATCH_FILTER_SECTIONS: readonly {
       { key: "resultPlayer", label: "Player" },
       { key: "resultShot", label: "Shot" },
       { key: "resultOutcome", label: "Outcome" },
+      { key: "resultMissed", label: "Missed" },
+      { key: "resultRallyLength", label: "Rally length" },
     ],
   },
   {
@@ -465,6 +512,68 @@ export function returnContactOf(
   return "neutral";
 }
 
+/**
+ * Serve › Result — a priority chain, so a point lands in at most one option:
+ * the point's own result type first (Ace, Service Winner, Double Fault),
+ * else how the return came back (`secondShotResult` Out/Net = a return
+ * error, In = in play), else none. A service winner whose return row reads
+ * Out is a service winner only.
+ */
+export function serveResultOf(point: MatchPoint): ServeResult | null {
+  const rt = lower(point.resultType);
+  if (rt === "ace") return "ace";
+  if (rt === "service winner") return "service-winner";
+  if (rt === "double fault") return "double-fault";
+  const ret = point.secondShotResult;
+  if (ret === "Out" || ret === "Net") return "return-error";
+  if (ret === "In") return "in-play";
+  return null;
+}
+
+/**
+ * The point ended on a winning return: the head-to-head card's Return winners
+ * row counts exactly these (adding that the returner won the point), the Film
+ * cut's `return-winner` ending and Return › Result "Winner" admit exactly
+ * these. One definition, so the figure and the points a click opens cannot
+ * drift apart. Re-exported from `film-cut-context.tsx` under the same name.
+ */
+export function isReturnWinner(point: MatchPoint): boolean {
+  const result = point.secondShotResult;
+  const type = (point.resultType ?? "").trim();
+  return (
+    result === "In" &&
+    point.rallyLength > 0 &&
+    point.rallyLength <= 2 &&
+    /winner$/i.test(type) &&
+    type !== "Service Winner"
+  );
+}
+
+/**
+ * Return › Result: a winning return (`isReturnWinner`), a missed one
+ * (`secondShotResult` Out/Net), or one that landed and the rally went on.
+ * None when the return's result was not recorded.
+ */
+export function returnResultOf(point: MatchPoint): ReturnResult | null {
+  if (isReturnWinner(point)) return "winner";
+  const ret = point.secondShotResult;
+  if (ret === "Out" || ret === "Net") return "error";
+  if (ret === "In") return "in-play";
+  return null;
+}
+
+/**
+ * `rally-length-card.tsx`'s band of a rally length — 1–4 short, 5–8 medium,
+ * 9+ long. Null below 1: 0 is "no shot count recorded", which that card
+ * leaves out of every band.
+ */
+export function rallyLengthBandOf(rallyLength: number): RallyLengthBand | null {
+  if (!(rallyLength >= 1)) return null;
+  if (rallyLength >= 9) return "long";
+  if (rallyLength >= 5) return "medium";
+  return "short";
+}
+
 function strokeOf(shotType: string | null | undefined): ResultShot | null {
   const t = lower(shotType);
   if (t.includes("overhead") || t.includes("smash")) return "Overhead";
@@ -518,6 +627,22 @@ export function finalShotOf(
 function lastShotOf(point: MatchPoint): MatchShot | undefined {
   const shots = point.shots ?? [];
   return shots[shots.length - 1];
+}
+
+/**
+ * Result › Missed: the point's LAST shot row went Out or into the Net
+ * (either case), and — when a Result player is set — that player hit it.
+ * Without shot rows there is no last shot, so nothing matches.
+ */
+function matchesMissed(
+  point: MatchPoint,
+  missed: ResultMissed,
+  pov: boolean | null,
+): boolean {
+  const last = lastShotOf(point);
+  if (!last) return false;
+  if (lower(last.result) !== missed.toLowerCase()) return false;
+  return pov === null || last.isPlayer1 === pov;
 }
 
 /**
@@ -667,6 +792,9 @@ export function matchesPoint(
   if (f.serveZone.length > 0 && !anyOf(f.serveZone, serveZoneOf(point))) {
     return false;
   }
+  if (f.serveResult.length > 0 && !anyOf(f.serveResult, serveResultOf(point))) {
+    return false;
+  }
 
   /* Return */
   if (f.returnType.length > 0 && !anyOf(f.returnType, returnStrokeOf(point))) {
@@ -687,6 +815,12 @@ export function matchesPoint(
   ) {
     return false;
   }
+  if (
+    f.returnResult.length > 0 &&
+    !anyOf(f.returnResult, returnResultOf(point))
+  ) {
+    return false;
+  }
 
   /* Result — from the point of view of the Result player */
   const pov = f.resultPlayer === null ? null : seatOf(f.resultPlayer, ctx);
@@ -700,6 +834,18 @@ export function matchesPoint(
     !f.resultOutcome.some((o) =>
       matchesOutcome(point, o, pov, ctx.youIsPlayer1),
     )
+  ) {
+    return false;
+  }
+  if (
+    f.resultMissed.length > 0 &&
+    !f.resultMissed.some((m) => matchesMissed(point, m, pov))
+  ) {
+    return false;
+  }
+  if (
+    f.resultRallyLength.length > 0 &&
+    !anyOf(f.resultRallyLength, rallyLengthBandOf(point.rallyLength))
   ) {
     return false;
   }
@@ -907,6 +1053,16 @@ const URL_CODEC: {
       ["T", "t"],
     ],
   },
+  serveResult: {
+    key: "vr",
+    codes: [
+      ["ace", "a"],
+      ["service-winner", "sw"],
+      ["return-error", "re"],
+      ["in-play", "ip"],
+      ["double-fault", "df"],
+    ],
+  },
   returnType: {
     key: "rt",
     codes: [
@@ -937,6 +1093,14 @@ const URL_CODEC: {
       ["neutral", "n"],
     ],
   },
+  returnResult: {
+    key: "rr",
+    codes: [
+      ["winner", "w"],
+      ["error", "e"],
+      ["in-play", "ip"],
+    ],
+  },
   resultPlayer: { key: "xp", codes: PLAYER_CODES },
   resultShot: {
     key: "xs",
@@ -956,6 +1120,21 @@ const URL_CODEC: {
       ["lost", "l"],
       ["winner", "wn"],
       ["error", "er"],
+    ],
+  },
+  resultMissed: {
+    key: "xm",
+    codes: [
+      ["Out", "o"],
+      ["Net", "n"],
+    ],
+  },
+  resultRallyLength: {
+    key: "xr",
+    codes: [
+      ["short", "s"],
+      ["medium", "m"],
+      ["long", "l"],
     ],
   },
   customPlayer: { key: "cp", codes: PLAYER_CODES },

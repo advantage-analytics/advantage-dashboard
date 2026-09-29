@@ -7,6 +7,7 @@ import {
   applyMatchFilters,
   EMPTY_MATCH_FILTERS,
   hasActiveMatchFilters,
+  isReturnWinner,
   MATCH_FILTER_KEYS,
   type MatchFilterContext,
   type MatchFilters,
@@ -160,23 +161,11 @@ export function hasFilmCut(cut: FilmCut | null | undefined): boolean {
 }
 
 /**
- * The point ended on a winning return: the head-to-head card's Return winners
- * row counts exactly these (adding that the returner won the point), and the
- * `return-winner` ending admits exactly these. One definition, so the figure
- * and the points a click opens cannot drift apart. Moved here from
- * `film/filters/types.ts` (T7), whose model T8 deletes.
+ * The point ended on a winning return — defined in the shared model beside
+ * Return › Result "Winner", which admits exactly these; re-exported here so
+ * the head-to-head card and the `return-winner` ending read one definition.
  */
-export function isReturnWinner(point: MatchPoint): boolean {
-  const result = point.secondShotResult;
-  const type = (point.resultType ?? "").trim();
-  return (
-    result === "In" &&
-    point.rallyLength > 0 &&
-    point.rallyLength <= 2 &&
-    /winner$/i.test(type) &&
-    type !== "Service Winner"
-  );
-}
+export { isReturnWinner };
 
 function matchesEnding(point: MatchPoint, ending: FilmCutEnding): boolean {
   const result = (point.resultType ?? "").trim().toLowerCase();

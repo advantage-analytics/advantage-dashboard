@@ -83,6 +83,40 @@ test.describe("applied-words", () => {
     ).toEqual(["Ad-40", "Rudy’s result"]);
   });
 
+  test("Serve/Return Result, Missed and Rally length read as their own phrases", () => {
+    expect(
+      appliedPhrases(
+        filtersWith({
+          serveResult: [
+            "double-fault",
+            "in-play",
+            "return-error",
+            "service-winner",
+            "ace",
+          ],
+          returnResult: ["in-play", "error", "winner"],
+          resultMissed: ["Net", "Out"],
+          resultRallyLength: ["long", "medium", "short"],
+        }),
+        NAMES,
+      ),
+    ).toEqual([
+      "ace",
+      "service winner",
+      "return error",
+      "serve returned",
+      "double fault",
+      "return winner",
+      "missed return",
+      "return in play",
+      "missed out",
+      "missed in the net",
+      "short rally (1–4)",
+      "medium rally (5–8)",
+      "long rally (9+)",
+    ]);
+  });
+
   test("no filters, no words", () => {
     expect(appliedPhrases(EMPTY_MATCH_FILTERS, NAMES)).toEqual([]);
   });

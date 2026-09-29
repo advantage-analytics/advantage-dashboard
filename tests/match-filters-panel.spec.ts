@@ -154,6 +154,7 @@ test.describe("FiltersPanel markup", () => {
       "Type",
       "Spin",
       "Zone",
+      "Result",
     ]);
     expect(groupLabels("return")).toEqual([
       "Player",
@@ -162,9 +163,16 @@ test.describe("FiltersPanel markup", () => {
       "Spin",
       "Zone",
       "Contact depth",
+      "Result",
     ]);
     // The Result row is "Shot" (the mockup's "Zone" was a typo).
-    expect(groupLabels("result")).toEqual(["Player", "Shot", "Outcome"]);
+    expect(groupLabels("result")).toEqual([
+      "Player",
+      "Shot",
+      "Outcome",
+      "Missed",
+      "Rally length",
+    ]);
     expect(groupLabels("custom")).toEqual([
       "Hit by",
       "Side",
@@ -209,6 +217,11 @@ test.describe("FiltersPanel markup", () => {
       "Lost",
       "Winner",
       "Error",
+      "Out",
+      "Net",
+      "Short 1–4",
+      "Medium 5–8",
+      "Long 9+",
     ]);
     expect(text(html)).not.toContain("Winnner");
 

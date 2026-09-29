@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Add Serve › Result, Return › Result, Result › Missed and Rally length groups
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/match-detail/match-filters/model.ts, match-filters/applied-words.ts, film-cut-context.tsx, tests/match-filters-model.spec.ts, tests/match-filters-panel.spec.ts, tests/match-filters-words-rail.spec.ts (guess)
 - **routes:** /dashboard/matches/[matchId]
