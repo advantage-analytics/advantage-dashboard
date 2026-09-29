@@ -7,6 +7,9 @@ import {
   DARK_READOUT_CLASS,
   DARK_READOUT_STYLE,
 } from "@/components/dashboard/matches/match-detail/chart-tooltip";
+import { handOf } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
+import type { Hand } from "@/components/dashboard/matches/match-detail/match-filters/shot-geometry";
 import { cn } from "@/lib/utils";
 
 import { OPP, OUT, YOU, readoutPlacement, type CourtMark } from "./film-court";
@@ -165,8 +168,12 @@ const keyOf = (mark: FilmCourtMark) => `${mark.shotId}:${mark.kind}`;
  * placement or result prints {@link UNMEASURED} and never a `0`, which would
  * be a different claim about the match.
  */
-function readoutLines(mark: FilmCourtMark, playerName: string) {
-  const cells = shotRowCells(mark.shot, mark.order, playerName);
+function readoutLines(
+  mark: FilmCourtMark,
+  playerName: string,
+  hand: Hand | null,
+) {
+  const cells = shotRowCells(mark.shot, mark.order, playerName, null, hand);
   const speed = cells.mph === UNMEASURED ? UNMEASURED : `${cells.mph} mph`;
   return {
     title: `${shotLabel(mark.shot)} · ${speed}`,
@@ -268,6 +275,9 @@ export function FilmCourt({
     seekKey: FilmCourtProps["seekKey"];
   } | null>(null);
   const openKey = opened && opened.seekKey === seekKey ? opened.key : null;
+  // The hands the Direction filter uses, so the readout's placement matches
+  // the row the filter kept (Inside Out, not Crosscourt).
+  const { context: filterContext } = useMatchFilters();
   const show = (key: string) => setOpened({ key, seekKey });
 
   const drawn = mode === "none" ? [] : marks;
@@ -279,7 +289,11 @@ export function FilmCourt({
 
   const open = drawn.find((mark) => keyOf(mark) === openKey) ?? null;
   const openLines = open
-    ? readoutLines(open, open.hitter === "you" ? youName : opponentName)
+    ? readoutLines(
+        open,
+        open.hitter === "you" ? youName : opponentName,
+        handOf(open.shot.isPlayer1, filterContext),
+      )
     : null;
   const openAt = open ? readoutPlacement(open.x, open.y, dock) : null;
 
@@ -428,6 +442,7 @@ export function FilmCourt({
           const lines = readoutLines(
             mark,
             mark.hitter === "you" ? youName : opponentName,
+            handOf(mark.shot.isPlayer1, filterContext),
           );
           return (
             <button

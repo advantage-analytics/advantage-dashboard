@@ -4,6 +4,9 @@ import { memo, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import { handOf } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
+import type { Hand } from "@/components/dashboard/matches/match-detail/match-filters/shot-geometry";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +75,10 @@ export const FilmThisPoint = memo(function FilmThisPoint({
 }) {
   const sides = useMatchSides();
   const youIsPlayer1 = sides.you.isPlayer1;
+  // The hands the Direction filter uses, so a row the filter keeps as Inside
+  // Out is labelled Inside Out. Outside the provider they are null and the
+  // stored zone prints as is.
+  const { context: filterContext } = useMatchFilters();
 
   const seconds = point?.duration != null ? Math.round(point.duration) : null;
   const ended = point ? point.resultType || "Point" : null;
@@ -149,6 +156,7 @@ export const FilmThisPoint = memo(function FilmThisPoint({
               rallyNumber={numbering.numbers.get(stop.shot.id) ?? i + 1}
               isOpener={isRallyOpener(stop.shot.id, numbering)}
               returnShotId={returnShotId}
+              hand={handOf(stop.shot.isPlayer1, filterContext)}
               playerName={lastNameOf(
                 stop.shot.isPlayer1 === youIsPlayer1
                   ? sides.you.name
@@ -238,6 +246,7 @@ const ShotRow = memo(function ShotRow({
   rallyNumber,
   isOpener,
   returnShotId,
+  hand,
   playerName,
   isActive,
   onSelect,
@@ -251,11 +260,19 @@ const ShotRow = memo(function ShotRow({
   isOpener: boolean;
   /** The point's return, from all its shots (timed or not), for Type. */
   returnShotId: string | null;
+  /** The hitter's hand, for Placement's Inside-Out / Inside-In. */
+  hand: Hand | null;
   playerName: string;
   isActive: boolean;
   onSelect: (stop: ShotStop) => void;
 }) {
-  const cells = shotRowCells(stop.shot, rallyNumber, playerName, returnShotId);
+  const cells = shotRowCells(
+    stop.shot,
+    rallyNumber,
+    playerName,
+    returnShotId,
+    hand,
+  );
 
   return (
     <button

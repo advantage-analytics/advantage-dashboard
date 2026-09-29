@@ -65,12 +65,20 @@ import {
  * - `unforced-error` — `resultType` containing "unforced error". Result ›
  *   Ending "error" covers forced errors too, and video matches do not
  *   separate the two.
+ * - `unreturned-serve` — `isUnreturnedServe`: a one-shot rally the server
+ *   won. On an Advantage Intelligence match the head-to-head card counts these
+ *   as aces (the derivation labels every one "Service Winner" and never
+ *   "Ace"), so its derived Aces row opens exactly these.
+ * - `rally-winner` — the `winner` bucket less every unreturned serve: the
+ *   derived Winners row, once its aces have moved to their own line. The two
+ *   derived rows never share a point.
  *
- * Aces, return winners and the rally bands are exact shared filters (Serve ›
- * Result "Ace", Return › Result "Winner", Result › Rally length), so their
- * cuts are pure and land entirely as pills.
+ * Published aces, return winners and the rally bands are exact shared
+ * filters (Serve › Result "Ace", Return › Result "Winner", Result › Rally
+ * length), so their cuts are pure and land entirely as pills.
  */
-export type FilmCutEnding = "winner" | "unforced-error";
+export type FilmCutEnding =
+  "winner" | "unforced-error" | "unreturned-serve" | "rally-winner";
 
 /** What a cut adds that `MatchFilters` cannot say. Film only. */
 export interface FilmCutExtras {
@@ -152,6 +160,21 @@ export function hasFilmCut(cut: FilmCut | null | undefined): boolean {
   );
 }
 
+/**
+ * The serve was never returned and the server won the point: a one-shot
+ * rally won by whoever served. Structural on purpose — rally length and the
+ * point's winner, never the "Service Winner" label — so a service winner
+ * with an intermediate stroke (rally length above one) is not one. The
+ * head-to-head card's derived Aces row counts exactly these (`tallySide`),
+ * and the `unreturned-serve` ending admits exactly these. A double fault is
+ * never one: the server lost it.
+ */
+export function isUnreturnedServe(point: MatchPoint): boolean {
+  return (
+    point.rallyLength === 1 && point.wonByPlayer1 === point.serverIsPlayer1
+  );
+}
+
 function matchesFilmCutEnding(
   point: MatchPoint,
   ending: FilmCutEnding,
@@ -162,6 +185,10 @@ function matchesFilmCutEnding(
       return result.includes("winner");
     case "unforced-error":
       return result.includes("unforced error");
+    case "unreturned-serve":
+      return isUnreturnedServe(point);
+    case "rally-winner":
+      return result.includes("winner") && !isUnreturnedServe(point);
   }
 }
 

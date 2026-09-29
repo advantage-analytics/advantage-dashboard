@@ -438,7 +438,16 @@ function seatOf(side: PlayerSide, ctx: MatchFilterContext): boolean {
   return side === "you" ? ctx.youIsPlayer1 : !ctx.youIsPlayer1;
 }
 
-function handOf(isPlayer1: boolean, ctx: MatchFilterContext): Hand | null {
+/**
+ * A seat's hand from the context — the one lookup the Direction filter and
+ * the Video tab's shot rows (`shotRowCells`) share, so a shot the filter
+ * calls Inside Out is labelled Inside Out. `ctx.hands` is already
+ * seat-correct; never swap on `youIsPlayer1` here.
+ */
+export function handOf(
+  isPlayer1: boolean,
+  ctx: MatchFilterContext,
+): Hand | null {
   return isPlayer1 ? ctx.hands.player1 : ctx.hands.player2;
 }
 
