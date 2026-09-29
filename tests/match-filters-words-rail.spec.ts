@@ -41,7 +41,7 @@ test.describe("applied-words", () => {
           sets: [2, 1],
           scoreType: ["breakpoint"],
           serveType: ["second"],
-          resultOutcome: ["winner"],
+          resultEnding: ["winner"],
           customRallyShot: [4],
           returnContact: ["middle"],
         }),
@@ -80,7 +80,7 @@ test.describe("applied-words", () => {
         filtersWith({ scorePoints: ["Ad-40"], resultPlayer: "you" }),
         NAMES,
       ),
-    ).toEqual(["Ad-40", "Rudy’s result"]);
+    ).toEqual(["Ad-40", "Rudy’s last shot"]);
   });
 
   test("Serve/Return Result, Missed and Rally length read as their own phrases", () => {

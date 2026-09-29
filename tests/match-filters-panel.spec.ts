@@ -165,11 +165,14 @@ test.describe("FiltersPanel markup", () => {
       "Contact depth",
       "Result",
     ]);
-    // The Result row is "Shot" (the mockup's "Zone" was a typo).
+    // Outcome is from your side and Hit by is the last shot's hitter — two
+    // groups, since "Player" used to mean both. The Result row is "Shot"
+    // (the mockup's "Zone" was a typo).
     expect(groupLabels("result")).toEqual([
-      "Player",
-      "Shot",
       "Outcome",
+      "Hit by",
+      "Shot",
+      "Ending",
       "Missed",
       "Rally length",
     ]);
@@ -180,6 +183,8 @@ test.describe("FiltersPanel markup", () => {
       "Hit",
     ]);
     expect(text(sectionHtml(html, "return"))).toContain("from the baseline");
+    expect(text(sectionHtml(html, "result"))).toContain("from your side");
+    expect(text(sectionHtml(html, "result"))).toContain("the last shot");
     expect(text(sectionHtml(html, "custom"))).toContain("1 = the serve");
 
     const score = pillLabels(sectionHtml(html, "score"));
@@ -205,6 +210,8 @@ test.describe("FiltersPanel markup", () => {
 
     const result = pillLabels(sectionHtml(html, "result"));
     expect(result).toEqual([
+      "Won",
+      "Lost",
       "Rudy Quan",
       "Federico Gomez",
       "Serve",
@@ -213,8 +220,6 @@ test.describe("FiltersPanel markup", () => {
       "Backhand",
       "Volley",
       "Overhead",
-      "Won",
-      "Lost",
       "Winner",
       "Error",
       "Out",
@@ -322,7 +327,7 @@ test.describe("FiltersPanel markup", () => {
   test("a section holding an applied filter starts open; the rest start closed", () => {
     const html = render(fullAvailability(), {
       ...EMPTY_MATCH_FILTERS,
-      resultOutcome: ["winner"],
+      resultEnding: ["winner"],
     });
     const expanded = sectionHeaders(html).map((h) => [h.title, h.expanded]);
     expect(Object.fromEntries(expanded)).toEqual({
@@ -466,7 +471,7 @@ test.describe("FiltersPanel draft", () => {
     const filters = {
       ...EMPTY_MATCH_FILTERS,
       server: "you" as const,
-      resultOutcome: ["winner"] as const,
+      resultEnding: ["winner"] as const,
     };
     const shown = panelSections(fullAvailability(), {
       you: "a",

@@ -40,8 +40,8 @@ import {
 const ALL_ROWS: H2HRowConfig[] = H2H_GROUPS.flatMap((group) => group.configs);
 
 const EXPECTED_CUTS: Record<string, FilmCut> = {
-  Aces: { resultOutcome: ["winner"], ending: "ace" },
-  "Double faults": { resultOutcome: ["error"], resultShot: ["Serve"] },
+  Aces: { resultEnding: ["winner"], ending: "ace" },
+  "Double faults": { resultEnding: ["error"], resultShot: ["Serve"] },
   "First serve in": { serveType: ["first"] },
   "First serve points won": { serveType: ["first"] },
   "Second serve points won": { serveType: ["second"] },
@@ -50,16 +50,21 @@ const EXPECTED_CUTS: Record<string, FilmCut> = {
   "Second serve returns won": { serveType: ["second"] },
   "Break points converted": { scoreType: ["breakpoint"] },
   "Return winners": { ending: "return-winner" },
-  Winners: { resultOutcome: ["winner"], ending: "winner" },
-  "Unforced errors": { resultOutcome: ["error"], ending: "unforced-error" },
+  Winners: { resultEnding: ["winner"], ending: "winner" },
+  "Unforced errors": { resultEnding: ["error"], ending: "unforced-error" },
   "Total points won": {},
 };
 
-/** What one cell of each row sends, for "you" — the opponent's mirrors it. */
+/**
+ * What one cell of each row sends, for "you" — the opponent's mirrors it.
+ * A won row is Result › Outcome from the viewer's side (Won for you, Lost
+ * for the opponent) with NO Hit by: the points you won include the ones the
+ * opponent's error ended.
+ */
 const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
-  Aces: { resultOutcome: ["winner"], ending: "ace", resultPlayer: "you" },
+  Aces: { resultEnding: ["winner"], ending: "ace", resultPlayer: "you" },
   "Double faults": {
-    resultOutcome: ["error"],
+    resultEnding: ["error"],
     resultShot: ["Serve"],
     resultPlayer: "you",
   },
@@ -68,52 +73,45 @@ const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
     serveType: ["first"],
     server: "you",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
   "Second serve points won": {
     serveType: ["second"],
     server: "you",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
   "Break points saved": {
     scoreType: ["breakpoint"],
     server: "you",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
   // Your first-serve returns are the opponent's first serves.
   "First serve returns won": {
     serveType: ["first"],
     server: "opponent",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
   "Second serve returns won": {
     serveType: ["second"],
     server: "opponent",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
   "Break points converted": {
     scoreType: ["breakpoint"],
     server: "opponent",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
   "Return winners": {
     ending: "return-winner",
     server: "opponent",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
-  Winners: { resultOutcome: ["winner"], ending: "winner", resultPlayer: "you" },
+  Winners: { resultEnding: ["winner"], ending: "winner", resultPlayer: "you" },
   "Unforced errors": {
-    resultOutcome: ["error"],
+    resultEnding: ["error"],
     ending: "unforced-error",
     resultPlayer: "you",
   },
-  "Total points won": { resultOutcome: ["won"], resultPlayer: "you" },
+  "Total points won": { resultOutcome: ["won"] },
 };
 
 function youCut(row: H2HRowConfig): FilmCut {
@@ -123,12 +121,20 @@ function oppCut(row: H2HRowConfig): FilmCut {
   return sideCut(row.cut!, "opp", row.sideBy, row.sideWon);
 }
 
-/** A cut with every "you" swapped for "opponent" and back. */
+/**
+ * A cut with every "you" swapped for "opponent" and back, and — since
+ * Outcome is read from the viewer's side — Won swapped for Lost.
+ */
 function mirrored(cut: FilmCut): FilmCut {
   const flip = (v: unknown) =>
     v === "you" ? "opponent" : v === "opponent" ? "you" : v;
+  const flipOutcome = (v: unknown) =>
+    v === "won" ? "lost" : v === "lost" ? "won" : v;
   return Object.fromEntries(
-    Object.entries(cut).map(([k, v]) => [k, flip(v)]),
+    Object.entries(cut).map(([k, v]) => [
+      k,
+      k === "resultOutcome" && Array.isArray(v) ? v.map(flipOutcome) : flip(v),
+    ]),
   ) as FilmCut;
 }
 
@@ -354,7 +360,7 @@ test.describe("a cell opens exactly the points its figure counts", () => {
       MATCH,
       {
         ...EMPTY_MATCH_FILTERS,
-        resultOutcome: ["winner"],
+        resultEnding: ["winner"],
         resultShot: ["Serve"],
         resultPlayer: "you",
       },
@@ -417,7 +423,7 @@ test.describe("a cell opens exactly the points its figure counts", () => {
         ...EMPTY_MATCH_FILTERS,
         server: "opponent",
         resultShot: ["Return"],
-        resultOutcome: ["winner"],
+        resultEnding: ["winner"],
         resultPlayer: "you",
       },
       CTX,

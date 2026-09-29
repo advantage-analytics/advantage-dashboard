@@ -304,20 +304,92 @@ function rally(
   return shots;
 }
 
-test("Won/Lost are from the Result player's point of view, you when none is set", () => {
+test("Won/Lost are from YOUR side (youIsPlayer1), whatever Hit by says", () => {
+  // Both points end on Rudy's racket, so Hit by "opponent" admits them and
+  // the outcome alone decides — it never flips to Rudy's point of view.
   const points = [
-    pt({ id: "p1-won", wonByPlayer1: true }),
-    pt({ id: "p2-won", wonByPlayer1: false }),
+    pt({
+      id: "p1-won",
+      wonByPlayer1: true,
+      player: "player2",
+      lastShotType: "Backhand",
+    }),
+    pt({
+      id: "p2-won",
+      wonByPlayer1: false,
+      player: "player2",
+      lastShotType: "Forehand",
+    }),
   ];
   expect(run(points, { resultOutcome: ["won"] })).toEqual(["p1-won"]);
   expect(run(points, { resultOutcome: ["lost"] })).toEqual(["p2-won"]);
   expect(run(points, { resultOutcome: ["won"] }, FLIPPED)).toEqual(["p2-won"]);
+  expect(run(points, { resultOutcome: ["lost"] }, FLIPPED)).toEqual(["p1-won"]);
   expect(
     run(points, { resultPlayer: "opponent", resultOutcome: ["won"] }),
-  ).toEqual(["p2-won"]);
+  ).toEqual(["p1-won"]);
   expect(
     run(points, { resultPlayer: "opponent", resultOutcome: ["lost"] }),
-  ).toEqual(["p1-won"]);
+  ).toEqual(["p2-won"]);
+  expect(
+    run(points, { resultPlayer: "opponent", resultOutcome: ["won"] }, FLIPPED),
+  ).toEqual([]);
+  expect(
+    run(points, { resultPlayer: "you", resultOutcome: ["won"] }, FLIPPED),
+  ).toEqual(["p2-won"]);
+});
+
+test("Hit by alone is the last shot's hitter; with Shot, Ending or Missed it is that group's own attribution", () => {
+  const points = [
+    // Your service winner: the last row is Rudy's return into the net.
+    pt({
+      id: "you-service-winner",
+      resultType: "Service Winner",
+      serverIsPlayer1: true,
+      wonByPlayer1: true,
+      shots: rally("Forehand", 2, "Net"),
+    }),
+    // Rudy's backhand winner on shot 4.
+    pt({
+      id: "rudy-bh-winner",
+      resultType: "Backhand Winner",
+      wonByPlayer1: false,
+      shots: rally("Backhand", 4, "In"),
+    }),
+    // Your forehand on shot 5, from the loader's last-shot fields alone.
+    pt({
+      id: "you-fh-no-rows",
+      resultType: "Forehand Winner",
+      player: "player1",
+      lastShotType: "Forehand",
+    }),
+    // No shot rows and no last shot type: nobody to attribute it to.
+    pt({ id: "no-final-shot", resultType: "" }),
+  ];
+  // Alone: whoever struck the last ball — the missed return is Rudy's.
+  expect(run(points, { resultPlayer: "you" })).toEqual(["you-fh-no-rows"]);
+  expect(run(points, { resultPlayer: "opponent" })).toEqual([
+    "you-service-winner",
+    "rudy-bh-winner",
+  ]);
+  expect(run(points, { resultPlayer: "you" }, FLIPPED)).toEqual([
+    "you-service-winner",
+    "rudy-bh-winner",
+  ]);
+  // With Ending picked, a service winner is the server's — yours.
+  expect(
+    run(points, { resultPlayer: "you", resultEnding: ["winner"] }),
+  ).toEqual(["you-service-winner", "you-fh-no-rows"]);
+  expect(
+    run(points, { resultPlayer: "opponent", resultEnding: ["winner"] }),
+  ).toEqual(["rudy-bh-winner"]);
+  // With Shot picked, the final shot's hitter still has to be that player.
+  expect(run(points, { resultPlayer: "you", resultShot: ["Return"] })).toEqual(
+    [],
+  );
+  expect(
+    run(points, { resultPlayer: "opponent", resultShot: ["Return"] }),
+  ).toEqual(["you-service-winner"]);
 });
 
 test("Winner = the POV player hit a winner, ace or service winner", () => {
@@ -357,17 +429,17 @@ test("Winner = the POV player hit a winner, ace or service winner", () => {
     }),
     pt({ id: "error", resultType: "Forehand Unforced Error" }),
   ];
-  expect(run(points, { resultOutcome: ["winner"] })).toEqual([
+  expect(run(points, { resultEnding: ["winner"] })).toEqual([
     "you-fh-winner",
     "rudy-bh-winner",
     "rudy-ace",
     "you-service-winner",
   ]);
   expect(
-    run(points, { resultPlayer: "you", resultOutcome: ["winner"] }),
+    run(points, { resultPlayer: "you", resultEnding: ["winner"] }),
   ).toEqual(["you-fh-winner", "you-service-winner"]);
   expect(
-    run(points, { resultPlayer: "opponent", resultOutcome: ["winner"] }),
+    run(points, { resultPlayer: "opponent", resultEnding: ["winner"] }),
   ).toEqual(["rudy-bh-winner", "rudy-ace"]);
 });
 
@@ -428,17 +500,17 @@ test("Error = the POV player made the error, incl. double faults and a null resu
       shots: rally("Forehand", 3, "In"),
     }),
   ];
-  expect(run(points, { resultOutcome: ["error"] })).toEqual([
+  expect(run(points, { resultEnding: ["error"] })).toEqual([
     "rudy-ue",
     "you-fe",
     "you-df",
     "null-rudy-out",
   ]);
+  expect(run(points, { resultPlayer: "you", resultEnding: ["error"] })).toEqual(
+    ["you-fe", "you-df"],
+  );
   expect(
-    run(points, { resultPlayer: "you", resultOutcome: ["error"] }),
-  ).toEqual(["you-fe", "you-df"]);
-  expect(
-    run(points, { resultPlayer: "opponent", resultOutcome: ["error"] }),
+    run(points, { resultPlayer: "opponent", resultEnding: ["error"] }),
   ).toEqual(["rudy-ue", "null-rudy-out"]);
 });
 
@@ -863,9 +935,10 @@ const EVERYTHING: MatchFilters = {
   returnZone: ["Down the Line", "Middle", "Crosscourt"],
   returnContact: ["inside", "middle", "neutral"],
   returnResult: ["winner", "error", "in-play"],
+  resultOutcome: ["won", "lost"],
   resultPlayer: "you",
   resultShot: ["Serve", "Return", "Forehand", "Backhand", "Volley", "Overhead"],
-  resultOutcome: ["won", "lost", "winner", "error"],
+  resultEnding: ["winner", "error"],
   resultMissed: ["Out", "Net"],
   resultRallyLength: ["short", "medium", "long"],
   customPlayer: "opponent",
@@ -922,6 +995,25 @@ test("parse of garbage is EMPTY and never throws", () => {
       f({ server: "opponent", serveZone: ["Wide"], sets: [2] }),
     ),
   ).toBe(true);
+});
+
+test("an older link's Winner/Error under Outcome (xo.wn, xo.er) parse as Ending; serialize writes xe", () => {
+  expect(parseMatchFilters("xo.w.wn")).toEqual(
+    f({ resultOutcome: ["won"], resultEnding: ["winner"] }),
+  );
+  expect(parseMatchFilters("xo.er")).toEqual(f({ resultEnding: ["error"] }));
+  // A moved token joins what the new group already holds, once.
+  expect(parseMatchFilters("xe.wn_xo.wn.er")).toEqual(
+    f({ resultEnding: ["winner", "error"] }),
+  );
+  expect(
+    serializeMatchFilters(
+      f({ resultOutcome: ["won"], resultEnding: ["winner", "error"] }),
+    ),
+  ).toBe("xo.w_xe.wn.er");
+  expect(serializeMatchFilters(parseMatchFilters("xo.w.wn"))).toBe(
+    "xo.w_xe.wn",
+  );
 });
 
 test("activeFilterCount counts chosen options; filtersEqual ignores order", () => {

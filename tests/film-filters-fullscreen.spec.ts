@@ -103,10 +103,10 @@ test("server, saved, set and rally length", () => {
   ).toEqual(["b"]);
 });
 
-test("how the point ended is Result › Outcome, one OR group", () => {
-  expect(list({ resultOutcome: ["winner"] })).toEqual(["a", "b"]);
-  expect(list({ resultOutcome: ["error"] })).toEqual(["c", "d"]);
-  expect(list({ resultOutcome: ["winner", "error"] })).toEqual([
+test("how the point ended is Result › Ending, one OR group", () => {
+  expect(list({ resultEnding: ["winner"] })).toEqual(["a", "b"]);
+  expect(list({ resultEnding: ["error"] })).toEqual(["c", "d"]);
+  expect(list({ resultEnding: ["winner", "error"] })).toEqual([
     "a",
     "b",
     "c",
@@ -149,7 +149,7 @@ test("the cut in words — the trigger and the zero state", () => {
           ...EMPTY_MATCH_FILTERS,
           sets: [2],
           server: "opponent",
-          resultOutcome: ["winner"],
+          resultEnding: ["winner"],
         },
         remainder: {
           extras: { rallyMin: 9 },

@@ -77,25 +77,25 @@ test.describe("point-endings cuts", () => {
   ];
 
   test("the viewer's row", () => {
-    // Every segment's side is Result › Player — who hit the winner or made
+    // Every segment's side is Result › Hit by — who hit the winner or made
     // the error (the server, for an ace or a double fault).
     expect(outcomeCut("winners", "you")).toEqual({
-      resultOutcome: ["winner"],
+      resultEnding: ["winner"],
       ending: "winner",
       resultPlayer: "you",
     });
     expect(outcomeCut("unforcedErrors", "you")).toEqual({
-      resultOutcome: ["error"],
+      resultEnding: ["error"],
       ending: "unforced-error",
       resultPlayer: "you",
     });
     expect(outcomeCut("doubleFaults", "you")).toEqual({
-      resultOutcome: ["error"],
+      resultEnding: ["error"],
       resultShot: ["Serve"],
       resultPlayer: "you",
     });
     expect(outcomeCut("aces", "you")).toEqual({
-      resultOutcome: ["winner"],
+      resultEnding: ["winner"],
       ending: "ace",
       resultPlayer: "you",
     });

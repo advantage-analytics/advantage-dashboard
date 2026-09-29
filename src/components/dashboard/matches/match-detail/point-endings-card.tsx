@@ -97,21 +97,21 @@ const OUTCOMES: OutcomeMeta[] = [
 
 /**
  * Each outcome's base cut, before a side is laid over it by `sideCut` — the
- * shared filters' Result › Outcome, narrowed by a Film-only `ending` where
- * Outcome alone would admit points this card counts in another segment (see
+ * shared filters' Result › Ending, narrowed by a Film-only `ending` where
+ * Ending alone would admit points this card counts in another segment (see
  * `FilmCutEnding`). The four are exclusive, like the tally below: a double
  * fault is Error + Serve, which no unforced error is.
  */
 const OUTCOME_BASE_CUT: Record<OutcomeKey, FilmCut> = {
-  winners: { resultOutcome: ["winner"], ending: "winner" },
-  unforcedErrors: { resultOutcome: ["error"], ending: "unforced-error" },
-  doubleFaults: { resultOutcome: ["error"], resultShot: ["Serve"] },
-  aces: { resultOutcome: ["winner"], ending: "ace" },
+  winners: { resultEnding: ["winner"], ending: "winner" },
+  unforcedErrors: { resultEnding: ["error"], ending: "unforced-error" },
+  doubleFaults: { resultEnding: ["error"], resultShot: ["Serve"] },
+  aces: { resultEnding: ["winner"], ending: "ace" },
 };
 
 /**
  * The film cut behind one segment of one side's bar: the side is Result ›
- * Player, the point of view Outcome reads — whoever hit the winner or made
+ * Hit by, the point of view Ending reads — whoever hit the winner or made
  * the error, and the server for an ace or a double fault. That is exactly
  * the line `head-to-head-card.tsx`'s `sideCut(…, "player")` draws for the
  * same four rows, so this delegates to it rather than re-deriving it here.

@@ -58,7 +58,10 @@ export type ReturnZone = "Down the Line" | "Middle" | "Crosscourt";
 export type ReturnContact = "inside" | "middle" | "neutral";
 export type ResultShot =
   "Serve" | "Return" | "Forehand" | "Backhand" | "Volley" | "Overhead";
-export type ResultOutcome = "won" | "lost" | "winner" | "error";
+/** Result › Outcome — always from YOUR side (`youIsPlayer1`). */
+export type ResultOutcome = "won" | "lost";
+/** Result › Ending — the point ended on a winner or an error. */
+export type ResultEnding = "winner" | "error";
 /** How the serve ended up — at most one per point (`serveResultOf`). */
 export type ServeResult =
   "ace" | "service-winner" | "return-error" | "in-play" | "double-fault";
@@ -94,10 +97,17 @@ export interface MatchFilters {
   readonly returnContact: readonly ReturnContact[];
   readonly returnResult: readonly ReturnResult[];
   /* Result */
-  /** The point-of-view player for Shot and Outcome. */
+  /** Won or lost from your side — never the Result player's. */
+  readonly resultOutcome: readonly ResultOutcome[];
+  /**
+   * Hit by: who struck the point's last shot. Alone it is `finalShotOf`'s
+   * hitter; with Shot, Ending or Missed chosen it is that group's point of
+   * view instead (a service winner is the server's, whatever the last row).
+   */
   readonly resultPlayer: PlayerSide | null;
   readonly resultShot: readonly ResultShot[];
-  readonly resultOutcome: readonly ResultOutcome[];
+  /** The winner or error the point ended on, by the Result player when set. */
+  readonly resultEnding: readonly ResultEnding[];
   /** The last shot's miss, hit by the Result player when one is set. */
   readonly resultMissed: readonly ResultMissed[];
   readonly resultRallyLength: readonly RallyLengthBand[];
@@ -146,9 +156,10 @@ export const MATCH_FILTER_KEYS: readonly MatchFilterKey[] = [
   "returnZone",
   "returnContact",
   "returnResult",
+  "resultOutcome",
   "resultPlayer",
   "resultShot",
-  "resultOutcome",
+  "resultEnding",
   "resultMissed",
   "resultRallyLength",
   "customPlayer",
@@ -172,9 +183,10 @@ export const EMPTY_MATCH_FILTERS: MatchFilters = Object.freeze({
   returnZone: [],
   returnContact: [],
   returnResult: [],
+  resultOutcome: [],
   resultPlayer: null,
   resultShot: [],
-  resultOutcome: [],
+  resultEnding: [],
   resultMissed: [],
   resultRallyLength: [],
   customPlayer: null,
@@ -264,6 +276,10 @@ export const MATCH_FILTER_OPTIONS: {
     { value: "error", label: "Error" },
     { value: "in-play", label: "In play" },
   ],
+  resultOutcome: [
+    { value: "won", label: "Won" },
+    { value: "lost", label: "Lost" },
+  ],
   resultPlayer: PLAYER_OPTIONS,
   resultShot: [
     { value: "Serve", label: "Serve" },
@@ -273,9 +289,7 @@ export const MATCH_FILTER_OPTIONS: {
     { value: "Volley", label: "Volley" },
     { value: "Overhead", label: "Overhead" },
   ],
-  resultOutcome: [
-    { value: "won", label: "Won" },
-    { value: "lost", label: "Lost" },
+  resultEnding: [
     { value: "winner", label: "Winner" },
     { value: "error", label: "Error" },
   ],
@@ -371,9 +385,10 @@ export const MATCH_FILTER_SECTIONS: readonly {
     id: "result",
     label: "Result",
     groups: [
-      { key: "resultPlayer", label: "Player" },
+      { key: "resultOutcome", label: "Outcome", note: "from your side" },
+      { key: "resultPlayer", label: "Hit by", note: "the last shot" },
       { key: "resultShot", label: "Shot" },
-      { key: "resultOutcome", label: "Outcome" },
+      { key: "resultEnding", label: "Ending" },
       { key: "resultMissed", label: "Missed" },
       { key: "resultRallyLength", label: "Rally length" },
     ],
@@ -681,27 +696,30 @@ export function errorMadeBy(point: MatchPoint): boolean | null {
   return null;
 }
 
+/**
+ * Result › Outcome is read from YOUR side and nowhere else (guardrails §4:
+ * attribution follows `youIsPlayer1` exactly) — the Result player never
+ * flips it, so "Hit by the opponent · Won" is the points you won that ended
+ * on the opponent's racket.
+ */
 function matchesOutcome(
   point: MatchPoint,
   outcome: ResultOutcome,
-  pov: boolean | null,
   youIsPlayer1: boolean,
 ): boolean {
-  switch (outcome) {
-    // Won/Lost need a point of view; with no Result player it is you.
-    case "won":
-      return point.wonByPlayer1 === (pov ?? youIsPlayer1);
-    case "lost":
-      return point.wonByPlayer1 !== (pov ?? youIsPlayer1);
-    case "winner": {
-      const by = winnerHitBy(point);
-      return by !== null && (pov === null || by === pov);
-    }
-    case "error": {
-      const by = errorMadeBy(point);
-      return by !== null && (pov === null || by === pov);
-    }
-  }
+  return outcome === "won"
+    ? point.wonByPlayer1 === youIsPlayer1
+    : point.wonByPlayer1 !== youIsPlayer1;
+}
+
+/** Result › Ending, by the Result player (`pov`) when one is set. */
+function matchesEnding(
+  point: MatchPoint,
+  ending: ResultEnding,
+  pov: boolean | null,
+): boolean {
+  const by = ending === "winner" ? winnerHitBy(point) : errorMadeBy(point);
+  return by !== null && (pov === null || by === pov);
 }
 
 function hasCustom(f: MatchFilters): boolean {
@@ -822,18 +840,35 @@ export function matchesPoint(
     return false;
   }
 
-  /* Result — from the point of view of the Result player */
+  /* Result — Outcome from your side; the rest from the Result player's */
+  if (
+    f.resultOutcome.length > 0 &&
+    !f.resultOutcome.some((o) => matchesOutcome(point, o, ctx.youIsPlayer1))
+  ) {
+    return false;
+  }
   const pov = f.resultPlayer === null ? null : seatOf(f.resultPlayer, ctx);
+  // Hit by on its own: the last shot's hitter. With Shot, Ending or Missed
+  // chosen it applies through that group's own attribution instead, so a
+  // service winner stays the server's although its last row is the missed
+  // return.
+  if (
+    pov !== null &&
+    f.resultShot.length === 0 &&
+    f.resultEnding.length === 0 &&
+    f.resultMissed.length === 0
+  ) {
+    const final = finalShotOf(point);
+    if (!final || final.isPlayer1 !== pov) return false;
+  }
   if (f.resultShot.length > 0) {
     const final = finalShotOf(point);
     if (!final || !anyOf(f.resultShot, final.kind)) return false;
     if (pov !== null && final.isPlayer1 !== pov) return false;
   }
   if (
-    f.resultOutcome.length > 0 &&
-    !f.resultOutcome.some((o) =>
-      matchesOutcome(point, o, pov, ctx.youIsPlayer1),
-    )
+    f.resultEnding.length > 0 &&
+    !f.resultEnding.some((e) => matchesEnding(point, e, pov))
   ) {
     return false;
   }
@@ -1101,6 +1136,13 @@ const URL_CODEC: {
       ["in-play", "ip"],
     ],
   },
+  resultOutcome: {
+    key: "xo",
+    codes: [
+      ["won", "w"],
+      ["lost", "l"],
+    ],
+  },
   resultPlayer: { key: "xp", codes: PLAYER_CODES },
   resultShot: {
     key: "xs",
@@ -1113,11 +1155,9 @@ const URL_CODEC: {
       ["Overhead", "oh"],
     ],
   },
-  resultOutcome: {
-    key: "xo",
+  resultEnding: {
+    key: "xe",
     codes: [
-      ["won", "w"],
-      ["lost", "l"],
       ["winner", "wn"],
       ["error", "er"],
     ],
@@ -1210,6 +1250,18 @@ const KEY_BY_CODE = new Map<string, MatchFilterKey>(
 );
 
 /**
+ * Tokens an older link may still carry, and the group they now belong to.
+ * Winner/Error lived under Result › Outcome (`xo.wn`, `xo.er`) until Ending
+ * became its own group; a shared `?f=` link keeps meaning what it meant.
+ * Read only — `serializeMatchFilters` writes the current form.
+ */
+const LEGACY_TOKENS: Readonly<
+  Record<string, Readonly<Record<string, [MatchFilterKey, unknown]>>>
+> = {
+  xo: { wn: ["resultEnding", "winner"], er: ["resultEnding", "error"] },
+};
+
+/**
  * The filters in a serialized string. Tolerant: unknown keys, unknown option
  * codes and malformed groups are dropped, a single-choice group keeps its
  * first valid option, and anything unparsable is EMPTY. Never throws.
@@ -1234,7 +1286,16 @@ export function parseMatchFilters(input: unknown): MatchFilters {
           ([, t]) => t === token,
         )?.[0];
       }
-      if (value !== undefined && !values.includes(value)) values.push(value);
+      if (value === undefined) {
+        const moved = LEGACY_TOKENS[code ?? ""]?.[token];
+        if (moved) {
+          const [toKey, toValue] = moved;
+          const held = out[toKey] as readonly unknown[];
+          if (!held.includes(toValue)) out[toKey] = [...held, toValue];
+        }
+        continue;
+      }
+      if (!values.includes(value)) values.push(value);
     }
     if (values.length === 0) continue;
     out[key] = isSingleKey(key) ? values[0] : values;

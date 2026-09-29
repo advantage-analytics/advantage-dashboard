@@ -6,6 +6,7 @@ import {
   type MatchFilters,
   type PlayerSide,
   type RallyLengthBand,
+  type ResultEnding,
   type ResultMissed,
   type ReturnResult,
   type ServeResult,
@@ -115,16 +116,11 @@ const PHRASE: {
         : "deep contact",
   returnResult: (option, value) =>
     RETURN_RESULT_PHRASE[value as ReturnResult] ?? lower(option),
-  resultPlayer: (_, value, names) => `${playerName(value, names)}’s result`,
+  resultOutcome: (_, value) => (value === "won" ? "points won" : "points lost"),
+  resultPlayer: (_, value, names) => `${playerName(value, names)}’s last shot`,
   resultShot: (option) => `ends on ${article(lower(option))}`,
-  resultOutcome: (_, value) =>
-    value === "won"
-      ? "points won"
-      : value === "lost"
-        ? "points lost"
-        : value === "winner"
-          ? "winners"
-          : "errors",
+  resultEnding: (_, value) =>
+    (value as ResultEnding) === "winner" ? "winners" : "errors",
   resultMissed: (option, value) =>
     RESULT_MISSED_PHRASE[value as ResultMissed] ?? lower(option),
   resultRallyLength: (option, value) =>
@@ -177,9 +173,10 @@ export const SENTENCE_KEYS: readonly MatchFilterKey[] = [
   "sets",
   "scoreType",
   "scorePoints",
+  "resultOutcome",
   "resultPlayer",
   "resultShot",
-  "resultOutcome",
+  "resultEnding",
   "resultMissed",
   "resultRallyLength",
   "customPlayer",

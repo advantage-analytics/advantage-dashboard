@@ -120,7 +120,8 @@ export interface H2HRowConfig {
   sideBy?: CutSide;
   /**
    * The cell opens the points its side WON, not every point the row is
-   * about: "74 of 100 won" opens the 74 (Result › Won, from that side).
+   * about: "74 of 100 won" opens the 74 (Result › Outcome, read from the
+   * viewer's side — Won for you, Lost for the opponent).
    */
   sideWon?: boolean;
   /** What the cut's points are, plural — "break points". Screen-reader copy. */
@@ -136,12 +137,12 @@ export interface H2HRowConfig {
 
 export const SERVE_ROWS: H2HRowConfig[] = [
   {
-    // Result › Winner by the server, narrowed to the "Ace" bucket: Winner
-    // alone would add every service winner, which the report counts as a
-    // winner (and which is every unreturned serve on a video match).
+    // Result › Ending Winner by the server, narrowed to the "Ace" bucket:
+    // Winner alone would add every service winner, which the report counts
+    // as a winner (and which is every unreturned serve on a video match).
     label: "Aces",
     key: "aces",
-    cut: { resultOutcome: ["winner"], ending: "ace" },
+    cut: { resultEnding: ["winner"], ending: "ace" },
     sideBy: "player",
     noun: "aces",
   },
@@ -151,7 +152,7 @@ export const SERVE_ROWS: H2HRowConfig[] = [
     label: "Double faults",
     key: "doubleFaults",
     lowerIsBetter: true,
-    cut: { resultOutcome: ["error"], resultShot: ["Serve"] },
+    cut: { resultEnding: ["error"], resultShot: ["Serve"] },
     sideBy: "player",
     noun: "double faults",
   },
@@ -271,9 +272,9 @@ export const POINT_ROWS: H2HRowConfig[] = [
   {
     label: "Winners",
     key: "winners",
-    // Result › Winner narrowed to the "winner" bucket, which leaves aces on
-    // their own line as the published figure does.
-    cut: { resultOutcome: ["winner"], ending: "winner" },
+    // Result › Ending Winner narrowed to the "winner" bucket, which leaves
+    // aces on their own line as the published figure does.
+    cut: { resultEnding: ["winner"], ending: "winner" },
     sideBy: "player",
     noun: "winners",
   },
@@ -281,9 +282,9 @@ export const POINT_ROWS: H2HRowConfig[] = [
     label: "Unforced errors",
     key: "unforcedErrors",
     lowerIsBetter: true,
-    // Result › Error covers forced errors too, and a video match does not
-    // separate them — the Film-only "unforced error" bucket narrows it.
-    cut: { resultOutcome: ["error"], ending: "unforced-error" },
+    // Result › Ending Error covers forced errors too, and a video match does
+    // not separate them — the Film-only "unforced error" bucket narrows it.
+    cut: { resultEnding: ["error"], ending: "unforced-error" },
     sideBy: "player",
     noun: "unforced errors",
   },

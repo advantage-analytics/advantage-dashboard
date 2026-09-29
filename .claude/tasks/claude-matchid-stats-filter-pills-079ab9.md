@@ -73,7 +73,7 @@ ready).
 
 ## T5 · Restructure Result: Outcome from your side, Hit by, Ending
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1, T4
 - **files:** src/components/dashboard/matches/match-detail/match-filters/model.ts, match-filters/applied-words.ts, film-cut-context.tsx, tests/match-filters-model.spec.ts, tests/head-to-head-cuts.spec.ts, tests/stat-widget-cuts.spec.ts, tests/match-filters-panel.spec.ts, tests/match-filters-words-rail.spec.ts, tests/film-filters-fullscreen.spec.ts, and the spec T1 put its pressed-pills assertion in (guess)

@@ -147,11 +147,9 @@ test("the Film list is applyMatchFilters(shared) AND the remainder's extras AND 
   expect(ids(filmListPoints(sharedPoints, local))).toEqual([]);
 
   // A landed pure cut is the shared filters alone — sides resolve through
-  // the filter context, never in the cut.
-  const won = landFilmCut(
-    shared,
-    intent({ resultOutcome: ["won"], resultPlayer: "you" }),
-  );
+  // the filter context, never in the cut (Won is read from the viewer's
+  // side, so a won cell carries no Hit by).
+  const won = landFilmCut(shared, intent({ resultOutcome: ["won"] }));
   expect(won.remainder).toBeNull();
   expect(
     ids(
@@ -298,8 +296,7 @@ test("landing a cut writes its MatchFilters half to the shared filters, key by k
 
   // A cut with no extras (every key a pill) lands no remainder.
   expect(
-    landFilmCut(shared, intent({ resultOutcome: ["won"], resultPlayer: "you" }))
-      .remainder,
+    landFilmCut(shared, intent({ resultOutcome: ["won"] })).remainder,
   ).toBeNull();
   // An empty cut (a whole-match row) changes nothing: the same object back.
   const empty = landFilmCut(shared, intent({}));
@@ -366,15 +363,15 @@ test("a landed '1st serve points won' cell presses exactly its pills in the draw
   // Sanity: the parse sees the whole catalog, not a fragment of it.
   expect(all.length).toBeGreaterThan(30);
   // Return › Player is the inverted `server` pill, so "you served" also
-  // presses the opponent as the returner.
+  // presses the opponent as the returner. Won is read from the viewer's
+  // side, so no Hit by pill is pressed.
   expect(all.filter((p) => p.pressed).map((p) => p.name)).toEqual([
     "serve › Player › Rudy Quan",
     "serve › Type › First serve",
     "return › Player › Federico Gomez",
-    "result › Player › Rudy Quan",
     "result › Outcome › Won",
   ]);
-  expect(html.match(/aria-pressed="true"/g)).toHaveLength(5);
+  expect(html.match(/aria-pressed="true"/g)).toHaveLength(4);
 });
 
 test("the strip states the cut in words — the shared filters, then the statistic's extras, then saved", () => {

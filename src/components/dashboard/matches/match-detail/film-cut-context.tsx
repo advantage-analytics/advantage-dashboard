@@ -47,15 +47,16 @@ import {
  *
  * Only the cut travels. Which player "you" is stays with the filter context
  * (`MatchFilterContext.youIsPlayer1`, from `useMatchSides()`, guardrails §4):
- * a cut's `server`/`resultPlayer` are you/opponent-relative and are resolved
- * there, never here.
+ * a cut's `server`/`resultPlayer` are you/opponent-relative, and its
+ * `resultOutcome` is read from the viewer's side; all are resolved there,
+ * never here.
  */
 
 /* ── The cut ─────────────────────────────────────────────────────────────── */
 
 /**
  * A result-type bucket the report's own tallies count by, which the shared
- * Result › Outcome cannot separate. Film only.
+ * Result › Ending cannot separate. Film only.
  *
  * - `ace` — `resultType` "Ace". Result › Winner (+ Serve) also admits every
  *   unreturned serve the video pipeline writes as "Service Winner", which the
@@ -238,11 +239,17 @@ export function applyFilmCut(
  *   player's first-serve points are the ones they served.
  * - `returner`: the side RETURNED it, so Serve › Player is the other one —
  *   your first-serve returns are the opponent's first serves.
- * - `player`: the side is Result › Player, the point of view Result › Outcome
+ * - `player`: the side is Result › Hit by, the point of view Result › Ending
  *   reads — whoever hit the winner or made the error (a double fault is the
  *   server's, an ace the server's).
  *
- * `won` adds Result › Won from that side, so "74 of 100 won" opens the 74.
+ * `won` adds Result › Outcome, which is always read from the VIEWER's side:
+ * "Won" for you, "Lost" for the opponent — the opponent's 26 of 100 are the
+ * points you lost. It never writes Hit by, since a point won from a side is
+ * that side's whoever struck the last ball (the opponent's error is still
+ * your point); so under `won` a `player` side is the outcome alone, and a
+ * `server`/`returner` side still narrows to the points that side served or
+ * returned.
  *
  * `you`/`opp` are relative, resolved through the filter context's
  * `youIsPlayer1` inside the film tab (guardrails §4); nothing here reads
@@ -268,10 +275,12 @@ export function sideCut(
   const who = playerSide(side);
   const attributed: FilmCut =
     by === "player"
-      ? { ...cut, resultPlayer: who }
+      ? won
+        ? cut
+        : { ...cut, resultPlayer: who }
       : { ...cut, server: by === "returner" ? otherSide(side) : who };
   return won
-    ? { ...attributed, resultOutcome: ["won"], resultPlayer: who }
+    ? { ...attributed, resultOutcome: [side === "you" ? "won" : "lost"] }
     : attributed;
 }
 
