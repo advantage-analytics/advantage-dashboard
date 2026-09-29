@@ -52,28 +52,6 @@ test.describe("splitInsight", () => {
     });
   });
 
-  test("a five-sentence summary keeps the first as the claim and the rest as evidence", () => {
-    // The generator now asks for 4-5 sentences under 600 characters (was 2-3
-    // under 350). The card's split is one sentence off the front, so the
-    // longer text needs no change there.
-    const claim =
-      "Your first serve carried this match, and it is the shot to keep building on.";
-    const evidence = [
-      "You landed 68% of first serves and won 77% of those points, which kept Okafor off balance from the very first game.",
-      "Second serves were a different story: at 1.5 double faults per set you handed back momentum in every close game.",
-      "Rally length also tilted against you once exchanges passed eight shots, where Okafor took 61% of the points.",
-      "Next week, work on a heavier second serve to the body and on staying patient through the longer rallies.",
-    ].join(" ");
-    const summary = `${claim} ${evidence}`;
-    expect(summary.length).toBeGreaterThanOrEqual(450);
-    expect(summary.length).toBeLessThan(600);
-    expect(summary).toContain("1.5");
-
-    const split = splitInsight(summary);
-    expect(split).toEqual({ claim, evidence });
-    expect(split.evidence?.match(/[.!?](\s|$)/g)).toHaveLength(4);
-  });
-
   test("a lowercase continuation after an abbreviation does not split", () => {
     const summary =
       "Reid mixed serve placement, e.g. the wide slice, to break rhythm.";

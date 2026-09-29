@@ -48,8 +48,35 @@
  * 0.3.2 (2026-09-28) folds under the ad rule the vendor was told
  * (processing_jobs.ad_scoring) instead of matches.format's; only the
  * break/set/match-point flags can differ.
+ * 0.4.1 (2026-09-28) keeps a trailing run of rallies whose score stream reset
+ * to 0-0 / 0-0 / no set (collapsedTailStart in rallies.ts): they fold into the
+ * last real game and take the last stroke's guess as winner, flagged
+ * `winner_guessed`. Before it, such a match was refused for points that
+ * resolved no winner. Numbered past 0.4.0 (phantom strokes, played.ts), which
+ * was already stamped on live rows from another branch.
+ * 0.4.2 (2026-09-28) lands 0.4.0's phantom-stroke drop on top of 0.4.1: a
+ * non-serve stroke before the deciding serve no longer reaches shots
+ * (played.ts, point flag `phantom_strokes_dropped`). It also adds the
+ * review-only `second_serve_called_out` flag and stops flagging
+ * `service_court_repeat` on a no-ad deciding point, where the receiver picks
+ * the side.
+ * 0.5.0 (2026-09-28) reads the trajectories file for our own line calls
+ * (line-calls.ts). When the ball before a derived winner bounced outside the
+ * singles lines, the winner's stroke is dropped as a dead ball and the point
+ * becomes an error by the out ball's hitter (played.ts,
+ * `winner_to_error_by_bounce`) — an autofix on 6 of 6 from one labelled
+ * match, with its reconsideration criteria in played.ts. A near-line or
+ * confidently-out ball flags `ending_suspect_line` for review instead. A job
+ * with no trajectories file derives exactly as 0.4.2.
+ * 0.6.0 (2026-09-29) demotes `winner_to_error_by_bounce` to a review flag:
+ * two more labelled matches took it to 14 of 18, under the 90% line
+ * played.ts set in advance, so the dead ball is no longer dropped and the
+ * vendor's ending stands. Adds two review flags on the score stream (flags.ts):
+ * `tiebreak_score_off_six_all` (tiebreak point scores while games are not
+ * 6-6 — Quan v Harazaki's real 5-7 set) and `score_side_mismatch` (points
+ * played in the game say one court, the server's stance says the other).
  */
-export const DERIVATION_VERSION = "0.3.2-unreconciled";
+export const DERIVATION_VERSION = "0.6.0-unreconciled";
 
 export type {
   RawSplitStepStroke,
@@ -87,6 +114,7 @@ export {
   playerLabels,
   opponentOf,
   rallyDuration,
+  collapsedTailStart,
   type RallyGrouping,
 } from "./rallies";
 
@@ -113,6 +141,7 @@ export { serveZone, directionZone } from "./court";
 export {
   resolvePointWinners,
   resolveWinner,
+  lastStrokeWinner,
   type PointWinner,
   type WinnerResolution,
 } from "./winners";
@@ -134,7 +163,32 @@ export {
   type ShotResult,
 } from "./result-type";
 
-export { flagPoint, flagStroke, POINT_FLAGS, SHOT_FLAGS } from "./flags";
+export {
+  flagPoint,
+  flagStroke,
+  pointsPlayed,
+  POINT_FLAGS,
+  SHOT_FLAGS,
+} from "./flags";
+export { playedRally, type PlayedRally } from "./played";
+export {
+  lineCallsFor,
+  singlesMargin,
+  type LineCall,
+  type LineCalls,
+} from "./line-calls";
+export {
+  serversByChangeover,
+  CHANGEOVER_MIN_GAP_S,
+  CHANGEOVER_MAX_GAP_S,
+} from "./server-witness";
+export {
+  groupTrajectories,
+  flightSamples,
+  type TrajectoryFlight,
+  type TrajectoryRow,
+  type BallSample,
+} from "./trajectory";
 
 export { pressureFor, type PressureFlags } from "./pressure";
 

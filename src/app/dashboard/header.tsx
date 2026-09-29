@@ -41,7 +41,6 @@ import { HeaderGreeting } from "@/components/dashboard/header-greeting";
 import { BetaHeaderMeter } from "@/components/dashboard/beta-header-meter";
 import { MENU_ROW_CLASS, MENU_RULE_CLASS } from "@/lib/ui/menu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
-import { UNKNOWN_EVENT_PLACEHOLDER } from "@/lib/data/match-share-format";
 import {
   PendingBar,
   PendingRegion,
@@ -49,7 +48,7 @@ import {
 import { useConfirmLeave } from "@/components/dashboard/leave-guard-context";
 
 interface MatchCrumb {
-  tournamentName: string;
+  tournamentName: string | null;
   player1Name: string;
   player2Name: string;
 }
@@ -228,7 +227,7 @@ export function Header({
           .single();
         if (data) {
           setMatchCrumb({
-            tournamentName: data.tournament_name ?? UNKNOWN_EVENT_PLACEHOLDER,
+            tournamentName: data.tournament_name,
             player1Name: data.player1_name,
             player2Name: data.player2_name,
           });
@@ -336,7 +335,10 @@ export function Header({
       : isMatchDetailPage && matchCrumb
         ? [
             MATCHES_CRUMB,
-            { label: matchCrumb.tournamentName },
+            // A match filed with no event has no event crumb — never a placeholder.
+            ...(matchCrumb.tournamentName
+              ? [{ label: matchCrumb.tournamentName }]
+              : []),
             { label: `${matchCrumb.player1Name} vs ${matchCrumb.player2Name}` },
           ]
         : teamSettingsProgram

@@ -138,7 +138,18 @@ internal naming only.
 
 `getLLMStream()` (`src/lib/llm/adapter.ts`) streams for `/api/home-insight` and
 `/api/team-insight`; `LLM_PROVIDER=anthropic|openai`, SDKs dynamically imported, mock
-mode with no key (`docs/llm-setup.md`).
+mode with no key (`docs/llm-setup.md`). `openai` is a misnomer: it drives the OpenAI SDK
+against Gemini (`gemini-3.5-flash-lite`), and production runs it.
+
+Match-report insights come from the `generate-insights` edge function (Gemini,
+`GEMINI_KEY`, model in its `GEMINI_MODEL` constant — `gemini-3.5-flash-lite`, since
+2.5-flash is refused to new keys; temperature 0.4, JSON `responseSchema`). The summary
+voice is settled: **2–3 sentences under 350 characters**, spoken to the player, the first
+sentence the single takeaway, key percentages quoted inline, no greeting, headers or
+bullet lists. A 4–5 sentence / 600-character version (`b317a1fe`, reverted) read wordier
+and dropped the statistics — don't lengthen it without sampling live output first.
+`tests/generate-insights-prompt.spec.ts` pins the wording. The function runs from what is
+deployed, not from git: a prompt change needs `deploy_edge_function` too.
 
 Product mail renders through `src/lib/services/email/shell.ts` and sends via Resend;
 auth mail is Supabase's own, in `supabase/email-templates/*.html`. `shell.ts` is a
@@ -207,6 +218,9 @@ this branch's queue, then stop.`
   fails any other PR into it. If a tool reports `main` as the default branch, the clone's
   `origin/HEAD` is stale: `git remote set-head origin splitstep-integration`.
 - `MAP.md` is generated — run `npm run map` after adding a route, or `npm test` fails.
+- **Vercel previews are opt-in**: only `main` and `splitstep-integration` build on
+  push; a `[preview]` tag in the commit message builds any other branch (only when the
+  user asks). A "Canceled" Vercel check on a PR is expected, not a failure.
 - Never hand-format `supabase/migrations/` or `src/styles/design-system/colors.css`.
   `.prettierignore` documents every exclusion and why.
 - No global state library — Context + server-side fetching only.

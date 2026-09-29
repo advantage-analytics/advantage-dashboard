@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Calendar,
   Clock,
@@ -16,23 +15,25 @@ import {
 } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import {
-  canRetryAnalysis,
   isAnalysisFailed,
   isInFlight,
+  type AnalysisStatus,
 } from "@/lib/data/match-analysis";
 import { createClient } from "@/lib/supabase/client";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 import {
-  AnalysisNotice,
+  DrawerAnalysisSteps,
   DrawerFact,
   DrawerHeading,
+  DrawerRecoveryAction,
   ProviderFact,
   SnapshotSection,
   drawerSideName,
   forgetMatchSnapshot,
   useMatchSnapshot,
 } from "./drawer-sections";
+import { drawerAnalysisStepsView } from "./match-detail/analysis-steps";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { advButton } from "@/lib/ui/adv-button";
 import { capitalize, cn } from "@/lib/utils";
@@ -80,16 +81,19 @@ export function forgetMatchDetails(matchId: string): void {
  * ⋯ is the uploader's Edit · Delete — the only place a match row's actions live.
  *
  * Body, top to bottom: the abbreviated match name links to its report, followed
- * by the outcome and score; compact icon-and-value metadata rows; the analysis
- * state when there is one; four snapshot figures once numbers exist — absent,
+ * by the outcome and score; compact icon-and-value metadata rows; the compact
+ * Analysis steps (`DrawerAnalysisSteps`) when there are any; four snapshot figures once numbers exist — absent,
  * not empty, before that; and on a team match, its scheduled line.
  *
  * ── The footer ─────────────────────────────────────────────────────────────
  * A blue "View match" for everyone, always — so a player, or a coach whose
  * events policy grants no schedule rights, is never left with an empty footer,
- * and the footer does not change shape from one viewer to the next. An outlined
- * "Retry" sits under it on a failed analysis for the person who uploaded it
- * (the resubmit route refuses anyone else).
+ * and the footer does not change shape from one viewer to the next. On a
+ * failed analysis, or a hand-off that stalled (`isSubmitStalled`), the stopped
+ * step's recovery action (`DrawerRecoveryAction`: "Retry", "Try again",
+ * "Rebuild statistics", or the upload link) sits outlined under it for the
+ * person who uploaded it (the routes refuse anyone else). A class with nothing
+ * to press — waiting on the allowance, statistics unavailable — adds nothing.
  *
  * When a saved upload fills this match (a draft folded onto its row), the
  * footer's one primary is "Continue upload", back into that draft's wizard,
@@ -148,15 +152,16 @@ export function MatchDrawer({
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
   const title = `${drawerSideName(match.player1.name)} vs ${drawerSideName(match.player2.name)}`;
-  // canRetryAnalysis owns the shared rule (failed vendor job, still has a job
-  // to resubmit, not an input rejection); this drawer's own access-control
-  // clause is canManage.
-  const canRetry =
-    canRetryAnalysis({
-      status,
-      jobId: match.analysis?.jobId,
-      inputRejected: match.analysis?.inputRejected,
-    }) && match.canManage !== false;
+  // This drawer's access-control clause is canManage: it decides who reads the
+  // stopped step's body and note, and who gets its action.
+  const canAct = match.canManage !== false;
+  const now = useStallClock(status);
+  // The stopped step — a failed row, or an `uploaded` row whose hand-off
+  // stalled — and its recovery class. The same view `DrawerAnalysisSteps`
+  // draws from, at the same clock, so the footer and the body cannot disagree.
+  const stopped = match.analysis
+    ? drawerAnalysisStepsView(match.analysis, now, canAct)?.failure
+    : undefined;
   // No numbers while a match is still being worked on or has failed: the
   // score and snapshot would draw zeroes that read as "no serves".
   const settled = !inFlight && !failed;
@@ -183,7 +188,10 @@ export function MatchDrawer({
           <MatchActionsMenu
             key={match.id}
             matchId={match.id}
-            matchLabel={match.tournamentName}
+            matchLabel={
+              match.tournamentName ??
+              `${match.player1.name} vs ${match.player2.name}`
+            }
           />
         )
       }
@@ -206,8 +214,15 @@ export function MatchDrawer({
               Continue upload
             </Link>
           )}
-          {canRetry && match.analysis?.jobId && (
-            <RetryButton jobId={match.analysis.jobId} />
+          {canAct && (
+            <DrawerRecoveryAction
+              key={match.analysis?.jobId ?? match.id}
+              recovery={stopped?.recovery}
+              stalled={stopped?.stalled ?? false}
+              jobId={match.analysis?.jobId}
+              matchId={match.id}
+              variant="outline"
+            />
           )}
         </>
       }
@@ -243,7 +258,9 @@ export function MatchDrawer({
               {schedule?.site ? capitalize(schedule.site) : "Not specified"}
             </DrawerFact>
             <DrawerFact label="Event" icon={<Trophy />}>
-              {match.tournamentName || schedule?.name || "Not specified"}
+              {match.tournamentName || schedule?.name || (
+                <span style={{ color: "var(--ink-400)" }}>No event</span>
+              )}
               {match.round && (
                 <span className="ml-1 text-[11px] text-[var(--ink-500)]">
                   {match.round}
@@ -259,11 +276,10 @@ export function MatchDrawer({
           </dl>
         </div>
 
-        <AnalysisNotice
-          status={status}
-          failNote={match.analysis?.failNote}
-          canRetry={canRetry}
-          inputRejected={match.analysis?.inputRejected}
+        <DrawerAnalysisSteps
+          analysis={match.analysis}
+          now={now}
+          canAct={canAct}
         />
 
         {settled && snapshot && <SnapshotSection snapshot={snapshot} />}
@@ -427,61 +443,37 @@ export function PeekDrawerFrame({
   );
 }
 
-/**
- * "Retry" — the match page's resubmit, POSTed to
- * `/api/splitstep/jobs/<jobId>/resubmit`. The one definition both peek
- * drawers draw: the Matches drawer keeps it outline under its blue "View
- * match"; the event pages' line drawer (`event-line-drawer.tsx`) makes it the
- * footer's one primary and drops "View match" to ghost. The route refuses
- * anyone who may not resubmit, so a caller gates only on what it knows.
- */
-export function RetryButton({
-  jobId,
-  variant = "outline",
-}: {
-  jobId: string;
-  variant?: "primary" | "outline";
-}) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+/** The stall clock's period: a threshold check, not a stopwatch. */
+const STALL_TICK_MS = 10_000;
 
-  return (
-    <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() =>
-          start(async () => {
-            setError(null);
-            const response = await fetch(
-              `/api/splitstep/jobs/${jobId}/resubmit`,
-              { method: "POST" },
-            ).catch(() => null);
-            if (!response?.ok) {
-              const payload = (await response?.json().catch(() => null)) as {
-                error?: string;
-              } | null;
-              setError(payload?.error ?? "That didn't go through.");
-              return;
-            }
-            router.refresh();
-          })
-        }
-        className={cn(advButton(variant, "md"), "w-full")}
-      >
-        {pending ? "Retrying…" : "Retry"}
-      </button>
-      {error && (
-        <p
-          role="alert"
-          className="text-[12px] leading-[18px] text-[var(--danger)]"
-        >
-          {error}
-        </p>
-      )}
-    </div>
-  );
+/**
+ * The clock the stalled-hand-off check reads — `analysis-steps-column.tsx`'s,
+ * for a drawer, shared by both peek drawers (`event-line-drawer.tsx` imports
+ * it). Null on the render the server also makes, then set only from timers
+ * (first tick straight after mount, so an already-stalled row reads as
+ * stalled when it opens, then every `STALL_TICK_MS`), never from `Date.now()`
+ * during render: the server has no "now" the client would agree with. Runs
+ * only while the row is `uploaded`, the one status the drawer's view reads the
+ * clock for; the view ignores it for every other status.
+ */
+export function useStallClock(
+  status: AnalysisStatus | undefined,
+): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  const readsClock = status === "uploaded";
+
+  useEffect(() => {
+    if (!readsClock) return;
+    const tick = () => setNow(Date.now());
+    const first = setTimeout(tick, 0);
+    const id = setInterval(tick, STALL_TICK_MS);
+    return () => {
+      clearTimeout(first);
+      clearInterval(id);
+    };
+  }, [readsClock]);
+
+  return now;
 }
 
 /**

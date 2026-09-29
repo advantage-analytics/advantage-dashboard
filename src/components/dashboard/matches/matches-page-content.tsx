@@ -19,10 +19,10 @@ import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { draftHref, type DraftRowData } from "./draft-row";
 import {
-  isAnalysisFailed,
   isAnalysisReady,
   isInFlight,
   isLiveUpdating,
+  matchListGroup,
 } from "@/lib/data/match-analysis";
 import {
   useLiveMatchAnalysis,
@@ -107,15 +107,11 @@ const FILTER_KEYS: FilterKey[] = [
 /**
  * Collapses the nine job statuses into the four buckets a player actually
  * filters by. This is the analysis queue's filter, folded into the chip row
- * that was already here.
+ * that was already here. The grouping decision itself lives in
+ * `matchListGroup()` (`match-analysis.ts`), which a spec can pin directly.
  */
 function analysisGroup(match: DisplayMatch): string | null {
-  const status = match.analysis?.status;
-  if (!status) return null;
-  if (isInFlight(status)) return "In progress";
-  if (isAnalysisFailed(status)) return "Failed";
-  if (status === "manual") return "No video";
-  return "Ready";
+  return matchListGroup(match.analysis);
 }
 
 const ANALYSIS_GROUP_ORDER = ["In progress", "Ready", "Failed", "No video"];
@@ -558,7 +554,7 @@ export function MatchesPageContent({
       const person = normalizedPersonName(search);
       result = result.filter(
         (m) =>
-          m.tournamentName.toLowerCase().includes(q) ||
+          (m.tournamentName?.toLowerCase().includes(q) ?? false) ||
           normalizedPersonName(m.player1.name).includes(person) ||
           normalizedPersonName(m.player2.name).includes(person) ||
           (m.round?.toLowerCase().includes(q) ?? false),
@@ -623,7 +619,17 @@ export function MatchesPageContent({
           cmp = a.player2.name.localeCompare(b.player2.name);
           break;
         case "event":
-          cmp = a.tournamentName.localeCompare(b.tournamentName);
+          // A match with no event sorts after every named one, ascending.
+          if (a.tournamentName === null || b.tournamentName === null) {
+            cmp =
+              a.tournamentName === b.tournamentName
+                ? 0
+                : a.tournamentName === null
+                  ? 1
+                  : -1;
+          } else {
+            cmp = a.tournamentName.localeCompare(b.tournamentName);
+          }
           break;
         case "result": {
           const aWin = a.score.winner === "player1" ? 1 : 0;

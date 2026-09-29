@@ -118,7 +118,7 @@ async function captureGeminiRequest(): Promise<{
   return captured;
 }
 
-test("the summary instruction asks for 4-5 sentences under 600 characters", async () => {
+test("the summary instruction asks for 2-3 sentences under 350 characters", async () => {
   const { body } = await captureGeminiRequest();
   const prompt = body.contents[0].parts[0].text;
 
@@ -126,9 +126,10 @@ test("the summary instruction asks for 4-5 sentences under 600 characters", asyn
     .split("\n")
     .find((line) => line.includes("a 'summary':"));
   expect(summaryLine).toBeDefined();
-  expect(summaryLine).toContain("4-5 sentences");
-  expect(summaryLine).toContain("under 600 characters");
-  expect(prompt).not.toContain("350");
+  expect(summaryLine).toContain("2-3 sentences");
+  expect(summaryLine).toContain("under 350 characters");
+  expect(prompt).not.toContain("600");
+  expect(prompt).not.toContain("4-5");
 
   // The rules around the length are unchanged.
   expect(summaryLine).toContain(
@@ -155,7 +156,7 @@ test("the summary names no vendor and speaks of Player 1 / Player 2", async () =
 
 test("the generation config and model are the ones the prompt was tuned for", async () => {
   const { url, body } = await captureGeminiRequest();
-  expect(url).toContain("/models/gemini-2.5-flash:generateContent");
+  expect(url).toContain("/models/gemini-3.5-flash-lite:generateContent");
   expect(body.generationConfig.temperature).toBe(0.4);
   expect(body.generationConfig.responseMimeType).toBe("application/json");
   expect(body.generationConfig.responseSchema).toMatchObject({

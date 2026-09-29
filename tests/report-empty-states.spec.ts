@@ -52,6 +52,14 @@ const REAL = new Set([
   "@/components/ui/empty-mark",
   "@/lib/utils",
   "@/components/dashboard/matches/match-detail/report-view",
+  // T18: the fold-unreconciled clause is only checkable against the real
+  // component's copy, not a marker's `data-component` span.
+  "@/components/dashboard/matches/match-detail/unpublished-stats-notice",
+  "@/components/dashboard/matches/new-match-wizard/styles",
+  // The cards bucket rally lengths through the filter model's bands (one
+  // source for the card, the head-to-head tally and the Rally length pills);
+  // it is pure — no React, no next/navigation — so it loads for real.
+  "@/components/dashboard/matches/match-detail/match-filters/model",
 ]);
 
 function render(
@@ -80,10 +88,6 @@ function render(
         },
         "@/components/dashboard/matches/match-detail/use-match-sides": {
           useMatchSides: () => sides,
-        },
-        "@/components/dashboard/matches/match-detail/set-scope": {
-          useSetScope: () => ({ activeSet: null, selectable: [] }),
-          scopePoints: (p: MatchPoint[]) => p,
         },
         "@/lib/data/match-utils": {
           surnameLabels: (a: string, b: string) => [a, b],
@@ -163,9 +167,46 @@ test.describe("StatisticsView", () => {
   test("points without published stats: the notice and the chart column, full width", () => {
     const html = render(file, "StatisticsView", [point()], stubs(false));
     expect(html).not.toContain('data-component="StatisticsEmpty"');
-    expect(html).toContain('data-component="UnpublishedStatsNotice"');
+    // The notice is the real component (T18), not a marker: its own anatomy
+    // is what proves it rendered.
+    expect(html).toContain('aria-label="Statistics not published"');
+    expect(html).toContain(
+      "Every point below has been checked against the final score you",
+    );
     expect(html).toContain('data-component="RallyLengthCard"');
     expect(html).not.toContain('data-component="HeadToHeadCard"');
+  });
+
+  test("fold unreconciled: the caveat strip renders, and the notice drops its accuracy clause", () => {
+    const html = render(file, "StatisticsView", [point()], {
+      ...stubs(false),
+      "@/components/dashboard/matches/match-detail/match-report-context": {
+        useMatchReport: () => ({
+          meta: {
+            statsPublished: false,
+            isDerived: false,
+            foldUnreconciled: true,
+          },
+        }),
+      },
+    });
+    expect(html).toContain(
+      "Advantage Intelligence couldn&#x27;t match every point to the final score you entered",
+    );
+    expect(html).toContain('aria-label="Statistics not published"');
+    expect(html).not.toContain(
+      "Every point below has been checked against the final score you",
+    );
+  });
+
+  test("fold reconciled (the default): no caveat strip, and the notice keeps its accuracy clause", () => {
+    const html = render(file, "StatisticsView", [point()], stubs(false));
+    expect(html).not.toContain(
+      "Advantage Intelligence couldn&#x27;t match every point",
+    );
+    expect(html).toContain(
+      "Every point below has been checked against the final score you",
+    );
   });
 
   test("points with published stats: the full widgets row", () => {
@@ -174,6 +215,59 @@ test.describe("StatisticsView", () => {
     expect(html).toContain('data-component="PointEndingsCard"');
     expect(html).not.toContain('data-component="StatisticsEmpty"');
   });
+});
+
+test.describe("StatisticsView — stats_unavailable", () => {
+  const file = DETAIL + "statistics-view.tsx";
+  const copy = createLoader().load(
+    "src/components/dashboard/matches/analysis-failure-copy.ts",
+  ) as typeof import("../src/components/dashboard/matches/analysis-failure-copy");
+  const stubs = {
+    "@/components/dashboard/matches/match-detail/match-report-context": {
+      useMatchReport: () => ({
+        meta: {
+          statsPublished: false,
+          statsUnavailable: true,
+          isDerived: true,
+        },
+      }),
+    },
+    "@/components/dashboard/matches/match-detail/match-report": {
+      MatchReport: { Insight: marker("Insight") },
+    },
+    // The real copy, so the note is checked against the strings the progress
+    // card and drawer use rather than a restatement of them.
+    "@/components/dashboard/matches/analysis-failure-copy": copy,
+  };
+  const SECTIONS = [
+    "Insight",
+    "StatisticsEmpty",
+    "UnpublishedStatsNotice",
+    "HeadToHeadCard",
+    "PerformanceTrackerChart",
+    "RallyLengthCard",
+    "PointEndingsCard",
+  ];
+
+  for (const [label, pts] of [
+    ["no points", [] as MatchPoint[]],
+    ["with points", [point()]],
+  ] as const) {
+    test(`${label}: the note in the notice slot, and no stat section`, () => {
+      const html = render(file, "StatisticsView", [...pts], stubs);
+      expect(html).toContain('data-testid="stats-unavailable-notice"');
+      expect(html).toContain(
+        "Analyzed, but the score couldn&#x27;t be read cleanly",
+      );
+      expect(html).toContain("so no statistics were saved for this match.");
+      expect(html).toContain(
+        copy.byClass.stats_unavailable.title.replace(/'/g, "&#x27;"),
+      );
+      for (const name of SECTIONS) {
+        expect(html).not.toContain(`data-component="${name}"`);
+      }
+    });
+  }
 });
 
 test.describe("MatchReportInsight", () => {

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { MARKETING_SITE_URL } from "@/lib/constants";
+import { LiveDots } from "@/components/ui/live-dots";
 
 const hero = ["Performance", "Intelligence", "for Competitive", "Tennis."];
 const subtitle =
@@ -16,10 +17,16 @@ const subtitle =
  * which had been tuned to sit the logo's centre 40px down to match the
  * marketing nav; the v2 set spec pins the same padding on every auth page, so
  * cross-page consistency wins over cross-site continuity here.
+ *
+ * The mesh carries the landing hero's animated dot grid (LiveDots) so the two
+ * surfaces match.
  */
 export default function BrandPanel() {
   return (
-    <div className="brand-mesh-gradient flex h-full flex-1 flex-col items-start justify-between px-[64px] pt-[32px] pb-[40px]">
+    <div className="brand-mesh-gradient relative isolate flex h-full flex-1 flex-col items-start justify-between px-[64px] pt-[32px] pb-[40px]">
+      {/* The landing hero's live dot grid over the same mesh, so the auth
+          panel reads as the marketing site continued. */}
+      <LiveDots className="-z-10" />
       <a
         href={MARKETING_SITE_URL}
         aria-label="Advantage Analytics — Home"

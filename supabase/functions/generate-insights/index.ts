@@ -4,6 +4,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_KEY");
+/**
+ * gemini-2.5-flash is closed to new Google Cloud projects ("limiting access to
+ * the 2.5 models to users who have actively used them in the past"), so the
+ * paid key moved in 2026-09-28 was refused with a 404. 3.5 Flash-Lite is
+ * Google's pick for new projects and costs the same per token.
+ */
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -76,7 +83,7 @@ async function captureGeminiGeneration({
           $ai_trace_id: traceId,
           $ai_session_id: null,
           $ai_span_name: "generate_match_insights",
-          $ai_model: "gemini-2.5-flash",
+          $ai_model: GEMINI_MODEL,
           $ai_provider: "gemini",
           // No $ai_input / $ai_output_choices: the prompt and reply carry
           // player first names and stats, so only usage is recorded — the
@@ -342,13 +349,13 @@ serve(async (req) => {
       required: ["player1", "player2"],
     };
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
     // 5. Build the prompt asking for insights on both players
     const prompt = `
       You are an expert college tennis coach. Analyze the following match statistics and provide, for BOTH Player 1 and Player 2:
       - 3 key strengths and 3 areas to improve (weaknesses). The 'value' should be the relevant percentage (0-100) associated with that specific stat.
-      - a 'summary': a paragraph of 4-5 sentences, under 600 characters in total, speaking directly to the player. The first sentence is the single most important takeaway from this match; the rest gives the evidence and what to focus on next. Do not greet them, do not use markdown headers or bullet points, and do not restate the raw numbers as a list — synthesize them into a flowing observation with a clear recommendation.
+      - a 'summary': a short paragraph of 2-3 sentences, under 350 characters in total, speaking directly to the player. The first sentence is the single most important takeaway from this match; the rest gives the evidence and what to focus on next. Do not greet them, do not use markdown headers or bullet points, and do not restate the raw numbers as a list — synthesize them into a flowing observation with a clear recommendation.
 
       Crucially, contextualize their performances against each other. If Player 1 dominated at the net, factor that into Player 2's weaknesses.
       Keep everything encouraging and actionable for college athletes.

@@ -29,7 +29,7 @@
 import type { SplitStepRally } from "./types";
 
 /** Rungs of a standard game, plus AD for ad-scoring matches. */
-const LADDER: Record<string, number> = {
+export const LADDER: Record<string, number> = {
   "0": 0,
   "15": 1,
   "30": 2,
@@ -41,7 +41,7 @@ export interface WinnerResolution {
   /** Player label that won, or null when no rule resolved it. */
   winner: string | null;
   /** Which rule fired, for the flag trail and for debugging. */
-  via: "ladder" | "tiebreak" | "game" | "set" | "final" | null;
+  via: "ladder" | "tiebreak" | "game" | "set" | "final" | "guess" | null;
 }
 
 /** Split a server-relative score string into [serverValue, returnerValue]. */
@@ -111,6 +111,32 @@ function pointSoleIncrement(
 function otherLabel(label: string, labels: string[]): string | null {
   const others = labels.filter((l) => l !== label);
   return others.length === 1 ? others[0] : null;
+}
+
+/**
+ * The winner the last stroke implies: its striker if it landed in, otherwise
+ * the other player.
+ *
+ * NOT a winner rule. The `in` flag is the unreliable half of the payload (see
+ * the module header), so this only ever cross-checks the score stream
+ * (`winner_disputed`) or stands in where the stream has nothing to say at all
+ * — a collapsed tail, where every such point is flagged `winner_guessed`.
+ * On job 45ff4bd7 it agreed with the score stream on 77 of 96 points.
+ *
+ * `labels` names the other player when the rally only ever shows one; without
+ * it such a rally has no answer.
+ */
+export function lastStrokeWinner(
+  rally: SplitStepRally,
+  labels?: string[],
+): string | null {
+  const last = rally.strokes[rally.strokes.length - 1];
+  if (!last) return null;
+  if (last.in) return last.playerLabel;
+  return (
+    rally.strokes.find((s) => s.playerLabel !== last.playerLabel)
+      ?.playerLabel ?? (labels ? otherLabel(last.playerLabel, labels) : null)
+  );
 }
 
 /**

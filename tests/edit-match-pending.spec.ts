@@ -33,6 +33,7 @@ const DIR = "src/components/dashboard/matches/match-actions";
 const dialog = source(`${DIR}/edit-match-dialog.tsx`);
 const scoreSrc = source(`${DIR}/edit-match-score.tsx`);
 const playersSrc = source(`${DIR}/edit-match-players.tsx`);
+const eventSrc = source(`${DIR}/edit-match-event.tsx`);
 
 const html = renderToStaticMarkup(React.createElement(EditMatchPending));
 const TAG = /<(\/?)([a-zA-Z0-9]+)([^>]*?)(\/?)>/g;
@@ -107,7 +108,9 @@ test("the row list is the form's own", () => {
   // Details: Event, then the two-column grid's unconditional fields.
   const [event, ...grid] = bySection("Details");
   expect(event.fields).toEqual(["Event"]);
-  expect(dialog).toContain('aria-label="Event"');
+  // The Event field is drawn by `EventField`, which the dialog renders.
+  expect(eventSrc).toContain('aria-label="Event"');
+  expect(dialog).toContain("<EventField");
   expect(dialog).toContain(
     '<div className="grid grid-cols-2 gap-x-4 gap-y-3.5">',
   );

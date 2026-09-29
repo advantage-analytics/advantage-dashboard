@@ -7,6 +7,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { ArrowRight, X } from "lucide-react";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { ConfirmAside } from "@/components/ui/confirm-dialog";
+import { LiveDots } from "@/components/ui/live-dots";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
@@ -51,7 +52,8 @@ export interface BetaWelcomeTerms {
  *
  * Deliberately louder than a settings dialog: it is the one moment the
  * product introduces itself, so it opens on the brand band the auth pages use
- * (`.brand-mesh-gradient`, white logo, light display type) with the allowance
+ * (`.brand-mesh-gradient` under the landing hero's live dot grid, white logo,
+ * light display type) with the allowance
  * as its headline figure, then drops into the Dialog (v3) body — hairline
  * fact rows, the aside, and the footer grammar (quiet link left, one primary
  * right). 520px, the compare-dialog width, because the figure needs the room.
@@ -98,6 +100,7 @@ export function BetaWelcomeDialog({
           }}
         >
           <div className="brand-mesh-gradient relative overflow-hidden px-7 pt-6 pb-7 text-white">
+            <LiveDots />
             <div className="relative flex items-center gap-2.5">
               <Image
                 src="/logos/logo.svg"

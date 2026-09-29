@@ -44,6 +44,7 @@ import {
   isProgramStaff,
   type Workspace,
 } from "@/lib/workspace/types";
+import { countEvents } from "@/components/dashboard/search/event-counts";
 import { cn } from "@/lib/utils";
 import {
   PendingBar,
@@ -134,7 +135,8 @@ const ALL_COLUMNS = [
 interface MatchResult {
   id: string;
   opponentName: string;
-  tournamentName: string;
+  /** Null when the match was filed with no event. */
+  tournamentName: string | null;
   /** Sets, already turned the viewer's way round — not a formatted string. */
   score: ScoreLineSet[];
   date: string;
@@ -561,7 +563,7 @@ export function SearchCommandPalette({
           return {
             id: m.id,
             opponentName: isP1 ? m.player2_name : m.player1_name,
-            tournamentName: m.tournament_name ?? "Unknown event",
+            tournamentName: m.tournament_name,
             // `swap` when the viewer is stored as player2, so the row reads
             // from their side — game counts and tiebreaks flipped together.
             score: scoreSetsFrom(m.score, { swap: !isP1 }),
@@ -573,12 +575,10 @@ export function SearchCommandPalette({
         });
 
       const oppCounts = new Map<string, number>();
-      const eventCounts = new Map<string, number>();
+      const eventCounts = countEvents(rows);
       for (const m of rows) {
         const opp = isMine(m.player1_id) ? m.player2_name : m.player1_name;
         oppCounts.set(opp, (oppCounts.get(opp) ?? 0) + 1);
-        const event = m.tournament_name ?? "Unknown event";
-        eventCounts.set(event, (eventCounts.get(event) ?? 0) + 1);
       }
       const topCounts = (counts: Map<string, number>): GroupedResult[] =>
         Array.from(counts.entries())
@@ -1095,7 +1095,7 @@ function FooterHint({
 }
 
 /** One row's body. The button around it owns the wash and the keycap. */
-function ResultRow({ item }: { item: FlatItem }) {
+export function ResultRow({ item }: { item: FlatItem }) {
   switch (item.type) {
     case "action": {
       const Icon = item.data.icon;
@@ -1133,7 +1133,9 @@ function ResultRow({ item }: { item: FlatItem }) {
               )}
             </span>
             <span className="text-[12px] text-[var(--ink-500)]">
-              {item.data.tournamentName}
+              {item.data.tournamentName ?? (
+                <span style={{ color: "var(--ink-400)" }}>No event</span>
+              )}
               <span className="mx-1 text-[var(--ink-300)]">&middot;</span>
               <ScoreLine sets={item.data.score} />
               <span className="mx-1 text-[var(--ink-300)]">&middot;</span>

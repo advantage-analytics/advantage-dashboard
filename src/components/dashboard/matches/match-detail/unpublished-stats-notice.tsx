@@ -13,7 +13,22 @@ import { Info } from "lucide-react";
  * So the cards are hidden AND this says why, in the same place they would have
  * been.
  */
-export function UnpublishedStatsNotice() {
+export interface UnpublishedStatsNoticeProps {
+  /**
+   * See `MatchReportMeta.foldUnreconciled`. When true, the fold that produced
+   * this timeline didn't reconcile against the entered score, so the "checked
+   * against the final score" claim below would be false — omit only that
+   * clause; the rest of the notice still holds (the cards are still hidden
+   * for the same measurement reason). `statistics-view.tsx` draws its own
+   * `noteStripCls` strip above this notice in that case, so the caveat is
+   * still said once, just not here.
+   */
+  foldUnreconciled?: boolean;
+}
+
+export function UnpublishedStatsNotice({
+  foldUnreconciled = false,
+}: UnpublishedStatsNoticeProps = {}) {
   return (
     <section
       aria-label="Statistics not published"
@@ -31,12 +46,17 @@ export function UnpublishedStatsNotice() {
             published for this match.
           </p>
           <p className="text-[12px] leading-[19.8px] font-normal text-[var(--color-text-body)]">
-            Every point below has been checked against the final score you
-            entered, so the timeline, key moments and court placement are
-            accurate. Aggregate totals aren&apos;t shown because parts of them
-            can&apos;t be measured reliably from this video yet &mdash; showing
-            a zero would read as a fact about your match rather than a gap in
-            the analysis.
+            {!foldUnreconciled && (
+              <>
+                Every point below has been checked against the final score you
+                entered, so the timeline, key moments and court placement are
+                accurate.{" "}
+              </>
+            )}
+            Aggregate totals aren&apos;t shown because parts of them can&apos;t
+            be measured reliably from this video yet &mdash; showing a zero
+            would read as a fact about your match rather than a gap in the
+            analysis.
           </p>
         </div>
       </div>

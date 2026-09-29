@@ -19,8 +19,11 @@ import type { BandSettings } from "@/lib/data/viz-bands";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 import type { DistanceUnit } from "@/lib/format/distance";
 import { FilmHeadProvider } from "@/components/dashboard/matches/match-detail/film-head-context";
-import { FilmCutProvider } from "@/components/dashboard/matches/match-detail/film-cut-context";
-import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
+import {
+  FilmCutProvider,
+  type FilmCut,
+  type FilmCutIntent,
+} from "@/components/dashboard/matches/match-detail/film-cut-context";
 
 /**
  * The match report's one context: state, actions and meta (settled Statistics
@@ -51,12 +54,15 @@ export interface MatchReportActions {
   /** Open a timed point in the Video view. */
   watchPoint(pointId: string): void;
   /**
-   * Open the Video view on a cut: the default filters with `cut` laid over
-   * them, the shell player on the first point it admits (T2). The film tab
-   * consumes it once (`film-cut-context.tsx`). A no-op without a playable
-   * video — there is no Video view to open, and `/m/[token]` never has one.
+   * Open the Video view on a statistic's cut: its `MatchFilters` keys land
+   * in the shared match filters (the drawer's pills pressed), its Film-only
+   * extras stay beside them named by `label` in the filter strip, and the
+   * shell player starts on the first point the list admits. The film tab
+   * consumes it once (`film-cut-context.tsx`, `landFilmCut`).
+   * A no-op without a playable video — there is no Video view to open, and
+   * `/m/[token]` never has one.
    */
-  watchCut(cut: Partial<FilmFilters>): void;
+  watchCut(cut: FilmCut, label: string): void;
   collapseInsight(): void;
   expandInsight(): void;
 }
@@ -71,6 +77,25 @@ export interface MatchReportMeta {
   isDerived: boolean;
   /** Both `match_stats` rows present. */
   statsPublished: boolean;
+  /**
+   * The analysis failed in a way that leaves the match viewable but with no
+   * statistics at all — `recovery === "stats_unavailable"` on a failed job
+   * (our derivation refused the vendor's data; retrying cannot change it).
+   * `page.tsx` lets such a match past the short-circuit, and the Statistics
+   * view draws one quiet note in place of every stat section. Defaults to
+   * `false`; `/m/[token]` never sets it.
+   */
+  statsUnavailable: boolean;
+  /**
+   * The match's newest completed job recorded that the derived point
+   * timeline could not be reconciled against the score entered
+   * (`derivation_quality->fold.reconciled === false`, T13). Some points may
+   * sit in the wrong game even though the score shown is the one entered.
+   * Defaults to `false`; a job derived before T13 carries no `fold` key and
+   * reads as `false` too — no backfill (guardrails §2). `/m/[token]` never
+   * sets it.
+   */
+  foldUnreconciled: boolean;
   /** A playable match video was resolved on the server. */
   hasPlayableVideo: boolean;
   /**
@@ -149,8 +174,12 @@ export function useMatchReport(): MatchReportContextValue {
 
 export interface MatchReportProviderProps extends Omit<
   MatchReportMeta,
-  "readOnly"
+  "readOnly" | "statsUnavailable" | "foldUnreconciled"
 > {
+  /** See `MatchReportMeta.statsUnavailable`. Defaults to `false`. */
+  statsUnavailable?: boolean;
+  /** See `MatchReportMeta.foldUnreconciled`. Defaults to `false`. */
+  foldUnreconciled?: boolean;
   /** See `MatchReportMeta.readOnly`. Defaults to `false`. */
   readOnly?: boolean;
   /**
@@ -167,6 +196,8 @@ export function MatchReportProvider({
   canCompare,
   isDerived,
   statsPublished,
+  statsUnavailable = false,
+  foldUnreconciled = false,
   hasPlayableVideo,
   savedViews,
   workspaceRole,
@@ -187,11 +218,9 @@ export function MatchReportProvider({
   // Collapse is only this visit's state; every visit opens expanded.
   const [insight, setInsight] = useState<InsightStatus>("expanded");
   // The "watch this cut" intent, between `watchCut` and the film tab taking
-  // it. Component state, not the URL: only `cut=`/`serve=` have a URL form
-  // (`serializeCut`), and the Advanced axes are deliberately kept out of it.
-  const [pendingCut, setPendingCut] = useState<Partial<FilmFilters> | null>(
-    null,
-  );
+  // it. Component state, not the URL: a statistic's cut is a one-off Film
+  // lens, never part of the shared `?f=` filters.
+  const [pendingCut, setPendingCut] = useState<FilmCutIntent | null>(null);
   const clearPendingCut = useCallback(() => setPendingCut(null), []);
 
   const actions = useMemo<MatchReportActions>(
@@ -217,9 +246,9 @@ export function MatchReportProvider({
         query.delete("fullscreen");
         window.history.pushState(null, "", `${pathname}?${query.toString()}`);
       },
-      watchCut(cut) {
+      watchCut(cut, label) {
         if (!hasPlayableVideo) return;
-        setPendingCut(cut);
+        setPendingCut({ cut, label });
         const query = new URLSearchParams(window.location.search);
         query.set("tab", "film");
         query.delete("fullscreen");
@@ -242,6 +271,8 @@ export function MatchReportProvider({
       canCompare,
       isDerived,
       statsPublished,
+      statsUnavailable,
+      foldUnreconciled,
       hasPlayableVideo,
       savedViews,
       workspaceRole,
@@ -258,6 +289,8 @@ export function MatchReportProvider({
       canCompare,
       isDerived,
       statsPublished,
+      statsUnavailable,
+      foldUnreconciled,
       hasPlayableVideo,
       savedViews,
       workspaceRole,
