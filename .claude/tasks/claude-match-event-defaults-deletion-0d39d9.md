@@ -97,7 +97,7 @@ ready).
 
 ## T7 · Delete unused featured-match-card and match-event-header
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/featured-match-card.tsx, src/components/dashboard/matches/match-event-header.tsx, MAP.md (only if `npm run map` changes it)
 - **done when:**

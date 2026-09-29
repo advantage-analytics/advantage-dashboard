@@ -56,3 +56,9 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical GATE PASS; completion `VERDICT: pass`. widget-states: palette loading/empty/error paths untouched.
 **changed:** `search-command-palette.tsx` — `MatchResult.tournamentName` is `string | null`, match rows show muted "No event" (`var(--ink-400)`), "Unknown event" gone; Events group built by new pure `countEvents()` (`search/event-counts.ts`), which skips null-event rows. `ResultRow` exported for the spec; two new tests in `tests/match-no-event.spec.ts`.
+
+## T7 · Delete unused featured-match-card and match-event-header — blocked
+
+**gate:** mechanical GATE FAIL — `tests/design-drift.spec.ts`: "Tailwind default-palette class: 0 (seed 1) — seed is stale — lower it to 0 in scripts/check-design-drift.mjs". The deleted files held the last such class. Completion review not run.
+**reason:** the fix (lower the seed) touches `scripts/check-design-drift.mjs`, which criterion 3 forbids ("the diff touches no file other than the two deletions"). Needs the author to widen the criterion.
+**stash:** eb0fb2d796ad15775fe3449b65611f7f2ad63c56
