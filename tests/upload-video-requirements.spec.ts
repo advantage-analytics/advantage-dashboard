@@ -191,26 +191,26 @@ test.describe("frame-rate boundary", () => {
     expect(evaluateVideoProbe(probe()).warnings).toBeUndefined();
   });
 
-  test("a whole-track average under 29.9 is refused, naming the average", () => {
+  test("a whole-track average under 29.5 is refused, naming the average", () => {
     // A variable-rate MP4 that opens at 30 to the sample but averages well
-    // under the vendor's documented rejection line over the whole track.
-    const input = probe({ fps: 30, averageFps: 29.5 });
+    // under the floor over the whole track.
+    const input = probe({ fps: 30, averageFps: 29.2 });
     const result = evaluateVideoProbe(input);
     expect(result.success).toBe(false);
     const error = result.error ?? "";
-    expect(error).toContain("29.5 fps");
+    expect(error).toContain("29.2 fps");
     expect(error).toContain("variable");
     expect(error).toContain(PROVIDER_DISPLAY_NAME);
     expect(error).toContain(`${MIN_CONTAINER_AVERAGE_FPS} fps`);
     expect(error).toContain("constant 30 fps");
     expect(error).not.toMatch(/splitstep|swingvision/i);
-    expect(formatProbeFps(input)).toBe("29.5 fps");
+    expect(formatProbeFps(input)).toBe("29.2 fps");
   });
 
-  test("the three tiers: refused under 29.9, warned up to 29.97, silent from 29.97", () => {
+  test("the three tiers: refused under 29.5, warned up to 29.97, silent from 29.97", () => {
     // The constants are the spec; the literals are here so a silent change
     // to either one fails this test.
-    expect(MIN_CONTAINER_AVERAGE_FPS).toBe(29.9);
+    expect(MIN_CONTAINER_AVERAGE_FPS).toBe(29.5);
     expect(RECOMMENDED_CONTAINER_AVERAGE_FPS).toBe(29.97);
 
     // 30000/1001 is 29.97003; the reader rounds to two decimals, so genuine
@@ -219,10 +219,11 @@ test.describe("frame-rate boundary", () => {
     expect(ntsc.success).toBe(true);
     expect(ntsc.warnings?.join(" ") ?? "").not.toContain("averages");
 
-    // Jobs 45ff4bd7 (29.94) and b74a1e04 (29.95) live here: accepted since
-    // 2026-09-29, with one warning that names the average and the vendor's
-    // recommended rate — and not a second fps line on top of it.
-    for (const averageFps of [29.96, 29.95, 29.94, 29.9]) {
+    // Jobs 45ff4bd7 (29.94) and b74a1e04 (29.95) live here, as do the four
+    // phone recordings measured 2026-09-29 (29.74–29.94): accepted with one
+    // warning that names the average and the vendor's recommended rate — and
+    // not a second fps line on top of it.
+    for (const averageFps of [29.96, 29.95, 29.94, 29.8, 29.74, 29.5]) {
       const input = probe({ fps: 30, averageFps });
       const result = evaluateVideoProbe(input);
       expect(result.success, `${averageFps}`).toBe(true);
@@ -239,7 +240,7 @@ test.describe("frame-rate boundary", () => {
     }
 
     expect(
-      evaluateVideoProbe(probe({ fps: 30, averageFps: 29.89 })).success,
+      evaluateVideoProbe(probe({ fps: 30, averageFps: 29.49 })).success,
     ).toBe(false);
   });
 
@@ -268,14 +269,14 @@ test.describe("frame-rate boundary", () => {
 
   // Browsers without requestVideoFrameCallback (Firefox) report no sampled
   // rate, but the container read still works — so the average stands in.
-  test("with no sampled rate, a sub-29.9 average is still refused", () => {
-    const p = probe({ fps: null, averageFps: 29.5 });
+  test("with no sampled rate, a sub-29.5 average is still refused", () => {
+    const p = probe({ fps: null, averageFps: 29.2 });
     const result = evaluateVideoProbe(p);
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("29.5 fps");
+    expect(result.error).toContain("29.2 fps");
     expect(result.error).toContain("constant 30 fps");
-    expect(formatProbeFps(p)).toBe("29.5 fps");
+    expect(formatProbeFps(p)).toBe("29.2 fps");
   });
 
   test("with no sampled rate, an average in the warning band is accepted with the one warning", () => {

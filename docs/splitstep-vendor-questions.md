@@ -40,7 +40,7 @@ ids.
 | Q6 — queue priority                                                | ❌ not confirmed                                                                   |
 | Q7 — stable error codes                                            | ✅ **answered by the September 2026 API**                                          |
 | Q8–Q12                                                             | ❌ open (Q11 partly covered by detection scores)                                   |
-| Q14 — frame-rate floor                                             | 🟡 **partly answered 2026-09-28: gate is 25 fps; our floor 29.9 since 2026-09-29** |
+| Q14 — frame-rate floor                                             | 🟡 **partly answered 2026-09-28: gate is 25 fps; our floor 29.5 since 2026-09-29** |
 | Q15 — points with no resolvable winner                             | ❌ new, open                                                                       |
 
 **The gate has substantially lifted.** The third payload settled the question
@@ -249,7 +249,7 @@ Winner indistinguishable. A `rally_end_reason` (`winner` / `out` / `net`), or
 anything marking that a player attempted and missed a shot, would unblock the
 remaining half.
 
-### Q14 — How is the frame-rate floor measured? **Partly answered 2026-09-28 — vendor gate 25; 29.97 recommended. Our floor lowered to 29.9 on 2026-09-29.**
+### Q14 — How is the frame-rate floor measured? **Partly answered 2026-09-28 — vendor gate 25; 29.97 recommended. Our floor lowered to 29.5 on 2026-09-29.**
 
 A file whose own metadata reports **29.94 fps** was rejected with
 `VIDEO_FRAME_RATE_TOO_LOW` at step `trimming_video`, detail `video is 29.80 fps`,
@@ -308,22 +308,27 @@ It is the vendor's own recommendation, and the one sub-29.97 file they accepted
 If users are blocked on footage they need, the fallback is to refuse below 25
 and warn between 25 and 29.97.
 
-**Decision revised, 2026-09-29: refuse below 29.9, warn from 29.9 up to 29.97.**
-`MIN_CONTAINER_AVERAGE_FPS` is now 29.9 — the rejection line the vendor's own
-error table prints — and a new `RECOMMENDED_CONTAINER_AVERAGE_FPS` (29.97) marks
-the band that uploads with one warning. Two things changed since the day before:
+**Decision revised, 2026-09-29: refuse below 29.5, warn from 29.5 up to 29.97.**
+`MIN_CONTAINER_AVERAGE_FPS` is now 29.5 and a new
+`RECOMMENDED_CONTAINER_AVERAGE_FPS` (29.97) marks the band that uploads with one
+warning. Two things changed since the day before:
 
 - The "published nothing" claim above is stale. Both sub-29.97 jobs — `b74a1e04`
   (29.95, 134 points) and `45ff4bd7` (29.94, 101 points) — are `completed` on
   derivation `0.6.0-unreconciled` and published; their low grades come from
   score-fold mismatches and net-hit flags, the same checks constant-30 footage
   trips, not from anything the frame rate explains.
-- A tournament's worth of phone recordings averaging 29.94–29.95 was being
-  refused. That average is what a phone produces after dropping a few frames,
-  so it is ordinary footage, not an edge case.
+- A tournament's worth of phone recordings was being refused. Four
+  full-length files measured with ffprobe on 2026-09-29 carry encoded rates of
+  29.97, 29.92, 30 and 59.94 but average 29.78, 29.80, 29.94 and 29.74 over
+  the whole track — a dropped frame every few seconds. That is ordinary phone
+  footage, not an edge case, and the vendor's own 29.9 line (first tried that
+  morning) still refused three of the four.
 
-The documented 25 fallback was not taken: between 25 and 29.9 there is no
-analysed file to point to, and 29.9 is a line the vendor once stood behind. An
+29.5 is the middle of the two numbers the vendor has given (29.9 in its docs,
+25 as its gate). It admits footage that lost up to about 1.6% of its frames
+and still refuses a genuinely variable-rate file. The 25 fallback was not
+taken outright: between 25 and 29.5 there is no analysed file to point to. An
 env-variable or per-account override was considered and rejected — the check
 runs in the browser, so an override would ship to everyone anyway.
 

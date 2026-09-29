@@ -24,11 +24,11 @@
  * genuine 29.97 at 30). And when the container's whole-track average is known
  * (`averageFps`, MP4/MOV only) it is judged in three tiers:
  *
- *   - under `MIN_CONTAINER_AVERAGE_FPS` (29.9)          → refused before a byte
- *     uploads. The vendor's API docs' own rejection line ("rejected below
- *     29.9 fps"), and the variable-rate case: a file opens at 30 to a 20-frame
- *     sample and averages far lower over the whole track.
- *   - 29.9 up to `RECOMMENDED_CONTAINER_AVERAGE_FPS` (29.97) → accepted with one
+ *   - under `MIN_CONTAINER_AVERAGE_FPS` (29.5)          → refused before a byte
+ *     uploads. The variable-rate case: a file opens at 30 to a 20-frame
+ *     sample and averages far lower over the whole track. Why 29.5 is in
+ *     config.ts, next to the constant.
+ *   - 29.5 up to `RECOMMENDED_CONTAINER_AVERAGE_FPS` (29.97) → accepted with one
  *     warning. The vendor's hard gate is 25 fps (Q14 in
  *     docs/splitstep-vendor-questions.md, answered 2026-09-28), so nothing here
  *     is rejected after upload, but 29.97 is the rate it recommends and stands
