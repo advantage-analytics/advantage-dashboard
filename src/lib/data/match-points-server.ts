@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPages } from "@/lib/data/paged-query";
+import { gameNumbersInSet } from "@/lib/data/game-in-set";
 import { pickServeShot, pickReturnShot } from "@/lib/data/serve-return-shots";
 
 /** One shot inside a point, in rally order — the film room's shot feed. */
@@ -38,6 +39,7 @@ export interface MatchPoint {
   id: string;
   pointNumber: number;
   setNumber: number;
+  /** Counted from 1 in each set, as tennis numbers games (`gameNumbersInSet`). */
   gameNumber: number;
   /** Sets won before this point, SERVER-FIRST like the two below ("1-0"). */
   setScore: string;
@@ -350,6 +352,8 @@ export async function getMatchPointsFromSupabase(
     }
   }
 
+  const gameInSet = gameNumbersInSet(points);
+
   return points.map((point): MatchPoint => {
     const pointShots = shotsByPointId.get(point.id) ?? [];
 
@@ -378,7 +382,7 @@ export async function getMatchPointsFromSupabase(
       id: point.id,
       pointNumber: point.point_number,
       setNumber: point.set_number,
-      gameNumber: point.game_number,
+      gameNumber: gameInSet(point),
       setScore: point.set_score ?? "0-0",
       gameScore: point.game_score ?? "0-0",
       pointScore: point.point_score ?? "0-0",
