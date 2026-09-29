@@ -332,6 +332,13 @@ taken outright: between 25 and 29.5 there is no analysed file to point to. An
 env-variable or per-account override was considered and rejected — the check
 runs in the browser, so an override would ship to everyone anyway.
 
+Same day, second finding: with the floor at 29.5 a 29.94 file was still
+refused — by the _other_ gate, the browser's ~20-frame sample played from the
+start of the file, which read 29.2 (one dropped frame in twenty). Twenty frames
+are not a frame rate. The validator now lets the whole-track average decide
+whenever it is known and falls back to the sample only when the container
+could not be read (non-MP4/MOV, or the read timed out).
+
 ### Q15 — Why do some points resolve no winner? **New, 2026-09-28.**
 
 Both sub-29.97 fps matches returned score streams with points we cannot give a

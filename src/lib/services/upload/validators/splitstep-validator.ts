@@ -19,10 +19,16 @@
  * Do not add a second copy of any threshold at a call site.
  *
  * ── The frame-rate floor ─────────────────────────────────────────────────────
- * Two rates are judged, and neither rescues the other. The browser sample,
- * snapped to a standard rate, must clear `MIN_VIDEO_FPS` (snapping keeps
- * genuine 29.97 at 30). And when the container's whole-track average is known
- * (`averageFps`, MP4/MOV only) it is judged in three tiers:
+ * Two measurements exist, and the whole-track container average is the judge
+ * whenever it is known. The browser sample (`fps`, ~20 frames played from the
+ * start of the file) is far too short to characterise a two-hour recording:
+ * one dropped frame in those 20 reads 29.2, phones stutter most at the very
+ * start, and a busy laptop drops presented frames the file never lost. A
+ * 29.94 file was refused on exactly that reading (2026-09-29). So the sample,
+ * snapped to a standard rate, must clear `MIN_VIDEO_FPS` only when the
+ * container could not be read (`averageFps` null: not MP4/MOV, or the read
+ * failed or timed out). When the average is known (`averageFps`, MP4/MOV only)
+ * it alone decides, in three tiers:
  *
  *   - under `MIN_CONTAINER_AVERAGE_FPS` (29.5)          → refused before a byte
  *     uploads. The variable-rate case: a file opens at 30 to a 20-frame
@@ -37,8 +43,7 @@
  *   - at or above 29.97                                    → silent. Constant-rate
  *     NTSC, 30 and 60 fps footage always lands here.
  *
- * A null average (another container, a failed or slow read) leaves the sample
- * to decide, as before. How the vendor computes its own number is still unknown.
+ * How the vendor computes its own number is still unknown.
  *
  * Likewise the container allowlist is exactly `ACCEPTED_VIDEO_EXTENSIONS` —
  * not the message's MP4 preference being enforced (.mov, .m4v, .avi, .mkv and
@@ -157,20 +162,21 @@ function formatAverage(averageFps: number): string {
 }
 
 /**
- * The frame rate the checks judge: the sampled rate when the browser could
- * measure one, otherwise the whole-track container average snapped the same
- * way. The fallback matters in browsers without `requestVideoFrameCallback`
- * (Firefox): the sample is null there, but the container read still works, and
- * without it a 24 fps MP4 would skip the floor and fail only after upload.
- * Null only when neither is known.
+ * The frame rate the checks judge: the whole-track container average, snapped
+ * to a standard rate, when it is known; otherwise the browser's sample. The
+ * average wins because it covers every frame in the file and the sample covers
+ * twenty (see the module comment). The fallback matters in browsers without
+ * `requestVideoFrameCallback` (Firefox), where the sample is null but the
+ * container read still works — and the other way round for a container
+ * mediabunny cannot index. Null only when neither is known.
  *
  * Exported so UI code deriving "one frame" from a probe (e.g. the trim
- * step's frame-step calculation) uses the same fallback and snap as the
+ * step's frame-step calculation) uses the same precedence and snap as the
  * validator, rather than a second copy that could drift.
  */
 export function effectiveFps(probe: VideoProbe): number | null {
-  if (probe.fps !== null) return probe.fps;
-  return probe.averageFps != null ? snapToStandardFps(probe.averageFps) : null;
+  if (probe.averageFps != null) return snapToStandardFps(probe.averageFps);
+  return probe.fps;
 }
 
 /**
@@ -205,12 +211,19 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
     };
   }
 
-  // A measured rate below the floor is fatal. An unmeasurable one is not —
+  // The sample judges only when the container could not be read; with an
+  // average in hand the two checks below own the verdict, because twenty
+  // frames from the start of a file are not a frame rate (module comment).
+  // A sampled rate below the floor is then fatal. An unmeasurable one is not —
   // see the warning below. The comparison runs on the snapped rate so NTSC
   // 29.97 clears the 30 floor here as well, and not only because probe.ts
   // happened to round it on the way in; the message still quotes the rate the
   // file reported, which is the number the camera's menu shows.
-  if (probe.fps !== null && snapToStandardFps(probe.fps) < MIN_VIDEO_FPS) {
+  if (
+    probe.averageFps == null &&
+    probe.fps !== null &&
+    snapToStandardFps(probe.fps) < MIN_VIDEO_FPS
+  ) {
     return {
       success: false,
       error: `Video runs at ${probe.fps} fps. Analysis needs at least ${MIN_VIDEO_FPS} fps.`,
@@ -218,9 +231,9 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
     };
   }
 
-  // The container average is judged too, in every browser — a variable-rate
-  // MP4 can open at 30 (what the sample sees) and average well under it (what
-  // the vendor measures). It never rescues a low sample; it can only refuse.
+  // The container average, in every browser — a variable-rate MP4 can open
+  // at 30 (what the sample sees) and average well under it (what the vendor
+  // measures), or open at 29.2 and average 29.94.
   if (averageBelowAccepted(probe)) {
     return {
       success: false,

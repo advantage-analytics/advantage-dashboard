@@ -19,6 +19,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   checkVideoFileBasics,
+  effectiveFps,
   evaluateVideoProbe,
   formatProbeFps,
 } from "@/lib/services/upload/validators/splitstep-validator";
@@ -261,10 +262,44 @@ test.describe("frame-rate boundary", () => {
     }
   });
 
-  test("the average never rescues a rate under the floor", () => {
+  test("a low average is refused whatever the sample read", () => {
     expect(evaluateVideoProbe(probe({ fps: 24, averageFps: 24 })).success).toBe(
       false,
     );
+    expect(evaluateVideoProbe(probe({ fps: 30, averageFps: 24 })).success).toBe(
+      false,
+    );
+  });
+
+  test("a known average overrides a low sample", () => {
+    // Emon_RohanMurali_Harvard.mp4, 2026-09-29: whole-track average 29.94,
+    // but the 20-frame sample at the start of the file read 29.2 (one dropped
+    // frame) and the wizard refused it. Twenty frames are not a frame rate;
+    // the container index covers every frame and decides.
+    const p = probe({ fps: 29.2, averageFps: 29.94 });
+    const result = evaluateVideoProbe(p);
+    expect(result.success).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings?.[0]).toContain("29.94 fps");
+    expect(formatProbeFps(p)).toBe("29.94 fps");
+    expect(effectiveFps(p)).toBe(30);
+
+    // A constant-rate file the browser merely stuttered on: nothing to say.
+    const steady = probe({ fps: 29.2, averageFps: 30 });
+    expect(evaluateVideoProbe(steady).success).toBe(true);
+    expect(evaluateVideoProbe(steady).warnings?.join(" ") ?? "").not.toContain(
+      "29.2",
+    );
+    expect(formatProbeFps(steady)).toBe("30 fps");
+  });
+
+  test("with no average, the sample still refuses under the floor", () => {
+    // Another container, or the read timed out: the sample is all there is.
+    const result = evaluateVideoProbe(probe({ fps: 29.2, averageFps: null }));
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("29.2 fps");
+    expect(result.error).toContain(`${MIN_VIDEO_FPS} fps`);
   });
 
   // Browsers without requestVideoFrameCallback (Firefox) report no sampled

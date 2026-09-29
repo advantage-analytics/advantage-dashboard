@@ -284,7 +284,11 @@ to put a testable seam.
 >   `RECOMMENDED_CONTAINER_AVERAGE_FPS` (29.97) bounds a band that uploads with
 >   one warning instead of a refusal — both sub-29.97 jobs publish on
 >   derivation 0.6.0, and full-length phone footage averaging 29.74–29.94 was
->   being turned away. Reasoning under Q14 in the vendor-questions doc.
+>   being turned away. Reasoning under Q14 in the vendor-questions doc. The
+>   same day the container average became the judge whenever it is known: the
+>   browser's 20-frame sample refuses on its own only when the container could
+>   not be read (a 29.94 file was refused on a 29.2 sample from its first
+>   twenty frames).
 >
 > `job-request.ts`, the three inputs in §4, `canSubmitVideo` and the webhook are
 > untouched.
