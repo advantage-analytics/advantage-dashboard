@@ -44,7 +44,7 @@ ready).
 
 ## T3 · Gate the webhook's failed branch on the job row
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/app/api/webhooks/splitstep/route.ts, tests/splitstep-webhook-route.spec.ts (new), tests/fixtures/vm-modules.ts (guess)

@@ -447,7 +447,14 @@ export async function POST(request: NextRequest) {
   // payload carries no duration, and the reservation is already the trim window
   // we asked them to analyse — so the estimate IS the actual, and calling
   // reconcileQuota() would mean inventing a number to pass it.
-  if (payload.nextStatus === "failed" && record.matched_job_id) {
+  //
+  // Gated on the row, not the payload. `job_status` is what the RPC's
+  // rank-guarded update left behind — never backwards, never off a terminal
+  // state — so a `job_failed` for a job already `completed`, `deriving` or
+  // `derivation_failed` leaves it there, and must release no quota, send no
+  // failure mail and trigger no resubmit. Keying on `payload.nextStatus` did
+  // all three for any delivery that merely claimed a failure.
+  if (record.job_status === "failed" && record.matched_job_id) {
     const failedJobId = record.matched_job_id;
     // Read once outside after(): the auto-retry decision keys on THIS
     // delivery's error fields, not on whatever the row says by the time the

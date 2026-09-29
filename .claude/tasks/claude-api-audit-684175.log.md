@@ -21,3 +21,12 @@ is the runner's. Newest entries at the bottom.
 
 1. Other `pipelineLog` calls that log vendor response bodies or error text could also carry SAS URLs to the console — audit them and apply `redactSignedUrls`.
 2. The regex stops a query at a backslash; if the vendor ever JSON-escapes `&` as `&`, the tail (incl. `sig=`) would survive — add a spec case if that shape appears.
+
+## T3 · Gate the webhook's failed branch on the job row — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** The webhook's failed branch now gates on `record.job_status === "failed" && record.matched_job_id` (the row status `record_splitstep_webhook` returns after its rank-guarded update — live ranks confirmed: completed = failed = 6, deriving 7, derivation_failed 8), so a late `job_failed` for a completed/derived job releases no quota, sends no mail, triggers no resubmit. New offline route spec `tests/splitstep-webhook-route.spec.ts` (4 cases incl. derivation_failed; mutation-checked against the old gate).
+**follow-ups:**
+
+1. **Wrong-mail edge (new with this gate):** any delivery landing on a row already `failed` now enters the branch — e.g. a late `job_processing` for a parent job that was auto-resubmitted after a download failure (no mail was sent then). It carries no error fields, so `retryable` is false and the user gets an "analysis failed" email while the retry runs. Tighten to `payload.nextStatus === "failed" && record.job_status === "failed"` (strict subset of old and new gates). Quota/resubmit side effects stay idempotent either way.
+2. The completed branch still keys on `payload.nextStatus === "completed"`; its downloads are guarded by `already_stored` and per-file keys. Could take the same row gate (completed/deriving/derivation_failed).
