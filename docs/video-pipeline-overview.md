@@ -600,19 +600,35 @@ ordering, and match-deletion cleanup. What remains is almost entirely vendor-sid
   through a proxy. The R2 code is deleted, so acting on this is now a build, not a
   revival; at pilot volume the bill does not justify one. Revisit if playback traffic
   grows.
-- **The job status endpoint is unused, and now matters more.**
-  `GET {BASE_URL}/jobs/{job_id}` is both the recovery path for a delivery lost to an
-  outage _and_ the replacement for `vendor_first_downloaded_at`, which the move to Azure
-  stopped populating (§3). Nothing calls it yet.
+- ~~**The job status endpoint is unused, and now matters more.**~~ **Wired,
+  2026-09-28** (`claude/video-retry-failure-surfacing-055fd8`): `reconcile.ts`
+  polls `GET {BASE_URL}/jobs/{job_id}` for jobs still `submitting`/`queued`/
+  `processing` with a vendor id whose `updated_at` is more than 30 minutes old
+  (capped, rate-limited to once per 10 minutes per job), and its results sweep
+  (`recoverUndeliveredResults`) re-runs the webhook's own `secureResults` →
+  `gradeResults` → `deriveAndPublish` sequence for a `completed` job whose
+  delivery never landed. `vendor_first_downloaded_at` still is not the signal
+  this replaces it with — see below.
 - **`vendor_first_downloaded_at`, `vendor_last_downloaded_at` and `vendor_request_count`
   are permanently null.** Only the retired Worker wrote them. Nothing in `src/` reads them,
   but `docs/ux-overhaul-brief.md` plans a "Processing" status on the first — that plan
   needs the job-status endpoint instead. The columns are left in place rather than
   dropped; decide once the replacement is wired.
-- **`video_id` and the structured `error` object are not promoted to columns.** The
-  failure payload carries `error.code` / `category` / `step`; only the free-text
-  `message` reaches `processing_jobs.error_message`. The full object is retained in
-  `raw_body`, so nothing is lost — it just is not queryable.
+- ~~**`video_id` and the structured `error` object are not promoted to columns.**~~
+  **`error.code` / `category` / `step` are promoted and used, 2026-09-28.** The
+  webhook writes them via `record_splitstep_webhook` (`error_code`,
+  `error_category`, `error_step` on `processing_jobs`); `reconcile.ts` writes
+  the same three columns too — `JOB_STALE` or a vendor failure code from its
+  poll, `RESULTS_DELIVERY_LOST` from either the poll (a completed job whose
+  delivery never arrived) or the results sweep (a delivery whose download
+  failed); and `submit-match-video.ts` writes a stalled-submit code
+  (`QUOTA_EXCEEDED`, `NOT_ELIGIBLE`, `INVALID_METADATA`, `NOT_CONFIGURED`) from
+  the browser when `/api/splitstep/jobs` refuses a submission. `derive-and-
+publish.ts` writes `DERIVATION_REFUSED` / `DERIVATION_ERROR` on the
+  derivation side. `classifyFailure()` (`src/lib/data/match-analysis.ts`) only
+  reads all of these — it writes none of them — to decide what a failed job's
+  recovery card offers. `video_id` alone is still not promoted; the full error
+  object is retained in `raw_body` regardless.
 - **Only the `individual` quota tier is reachable** (§8).
 - **Ten older migration files carry no applied version stamp.** Pre-existing drift, not
   from this work; each needs verifying against the live DB before `supabase db push` is

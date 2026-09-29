@@ -14,7 +14,7 @@ import { advButton } from "@/lib/ui/adv-button";
  *
  * Never a skeleton (nothing is arriving) and never a sample figure (a number
  * here is a claim about this match). A match still being analysed never
- * reaches this: `page.tsx` short-circuits to `MatchAnalysisProgress` first.
+ * reaches this: `page.tsx` short-circuits to `AnalysisSteps` first.
  */
 export function ReportPaneEmpty({
   heading,

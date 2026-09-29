@@ -8,7 +8,7 @@
  * `supabase/migrations/20260820072347_program_event_entries.sql`.
  */
 
-import type { AnalysisStatus } from "@/lib/data/match-analysis";
+import type { AnalysisStatus, RecoveryClass } from "@/lib/data/match-analysis";
 
 export type EventKind = "dual" | "tournament";
 export type EventSite = "home" | "away" | "neutral";
@@ -142,10 +142,22 @@ export interface EntryMatch {
   sourceProvider?: string | null;
   /** `processing_jobs.id` from the analysis map — what a retry acts on. */
   jobId?: string | null;
+  /** When the job row last moved, from the analysis map — `isSubmitStalled()`'s staleness input. */
+  updatedAt?: string | null;
+  /** The vendor's job reference, from the analysis map — an accepted job is never stalled. */
+  jobReference?: string | null;
+  /** Bytes moved, 0-100, only while the transfer runs — from the analysis map. */
+  uploadPercent?: number | null;
   /** The failed job's note, from the analysis map. */
   failNote?: string | null;
-  /** The vendor refused the video itself, from the analysis map — no retry. */
-  inputRejected?: boolean | null;
+  /** What can be done about a job that did not finish, from the analysis map. */
+  recovery?: RecoveryClass | null;
+  /** The stored note `showsStoredNote()` allows, from the analysis map. */
+  note?: string | null;
+  /** The job's raw error code, from the analysis map — `waitOrAskVariant()`'s input only. */
+  errorCode?: string | null;
+  /** Rows in the job's resubmission chain, from the analysis map — `waitOrAskVariant()`'s input only. */
+  attemptsUsed?: number | null;
 }
 
 export interface EventEntry {

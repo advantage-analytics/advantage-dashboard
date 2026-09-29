@@ -137,6 +137,11 @@ export const NORMAL_ENTRIES: EventEntry[] = [
         hasVideo: true,
         jobId: "job-s4",
         failNote: "The video ended before the match did",
+        // What the loader now projects beside failNote (T7): the drawers read
+        // the recovery class and its stored note, never the raw failNote.
+        recovery: "retry",
+        note: "The video ended before the match did",
+        errorCode: "VIDEO_TRUNCATED",
       }),
     ],
   }),
