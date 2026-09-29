@@ -62,3 +62,8 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical GATE FAIL — `tests/design-drift.spec.ts`: "Tailwind default-palette class: 0 (seed 1) — seed is stale — lower it to 0 in scripts/check-design-drift.mjs". The deleted files held the last such class. Completion review not run.
 **reason:** the fix (lower the seed) touches `scripts/check-design-drift.mjs`, which criterion 3 forbids ("the diff touches no file other than the two deletions"). Needs the author to widen the criterion.
 **stash:** eb0fb2d796ad15775fe3449b65611f7f2ad63c56
+
+## T7 · Delete unused featured-match-card and match-event-header — done
+
+**gate:** mechanical GATE PASS; completion `VERDICT: pass` (criterion 3 widened by the author in chat to allow the drift seed change).
+**changed:** Restored stash eb0fb2d7: `featured-match-card.tsx` and `match-event-header.tsx` deleted (no importers). `scripts/check-design-drift.mjs` `defaultPalette` seed 1 → 0 — the deleted files held the last Tailwind default-palette class. MAP.md unchanged.
