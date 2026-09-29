@@ -22,3 +22,13 @@ is the runner's. Newest entries at the bottom.
 2. Drawer Court and Home/Away fields still read "Not specified".
 3. `featured-match-card.tsx` and `match-event-header.tsx` look dead (no importers) — candidates for deletion.
 4. Live repair from T4 is now due: `update matches set tournament_name = null where tournament_name = player1_name || ' vs ' || player2_name`.
+
+## T1 · Let an event delete detach its matches under a client session — done
+
+**gate:** mechanical GATE PASS; completion `VERDICT: pass` (last criterion judged under the author's in-chat amendment: write the migration, do not apply it).
+**changed:** New `supabase/migrations/20260929170000_event_delete_detaches_under_client.sql` — `guard_event_delete` sets a transaction-local `advantage.detach_event_id` marker and detaches its matches itself (`event_entry_id` + `tournament_name` → null) before the entry cascade; `matches_block_client_regraft` (copied verbatim from live) accepts entry→null only under that marker for an entry of that event. Spec actor now sets `request.jwt.claims`; detach asserts `tournament_name is null`. Guardrails doc gains the fourth reviewed exception. **NOT applied to live** — the author applies it.
+**follow-ups:**
+
+1. After applying live, delete event `bc14ddbf-16ba-4359-a762-9c846d4882a9` from the app and confirm its match shows "No event".
+2. Add a negative spec case: a bare client `update matches set event_entry_id = null` must still raise 42501.
+3. `20260923021801_event_delete_detaches_matches.sql` header still says the FK does the detaching — a pointer to the new migration would help.

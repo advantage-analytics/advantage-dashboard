@@ -124,6 +124,28 @@ be. Doubles teams and existing users depend on it.
 > line with a saved outcome. Migration:
 > `supabase/migrations/20260913120000_attach_match_to_event_line.sql`.
 
+> **A fourth reviewed exception, added 2026-09-29: the event-delete detach in
+> `guard_event_delete`.**
+>
+> Deleting a schedule event that holds matches leaves those matches as
+> unassigned program matches (decision 2026-09-22, PR #255). The detach was
+> meant to ride on `matches_event_entry_id_fkey ON DELETE SET NULL`, but that
+> referential UPDATE fires `matches_block_client_regraft`, which refused every
+> entry → NULL move for a signed-in user, so no event with a match could be
+> deleted from the app. The BEFORE DELETE trigger on `program_events` now
+> performs the detach itself, and the regraft trigger accepts the move only
+> while a transaction-local marker names the event the entry belongs to.
+> Allowed on the attach exception's terms: a single explicit action by an
+> owner or coach who runs that program's schedule (`delete_schedule_event`);
+> scoped to the matches on the lines of the one event being deleted; only
+> from a line to no line; touching **only** `event_entry_id` and
+> `tournament_name` — **never** `score`, `format`, `player1_id` or
+> `program_id`, and nothing under `match_stats`, `points` or `shots`; and
+> audit-logged to `program_audit_log` as `event.deleted` with
+> `detached_matches`, counted before the detach. A bare client UPDATE that
+> nulls `event_entry_id` is refused exactly as before. Migration:
+> `supabase/migrations/20260929170000_event_delete_detaches_under_client.sql`.
+
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
 > Not a code path — a single hand-run `UPDATE`, approved by the owner in

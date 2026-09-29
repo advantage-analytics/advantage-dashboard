@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Let an event delete detach its matches under a client session
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<ts>_event_delete_detaches_under_client.sql (new), tests/schedule-event-delete-db.spec.ts, docs/ui-revamp-guardrails.md (guess)
 - **done when:**
