@@ -170,7 +170,7 @@ function FileOrVideo({
             </>
           )}
           {error && (
-            <p role="alert" className="text-[13px] text-[var(--red)]">
+            <p role="alert" className="text-[13px] text-[var(--error)]">
               {error}
             </p>
           )}
