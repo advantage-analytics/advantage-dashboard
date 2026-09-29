@@ -184,7 +184,7 @@ export function fitPillCount(
     return total;
   };
   if (widthOf(pillWidths.length, false) <= available) return pillWidths.length;
-  for (let n = pillWidths.length - 1; n > 0; n--) {
+  for (let n = pillWidths.length - 1; n >= 0; n--) {
     if (widthOf(n, true) <= available) return n;
   }
   return 0;

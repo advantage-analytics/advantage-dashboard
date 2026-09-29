@@ -134,25 +134,32 @@ function PillRow({ pills }: { pills: string[] }) {
   const measureRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(pills.length);
 
+  // Keyed on the label text, not the array: callers rebuild `pills` every
+  // render, and identity would tear the observer down each time.
+  const pillsKey = pills.join("\u0000");
+
   useLayoutEffect(() => {
     const row = rowRef.current;
     const measure = measureRef.current;
     if (!row || !measure) return;
     const compute = () => {
-      const items = Array.from(measure.children) as HTMLElement[];
-      const pillWidths = items
-        .slice(0, pills.length)
-        .map((el) => el.offsetWidth);
-      const moreWidth = items[pills.length]?.offsetWidth ?? 0;
-      setVisible(
-        fitPillCount(pillWidths, moreWidth, PILL_GAP_PX, row.clientWidth),
+      // Every pill, then the widest possible "+n" last.
+      const widths = Array.from(
+        measure.children,
+        (el) => (el as HTMLElement).offsetWidth,
       );
+      const moreWidth = widths.pop() ?? 0;
+      setVisible(fitPillCount(widths, moreWidth, PILL_GAP_PX, row.clientWidth));
     };
     compute();
+    // The twin is observed too: a web-font swap (`display: "swap"` in
+    // `app/layout.tsx`) widens the pills without changing the row's width,
+    // and only the twin's size moves with them.
     const observer = new ResizeObserver(compute);
     observer.observe(row);
+    observer.observe(measure);
     return () => observer.disconnect();
-  }, [pills]);
+  }, [pillsKey]);
 
   const hidden = pills.length - visible;
 
