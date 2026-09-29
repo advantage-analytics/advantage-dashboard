@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { transformDbMatch, type DbMatch } from "@/lib/data/matches-list-types";
 import { realTournamentName } from "@/lib/data/match-share-format";
+import { groupMatchesIntoEvents } from "@/lib/data/home-recent-data";
 import { createLoader, marker } from "./fixtures/vm-modules";
 
 /**
@@ -193,4 +194,46 @@ test("palette Events group holds only named events", () => {
   expect([...countEvents(PALETTE_ROWS).entries()]).toEqual([
     ["Spring Invitational", 1],
   ]);
+});
+
+test.describe("Home recent matches — no-event grouping", () => {
+  const row = (id: string, tournament_name: string | null) => ({
+    id,
+    created_by: "viewer",
+    player1_id: "viewer",
+    player2_id: null,
+    player1_name: "Me",
+    player2_name: `Opp ${id}`,
+    tournament_name,
+    round: null,
+    date: "2026-09-29T12:00:00Z",
+    score: { player1: [6, 6], player2: [3, 4] },
+    result: null,
+    match_type: null,
+    court_type: null,
+    verified: null,
+    duration: null,
+    opponent_hand: null,
+    opponent_backhand: null,
+  });
+
+  test("same-day matches with no event stay separate; a shared event groups", () => {
+    const events = groupMatchesIntoEvents(
+      [
+        row("a", null),
+        row("b", null),
+        row("c", "Fall Open"),
+        row("d", "Fall Open"),
+      ],
+      ["viewer"],
+      "viewer",
+      new Map(),
+      new Map(),
+    );
+    const noEvent = events.filter((e) => e.tournamentName === null);
+    expect(noEvent).toHaveLength(2);
+    expect(noEvent.every((e) => e.matches.length === 1)).toBe(true);
+    const fall = events.find((e) => e.tournamentName === "Fall Open");
+    expect(fall?.matches).toHaveLength(2);
+  });
 });
