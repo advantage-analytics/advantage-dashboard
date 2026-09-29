@@ -100,17 +100,37 @@ export async function POST(
   // budget that pays for a match is the one the match belongs to. The two
   // reads are independent (one hits matches, one resolves the session), so
   // they share a round trip.
-  const [{ data: matchRow }, workspaceContext] = await Promise.all([
-    admin
-      .from("matches")
-      .select("program_id")
-      .eq("id", (jobRow as { match_id: string }).match_id)
-      .maybeSingle(),
-    getWorkspaceContext(),
-  ]);
+  const [{ data: matchRow, error: matchError }, workspaceContext] =
+    await Promise.all([
+      admin
+        .from("matches")
+        .select("program_id")
+        .eq("id", (jobRow as { match_id: string }).match_id)
+        .maybeSingle(),
+      getWorkspaceContext(),
+    ]);
+
+  // A failed read is not "no program": treating it as `program_id: null` would
+  // make billingWorkspaceFor() pick the personal workspace and charge a team
+  // match's retry to the player's own allowance. Refuse before resolving it.
+  if (matchError) {
+    pipelineLog.error(`${LOG} match lookup failed`, {
+      jobId,
+      error: matchError.message,
+    });
+    return NextResponse.json(
+      { error: "Could not load the match. Try again." },
+      { status: 503 },
+    );
+  }
+  // The read succeeded and the match is gone: never bill it to anyone.
+  if (!matchRow) {
+    return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  }
+
   const billingWorkspace = billingWorkspaceFor(
     workspaceContext?.available ?? [],
-    (matchRow as { program_id: string | null } | null)?.program_id ?? null,
+    (matchRow as { program_id: string | null }).program_id,
   );
 
   if (!billingWorkspace) {

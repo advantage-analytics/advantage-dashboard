@@ -67,3 +67,11 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `docs/ui-revamp-guardrails.md:27` and `docs/video-pipeline-overview.md:287,675` still tell readers to set `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true` — inert since T1; describe fail-closed-once-secret-is-set + the `SPLITSTEP_WEBHOOK_ALLOW_UNSIGNED` pilot hatch.
+
+## T7 · Resubmit refuses when the match read fails — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** Implemented in parallel in an isolated worktree (commit 5ccb2268), brought over here. `resubmit/route.ts` now answers 503 "Could not load the match. Try again." (logged via `pipelineLog.error`) when the `matches` read errors, and 404 "Job not found" when the match row is gone — before `billingWorkspaceFor`, so a team match's retry can no longer fall through to the personal allowance. New offline spec `tests/resubmit-route-billing.spec.ts` (3 cases).
+**follow-ups:**
+
+1. Check whether `/api/splitstep/jobs` and `/api/splitstep/upload-url` resolve `program_id` from a match read whose error is ignored in the same way.

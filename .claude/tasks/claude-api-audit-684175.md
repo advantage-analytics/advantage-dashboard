@@ -95,7 +95,7 @@ ready).
 
 ## T7 · Resubmit refuses when the match read fails
 
-- **status:** doing
+- **status:** done
 - **model:** sonnet
 - **files:** src/app/api/splitstep/jobs/[jobId]/resubmit/route.ts, tests/resubmit-route-billing.spec.ts (new) (guess)
 - **done when:**
