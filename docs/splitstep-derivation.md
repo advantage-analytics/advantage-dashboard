@@ -314,7 +314,7 @@ other than the three analysed.
 
 - **Reprocessing.** When `DERIVATION_VERSION` bumps, every stored match needs
   rebuilding and no webhook will fire. Wants a paged cron route following
-  `src/app/api/cron/reclaim-videos`, calling `deriveAndPublish()` — not a second
+  `src/app/api/cron/cleanup-match-videos/route.ts` (the live cron pattern to copy), calling `deriveAndPublish()` — not a second
   implementation.
 - **Cross-provider display.** No aggregate reader filters by provider. Nulls no
   longer corrupt the means, but approximate winners/errors still reach

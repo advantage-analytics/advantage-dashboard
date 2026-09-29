@@ -364,7 +364,7 @@ delete is not. Storage failures log and the row delete proceeds regardless.
 
 ### The source video is no longer deleted when a job completes
 
-Until September 2026 the webhook (and a daily `/api/cron/reclaim-videos` pass) deleted the
+Until September 2026 the webhook (and a daily `/api/cron/reclaim-videos` pass — route deleted) deleted the
 source blob once the results JSON was stored and the vendor's trimmed re-encode had been
 copied in. Both are gone, along with `reclaim-videos.ts`, `startTrimmedVideoCopy()` and
 `trimmedCopyStatus()`:

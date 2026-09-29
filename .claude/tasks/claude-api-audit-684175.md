@@ -95,7 +95,7 @@ ready).
 
 ## T7 · Resubmit refuses when the match read fails
 
-- **status:** todo
+- **status:** doing
 - **model:** sonnet
 - **files:** src/app/api/splitstep/jobs/[jobId]/resubmit/route.ts, tests/resubmit-route-billing.spec.ts (new) (guess)
 - **done when:**
@@ -107,7 +107,7 @@ ready).
 
 ## T8 · `/api/upload` invokes process-match inside `after()`
 
-- **status:** todo
+- **status:** doing
 - **model:** sonnet
 - **files:** src/app/api/upload/route.ts, tests/upload-route-guards.spec.ts (guess)
 - **done when:**
@@ -119,7 +119,7 @@ ready).
 
 ## T9 · Harden `/api/matches/[matchId]` ids, bodies, and error mapping
 
-- **status:** todo
+- **status:** doing
 - **model:** opus
 - **files:** src/app/api/matches/[matchId]/route.ts, src/lib/services/matches/purge-match-storage.ts, tests/match-delete-claim-release.spec.ts, tests/match-route-guards.spec.ts (new) (guess)
 - **done when:**
@@ -209,7 +209,7 @@ ready).
 
 ## T16 · Offline 401 specs for home-insight, team-insight and hours-left
 
-- **status:** todo
+- **status:** doing
 - **model:** sonnet
 - **files:** tests/insight-routes-auth.spec.ts (new), src/app/api/home-insight/route.ts, src/app/api/team-insight/route.ts, src/app/api/splitstep/hours-left/route.ts (guess)
 - **done when:**
@@ -220,7 +220,7 @@ ready).
 
 ## T17 · Fix stale route references in three docs
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** docs/splitstep-derivation.md, docs/video-pipeline-overview.md, docs/ux-overhaul-brief.md (guess)
 - **done when:**

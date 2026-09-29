@@ -59,3 +59,11 @@ is the runner's. Newest entries at the bottom.
 
 1. `processing_usage.job_id` is `not null` live, so the `where job_id is not null` predicate is vacuous (kept for shape consistency); `admin-team-server.ts:683` comments that the column "is nullable" — stale.
 2. The migration header (~58 lines) could be trimmed at `/pr-check`'s simplify pass.
+
+## T17 · Fix stale route references in three docs — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** Implemented in parallel in an isolated worktree (commit 7fabd2c5), brought over here. `docs/splitstep-derivation.md` §8 points at the live `cron/cleanup-match-videos/route.ts`; `docs/video-pipeline-overview.md:367` marks `/api/cron/reclaim-videos` "route deleted"; `docs/ux-overhaul-brief.md` annotates `/api/chat` as "not implemented — proposed" at 112/147/210/299. Runner reworded one stale comment in `src/lib/llm/stream-response.ts` ("`/api/chat`" → "the since-deleted chat route") so the `grep -rn "/api/chat" docs/ src/` criterion holds.
+**follow-ups:**
+
+1. `docs/ui-revamp-guardrails.md:27` and `docs/video-pipeline-overview.md:287,675` still tell readers to set `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true` — inert since T1; describe fail-closed-once-secret-is-set + the `SPLITSTEP_WEBHOOK_ALLOW_UNSIGNED` pilot hatch.

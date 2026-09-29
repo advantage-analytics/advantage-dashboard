@@ -109,7 +109,7 @@ This is the audit's biggest finding: **most of what the founder wants a redesign
 | Orphan (no route/caller today)                                                                                                                                                                                                                                                                       | Maps to                                                                             |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Full statistics page: `statistics-page-content.tsx` + `MatchSelector`, `PeriodToggle`, `RollingFormStrip`, `StatProgressionChart`, `OpponentLedger`, `SurfaceDna`, `EfficiencyMatrix`, + server/client data layer (`statistics-server.ts` / `statistics-client.ts`, `stat-configs.ts` with 24 stats) | **Trends** (§6) — the "trends over multiple matches" ask                            |
-| `/api/chat` — streaming, auth-guarded, provider-abstracted, `MatchContext` prompt builder                                                                                                                                                                                                            | **Ask (chatbot)** (§5 F5) — zero UI callers today                                   |
+| `/api/chat` (not implemented — proposed) — streaming, auth-guarded, provider-abstracted, `MatchContext` prompt builder                                                                                                                                                                               | **Ask (chatbot)** (§5 F5) — zero UI callers today                                   |
 | Video review subsystem: `match-video-panel.tsx`, `match-video-sidebar.tsx`, `video-filter-bar.tsx`, `use-video-auto-advance.ts`                                                                                                                                                                      | **Film Room** altitude of the match report — indispensable once video is the source |
 | `court-visualization.tsx` (~730 lines, serve/return modes, filters) + `visuals/configs/`                                                                                                                                                                                                             | Match report court section / Film Room                                              |
 | `analysis-sidebar.tsx` (320px rail with status + stat rows)                                                                                                                                                                                                                                          | Basis for the match report's anchor nav rail                                        |
@@ -144,7 +144,7 @@ Navigation is three destinations (Home, Matches, Statistics→placeholder) plus 
 /dashboard/matches/new        Upload wizard (existing, extended)
 /dashboard/matches/[id]       Match Report — single canonical page, 3 altitudes
 /dashboard/trends             Trends (renamed from Statistics; wire the orphaned page)
-/dashboard/ask                Ask — chat with your data (new; wires /api/chat)
+/dashboard/ask                Ask — chat with your data (new; wires /api/chat — not implemented, proposed)
 /dashboard/settings/…         profile · account · subscription · preferences (new: analysis presets, notifications)
 /dashboard/help               Help (existing; glossary becomes a system-wide service, §7.1)
 ```
@@ -207,7 +207,7 @@ Wire the orphaned page at `/dashboard/trends`. Existing: match selector, period 
 
 ### F5 — Ask (chatbot)
 
-Wire `/api/chat` to a UI three ways: **contextual** ("Ask about this match" on the report — `MatchContext` is already the API's input shape; start here), **global** panel from the sidebar/⌘J with conversation history, and **chat-to-widget** later (an answered question can be pinned as a card — the bridge between chat and customization). Grounding rules: only answer from the user's data; every number cited links to the stat row or filtered film-room view that proves it; "I don't have that" beats invention. Persona: the pro-room analyst — terse, specific, no cheerleading (brand: no hand-holding).
+Wire `/api/chat` (not implemented — proposed; no such route exists) to a UI three ways: **contextual** ("Ask about this match" on the report — `MatchContext` is already the API's input shape; start here), **global** panel from the sidebar/⌘J with conversation history, and **chat-to-widget** later (an answered question can be pinned as a card — the bridge between chat and customization). Grounding rules: only answer from the user's data; every number cited links to the stat row or filtered film-room view that proves it; "I don't have that" beats invention. Persona: the pro-room analyst — terse, specific, no cheerleading (brand: no hand-holding).
 
 ### F6 — Coach's Monday (team)
 
@@ -296,7 +296,7 @@ Every stat label everywhere gets a hover/tap definition from the existing help g
 
 ## Appendix A — Reuse inventory (orphan → destination)
 
-`statistics-page-content.tsx` + 12 siblings + data layer → **/dashboard/trends** · `/api/chat` → **Ask** · `match-video-panel/-sidebar`, `video-filter-bar`, `use-video-auto-advance` → **Film Room** · `court-visualization.tsx` + configs → **Report court section** · `analysis-sidebar.tsx` → **Report anchor rail** · `KpiTile.href` → linked KPIs · `ui/tabs.tsx` → altitude/section chrome · `featured-match-card.tsx` → Home latest-match story card candidate · `matches.private` → per-match share toggle (D5).
+`statistics-page-content.tsx` + 12 siblings + data layer → **/dashboard/trends** · `/api/chat` (not implemented — proposed) → **Ask** · `match-video-panel/-sidebar`, `video-filter-bar`, `use-video-auto-advance` → **Film Room** · `court-visualization.tsx` + configs → **Report court section** · `analysis-sidebar.tsx` → **Report anchor rail** · `KpiTile.href` → linked KPIs · `ui/tabs.tsx` → altitude/section chrome · `featured-match-card.tsx` → Home latest-match story card candidate · `matches.private` → per-match share toggle (D5).
 
 ## Appendix B — Method
 
