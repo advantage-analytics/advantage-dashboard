@@ -63,13 +63,84 @@ export function NoPadding() {
   return (
     <div style={{ maxWidth: 460 }}>
       <WidgetCard header="Serve placement" noPadding>
-        <div
+        <table
           style={{
-            height: 120,
-            background: "linear-gradient(180deg, var(--surface-subtle), #fff)",
-            borderTop: "1px solid var(--border-hairline)",
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: 13,
+            color: "var(--ink-900)",
           }}
-        />
+        >
+          <thead>
+            <tr
+              style={{
+                background: "var(--surface-subtle)",
+                color: "var(--ink-500)",
+                fontSize: 11,
+              }}
+            >
+              <th
+                style={{
+                  textAlign: "left",
+                  fontWeight: 500,
+                  padding: "8px 18px",
+                }}
+              >
+                Zone
+              </th>
+              <th
+                style={{
+                  textAlign: "right",
+                  fontWeight: 500,
+                  padding: "8px 18px",
+                }}
+              >
+                1st serve
+              </th>
+              <th
+                style={{
+                  textAlign: "right",
+                  fontWeight: 500,
+                  padding: "8px 18px",
+                }}
+              >
+                Won
+              </th>
+            </tr>
+          </thead>
+          <tbody className="tabular-nums">
+            {[
+              ["Wide", "38%", "71%"],
+              ["Body", "21%", "58%"],
+              ["T", "41%", "76%"],
+            ].map(([zone, share, won]) => (
+              <tr
+                key={zone}
+                style={{ borderTop: "1px solid var(--border-hairline)" }}
+              >
+                <td style={{ padding: "9px 18px" }}>{zone}</td>
+                <td
+                  style={{
+                    padding: "9px 18px",
+                    textAlign: "right",
+                    color: "var(--ink-700)",
+                  }}
+                >
+                  {share}
+                </td>
+                <td
+                  style={{
+                    padding: "9px 18px",
+                    textAlign: "right",
+                    color: "var(--ink-700)",
+                  }}
+                >
+                  {won}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </WidgetCard>
     </div>
   );
