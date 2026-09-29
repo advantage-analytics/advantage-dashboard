@@ -161,16 +161,18 @@ test.describe("FiltersPanel markup", () => {
       "Type",
       "Spin",
       "Zone",
-      "Contact",
+      "Contact depth",
     ]);
     // The Result row is "Shot" (the mockup's "Zone" was a typo).
     expect(groupLabels("result")).toEqual(["Player", "Shot", "Outcome"]);
     expect(groupLabels("custom")).toEqual([
-      "Choose player",
+      "Hit by",
       "Side",
       "Direction",
-      "Rally shot",
+      "Hit",
     ]);
+    expect(text(sectionHtml(html, "return"))).toContain("from the baseline");
+    expect(text(sectionHtml(html, "custom"))).toContain("1 = the serve");
 
     const score = pillLabels(sectionHtml(html, "score"));
     expect(score).toEqual(

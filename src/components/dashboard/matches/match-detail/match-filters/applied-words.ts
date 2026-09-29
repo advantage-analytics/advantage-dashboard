@@ -79,7 +79,12 @@ const PHRASE: {
   returnType: (option) => `${lower(option)} return`,
   returnSpin: (option) => `${lower(option)} return`,
   returnZone: (option) => `${lower(option)} return`,
-  returnContact: (option) => `${lower(option)} contact`,
+  returnContact: (_, value) =>
+    value === "inside"
+      ? "contact inside the baseline"
+      : value === "middle"
+        ? "contact on the baseline"
+        : "deep contact",
   resultPlayer: (_, value, names) => `${playerName(value, names)}’s result`,
   resultShot: (option) => `ends on ${article(lower(option))}`,
   resultOutcome: (_, value) =>

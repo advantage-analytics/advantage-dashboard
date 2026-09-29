@@ -226,9 +226,9 @@ export const MATCH_FILTER_OPTIONS: {
     { value: "Crosscourt", label: "Crosscourt" },
   ],
   returnContact: [
-    { value: "inside", label: "Inside" },
-    { value: "middle", label: "Middle" },
-    { value: "neutral", label: "Neutral" },
+    { value: "inside", label: "Inside the baseline" },
+    { value: "middle", label: "On the baseline" },
+    { value: "neutral", label: "Deep" },
   ],
   resultPlayer: PLAYER_OPTIONS,
   resultShot: [
@@ -315,7 +315,11 @@ export const MATCH_FILTER_SECTIONS: readonly {
       { key: "returnType", label: "Type" },
       { key: "returnSpin", label: "Spin" },
       { key: "returnZone", label: "Zone" },
-      { key: "returnContact", label: "Contact" },
+      {
+        key: "returnContact",
+        label: "Contact depth",
+        note: "from the baseline",
+      },
     ],
   },
   {
@@ -331,10 +335,10 @@ export const MATCH_FILTER_SECTIONS: readonly {
     id: "custom",
     label: "Custom",
     groups: [
-      { key: "customPlayer", label: "Choose player" },
+      { key: "customPlayer", label: "Hit by" },
       { key: "customSide", label: "Side" },
       { key: "customDirection", label: "Direction" },
-      { key: "customRallyShot", label: "Rally shot" },
+      { key: "customRallyShot", label: "Hit", note: "1 = the serve" },
     ],
   },
 ];

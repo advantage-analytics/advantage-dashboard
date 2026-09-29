@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Relabel Return contact depth and the Custom groups
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/match-detail/match-filters/model.ts, match-filters/applied-words.ts, tests/match-filters-panel.spec.ts, tests/match-filters-words-rail.spec.ts (guess)
 - **routes:** /dashboard/matches/[matchId]

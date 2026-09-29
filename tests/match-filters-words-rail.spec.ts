@@ -52,7 +52,7 @@ test.describe("applied-words", () => {
       "second serve",
       "wide serve",
       "T serve",
-      "middle contact",
+      "contact on the baseline",
       "set 1",
       "set 2",
       "break point",
