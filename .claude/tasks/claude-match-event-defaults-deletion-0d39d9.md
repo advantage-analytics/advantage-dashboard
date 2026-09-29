@@ -45,7 +45,7 @@ ready).
 
 ## T3 · "Remove from event" in the Edit Match dialog
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/components/dashboard/matches/match-actions/edit-match-dialog.tsx, src/app/api/matches/[matchId]/route.ts, tests/edit-match-dialog-logic.spec.ts (guess)

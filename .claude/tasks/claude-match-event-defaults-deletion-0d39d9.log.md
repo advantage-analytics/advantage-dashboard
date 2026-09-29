@@ -42,3 +42,12 @@ is the runner's. Newest entries at the bottom.
 1. Apply 20260929170000 then 20260929170100 live. If another audit verb lands live first, add it to the re-created CHECK.
 2. Run the spec against the local container (`DETACH_MATCH_LOCAL_CONTAINER=…`) — the SQL has not been parsed by Postgres yet.
 3. A match with `program_id` null on a line cannot be detached (matches the attach rule) — confirm that's wanted.
+
+## T3 · "Remove from event" in the Edit Match dialog — done
+
+**gate:** mechanical GATE PASS; completion `VERDICT: pass`. widget-states: dialog loading/empty/error paths unchanged; only an inline confirm pending label added.
+**changed:** GET `/api/matches/[matchId]` returns `canDetach` beside `canAttach`. New `detachMatchFromLine` server action in `src/lib/schedule/attach-line.ts` calls `detach_match_from_event_line` and passes the RPC error through. Event rows extracted to new `edit-match-event.tsx` (shared `EVENT_ACTION_CLS`); a linked match with `canDetach` shows blue-text "Remove from event" → danger `ConfirmDialog` naming the event → toast "Removed from <event>" and the dialog reloads with an empty, editable Event field. New offline spec `tests/edit-match-event.spec.ts`; `edit-match-pending.spec.ts` follows the extraction.
+**follow-ups:**
+
+1. The button errors ("function not found") until 20260929170100 is applied live.
+2. Eyes-on: a team match on an event, signed in as a schedule manager; check Esc in the confirm closes only the confirm.

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Info, Loader2, Plus } from "lucide-react";
+import { ArrowUpRight, Info, Loader2 } from "lucide-react";
 import { DateField, type DateFieldHandle } from "@/components/ui/date-field";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { advButton } from "@/lib/ui/adv-button";
@@ -15,6 +15,7 @@ import {
   DialogProblem,
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
+import { ConfirmDialog, Em } from "@/components/ui/confirm-dialog";
 import {
   Answer,
   WarningGlyph,
@@ -47,10 +48,16 @@ import {
 } from "@/lib/matches/edit-match-copy";
 import {
   attachMatchToLine,
+  detachMatchFromLine,
   findAttachableLines,
 } from "@/lib/schedule/attach-line";
 import { lineName, type AttachLine } from "@/lib/schedule/attach-line-state";
 import { AttachLinePicker } from "./attach-line-picker";
+import {
+  EventField,
+  eventFieldValue,
+  LinkedEventLine,
+} from "./edit-match-event";
 import { EditMatchPending } from "@/components/dashboard/loading/edit-match-pending";
 import {
   EditMatchScore,
@@ -113,6 +120,8 @@ interface Loaded {
   analysis: { status: AnalysisStatus } | null;
   event: EventContext | null;
   canAttach: boolean;
+  /** On a line, and the viewer may take it off (`detach_match_from_event_line`). */
+  canDetach: boolean;
 }
 
 const FORM_ID = "edit-match-form";
@@ -242,6 +251,12 @@ export function EditMatchDialog({
   /** The pick to restore if Change is abandoned. */
   const changeFrom = useRef<AttachLine | null>(null);
 
+  /** "Remove from event": the confirm, its request, and the reload after. */
+  const [removing, setRemoving] = useState(false);
+  const [detaching, setDetaching] = useState(false);
+  const [detachError, setDetachError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
   const p1Ref = useRef<HTMLInputElement>(null);
   const p2Ref = useRef<HTMLInputElement>(null);
   const dateRef = useRef<DateFieldHandle | null>(null);
@@ -268,7 +283,7 @@ export function EditMatchDialog({
         const m = data.match;
         setPlayerId(m.player1_id);
         setRoster(m.program_id ? (suggestions?.roster ?? []) : null);
-        setTournament(m.tournament_name ?? "");
+        setTournament(eventFieldValue(m));
         setDate(dayOf(m.date));
         setRound(normalizeRound(m.round) ?? "");
         setMatchType(m.match_type ?? "");
@@ -334,7 +349,7 @@ export function EditMatchDialog({
     return () => {
       live = false;
     };
-  }, [matchId, open]);
+  }, [matchId, open, reloadKey]);
 
   const match = loaded?.match ?? null;
   const event = loaded?.event ?? null;
@@ -624,6 +639,32 @@ export function EditMatchDialog({
     }
   }
 
+  async function removeFromEvent() {
+    if (!event || detaching) return;
+    setDetaching(true);
+    setDetachError(null);
+    try {
+      const detached = await detachMatchFromLine({ matchId });
+      if (!detached.ok) {
+        setDetachError(detached.error);
+        setDetaching(false);
+        return;
+      }
+      setDetaching(false);
+      setRemoving(false);
+      push({ tone: "success", title: `Removed from ${detached.eventName}` });
+      forgetMatchDetails(matchId);
+      // Reload the match: off the line, the Event field is back and editable.
+      setReloadKey((k) => k + 1);
+      router.refresh();
+    } catch {
+      setDetachError(
+        "Couldn't reach the server, so it may not have been removed. Reload the page to check.",
+      );
+      setDetaching(false);
+    }
+  }
+
   // ── Header ────────────────────────────────────────────────────────────────
   let description: React.ReactNode = "Correct the score, players and details.";
   if (match && event) {
@@ -900,79 +941,54 @@ export function EditMatchDialog({
                   </span>
                 ) : (
                   event && (
-                    <span>
-                      The date, {event.eventKind === "dual" ? "line" : "round"}{" "}
-                      and surface come from the {event.eventKind}. Change them
-                      in Schedule.
-                    </span>
+                    <LinkedEventLine
+                      eventKind={event.eventKind}
+                      canDetach={!!loaded?.canDetach}
+                      onRemove={() => {
+                        setDetachError(null);
+                        setRemoving(true);
+                      }}
+                      disabled={saving || detaching}
+                    />
                   )
                 )}
               </div>
             </section>
           ) : (
             <section className="flex flex-col gap-3.5" aria-label="Details">
-              <div className="flex flex-col gap-2">
-                <span className="text-[11px] text-[var(--ink-600)]">Event</span>
-                {picking ? (
-                  <AttachLinePicker
-                    load={(query) =>
-                      findAttachableLines({
+              <EventField
+                value={tournament}
+                onChange={setTournament}
+                disabled={saving}
+                picker={
+                  picking ? (
+                    <AttachLinePicker
+                      load={(query) =>
+                        findAttachableLines({
+                          matchId,
+                          query,
+                          unsaved: {
+                            player: unsavedPlayer,
+                            round: round || null,
+                            date: date || null,
+                          },
+                        })
+                      }
+                      loadKey={JSON.stringify([
                         matchId,
-                        query,
-                        unsaved: {
-                          player: unsavedPlayer,
-                          round: round || null,
-                          date: date || null,
-                        },
-                      })
-                    }
-                    loadKey={JSON.stringify([
-                      matchId,
-                      unsavedPlayer,
-                      round || null,
-                      date || null,
-                    ])}
-                    onPick={pickLine}
-                    onClose={closePicker}
-                  />
-                ) : (
-                  <SettingsUnderlineInput
-                    aria-label="Event"
-                    value={tournament}
-                    placeholder="Tournament, dual or practice"
-                    disabled={saving}
-                    onChange={(e) => setTournament(e.target.value)}
-                  />
-                )}
-                {match.program_id && !picking && (
-                  <span className="flex flex-wrap items-center gap-x-2 pt-0.5 text-[11px] text-[var(--ink-500)]">
-                    {loaded?.canAttach ? (
-                      <>
-                        <span>One-off · not on the schedule</span>
-                        <span className="text-[var(--ink-300)]">·</span>
-                        <button
-                          type="button"
-                          onClick={() => setPicking(true)}
-                          disabled={saving}
-                          className="inline-flex cursor-pointer items-center gap-[3px] text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
-                        >
-                          <Plus
-                            className="size-[11px]"
-                            strokeWidth={2}
-                            aria-hidden
-                          />
-                          Add to an event
-                        </button>
-                      </>
-                    ) : (
-                      <span>
-                        One-off · not on the schedule. A coach who runs the
-                        schedule can add it to an event.
-                      </span>
-                    )}
-                  </span>
-                )}
-              </div>
+                        unsavedPlayer,
+                        round || null,
+                        date || null,
+                      ])}
+                      onPick={pickLine}
+                      onClose={closePicker}
+                    />
+                  ) : null
+                }
+                teamMatch={!!match.program_id}
+                canAttach={!!loaded?.canAttach}
+                onAdd={() => setPicking(true)}
+              />
 
               <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
                 <SettingsField
@@ -1142,6 +1158,27 @@ export function EditMatchDialog({
 
           <DialogProblem message={error} />
         </form>
+      )}
+      {event && (
+        <ConfirmDialog
+          open={removing}
+          onOpenChange={(next) => {
+            if (!detaching) setRemoving(next);
+          }}
+          title="Remove from event?"
+          description={
+            <>
+              Takes this match off <Em>{event.eventName}</Em>. The match, its
+              score and its statistics stay as they are.
+            </>
+          }
+          tone="danger"
+          confirmLabel="Remove from event"
+          pendingLabel="Removing…"
+          pending={detaching}
+          error={detachError}
+          onConfirm={() => void removeFromEvent()}
+        />
       )}
     </RosterDialog>
   );

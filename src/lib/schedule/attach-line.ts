@@ -191,3 +191,48 @@ export async function attachMatchToLine(input: {
     round: row.round,
   };
 }
+
+export type DetachResult =
+  | {
+      ok: true;
+      eventId: string;
+      eventName: string;
+      eventKind: "dual" | "tournament";
+    }
+  | { ok: false; error: string };
+
+/**
+ * The Edit Match dialog's "Remove from event": takes the match off its line
+ * through `detach_match_from_event_line`
+ * (`supabase/migrations/20260929170100_detach_match_from_event_line.sql`),
+ * the only single-match path off a line the database accepts. It re-checks
+ * the uploader and the schedule role and writes the audit row; its refusals
+ * are sentences, shown as they come.
+ */
+export async function detachMatchFromLine(input: {
+  matchId: string;
+}): Promise<DetachResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("detach_match_from_event_line", {
+    p_match_id: input.matchId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  const row = data as {
+    event_id: string;
+    event_name: string;
+    event_kind: "dual" | "tournament";
+  };
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/matches");
+  revalidatePath(`/dashboard/matches/${input.matchId}`);
+  revalidatePath("/dashboard/team/schedule");
+  revalidatePath(`/dashboard/team/schedule/${row.event_id}`);
+
+  return {
+    ok: true,
+    eventId: row.event_id,
+    eventName: row.event_name,
+    eventKind: row.event_kind,
+  };
+}

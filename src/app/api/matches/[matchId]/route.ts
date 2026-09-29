@@ -175,24 +175,29 @@ export async function GET(
 
   // Attaching needs a team match that isn't on a line yet, in the workspace
   // being viewed, by someone the events policy lets run the schedule. The
-  // database re-checks all of it (`attach_match_to_event_line`).
+  // database re-checks all of it (`attach_match_to_event_line`). Detaching is
+  // the inverse on the same terms: a team match that is on a line. The viewer
+  // is `created_by` already — `loadOwnMatch` reads only their own match — and
+  // `detach_match_from_event_line` re-checks both.
   const attachable = !!match.program_id && !match.event_entry_id;
+  const detachable = !!match.program_id && !!match.event_entry_id;
   const [analysis, event, workspace] = await Promise.all([
     analysisFor(supabase, matchId),
     match.event_entry_id
       ? eventContextFor(supabase, match.event_entry_id)
       : Promise.resolve(null),
-    attachable ? getWorkspaceContext() : Promise.resolve(null),
+    attachable || detachable ? getWorkspaceContext() : Promise.resolve(null),
   ]);
 
   const active = workspace?.active;
-  const canAttach =
-    attachable &&
+  const runsSchedule =
     active?.kind === "team" &&
     active.id === match.program_id &&
     canManageTeamSchedule(active);
+  const canAttach = attachable && runsSchedule;
+  const canDetach = detachable && runsSchedule;
 
-  return NextResponse.json({ match, analysis, event, canAttach });
+  return NextResponse.json({ match, analysis, event, canAttach, canDetach });
 }
 
 export async function PATCH(
