@@ -7,6 +7,7 @@ import {
   applyMatchFilters,
   EMPTY_MATCH_FILTERS,
   hasActiveMatchFilters,
+  isUnreturnedServe,
   MATCH_FILTER_KEYS,
   type MatchFilterContext,
   type MatchFilters,
@@ -157,21 +158,6 @@ export function hasFilmCut(cut: FilmCut | null | undefined): boolean {
   if (!cut) return false;
   return (
     hasActiveMatchFilters(filmCutFilters(cut)) || filmCutExtras(cut) !== null
-  );
-}
-
-/**
- * The serve was never returned and the server won the point: a one-shot
- * rally won by whoever served. Structural on purpose — rally length and the
- * point's winner, never the "Service Winner" label — so a service winner
- * with an intermediate stroke (rally length above one) is not one. The
- * head-to-head card's derived Aces row counts exactly these (`tallySide`),
- * and the `unreturned-serve` ending admits exactly these. A double fault is
- * never one: the server lost it.
- */
-export function isUnreturnedServe(point: MatchPoint): boolean {
-  return (
-    point.rallyLength === 1 && point.wonByPlayer1 === point.serverIsPlayer1
   );
 }
 

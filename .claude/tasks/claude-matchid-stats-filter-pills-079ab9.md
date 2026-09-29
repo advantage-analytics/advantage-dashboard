@@ -103,7 +103,7 @@ ready).
 
 ## T7 · Teach Serve › Result "Ace" that a derived match's unreturned serves are aces
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/match-detail/match-filters/model.ts, match-filters/provider.tsx, film-cut-context.tsx (import only), head-to-head-card.tsx (import only), tests/match-filters-model.spec.ts, tests/match-filters-provider.spec.ts, tests/head-to-head-cuts.spec.ts (import only) (guess)
 - **routes:** /dashboard/matches/[matchId]

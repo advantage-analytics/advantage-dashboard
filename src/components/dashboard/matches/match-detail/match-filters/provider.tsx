@@ -225,8 +225,12 @@ export function useMatchFilters(): MatchFiltersValue {
   // Read unconditionally (hook order), used only when there is no provider.
   // The fallback's context carries no hands: nothing is filtered, so nothing
   // ever consults them, and building them would walk every shot per card.
-  const { points } = useMatchData();
+  // `isDerived` is cheap and read off the same row `buildFilterContext`
+  // reads, so a card that tests an option against this context (a cut) sees
+  // the match as the provider would.
+  const { match, points } = useMatchData();
   const youIsPlayer1 = useMatchSides().you.isPlayer1;
+  const isDerived = match.sourceProvider === "splitstep";
   const fallback = useMemo<MatchFiltersValue>(
     () => ({
       filters: EMPTY_MATCH_FILTERS,
@@ -234,11 +238,15 @@ export function useMatchFilters(): MatchFiltersValue {
       clearFilters: noop,
       filteredPoints: points,
       filtersActive: false,
-      context: { youIsPlayer1, hands: { player1: null, player2: null } },
+      context: {
+        youIsPlayer1,
+        hands: { player1: null, player2: null },
+        isDerived,
+      },
       filmRemainder: null,
       setFilmRemainder: noop,
     }),
-    [points, youIsPlayer1],
+    [points, youIsPlayer1, isDerived],
   );
   return provided ?? fallback;
 }

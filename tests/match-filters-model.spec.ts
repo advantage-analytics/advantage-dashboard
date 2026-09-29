@@ -29,6 +29,8 @@ const CTX: MatchFilterContext = {
   hands: { player1: "right", player2: "right" },
 };
 const FLIPPED: MatchFilterContext = { ...CTX, youIsPlayer1: false };
+/** An Advantage Intelligence (video-derived) match. */
+const DERIVED: MatchFilterContext = { ...CTX, isDerived: true };
 
 /** Where a player stands behind each baseline, in the stored frame. */
 const LOW_END_Y = -0.5;
@@ -735,10 +737,19 @@ test("buildFilterContext: the match row's hand first, else inferred from forehan
   const match = {
     player1: { hand: "Right" },
     player2: { hand: null },
-  } as unknown as Pick<Match, "player1" | "player2">;
+  } as unknown as Pick<Match, "player1" | "player2" | "sourceProvider">;
   expect(buildFilterContext(match, lefty, true)).toEqual({
     youIsPlayer1: true,
     hands: { player1: "right", player2: "left" },
+    isDerived: false,
+  });
+  // The same row from Advantage Intelligence is a derived match.
+  expect(
+    buildFilterContext({ ...match, sourceProvider: "splitstep" }, lefty, true),
+  ).toEqual({
+    youIsPlayer1: true,
+    hands: { player1: "right", player2: "left" },
+    isDerived: true,
   });
 });
 
@@ -790,6 +801,38 @@ test("Serve › Result is ONE option per point: result type first, then the retu
   ] as const) {
     expect(run(swOut, { serveResult: [other] })).toEqual([]);
   }
+});
+
+test("Serve › Result on a derived match: Ace = an unreturned serve the server won, never the result type", () => {
+  // The same six points as above. "ace" and "sw" are both one-shot rallies
+  // won by the server (the fixture's default winner and server are both
+  // player1); "df" is a zero-shot rally, the rest four-shot rallies.
+  const points = [
+    pt({ id: "ace", resultType: "Ace", rallyLength: 1 }),
+    pt({ id: "sw", resultType: "Service Winner", rallyLength: 1 }),
+    pt({ id: "re", resultType: "Forehand Error", secondShotResult: "Net" }),
+    pt({ id: "ip", resultType: "Forehand Winner", secondShotResult: "In" }),
+    pt({ id: "df", resultType: "Double Fault", rallyLength: 0 }),
+    pt({ id: "none", resultType: "Forehand Winner" }),
+  ];
+  expect(run(points, { serveResult: ["ace"] }, DERIVED)).toEqual(["ace", "sw"]);
+  expect(run(points, { serveResult: ["service-winner"] }, DERIVED)).toEqual([]);
+  expect(run(points, { serveResult: ["double-fault"] }, DERIVED)).toEqual([
+    "df",
+  ]);
+
+  // A service winner with an intermediate stroke is not an unreturned serve:
+  // it stays a service winner, and is no ace.
+  const withStroke = [
+    ...points,
+    pt({ id: "sw-3", resultType: "Service Winner", rallyLength: 3 }),
+  ];
+  expect(run(withStroke, { serveResult: ["service-winner"] }, DERIVED)).toEqual(
+    ["sw-3"],
+  );
+  expect(run(withStroke, { serveResult: ["ace"] }, DERIVED)).not.toContain(
+    "sw-3",
+  );
 });
 
 test("Return › Result: winner = isReturnWinner, error = return Out/Net, in play = landed otherwise", () => {
@@ -910,6 +953,12 @@ test("optionAvailability hides Serve › Result's Ace when the match has none", 
   expect(av.serveResult.has("ace")).toBe(false);
   expect(av.serveResult.has("service-winner")).toBe(true);
   expect(av.serveResult.has("double-fault")).toBe(true);
+
+  // On a derived match the one-shot service winner IS an ace, so Ace shows
+  // and Service Winner has nothing left.
+  const derived = optionAvailability(points, DERIVED);
+  expect(derived.serveResult.has("ace")).toBe(true);
+  expect(derived.serveResult.has("service-winner")).toBe(false);
 });
 
 /* ── Counting, equality, URL ────────────────────────────────────────────── */

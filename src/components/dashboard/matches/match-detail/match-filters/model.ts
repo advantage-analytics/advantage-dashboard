@@ -412,15 +412,24 @@ export interface MatchFilterContext {
   youIsPlayer1: boolean;
   /** Each seat's stroke hand, for Custom › Direction's Inside-Out/Inside-In. */
   hands: { player1: Hand | null; player2: Hand | null };
+  /**
+   * An Advantage Intelligence (video-derived) match —
+   * `match.sourceProvider === "splitstep"`, the same test both report pages
+   * make for `meta.isDerived`. Absent reads as NOT derived: a SwingVision
+   * match. Serve › Result reads it (`serveResultOf`): a derived match's
+   * unreturned serves are its aces. Read it as `ctx.isDerived === true`.
+   */
+  isDerived?: boolean;
 }
 
 /**
  * The filters' context for one match: the match row's hands
  * (`playerHands`, already seat-correct — no swap here) and, where a row has
- * none, the hand inferred from that seat's forehands (`inferHand`).
+ * none, the hand inferred from that seat's forehands (`inferHand`); and
+ * whether the match is derived from video (`isDerived`), off the same row.
  */
 export function buildFilterContext(
-  match: Pick<Match, "player1" | "player2">,
+  match: Pick<Match, "player1" | "player2" | "sourceProvider">,
   points: readonly Pick<MatchPoint, "shots">[],
   youIsPlayer1: boolean,
 ): MatchFilterContext {
@@ -431,6 +440,7 @@ export function buildFilterContext(
       player1: stored.player1 ?? inferHand(points, true),
       player2: stored.player2 ?? inferHand(points, false),
     },
+    isDerived: match.sourceProvider === "splitstep",
   };
 }
 
@@ -537,15 +547,44 @@ export function returnContactOf(
 }
 
 /**
+ * The serve was never returned and the server won the point: a one-shot
+ * rally won by whoever served. Structural on purpose — rally length and the
+ * point's winner, never the "Service Winner" label — so a service winner
+ * with an intermediate stroke (rally length above one) is not one. The
+ * head-to-head card's derived Aces row counts exactly these (`tallySide`),
+ * the `unreturned-serve` Film-only ending admits exactly these, and on a
+ * derived match Serve › Result "Ace" admits exactly these
+ * (`serveResultOf`). A double fault is never one: the server lost it.
+ */
+export function isUnreturnedServe(point: MatchPoint): boolean {
+  return (
+    point.rallyLength === 1 && point.wonByPlayer1 === point.serverIsPlayer1
+  );
+}
+
+/**
  * Serve › Result — a priority chain, so a point lands in at most one option:
  * the point's own result type first (Ace, Service Winner, Double Fault),
  * else how the return came back (`secondShotResult` Out/Net = a return
  * error, In = in play), else none. A service winner whose return row reads
  * Out is a service winner only.
+ *
+ * On a derived match (`ctx.isDerived`) "Ace" is structural instead:
+ * `isUnreturnedServe`, and never the result type — the derivation labels
+ * every unreturned serve "Service Winner" and never "Ace", and the
+ * head-to-head card counts these as its Aces. So an unreturned serve is an
+ * ace there and not a service winner; the rest of the chain is unchanged.
  */
-export function serveResultOf(point: MatchPoint): ServeResult | null {
+export function serveResultOf(
+  point: MatchPoint,
+  ctx: MatchFilterContext,
+): ServeResult | null {
   const rt = lower(point.resultType);
-  if (rt === "ace") return "ace";
+  if (ctx.isDerived === true) {
+    if (isUnreturnedServe(point)) return "ace";
+  } else if (rt === "ace") {
+    return "ace";
+  }
   if (rt === "service winner") return "service-winner";
   if (rt === "double fault") return "double-fault";
   const ret = point.secondShotResult;
@@ -818,7 +857,10 @@ export function matchesPoint(
   if (f.serveZone.length > 0 && !anyOf(f.serveZone, serveZoneOf(point))) {
     return false;
   }
-  if (f.serveResult.length > 0 && !anyOf(f.serveResult, serveResultOf(point))) {
+  if (
+    f.serveResult.length > 0 &&
+    !anyOf(f.serveResult, serveResultOf(point, ctx))
+  ) {
     return false;
   }
 
