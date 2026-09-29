@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Webhook fails closed when the secret is set
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/app/api/webhooks/splitstep/route.ts, src/lib/services/splitstep/webhook-auth.ts (new), .env.example, tests/splitstep-webhook-auth.spec.ts (new), tests/fixtures/with-env.ts (guess)
 - **done when:**
