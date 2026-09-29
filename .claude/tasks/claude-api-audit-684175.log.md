@@ -122,3 +122,13 @@ is the runner's. Newest entries at the bottom.
 2. Vendor text is still stored in `processing_jobs.error_message` by the same catch — check whether any UI shows that column.
 3. A thrown video-URL mint also answers `code: "vendor_rejected"` (same catch).
 4. Admin video reservation RPC failure answers 400; arguably a 5xx.
+
+## T13 · OpenAPI 3.1 spec, part 1: match, video, upload, programs routes + lint script — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) + `npm run api:lint` "No issues found" + format:check · completion VERDICT: pass
+**changed:** Implemented in parallel in an isolated worktree (commit cbf8bf40), brought over here. New `openapi/advantage-api.yaml` (OpenAPI 3.1.0): `cookieAuth`, `ErrorResponse` (+ `VideoErrorResponse`, `FieldErrorResponse`, `LegacyErrorResponse`), 13 routes / 16 operations with every status read from the handlers (reviewer spot-checked 8 operations: no missing or extra codes), 202 + `Retry-After` on complete, shared 403 `cross_origin` / 413 `request_too_large` responses, 169 examples (ajv-validated against their schemas). `package.json` gains `api:lint` (Postman CLI local mode — lints without login; exits 1 on a broken spec). MAP.md Source layout gains an `openapi/` row.
+**follow-ups:**
+
+1. `postman spec lint` prints an "Authentication required" notice on every run (still lints, exit 0) — governance rulesets only run when logged in; CI doesn't run `api:lint` and the `postman` binary isn't a devDependency.
+2. The spec names the production Supabase project ref in the `cookieAuth` cookie name.
+3. `/api/validate-file` answers 500 (not 400) on a non-JSON body; the uploads POST 201 carries no `Location` header. Documented as-is.

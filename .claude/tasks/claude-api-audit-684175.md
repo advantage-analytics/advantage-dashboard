@@ -171,7 +171,7 @@ ready).
 
 ## T13 · OpenAPI 3.1 spec, part 1: match, video, upload, programs routes + lint script
 
-- **status:** doing
+- **status:** done
 - **model:** opus
 - **files:** openapi/advantage-api.yaml (new), package.json, MAP.md (hand-written section only), src/app/api/matches/[matchId]/**, src/app/api/upload/route.ts, src/app/api/validate-file/route.ts, src/app/api/programs/**, src/lib/services/match-video/http.ts (guess)
 - **done when:**

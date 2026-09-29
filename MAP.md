@@ -118,6 +118,7 @@ which exists four separate times.
 | `src/hooks/` | Shared React hooks |
 | `supabase/functions/` | Edge functions |
 | `scripts/` | Repo tooling, not shipped |
+| `openapi/` | `advantage-api.yaml` — OpenAPI 3.1 description of the `src/app/api/` route handlers (auth, status codes, request/response schemas, examples); `npm run api:lint` checks it |
 
 ## Data layer
 
