@@ -49,7 +49,13 @@ const user = randomUUID(),
   program = randomUUID(),
   event = randomUUID(),
   entry = randomUUID();
-const actor = `set local role authenticated; select set_config('request.jwt.claim.sub','${user}',true);`;
+// A real client session carries `request.jwt.claims`, which is what
+// `matches_block_client_regraft` reads to decide it is a client. With only
+// `request.jwt.claim.sub` set, the trigger treated the session as trusted and
+// the one-match deletion below passed against the pre-migration trigger, which
+// in production refused the FK's entry → NULL move with 42501
+// (20260929210705_event_delete_detaches_under_client.sql).
+const actor = `set local role authenticated; select set_config('request.jwt.claim.sub','${user}',true); select set_config('request.jwt.claims','{"role":"authenticated","sub":"${user}"}',true);`;
 const setup = `insert into auth.users(id,email) values('${user}','${user}@test.invalid');
 insert into public.programs(id,school_name) values('${program}','Delete fixture');
 insert into public.program_members(program_id,user_id,role) values('${program}','${user}','owner');
@@ -82,11 +88,12 @@ test.describe("event deletion database boundary (local opt-in only)", () => {
       `begin; ${setup} update public.program_members set role='staff' where program_id='${program}'; ${actor} ${denied(`delete from public.program_events where id='${event}';`, "42501")} rollback;`,
     );
     // Recorded matches, forfeits and outcomes no longer block deletion: the
-    // match survives detached, outcomes cascade, and the audit counts matches.
+    // match survives detached (line, tournament name and round cleared),
+    // outcomes cascade, and the audit counts matches.
     const match = randomUUID();
     for (const [dependency, detached] of [
       [
-        `insert into public.matches(id,event_entry_id,score) values('${match}','${entry}','{"sets":[[6,0],[6,0]]}');`,
+        `insert into public.matches(id,event_entry_id,score,tournament_name,round) values('${match}','${entry}','{"sets":[[6,0],[6,0]]}','Delete fixture','S1');`,
         "1",
       ],
       [
@@ -101,7 +108,7 @@ test.describe("event deletion database boundary (local opt-in only)", () => {
       sql(`begin; ${setup} ${dependency} ${actor}
         do $$ begin if (${remove.replace(/;$/, "")}) <> '${event}' then raise exception 'Wrong deleted id'; end if; end $$; reset role;
         do $$ begin if (select count(*) from public.program_events where id='${event}') <> 0 then raise exception 'Event survived'; end if;
-        if ${detached === "1" ? `not exists(select 1 from public.matches where id='${match}' and event_entry_id is null)` : `exists(select 1 from public.matches where event_entry_id='${entry}')`} then raise exception 'Match not detached'; end if;
+        if ${detached === "1" ? `not exists(select 1 from public.matches where id='${match}' and event_entry_id is null and tournament_name is null and round is null)` : `exists(select 1 from public.matches where event_entry_id='${entry}')`} then raise exception 'Match not detached'; end if;
         if exists(select 1 from public.program_event_outcomes where event_id='${event}') then raise exception 'Outcome survived'; end if;
         if (select details->>'detached_matches' from public.program_audit_log where subject_id='${event}' and actor_user_id='${user}' and action='event.deleted') is distinct from '${detached}' then raise exception 'Wrong detached count'; end if; end $$; rollback;`);
     }

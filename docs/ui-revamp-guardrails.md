@@ -124,6 +124,72 @@ be. Doubles teams and existing users depend on it.
 > line with a saved outcome. Migration:
 > `supabase/migrations/20260913120000_attach_match_to_event_line.sql`.
 
+> **A fourth reviewed exception, added 2026-09-29: the event-delete detach in
+> `guard_event_delete`.**
+>
+> Deleting a schedule event that holds matches leaves those matches as
+> unassigned program matches (decision 2026-09-22, PR #255). The detach was
+> meant to ride on `matches_event_entry_id_fkey ON DELETE SET NULL`, but that
+> referential UPDATE fires `matches_block_client_regraft`, which refused every
+> entry → NULL move for a signed-in user, so no event with a match could be
+> deleted from the app. The BEFORE DELETE trigger on `program_events` now
+> performs the detach itself, and the regraft trigger accepts the move only
+> while a transaction-local marker names the event the entry belongs to.
+> Allowed on the attach exception's terms: a single explicit action by an
+> owner or coach who runs that program's schedule (`delete_schedule_event`);
+> scoped to the matches on the lines of the one event being deleted; only
+> from a line to no line; touching **only** `event_entry_id`,
+> `tournament_name` and `round` (`date`, `match_type` and `court_type` stay —
+> they hold without a line; a round only means something inside the line
+> that gave it) — **never** `score`, `format`, `player1_id` or
+> `program_id`, and nothing under `match_stats`, `points` or `shots`; and
+> audit-logged to `program_audit_log` as `event.deleted` with
+> `detached_matches`, counted before the detach. A bare client UPDATE that
+> nulls `event_entry_id` is refused exactly as before. Migrations:
+> `supabase/migrations/20260929210705_event_delete_detaches_under_client.sql`,
+> then `round` added to the detach in `20260929213016_detach_clears_round.sql`.
+>
+> The same exception covers `detach_match_from_event_line`, added the same
+> day: the single-match inverse of `attach_match_to_event_line`, from the
+> Edit Match dialog. It is allowed on the attach exception's terms exactly —
+> a single explicit action by the match's own uploader, who must also run
+> that program's schedule; scoped to one match; only from a line to no line;
+> touching **only** `event_entry_id`, `tournament_name` and `round` (`date`,
+> `match_type` and `court_type` stay — they describe the match, not the
+> line) — **never** `score`, `format`, `player1_id` or `program_id`, and
+> nothing under `match_stats`, `points` or `shots`; and audit-logged to
+> `program_audit_log` as `match.detached` with the match, entry and event
+> ids. The regraft trigger accepts the move only while a second
+> transaction-local marker names that one match, so a bare client UPDATE
+> stays refused; a saved outcome on the line does not block the detach and
+> is left untouched. Migrations:
+> `supabase/migrations/20260929210741_detach_match_from_event_line.sql`,
+> then `round` added to the detach in `20260929213016_detach_clears_round.sql`.
+
+> **A fifth reviewed exception, added 2026-09-29: `set_match_round_on_line`.**
+>
+> The Edit Match dialog's "Edit round" changes the round of a match that is
+> already on a tournament line — the one column the attach set on the way on
+> and the detaches cleared on the way off, with no path in between except
+> detach-and-re-attach (two audit rows, and `date`, `match_type` and
+> `court_type` re-derived from the event). Allowed on the attach exception's
+> terms exactly: a single explicit action by the match's own uploader, who
+> must also run that program's schedule; scoped to one match; tournament
+> lines only (a dual line's round is its slot, and the line decides it); the
+> match stays on its line; touching **only** `round` — **never**
+> `event_entry_id`, `tournament_name`, `date`, `match_type`, `court_type`,
+> `score`, `format`, `player1_id` or `program_id`, and nothing under
+> `match_stats`, `points` or `shots`; and audit-logged to `program_audit_log`
+> as `match.round_changed` with the match, entry and event ids and the
+> `from`/`to` rounds. The function refuses a blank round and a round another
+> match on the entry already holds; `guard_schedule_result` still refuses one
+> with a saved outcome. The regraft trigger now also fires on `round`, and
+> accepts a round change on a linked match only while a third
+> transaction-local marker names that one match — so a bare client UPDATE of
+> `round` on a linked match is refused, while a round change on an unlinked
+> match (the Details form) passes as before. Migration:
+> `supabase/migrations/20260929215610_set_match_round_on_line.sql`.
+
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
 > Not a code path — a single hand-run `UPDATE`, approved by the owner in

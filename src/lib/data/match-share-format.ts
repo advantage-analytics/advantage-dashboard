@@ -54,11 +54,12 @@ export function sharedMatchPair(
 }
 
 /**
- * The dashboard's match transform fills a missing tournament with the
- * placeholder "Unknown Event" (`match-detail-server.ts`,
- * `matches-list-types.ts`). Inside the app that reads as a label; on a public
- * link, a preview card or an email subject it reads as a fact about the
- * match. Public surfaces ask this instead: the real name, or null.
+ * The dashboard's match transforms used to fill a missing tournament with the
+ * placeholder "Unknown Event"; they now carry null, and the app prints a muted
+ * "No event". The literal can still arrive — a row stored with it, or a caller
+ * that predates the change — and on a public link, a preview card or an email
+ * subject it would read as a fact about the match. Public surfaces ask this
+ * instead: the real name, or null.
  */
 export const UNKNOWN_EVENT_PLACEHOLDER = "Unknown Event";
 

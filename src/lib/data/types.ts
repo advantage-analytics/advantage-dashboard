@@ -20,7 +20,8 @@ export interface MatchScore {
 
 export interface Match {
   id: string;
-  tournamentName: string;
+  /** `matches.tournament_name`; null when the match was filed with no event. */
+  tournamentName: string | null;
   date: string;
   matchType: string;
   courtType?: string;

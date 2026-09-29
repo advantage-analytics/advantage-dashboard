@@ -12,7 +12,6 @@ import { getMyPlayerIds, isMe } from "@/lib/data/player-identity-server";
 import { youSeat } from "@/lib/data/viewer-side";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
-import { UNKNOWN_EVENT_PLACEHOLDER } from "@/lib/data/match-share-format";
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { Match, SetScore } from "@/lib/data/types";
 
@@ -187,7 +186,7 @@ export function transformDbMatchToMatch(
 
   return {
     id: row.id,
-    tournamentName: row.tournament_name ?? UNKNOWN_EVENT_PLACEHOLDER,
+    tournamentName: row.tournament_name,
     date: formatDisplayDate(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,

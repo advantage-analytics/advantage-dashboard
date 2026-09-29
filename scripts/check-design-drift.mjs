@@ -374,7 +374,7 @@ const CHECKS = [
   },
   {
     key: "defaultPalette",
-    seed: 1,
+    seed: 0,
     label: "Tailwind default-palette class",
     fix: "swap for the DS token that plays the same role — --ink-*, --blue*, --surface-*",
   },
