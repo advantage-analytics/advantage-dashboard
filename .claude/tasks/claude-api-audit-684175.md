@@ -146,7 +146,7 @@ ready).
 
 ## T11 · UUID guard on jobs, resubmit, rederive and upload-url
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T10
 - **files:** src/app/api/splitstep/jobs/handler.ts, src/app/api/splitstep/jobs/[jobId]/rederive/handler.ts, src/app/api/splitstep/jobs/[jobId]/resubmit/route.ts, src/app/api/splitstep/upload-url/handler.ts, tests/job-submission-authorization.spec.ts, tests/rederive-handler.spec.ts, tests/upload-url-authorization.spec.ts (guess)

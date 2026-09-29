@@ -51,6 +51,7 @@ import { NextResponse } from "next/server";
 
 import { buildSplitStepJobRequest } from "@/lib/services/splitstep/job-request";
 import type { SplitStepJobRequest } from "@/lib/services/splitstep/job-request";
+import { isUuid } from "@/lib/services/match-video/access";
 import { athleteOnRow } from "@/lib/services/splitstep/match-athlete";
 import type { QuotaReservation } from "@/lib/services/splitstep/quota";
 import { parseWebhookPayload } from "@/lib/services/splitstep/webhook-payload";
@@ -256,6 +257,12 @@ export async function handleSubmitJob(
 
   if (!jobId) {
     return NextResponse.json({ error: "jobId is required" }, { status: 400 });
+  }
+
+  // A job id is a UUID. Anything else cannot name a row, and would only reach
+  // the database to fail a cast — answered as the same 404 as a missing job.
+  if (!isUuid(jobId)) {
+    return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
   // The orientation check used to sit here, before anything was loaded. It has

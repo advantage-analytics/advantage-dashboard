@@ -92,7 +92,7 @@ const ROSTER: readonly RosterIdentity[] = [AVA, BEN, CAM];
 
 function match(overrides: Partial<UploadUrlMatch> = {}): UploadUrlMatch {
   return {
-    id: "m-1",
+    id: "22222222-2222-4222-8222-222222222222",
     created_by: VIEWER,
     program_id: PROGRAM,
     player1_id: AVA.playerId,
@@ -106,6 +106,8 @@ interface Harness {
   minted: string[];
   recorded: Array<{ matchId: string; blobName: string }>;
   rosterReads: string[];
+  /** Every `loadMatch` call — the first read the handler makes. */
+  matchLoads: string[];
 }
 
 function harness(input: {
@@ -125,17 +127,21 @@ function harness(input: {
   const minted: string[] = [];
   const recorded: Array<{ matchId: string; blobName: string }> = [];
   const rosterReads: string[] = [];
+  const matchLoads: string[] = [];
   const deps: UploadUrlDeps = {
     currentUserId: async () =>
       input.userId === undefined ? VIEWER : input.userId,
-    loadMatch: async () => ({
-      match: input.matchError
-        ? null
-        : input.match === undefined
-          ? match()
-          : input.match,
-      error: input.matchError ?? null,
-    }),
+    loadMatch: async (matchId) => {
+      matchLoads.push(matchId);
+      return {
+        match: input.matchError
+          ? null
+          : input.match === undefined
+            ? match()
+            : input.match,
+        error: input.matchError ?? null,
+      };
+    },
     availableWorkspaces: async () => input.workspaces ?? [personal(), team()],
     loadRoster: async (programId) => {
       rosterReads.push(programId);
@@ -168,7 +174,7 @@ function harness(input: {
       return { error: null };
     },
   };
-  return { deps, minted, recorded, rosterReads };
+  return { deps, minted, recorded, rosterReads, matchLoads };
 }
 
 function post(body: unknown): Request {
@@ -179,7 +185,10 @@ function post(body: unknown): Request {
   });
 }
 
-const VALID_BODY = { matchId: "m-1", fileName: "final.mp4" };
+const VALID_BODY = {
+  matchId: "22222222-2222-4222-8222-222222222222",
+  fileName: "final.mp4",
+};
 
 async function call(h: Harness, body: unknown = VALID_BODY) {
   const res = await handleUploadUrl(post(body), h.deps);
@@ -210,10 +219,22 @@ test("no session → 401 before anything else is read", async () => {
   expect(h.rosterReads).toEqual([]);
 });
 
+test("a matchId that is not a UUID → 404 before the match is loaded", async () => {
+  const h = harness({});
+  const r = await call(h, { matchId: "not-a-uuid", fileName: "final.mp4" });
+  expectDenied(h, 404, r);
+  expect(r.json.error).toBe("No such match");
+  expect(h.matchLoads).toEqual([]);
+});
+
 test("malformed body and missing fields → 400", async () => {
   const h = harness({});
   expectDenied(h, 400, await call(h, "{not json"));
-  expectDenied(h, 400, await call(h, { matchId: "m-1" }));
+  expectDenied(
+    h,
+    400,
+    await call(h, { matchId: "22222222-2222-4222-8222-222222222222" }),
+  );
   expectDenied(h, 400, await call(h, { fileName: "x.mp4" }));
 });
 
@@ -270,10 +291,15 @@ test("a personal match attributed to the uploader mints the stub credential", as
   expect(r.status).toBe(200);
   expect(r.json.uploadUrl).toBe(STUB_URL);
   // `videoObjectKey()` names the blob, not the file: the extension is kept.
-  expect(r.json.videoObjectKey).toBe("videos/u-coach/m-1/original.mp4");
+  expect(r.json.videoObjectKey).toBe(
+    "videos/u-coach/22222222-2222-4222-8222-222222222222/original.mp4",
+  );
   expect(h.minted).toEqual([r.json.videoObjectKey]);
   expect(h.recorded).toEqual([
-    { matchId: "m-1", blobName: r.json.videoObjectKey },
+    {
+      matchId: "22222222-2222-4222-8222-222222222222",
+      blobName: r.json.videoObjectKey,
+    },
   ]);
   // A personal workspace has no roster; none is read.
   expect(h.rosterReads).toEqual([]);
@@ -523,7 +549,10 @@ test("an unsupported container → 400, nothing minted", async () => {
   expectDenied(
     h,
     400,
-    await call(h, { matchId: "m-1", fileName: "final.txt" }),
+    await call(h, {
+      matchId: "22222222-2222-4222-8222-222222222222",
+      fileName: "final.txt",
+    }),
   );
 });
 
@@ -571,7 +600,7 @@ for (const member of [false, true]) {
     });
     h.deps.authorizeAdminVideo = async () => ({
       jobId: "admin-job",
-      matchId: "m-1",
+      matchId: "22222222-2222-4222-8222-222222222222",
       programId: PROGRAM,
       workspace: team({ role: "owner" }),
       roster: ROSTER,
@@ -582,7 +611,9 @@ for (const member of [false, true]) {
       return { error: null };
     };
     expect((await call(h)).status).toBe(200);
-    expect(writes).toEqual([["m-1", expect.any(String), "admin-job"]]);
+    expect(writes).toEqual([
+      ["22222222-2222-4222-8222-222222222222", expect.any(String), "admin-job"],
+    ]);
     expect(h.rosterReads).toEqual([]);
   });
 }
@@ -596,7 +627,7 @@ test("console upload discovery refuses revoked admin and wrong-program authoriza
   const wrong = harness({});
   wrong.deps.authorizeAdminVideo = async () => ({
     jobId: "j",
-    matchId: "m-1",
+    matchId: "22222222-2222-4222-8222-222222222222",
     programId: OTHER_PROGRAM,
     workspace: team({ id: OTHER_PROGRAM }),
     roster: ROSTER,

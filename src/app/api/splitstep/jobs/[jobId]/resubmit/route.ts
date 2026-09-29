@@ -10,6 +10,7 @@
 
 import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { NextResponse, type NextRequest } from "next/server";
+import { isUuid } from "@/lib/services/match-video/access";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -68,6 +69,12 @@ export async function POST(
 
   if (authError || !user) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+
+  // Not a UUID = no such job; same 404 as a missing or foreign one, and it
+  // never reaches the database to fail a cast.
+  if (!isUuid(jobId)) {
+    return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
   const admin = createAdminClient();

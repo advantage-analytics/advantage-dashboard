@@ -132,3 +132,8 @@ is the runner's. Newest entries at the bottom.
 1. `postman spec lint` prints an "Authentication required" notice on every run (still lints, exit 0) — governance rulesets only run when logged in; CI doesn't run `api:lint` and the `postman` binary isn't a devDependency.
 2. The spec names the production Supabase project ref in the `cookieAuth` cookie name.
 3. `/api/validate-file` answers 500 (not 400) on a non-JSON body; the uploads POST 201 carries no `Location` header. Documented as-is.
+
+## T11 · UUID guard on jobs, resubmit, rederive and upload-url — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** `/api/splitstep/jobs`, `/jobs/[jobId]/rederive` and `/jobs/[jobId]/resubmit` answer 404 "Job not found" for a non-UUID job id, and `/api/splitstep/upload-url` answers its existing 404 "No such match" for a non-UUID match id — each after sign-in and before the first read (no more 500 from a Postgres 22P02). Fixture ids in the three named specs (and `tests/resubmit-route-billing.spec.ts`, which would otherwise hit the guard) became UUIDs; each gained a 404 case asserting the load was never reached.

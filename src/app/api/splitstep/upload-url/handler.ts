@@ -24,6 +24,7 @@
 import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { NextResponse } from "next/server";
 
+import { isUuid } from "@/lib/services/match-video/access";
 import { athleteOnRow } from "@/lib/services/splitstep/match-athlete";
 import { videoObjectKey } from "@/lib/services/splitstep/object-keys";
 import {
@@ -159,6 +160,12 @@ export async function handleUploadUrl(
       { error: "matchId and fileName are required" },
       { status: 400 },
     );
+  }
+
+  // A match id is a UUID. Anything else cannot name a row — same 404 as a
+  // missing match, before the database is asked.
+  if (!isUuid(matchId)) {
+    return NextResponse.json({ error: "No such match" }, { status: 404 });
   }
 
   // Ownership, via the service-role client. RLS would answer this too, but a

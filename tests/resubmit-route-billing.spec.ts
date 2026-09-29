@@ -19,7 +19,7 @@ import { createLoader } from "./fixtures/vm-modules";
  */
 
 const USER = "u-owner";
-const JOB = "job-1";
+const JOB = "11111111-1111-4111-8111-111111111111";
 const MATCH = "m-1";
 const PROGRAM = "program-1";
 
@@ -33,9 +33,11 @@ interface Scenario {
 function loadRoute(scenario: Scenario) {
   const calls: { workspace: { id: string } }[] = [];
   const logged: { message: string; detail: unknown }[] = [];
+  const reads: string[] = [];
 
   const admin = {
     from(table: string) {
+      reads.push(table);
       const builder = {
         select: () => builder,
         eq: () => builder,
@@ -94,12 +96,14 @@ function loadRoute(scenario: Scenario) {
   return {
     calls,
     logged,
-    post: () =>
+    reads,
+    post: (jobId: string = JOB) =>
       POST(
-        new NextRequest(`http://localhost/api/splitstep/jobs/${JOB}/resubmit`, {
-          method: "POST",
-        }),
-        { params: Promise.resolve({ jobId: JOB }) },
+        new NextRequest(
+          `http://localhost/api/splitstep/jobs/${jobId}/resubmit`,
+          { method: "POST" },
+        ),
+        { params: Promise.resolve({ jobId }) },
       ),
   };
 }
@@ -108,6 +112,20 @@ const PERSONAL = { id: USER, kind: "personal" as const, name: "Me" };
 const TEAM = { id: PROGRAM, kind: "team" as const, name: "Team" };
 
 test.describe("resubmit route billing", () => {
+  test("a jobId that is not a UUID → 404 before any read, resubmitJob unreached", async () => {
+    const { post, calls, reads } = loadRoute({
+      match: { data: null, error: null },
+      available: [PERSONAL, TEAM],
+    });
+
+    const res = await post("not-a-uuid");
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Job not found" });
+    expect(reads).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
   test("a matches read error → 503, logged, resubmitJob unreached", async () => {
     const { post, calls, logged } = loadRoute({
       match: { data: null, error: { message: "connection reset" } },
