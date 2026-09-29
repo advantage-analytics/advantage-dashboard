@@ -18,7 +18,7 @@
  */
 
 import { serveCourtSide } from "./court";
-import { lastStrokeWinner } from "./winners";
+import { LADDER, lastStrokeWinner } from "./winners";
 import type { LineCalls } from "./line-calls";
 import type { SplitStepRally, SplitStepStroke } from "./types";
 
@@ -265,30 +265,14 @@ export function flagPoint(params: {
     flags.push(POINT_FLAGS.TIEBREAK_SCORE_OFF_SIX_ALL);
   }
 
-  const serve = rally.serves[0];
-  if (serve && !(!adScoring && isDecidingPoint(rally))) {
-    const played = pointsPlayed(opening?.predPointScore ?? null);
-    const side = serveCourtSide(serve.playerX, serve.playerY);
-    const offCentre = Math.abs(serve.playerX ?? 0) >= SIDE_DEAD_ZONE_M;
-    if (played !== null && side && offCentre) {
-      const expected = played % 2 === 0 ? "deuce" : "ad";
-      if (side !== expected) flags.push(POINT_FLAGS.SCORE_SIDE_MISMATCH);
-    }
+  if (scoreSideMismatch(rally, adScoring)) {
+    flags.push(POINT_FLAGS.SCORE_SIDE_MISMATCH);
   }
 
   if (!resultType) flags.push(POINT_FLAGS.RESULT_TYPE_UNKNOWN);
 
   return flags;
 }
-
-/** 0/15/30/40/AD as points won; anything else is not a game score. */
-const RUNGS: Record<string, number> = {
-  "0": 0,
-  "15": 1,
-  "30": 2,
-  "40": 3,
-  AD: 4,
-};
 
 function scoreParts(score: string | null): [string, string] | null {
   const parts = (score ?? "").split("-").map((p) => p.trim().toUpperCase());
@@ -308,7 +292,7 @@ export function pointsPlayed(score: string | null): number | null {
   const parts = scoreParts(score);
   if (!parts) return null;
   const [a, b] = parts;
-  if (a in RUNGS && b in RUNGS) return RUNGS[a] + RUNGS[b];
+  if (a in LADDER && b in LADDER) return LADDER[a] + LADDER[b];
   const x = Number(a);
   const y = Number(b);
   return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0
@@ -321,7 +305,7 @@ function tiebreakOffSixAll(
   opening: SplitStepRally["strokes"][number],
 ): boolean {
   const point = scoreParts(opening.predPointScore);
-  if (!point || (point[0] in RUNGS && point[1] in RUNGS)) return false;
+  if (!point || (point[0] in LADDER && point[1] in LADDER)) return false;
   if (pointsPlayed(opening.predPointScore) === null) return false;
   const games = scoreParts(opening.predGameScore);
   if (!games) return false;
@@ -333,8 +317,26 @@ function tiebreakOffSixAll(
   return true;
 }
 
+/**
+ * The server stood on the wrong side for the points already played. Skipped
+ * for a stance near the centre mark, and for a no-ad deciding point, where the
+ * receiver picks the side.
+ */
+function scoreSideMismatch(rally: SplitStepRally, adScoring: boolean): boolean {
+  const serve = rally.serves[0];
+  if (!serve || (!adScoring && isDecidingPoint(rally))) return false;
+  if (Math.abs(serve.playerX ?? 0) < SIDE_DEAD_ZONE_M) return false;
+  const played = pointsPlayed(rally.strokes[0]?.predPointScore ?? null);
+  const side = serveCourtSide(serve.playerX, serve.playerY);
+  return (
+    played !== null &&
+    side !== null &&
+    side !== (played % 2 === 0 ? "deuce" : "ad")
+  );
+}
+
 /** 40-40 before the point — under no-ad, the receiver picks the side. */
 function isDecidingPoint(rally: SplitStepRally): boolean {
-  const parts = (rally.strokes[0]?.predPointScore ?? "").split("-");
-  return parts.length === 2 && parts.every((p) => p.trim() === "40");
+  const parts = scoreParts(rally.strokes[0]?.predPointScore ?? null);
+  return parts !== null && parts[0] === "40" && parts[1] === "40";
 }
