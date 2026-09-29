@@ -75,3 +75,11 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. Check whether `/api/splitstep/jobs` and `/api/splitstep/upload-url` resolve `program_id` from a match read whose error is ignored in the same way.
+
+## T8 · `/api/upload` invokes process-match inside `after()` — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**changed:** Implemented in parallel in an isolated worktree (commit 8522bc96), brought over here. `/api/upload` now runs the `source_provider` read and the `process-match` invoke inside `after()` (awaited, error logged), so Vercel can't freeze the function before the call goes out; the `match_files` listing that decides whether to invoke stays before the response. The unsupported-provider refusal no longer echoes `err.message` (400 "Unsupported provider"). `tests/upload-route-guards.spec.ts` stubs `next/server`'s `after` (runs and awaits the callback) and adds the unsupported-provider case (17 pass).
+**follow-ups:**
+
+1. Audit other routes for un-awaited `functions.invoke` calls outside `after()`.

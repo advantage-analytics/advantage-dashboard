@@ -107,7 +107,7 @@ ready).
 
 ## T8 · `/api/upload` invokes process-match inside `after()`
 
-- **status:** doing
+- **status:** done
 - **model:** sonnet
 - **files:** src/app/api/upload/route.ts, tests/upload-route-guards.spec.ts (guess)
 - **done when:**
