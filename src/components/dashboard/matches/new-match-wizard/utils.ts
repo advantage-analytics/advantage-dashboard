@@ -514,6 +514,13 @@ export function setHasData(
  */
 export const STORAGE_KEYS = {
   FORM_DATA: "uploadFormData",
+  /**
+   * `kind:id` of the workspace that autosaved `FORM_DATA`. A workspace
+   * pre-selects its own format answers (`workspaceFormatDefaults`), so a form
+   * saved under one must not carry them into another — see
+   * `loadFormDataFromStorage`.
+   */
+  FORM_DATA_WORKSPACE: "uploadFormDataWorkspace",
   UPLOADED_FILE: "uploadedFile",
   SELECTED_PROVIDER: "selectedProvider",
   /**
@@ -531,6 +538,7 @@ export const STORAGE_KEYS = {
  */
 export function clearStorageData(): void {
   localStorage.removeItem(STORAGE_KEYS.FORM_DATA);
+  localStorage.removeItem(STORAGE_KEYS.FORM_DATA_WORKSPACE);
   localStorage.removeItem(STORAGE_KEYS.UPLOADED_FILE);
   localStorage.removeItem(STORAGE_KEYS.SELECTED_PROVIDER);
   localStorage.removeItem(STORAGE_KEYS.DRAFT_KEPT);
@@ -579,12 +587,29 @@ export function formatHoursCap(seconds: number): string {
 }
 
 /**
- * Load form data from localStorage
+ * Load form data from localStorage.
+ *
+ * A form saved under a different workspace — or before
+ * the save was tagged — loses its Scoring and Lets answers, so the current
+ * workspace's own defaults apply. Otherwise a college workspace's pre-selected
+ * No-Ad would reach a personal upload as an answer nobody gave (guardrails
+ * §3.1), and a personal visit's Replay would override the college Play on.
  */
-export function loadFormDataFromStorage(): FormData | null {
+export function loadFormDataFromStorage(workspaceKey: string): FormData | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.FORM_DATA);
-    return stored ? JSON.parse(stored) : null;
+    if (!stored) return null;
+    const formData: FormData = JSON.parse(stored);
+    if (localStorage.getItem(STORAGE_KEYS.FORM_DATA_WORKSPACE) === workspaceKey)
+      return formData;
+    // Removed rather than set to undefined: the caller spreads this over the
+    // defaults, and an own `undefined` key would still overwrite them.
+    const {
+      adScoring: _adScoring,
+      playOnLets: _playOnLets,
+      ...rest
+    } = formData;
+    return rest as FormData;
   } catch (e) {
     console.error("Error parsing form data:", e);
     return null;
@@ -613,8 +638,13 @@ export function loadUploadedFileFromStorage(): StoredUploadedFile | null {
 }
 
 /**
- * Save form data to localStorage
+ * Save form data to localStorage, tagged with the workspace it was answered
+ * in (see `loadFormDataFromStorage`).
  */
-export function saveFormDataToStorage(formData: FormData): void {
+export function saveFormDataToStorage(
+  formData: FormData,
+  workspaceKey: string,
+): void {
   localStorage.setItem(STORAGE_KEYS.FORM_DATA, JSON.stringify(formData));
+  localStorage.setItem(STORAGE_KEYS.FORM_DATA_WORKSPACE, workspaceKey);
 }
