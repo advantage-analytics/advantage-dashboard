@@ -7,10 +7,25 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_KEY");
 /**
  * gemini-2.5-flash is closed to new Google Cloud projects ("limiting access to
  * the 2.5 models to users who have actively used them in the past"), so the
- * paid key moved in 2026-09-28 was refused with a 404. 3.5 Flash-Lite is
- * Google's pick for new projects and costs the same per token.
+ * paid key moved in 2026-09-28 was refused with a 404. 3.5 Flash replaced
+ * 3.5 Flash-Lite on 2026-09-29 after a 16-match side-by-side (better
+ * headlines, no wrong figures); it takes ~14 s a call against ~3 s.
  */
-const GEMINI_MODEL = "gemini-3.5-flash-lite";
+const GEMINI_MODEL = "gemini-3.5-flash";
+
+/**
+ * The video webhook waits this long on the function (`INSIGHTS_CAP_MS` in
+ * `src/lib/services/splitstep/request-insights.ts`). A rejected first answer
+ * is asked for again only while a whole second call still fits inside it —
+ * the slowest Flash call seen was 18.6 s — and that call is cut off at
+ * `DB_WRITE_MARGIN_MS` before the wait ends, keeping the first answer. The
+ * caller's clock starts before this one does (the network hop, a cold boot),
+ * so `CALLER_HEAD_START_MS` is taken off the wait up front.
+ */
+const WEBHOOK_WAIT_MS = 35_000;
+const CALLER_HEAD_START_MS = 3_000;
+const RETRY_NEEDS_MS = 20_000;
+const DB_WRITE_MARGIN_MS = 1_500;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -46,7 +61,9 @@ async function fetchWithRetry(
       );
       await response.body?.cancel();
     } catch (err) {
-      if (delay === undefined) throw err;
+      // A deliberately cut-off call is over; backing off would only waste
+      // the time the cut-off was saving.
+      if (delay === undefined || init.signal?.aborted) throw err;
       console.warn(
         `Gemini request threw; retrying (attempt ${attempt + 2}):`,
         err instanceof Error ? err.message : String(err),
@@ -101,6 +118,203 @@ async function captureGeminiGeneration({
   } catch (error) {
     console.warn("PostHog AI generation capture threw:", error);
   }
+}
+
+/**
+ * The match report's insight card shows a summary's first sentence as its
+ * headline and the rest as the description beneath it
+ * (`src/components/dashboard/matches/match-detail/insight-text.ts`). The
+ * model writes the two as separate fields and `summary` is composed from
+ * them, so every reader of `summary` keeps working and the card's split
+ * lands exactly on the headline.
+ */
+const HEADLINE_MAX_CHARS = 90;
+const SUMMARY_MAX_CHARS = 350;
+
+const PLAYER_KEYS = ["player1", "player2"] as const;
+
+/**
+ * Words whose period the card's splitter reads as an abbreviation's, so a
+ * headline ending on one never splits from its description. A copy of
+ * `ABBREVIATIONS` in `insight-text.ts`, which this function cannot import.
+ */
+const ABBREVIATIONS = new Set([
+  "vs",
+  "v",
+  "mr",
+  "mrs",
+  "ms",
+  "dr",
+  "st",
+  "jr",
+  "sr",
+  "approx",
+  "etc",
+]);
+
+/** A headline's last word, when the splitter would take its period as an abbreviation's. */
+function endsOnAbbreviation(headline: string): boolean {
+  const word = (/(\S+)\.$/.exec(headline)?.[1] ?? "").replace(/^[("'“‘]+/, "");
+  return (
+    /^[A-Za-z]$/.test(word) ||
+    /^(?:[A-Za-z]\.)+[A-Za-z]$/.test(word) ||
+    ABBREVIATIONS.has(word.toLowerCase().replace(/\./g, ""))
+  );
+}
+
+/**
+ * The prompt's voice rules, checked: no coach "we" (lowercase "us", so "US
+ * Open" is not caught) and never the prompt's own Player 1 / Player 2 labels.
+ */
+const COACH_VOICE = /\b(?:[Ww]e|us|[Oo]ur|[Ll]et['’]s)\b/;
+const PLAYER_LABEL = /\bplayer\s*[12]\b/i;
+
+type PlayerSummary = {
+  focus?: string;
+  headline?: string;
+  description?: string;
+  summary?: string;
+};
+
+/**
+ * What stops one player's headline and description from reading as the
+ * card's two lines, or null. A headline must be one sentence the card's
+ * splitter ends at: closing punctuation, no sentence break inside it, and a
+ * description that opens with a capital (the splitter's boundary is
+ * `[.!?]` + whitespace + capital). Stricter than the splitter, which also
+ * forgives abbreviations — a stray "J. Smith" only costs a retry.
+ */
+function playerSummaryProblem(
+  player: PlayerSummary | undefined,
+): string | null {
+  const headline = player?.headline?.trim() ?? "";
+  const description = player?.description?.trim() ?? "";
+  if (!headline || !description) return "a headline or description is missing";
+  if (headline.length > HEADLINE_MAX_CHARS) {
+    return `a headline is ${headline.length} characters, over ${HEADLINE_MAX_CHARS}`;
+  }
+  if (/\d/.test(headline)) return "a headline quotes a figure";
+  if (!/[.!?]$/.test(headline)) return "a headline does not end its sentence";
+  if (/[.!?]\s+[A-Z]/.test(headline))
+    return "a headline is more than one sentence";
+  if (endsOnAbbreviation(headline)) {
+    return "a headline ends on an abbreviation or initial";
+  }
+  if (!/^[A-Z]/.test(description)) {
+    return "a description does not start a new sentence";
+  }
+  if (description.length <= headline.length) {
+    return "a description is not longer than its headline";
+  }
+  const text = `${headline} ${description}`;
+  if (text.length > SUMMARY_MAX_CHARS) {
+    return `a summary is ${text.length} characters, over ${SUMMARY_MAX_CHARS}`;
+  }
+  if (PLAYER_LABEL.test(text)) return 'a summary says "Player 1" or "Player 2"';
+  if (COACH_VOICE.test(text)) return 'a summary speaks as "we"';
+  return null;
+}
+
+function summaryProblems(insights: Record<string, PlayerSummary>): string[] {
+  const problems: string[] = [];
+  for (const key of PLAYER_KEYS) {
+    const problem = playerSummaryProblem(insights?.[key]);
+    if (problem) problems.push(`${key}: ${problem}`);
+  }
+  return problems;
+}
+
+/**
+ * Per player, the retry's answer only where it fixed what the first answer
+ * got wrong. A player the first answer already got right keeps it, and a
+ * retry that is no better never replaces it.
+ */
+function keepBetter(
+  first: Record<string, PlayerSummary>,
+  retried: Record<string, PlayerSummary>,
+): Record<string, PlayerSummary> {
+  const kept = { ...first };
+  for (const key of PLAYER_KEYS) {
+    if (
+      playerSummaryProblem(first?.[key]) !== null &&
+      playerSummaryProblem(retried?.[key]) === null
+    ) {
+      kept[key] = retried[key];
+    }
+  }
+  return kept;
+}
+
+/**
+ * A summary still naming "Player 1" or "Player 2" after everything is not
+ * saved: the viewer may be either player, so the label can point at them or
+ * at their opponent, and no summary reads better than a wrong-seeming one.
+ * The card shows its empty state; strengths and weaknesses are kept.
+ */
+function dropLabelledSummaries(insights: Record<string, PlayerSummary>) {
+  for (const key of PLAYER_KEYS) {
+    const player = insights?.[key];
+    if (!player) continue;
+    if (
+      PLAYER_LABEL.test(`${player.headline ?? ""} ${player.description ?? ""}`)
+    ) {
+      console.warn(`${key}: summary still says Player 1/2; not saving it`);
+      delete player.focus;
+      delete player.headline;
+      delete player.description;
+      delete player.summary;
+    }
+  }
+}
+
+/** Writes each player's `summary` as headline + description. */
+function composeSummaries(insights: Record<string, PlayerSummary>) {
+  for (const key of PLAYER_KEYS) {
+    const player = insights?.[key];
+    if (!player) continue;
+    const parts = [player.headline, player.description]
+      .map((part) => part?.trim())
+      .filter(Boolean);
+    if (parts.length > 0) player.summary = parts.join(" ");
+  }
+}
+
+/** One Gemini call: the parsed JSON answer, or a thrown error. */
+async function generateInsights(
+  url: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<Record<string, PlayerSummary>> {
+  const geminiResponse = await fetchWithRetry(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  const geminiData = await geminiResponse.json();
+
+  // 👇 ADDED: Check if Google returned an API error
+  if (!geminiResponse.ok) {
+    console.error(
+      "GEMINI API ERROR Payload:",
+      JSON.stringify(geminiData, null, 2),
+    );
+    throw new Error(
+      `Gemini API failed: ${geminiData.error?.message || "Unknown error"}`,
+    );
+  }
+
+  // 👇 ADDED: Safety check just in case the response is weirdly formatted
+  if (!geminiData.candidates || geminiData.candidates.length === 0) {
+    console.error(
+      "UNEXPECTED GEMINI RESPONSE:",
+      JSON.stringify(geminiData, null, 2),
+    );
+    throw new Error("Gemini API returned an empty or malformed response.");
+  }
+
+  return JSON.parse(geminiData.candidates[0].content.parts[0].text);
 }
 
 const JSON_HEADERS = {
@@ -177,6 +391,7 @@ async function callerOwnsMatch(
 }
 
 serve(async (req) => {
+  const requestStartedAt = Date.now();
   try {
     // The caller is verified before the body is trusted for anything: the
     // write below runs under the service role, so without this any anon-key
@@ -298,16 +513,16 @@ serve(async (req) => {
               // reference to avoid the model double-stating it or implying a long history.
               comparisonContext = `
 
-      Player 1 comparison context (use ONLY for Player 1's summary):
+      Player 1 comparison context (use ONLY for Player 1's headline and description):
       - This is only the player's 2nd recorded match. Their single prior match (their baseline AND previous match): ${JSON.stringify(prevRow ?? averages)}
-      In Player 1's summary, briefly note whether they improved or regressed since that previous match — qualitatively: do not print the prior-match or average figures (this match's own percentages are still quoted as above). Do NOT imply an established trend or long history from a single prior match.`;
+      In Player 1's description, briefly note whether they improved or regressed since that previous match — qualitatively: do not print the prior-match or average figures (this match's own percentages are still quoted as above). Do NOT imply an established trend or long history from a single prior match.`;
             } else {
               comparisonContext = `
 
-      Player 1 comparison context (use ONLY for Player 1's summary):
+      Player 1 comparison context (use ONLY for Player 1's headline and description):
       - Typical averages across ${priorRows.length} prior matches: ${JSON.stringify(averages)}
       - Immediately previous match: ${prevRow ? JSON.stringify(prevRow) : "unavailable"}
-      In Player 1's summary, frame THIS match against their typical averages AND their previous match (above/below their usual level; improved or regressed since last time) — qualitatively: do not print the prior-match or average figures (this match's own percentages are still quoted as above).`;
+      In Player 1's description, frame THIS match against their typical averages AND their previous match (above/below their usual level; improved or regressed since last time) — qualitatively: do not print the prior-match or average figures (this match's own percentages are still quoted as above).`;
             }
           }
         }
@@ -328,16 +543,26 @@ serve(async (req) => {
       required: ["name", "description", "value"],
     };
 
+    // The summary arrives as its parts, in the order the model writes them:
+    // the subject first, so the headline and description are both written
+    // about something already named. `summary` is composed from them below.
     const playerInsightsSchema = {
       type: "OBJECT",
       properties: {
-        // One synthesized, dashboard-ready prose insight for this player. Mirrors
-        // the home-dashboard AI insight voice (see src/app/api/home-insight/route.ts).
-        summary: { type: "STRING" },
+        focus: { type: "STRING" },
+        headline: { type: "STRING" },
+        description: { type: "STRING" },
         strengths: { type: "ARRAY", items: insightItemSchema },
         weaknesses: { type: "ARRAY", items: insightItemSchema },
       },
-      required: ["summary", "strengths", "weaknesses"],
+      required: ["focus", "headline", "description", "strengths", "weaknesses"],
+      propertyOrdering: [
+        "focus",
+        "headline",
+        "description",
+        "strengths",
+        "weaknesses",
+      ],
     };
 
     const responseSchema = {
@@ -355,58 +580,64 @@ serve(async (req) => {
     const prompt = `
       You are an expert college tennis coach. Analyze the following match statistics and provide, for BOTH Player 1 and Player 2:
       - 3 key strengths and 3 areas to improve (weaknesses). The 'value' should be the relevant percentage (0-100) associated with that specific stat.
-      - a 'summary': a short paragraph of 2-3 sentences, under 350 characters in total, speaking directly to the player. The first sentence is the headline: the single most important takeaway from this match, in plain words, under 90 characters and with no figures. The remaining sentences are the description, longer than the headline, and they stay on that same takeaway rather than raising a second topic: quote the one or two percentages from THIS match that prove it inline, rounded to the nearest whole number and written as digits with a percent sign (e.g. 73.5 becomes "you won 74% of first-serve points"), then say what to work on to build on it or fix it. Every figure you quote and the advice you give must be about the headline's subject; if the most useful advice is about a different part of their game, make that the headline instead. Do not greet them, do not use markdown headers or bullet points, and do not list stats one after another — weave those figures into a flowing observation.
+      - a 'focus': the one part of their game this match's summary is about, named as the statistic (e.g. "second-serve points won"). Choose it first; the headline and description are both about it and nothing else.
+      - a 'headline': one sentence, under ${HEADLINE_MAX_CHARS} characters, with no figures, speaking directly to the player: the single most important takeaway from this match about the focus, in plain words.
+      - a 'description': exactly two sentences, longer than the headline and under ${SUMMARY_MAX_CHARS} characters together with it. Quote the one or two percentages from THIS match that prove the headline inline, rounded to the nearest whole number and written as digits with a percent sign (e.g. 73.5 becomes "you won 74% of first-serve points"), then, in the second sentence, say what to work on to build on it or fix it. Stay on the focus: no second topic, and no closing "but" that turns to another part of their game. Do not greet them, do not use markdown headers or bullet points, and do not list stats one after another — weave those figures into a flowing observation.
 
       Crucially, contextualize their performances against each other. If Player 1 dominated at the net, factor that into Player 2's weaknesses.
       Keep everything encouraging and actionable for college athletes.
+      Speak to each player as "you"; never write "we", "us", "our" or "let's" — there is no coach speaking. Call the other player "your opponent", never "Player 1" or "Player 2".
 
       Player 1 Stats: ${JSON.stringify(player1Stats || { note: "Stats unavailable" })}
       Player 2 Stats: ${JSON.stringify(player2Stats || { note: "Stats unavailable" })}${comparisonContext}
     `;
 
-    // 6. Call the Gemini API via REST
     const generationStartedAt = Date.now();
-    const geminiResponse = await fetchWithRetry(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: responseSchema,
-          temperature: 0.4,
-        },
-      }),
+    const request = (text: string) => ({
+      contents: [{ role: "user", parts: [{ text }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: responseSchema,
+        temperature: 0.4,
+      },
     });
-
-    const geminiData = await geminiResponse.json();
-
-    // 👇 ADDED: Check if Google returned an API error
-    if (!geminiResponse.ok) {
-      console.error(
-        "GEMINI API ERROR Payload:",
-        JSON.stringify(geminiData, null, 2),
-      );
-      throw new Error(
-        `Gemini API failed: ${geminiData.error?.message || "Unknown error"}`,
-      );
+    // 6. Call Gemini, and once more if a headline breaks the card's rules
+    let insightsJSON = await generateInsights(geminiUrl, request(prompt));
+    let problems = summaryProblems(insightsJSON);
+    const remainingMs =
+      WEBHOOK_WAIT_MS - CALLER_HEAD_START_MS - (Date.now() - requestStartedAt);
+    if (problems.length > 0 && remainingMs >= RETRY_NEEDS_MS) {
+      console.warn("Summary rejected, asking again:", problems.join("; "));
+      try {
+        const retried = await generateInsights(
+          geminiUrl,
+          request(`${prompt}
+      A previous answer was rejected because ${problems.join("; ")}. Follow the headline and description rules exactly.`),
+          AbortSignal.timeout(remainingMs - DB_WRITE_MARGIN_MS),
+        );
+        insightsJSON = keepBetter(insightsJSON, retried);
+        problems = summaryProblems(insightsJSON);
+      } catch (err) {
+        // The first answer is still usable; a failed or cut-off retry must
+        // not cost the match its summary.
+        console.warn(
+          "Retry failed; keeping the first answer:",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     }
-
-    // 👇 ADDED: Safety check just in case the response is weirdly formatted
-    if (!geminiData.candidates || geminiData.candidates.length === 0) {
-      console.error(
-        "UNEXPECTED GEMINI RESPONSE:",
-        JSON.stringify(geminiData, null, 2),
-      );
-      throw new Error("Gemini API returned an empty or malformed response.");
+    if (problems.length > 0) {
+      // Kept anyway (no time for a retry, or the retry was off too): a
+      // summary that breaks a rule still beats none, and the card falls back
+      // to splitting it at its first sentence.
+      console.warn("Summary kept despite:", problems.join("; "));
     }
-
-    const generatedInsights = geminiData.candidates[0].content.parts[0].text;
     await captureGeminiGeneration({
       userId: uploaderId,
       latency: (Date.now() - generationStartedAt) / 1000,
     });
-    const insightsJSON = JSON.parse(generatedInsights);
+    dropLabelledSummaries(insightsJSON);
+    composeSummaries(insightsJSON);
 
     // 7. Update the 'matches' table directly
     // Assuming the primary key in your 'matches' table is 'id'

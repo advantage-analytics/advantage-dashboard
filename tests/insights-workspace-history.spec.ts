@@ -73,6 +73,7 @@ async function historyFilters(programId: string | null | undefined) {
           : { createClient: () => supabase },
       Deno: { env: { get: (key: string) => ENV[key] } },
       Response,
+      AbortSignal,
       console,
       fetch: async () =>
         Response.json({
