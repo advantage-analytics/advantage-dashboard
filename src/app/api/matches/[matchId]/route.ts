@@ -219,7 +219,7 @@ export async function GET(
       "Could not load the match",
     );
   }
-  const analysis = analysisRead.analysis;
+  const { analysis } = analysisRead;
 
   const active = workspace?.active;
   const canAttach =
@@ -276,7 +276,7 @@ export async function PATCH(
       "Could not load the match",
     );
   }
-  const analysis = analysisRead.analysis;
+  const { analysis } = analysisRead;
   const stored = existing as unknown as MatchRow;
 
   const result = normalizeMatchPatch(body, {
@@ -426,9 +426,8 @@ export async function DELETE(
   if (deleteError) {
     // The 409 and 503 refusals above take no claim (the claim RPC answers
     // false, or fails, before its insert), so only this failed-delete branch
-    // releases. The id
-    // is the one the `created_by = user.id` lookup already admitted, never a
-    // body field. See `releaseStoragePurgeClaims` for why this matters.
+    // releases. The id is the one the `created_by = user.id` lookup already
+    // admitted, never a body field. See `releaseStoragePurgeClaims` for why this matters.
     await releaseStoragePurgeClaims(
       createAdminClient(),
       [matchId],

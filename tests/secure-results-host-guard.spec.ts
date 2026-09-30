@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { createLoader } from "./fixtures/vm-modules";
+import { loadSecureResults } from "./fixtures/secure-results-harness";
 import { withEnv } from "./fixtures/with-env";
 
 /**
@@ -31,7 +31,6 @@ const VENDOR_URL =
 const EVIL_URL = "https://evil.example/strokes.json?sv=1&sig=SECRET";
 
 type Rpc = { fn: string; args: Record<string, unknown> };
-type Log = { level: string; message: string; detail: unknown };
 type FetchCall = { url: string; init: RequestInit | undefined };
 
 function fakeSupabase() {
@@ -56,40 +55,6 @@ function fakeSupabase() {
   return { client, uploads, rpcs };
 }
 
-function load() {
-  const logs: Log[] = [];
-  const record =
-    (level: string) =>
-    (message: string, detail?: unknown): void => {
-      logs.push({ level, message, detail });
-    };
-  const loader = createLoader({
-    globals: { Error, Blob, AbortSignal, URL },
-    stubs: {
-      "./pipeline-log": {
-        pipelineLog: {
-          info: record("info"),
-          warn: record("warn"),
-          error: record("error"),
-        },
-      },
-    },
-  });
-  const mod = loader.load("src/lib/services/splitstep/secure-results.ts");
-  return {
-    secureResults: mod.secureResults as (p: Record<string, unknown>) => Promise<
-      | {
-          resultsSecured: true;
-          objectKey: string;
-          bytes: number;
-          body?: string;
-        }
-      | { resultsSecured: false; error: string }
-    >,
-    logs,
-  };
-}
-
 function recordingFetch(body = '{"points":[]}') {
   const calls: FetchCall[] = [];
   const impl = async (url: string, init?: RequestInit) => {
@@ -102,7 +67,7 @@ function recordingFetch(body = '{"points":[]}') {
 test.describe("secureResults — result-host guard", () => {
   test("a disallowed host is never fetched and the outcome is resultsSecured: false", async () => {
     await withEnv(ENV_KEYS, {}, async () => {
-      const { secureResults, logs } = load();
+      const { secureResults, logs } = loadSecureResults();
       const fake = fakeSupabase();
       const f = recordingFetch();
 
@@ -154,7 +119,7 @@ test.describe("secureResults — result-host guard", () => {
 
   test("a suffix-spoofed vendor host is refused the same way", async () => {
     await withEnv(ENV_KEYS, {}, async () => {
-      const { secureResults } = load();
+      const { secureResults } = loadSecureResults();
       const fake = fakeSupabase();
       const f = recordingFetch();
 
@@ -178,7 +143,7 @@ test.describe("secureResults — result-host guard", () => {
 
   test("an allowed host is fetched once, with redirect: 'error'", async () => {
     await withEnv(ENV_KEYS, {}, async () => {
-      const { secureResults, logs } = load();
+      const { secureResults, logs } = loadSecureResults();
       const fake = fakeSupabase();
       const json = '{"points":[]}';
       const f = recordingFetch(json);
@@ -212,7 +177,7 @@ test.describe("secureResults — result-host guard", () => {
       ENV_KEYS,
       { SPLITSTEP_RESULT_HOSTS: "evil.example" },
       async () => {
-        const { secureResults } = load();
+        const { secureResults } = loadSecureResults();
         const fake = fakeSupabase();
         const f = recordingFetch();
 

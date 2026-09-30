@@ -49,17 +49,15 @@ export interface PurgeMatchStorageOptions {
  */
 export class PurgeRefusedError extends Error {
   readonly kind: "protected" | "unavailable";
-  readonly cause: unknown;
 
   constructor(
     kind: "protected" | "unavailable",
     message: string,
     cause?: unknown,
   ) {
-    super(message);
+    super(message, { cause });
     this.name = "PurgeRefusedError";
     this.kind = kind;
-    this.cause = cause;
   }
 }
 
@@ -210,20 +208,21 @@ export async function purgeMatchStorage(
     });
   const { data: protectedMatch, error: protectionError } =
     await claimPurge(matchIds);
+  // Only an explicit `false` from a clean read is the console's refusal.
+  // An error, or any answer outside the RPC's boolean contract, means the
+  // guard could not be checked — not that the match is protected.
+  if (protectedMatch === false && !protectionError) {
+    throw new PurgeRefusedError(
+      "protected",
+      "Matches recorded or analyzed through the admin console cannot be deleted here.",
+    );
+  }
   if (protectedMatch !== true || protectionError) {
-    // Only an explicit `false` from a clean read is the console's refusal.
-    // An error, or any answer outside the RPC's boolean contract, means the
-    // guard could not be checked — not that the match is protected.
-    throw protectedMatch === false && !protectionError
-      ? new PurgeRefusedError(
-          "protected",
-          "Matches recorded or analyzed through the admin console cannot be deleted here.",
-        )
-      : new PurgeRefusedError(
-          "unavailable",
-          "We could not verify whether these matches can be deleted. Try again.",
-          protectionError,
-        );
+    throw new PurgeRefusedError(
+      "unavailable",
+      "We could not verify whether these matches can be deleted. Try again.",
+      protectionError,
+    );
   }
 
   // Both storage cleanups key off the same rows, so they are read once here

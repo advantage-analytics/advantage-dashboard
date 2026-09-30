@@ -46,10 +46,10 @@ export const checkAdmin = cache(async (): Promise<AdminCheck> => {
 });
 
 /** `checkAdmin()` as yes/no: the actor, or `null` for either refusal. */
-export const requireAdmin = cache(async (): Promise<{ id: string } | null> => {
+export async function requireAdmin(): Promise<{ id: string } | null> {
   const check = await checkAdmin();
   return check.ok ? { id: check.id } : null;
-});
+}
 
 /**
  * Same gate as `admin/layout.tsx`, for a server component or loader that is
