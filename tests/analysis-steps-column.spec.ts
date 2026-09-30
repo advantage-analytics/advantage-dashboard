@@ -264,12 +264,15 @@ test("stalled retry: before the clock's first tick, only the server's classifica
   expect(html).not.toContain("<button");
 });
 
-test("the clock is only ever set from an interval", () => {
+test("the clock is only ever set from a timer: once after mount, then on an interval", () => {
   const source = readFileSync(COLUMN, "utf8");
   expect(source).toContain("useState<number | null>(null)");
-  // One read of the wall clock, and it is the interval's.
+  // One read of the wall clock, inside the tick the timers share — never in
+  // render. The first tick fires right after mount so timing lines show at once.
   expect(count(source, "Date.now()")).toBe(1);
-  expect(source).toMatch(/setInterval\(\(\) => setClock\(Date\.now\(\)\)/);
+  expect(source).toMatch(/const tick = \(\) => setClock\(Date\.now\(\)\)/);
+  expect(source).toMatch(/setTimeout\(tick, 0\)/);
+  expect(source).toMatch(/setInterval\(tick, TICK_MS\)/);
   // The live row, merged over the server's, gated on the server status.
   expect(source).toMatch(/isLiveUpdating\(serverAnalysis\.status\)/);
   expect(source).toMatch(/withLiveAnalysis\(serverAnalysis,/);

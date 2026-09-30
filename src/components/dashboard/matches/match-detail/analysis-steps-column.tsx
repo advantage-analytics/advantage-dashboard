@@ -131,11 +131,12 @@ export function AnalysisSteps({
   // A clock, so the estimate keeps counting down between progress writes and a
   // hand-off that never happened turns into the stalled step without a reload.
   //
-  // Starts null and is only ever set by the interval, never during render: the
+  // Starts null and is only ever set from a timer, never during render: the
   // server has no "now" the client would agree with, so reading one here is a
-  // hydration mismatch. Until the first tick the view reads null as "not
-  // stalled, no estimate" — an estimate from a transfer's first seconds is
-  // noise anyway.
+  // hydration mismatch. The first tick fires straight after mount (a 0 ms
+  // timeout), then every TICK_MS — so the timing lines ("Waiting 4 min",
+  // "Started 12 min ago") appear at once instead of after the first 10 s.
+  // Before that first tick the view reads null as "not stalled, no estimate".
   const [clock, setClock] = useState<number | null>(null);
   // Only the statuses the view reads the clock for: the upload estimate and
   // stall threshold, and the queued / processing / cancelled timing lines. No
@@ -144,8 +145,13 @@ export function AnalysisSteps({
 
   useEffect(() => {
     if (!readsClock) return;
-    const id = setInterval(() => setClock(Date.now()), TICK_MS);
-    return () => clearInterval(id);
+    const tick = () => setClock(Date.now());
+    const first = setTimeout(tick, 0);
+    const id = setInterval(tick, TICK_MS);
+    return () => {
+      clearTimeout(first);
+      clearInterval(id);
+    };
   }, [readsClock]);
 
   const view = analysisStepsView(analysis, snapshotAt ?? clock);
