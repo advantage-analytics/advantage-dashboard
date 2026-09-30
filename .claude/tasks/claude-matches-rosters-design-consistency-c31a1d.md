@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Add a terminal `cancelled` job status, `vendor_started_at` and the `cancel_processing_job` RPC
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<live-version>_processing_jobs_cancelled.sql (new, named by the version `apply_migration` records), tests/database/cancel-processing-job.test.mjs (new, PGlite under `npm run test:database`)
 - **done when:**
