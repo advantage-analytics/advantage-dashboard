@@ -25,6 +25,9 @@ export interface RosterFullRow {
   class_year?: string | null;
   /** "coach" until the profile is claimed, then "self". */
   managed_by?: string | null;
+  /** The player's saved style — the claimed player's own value once claimed. */
+  hand?: string | null;
+  backhand?: string | null;
 }
 
 export interface RosterPlayerOption {
@@ -48,6 +51,13 @@ export interface RosterPlayerOption {
    * the grey Coach-managed pill.
    */
   managedBy: "coach" | "self";
+  /**
+   * Their saved hand and backhand, or null where nobody has answered — the
+   * upload wizard prefills from these ("from their roster"). Anything outside
+   * the vocabulary reads as unanswered rather than as a value no menu offers.
+   */
+  hand: "right" | "left" | null;
+  backhand: "one-handed" | "two-handed" | null;
 }
 
 /** Players only, named, in ladder order (unranked last, then by name). */
@@ -56,7 +66,7 @@ export function rosterPlayerOptions(
 ): RosterPlayerOption[] {
   return (rows ?? [])
     .filter((row) => row.role === "player")
-    .map((row) => ({
+    .map((row): RosterPlayerOption => ({
       playerId: row.player_id,
       userId: row.user_id ?? null,
       // `program_players` requires both names, so a player row always has
@@ -72,6 +82,11 @@ export function rosterPlayerOptions(
       email: row.email?.trim() || null,
       managedBy: (row.managed_by === "self" ? "self" : "coach") as
         "coach" | "self",
+      hand: row.hand === "right" || row.hand === "left" ? row.hand : null,
+      backhand:
+        row.backhand === "one-handed" || row.backhand === "two-handed"
+          ? row.backhand
+          : null,
     }))
     .sort((a, b) => {
       if (a.ladderPosition === b.ladderPosition)

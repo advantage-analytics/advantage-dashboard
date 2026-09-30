@@ -97,6 +97,8 @@ export interface OwnProfileRow {
   class_year: string | null;
   lineup_spot: number | null;
   claimed_by_user_id: string | null;
+  hand?: string | null;
+  backhand?: string | null;
 }
 
 /**
@@ -133,6 +135,8 @@ export function eligibleRosterOptions(
       lineup_spot: own.lineup_spot,
       class_year: own.class_year,
       managed_by: "self",
+      hand: own.hand ?? null,
+      backhand: own.backhand ?? null,
     });
   }
   return rosterPlayerOptions(base);

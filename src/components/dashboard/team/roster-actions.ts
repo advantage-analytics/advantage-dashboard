@@ -3,6 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import {
+  BACKHANDS,
+  HANDS,
+  type Backhand,
+  type Hand,
+} from "@/lib/matches/patch-match";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
 
 /**
@@ -171,6 +177,8 @@ export async function addProgramPlayer(input: {
   classYear?: string | null;
   lineupSpot?: number | null;
   email?: string | null;
+  hand?: string | null;
+  backhand?: string | null;
 }): Promise<AddPlayerResult> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") {
@@ -188,6 +196,8 @@ export async function addProgramPlayer(input: {
     p_class_year: input.classYear ?? null,
     p_lineup_spot: input.lineupSpot ?? null,
     p_email: input.email ?? null,
+    p_hand: asHand(input.hand),
+    p_backhand: asBackhand(input.backhand),
   });
 
   if (error) {
@@ -216,6 +226,13 @@ export interface PlayerFields {
   classYear: string;
   lineupSpot: string;
   email: string;
+  /**
+   * The player's style, `""` when unset. For a claimed profile this is the
+   * player's own `users` value (falling back to what the coach recorded before
+   * the claim) — the one cell `set_program_player_style` writes.
+   */
+  hand: string;
+  backhand: string;
   /** A login is bound to this profile, so the address above is not their only one. */
   claimed: boolean;
 }
@@ -227,6 +244,8 @@ interface DbPlayerFieldsRow {
   class_year: string | null;
   lineup_spot: number | null;
   email: string | null;
+  hand: string | null;
+  backhand: string | null;
   claimed_by_user_id: string | null;
   archived_at: string | null;
   merged_into_id: string | null;
@@ -284,7 +303,7 @@ export async function getProgramPlayerFields(
     supabase
       .from("program_players")
       .select(
-        "program_id, first_name, last_name, class_year, lineup_spot, email, claimed_by_user_id, archived_at, merged_into_id",
+        "program_id, first_name, last_name, class_year, lineup_spot, email, hand, backhand, claimed_by_user_id, archived_at, merged_into_id",
       )
       .eq("id", profileId)
       .maybeSingle(),
@@ -324,6 +343,30 @@ export async function getProgramPlayerFields(
     return { ok: false, error: GONE_MESSAGE, gone: true };
   }
 
+  // Style is the one field where the claimed player's own value wins — the
+  // opposite of email and class year above. Coaches cannot select another
+  // member's `users` row, so the resolved value comes from the roster RPC,
+  // which already applies `coalesce(u.hand, pp.hand)`. Only claimed rows pay
+  // for the second read.
+  let hand = row.hand;
+  let backhand = row.backhand;
+  if (row.claimed_by_user_id !== null) {
+    const { data: roster } = await supabase.rpc("program_roster_full", {
+      p_program_id: row.program_id,
+    });
+    const resolved = (
+      (roster ?? []) as {
+        profile_id: string | null;
+        hand: string | null;
+        backhand: string | null;
+      }[]
+    ).find((member) => member.profile_id === profileId);
+    if (resolved) {
+      hand = resolved.hand;
+      backhand = resolved.backhand;
+    }
+  }
+
   return {
     ok: true,
     fields: {
@@ -332,6 +375,8 @@ export async function getProgramPlayerFields(
       classYear: row.class_year ?? "",
       lineupSpot: row.lineup_spot === null ? "" : String(row.lineup_spot),
       email: row.email ?? "",
+      hand: hand ?? "",
+      backhand: backhand ?? "",
       claimed: row.claimed_by_user_id !== null,
     },
   };
@@ -378,6 +423,8 @@ export async function updateProgramPlayer(input: {
   classYear: string | null;
   lineupSpot: number | null;
   email: string | null;
+  hand: string | null;
+  backhand: string | null;
 }): Promise<UpdatePlayerResult> {
   // Resolved here as well as inside the read below, because the program id is
   // what scopes the duplicate-email lookup on the failure path.
@@ -417,10 +464,98 @@ export async function updateProgramPlayer(input: {
     };
   }
 
+  // Style goes through its own RPC — `update_program_player` never touches it,
+  // so an older client that omits it cannot clear it. Only when it changed, so
+  // an ordinary name edit does not rewrite a claimed player's own profile.
+  const hand = asHand(input.hand);
+  const backhand = asBackhand(input.backhand);
+  if (
+    hand !== (live.fields.hand || null) ||
+    backhand !== (live.fields.backhand || null)
+  ) {
+    const style = await supabase.rpc("set_program_player_style", {
+      p_player_id: input.profileId,
+      p_hand: hand,
+      p_backhand: backhand,
+    });
+    if (style.error) {
+      const raw = style.error.message?.trim();
+      return {
+        ok: false,
+        error:
+          raw && raw.length > 0
+            ? raw
+            : "Couldn't save their hand and backhand.",
+        gone: false,
+      };
+    }
+  }
+
   revalidatePath(ROSTER_PATH);
   revalidatePath(`${ROSTER_PATH}/${input.profileId}`);
   revalidatePath(TEAM_HOME_PATH);
   return { ok: true };
+}
+
+/**
+ * Save a roster player's hand and backhand, and nothing else — the upload
+ * wizard's "use for future matches". Scoped to the active team like every
+ * other write here; the RPC re-checks staff (or the player on their own
+ * claimed row) and routes a claimed profile's write to the player's `users`
+ * row, so the roster and their Settings share one value.
+ */
+export async function saveRosterPlayerStyle(input: {
+  profileId: string;
+  hand: string | null;
+  backhand: string | null;
+}): Promise<ActionResult> {
+  const workspace = await getWorkspaceContext();
+  if (!workspace || workspace.active.kind !== "team") {
+    return {
+      ok: false,
+      error: "Switch to your team workspace to edit players.",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("program_players")
+    .select("program_id")
+    .eq("id", input.profileId)
+    .maybeSingle();
+  if (!row || row.program_id !== workspace.active.id) {
+    return { ok: false, error: GONE_MESSAGE };
+  }
+
+  const { error } = await supabase.rpc("set_program_player_style", {
+    p_player_id: input.profileId,
+    p_hand: asHand(input.hand),
+    p_backhand: asBackhand(input.backhand),
+  });
+  if (error) {
+    const raw = error.message?.trim();
+    return {
+      ok: false,
+      error:
+        raw && raw.length > 0 ? raw : "Couldn't save their hand and backhand.",
+    };
+  }
+
+  revalidatePath(ROSTER_PATH);
+  revalidatePath(`${ROSTER_PATH}/${input.profileId}`);
+  return { ok: true };
+}
+
+/**
+ * A server action's arguments are the caller's, so a value outside the
+ * vocabulary becomes "not set" here rather than a CHECK violation in prose.
+ */
+function asHand(value: string | null | undefined): Hand | null {
+  return HANDS.includes(value as Hand) ? (value as Hand) : null;
+}
+
+function asBackhand(value: string | null | undefined): Backhand | null {
+  return BACKHANDS.includes(value as Backhand) ? (value as Backhand) : null;
 }
 
 /**

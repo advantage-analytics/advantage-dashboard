@@ -888,7 +888,7 @@ export async function adminSetMemberUploadEnabled(input: {
  * `{ ok: false; error: string }`, so nothing about the refusal contract changes;
  * `{ ok: false }` for a non-admin is exactly what `AdminTeamOutcome` would give.
  *
- * The input is `addProgramPlayer`'s five player fields, spelled identically,
+ * The input is `addProgramPlayer`'s player fields, spelled identically,
  * plus the `programId` an admin has no workspace to infer. The dialog's caller
  * binds that one id and passes the rest through verbatim.
  *
@@ -903,6 +903,8 @@ export async function adminAddProgramPlayer(input: {
   classYear?: string | null;
   lineupSpot?: number | null;
   email?: string | null;
+  hand?: string | null;
+  backhand?: string | null;
 }): Promise<AddPlayerResult> {
   const admin = await requireAdmin();
   if (!admin) return { ok: false, error: NOT_AUTHORIZED };
@@ -915,6 +917,9 @@ export async function adminAddProgramPlayer(input: {
     p_class_year: input.classYear ?? null,
     p_lineup_spot: input.lineupSpot ?? null,
     p_email: input.email ?? null,
+    // The RPC refuses anything outside the vocabulary in prose; "" is unset.
+    p_hand: input.hand || null,
+    p_backhand: input.backhand || null,
   });
 
   if (error) {
