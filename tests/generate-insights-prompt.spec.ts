@@ -142,6 +142,11 @@ test("the summary instruction asks for 2-3 sentences under 350 characters", asyn
   expect(summaryLine).toContain(
     "stay on that same takeaway rather than raising a second topic",
   );
+  expect(summaryLine).toContain(
+    "Every figure you quote and the advice you give must be about the headline's subject",
+  );
+  // The stat cards round, so the summary must too, or the two disagree by 1.
+  expect(summaryLine).toContain("rounded to the nearest whole number");
   expect(summaryLine).toContain("Do not greet them");
   expect(summaryLine).toContain("do not use markdown headers or bullet points");
   expect(summaryLine).toContain("do not list stats one after another");
