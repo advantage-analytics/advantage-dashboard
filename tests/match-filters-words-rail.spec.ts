@@ -41,7 +41,7 @@ test.describe("applied-words", () => {
           sets: [2, 1],
           scoreType: ["breakpoint"],
           serveType: ["second"],
-          resultOutcome: ["winner"],
+          resultEnding: ["winner"],
           customRallyShot: [4],
           returnContact: ["middle"],
         }),
@@ -52,7 +52,7 @@ test.describe("applied-words", () => {
       "second serve",
       "wide serve",
       "T serve",
-      "middle contact",
+      "contact on the baseline",
       "set 1",
       "set 2",
       "break point",
@@ -80,7 +80,41 @@ test.describe("applied-words", () => {
         filtersWith({ scorePoints: ["Ad-40"], resultPlayer: "you" }),
         NAMES,
       ),
-    ).toEqual(["Ad-40", "Rudy’s result"]);
+    ).toEqual(["Ad-40", "Rudy’s last shot"]);
+  });
+
+  test("Serve/Return Result, Missed and Rally length read as their own phrases", () => {
+    expect(
+      appliedPhrases(
+        filtersWith({
+          serveResult: [
+            "double-fault",
+            "in-play",
+            "return-error",
+            "service-winner",
+            "ace",
+          ],
+          returnResult: ["in-play", "error", "winner"],
+          resultMissed: ["Net", "Out"],
+          resultRallyLength: ["long", "medium", "short"],
+        }),
+        NAMES,
+      ),
+    ).toEqual([
+      "ace",
+      "service winner",
+      "return error",
+      "serve returned",
+      "double fault",
+      "return winner",
+      "missed return",
+      "return in play",
+      "missed out",
+      "missed in the net",
+      "short rally (1–4)",
+      "medium rally (5–8)",
+      "long rally (9+)",
+    ]);
   });
 
   test("no filters, no words", () => {

@@ -86,6 +86,7 @@ import {
   determineWinner,
   buildMatchData,
   getAdjustedScores,
+  playedSetCount,
   formatFileSize,
   clearStorageData,
   loadFormDataFromStorage,
@@ -692,6 +693,31 @@ export interface UseUploadMatchWizardReturn {
 
   // Match creation
   handleCreateMatch: () => Promise<void>;
+}
+
+/**
+ * The admin video route's score: the adjusted rows without the trailing sets
+ * nobody entered (`playedSetCount`), so a two-set best-of-3 is not stored with
+ * a blank third set.
+ */
+function adminVideoScore(formData: MatchFormData) {
+  const player1 = getAdjustedScores(
+    formData.playerScores,
+    formData.bestOf,
+    formData.numberOfSets,
+  );
+  const player2 = getAdjustedScores(
+    formData.opponentScores,
+    formData.bestOf,
+    formData.numberOfSets,
+  );
+  const sets = playedSetCount(player1, player2);
+  return {
+    player1: player1.slice(0, sets),
+    player2: player2.slice(0, sets),
+    player1_tiebreaks: formData.playerTiebreaks.slice(0, sets),
+    player2_tiebreaks: formData.opponentTiebreaks.slice(0, sets),
+  };
 }
 
 // Helper to get current date in YYYY-MM-DD format.
@@ -3017,20 +3043,7 @@ export function useUploadMatchWizard({
                   : {
                       opponentName: formData.opponentName,
                       bestOf: Number(formData.bestOf),
-                      score: {
-                        player1: getAdjustedScores(
-                          formData.playerScores,
-                          formData.bestOf,
-                          formData.numberOfSets,
-                        ),
-                        player2: getAdjustedScores(
-                          formData.opponentScores,
-                          formData.bestOf,
-                          formData.numberOfSets,
-                        ),
-                        player1_tiebreaks: formData.playerTiebreaks,
-                        player2_tiebreaks: formData.opponentTiebreaks,
-                      },
+                      score: adminVideoScore(formData),
                     }),
                 startSeconds: formData.videoStartSeconds,
                 endSeconds: formData.videoEndSeconds,
@@ -3206,10 +3219,6 @@ export function useUploadMatchWizard({
           formData.opponentName,
         );
 
-        const eventName =
-          formData.eventName ||
-          `${formData.playerName} vs ${formData.opponentName}`;
-
         // Give the opponent an identity, when the uploader named their program.
         //
         // Best-effort and never blocking: `contribute_opponent_player` refuses
@@ -3295,8 +3304,10 @@ export function useUploadMatchWizard({
         const matchData = buildMatchData(
           matchId,
           {
+            // eventName goes through as typed: an empty Event field saves no
+            // event (null), never a synthesised "P1 vs P2" title. A preset or
+            // attached line has already put its name into formData.eventName.
             ...formData,
-            eventName,
             // An early-end answer left over from before the score was
             // finished would label a decided match "Retired".
             result: stopped ? formData.result : decidedResult,

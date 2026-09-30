@@ -554,7 +554,7 @@ export function MatchesPageContent({
       const person = normalizedPersonName(search);
       result = result.filter(
         (m) =>
-          m.tournamentName.toLowerCase().includes(q) ||
+          (m.tournamentName?.toLowerCase().includes(q) ?? false) ||
           normalizedPersonName(m.player1.name).includes(person) ||
           normalizedPersonName(m.player2.name).includes(person) ||
           (m.round?.toLowerCase().includes(q) ?? false),
@@ -619,7 +619,17 @@ export function MatchesPageContent({
           cmp = a.player2.name.localeCompare(b.player2.name);
           break;
         case "event":
-          cmp = a.tournamentName.localeCompare(b.tournamentName);
+          // A match with no event sorts after every named one, ascending.
+          if (a.tournamentName === null || b.tournamentName === null) {
+            cmp =
+              a.tournamentName === b.tournamentName
+                ? 0
+                : a.tournamentName === null
+                  ? 1
+                  : -1;
+          } else {
+            cmp = a.tournamentName.localeCompare(b.tournamentName);
+          }
           break;
         case "result": {
           const aWin = a.score.winner === "player1" ? 1 : 0;

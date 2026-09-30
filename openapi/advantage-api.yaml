@@ -133,6 +133,8 @@ paths:
                     analysis: null
                     event: null
                     canAttach: false
+                    canDetach: false
+                    canEditRound: false
         "401":
           $ref: "#/components/responses/PlainUnauthorized"
         "404":
@@ -3267,6 +3269,7 @@ components:
           site,
           surface,
           format,
+          takenRounds,
         ]
       properties:
         eventId:
@@ -3298,9 +3301,17 @@ components:
               type: integer
             ad_scoring:
               type: [boolean, "null"]
+        takenRounds:
+          type: array
+          items:
+            type: string
+          description: >-
+            Round codes the line already holds without this match (its other
+            matches and its outcomes). The Round menu leaves them out, and
+            `set_match_round_on_line` refuses them.
     MatchDetailResponse:
       type: object
-      required: [match, analysis, event, canAttach]
+      required: [match, analysis, event, canAttach, canDetach, canEditRound]
       properties:
         match:
           $ref: "#/components/schemas/Match"
@@ -3323,6 +3334,16 @@ components:
           description: >-
             A team match not yet on a line, in the viewed team workspace, by
             someone who may run its schedule.
+        canDetach:
+          type: boolean
+          description: >-
+            A team match that is on a line, in the viewed team workspace, by
+            someone who may run its schedule.
+        canEditRound:
+          type: boolean
+          description: >-
+            `canDetach` on a tournament line, whose round is the match's own
+            (a dual line's round is its slot).
     MatchPatchRequest:
       type: object
       description: >-

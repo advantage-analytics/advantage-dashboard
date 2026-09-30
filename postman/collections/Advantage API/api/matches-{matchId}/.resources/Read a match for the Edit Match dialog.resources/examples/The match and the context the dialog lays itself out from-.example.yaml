@@ -65,6 +65,8 @@ response:
         },
         "analysis": null,
         "event": null,
-        "canAttach": false
+        "canAttach": false,
+        "canDetach": false,
+        "canEditRound": false
       }
 order: 1000

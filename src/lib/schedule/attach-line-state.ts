@@ -11,7 +11,7 @@
  */
 
 import { normalizedPersonName } from "@/lib/data/person-name";
-import { normalizeRound } from "@/lib/matches/round-options";
+import { normalizeRound, takenRoundCodes } from "@/lib/matches/round-options";
 import { matchForRound, resolveEntryResult } from "@/lib/schedule/entry-state";
 import type { EventEntry, EventKind, ProgramEvent } from "@/lib/schedule/types";
 
@@ -67,6 +67,13 @@ export interface AttachLine {
   eventAdScoring: boolean | null;
   /** The event runs on the match's date. */
   sameDay: boolean;
+  /**
+   * Rounds this entry already has a result for — its matches' and outcomes'
+   * rounds as short codes. The Edit Match dialog leaves them out of the Round
+   * menu it draws for a tournament line picked without one. A dual's is its
+   * slot once scored, which nothing reads.
+   */
+  takenRounds: string[];
 }
 
 export interface AttachLineGroups {
@@ -136,7 +143,13 @@ function lineFor(
   } else if (entry.forfeit !== null) {
     state = "forfeit";
     reason = "Forfeited";
-  } else if (event.kind === "tournament" && round === null) {
+  } else if (
+    event.kind === "tournament" &&
+    round === null &&
+    mode === "upload"
+  ) {
+    // Edit Match picks the round beside the line (`EventRoundField`); the
+    // wizard's Round field sits on another step, so it still has to come first.
     state = "needsRound";
     reason = "Set the round first";
   } else if (taken && mode === "upload" && result?.kind === "played") {
@@ -151,6 +164,11 @@ function lineFor(
     state = "otherPlayer";
     reason = "Other player";
   }
+
+  const takenRounds = takenRoundCodes([
+    ...entry.matches,
+    ...(entry.outcomes ?? []),
+  ]);
 
   const formatDiffers =
     event.format.bestOf !== match.bestOf ||
@@ -181,6 +199,7 @@ function lineFor(
     eventBestOf: event.format.bestOf,
     eventAdScoring: event.format.adScoring,
     sameDay: match.date >= event.startsOn && match.date <= event.endsOn,
+    takenRounds,
   };
 }
 

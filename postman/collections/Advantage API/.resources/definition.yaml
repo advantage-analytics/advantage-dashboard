@@ -42,7 +42,7 @@ description: |
 variables:
   baseUrl: https://app.advantage-analytics.com
 auth:
-  - id: b75d8fb6-3c0f-48cf-84f8-02c4f41eba20
+  - id: 5783a497-d0b5-4389-820b-f2cb1b9a4bc4
     type: apikey
     name: apikey auth
     credentials:

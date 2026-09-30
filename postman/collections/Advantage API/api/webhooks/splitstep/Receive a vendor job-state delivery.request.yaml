@@ -27,8 +27,7 @@ body:
         "category": "<string>",
         "step": "<string>",
         "message": "<string>"
-      },
-      "key_0": 4989
+      }
     }
 auth:
   type: apikey

@@ -17,6 +17,7 @@ import {
 } from "@/lib/matches/patch-match";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
+import { takenRoundCodes } from "@/lib/matches/round-options";
 import {
   rosterPlayerOptions,
   type RosterFullRow,
@@ -34,7 +35,8 @@ const BETA_FORCE_PRIVATE = true;
  * GET carries what the dialog decides its layout from, not just the editable
  * columns: whether the match was analyzed (format is then fixed), the event
  * line it sits on (E1 — the event owns date, round, type and surface), and
- * whether this viewer may attach a one-off team match to a line.
+ * whether this viewer may attach a one-off team match to a line, take it off
+ * one, or change its round on a tournament line.
  *
  * PATCH rules live in `normalizeMatchPatch` (`src/lib/matches/patch-match.ts`).
  */
@@ -64,6 +66,12 @@ export interface MatchEventContext {
   site: string;
   surface: string | null;
   format: { best_of?: number; ad_scoring?: boolean | null } | null;
+  /**
+   * Rounds the line already holds without this match — its other matches'
+   * and its outcomes' — as round codes. The Round menu leaves them out;
+   * `set_match_round_on_line` refuses them either way.
+   */
+  takenRounds: string[];
 }
 
 /**
@@ -128,14 +136,26 @@ async function analysisFor(supabase: Supabase, matchId: string) {
 async function eventContextFor(
   supabase: Supabase,
   entryId: string,
+  matchId: string,
 ): Promise<MatchEventContext | null> {
-  const { data } = await supabase
-    .from("program_event_entries")
-    .select(
-      "slot, discipline, event:program_events(id, name, kind, starts_on, ends_on, site, surface, format)",
-    )
-    .eq("id", entryId)
-    .maybeSingle();
+  const [{ data }, { data: others }, { data: outcomes }] = await Promise.all([
+    supabase
+      .from("program_event_entries")
+      .select(
+        "slot, discipline, event:program_events(id, name, kind, starts_on, ends_on, site, surface, format)",
+      )
+      .eq("id", entryId)
+      .maybeSingle(),
+    supabase
+      .from("matches")
+      .select("round")
+      .eq("event_entry_id", entryId)
+      .neq("id", matchId),
+    supabase
+      .from("program_event_outcomes")
+      .select("round")
+      .eq("entry_id", entryId),
+  ]);
   const row = data as {
     slot: string | null;
     discipline: string;
@@ -151,6 +171,10 @@ async function eventContextFor(
     } | null;
   } | null;
   if (!row?.event) return null;
+  const takenRounds = takenRoundCodes([
+    ...((others ?? []) as { round: string | null }[]),
+    ...((outcomes ?? []) as { round: string | null }[]),
+  ]);
   return {
     eventId: row.event.id,
     eventName: row.event.name,
@@ -162,6 +186,7 @@ async function eventContextFor(
     site: row.event.site,
     surface: row.event.surface,
     format: row.event.format,
+    takenRounds,
   };
 }
 
@@ -203,14 +228,18 @@ export async function GET(
 
   // Attaching needs a team match that isn't on a line yet, in the workspace
   // being viewed, by someone the events policy lets run the schedule. The
-  // database re-checks all of it (`attach_match_to_event_line`).
+  // database re-checks all of it (`attach_match_to_event_line`). Detaching is
+  // the inverse on the same terms: a team match that is on a line. The viewer
+  // is `created_by` already — `loadOwnMatch` reads only their own match — and
+  // `detach_match_from_event_line` re-checks both.
   const attachable = !!match.program_id && !match.event_entry_id;
+  const detachable = !!match.program_id && !!match.event_entry_id;
   const [analysisRead, event, workspace] = await Promise.all([
     analysisFor(supabase, matchId),
     match.event_entry_id
-      ? eventContextFor(supabase, match.event_entry_id)
+      ? eventContextFor(supabase, match.event_entry_id, matchId)
       : Promise.resolve(null),
-    attachable ? getWorkspaceContext() : Promise.resolve(null),
+    attachable || detachable ? getWorkspaceContext() : Promise.resolve(null),
   ]);
   if (analysisRead.error) {
     return serverError(
@@ -222,13 +251,26 @@ export async function GET(
   const { analysis } = analysisRead;
 
   const active = workspace?.active;
-  const canAttach =
-    attachable &&
+  const runsSchedule =
     active?.kind === "team" &&
     active.id === match.program_id &&
     canManageTeamSchedule(active);
+  const canAttach = attachable && runsSchedule;
+  const canDetach = detachable && runsSchedule;
+  // A tournament line's round is the match's own, changed through
+  // `set_match_round_on_line` on the detach's terms; a dual line's round is
+  // its slot, and the line decides it.
+  const canEditRound =
+    detachable && event?.eventKind === "tournament" && runsSchedule;
 
-  return NextResponse.json({ match, analysis, event, canAttach });
+  return NextResponse.json({
+    match,
+    analysis,
+    event,
+    canAttach,
+    canDetach,
+    canEditRound,
+  });
 }
 
 export async function PATCH(

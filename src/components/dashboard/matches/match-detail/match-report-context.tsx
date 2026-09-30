@@ -54,10 +54,11 @@ export interface MatchReportActions {
   /** Open a timed point in the Video view. */
   watchPoint(pointId: string): void;
   /**
-   * Open the Video view on a statistic's cut: `cut` ANDed over the shared
-   * match filters in Film only (never written to them), drawn as one
-   * removable chip reading `label`, the shell player on the first point it
-   * admits (T2, T7). The film tab consumes it once (`film-cut-context.tsx`).
+   * Open the Video view on a statistic's cut: its `MatchFilters` keys land
+   * in the shared match filters (the drawer's pills pressed), its Film-only
+   * extras stay beside them named by `label` in the filter strip, and the
+   * shell player starts on the first point the list admits. The film tab
+   * consumes it once (`film-cut-context.tsx`, `landFilmCut`).
    * A no-op without a playable video — there is no Video view to open, and
    * `/m/[token]` never has one.
    */

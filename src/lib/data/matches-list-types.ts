@@ -1,7 +1,6 @@
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
-import { UNKNOWN_EVENT_PLACEHOLDER } from "@/lib/data/match-share-format";
 
 export interface DbMatch {
   id: string;
@@ -31,7 +30,8 @@ export interface DisplayMatch {
   /** Matches API currently permits only the uploader to edit or delete. */
   canManage?: boolean;
   id: string;
-  tournamentName: string;
+  /** Null when the match was filed with no event — the row renders "No event". */
+  tournamentName: string | null;
   date: string;
   matchType: string;
   courtType?: string;
@@ -114,7 +114,7 @@ export function transformDbMatch(
 
   return {
     id: row.id,
-    tournamentName: row.tournament_name ?? UNKNOWN_EVENT_PLACEHOLDER,
+    tournamentName: row.tournament_name,
     date: formatDisplayDate(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,

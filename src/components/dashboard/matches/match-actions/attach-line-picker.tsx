@@ -332,7 +332,12 @@ function LineRow<L extends AttachLine>({
         )}
       >
         {line.reason ??
-          (line.existingMatchId ? "Result in · no video" : "Awaiting result")}
+          // A tournament line picked without a round takes one in the dialog.
+          (line.eventKind === "tournament" && line.round === null
+            ? "Choose a round"
+            : line.existingMatchId
+              ? "Result in · no video"
+              : "Awaiting result")}
       </span>
     </button>
   );

@@ -16,12 +16,13 @@ import {
 import {
   applyFilmCut,
   FILM_CUT_EXTRA_KEYS,
-  isUnreturnedServe,
+  filmCutExtras,
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
   applyMatchFilters,
   EMPTY_MATCH_FILTERS,
+  isUnreturnedServe,
   MATCH_FILTER_KEYS,
   type MatchFilterContext,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
@@ -42,8 +43,8 @@ import {
 const ALL_ROWS: H2HRowConfig[] = H2H_GROUPS.flatMap((group) => group.configs);
 
 const EXPECTED_CUTS: Record<string, FilmCut> = {
-  Aces: { resultOutcome: ["winner"], ending: "ace" },
-  "Double faults": { resultOutcome: ["error"], resultShot: ["Serve"] },
+  Aces: { serveResult: ["ace"] },
+  "Double faults": { resultEnding: ["error"], resultShot: ["Serve"] },
   "First serve in": { serveType: ["first"] },
   "First serve points won": { serveType: ["first"] },
   "Second serve points won": { serveType: ["second"] },
@@ -51,17 +52,23 @@ const EXPECTED_CUTS: Record<string, FilmCut> = {
   "First serve returns won": { serveType: ["first"] },
   "Second serve returns won": { serveType: ["second"] },
   "Break points converted": { scoreType: ["breakpoint"] },
-  "Return winners": { ending: "return-winner" },
-  Winners: { resultOutcome: ["winner"], ending: "winner" },
-  "Unforced errors": { resultOutcome: ["error"], ending: "unforced-error" },
+  "Return winners": { returnResult: ["winner"] },
+  Winners: { resultEnding: ["winner"], ending: "winner" },
+  "Unforced errors": { resultEnding: ["error"], ending: "unforced-error" },
   "Total points won": {},
 };
 
-/** What one cell of each row sends, for "you" — the opponent's mirrors it. */
+/**
+ * What one cell of each row sends, for "you" — the opponent's mirrors it.
+ * A won row is Result › Outcome from the viewer's side (Won for you, Lost
+ * for the opponent) with NO Hit by: the points you won include the ones the
+ * opponent's error ended.
+ */
 const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
-  Aces: { resultOutcome: ["winner"], ending: "ace", resultPlayer: "you" },
+  // An ace is the server's: Serve › Player, never Hit by.
+  Aces: { serveResult: ["ace"], server: "you" },
   "Double faults": {
-    resultOutcome: ["error"],
+    resultEnding: ["error"],
     resultShot: ["Serve"],
     resultPlayer: "you",
   },
@@ -70,52 +77,45 @@ const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
     serveType: ["first"],
     server: "you",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
   "Second serve points won": {
     serveType: ["second"],
     server: "you",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
   "Break points saved": {
     scoreType: ["breakpoint"],
     server: "you",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
   // Your first-serve returns are the opponent's first serves.
   "First serve returns won": {
     serveType: ["first"],
     server: "opponent",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
   "Second serve returns won": {
     serveType: ["second"],
     server: "opponent",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
   "Break points converted": {
     scoreType: ["breakpoint"],
     server: "opponent",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
   "Return winners": {
-    ending: "return-winner",
+    returnResult: ["winner"],
     server: "opponent",
     resultOutcome: ["won"],
-    resultPlayer: "you",
   },
-  Winners: { resultOutcome: ["winner"], ending: "winner", resultPlayer: "you" },
+  Winners: { resultEnding: ["winner"], ending: "winner", resultPlayer: "you" },
   "Unforced errors": {
-    resultOutcome: ["error"],
+    resultEnding: ["error"],
     ending: "unforced-error",
     resultPlayer: "you",
   },
-  "Total points won": { resultOutcome: ["won"], resultPlayer: "you" },
+  "Total points won": { resultOutcome: ["won"] },
 };
 
 function youCut(row: H2HRowConfig): FilmCut {
@@ -125,12 +125,20 @@ function oppCut(row: H2HRowConfig): FilmCut {
   return sideCut(row.cut!, "opp", row.sideBy, row.sideWon);
 }
 
-/** A cut with every "you" swapped for "opponent" and back. */
+/**
+ * A cut with every "you" swapped for "opponent" and back, and — since
+ * Outcome is read from the viewer's side — Won swapped for Lost.
+ */
 function mirrored(cut: FilmCut): FilmCut {
   const flip = (v: unknown) =>
     v === "you" ? "opponent" : v === "opponent" ? "you" : v;
+  const flipOutcome = (v: unknown) =>
+    v === "won" ? "lost" : v === "lost" ? "won" : v;
   return Object.fromEntries(
-    Object.entries(cut).map(([k, v]) => [k, flip(v)]),
+    Object.entries(cut).map(([k, v]) => [
+      k,
+      k === "resultOutcome" && Array.isArray(v) ? v.map(flipOutcome) : flip(v),
+    ]),
   ) as FilmCut;
 }
 
@@ -356,7 +364,7 @@ test.describe("a cell opens exactly the points its figure counts", () => {
       MATCH,
       {
         ...EMPTY_MATCH_FILTERS,
-        resultOutcome: ["winner"],
+        resultEnding: ["winner"],
         resultShot: ["Serve"],
         resultPlayer: "you",
       },
@@ -366,6 +374,14 @@ test.describe("a cell opens exactly the points its figure counts", () => {
     expect(
       applyFilmCut(MATCH, MATCH, youCut(row), CTX).map((pt) => pt.id),
     ).toEqual(["ace-you"]);
+    // A pure cut: every key of the cell's cut is a shared filter, so it
+    // lands entirely as pills with no Film-only remainder.
+    const shared = new Set<string>(MATCH_FILTER_KEYS);
+    for (const cut of [youCut(row), oppCut(row)]) {
+      for (const key of Object.keys(cut)) {
+        expect(shared.has(key), `Aces → ${key}`).toBe(true);
+      }
+    }
   });
 
   test("double faults are the server's error on a serve", () => {
@@ -379,6 +395,14 @@ test.describe("a cell opens exactly the points its figure counts", () => {
     const ids = applyFilmCut(MATCH, MATCH, youCut(row), CTX).map((pt) => pt.id);
     expect(ids).not.toContain("ace-you");
     expect(ids).toEqual(["sw-you", "fw-you", "bp-saved", "rw-you"]);
+    // Why the row keeps its Film-only `winner` ending: Result › Ending
+    // "winner" by you alone credits your ace to you as a winner.
+    const endingAlone = applyMatchFilters(
+      MATCH,
+      { ...EMPTY_MATCH_FILTERS, resultEnding: ["winner"], resultPlayer: "you" },
+      CTX,
+    ).map((pt) => pt.id);
+    expect(endingAlone).toContain("ace-you");
   });
 
   test("unforced errors leave the forced ones out", () => {
@@ -403,28 +427,20 @@ test.describe("a cell opens exactly the points its figure counts", () => {
     expect(count(byConfig("Total points won").cut!)).toBe(MATCH.length);
   });
 
-  test("return winners agree with the count, which Result › Return could not", () => {
+  test("return winners agree with the count through Return › Result", () => {
     const row = byConfig("Return winners");
     expect(count(youCut(row))).toBe(you.returnWinners);
     expect(count(oppCut(row))).toBe(opp.returnWinners);
     expect(you.returnWinners).toBe(1);
     // `both` also admits the mislabelled two-shot winner, as it always has.
     expect(count(row.cut!)).toBe(2);
-    // The shared vocabulary finds the return from shot rows, which these
-    // points (like any import without them) do not carry — so it cannot
-    // agree, and the row keeps the Film-only `return-winner` ending.
-    const viaResult = applyMatchFilters(
-      MATCH,
-      {
-        ...EMPTY_MATCH_FILTERS,
-        server: "opponent",
-        resultShot: ["Return"],
-        resultOutcome: ["winner"],
-        resultPlayer: "you",
-      },
-      CTX,
-    );
-    expect(viaResult.length).not.toBe(you.returnWinners);
+    // A pure cut: no key outside the shared filters.
+    const shared = new Set<string>(MATCH_FILTER_KEYS);
+    for (const cut of [row.cut!, youCut(row), oppCut(row)]) {
+      for (const key of Object.keys(cut)) {
+        expect(shared.has(key), `Return winners → ${key}`).toBe(true);
+      }
+    }
   });
 
   test("the count is taken over the shared filters' points", () => {
@@ -577,18 +593,22 @@ function derivedConfig(label: string): H2HRowConfig {
   return row;
 }
 
+/**
+ * The model on an Advantage Intelligence match, as `useMatchFilters()` builds
+ * it there (`match.sourceProvider === "splitstep"`): Serve › Result "Ace" is
+ * `isUnreturnedServe`.
+ */
+const DERIVED_CTX: MatchFilterContext = { ...CTX, isDerived: true };
+
 test.describe("derived (Advantage Intelligence) cuts", () => {
   const derivedAces = derivedConfig("Aces");
   const derivedWinners = derivedConfig("Winners");
 
-  test("the derived Aces row opens the unreturned-serve ending by player", () => {
-    expect(derivedAces.cut).toEqual({
-      resultOutcome: ["winner"],
-      ending: "unreturned-serve",
-    });
-    expect(derivedAces.sideBy).toBe("player");
+  test("the derived Aces row opens Serve › Result Ace by the server", () => {
+    expect(derivedAces.cut).toEqual({ serveResult: ["ace"] });
+    expect(derivedAces.sideBy).toBe("server");
     expect(derivedWinners.cut).toEqual({
-      resultOutcome: ["winner"],
+      resultEnding: ["winner"],
       ending: "rally-winner",
     });
     expect(derivedWinners.sideBy).toBe("player");
@@ -602,8 +622,8 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
       const opened = applyFilmCut(
         MATCH,
         MATCH,
-        sideCut(derivedAces.cut!, who, "player"),
-        CTX,
+        sideCut(derivedAces.cut!, who, "server"),
+        DERIVED_CTX,
       );
       expect(opened.length, who).toBe(tallySide(MATCH, isP1).unreturnedServes);
       expect(opened.every(isUnreturnedServe), who).toBe(true);
@@ -612,36 +632,49 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
       applyFilmCut(
         MATCH,
         MATCH,
-        sideCut(derivedAces.cut!, "you", "player"),
-        CTX,
+        sideCut(derivedAces.cut!, "you", "server"),
+        DERIVED_CTX,
       ).map((pt) => pt.id),
     ).toEqual(["ace-you", "sw-you"]);
   });
 
+  test("the derived Aces cut is pure: it lands entirely as pills", () => {
+    expect(filmCutExtras(derivedAces.cut!)).toBeNull();
+    const known = new Set<string>(MATCH_FILTER_KEYS);
+    for (const key of Object.keys(sideCut(derivedAces.cut!, "you", "server"))) {
+      expect(known.has(key), key).toBe(true);
+    }
+  });
+
   test("the derived Winners cut never shares a point with the derived Aces cut", () => {
     const aces = new Set(
-      applyFilmCut(MATCH, MATCH, derivedAces.cut!, CTX).map((pt) => pt.id),
+      applyFilmCut(MATCH, MATCH, derivedAces.cut!, DERIVED_CTX).map(
+        (pt) => pt.id,
+      ),
     );
     expect(aces.size).toBeGreaterThan(0);
-    const winners = applyFilmCut(MATCH, MATCH, derivedWinners.cut!, CTX).map(
-      (pt) => pt.id,
-    );
+    const winners = applyFilmCut(
+      MATCH,
+      MATCH,
+      derivedWinners.cut!,
+      DERIVED_CTX,
+    ).map((pt) => pt.id);
     for (const id of winners) expect(aces.has(id), id).toBe(false);
-    // And per side.
+    // And per side, each by its own row's side rule.
     for (const who of ["you", "opp"] as const) {
       const a = new Set(
         applyFilmCut(
           MATCH,
           MATCH,
-          sideCut(derivedAces.cut!, who, "player"),
-          CTX,
+          sideCut(derivedAces.cut!, who, derivedAces.sideBy),
+          DERIVED_CTX,
         ).map((pt) => pt.id),
       );
       for (const pt of applyFilmCut(
         MATCH,
         MATCH,
-        sideCut(derivedWinners.cut!, who, "player"),
-        CTX,
+        sideCut(derivedWinners.cut!, who, derivedWinners.sideBy),
+        DERIVED_CTX,
       )) {
         expect(a.has(pt.id), `${who} ${pt.id}`).toBe(false);
       }
@@ -653,7 +686,7 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
       ...MATCH_FILTER_KEYS,
       ...FILM_CUT_EXTRA_KEYS,
     ]);
-    expect(FILM_CUT_EXTRA_KEYS).toEqual(["rallyMin", "rallyMax", "ending"]);
+    expect(FILM_CUT_EXTRA_KEYS).toEqual(["ending"]);
     for (const row of DERIVED_ROWS) {
       if (!row.cut) continue;
       for (const key of Object.keys(row.cut)) {
@@ -667,5 +700,15 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
     expect(
       applyFilmCut(MATCH, MATCH, byConfig("Aces").cut!, CTX).map((pt) => pt.id),
     ).toEqual(["ace-you", "ace-opp"]);
+  });
+
+  test("the SwingVision and derived Aces cuts are one pill, differing only by context", () => {
+    expect(byConfig("Aces").cut).toEqual(derivedAces.cut);
+    // Under the derived context every unreturned serve is an ace.
+    expect(
+      applyFilmCut(MATCH, MATCH, byConfig("Aces").cut!, DERIVED_CTX).map(
+        (pt) => pt.id,
+      ),
+    ).toEqual(["ace-you", "ace-opp", "sw-you"]);
   });
 });

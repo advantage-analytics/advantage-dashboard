@@ -191,7 +191,7 @@ function FilterRailShell({
   const closing = phase === "closing";
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const { filters, setFilters } = useMatchFilters();
+  const { filters, setFilters, filmRemainder } = useMatchFilters();
   const { availability, youName, oppName, total } = useFiltersPanelData();
 
   // Take focus on open so Esc and Tab start inside the drawer. A frame
@@ -253,6 +253,7 @@ function FilterRailShell({
           oppName={oppName}
           countFor={countFor}
           total={total}
+          filmCut={filmRemainder?.label ?? null}
           onApply={(next) => {
             setFilters(next);
             close();
