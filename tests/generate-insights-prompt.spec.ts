@@ -202,7 +202,14 @@ test("the prompt asks for a focus, a short headline and a longer description", a
   expect(headline).toContain("the single most important takeaway");
 
   const description = fieldLine(prompt, "description");
-  expect(description).toContain("longer than the headline");
+  // Two sentences: the evidence, then what to work on. "One or two" let
+  // flash-lite stop at one thin line under the headline.
+  expect(description).toContain(
+    "exactly two sentences, longer than the headline",
+  );
+  expect(description).toContain(
+    "then, in the second sentence, say what to work on",
+  );
   expect(description).toContain("under 350 characters together with it");
   // The description quotes this match's own figures inline — without this
   // flash-lite wrote summaries with no numbers at all.
