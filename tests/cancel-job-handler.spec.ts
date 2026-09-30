@@ -3,6 +3,8 @@ import { expect, test } from "@playwright/test";
 import {
   ALREADY_STARTED_MESSAGE,
   handleCancelJob,
+  MARK_CANCELLED_RETRIES,
+  NOT_READY_MESSAGE,
   readVendorDelete,
   VENDOR_UNAVAILABLE_MESSAGE,
   type CancelJobDeps,
@@ -14,7 +16,9 @@ import {
  * `/api/splitstep/jobs/[jobId]/cancel`'s ladder, run against fakes: no
  * Supabase, no vendor. Every refusal asserts which seams were reached, and
  * above all that `markCancelled` — the row flip and allowance release — never
- * runs unless the vendor answered 2xx.
+ * runs unless the vendor no longer holds the job: a 2xx, or a 404
+ * `JOB_NOT_FOUND` for a row still `submitting|queued`. Never on a 409, a 5xx
+ * or an unreachable vendor.
  */
 
 const VIEWER = "u-player";
@@ -44,6 +48,9 @@ function harness({
   job = jobRow() as CancelJobRow | null,
   vendor = { kind: "removed" } as VendorDeleteOutcome,
   marked = "cancelled" as string | null,
+  /** Per-call answers for `markCancelled`; the last one repeats. Beats `marked`. */
+  markResults = undefined as
+    { status: string | null; error: string | null }[] | undefined,
 } = {}): Harness {
   const calls: string[] = [];
   const vendorIds: string[] = [];
@@ -69,6 +76,11 @@ function harness({
       async markCancelled(jobId, user) {
         calls.push("markCancelled");
         markArgs.push([jobId, user]);
+        if (markResults) {
+          return markResults[
+            Math.min(markArgs.length - 1, markResults.length - 1)
+          ];
+        }
         return { status: marked, error: null };
       },
     },
@@ -126,12 +138,25 @@ test.describe("cancel job handler", () => {
     });
   }
 
-  test("409 already_started for a queued job with no vendor id yet", async () => {
-    const h = harness({ job: jobRow({ external_job_id: null }) });
+  for (const status of ["submitting", "queued"]) {
+    test(`409 not_ready for a ${status} job with no vendor id yet — not "started"`, async () => {
+      const h = harness({ job: jobRow({ status, external_job_id: null }) });
+      const { status: http, body } = await run(h);
+      expect(http).toBe(409);
+      expect(body.code).toBe("not_ready");
+      expect(body.error).toBe(NOT_READY_MESSAGE);
+      expect(h.calls).not.toContain("deleteAtVendor");
+      expect(h.calls).not.toContain("markCancelled");
+    });
+  }
+
+  test("a started job with no vendor id is still already_started", async () => {
+    const h = harness({
+      job: jobRow({ status: "processing", external_job_id: null }),
+    });
     const { status, body } = await run(h);
     expect(status).toBe(409);
     expect(body.code).toBe("already_started");
-    expect(h.calls).not.toContain("deleteAtVendor");
   });
 
   test("vendor 2xx → markCancelled, then 200 { status: cancelled }", async () => {
@@ -161,10 +186,38 @@ test.describe("cancel job handler", () => {
     expect(h.calls).not.toContain("markCancelled");
   });
 
-  test("vendor 404 JOB_NOT_FOUND → 409 not_cancellable", async () => {
+  test("vendor 404 JOB_NOT_FOUND on a still-queued row → markCancelled → 200", async () => {
+    // A repeat click after a first cancel whose DELETE landed but whose row
+    // flip failed: the vendor has dropped the job, so settling our row is
+    // truthful and releases the reservation.
     const h = harness({
       vendor: { kind: "refused", status: 404, code: "JOB_NOT_FOUND" },
     });
+    const { status, body } = await run(h);
+    expect(status).toBe(200);
+    expect(body).toEqual({ status: "cancelled" });
+    expect(h.calls).toEqual([
+      "currentUserId",
+      "loadJob",
+      "deleteAtVendor",
+      "markCancelled",
+    ]);
+    expect(h.markArgs).toEqual([[JOB, VIEWER]]);
+  });
+
+  test("vendor 404 JOB_NOT_FOUND but the row moved on → 409 not_cancellable", async () => {
+    const h = harness({
+      vendor: { kind: "refused", status: 404, code: "JOB_NOT_FOUND" },
+      marked: null,
+    });
+    const { status, body } = await run(h);
+    expect(status).toBe(409);
+    expect(body.code).toBe("not_cancellable");
+    expect(h.calls).toContain("markCancelled");
+  });
+
+  test("a bare vendor 404 without JOB_NOT_FOUND refunds nothing", async () => {
+    const h = harness({ vendor: { kind: "refused", status: 404, code: null } });
     const { status, body } = await run(h);
     expect(status).toBe(409);
     expect(body.code).toBe("not_cancellable");
@@ -195,6 +248,40 @@ test.describe("cancel job handler", () => {
       expect(h.calls).not.toContain("markCancelled");
     });
   }
+
+  test("vendor 2xx, markCancelled errors once, the retry flips it → 200", async () => {
+    const h = harness({
+      markResults: [
+        { status: null, error: "connection reset" },
+        { status: "cancelled", error: null },
+      ],
+    });
+    const { status, body } = await run(h);
+    expect(status).toBe(200);
+    expect(body).toEqual({ status: "cancelled" });
+    expect(h.markArgs).toEqual([
+      [JOB, VIEWER],
+      [JOB, VIEWER],
+    ]);
+    // The vendor is asked once; only the row flip is retried.
+    expect(h.vendorIds).toEqual([EXTERNAL]);
+  });
+
+  test("vendor 2xx but markCancelled keeps erroring → 500 after the retries", async () => {
+    const h = harness({
+      markResults: [{ status: null, error: "connection reset" }],
+    });
+    const { status, body } = await run(h);
+    expect(status).toBe(500);
+    expect(body.code).toBe("internal_error");
+    expect(h.markArgs).toHaveLength(1 + MARK_CANCELLED_RETRIES);
+  });
+
+  test("a row that moved on is an answer, not an error — never retried", async () => {
+    const h = harness({ marked: null });
+    await run(h);
+    expect(h.markArgs).toHaveLength(1);
+  });
 
   test("vendor 2xx but the row moved on → 409 not_cancellable", async () => {
     const h = harness({ marked: null });

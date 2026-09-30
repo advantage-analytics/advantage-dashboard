@@ -176,8 +176,9 @@ export interface MatchAnalysis {
    */
   errorCode?: string;
   /**
-   * Rows in the newest job's resubmission chain, the original included —
-   * `chainAttempts()`. The ceiling input to `classifyFailure()`.
+   * Rows in the newest job's resubmission chain, the original included and
+   * cancelled rows left out — `chainAttempts()`. The ceiling input to
+   * `classifyFailure()`.
    */
   attemptsUsed?: number;
   /**
@@ -354,6 +355,17 @@ export function canRetryAnalysis(analysis: {
 
 /** 1 original + 2 resubmissions. Enforced here and nowhere else. */
 export const MAX_TOTAL_ATTEMPTS = 3;
+
+/**
+ * Whether a job row spends one of the chain's {@link MAX_TOTAL_ATTEMPTS}. A
+ * `cancelled` row does not: the athlete withdrew it from the vendor's queue
+ * before it ran, so cancel → "Send for analysis again" cycles never use up the
+ * retries meant for vendor failures. `resubmitJob()`'s ceiling and
+ * `chainAttempts()` both count through this, so the button and the copy agree.
+ */
+export function countsAsAttempt(status: string | null | undefined): boolean {
+  return status !== "cancelled";
+}
 
 /**
  * The ONE failure class the system retries on its own.
@@ -557,17 +569,23 @@ export function recoveryFields(
 }
 
 /**
- * How many rows the newest job's resubmission chain holds, the original
- * included: its root (walked up `resubmitted_from_job_id`) plus every row
- * descending from that root. Counted among `rows` only — the rows a loader
- * already fetched for one match — so it costs no query.
+ * How many attempts the newest job's resubmission chain has spent, the
+ * original included: its root (walked up `resubmitted_from_job_id`) plus every
+ * row descending from that root, less any `cancelled` row
+ * ({@link countsAsAttempt}) — the same count `resubmitJob()`'s ceiling uses.
+ * A row without a `status` counts. Counted among `rows` only — the rows a
+ * loader already fetched for one match — so it costs no query.
  *
  * An earlier upload for the same match that no link connects is a separate
  * chain and is not counted: it did not spend this chain's attempts. Returns 1
  * when `newestId` is not among `rows`. Cycle-safe.
  */
 export function chainAttempts(
-  rows: readonly { id: string; resubmitted_from_job_id?: string | null }[],
+  rows: readonly {
+    id: string;
+    resubmitted_from_job_id?: string | null;
+    status?: string | null;
+  }[],
   newestId: string,
 ): number {
   // A chain is a tree, so "root plus descendants" is exactly the rows linked
@@ -599,7 +617,11 @@ export function chainAttempts(
       frontier.push(next);
     }
   }
-  return seen.size;
+  let spent = 0;
+  for (const row of rows) {
+    if (seen.has(row.id) && countsAsAttempt(row.status)) spent += 1;
+  }
+  return spent;
 }
 
 export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {

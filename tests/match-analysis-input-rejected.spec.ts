@@ -270,6 +270,18 @@ test("chainAttempts: the newest job's chain only, root plus descendants", () => 
   ).toBe(2);
 });
 
+test("chainAttempts: cancelled rows spend no attempt", () => {
+  // j4 (failed) ← j3 (cancelled) ← j2 (cancelled) ← j1 (failed): the two
+  // cancels were the athlete's decision, not vendor failures.
+  const rows = [
+    { id: "j4", resubmitted_from_job_id: "j3", status: "failed" },
+    { id: "j3", resubmitted_from_job_id: "j2", status: "cancelled" },
+    { id: "j2", resubmitted_from_job_id: "j1", status: "cancelled" },
+    { id: "j1", resubmitted_from_job_id: null, status: "failed" },
+  ];
+  expect(chainAttempts(rows, "j4")).toBe(2);
+});
+
 test("liveAnalysisPatch carries recovery and note through the shared classifier", () => {
   const loader = createLoader({
     stubs: {

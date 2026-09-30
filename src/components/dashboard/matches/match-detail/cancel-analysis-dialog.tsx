@@ -8,7 +8,8 @@
  * red-only-when-something-is-lost rule); the video and the reserved minutes
  * are not, and the body says so. The request is `POST
  * /api/splitstep/jobs/:id/cancel` (T2). A refusal — the vendor started in the
- * meantime (409 `already_started`), the job is past cancelling (409
+ * meantime (409 `already_started`), the hand-off to the vendor has not
+ * finished (409 `not_ready`), the job is past cancelling (409
  * `not_cancellable`), the vendor did not answer (503) — is the route's own
  * sentence, shown in the dialog, which stays open. Who may cancel is decided
  * server-side; nothing here hides the action by role.

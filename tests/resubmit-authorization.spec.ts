@@ -834,3 +834,53 @@ test("a cancelled parent with no video is refused before any blob check", async 
   expectRefused(h, await manual(h), "video_unavailable");
   expect(h.blobChecks).toEqual([]);
 });
+
+// ── The attempt ceiling: cancelled links spend no attempt ────────────────
+
+/** Seed `rows` into the fake beside the parent — earlier links of its chain. */
+function withChain(h: Harness, rows: Row[]): Harness {
+  h.db.tables.processing_jobs.push(
+    ...rows.map((row) => ({
+      match_id: "m-1",
+      auto_resubmitted: false,
+      ...row,
+    })),
+  );
+  return h;
+}
+
+test("a chain with two cancelled links still allows a manual resend", async () => {
+  // j-a (failed) ← j-b (failed) ← j-c (cancelled) ← j-parent (cancelled):
+  // four rows, but only the two failures spent an attempt, so the ceiling of
+  // three is not reached and "Send for analysis again" goes through.
+  const h = withChain(
+    harness({
+      job: parentJob({
+        status: "cancelled",
+        error_code: "CANCELLED",
+        resubmitted_from_job_id: "j-c",
+      }),
+    }),
+    [
+      { id: "j-a", status: "failed", resubmitted_from_job_id: null },
+      { id: "j-b", status: "failed", resubmitted_from_job_id: "j-a" },
+      { id: "j-c", status: "cancelled", resubmitted_from_job_id: "j-b" },
+    ],
+  );
+  const r = await manual(h);
+  expect(r.ok).toBe(true);
+  expect(h.db.inserts).toHaveLength(1);
+  expect(h.db.inserts[0].row.resubmitted_from_job_id).toBe("j-parent");
+  expect(h.sent).toHaveLength(1);
+});
+
+test("three failed attempts still hit the ceiling", async () => {
+  const h = withChain(
+    harness({ job: parentJob({ resubmitted_from_job_id: "j-b" }) }),
+    [
+      { id: "j-a", status: "failed", resubmitted_from_job_id: null },
+      { id: "j-b", status: "failed", resubmitted_from_job_id: "j-a" },
+    ],
+  );
+  expectRefused(h, await manual(h), "attempt_ceiling");
+});

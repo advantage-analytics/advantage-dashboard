@@ -109,6 +109,7 @@ import type { Workspace } from "@/lib/workspace/types";
 
 import {
   classifyFailure,
+  countsAsAttempt,
   isDownloadFailure,
   MAX_TOTAL_ATTEMPTS,
 } from "@/lib/data/match-analysis";
@@ -372,7 +373,7 @@ export async function resubmitJob(params: {
 
   // classifyFailure() is the single source of truth for what a failed row
   // means for recovery (design §4). attemptsUsed is 0 here on purpose: the
-  // attempt-ceiling gate is a separate check below (`chain.length >=
+  // attempt-ceiling gate is a separate check below (`attemptsSpent >=
   // MAX_TOTAL_ATTEMPTS`) that this call must not pre-empt, and
   // classifyFailure() only turns a "failed" row's retry into wait_or_ask once
   // attemptsUsed reaches that ceiling. hasResults is irrelevant for a failed
@@ -459,7 +460,12 @@ export async function resubmitJob(params: {
     };
   }
 
-  if (chain.length >= MAX_TOTAL_ATTEMPTS) {
+  // A cancelled row — the athlete withdrew it from the vendor's queue before
+  // it ran — spends no attempt, so cancel → "Send for analysis again" cycles
+  // never use up the retries meant for vendor failures. `chainAttempts()`
+  // counts the same way, so the "retry" / "wait_or_ask" copy agrees.
+  const attemptsSpent = chain.filter((j) => countsAsAttempt(j.status)).length;
+  if (attemptsSpent >= MAX_TOTAL_ATTEMPTS) {
     return {
       ok: false,
       reason: "attempt_ceiling",
@@ -899,9 +905,17 @@ export async function resubmitJob(params: {
 }
 
 /**
+ * How many links either walk in {@link loadChain} follows. Cancelled rows
+ * spend no attempt, so a chain can run deeper than the attempt ceiling; the
+ * bound only has to outlast any plausible run of cancel → resend cycles while
+ * still stopping a data cycle from spinning the loop.
+ */
+const MAX_CHAIN_DEPTH = 50;
+
+/**
  * Every job in this chain: the root plus all descendants. Returns null on a
- * read error. Bounded — with a ceiling of 3 the loop runs at most a few times,
- * and the bound exists so a data cycle cannot spin it.
+ * read error. Bounded by {@link MAX_CHAIN_DEPTH} so a data cycle cannot spin
+ * it; a normal chain is a handful of rows.
  */
 async function loadChain(
   supabase: SupabaseClient,
@@ -910,7 +924,7 @@ async function loadChain(
   // Up to the root.
   let rootId = from.id;
   let parentId = from.resubmitted_from_job_id;
-  for (let i = 0; parentId && i < 10; i++) {
+  for (let i = 0; parentId && i < MAX_CHAIN_DEPTH; i++) {
     rootId = parentId;
     const { data, error } = await supabase
       .from("processing_jobs")
@@ -935,7 +949,7 @@ async function loadChain(
     rootRow as { id: string; status: string; auto_resubmitted: boolean },
   ];
   let frontier = [rootId];
-  for (let i = 0; frontier.length > 0 && i < 10; i++) {
+  for (let i = 0; frontier.length > 0 && i < MAX_CHAIN_DEPTH; i++) {
     const { data, error } = await supabase
       .from("processing_jobs")
       .select("id, status, auto_resubmitted")

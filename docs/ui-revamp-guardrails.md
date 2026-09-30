@@ -546,11 +546,17 @@ to put a testable seam.
 > - a new `POST /api/splitstep/jobs/[jobId]/cancel` **route + handler** —
 >   "Cancel analysis". `route.ts` is wiring; `handler.ts` holds the ladder:
 >   signed in, a UUID, owns the job (`created_by`, the same 404 for missing and
->   not-yours), still `submitting|queued` with a vendor id, then the vendor's
->   `DELETE {SPLITSTEP_API_URL}/{id}`. Only after a 2xx does the
->   `cancel_processing_job` RPC flip the row and release its **queued**
->   reservation in one transaction; a `409 JOB_NOT_REMOVABLE` (the vendor
->   started) answers "can't be cancelled now" and changes nothing. The RPC is
+>   not-yours), still `submitting|queued` (with no vendor id yet it answers
+>   409 `not_ready`, "still being handed off"), then the vendor's
+>   `DELETE {SPLITSTEP_API_URL}/{id}`. Only when the vendor no longer holds the
+>   job — a 2xx, or a `404 JOB_NOT_FOUND` for a row still `submitting|queued`
+>   — does the `cancel_processing_job` RPC flip the row and release its
+>   **queued** reservation in one transaction (retried twice on a transport
+>   error). The `JOB_NOT_FOUND` branch is what lets a second click recover a
+>   first cancel whose DELETE landed but whose flip failed: the reconciler
+>   never moves a row on `JOB_NOT_FOUND`, so nothing else would. A bare 404
+>   without that code, a `409 JOB_NOT_REMOVABLE` (the vendor started), a 5xx
+>   or no answer change nothing. The RPC is
 >   service-role only and, since `20260930083017`, matches `submitting|queued`
 >   only — the same line as the route — so a started job can never be refunded.
 > - `webhooks/splitstep/route.ts` — **skip.** A `job_completed` that lands for a
@@ -577,6 +583,10 @@ to put a testable seam.
 >   It is **manual only** — `auto` callers (webhook, reconciler, jobs route) are
 >   refused, because the cancel was a person's decision — and skips
 >   `classifyFailure()`, which has nothing to say about a job that did not fail.
+>   A `cancelled` row spends none of the chain's `MAX_TOTAL_ATTEMPTS`
+>   (`countsAsAttempt()`, shared by the ceiling and `chainAttempts()`), so
+>   cancel → resend cycles never use up the retries meant for vendor failures;
+>   `loadChain()`'s walk bound rose from 10 to 50 links to match.
 >   `cancelled` joins `TERMINAL_STATUSES`. `adopt-deliveries.ts` changed a doc
 >   comment only.
 >
