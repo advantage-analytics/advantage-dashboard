@@ -64,9 +64,31 @@ jobs:
       #
       # Chromium only: the config declares no `projects`, so that is the default
       # and the sole browser anything here launches.
-      - name: Install Playwright Chromium
+      #
+      # The browser download is cached, keyed on the installed Playwright
+      # version: on 2026-09-30 an uncached install took 11 minutes instead of
+      # ~30 s and pushed the job past its timeout. A cache hit still installs
+      # the OS libraries (`install-deps`), which the cache cannot carry.
+      - name: Read Playwright version
         if: always()
+        id: playwright-version
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        if: always()
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium
+
+      - name: Install Playwright Chromium
+        if: always() && steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies
+        if: always() && steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       - name: Test
         if: always()
