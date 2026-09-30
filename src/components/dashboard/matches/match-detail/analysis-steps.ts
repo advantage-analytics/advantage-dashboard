@@ -17,6 +17,7 @@
 
 import {
   ANALYSIS_LABEL,
+  formatDuration,
   formatEta,
   isAnalysisFailed,
   isInFlight,
@@ -54,6 +55,9 @@ export const STAGE_NOTE = {
   // the honest version says what is done and does not promise when the rest is.
   processed:
     "Your video came back analyzed and is saved. Turning it into your match stats is still in progress.",
+  // Cancel is only offered while the job waits in the vendor's queue, so no
+  // vendor compute ran and the reserved time went back (T1's RPC).
+  cancelled: "Your video is still stored. Nothing was charged.",
 } as const;
 
 /**
@@ -82,6 +86,7 @@ export const STEPPER_COPY = {
     deriving: "Adding your stats",
     failed: "Analysis didn't finish",
     statsFailed: "Stats couldn't be added",
+    cancelled: "Analysis cancelled",
   },
   steps: {
     videoDone: "Video uploaded",
@@ -92,6 +97,26 @@ export const STEPPER_COPY = {
     analysisDone: "Video analyzed",
     stats: "Stats",
     statsNow: "Adding your stats",
+    cancelled: "Analysis cancelled",
+  },
+  /**
+   * How long the vendor's analysis runs once it starts. Basis: the 6 completed
+   * jobs to date took 45–80 min for 86–124 min of video. Phrased loosely on
+   * purpose — a precise figure would be an invented ETA (banned); revisit if
+   * the spread moves.
+   */
+  aboutAnHour: "about an hour",
+  /** The queued step's quiet escape: the action, then what it gives back. */
+  cancel: {
+    action: "Cancel analysis",
+    consequence: (duration: string) =>
+      `${duration} goes back to this month's analysis time`,
+  },
+  /** The cancelled step's way back: the action, then what it costs. */
+  resend: {
+    action: "Send for analysis again",
+    consequence: (duration: string) =>
+      `Uses about ${duration} of this month's analysis time`,
   },
 } as const;
 
@@ -99,12 +124,31 @@ export const STEPPER_COPY = {
 
 export type AnalysisStepKey = "saved" | "video" | "analysis" | "stats";
 
+/**
+ * A quiet text action under a step's note, and the time it moves. The seconds
+ * are `reservedSeconds`; absent, the action still draws without its
+ * consequence line — a guessed duration would be an invented figure.
+ */
+export interface StepAction {
+  reservedSeconds?: number;
+}
+
 /** What sits under a step's label. At most one step in a view has a body. */
 export type AnalysisStepBody =
   /** The transfer: a measured bar, an estimate once one exists, the notes. */
   | { kind: "upload"; percent: number; eta?: string }
-  /** One quiet line of reassurance. */
-  | { kind: "note"; text: string }
+  /**
+   * One quiet line of reassurance; then, on the match page only, the timing
+   * line (`meta`) and at most one action — Cancel while queued, resend once
+   * cancelled. `drawerAnalysisStepsView` drops all three.
+   */
+  | {
+      kind: "note";
+      text: string;
+      meta?: string;
+      cancel?: StepAction;
+      resend?: StepAction;
+    }
   /** The step that stopped: why, what it means, and the one fix. */
   | {
       kind: "failure";
@@ -129,6 +173,64 @@ export interface AnalysisStepsView {
   steps: AnalysisStepView[];
   /** The recovery class the failing step carries, if any step failed. */
   failure?: { step: AnalysisStepKey; recovery: RecoveryClass };
+}
+
+// ── Timing line ─────────────────────────────────────────────────────────────
+
+/** Seconds since `iso` on the view's clock; undefined before it ticks. */
+function secondsSince(
+  iso: string | undefined,
+  now: number | null,
+): number | undefined {
+  if (!iso || now === null) return undefined;
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return undefined;
+  return Math.max(0, (now - at) / 1000);
+}
+
+/** "12 min ago", or "just now" inside the first minute. */
+function ago(seconds: number): string {
+  return seconds < 60 ? "just now" : `${formatDuration(seconds)} ago`;
+}
+
+/**
+ * Segments joined with " · ", each already sentence case (a capital after
+ * every dot). A segment that needs the clock is simply absent until it ticks.
+ */
+function metaLine(...segments: (string | undefined)[]): string | undefined {
+  const kept = segments.filter((s): s is string => Boolean(s));
+  return kept.length > 0 ? kept.join(" · ") : undefined;
+}
+
+function queuedMeta(analysis: MatchAnalysis, now: number | null) {
+  const waited = secondsSince(analysis.queuedAt, now);
+  return metaLine(
+    waited === undefined
+      ? undefined
+      : waited < 60
+        ? "Waiting under a minute"
+        : `Waiting ${formatDuration(waited)}`,
+    `Takes ${STEPPER_COPY.aboutAnHour} once it starts`,
+  );
+}
+
+function processingMeta(analysis: MatchAnalysis, now: number | null) {
+  const ran = secondsSince(analysis.vendorStartedAt, now);
+  return metaLine(
+    ran === undefined ? undefined : `Started ${ago(ran)}`,
+    `Usually done in ${STEPPER_COPY.aboutAnHour}`,
+  );
+}
+
+function cancelledMeta(analysis: MatchAnalysis, now: number | null) {
+  // The cancel is the row's last write, so `updated_at` is when it happened.
+  const since = secondsSince(analysis.updatedAt, now);
+  return metaLine(
+    since === undefined ? undefined : `Cancelled ${ago(since)}`,
+    analysis.reservedSeconds === undefined
+      ? undefined
+      : `${formatDuration(analysis.reservedSeconds)} returned`,
+  );
 }
 
 // ── Mapping ─────────────────────────────────────────────────────────────────
@@ -301,7 +403,12 @@ export function analysisStepsView(
             // Current, but nothing is running until the vendor picks it up —
             // `processing` below is where the spinner starts.
             state: "wait",
-            body: { kind: "note", text: STAGE_NOTE.queued },
+            body: {
+              kind: "note",
+              text: STAGE_NOTE.queued,
+              meta: queuedMeta(analysis, now),
+              cancel: { reservedSeconds: analysis.reservedSeconds },
+            },
           },
           STATS_LATER,
         ],
@@ -317,7 +424,13 @@ export function analysisStepsView(
             key: "analysis",
             label: STEPPER_COPY.steps.analyzing,
             state: "now",
-            body: { kind: "note", text: STAGE_NOTE.processing },
+            // No Cancel: the vendor has started, and its DELETE refuses a
+            // running job (T2's `already_started`).
+            body: {
+              kind: "note",
+              text: STAGE_NOTE.processing,
+              meta: processingMeta(analysis, now),
+            },
           },
           STATS_LATER,
         ],
@@ -415,6 +528,29 @@ export function analysisStepsView(
       };
     }
 
+    case "cancelled":
+      // Stopped by the player while it waited in line: grey, not failed —
+      // nothing went wrong — and the way back is one quiet action.
+      return {
+        title: STEPPER_COPY.titles.cancelled,
+        steps: [
+          SAVED,
+          VIDEO_DONE,
+          {
+            key: "analysis",
+            label: STEPPER_COPY.steps.cancelled,
+            state: "stopped",
+            body: {
+              kind: "note",
+              text: STAGE_NOTE.cancelled,
+              meta: cancelledMeta(analysis, now),
+              resend: { reservedSeconds: analysis.reservedSeconds },
+            },
+          },
+          STATS_LATER,
+        ],
+      };
+
     // Terminal states never reach this card (the page renders instead); if
     // one does, every step is simply done.
     default:
@@ -480,7 +616,8 @@ export interface DrawerAnalysisStepsView {
  * - uploading: the floored percent as the step's value, and no body (no bar,
  *   no estimate, no notes — the match page has those);
  * - a running step: `STAGE_NOTE`'s line, except processing, which reads
- *   `DRAWER_PROCESSING_NOTE`;
+ *   `DRAWER_PROCESSING_NOTE` — and never the page's timing line or its
+ *   Cancel/resend action: those are the match page's alone;
  * - the stopped step, a stalled hand-off included: with `canAct`, headline
  *   `note ?? title` and the class's drawer body (a stalled retry reads
  *   `STALLED_RETRY_COPY`); without it, `DRAWER_NO_ACTION_TITLE` and

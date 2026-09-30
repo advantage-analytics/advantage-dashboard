@@ -22,6 +22,7 @@ const INK: Record<StepState, string> = {
   later: "var(--ink-600)",
   done: "var(--ink-500)",
   fail: "var(--ink-900)",
+  stopped: "var(--ink-500)",
 };
 
 export function AnalysisStatusLine({

@@ -56,6 +56,13 @@ test.describe("matchPageKind", () => {
     }
   }
 
+  test("cancelled draws the steps — the cancelled view, never empty stat sections", () => {
+    expect(matchPageKind({ status: "cancelled" })).toBe("steps");
+    expect(
+      matchPageKind({ status: "cancelled", recovery: "stats_unavailable" }),
+    ).toBe("steps");
+  });
+
   test("derivation_failed + stats_unavailable draws the report", () => {
     expect(
       matchPageKind({

@@ -6,7 +6,11 @@ import { cn } from "@/lib/utils";
 
 /**
  * A step's progress state: done, running now, the current step but waiting on
- * someone else, not started yet, or failed.
+ * someone else, not started yet, failed, or stopped on purpose.
+ *
+ * `stopped` is a step the player ended — an analysis cancelled while it waited
+ * in the queue. The Failed chip's shape in grey: nothing went wrong, so it
+ * must not borrow the danger red.
  *
  * `wait` is the queued step: it IS where the job is (dark label, like `now`),
  * but nothing is running, so it must not spin. It wears the dashed "waiting
@@ -22,7 +26,7 @@ import { cn } from "@/lib/utils";
  * there; it is specific to that screen. Only the generic row and its dot are
  * shared here.
  */
-export type StepState = "done" | "now" | "wait" | "later" | "fail";
+export type StepState = "done" | "now" | "wait" | "later" | "fail" | "stopped";
 
 /**
  * Inline colour: DS type classes are unlayered and beat Tailwind utilities.
@@ -35,6 +39,7 @@ export const LABEL_INK: Record<StepState, string> = {
   wait: "var(--ink-900)",
   later: "var(--ink-400)",
   fail: "var(--ink-900)",
+  stopped: "var(--ink-900)",
 };
 
 /**
@@ -167,6 +172,19 @@ export function StepMark({
             aria-hidden="true"
           />
           <span className="sr-only">Failed:</span>
+        </span>
+      );
+    case "stopped":
+      return (
+        <span
+          className={`flex ${box} items-center justify-center rounded-full bg-[var(--ink-100)]`}
+        >
+          <X
+            className={`${glyph} text-[var(--ink-600)]`}
+            strokeWidth={2.25}
+            aria-hidden="true"
+          />
+          <span className="sr-only">Cancelled:</span>
         </span>
       );
     case "wait":

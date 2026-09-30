@@ -62,3 +62,15 @@ is the runner's. Newest entries at the bottom.
 
 1. Old `?analysis=No+video` bookmarks now match no group (the grep criterion forbids an alias).
 2. The help page's `ANALYSIS_JOURNEY` could add rows for Cancelled and Not analyzed.
+
+## T6 · Stepper timing, the quiet Cancel group and the cancelled view — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `analysisStepsView`: queued/processing timing lines, `cancel`/`resend` on note bodies, new cancelled view (stopped step, note, "Cancelled N min ago · 1h 29m returned", "Send for analysis again"); drawer strips them. `analysis-steps-column.tsx`: clock covers queued/processing/cancelled, 11px timing line, `QuietAction` text buttons (Cancel red hover, resend blue hover, consequence line via aria-describedby), optional `onCancel`/`onResend`. `matchPageKind` sends `cancelled` to the steps view (from T4's follow-up; guardrails §3.3 note added). New shared `formatDuration` (used by `formatEta`), `STEPPER_COPY.aboutAnHour` with its basis. StepState `stopped` added (T5 will rebase onto it). Design preview gains a cancelled board. Runner note: the dispatch prompt carried a literal `TASKBLOCK` placeholder; the worker read T6 from the queue file, and the reviewer judged against the real block.
+
+**follow-ups:**
+
+1. On a live page the clock starts empty (existing spec pins one Date.now from the interval), so for the first ~10 s the timing line shows only its clock-free half ("Takes about an hour once it starts").
+2. "Cancelled N min ago" is measured from `updatedAt`, assuming the cancel is the row's last write.
+3. T5 retry must reconcile with the `stopped` state added here (LABEL_INK.stopped = ink-900, INK.stopped = ink-500).

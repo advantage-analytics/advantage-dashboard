@@ -50,6 +50,8 @@ type ColumnProps = {
   matchId: string;
   match: MatchLineProps;
   snapshotAt?: number;
+  onCancel?: () => void;
+  onResend?: () => void;
 };
 const { AnalysisSteps } = loader.load(COLUMN) as {
   AnalysisSteps: React.ComponentType<ColumnProps>;
@@ -278,4 +280,122 @@ test("/design renders every variant through the column, with no card", () => {
   expect(count(html, "Maya Chen vs Sofia Alvarez · Won ")).toBe(variants);
   for (const gone of ["--radius-card", "--shadow-card", "--border-card", "<dl"])
     expect(html).not.toContain(gone);
+});
+
+// ── The timing line and the quiet actions (T6) ──────────────────────────────
+
+const QUEUED: MatchAnalysis = {
+  ...BASE,
+  status: "queued",
+  queuedAt: minutesAgo(12),
+  reservedSeconds: 5340,
+};
+const PROCESSING: MatchAnalysis = {
+  ...BASE,
+  status: "processing",
+  queuedAt: minutesAgo(40),
+  vendorStartedAt: minutesAgo(18),
+  reservedSeconds: 5340,
+};
+const CANCELLED: MatchAnalysis = {
+  ...BASE,
+  status: "cancelled",
+  updatedAt: minutesAgo(4),
+  reservedSeconds: 5340,
+};
+
+function renderWith(analysis: MatchAnalysis) {
+  return renderToStaticMarkup(
+    React.createElement(AnalysisSteps, {
+      analysis,
+      matchId: MATCH_ID,
+      match: MATCH,
+      snapshotAt: NOW,
+      onCancel: () => {},
+      onResend: () => {},
+    }),
+  );
+}
+
+const META =
+  '<p class="text-[11px] leading-4 text-[var(--ink-400)] tabular-nums">';
+
+/** The quiet action's button and the line its `aria-describedby` names. */
+function quietAction(li: string, label: string) {
+  const button = li.match(
+    new RegExp(`<button[^>]*>${escape(label)}</button>`),
+  )?.[0];
+  if (!button) throw new Error(`no "${label}" action`);
+  const describedBy = button.match(/aria-describedby="([^"]+)"/)?.[1];
+  if (!describedBy) throw new Error("action is not described");
+  const line = li.match(
+    new RegExp(`<p id="${describedBy}"[^>]*>([^<]*)</p>`),
+  )?.[1];
+  return { button, line };
+}
+
+test("queued: the timing line 8px under the note, then the Cancel group 20px below", () => {
+  const li = items(renderWith(QUEUED))[2];
+  // The note and its meta, grouped at gap-2 (8px).
+  expect(li).toContain(
+    `<div class="flex flex-col gap-2"><p class="${"text-[12px] leading-[1.55] text-[var(--ink-600)]"}">`,
+  );
+  expect(li).toContain(
+    `${META}Waiting 12 min · Takes about an hour once it starts</p>`,
+  );
+
+  const { button, line } = quietAction(li, "Cancel analysis");
+  expect(line).toBe("1h 29m goes back to this month&#x27;s analysis time");
+  // 20px below, the pair 8px apart.
+  expect(li).toContain('<div class="mt-5 flex flex-col items-start gap-2">');
+  // 12/500 ink-700, red on hover — a text action, no chrome.
+  for (const cls of [
+    'type="button"',
+    "cursor-pointer",
+    "text-[12px]",
+    "font-medium",
+    "text-[var(--ink-700)]",
+    "hover:text-[var(--danger)]",
+  ])
+    expect(button).toContain(cls);
+  for (const chrome of ["bg-", "border", "shadow", "px-", "py-", "h-8", "h-9"])
+    expect(button).not.toContain(chrome);
+  // The consequence line: 11px ink-400.
+  expect(li).toMatch(
+    /<p id="[^"]+" class="text-\[11px\] leading-4 text-\[var\(--ink-400\)\] tabular-nums">/,
+  );
+  expect(li).not.toContain("Send for analysis again");
+});
+
+test("processing: the started line, and no Cancel group", () => {
+  const html = renderWith(PROCESSING);
+  expect(html).toContain(
+    `${META}Started 18 min ago · Usually done in about an hour</p>`,
+  );
+  expect(html).not.toContain("Cancel analysis");
+  expect(html).not.toContain("<button");
+});
+
+test("cancelled: a stopped step, its timing, and the resend action in blue", () => {
+  const html = renderWith(CANCELLED);
+  expect(html).toMatch(/<h1[^>]*>Analysis cancelled<\/h1>/);
+  const li = items(html)[2];
+  // The grey stopped mark, never the Failed chip's red.
+  expect(li).toContain('<span class="sr-only">Cancelled:</span>');
+  expect(li).not.toContain("--danger");
+  expect(li).toContain("Your video is still stored. Nothing was charged.");
+  expect(li).toContain(`${META}Cancelled 4 min ago · 1h 29m returned</p>`);
+
+  const { button, line } = quietAction(li, "Send for analysis again");
+  expect(line).toBe("Uses about 1h 29m of this month&#x27;s analysis time");
+  expect(button).toContain("hover:text-[var(--blue-hover)]");
+  expect(html).not.toContain("Cancel analysis");
+});
+
+test("before the clock ticks, the timing line keeps only its clock-free segment", () => {
+  const html = render(QUEUED, null);
+  expect(html).toContain(`${META}Takes about an hour once it starts</p>`);
+  expect(html).not.toContain("Waiting 12 min");
+  // The Cancel group needs no clock.
+  expect(html).toContain("Cancel analysis");
 });

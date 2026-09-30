@@ -642,6 +642,10 @@ When `isInFlight(status) || isAnalysisFailed(status)`, the page renders hero +
 summary + `AnalysisSteps` and **returns early**. Keep that gate. Every
 stat section below it would draw zeroes.
 
+`cancelled` (a job the player cancelled while it waited in the queue) takes the
+same early return through `matchPageKind()`: nothing was analysed, and the
+stepper's cancelled view is where "Send for analysis again" lives.
+
 **Since 2026-09-28, the gate has exactly one exemption.** A failed status whose
 recovery class (`classifyFailure()`, `src/lib/data/match-analysis.ts`) is
 `stats_unavailable` — a derivation that deterministically refused the vendor's

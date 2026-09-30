@@ -87,7 +87,7 @@ ready).
 
 ## T6 · Stepper timing, the quiet Cancel group and the cancelled view
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4
 - **files:** src/components/dashboard/matches/match-detail/analysis-steps.ts, src/components/dashboard/matches/match-detail/analysis-steps-column.tsx, src/lib/data/match-analysis-server.ts (formatWindow, if exported/moved), src/app/design/analysis-steps-preview.tsx, tests/analysis-steps-view.spec.ts, tests/analysis-steps-column.spec.ts
