@@ -131,12 +131,16 @@ test("the summary instruction asks for 2-3 sentences under 350 characters", asyn
   expect(prompt).not.toContain("600");
   expect(prompt).not.toContain("4-5");
 
-  // The rules around the length are unchanged.
+  // The report card shows the first sentence as a headline and the rest as
+  // its description (`splitInsight`), so the headline is the short one and
+  // the description stays on the headline's point.
   expect(summaryLine).toContain(
-    "The first sentence is the single most important takeaway from this match",
+    "The first sentence is the headline: the single most important takeaway from this match",
   );
+  expect(summaryLine).toContain("under 90 characters and with no figures");
+  expect(summaryLine).toContain("longer than the headline");
   expect(summaryLine).toContain(
-    "the rest gives the evidence and what to focus on next",
+    "stay on that same takeaway rather than raising a second topic",
   );
   expect(summaryLine).toContain("Do not greet them");
   expect(summaryLine).toContain("do not use markdown headers or bullet points");
@@ -144,7 +148,7 @@ test("the summary instruction asks for 2-3 sentences under 350 characters", asyn
   // The summary quotes this match's own figures inline — without this line
   // flash-lite wrote summaries with no numbers at all.
   expect(summaryLine).toContain(
-    "Quote the one or two percentages from THIS match",
+    "quote the one or two percentages from THIS match",
   );
   expect(summaryLine).toContain("as digits with a percent sign");
   expect(prompt).not.toContain("WITHOUT printing raw numbers");
