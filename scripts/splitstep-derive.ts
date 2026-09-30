@@ -92,9 +92,14 @@ async function main() {
   }
   console.log(`folded sets: ${JSON.stringify(r.foldedSets)}`);
   console.log(`unresolved points: ${r.unresolvedPoints.length}`);
-  if (t.guessedTailRallies.length > 0) {
+  if (t.frozenRallies.length > 0) {
     console.log(
-      `guessed tail rallies (score stream reset, winner_guessed): ${t.guessedTailRallies.join(", ")}`,
+      `frozen score rallies (games read from the serve, score_frozen): ${t.frozenRallies.join(", ")}`,
+    );
+  }
+  if (t.guessedRallies.length > 0) {
+    console.log(
+      `guessed rallies (no readable score, winner_guessed): ${t.guessedRallies.join(", ")}`,
     );
   }
   console.log(

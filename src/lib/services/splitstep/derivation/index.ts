@@ -75,8 +75,15 @@
  * `tiebreak_score_off_six_all` (tiebreak point scores while games are not
  * 6-6 — Quan v Harazaki's real 5-7 set) and `score_side_mismatch` (points
  * played in the game say one court, the server's stance says the other).
+ * 0.7.0 (2026-09-30) stops refusing a match for points the score stream
+ * cannot resolve. A run of 8+ identical score readings (frozen.ts) is split
+ * into games from the serve's end and court, the server alternating game by
+ * game and the strokes relabelled to match; its points take the last stroke's
+ * guess, flagged `winner_guessed` + `score_frozen`, with null score columns.
+ * A shorter stall inside a game keeps the vendor's game and guesses the same
+ * way. Job ac56ef8b (Quan v Balciunas) froze for all of set two.
  */
-export const DERIVATION_VERSION = "0.6.0-unreconciled";
+export const DERIVATION_VERSION = "0.7.0-unreconciled";
 
 export type {
   RawSplitStepStroke,
@@ -117,6 +124,14 @@ export {
   collapsedTailStart,
   type RallyGrouping,
 } from "./rallies";
+
+export {
+  FROZEN_MIN_RALLIES,
+  frozenStretches,
+  frozenGameStarts,
+  withServer,
+  type FrozenStretch,
+} from "./frozen";
 
 export {
   serveBracket,
