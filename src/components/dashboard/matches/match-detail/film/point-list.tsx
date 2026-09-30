@@ -20,7 +20,10 @@ import {
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { Workspace } from "@/lib/workspace/types";
-import { handOf } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import {
+  handOf,
+  pointResultLabel,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import type { Hand } from "@/components/dashboard/matches/match-detail/match-filters/shot-geometry";
 import type { MatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
@@ -34,6 +37,7 @@ import { FilmAdvancedPanel } from "./film-advanced-panel";
 import { reducedMotionNow } from "./film-motion";
 import { FilmQuickFilters } from "./film-quick-filters";
 import {
+  pointDetail,
   rallyNumbering,
   shotRowAriaLabel,
   shotRowCells,
@@ -365,6 +369,11 @@ export const PointList = memo(function PointList({
   // on personal, the program's crest on a team — so a point you decided reads
   // as yours at a glance; the opponent's rows keep their initials.
   const { active: workspace } = useWorkspace();
+  // A row's words are the filters' own: an unreturned serve is named "Ace"
+  // on a derived match (`pointResultLabel`), as the head-to-head Aces row
+  // that opens it counts it, and its direction reads Inside Out / Inside In
+  // by the hitter's hand (`pointDetail`), as Custom › Direction selects it.
+  const { context: labelContext } = useMatchFilters();
 
   const filtered = filmListActive(filmFilters);
 
@@ -763,6 +772,8 @@ export const PointList = memo(function PointList({
                         <Fragment key={point.id}>
                           <PointRow
                             point={point}
+                            title={pointResultLabel(point, labelContext)}
+                            detail={pointDetail(point, labelContext.hands)}
                             isYou={isYou}
                             initials={
                               isYou ? sides.you.initials : sides.opp.initials
@@ -1105,6 +1116,8 @@ const ROW_TONE = {
  */
 export const PointRow = memo(function PointRow({
   point,
+  title,
+  detail,
   isYou,
   initials,
   workspace,
@@ -1118,6 +1131,10 @@ export const PointRow = memo(function PointRow({
   tone = "light",
 }: {
   point: MatchPoint;
+  /** The row's name — `pointResultLabel`, never the raw result type. */
+  title: string;
+  /** The row's second line — `pointDetail`. */
+  detail: string;
   isYou: boolean;
   initials: string;
   /** The active workspace, whose mark leads the viewer's own rows. */
@@ -1148,9 +1165,7 @@ export const PointRow = memo(function PointRow({
       // something a test can assert on without pinning a token's value.
       data-point-id={point.id}
       data-playing={isActive ? "true" : undefined}
-      aria-label={
-        seekable ? `${point.resultType} — jump to this point` : undefined
-      }
+      aria-label={seekable ? `${title} — jump to this point` : undefined}
       // A Shift-held press would otherwise extend the document's selection
       // from wherever the last caret was, so the ⇧-click that opens the room
       // leaves a band of highlighted rows behind it. Suppressed only while
@@ -1198,9 +1213,9 @@ export const PointRow = memo(function PointRow({
       </span>
 
       <span className="flex min-w-0 flex-col gap-px">
-        <span className={t.title}>{point.resultType || "Point"}</span>
+        <span className={t.title}>{title}</span>
         <span className={t.detail} style={t.detailStyle}>
-          {point.description}
+          {detail}
         </span>
       </span>
 

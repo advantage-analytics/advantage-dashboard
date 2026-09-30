@@ -4,6 +4,8 @@ import { Check, Eye, EyeOff, Minus, UserCheck } from "lucide-react";
 import { HelpToc } from "./help-toc";
 import { Kbd } from "@/components/ui/kbd";
 import { ANALYSIS_LABEL } from "@/lib/data/match-analysis";
+import { AnalysisStatusLine } from "@/components/dashboard/shared/analysis-status-line";
+import type { StepState } from "@/components/dashboard/shared/vertical-steps";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 
 const SWINGVISION_TROUBLESHOOTING_URL =
@@ -41,22 +43,13 @@ const sectionScrollMt = "scroll-mt-[88px] lg:scroll-mt-[72px]";
  * by that name and it is a different thing: the weighted segments of the
  * progress bar, four of them, sized by how long each takes.
  */
-const ANALYSIS_JOURNEY: { label: string; tone: StatusTone }[] = [
-  { label: ANALYSIS_LABEL.uploading, tone: "blue" },
-  { label: ANALYSIS_LABEL.queued, tone: "neutral" },
-  { label: ANALYSIS_LABEL.processing, tone: "blue" },
-  { label: ANALYSIS_LABEL.deriving, tone: "blue" },
-  { label: ANALYSIS_LABEL.completed, tone: "win" },
+const ANALYSIS_JOURNEY: { label: string; mark: StepState }[] = [
+  { label: ANALYSIS_LABEL.uploading, mark: "now" },
+  { label: ANALYSIS_LABEL.queued, mark: "wait" },
+  { label: ANALYSIS_LABEL.processing, mark: "now" },
+  { label: ANALYSIS_LABEL.deriving, mark: "now" },
+  { label: ANALYSIS_LABEL.completed, mark: "done" },
 ];
-
-/** Tones from the design system's StatusChip: blue in flight, win at the end. */
-type StatusTone = "blue" | "neutral" | "win";
-
-const STATUS_TONE: Record<StatusTone, string> = {
-  blue: "text-[var(--blue)]",
-  neutral: "text-[var(--ink-500)]",
-  win: "text-[var(--success)]",
-};
 
 const INTELLIGENCE_REQUIREMENTS = [
   "Singles only",
@@ -409,21 +402,14 @@ export default function HelpCenterPage() {
 
               <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
                 <span className={blockLabelClass}>After you submit</span>
-                {/* Dot + label, no container — the design system's StatusChip
-                    is "quiet inline dot + sentence-case text", and a row of
-                    filled pills would read as five buttons. */}
+                {/* The tables' own mark + word (`AnalysisStatusLine`), so this
+                    legend reads exactly as the Matches and Roster cells do. */}
                 <ol className="flex flex-wrap items-center gap-2.5">
                   {ANALYSIS_JOURNEY.map((stage, index) => (
                     <li key={stage.label} className="flex items-center gap-2.5">
-                      <span
-                        className={`inline-flex items-center gap-1.5 text-[11px] leading-none whitespace-nowrap ${STATUS_TONE[stage.tone]}`}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="size-[5px] shrink-0 rounded-full bg-current"
-                        />
+                      <AnalysisStatusLine mark={stage.mark}>
                         {stage.label}
-                      </span>
+                      </AnalysisStatusLine>
                       {index < ANALYSIS_JOURNEY.length - 1 && (
                         <span
                           aria-hidden="true"

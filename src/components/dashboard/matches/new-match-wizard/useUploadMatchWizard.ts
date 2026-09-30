@@ -74,8 +74,11 @@ import {
   VideoProbeSummary,
   DEFAULT_FORM_DATA,
   STEP_ORDER_BY_KIND,
+  NO_FORMAT_DEFAULTS,
   presetLineKey,
+  workspaceFormatDefaults,
   type EventPreset,
+  type WorkspaceFormatDefaults,
   type LineOffer,
   type MatchDraft,
   type IdentityMatchStatus,
@@ -517,6 +520,8 @@ export interface UseUploadMatchWizardReturn {
   error: string | null;
   uploadError: string | null;
   formData: MatchFormData;
+  /** Tags a stored form with its workspace — `saveFormDataToStorage`. */
+  storageWorkspaceKey: string;
   parsingState: ParsingState;
   importIdentity: ImportIdentityState;
 
@@ -758,10 +763,14 @@ function getCurrentTime(): string {
   return now.toTimeString().slice(0, 5);
 }
 
-// Get default form data with current date/time
-function getDefaultFormData(): MatchFormData {
+// Get default form data with current date/time, plus the format answers a
+// college team workspace pre-selects (`workspaceFormatDefaults`).
+function getDefaultFormData(
+  formatDefaults: WorkspaceFormatDefaults,
+): MatchFormData {
   return {
     ...DEFAULT_FORM_DATA,
+    ...formatDefaults,
     date: getCurrentDate(),
     time: getCurrentTime(),
   };
@@ -786,6 +795,13 @@ export function useUploadMatchWizard({
   // server-side once per request by the dashboard layout, so reading it here
   // costs nothing and cannot disagree with the sidebar's switcher.
   const { active: activeWorkspace, viewer } = useWorkspace();
+  // No-ad and play-on lets come pre-selected in a college team workspace. Not
+  // in the admin console, which has its own scoring control and presets.
+  const formatDefaults = isAdminMode
+    ? NO_FORMAT_DEFAULTS
+    : workspaceFormatDefaults(activeWorkspace);
+  // Tags the autosaved form, so its format answers stay in this workspace.
+  const storageWorkspaceKey = `${activeWorkspace.kind}:${activeWorkspace.id}`;
 
   /**
    * The source the wizard opens on before localStorage can be read — the
@@ -840,7 +856,9 @@ export function useUploadMatchWizard({
   const [error, setError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isPrivateMatch] = useState(true);
-  const [formData, setFormData] = useState<MatchFormData>(getDefaultFormData);
+  const [formData, setFormData] = useState<MatchFormData>(() =>
+    getDefaultFormData(formatDefaults),
+  );
   /**
    * Must step 1 ask WHO PLAYED? Only a team workspace with no preset: the
    * personal wizard's uploader IS the player, and a preset arrives with the
@@ -1047,7 +1065,7 @@ export function useUploadMatchWizard({
     identityComparison && parsedImport
       ? buildImportIdentityConfirmationKey({
           ...identityComparison,
-          workspaceId: `${activeWorkspace.kind}:${activeWorkspace.id}`,
+          workspaceId: storageWorkspaceKey,
           fileGenerationId: `${selectedProvider}:${parsedImport.generation}`,
         })
       : null;
@@ -1341,11 +1359,11 @@ export function useUploadMatchWizard({
   useEffect(() => {
     if (!open || admin) return;
     const handle = window.setTimeout(() => {
-      saveFormDataToStorage(formData);
+      saveFormDataToStorage(formData, storageWorkspaceKey);
       setLastChangedAt(Date.now());
     }, 400);
     return () => window.clearTimeout(handle);
-  }, [open, formData, admin]);
+  }, [open, formData, admin, storageWorkspaceKey]);
 
   const saveDraft = useCallback(async (): Promise<boolean> => {
     if (admin) return false;
@@ -1503,14 +1521,27 @@ export function useUploadMatchWizard({
             ? surfaceToCourtType(preset.surface)
             : prev.courtType,
           bestOf: String(preset.bestOf),
-          adScoring: preset.adScoring ?? undefined,
-          // College matches (dual or tournament lines) play lets out by
-          // default — see recordResult's format.play_on_lets. A personal
-          // upload never reaches this branch, so DEFAULT_FORM_DATA's `false`
-          // stands for it.
+          // An event that declared its scoring owns it; one that declared
+          // nothing defaults to no-ad in a college workspace when the line is
+          // (re)opened, and stays unanswered elsewhere. As with Lets below, a
+          // resumed draft's saved answer stands on its first seed. A re-run
+          // for the SAME line keeps the live answer only when it was the
+          // coach's — an event that withdrew its declaration resets it.
+          adScoring:
+            preset.adScoring ??
+            (firstSeed || swapped || previousPreset?.adScoring != null
+              ? ((firstSeed ? draft?.formData?.adScoring : undefined) ??
+                formatDefaults.adScoring)
+              : prev.adScoring),
+          // College matches (dual or tournament lines, or any line in a
+          // college workspace) play lets out by default — see recordResult's
+          // format.play_on_lets. A personal upload never reaches this branch,
+          // so DEFAULT_FORM_DATA's `false` stands for it.
           playOnLets:
             defaultLets &&
-            (preset.eventKind === "dual" || preset.eventKind === "tournament")
+            (formatDefaults.playOnLets ||
+              preset.eventKind === "dual" ||
+              preset.eventKind === "tournament")
               ? true
               : // A resumed draft's saved answer on its first seed; after that
                 // the live value — `base` re-spreads the draft, which would
@@ -1559,7 +1590,7 @@ export function useUploadMatchWizard({
           ? (draft.provider as ProviderId)
           : DEFAULT_PROVIDER_ID;
       setSelectedProvider(draftProvider);
-      setFormData({ ...getDefaultFormData(), ...draft.formData });
+      setFormData({ ...getDefaultFormData(formatDefaults), ...draft.formData });
       if (draft.attachedLine) {
         attachedLineRef.current = draft.attachedLine;
         setAttachedLine(draft.attachedLine);
@@ -1579,7 +1610,10 @@ export function useUploadMatchWizard({
     if (isAdminMode) {
       setSelectedProvider(initialProvider ?? DEFAULT_PROVIDER_ID);
       if (seededPlayerName)
-        setFormData({ ...getDefaultFormData(), playerName: seededPlayerName });
+        setFormData({
+          ...getDefaultFormData(formatDefaults),
+          playerName: seededPlayerName,
+        });
       return;
     }
     const existingProvider = localStorage.getItem(
@@ -1610,7 +1644,7 @@ export function useUploadMatchWizard({
       startingProvider === existingProvider;
     if (startingProvider) setSelectedProvider(startingProvider);
 
-    const storedFormData = loadFormDataFromStorage();
+    const storedFormData = loadFormDataFromStorage(storageWorkspaceKey);
     if (storedFormData || seededPlayerName) {
       // Merge over defaults so newly added fields (e.g. player hand/backhand)
       // pick up their preselected values when stored data predates them.
@@ -1620,10 +1654,20 @@ export function useUploadMatchWizard({
       // with the id chosen in the For field is the mismatch the details step
       // exists to make impossible.
       setFormData({
-        ...getDefaultFormData(),
+        ...getDefaultFormData(formatDefaults),
         ...storedFormData,
         ...(seededPlayerName ? { playerName: seededPlayerName } : {}),
       });
+    } else {
+      // Nothing stored to reseed from — a switch in place before the first
+      // autosave, or storage that cannot be written. The live form may still
+      // hold the previous workspace's pre-selected format answers; put this
+      // workspace's own back, or the autosave would stamp them as its own.
+      setFormData((prev) => ({
+        ...prev,
+        adScoring: formatDefaults.adScoring ?? DEFAULT_FORM_DATA.adScoring,
+        playOnLets: formatDefaults.playOnLets ?? DEFAULT_FORM_DATA.playOnLets,
+      }));
     }
 
     const storedFile = loadUploadedFileFromStorage();
@@ -1730,6 +1774,8 @@ export function useUploadMatchWizard({
     resetFileGeneration,
     initialProvider,
     isAdminMode,
+    formatDefaults,
+    storageWorkspaceKey,
   ]);
 
   /**
@@ -3714,6 +3760,7 @@ export function useUploadMatchWizard({
     error,
     uploadError,
     formData,
+    storageWorkspaceKey,
     parsingState,
     importIdentity: {
       parsedNames: parsedImport

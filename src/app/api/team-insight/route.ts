@@ -53,7 +53,9 @@ function buildTeamInsightSystemPrompt(
     )
     .join("\n");
 
+  // A first match is a figure, not a change — its 0 is "nothing yet".
   const moversText = movers
+    .filter((m) => !m.firstMatch)
     .slice(0, 5)
     .map(
       (m) =>
@@ -71,7 +73,7 @@ Dual form (oldest → newest): ${formText}
 Squad averages that moved most, against earlier in the season:
 ${kpiText || "  No notable movement yet."}
 
-Players whose numbers moved most since last week:
+Players whose latest match moved most against their earlier ones:
 ${moversText || "  Nobody has enough matches to show a change yet."}
 
 Write ONE sentence: the single most important thing this data says about the squad.

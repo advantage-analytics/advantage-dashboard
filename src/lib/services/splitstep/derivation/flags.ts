@@ -40,11 +40,19 @@ export const POINT_FLAGS = {
   /** Service court failed to alternate from the previous point in the game. */
   SERVICE_COURT_REPEAT: "service_court_repeat",
   /**
-   * The score stream had collapsed (see `collapsedTailStart`), so the winner is
-   * the last stroke's guess, not a reading of the score. The stream agrees with
-   * that guess on roughly 80% of the points where both exist.
+   * The score stream could not name the winner — it collapsed
+   * (`collapsedTailStart`), froze (frozen.ts) or stalled inside a game — so
+   * the winner is the last stroke's guess, not a reading of the score. The
+   * stream agrees with that guess on roughly 80% of the points where both
+   * exist.
    */
   WINNER_GUESSED: "winner_guessed",
+  /**
+   * Inside a frozen score stretch (frozen.ts): the game was read from the
+   * serve's end and court, the server by alternation, and the score columns
+   * are null because the vendor's reading was stuck.
+   */
+  SCORE_FROZEN: "score_frozen",
   /**
    * No result_type could be assigned honestly. Measured: both hits on the
    * labelled match were points the server actually won (an ace, a return

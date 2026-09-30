@@ -536,6 +536,70 @@ to put a testable seam.
 > `reconcile()`, winners, `calculate_match_stats` and the schema are untouched.
 > `DERIVATION_VERSION` is `0.5.0-unreconciled`.
 
+> **A reviewed exception, added 2026-09-30: cancelling a queued analysis, from
+> `claude/matches-rosters-design-consistency-c31a1d`.** An athlete can now
+> withdraw a video that is still waiting in the vendor's queue, and send a
+> cancelled one again. `cancelled` is a new terminal status that outranks every
+> other (`splitstep_status_rank` = 9), so no webhook or poll can move a job off
+> it. Each frozen file gained one narrow capability:
+>
+> - a new `POST /api/splitstep/jobs/[jobId]/cancel` **route + handler** —
+>   "Cancel analysis". `route.ts` is wiring; `handler.ts` holds the ladder:
+>   signed in, a UUID, owns the job (`created_by`, the same 404 for missing and
+>   not-yours), still `submitting|queued` (with no vendor id yet it answers
+>   409 `not_ready`, "still being handed off"), then the vendor's
+>   `DELETE {SPLITSTEP_API_URL}/{id}`. Only when the vendor no longer holds the
+>   job — a 2xx, or a `404 JOB_NOT_FOUND` for a row still `submitting|queued`
+>   — does the `cancel_processing_job` RPC flip the row and release its
+>   **queued** reservation in one transaction (retried twice on a transport
+>   error). The `JOB_NOT_FOUND` branch is what lets a second click recover a
+>   first cancel whose DELETE landed but whose flip failed: the reconciler
+>   never moves a row on `JOB_NOT_FOUND`, so nothing else would. A bare 404
+>   without that code, a `409 JOB_NOT_REMOVABLE` (the vendor started), a 5xx
+>   or no answer change nothing. The RPC is
+>   service-role only and, since `20260930083017`, matches `submitting|queued`
+>   only — the same line as the route — so a started job can never be refunded.
+> - `webhooks/splitstep/route.ts` — **skip.** A `job_completed` that lands for a
+>   row already `cancelled` (the vendor picked it up as the DELETE raced it) is
+>   recorded as a delivery and logged, and nothing is secured, graded or
+>   derived. Every other branch is unchanged.
+> - `derive-and-publish.ts` — **guard.** The move to `deriving` is now
+>   `.neq("status", "cancelled")` and returns without deriving when it matched
+>   no row, so a late completion or a hand re-run cannot resurrect a cancelled
+>   job through the plain update the rank guard never sees.
+> - `reconcile.ts` — **sweep.** `refreshQueuedJobs()` runs after the existing
+>   stale poll (unchanged) for the match ids of the RLS-scoped page read only.
+>   `listInFlightJobs()` makes one vendor `GET /jobs` list call per page read,
+>   cached 60 s, and moves a row `queued` → `processing` (guarded on it still
+>   being `queued`, so a webhook always wins) with `vendor_started_at` set to
+>   the vendor's `updated_at` for that status. Absence from the list is never
+>   read as an outcome. This is what lets the UI stop offering Cancel once the
+>   vendor has started.
+> - `resubmit-job.ts` — **accepts a cancelled parent.** "Send for analysis
+>   again" is a normal resubmission: a new child row, `reserveQuota()` reserves
+>   the month's time anew, and the parent's `initial_top_player_is_player1`,
+>   `ad_scoring` and `fixed_camera` are reused (falling back to the match row)
+>   exactly as for a failed parent.
+>   It is **manual only** — `auto` callers (webhook, reconciler, jobs route) are
+>   refused, because the cancel was a person's decision — and skips
+>   `classifyFailure()`, which has nothing to say about a job that did not fail.
+>   A `cancelled` row spends none of the chain's `MAX_TOTAL_ATTEMPTS`
+>   (`countsAsAttempt()`, shared by the ceiling and `chainAttempts()`), so
+>   cancel → resend cycles never use up the retries meant for vendor failures;
+>   `loadChain()`'s walk bound rose from 10 to 50 links to match.
+>   `cancelled` joins `TERMINAL_STATUSES`. `adopt-deliveries.ts` changed a doc
+>   comment only.
+>
+> Unchanged: what is sent to the vendor (`job-request.ts`, the three §4 inputs,
+> the blob), what is billed (a started job keeps its reservation; only a job the
+> vendor removed from its queue is released, and a resend reserves through the
+> same `reserveQuota()`), and what is computed (`persistTranscript`,
+> `calculate_match_stats`, `swingvision-*`, `process-match` and existing match
+> data). Migrations
+> `supabase/migrations/20260930062236_processing_jobs_cancelled.sql` and
+> `20260930083017_cancel_processing_job_queued_only.sql`, both applied live
+> 2026-09-30.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 
@@ -564,6 +628,34 @@ submission returns 422 with a field list:
 They are typed `boolean | null | undefined` on purpose. **Do not "simplify" them
 to `boolean` with a default.** A null coerced to `false` is a wrong answer that
 looks like a real one — see §4.
+
+> **A reviewed exception, added 2026-09-29: college workspaces pre-select
+> No-Ad.** In a team workspace whose program is `org_type = 'college'`, the
+> wizard opens with `adScoring: false` (and `playOnLets: true`) —
+> `workspaceFormatDefaults()` in `new-match-wizard/types.ts`. College duals and
+> tournaments are played no-ad, so the default is the known format, not a
+> coerced null; the type stays optional and every other workspace still opens
+> unanswered. It covers event lines too: a line that declares no scoring seeds
+> No-Ad when it is opened or swapped to, and every college line (not only duals
+> and tournaments) seeds Play on.
+>
+> Where it does not reach: an event that declares its scoring owns it, a
+> SwingVision export's scoring replaces it, and the admin console never gets
+> it. The localStorage copy of the form — written by the autosave and by Save
+> draft — is tagged with its workspace and carries its Scoring/Lets only back
+> into that workspace (`loadFormDataFromStorage`); a copy saved before the tag
+> existed loses them once. The `match_drafts` row carries no such tag: its
+> workspace binding is `program_id` (`draftBelongsToWorkspace()`). An in-place
+> switch with nothing stored resets both answers to the new workspace's
+> defaults.
+>
+> Consequences of the same choice: a draft saved without a Scoring answer
+> resumes as No-Ad in a college workspace, and switching into one in place
+> replaces an Ad answer given in another workspace. The cost, accepted: an
+> ad-scored match filed in a college workspace (an exhibition) goes to the
+> vendor as `Ad:false` unless the coach changes the field, and its pressure
+> flags come out wrong (§2's 2026-09-28 ad-scoring note) — attribution is
+> unaffected.
 
 **The trim window is not cosmetic.** `videoStartSeconds`/`videoEndSeconds` become
 `billable_seconds`, which is what the 2-hour monthly cap is charged against, and
@@ -613,6 +705,10 @@ serves".
 When `isInFlight(status) || isAnalysisFailed(status)`, the page renders hero +
 summary + `AnalysisSteps` and **returns early**. Keep that gate. Every
 stat section below it would draw zeroes.
+
+`cancelled` (a job the player cancelled while it waited in the queue) takes the
+same early return through `matchPageKind()`: nothing was analysed, and the
+stepper's cancelled view is where "Send for analysis again" lives.
 
 **Since 2026-09-28, the gate has exactly one exemption.** A failed status whose
 recovery class (`classifyFailure()`, `src/lib/data/match-analysis.ts`) is

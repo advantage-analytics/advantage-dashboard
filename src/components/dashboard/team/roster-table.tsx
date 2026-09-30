@@ -6,7 +6,12 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, Reorder, useReducedMotion } from "framer-motion";
 import { GitMerge, GripVertical } from "lucide-react";
 import { BENCH, sequenceFrom } from "@/lib/data/lineup-draft";
-import { StatusChip } from "@/components/ui/status-chip";
+import { AnalysisStatusLine } from "@/components/dashboard/shared/analysis-status-line";
+import {
+  ANALYSIS_LABEL,
+  inFlightMark,
+  type AnalysisStatus,
+} from "@/lib/data/match-analysis";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { FormTicks } from "@/components/dashboard/shared/form-ticks";
@@ -57,13 +62,14 @@ import type { RosterInvite, RosterMember } from "@/lib/data/team-roster-server";
  * The last-match cell was answering two questions at once — what happened, and
  * what state the analysis is in — so every state grew its own trailing element
  * and the column lost its shape. Now: mark, opponent, and exactly ONE token in
- * the same place. A settled row shows its date, a running row shows Analyzing,
+ * the same place. A settled row shows its date, a running row its analysis state
+ * (Queued, Uploading, Analyzing — the Matches list's mark and word),
  * an unscored row shows Review score. The elapsed clock is gone entirely; the
  * activity tray is where a running job is tracked.
  *
  * The two token treatments are deliberately different, and the difference is
- * the rule rather than an oversight: `StatusChip` is a flat dot-and-label with
- * no container (its own note: a filled pill in a table cell "competes with the
+ * the rule rather than an oversight: `AnalysisStatusLine` is a flat mark-and-label
+ * with no container (its own note: a filled pill in a table cell "competes with the
  * number for the eye"), and it means *nothing to do*. The filled grey pill is
  * this table's existing clickable-question treatment — the same one
  * "Possible duplicate" wears — and it means *your move*.
@@ -180,6 +186,34 @@ function Record({ wins, losses }: { wins: number; losses: number }) {
  * The 14px slot every last-match row opens with, so the opponent sits on the
  * same x whatever the row's state.
  */
+/**
+ * The running job's state in the Last-match cell — the Matches list's mark and
+ * word (`AnalysisStatusLine`), so Queued, Uploading and Analyzing read the same
+ * on both screens. No progress bar: a 52px row with a name, record and form
+ * has no room for one, and the percentage says it on one line.
+ */
+function RosterAnalysisStatus({
+  analysis,
+}: {
+  analysis: { status: AnalysisStatus; uploadPercent?: number };
+}) {
+  const { status, uploadPercent } = analysis;
+  const word =
+    status === "processing" || status === "deriving"
+      ? "Analyzing"
+      : status === "uploading" && uploadPercent !== undefined
+        ? `${ANALYSIS_LABEL.uploading} ${Math.round(uploadPercent)}%`
+        : ANALYSIS_LABEL[status];
+  return (
+    <AnalysisStatusLine
+      mark={inFlightMark(status)}
+      className="tabular ml-auto shrink-0"
+    >
+      {word}
+    </AnalysisStatusLine>
+  );
+}
+
 function MarkSlot({ children }: { children: React.ReactNode }) {
   return (
     <span className="flex w-3.5 shrink-0 items-center justify-center">
@@ -204,7 +238,7 @@ function LastMatchCell({ member }: { member: RosterMember }) {
     );
   }
 
-  if (lastMatch.analyzing) {
+  if (lastMatch.analysis) {
     return (
       <span className={cn(COL.last, "flex items-center gap-2.5")}>
         <MarkSlot>
@@ -216,9 +250,7 @@ function LastMatchCell({ member }: { member: RosterMember }) {
         <span className="truncate text-[12px] text-[var(--ink-700)]">
           {lastMatch.opponent}
         </span>
-        <StatusChip tone="blue" live className="ml-auto shrink-0">
-          Analyzing
-        </StatusChip>
+        <RosterAnalysisStatus analysis={lastMatch.analysis} />
       </span>
     );
   }

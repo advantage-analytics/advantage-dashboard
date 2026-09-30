@@ -114,7 +114,7 @@ function analysisGroup(match: DisplayMatch): string | null {
   return matchListGroup(match.analysis);
 }
 
-const ANALYSIS_GROUP_ORDER = ["In progress", "Ready", "Failed", "No video"];
+const ANALYSIS_GROUP_ORDER = ["In progress", "Ready", "Failed", "Not analyzed"];
 
 interface ActiveFilter {
   key: FilterKey;

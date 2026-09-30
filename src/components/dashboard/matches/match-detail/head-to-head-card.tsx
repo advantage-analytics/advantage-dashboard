@@ -19,9 +19,11 @@ import {
   type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
+  errorMadeBy,
   isReturnWinner,
   isUnreturnedServe,
   rallyLengthBandOf,
+  winnerHitBy,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import type { MatchPoint } from "@/lib/data/match-points-server";
@@ -581,8 +583,6 @@ export function tallySide(
     returnsRecorded: 0,
     unreturnedServes: 0,
   };
-  const me = isPlayer1 ? "player1" : "player2";
-
   for (const p of points) {
     const iWon = p.wonByPlayer1 === isPlayer1;
     const iServed = p.serverIsPlayer1 === isPlayer1;
@@ -620,9 +620,12 @@ export function tallySide(
     // LIKE '%Unforced Error%' against the same free-text `result_type`
     // (see lib/services/splitstep/derivation/result-type.ts). Matching the
     // same substrings keeps a scoped row comparable with the published one.
-    if (p.player === me) {
-      if (result.includes("winner")) d.winners += 1;
-      else if (result.includes("unforced error")) d.unforcedErrors += 1;
+    // Credited as the Result filters and Point endings credit them: a
+    // service winner to the server, not to the returner's missed last row.
+    if (result.includes("winner")) {
+      if (winnerHitBy(p) === isPlayer1) d.winners += 1;
+    } else if (result.includes("unforced error")) {
+      if (errorMadeBy(p) === isPlayer1) d.unforcedErrors += 1;
     }
 
     // rallyLength is 0 when the source recorded none — not a one-shot rally.

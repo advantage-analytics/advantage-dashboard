@@ -88,22 +88,39 @@ const VARIANTS: readonly {
   },
   {
     id: "queued",
-    label: "Queued",
+    label: "Queued — waiting, with Cancel",
     analysis: {
       ...BASE,
       status: "queued",
       jobReference: "ss_7f3a92c1",
       updatedAt: minutesAgo(2),
+      queuedAt: minutesAgo(12),
+      reservedSeconds: 5340,
     },
   },
   {
     id: "processing",
-    label: "Processing",
+    label: "Processing — started, no Cancel",
     analysis: {
       ...BASE,
       status: "processing",
       progressPercent: 40,
       jobReference: "ss_7f3a92c1",
+      queuedAt: minutesAgo(40),
+      vendorStartedAt: minutesAgo(18),
+      reservedSeconds: 5340,
+    },
+  },
+  {
+    id: "cancelled",
+    label: "Cancelled — send for analysis again",
+    analysis: {
+      ...BASE,
+      status: "cancelled",
+      jobReference: "ss_7f3a92c1",
+      updatedAt: minutesAgo(4),
+      queuedAt: minutesAgo(30),
+      reservedSeconds: 5340,
     },
   },
   {
@@ -190,6 +207,9 @@ const VARIANTS: readonly {
   },
 ];
 
+/** Cancel and resend on this page: drawn, never sent. */
+const noop = () => {};
+
 export function AnalysisStepsPreview() {
   return (
     <section id="analysis-stepper" className="mt-16">
@@ -197,9 +217,9 @@ export function AnalysisStepsPreview() {
         Match analysis — stepper column
       </h2>
       <p className="mt-1 max-w-[60ch] text-[12px] leading-[1.6] text-[var(--ink-600)]">
-        Every state of a match page while its analysis is in flight or has
-        failed, drawn as the upload wizard&apos;s final screen: the same
-        card-free column, title, match line and stepper. Fixed inputs and a
+        Every state of a match page while its analysis is in flight, has failed
+        or was cancelled, drawn as the upload wizard&apos;s final screen: the
+        same card-free column, title, match line and stepper. Fixed inputs and a
         fixed clock; the actions render but are not wired to a real job.
       </p>
       <div className="mt-6 grid max-w-[1120px] grid-cols-1 gap-x-10 gap-y-12 lg:grid-cols-2">
@@ -211,6 +231,12 @@ export function AnalysisStepsPreview() {
               matchId="00000000-0000-4000-8000-000000000000"
               match={MATCH}
               snapshotAt={NOW}
+              // Previewed as the job's submitter, so both actions show.
+              canAct
+              // The placeholder job id is not a real job: Cancel and resend
+              // stay inert here instead of posting the live routes.
+              onCancel={noop}
+              onResend={noop}
             />
           </div>
         ))}

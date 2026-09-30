@@ -25,6 +25,7 @@ import {
   type MatchAnalysis,
   type RecoveryFacts,
   jobRecoveryFacts,
+  jobTimingFields,
   pipelinePercent,
   recoveryFields,
   resolveAnalysisStatus,
@@ -63,6 +64,15 @@ export interface LiveJobRow {
   results_object_key: string | null;
   /** Set on a resubmission — the one chain fact a realtime row carries. */
   resubmitted_from_job_id: string | null;
+  /**
+   * The timing columns, on the wire with the whole row — see
+   * `jobTimingFields()`. Optional because a patch built from a narrower row
+   * simply leaves the clocks unset.
+   */
+  submitted_at?: string | null;
+  queued_ack_at?: string | null;
+  vendor_started_at?: string | null;
+  billable_seconds?: number | null;
 }
 
 /**
@@ -89,6 +99,9 @@ export type LiveAnalysisPatch = Pick<
   | "errorCode"
   | "jobReference"
   | "startedAt"
+  | "queuedAt"
+  | "vendorStartedAt"
+  | "reservedSeconds"
 > & {
   /**
    * Consumed by `withLiveAnalysis` and never merged onto the analysis. Absent
@@ -144,6 +157,9 @@ export function liveAnalysisPatch(
     // its own; `withLiveAnalysis` re-decides it against the base chain count.
     ...recoveryFields(facts, attemptsUsed, errorMessage),
     jobReference: row.external_job_id ?? undefined,
+    // Same projection as the server loader, so a queued → processing event
+    // starts the "Started N min ago" clock without a reload.
+    ...jobTimingFields(row),
     recoveryBasis: {
       jobId: row.id,
       resubmitted: row.resubmitted_from_job_id != null,

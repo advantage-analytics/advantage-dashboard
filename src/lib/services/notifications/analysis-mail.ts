@@ -119,7 +119,7 @@ export async function notifyAnalysisOutcome(params: {
       });
       const { data: chainRows } = await supabase
         .from("processing_jobs")
-        .select("id, resubmitted_from_job_id")
+        .select("id, resubmitted_from_job_id, status")
         .eq("match_id", matchId);
       const attemptsUsed = chainRows ? chainAttempts(chainRows, jobId) : 1;
       failureClass = classifyFailure({ ...facts, attemptsUsed });

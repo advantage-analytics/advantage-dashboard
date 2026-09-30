@@ -35,3 +35,28 @@ test("Back to matches shows only once nothing in this tab is running, and never 
   expect(exits).toContain("!view.busy &&");
   expect(exits).toContain("href={MATCHES_HREF}");
 });
+
+test("Cancel asks first, in a danger ConfirmDialog, and only confirm cancels", () => {
+  expect(src).toContain("<CancelUploadControl cancel={upload.cancel} />");
+  const dlg = src.slice(src.indexOf("function CancelUploadControl"));
+  expect(dlg).toContain("<ConfirmDialog");
+  expect(dlg).toContain('tone="danger"');
+  expect(dlg).toContain('title="Cancel this upload?"');
+  expect(dlg).toContain("The match stays saved with its score.");
+  expect(dlg).toContain(
+    "Only the video stops, and you can add it again later from the match page.",
+  );
+  // Closes with the control when the upload ends.
+  expect(src).toContain("{upload?.cancel && <CancelUploadControl");
+  expect(dlg).toContain("<ConfirmNote icon={<Clock />}>");
+  expect(dlg).toContain("No analysis time has been used.");
+  expect(dlg).toContain('confirmLabel="Cancel upload"');
+  expect(dlg).toContain('cancelLabel="Keep uploading"');
+  // The trigger only opens; cancel() runs from onConfirm.
+  expect(dlg).toContain("onClick={() => setOpen(true)}");
+  expect(dlg).toMatch(/onConfirm=\{\(\) => \{\s*cancel\(\);/);
+});
+
+test("the upload meta line is sentence case per segment", () => {
+  expect(src).toContain("sentenceCase(formatEta(progress.etaSeconds))");
+});

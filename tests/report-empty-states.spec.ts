@@ -60,6 +60,9 @@ const REAL = new Set([
   // source for the card, the head-to-head tally and the Rally length pills);
   // it is pure — no React, no next/navigation — so it loads for real.
   "@/components/dashboard/matches/match-detail/match-filters/model",
+  // The Shots tab's points, with a derived match's aces named — pure over
+  // the stubbed `useMatchData`, so it loads for real.
+  "@/components/dashboard/matches/match-detail/shots/use-viz-points",
 ]);
 
 function render(

@@ -24,6 +24,7 @@ import {
   EMPTY_MATCH_FILTERS,
   isUnreturnedServe,
   MATCH_FILTER_KEYS,
+  pointResultLabel,
   type MatchFilterContext,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 
@@ -710,5 +711,24 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
         (pt) => pt.id,
       ),
     ).toEqual(["ace-you", "ace-opp", "sw-you"]);
+  });
+
+  test("every point the derived Aces cut opens is named Ace in the list", () => {
+    const opened = applyFilmCut(MATCH, MATCH, derivedAces.cut!, DERIVED_CTX);
+    expect(opened.length).toBeGreaterThan(0);
+    for (const pt of opened) {
+      expect(pointResultLabel(pt, DERIVED_CTX), pt.id).toBe("Ace");
+    }
+    // On SwingVision the stored label stands: a service winner stays one.
+    const sw = MATCH.find((pt) => pt.id === "sw-you")!;
+    expect(pointResultLabel(sw, CTX)).toBe(sw.resultType);
+  });
+
+  test("a derived service winner with a stroke after the serve keeps its label", () => {
+    const sw = MATCH.find((pt) => pt.id === "sw-you")!;
+    const rallied = { ...sw, rallyLength: 2 };
+    expect(isUnreturnedServe(rallied)).toBe(false);
+    expect(pointResultLabel(rallied, DERIVED_CTX)).toBe(sw.resultType);
+    expect(pointResultLabel({ ...sw, resultType: "" }, CTX)).toBe("Point");
   });
 });
