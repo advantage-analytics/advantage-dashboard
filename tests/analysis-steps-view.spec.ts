@@ -458,9 +458,31 @@ test("drawer: the same keys, labels and states as the page view, for every in-fl
 });
 
 test("drawer: null for a status that is neither in flight nor failed", () => {
-  for (const status of ["completed", "imported", "timeline"] as const) {
+  for (const status of [
+    "completed",
+    "imported",
+    "timeline",
+    "cancelled",
+  ] as const) {
     expect(drawerAnalysisStepsView({ ...BASE, status }, NOW, true)).toBeNull();
   }
+});
+
+test("the three timing fields ride on the analysis without changing the view", () => {
+  // T4 carries them; the stepper's meta line (T6) is what reads them. Until
+  // then a queued card must draw exactly as it did without them.
+  const queued: MatchAnalysis = { ...BASE, status: "queued" };
+  const timed: MatchAnalysis = {
+    ...queued,
+    queuedAt: minutesAgo(12),
+    vendorStartedAt: undefined,
+    reservedSeconds: 5340,
+  };
+  expect(timed.queuedAt).toBe(minutesAgo(12));
+  expect(timed.reservedSeconds).toBe(5340);
+  expect(shape(analysisStepsView(timed, NOW))).toEqual(
+    shape(analysisStepsView(queued, NOW)),
+  );
 });
 
 test("drawer: uploading carries the floored percent as its value and no body", () => {

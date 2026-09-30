@@ -37,3 +37,15 @@ is the runner's. Newest entries at the bottom.
 1. `scripts/splitstep-derive.ts` now just prints `{ok:false, reason:"job is cancelled"}` for a cancelled job; could say so more clearly.
 2. Confirm the reconciler's results sweep and stale poll never release quota or send mail for a `cancelled` row (they likely select by status and skip it).
 3. `record_splitstep_webhook` still writes a late completion's result urls onto a cancelled row (status is safe); harmless but worth knowing.
+
+## T4 · Read `cancelled` and the timing fields in the data layer; let resubmit accept a cancelled parent — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `cancelled` added to AnalysisStatus / STATUS_MAP / ANALYSIS_LABEL ("Cancelled"), in no in-flight/failed/ready set; `matchListGroup` groups it with `manual`; `stageIndexFor`/`pipelinePercent` handle it; `analysisAction` gives it "View match" instead of falling through to "Cancel". New `jobTimingFields()` supplies `queuedAt`, `vendorStartedAt`, `reservedSeconds` to both `loadMatchAnalysis` and the live hook. `resubmitJob`: `RESUBMITTABLE_STATUSES = {failed, cancelled}`, `cancelled` added to TERMINAL_STATUSES (otherwise the parent blocked its own resend as an in-flight duplicate), auto-resubmit refuses a cancelled parent. Specs: resubmit-authorization, match-analysis-timeline, analysis-steps-view.
+
+**follow-ups:**
+
+1. IMPORTANT for T6: `matchPageKind` still returns "report" for `cancelled`, so a cancelled match shows the full report with empty stat sections (guardrails §3.3). T6 must add `cancelled` to the "steps" branch together with its cancelled view — T6's task text does not name `matchPageKind`.
+2. A cancelled attempt still counts toward the 3-attempts-per-chain limit; decide whether cancelled rows should be excluded.
+3. `row-state.tsx` hard-codes `status === "manual" ? "Not analyzed"`; T5's rename should fold `cancelled` in.

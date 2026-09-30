@@ -60,7 +60,7 @@ ready).
 
 ## T4 · Read `cancelled` and the timing fields in the data layer; let resubmit accept a cancelled parent
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/lib/data/match-analysis.ts, src/lib/data/match-analysis-server.ts, src/hooks/use-live-match-analysis.ts, src/lib/services/splitstep/resubmit-job.ts, tests/analysis-steps-view.spec.ts, tests/resubmit-authorization.spec.ts, tests/match-analysis-timeline.spec.ts (guess)

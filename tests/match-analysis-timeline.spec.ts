@@ -2,16 +2,27 @@ import { expect, test } from "@playwright/test";
 
 import {
   ANALYSIS_LABEL,
+  STATUS_MAP,
   analysisAction,
   isAnalysisFailed,
+  isAnalysisReady,
   isInFlight,
   isLiveUpdating,
+  isStalled,
   isWorking,
+  jobTimingFields,
+  matchListGroup,
+  pipelinePercent,
   resolveAnalysisStatus,
   withStatsPublished,
   type MatchAnalysis,
   type RecoveryClass,
 } from "@/lib/data/match-analysis";
+import type {
+  LiveAnalysisPatch,
+  LiveJobRow,
+} from "@/hooks/use-live-match-analysis";
+import { createLoader } from "./fixtures/vm-modules";
 
 /**
  * The `timeline` state: a verified point-by-point transcript with no published
@@ -47,6 +58,7 @@ test.describe("withStatsPublished", () => {
       "derivation_failed",
       "imported",
       "manual",
+      "cancelled",
     ] as const) {
       expect(withStatsPublished(status, false)).toBe(status);
       expect(withStatsPublished(status, true)).toBe(status);
@@ -236,5 +248,138 @@ test.describe("analysisAction: failed row follows the recovery class", () => {
     const action = analysisAction(baseFailed, matchId);
     expect(action?.label).toBe("Start over");
     expect(action?.href).toBe("/dashboard/matches/new");
+  });
+});
+
+test.describe("cancelled: settled, never analysed, never Ready", () => {
+  test("the job status maps to its own word", () => {
+    expect(STATUS_MAP.cancelled).toBe("cancelled");
+    // derivation_version is irrelevant — only `completed` reads it.
+    expect(resolveAnalysisStatus("cancelled", null)).toBe("cancelled");
+    expect(resolveAnalysisStatus("cancelled", "0.6.0")).toBe("cancelled");
+    expect(ANALYSIS_LABEL.cancelled).toBe("Cancelled");
+  });
+
+  test("it is in none of the in-flight, failed or ready sets", () => {
+    expect(isInFlight("cancelled")).toBe(false);
+    expect(isWorking("cancelled")).toBe(false);
+    expect(isLiveUpdating("cancelled")).toBe(false);
+    expect(isStalled("cancelled")).toBe(false);
+    expect(isAnalysisFailed("cancelled")).toBe(false);
+    expect(isAnalysisReady("cancelled")).toBe(false);
+  });
+
+  test("the matches list groups it with a manual match, never Ready", () => {
+    const group = matchListGroup({ status: "cancelled" });
+    expect(group).toBe(matchListGroup({ status: "manual" }));
+    expect(group).not.toBe("Ready");
+    expect(group).not.toBe("In progress");
+    expect(group).not.toBe("Failed");
+  });
+
+  test("no progress bar, and the row points at the match page", () => {
+    expect(pipelinePercent("cancelled")).toBeUndefined();
+    const action = analysisAction(
+      { status: "cancelled", providerId: "splitstep", jobId: "j1" },
+      "m1",
+    );
+    // Never "Cancel" — the job is already stopped.
+    expect(action?.label).toBe("View match");
+    expect(action?.href).toBe("/dashboard/matches/m1");
+  });
+});
+
+test.describe("queuedAt, vendorStartedAt and reservedSeconds", () => {
+  const QUEUED = "2026-09-29T10:00:00Z";
+  const SUBMITTED = "2026-09-29T09:59:30Z";
+  const STARTED = "2026-09-29T10:20:00Z";
+
+  test("queuedAt is the vendor acknowledgement, falling back to submission", () => {
+    expect(
+      jobTimingFields({ queued_ack_at: QUEUED, submitted_at: SUBMITTED }),
+    ).toMatchObject({ queuedAt: QUEUED });
+    expect(
+      jobTimingFields({ queued_ack_at: null, submitted_at: SUBMITTED }),
+    ).toMatchObject({ queuedAt: SUBMITTED });
+    expect(jobTimingFields({}).queuedAt).toBeUndefined();
+  });
+
+  test("vendorStartedAt and reservedSeconds read their columns", () => {
+    expect(
+      jobTimingFields({ vendor_started_at: STARTED, billable_seconds: 5340 }),
+    ).toEqual({
+      queuedAt: undefined,
+      vendorStartedAt: STARTED,
+      reservedSeconds: 5340,
+    });
+    // A zero reservation is no reservation — nothing "goes back".
+    expect(jobTimingFields({ billable_seconds: 0 }).reservedSeconds).toBe(
+      undefined,
+    );
+  });
+
+  test("every key is present so a live patch clears a stale clock", () => {
+    expect(Object.keys(jobTimingFields({})).sort()).toEqual([
+      "queuedAt",
+      "reservedSeconds",
+      "vendorStartedAt",
+    ]);
+  });
+
+  test("the realtime patch carries the same three fields and the cancelled status", () => {
+    const loader = createLoader({
+      stubs: {
+        "@/lib/supabase/client": {
+          createClient: () => {
+            throw new Error("no socket in an offline spec");
+          },
+        },
+      },
+    });
+    const { liveAnalysisPatch } = loader.load(
+      "src/hooks/use-live-match-analysis.ts",
+    ) as {
+      liveAnalysisPatch: (row: LiveJobRow) => LiveAnalysisPatch | undefined;
+    };
+
+    const row: LiveJobRow = {
+      id: "j1",
+      match_id: "m1",
+      status: "processing",
+      upload_progress_percent: null,
+      error_message: null,
+      error_category: null,
+      external_job_id: "ext-1",
+      created_at: "2026-09-29T09:00:00Z",
+      derivation_version: null,
+      updated_at: STARTED,
+      error_code: null,
+      error_step: null,
+      video_object_key: "videos/m1.mp4",
+      results_object_key: null,
+      resubmitted_from_job_id: null,
+      submitted_at: SUBMITTED,
+      queued_ack_at: QUEUED,
+      vendor_started_at: STARTED,
+      billable_seconds: 5340,
+    };
+
+    expect(liveAnalysisPatch(row)).toMatchObject({
+      status: "processing",
+      queuedAt: QUEUED,
+      vendorStartedAt: STARTED,
+      reservedSeconds: 5340,
+    });
+
+    const cancelled = liveAnalysisPatch({
+      ...row,
+      status: "cancelled",
+      error_code: "CANCELLED",
+      vendor_started_at: null,
+    });
+    expect(cancelled?.status).toBe("cancelled");
+    expect(cancelled?.vendorStartedAt).toBeUndefined();
+    // A cancel is not a failure: no recovery class, so no Retry.
+    expect(cancelled?.recovery).toBeUndefined();
   });
 });

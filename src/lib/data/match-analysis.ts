@@ -75,6 +75,18 @@ export type AnalysisStatus =
    * whether `match_stats` rows actually exist.
    */
   | "timeline"
+  /**
+   * The athlete stopped the analysis before the vendor began it. Terminal:
+   * set only by the cancel route (`cancel_processing_job`) after the vendor
+   * removed the queued job, and its reservation was released in the same
+   * write. The video is still stored — "Send for analysis again" resubmits
+   * from it (resubmitJob() accepts a cancelled parent).
+   *
+   * Settled but neither failed nor ready: nothing went wrong and nothing was
+   * analysed, so it is in none of IN_FLIGHT, FAILED or READY and the matches
+   * list groups it with `manual`.
+   */
+  | "cancelled"
   /* --- derived, not job statuses --- */
   /** Arrived complete from a file import. Never had a processing job. */
   | "imported"
@@ -161,7 +173,47 @@ export interface MatchAnalysis {
    * `chainAttempts()`. The ceiling input to `classifyFailure()`.
    */
   attemptsUsed?: number;
+  /**
+   * When the vendor took the job into its queue, ISO —
+   * `queued_ack_at ?? submitted_at`. The acknowledgement is the truer mark;
+   * `submitted_at` stands in when the `job_queued` webhook never arrived. The
+   * "Waiting N min" clock.
+   */
+  queuedAt?: string;
+  /**
+   * When the vendor reported it had begun processing, ISO
+   * (`vendor_started_at`). The "Started N min ago" clock; null-and-cancelled
+   * means the job never cost vendor compute.
+   */
+  vendorStartedAt?: string;
+  /**
+   * Seconds of the month's analysis time this job reserved
+   * (`billable_seconds`) — the "1h 29m goes back" figure on cancel. Raw
+   * seconds, unlike `window`, which is the same number pre-formatted.
+   */
+  reservedSeconds?: number;
   verified?: boolean;
+}
+
+/**
+ * The job-row timing columns → `queuedAt`, `vendorStartedAt`,
+ * `reservedSeconds`. The ONE projection the server loader and the realtime
+ * patch share, so the two cannot read the clocks differently. Every key is
+ * always present so a live patch spread over the server render clears a
+ * field the row no longer carries.
+ */
+export function jobTimingFields(row: {
+  queued_ack_at?: string | null;
+  submitted_at?: string | null;
+  vendor_started_at?: string | null;
+  billable_seconds?: number | null;
+}): Pick<MatchAnalysis, "queuedAt" | "vendorStartedAt" | "reservedSeconds"> {
+  const reserved = row.billable_seconds;
+  return {
+    queuedAt: row.queued_ack_at ?? row.submitted_at ?? undefined,
+    vendorStartedAt: row.vendor_started_at ?? undefined,
+    reservedSeconds: reserved != null && reserved > 0 ? reserved : undefined,
+  };
 }
 
 /**
@@ -188,6 +240,7 @@ export const STATUS_MAP: Record<string, AnalysisStatus> = {
   completed: "completed",
   failed: "failed",
   derivation_failed: "derivation_failed",
+  cancelled: "cancelled",
 };
 
 /**
@@ -561,6 +614,7 @@ export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
   derivation_failed: "Stats failed",
   imported: "Imported",
   manual: "Stats unavailable",
+  cancelled: "Cancelled",
 };
 
 /**
@@ -628,8 +682,15 @@ export function pipelinePercent(
   }
 
   // A failure carries no percentage — the component fills the stage it died in
-  // from `failedHere` — and a hand-scored match never had a pipeline.
-  if (isAnalysisFailed(status) || status === "manual") return undefined;
+  // from `failedHere` — and a hand-scored match never had a pipeline. A
+  // cancelled job stopped where it stood; a bar would claim progress.
+  if (
+    isAnalysisFailed(status) ||
+    status === "manual" ||
+    status === "cancelled"
+  ) {
+    return undefined;
+  }
 
   if (status === "completed" || status === "imported") return 100;
 
@@ -707,6 +768,9 @@ export function stageIndexFor(status: AnalysisStatus): number {
     case "manual":
       return 0;
     case "queued":
+    // Cancel is offered only while the job waits in the vendor's queue, so a
+    // cancelled job stopped there.
+    case "cancelled":
       return 1;
     case "processing":
     case "deriving":
@@ -884,7 +948,9 @@ export function matchListGroup(
   if (analysis?.recovery === "stats_unavailable") return "Ready";
   if (isInFlight(status)) return "In progress";
   if (isAnalysisFailed(status)) return "Failed";
-  if (status === "manual") return "No video";
+  // A cancelled job was never analysed — the same group as a match with no
+  // video, and never "Ready" (T5 renames the group "Not analyzed").
+  if (status === "manual" || status === "cancelled") return "No video";
   return "Ready";
 }
 
@@ -1041,6 +1107,11 @@ export function analysisAction(
   }
   if (analysis.status === "manual") {
     return addVideoAction();
+  }
+  // The video is still stored; "Send for analysis again" lives on the match
+  // page. Without this a cancelled row fell through to "Cancel" below.
+  if (analysis.status === "cancelled") {
+    return viewMatchAction("View match", matchId);
   }
   return { label: "Cancel", ink: "#888888", hoverInk: "#525252" };
 }

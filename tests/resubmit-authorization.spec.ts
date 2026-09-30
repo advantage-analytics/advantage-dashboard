@@ -788,3 +788,49 @@ test("an automatic retry of a downloading_video failure is not refused by the ne
   const r = await auto(h);
   expect(r.ok).toBe(true);
 });
+
+// ── "Send for analysis again": a cancelled parent ─────────────────────────
+
+test("a cancelled parent resubmits manually and reserves the month's time anew", async () => {
+  // The cancel released the parent's reservation, so the child reserves again
+  // — exactly as for a failed parent. The cancelled parent must not count as
+  // an analysis in flight, or it would refuse its own resend.
+  const h = harness({
+    job: parentJob({ status: "cancelled", error_code: "CANCELLED" }),
+  });
+  const r = await manual(h);
+  expect(r.ok).toBe(true);
+  if (!r.ok) return;
+
+  expect(h.db.inserts).toHaveLength(1);
+  const child = h.db.inserts[0].row;
+  expect(child.resubmitted_from_job_id).toBe("j-parent");
+  expect(child.auto_resubmitted).toBe(false);
+  expect(h.reserved).toEqual([
+    { jobId: child.id, workspaceId: PROGRAM, seconds: 5182 },
+  ]);
+  expect(h.sent).toHaveLength(1);
+  expect(h.db.row("processing_jobs", child.id)?.status).toBe("queued");
+  // The parent stays cancelled; nothing is released on its behalf.
+  expect(h.db.row("processing_jobs", "j-parent")?.status).toBe("cancelled");
+  expect(h.released).toEqual([]);
+});
+
+test("a cancelled parent is never resent automatically", async () => {
+  const h = harness({
+    job: parentJob({ status: "cancelled", error_code: "CANCELLED" }),
+  });
+  expectRefused(h, await auto(h), "not_failed");
+});
+
+test("a cancelled parent with no video is refused before any blob check", async () => {
+  const h = harness({
+    job: parentJob({
+      status: "cancelled",
+      error_code: "CANCELLED",
+      video_object_key: null,
+    }),
+  });
+  expectRefused(h, await manual(h), "video_unavailable");
+  expect(h.blobChecks).toEqual([]);
+});
