@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { TeamSetupProgress } from "@/lib/data/team-home-server";
 import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
+import { capitalize } from "@/lib/utils";
 
 /**
  * "Getting set up · 1 of 3 · A dual on the schedule. Add a dual" — a quiet
@@ -65,12 +66,11 @@ export function TeamSetupLine({ setup }: { setup: TeamSetupProgress }) {
 
   const done = STEPS.length - remaining.length;
   const next = remaining[0];
-  const sentence =
+  const phrase =
     remaining.length === STEPS.length
-      ? `${STEPS.map((step) => step.phrase)
-          .join(", ")
-          .replace(/^./, (first) => first.toUpperCase())}.`
-      : `${next.phrase.charAt(0).toUpperCase()}${next.phrase.slice(1)}.`;
+      ? STEPS.map((step) => step.phrase).join(", ")
+      : next.phrase;
+  const sentence = `${capitalize(phrase)}.`;
 
   return (
     <div

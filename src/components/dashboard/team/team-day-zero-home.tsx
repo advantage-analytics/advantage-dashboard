@@ -42,14 +42,14 @@ export function TeamDayZeroHome({
               >
                 Add players
               </Link>
-              {SCHEDULE_ENABLED ? (
+              {SCHEDULE_ENABLED && (
                 <Link
                   href="/dashboard/team/schedule/new/dual"
                   className={advButton("ghost")}
                 >
                   Schedule a dual
                 </Link>
-              ) : null}
+              )}
             </div>
           ) : null
         }

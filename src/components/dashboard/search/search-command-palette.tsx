@@ -80,9 +80,9 @@ import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
  * ── Commands ───────────────────────────────────────────────────────────────
  * Only real destinations. Statistics, Ask, Opponents and — while
  * `SCHEDULE_ENABLED` is off — Schedule are still `ComingSoonPage` stubs, and
- * a command that opens a placeholder is worse than no command. Program verbs are ABSENT in a personal workspace, never
- * disabled — a greyed-out "Invite a player" is a promise the workspace cannot
- * keep. Each command's hint is the route table's own label for its href, so a
+ * a command that opens a placeholder is worse than no command. Program verbs
+ * are ABSENT in a personal workspace, never disabled — a greyed-out "Invite a
+ * player" is a promise the workspace cannot keep. Each command's hint is the route table's own label for its href, so a
  * rename in `nav.ts` reaches here without a second edit.
  */
 

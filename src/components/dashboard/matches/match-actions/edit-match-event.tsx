@@ -48,15 +48,13 @@ export function LinkedEventLine({
   onRemove: () => void;
   disabled?: boolean;
 }) {
+  const lead =
+    eventKind === "tournament" && canEditRound
+      ? "The date and surface come from the tournament."
+      : `The date, ${eventKind === "dual" ? "line" : "round"} and surface come from the ${eventKind}.`;
   return (
     <>
-      <span>
-        {`${
-          eventKind === "tournament" && canEditRound
-            ? "The date and surface come from the tournament."
-            : `The date, ${eventKind === "dual" ? "line" : "round"} and surface come from the ${eventKind}.`
-        }${scheduleHint ? " Change them in Schedule." : ""}`}
-      </span>
+      <span>{scheduleHint ? `${lead} Change them in Schedule.` : lead}</span>
       {canDetach && (
         <span>
           <button

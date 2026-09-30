@@ -666,14 +666,12 @@ export function EditMatchDialog({
         push({
           tone: "success",
           title: `Added to ${attached.eventName} · ${attached.slot ?? attached.round ?? ""}`,
-          ...(SCHEDULE_ENABLED
+          action: SCHEDULE_ENABLED
             ? {
-                action: {
-                  label: "Open in Schedule",
-                  href: `/dashboard/team/schedule/${attached.eventId}`,
-                },
+                label: "Open in Schedule",
+                href: `/dashboard/team/schedule/${attached.eventId}`,
               }
-            : {}),
+            : undefined,
         });
       }
 
