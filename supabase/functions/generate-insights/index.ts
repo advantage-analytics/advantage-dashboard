@@ -7,10 +7,20 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_KEY");
 /**
  * gemini-2.5-flash is closed to new Google Cloud projects ("limiting access to
  * the 2.5 models to users who have actively used them in the past"), so the
- * paid key moved in 2026-09-28 was refused with a 404. 3.5 Flash-Lite is
- * Google's pick for new projects and costs the same per token.
+ * paid key moved in 2026-09-28 was refused with a 404. 3.5 Flash replaced
+ * 3.5 Flash-Lite on 2026-09-29 after a 16-match side-by-side: its headlines
+ * state what happened rather than giving orders, its focus varies beyond the
+ * serve, and it made none of Flash-Lite's slips (a wrong figure, "Player 1"
+ * in a player's summary). It takes ~14 s a call against ~3 s.
  */
-const GEMINI_MODEL = "gemini-3.5-flash-lite";
+const GEMINI_MODEL = "gemini-3.5-flash";
+
+/**
+ * A first answer slower than this is kept rather than asked for again: the
+ * video webhook waits `INSIGHTS_CAP_MS` (35 s) on this function, and a second
+ * Flash call would take it past that.
+ */
+const RETRY_BUDGET_MS = 15_000;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -476,6 +486,7 @@ serve(async (req) => {
 
       Crucially, contextualize their performances against each other. If Player 1 dominated at the net, factor that into Player 2's weaknesses.
       Keep everything encouraging and actionable for college athletes.
+      Speak to each player as "you"; never write "we", "us", "our" or "let's" — there is no coach speaking. Call the other player "your opponent", never "Player 1" or "Player 2".
 
       Player 1 Stats: ${JSON.stringify(player1Stats || { note: "Stats unavailable" })}
       Player 2 Stats: ${JSON.stringify(player2Stats || { note: "Stats unavailable" })}${comparisonContext}
@@ -492,7 +503,14 @@ serve(async (req) => {
       },
     });
     let problems = summaryProblems(insightsJSON);
-    if (problems.length > 0) {
+    const firstCallMs = Date.now() - generationStartedAt;
+    if (problems.length > 0 && firstCallMs > RETRY_BUDGET_MS) {
+      // Kept as it is: see RETRY_BUDGET_MS. The card still splits it.
+      console.warn(
+        `Summary off but the first call took ${firstCallMs} ms, so it is kept:`,
+        problems.join("; "),
+      );
+    } else if (problems.length > 0) {
       console.warn("Summary rejected, asking again:", problems.join("; "));
       insightsJSON = await generateInsights(geminiUrl, {
         contents: [

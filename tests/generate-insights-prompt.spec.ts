@@ -68,13 +68,18 @@ const GOOD_REPLY: Reply = {
  * next of `replies` (the last one repeats), and returns every request it made
  * and the insights it saved.
  */
-async function runWithReplies(replies: Reply[] = [{}]): Promise<{
+async function runWithReplies(
+  replies: Reply[] = [{}],
+  /** When set, a fake clock the function reads that each Gemini call advances by this much. */
+  msPerCall?: number,
+): Promise<{
   requests: { url: string; body: GeminiRequestBody }[];
   saved: Record<string, PlayerReply> | null;
 }> {
   let handler!: (request: Request) => Promise<Response>;
   const requests: { url: string; body: GeminiRequestBody }[] = [];
   let saved: Record<string, PlayerReply> | null = null;
+  let clock = 0;
 
   const from = (table: string) => {
     const resolve = () => {
@@ -127,9 +132,11 @@ async function runWithReplies(replies: Reply[] = [{}]): Promise<{
           },
     Deno: { env: { get: (key: string) => GENERATE_INSIGHTS_ENV[key] } },
     Response,
+    ...(msPerCall === undefined ? {} : { Date: { now: () => clock } }),
     console: { ...console, warn: () => {}, error: () => {} },
     fetch: async (url: string, init?: RequestInit) => {
       if (url.startsWith("https://generativelanguage.googleapis.com/")) {
+        clock += msPerCall ?? 0;
         requests.push({
           url,
           body: JSON.parse(String(init?.body)) as GeminiRequestBody,
@@ -201,6 +208,12 @@ test("the prompt asks for a focus, a short headline and a longer description", a
   expect(description).toContain("do not use markdown headers or bullet points");
   expect(description).toContain("do not list stats one after another");
 
+  // No coach voice, and the viewer never sees the prompt's own labels.
+  expect(prompt).toContain('never write "we", "us", "our" or "let\'s"');
+  expect(prompt).toContain(
+    'Call the other player "your opponent", never "Player 1" or "Player 2"',
+  );
+
   expect(prompt).not.toContain("a 'summary':");
   expect(prompt).not.toContain("WITHOUT printing raw numbers");
   expect(prompt).not.toContain("600");
@@ -220,7 +233,7 @@ test("the summary names no vendor and speaks of Player 1 / Player 2", async () =
 
 test("the generation config and model are the ones the prompt was tuned for", async () => {
   const { url, body } = await captureGeminiRequest();
-  expect(url).toContain("/models/gemini-3.5-flash-lite:generateContent");
+  expect(url).toContain("/models/gemini-3.5-flash:generateContent");
   expect(body.generationConfig.temperature).toBe(0.4);
   expect(body.generationConfig.responseMimeType).toBe("application/json");
   expect(body.generationConfig.responseSchema).toMatchObject({
@@ -292,5 +305,18 @@ test("a reply still off after the retry is saved anyway, never dropped", async (
   expect(requests).toHaveLength(2);
   expect(saved?.player2?.summary).toBe(
     `Strong serving. It carried you. ${GOOD_REPLY.player2!.description}`,
+  );
+});
+
+test("a slow first answer is kept rather than asked for again", async () => {
+  const bad: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline: "You won 67% of points." },
+  };
+  // Past RETRY_BUDGET_MS: a second call would outrun the webhook's 35 s wait.
+  const { requests, saved } = await runWithReplies([bad, GOOD_REPLY], 20_000);
+  expect(requests).toHaveLength(1);
+  expect(saved?.player1?.summary).toBe(
+    `You won 67% of points. ${GOOD_REPLY.player1!.description}`,
   );
 });
