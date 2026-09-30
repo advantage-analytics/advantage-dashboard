@@ -20,6 +20,9 @@ import {
   shotNumber,
   shotResult,
   collapsedTailStart,
+  frozenGameStarts,
+  frozenStretches,
+  FROZEN_MIN_RALLIES,
   lastStrokeWinner,
   POINT_FLAGS,
   SHOT_FLAGS,
@@ -1105,7 +1108,7 @@ test.describe("collapsed score tail", () => {
 
     // The last real rally lost its successor's score, so it is guessed too.
     const tailIds = tail.map((r) => r.rallyId);
-    expect(t.guessedTailRallies).toEqual([lastId, ...tailIds]);
+    expect(t.guessedRallies).toEqual([lastId, ...tailIds]);
     const guessed = t.points.filter((p) =>
       p.flags.includes(POINT_FLAGS.WINNER_GUESSED),
     );
@@ -1117,6 +1120,310 @@ test.describe("collapsed score tail", () => {
       expect(p.set_number).toBe(lastReal.set_number);
       expect(p.game_number).toBe(lastReal.game_number);
     }
+  });
+});
+
+test.describe("frozen score stretch", () => {
+  /**
+   * One frozen rally: the vendor names `label` the server whatever end the
+   * serve came from (job ac56ef8b), the reading never moves, and the serve's
+   * end, court and time are what the games are read from.
+   */
+  const frozenRally = (
+    rallyId: number,
+    label: string,
+    other: string,
+    end: "top" | "bottom",
+    court: "deuce" | "ad",
+    videoTime: number,
+    set: string | null = "1-0",
+  ): SplitStepRally => {
+    const y = end === "bottom" ? -11.8 : 13.5;
+    // Bottom end: +x is the deuce court; top end: -x (serveCourtSide).
+    const x = (court === "deuce") === (end === "bottom") ? 0.8 : -0.8;
+    const at = {
+      predSetScore: set,
+      predGameScore: "0-0",
+      predPointScore: "0-0",
+    };
+    return {
+      ...rally([
+        stroke({
+          rallyId,
+          playerLabel: label,
+          strokeType: "serve",
+          playerX: x,
+          playerY: y,
+          videoTime,
+          ...at,
+        }),
+        stroke({
+          rallyId,
+          playerLabel: other,
+          strokeNumber: 2,
+          playerY: -y,
+          videoTime: videoTime + 2,
+          in: false,
+          ...at,
+        }),
+      ]),
+      rallyId,
+    };
+  };
+
+  test("a run of identical readings is frozen only past the longest game", () => {
+    const run = (n: number) =>
+      Array.from({ length: n }, (_, i) =>
+        frozenRally(i + 1, "A", "B", "bottom", "deuce", i * 30),
+      );
+    expect(frozenStretches(run(FROZEN_MIN_RALLIES))).toEqual([
+      { start: 0, end: FROZEN_MIN_RALLIES },
+    ]);
+    expect(frozenStretches(run(FROZEN_MIN_RALLIES - 1))).toEqual([]);
+  });
+
+  test("games split where the serve switches ends or follows a changeover", () => {
+    const run = [
+      frozenRally(1, "A", "B", "bottom", "deuce", 0),
+      frozenRally(2, "A", "B", "bottom", "ad", 30),
+      // New server, other end, no changeover.
+      frozenRally(3, "A", "B", "top", "deuce", 60),
+      frozenRally(4, "A", "B", "top", "ad", 90),
+      // Same end after a sit-down break, from the deuce court: changeover.
+      frozenRally(5, "A", "B", "top", "deuce", 220),
+      // A long pause before an AD point is not a new game.
+      frozenRally(6, "A", "B", "top", "ad", 350),
+    ];
+    expect(frozenGameStarts(run)).toEqual([
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+    ]);
+  });
+
+  test("a frozen stretch keeps every point, in games, with the server alternating", () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, "Gate 1 is restored");
+    const a = analyzeResults(clean);
+    const last = a.rallies[a.rallies.length - 1];
+    const [p, q] = a.players;
+    const t0 = last.strokes[last.strokes.length - 1].videoTime + 60;
+    const ends: ["top" | "bottom", number][] = [
+      ["bottom", 0],
+      ["bottom", 30],
+      ["bottom", 60],
+      ["bottom", 90],
+      ["top", 130],
+      ["top", 160],
+      ["top", 190],
+      ["top", 220],
+      ["top", 350],
+      ["top", 380],
+      ["top", 410],
+      ["top", 440],
+    ];
+    // The vendor calls p the server of every one, as on ac56ef8b.
+    const run = ends.map(([end, dt], i) =>
+      frozenRally(
+        last.rallyId + i + 1,
+        p,
+        q,
+        end,
+        i % 2 === 0 ? "deuce" : "ad",
+        t0 + dt,
+        "9-9",
+      ),
+    );
+    const t = buildTranscript({
+      rallies: [...a.rallies, ...run],
+      labels: a.players,
+      score: { player1: [6, 0, 6], player2: [0, 6, 0] },
+      initialTopIsPlayer1: null,
+    });
+
+    expect(t.ok).toBe(true);
+    expect(t.reconciliation.unresolvedPoints).toEqual([]);
+    const ids = run.map((r) => r.rallyId);
+    expect(t.frozenRallies).toEqual(ids);
+
+    const frozen = t.points.slice(a.rallies.length);
+    expect(frozen).toHaveLength(run.length);
+    for (const point of frozen) {
+      expect(point.flags).toContain(POINT_FLAGS.SCORE_FROZEN);
+      expect(point.flags).toContain(POINT_FLAGS.WINNER_GUESSED);
+      expect(point.point_score).toBeNull();
+      expect(point.game_score).toBeNull();
+      expect(point.set_score).toBeNull();
+    }
+
+    // Three games of four, each a new game number.
+    const games = frozen.map((pt) => pt.game_number);
+    expect(new Set(games).size).toBe(3);
+    expect(games.slice(0, 4).every((g) => g === games[0])).toBe(true);
+    expect(games.slice(4, 8).every((g) => g === games[4])).toBe(true);
+    expect(games.slice(8).every((g) => g === games[8])).toBe(true);
+
+    // The server alternates game by game from the last readable rally, and
+    // the relabelled serve is credited to that server.
+    const lastRealServerIsP1 = t.points[a.rallies.length - 1].server_is_player1;
+    const servers = [frozen[0], frozen[4], frozen[8]].map(
+      (pt) => pt.server_is_player1,
+    );
+    expect(servers).toEqual([
+      !lastRealServerIsP1,
+      lastRealServerIsP1,
+      !lastRealServerIsP1,
+    ]);
+    for (const point of frozen) {
+      expect(point.shots[0].is_player1).toBe(point.server_is_player1);
+    }
+  });
+
+  test("a leading warm-up rally is still refused, not kept as a phantom set", () => {
+    const a = analyzeResults(degraded);
+    const t = buildTranscript({
+      rallies: a.rallies,
+      labels: a.players,
+      score: { player1: [10, 6, 5], player2: [6, 3, 2] },
+      initialTopIsPlayer1: null,
+    });
+    expect(t.ok).toBe(false);
+    expect(t.reason).toBe("1 point(s) resolved no winner");
+    expect(t.guessedRallies).not.toContain(a.rallies[0].rallyId);
+  });
+
+  test("relabelled frozen points keep their line calls and skip the score-side flag", () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, "Gate 1 is restored");
+    const a = analyzeResults(clean);
+    const last = a.rallies[a.rallies.length - 1];
+    // The vendor names the last real server again, so the frozen game's
+    // server (the other player) forces a relabel of every rally.
+    const vendor = last.server;
+    const other = a.players.find((l) => l !== vendor) as string;
+    const t0 = last.strokes[last.strokes.length - 1].videoTime + 60;
+    const at = {
+      predSetScore: "9-9",
+      predGameScore: "0-0",
+      predPointScore: "0-0",
+    };
+    const beforeWinner: SplitStepStroke[] = [];
+    const run: SplitStepRally[] = Array.from(
+      { length: FROZEN_MIN_RALLIES },
+      (_, i) => {
+        const rallyId = last.rallyId + i + 1;
+        // All from the bottom, alternating courts: every ad-court serve is at
+        // odds with the frozen "first point" reading.
+        const x = i % 2 === 0 ? 0.8 : -0.8;
+        const t = t0 + i * 30;
+        const before = stroke({
+          rallyId,
+          playerLabel: other,
+          strokeNumber: 2,
+          playerY: 12,
+          videoTime: t + 2,
+          in: true,
+          ...at,
+        });
+        beforeWinner.push(before);
+        return {
+          ...rally([
+            stroke({
+              rallyId,
+              playerLabel: vendor,
+              strokeType: "serve",
+              playerX: x,
+              playerY: -11.8,
+              videoTime: t,
+              ...at,
+            }),
+            before,
+            // A winner by the vendor-labelled server's side.
+            stroke({
+              rallyId,
+              playerLabel: vendor,
+              strokeNumber: 3,
+              playerY: -11,
+              videoTime: t + 4,
+              in: true,
+              ...at,
+            }),
+          ]),
+          rallyId,
+        };
+      },
+    );
+    // The ball before every winner sat on the line.
+    const lineCalls = new Map<SplitStepStroke, LineCall>(
+      beforeWinner.map((s) => [
+        s,
+        { margin: 0, netClearance: 1, source: "trajectory" },
+      ]),
+    );
+    const t = buildTranscript({
+      rallies: [...a.rallies, ...run],
+      labels: a.players,
+      score: { player1: [6, 0, 6], player2: [0, 6, 0] },
+      initialTopIsPlayer1: null,
+      lineCalls,
+    });
+    const frozen = t.points.slice(a.rallies.length);
+    expect(frozen).toHaveLength(run.length);
+    for (const point of frozen) {
+      expect(point.flags).toContain(POINT_FLAGS.ENDING_SUSPECT_LINE);
+      expect(point.flags).not.toContain(POINT_FLAGS.SCORE_SIDE_MISMATCH);
+    }
+  });
+
+  test("a stall inside a game is guessed, not refused", () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, "Gate 1 is restored");
+    const a = analyzeResults(clean);
+    // Find two consecutive rallies in one game and copy the first's reading
+    // onto the second, so the transition between them reads no change.
+    const i = a.rallies.findIndex(
+      (r, k) =>
+        k > 0 &&
+        k < a.rallies.length - 1 &&
+        r.server === a.rallies[k - 1].server &&
+        r.strokes[0].predGameScore ===
+          a.rallies[k - 1].strokes[0].predGameScore &&
+        r.strokes[0].predPointScore !==
+          a.rallies[k - 1].strokes[0].predPointScore,
+    );
+    expect(i).toBeGreaterThan(0);
+    const reading = a.rallies[i - 1].strokes[0];
+    const stalled = a.rallies.map((r, k) =>
+      k !== i
+        ? r
+        : {
+            ...r,
+            strokes: r.strokes.map((s, n) =>
+              n === 0
+                ? {
+                    ...s,
+                    predSetScore: reading.predSetScore,
+                    predGameScore: reading.predGameScore,
+                    predPointScore: reading.predPointScore,
+                  }
+                : s,
+            ),
+          },
+    );
+    const t = buildTranscript({
+      rallies: stalled,
+      labels: a.players,
+      score: { player1: [6, 0, 6], player2: [0, 6, 0] },
+      initialTopIsPlayer1: null,
+    });
+    expect(t.ok).toBe(true);
+    // Only the final rally, which reconcile settles from the entered score.
+    expect(t.reconciliation.unresolvedPoints).toEqual([
+      a.rallies[a.rallies.length - 1].rallyId,
+    ]);
+    expect(t.guessedRallies).toContain(a.rallies[i - 1].rallyId);
+    expect(t.frozenRallies).toEqual([]);
+    expect(t.points[i - 1].flags).toContain(POINT_FLAGS.WINNER_GUESSED);
   });
 });
 
