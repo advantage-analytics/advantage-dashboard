@@ -106,6 +106,7 @@ async function invoke({
         : { createClient },
     Deno: { env: { get: (key: string) => env[key] } },
     Response,
+    AbortSignal,
     console: { ...console, warn: () => {}, error: () => {} },
     fetch: async (url: string) => {
       events.push(

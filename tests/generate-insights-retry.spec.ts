@@ -64,6 +64,7 @@ async function run(statuses: number[]) {
           : { createClient: () => ({ from: () => query }) },
       Deno: { env: { get: (key: string) => ENV[key] } },
       Response,
+      AbortSignal,
       console: { ...console, warn: () => {}, error: () => {} },
       setTimeout: (fn: () => void) => setTimeout(fn, 0),
       fetch: async () => {

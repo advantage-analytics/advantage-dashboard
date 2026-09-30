@@ -8,19 +8,21 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_KEY");
  * gemini-2.5-flash is closed to new Google Cloud projects ("limiting access to
  * the 2.5 models to users who have actively used them in the past"), so the
  * paid key moved in 2026-09-28 was refused with a 404. 3.5 Flash replaced
- * 3.5 Flash-Lite on 2026-09-29 after a 16-match side-by-side: its headlines
- * state what happened rather than giving orders, its focus varies beyond the
- * serve, and it made none of Flash-Lite's slips (a wrong figure, "Player 1"
- * in a player's summary). It takes ~14 s a call against ~3 s.
+ * 3.5 Flash-Lite on 2026-09-29 after a 16-match side-by-side (better
+ * headlines, no wrong figures); it takes ~14 s a call against ~3 s.
  */
 const GEMINI_MODEL = "gemini-3.5-flash";
 
 /**
- * A first answer slower than this is kept rather than asked for again: the
- * video webhook waits `INSIGHTS_CAP_MS` (35 s) on this function, and a second
- * Flash call would take it past that.
+ * The video webhook waits this long on the function (`INSIGHTS_CAP_MS` in
+ * `src/lib/services/splitstep/request-insights.ts`). A rejected first answer
+ * is asked for again only while a whole second call still fits inside it —
+ * the slowest Flash call seen was 18.6 s — and that call is cut off at
+ * `DB_WRITE_MARGIN_MS` before the wait ends, keeping the first answer.
  */
-const RETRY_BUDGET_MS = 15_000;
+const WEBHOOK_WAIT_MS = 35_000;
+const RETRY_NEEDS_MS = 20_000;
+const DB_WRITE_MARGIN_MS = 1_500;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -56,7 +58,9 @@ async function fetchWithRetry(
       );
       await response.body?.cancel();
     } catch (err) {
-      if (delay === undefined) throw err;
+      // A deliberately cut-off call is over; backing off would only waste
+      // the time the cut-off was saving.
+      if (delay === undefined || init.signal?.aborted) throw err;
       console.warn(
         `Gemini request threw; retrying (attempt ${attempt + 2}):`,
         err instanceof Error ? err.message : String(err),
@@ -124,6 +128,44 @@ async function captureGeminiGeneration({
 const HEADLINE_MAX_CHARS = 90;
 const SUMMARY_MAX_CHARS = 350;
 
+const PLAYER_KEYS = ["player1", "player2"] as const;
+
+/**
+ * Words whose period the card's splitter reads as an abbreviation's, so a
+ * headline ending on one never splits from its description. A copy of
+ * `ABBREVIATIONS` in `insight-text.ts`, which this function cannot import.
+ */
+const ABBREVIATIONS = new Set([
+  "vs",
+  "v",
+  "mr",
+  "mrs",
+  "ms",
+  "dr",
+  "st",
+  "jr",
+  "sr",
+  "approx",
+  "etc",
+]);
+
+/** A headline's last word, when the splitter would take its period as an abbreviation's. */
+function endsOnAbbreviation(headline: string): boolean {
+  const word = (/(\S+)\.$/.exec(headline)?.[1] ?? "").replace(/^[("'“‘]+/, "");
+  return (
+    /^[A-Za-z]$/.test(word) ||
+    /^(?:[A-Za-z]\.)+[A-Za-z]$/.test(word) ||
+    ABBREVIATIONS.has(word.toLowerCase().replace(/\./g, ""))
+  );
+}
+
+/**
+ * The prompt's voice rules, checked: no coach "we" (lowercase "us", so "US
+ * Open" is not caught) and never the prompt's own Player 1 / Player 2 labels.
+ */
+const COACH_VOICE = /\b(?:[Ww]e|us|[Oo]ur|[Ll]et['’]s)\b/;
+const PLAYER_LABEL = /\bplayer\s*[12]\b/i;
+
 type PlayerSummary = {
   focus?: string;
   headline?: string;
@@ -152,18 +194,24 @@ function playerSummaryProblem(
   if (!/[.!?]$/.test(headline)) return "a headline does not end its sentence";
   if (/[.!?]\s+[A-Z]/.test(headline))
     return "a headline is more than one sentence";
+  if (endsOnAbbreviation(headline)) {
+    return "a headline ends on an abbreviation or initial";
+  }
   if (!/^[A-Z]/.test(description)) {
     return "a description does not start a new sentence";
   }
   if (description.length <= headline.length) {
     return "a description is not longer than its headline";
   }
+  const text = `${headline} ${description}`;
+  if (PLAYER_LABEL.test(text)) return 'a summary says "Player 1" or "Player 2"';
+  if (COACH_VOICE.test(text)) return 'a summary speaks as "we"';
   return null;
 }
 
 function summaryProblems(insights: Record<string, PlayerSummary>): string[] {
   const problems: string[] = [];
-  for (const key of ["player1", "player2"]) {
+  for (const key of PLAYER_KEYS) {
     const problem = playerSummaryProblem(insights?.[key]);
     if (problem) problems.push(`${key}: ${problem}`);
   }
@@ -172,7 +220,7 @@ function summaryProblems(insights: Record<string, PlayerSummary>): string[] {
 
 /** Writes each player's `summary` as headline + description. */
 function composeSummaries(insights: Record<string, PlayerSummary>) {
-  for (const key of ["player1", "player2"]) {
+  for (const key of PLAYER_KEYS) {
     const player = insights?.[key];
     if (!player) continue;
     const parts = [player.headline, player.description]
@@ -186,11 +234,13 @@ function composeSummaries(insights: Record<string, PlayerSummary>) {
 async function generateInsights(
   url: string,
   body: unknown,
+  signal?: AbortSignal,
 ): Promise<Record<string, PlayerSummary>> {
   const geminiResponse = await fetchWithRetry(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
 
   const geminiData = await geminiResponse.json();
@@ -292,6 +342,7 @@ async function callerOwnsMatch(
 }
 
 serve(async (req) => {
+  const requestStartedAt = Date.now();
   try {
     // The caller is verified before the body is trusted for anything: the
     // write below runs under the service role, so without this any anon-key
@@ -493,49 +544,43 @@ serve(async (req) => {
     `;
 
     const generationStartedAt = Date.now();
-    // 6. Call Gemini, and once more if a headline breaks the card's rules
-    let insightsJSON = await generateInsights(geminiUrl, {
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
+    const request = (text: string) => ({
+      contents: [{ role: "user", parts: [{ text }] }],
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,
         temperature: 0.4,
       },
     });
+    // 6. Call Gemini, and once more if a headline breaks the card's rules
+    let insightsJSON = await generateInsights(geminiUrl, request(prompt));
     let problems = summaryProblems(insightsJSON);
-    const firstCallMs = Date.now() - generationStartedAt;
-    if (problems.length > 0 && firstCallMs > RETRY_BUDGET_MS) {
-      // Kept as it is: see RETRY_BUDGET_MS. The card still splits it.
-      console.warn(
-        `Summary off but the first call took ${firstCallMs} ms, so it is kept:`,
-        problems.join("; "),
-      );
-    } else if (problems.length > 0) {
+    const remainingMs = WEBHOOK_WAIT_MS - (Date.now() - requestStartedAt);
+    if (problems.length > 0 && remainingMs >= RETRY_NEEDS_MS) {
       console.warn("Summary rejected, asking again:", problems.join("; "));
-      insightsJSON = await generateInsights(geminiUrl, {
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: `${prompt}
-      A previous answer was rejected because ${problems.join("; ")}. Follow the headline and description rules exactly.`,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: responseSchema,
-          temperature: 0.4,
-        },
-      });
-      problems = summaryProblems(insightsJSON);
-      if (problems.length > 0) {
-        // Kept anyway: a summary that breaks a rule still beats none, and the
-        // card falls back to splitting it at its first sentence.
-        console.warn("Summary still off after a retry:", problems.join("; "));
+      try {
+        const retried = await generateInsights(
+          geminiUrl,
+          request(`${prompt}
+      A previous answer was rejected because ${problems.join("; ")}. Follow the headline and description rules exactly.`),
+          AbortSignal.timeout(remainingMs - DB_WRITE_MARGIN_MS),
+        );
+        insightsJSON = retried;
+        problems = summaryProblems(retried);
+      } catch (err) {
+        // The first answer is still usable; a failed or cut-off retry must
+        // not cost the match its summary.
+        console.warn(
+          "Retry failed; keeping the first answer:",
+          err instanceof Error ? err.message : String(err),
+        );
       }
+    }
+    if (problems.length > 0) {
+      // Kept anyway (no time for a retry, or the retry was off too): a
+      // summary that breaks a rule still beats none, and the card falls back
+      // to splitting it at its first sentence.
+      console.warn("Summary kept despite:", problems.join("; "));
     }
     await captureGeminiGeneration({
       userId: uploaderId,

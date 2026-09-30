@@ -46,6 +46,8 @@ type PlayerReply = {
   summary?: string;
 };
 type Reply = { player1?: PlayerReply; player2?: PlayerReply };
+/** A scripted Gemini turn: an answer, or `null` for a refused call. */
+type Turn = Reply | null;
 
 /** A reply whose headlines and descriptions pass the function's check. */
 const GOOD_REPLY: Reply = {
@@ -69,7 +71,7 @@ const GOOD_REPLY: Reply = {
  * and the insights it saved.
  */
 async function runWithReplies(
-  replies: Reply[] = [{}],
+  replies: Turn[] = [{}],
   /** When set, a fake clock the function reads that each Gemini call advances by this much. */
   msPerCall?: number,
 ): Promise<{
@@ -132,6 +134,7 @@ async function runWithReplies(
           },
     Deno: { env: { get: (key: string) => GENERATE_INSIGHTS_ENV[key] } },
     Response,
+    AbortSignal,
     ...(msPerCall === undefined ? {} : { Date: { now: () => clock } }),
     console: { ...console, warn: () => {}, error: () => {} },
     fetch: async (url: string, init?: RequestInit) => {
@@ -142,6 +145,12 @@ async function runWithReplies(
           body: JSON.parse(String(init?.body)) as GeminiRequestBody,
         });
         const reply = replies[Math.min(requests.length, replies.length) - 1];
+        if (reply === null) {
+          return Response.json(
+            { error: { message: "refused" } },
+            { status: 400 },
+          );
+        }
         return Response.json({
           candidates: [
             { content: { parts: [{ text: JSON.stringify(reply) }] } },
@@ -313,10 +322,83 @@ test("a slow first answer is kept rather than asked for again", async () => {
     ...GOOD_REPLY,
     player1: { ...GOOD_REPLY.player1, headline: "You won 67% of points." },
   };
-  // Past RETRY_BUDGET_MS: a second call would outrun the webhook's 35 s wait.
+  // 20 s in, a second call no longer fits the webhook's 35 s wait.
   const { requests, saved } = await runWithReplies([bad, GOOD_REPLY], 20_000);
   expect(requests).toHaveLength(1);
   expect(saved?.player1?.summary).toBe(
     `You won 67% of points. ${GOOD_REPLY.player1!.description}`,
   );
+});
+
+test("a retry that fails keeps the first answer instead of losing the summary", async () => {
+  const bad: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline: "You won 67% of points." },
+  };
+  const { requests, saved } = await runWithReplies([bad, null]);
+  expect(requests).toHaveLength(2);
+  expect(saved?.player1?.summary).toBe(
+    `You won 67% of points. ${GOOD_REPLY.player1!.description}`,
+  );
+});
+
+test("a headline ending on an initial is rejected, because the card would not split it", async () => {
+  const headline = "Your serving plan worked, so stick with plan B.";
+  // The card's splitter reads "B." as an initial and finds no boundary.
+  expect(
+    splitInsight(`${headline} ${GOOD_REPLY.player1!.description}`).evidence,
+  ).toBeNull();
+
+  const bad: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline },
+  };
+  const { requests } = await runWithReplies([bad, GOOD_REPLY]);
+  expect(requests).toHaveLength(2);
+  expect(requests[1].body.contents[0].parts[0].text).toContain(
+    "player1: a headline ends on an abbreviation or initial",
+  );
+});
+
+for (const [label, description, problem] of [
+  [
+    "Player 1",
+    "As Player 1 pressed, you won 67% of second-serve points, so keep trusting your kick serve.",
+    'a summary says "Player 1" or "Player 2"',
+  ],
+  [
+    "we",
+    "You won 67% of second-serve points. We will keep working on your kick serve in practice.",
+    'a summary speaks as "we"',
+  ],
+  [
+    "let's",
+    "You won 67% of second-serve points, so let's keep building your kick serve in practice.",
+    'a summary speaks as "we"',
+  ],
+] as const) {
+  test(`a description that uses "${label}" is asked for again`, async () => {
+    const bad: Reply = {
+      ...GOOD_REPLY,
+      player2: { ...GOOD_REPLY.player2, description },
+    };
+    const { requests } = await runWithReplies([bad, GOOD_REPLY]);
+    expect(requests).toHaveLength(2);
+    expect(requests[1].body.contents[0].parts[0].text).toContain(
+      `player2: ${problem}`,
+    );
+  });
+}
+
+test('naming the US Open is not mistaken for a coach\'s "us"', async () => {
+  const reply: Reply = {
+    ...GOOD_REPLY,
+    player1: {
+      ...GOOD_REPLY.player1,
+      description:
+        "You won 67% of second-serve points in a US Open qualifier, so keep trusting your kick serve.",
+    },
+  };
+  const { requests } = await runWithReplies([reply]);
+  expect(requests).toHaveLength(1);
 });
