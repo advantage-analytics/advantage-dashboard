@@ -308,24 +308,34 @@ export function MatchStep() {
   // this has to be the same object across renders that don't actually change
   // it, or the memo never bails and the whole ~1,800-line tree re-renders on
   // every unrelated wizard state change.
-  const subject = useMemo(
-    () => ({
+  const subject = useMemo(() => {
+    const playerId =
+      whoPlayed.subject?.kind === "roster"
+        ? whoPlayed.subject.playerId
+        : (preset?.playerUserId ?? null);
+    // The roster row behind the pick, when there is one — what its saved hand
+    // and backhand are, and whether "use for future matches" has a profile to
+    // write to. A preset's player is looked up the same way; a personal
+    // workspace has no roster, so this is null there.
+    const rosterRow =
+      playerId === null
+        ? undefined
+        : whoPlayed.roster?.find((row) => row.playerId === playerId);
+    return {
       name: formData.playerName || whoPlayed.uploaderName || "You",
       isSelf: !preset && whoPlayed.subject?.kind !== "roster",
-      playerId:
-        whoPlayed.subject?.kind === "roster"
-          ? whoPlayed.subject.playerId
-          : (preset?.playerUserId ?? null),
+      playerId,
       userId: workspaces.viewer.id,
-    }),
-    [
-      formData.playerName,
-      whoPlayed.uploaderName,
-      whoPlayed.subject,
-      preset,
-      workspaces.viewer.id,
-    ],
-  );
+      rosterStyle: rosterRow ?? null,
+    };
+  }, [
+    formData.playerName,
+    whoPlayed.uploaderName,
+    whoPlayed.subject,
+    whoPlayed.roster,
+    preset,
+    workspaces.viewer.id,
+  ]);
 
   if (admin?.attachment)
     return (

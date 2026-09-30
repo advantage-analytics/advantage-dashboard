@@ -117,6 +117,13 @@ import {
 import { AnimatedHeight } from "./AnimatedHeight";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
 import { firstOpenSet, isStoppedResult, scoreGames } from "./score-state";
+import {
+  firstNameOf,
+  styleSaveChecked,
+  styleSaveChoice,
+  styleSaveOffer,
+  type SavedStyle,
+} from "./style-save-offer";
 
 export interface DetailsStepContentProps {
   formData: FormData;
@@ -144,6 +151,13 @@ export interface DetailsStepContentProps {
     isSelf: boolean;
     playerId: string | null;
     userId: string | null;
+    /**
+     * The picked player's roster row's saved style, or null when the pick is
+     * not a roster profile (a personal upload, a preset naming nobody). A row
+     * with nothing saved is `{ hand: null, backhand: null }`, not null — the
+     * difference is whether "use for future matches" has somewhere to write.
+     */
+    rosterStyle: SavedStyle | null;
   };
   /** The event line this flow started from, when it did. */
   preset: EventPreset | null;
@@ -1088,11 +1102,43 @@ function DetailsStepContentImpl({
     };
   }, [inDual, lineProgramKey, lineSlot, lookupScope]);
 
-  // A roster player has no profile to read; their last match is the record.
+  // A roster player's saved style is the record — coach-set on the roster, or
+  // the player's own once they have claimed the profile. It wins over their
+  // last match, including a last-match guess already on screen because the
+  // roster arrived after this step did. A style the coach typed is never
+  // replaced.
+  const rosterHand = subject.rosterStyle?.hand ?? null;
+  const rosterBackhand = subject.rosterStyle?.backhand ?? null;
+  useEffect(() => {
+    if (subject.isSelf || admin) return;
+    if (!rosterHand && !rosterBackhand) return;
+    const source = formData.playerStyleSource;
+    const untouched =
+      source === "history" ||
+      (!formData.playerHand &&
+        !formData.playerBackhand &&
+        source === undefined);
+    if (!untouched) return;
+    onInputChange("playerHand", rosterHand ?? undefined);
+    onInputChange("playerBackhand", rosterBackhand ?? undefined);
+    onInputChange("playerStyleSource", "roster");
+  }, [
+    subject.isSelf,
+    admin,
+    rosterHand,
+    rosterBackhand,
+    formData.playerStyleSource,
+    formData.playerHand,
+    formData.playerBackhand,
+    onInputChange,
+  ]);
+
+  // Nothing saved on the roster: their last match is the record.
   const styleAsked = useRef(false);
   useEffect(() => {
     if (styleAsked.current || subject.isSelf) return;
     if (formData.playerHand || formData.playerBackhand) return;
+    if (rosterHand || rosterBackhand) return;
     styleAsked.current = true;
     void playerStyleFromMatches({
       scope: lookupScope,
@@ -1120,6 +1166,8 @@ function DetailsStepContentImpl({
     subject.name,
     formData.playerHand,
     formData.playerBackhand,
+    rosterHand,
+    rosterBackhand,
     onInputChange,
   ]);
 
@@ -1274,6 +1322,17 @@ function DetailsStepContentImpl({
   // picked on step 1, and SubjectBar's "Not <name>?" is where it changes. Say
   // so quietly rather than add a second control for the same start-over.
   const pickedOnStepOne = workspaceKind === "team" && !preset;
+  // "Use for future matches" — only for a roster profile, in a team, outside
+  // the admin console (which records for a program it does not coach).
+  const styleOffer =
+    !admin && workspaceKind === "team" && subject.rosterStyle
+      ? styleSaveOffer(subject.rosterStyle, playerHand, playerBackhand)
+      : null;
+  const styleSaveTicked = styleSaveChecked(
+    styleOffer,
+    formData.saveStyleChoice,
+  );
+  const playerFirstName = firstNameOf(subject.name);
   const playerProvenance = provenanceFor(formData.playerStyleSource, {
     isSelf: subject.isSelf,
     school: null,
@@ -1515,6 +1574,38 @@ function DetailsStepContentImpl({
                       : "Save to your profile"}
                 </button>
               )}
+            {/* The roster twin of the link above, as a checkbox because it
+                acts on Save rather than on the click — the same grammar as
+                Add player's "Also send an invite". Ticked when the roster had
+                no answer; unticked when the coach is overriding one, so a
+                match-only difference stays match-only unless they say so. */}
+            {styleOffer && (
+              <label className="flex cursor-pointer items-start gap-2.5 sm:col-span-2 sm:col-start-2">
+                <input
+                  type="checkbox"
+                  checked={styleSaveTicked}
+                  onChange={(event) =>
+                    onInputChange(
+                      "saveStyleChoice",
+                      styleSaveChoice(styleOffer.mode, event.target.checked),
+                    )
+                  }
+                  className="mt-px size-4 shrink-0 cursor-pointer accent-[var(--blue)]"
+                />
+                <span>
+                  <span className="block text-[12px] text-[var(--ink-700)]">
+                    {styleOffer.mode === "save"
+                      ? `Use for ${playerFirstName}'s future matches`
+                      : `Update ${playerFirstName}'s saved hand and backhand`}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                    {styleOffer.mode === "save"
+                      ? "Saves to their roster profile when you save this match."
+                      : "Leave unticked to change this match only."}
+                  </span>
+                </span>
+              </label>
+            )}
           </div>
 
           {/* The opponent — named here, then read back like the row above. */}

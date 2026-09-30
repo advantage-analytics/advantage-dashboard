@@ -6,6 +6,7 @@ import type { ProviderKind } from "@/lib/services/upload";
 import type { VideoProbe } from "@/lib/video/probe";
 import type { Discipline, EventSite, MatchEnding } from "@/lib/schedule/types";
 import type { RetiredSide } from "./score-state";
+import type { StyleSaveChoice } from "./style-save-offer";
 
 /** Wizard step identifiers */
 /**
@@ -111,6 +112,12 @@ export interface FormData {
   playerStyleSource?: ValueSource;
   /** Where the opponent's hand and backhand came from. */
   opponentStyleSource?: ValueSource;
+  /**
+   * The coach's answer to "use for future matches" / "update their saved hand
+   * and backhand", tagged with which of the two it answered — see
+   * `style-save-offer.ts`. Undefined means the offer's own default.
+   */
+  saveStyleChoice?: StyleSaveChoice;
   /** Tournament, dual or a one-off — decides whether Round is asked. */
   eventKind?: "tournament" | "dual" | "other";
 }

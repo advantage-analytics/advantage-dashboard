@@ -544,7 +544,7 @@ export async function opponentRosterForLine(input: {
 
 /**
  * The player's hand and backhand as this program last recorded them — the
- * provenance for a roster player who has no profile of their own to read.
+ * fallback for a roster player whose roster profile has no style saved.
  */
 export async function playerStyleFromMatches(input: {
   playerId: string | null;
@@ -557,6 +557,10 @@ export async function playerStyleFromMatches(input: {
   let query = supabase
     .from("matches")
     .select("player_hand, player_backhand")
+    // The newest match that recorded a style, not the newest match: one
+    // saved without an answer would otherwise hide every older one that had
+    // it. Same filter Edit match's suggestion uses.
+    .or("player_hand.not.is.null,player_backhand.not.is.null")
     .order("date", { ascending: false })
     .limit(1);
   // Scoped like opponentsPlayed above: this workspace's matches, never a

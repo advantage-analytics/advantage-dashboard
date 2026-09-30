@@ -11,6 +11,8 @@
  */
 
 import { useAdminWizardMode } from "./admin-mode";
+import { styleSaveChecked, styleSaveOffer } from "./style-save-offer";
+import { saveRosterPlayerStyle } from "@/components/dashboard/team/roster-actions";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { capitalize } from "@/lib/utils";
 import { useRouter } from "next/navigation";
@@ -166,6 +168,7 @@ const START_OVER_FIELDS = [
   "playerHand",
   "playerBackhand",
   "playerStyleSource",
+  "saveStyleChoice",
   "opponentName",
   "opponentSource",
   "opponentPlayerId",
@@ -205,6 +208,7 @@ const LINE_SWAP_FIELDS = [
   "playerHand",
   "playerBackhand",
   "playerStyleSource",
+  "saveStyleChoice",
   "opponentHand",
   "opponentBackhand",
   "opponentStyleSource",
@@ -1849,7 +1853,7 @@ export function useUploadMatchWizard({
           supabase
             .from("program_players")
             .select(
-              "id, program_id, first_name, last_name, email, class_year, lineup_spot, claimed_by_user_id",
+              "id, program_id, first_name, last_name, email, class_year, lineup_spot, claimed_by_user_id, hand, backhand",
             )
             .eq("program_id", eligibilityWorkspace.id)
             .eq("claimed_by_user_id", viewer.id)
@@ -2057,17 +2061,23 @@ export function useUploadMatchWizard({
         ...prev,
         playerName:
           subject.kind === "roster" ? subject.name : (uploaderName ?? ""),
-        // A profile's hand and backhand belong to the uploader. Picking a
-        // roster player drops them — an owner picking their OWN profile too,
-        // since that row is a roster choice like any other and the details
-        // step reads the profile again for it.
-        ...(prev.playerStyleSource === "profile" && subject.kind === "roster"
+        // A looked-up style belongs to whoever it was looked up for. The
+        // uploader's profile, the previous pick's roster profile or their last
+        // match all drop on a roster pick — an owner picking their OWN profile
+        // too, since that row is a roster choice like any other. The details
+        // step fills them again for the new player: their roster profile
+        // first, then their last match. A style the coach typed stays.
+        ...(subject.kind === "roster" &&
+        (prev.playerStyleSource === "profile" ||
+          prev.playerStyleSource === "roster" ||
+          prev.playerStyleSource === "history")
           ? {
               playerHand: undefined,
               playerBackhand: undefined,
               playerStyleSource: undefined,
             }
           : {}),
+        saveStyleChoice: undefined,
       }));
     },
     [
@@ -3359,6 +3369,13 @@ export function useUploadMatchWizard({
                 ...(opponentPlayerId
                   ? { opponent_player_id: opponentPlayerId }
                   : {}),
+                // Required answers on the details step, so they are written
+                // here as on an insert — this branch used to drop all four,
+                // leaving a filled line's match with no style at all.
+                player_hand: matchRow.player_hand,
+                player_backhand: matchRow.player_backhand,
+                opponent_hand: matchRow.opponent_hand,
+                opponent_backhand: matchRow.opponent_backhand,
                 ...(isProcessingProvider
                   ? {
                       fixed_camera: formData.fixedCamera ?? null,
@@ -3397,6 +3414,44 @@ export function useUploadMatchWizard({
                   "a new result for this line."
               : "The match could not be saved. Nothing was uploaded — try again.",
           );
+        }
+
+        // "Use for future matches", ticked on the details step. Decided from
+        // the same roster row and the same pure rule the checkbox drew from,
+        // so what was on screen is what is written. After the match is in and
+        // never awaited: the match is the upload, and a style that failed to
+        // save costs the coach one re-answer next time, not this match.
+        // `eligibilityWorkspace`, not the active one: it is what the roster
+        // was loaded for and what the details step gated the checkbox on, so
+        // a reused match pinned to its team saves what the box promised.
+        const styleRow =
+          !admin && eligibilityWorkspace.kind === "team"
+            ? teamRoster?.find((row) => row.playerId === playerUserId)
+            : undefined;
+        if (
+          styleRow &&
+          styleSaveChecked(
+            styleSaveOffer(
+              { hand: styleRow.hand, backhand: styleRow.backhand },
+              formData.playerHand,
+              formData.playerBackhand,
+            ),
+            formData.saveStyleChoice,
+          )
+        ) {
+          void saveRosterPlayerStyle({
+            profileId: styleRow.playerId,
+            hand: formData.playerHand ?? null,
+            backhand: formData.playerBackhand ?? null,
+          })
+            .then((result) => {
+              if (!result.ok) throw new Error(result.error);
+            })
+            .catch((err) => {
+              console.error("[wizard] could not save the player's style", {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            });
         }
 
         // Match row is in. Close the modal now so the user can move on; the file
@@ -3617,6 +3672,8 @@ export function useUploadMatchWizard({
     refreshApproval,
     refusalForWindow,
     matchSubject,
+    teamRoster,
+    eligibilityWorkspace.kind,
     isUploading,
     isProbing,
     parsingState.isParsing,
