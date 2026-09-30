@@ -300,14 +300,14 @@ serve(async (req) => {
 
       Player 1 comparison context (use ONLY for Player 1's summary):
       - This is only the player's 2nd recorded match. Their single prior match (their baseline AND previous match): ${JSON.stringify(prevRow ?? averages)}
-      In Player 1's summary, briefly note whether they improved or regressed since that previous match — qualitatively, WITHOUT printing raw numbers. Do NOT imply an established trend or long history from a single prior match.`;
+      In Player 1's summary, briefly note whether they improved or regressed since that previous match — qualitatively: do not print the prior-match or average figures (this match's own percentages are still quoted as above). Do NOT imply an established trend or long history from a single prior match.`;
             } else {
               comparisonContext = `
 
       Player 1 comparison context (use ONLY for Player 1's summary):
       - Typical averages across ${priorRows.length} prior matches: ${JSON.stringify(averages)}
       - Immediately previous match: ${prevRow ? JSON.stringify(prevRow) : "unavailable"}
-      In Player 1's summary, frame THIS match against their typical averages AND their previous match (above/below their usual level; improved or regressed since last time) — qualitatively, WITHOUT printing raw numbers.`;
+      In Player 1's summary, frame THIS match against their typical averages AND their previous match (above/below their usual level; improved or regressed since last time) — qualitatively: do not print the prior-match or average figures (this match's own percentages are still quoted as above).`;
             }
           }
         }
@@ -355,7 +355,7 @@ serve(async (req) => {
     const prompt = `
       You are an expert college tennis coach. Analyze the following match statistics and provide, for BOTH Player 1 and Player 2:
       - 3 key strengths and 3 areas to improve (weaknesses). The 'value' should be the relevant percentage (0-100) associated with that specific stat.
-      - a 'summary': a short paragraph of 2-3 sentences, under 350 characters in total, speaking directly to the player. The first sentence is the single most important takeaway from this match; the rest gives the evidence and what to focus on next. Do not greet them, do not use markdown headers or bullet points, and do not restate the raw numbers as a list — synthesize them into a flowing observation with a clear recommendation.
+      - a 'summary': a short paragraph of 2-3 sentences, under 350 characters in total, speaking directly to the player. The first sentence is the single most important takeaway from this match; the rest gives the evidence and what to focus on next. Quote the one or two percentages from THIS match that back up the takeaway inline, written as digits with a percent sign (e.g. "you won 74% of first-serve points"). Do not greet them, do not use markdown headers or bullet points, and do not list stats one after another — weave those figures into a flowing observation with a clear recommendation.
 
       Crucially, contextualize their performances against each other. If Player 1 dominated at the net, factor that into Player 2's weaknesses.
       Keep everything encouraging and actionable for college athletes.

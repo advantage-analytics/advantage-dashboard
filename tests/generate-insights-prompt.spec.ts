@@ -140,7 +140,14 @@ test("the summary instruction asks for 2-3 sentences under 350 characters", asyn
   );
   expect(summaryLine).toContain("Do not greet them");
   expect(summaryLine).toContain("do not use markdown headers or bullet points");
-  expect(summaryLine).toContain("do not restate the raw numbers as a list");
+  expect(summaryLine).toContain("do not list stats one after another");
+  // The summary quotes this match's own figures inline — without this line
+  // flash-lite wrote summaries with no numbers at all.
+  expect(summaryLine).toContain(
+    "Quote the one or two percentages from THIS match",
+  );
+  expect(summaryLine).toContain("as digits with a percent sign");
+  expect(prompt).not.toContain("WITHOUT printing raw numbers");
 });
 
 test("the summary names no vendor and speaks of Player 1 / Player 2", async () => {
