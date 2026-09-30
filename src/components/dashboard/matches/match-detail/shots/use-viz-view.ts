@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/use-viz-points";
 import {
   useMatchSides,
   type MatchSide,
@@ -76,7 +77,7 @@ export interface VizView {
 }
 
 export function useVizView(): VizView {
-  const { points } = useMatchData();
+  const points = useVizPoints(useMatchData());
   const { you, opp } = useMatchSides();
   const { state } = useVizState();
   const { bands, unit, contactHidden } = useVizBands();

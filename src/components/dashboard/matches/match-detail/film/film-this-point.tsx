@@ -4,7 +4,10 @@ import { memo, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
-import { handOf } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import {
+  handOf,
+  pointResultLabel,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import type { Hand } from "@/components/dashboard/matches/match-detail/match-filters/shot-geometry";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
@@ -81,7 +84,7 @@ export const FilmThisPoint = memo(function FilmThisPoint({
   const { context: filterContext } = useMatchFilters();
 
   const seconds = point?.duration != null ? Math.round(point.duration) : null;
-  const ended = point ? point.resultType || "Point" : null;
+  const ended = point ? pointResultLabel(point, filterContext) : null;
   // Over ALL the point's shots, timed or not: the return is a role in the
   // rally, and an untimed serve row still decides which shot it is.
   const returnShotId = pointReturnShotId(point?.shots);

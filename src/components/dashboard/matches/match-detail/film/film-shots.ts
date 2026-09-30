@@ -2,6 +2,7 @@ import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import { isFeedShotType, isServeShotType } from "@/lib/data/serve-return-shots";
 
 import { shotDirection, type Hand } from "../match-filters/shot-geometry";
+import { normalizeServeSpin } from "../match-filters/spin";
 import {
   REACHED_EPSILON_SECONDS,
   toFilmTime,
@@ -109,19 +110,87 @@ export function activeShotAt(
   };
 }
 
-/** "First Serve" + "topspin" → "First serve · topspin". */
-export function shotLabel(shot: MatchShot): string {
-  const type = shot.shotType
-    ? shot.shotType.charAt(0) + shot.shotType.slice(1).toLowerCase()
-    : "Shot";
-  return shot.spinType ? `${type} · ${shot.spinType.toLowerCase()}` : type;
-}
-
 /** The em dash the Current point widget draws for anything unmeasured. */
 export const UNMEASURED = "—";
 
 function sentenceCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+/**
+ * A shot's spin as the filters name it, or null when unrecorded. A serve's is
+ * Serve › Spin's word (`normalizeServeSpin`: the vendor's topspin serve is a
+ * Kick, its sidespin a Slice), so the rows Kick opens say Kick; a value that
+ * filter has no word for, and every rally shot's, prints as recorded.
+ */
+export function shotSpinLabel(
+  shot: Pick<MatchShot, "shotType" | "spinType">,
+): string | null {
+  if (!shot.spinType) return null;
+  const serve = isServeRow(shot.shotType?.trim() ?? "")
+    ? normalizeServeSpin(shot.spinType)
+    : null;
+  return serve ?? sentenceCase(shot.spinType);
+}
+
+/** "First Serve" + "topspin" → "First serve · kick". */
+export function shotLabel(shot: MatchShot): string {
+  const type = shot.shotType ? sentenceCase(shot.shotType) : "Shot";
+  const spin = shotSpinLabel(shot);
+  return spin ? `${type} · ${spin.toLowerCase()}` : type;
+}
+
+const SERVE_RESULT_TYPES = new Set(["Ace", "Service Winner", "Double Fault"]);
+
+/**
+ * The points list's second line: the shot that decided the point, then its
+ * pressure. A serve result (ace, service winner, double fault) describes the
+ * serve played — spin, type, box zone; anything else the rally's last shot —
+ * spin and direction. Built here rather than on the server because the words
+ * are the filters' own: a serve's spin is Serve › Spin's
+ * ({@link shotSpinLabel}) and a rally shot's direction is Custom ›
+ * Direction's (`shotDirection`, which needs the hitter's hand), so a forehand
+ * struck from the backhand half reads Inside Out here as it does in its shot
+ * row. "Break point" is Score › Break point's spelling.
+ */
+export function pointDetail(
+  point: MatchPoint,
+  /** Each seat's hand — the filter context's `hands`. */
+  hands: { player1: Hand | null; player2: Hand | null },
+): string {
+  const parts: string[] = [];
+  const shots = point.shots ?? [];
+
+  if (SERVE_RESULT_TYPES.has(point.resultType)) {
+    // The loader's `firstShot*` is the serve actually played
+    // (`pickServeShot`: the second serve when there was one).
+    const segments = [
+      point.firstShotSpin
+        ? shotSpinLabel({
+            shotType: point.firstShotType ?? "First Serve",
+            spinType: point.firstShotSpin,
+          })
+        : null,
+      point.firstShotType,
+      point.firstShotZone,
+    ].filter(Boolean);
+    if (segments.length > 0) parts.push(segments.join(" "));
+  } else {
+    const last = shots[shots.length - 1];
+    const spin = last ? shotSpinLabel(last) : (point.lastShotSpin ?? null);
+    const direction = last
+      ? (shotDirection(last, last.isPlayer1 ? hands.player1 : hands.player2) ??
+        last.zone)
+      : point.lastShotZone;
+    const segments = [spin, direction].filter(Boolean);
+    if (segments.length > 0) parts.push(segments.join(" "));
+  }
+
+  if (point.isBreakPoint) parts.push("Break point");
+  if (point.isSetPoint) parts.push("Set point");
+  if (point.isMatchPoint) parts.push("Match point");
+
+  return parts.join(" · ") || "Rally";
 }
 
 /** One shot's row in the "Current point" widget, one string per column. */
@@ -315,7 +384,7 @@ export function shotRowCells(
   return {
     order: String(order),
     player: playerName || UNMEASURED,
-    spin: shot.spinType ? sentenceCase(shot.spinType) : UNMEASURED,
+    spin: shotSpinLabel(shot) ?? UNMEASURED,
     stroke: isServe ? "Serve" : shotType ? sentenceCase(shotType) : UNMEASURED,
     type: shotTypeLabel(shot, returnShotId),
     placement: direction ?? (shot.zone || UNMEASURED),

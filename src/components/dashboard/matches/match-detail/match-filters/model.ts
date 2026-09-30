@@ -575,7 +575,9 @@ export function isUnreturnedServe(point: MatchPoint): boolean {
  * `isUnreturnedServe`, and never the result type — the derivation labels
  * every unreturned serve "Service Winner" and never "Ace", and the
  * head-to-head card counts these as its Aces. So an unreturned serve is an
- * ace there and not a service winner; the rest of the chain is unchanged.
+ * ace there, and "Service winner" is never an answer: a serve the returner
+ * touched is found by the return instead (Return › Result "Error"), and the
+ * option is left out of the panel (`optionAvailability`).
  */
 export function serveResultOf(
   point: MatchPoint,
@@ -583,12 +585,28 @@ export function serveResultOf(
 ): ServeResult | null {
   const rt = lower(point.resultType);
   if (ctx.isDerived ? isUnreturnedServe(point) : rt === "ace") return "ace";
-  if (rt === "service winner") return "service-winner";
+  if (rt === "service winner" && !ctx.isDerived) return "service-winner";
   if (rt === "double fault") return "double-fault";
   const ret = point.secondShotResult;
   if (ret === "Out" || ret === "Net") return "return-error";
   if (ret === "In") return "in-play";
   return null;
+}
+
+/**
+ * The name a point is shown under — the points list row, "This point" and the
+ * room's scoreboard. The stored result type, except on a derived match, where
+ * an unreturned serve reads "Ace": the derivation stores it as "Service
+ * Winner", but the head-to-head Aces row counts it and Serve › Result "Ace"
+ * opens it (`serveResultOf`), so the rows that click shows must say so. A
+ * service winner with a stroke after the serve is not one and keeps its label.
+ */
+export function pointResultLabel(
+  point: MatchPoint,
+  ctx: Pick<MatchFilterContext, "isDerived">,
+): string {
+  if (ctx.isDerived && isUnreturnedServe(point)) return "Ace";
+  return point.resultType || "Point";
 }
 
 /**
@@ -615,6 +633,9 @@ export function isReturnWinner(point: MatchPoint): boolean {
  * None when the return's result was not recorded.
  */
 export function returnResultOf(point: MatchPoint): ReturnResult | null {
+  // No serve landed, so there was no return — whatever the returner's swing
+  // at the dead ball recorded (see `lastShotOf`).
+  if (lower(point.resultType) === "double fault") return null;
   if (isReturnWinner(point)) return "winner";
   const ret = point.secondShotResult;
   if (ret === "Out" || ret === "Net") return "error";
@@ -655,7 +676,7 @@ export function finalShotOf(
   point: MatchPoint,
 ): { kind: ResultShot | null; isPlayer1: boolean } | null {
   const shots = point.shots ?? [];
-  const last = shots[shots.length - 1];
+  const last = lastShotOf(point);
   if (!last) {
     if (!point.lastShotType) return null;
     return {
@@ -684,8 +705,21 @@ export function finalShotOf(
   return { kind, isPlayer1: last.isPlayer1 };
 }
 
+/**
+ * The point's deciding shot row: its last one, except on a double fault,
+ * where it is the server's last serve. SwingVision records the returner's
+ * swing at the dead second serve after it (about half its double faults end
+ * on a "Backhand … In" row), and reading that row made a double fault a
+ * Return, hit by the returner — out of the Error + Serve cut that the
+ * head-to-head and Point endings Double faults figures open.
+ */
 function lastShotOf(point: MatchPoint): MatchShot | undefined {
   const shots = point.shots ?? [];
+  if (lower(point.resultType) === "double fault") {
+    for (let i = shots.length - 1; i >= 0; i -= 1) {
+      if (isServeShotType(shots[i].shotType)) return shots[i];
+    }
+  }
   return shots[shots.length - 1];
 }
 
