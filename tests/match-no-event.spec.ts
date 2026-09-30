@@ -153,6 +153,7 @@ function paletteMatch(tournamentName: string | null) {
     type: "match",
     data: {
       id: "m1",
+      playerName: "Dana Brooks",
       opponentName: "Sam Ortiz",
       tournamentName,
       score: [],
@@ -164,17 +165,20 @@ function paletteMatch(tournamentName: string | null) {
   };
 }
 
-test("palette match row with no event reads a muted 'No event'", () => {
+// The palette drops the event segment outright rather than saying "No
+// event": the line starts at the score, with no dot in front of it.
+test("palette match row with no event leaves the event out", () => {
   const { ResultRow } = paletteLoader.load(
     "src/components/dashboard/search/search-command-palette.tsx",
   ) as { ResultRow: React.ComponentType<Record<string, unknown>> };
   const none = render(
     React.createElement(ResultRow, { item: paletteMatch(null) }),
   );
-  expect(none).toMatch(
-    /<span[^>]*style="color:var\(--ink-400\)"[^>]*>No event<\/span>/,
-  );
+  expect(none).toMatch(/Dana Brooks <span[^>]*>vs\.<\/span> Sam Ortiz/);
+  expect(none).not.toContain("No event");
   expect(none).not.toContain("Unknown event");
+  // The second line opens on the score (a stubbed span here), not a dot.
+  expect(none).not.toMatch(/text-\[12px\][^"]*"><span class="mx-1/);
 
   const named = render(
     React.createElement(ResultRow, {
