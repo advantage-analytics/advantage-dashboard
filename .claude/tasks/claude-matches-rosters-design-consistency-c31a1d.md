@@ -73,7 +73,7 @@ ready).
 
 ## T5 · Rename "No video" to "Not analyzed" and lead every list row with a StepMark
 
-- **status:** blocked
+- **status:** todo
 - **model:** opus
 - **needs:** T4
 - **files:** src/lib/data/match-analysis.ts (matchListGroup), src/components/dashboard/matches/matches-page-content.tsx (ANALYSIS_GROUP_ORDER + Filter menu), src/components/dashboard/matches/row-state.tsx, src/components/dashboard/shared/vertical-steps.tsx (StepState), src/components/dashboard/shared/analysis-status-line.tsx, tests/matches-list-grouping.spec.ts, tests/match-film-entry.spec.ts (guess)
@@ -83,7 +83,7 @@ ready).
   - [ ] `StepState` gains `stopped` (`--ink-100` fill, `--ink-600` x glyph — the Failed chip's shape in grey) and `none` (thin solid `--ink-200` ring), rendered by the shared mark component
   - [ ] `row-state.tsx` leads every lifecycle row with a mark: Cancelled = `stopped`; Not analyzed and Stats unavailable = `none`; Imported and Timeline ready = `done`; Failed keeps `fail`; the words stay ink-500
   - [ ] `tests/matches-list-grouping.spec.ts` asserts a `cancelled` match lands in "Not analyzed" alongside a `manual` one and never in "Ready", and a row-state spec asserts the mark state per lifecycle word
-- **notes:** Plan §T4 (list-UI half), decisions 2026-09-30 (board 6d). Design system: read `.skills/advantage-analytics-design/SKILL.md` first. Do not touch the drawer or the stepper here.
+- **notes:** Retry (blocked once, see log): first `git stash apply 85980803a8bf6fb8b0b31d69754004de11f6f2e5` to restore the earlier work, reconcile with the `stopped` StepState T6 already added (keep one definition), then fix the gate failure: `AnalysisStatusLine` must render the word in its own element so the mark's sr-only prefix ("Done:") is not part of the word's text node; `tests/schedule-dual-outcomes.spec.ts:230` (`getByText("Imported", { exact: true })`) and the tournament-detail specs must pass. Drop the stash entry after it applies cleanly. Plan §T4 (list-UI half), decisions 2026-09-30 (board 6d). Design system: read `.skills/advantage-analytics-design/SKILL.md` first. Do not touch the drawer or the stepper here.
 
 ## T6 · Stepper timing, the quiet Cancel group and the cancelled view
 
@@ -101,7 +101,7 @@ ready).
 
 ## T7 · Wire "Cancel analysis" to the route through `CancelAnalysisDialog`
 
-- **status:** blocked
+- **status:** todo
 - **model:** opus
 - **needs:** T2, T6
 - **files:** src/components/dashboard/matches/match-detail/cancel-analysis-dialog.tsx (new), src/components/dashboard/matches/match-detail/analysis-steps-column.tsx (or its client wrapper), tests/cancel-analysis-dialog.spec.ts (new), tests/analysis-steps-column.spec.ts
@@ -111,7 +111,7 @@ ready).
   - [ ] Confirm POSTs `/api/splitstep/jobs/<jobId>/cancel` (same-origin fetch); a 409 or 503 shows the route's `error` sentence through the dialog's `error` prop and keeps the dialog open; 200 closes it and refreshes
   - [ ] The stepper's "Cancel analysis" action opens the dialog and "Send for analysis again" calls the existing resubmit route directly with no confirm
   - [ ] Specs assert the dialog copy and labels, the 409 error path, and that the stepper column's queued body renders the action that opens the dialog
-- **notes:** Plan §T5 (dialog part). Offline component specs: see memory `reference_offline_component_specs` (vm-modules loader). Uploader-only is enforced server-side (T2); the client does not hide the action by role.
+- **notes:** Retry (blocked once, see log): first `git stash apply 855addb53c86e5d3d870de8d4b345a74f51c3788` to restore the earlier work, then fix the gate failure: move `useRouter()` out of the top of `analysis-steps-column.tsx` into the dialog and resend pieces that need it, so the column renders without an app router; `tests/uploading-progress-parity.spec.ts` must pass unchanged. Also pass no-op handlers in `src/app/design/analysis-steps-preview.tsx`. Drop the stash entry after it applies cleanly. Plan §T5 (dialog part). Offline component specs: see memory `reference_offline_component_specs` (vm-modules loader). Uploader-only is enforced server-side (T2); the client does not hide the action by role.
 
 ## T8 · Ask before cancelling an upload
 
