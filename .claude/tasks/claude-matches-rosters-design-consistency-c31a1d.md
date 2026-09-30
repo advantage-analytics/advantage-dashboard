@@ -73,7 +73,7 @@ ready).
 
 ## T5 · Rename "No video" to "Not analyzed" and lead every list row with a StepMark
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T4
 - **files:** src/lib/data/match-analysis.ts (matchListGroup), src/components/dashboard/matches/matches-page-content.tsx (ANALYSIS_GROUP_ORDER + Filter menu), src/components/dashboard/matches/row-state.tsx, src/components/dashboard/shared/vertical-steps.tsx (StepState), src/components/dashboard/shared/analysis-status-line.tsx, tests/matches-list-grouping.spec.ts, tests/match-film-entry.spec.ts (guess)

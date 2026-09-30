@@ -49,3 +49,16 @@ is the runner's. Newest entries at the bottom.
 1. IMPORTANT for T6: `matchPageKind` still returns "report" for `cancelled`, so a cancelled match shows the full report with empty stat sections (guardrails §3.3). T6 must add `cancelled` to the "steps" branch together with its cancelled view — T6's task text does not name `matchPageKind`.
 2. A cancelled attempt still counts toward the 3-attempts-per-chain limit; decide whether cancelled rows should be excluded.
 3. `row-state.tsx` hard-codes `status === "manual" ? "Not analyzed"`; T5's rename should fold `cancelled` in.
+
+## T5 · Rename "No video" to "Not analyzed" and lead every list row with a StepMark — blocked
+
+**gate:** mechanical FAIL (completion review not run)
+
+**reason:** `tests/schedule-dual-outcomes.spec.ts:230` ("an in-progress dual counts what is decided and asks for a result") fails deterministically (re-run alone: 1 failed / 12 passed). At line 260 it expects `line(page, "S2").getByText("Imported", { exact: true })`; `RowLifecycle` now gives Imported a `done` StepMark whose sr-only "Done:" sits inside the same `AnalysisStatusLine` span, so the element's text is "Done:Imported" and the exact match finds nothing. Fix on retry: render the mark's sr-only prefix outside the word's text node (e.g. wrap the word in its own span) or update that spec to match the word element; also re-run schedule-dual-outcomes and tournament-detail specs, which render RowLifecycle via `dual-detail.tsx`/`tournament-detail.tsx`.
+
+**stash:** 85980803a8bf6fb8b0b31d69754004de11f6f2e5
+
+**follow-ups:**
+
+1. Old `?analysis=No+video` bookmarks now match no group (the grep criterion forbids an alias).
+2. The help page's `ANALYSIS_JOURNEY` could add rows for Cancelled and Not analyzed.
