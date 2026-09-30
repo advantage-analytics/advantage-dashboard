@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Add `POST /api/splitstep/jobs/[jobId]/cancel`
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/app/api/splitstep/jobs/[jobId]/cancel/handler.ts (new), src/app/api/splitstep/jobs/[jobId]/cancel/route.ts (new), tests/cancel-job-handler.spec.ts (new), MAP.md (regenerated)
