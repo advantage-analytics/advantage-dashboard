@@ -108,3 +108,9 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. "Cancel opens the dialog" is only checked by source assertion; eyes-on at /pr-check should confirm the click, the dialog and the refresh on a queued match.
+
+## T8 · Ask before cancelling an upload — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `UploadMatchSuccess.tsx`: the upload Cancel opens `CancelUploadControl`, a synchronous danger ConfirmDialog ("Cancel this upload?", the stays-saved prose, a Clock note "No analysis time has been used…", "Cancel upload" / "Keep uploading"); confirm calls `upload.cancel()`; the control renders only while `upload.cancel` exists, so the dialog unmounts when the upload ends. Meta line reads "… · About 6 min left" via a call-site `sentenceCase` (formatEta unchanged). tests/upload-success-actions.spec.ts extended.

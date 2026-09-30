@@ -115,7 +115,7 @@ ready).
 
 ## T8 · Ask before cancelling an upload
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/new-match-wizard/UploadMatchSuccess.tsx, tests/upload-success-actions.spec.ts
 - **routes:** /dashboard/matches/new
