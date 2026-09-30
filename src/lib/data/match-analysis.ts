@@ -942,7 +942,7 @@ export function matchPageKind({
 
 /**
  * The matches list's own lifecycle grouping — "In progress" / "Ready" /
- * "Failed" / "No video" — kept as a named export so the list's decision is a
+ * "Failed" / "Not analyzed" — kept as a named export so the list's decision is a
  * pure function a spec can pin, not inline logic in the list component.
  *
  * Deliberately NOT `isAnalysisFailed(status)` alone. Product decision
@@ -961,9 +961,9 @@ export function matchListGroup(
   if (analysis?.recovery === "stats_unavailable") return "Ready";
   if (isInFlight(status)) return "In progress";
   if (isAnalysisFailed(status)) return "Failed";
-  // A cancelled job was never analysed — the same group as a match with no
-  // video, and never "Ready" (T5 renames the group "Not analyzed").
-  if (status === "manual" || status === "cancelled") return "No video";
+  // A cancelled job was never analysed — the same group as a hand-scored
+  // match, and never "Ready".
+  if (status === "manual" || status === "cancelled") return "Not analyzed";
   return "Ready";
 }
 

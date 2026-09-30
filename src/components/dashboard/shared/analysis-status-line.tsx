@@ -9,11 +9,10 @@ import { StepMark, type StepState } from "./vertical-steps";
  * already draw, rather than a third dialect.
  *
  * The mark carries the state (spinner working, dashed `wait` ring, check
- * done, cross failed); the word names the step. Blue stays off both: it
- * belongs to the upload bar, the one thing here that measures.
- *
- * `mark={null}` keeps the 14px slot empty, so a markless word ("Not
- * analyzed") still starts at the same x as every other row's word.
+ * done, red cross failed, grey cross stopped, solid ring never analysed); the
+ * word names the step. Blue stays off both: it belongs to the upload bar, the
+ * one thing here that measures. Every row leads with a mark, so every word
+ * starts at the same x.
  */
 
 const INK: Record<StepState, string> = {
@@ -23,6 +22,7 @@ const INK: Record<StepState, string> = {
   done: "var(--ink-500)",
   fail: "var(--ink-900)",
   stopped: "var(--ink-500)",
+  none: "var(--ink-500)",
 };
 
 export function AnalysisStatusLine({
@@ -31,7 +31,7 @@ export function AnalysisStatusLine({
   value,
   className,
 }: {
-  mark: StepState | null;
+  mark: StepState;
   children: React.ReactNode;
   /** Right-aligned reading on the same line — the upload percentage. */
   value?: string;
@@ -43,14 +43,12 @@ export function AnalysisStatusLine({
         "inline-flex items-center gap-2 text-[11px] leading-none whitespace-nowrap",
         className,
       )}
-      style={{ color: mark ? INK[mark] : "var(--ink-500)" }}
+      style={{ color: INK[mark] }}
     >
-      {mark ? (
-        <StepMark state={mark} size="compact" />
-      ) : (
-        <span aria-hidden className="size-[14px] shrink-0" />
-      )}
-      {children}
+      <StepMark state={mark} size="compact" />
+      {/* Its own element, so the word's text is exactly the word — the
+          mark's screen-reader prefix ("Done:") lives in a sibling. */}
+      <span>{children}</span>
       {value && (
         <span className="tabular ml-auto pl-2 text-[var(--ink-700)]">
           {value}

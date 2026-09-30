@@ -91,12 +91,22 @@ export function RowLifecycle({
     return <AnalysisStatusLine mark="fail">Failed</AnalysisStatusLine>;
   }
 
-  // Only a real analysis earns the check. "Not analyzed" and the partial
-  // states keep an empty slot, so their word still lines up.
-  const done = status === "completed" || status === "timeline";
+  // Every settled row leads with a mark. Only a real analysis (or an import)
+  // earns the check; a cancelled job reads as stopped, and a match with no
+  // analysis behind it — hand-scored, or stats our derivation refused — gets
+  // the solid "nothing coming" ring.
+  if (status === "cancelled") {
+    return <AnalysisStatusLine mark="stopped">Cancelled</AnalysisStatusLine>;
+  }
+  if (status === "manual") {
+    return <AnalysisStatusLine mark="none">Not analyzed</AnalysisStatusLine>;
+  }
+  const word = matchListStatusLabel(analysis);
   return (
-    <AnalysisStatusLine mark={done ? "done" : null}>
-      {status === "manual" ? "Not analyzed" : matchListStatusLabel(analysis)}
+    <AnalysisStatusLine
+      mark={analysis.recovery === "stats_unavailable" ? "none" : "done"}
+    >
+      {word}
     </AnalysisStatusLine>
   );
 }

@@ -88,3 +88,13 @@ is the runner's. Newest entries at the bottom.
 1. `/design` preview passes no handlers, so its boards now use real wiring (hits a placeholder job id); pass no-op handlers there.
 2. "Sending…" could move into `STEPPER_COPY`.
 3. Resend is a quiet text action rather than reusing the bordered `RetryAnalysis`; same request and refusal handling.
+
+## T5 · Rename "No video" to "Not analyzed" and lead every list row with a StepMark — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Retry of the blocked run: stash 85980803 applied (conflicts with T6's `stopped` resolved to one definition) and dropped. `matchListGroup` and `ANALYSIS_GROUP_ORDER` (so the Filter menu and `?analysis=`) use "Not analyzed" for manual + cancelled. StepState `none` (solid `--ink-200` ring, sr-only "Not analyzed:"). `RowLifecycle`: every row leads with a mark (Cancelled stopped; Not analyzed / Stats unavailable none; Imported / Timeline ready / Analyzed done; Failed fail). Gate fix: `AnalysisStatusLine` wraps the word in its own span so a mark's sr-only prefix is not in the word's text (schedule-dual-outcomes passes unchanged). New tests/matches-row-state.spec.ts; grouping spec covers cancelled.
+
+**follow-ups:**
+
+1. Old `?analysis=No+video` bookmarks now filter to zero rows and show a stale chip; a legacy alias would need an exception to T5's grep rule.

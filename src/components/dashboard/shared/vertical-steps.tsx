@@ -6,11 +6,15 @@ import { cn } from "@/lib/utils";
 
 /**
  * A step's progress state: done, running now, the current step but waiting on
- * someone else, not started yet, failed, or stopped on purpose.
+ * someone else, not started yet, failed, or stopped on purpose — plus
+ * `none`, for a list row that was never analysed at all.
  *
  * `stopped` is a step the player ended — an analysis cancelled while it waited
  * in the queue. The Failed chip's shape in grey: nothing went wrong, so it
  * must not borrow the danger red.
+ *
+ * `none` is not a step in a running job: a match with no analysis (manual
+ * entry, cancelled, stats unavailable). A thin solid ring — nothing is coming.
  *
  * `wait` is the queued step: it IS where the job is (dark label, like `now`),
  * but nothing is running, so it must not spin. It wears the dashed "waiting
@@ -26,7 +30,8 @@ import { cn } from "@/lib/utils";
  * there; it is specific to that screen. Only the generic row and its dot are
  * shared here.
  */
-export type StepState = "done" | "now" | "wait" | "later" | "fail" | "stopped";
+export type StepState =
+  "done" | "now" | "wait" | "later" | "fail" | "stopped" | "none";
 
 /**
  * Inline colour: DS type classes are unlayered and beat Tailwind utilities.
@@ -40,6 +45,7 @@ export const LABEL_INK: Record<StepState, string> = {
   later: "var(--ink-400)",
   fail: "var(--ink-900)",
   stopped: "var(--ink-900)",
+  none: "var(--ink-400)",
 };
 
 /**
@@ -203,6 +209,15 @@ export function StepMark({
           className={`${box} rounded-full border-[1.5px] border-dashed border-[var(--ink-300)]`}
         >
           <span className="sr-only">Not started:</span>
+        </span>
+      );
+    case "none":
+      // Solid, not dashed: nothing is coming. `later`'s box, one ink lighter.
+      return (
+        <span
+          className={`${box} rounded-full border-[1.5px] border-[var(--ink-200)]`}
+        >
+          <span className="sr-only">Not analyzed:</span>
         </span>
       );
   }
