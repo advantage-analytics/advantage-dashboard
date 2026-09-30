@@ -74,3 +74,17 @@ is the runner's. Newest entries at the bottom.
 1. On a live page the clock starts empty (existing spec pins one Date.now from the interval), so for the first ~10 s the timing line shows only its clock-free half ("Takes about an hour once it starts").
 2. "Cancelled N min ago" is measured from `updatedAt`, assuming the cancel is the row's last write.
 3. T5 retry must reconcile with the `stopped` state added here (LABEL_INK.stopped = ink-900, INK.stopped = ink-500).
+
+## T7 · Wire "Cancel analysis" to the route through `CancelAnalysisDialog` — blocked
+
+**gate:** mechanical FAIL (completion review not run)
+
+**reason:** `tests/uploading-progress-parity.spec.ts` (3 of 4 tests) fails deterministically with "invariant expected app router to be mounted": `analysis-steps-column.tsx` now calls `useRouter()` from `next/navigation` at the top of the column, and that spec renders the column without stubbing `next/navigation`. Fix on retry: move `useRouter()` into the components that actually need it (the dialog and the resend action) so the column renders router-free, or add a `next/navigation` stub to `uploading-progress-parity.spec.ts` (the column spec already stubs it). Re-run uploading-progress-parity, analysis-steps-pending and match-page specs that render the column.
+
+**stash:** 855addb53c86e5d3d870de8d4b345a74f51c3788
+
+**follow-ups:**
+
+1. `/design` preview passes no handlers, so its boards now use real wiring (hits a placeholder job id); pass no-op handlers there.
+2. "Sending…" could move into `STEPPER_COPY`.
+3. Resend is a quiet text action rather than reusing the bordered `RetryAnalysis`; same request and refusal handling.
