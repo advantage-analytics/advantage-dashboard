@@ -176,6 +176,34 @@ dot for single-choice (`Radio`), 4px-radius square for multi-select
 also sets border `--blue` + `--blue-tint-08` wash — the dot marks the
 selected item, it never appears on hover.
 
+**`Checkbox`** (2026-09-29, in-repo, `ui/checkbox.tsx`) — the one checkbox on
+the dashboard, for multi-select and for a yes/no a form asks. 14px square,
+`--radius-cell` (4px) corners; at rest a 1px `--ink-300` ring on
+`--surface-card`; checked, solid `--blue` with a white Lucide `Check` at 10px,
+stroke 3; disabled, the same mark at 50% opacity. It is the geometry the
+Matches filter menu's checklist rows drew by hand, lifted into a primitive.
+**Never the browser's native box** — `accent-[var(--blue)]` on an
+`<input type="checkbox">` renders at the OS's size, radius and check weight,
+differently per platform, and was how the roster dialog's "Also send an
+invite" and the wizard's "Use for future matches" rows came to look nothing
+like the filter menu. Two exports, one mark:
+
+- **`CheckboxMark`** — the box alone, `aria-hidden`, for a row that is itself
+  the control (`<button role="checkbox" aria-checked>`), as in the filter
+  menu's checklist, where the whole 32px row toggles and a nested input would
+  be a second focus stop.
+- **`Checkbox`** — a visually hidden native `<input type="checkbox">` drawn by
+  the mark, for form rows. It goes **inside** the `<label>` that carries the
+  sentence (12px `--ink-700`, an optional 11px `--ink-500` sub-line), with
+  `mt-px` to sit on the first line; the label's text toggles it. Focus rings
+  the mark (`--focus-ring`), since the input is invisible.
+
+_Shipped:_ `AuthCheckbox` (`components/auth/auth-checkbox.tsx`, 16px,
+`--border-field` ring) on the auth and claim forms, and the Shots tab's
+save-view dialog's "Share with team" box (16px, hand-rolled, with a dark-tone
+variant) predate this and still draw their own — drift to migrate onto
+`Checkbox`, not a second style.
+
 **`SlotLine`** — one sentence, two hosts. When a match belongs to a lineup
 slot the product says so as: line label (11px ink-500; mono only inside a
 lineup list) → `chevron-right` 12px ink-300 → the matchup (12px; the
@@ -301,7 +329,7 @@ layout: `FloatMenuItem` drew "a 12px Signal Blue check" in its leading slot,
 so every `MenuSelect` marked the pick on the left while the hand-built menus —
 workspace switchers, the wizard's roster, source and line menus, the lineup
 pickers — marked it on the right, at three sizes and three stroke weights._
-Single choice = the check-dot `Radio`, multi-select = the square `Checkbox`; a
+Single choice = the check-dot `Radio`, multi-select = the square `Checkbox` (`ui/checkbox.tsx`); a
 dialog carries one primary, never two.
 
 ---

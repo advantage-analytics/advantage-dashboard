@@ -70,6 +70,7 @@ import {
 } from "@/components/ui/popover";
 import { DateField } from "@/components/ui/date-field";
 import { YouPill } from "@/components/ui/you-pill";
+import { Checkbox } from "@/components/ui/checkbox";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Kbd } from "@/components/ui/kbd";
@@ -1581,16 +1582,15 @@ function DetailsStepContentImpl({
                 match-only difference stays match-only unless they say so. */}
             {styleOffer && (
               <label className="flex cursor-pointer items-start gap-2.5 sm:col-span-2 sm:col-start-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={styleSaveTicked}
-                  onChange={(event) =>
+                  onChange={(checked) =>
                     onInputChange(
                       "saveStyleChoice",
-                      styleSaveChoice(styleOffer.mode, event.target.checked),
+                      styleSaveChoice(styleOffer.mode, checked),
                     )
                   }
-                  className="mt-px size-4 shrink-0 cursor-pointer accent-[var(--blue)]"
+                  className="mt-px"
                 />
                 <span>
                   <span className="block text-[12px] text-[var(--ink-700)]">
