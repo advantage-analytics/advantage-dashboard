@@ -50,6 +50,7 @@ type ColumnProps = {
   matchId: string;
   match: MatchLineProps;
   snapshotAt?: number;
+  canAct?: boolean;
   onCancel?: () => void;
   onResend?: () => void;
 };
@@ -146,7 +147,10 @@ const CASES: { id: string; analysis: MatchAnalysis }[] = [
   },
 ];
 
-/** `null` = no snapshot: the component's own clock, which starts unset. */
+/**
+ * `null` = no snapshot: the component's own clock, which starts unset.
+ * Rendered as the job's submitter (`canAct`) unless a test says otherwise.
+ */
 function render(analysis: MatchAnalysis, at: number | null = NOW) {
   const snapshotAt = at ?? undefined;
   return renderToStaticMarkup(
@@ -155,6 +159,7 @@ function render(analysis: MatchAnalysis, at: number | null = NOW) {
       matchId: MATCH_ID,
       match: MATCH,
       snapshotAt,
+      canAct: true,
     }),
   );
 }
@@ -304,13 +309,14 @@ const CANCELLED: MatchAnalysis = {
   reservedSeconds: 5340,
 };
 
-function renderWith(analysis: MatchAnalysis) {
+function renderWith(analysis: MatchAnalysis, canAct = true) {
   return renderToStaticMarkup(
     React.createElement(AnalysisSteps, {
       analysis,
       matchId: MATCH_ID,
       match: MATCH,
       snapshotAt: NOW,
+      canAct,
       onCancel: () => {},
       onResend: () => {},
     }),
@@ -428,13 +434,14 @@ const wired = createLoader({
   },
 }).load(COLUMN) as { AnalysisSteps: React.ComponentType<ColumnProps> };
 
-function renderWired(analysis: MatchAnalysis) {
+function renderWired(analysis: MatchAnalysis, canAct = true) {
   return renderToStaticMarkup(
     React.createElement(wired.AnalysisSteps, {
       analysis,
       matchId: MATCH_ID,
       match: MATCH,
       snapshotAt: NOW,
+      canAct,
     }),
   );
 }
@@ -504,7 +511,61 @@ test("queued, with no app router mounted: the column still renders its Cancel ac
       matchId: MATCH_ID,
       match: MATCH,
       snapshotAt: NOW,
+      canAct: true,
     }),
   );
   expect(html).toContain("Cancel analysis");
+});
+
+// ── Only the job's submitter is offered the actions ─────────────────────────
+// The cancel and resubmit routes act for `created_by` alone and answer anyone
+// else "Job not found", so a coach or teammate viewing the match reads the
+// same steps with nothing under them.
+
+test("another viewer: a queued job shows its note and timing, but no Cancel", () => {
+  for (const html of [renderWith(QUEUED, false), renderWired(QUEUED, false)]) {
+    const li = items(html)[2];
+    expect(li).toContain(
+      `${META}Waiting 12 min · Takes about an hour once it starts</p>`,
+    );
+    expect(html).not.toContain("Cancel analysis");
+    expect(html).not.toContain("data-cancel-dialog");
+  }
+});
+
+test("another viewer: a cancelled job offers no resend", () => {
+  for (const html of [
+    renderWith(CANCELLED, false),
+    renderWired(CANCELLED, false),
+  ]) {
+    expect(html).toMatch(/<h1[^>]*>Analysis cancelled<\/h1>/);
+    expect(html).not.toContain("Send for analysis again");
+  }
+});
+
+test("canAct defaults to false: no caller flag, no actions", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(AnalysisSteps, {
+      analysis: QUEUED,
+      matchId: MATCH_ID,
+      match: MATCH,
+      snapshotAt: NOW,
+    }),
+  );
+  expect(html).not.toContain("Cancel analysis");
+});
+
+test("the match page offers the actions only to the job's creator", () => {
+  const page = readFileSync(
+    "src/app/dashboard/matches/(detail)/[matchId]/page.tsx",
+    "utf8",
+  );
+  expect(page).toMatch(
+    /const canAct =\s+analysis\.createdBy !== undefined &&\s+analysis\.createdBy === workspace\?\.viewer\.id;/,
+  );
+  expect(page).toMatch(
+    /<AnalysisSteps\s+analysis=\{analysis\}\s+canAct=\{canAct\}/,
+  );
+  const loader = readFileSync("src/lib/data/match-analysis-server.ts", "utf8");
+  expect(loader).toContain("createdBy: row.created_by ?? undefined");
 });

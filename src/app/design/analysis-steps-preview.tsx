@@ -231,6 +231,8 @@ export function AnalysisStepsPreview() {
               matchId="00000000-0000-4000-8000-000000000000"
               match={MATCH}
               snapshotAt={NOW}
+              // Previewed as the job's submitter, so both actions show.
+              canAct
               // The placeholder job id is not a real job: Cancel and resend
               // stay inert here instead of posting the live routes.
               onCancel={noop}

@@ -28,6 +28,8 @@ import { formatClock } from "@/components/dashboard/matches/new-match-wizard/uti
 interface JobRow {
   id: string;
   match_id: string;
+  /** The submitting login — see `MatchAnalysis.createdBy`. */
+  created_by: string | null;
   updated_at: string;
   status: string;
   upload_progress_percent: number | null;
@@ -108,7 +110,7 @@ export async function loadMatchAnalysis(
   const { data, error } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, status, upload_progress_percent, error_message, error_category, error_code, error_step, video_object_key, results_object_key, resubmitted_from_job_id, billable_seconds, external_job_id, created_at, updated_at, derivation_version, submitted_at, queued_ack_at, vendor_started_at",
+      "id, match_id, created_by, status, upload_progress_percent, error_message, error_category, error_code, error_step, video_object_key, results_object_key, resubmitted_from_job_id, billable_seconds, external_job_id, created_at, updated_at, derivation_version, submitted_at, queued_ack_at, vendor_started_at",
     )
     .in("match_id", matchIds)
     // Newest first, so the reduce below keeps the latest attempt per match.
@@ -182,6 +184,7 @@ export async function loadMatchAnalysis(
       // when it STARTED: on a 4 GB upload those are an hour apart, which would
       // make a healthy job look stalled the second it landed.
       jobId: row.id,
+      createdBy: row.created_by ?? undefined,
       updatedAt: row.updated_at,
       providerId: "splitstep",
       jobReference: row.external_job_id ?? undefined,

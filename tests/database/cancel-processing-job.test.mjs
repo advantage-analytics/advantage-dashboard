@@ -5,11 +5,14 @@
  * `processing_jobs` / `processing_usage` — and the admin guard functions the
  * migration re-creates need only the row types they declare to exist. The
  * migration file is executed byte-for-byte, so its own assertion blocks run
- * too (constraint admits `cancelled`, rank 9, service_role-only ACL).
+ * too (constraint admits `cancelled`, rank 9, service_role-only ACL). The
+ * follow-up migration that narrows the RPC to `submitting | queued` is
+ * applied on top, as it is live, and its assertion blocks run as well.
  *
  * What this proves: the RPC flips a cancellable job the caller owns and
- * releases its quota row in the same call; a job owned by someone else and a
- * job already terminal are both left alone (null return, usage untouched);
+ * releases its quota row in the same call; a job owned by someone else, a job
+ * the vendor already started (`processing`) and a job already terminal are
+ * all left alone (null return, usage untouched);
  * and the migration is idempotent. PGlite serializes one connection, so no
  * concurrent-cancel behaviour is exercised here.
  */
@@ -26,12 +29,20 @@ const migration = await readFile(
   ),
   "utf8",
 );
+const narrowing = await readFile(
+  new URL(
+    "../../supabase/migrations/20260930083017_cancel_processing_job_queued_only.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 const OWNER = uuid(1);
 const STRANGER = uuid(2);
 const QUEUED_JOB = uuid(10);
 const STRANGERS_JOB = uuid(11);
 const COMPLETED_JOB = uuid(12);
+const PROCESSING_JOB = uuid(13);
 
 async function boot() {
   const db = new PGlite();
@@ -61,6 +72,7 @@ async function boot() {
     );
   `);
   await db.exec(migration);
+  await db.exec(narrowing);
   return db;
 }
 
@@ -69,12 +81,13 @@ async function seed(db) {
     `insert into public.processing_jobs (id, created_by, status) values
        ($1, $4, 'queued'),
        ($2, $5, 'queued'),
-       ($3, $4, 'completed')`,
-    [QUEUED_JOB, STRANGERS_JOB, COMPLETED_JOB, OWNER, STRANGER],
+       ($3, $4, 'completed'),
+       ($6, $4, 'processing')`,
+    [QUEUED_JOB, STRANGERS_JOB, COMPLETED_JOB, OWNER, STRANGER, PROCESSING_JOB],
   );
   await db.query(
-    `insert into public.processing_usage (job_id) values ($1), ($2), ($3)`,
-    [QUEUED_JOB, STRANGERS_JOB, COMPLETED_JOB],
+    `insert into public.processing_usage (job_id) values ($1), ($2), ($3), ($4)`,
+    [QUEUED_JOB, STRANGERS_JOB, COMPLETED_JOB, PROCESSING_JOB],
   );
 }
 
@@ -155,12 +168,32 @@ test("a completed job returns null and is left untouched", async () => {
   }
 });
 
+test("a processing job is not cancelled and its usage stays reserved", async () => {
+  const db = await boot();
+  try {
+    await seed(db);
+
+    // The vendor has started work: the route refuses it, and so does the RPC.
+    assert.equal(await cancel(db, PROCESSING_JOB, OWNER), null);
+    assert.deepEqual(await jobRow(db, PROCESSING_JOB), {
+      status: "processing",
+      error_code: null,
+      completed: false,
+    });
+    assert.equal(await released(db, PROCESSING_JOB), false);
+  } finally {
+    await db.close();
+  }
+});
+
 test("the migration is idempotent and pins rank, constraint and ACL", async () => {
   const db = await boot();
   try {
-    // Re-running is a no-op: the constraint block returns early, the column
-    // is `if not exists`, the functions are `create or replace`.
+    // Re-running both is a no-op: the constraint block returns early, the
+    // column is `if not exists`, the functions are `create or replace`. The
+    // narrowing migration runs last, so the RPC ends on submitting|queued.
     await db.exec(migration);
+    await db.exec(narrowing);
 
     const {
       rows: [facts],

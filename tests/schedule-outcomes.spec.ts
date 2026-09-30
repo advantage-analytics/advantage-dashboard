@@ -5,12 +5,14 @@ import {
   entryState,
   lineCoverageFrom,
   lineWon,
+  matchState,
   readyMatchIdsFrom,
   resolveEntryResult,
   resultState,
   resultWon,
   supportsVideo,
 } from "@/lib/schedule/entry-state";
+import { lineAction } from "@/lib/schedule/line-action";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
 import type {
   EntryMatch,
@@ -334,5 +336,48 @@ test.describe("a dual line whose match carries its slot as the round", () => {
     };
     expect(resolveEntryResult(tournament, "QF").kind).toBe("played");
     expect(resolveEntryResult(tournament, "SF").kind).toBe("unanswered");
+  });
+});
+
+test.describe("a cancelled analysis keeps its video", () => {
+  // Cancelled while queued: the video is stored, nothing was analysed. It is
+  // not `no-video` (which offers "Add video" for a file the line already
+  // has) and not `ready` (there is no report).
+  const cancelled: EntryMatch = {
+    ...match("R16"),
+    status: "cancelled",
+    hasVideo: true,
+  };
+
+  test("matchState reads not-analyzed, worded as the matches list words it", () => {
+    expect(matchState(cancelled)).toBe("not-analyzed");
+    expect(LINE_STATUS["not-analyzed"]).toEqual({
+      label: "Not analyzed",
+      tone: "neutral",
+    });
+    const e = entry({ matches: [cancelled] });
+    expect(entryState(e)).toBe("not-analyzed");
+    expect(entryState(e, "R16")).toBe("not-analyzed");
+    expect(readyMatchIdsFrom([e])).not.toContain(cancelled.id);
+  });
+
+  test("the line offers its status, never Add video", () => {
+    const action = lineAction({
+      state: matchState(cancelled),
+      match: cancelled,
+      entryId: "entry",
+      matchId: cancelled.id,
+      doubles: false,
+      canEdit: true,
+      scoreHref: "/score",
+    });
+    expect(action).toEqual({
+      kind: "status",
+      status: { label: "Not analyzed", tone: "neutral" },
+    });
+  });
+
+  test("a scored match nothing was sent for still offers Add video", () => {
+    expect(matchState({ ...match("R16"), status: "manual" })).toBe("no-video");
   });
 });

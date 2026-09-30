@@ -536,6 +536,60 @@ to put a testable seam.
 > `reconcile()`, winners, `calculate_match_stats` and the schema are untouched.
 > `DERIVATION_VERSION` is `0.5.0-unreconciled`.
 
+> **A reviewed exception, added 2026-09-30: cancelling a queued analysis, from
+> `claude/matches-rosters-design-consistency-c31a1d`.** An athlete can now
+> withdraw a video that is still waiting in the vendor's queue, and send a
+> cancelled one again. `cancelled` is a new terminal status that outranks every
+> other (`splitstep_status_rank` = 9), so no webhook or poll can move a job off
+> it. Each frozen file gained one narrow capability:
+>
+> - a new `POST /api/splitstep/jobs/[jobId]/cancel` **route + handler** —
+>   "Cancel analysis". `route.ts` is wiring; `handler.ts` holds the ladder:
+>   signed in, a UUID, owns the job (`created_by`, the same 404 for missing and
+>   not-yours), still `submitting|queued` with a vendor id, then the vendor's
+>   `DELETE {SPLITSTEP_API_URL}/{id}`. Only after a 2xx does the
+>   `cancel_processing_job` RPC flip the row and release its **queued**
+>   reservation in one transaction; a `409 JOB_NOT_REMOVABLE` (the vendor
+>   started) answers "can't be cancelled now" and changes nothing. The RPC is
+>   service-role only and, since `20260930083017`, matches `submitting|queued`
+>   only — the same line as the route — so a started job can never be refunded.
+> - `webhooks/splitstep/route.ts` — **skip.** A `job_completed` that lands for a
+>   row already `cancelled` (the vendor picked it up as the DELETE raced it) is
+>   recorded as a delivery and logged, and nothing is secured, graded or
+>   derived. Every other branch is unchanged.
+> - `derive-and-publish.ts` — **guard.** The move to `deriving` is now
+>   `.neq("status", "cancelled")` and returns without deriving when it matched
+>   no row, so a late completion or a hand re-run cannot resurrect a cancelled
+>   job through the plain update the rank guard never sees.
+> - `reconcile.ts` — **sweep.** `refreshQueuedJobs()` runs after the existing
+>   stale poll (unchanged) for the match ids of the RLS-scoped page read only.
+>   `listInFlightJobs()` makes one vendor `GET /jobs` list call per page read,
+>   cached 60 s, and moves a row `queued` → `processing` (guarded on it still
+>   being `queued`, so a webhook always wins) with `vendor_started_at` set to
+>   the vendor's `updated_at` for that status. Absence from the list is never
+>   read as an outcome. This is what lets the UI stop offering Cancel once the
+>   vendor has started.
+> - `resubmit-job.ts` — **accepts a cancelled parent.** "Send for analysis
+>   again" is a normal resubmission: a new child row, `reserveQuota()` reserves
+>   the month's time anew, and the parent's `initial_top_player_is_player1`,
+>   `ad_scoring` and `fixed_camera` are reused (falling back to the match row)
+>   exactly as for a failed parent.
+>   It is **manual only** — `auto` callers (webhook, reconciler, jobs route) are
+>   refused, because the cancel was a person's decision — and skips
+>   `classifyFailure()`, which has nothing to say about a job that did not fail.
+>   `cancelled` joins `TERMINAL_STATUSES`. `adopt-deliveries.ts` changed a doc
+>   comment only.
+>
+> Unchanged: what is sent to the vendor (`job-request.ts`, the three §4 inputs,
+> the blob), what is billed (a started job keeps its reservation; only a job the
+> vendor removed from its queue is released, and a resend reserves through the
+> same `reserveQuota()`), and what is computed (`persistTranscript`,
+> `calculate_match_stats`, `swingvision-*`, `process-match` and existing match
+> data). Migrations
+> `supabase/migrations/20260930062236_processing_jobs_cancelled.sql` and
+> `20260930083017_cancel_processing_job_queued_only.sql`, both applied live
+> 2026-09-30.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 

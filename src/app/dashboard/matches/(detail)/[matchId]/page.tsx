@@ -297,9 +297,16 @@ export default async function MatchDetailPage({
     const lineSets = playedSets(sides.sets);
     const setsYou = lineSets.filter((s) => s.player1 > s.player2).length;
     const setsOpp = lineSets.filter((s) => s.player2 > s.player1).length;
+    // Cancel and resend belong to whoever submitted the job: their routes
+    // answer everyone else "Job not found", so no one else is offered them.
+    // A lost session (no workspace) or a job with no creator reads as false.
+    const canAct =
+      analysis.createdBy !== undefined &&
+      analysis.createdBy === workspace?.viewer.id;
     return (
       <AnalysisSteps
         analysis={analysis}
+        canAct={canAct}
         matchId={matchId}
         match={{
           player: sides.you.name,

@@ -16,6 +16,10 @@
  * Cancel opens `CancelAnalysisDialog`, resend (`ResendAction`) posts the
  * resubmit route with no confirm and shows a refusal under itself. A caller
  * may pass its own handlers instead. The peek drawers never draw either.
+ * Both render only with `canAct` — the viewer submitted this job — because
+ * the cancel and resubmit routes act for the job's `created_by` alone and
+ * answer anyone else "Job not found". Every other viewer reads the same
+ * steps with no action under them.
  *
  * The column itself never reads the app router: only the dialog and the
  * resend action do, and each mounts only where it is needed — so the column
@@ -79,6 +83,7 @@ export function AnalysisSteps({
   matchId,
   match,
   snapshotAt,
+  canAct = false,
   onCancel,
   onResend,
 }: {
@@ -95,6 +100,13 @@ export function AnalysisSteps({
    * Omit it everywhere real.
    */
   snapshotAt?: number;
+  /**
+   * The viewer submitted this job (`MatchAnalysis.createdBy`), so Cancel and
+   * resend are theirs to take. Decided by the caller — the match page compares
+   * the job's creator with the signed-in viewer — and false by default: an
+   * authorization input never defaults permissively.
+   */
+  canAct?: boolean;
   /** Replaces the queued step's "Cancel analysis" (which opens the dialog). */
   onCancel?: () => void;
   /** Replaces the cancelled step's "Send for analysis again" (the resubmit). */
@@ -164,6 +176,7 @@ export function AnalysisSteps({
               {step.body && (
                 <StepBody
                   body={step.body}
+                  canAct={canAct}
                   jobId={jobId}
                   matchId={matchId}
                   onCancel={onCancel ?? (() => setCancelOpen(true))}
@@ -192,12 +205,14 @@ export function AnalysisSteps({
 
 function StepBody({
   body,
+  canAct,
   jobId,
   matchId,
   onCancel,
   onResend,
 }: {
   body: AnalysisStepBody;
+  canAct: boolean;
   jobId: string | undefined;
   matchId: string;
   onCancel?: () => void;
@@ -228,8 +243,11 @@ function StepBody({
         </>
       );
 
-    case "note":
-      if (!body.meta && !body.cancel && !body.resend) {
+    case "note": {
+      // The view offers the actions; only the job's submitter may take them.
+      const cancel = canAct ? body.cancel : undefined;
+      const resend = canAct ? body.resend : undefined;
+      if (!body.meta && !cancel && !resend) {
         return <p className={NOTE}>{body.text}</p>;
       }
       return (
@@ -243,30 +261,31 @@ function StepBody({
               </p>
             )}
           </div>
-          {body.cancel && (
+          {cancel && (
             <QuietAction
               label={STEPPER_COPY.cancel.action}
-              consequence={consequence(body.cancel, STEPPER_COPY.cancel)}
+              consequence={consequence(cancel, STEPPER_COPY.cancel)}
               tone="danger"
               onClick={onCancel}
             />
           )}
-          {body.resend &&
+          {resend &&
             (onResend || !jobId ? (
               <QuietAction
                 label={STEPPER_COPY.resend.action}
-                consequence={consequence(body.resend, STEPPER_COPY.resend)}
+                consequence={consequence(resend, STEPPER_COPY.resend)}
                 tone="blue"
                 onClick={onResend}
               />
             ) : (
               <ResendAction
                 jobId={jobId}
-                consequence={consequence(body.resend, STEPPER_COPY.resend)}
+                consequence={consequence(resend, STEPPER_COPY.resend)}
               />
             ))}
         </div>
       );
+    }
 
     case "failure":
       return (

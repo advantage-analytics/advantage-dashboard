@@ -136,6 +136,13 @@ export interface MatchAnalysis {
   window?: string;
   /** `processing_jobs.id`, so a stalled submission has something to retry. */
   jobId?: string;
+  /**
+   * `processing_jobs.created_by` — the login that submitted this job. The
+   * cancel and resubmit routes act only for this user (anyone else gets "Job
+   * not found"), so the match page offers "Cancel analysis" / "Send for
+   * analysis again" only when the viewer is this id.
+   */
+  createdBy?: string;
   /** When the row last moved, ISO. The staleness input for `isSubmitStalled`. */
   updatedAt?: string;
   jobReference?: string;

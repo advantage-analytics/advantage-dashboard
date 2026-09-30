@@ -131,6 +131,15 @@ export type EntryState =
   | "working"
   /** There is a report to read. */
   | "ready"
+  /**
+   * The video was sent and its analysis cancelled while it was still queued
+   * (`cancelled`). The video is stored — so this is not `no-video`, and the
+   * line must not offer "Add video" for a file it already has — and nothing
+   * was analysed, so it is not `ready` either: no report, and it never counts
+   * toward "reports ready". Worded "Not analyzed", the matches list's word for
+   * the same status; sending it again is the match page's action.
+   */
+  | "not-analyzed"
   | "failed"
   /**
    * One side forfeited — the line is decided without a match ever being played.
@@ -316,6 +325,7 @@ export function matchState(match: EntryMatch): EntryState {
   if (isWorking(match.status)) return "working";
   if (isAnalysisReady(match.status) && match.hasVideo) return "ready";
   if (match.hasVideo && isInFlight(match.status)) return "waiting";
+  if (match.status === "cancelled") return "not-analyzed";
   return "no-video";
 }
 
@@ -324,14 +334,21 @@ export function matchState(match: EntryMatch): EntryState {
  *
  * Written over `matchState` so the rules exist once. The precedence order is
  * the same one this used to spell out inline: failed, then working, then
- * ready, then waiting, and no-video when none of them apply. It is the right
+ * ready, then waiting, then not-analyzed, and no-video when none of them
+ * apply. It is the right
  * answer for a summary (the schedule list, the upload queue) and the wrong one
  * for a single row — use `matchState` there.
  *
  * A forfeited entry shortcuts before match analysis: a forfeit is decided, and
  * nothing about the matches underneath matters.
  */
-const STATE_PRECEDENCE = ["failed", "working", "ready", "waiting"] as const;
+const STATE_PRECEDENCE = [
+  "failed",
+  "working",
+  "ready",
+  "waiting",
+  "not-analyzed",
+] as const;
 
 export function entryState(
   entry: EventEntry,
