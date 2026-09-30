@@ -479,15 +479,7 @@ export async function updateProgramPlayer(input: {
       p_backhand: backhand,
     });
     if (style.error) {
-      const raw = style.error.message?.trim();
-      return {
-        ok: false,
-        error:
-          raw && raw.length > 0
-            ? raw
-            : "Couldn't save their hand and backhand.",
-        gone: false,
-      };
+      return { ok: false, error: styleErrorMessage(style.error), gone: false };
     }
   }
 
@@ -533,12 +525,7 @@ export async function saveRosterPlayerStyle(input: {
     p_backhand: asBackhand(input.backhand),
   });
   if (error) {
-    const raw = error.message?.trim();
-    return {
-      ok: false,
-      error:
-        raw && raw.length > 0 ? raw : "Couldn't save their hand and backhand.",
-    };
+    return { ok: false, error: styleErrorMessage(error) };
   }
 
   revalidatePath(ROSTER_PATH);
@@ -550,6 +537,10 @@ export async function saveRosterPlayerStyle(input: {
  * A server action's arguments are the caller's, so a value outside the
  * vocabulary becomes "not set" here rather than a CHECK violation in prose.
  */
+function styleErrorMessage(error: { message?: string }): string {
+  return error.message?.trim() || "Couldn't save their hand and backhand.";
+}
+
 function asHand(value: string | null | undefined): Hand | null {
   return HANDS.includes(value as Hand) ? (value as Hand) : null;
 }

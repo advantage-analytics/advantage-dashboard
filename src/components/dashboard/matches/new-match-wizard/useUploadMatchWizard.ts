@@ -3421,20 +3421,23 @@ export function useUploadMatchWizard({
         // so what was on screen is what is written. After the match is in and
         // never awaited: the match is the upload, and a style that failed to
         // save costs the coach one re-answer next time, not this match.
+        // `eligibilityWorkspace`, not the active one: it is what the roster
+        // was loaded for and what the details step gated the checkbox on, so
+        // a reused match pinned to its team saves what the box promised.
         const styleRow =
-          !admin && activeWorkspace.kind === "team"
+          !admin && eligibilityWorkspace.kind === "team"
             ? teamRoster?.find((row) => row.playerId === playerUserId)
             : undefined;
-        const styleOffer = styleRow
-          ? styleSaveOffer(
+        if (
+          styleRow &&
+          styleSaveChecked(
+            styleSaveOffer(
               { hand: styleRow.hand, backhand: styleRow.backhand },
               formData.playerHand,
               formData.playerBackhand,
-            )
-          : null;
-        if (
-          styleRow &&
-          styleSaveChecked(styleOffer, formData.saveStyleChoice)
+            ),
+            formData.saveStyleChoice,
+          )
         ) {
           void saveRosterPlayerStyle({
             profileId: styleRow.playerId,
@@ -3442,10 +3445,7 @@ export function useUploadMatchWizard({
             backhand: formData.playerBackhand ?? null,
           })
             .then((result) => {
-              if (!result.ok)
-                console.error("[wizard] could not save the player's style", {
-                  error: result.error,
-                });
+              if (!result.ok) throw new Error(result.error);
             })
             .catch((err) => {
               console.error("[wizard] could not save the player's style", {
@@ -3673,6 +3673,7 @@ export function useUploadMatchWizard({
     refusalForWindow,
     matchSubject,
     teamRoster,
+    eligibilityWorkspace.kind,
     isUploading,
     isProbing,
     parsingState.isParsing,

@@ -21,9 +21,11 @@
  * call it, so the checkbox on screen and the write behind it cannot disagree.
  */
 
+import type { Backhand, Hand } from "@/lib/matches/patch-match";
+
 export type SavedStyle = {
-  hand: "right" | "left" | null;
-  backhand: "one-handed" | "two-handed" | null;
+  hand: Hand | null;
+  backhand: Backhand | null;
 };
 
 export type StyleSaveOffer = {

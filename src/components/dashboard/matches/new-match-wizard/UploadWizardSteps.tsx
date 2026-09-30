@@ -326,9 +326,7 @@ export function MatchStep() {
       isSelf: !preset && whoPlayed.subject?.kind !== "roster",
       playerId,
       userId: workspaces.viewer.id,
-      rosterStyle: rosterRow
-        ? { hand: rosterRow.hand, backhand: rosterRow.backhand }
-        : null,
+      rosterStyle: rosterRow ?? null,
     };
   }, [
     formData.playerName,
