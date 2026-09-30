@@ -30,11 +30,16 @@ interface FakeOptions {
   rpcError?: { fn: string; message: string };
   derivationQuality?: Record<string, unknown> | null;
   qualityReadError?: string;
+  /** The row's status — `cancelled` makes the guarded `deriving` write miss. */
+  status?: string;
 }
 
 function fakeSupabase(opts: FakeOptions = {}) {
   const updates: Update[] = [];
   const rpcCalls: string[] = [];
+  /** `.neq()` guards seen on each update, in order. */
+  const guards: [string, unknown][][] = [];
+  const status = opts.status ?? "graded";
 
   const client = {
     from(table: string) {
@@ -42,9 +47,31 @@ function fakeSupabase(opts: FakeOptions = {}) {
         throw new Error(`unexpected table ${table}`);
       return {
         update(payload: Update) {
-          updates.push(payload);
-          const done = Promise.resolve({ error: null });
-          return { eq: () => done };
+          const neqs: [string, unknown][] = [];
+          guards.push(neqs);
+          // Recorded only if the guards let it through, like the real row.
+          const hits = () =>
+            neqs.every(([col, v]) => col !== "status" || status !== v);
+          const settle = () => {
+            const hit = hits();
+            if (hit) updates.push(payload);
+            return { data: hit ? [{ id: JOB }] : [], error: null };
+          };
+          const b = {
+            eq: () => b,
+            neq(col: string, v: unknown) {
+              neqs.push([col, v]);
+              return b;
+            },
+            select: async () => settle(),
+            then(
+              resolve: (v: unknown) => unknown,
+              reject?: (e: unknown) => unknown,
+            ) {
+              return Promise.resolve(settle()).then(resolve, reject);
+            },
+          };
+          return b;
         },
         select(cols: string) {
           if (cols !== "derivation_quality")
@@ -73,7 +100,7 @@ function fakeSupabase(opts: FakeOptions = {}) {
     },
   };
 
-  return { client, updates, rpcCalls };
+  return { client, updates, rpcCalls, guards };
 }
 
 function transcript(reconciled: boolean) {
@@ -309,5 +336,35 @@ test.describe("deriveAndPublish unreconciled fold", () => {
       { status: "deriving" },
       { status: "completed", error_message: null, error_code: null },
     ]);
+  });
+});
+
+test.describe("deriveAndPublish on a cancelled job", () => {
+  quietConsole();
+
+  test("the deriving write is guarded off cancelled", async () => {
+    const { deriveAndPublish } = load(written());
+    const fake = fakeSupabase();
+
+    await deriveAndPublish({ supabase: fake.client, jobId: JOB });
+
+    expect(fake.guards[0]).toEqual([["status", "cancelled"]]);
+  });
+
+  test("a cancelled row is never moved to deriving, and nothing runs after", async () => {
+    let persisted = false;
+    const { deriveAndPublish, mail } = load(async () => {
+      persisted = true;
+      return written()();
+    });
+    const fake = fakeSupabase({ status: "cancelled" });
+
+    const out = await deriveAndPublish({ supabase: fake.client, jobId: JOB });
+
+    expect(out).toEqual({ ok: false, reason: "job is cancelled" });
+    expect(fake.updates).toEqual([]);
+    expect(persisted).toBe(false);
+    expect(fake.rpcCalls).toEqual([]);
+    expect(mail).toEqual([]);
   });
 });

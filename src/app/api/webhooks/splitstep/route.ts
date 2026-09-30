@@ -268,7 +268,26 @@ export async function POST(request: NextRequest) {
   // confirmed no retry policy exists, so a 500 bought nothing and only risked
   // the timeout. Recovery is by hand from the stored strokes url, or via
   // GET {BASE_URL}/jobs/{job_id}, which the docs now expose.
-  if (payload.nextStatus === "completed") {
+  //
+  // Gated on the row, like the failed branch below. A job the user cancelled
+  // while it was queued is terminal (`splitstep_status_rank('cancelled') = 9`),
+  // and they were told nothing would be analysed. If the vendor had already
+  // picked it up when the DELETE raced it, a `job_completed` can still land:
+  // the envelope is recorded above, and nothing is secured, graded or derived.
+  const completedOnCancelledJob =
+    payload.nextStatus === "completed" && record.job_status === "cancelled";
+  if (completedOnCancelledJob) {
+    pipelineLog.warn(
+      `${LOG} SKIPPED — job_completed for a cancelled job; nothing secured or derived`,
+      {
+        deliveryId: record.delivery_id,
+        jobId: record.matched_job_id,
+        externalJobId: payload.externalJobId,
+      },
+    );
+  }
+
+  if (payload.nextStatus === "completed" && !completedOnCancelledJob) {
     const deliveryId = record.delivery_id;
     const jobId = record.matched_job_id;
 
@@ -440,8 +459,11 @@ export async function POST(request: NextRequest) {
   // forever. releaseQuota had exactly one caller — the submit-failure path in
   // api/splitstep/jobs, which fires only when the POST itself throws — so a
   // failure during processing left the allowance spent with nothing to show
-  // for it. Against a 2-hour monthly cap and no vendor cancel endpoint, that is
-  // the leak that made automatic submission dangerous rather than merely bold.
+  // for it. Against a 2-hour monthly cap, that is the leak that made automatic
+  // submission dangerous rather than merely bold — the vendor's cancel
+  // (`DELETE {SPLITSTEP_API_URL}/{id}`, behind POST /api/splitstep/jobs/[jobId]/
+  // cancel) only removes a job while it is still queued, and answers 409
+  // JOB_NOT_REMOVABLE once processing starts, so it recovers nothing here.
   //
   // Safe to run on a redelivery: release_processing_quota() updates only where
   // `released = false`, so a second failure notice for the same job credits

@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Guard the pipeline against late webhooks on cancelled jobs and stamp `vendor_started_at`
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/app/api/webhooks/splitstep/route.ts, src/lib/services/splitstep/derive-and-publish.ts, src/lib/services/splitstep/reconcile.ts, src/lib/services/splitstep/adopt-deliveries.ts, src/lib/data/match-analysis.ts (comment at ~950), tests/reconcile-queued-jobs.spec.ts, tests/splitstep-webhook-route.spec.ts

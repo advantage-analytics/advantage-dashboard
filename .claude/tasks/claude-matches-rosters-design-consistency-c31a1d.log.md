@@ -25,3 +25,15 @@ is the runner's. Newest entries at the bottom.
 1. `openapi/advantage-api.yaml` has no entry for the cancel route (copy the rederive entry).
 2. handler.ts casts new codes into `MatchVideoHttpError`; a properly widened shared error-code type would be cleaner.
 3. `scripts/generate-map.mjs` ignores API routes, so MAP.md's API row always needs hand edits.
+
+## T3 · Guard the pipeline against late webhooks on cancelled jobs and stamp `vendor_started_at` — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Webhook completed branch skips (logs SKIPPED, still 200 and still records the delivery) when the row is `cancelled`. `deriveAndPublish`'s `deriving` write is guarded `.neq("status","cancelled")` and stops the derivation when no row moves (a write error there now reaches the DERIVATION_ERROR path instead of being ignored). `refreshQueuedJobs` keeps the vendor's per-job `updated_at` and writes `vendor_started_at` with `status='processing'` (one guarded update per started job; falls back to now). Three stale "no cancel endpoint" comments rewritten. Specs: reconcile-queued-jobs, splitstep-webhook-route, derive-and-publish-codes (fake extended for the new chain; outside files:, judged necessary).
+
+**follow-ups:**
+
+1. `scripts/splitstep-derive.ts` now just prints `{ok:false, reason:"job is cancelled"}` for a cancelled job; could say so more clearly.
+2. Confirm the reconciler's results sweep and stale poll never release quota or send mail for a `cancelled` row (they likely select by status and skip it).
+3. `record_splitstep_webhook` still writes a late completion's result urls onto a cancelled row (status is safe); harmless but worth knowing.

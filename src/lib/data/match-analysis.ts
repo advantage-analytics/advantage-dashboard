@@ -947,7 +947,12 @@ export function isSubmitStalled(
 
 export interface AnalysisAction {
   label: string;
-  /** Absent for Cancel — there is no cancel endpoint yet, so it does not navigate. */
+  /**
+   * Absent for Cancel — it does not navigate. Cancelling is a POST to
+   * `/api/splitstep/jobs/[jobId]/cancel`, which calls the vendor's
+   * `DELETE {SPLITSTEP_API_URL}/{id}`; that only succeeds while the job is
+   * still queued (409 JOB_NOT_REMOVABLE once processing has started).
+   */
   href?: string;
   ink: string;
   hoverInk: string;

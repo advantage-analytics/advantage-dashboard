@@ -257,9 +257,17 @@ export async function reconcileVendorJobs(params: {
  */
 const QUEUE_LIST_TTL_MS = 60 * 1000;
 
+/** One entry of the vendor's `GET /jobs` list, as far as we read it. */
+interface InFlightJob {
+  /** Our next status for the job (`processing` once a worker has it). */
+  nextStatus: string;
+  /** The vendor's per-job `updated_at` — for a started job, when it started. */
+  updatedAt: string | null;
+}
+
 let queueListCache: {
   at: number;
-  jobs: Map<string, string>;
+  jobs: Map<string, InFlightJob>;
 } | null = null;
 
 /**
@@ -275,9 +283,16 @@ let queueListCache: {
  * One `GET {BASE_URL}/jobs` lists every in-flight job for our key, so this is
  * one request per page read however many rows are queued, cached for a minute.
  * It only ever moves `queued` → `processing`, guarded on the row still being
- * `queued` so a webhook that lands meanwhile always wins. A job missing from
- * the list is finished or failed; its webhook, or the stale poll, owns that —
- * absence is never read as an outcome here.
+ * `queued` so a webhook that lands meanwhile always wins — and a cancelled job
+ * is never `queued`, so it is never moved. A job missing from the list is
+ * finished or failed; its webhook, or the stale poll, owns that — absence is
+ * never read as an outcome here.
+ *
+ * The same write stamps `vendor_started_at` from the vendor's per-job
+ * `updated_at`: the moment a worker picked the job up, which is also the point
+ * past which the vendor's DELETE refuses to cancel it. Falls back to `now`
+ * when the list carries no parseable timestamp. One update per started job,
+ * since each carries its own time; a page rarely holds more than a couple.
  */
 export async function refreshQueuedJobs(params: {
   supabase: SupabaseClient;
@@ -301,31 +316,54 @@ export async function refreshQueuedJobs(params: {
   const vendorJobs = await listInFlightJobs(config, now);
   if (!vendorJobs) return 0;
 
-  const started = (data as { id: string; external_job_id: string }[])
-    .filter((job) => vendorJobs.get(job.external_job_id) === "processing")
-    .map((job) => job.id);
+  const started = (data as { id: string; external_job_id: string }[]).flatMap(
+    (job) => {
+      const vendor = vendorJobs.get(job.external_job_id);
+      if (vendor?.nextStatus !== "processing") return [];
+      return [{ id: job.id, startedAt: vendor.updatedAt ?? now.toISOString() }];
+    },
+  );
   if (started.length === 0) return 0;
 
-  const { data: moved, error: moveError } = await supabase
-    .from("processing_jobs")
-    .update({ status: "processing" })
-    .in("id", started)
-    .eq("status", "queued")
-    .select("id");
-  if (moveError) {
-    console.warn(`${LOG} could not mark started jobs`, {
-      error: moveError.message,
-    });
-    return 0;
+  const results = await Promise.all(
+    started.map(({ id, startedAt }) =>
+      supabase
+        .from("processing_jobs")
+        .update({ status: "processing", vendor_started_at: startedAt })
+        .eq("id", id)
+        .eq("status", "queued")
+        .select("id"),
+    ),
+  );
+
+  let movedCount = 0;
+  for (const { data: moved, error: moveError } of results) {
+    if (moveError) {
+      console.warn(`${LOG} could not mark a started job`, {
+        error: moveError.message,
+      });
+      continue;
+    }
+    movedCount += moved?.length ?? 0;
   }
-  return moved?.length ?? 0;
+  return movedCount;
 }
 
-/** Vendor job id → our next status, for every job their queue still holds. */
+/** A vendor timestamp as ISO, or null when it is absent or unparseable. */
+function vendorTimestamp(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+/**
+ * Vendor job id → our next status and its `updated_at`, for every job their
+ * queue still holds.
+ */
 async function listInFlightJobs(
   config: { apiUrl: string; apiKey: string },
   now: Date,
-): Promise<Map<string, string> | null> {
+): Promise<Map<string, InFlightJob> | null> {
   if (queueListCache && now.getTime() - queueListCache.at < QUEUE_LIST_TTL_MS) {
     return queueListCache.jobs;
   }
@@ -364,11 +402,18 @@ async function listInFlightJobs(
     return null;
   }
 
-  const jobs = new Map<string, string>();
+  const jobs = new Map<string, InFlightJob>();
   for (const entry of list) {
     const parsed = parseWebhookPayload(entry);
     if (parsed.externalJobId && parsed.nextStatus) {
-      jobs.set(parsed.externalJobId, parsed.nextStatus);
+      jobs.set(parsed.externalJobId, {
+        nextStatus: parsed.nextStatus,
+        updatedAt: vendorTimestamp(
+          entry && typeof entry === "object"
+            ? (entry as { updated_at?: unknown }).updated_at
+            : null,
+        ),
+      });
     }
   }
   queueListCache = { at: now.getTime(), jobs };
