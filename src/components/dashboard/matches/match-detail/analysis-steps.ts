@@ -298,7 +298,9 @@ export function analysisStepsView(
           {
             key: "analysis",
             label: STEPPER_COPY.steps.inLine,
-            state: "now",
+            // Current, but nothing is running until the vendor picks it up —
+            // `processing` below is where the spinner starts.
+            state: "wait",
             body: { kind: "note", text: STAGE_NOTE.queued },
           },
           STATS_LATER,

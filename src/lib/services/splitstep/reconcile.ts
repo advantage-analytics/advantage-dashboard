@@ -250,6 +250,131 @@ export async function reconcileVendorJobs(params: {
   return outcome;
 }
 
+/**
+ * How long a cached `GET /jobs` answer stays good. The matches layout and page
+ * both render in one request, and a coach flicking between Matches and Roster
+ * should not cost a vendor call per click.
+ */
+const QUEUE_LIST_TTL_MS = 60 * 1000;
+
+let queueListCache: {
+  at: number;
+  jobs: Map<string, string>;
+} | null = null;
+
+/**
+ * Learn which queued jobs the vendor has started.
+ *
+ * The vendor sends no "processing" webhook — only `queued` and then
+ * `job_completed` / `job_failed` (api-docs.html, "Webhook Responses"). The only
+ * source is their status API, whose `job_processing` means a worker picked the
+ * job up. `reconcileVendorJobs` above cannot answer this: it waits 30 minutes
+ * before polling, built for stuck jobs, and a typical job starts well inside
+ * that. So a row went Queued → Analyzed without ever reading Analyzing.
+ *
+ * One `GET {BASE_URL}/jobs` lists every in-flight job for our key, so this is
+ * one request per page read however many rows are queued, cached for a minute.
+ * It only ever moves `queued` → `processing`, guarded on the row still being
+ * `queued` so a webhook that lands meanwhile always wins. A job missing from
+ * the list is finished or failed; its webhook, or the stale poll, owns that —
+ * absence is never read as an outcome here.
+ */
+export async function refreshQueuedJobs(params: {
+  supabase: SupabaseClient;
+  matchIds: string[];
+  now?: Date;
+}): Promise<number> {
+  const { supabase, matchIds, now = new Date() } = params;
+  if (matchIds.length === 0) return 0;
+
+  const config = resolveSplitstepVendorApiConfig();
+  if (!config.ok) return 0;
+
+  const { data, error } = await supabase
+    .from("processing_jobs")
+    .select("id, external_job_id")
+    .eq("status", "queued")
+    .not("external_job_id", "is", null)
+    .in("match_id", matchIds);
+  if (error || !data || data.length === 0) return 0;
+
+  const vendorJobs = await listInFlightJobs(config, now);
+  if (!vendorJobs) return 0;
+
+  const started = (data as { id: string; external_job_id: string }[])
+    .filter((job) => vendorJobs.get(job.external_job_id) === "processing")
+    .map((job) => job.id);
+  if (started.length === 0) return 0;
+
+  const { data: moved, error: moveError } = await supabase
+    .from("processing_jobs")
+    .update({ status: "processing" })
+    .in("id", started)
+    .eq("status", "queued")
+    .select("id");
+  if (moveError) {
+    console.warn(`${LOG} could not mark started jobs`, {
+      error: moveError.message,
+    });
+    return 0;
+  }
+  return moved?.length ?? 0;
+}
+
+/** Vendor job id → our next status, for every job their queue still holds. */
+async function listInFlightJobs(
+  config: { apiUrl: string; apiKey: string },
+  now: Date,
+): Promise<Map<string, string> | null> {
+  if (queueListCache && now.getTime() - queueListCache.at < QUEUE_LIST_TTL_MS) {
+    return queueListCache.jobs;
+  }
+
+  let body: unknown;
+  try {
+    const response = await fetch(config.apiUrl.replace(/\/$/, ""), {
+      headers: { "X-Api-Key": config.apiKey },
+      signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      console.warn(`${LOG} job list gave no usable answer`, {
+        httpStatus: response.status,
+      });
+      return null;
+    }
+    body = await response.json();
+  } catch (err) {
+    console.warn(`${LOG} job list failed`, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+
+  // `{ jobs: [...] }` per their reference client; a bare array is accepted
+  // too rather than silently reading every job as absent.
+  const list = Array.isArray(body)
+    ? body
+    : body &&
+        typeof body === "object" &&
+        Array.isArray((body as { jobs?: unknown }).jobs)
+      ? (body as { jobs: unknown[] }).jobs
+      : null;
+  if (!list) {
+    console.warn(`${LOG} job list had an unexpected shape`);
+    return null;
+  }
+
+  const jobs = new Map<string, string>();
+  for (const entry of list) {
+    const parsed = parseWebhookPayload(entry);
+    if (parsed.externalJobId && parsed.nextStatus) {
+      jobs.set(parsed.externalJobId, parsed.nextStatus);
+    }
+  }
+  queueListCache = { at: now.getTime(), jobs };
+  return jobs;
+}
+
 interface PolledFailure {
   jobId: string;
   errorCode: string | null;
@@ -272,7 +397,9 @@ export async function reconcileBeforePageRead(
 ): Promise<void> {
   try {
     const { createAdminClient } = await import("@/lib/supabase/admin");
-    await reconcileVendorJobs({ supabase: createAdminClient(), matchIds });
+    const supabase = createAdminClient();
+    await reconcileVendorJobs({ supabase, matchIds });
+    await refreshQueuedJobs({ supabase, matchIds });
   } catch (err) {
     // Never fatal — the page is more useful slightly stale than not at all.
     console.warn(`[${pageTag}] reconciliation failed`, {

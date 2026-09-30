@@ -189,12 +189,12 @@ test("wait_or_ask picks its variant from the error code", () => {
   });
 });
 
-test("queued: analysis in line", () => {
+test("queued: analysis in line — the current step, waiting, not spinning", () => {
   const view = analysisStepsView({ ...BASE, status: "queued" }, NOW);
   expect(shape(view)).toEqual([
     "saved:done",
     "video:done",
-    "analysis:now",
+    "analysis:wait",
     "stats:later",
   ]);
   expect(view.steps[2].body).toEqual({ kind: "note", text: STAGE_NOTE.queued });

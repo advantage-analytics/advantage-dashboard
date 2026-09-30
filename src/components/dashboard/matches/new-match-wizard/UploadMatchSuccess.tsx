@@ -324,7 +324,9 @@ function successView(
         steps: [
           saved,
           uploaded,
-          { key: "analysis", state: "now", label: "Analysis in line" },
+          // Waiting, not running: the vendor has it in line. The same `wait`
+          // mark the match page and the Matches row draw for Queued.
+          { key: "analysis", state: "wait", label: "Analysis in line" },
         ],
         busy: false,
         primary: "view",

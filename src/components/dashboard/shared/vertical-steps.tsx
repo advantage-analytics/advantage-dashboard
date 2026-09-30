@@ -5,7 +5,15 @@ import { Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * A step's progress state: done, running now, not started yet, or failed.
+ * A step's progress state: done, running now, the current step but waiting on
+ * someone else, not started yet, or failed.
+ *
+ * `wait` is the queued step: it IS where the job is (dark label, like `now`),
+ * but nothing is running, so it must not spin. It wears the dashed "waiting
+ * for something real" ring, a shade darker than `later`'s so a current wait
+ * still stands apart from the steps after it. The Matches and Roster tables
+ * draw the same mark for Queued, so the spinner means one thing everywhere:
+ * work is running right now.
  *
  * Extracted from `UploadMatchSuccess.tsx` (T7) so a second vertical stepper
  * (e.g. an admin flow) can reuse the exact same geometry without re-deriving
@@ -14,7 +22,7 @@ import { cn } from "@/lib/utils";
  * there; it is specific to that screen. Only the generic row and its dot are
  * shared here.
  */
-export type StepState = "done" | "now" | "later" | "fail";
+export type StepState = "done" | "now" | "wait" | "later" | "fail";
 
 /**
  * Inline colour: DS type classes are unlayered and beat Tailwind utilities.
@@ -24,6 +32,7 @@ export type StepState = "done" | "now" | "later" | "fail";
 export const LABEL_INK: Record<StepState, string> = {
   done: "var(--ink-600)",
   now: "var(--ink-900)",
+  wait: "var(--ink-900)",
   later: "var(--ink-400)",
   fail: "var(--ink-900)",
 };
@@ -53,7 +62,7 @@ export function VerticalStep({
   return (
     <li
       className="flex gap-3.5"
-      aria-current={state === "now" ? "step" : undefined}
+      aria-current={state === "now" || state === "wait" ? "step" : undefined}
     >
       <div className="flex w-4 shrink-0 flex-col items-center pt-0.5">
         <StepMark state={state} />
@@ -158,6 +167,15 @@ export function StepMark({
             aria-hidden="true"
           />
           <span className="sr-only">Failed:</span>
+        </span>
+      );
+    case "wait":
+      return (
+        <span
+          className={`${box} rounded-full border-[1.5px] border-dashed border-[var(--ink-400)]`}
+          role="status"
+        >
+          <span className="sr-only">Waiting:</span>
         </span>
       );
     case "later":
