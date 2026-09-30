@@ -6,11 +6,12 @@ import { cn } from "@/lib/utils";
  * "one glyph means chosen" pair (single choice is the check-dot `Radio`).
  *
  * 14px, `--radius-cell` (4px) corners. At rest a 1px `--ink-300` ring with no
- * fill — so a row's hover wash shows through, as it always did; checked, solid Signal Blue with a white Lucide `Check` at 10px,
- * stroke 3. The geometry the Matches filter menu's checklist rows have always
- * drawn — lifted here so every checkbox on the dashboard is that one, not the
- * browser's native box tinted with `accent-color`, which renders at the OS's
- * size, radius and check weight and differs per platform.
+ * fill — so a row's hover wash shows through, as it always did; checked, solid
+ * Signal Blue with a white Lucide `Check` at 10px, stroke 3. The geometry the
+ * Matches filter menu's checklist rows have always drawn — lifted here so
+ * every checkbox on the dashboard is that one, not the browser's native box
+ * tinted with `accent-color`, which renders at the OS's size, radius and check
+ * weight and differs per platform.
  *
  * Two shapes, one mark:
  *
