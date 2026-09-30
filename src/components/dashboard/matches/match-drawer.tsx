@@ -37,6 +37,7 @@ import { drawerAnalysisStepsView } from "./match-detail/analysis-steps";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { advButton } from "@/lib/ui/adv-button";
 import { capitalize, cn } from "@/lib/utils";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 
 /** The drawer's `role="dialog"` carries this so the window key handler can tell it from a modal. */
 export const DRAWER_ATTR = "data-match-drawer";
@@ -283,7 +284,10 @@ export function MatchDrawer({
 
         {settled && snapshot && <SnapshotSection snapshot={snapshot} />}
 
-        {isTeam && schedule && (
+        {/* The line's site and event name still fill the facts above; only
+            the way into the Schedule closes while it is a coming-soon page
+            (`lib/schedule/availability.ts`). */}
+        {SCHEDULE_ENABLED && isTeam && schedule && (
           <div className="flex flex-col gap-0.5">
             <span className="eyebrow-sm pb-2">Schedule</span>
             <Link

@@ -29,28 +29,32 @@ export function eventFieldValue(match: {
  * the line or round and the surface; `canDetach` adds the one way to take this
  * match off it (`detach_match_from_event_line`). On a tournament line with
  * `canEditRound` the round is the match's own, chosen in the dialog
- * (`set_match_round_on_line`), so the sentence leaves it out.
+ * (`set_match_round_on_line`), so the sentence leaves it out. `scheduleHint`
+ * off drops "Change them in Schedule." — the dialog passes `SCHEDULE_ENABLED`,
+ * since the Schedule may be a coming-soon page (`lib/schedule/availability.ts`).
  */
 export function LinkedEventLine({
   eventKind,
   canDetach,
   canEditRound = false,
+  scheduleHint = true,
   onRemove,
   disabled,
 }: {
   eventKind: "dual" | "tournament";
   canDetach: boolean;
   canEditRound?: boolean;
+  scheduleHint?: boolean;
   onRemove: () => void;
   disabled?: boolean;
 }) {
+  const lead =
+    eventKind === "tournament" && canEditRound
+      ? "The date and surface come from the tournament."
+      : `The date, ${eventKind === "dual" ? "line" : "round"} and surface come from the ${eventKind}.`;
   return (
     <>
-      <span>
-        {eventKind === "tournament" && canEditRound
-          ? "The date and surface come from the tournament. Change them in Schedule."
-          : `The date, ${eventKind === "dual" ? "line" : "round"} and surface come from the ${eventKind}. Change them in Schedule.`}
-      </span>
+      <span>{scheduleHint ? `${lead} Change them in Schedule.` : lead}</span>
       {canDetach && (
         <span>
           <button

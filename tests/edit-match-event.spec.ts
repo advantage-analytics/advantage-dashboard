@@ -28,6 +28,7 @@ const { LinkedEventLine, EventField, eventFieldValue, EVENT_ACTION_CLS } =
       eventKind: "dual" | "tournament";
       canDetach: boolean;
       canEditRound?: boolean;
+      scheduleHint?: boolean;
       onRemove: () => void;
       disabled?: boolean;
     }>;
@@ -97,6 +98,19 @@ test.describe("a match on a line", () => {
     expect(tournament(false)).toContain(
       "The date, round and surface come from the tournament. Change them in Schedule.",
     );
+  });
+
+  test("scheduleHint off: no pointer to the Schedule", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(LinkedEventLine, {
+        eventKind: "dual",
+        canDetach: false,
+        scheduleHint: false,
+        onRemove: noop,
+      }),
+    );
+    expect(html).toContain("The date, line and surface come from the dual.");
+    expect(html).not.toContain("Schedule");
   });
 
   test("a dual line stays locked even with canEditRound", () => {

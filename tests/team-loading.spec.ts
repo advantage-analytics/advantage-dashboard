@@ -24,6 +24,15 @@ function route(
     fail?: boolean;
     joinFail?: boolean;
     dayZero?: boolean;
+    /** Presence's `hasSchedule` on a day-zero program. */
+    hasEvents?: boolean;
+    /**
+     * `SCHEDULE_ENABLED`. Stubbed explicitly: the catch-all proxy below would
+     * hand back a component — truthy — and silently test the enabled path.
+     * Defaults on, since the schedule's implementation is kept behind it;
+     * the flag-off tests at the bottom pass `false`.
+     */
+    scheduleEnabled?: boolean;
   } = {},
 ) {
   const reads: string[] = [];
@@ -100,7 +109,7 @@ function route(
                 ? {
                     hasMatches: false,
                     hasRoster: false,
-                    hasSchedule: false,
+                    hasSchedule: options.hasEvents ?? false,
                   }
                 : {
                     hasMatches: true,
@@ -137,6 +146,15 @@ function route(
               return pending;
             },
           };
+        if (id === "@/lib/schedule/availability") {
+          const enabled = options.scheduleEnabled ?? true;
+          return {
+            SCHEDULE_ENABLED: enabled,
+            scheduleSlot: (node: unknown) => (enabled ? node : null),
+            scheduleHref: (schedulePath: string, fallback: string) =>
+              enabled ? schedulePath : fallback,
+          };
+        }
         if (id.includes("splitstep/config"))
           return { currentBillingMonth: () => "2026-09" };
         return new Proxy({}, { get: (_, key) => component(String(key)) });
@@ -291,4 +309,43 @@ test("Player view skips the staff join-request read and does not offer adding a 
   const home = route("", { role: "player" });
   const dual = await renderChild(find(await home.render(), "Dual")!);
   expect(find(dual, "DualSheetEmpty")?.props.canSchedule).toBe(false);
+});
+
+// ── While the Schedule is a coming-soon page (`lib/schedule/availability.ts`)
+
+test("Schedule off: the page is the coming-soon stub and reads nothing", async () => {
+  for (const kind of ["team", "personal", null]) {
+    const schedule = route("schedule", { kind, scheduleEnabled: false });
+    const page = await schedule.render();
+    expect(find(page, "ComingSoonPage")?.props).toMatchObject({
+      title: "Schedule",
+    });
+    expect(find(page, "StaticSchedule")).toBeUndefined();
+    expect(schedule.reads).toEqual([]);
+  }
+});
+
+test("Schedule off: Team Home draws no dual, court record or dual history", async () => {
+  const home = route("", { scheduleEnabled: false });
+  const frame = find(await home.render(), "TeamHomeFrame");
+  expect(frame).toBeDefined();
+  expect(frame?.props).toMatchObject({
+    dual: null,
+    court: null,
+    history: null,
+  });
+  expect(find(frame, "Dual")).toBeUndefined();
+  expect(find(frame, "Court")).toBeUndefined();
+  expect(find(frame, "History")).toBeUndefined();
+});
+
+test("Schedule off: a program with only events is still day zero", async () => {
+  const home = route("", {
+    dayZero: true,
+    hasEvents: true,
+    scheduleEnabled: false,
+  });
+  const page = await home.render();
+  expect(find(page, "TeamHomeDayZeroPage")).toBeDefined();
+  expect(find(page, "PresenceReport")?.props).toMatchObject({ duals: false });
 });

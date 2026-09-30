@@ -81,6 +81,7 @@ import {
   roundKindFor,
   roundOptionsFor,
 } from "@/lib/matches/round-options";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 
 type FieldKey = "player1_name" | "player2_name" | "date" | "round";
 
@@ -665,10 +666,12 @@ export function EditMatchDialog({
         push({
           tone: "success",
           title: `Added to ${attached.eventName} · ${attached.slot ?? attached.round ?? ""}`,
-          action: {
-            label: "Open in Schedule",
-            href: `/dashboard/team/schedule/${attached.eventId}`,
-          },
+          action: SCHEDULE_ENABLED
+            ? {
+                label: "Open in Schedule",
+                href: `/dashboard/team/schedule/${attached.eventId}`,
+              }
+            : undefined,
         });
       }
 
@@ -731,13 +734,15 @@ export function EditMatchDialog({
             surface: event.surface,
           })}
         </span>
-        <Link
-          href={`/dashboard/team/schedule/${event.eventId}`}
-          className="inline-flex items-center gap-0.5 font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
-        >
-          Open
-          <ArrowUpRight className="size-3" strokeWidth={2} aria-hidden />
-        </Link>
+        {SCHEDULE_ENABLED && (
+          <Link
+            href={`/dashboard/team/schedule/${event.eventId}`}
+            className="inline-flex items-center gap-0.5 font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
+          >
+            Open
+            <ArrowUpRight className="size-3" strokeWidth={2} aria-hidden />
+          </Link>
+        )}
       </span>
     );
   } else if (match && pendingLine) {
@@ -1030,6 +1035,7 @@ export function EditMatchDialog({
                       eventKind={event.eventKind}
                       canDetach={!!loaded?.canDetach}
                       canEditRound={lineRoundEditable}
+                      scheduleHint={SCHEDULE_ENABLED}
                       onRemove={() => {
                         setDetachError(null);
                         setRemoving(true);
@@ -1071,7 +1077,9 @@ export function EditMatchDialog({
                     />
                   ) : null
                 }
-                teamMatch={!!match.program_id}
+                // No one-off note or "Add to an event" while the Schedule is a
+                // coming-soon page (`lib/schedule/availability.ts`).
+                teamMatch={SCHEDULE_ENABLED && !!match.program_id}
                 canAttach={!!loaded?.canAttach}
                 onAdd={() => setPicking(true)}
               />
