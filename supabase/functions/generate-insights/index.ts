@@ -18,9 +18,12 @@ const GEMINI_MODEL = "gemini-3.5-flash";
  * `src/lib/services/splitstep/request-insights.ts`). A rejected first answer
  * is asked for again only while a whole second call still fits inside it —
  * the slowest Flash call seen was 18.6 s — and that call is cut off at
- * `DB_WRITE_MARGIN_MS` before the wait ends, keeping the first answer.
+ * `DB_WRITE_MARGIN_MS` before the wait ends, keeping the first answer. The
+ * caller's clock starts before this one does (the network hop, a cold boot),
+ * so `CALLER_HEAD_START_MS` is taken off the wait up front.
  */
 const WEBHOOK_WAIT_MS = 35_000;
+const CALLER_HEAD_START_MS = 3_000;
 const RETRY_NEEDS_MS = 20_000;
 const DB_WRITE_MARGIN_MS = 1_500;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -204,6 +207,9 @@ function playerSummaryProblem(
     return "a description is not longer than its headline";
   }
   const text = `${headline} ${description}`;
+  if (text.length > SUMMARY_MAX_CHARS) {
+    return `a summary is ${text.length} characters, over ${SUMMARY_MAX_CHARS}`;
+  }
   if (PLAYER_LABEL.test(text)) return 'a summary says "Player 1" or "Player 2"';
   if (COACH_VOICE.test(text)) return 'a summary speaks as "we"';
   return null;
@@ -216,6 +222,49 @@ function summaryProblems(insights: Record<string, PlayerSummary>): string[] {
     if (problem) problems.push(`${key}: ${problem}`);
   }
   return problems;
+}
+
+/**
+ * Per player, the retry's answer only where it fixed what the first answer
+ * got wrong. A player the first answer already got right keeps it, and a
+ * retry that is no better never replaces it.
+ */
+function keepBetter(
+  first: Record<string, PlayerSummary>,
+  retried: Record<string, PlayerSummary>,
+): Record<string, PlayerSummary> {
+  const kept = { ...first };
+  for (const key of PLAYER_KEYS) {
+    if (
+      playerSummaryProblem(first?.[key]) !== null &&
+      playerSummaryProblem(retried?.[key]) === null
+    ) {
+      kept[key] = retried[key];
+    }
+  }
+  return kept;
+}
+
+/**
+ * A summary still naming "Player 1" or "Player 2" after everything is not
+ * saved: the viewer may be either player, so the label can point at them or
+ * at their opponent, and no summary reads better than a wrong-seeming one.
+ * The card shows its empty state; strengths and weaknesses are kept.
+ */
+function dropLabelledSummaries(insights: Record<string, PlayerSummary>) {
+  for (const key of PLAYER_KEYS) {
+    const player = insights?.[key];
+    if (!player) continue;
+    if (
+      PLAYER_LABEL.test(`${player.headline ?? ""} ${player.description ?? ""}`)
+    ) {
+      console.warn(`${key}: summary still says Player 1/2; not saving it`);
+      delete player.focus;
+      delete player.headline;
+      delete player.description;
+      delete player.summary;
+    }
+  }
 }
 
 /** Writes each player's `summary` as headline + description. */
@@ -555,7 +604,8 @@ serve(async (req) => {
     // 6. Call Gemini, and once more if a headline breaks the card's rules
     let insightsJSON = await generateInsights(geminiUrl, request(prompt));
     let problems = summaryProblems(insightsJSON);
-    const remainingMs = WEBHOOK_WAIT_MS - (Date.now() - requestStartedAt);
+    const remainingMs =
+      WEBHOOK_WAIT_MS - CALLER_HEAD_START_MS - (Date.now() - requestStartedAt);
     if (problems.length > 0 && remainingMs >= RETRY_NEEDS_MS) {
       console.warn("Summary rejected, asking again:", problems.join("; "));
       try {
@@ -565,8 +615,8 @@ serve(async (req) => {
       A previous answer was rejected because ${problems.join("; ")}. Follow the headline and description rules exactly.`),
           AbortSignal.timeout(remainingMs - DB_WRITE_MARGIN_MS),
         );
-        insightsJSON = retried;
-        problems = summaryProblems(retried);
+        insightsJSON = keepBetter(insightsJSON, retried);
+        problems = summaryProblems(insightsJSON);
       } catch (err) {
         // The first answer is still usable; a failed or cut-off retry must
         // not cost the match its summary.
@@ -586,6 +636,7 @@ serve(async (req) => {
       userId: uploaderId,
       latency: (Date.now() - generationStartedAt) / 1000,
     });
+    dropLabelledSummaries(insightsJSON);
     composeSummaries(insightsJSON);
 
     // 7. Update the 'matches' table directly

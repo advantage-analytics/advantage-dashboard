@@ -402,3 +402,85 @@ test('naming the US Open is not mistaken for a coach\'s "us"', async () => {
   const { requests } = await runWithReplies([reply]);
   expect(requests).toHaveLength(1);
 });
+
+test("a retry that is no better does not replace the first answer", async () => {
+  const first: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline: "You won 67% of points." },
+  };
+  const worse: Reply = {
+    player1: {
+      ...GOOD_REPLY.player1,
+      headline: "Your 2nd serve held up.",
+    },
+    player2: {
+      ...GOOD_REPLY.player2,
+      headline: "You won 66% on first serve.",
+    },
+  };
+  const { requests, saved } = await runWithReplies([first, worse]);
+  expect(requests).toHaveLength(2);
+  // player1 was off both times, so the first answer stands; player2 was
+  // right the first time, so the retry's broken version never replaces it.
+  expect(saved?.player1?.headline).toBe("You won 67% of points.");
+  expect(saved?.player2?.headline).toBe(GOOD_REPLY.player2!.headline);
+});
+
+test("the retry is taken per player, only where it fixed the first answer", async () => {
+  const first: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline: "You won 67% of points." },
+  };
+  const mixed: Reply = {
+    player1: GOOD_REPLY.player1,
+    player2: { ...GOOD_REPLY.player2, headline: "You won 66% on first serve." },
+  };
+  const { saved } = await runWithReplies([first, mixed]);
+  expect(saved?.player1?.headline).toBe(GOOD_REPLY.player1!.headline);
+  expect(saved?.player2?.headline).toBe(GOOD_REPLY.player2!.headline);
+});
+
+test("a summary over 350 characters is asked for again", async () => {
+  const long: Reply = {
+    ...GOOD_REPLY,
+    player1: {
+      ...GOOD_REPLY.player1,
+      description:
+        `${GOOD_REPLY.player1!.description} ${"Keep building that rhythm in every practice set you play. ".repeat(4)}`.trim(),
+    },
+  };
+  const { requests } = await runWithReplies([long, GOOD_REPLY]);
+  expect(requests).toHaveLength(2);
+  expect(requests[1].body.contents[0].parts[0].text).toMatch(
+    /player1: a summary is \d+ characters, over 350/,
+  );
+});
+
+test("a first answer after 13 s is not retried: the caller's clock started earlier", async () => {
+  const bad: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline: "You won 67% of points." },
+  };
+  // 35 s wait − 3 s head start − 13 s = 19 s left, short of a 20 s call.
+  const { requests } = await runWithReplies([bad, GOOD_REPLY], 13_000);
+  expect(requests).toHaveLength(1);
+});
+
+test("a summary still naming Player 1/2 after the retry is not saved", async () => {
+  const labelled: Reply = {
+    ...GOOD_REPLY,
+    player2: {
+      ...GOOD_REPLY.player2,
+      description:
+        "As Player 1 pressed, you won 66% of first-serve points, so keep landing that first serve.",
+    },
+  };
+  const { requests, saved } = await runWithReplies([labelled]);
+  expect(requests).toHaveLength(2);
+  expect(saved?.player2?.summary).toBeUndefined();
+  expect(saved?.player2?.headline).toBeUndefined();
+  // The other player's summary is untouched.
+  expect(saved?.player1?.summary).toBe(
+    `${GOOD_REPLY.player1!.headline} ${GOOD_REPLY.player1!.description}`,
+  );
+});
