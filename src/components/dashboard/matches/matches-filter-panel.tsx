@@ -2,8 +2,8 @@
 import { FilterTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 
 import { useState } from "react";
-import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CheckboxMark } from "@/components/ui/checkbox";
 import {
   Popover,
   PopoverContent,
@@ -205,22 +205,7 @@ export function MatchesFilterPanel<K extends string>({
                       }
                       className="flex h-8 items-center gap-[9px] rounded-[var(--radius-element)] px-2 text-left transition-colors duration-150 hover:bg-[var(--surface-subtle)]"
                     >
-                      <span
-                        className={cn(
-                          "flex size-3.5 shrink-0 items-center justify-center rounded-[var(--radius-cell)] border",
-                          active
-                            ? "border-[var(--blue)] bg-[var(--blue)]"
-                            : "border-[var(--ink-300)]",
-                        )}
-                      >
-                        {active && (
-                          <Check
-                            className="size-2.5 text-white"
-                            strokeWidth={3}
-                            aria-hidden="true"
-                          />
-                        )}
-                      </span>
+                      <CheckboxMark checked={active} />
                       <span
                         className="min-w-0 truncate text-[12px]"
                         style={{ color: "var(--ink-900)" }}

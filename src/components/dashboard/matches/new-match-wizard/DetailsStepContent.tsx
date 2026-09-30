@@ -70,6 +70,7 @@ import {
 } from "@/components/ui/popover";
 import { DateField } from "@/components/ui/date-field";
 import { YouPill } from "@/components/ui/you-pill";
+import { Checkbox } from "@/components/ui/checkbox";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Kbd } from "@/components/ui/kbd";
@@ -158,6 +159,11 @@ export interface DetailsStepContentProps {
      * difference is whether "use for future matches" has somewhere to write.
      */
     rosterStyle: SavedStyle | null;
+    /**
+     * Whether the viewer may save that style (`canSaveRosterStyle`): staff, or
+     * the player on their own profile. Everyone else gets the prefill only.
+     */
+    canSaveStyle: boolean;
   };
   /** The event line this flow started from, when it did. */
   preset: EventPreset | null;
@@ -1325,7 +1331,10 @@ function DetailsStepContentImpl({
   // "Use for future matches" — only for a roster profile, in a team, outside
   // the admin console (which records for a program it does not coach).
   const styleOffer =
-    !admin && workspaceKind === "team" && subject.rosterStyle
+    !admin &&
+    workspaceKind === "team" &&
+    subject.canSaveStyle &&
+    subject.rosterStyle
       ? styleSaveOffer(subject.rosterStyle, playerHand, playerBackhand)
       : null;
   const styleSaveTicked = styleSaveChecked(
@@ -1581,16 +1590,15 @@ function DetailsStepContentImpl({
                 match-only difference stays match-only unless they say so. */}
             {styleOffer && (
               <label className="flex cursor-pointer items-start gap-2.5 sm:col-span-2 sm:col-start-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={styleSaveTicked}
-                  onChange={(event) =>
+                  onChange={(checked) =>
                     onInputChange(
                       "saveStyleChoice",
-                      styleSaveChoice(styleOffer.mode, event.target.checked),
+                      styleSaveChoice(styleOffer.mode, checked),
                     )
                   }
-                  className="mt-px size-4 shrink-0 cursor-pointer accent-[var(--blue)]"
+                  className="mt-px"
                 />
                 <span>
                   <span className="block text-[12px] text-[var(--ink-700)]">

@@ -36,15 +36,19 @@ that decides which of two conflicting patterns wins.
 > v3 ships 36 primitives against v2's 21: `DataTable`, `Score`, `Delta`,
 > `ResultMark`, `InsightCard`+`EngineChip`, `Notice`, `Avatar`+`StatePill`,
 > `Radio`, `EntitySelect`, `ActivityTray`, `SlotLine`, `ScoreGrid`, `FieldRow`,
-> `StepBar`, `InlineFacts`. Five more were added in-repo and are not in the
+> `StepBar`, `InlineFacts`. Six more were added in-repo and are not in the
 > project yet: `FloatMenu` and `MenuSelect` (2026-09-07, `ui/float-menu.tsx`,
 > `ui/menu-select.tsx`) — see [Dropdown / Menu](reference/chrome.md);
 > `ConfirmDialog` (2026-09-13, `ui/confirm-dialog.tsx`), the one shell for
 > every confirmation — see [Dialog (v3)](reference/chrome.md); `ChosenCheck`
 > (2026-09-13, `ui/float-menu.tsx`), the right-edge "chosen" mark every menu
 > draws — see **Selected-row check** ([primitives](reference/primitives.md));
-> and `YouPill` (2026-09-13, `ui/you-pill.tsx`), the viewer's own marker on
-> every surface — see [Settings Pages](reference/settings.md).
+> `YouPill` (2026-09-13, `ui/you-pill.tsx`), the viewer's own marker on
+> every surface — see [Settings Pages](reference/settings.md); and `Checkbox`
+>
+> - `CheckboxMark` (2026-09-29, `ui/checkbox.tsx`), the one checkbox — the
+>   filter menu's 14px box, never the browser's native one — see **`Checkbox`**
+>   ([primitives](reference/primitives.md)).
 >
 > In the project, `readme.md` is the current-state rulebook and `CHANGELOG.md`
 > the decision trail (the v2→v3 diff, then Rounds 10–20 and a platform audit;

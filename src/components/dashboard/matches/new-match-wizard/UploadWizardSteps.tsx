@@ -4,6 +4,8 @@ import { AdvSelect } from "@/components/ui/adv-select";
 import { useAdminWizardMode, AdminResultLock } from "./admin-mode";
 import { useCallback, useMemo } from "react";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { isProgramStaff } from "@/lib/workspace/types";
+import { canSaveRosterStyle } from "./style-save-offer";
 import { AnimatedHeight } from "./AnimatedHeight";
 import { DetailsStepContent } from "./DetailsStepContent";
 import { EligibilityNotice } from "./EligibilityNotice";
@@ -327,6 +329,13 @@ export function MatchStep() {
       playerId,
       userId: workspaces.viewer.id,
       rosterStyle: rosterRow ?? null,
+      canSaveStyle:
+        rosterRow !== undefined &&
+        canSaveRosterStyle({
+          staff: isProgramStaff(workspaces.active),
+          rowUserId: rosterRow.userId,
+          viewerId: workspaces.viewer.id,
+        }),
     };
   }, [
     formData.playerName,
@@ -335,6 +344,7 @@ export function MatchStep() {
     whoPlayed.roster,
     preset,
     workspaces.viewer.id,
+    workspaces.active,
   ]);
 
   if (admin?.attachment)

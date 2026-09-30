@@ -18,6 +18,7 @@ import {
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
 import { advButton } from "@/lib/ui/adv-button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import type { AddPlayerResult } from "@/components/dashboard/team/roster-actions";
 import {
@@ -826,11 +827,10 @@ export function AddPlayerDialog({
           exists only while that sentence does — a free spot asks nothing. */}
       {spotTakenBy.length > 0 && (
         <label className="flex cursor-pointer items-start gap-2.5">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={spotAcknowledged}
-            onChange={(event) => setSpotAcknowledged(event.target.checked)}
-            className="mt-px size-4 shrink-0 cursor-pointer accent-[var(--blue)]"
+            onChange={setSpotAcknowledged}
+            className="mt-px"
           />
           <span>
             <span className="block text-[12px] text-[var(--ink-700)]">
@@ -875,12 +875,11 @@ export function AddPlayerDialog({
       </SettingsField>
 
       <label className="flex cursor-pointer items-start gap-2.5">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={alsoInvite}
           disabled={email.trim() === ""}
-          onChange={(event) => setAlsoInvite(event.target.checked)}
-          className="mt-px size-4 shrink-0 cursor-pointer accent-[var(--blue)] disabled:cursor-not-allowed disabled:opacity-40"
+          onChange={setAlsoInvite}
+          className="mt-px"
         />
         <span>
           <span className="block text-[12px] text-[var(--ink-700)]">

@@ -73,6 +73,24 @@ export function styleSaveChecked(
   return offer.defaultChecked;
 }
 
+/**
+ * Who may save a roster player's style — the same rule
+ * `set_program_player_style` enforces, asked first so the checkbox is never
+ * offered to someone whose save would be refused: program staff, or the
+ * player themselves on their own claimed profile. A player-role uploader
+ * picking a teammate gets the prefill but no checkbox.
+ */
+export function canSaveRosterStyle(input: {
+  staff: boolean;
+  rowUserId: string | null;
+  viewerId: string | null;
+}): boolean {
+  return (
+    input.staff ||
+    (input.rowUserId !== null && input.rowUserId === input.viewerId)
+  );
+}
+
 /** "Maya Rodriguez" → "Maya". A one-word name is its own first name. */
 export function firstNameOf(name: string): string {
   return name.trim().split(/\s+/)[0] || name;
