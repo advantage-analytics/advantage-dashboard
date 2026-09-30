@@ -253,7 +253,9 @@ function DrawerStep({
   return (
     <li
       className="flex gap-3"
-      aria-current={step.state === "now" ? "step" : undefined}
+      aria-current={
+        step.state === "now" || step.state === "wait" ? "step" : undefined
+      }
     >
       <div className="flex w-4 shrink-0 flex-col items-center pt-px">
         <StepMark state={step.state} />

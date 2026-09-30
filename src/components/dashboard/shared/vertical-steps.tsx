@@ -5,7 +5,23 @@ import { Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * A step's progress state: done, running now, not started yet, or failed.
+ * A step's progress state: done, running now, the current step but waiting on
+ * someone else, not started yet, failed, or stopped on purpose — plus
+ * `none`, for a list row that was never analysed at all.
+ *
+ * `stopped` is a step the player ended — an analysis cancelled while it waited
+ * in the queue. The Failed chip's shape in grey: nothing went wrong, so it
+ * must not borrow the danger red.
+ *
+ * `none` is not a step in a running job: a match with no analysis (manual
+ * entry, cancelled, stats unavailable). A thin solid ring — nothing is coming.
+ *
+ * `wait` is the queued step: it IS where the job is (dark label, like `now`),
+ * but nothing is running, so it must not spin. It wears the dashed "waiting
+ * for something real" ring, a shade darker than `later`'s so a current wait
+ * still stands apart from the steps after it. The Matches and Roster tables
+ * draw the same mark for Queued, so the spinner means one thing everywhere:
+ * work is running right now.
  *
  * Extracted from `UploadMatchSuccess.tsx` (T7) so a second vertical stepper
  * (e.g. an admin flow) can reuse the exact same geometry without re-deriving
@@ -14,7 +30,8 @@ import { cn } from "@/lib/utils";
  * there; it is specific to that screen. Only the generic row and its dot are
  * shared here.
  */
-export type StepState = "done" | "now" | "later" | "fail";
+export type StepState =
+  "done" | "now" | "wait" | "later" | "fail" | "stopped" | "none";
 
 /**
  * Inline colour: DS type classes are unlayered and beat Tailwind utilities.
@@ -24,8 +41,11 @@ export type StepState = "done" | "now" | "later" | "fail";
 export const LABEL_INK: Record<StepState, string> = {
   done: "var(--ink-600)",
   now: "var(--ink-900)",
+  wait: "var(--ink-900)",
   later: "var(--ink-400)",
   fail: "var(--ink-900)",
+  stopped: "var(--ink-900)",
+  none: "var(--ink-400)",
 };
 
 /**
@@ -53,7 +73,7 @@ export function VerticalStep({
   return (
     <li
       className="flex gap-3.5"
-      aria-current={state === "now" ? "step" : undefined}
+      aria-current={state === "now" || state === "wait" ? "step" : undefined}
     >
       <div className="flex w-4 shrink-0 flex-col items-center pt-0.5">
         <StepMark state={state} />
@@ -160,6 +180,28 @@ export function StepMark({
           <span className="sr-only">Failed:</span>
         </span>
       );
+    case "stopped":
+      return (
+        <span
+          className={`flex ${box} items-center justify-center rounded-full bg-[var(--ink-100)]`}
+        >
+          <X
+            className={`${glyph} text-[var(--ink-600)]`}
+            strokeWidth={2.25}
+            aria-hidden="true"
+          />
+          <span className="sr-only">Cancelled:</span>
+        </span>
+      );
+    case "wait":
+      return (
+        <span
+          className={`${box} rounded-full border-[1.5px] border-dashed border-[var(--ink-400)]`}
+          role="status"
+        >
+          <span className="sr-only">Waiting:</span>
+        </span>
+      );
     case "later":
       // Dashed means waiting for something real.
       return (
@@ -167,6 +209,15 @@ export function StepMark({
           className={`${box} rounded-full border-[1.5px] border-dashed border-[var(--ink-300)]`}
         >
           <span className="sr-only">Not started:</span>
+        </span>
+      );
+    case "none":
+      // Solid, not dashed: nothing is coming. `later`'s box, one ink lighter.
+      return (
+        <span
+          className={`${box} rounded-full border-[1.5px] border-[var(--ink-200)]`}
+        >
+          <span className="sr-only">Not analyzed:</span>
         </span>
       );
   }

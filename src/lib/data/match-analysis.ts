@@ -75,6 +75,18 @@ export type AnalysisStatus =
    * whether `match_stats` rows actually exist.
    */
   | "timeline"
+  /**
+   * The athlete stopped the analysis before the vendor began it. Terminal:
+   * set only by the cancel route (`cancel_processing_job`) after the vendor
+   * removed the queued job, and its reservation was released in the same
+   * write. The video is still stored — "Send for analysis again" resubmits
+   * from it (resubmitJob() accepts a cancelled parent).
+   *
+   * Settled but neither failed nor ready: nothing went wrong and nothing was
+   * analysed, so it is in none of IN_FLIGHT, FAILED or READY and the matches
+   * list groups it with `manual`.
+   */
+  | "cancelled"
   /* --- derived, not job statuses --- */
   /** Arrived complete from a file import. Never had a processing job. */
   | "imported"
@@ -124,6 +136,13 @@ export interface MatchAnalysis {
   window?: string;
   /** `processing_jobs.id`, so a stalled submission has something to retry. */
   jobId?: string;
+  /**
+   * `processing_jobs.created_by` — the login that submitted this job. The
+   * cancel and resubmit routes act only for this user (anyone else gets "Job
+   * not found"), so the match page offers "Cancel analysis" / "Send for
+   * analysis again" only when the viewer is this id.
+   */
+  createdBy?: string;
   /** When the row last moved, ISO. The staleness input for `isSubmitStalled`. */
   updatedAt?: string;
   jobReference?: string;
@@ -157,11 +176,52 @@ export interface MatchAnalysis {
    */
   errorCode?: string;
   /**
-   * Rows in the newest job's resubmission chain, the original included —
-   * `chainAttempts()`. The ceiling input to `classifyFailure()`.
+   * Rows in the newest job's resubmission chain, the original included and
+   * cancelled rows left out — `chainAttempts()`. The ceiling input to
+   * `classifyFailure()`.
    */
   attemptsUsed?: number;
+  /**
+   * When the vendor took the job into its queue, ISO —
+   * `queued_ack_at ?? submitted_at`. The acknowledgement is the truer mark;
+   * `submitted_at` stands in when the `job_queued` webhook never arrived. The
+   * "Waiting N min" clock.
+   */
+  queuedAt?: string;
+  /**
+   * When the vendor reported it had begun processing, ISO
+   * (`vendor_started_at`). The "Started N min ago" clock; null-and-cancelled
+   * means the job never cost vendor compute.
+   */
+  vendorStartedAt?: string;
+  /**
+   * Seconds of the month's analysis time this job reserved
+   * (`billable_seconds`) — the "1h 29m goes back" figure on cancel. Raw
+   * seconds, unlike `window`, which is the same number pre-formatted.
+   */
+  reservedSeconds?: number;
   verified?: boolean;
+}
+
+/**
+ * The job-row timing columns → `queuedAt`, `vendorStartedAt`,
+ * `reservedSeconds`. The ONE projection the server loader and the realtime
+ * patch share, so the two cannot read the clocks differently. Every key is
+ * always present so a live patch spread over the server render clears a
+ * field the row no longer carries.
+ */
+export function jobTimingFields(row: {
+  queued_ack_at?: string | null;
+  submitted_at?: string | null;
+  vendor_started_at?: string | null;
+  billable_seconds?: number | null;
+}): Pick<MatchAnalysis, "queuedAt" | "vendorStartedAt" | "reservedSeconds"> {
+  const reserved = row.billable_seconds;
+  return {
+    queuedAt: row.queued_ack_at ?? row.submitted_at ?? undefined,
+    vendorStartedAt: row.vendor_started_at ?? undefined,
+    reservedSeconds: reserved != null && reserved > 0 ? reserved : undefined,
+  };
 }
 
 /**
@@ -188,6 +248,7 @@ export const STATUS_MAP: Record<string, AnalysisStatus> = {
   completed: "completed",
   failed: "failed",
   derivation_failed: "derivation_failed",
+  cancelled: "cancelled",
 };
 
 /**
@@ -294,6 +355,17 @@ export function canRetryAnalysis(analysis: {
 
 /** 1 original + 2 resubmissions. Enforced here and nowhere else. */
 export const MAX_TOTAL_ATTEMPTS = 3;
+
+/**
+ * Whether a job row spends one of the chain's {@link MAX_TOTAL_ATTEMPTS}. A
+ * `cancelled` row does not: the athlete withdrew it from the vendor's queue
+ * before it ran, so cancel → "Send for analysis again" cycles never use up the
+ * retries meant for vendor failures. `resubmitJob()`'s ceiling and
+ * `chainAttempts()` both count through this, so the button and the copy agree.
+ */
+export function countsAsAttempt(status: string | null | undefined): boolean {
+  return status !== "cancelled";
+}
 
 /**
  * The ONE failure class the system retries on its own.
@@ -497,17 +569,23 @@ export function recoveryFields(
 }
 
 /**
- * How many rows the newest job's resubmission chain holds, the original
- * included: its root (walked up `resubmitted_from_job_id`) plus every row
- * descending from that root. Counted among `rows` only — the rows a loader
- * already fetched for one match — so it costs no query.
+ * How many attempts the newest job's resubmission chain has spent, the
+ * original included: its root (walked up `resubmitted_from_job_id`) plus every
+ * row descending from that root, less any `cancelled` row
+ * ({@link countsAsAttempt}) — the same count `resubmitJob()`'s ceiling uses.
+ * A row without a `status` counts. Counted among `rows` only — the rows a
+ * loader already fetched for one match — so it costs no query.
  *
  * An earlier upload for the same match that no link connects is a separate
  * chain and is not counted: it did not spend this chain's attempts. Returns 1
  * when `newestId` is not among `rows`. Cycle-safe.
  */
 export function chainAttempts(
-  rows: readonly { id: string; resubmitted_from_job_id?: string | null }[],
+  rows: readonly {
+    id: string;
+    resubmitted_from_job_id?: string | null;
+    status?: string | null;
+  }[],
   newestId: string,
 ): number {
   // A chain is a tree, so "root plus descendants" is exactly the rows linked
@@ -539,7 +617,11 @@ export function chainAttempts(
       frontier.push(next);
     }
   }
-  return seen.size;
+  let spent = 0;
+  for (const row of rows) {
+    if (seen.has(row.id) && countsAsAttempt(row.status)) spent += 1;
+  }
+  return spent;
 }
 
 export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
@@ -561,6 +643,7 @@ export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
   derivation_failed: "Stats failed",
   imported: "Imported",
   manual: "Stats unavailable",
+  cancelled: "Cancelled",
 };
 
 /**
@@ -628,8 +711,15 @@ export function pipelinePercent(
   }
 
   // A failure carries no percentage — the component fills the stage it died in
-  // from `failedHere` — and a hand-scored match never had a pipeline.
-  if (isAnalysisFailed(status) || status === "manual") return undefined;
+  // from `failedHere` — and a hand-scored match never had a pipeline. A
+  // cancelled job stopped where it stood; a bar would claim progress.
+  if (
+    isAnalysisFailed(status) ||
+    status === "manual" ||
+    status === "cancelled"
+  ) {
+    return undefined;
+  }
 
   if (status === "completed" || status === "imported") return 100;
 
@@ -686,13 +776,22 @@ export function uploadEtaSeconds(
  */
 export function formatEta(seconds: number): string {
   if (seconds < 90) return "under a minute left";
+  return `about ${formatDuration(seconds)} left`;
+}
 
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `about ${minutes} min left`;
+/**
+ * A length of time in whole minutes — "12 min", "1h", "1h 29m". `formatEta`'s
+ * own arithmetic, shared so an estimate, an elapsed clock and a reserved
+ * allowance ("1h 29m goes back…") cannot phrase the same span two ways.
+ * Floors at one minute: a zero reads as nothing having happened.
+ */
+export function formatDuration(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  if (minutes < 60) return `${minutes} min`;
 
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest === 0 ? `about ${hours}h left` : `about ${hours}h ${rest}m left`;
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
 }
 
 /**
@@ -707,6 +806,9 @@ export function stageIndexFor(status: AnalysisStatus): number {
     case "manual":
       return 0;
     case "queued":
+    // Cancel is offered only while the job waits in the vendor's queue, so a
+    // cancelled job stopped there.
+    case "cancelled":
       return 1;
     case "processing":
     case "deriving":
@@ -780,6 +882,11 @@ export function isWorking(status: AnalysisStatus): boolean {
   return IN_FLIGHT.has(status) && !IDLE.has(status);
 }
 
+/** The step mark for an in-flight row: a spinner only while work runs, else a waiting dot. */
+export function inFlightMark(status: AnalysisStatus): "now" | "wait" {
+  return isWorking(status) ? "now" : "wait";
+}
+
 /**
  * Is a database update actually coming for this row?
  *
@@ -851,12 +958,16 @@ export type MatchPageKind = "steps" | "report";
  *
  * `"steps"` for every in-flight or failed status — every stat section would
  * draw zeroes, and the reason it stopped is more use than a page of them —
- * except the one `isStatsUnavailable` exemption. Everything else is the report.
+ * except the one `isStatsUnavailable` exemption, and for `cancelled`: a job
+ * cancelled in the queue was never analysed, so the report would be empty
+ * sections, and the stepper's cancelled view is where "Send for analysis
+ * again" lives. Everything else is the report.
  */
 export function matchPageKind({
   status,
   recovery,
 }: Pick<MatchAnalysis, "status" | "recovery">): MatchPageKind {
+  if (status === "cancelled") return "steps";
   return (isInFlight(status) || isAnalysisFailed(status)) &&
     !isStatsUnavailable({ status, recovery })
     ? "steps"
@@ -865,7 +976,7 @@ export function matchPageKind({
 
 /**
  * The matches list's own lifecycle grouping — "In progress" / "Ready" /
- * "Failed" / "No video" — kept as a named export so the list's decision is a
+ * "Failed" / "Not analyzed" — kept as a named export so the list's decision is a
  * pure function a spec can pin, not inline logic in the list component.
  *
  * Deliberately NOT `isAnalysisFailed(status)` alone. Product decision
@@ -884,7 +995,9 @@ export function matchListGroup(
   if (analysis?.recovery === "stats_unavailable") return "Ready";
   if (isInFlight(status)) return "In progress";
   if (isAnalysisFailed(status)) return "Failed";
-  if (status === "manual") return "No video";
+  // A cancelled job was never analysed — the same group as a hand-scored
+  // match, and never "Ready".
+  if (status === "manual" || status === "cancelled") return "Not analyzed";
   return "Ready";
 }
 
@@ -947,7 +1060,12 @@ export function isSubmitStalled(
 
 export interface AnalysisAction {
   label: string;
-  /** Absent for Cancel — there is no cancel endpoint yet, so it does not navigate. */
+  /**
+   * Absent for Cancel — it does not navigate. Cancelling is a POST to
+   * `/api/splitstep/jobs/[jobId]/cancel`, which calls the vendor's
+   * `DELETE {SPLITSTEP_API_URL}/{id}`; that only succeeds while the job is
+   * still queued (409 JOB_NOT_REMOVABLE once processing has started).
+   */
   href?: string;
   ink: string;
   hoverInk: string;
@@ -1036,6 +1154,11 @@ export function analysisAction(
   }
   if (analysis.status === "manual") {
     return addVideoAction();
+  }
+  // The video is still stored; "Send for analysis again" lives on the match
+  // page. Without this a cancelled row fell through to "Cancel" below.
+  if (analysis.status === "cancelled") {
+    return viewMatchAction("View match", matchId);
   }
   return { label: "Cancel", ink: "#888888", hoverInk: "#525252" };
 }

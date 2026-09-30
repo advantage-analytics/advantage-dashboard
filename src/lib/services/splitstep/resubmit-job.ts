@@ -1,5 +1,6 @@
 /**
- * Resubmission — recovery from a *failed* vendor job.
+ * Resubmission — recovery from a *failed* vendor job, or a fresh send of a
+ * *cancelled* one.
  *
  * A resubmission is a NEW `processing_jobs` row linked to its parent via
  * `resubmitted_from_job_id`, never a status rewind on the old one:
@@ -12,7 +13,17 @@
  * columns:
  *   • the webhook's `job_failed` branch (auto — one automatic attempt per
  *     chain, download-step failures only)
- *   • POST /api/splitstep/jobs/[jobId]/resubmit (manual — "Retry analysis")
+ *   • POST /api/splitstep/jobs/[jobId]/resubmit (manual — "Retry analysis"
+ *     on a failed job, and "Send for analysis again" on a cancelled one)
+ *
+ * A `cancelled` parent is the athlete having stopped a queued job themselves
+ * (`cancel_processing_job`, which released its reservation). "Send for
+ * analysis again" is the same resubmission: a new child row that reserves the
+ * month's time anew, exactly as a failed parent's does. It is MANUAL only —
+ * cancelling was a person's decision, so no webhook or reconciler may undo it
+ * — and it skips `classifyFailure()`, which has nothing to say about a job
+ * that did not fail (its `error_code` is `CANCELLED`, which no failure rule
+ * reads).
  *
  * ── Video recovery, and why there is no "re-stage" branch ────────────────────
  * The planning doc for this feature said to re-stage from "the R2 original"
@@ -98,6 +109,7 @@ import type { Workspace } from "@/lib/workspace/types";
 
 import {
   classifyFailure,
+  countsAsAttempt,
   isDownloadFailure,
   MAX_TOTAL_ATTEMPTS,
 } from "@/lib/data/match-analysis";
@@ -110,8 +122,23 @@ export { isDownloadFailure, MAX_TOTAL_ATTEMPTS };
 
 const LOG = "[splitstep-resubmit]";
 
-/** Statuses that mean "this row will never move again on its own". */
-const TERMINAL_STATUSES = ["failed", "completed", "derivation_failed"];
+/**
+ * Statuses that mean "this row will never move again on its own".
+ * `cancelled` belongs here: without it the cancelled parent itself would read
+ * as an analysis in flight and refuse its own "Send for analysis again".
+ */
+const TERMINAL_STATUSES = [
+  "failed",
+  "completed",
+  "derivation_failed",
+  "cancelled",
+];
+
+/**
+ * Parent statuses a resubmission may start from. `failed` for "Retry
+ * analysis"; `cancelled` for "Send for analysis again" (manual only).
+ */
+const RESUBMITTABLE_STATUSES = new Set(["failed", "cancelled"]);
 
 export type ResubmitRefusalReason =
   | "not_found"
@@ -260,7 +287,7 @@ interface ParentJob {
 export async function resubmitJob(params: {
   /** Service-role client — this runs from webhooks and background paths. */
   supabase: SupabaseClient;
-  /** The FAILED job to resubmit from. */
+  /** The FAILED (or, manual only, CANCELLED) job to resubmit from. */
   jobId: string;
   /** True when the system is retrying, false when a user pressed the button. */
   auto: boolean;
@@ -292,7 +319,8 @@ export async function resubmitJob(params: {
     };
   }
 
-  // 1. The parent must exist and be terminally failed. `derivation_failed` is
+  // 1. The parent must exist and be terminally failed — or cancelled by the
+  //    athlete, for "Send for analysis again". `derivation_failed` is
   //    excluded on purpose: its results already exist and resubmitting the
   //    video would spend quota to recompute what a derivation re-run gets free.
   const { data: parentRow, error: parentError } = await supabase
@@ -325,31 +353,46 @@ export async function resubmitJob(params: {
   }
   const parent: ParentJob = { ...raw, created_by: raw.created_by };
 
-  if (parent.status !== "failed") {
+  if (!RESUBMITTABLE_STATUSES.has(parent.status)) {
     return {
       ok: false,
       reason: "not_failed",
-      message: `Only a failed analysis can be retried; this one is ${parent.status}.`,
+      message: `Only a failed or cancelled analysis can be sent again; this one is ${parent.status}.`,
+    };
+  }
+
+  const cancelled = parent.status === "cancelled";
+  if (cancelled && auto) {
+    // A cancel is the athlete's decision; the system never reverses it.
+    return {
+      ok: false,
+      reason: "not_failed",
+      message: "A cancelled analysis is only sent again by the athlete.",
     };
   }
 
   // classifyFailure() is the single source of truth for what a failed row
   // means for recovery (design §4). attemptsUsed is 0 here on purpose: the
-  // attempt-ceiling gate is a separate check below (`chain.length >=
+  // attempt-ceiling gate is a separate check below (`attemptsSpent >=
   // MAX_TOTAL_ATTEMPTS`) that this call must not pre-empt, and
   // classifyFailure() only turns a "failed" row's retry into wait_or_ask once
   // attemptsUsed reaches that ceiling. hasResults is irrelevant for a failed
   // job, so it is always false.
-  const recoveryClass = classifyFailure({
-    dbStatus: parent.status,
-    errorCode: parent.error_code,
-    errorCategory: parent.error_category,
-    errorStep: parent.error_step,
-    hasVideo: parent.video_object_key !== null,
-    hasResults: false,
-    attemptsUsed: 0,
-    stalledSubmit: false,
-  });
+  //
+  // A cancelled parent did not fail, so there is nothing to classify: it is
+  // treated as "retry" and meets the same video, chain and duplicate checks.
+  const recoveryClass = cancelled
+    ? "retry"
+    : classifyFailure({
+        dbStatus: parent.status,
+        errorCode: parent.error_code,
+        errorCategory: parent.error_category,
+        errorStep: parent.error_step,
+        hasVideo: parent.video_object_key !== null,
+        hasResults: false,
+        attemptsUsed: 0,
+        stalledSubmit: false,
+      });
 
   if (recoveryClass === "fix_recording") {
     // The vendor rejected the file itself — a frame-rate, resolution, or
@@ -417,7 +460,12 @@ export async function resubmitJob(params: {
     };
   }
 
-  if (chain.length >= MAX_TOTAL_ATTEMPTS) {
+  // A cancelled row — the athlete withdrew it from the vendor's queue before
+  // it ran — spends no attempt, so cancel → "Send for analysis again" cycles
+  // never use up the retries meant for vendor failures. `chainAttempts()`
+  // counts the same way, so the "retry" / "wait_or_ask" copy agrees.
+  const attemptsSpent = chain.filter((j) => countsAsAttempt(j.status)).length;
+  if (attemptsSpent >= MAX_TOTAL_ATTEMPTS) {
     return {
       ok: false,
       reason: "attempt_ceiling",
@@ -857,9 +905,17 @@ export async function resubmitJob(params: {
 }
 
 /**
+ * How many links either walk in {@link loadChain} follows. Cancelled rows
+ * spend no attempt, so a chain can run deeper than the attempt ceiling; the
+ * bound only has to outlast any plausible run of cancel → resend cycles while
+ * still stopping a data cycle from spinning the loop.
+ */
+const MAX_CHAIN_DEPTH = 50;
+
+/**
  * Every job in this chain: the root plus all descendants. Returns null on a
- * read error. Bounded — with a ceiling of 3 the loop runs at most a few times,
- * and the bound exists so a data cycle cannot spin it.
+ * read error. Bounded by {@link MAX_CHAIN_DEPTH} so a data cycle cannot spin
+ * it; a normal chain is a handful of rows.
  */
 async function loadChain(
   supabase: SupabaseClient,
@@ -868,7 +924,7 @@ async function loadChain(
   // Up to the root.
   let rootId = from.id;
   let parentId = from.resubmitted_from_job_id;
-  for (let i = 0; parentId && i < 10; i++) {
+  for (let i = 0; parentId && i < MAX_CHAIN_DEPTH; i++) {
     rootId = parentId;
     const { data, error } = await supabase
       .from("processing_jobs")
@@ -893,7 +949,7 @@ async function loadChain(
     rootRow as { id: string; status: string; auto_resubmitted: boolean },
   ];
   let frontier = [rootId];
-  for (let i = 0; frontier.length > 0 && i < 10; i++) {
+  for (let i = 0; frontier.length > 0 && i < MAX_CHAIN_DEPTH; i++) {
     const { data, error } = await supabase
       .from("processing_jobs")
       .select("id, status, auto_resubmitted")

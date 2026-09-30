@@ -71,10 +71,24 @@ export async function deriveAndPublish(params: {
   const { supabase, jobId, deadline } = params;
 
   try {
-    await supabase
+    // Never off `cancelled`. The user withdrew the job while it was queued
+    // (POST /api/splitstep/jobs/[jobId]/cancel) and was told nothing would be
+    // analysed; a late completion — or a hand re-run — must not resurrect it.
+    // `record_splitstep_webhook` already refuses to move the row (rank 9), but
+    // this write is a plain update that the rank guard never sees. Every
+    // settle write below keys on the id alone, so the guard has to stop the
+    // whole derivation, not just this one write.
+    const { data: moved, error: moveError } = await supabase
       .from("processing_jobs")
       .update({ status: "deriving" })
-      .eq("id", jobId);
+      .eq("id", jobId)
+      .neq("status", "cancelled")
+      .select("id");
+    if (moveError) throw new Error(moveError.message);
+    if (!moved || moved.length === 0) {
+      console.warn(`${LOG} skipped — job is cancelled or missing`, { jobId });
+      return { ok: false, reason: "job is cancelled" };
+    }
 
     const written = await persistTranscript({ supabase, jobId });
 

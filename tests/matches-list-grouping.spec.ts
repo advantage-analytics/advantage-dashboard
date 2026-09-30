@@ -7,7 +7,7 @@ import {
 } from "@/lib/data/match-analysis";
 
 /**
- * The matches list groups rows "In progress / Ready / Failed / No video".
+ * The matches list groups rows "In progress / Ready / Failed / Not analyzed".
  *
  * Product decision 2026-09-27: a `derivation_failed` row classified
  * `stats_unavailable` (our derivation engine refused the data, deterministically)
@@ -61,12 +61,20 @@ test.describe("matchListGroup", () => {
     expect(matchListGroup(analysis)).toBe("In progress");
   });
 
-  test("a manual (hand-scored) row groups under No video", () => {
+  test("a manual (hand-scored) row groups under Not analyzed", () => {
     const analysis: MatchAnalysis = {
       status: "manual",
       providerId: null,
     };
-    expect(matchListGroup(analysis)).toBe("No video");
+    expect(matchListGroup(analysis)).toBe("Not analyzed");
+  });
+
+  test("a cancelled row groups under Not analyzed beside a manual one, never Ready", () => {
+    const cancelled: MatchAnalysis = { status: "cancelled", providerId: null };
+    const manual: MatchAnalysis = { status: "manual", providerId: null };
+    expect(matchListGroup(cancelled)).toBe("Not analyzed");
+    expect(matchListGroup(cancelled)).toBe(matchListGroup(manual));
+    expect(matchListGroup(cancelled)).not.toBe("Ready");
   });
 
   test("no analysis at all resolves to null, not a group", () => {

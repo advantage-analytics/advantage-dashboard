@@ -22,6 +22,7 @@ import {
   ANALYSIS_LABEL,
   isInFlight,
   isLiveUpdating,
+  inFlightMark,
   isWorking,
 } from "@/lib/data/match-analysis";
 import { invitationHref } from "@/lib/services/programs/join-links";
@@ -125,7 +126,9 @@ function InFlightRow({ item }: { item: ActivityItem }) {
       <Lead>
         {/* Down 2px so the 14px mark centres on the title's first line. */}
         <span className="mt-0.5 flex">
-          <StepMark state="now" size="compact" />
+          {/* Spinner only while work runs; a queued or stored job wears the
+              still `wait` ring, as it does in the Matches and Roster rows. */}
+          <StepMark state={inFlightMark(analysis.status)} size="compact" />
         </span>
       </Lead>
       <span className="flex min-w-0 flex-1 flex-col gap-[7px]">
