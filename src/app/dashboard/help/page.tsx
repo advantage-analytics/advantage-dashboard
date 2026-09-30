@@ -6,7 +6,8 @@ import { Kbd } from "@/components/ui/kbd";
 import { ANALYSIS_LABEL } from "@/lib/data/match-analysis";
 import { AnalysisStatusLine } from "@/components/dashboard/shared/analysis-status-line";
 import type { StepState } from "@/components/dashboard/shared/vertical-steps";
-import { SUPPORT_EMAIL } from "@/lib/constants";
+import { EXPORT_GUIDE_URL, SUPPORT_EMAIL } from "@/lib/constants";
+import { MAX_VIDEO_SIZE_BYTES } from "@/lib/services/splitstep/config";
 
 const SWINGVISION_TROUBLESHOOTING_URL =
   "https://support.swingvision.com/hc/en-us/articles/360058475731";
@@ -51,10 +52,14 @@ const ANALYSIS_JOURNEY: { label: string; mark: StepState }[] = [
   { label: ANALYSIS_LABEL.completed, mark: "done" },
 ];
 
+/** The vendor's upload cap, in the whole gigabytes the film empty state prints. */
+const MAX_VIDEO_GB = Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000);
+
 const INTELLIGENCE_REQUIREMENTS = [
   "Singles only",
   "1080p or higher",
   "30 fps or higher",
+  `Under ${MAX_VIDEO_GB} GB`,
   "Trim covers complete games",
 ];
 
@@ -337,8 +342,8 @@ export default function HelpCenterPage() {
                 />
                 <SourceCard
                   title="You have a SwingVision export"
-                  body="Drop the .xlsx. Stats appear as soon as it parses. Singles only."
-                  cost="No hours used · instant · stats only, no video"
+                  body="Drop the .xlsx. Stats appear as soon as it parses. Singles only. Add the film later if you have it."
+                  cost="No hours used · instant · video optional"
                 />
               </div>
 
@@ -348,11 +353,9 @@ export default function HelpCenterPage() {
                   <FeatureRow>
                     Serve, return, rally and break-point breakdowns
                   </FeatureRow>
+                  <FeatureRow>Trends across your matches on Home</FeatureRow>
                   <FeatureRow>
-                    Trends across your season, and Ask over your own matches
-                  </FeatureRow>
-                  <FeatureRow included={false}>
-                    Shot-by-shot video review — Advantage Intelligence only
+                    Every point as a video clip — once the match film is on file
                   </FeatureRow>
                 </div>
               </div>
@@ -396,7 +399,55 @@ export default function HelpCenterPage() {
                   Files are checked when you pick them — a 720p video is
                   rejected before a single byte uploads, with the fix spelled
                   out: Phone settings → Camera → Record at 1080p/30 or higher.
-                  Doubles lines record a score only.
+                  Doubles lines record a score only. Getting the file off a
+                  phone or court camera is covered step by step in the{" "}
+                  <a
+                    href={EXPORT_GUIDE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={linkClass}
+                  >
+                    export guide
+                  </a>
+                  .
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>Filming for analysis</span>
+                <div className="flex flex-col">
+                  <FeatureRow>
+                    The full court in frame, from behind the baseline
+                  </FeatureRow>
+                  <FeatureRow>The whole match, changeovers and all</FeatureRow>
+                  <FeatureRow included={false}>
+                    Cropping or zooming — the court lines have to stay in frame
+                  </FeatureRow>
+                  <FeatureRow included={false}>
+                    Highlight reels — patterns live in the full run of points
+                  </FeatureRow>
+                </div>
+                <p className={proseClass}>
+                  Audio is ignored, so there is nothing to clean up there.
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>
+                  If your file is over {MAX_VIDEO_GB} GB
+                </span>
+                <p className={proseClass}>
+                  Shorten it rather than compress it. Photos on iPhone, Mac and
+                  Windows can trim a video without lowering its resolution —
+                  keep a run of complete games, such as one set, and upload
+                  that. If trimming isn&rsquo;t an option, write to{" "}
+                  <a
+                    href={`mailto:${SUPPORT_EMAIL}?subject=Large%20match%20file`}
+                    className={linkClass}
+                  >
+                    {SUPPORT_EMAIL}
+                  </a>{" "}
+                  and we&rsquo;ll sort it out with you.
                 </p>
               </div>
 
