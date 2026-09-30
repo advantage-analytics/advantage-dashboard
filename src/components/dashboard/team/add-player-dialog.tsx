@@ -30,7 +30,9 @@ import {
 import {
   PlayerMenuField,
   RosterNote,
+  backhandOptions,
   classYearOptions,
+  handOptions,
   lineupSpotOptions,
   nameList,
   spotHeldNote,
@@ -229,6 +231,8 @@ export type AddPlayerActions = {
     classYear: string | null;
     lineupSpot: number | null;
     email: string | null;
+    hand: string | null;
+    backhand: string | null;
   }) => Promise<AddPlayerResult>;
   /** `inviteMember`, narrowed to the one call this dialog makes. */
   invite: (input: {
@@ -306,6 +310,8 @@ export function AddPlayerDialog({
   const [classYear, setClassYear] = useState("");
   const [lineupSpot, setLineupSpot] = useState("");
   const [email, setEmail] = useState("");
+  const [hand, setHand] = useState("");
+  const [backhand, setBackhand] = useState("");
   const [alsoInvite, setAlsoInvite] = useState(false);
   /**
    * The coach saying, out loud, that a shared line is what they meant.
@@ -427,6 +433,8 @@ export function AddPlayerDialog({
     setClassYear("");
     setLineupSpot("");
     setEmail("");
+    setHand("");
+    setBackhand("");
     setAlsoInvite(false);
     setSpotAcknowledged(false);
     setError(null);
@@ -470,6 +478,8 @@ export function AddPlayerDialog({
     classYear,
     lineupSpot,
     email.trim(),
+    hand,
+    backhand,
   ].join("\u0000");
 
   const createdProfileId =
@@ -585,6 +595,8 @@ export function AddPlayerDialog({
         lastName: lastName.trim(),
         classYear: classYear || null,
         lineupSpot: lineupSpot ? Number(lineupSpot) : null,
+        hand: hand || null,
+        backhand: backhand || null,
         email: email.trim() || null,
       });
 
@@ -831,6 +843,24 @@ export function AddPlayerDialog({
           </span>
         </label>
       )}
+
+      {/* Optional here, required in the upload wizard, which reads it back
+          ("from their roster") so the coach answers it once per player rather
+          than once per match. */}
+      <div className="grid grid-cols-2 gap-4">
+        <PlayerMenuField
+          label="Hand"
+          value={hand}
+          options={handOptions(hand)}
+          onChange={setHand}
+        />
+        <PlayerMenuField
+          label="Backhand"
+          value={backhand}
+          options={backhandOptions(backhand)}
+          onChange={setBackhand}
+        />
+      </div>
 
       <SettingsField
         label="Email"

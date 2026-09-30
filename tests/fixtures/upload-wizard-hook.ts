@@ -6,6 +6,7 @@ import * as types from "@/components/dashboard/matches/new-match-wizard/types";
 import * as validation from "@/components/dashboard/matches/new-match-wizard/validation";
 import * as scoreState from "@/components/dashboard/matches/new-match-wizard/score-state";
 import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
+import * as styleSaveOffer from "@/components/dashboard/matches/new-match-wizard/style-save-offer";
 import * as scoreFormat from "@/lib/ui/score-format";
 import * as quota from "@/lib/services/splitstep/quota";
 import * as draftTarget from "@/lib/wizard/draft-target";
@@ -376,6 +377,12 @@ export function uploadWizardHarness(
     },
     // Pure: the rule a draft's match is reused by (T20).
     "@/lib/wizard/draft-target": draftTarget,
+    // Pure: the "use for future matches" rule the submit path re-decides.
+    "./style-save-offer": styleSaveOffer,
+    // A server action; the roster write itself is the RPC's to prove.
+    "@/components/dashboard/team/roster-actions": {
+      saveRosterPlayerStyle: async () => ({ ok: true }),
+    },
     "./types": types,
     "./validation": validation,
     "./score-state": scoreState,

@@ -14,6 +14,7 @@ export function useDraftSaving(
   wizard: Pick<
     UseUploadMatchWizardReturn,
     | "formData"
+    | "storageWorkspaceKey"
     | "selectedProvider"
     | "saveDraft"
     | "draftSaving"
@@ -24,6 +25,7 @@ export function useDraftSaving(
 ): () => Promise<void> {
   const {
     formData,
+    storageWorkspaceKey,
     selectedProvider,
     saveDraft,
     draftSaving,
@@ -63,7 +65,7 @@ export function useDraftSaving(
    * storage on the way out. Then it goes where Cancel would.
    */
   const handleSaveDraft = useCallback(async () => {
-    saveFormDataToStorage(formData);
+    saveFormDataToStorage(formData, storageWorkspaceKey);
     if (selectedProvider) {
       localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, selectedProvider);
     }
@@ -78,7 +80,14 @@ export function useDraftSaving(
     const saved = await saveDraft();
     if (!saved) return;
     router.push(exitHref);
-  }, [formData, selectedProvider, saveDraft, router, exitHref]);
+  }, [
+    formData,
+    storageWorkspaceKey,
+    selectedProvider,
+    saveDraft,
+    router,
+    exitHref,
+  ]);
 
   return handleSaveDraft;
 }

@@ -76,7 +76,7 @@ test("the prefill the replica models is the one the dialog ships", () => {
 
   // The suppression key is still every argument `addProgramPlayer` is handed.
   expect(SOURCE).toMatch(
-    /const formKey = \[\s*firstName\.trim\(\),\s*lastName\.trim\(\),\s*classYear,\s*lineupSpot,\s*email\.trim\(\),\s*\]\.join\("\\u0000"\);/,
+    /const formKey = \[\s*firstName\.trim\(\),\s*lastName\.trim\(\),\s*classYear,\s*lineupSpot,\s*email\.trim\(\),\s*hand,\s*backhand,\s*\]\.join\("\\u0000"\);/,
   );
   expect(SOURCE).toContain(
     "created !== null && created.form === formKey ? created.profileId : null",

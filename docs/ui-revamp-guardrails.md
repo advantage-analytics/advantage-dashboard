@@ -565,6 +565,34 @@ They are typed `boolean | null | undefined` on purpose. **Do not "simplify" them
 to `boolean` with a default.** A null coerced to `false` is a wrong answer that
 looks like a real one — see §4.
 
+> **A reviewed exception, added 2026-09-29: college workspaces pre-select
+> No-Ad.** In a team workspace whose program is `org_type = 'college'`, the
+> wizard opens with `adScoring: false` (and `playOnLets: true`) —
+> `workspaceFormatDefaults()` in `new-match-wizard/types.ts`. College duals and
+> tournaments are played no-ad, so the default is the known format, not a
+> coerced null; the type stays optional and every other workspace still opens
+> unanswered. It covers event lines too: a line that declares no scoring seeds
+> No-Ad when it is opened or swapped to, and every college line (not only duals
+> and tournaments) seeds Play on.
+>
+> Where it does not reach: an event that declares its scoring owns it, a
+> SwingVision export's scoring replaces it, and the admin console never gets
+> it. The localStorage copy of the form — written by the autosave and by Save
+> draft — is tagged with its workspace and carries its Scoring/Lets only back
+> into that workspace (`loadFormDataFromStorage`); a copy saved before the tag
+> existed loses them once. The `match_drafts` row carries no such tag: its
+> workspace binding is `program_id` (`draftBelongsToWorkspace()`). An in-place
+> switch with nothing stored resets both answers to the new workspace's
+> defaults.
+>
+> Consequences of the same choice: a draft saved without a Scoring answer
+> resumes as No-Ad in a college workspace, and switching into one in place
+> replaces an Ad answer given in another workspace. The cost, accepted: an
+> ad-scored match filed in a college workspace (an exhibition) goes to the
+> vendor as `Ad:false` unless the coach changes the field, and its pressure
+> flags come out wrong (§2's 2026-09-28 ad-scoring note) — attribution is
+> unaffected.
+
 **The trim window is not cosmetic.** `videoStartSeconds`/`videoEndSeconds` become
 `billable_seconds`, which is what the 2-hour monthly cap is charged against, and
 the file that is uploaded: the browser cuts the video to that window before any
