@@ -247,7 +247,9 @@ function InsightExpanded({
 
   return (
     <div className="flex flex-col gap-2 p-[16px_20px_12px]">
-      <p className="text-body [text-wrap:pretty]" style={CLAIM_STYLE}>
+      {/* The claim is a headline, so it balances; the evidence is prose and
+          stays `pretty`. */}
+      <p className="text-body [text-wrap:balance]" style={CLAIM_STYLE}>
         {claim}
         {!evidence && <WhyThisSuffix readOnly={meta.readOnly} />}
       </p>
