@@ -13,6 +13,10 @@ import { PanelRight } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import {
+  isDerivedMatch,
+  pointResultLabel,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { isFormControl } from "@/components/dashboard/matches/new-match-wizard/useWizardKeys";
 import {
   formatClock,
@@ -1548,7 +1552,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                   // Between points the board says nothing about a point; T4's
                   // foot falls back to the game state on a null name (R7).
                   pointName={
-                    activePoint ? activePoint.resultType || "Point" : null
+                    activePoint
+                      ? pointResultLabel(activePoint, {
+                          isDerived: isDerivedMatch(match),
+                        })
+                      : null
                   }
                   playing={playing}
                   elapsed={formatClock(currentTime)}

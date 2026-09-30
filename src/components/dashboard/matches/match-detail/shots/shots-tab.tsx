@@ -17,6 +17,7 @@ import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shot
 import { VizBandsProvider } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
 import { VizEmpty } from "@/components/dashboard/matches/match-detail/shots/viz-empty";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/use-viz-points";
 
 /**
  * The Visualizations tab's panel. `?cut=` absent (or unrecognised) renders
@@ -108,7 +109,7 @@ function ShotsTabBody() {
   const [wallCollection, setWallCollection] =
     useState<WallCollection>("default");
   const { meta, actions } = useMatchReport();
-  const { points } = useMatchData();
+  const points = useVizPoints(useMatchData());
   const mounted = useMounted();
 
   // Keep the gallery selection across the wall/focused mount switch. A saved

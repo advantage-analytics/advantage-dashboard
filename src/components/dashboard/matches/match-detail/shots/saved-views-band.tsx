@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Users } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/use-viz-points";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import {
@@ -114,7 +115,7 @@ export function SavedViewsBand({
   variant?: "wall" | "focused";
 }) {
   const router = useRouter();
-  const { points } = useMatchData();
+  const points = useVizPoints(useMatchData());
   const { bands, unit, contactHidden } = useVizBands();
   const { you, opp } = useMatchSides();
   const { state, hrefFor } = useVizState();

@@ -124,8 +124,9 @@ test("a stored landing converts through the same clock, nonsense dropped", () =>
 });
 
 test("labels", () => {
+  // A serve's spin is Serve › Spin's word: the vendor's topspin is a kick.
   expect(shotLabel(shot("a", 1, { shotType: "First Serve" }))).toBe(
-    "First serve · topspin",
+    "First serve · kick",
   );
   expect(shotLabel(shot("b", 1, { shotType: null, spinType: null }))).toBe(
     "Shot",

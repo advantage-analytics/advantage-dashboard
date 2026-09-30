@@ -163,7 +163,7 @@ function buildDescription(
   }
 
   // Append pressure labels
-  if (point.is_break_point) parts.push("Breakpoint");
+  if (point.is_break_point) parts.push("Break point");
   if (point.is_set_point) parts.push("Set point");
   if (point.is_match_point) parts.push("Match point");
 

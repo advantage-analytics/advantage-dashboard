@@ -2,6 +2,7 @@
 
 import { useMemo, type ReactNode } from "react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/use-viz-points";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { CourtTile, TileFullscreenGlyph } from "./court-tile";
 import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
@@ -35,7 +36,7 @@ export function VizWall({
   collection: WallCollection;
   onCollectionChange: (collection: WallCollection) => void;
 }) {
-  const { points } = useMatchData();
+  const points = useVizPoints(useMatchData());
   const { you, opp } = useMatchSides();
   const { hrefFor } = useVizState();
 
