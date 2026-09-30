@@ -1,0 +1,21 @@
+$kind: http-request
+description: "Retires the attachment (`retired_reason = 'removed'`) and schedules a best-effort blob cleanup after the response. Allowed for the video's uploader, or an owner or coach of the match's program. Idempotent: a repeat answers 200 with the row as it stands."
+url: "{{baseUrl}}/api/matches/:matchId/video"
+method: DELETE
+headers:
+  Content-Type: application/json
+  Accept: application/json
+pathVariables:
+  - key: matchId
+    value: <uuid>
+    disabled: false
+    description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+body:
+  type: json
+  content: |-
+    {
+      "attachmentId": "<uuid>"
+    }
+settings: {}
+examples: ./.resources/Remove the active video.resources/examples
+order: 2000

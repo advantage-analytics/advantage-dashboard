@@ -1,0 +1,28 @@
+$kind: http-request
+description: "Creates (201) or finds again (200, same `clientRequestId`) a pending attempt and returns a write-only SAS URL for its staged key. Unknown body keys are refused by name. `expectedActive` must be present: `null` claims the match has no video, and an add is refused at the workspace's active-video limit."
+url: "{{baseUrl}}/api/matches/:matchId/video/uploads"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+pathVariables:
+  - key: matchId
+    value: <uuid>
+    disabled: false
+    description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+body:
+  type: json
+  content: |-
+    {
+      "filename": "<string>",
+      "sizeBytes": 0,
+      "contentType": "<string>",
+      "clientRequestId": "<uuid>",
+      "expectedActive": {
+        "id": "<uuid>",
+        "version": 0
+      }
+    }
+settings: {}
+examples: ./.resources/Reserve an upload attempt and get a write-only URL.resources/examples
+order: 1000

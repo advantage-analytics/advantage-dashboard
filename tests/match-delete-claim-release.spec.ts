@@ -1,20 +1,29 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
+import { isUuid } from "@/lib/services/match-video/access";
+import { isPlainObject } from "@/lib/services/match-video/http";
+import { PurgeRefusedError } from "@/lib/services/matches/purge-match-storage";
 
 /**
  * The match DELETE route against fakes, recording effect order. Same
  * transpile harness as `tests/admin-match-delete-protection.spec.ts`: the
  * route file is compiled to CommonJS and its imports answered from `mocks`,
  * so GET and PATCH's dependencies can be empty objects — only DELETE runs.
+ *
+ * `purgeThrows` picks what the purge throws: the real `PurgeRefusedError` of
+ * either kind, or a plain `Error` standing in for anything unexpected. Each
+ * carries a message the route must NOT forward.
  */
+const LEAKY = "internal: admin_claim_match_storage_purge said no";
+
 function harness(scenario: {
   deleteError?: { message: string } | null;
-  purgeThrows?: boolean;
+  purgeThrows?: "protected" | "unavailable" | "unexpected";
 }) {
   const effects: string[] = [];
   const released: string[][] = [];
-  const matchId = "match-1";
+  const matchId = "5b0c7a52-3f4e-4d7a-9a41-0f2d6c1e8b90";
   const lookup = {
     select: () => lookup,
     eq: () => lookup,
@@ -70,14 +79,18 @@ function harness(scenario: {
         },
       }),
     },
+    "@/lib/services/match-video/access": { isUuid },
+    "@/lib/services/match-video/http": { isPlainObject },
     "@/lib/services/matches/purge-match-storage": {
+      PurgeRefusedError,
       purgeMatchStorage: async (_client: unknown, ids: string[]) => {
         effects.push("purge");
         expect(ids).toEqual([matchId]);
+        if (scenario.purgeThrows === "unexpected") throw new Error(LEAKY);
         if (scenario.purgeThrows) {
-          throw new Error(
-            "Matches recorded or analyzed through the admin console cannot be deleted here.",
-          );
+          throw new PurgeRefusedError(scenario.purgeThrows, LEAKY, {
+            message: "rpc exploded",
+          });
         }
       },
     },
@@ -147,14 +160,30 @@ test("a completed delete releases nothing — the claim cascades with the row", 
   expect(h.released).toEqual([]);
 });
 
-test("the 409 purge refusal is unchanged: no delete, no release", async () => {
-  const h = harness({ purgeThrows: true });
+test("a protected refusal is a 409 with the console sentence: no delete, no release", async () => {
+  const h = harness({ purgeThrows: "protected" });
   const response = await h.run();
   expect(response.status).toBe(409);
   expect(response.body).toEqual({
     error:
       "Matches recorded or analyzed through the admin console cannot be deleted here.",
   });
+  expect(JSON.stringify(response.body)).not.toContain(LEAKY);
   expect(h.effects).toEqual(["purge"]);
   expect(h.released).toEqual([]);
 });
+
+for (const kind of ["unavailable", "unexpected"] as const) {
+  test(`an ${kind} purge failure is a 503 that forwards no message: no delete, no release`, async () => {
+    const h = harness({ purgeThrows: kind });
+    const response = await h.run();
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({
+      error: "Match deletion is unavailable. Try again.",
+    });
+    expect(JSON.stringify(response.body)).not.toContain(LEAKY);
+    expect(JSON.stringify(response.body)).not.toContain("rpc exploded");
+    expect(h.effects).toEqual(["purge"]);
+    expect(h.released).toEqual([]);
+  });
+}

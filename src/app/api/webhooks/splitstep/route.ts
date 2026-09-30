@@ -44,13 +44,24 @@
  * is recording the envelope, which is what makes everything else recoverable.
  */
 
-import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
+import {
+  pipelineLog,
+  redactSignedUrls,
+} from "@/lib/services/splitstep/pipeline-log";
 import { NextRequest, NextResponse, after } from "next/server";
-import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  SIGNATURE_HEADERS,
+  verifyWebhookAuth,
+} from "@/lib/services/splitstep/webhook-auth";
 import { parseWebhookPayload } from "@/lib/services/splitstep/webhook-payload";
 import { selectDeliveryStorageKeys } from "@/lib/services/splitstep/delivery-storage-keys";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
+import {
+  isAllowedResultUrl,
+  resultUrlHostname,
+} from "@/lib/services/splitstep/result-url-policy";
 import { releaseQuota } from "@/lib/services/splitstep/quota";
 import {
   isDownloadFailure,
@@ -106,144 +117,6 @@ const FRAME_DATA_FETCH_TIMEOUT_MS = 20_000;
 const TRAJECTORIES_BEFORE_DERIVE_TIMEOUT_MS = 8_000;
 
 /**
- * Headers the signature might arrive in.
- *
- * `x-hmac-signature` is the vendor's answer, given by email and since added to
- * their published docs, so it leads. The rest stay for two reasons. They are
- * still a cheap hedge until a real delivery confirms the documented name — the
- * log below prints the full header set whenever none of these match. And this
- * list is also the redaction set for safeHeaders(): dropping `authorization` or
- * `x-api-key` from it would start writing credential values into the delivery
- * row, which is a worse outcome than carrying a few dead candidates.
- */
-const SIGNATURE_HEADERS = [
-  "x-hmac-signature",
-  "x-splitstep-signature",
-  "x-webhook-signature",
-  "x-signature",
-  "x-signature-256",
-  "x-hub-signature-256",
-  "signature",
-  "x-webhook-secret",
-  "x-api-key",
-  "authorization",
-] as const;
-
-type AuthOutcome = {
-  /** Whether to process this delivery at all. */
-  ok: boolean;
-  /** Recorded on the row. True only for a real HMAC match. */
-  verified: boolean;
-  /** For the log; never includes the signature or the secret. */
-  reason: string;
-};
-
-/**
- * Verify a delivery against the documented scheme:
- * base64(HMAC-SHA256(secret, raw_body)), compared to a signature header.
- *
- *   digest = hmac.new(secret, raw_body, sha256).digest()
- *   expected = base64.b64encode(digest)
- *
- * ── Why a missing signature is accepted, not rejected ────────────────────────
- * The vendor has NO retry policy and a 30s connection timeout, so a delivery we
- * refuse is gone permanently — there is no second attempt to fix it on. Paired
- * with a header name nobody has written down, rejecting on "no signature found"
- * risks discarding perfectly valid results because we looked in the wrong place.
- *
- * So: a signature that is present and WRONG is refused (that is a real failure).
- * A signature we cannot find is accepted, recorded `signature_verified = false`,
- * and logged with the full header set — which is what tells us the header name.
- *
- * Set SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true to flip to fail-closed. Do that
- * as soon as one real delivery has confirmed the header, and before any real
- * athlete video goes through.
- */
-function verifyWebhookAuth(request: NextRequest, rawBody: string): AuthOutcome {
-  const secret = process.env.SPLITSTEP_WEBHOOK_SECRET;
-
-  if (!secret) {
-    pipelineLog.warn(
-      `${LOG} UNSIGNED — SPLITSTEP_WEBHOOK_SECRET is not set. Accepting without ` +
-        `authentication. This must not remain true once real match video is processed.`,
-    );
-    return { ok: true, verified: false, reason: "no secret configured" };
-  }
-
-  const expected = createHmac("sha256", secret)
-    .update(rawBody, "utf8")
-    .digest("base64");
-
-  // Equal-length compare via digests, so nothing leaks through timing or length.
-  const matches = (presented: string, against: string) =>
-    timingSafeEqual(
-      createHash("sha256").update(presented).digest(),
-      createHash("sha256").update(against).digest(),
-    );
-
-  let sawCandidate = false;
-
-  for (const header of SIGNATURE_HEADERS) {
-    const raw = request.headers.get(header);
-    if (!raw) continue;
-    sawCandidate = true;
-
-    const presented =
-      header === "authorization" ? raw.replace(/^Bearer\s+/i, "") : raw.trim();
-
-    if (matches(presented, expected)) {
-      return {
-        ok: true,
-        verified: true,
-        reason: `HMAC verified via ${header}`,
-      };
-    }
-
-    // Tolerated, not trusted: some senders put the shared secret itself in the
-    // header rather than a signature over the body. It proves they hold the
-    // secret, which is worth accepting, but it is not a signature — it says
-    // nothing about whether the body was modified in transit.
-    if (matches(presented, secret)) {
-      pipelineLog.warn(
-        `${LOG} ${header} carried the raw shared secret, not an HMAC of the body. ` +
-          `Accepted, but recorded unverified — ask the vendor to send ` +
-          `base64(HMAC-SHA256(secret, raw_body)).`,
-      );
-      return { ok: true, verified: false, reason: `raw secret via ${header}` };
-    }
-  }
-
-  if (sawCandidate) {
-    // A signature was presented and it did not match. That is a real failure,
-    // not an unknown-header problem.
-    return {
-      ok: false,
-      verified: false,
-      reason: "signature present but did not match",
-    };
-  }
-
-  const requireSignature =
-    process.env.SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE === "true";
-
-  pipelineLog.warn(
-    `${LOG} no signature header found${requireSignature ? " — REJECTING" : " — accepting unverified"}`,
-    {
-      searched: SIGNATURE_HEADERS,
-      // The header NAMES are what identify the right one. Values are redacted
-      // by safeHeaders() before anything is stored or logged.
-      received: [...request.headers.keys()],
-    },
-  );
-
-  return {
-    ok: !requireSignature,
-    verified: false,
-    reason: "no signature header found",
-  };
-}
-
-/**
  * Headers worth keeping, without dragging a credential into the database.
  *
  * Every candidate signature header is redacted along with `cookie`. The NAMES
@@ -279,7 +152,7 @@ export async function POST(request: NextRequest) {
   pipelineLog.info(`${LOG} received`, {
     bytes: rawBody.length,
     contentType: request.headers.get("content-type"),
-    body: rawBody.slice(0, 4000),
+    body: redactSignedUrls(rawBody).slice(0, 4000),
   });
 
   // 2. Authenticate. Must run against the exact bytes received — the HMAC is
@@ -578,7 +451,23 @@ export async function POST(request: NextRequest) {
   // payload carries no duration, and the reservation is already the trim window
   // we asked them to analyse — so the estimate IS the actual, and calling
   // reconcileQuota() would mean inventing a number to pass it.
-  if (payload.nextStatus === "failed" && record.matched_job_id) {
+  //
+  // Gated on the row, not the payload. `job_status` is what the RPC's
+  // rank-guarded update left behind — never backwards, never off a terminal
+  // state — so a `job_failed` for a job already `completed`, `deriving` or
+  // `derivation_failed` leaves it there, and must release no quota, send no
+  // failure mail and trigger no resubmit. Keying on `payload.nextStatus` did
+  // all three for any delivery that merely claimed a failure.
+  //
+  // The payload must still say failed too. A late `job_processing` landing on
+  // a row that is already `failed` carries no error fields, so it would read
+  // as non-retryable and mail "analysis failed" over a job that was quietly
+  // auto-resubmitted — the mail that failure deliberately never sent.
+  if (
+    payload.nextStatus === "failed" &&
+    record.job_status === "failed" &&
+    record.matched_job_id
+  ) {
     const failedJobId = record.matched_job_id;
     // Read once outside after(): the auto-retry decision keys on THIS
     // delivery's error fields, not on whatever the row says by the time the
@@ -678,6 +567,12 @@ export async function POST(request: NextRequest) {
  * straight back out of storage. The per-frame files are tens of megabytes and
  * nothing here reads them, so they go through as a Blob and are never decoded
  * into a string at all.
+ *
+ * The URL is checked against the result-host allowlist before anything is
+ * fetched (result-url-policy.ts): the payload is untrusted input and this is
+ * the server making a request it names. A refusal is an ordinary `ok: false`,
+ * so the caller logs the same recovery path it does for any other miss; the
+ * line here names the host only, never the signed URL.
  */
 async function storeVendorJson(params: {
   supabase: ReturnType<typeof createAdminClient>;
@@ -691,13 +586,23 @@ async function storeVendorJson(params: {
 > {
   const { supabase, url, objectKey, timeoutMs, returnBody = false } = params;
 
+  if (!isAllowedResultUrl(url)) {
+    const hostname = resultUrlHostname(url);
+    pipelineLog.error(`${LOG} result url host not allowed — not fetched`, {
+      objectKey,
+      hostname,
+    });
+    return { ok: false, error: `result url host not allowed: ${hostname}` };
+  }
+
   let body: Blob;
   let text: string | undefined;
   try {
     const response = await fetch(url, {
       signal: AbortSignal.timeout(timeoutMs),
-      // No credentials — the URL carries its own.
-      redirect: "follow",
+      // No credentials — the URL carries its own. A redirect is refused rather
+      // than followed: the allowlist above was checked against THIS host.
+      redirect: "error",
     });
 
     if (!response.ok) {

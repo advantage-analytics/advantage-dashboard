@@ -1,0 +1,29 @@
+$kind: http-request
+description: "Verifies the staged bytes, copies them to the immutable final key and makes the attempt the match's active video. The copy runs inside Azure: while it does, the answer is `202` with a `Retry-After` header and the client re-sends the SAME request after `retryAfterSeconds`. Each request holds a per-request finalization lease (90 s) and releases it before answering. A replay after a lost `200` answers `200` again while that attachment is still active."
+url: "{{baseUrl}}/api/matches/:matchId/video/uploads/:attachmentId/complete"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+pathVariables:
+  - key: matchId
+    value: <uuid>
+    disabled: false
+    description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+  - key: attachmentId
+    value: <uuid>
+    disabled: false
+    description: (Required) The upload attempt's id, as returned by the reservation. A value that is not a UUID answers 404 `match_not_found`.
+body:
+  type: json
+  content: |-
+    {
+      "confirmedVideoTimeSeconds": 0,
+      "expectedActive": {
+        "id": "<uuid>",
+        "version": 0
+      }
+    }
+settings: {}
+examples: ./.resources/Verify, publish and activate an uploaded video.resources/examples
+order: 3000

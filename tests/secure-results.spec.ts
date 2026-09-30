@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { createLoader } from "./fixtures/vm-modules";
+import { loadSecureResults } from "./fixtures/secure-results-harness";
 
 /**
  * `secureResults()` — the webhook's results-securing step, extracted so the
@@ -17,13 +17,15 @@ import { createLoader } from "./fixtures/vm-modules";
 
 const JOB = "job-1";
 const DELIVERY = "del-1";
-const URL_ = "https://vendor.example.test/strokes.json?sig=abc";
+// On the vendor's account: the fetch is host-allowlisted (result-url-policy.ts)
+// and that guard has its own spec, secure-results-host-guard.spec.ts.
+const URL_ =
+  "https://splitstepclientvideos.blob.core.windows.net/out/job/strokes.json?sig=abc";
 const KEY = "results/user-1/match-1/job-1.json";
 const LOG = "[splitstep-webhook]";
 
 type Upload = { bucket: string; key: string; body: string; opts: unknown };
 type Rpc = { fn: string; args: Record<string, unknown> };
-type Log = { level: string; message: string; detail: unknown };
 
 function fakeSupabase(uploadError?: string) {
   const uploads: Upload[] = [];
@@ -47,40 +49,6 @@ function fakeSupabase(uploadError?: string) {
   return { client, uploads, rpcs };
 }
 
-function load() {
-  const logs: Log[] = [];
-  const record =
-    (level: string) =>
-    (message: string, detail?: unknown): void => {
-      logs.push({ level, message, detail });
-    };
-  const loader = createLoader({
-    globals: { Error, Blob, AbortSignal },
-    stubs: {
-      "./pipeline-log": {
-        pipelineLog: {
-          info: record("info"),
-          warn: record("warn"),
-          error: record("error"),
-        },
-      },
-    },
-  });
-  const mod = loader.load("src/lib/services/splitstep/secure-results.ts");
-  return {
-    secureResults: mod.secureResults as (p: Record<string, unknown>) => Promise<
-      | {
-          resultsSecured: true;
-          objectKey: string;
-          bytes: number;
-          body?: string;
-        }
-      | { resultsSecured: false; error: string }
-    >,
-    logs,
-  };
-}
-
 function fetchReturning(status: number, body: string, statusText = "") {
   const calls: string[] = [];
   const impl = async (url: string) => {
@@ -92,7 +60,7 @@ function fetchReturning(status: number, body: string, statusText = "") {
 
 test.describe("secureResults", () => {
   test("success stores the file and finalizes with the results key", async () => {
-    const { secureResults, logs } = load();
+    const { secureResults, logs } = loadSecureResults();
     const fake = fakeSupabase();
     const json = '{"points":[]}';
     const f = fetchReturning(200, json);
@@ -144,7 +112,7 @@ test.describe("secureResults", () => {
   });
 
   test("a non-2xx download writes processing_error and returns false", async () => {
-    const { secureResults, logs } = load();
+    const { secureResults, logs } = loadSecureResults();
     const fake = fakeSupabase();
     const f = fetchReturning(403, "denied", "Forbidden");
 
@@ -181,7 +149,7 @@ test.describe("secureResults", () => {
   });
 
   test("a thrown fetch writes processing_error and returns false", async () => {
-    const { secureResults } = load();
+    const { secureResults } = loadSecureResults();
     const fake = fakeSupabase();
 
     const out = await secureResults({
@@ -209,7 +177,7 @@ test.describe("secureResults", () => {
   });
 
   test("an empty body and a failed upload are failures too", async () => {
-    const { secureResults } = load();
+    const { secureResults } = loadSecureResults();
 
     const empty = fakeSupabase();
     const emptyOut = await secureResults({
@@ -247,7 +215,7 @@ test.describe("secureResults", () => {
   });
 
   test("without a delivery the RPC runs with a null delivery id", async () => {
-    const { secureResults, logs } = load();
+    const { secureResults, logs } = loadSecureResults();
     const fake = fakeSupabase();
 
     const out = await secureResults({

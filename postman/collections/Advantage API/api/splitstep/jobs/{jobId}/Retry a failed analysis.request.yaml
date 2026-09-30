@@ -1,0 +1,14 @@
+$kind: http-request
+description: The "Retry analysis" button. Ownership and the billing workspace are resolved here from the session; everything else — terminal state, attempt ceiling, duplicate guard, blob existence, the upload contract, quota and the vendor POST — is `resubmitJob()`, shared with the webhook's automatic retry. A success is a NEW child job. No body is read. Every refusal from `resubmitJob()` answers `{ error, reason }` with the status `REFUSAL_STATUS` maps `reason` to.
+url: "{{baseUrl}}/api/splitstep/jobs/:jobId/resubmit"
+method: POST
+headers:
+  Accept: application/json
+pathVariables:
+  - key: jobId
+    value: <uuid>
+    disabled: false
+    description: (Required) A `processing_jobs` id. A value that is not a UUID answers 404 "Job not found", the same as a missing job or someone else's.
+settings: {}
+examples: ./.resources/Retry a failed analysis.resources/examples
+order: 1000

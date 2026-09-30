@@ -24,7 +24,7 @@ Verified against a real job (86 min, vendor job `778912d7`, our job
 | Auto-submit on upload completion | vendor accepted, `external_job_id` recorded                                 |
 | `VideoUrl` SAS                   | vendor fetched it                                                           |
 | Webhook receipt + HMAC           | 2 deliveries, both `signature_verified: true`                               |
-| Signature enforcement            | `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true`, suite green                     |
+| Signature enforcement            | fail-closed once the secret is set (`webhook-auth.ts`), suite green         |
 | Results JSON                     | 645 KB → `match-results` bucket                                             |
 | Trimmed video capture            | 1.43 GB copied into our container, `copyStatus: success`                    |
 | Source reclaim                   | 1.54 GB deleted, vendor's SAS neutralised (policy since retired, see below) |

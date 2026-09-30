@@ -1,0 +1,9 @@
+$kind: http-request
+description: "Team Home's counterpart to `/api/home-insight`, about the ACTIVE team workspace's squad rather than the viewer. Same contract: one sentence, plain-text stream, 204 when there is no analysed dual match or no insight to make. The program comes from the workspace cookie through `getWorkspaceContext()`; no body is read."
+url: "{{baseUrl}}/api/team-insight"
+method: POST
+headers:
+  Accept: text/plain
+settings: {}
+examples: ./.resources/Stream Team Home's Focus card claim line.resources/examples
+order: 9000

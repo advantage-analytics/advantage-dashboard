@@ -1,0 +1,42 @@
+$kind: http-example
+name: A fresh write-only URL for the same staged key.
+request:
+  url: "{{baseUrl}}/api/matches/:matchId/video/uploads/:attachmentId/renew"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  pathVariables:
+    - key: matchId
+      value: <uuid>
+      disabled: false
+      description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+    - key: attachmentId
+      value: <uuid>
+      disabled: false
+      description: (Required) The upload attempt's id, as returned by the reservation. A value that is not a UUID answers 404 `match_not_found`.
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Cache-Control
+      value: string
+      disabled: false
+      description: Every answer carries a credential or is per-caller, so none is cacheable.
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "attachmentId": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+        "uploadUrl": "https://example.blob.core.windows.net/match-videos/staged/9e8d7c6b.mp4?sv=2025-01-05&sp=cw&sig=REDACTED",
+        "uploadExpiresAt": "2026-09-30T02:00:00.000Z"
+      }
+order: 1000

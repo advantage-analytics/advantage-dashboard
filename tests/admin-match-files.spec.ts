@@ -1,7 +1,11 @@
 import { test, expect } from "@playwright/test";
 import ExcelJS from "exceljs";
 import { createHash } from "node:crypto";
-import { submitAdminMatchFile } from "@/lib/services/programs/admin-file-submission";
+import {
+  getAdminMatchFileStatus,
+  submitAdminMatchFile,
+} from "@/lib/services/programs/admin-file-submission";
+import type { AdminCheck } from "@/lib/services/programs/admin-guard";
 const id = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 async function workbook() {
@@ -42,7 +46,8 @@ function form(file: File) {
 }
 function harness(
   options: {
-    admin?: boolean;
+    /** `false` a signed-in non-admin (403), `401` no session at all. */
+    admin?: boolean | 401;
     existing?: Blob;
     state?: string;
     error?: string;
@@ -94,7 +99,10 @@ function harness(
     }),
   };
   const deps = {
-    requireAdmin: async () => (options.admin === false ? null : { id: id(9) }),
+    checkAdmin: async (): Promise<AdminCheck> =>
+      options.admin === false || options.admin === 401
+        ? { ok: false, status: options.admin === 401 ? 401 : 403 }
+        : { ok: true, id: id(9) },
     createAdminClient: () => admin as any,
     createClient: async () => client as any,
   };
@@ -131,8 +139,23 @@ test("server uses real validator/parser and session actor, ignoring no client cl
 test("authorization and workbook validation precede storage; caller cannot supply parsed score or actor", async () => {
   const file = await workbook();
   const denied = harness({ admin: false });
-  expect((await submitAdminMatchFile(form(file), denied.deps)).ok).toBe(false);
+  expect(await submitAdminMatchFile(form(file), denied.deps)).toMatchObject({
+    ok: false,
+    status: 403,
+  });
   expect(denied.calls).toEqual([]);
+  const anonymous = harness({ admin: 401 });
+  expect(await submitAdminMatchFile(form(file), anonymous.deps)).toMatchObject({
+    ok: false,
+    status: 401,
+  });
+  expect(
+    await getAdminMatchFileStatus(id(1), id(2), anonymous.deps),
+  ).toMatchObject({ ok: false, status: 401 });
+  expect(
+    await getAdminMatchFileStatus(id(1), id(2), denied.deps),
+  ).toMatchObject({ ok: false, status: 403 });
+  expect(anonymous.calls).toEqual([]);
   for (const key of ["actorId", "score", "parsed", "storagePath"]) {
     const h = harness();
     const data = form(file);

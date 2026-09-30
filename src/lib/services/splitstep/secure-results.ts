@@ -1,6 +1,7 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { RESULTS_BUCKET } from "./config";
 import { pipelineLog } from "./pipeline-log";
+import { isAllowedResultUrl, resultUrlHostname } from "./result-url-policy";
 
 /**
  * Secure a job's results: download the vendor's strokes JSON, write it to the
@@ -74,6 +75,7 @@ export async function secureResults(params: {
     // straight back out of storage.
     returnBody: true,
     fetchImpl: io.fetch ?? fetch,
+    logPrefix,
   });
 
   await supabase.rpc("finalize_splitstep_results", {
@@ -112,6 +114,12 @@ export async function secureResults(params: {
  * A copy of the route's `storeVendorJson` with `fetch` injectable. The route
  * keeps its own for the per-frame files: it is frozen, and a route module may
  * not export a helper for this file to import.
+ *
+ * The URL is checked against the result-host allowlist before anything is
+ * fetched (result-url-policy.ts): the vendor's payload is untrusted input and
+ * this is the server making a request it names. A refusal is an ordinary
+ * `ok: false` so it reaches `finalize_splitstep_results` like any other
+ * download failure; the log line names the host only, never the signed URL.
  */
 async function storeVendorJson(params: {
   supabase: ReturnType<typeof createAdminClient>;
@@ -120,6 +128,7 @@ async function storeVendorJson(params: {
   timeoutMs: number;
   returnBody?: boolean;
   fetchImpl: typeof fetch;
+  logPrefix: string;
 }): Promise<
   | { ok: true; objectKey: string; bytes: number; body?: string }
   | { ok: false; error: string }
@@ -131,15 +140,29 @@ async function storeVendorJson(params: {
     timeoutMs,
     returnBody = false,
     fetchImpl,
+    logPrefix,
   } = params;
+
+  if (!isAllowedResultUrl(url)) {
+    const hostname = resultUrlHostname(url);
+    pipelineLog.error(
+      `${logPrefix} result url host not allowed — not fetched`,
+      {
+        objectKey,
+        hostname,
+      },
+    );
+    return { ok: false, error: `result url host not allowed: ${hostname}` };
+  }
 
   let body: Blob;
   let text: string | undefined;
   try {
     const response = await fetchImpl(url, {
       signal: AbortSignal.timeout(timeoutMs),
-      // No credentials — the URL carries its own.
-      redirect: "follow",
+      // No credentials — the URL carries its own. A redirect is refused rather
+      // than followed: the allowlist above was checked against THIS host.
+      redirect: "error",
     });
 
     if (!response.ok) {

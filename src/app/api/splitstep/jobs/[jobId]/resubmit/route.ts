@@ -10,6 +10,7 @@
 
 import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { NextResponse, type NextRequest } from "next/server";
+import { isUuid } from "@/lib/services/match-video/access";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -42,6 +43,8 @@ const REFUSAL_STATUS: Record<ResubmitRefusalReason, number> = {
   already_auto_resubmitted: 409,
   video_unavailable: 409,
   quota: 429,
+  // No answer from the reservation RPC — not a refusal, so "try again".
+  quota_unavailable: 503,
   not_configured: 503,
   invalid_metadata: 422,
   submit_failed: 502,
@@ -66,6 +69,12 @@ export async function POST(
 
   if (authError || !user) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+
+  // Not a UUID = no such job; same 404 as a missing or foreign one, and it
+  // never reaches the database to fail a cast.
+  if (!isUuid(jobId)) {
+    return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
   const admin = createAdminClient();
@@ -100,17 +109,37 @@ export async function POST(
   // budget that pays for a match is the one the match belongs to. The two
   // reads are independent (one hits matches, one resolves the session), so
   // they share a round trip.
-  const [{ data: matchRow }, workspaceContext] = await Promise.all([
-    admin
-      .from("matches")
-      .select("program_id")
-      .eq("id", (jobRow as { match_id: string }).match_id)
-      .maybeSingle(),
-    getWorkspaceContext(),
-  ]);
+  const [{ data: matchRow, error: matchError }, workspaceContext] =
+    await Promise.all([
+      admin
+        .from("matches")
+        .select("program_id")
+        .eq("id", (jobRow as { match_id: string }).match_id)
+        .maybeSingle(),
+      getWorkspaceContext(),
+    ]);
+
+  // A failed read is not "no program": treating it as `program_id: null` would
+  // make billingWorkspaceFor() pick the personal workspace and charge a team
+  // match's retry to the player's own allowance. Refuse before resolving it.
+  if (matchError) {
+    pipelineLog.error(`${LOG} match lookup failed`, {
+      jobId,
+      error: matchError.message,
+    });
+    return NextResponse.json(
+      { error: "Could not load the match. Try again." },
+      { status: 503 },
+    );
+  }
+  // The read succeeded and the match is gone: never bill it to anyone.
+  if (!matchRow) {
+    return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  }
+
   const billingWorkspace = billingWorkspaceFor(
     workspaceContext?.available ?? [],
-    (matchRow as { program_id: string | null } | null)?.program_id ?? null,
+    (matchRow as { program_id: string | null }).program_id,
   );
 
   if (!billingWorkspace) {

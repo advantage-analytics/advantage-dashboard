@@ -1,0 +1,14 @@
+$kind: http-request
+description: 'For anyone who can see the match. Also the credential-refresh endpoint: re-fetch as `playbackExpiresAt` nears and compare `id` and `version` — a different `id` is a replacement, a higher `version` an alignment correction. A match with no video answers `{"attachment": null}`. No same-origin check: a browser sends no `Origin` on a same-origin GET, and the route sets no CORS headers.'
+url: "{{baseUrl}}/api/matches/:matchId/video"
+method: GET
+headers:
+  Accept: application/json
+pathVariables:
+  - key: matchId
+    value: <uuid>
+    disabled: false
+    description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+settings: {}
+examples: ./.resources/Read playback metadata and a fresh read-only URL.resources/examples
+order: 1000

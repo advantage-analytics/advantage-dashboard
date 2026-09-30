@@ -5,7 +5,7 @@
  * Performs authentication, validation, and storage operations.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
   createUploadService,
@@ -95,12 +95,9 @@ export async function POST(
     let strategy;
     try {
       strategy = getImportProviderStrategy(providerId as ProviderId);
-    } catch (err) {
+    } catch {
       return NextResponse.json(
-        {
-          success: false,
-          error: err instanceof Error ? err.message : "Unsupported provider",
-        },
+        { success: false, error: "Unsupported provider" },
         { status: 400 },
       );
     }
@@ -222,9 +219,15 @@ export async function POST(
       );
     }
 
-    // 9. Trigger Edge Function to process match data (fire and forget)
-    // Get all files for this match to pass to the Edge Function
+    // 9. Trigger Edge Function to process match data. The invoke runs inside
+    //    `after()` so it completes after the 200 is sent: an un-awaited
+    //    promise can be frozen with the function the moment the response goes
+    //    out (the sibling splitstep routes and the webhook do the same). The
+    //    file listing stays here — it decides whether there is anything to
+    //    invoke — while the `source_provider` read and the invoke move into
+    //    the callback. Failures are logged, never surfaced to the caller.
     try {
+      // Get all files for this match to pass to the Edge Function
       const { data: matchFiles } = await supabase
         .from("match_files")
         .select("storage_path, file_name")
@@ -235,27 +238,28 @@ export async function POST(
           .map((f) => f.storage_path || f.file_name)
           .filter((v): v is string => Boolean(v));
 
-        // Fetch source_provider from match record
-        const { data: match } = await supabase
-          .from("matches")
-          .select("source_provider")
-          .eq("id", matchId)
-          .single();
+        after(async () => {
+          try {
+            // Fetch source_provider from match record
+            const { data: match } = await supabase
+              .from("matches")
+              .select("source_provider")
+              .eq("id", matchId)
+              .single();
 
-        // Call Edge Function asynchronously (don't wait for response)
-        supabase.functions
-          .invoke("process-match", {
-            body: {
-              matchId,
-              userId: user.id,
-              fileNames,
-              sourceProvider: match?.source_provider || null,
-            },
-          })
-          .catch((err) => {
+            await supabase.functions.invoke("process-match", {
+              body: {
+                matchId,
+                userId: user.id,
+                fileNames,
+                sourceProvider: match?.source_provider || null,
+              },
+            });
+          } catch (err) {
             // Log error but don't fail the upload
             console.error("Error triggering process-match Edge Function:", err);
-          });
+          }
+        });
       }
     } catch (err) {
       // Log error but don't fail the upload

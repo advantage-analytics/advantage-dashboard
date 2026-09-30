@@ -1,0 +1,72 @@
+$kind: http-example
+name: The match and the context the dialog lays itself out from.
+request:
+  url: "{{baseUrl}}/api/matches/:matchId"
+  method: GET
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  pathVariables:
+    - key: matchId
+      value: <uuid>
+      disabled: false
+      description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "match": {
+          "id": "5b0f4c1e-8a7d-4b43-9f7e-1c2d3e4f5a6b",
+          "tournament_name": "Spring Open",
+          "round": "R16",
+          "date": "2026-09-12T12:00:00",
+          "match_type": "tournament",
+          "court_type": "hard",
+          "player1_id": "0e9a2b7c-4d1f-4a8e-9b3c-2f1e0d9c8b7a",
+          "player1_name": "Alex Rivera",
+          "player2_name": "Sam Chen",
+          "score": {
+            "player1": [
+              6,
+              4,
+              6
+            ],
+            "player2": [
+              3,
+              6,
+              2
+            ],
+            "winner": "player1"
+          },
+          "private": true,
+          "format": {
+            "best_of": 3,
+            "ad_scoring": true
+          },
+          "duration": null,
+          "player_hand": "right",
+          "player_backhand": "two-handed",
+          "opponent_hand": "left",
+          "opponent_backhand": "one-handed",
+          "program_id": null,
+          "event_entry_id": null,
+          "source_provider": null
+        },
+        "analysis": null,
+        "event": null,
+        "canAttach": false,
+        "canDetach": false,
+        "canEditRound": false
+      }
+order: 1000

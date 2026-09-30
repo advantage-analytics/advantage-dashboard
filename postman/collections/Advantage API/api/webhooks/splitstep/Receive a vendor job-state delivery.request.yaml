@@ -1,0 +1,40 @@
+$kind: http-request
+description: |-
+  The Advantage Intelligence vendor POSTs here when a job changes state (`job_queued`, `job_processing`, `job_completed`, `job_failed`). The shape is verify → record → 200 → everything else in `after()`: the vendor has a 30 s timeout and no retry policy, so the only work before the answer is recording the envelope, which is what makes the rest recoverable by hand.
+
+  **Authentication** (`webhook-auth.ts`). With `SPLITSTEP_WEBHOOK_SECRET` set the endpoint fails closed: the signature (`x-hmac-signature`, see `splitstepHmac`) must match, and a delivery with no signature header is refused too — unless `SPLITSTEP_WEBHOOK_ALLOW_UNSIGNED=true`, the pilot escape hatch, which accepts it recorded `signature_verified = false`. A header carrying the raw shared secret instead of an HMAC is accepted but recorded unverified. With no secret configured at all the endpoint is open and logs a warning on every delivery.
+
+  A delivery that matches no job is still recorded and answers 200 — a retry would orphan identically.
+url: "{{baseUrl}}/api/webhooks/splitstep"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "job_id": "<string>",
+      "event": "<string>",
+      "status": "<string>",
+      "MatchID": "<string>",
+      "strokes_url": "<string,null-uri>",
+      "players_url": "<string,null-uri>",
+      "trajectories_url": "<string,null-uri>",
+      "trimmed_video_url": "<string,null-uri>",
+      "error": {
+        "code": "<string>",
+        "category": "<string>",
+        "step": "<string>",
+        "message": "<string>"
+      }
+    }
+auth:
+  type: apikey
+  credentials:
+    key: x-hmac-signature
+    value: "{{apiKey}}"
+    in: header
+settings: {}
+examples: ./.resources/Receive a vendor job-state delivery.resources/examples
+order: 2000

@@ -17,7 +17,7 @@ import {
 
 const VIEWER = "u-player";
 const OTHER_USER = "u-someone-else";
-const JOB = "job-1";
+const JOB = "11111111-1111-4111-8111-111111111111";
 const NOW = 1_700_000_000_000;
 const MAX_DURATION = 60;
 
@@ -101,6 +101,16 @@ test.describe("rederive handler", () => {
     expect(body.error).toBe("Job not found");
     expect(h.calls).not.toContain("claimJob");
     expect(h.calls).not.toContain("derive");
+  });
+
+  test("404 for a jobId that is not a UUID, before the job is loaded", async () => {
+    const h = harness({});
+    const response = await handleRederive("job-1", h.deps, {
+      maxDurationSeconds: MAX_DURATION,
+    });
+    expect(response.status).toBe(404);
+    expect((await response.json()).error).toBe("Job not found");
+    expect(h.calls).toEqual(["currentUserId"]);
   });
 
   test("404 for a missing job", async () => {

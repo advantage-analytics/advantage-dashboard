@@ -1,0 +1,14 @@
+$kind: http-request
+description: 'The "Rebuild statistics" button on a `derivation_failed` job whose build crashed. Re-runs `deriveAndPublish()` on the stored vendor results: no vendor call, no allowance, no attempt counted. A compare-and-set claim (`derivation_failed → deriving`) keeps two clicks from both deriving. No body is read.'
+url: "{{baseUrl}}/api/splitstep/jobs/:jobId/rederive"
+method: POST
+headers:
+  Accept: application/json
+pathVariables:
+  - key: jobId
+    value: <uuid>
+    disabled: false
+    description: (Required) A `processing_jobs` id. A value that is not a UUID answers 404 "Job not found", the same as a missing job or someone else's.
+settings: {}
+examples: ./.resources/Rebuild a job's statistics from delivered results.resources/examples
+order: 2000

@@ -1,0 +1,31 @@
+$kind: http-example
+name: A required field is missing, or the workbook failed validation — the body then carries the validator's detail beside `error`.
+request:
+  url: "{{baseUrl}}/api/validate-file"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "file": "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,UEsDBBQABgAIAAAAIQ...",
+        "fileName": "match-export.xlsx"
+      }
+response:
+  statusCode: 400
+  statusText: Bad Request
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "success": false,
+        "error": "File data and file name are required"
+      }
+order: 2000

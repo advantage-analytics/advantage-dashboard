@@ -128,6 +128,11 @@ export type ResubmitRefusalReason =
   | "already_auto_resubmitted"
   | "video_unavailable"
   | "quota"
+  /**
+   * The reservation RPC failed outright — no answer either way, nothing
+   * spent, the child row removed. The route answers 503 "try again".
+   */
+  | "quota_unavailable"
   | "not_configured"
   | "invalid_metadata"
   | "submit_failed"
@@ -673,16 +678,38 @@ export async function resubmitJob(params: {
 
   // 7. Reserve quota for the child. The parent's reservation was released on
   //    failure, so this is a fresh spend against the same budget.
-  const reserved = await reserveForChild({
-    supabase,
-    io,
-    auto,
-    workspace,
-    parent,
-    childId,
-    programId: match.program_id,
-    seconds: billableSeconds,
-  });
+  //
+  //    A reservation that THROWS (the RPC failed, or the auto path's
+  //    workspace read did) is not a refusal and holds nothing to release —
+  //    but the child row is already live, and an `uploaded` orphan would
+  //    trip `processing_jobs_one_live_per_match` on every later retry. So it
+  //    gets the same cleanup as a refusal, and a "try again" answer.
+  let reserved: Awaited<ReturnType<typeof reserveForChild>>;
+  try {
+    reserved = await reserveForChild({
+      supabase,
+      io,
+      auto,
+      workspace,
+      parent,
+      childId,
+      programId: match.program_id,
+      seconds: billableSeconds,
+    });
+  } catch (err) {
+    console.error(`${LOG} quota reservation failed`, {
+      jobId: parent.id,
+      childId,
+      code: (err as { code?: unknown } | null)?.code ?? null,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    await supabase.from("processing_jobs").delete().eq("id", childId);
+    return {
+      ok: false,
+      reason: "quota_unavailable",
+      message: "Could not reserve analysis time. Try again.",
+    };
+  }
 
   if (!reserved.ok) {
     // The child row did nothing yet — remove it rather than leaving a

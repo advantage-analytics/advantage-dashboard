@@ -1,0 +1,27 @@
+$kind: http-request
+description: "Verifies the `Stripe-Signature` header against `STRIPE_WEBHOOK_SECRET` over the raw body, then acts on `checkout.session.completed` only: the user named by `metadata.user_id` (or `client_reference_id`) is moved to Pro. Every other event type answers 200 untouched. Kept after checkout was retired, for receipts and any checkout already open. The module throws at load when `STRIPE_WEBHOOK_SECRET` is unset, so on such a deployment every request fails before this handler runs."
+url: "{{baseUrl}}/api/webhooks/stripe"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "id": "<string>",
+      "type": "<string>",
+      "data": {
+        "object": "<object>"
+      },
+      "object": "<string>"
+    }
+auth:
+  type: apikey
+  credentials:
+    key: Stripe-Signature
+    value: "{{apiKey}}"
+    in: header
+settings: {}
+examples: ./.resources/Receive a Stripe event.resources/examples
+order: 2000

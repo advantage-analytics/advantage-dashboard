@@ -142,6 +142,30 @@ async function get(
   });
 }
 
+/**
+ * A POST with a throwaway body. The file route parses form data before the
+ * admin check, so it gets one real field — an empty multipart body might not
+ * parse, and that would be the route's 500, not the check under test.
+ */
+async function post(
+  request: APIRequestContext,
+  path: string,
+  cookie?: string,
+): Promise<APIResponse> {
+  return request.post(`${BASE_URL}${path}`, {
+    headers: cookie ? { cookie } : undefined,
+    ...(path.endsWith("/file")
+      ? { multipart: { operationId: "smoke" } }
+      : { data: {} }),
+    maxRedirects: 0,
+  });
+}
+
+const ADMIN_UPLOAD_ROUTES = [
+  "/api/admin/uploads/video",
+  "/api/admin/uploads/file",
+] as const;
+
 /** The routes proven for both the admin and non-admin session. */
 const TEAM_ROUTES = [
   "/admin/teams",
@@ -252,6 +276,33 @@ test.describe("Admin console route smoke test (live)", () => {
     const response = await get(request, "/admin/claims");
     expect(response.status()).toBe(307);
     expect(locationPathname(response)).toBe("/admin/requests");
+  });
+
+  // ── admin upload API: 401 without a session, 403 for a non-admin ────────
+  //
+  // An API route answers the status HTTP means, unlike the pages above
+  // (login redirect / 404). An empty body is enough: the admin check runs
+  // before the body is read.
+
+  test("unauthenticated POST to the admin upload routes answers 401", async ({
+    request,
+  }) => {
+    for (const path of ADMIN_UPLOAD_ROUTES) {
+      const response = await post(request, path);
+      expect(response.status(), path).toBe(401);
+      expect(await response.json(), path).toMatchObject({ ok: false });
+    }
+  });
+
+  test("a signed-in non-admin POST to the admin upload routes answers 403", async ({
+    request,
+  }) => {
+    const cookie = await sessionCookieHeader(memberSession);
+    for (const path of ADMIN_UPLOAD_ROUTES) {
+      const response = await post(request, path, cookie);
+      expect(response.status(), path).toBe(403);
+      expect(await response.json(), path).toMatchObject({ ok: false });
+    }
   });
 
   // ── admin session ───────────────────────────────────────────────────────

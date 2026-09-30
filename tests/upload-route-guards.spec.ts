@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import * as nextServer from "next/server";
 import { NextRequest } from "next/server";
 
 import { swingVisionStrategy } from "@/lib/services/upload";
@@ -148,11 +149,28 @@ type RouteHandler = (request: NextRequest) => Promise<Response>;
 const GLOBALS = { Buffer, File, URL };
 
 function loadUploadRoute(client: unknown): RouteHandler {
+  // The real `after()` throws outside a request scope, so the stub runs the
+  // callback at once and remembers its promise; the returned handler settles
+  // them after the response, as the platform would once it has been sent.
+  const pending: Promise<unknown>[] = [];
   const loader = createLoader({
-    stubs: { "@/lib/supabase/server": { createClient: async () => client } },
+    stubs: {
+      "@/lib/supabase/server": { createClient: async () => client },
+      "next/server": {
+        ...nextServer,
+        after: (cb: () => unknown) => {
+          pending.push(Promise.resolve(cb()));
+        },
+      },
+    },
     globals: GLOBALS,
   });
-  return loader.load("src/app/api/upload/route.ts").POST as RouteHandler;
+  const POST = loader.load("src/app/api/upload/route.ts").POST as RouteHandler;
+  return async (request) => {
+    const res = await POST(request);
+    await Promise.all(pending.splice(0));
+    return res;
+  };
 }
 
 function loadValidateRoute(
@@ -306,6 +324,30 @@ test.describe("/api/upload", () => {
         },
       },
     ]);
+  });
+
+  test("a processing provider (getImportProviderStrategy throws) → 400 'Unsupported provider'", async () => {
+    const { client, uploads, invokes } = fakeClient(ownDb());
+    const POST = loadUploadRoute(client);
+    const fd = new FormData();
+    fd.append("file", new File([new Uint8Array(16)], "match.mp4"));
+    fd.append("matchId", MATCH);
+    fd.append("providerId", "splitstep");
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/upload", {
+        method: "POST",
+        body: fd,
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: "Unsupported provider",
+    });
+    expect(uploads).toEqual([]);
+    expect(invokes).toEqual([]);
   });
 
   // ── T17: the insert itself loses the race ─────────────────────────────────

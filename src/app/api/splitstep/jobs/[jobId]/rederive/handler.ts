@@ -20,6 +20,7 @@
 import { NextResponse } from "next/server";
 
 import { classifyFailure, jobRecoveryFacts } from "@/lib/data/match-analysis";
+import { isUuid } from "@/lib/services/match-video/access";
 import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 
 const LOG = "[splitstep-rederive-route]";
@@ -81,6 +82,9 @@ export async function handleRederive(
 
   const userId = await deps.currentUserId();
   if (!userId) return refuse("Not signed in", 401);
+
+  // Not a UUID = no such job; same 404 as a missing or foreign one.
+  if (!isUuid(jobId)) return refuse("Job not found", 404);
 
   const { job, error: loadError } = await deps.loadJob(jobId);
   if (loadError) {

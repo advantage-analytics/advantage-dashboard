@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { purgeMatchStorage } from "@/lib/services/matches/purge-match-storage";
+import {
+  purgeMatchStorage,
+  PurgeRefusedError,
+} from "@/lib/services/matches/purge-match-storage";
 import { releaseStoragePurgeClaims } from "@/lib/services/matches/release-storage-purge-claim";
 import { resolveAnalysisStatus } from "@/lib/data/match-analysis";
+import { isUuid } from "@/lib/services/match-video/access";
+import { isPlainObject } from "@/lib/services/match-video/http";
 import {
   normalizeMatchPatch,
   type MatchFormat,
@@ -69,6 +74,22 @@ export interface MatchEventContext {
   takenRounds: string[];
 }
 
+/**
+ * The route's answer for a match that does not exist for this caller. A
+ * malformed id gets it too, before any Supabase call: Postgres would only
+ * refuse it as an invalid uuid, which the lookup turned into a 500.
+ */
+function notFound() {
+  return NextResponse.json({ error: "Not found" }, { status: 404 });
+}
+
+/** DELETE's answer when the admin console's purge guard refuses the match. */
+const PURGE_PROTECTED_MESSAGE =
+  "Matches recorded or analyzed through the admin console cannot be deleted here.";
+
+/** DELETE's answer when that guard could not be checked, or anything else threw. */
+const PURGE_UNAVAILABLE_MESSAGE = "Match deletion is unavailable. Try again.";
+
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
@@ -91,19 +112,25 @@ function serverError(logLabel: string, cause: unknown, publicMessage: string) {
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
-/** The newest job for the match, in the shared status vocabulary, or null. */
+/**
+ * The newest job for the match, in the shared status vocabulary, or null —
+ * with the read's error beside it. A failed read must not pass for "not
+ * analysed": PATCH would then unlock the format and player edits that an
+ * analysed match keeps fixed.
+ */
 async function analysisFor(supabase: Supabase, matchId: string) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("processing_jobs")
     .select("status, derivation_version")
     .eq("match_id", matchId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!data) return null;
+  if (error) return { analysis: null, error };
+  if (!data) return { analysis: null, error: null };
   const row = data as { status: string; derivation_version: string | null };
   const status = resolveAnalysisStatus(row.status, row.derivation_version);
-  return status ? { status } : null;
+  return { analysis: status ? { status } : null, error: null };
 }
 
 async function eventContextFor(
@@ -181,6 +208,7 @@ export async function GET(
   { params }: { params: Promise<{ matchId: string }> },
 ) {
   const { matchId } = await params;
+  if (!isUuid(matchId)) return notFound();
   const supabase = await createClient();
   const {
     data: { user },
@@ -195,7 +223,7 @@ export async function GET(
       "Could not load the match",
     );
   }
-  if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!data) return notFound();
   const match = data as unknown as MatchRow;
 
   // Attaching needs a team match that isn't on a line yet, in the workspace
@@ -206,13 +234,21 @@ export async function GET(
   // `detach_match_from_event_line` re-checks both.
   const attachable = !!match.program_id && !match.event_entry_id;
   const detachable = !!match.program_id && !!match.event_entry_id;
-  const [analysis, event, workspace] = await Promise.all([
+  const [analysisRead, event, workspace] = await Promise.all([
     analysisFor(supabase, matchId),
     match.event_entry_id
       ? eventContextFor(supabase, match.event_entry_id, matchId)
       : Promise.resolve(null),
     attachable || detachable ? getWorkspaceContext() : Promise.resolve(null),
   ]);
+  if (analysisRead.error) {
+    return serverError(
+      "GET /api/matches/[matchId]: failed to load analysis status",
+      analysisRead.error,
+      "Could not load the match",
+    );
+  }
+  const { analysis } = analysisRead;
 
   const active = workspace?.active;
   const runsSchedule =
@@ -242,25 +278,31 @@ export async function PATCH(
   { params }: { params: Promise<{ matchId: string }> },
 ) {
   const { matchId } = await params;
+  if (!isUuid(matchId)) return notFound();
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return unauthorized();
 
-  let body: Record<string, unknown>;
+  // Valid JSON is not enough: `null`, `42`, `"x"` and `[]` all parse, and
+  // `normalizeMatchPatch` reads the body with `key in body`, which throws on
+  // a primitive. Only an object literal is a patch.
+  let body: unknown;
   try {
     body = await req.json();
   } catch {
     return badRequest("Invalid JSON body");
   }
+  if (!isPlainObject(body)) return badRequest("Invalid JSON body");
 
   // The analysis read is harmless for a match that turns out not to be ours
   // (it returns nothing), so it runs beside the ownership lookup.
-  const [{ data: existing, error: lookupError }, analysis] = await Promise.all([
-    loadOwnMatch(supabase, matchId, user.id),
-    analysisFor(supabase, matchId),
-  ]);
+  const [{ data: existing, error: lookupError }, analysisRead] =
+    await Promise.all([
+      loadOwnMatch(supabase, matchId, user.id),
+      analysisFor(supabase, matchId),
+    ]);
   if (lookupError) {
     return serverError(
       "PATCH /api/matches/[matchId]: failed to load match",
@@ -268,8 +310,15 @@ export async function PATCH(
       "Could not load the match",
     );
   }
-  if (!existing)
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!existing) return notFound();
+  if (analysisRead.error) {
+    return serverError(
+      "PATCH /api/matches/[matchId]: failed to load analysis status",
+      analysisRead.error,
+      "Could not load the match",
+    );
+  }
+  const { analysis } = analysisRead;
   const stored = existing as unknown as MatchRow;
 
   const result = normalizeMatchPatch(body, {
@@ -291,9 +340,19 @@ export async function PATCH(
     if (update.player1_id === stored.player1_id) {
       delete update.player1_id;
     } else {
-      const { data: rows } = await supabase.rpc("program_roster_full", {
-        p_program_id: stored.program_id,
-      });
+      const { data: rows, error: rosterError } = await supabase.rpc(
+        "program_roster_full",
+        { p_program_id: stored.program_id },
+      );
+      // A failed roster read is not an off-roster pick: answering "Choose a
+      // player…" would blame the user for our outage.
+      if (rosterError) {
+        return serverError(
+          "PATCH /api/matches/[matchId]: failed to load roster",
+          rosterError,
+          "Could not load the roster",
+        );
+      }
       const pick = rosterPlayerOptions((rows ?? []) as RosterFullRow[]).find(
         (option) => option.playerId === update.player1_id,
       );
@@ -337,7 +396,7 @@ export async function PATCH(
       "Could not save the match",
     );
   }
-  if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!data) return notFound();
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/matches");
@@ -351,6 +410,7 @@ export async function DELETE(
   { params }: { params: Promise<{ matchId: string }> },
 ) {
   const { matchId } = await params;
+  if (!isUuid(matchId)) return notFound();
   const supabase = await createClient();
   const {
     data: { user },
@@ -371,23 +431,31 @@ export async function DELETE(
       "Could not load the match",
     );
   }
-  if (!existing)
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!existing) return notFound();
 
   // Storage first, then the row. The ordering is load-bearing and the reason
   // this is a function call rather than a foreign-key cascade — see
   // purgeMatchStorage().
+  //
+  // A refusal maps by kind, never by forwarding `error.message`: the console
+  // guard is a 409 with its fixed sentence, and everything else — the guard
+  // unreadable, or any other throw — is a retryable 503.
   try {
     await purgeMatchStorage(supabase, [matchId]);
   } catch (error) {
+    if (error instanceof PurgeRefusedError && error.kind === "protected") {
+      return NextResponse.json(
+        { error: PURGE_PROTECTED_MESSAGE },
+        { status: 409 },
+      );
+    }
+    console.error(
+      "DELETE /api/matches/[matchId]: storage purge unavailable",
+      error instanceof PurgeRefusedError ? (error.cause ?? error) : error,
+    );
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Match deletion is unavailable.",
-      },
-      { status: 409 },
+      { error: PURGE_UNAVAILABLE_MESSAGE },
+      { status: 503 },
     );
   }
 
@@ -398,10 +466,11 @@ export async function DELETE(
     .eq("created_by", user.id);
 
   if (deleteError) {
-    // The 409 refusal above takes no claim (the claim RPC answers false
-    // before its insert), so only this failed-delete branch releases. The id
-    // is the one the `created_by = user.id` lookup already admitted, never a
-    // body field. See `releaseStoragePurgeClaims` for why this matters.
+    // The 409 and 503 refusals above take no claim (the claim RPC answers
+    // false, or fails, before its insert), so only this failed-delete branch
+    // releases. The id is the one the `created_by = user.id` lookup already
+    // admitted, never a body field. See `releaseStoragePurgeClaims` for why
+    // this matters.
     await releaseStoragePurgeClaims(
       createAdminClient(),
       [matchId],

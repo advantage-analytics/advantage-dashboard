@@ -1,0 +1,40 @@
+$kind: http-example
+name: A form field is missing, the provider is not an import provider, or the file fails the provider's checks.
+request:
+  url: "{{baseUrl}}/api/upload"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: formdata
+    content:
+      - type: text
+        key: matchId
+        value: 5b0f4c1e-8a7d-4b43-9f7e-1c2d3e4f5a6b
+        description: "(Required) "
+      - type: text
+        key: providerId
+        value: swing-vision
+        description: (Required) An import provider. Only `swing-vision` is one today.
+      - type: file
+        key: file
+        src: ""
+        contentType: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+        description: (Required) The SwingVision .xlsx export, under 50 MB.
+response:
+  statusCode: 400
+  statusText: Bad Request
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "success": false,
+        "error": "No file provided"
+      }
+order: 2000

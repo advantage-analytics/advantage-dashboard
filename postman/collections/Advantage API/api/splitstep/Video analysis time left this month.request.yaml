@@ -1,0 +1,9 @@
+$kind: http-request
+description: "For the header's Beta pill: the ACTIVE workspace's remaining seconds from `peekQuota()` — for an individual, the tighter of their own cap and the shared beta band. Advisory; `reserveQuota()` still decides at submit. `workspaceId` lets the pill drop an answer for a workspace it has since left."
+url: "{{baseUrl}}/api/splitstep/hours-left"
+method: GET
+headers:
+  Accept: application/json
+settings: {}
+examples: ./.resources/Video analysis time left this month.resources/examples
+order: 3000
