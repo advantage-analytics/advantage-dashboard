@@ -399,3 +399,112 @@ test("before the clock ticks, the timing line keeps only its clock-free segment"
   // The Cancel group needs no clock.
   expect(html).toContain("Cancel analysis");
 });
+
+// ── Cancel and resend, wired (T7) ───────────────────────────────────────────
+
+/** The column with the dialog swapped for a marker that prints its props. */
+const wired = createLoader({
+  stubs: {
+    "next/navigation": { useRouter: () => ({ refresh() {} }) },
+    "next/link": { __esModule: true, default: passthrough("a") },
+    "@/lib/supabase/client": {
+      createClient: () => {
+        throw new Error("no Supabase client offline");
+      },
+    },
+    "@/components/dashboard/matches/match-detail/cancel-analysis-dialog": {
+      CancelAnalysisDialog: (props: {
+        jobId: string;
+        reservedSeconds: number | undefined;
+        open: boolean;
+      }) =>
+        React.createElement("span", {
+          "data-cancel-dialog": props.jobId,
+          "data-open": String(props.open),
+          "data-reserved": String(props.reservedSeconds),
+        }),
+      requestResubmit: async () => ({ ok: true }),
+    },
+  },
+}).load(COLUMN) as { AnalysisSteps: React.ComponentType<ColumnProps> };
+
+function renderWired(analysis: MatchAnalysis) {
+  return renderToStaticMarkup(
+    React.createElement(wired.AnalysisSteps, {
+      analysis,
+      matchId: MATCH_ID,
+      match: MATCH,
+      snapshotAt: NOW,
+    }),
+  );
+}
+
+test("queued, no caller handlers: the Cancel action, and no dialog (or router) until it is asked", () => {
+  const html = renderWired(QUEUED);
+  const li = items(html)[2];
+  const { button } = quietAction(li, "Cancel analysis");
+  expect(button).not.toContain("disabled");
+  // The dialog mounts on the first "Cancel analysis" — a closed column never
+  // reads the app router, so it renders offline and on /design without one.
+  expect(html).not.toContain("data-cancel-dialog");
+});
+
+test("the Cancel action opens the dialog for this job; resend posts the resubmit route with no confirm", () => {
+  const source = readFileSync(COLUMN, "utf8");
+  // The default Cancel handler is the dialog's open state, and nothing else.
+  expect(source).toContain(
+    "onCancel={onCancel ?? (() => setCancelOpen(true))}",
+  );
+  expect(source).toMatch(
+    /\{jobId && cancelOpen !== null && \(\s*<CancelAnalysisDialog\s+jobId=\{jobId\}\s+reservedSeconds=\{analysis\.reservedSeconds\}\s+open=\{cancelOpen\}\s+onOpenChange=\{setCancelOpen\}/,
+  );
+  // Resend: straight to the request, refreshed on success, refusal kept.
+  expect(source).toMatch(
+    /function ResendAction[\s\S]*?useRouter\(\)[\s\S]*?requestResubmit\(jobId\)[\s\S]*?setError\(result\.error\)[\s\S]*?router\.refresh\(\)/,
+  );
+  // Only the dialog and the resend action read the router, never the column.
+  const column = source.slice(
+    source.indexOf("export function AnalysisSteps"),
+    source.indexOf("function StepBody"),
+  );
+  expect(column).not.toContain("useRouter");
+});
+
+test("cancelled: the resend action is live, with no dialog mounted", () => {
+  const html = renderWired(CANCELLED);
+  const { button } = quietAction(items(html)[2], "Send for analysis again");
+  expect(button).not.toContain("disabled");
+  expect(button).not.toContain("aria-busy");
+  expect(html).not.toContain("data-cancel-dialog");
+  expect(html).not.toContain('role="alert"');
+});
+
+test("no job id: no dialog to open", () => {
+  const html = renderWired({ ...QUEUED, jobId: undefined });
+  expect(html).not.toContain("data-cancel-dialog");
+});
+
+test("queued, with no app router mounted: the column still renders its Cancel action", () => {
+  // No next/navigation stub: a router read anywhere in the closed column would
+  // throw "expected app router to be mounted" (the uploading-parity spec's
+  // failure before T7 moved it into the dialog and the resend action).
+  const { AnalysisSteps } = createLoader({
+    stubs: {
+      "next/link": { __esModule: true, default: passthrough("a") },
+      "@/lib/supabase/client": {
+        createClient: () => {
+          throw new Error("no Supabase client offline");
+        },
+      },
+    },
+  }).load(COLUMN) as { AnalysisSteps: React.ComponentType<ColumnProps> };
+  const html = renderToStaticMarkup(
+    React.createElement(AnalysisSteps, {
+      analysis: QUEUED,
+      matchId: MATCH_ID,
+      match: MATCH,
+      snapshotAt: NOW,
+    }),
+  );
+  expect(html).toContain("Cancel analysis");
+});

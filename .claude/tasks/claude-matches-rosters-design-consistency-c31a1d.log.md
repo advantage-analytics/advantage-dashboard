@@ -98,3 +98,13 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. Old `?analysis=No+video` bookmarks now filter to zero rows and show a stale chip; a legacy alias would need an exception to T5's grep rule.
+
+## T7 · Wire "Cancel analysis" to the route through `CancelAnalysisDialog` — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Retry of the blocked run: stash 855addb5 applied cleanly and dropped. New `cancel-analysis-dialog.tsx` (`CancelAnalysisConfirm` view, `CancelAnalysisDialog` with router + async cancel, `requestCancel`/`requestResubmit` helpers): danger ConfirmDialog, exact copy, Clock note with the reserved duration, route refusal shown in-dialog, 200 closes and refreshes. Gate fix: `AnalysisSteps` no longer calls `useRouter()`; the dialog mounts on first open, resend lives in a `ResendAction` component, so the column renders without an app router (uploading-progress-parity unchanged and passing; full offline suite 4512 passed in the worker's run). Design preview passes no-op handlers. Specs: cancel-analysis-dialog (new), analysis-steps-column.
+
+**follow-ups:**
+
+1. "Cancel opens the dialog" is only checked by source assertion; eyes-on at /pr-check should confirm the click, the dialog and the refresh on a queued match.

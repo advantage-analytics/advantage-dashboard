@@ -207,6 +207,9 @@ const VARIANTS: readonly {
   },
 ];
 
+/** Cancel and resend on this page: drawn, never sent. */
+const noop = () => {};
+
 export function AnalysisStepsPreview() {
   return (
     <section id="analysis-stepper" className="mt-16">
@@ -228,6 +231,10 @@ export function AnalysisStepsPreview() {
               matchId="00000000-0000-4000-8000-000000000000"
               match={MATCH}
               snapshotAt={NOW}
+              // The placeholder job id is not a real job: Cancel and resend
+              // stay inert here instead of posting the live routes.
+              onCancel={noop}
+              onResend={noop}
             />
           </div>
         ))}

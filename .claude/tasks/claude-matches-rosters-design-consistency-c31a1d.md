@@ -101,7 +101,7 @@ ready).
 
 ## T7 · Wire "Cancel analysis" to the route through `CancelAnalysisDialog`
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T6
 - **files:** src/components/dashboard/matches/match-detail/cancel-analysis-dialog.tsx (new), src/components/dashboard/matches/match-detail/analysis-steps-column.tsx (or its client wrapper), tests/cancel-analysis-dialog.spec.ts (new), tests/analysis-steps-column.spec.ts

@@ -12,14 +12,21 @@
  * stalled-submit threshold, the upload estimate and the queued / processing /
  * cancelled timing lines.
  *
- * Cancel (queued) and resend (cancelled) are quiet text actions whose handlers
- * the caller supplies; the peek drawers never draw either.
+ * Cancel (queued) and resend (cancelled) are quiet text actions, wired here:
+ * Cancel opens `CancelAnalysisDialog`, resend (`ResendAction`) posts the
+ * resubmit route with no confirm and shows a refusal under itself. A caller
+ * may pass its own handlers instead. The peek drawers never draw either.
+ *
+ * The column itself never reads the app router: only the dialog and the
+ * resend action do, and each mounts only where it is needed — so the column
+ * renders offline (specs) and on `/design` without one.
  *
  * Mounted by the match page's awaiting-analysis short-circuit (guardrails
  * §3.3), and previewed on `/design`.
  */
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   formatDuration,
@@ -40,6 +47,10 @@ import { AnalysisProgressTrack } from "../analysis-progress-track";
 import { UPLOADING_COPY } from "../upload-progress-copy";
 import { RecoveryAction } from "./recovery-action";
 import {
+  CancelAnalysisDialog,
+  requestResubmit,
+} from "./cancel-analysis-dialog";
+import {
   STEPPER_COPY,
   analysisStepsView,
   type AnalysisStepBody,
@@ -47,6 +58,9 @@ import {
 } from "./analysis-steps";
 
 const NOTE = "text-[12px] leading-[1.55] text-[var(--ink-600)]";
+
+/** The resend action's label while its request is in flight. */
+const RESEND_PENDING = "Sending…";
 
 /** The clock's period: an estimate and a stall threshold, not a stopwatch. */
 const TICK_MS = 10_000;
@@ -81,12 +95,15 @@ export function AnalysisSteps({
    * Omit it everywhere real.
    */
   snapshotAt?: number;
-  /** The queued step's "Cancel analysis". Wired by the caller (T7). */
+  /** Replaces the queued step's "Cancel analysis" (which opens the dialog). */
   onCancel?: () => void;
-  /** The cancelled step's "Send for analysis again" — fires with no confirm. */
+  /** Replaces the cancelled step's "Send for analysis again" (the resubmit). */
   onResend?: () => void;
 }): React.JSX.Element {
   const snapshot = snapshotAt !== undefined;
+  // null until first asked: the dialog (and its router) mounts on the first
+  // "Cancel analysis", then stays mounted for the job.
+  const [cancelOpen, setCancelOpen] = useState<boolean | null>(null);
 
   // Gated on isLiveUpdating so a match parked at `processed` does not hold a
   // socket open for a row that cannot change until Phase 2 ships. Keyed off the
@@ -120,6 +137,7 @@ export function AnalysisSteps({
   }, [readsClock]);
 
   const view = analysisStepsView(analysis, snapshotAt ?? clock);
+  const jobId = analysis.jobId;
 
   return (
     <section
@@ -146,9 +164,9 @@ export function AnalysisSteps({
               {step.body && (
                 <StepBody
                   body={step.body}
-                  jobId={analysis.jobId}
+                  jobId={jobId}
                   matchId={matchId}
-                  onCancel={onCancel}
+                  onCancel={onCancel ?? (() => setCancelOpen(true))}
                   onResend={onResend}
                 />
               )}
@@ -156,6 +174,18 @@ export function AnalysisSteps({
           ))}
         </ol>
       </div>
+
+      {/* Mounted for the job once asked, not for the queued step: a Realtime
+          move to `processing` mid-question must leave the dialog up to show
+          the route's "already started" refusal, not unmount it. */}
+      {jobId && cancelOpen !== null && (
+        <CancelAnalysisDialog
+          jobId={jobId}
+          reservedSeconds={analysis.reservedSeconds}
+          open={cancelOpen}
+          onOpenChange={setCancelOpen}
+        />
+      )}
     </section>
   );
 }
@@ -221,14 +251,20 @@ function StepBody({
               onClick={onCancel}
             />
           )}
-          {body.resend && (
-            <QuietAction
-              label={STEPPER_COPY.resend.action}
-              consequence={consequence(body.resend, STEPPER_COPY.resend)}
-              tone="blue"
-              onClick={onResend}
-            />
-          )}
+          {body.resend &&
+            (onResend || !jobId ? (
+              <QuietAction
+                label={STEPPER_COPY.resend.action}
+                consequence={consequence(body.resend, STEPPER_COPY.resend)}
+                tone="blue"
+                onClick={onResend}
+              />
+            ) : (
+              <ResendAction
+                jobId={jobId}
+                consequence={consequence(body.resend, STEPPER_COPY.resend)}
+              />
+            ))}
         </div>
       );
 
@@ -268,22 +304,71 @@ function consequence(
 }
 
 /**
+ * "Send for analysis again", wired: straight to the resubmit route, no
+ * confirm — sending again is what the cancelled page is for, and its cost is
+ * printed under the action. RetryAnalysis's request, as a quiet action. The
+ * only piece of the column besides the dialog that reads the app router.
+ */
+function ResendAction({
+  jobId,
+  consequence: note,
+}: {
+  jobId: string;
+  consequence: string | undefined;
+}): React.JSX.Element {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startResend] = useTransition();
+
+  const resend = () =>
+    startResend(async () => {
+      setError(null);
+      const result = await requestResubmit(jobId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+
+  return (
+    <QuietAction
+      label={STEPPER_COPY.resend.action}
+      consequence={note}
+      tone="blue"
+      onClick={resend}
+      pending={pending}
+      pendingLabel={RESEND_PENDING}
+      error={error}
+    />
+  );
+}
+
+/**
  * A step's secondary action as quiet text, never a button's chrome or a tinted
  * box (memory: stepper quiet actions): 20px below the note group, the action
  * at 12/500 ink-700, and what it moves 8px under it, tied to it by
  * `aria-describedby`. Hover takes the action's tone — danger red for Cancel,
  * blue for resend. Focus is the global ring (`focus.css`), so none is written.
+ * A request in flight swaps the label and holds the button; a refusal is the
+ * route's sentence, in danger red under the consequence line.
  */
 function QuietAction({
   label,
   consequence,
   tone,
   onClick,
+  pending = false,
+  pendingLabel,
+  error = null,
 }: {
   label: string;
   consequence: string | undefined;
   tone: "danger" | "blue";
   onClick: (() => void) | undefined;
+  pending?: boolean;
+  pendingLabel?: string;
+  error?: string | null;
 }): React.JSX.Element {
   const id = useId();
   return (
@@ -291,6 +376,8 @@ function QuietAction({
       <button
         type="button"
         onClick={onClick}
+        disabled={pending}
+        aria-busy={pending || undefined}
         aria-describedby={consequence ? id : undefined}
         className={cn(
           "cursor-pointer rounded-[4px] text-[12px] leading-4 font-medium text-[var(--ink-700)] transition-colors duration-150",
@@ -299,7 +386,7 @@ function QuietAction({
             : "hover:text-[var(--blue-hover)]",
         )}
       >
-        {label}
+        {pending ? (pendingLabel ?? label) : label}
       </button>
       {consequence && (
         <p
@@ -307,6 +394,14 @@ function QuietAction({
           className="text-[11px] leading-4 text-[var(--ink-400)] tabular-nums"
         >
           {consequence}
+        </p>
+      )}
+      {error && (
+        <p
+          role="alert"
+          className="text-[12px] leading-[18px] text-[var(--danger)]"
+        >
+          {error}
         </p>
       )}
     </div>
