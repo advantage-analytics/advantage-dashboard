@@ -469,7 +469,8 @@ export async function DELETE(
     // The 409 and 503 refusals above take no claim (the claim RPC answers
     // false, or fails, before its insert), so only this failed-delete branch
     // releases. The id is the one the `created_by = user.id` lookup already
-    // admitted, never a body field. See `releaseStoragePurgeClaims` for why this matters.
+    // admitted, never a body field. See `releaseStoragePurgeClaims` for why
+    // this matters.
     await releaseStoragePurgeClaims(
       createAdminClient(),
       [matchId],
