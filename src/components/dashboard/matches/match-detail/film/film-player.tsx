@@ -114,6 +114,11 @@ export interface FilmPlayerHandle {
   /** Move the playhead by `delta` seconds, either way. */
   seekBy: (delta: number) => void;
   togglePlay: () => void;
+  /**
+   * Start playback — what a Statistics card's click-through lands with. A
+   * refusal goes to `onPlayRejected`, same as `togglePlay`.
+   */
+  play: () => void;
   /** Jump to the previous (-1) or next (1) point in the applied cut. */
   step: (direction: -1 | 1) => void;
   pause: () => void;
@@ -485,21 +490,24 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       land();
     }, [resume, generation, land]);
 
+    const play = useCallback(() => {
+      const el = videoRef.current;
+      if (!el?.paused) return;
+      // A rejected promise here is autoplay policy or a load interrupted by
+      // the next seek — never evidence that the file or its credential is
+      // broken, which is why it goes to `onPlayRejected` and not to the
+      // error panel. The fullscreen room has always swallowed it; this
+      // surface used to raise "The film stopped loading" over a click the
+      // browser simply declined.
+      void el.play().catch(() => onPlayRejected());
+    }, [onPlayRejected]);
+
     const togglePlay = useCallback(() => {
       const el = videoRef.current;
       if (!el) return;
-      if (el.paused) {
-        // A rejected promise here is autoplay policy or a load interrupted by
-        // the next seek — never evidence that the file or its credential is
-        // broken, which is why it goes to `onPlayRejected` and not to the
-        // error panel. The fullscreen room has always swallowed it; this
-        // surface used to raise "The film stopped loading" over a click the
-        // browser simply declined.
-        void el.play().catch(() => onPlayRejected());
-      } else {
-        el.pause();
-      }
-    }, [onPlayRejected]);
+      if (el.paused) play();
+      else el.pause();
+    }, [play]);
 
     const step = useCallback(
       (direction: -1 | 1) => {
@@ -518,6 +526,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
         seekTo,
         seekBy: (delta) => seekTo((videoRef.current?.currentTime ?? 0) + delta),
         togglePlay,
+        play,
         step,
         pause: () => videoRef.current?.pause(),
         snapshot: () => {
@@ -534,7 +543,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             : null;
         },
       }),
-      [seekTo, togglePlay, step],
+      [seekTo, togglePlay, play, step],
     );
 
     const toggleMute = useCallback(() => {

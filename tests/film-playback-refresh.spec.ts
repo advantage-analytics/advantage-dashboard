@@ -767,23 +767,56 @@ test("the Advantage Intelligence lineage asks for nothing at all", async ({
   expect((await state(page, REPORT))?.time).toBeCloseTo(0.3, 1);
 });
 
-test("Watch point opens the aligned point in the Video room", async ({
+test("entering the room while the report player is PLAYING keeps it playing", async ({
   page,
 }) => {
-  await open(page, "provider-watch", {
-    lineage: "vendor-copy",
-    tab: "film",
-    point: "b",
+  await open(page, "ok-enter-playing");
+  await page.getByRole("button", { name: "Play", exact: true }).first().click();
+  await page.waitForFunction(
+    (sel) => document.querySelector<HTMLVideoElement>(sel)?.paused === false,
+    REPORT,
+  );
+
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+  // No second press: the room picks up playing.
+  await page.waitForFunction(
+    (sel) => document.querySelector<HTMLVideoElement>(sel)?.paused === false,
+    ROOM,
+    { timeout: 5000 },
+  );
+  expect((await state(page, REPORT))?.paused).toBe(true);
+});
+
+test("Watch point lands the aligned point in the Video tab, playing, not the room", async ({
+  page,
+}) => {
+  await open(page, "provider-watch", { lineage: "vendor-copy", tab: "film" });
+  // The viewer's click on a Statistics card is the gesture that lets the film
+  // start with sound; this click stands in for it before the intent lands.
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.evaluate(() => {
+    const q = new URLSearchParams(location.search);
+    q.set("point", "b");
+    history.pushState(null, "", `?${q}`);
+    (window as unknown as FilmRefreshHarnessWindow).remountFilmTab();
   });
-  await expect(page.getByRole("dialog", { name: "Film room" })).toBeVisible();
-  await expect(page).toHaveURL(/fullscreen=1/);
+
+  // Same landing as a statistic's cut: the report player seeks to the point
+  // and plays; the screen-covering room stays shut.
+  await page.waitForFunction(
+    (sel) => {
+      const v = document.querySelector<HTMLVideoElement>(sel);
+      return !!v && v.currentTime >= 0.3 && !v.paused;
+    },
+    REPORT,
+    { timeout: 5000 },
+  );
   await expect(page).not.toHaveURL(/[?&]point=/);
-  await page.waitForFunction(() => {
-    const room = document.querySelector<HTMLVideoElement>(
-      '[data-testid="film-room-video"]',
-    );
-    return !!room && room.currentTime >= 0.3;
-  });
+  await expect(page).not.toHaveURL(/fullscreen=1/);
+  await expect(page.getByRole("dialog", { name: "Film room" })).toHaveCount(0);
 });
 
 test("the provider lineage still answers a media error with Reload", async ({
