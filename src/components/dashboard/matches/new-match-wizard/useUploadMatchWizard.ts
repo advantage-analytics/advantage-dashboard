@@ -11,7 +11,11 @@
  */
 
 import { useAdminWizardMode } from "./admin-mode";
-import { styleSaveChecked, styleSaveOffer } from "./style-save-offer";
+import {
+  canSaveRosterStyle,
+  styleSaveChecked,
+  styleSaveOffer,
+} from "./style-save-offer";
 import { saveRosterPlayerStyle } from "@/components/dashboard/team/roster-actions";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { capitalize } from "@/lib/utils";
@@ -2055,20 +2059,28 @@ export function useUploadMatchWizard({
         if (teamRoster && rosterSubjectOrNull(subject, teamRoster) === null)
           return;
       }
+      const previous = matchSubjectRef.current;
+      const otherPlayer =
+        previous?.kind !== "roster" ||
+        subject.kind !== "roster" ||
+        previous.playerId !== subject.playerId;
       resetIdentityAnswer();
       applyMatchSubject(subject);
       setFormData((prev) => ({
         ...prev,
         playerName:
           subject.kind === "roster" ? subject.name : (uploaderName ?? ""),
-        // A looked-up style belongs to whoever it was looked up for. The
-        // uploader's profile, the previous pick's roster profile or their last
-        // match all drop on a roster pick — an owner picking their OWN profile
-        // too, since that row is a roster choice like any other. The details
-        // step fills them again for the new player: their roster profile
-        // first, then their last match. A style the coach typed stays.
+        // A style belongs to the player it was answered for. On a roster pick
+        // of anyone else it drops — looked up (the uploader's profile, the
+        // previous pick's roster row or last match) or typed, since a typed
+        // style carried to the next player would be saved onto their roster
+        // profile by the ticked "use for future matches". An owner picking
+        // their OWN profile drops the uploader's too: that row is a roster
+        // choice like any other. Re-picking the same player keeps it. The
+        // details step fills them again: roster profile first, then last match.
         ...(subject.kind === "roster" &&
-        (prev.playerStyleSource === "profile" ||
+        (otherPlayer ||
+          prev.playerStyleSource === "profile" ||
           prev.playerStyleSource === "roster" ||
           prev.playerStyleSource === "history")
           ? {
@@ -3421,15 +3433,22 @@ export function useUploadMatchWizard({
         // so what was on screen is what is written. After the match is in and
         // never awaited: the match is the upload, and a style that failed to
         // save costs the coach one re-answer next time, not this match.
-        // `eligibilityWorkspace`, not the active one: it is what the roster
-        // was loaded for and what the details step gated the checkbox on, so
-        // a reused match pinned to its team saves what the box promised.
+        // The active workspace, like the details step's `workspaceKind` and
+        // `saveRosterPlayerStyle`'s own scope — all three read the same one,
+        // so the box on screen and the write behind it cannot disagree.
         const styleRow =
-          !admin && eligibilityWorkspace.kind === "team"
+          !admin && activeWorkspace.kind === "team"
             ? teamRoster?.find((row) => row.playerId === playerUserId)
             : undefined;
         if (
           styleRow &&
+          canSaveRosterStyle({
+            // `isProgramStaff()`'s rule, spelled out: this module's only
+            // import from workspace/types is a type.
+            staff: activeWorkspace.role !== "player",
+            rowUserId: styleRow.userId,
+            viewerId: viewer.id,
+          }) &&
           styleSaveChecked(
             styleSaveOffer(
               { hand: styleRow.hand, backhand: styleRow.backhand },
@@ -3673,7 +3692,7 @@ export function useUploadMatchWizard({
     refusalForWindow,
     matchSubject,
     teamRoster,
-    eligibilityWorkspace.kind,
+    viewer.id,
     isUploading,
     isProbing,
     parsingState.isParsing,

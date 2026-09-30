@@ -1,5 +1,3 @@
-"use client";
-
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -7,8 +5,8 @@ import { cn } from "@/lib/utils";
  * The dashboard's checkbox — multi-select and yes/no, the square half of the
  * "one glyph means chosen" pair (single choice is the check-dot `Radio`).
  *
- * 14px, `--radius-cell` (4px) corners. At rest a 1px `--ink-300` ring on the
- * card surface; checked, solid Signal Blue with a white Lucide `Check` at 10px,
+ * 14px, `--radius-cell` (4px) corners. At rest a 1px `--ink-300` ring with no
+ * fill — so a row's hover wash shows through, as it always did; checked, solid Signal Blue with a white Lucide `Check` at 10px,
  * stroke 3. The geometry the Matches filter menu's checklist rows have always
  * drawn — lifted here so every checkbox on the dashboard is that one, not the
  * browser's native box tinted with `accent-color`, which renders at the OS's
@@ -25,6 +23,10 @@ import { cn } from "@/lib/utils";
  *   sentence, so the text toggles it and the form keeps native semantics
  *   (Space, form reset, `checked` in devtools). Focus rings the mark, since
  *   the input itself is invisible.
+ *
+ * No `"use client"`: there is no state or hook here, so `CheckboxMark` renders
+ * on the server too, and `Checkbox` joins whichever client component hands it
+ * an `onChange`.
  */
 
 export function CheckboxMark({
@@ -43,7 +45,7 @@ export function CheckboxMark({
         "flex size-3.5 shrink-0 items-center justify-center rounded-[var(--radius-cell)] border transition-colors duration-150",
         checked
           ? "border-[var(--blue)] bg-[var(--blue)]"
-          : "border-[var(--ink-300)] bg-[var(--surface-card)]",
+          : "border-[var(--ink-300)]",
         disabled && "opacity-50",
         className,
       )}

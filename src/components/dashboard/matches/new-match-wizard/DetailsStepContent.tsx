@@ -159,6 +159,11 @@ export interface DetailsStepContentProps {
      * difference is whether "use for future matches" has somewhere to write.
      */
     rosterStyle: SavedStyle | null;
+    /**
+     * Whether the viewer may save that style (`canSaveRosterStyle`): staff, or
+     * the player on their own profile. Everyone else gets the prefill only.
+     */
+    canSaveStyle: boolean;
   };
   /** The event line this flow started from, when it did. */
   preset: EventPreset | null;
@@ -1326,7 +1331,10 @@ function DetailsStepContentImpl({
   // "Use for future matches" — only for a roster profile, in a team, outside
   // the admin console (which records for a program it does not coach).
   const styleOffer =
-    !admin && workspaceKind === "team" && subject.rosterStyle
+    !admin &&
+    workspaceKind === "team" &&
+    subject.canSaveStyle &&
+    subject.rosterStyle
       ? styleSaveOffer(subject.rosterStyle, playerHand, playerBackhand)
       : null;
   const styleSaveTicked = styleSaveChecked(

@@ -178,8 +178,8 @@ selected item, it never appears on hover.
 
 **`Checkbox`** (2026-09-29, in-repo, `ui/checkbox.tsx`) — the one checkbox on
 the dashboard, for multi-select and for a yes/no a form asks. 14px square,
-`--radius-cell` (4px) corners; at rest a 1px `--ink-300` ring on
-`--surface-card`; checked, solid `--blue` with a white Lucide `Check` at 10px,
+`--radius-cell` (4px) corners; at rest a 1px `--ink-300` ring and no fill (a
+row's hover wash shows through); checked, solid `--blue` with a white Lucide `Check` at 10px,
 stroke 3; disabled, the same mark at 50% opacity. It is the geometry the
 Matches filter menu's checklist rows drew by hand, lifted into a primitive.
 **Never the browser's native box** — `accent-[var(--blue)]` on an

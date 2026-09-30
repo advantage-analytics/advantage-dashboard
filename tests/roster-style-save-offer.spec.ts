@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  canSaveRosterStyle,
   firstNameOf,
   styleSaveChecked,
   styleSaveChoice,
@@ -83,4 +84,20 @@ test("the roster menus offer the wizard's vocabulary, then Not set", () => {
     "one-handed",
     "__not-set",
   ]);
+});
+
+test("only staff, or the player on their own profile, may save a style", () => {
+  expect(
+    canSaveRosterStyle({ staff: true, rowUserId: null, viewerId: "coach" }),
+  ).toBe(true);
+  expect(
+    canSaveRosterStyle({ staff: false, rowUserId: "me", viewerId: "me" }),
+  ).toBe(true);
+  // A player picking a teammate, claimed or not, gets the prefill only.
+  expect(
+    canSaveRosterStyle({ staff: false, rowUserId: "them", viewerId: "me" }),
+  ).toBe(false);
+  expect(
+    canSaveRosterStyle({ staff: false, rowUserId: null, viewerId: "me" }),
+  ).toBe(false);
 });
