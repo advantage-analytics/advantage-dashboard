@@ -757,8 +757,6 @@ function sentenceCase(text: string): string {
  */
 function CancelUploadControl({ cancel }: { cancel: () => void }) {
   const [open, setOpen] = useState(false);
-  // Closes itself when the upload ends: `cancel` goes undefined, the parent
-  // stops rendering this control, and the dialog unmounts with it.
   return (
     <>
       <button

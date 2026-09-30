@@ -7,7 +7,7 @@ import {
   ANALYSIS_LABEL,
   isInFlight,
   isSubmitStalled,
-  isWorking,
+  inFlightMark,
   matchListGroup,
   matchListStatusLabel,
   type MatchAnalysis,
@@ -76,7 +76,7 @@ export function RowLifecycle({
     // Both analysis engines read as Analyzing; waiting states keep their own
     // words and a still mark, so queued or stored video never implies work.
     return (
-      <AnalysisStatusLine mark={isWorking(status) ? "now" : "wait"}>
+      <AnalysisStatusLine mark={inFlightMark(status)}>
         {status === "processing" || status === "deriving"
           ? "Analyzing"
           : ANALYSIS_LABEL[status]}

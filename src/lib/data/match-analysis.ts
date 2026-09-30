@@ -853,6 +853,11 @@ export function isWorking(status: AnalysisStatus): boolean {
   return IN_FLIGHT.has(status) && !IDLE.has(status);
 }
 
+/** The step mark for an in-flight row: a spinner only while work runs, else a waiting dot. */
+export function inFlightMark(status: AnalysisStatus): "now" | "wait" {
+  return isWorking(status) ? "now" : "wait";
+}
+
 /**
  * Is a database update actually coming for this row?
  *

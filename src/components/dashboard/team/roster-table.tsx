@@ -9,7 +9,7 @@ import { BENCH, sequenceFrom } from "@/lib/data/lineup-draft";
 import { AnalysisStatusLine } from "@/components/dashboard/shared/analysis-status-line";
 import {
   ANALYSIS_LABEL,
-  isWorking,
+  inFlightMark,
   type AnalysisStatus,
 } from "@/lib/data/match-analysis";
 import { ResultMark } from "@/components/dashboard/result-mark";
@@ -206,7 +206,7 @@ function RosterAnalysisStatus({
         : ANALYSIS_LABEL[status];
   return (
     <AnalysisStatusLine
-      mark={isWorking(status) ? "now" : "wait"}
+      mark={inFlightMark(status)}
       className="tabular ml-auto shrink-0"
     >
       {word}
