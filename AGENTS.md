@@ -236,7 +236,9 @@ this branch's queue, then stop.`
 Copy `.env.example` to `.env.local` — it documents every variable, which are optional,
 and what leaving one unset actually does. Only the three Supabase keys plus
 `NEXT_PUBLIC_SITE_URL` are needed to boot. In an agent worktree,
-`.claude/hooks/bootstrap-worktree.sh` symlinks it from the main checkout.
+`.worktreeinclude` has Claude Code copy it in when the worktree is created, and
+`.claude/hooks/bootstrap-worktree.sh` symlinks it from the main checkout when
+that did not happen.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
