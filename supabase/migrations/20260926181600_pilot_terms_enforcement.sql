@@ -15,7 +15,10 @@
 -- success stamp the new program's id onto that acceptance.
 --
 -- Depends on `20260926181544_pilot_terms_acceptances.sql` (the table and the
--- version function), which IS applied.
+-- version function), which IS applied, and on
+-- `20261001183845_claim_completion_service_role_only.sql`, which IS applied
+-- and changed `complete_program_claim` to a service-role-only signature —
+-- the section for it below was rewritten on 2026-10-01 to match.
 --
 -- SQLSTATE
 -- --------
@@ -222,15 +225,26 @@ end;
 $$;
 
 -- ── complete_program_claim ──────────────────────────────────────────────────
+--
+-- The SERVICE-ROLE overload from 20261001183845_claim_completion_service_role_only.sql:
+-- the claimant arrives as `p_claimant_user_id`, never `auth.uid()`, so the
+-- acceptance is checked against that parameter. The body is that migration's
+-- plus the gate and the stamp.
+--
+-- This section used to re-create the 7-argument overload and grant it to
+-- `authenticated`. It must never do that again: that overload let any
+-- signed-in user write their own review evidence, and it is dropped by
+-- 20261001190000_drop_legacy_complete_program_claim.sql.
 
 create or replace function public.complete_program_claim(
-  p_program_key text,
-  p_claimed_email text,
-  p_claimant_name text,
-  p_claimant_role text,
-  p_domain_matched boolean,
+  p_claimant_user_id    uuid,
+  p_program_key         text,
+  p_claimed_email       text,
+  p_claimant_name       text,
+  p_claimant_role       text,
+  p_domain_matched      boolean,
   p_skips_manual_review boolean,
-  p_match_reason text
+  p_match_reason        text
 )
 returns jsonb
 language plpgsql
@@ -238,8 +252,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_uid     uuid := (select auth.uid());
-  v_email   text := (select auth.email());
+  v_uid     uuid := p_claimant_user_id;
   v_program public.programs%rowtype;
   v_claim   public.program_claims%rowtype;
   v_status  text;
@@ -250,8 +263,13 @@ begin
     raise exception 'not authenticated' using errcode = '28000';
   end if;
 
-  if v_email is null or lower(v_email) <> lower(p_claimed_email) then
-    raise exception 'claimed address does not match the verified session'
+  if p_claimed_email is null or not exists (
+    select 1
+      from auth.users u
+     where u.id = v_uid
+       and lower(u.email) = lower(p_claimed_email)
+  ) then
+    raise exception 'claimed address does not match the claimant account'
       using errcode = '42501';
   end if;
 
@@ -306,7 +324,7 @@ begin
     status, objection_window_ends_at
   ) values (
     v_program.id, v_uid, lower(p_claimed_email), p_claimant_name, p_claimant_role,
-    p_domain_matched, p_skips_manual_review, v_contact,
+    coalesce(p_domain_matched, false), coalesce(p_skips_manual_review, false), v_contact,
     case
       when v_contact then 'recorded staff contact for this program - approved automatically'
       else p_match_reason
@@ -494,11 +512,11 @@ grant execute on function public.create_custom_program(text, text)
   to authenticated, service_role;
 
 revoke execute on function public.complete_program_claim(
-  text, text, text, text, boolean, boolean, text
-) from public, anon;
+  uuid, text, text, text, text, boolean, boolean, text
+) from public, anon, authenticated;
 grant execute on function public.complete_program_claim(
-  text, text, text, text, boolean, boolean, text
-) to authenticated, service_role;
+  uuid, text, text, text, text, boolean, boolean, text
+) to service_role;
 
 revoke execute on function public.complete_program_claim_with_token(
   uuid, text, boolean, boolean, text
