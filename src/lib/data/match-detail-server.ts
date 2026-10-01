@@ -190,7 +190,7 @@ export function transformDbMatchToMatch(
     date: formatDisplayDate(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
-    verificationStatus: row.verified ? "Verified Result" : undefined,
+    verificationStatus: row.verified ? "Verified result" : undefined,
     sourceProvider: row.source_provider ?? undefined,
     round: row.round ?? undefined,
     matchContext: matchContextCaption(row.result),

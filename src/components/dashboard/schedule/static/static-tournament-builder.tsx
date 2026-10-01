@@ -605,7 +605,7 @@ export function TournamentNameStep({
 }) {
   return (
     <label className="block">
-      <span className="eyebrow">Tournament · name</span>
+      <span className="eyebrow">Tournament · Name</span>
       {/* The 2px rule turns blue on focus and is the focus mark, so the input
           opts out of the ring inside it (`styles/design-system/focus.css`).
           The placeholder is the name `3c` drew filled in: an unnamed

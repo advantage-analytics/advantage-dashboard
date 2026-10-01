@@ -288,7 +288,7 @@ export function SettingsProfilePending() {
                 <Text className="text-[11px] font-medium">Upload a photo</Text>
               )}
               <Text className="text-[11px]">
-                PNG, JPG or WebP · cropped to a circle
+                PNG, JPG or WebP · Cropped to a circle
               </Text>
             </div>
           </div>
@@ -605,7 +605,7 @@ export function SettingsUsagePending() {
         </SettingsCardTitle>
         <Box className="h-1.5 w-full rounded-[3px]" />
         <Text className="text-[11px]">
-          Personal uploads only · resets Oct 1 · free through Dec 31, 2026
+          Personal uploads only · Resets Oct 1 · Free through Dec 31, 2026
         </Text>
       </SettingsCard>
 
@@ -631,7 +631,7 @@ export function SettingsUsagePending() {
                     {team.name}
                   </Text>
                   <Text className="truncate text-[11px] font-normal">
-                    {squad ? `${squad} · shared hours` : "Shared hours"}
+                    {squad ? `${squad} · Shared hours` : "Shared hours"}
                   </Text>
                 </span>
               </span>
@@ -689,8 +689,8 @@ function MatchVideosPendingCard() {
             <Box className="size-8 rounded-[8px]" />
             <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
               {squad
-                ? `${active.name} · ${squad} · match videos`
-                : `${active.name} · match videos`}
+                ? `${active.name} · ${squad} · Match videos`
+                : `${active.name} · Match videos`}
             </span>
           </span>
         ) : (
@@ -827,7 +827,7 @@ export function SettingsTeamDetailPending() {
               <div className="mt-[7px] flex items-center gap-3">
                 <Text className="text-[11px] font-medium">Upload a crest</Text>
                 <Text className="text-[11px]">
-                  PNG, JPG, WebP or SVG · under 512 KB
+                  PNG, JPG, WebP or SVG · Under 512 KB
                 </Text>
               </div>
             </div>

@@ -226,10 +226,10 @@ test("No player for the opponent records their forfeit, and a name takes it back
     noPlayer: false,
     ourIds: ["riley-chen"],
   });
-  await expect(page.getByText("No player · we win by forfeit")).toBeVisible();
+  await expect(page.getByText("No player · We win by forfeit")).toBeVisible();
 
   // Typing a name and pressing Enter names them — it never picks No player.
-  await page.getByText("No player · we win by forfeit").click();
+  await page.getByText("No player · We win by forfeit").click();
   await page.getByPlaceholder("Name", { exact: true }).last().fill("Sam Hill");
   await page.keyboard.press("Enter");
   lines = JSON.parse((await page.getByLabel("Lineup state").textContent())!);
@@ -541,7 +541,7 @@ test("a doubles-only opponent is added in place, and No pair is their forfeit", 
 
   await trigger.click();
   await page.getByRole("menuitemradio", { name: /^No pair/ }).click();
-  await expect(trigger).toContainText("No pair · we win by forfeit");
+  await expect(trigger).toContainText("No pair · We win by forfeit");
   expect(await lineState(page, "D1")).toMatchObject({
     theirLabels: [],
     theirNoPlayer: true,

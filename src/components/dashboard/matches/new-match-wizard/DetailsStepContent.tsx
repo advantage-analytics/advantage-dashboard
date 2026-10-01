@@ -189,7 +189,7 @@ type Backhand = "one-handed" | "two-handed";
 
 const COURT_OPTIONS: readonly { value: string; label: string }[] = [
   { value: "Outdoor Hard Court", label: "Hard" },
-  { value: "Indoor Hard Court", label: "Hard · indoor" },
+  { value: "Indoor Hard Court", label: "Hard · Indoor" },
   { value: "Clay Court", label: "Clay" },
   { value: "Grass Court", label: "Grass" },
 ];
@@ -769,7 +769,7 @@ function ScheduleFooter({
     <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-[var(--ink-500)]">
       {canAttach ? (
         <>
-          <span>One-off · not on the schedule</span>
+          <span>One-off · Not on the schedule</span>
           <span className="text-[var(--ink-300)]">·</span>
           <button
             type="button"
@@ -921,7 +921,7 @@ function provenanceFor(
       return ctx.school ? `from ${ctx.school}'s roster` : "from their roster";
     case "new":
       return ctx.saved && ctx.school
-        ? `new · saved to ${ctx.school}`
+        ? `New · Saved to ${ctx.school}`
         : ctx.isSelf
           ? null
           : "only you see this name";
@@ -1350,7 +1350,7 @@ function DetailsStepContentImpl({
   const opponentProvenance =
     formData.opponentSource === "new"
       ? savedSchool
-        ? `new · saved to ${savedSchool}`
+        ? `New · Saved to ${savedSchool}`
         : workspaceKind === "personal"
           ? "only you see this name"
           : "new"
@@ -1366,7 +1366,7 @@ function DetailsStepContentImpl({
   // ---- Context
 
   const contextMicro = line
-    ? "from the lineup · change any of them here"
+    ? "from the lineup · Change any of them here"
     : isProcessingProvider
       ? workspaceKind === "team"
         ? "type what the schedule can't fill"
@@ -1747,7 +1747,7 @@ function DetailsStepContentImpl({
                             </span>
                             <span className="text-[11px] text-[var(--ink-500)]">
                               {p.matches}{" "}
-                              {p.matches === 1 ? "match" : "matches"} · last{" "}
+                              {p.matches === 1 ? "match" : "matches"} · Last{" "}
                               {formatMonthDay(p.lastDate)}
                             </span>
                           </button>

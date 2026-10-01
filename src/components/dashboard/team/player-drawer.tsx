@@ -746,7 +746,7 @@ export function PlayerDrawer({
               <div className="flex items-baseline justify-between">
                 <span className="text-[12px] text-[var(--ink-600)]">
                   {active.label}
-                  {points.length > 0 && ` · last ${points.length}`}
+                  {points.length > 0 && ` · Last ${points.length}`}
                 </span>
                 <span className="inline-flex items-baseline gap-1.5">
                   <span className="tabular text-[16px] text-[var(--ink-900)]">

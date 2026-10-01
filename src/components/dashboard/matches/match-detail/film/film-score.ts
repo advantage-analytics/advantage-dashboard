@@ -224,9 +224,9 @@ export function footLine(
 ): string {
   const named = pointName?.trim();
   if (!named) {
-    return `Set ${state.set} · game ${state.game} · ${state.serverName} serving`;
+    return `Set ${state.set} · Game ${state.game} · ${state.serverName} serving`;
   }
-  return saved ? `${named} · saved` : named;
+  return saved ? `${named} · Saved` : named;
 }
 
 /**

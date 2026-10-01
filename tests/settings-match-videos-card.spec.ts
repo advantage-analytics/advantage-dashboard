@@ -170,7 +170,7 @@ test("team workspace: crest title, used / cap, rows by count, footnote", () => {
   const html = render(TEAM, teamRows(), 25);
   const t = text(html);
   expect(html).toContain("data-workspace-mark");
-  expect(t).toContain("Cardinal · Men's · match videos");
+  expect(t).toContain("Cardinal · Men's · Match videos");
   expect(t).toContain("6 / 25");
 
   const hale = t.indexOf("Coach Hale · 3 videos · 9.0 GB");

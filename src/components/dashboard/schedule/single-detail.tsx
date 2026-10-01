@@ -70,7 +70,7 @@ export function SingleDetail({
             {match.matchType
               ? ` · ${match.matchType.toLowerCase()}`
               : ""} · {formatEventDay(match.date.slice(0, 10))}
-            {won !== null ? " · final" : ""}
+            {won !== null ? " · Final" : ""}
           </span>
 
           {/* The page's h1 — the matchup, including the d./f./vs verb, because

@@ -505,10 +505,10 @@ test("the strip states the cut in words — the shared filters, then the statist
   // The cut's shared half reads as shared phrases; the label names only the
   // extras still in force.
   expect(filmListSentence({ ...aces, savedOnly: false }, names)).toBe(
-    "Reid serving · winners · Reid, from Statistics",
+    "Reid serving · Winners · Reid, from Statistics",
   );
   expect(filmListSentence({ ...aces, savedOnly: true }, names)).toBe(
-    "Reid serving · winners · Reid, from Statistics · saved",
+    "Reid serving · Winners · Reid, from Statistics · Saved",
   );
   // Exactly where the landing put the viewer: the way back out.
   expect(filmStripAction({ ...aces, savedOnly: false })).toBe(

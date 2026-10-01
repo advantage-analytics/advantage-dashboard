@@ -758,7 +758,7 @@ export function OpponentPopup({
             )}
             style={{ color: noPlayer ? "var(--ink-500)" : "var(--ink-900)" }}
           >
-            {noPlayer ? "No player · we win by forfeit" : value}
+            {noPlayer ? "No player · We win by forfeit" : value}
           </span>
         ) : (
           <span className="truncate text-[12px] text-[var(--ink-400)]">

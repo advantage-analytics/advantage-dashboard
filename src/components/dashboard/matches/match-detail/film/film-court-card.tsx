@@ -177,7 +177,7 @@ function readoutLines(
   const speed = cells.mph === UNMEASURED ? UNMEASURED : `${cells.mph} mph`;
   return {
     title: `${shotLabel(mark.shot)} · ${speed}`,
-    who: `${cells.player} · shot ${mark.order} of ${mark.rallyShots}`,
+    who: `${cells.player} · Shot ${mark.order} of ${mark.rallyShots}`,
     where: `${cells.placement} · ${cells.result.toLowerCase()}`,
   };
 }

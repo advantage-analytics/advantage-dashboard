@@ -35,7 +35,7 @@ const STAT_CELLS: Array<{
   format: (m: MatchRow) => string;
 }> = [
   {
-    label: "1st serve",
+    label: "1st Serve",
     width: "64px",
     format: (m) => (m.firstServePct != null ? `${m.firstServePct}%` : "—"),
   },

@@ -310,7 +310,7 @@ export function PerformanceTrackerChart() {
   // derived match does.
   const monoLine = readoutPoint
     ? readoutPoint.videoTime !== null
-      ? `${formatClock(readoutPoint.videoTime)} · point ${readoutPoint.pointNumber}`
+      ? `${formatClock(readoutPoint.videoTime)} · Point ${readoutPoint.pointNumber}`
       : `point ${readoutPoint.pointNumber}`
     : "";
 

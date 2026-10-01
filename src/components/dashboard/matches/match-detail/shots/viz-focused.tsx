@@ -68,13 +68,13 @@ import {
  */
 
 const LEGEND_CAPTION: Record<Cut, string> = {
-  serve: "Half court · landing point",
-  returnPlacement: "Far half · landing point",
-  rallyPlacement: "Far half · landing point",
-  returnContact: "Near half · contact point",
+  serve: "Half court · Landing point",
+  returnPlacement: "Far half · Landing point",
+  rallyPlacement: "Far half · Landing point",
+  returnContact: "Near half · Contact point",
   // rallyPosition renders through the returnContact frame — same caption,
   // since it's the same half.
-  rallyPosition: "Near half · contact point",
+  rallyPosition: "Near half · Contact point",
 };
 
 type MarkAnchor = {
@@ -649,7 +649,7 @@ export function VizFocused({
                   className="text-micro"
                   style={{ color: "var(--ink-600)" }}
                 >
-                  Count · points won
+                  Count · Points won
                 </span>
               )}
               {legendItemsFor(cut, state.chart).map((item) =>

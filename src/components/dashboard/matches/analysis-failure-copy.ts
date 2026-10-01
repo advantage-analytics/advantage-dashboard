@@ -84,7 +84,7 @@ export const TRAY_REASON: Record<
 } = {
   upload_again: "Upload didn't finish",
   fix_recording: "Recording didn't meet the requirements",
-  retry: "Analysis stopped · retry available",
+  retry: "Analysis stopped · Retry available",
   rederive: "Stats need rebuilding",
   wait_or_ask: {
     allowance: "Not enough analysis time left this month",

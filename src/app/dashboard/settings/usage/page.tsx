@@ -89,8 +89,8 @@ export default async function UsagePage() {
         </div>
 
         <span className="text-[11px] text-[var(--ink-500)]">
-          Personal uploads only · resets{" "}
-          {formatResetDate(personal.billingMonth)} · free through Dec 31, 2026
+          Personal uploads only · Resets{" "}
+          {formatResetDate(personal.billingMonth)} · Free through Dec 31, 2026
         </span>
       </SettingsCard>
 

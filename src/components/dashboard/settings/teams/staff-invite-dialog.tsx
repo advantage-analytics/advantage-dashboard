@@ -187,7 +187,7 @@ export function StaffInviteDialog({
                   Staff
                 </span>
                 <span className="text-[11px] text-[var(--ink-400)]">
-                  only the owner invites coaches
+                  Only the owner invites coaches
                 </span>
               </div>
             </div>

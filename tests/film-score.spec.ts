@@ -116,12 +116,12 @@ test.describe("footLine", () => {
   test("the point's name, gaining · saved when it is bookmarked", () => {
     expect(footLine("Forehand Winner", false, state)).toBe("Forehand Winner");
     expect(footLine("Forehand Winner", true, state)).toBe(
-      "Forehand Winner · saved",
+      "Forehand Winner · Saved",
     );
   });
 
   test("falls back to the game state, never to an empty string", () => {
-    const fallback = "Set 2 · game 7 · Reid serving";
+    const fallback = "Set 2 · Game 7 · Reid serving";
     expect(footLine(null, false, state)).toBe(fallback);
     expect(footLine("   ", false, state)).toBe(fallback);
     // Saved is about a point; with no point there is nothing to append to.

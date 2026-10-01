@@ -24,5 +24,5 @@ export const ROSTER_COLUMNS: readonly (
   { spacer: true },
   { label: "Record", col: COL.record },
   { label: "Form", col: COL.form },
-  { label: "Last match", col: COL.last },
+  { label: "Last Match", col: COL.last },
 ];

@@ -99,7 +99,7 @@ export function FilmEmptyState({
           : `The statistics came from a SwingVision export. Your team has used all ${quota?.cap} match videos. Remove one, usually from a match nobody watches any more, to add the film here.`;
 
   const micro = !quota
-    ? `MP4 up to ${MAX_VIDEO_GB} GB · we index the points, you keep the file`
+    ? `MP4 up to ${MAX_VIDEO_GB} GB · We index the points, you keep the file`
     : atCap
       ? matchVideoCountLabel(quota)
       : `MP4 up to ${MAX_VIDEO_GB} GB · ${matchVideoCountLabel(quota)}`;

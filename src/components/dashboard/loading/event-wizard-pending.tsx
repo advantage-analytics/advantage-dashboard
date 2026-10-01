@@ -267,7 +267,7 @@ export function NewTournamentPending() {
       lede={TOURNAMENT_COPY[1].lede}
       footerStart={BACK_AND_CANCEL}
     >
-      <span className="eyebrow">Tournament · name</span>
+      <span className="eyebrow">Tournament · Name</span>
       <span className="mt-1 flex h-[46px] items-center border-b-2 border-[var(--border-medium)] pt-1.5 pb-2">
         <PendingBar className="h-6 w-72" />
       </span>
