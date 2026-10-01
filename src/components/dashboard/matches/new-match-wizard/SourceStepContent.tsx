@@ -446,7 +446,7 @@ function SourceStepContentImpl({
   const videoRefusal =
     currentKind === "processing" ? explainVideoRefusal(active) : null;
   const teamHours =
-    isTeam && currentKind === "processing" ? " · team hours" : "";
+    isTeam && currentKind === "processing" ? " · Team hours" : "";
 
   const sourceNote =
     currentKind === "import" ? (

@@ -412,13 +412,12 @@ const CHECKS = [
   },
   {
     key: "middotLower",
-    // 19 at the seed. Two are a recorded decision to KEEP lower case — "Resets
-    // Oct 1 · in 18 days" (settings/teams/program-hours-summary.tsx and its
-    // skeleton in loading/settings-pending.tsx), where the second segment is
-    // the tail of the first and a capital reads as a new claim. The other 17
-    // were found by this check after the 2026-09-30 sweep and have not been
-    // reviewed; lower the seed as each is capitalised or ruled a keeper.
-    seed: 19,
+    // Both are a recorded decision to KEEP lower case — "Resets Oct 1 · in 18
+    // days" (settings/teams/program-hours-summary.tsx and its skeleton in
+    // loading/settings-pending.tsx), where the second segment is the tail of
+    // the first and a capital reads as a new claim. 19 → 2 on 2026-09-30, when
+    // the 17 this check found after the sweep were capitalised.
+    seed: 2,
     label: "lower-case middot segment",
     fix: "capitalise the first letter after the middot (sentence case per segment)",
   },

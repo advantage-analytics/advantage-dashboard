@@ -549,7 +549,7 @@ export function ScoreBlock({
         {fromLine && (
           <>
             {" "}
-            <span className="text-[var(--ink-300)]">·</span> format from the
+            <span className="text-[var(--ink-300)]">·</span> Format from the
             event
           </>
         )}

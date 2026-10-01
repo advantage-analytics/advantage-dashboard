@@ -859,7 +859,7 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
     drawn(rows, "lineup-rows.tsx", "Not in the lineup");
     drawn(rows, "lineup-rows.tsx", "Choose pair");
     drawn(rows, "lineup-rows.tsx", "Choose partner");
-    drawn(rows, "lineup-rows.tsx", " · pick two");
+    drawn(rows, "lineup-rows.tsx", " · Pick two");
     // RETIRED ' named' — the heading counts lines set, not opponents named.
     drawn(picker, "lineup-name-picker.tsx", "No player");
     drawn(picker, "lineup-name-picker.tsx", "Counts as a forfeit");

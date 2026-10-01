@@ -155,7 +155,7 @@ export function FiltersPanel({
           data-film-cut=""
           className="text-micro shrink-0 border-b border-[var(--border-hairline)] px-5 py-2.5"
         >
-          {`${filmCut} · from Statistics — the strip's Clear removes it`}
+          {`${filmCut} · From Statistics — the strip's Clear removes it`}
         </p>
       )}
 

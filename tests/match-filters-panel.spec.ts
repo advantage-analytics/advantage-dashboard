@@ -348,7 +348,7 @@ test.describe("FiltersPanel film cut line", () => {
     const line = html.match(/<p[^>]*data-film-cut=""[^>]*>([^<]*)<\/p>/);
     expect(line).not.toBeNull();
     expect(text(line![1])).toBe(
-      "Short rallies · 1–4 shots · from Statistics — the strip's Clear removes it",
+      "Short rallies · 1–4 shots · From Statistics — the strip's Clear removes it",
     );
     // Read-only: nothing in the line to press.
     expect(line![0]).not.toContain("<button");

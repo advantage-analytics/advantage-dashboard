@@ -473,7 +473,7 @@ function RosterTypeahead({
           className="text-micro pointer-events-none absolute top-[calc(100%-4px)] left-0 block max-w-full truncate"
           style={{ color: "var(--ink-500)", lineHeight: 1 }}
         >
-          already on {clashWith} · choose another player
+          already on {clashWith} · Choose another player
         </span>
       ) : !open && unmatched.length > 0 ? (
         <span

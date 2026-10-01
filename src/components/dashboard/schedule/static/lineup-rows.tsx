@@ -565,7 +565,7 @@ function PairPicker({
       }
     >
       <div className="px-2.5 pt-1.5 pb-1 text-[11px] text-[var(--ink-600)]">
-        Pair for {line.slot} · pick two
+        Pair for {line.slot} · Pick two
       </div>
       <div className="flex max-h-[296px] flex-col overflow-y-auto">
         {people.map((player) => {
@@ -1117,7 +1117,7 @@ export function OpponentPairPicker({
       }
     >
       <div className="px-2.5 pt-1.5 pb-1 text-[11px] text-[var(--ink-600)]">
-        Pair for {line.slot} · pick two
+        Pair for {line.slot} · Pick two
       </div>
       <div className="flex max-h-[296px] flex-col overflow-y-auto">
         {choices.map((name) => {

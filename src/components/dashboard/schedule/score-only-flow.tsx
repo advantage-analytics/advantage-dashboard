@@ -1249,7 +1249,7 @@ function EndingLine({
         {winner && typed ? (
           <>
             {" "}
-            <span className="text-[var(--ink-300)]">·</span> the score stays as
+            <span className="text-[var(--ink-300)]">·</span> The score stays as
             entered, marked {endingMark(state.ending)}
           </>
         ) : winner && !retired ? (

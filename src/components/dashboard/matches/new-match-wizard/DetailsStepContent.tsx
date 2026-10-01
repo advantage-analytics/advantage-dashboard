@@ -1366,7 +1366,7 @@ function DetailsStepContentImpl({
   // ---- Context
 
   const contextMicro = line
-    ? "from the lineup · change any of them here"
+    ? "from the lineup · Change any of them here"
     : isProcessingProvider
       ? workspaceKind === "team"
         ? "type what the schedule can't fill"
@@ -1747,7 +1747,7 @@ function DetailsStepContentImpl({
                             </span>
                             <span className="text-[11px] text-[var(--ink-500)]">
                               {p.matches}{" "}
-                              {p.matches === 1 ? "match" : "matches"} · last{" "}
+                              {p.matches === 1 ? "match" : "matches"} · Last{" "}
                               {formatMonthDay(p.lastDate)}
                             </span>
                           </button>

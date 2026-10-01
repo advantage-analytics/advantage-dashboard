@@ -234,7 +234,7 @@ function Tally({ tally, lines }: { tally: DualTally; lines: DualSheetLine[] }) {
         </div>
       ) : (
         <span className="text-micro tabular">
-          {lines.length} {lines.length === 1 ? "line" : "lines"} · not started
+          {lines.length} {lines.length === 1 ? "line" : "lines"} · Not started
         </span>
       )}
     </div>

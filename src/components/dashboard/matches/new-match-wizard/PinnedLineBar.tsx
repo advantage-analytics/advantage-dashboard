@@ -157,7 +157,7 @@ export function PinnedLineBar({
         >
           <span className={floatMenuLabelCls}>
             {preset.eventName}
-            {preset.eventKind === "dual" ? " dual" : ""} · lineup
+            {preset.eventKind === "dual" ? " dual" : ""} · Lineup
           </span>
           {lineup.map((line) => {
             // By entry, not by slot: a tournament entry's slot is a position
