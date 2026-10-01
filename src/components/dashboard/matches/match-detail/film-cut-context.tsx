@@ -31,15 +31,15 @@ import {
  * cannot say without changing a count (`FilmCutExtras`). Landing splits it
  * (`landFilmCut`, `film/film-list-filters.ts`): the `MatchFilters` half is
  * WRITTEN into the shared filters (`MatchFiltersProvider`, mirrored to
- * `?f=`), key by key, so the filters drawer's pills show it pressed — the
- * Statistics tab is always the whole match, so nothing there moves. The
- * extras are the `FilmCutRemainder`: never pills (Result › Ending "error"
- * would widen "Unforced errors", "winner" fold the aces into "Winners"),
- * held beside the shared filters above the view switch and named in the
+ * `?f=`), REPLACING whatever was applied there, so the filters drawer's pills
+ * show it pressed — the Statistics tab is always the whole match, so nothing
+ * there moves. The extras are the `FilmCutRemainder`: never pills (Result ›
+ * Ending "error" would widen "Unforced errors", "winner" fold the aces into
+ * "Winners"), held beside the shared filters above the view switch and named in the
  * Video tab's filter strip ("…, from Statistics"). A card counts its "Watch
  * all N" with `applyFilmCut` over the WHOLE match (`applyFilmCut(points,
- * points, …)`); with no other Video filter applied, the points a click opens
- * are exactly the points the card counted.
+ * points, …)`); a landing resets the Video filters, so the points a click
+ * opens are exactly the points the card counted.
  *
  * Its own context, like `film-head-context.tsx`, for the same two reasons: the
  * film subtree must not depend on `useMatchReport()` (`film-tab.tsx`'s header
