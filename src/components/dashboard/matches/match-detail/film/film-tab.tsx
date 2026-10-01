@@ -443,9 +443,10 @@ function FilmRoom({
    * filters it sets have been applied.
    *
    * 1. Take the pending cut and land it (`landFilmCut`): its `MatchFilters`
-   *    keys REPLACE those keys of the shared filters, written through
-   *    `setShared` (so the drawer's pills show them pressed and `?f=`
-   *    carries them); its extras and label become the provider's remainder,
+   *    half REPLACES the shared filters outright — an earlier cut or drawer
+   *    pick never stacks under it — written through `setShared` (so the
+   *    drawer's pills show it pressed and `?f=` carries it); its extras and
+   *    label become the provider's remainder,
    *    replacing any earlier one, with `landed` = the shared filters just
    *    written; the saved toggle goes off, since the card counted every
    *    point. The same values are remembered as the `landing`, and the
