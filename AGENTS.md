@@ -223,6 +223,13 @@ this branch's queue, then stop.`
   user asks). A "Canceled" Vercel check on a PR is expected, not a failure.
 - Never hand-format `supabase/migrations/` or `src/styles/design-system/colors.css`.
   `.prettierignore` documents every exclusion and why.
+- **New database functions are not executable signed out by default** (since
+  `20261001184305_function_default_privileges_no_anon`). A function a migration creates
+  in `public` goes to `authenticated` and `service_role` only; one meant to be public
+  must `grant execute on function … to anon` in its own migration. Outside `public` it
+  gets no grant beyond its owner, so add one for any role that calls it directly. A
+  `drop` + `create` resets grants to this default — re-grant `anon` where it was
+  deliberate (`search_programs`, `program_public_status`).
 - No global state library — Context + server-side fetching only.
 - API routes answer refusals as `{ error, code?, detail? }` through `errorResponse()` /
   `jsonResponse()` in `src/lib/services/match-video/http.ts`: `error` is the sentence
