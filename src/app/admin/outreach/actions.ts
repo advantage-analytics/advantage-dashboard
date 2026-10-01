@@ -12,7 +12,9 @@ import {
   listSuppressedAddresses,
 } from "@/lib/services/email/resend-admin";
 import {
+  checkOutreachTemplate,
   OutreachConfigError,
+  outreachTemplateSource,
   renderOutreachEmail,
 } from "@/lib/services/email/templates/outreach";
 import { recipientsFromCsv } from "@/lib/services/outreach/csv";
@@ -22,11 +24,14 @@ import {
   loadRecipientById,
   loadRecipients,
   loadSends,
+  loadTemplate,
 } from "@/lib/services/outreach/outreach-server";
 import {
   IMPORTABLE_LISTS,
   OUTREACH_CAMPAIGN,
   outreachEmail,
+  type OutreachCc,
+  type OutreachTemplate,
   type OutreachTrancheInput,
   type OutreachTrancheResult,
 } from "@/lib/services/outreach/types";
@@ -52,6 +57,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const POSTAL = () => process.env.OUTREACH_POSTAL_ADDRESS?.trim() || null;
 const COLD = new Set([6, 7, 8]);
+const PAGE = "/admin/outreach";
 
 const NOT_ADMIN = "Only admins can do this.";
 
@@ -132,7 +138,7 @@ export async function importOutreachCsv(
     }
   }
 
-  revalidatePath("/admin/outreach");
+  revalidatePath(PAGE);
   const name = outreachEmail(listNo)?.name ?? `email ${listNo}`;
   return {
     ok: true,
@@ -143,22 +149,31 @@ export async function importOutreachCsv(
 
 // ── Preview ───────────────────────────────────────────────────────────────
 
+export type OutreachPreview =
+  | { ok: true; subject: string; html: string; text: string }
+  | { ok: false; error: string };
+
+/**
+ * One recipient's email. With `draft`, renders the editor's unsaved subject
+ * and HTML instead of what is saved, so an edit can be seen before it is kept.
+ */
 export async function previewOutreach(
   recipientId: string,
   emailNo: number,
-): Promise<
-  | { ok: true; subject: string; html: string; text: string }
-  | { ok: false; error: string }
-> {
+  draft?: { subject: string; html: string } | null,
+): Promise<OutreachPreview> {
   if (!(await requireAdmin())) return { ok: false, error: NOT_ADMIN };
   const recipient = await loadRecipientById(recipientId);
   if (!recipient)
     return { ok: false, error: "That recipient is no longer in the list." };
+  const template: OutreachTemplate | null = draft
+    ? { emailNo, ...draft, updatedAt: "" }
+    : await loadTemplate(emailNo);
   const { subject, message } = renderOutreachEmail(
     emailNo,
     recipient,
     POSTAL(),
-    { preview: true },
+    { preview: true, template },
   );
   return { ok: true, subject, html: message.html, text: message.text };
 }
@@ -186,7 +201,7 @@ export async function sendOutreachTest(
     emailNo,
     recipient,
     POSTAL(),
-    { preview: true },
+    { preview: true, template: await loadTemplate(emailNo) },
   );
   const result = await sendEmail({
     ...message,
@@ -258,7 +273,10 @@ export async function sendOutreachTranche(
   const def = outreachEmail(input.emailNo);
   if (!def) return { ok: false, message: "Choose an email.", ...empty };
 
-  const limit = Math.floor(input.limit);
+  const picked = input.recipientIds?.length
+    ? new Set(input.recipientIds)
+    : null;
+  const limit = picked ? picked.size : Math.floor(input.limit);
   if (!(limit >= 1 && limit <= OUTREACH_TRANCHE_MAX)) {
     return {
       ok: false,
@@ -297,21 +315,29 @@ export async function sendOutreachTranche(
     };
   }
 
-  const [recipients, sends, claimed] = await Promise.all([
+  const [recipients, sends, claimed, template] = await Promise.all([
     loadRecipients(def.list),
     loadSends(),
     loadClaimedKeys(),
+    loadTemplate(input.emailNo),
   ]);
-  const rows = buildRows(input.emailNo, recipients, sends, claimed)
-    .filter((row) => row.state === "not_sent" || row.state === "failed")
-    .filter(
-      (row) => !input.division || row.recipient.division === input.division,
-    )
-    .filter(
-      (row) =>
-        !input.conference || row.recipient.conference === input.conference,
-    )
-    .slice(0, limit);
+  const waiting = buildRows(input.emailNo, recipients, sends, claimed).filter(
+    (row) => row.state === "not_sent" || row.state === "failed",
+  );
+  const rows = (
+    picked
+      ? waiting.filter((row) => picked.has(row.recipient.id))
+      : waiting
+          .filter(
+            (row) =>
+              !input.division || row.recipient.division === input.division,
+          )
+          .filter(
+            (row) =>
+              !input.conference ||
+              row.recipient.conference === input.conference,
+          )
+  ).slice(0, limit);
 
   if (rows.length === 0) {
     return {
@@ -327,7 +353,9 @@ export async function sendOutreachTranche(
   try {
     rendered = rows.map((row) => ({
       row,
-      ...renderOutreachEmail(input.emailNo, row.recipient, postal),
+      ...renderOutreachEmail(input.emailNo, row.recipient, postal, {
+        template,
+      }),
     }));
   } catch (error) {
     const message =
@@ -469,7 +497,7 @@ export async function sendOutreachTranche(
     (result.skipped.length ? `, ${result.skipped.length} skipped` : "") +
     ".";
 
-  revalidatePath("/admin/outreach");
+  revalidatePath(PAGE);
   return result;
 }
 
@@ -506,6 +534,224 @@ export async function cancelOutreachSend(
     .from("outreach_sends")
     .update({ status: "cancelled", updated_at: new Date().toISOString() })
     .eq("id", send.id);
-  revalidatePath("/admin/outreach");
+  revalidatePath(PAGE);
   return { ok: true, message: "Cancelled. It won't go out." };
+}
+
+// ── Edit the email ────────────────────────────────────────────────────────
+
+export interface OutreachTemplateDraft {
+  subject: string;
+  html: string;
+  /** True when this is the admin's own saved version, not the built-in. */
+  custom: boolean;
+  updatedAt: string | null;
+}
+
+/** What the editor opens with: the saved version, else the built-in one. */
+export async function loadOutreachTemplate(
+  emailNo: number,
+): Promise<
+  { ok: true; draft: OutreachTemplateDraft } | { ok: false; error: string }
+> {
+  if (!(await requireAdmin())) return { ok: false, error: NOT_ADMIN };
+  if (!outreachEmail(emailNo)) return { ok: false, error: "Choose an email." };
+  const saved = await loadTemplate(emailNo);
+  if (saved) {
+    return {
+      ok: true,
+      draft: {
+        subject: saved.subject,
+        html: saved.html,
+        custom: true,
+        updatedAt: saved.updatedAt,
+      },
+    };
+  }
+  return {
+    ok: true,
+    draft: {
+      ...outreachTemplateSource(emailNo),
+      custom: false,
+      updatedAt: null,
+    },
+  };
+}
+
+/** The built-in version, for "Start from original" without deleting yet. */
+export async function loadOriginalOutreachTemplate(
+  emailNo: number,
+): Promise<
+  { ok: true; subject: string; html: string } | { ok: false; error: string }
+> {
+  if (!(await requireAdmin())) return { ok: false, error: NOT_ADMIN };
+  if (!outreachEmail(emailNo)) return { ok: false, error: "Choose an email." };
+  return { ok: true, ...outreachTemplateSource(emailNo) };
+}
+
+export async function saveOutreachTemplate(
+  emailNo: number,
+  subject: string,
+  html: string,
+): Promise<{ ok: boolean; message: string; problems: string[] }> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, message: NOT_ADMIN, problems: [] };
+  if (!outreachEmail(emailNo))
+    return { ok: false, message: "Choose an email.", problems: [] };
+  const problems = checkOutreachTemplate(emailNo, subject, html);
+  if (problems.length) return { ok: false, message: "Not saved.", problems };
+
+  const { error } = await createAdminClient().from("outreach_templates").upsert(
+    {
+      campaign: OUTREACH_CAMPAIGN,
+      email_no: emailNo,
+      subject: subject.trim(),
+      html,
+      updated_by: admin.id,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "campaign,email_no" },
+  );
+  if (error) return { ok: false, message: error.message, problems: [] };
+  revalidatePath(PAGE);
+  return {
+    ok: true,
+    message: "Saved. Previews, tests and sends of this email use it now.",
+    problems: [],
+  };
+}
+
+export async function resetOutreachTemplate(
+  emailNo: number,
+): Promise<{ ok: boolean; message: string }> {
+  if (!(await requireAdmin())) return { ok: false, message: NOT_ADMIN };
+  const { error } = await createAdminClient()
+    .from("outreach_templates")
+    .delete()
+    .eq("campaign", OUTREACH_CAMPAIGN)
+    .eq("email_no", emailNo);
+  if (error) return { ok: false, message: error.message };
+  revalidatePath(PAGE);
+  return { ok: true, message: "Back to the original email." };
+}
+
+// ── Manage recipients ─────────────────────────────────────────────────────
+
+export interface OutreachRecipientEdit {
+  toName: string;
+  toLastName: string;
+  toEmail: string;
+  /** One person per line: "Name <address>" or just the address. */
+  cc: string;
+}
+
+function parseCc(text: string): { cc: OutreachCc[]; bad: string[] } {
+  const cc: OutreachCc[] = [];
+  const bad: string[] = [];
+  for (const line of text.split(/[\n;]+/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const angled = trimmed.match(/^(.*)<([^>]+)>$/);
+    const email = (angled ? angled[2] : trimmed).trim().toLowerCase();
+    const name = angled ? angled[1].trim().replace(/^"|"$/g, "") : "";
+    if (!EMAIL_RE.test(email)) bad.push(trimmed);
+    else if (!cc.some((person) => person.email === email))
+      cc.push({ name, email });
+  }
+  return { cc, bad };
+}
+
+export async function updateOutreachRecipient(
+  id: string,
+  edit: OutreachRecipientEdit,
+): Promise<{ ok: boolean; message: string }> {
+  if (!(await requireAdmin())) return { ok: false, message: NOT_ADMIN };
+  const toEmail = edit.toEmail.trim().toLowerCase();
+  if (!EMAIL_RE.test(toEmail))
+    return { ok: false, message: "The To address isn't a valid email." };
+  const { cc, bad } = parseCc(edit.cc);
+  if (bad.length)
+    return { ok: false, message: `Not a valid CC address: ${bad[0]}` };
+
+  const { error } = await createAdminClient()
+    .from("outreach_recipients")
+    .update({
+      to_name: edit.toName.trim() || null,
+      to_last_name: edit.toLastName.trim() || null,
+      to_email: toEmail,
+      cc: cc.filter((person) => person.email !== toEmail),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("campaign", OUTREACH_CAMPAIGN);
+  if (error) return { ok: false, message: error.message };
+  revalidatePath(PAGE);
+  return { ok: true, message: "Saved." };
+}
+
+/** Hold rows out of every send, or let them back in. */
+export async function setOutreachHeld(
+  ids: string[],
+  held: boolean,
+): Promise<{ ok: boolean; message: string }> {
+  if (!(await requireAdmin())) return { ok: false, message: NOT_ADMIN };
+  if (ids.length === 0) return { ok: false, message: "Select someone first." };
+  const db = createAdminClient();
+  for (let at = 0; at < ids.length; at += 300) {
+    const { error } = await db
+      .from("outreach_recipients")
+      .update({ held, updated_at: new Date().toISOString() })
+      .in("id", ids.slice(at, at + 300))
+      .eq("campaign", OUTREACH_CAMPAIGN);
+    if (error) return { ok: false, message: error.message };
+  }
+  revalidatePath(PAGE);
+  const n = ids.length.toLocaleString("en-US");
+  return {
+    ok: true,
+    message: held
+      ? `Held ${n}. They stay in the list and won't be sent to.`
+      : `Released ${n}. They can be sent to again.`,
+  };
+}
+
+/**
+ * Remove rows from the list. Only rows nothing real was ever sent to: a row
+ * with send history is the record of that email, so hold it instead.
+ */
+export async function removeOutreachRecipients(
+  ids: string[],
+): Promise<{ ok: boolean; message: string }> {
+  if (!(await requireAdmin())) return { ok: false, message: NOT_ADMIN };
+  if (ids.length === 0) return { ok: false, message: "Select someone first." };
+  const db = createAdminClient();
+  const withHistory = new Set<string>();
+  for (let at = 0; at < ids.length; at += 300) {
+    const { data, error } = await db
+      .from("outreach_sends")
+      .select("recipient_id")
+      .in("recipient_id", ids.slice(at, at + 300))
+      .neq("status", "test");
+    if (error) return { ok: false, message: error.message };
+    for (const row of data ?? []) withHistory.add(row.recipient_id as string);
+  }
+  const removable = ids.filter((id) => !withHistory.has(id));
+  for (let at = 0; at < removable.length; at += 300) {
+    const { error } = await db
+      .from("outreach_recipients")
+      .delete()
+      .in("id", removable.slice(at, at + 300))
+      .eq("campaign", OUTREACH_CAMPAIGN);
+    if (error) return { ok: false, message: error.message };
+  }
+  revalidatePath(PAGE);
+  const kept = withHistory.size;
+  return {
+    ok: removable.length > 0,
+    message:
+      `Removed ${removable.length.toLocaleString("en-US")}.` +
+      (kept
+        ? ` Kept ${kept.toLocaleString("en-US")} that already have sends on record; hold those instead.`
+        : ""),
+  };
 }

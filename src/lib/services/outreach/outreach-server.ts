@@ -1,8 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   OUTREACH_CAMPAIGN,
+  type OutreachProgram,
   type OutreachRecipient,
   type OutreachSend,
+  type OutreachTemplate,
 } from "./types";
 
 /**
@@ -27,6 +29,7 @@ type RecipientRow = {
   cc: unknown;
   program_keys: string[] | null;
   fields: unknown;
+  held: boolean | null;
 };
 
 type SendRow = {
@@ -41,6 +44,8 @@ type SendRow = {
 };
 
 const PAGE = 1000;
+const RECIPIENT_COLUMNS =
+  "id,email_no,row_key,label,division,conference,to_name,to_last_name,to_role,to_email,cc,program_keys,fields,held";
 
 function toRecipient(row: RecipientRow): OutreachRecipient {
   return {
@@ -60,6 +65,7 @@ function toRecipient(row: RecipientRow): OutreachRecipient {
       row.fields && typeof row.fields === "object"
         ? (row.fields as OutreachRecipient["fields"])
         : {},
+    held: Boolean(row.held),
   };
 }
 
@@ -85,9 +91,7 @@ export async function loadRecipients(
   for (let from = 0; ; from += PAGE) {
     let query = db
       .from("outreach_recipients")
-      .select(
-        "id,email_no,row_key,label,division,conference,to_name,to_last_name,to_role,to_email,cc,program_keys,fields",
-      )
+      .select(RECIPIENT_COLUMNS)
       .eq("campaign", OUTREACH_CAMPAIGN)
       .order("email_no")
       .order("division", { nullsFirst: true })
@@ -110,9 +114,7 @@ export async function loadRecipientById(
   const db = createAdminClient();
   const { data, error } = await db
     .from("outreach_recipients")
-    .select(
-      "id,email_no,row_key,label,division,conference,to_name,to_last_name,to_role,to_email,cc,program_keys,fields",
-    )
+    .select(RECIPIENT_COLUMNS)
     .eq("id", id)
     .eq("campaign", OUTREACH_CAMPAIGN)
     .maybeSingle();
@@ -152,4 +154,56 @@ export async function loadClaimedKeys(): Promise<Set<string>> {
   if (error)
     throw new Error(`Loading claimed programs failed: ${error.message}`);
   return new Set((data ?? []).map((row) => row.program_key as string));
+}
+
+/** The programs behind these keys: name, status and admin page id. */
+export async function loadPrograms(keys: string[]): Promise<OutreachProgram[]> {
+  const db = createAdminClient();
+  const unique = [...new Set(keys)];
+  const out: OutreachProgram[] = [];
+  // Chunked: a long `in (...)` list would overflow the request URL.
+  for (let at = 0; at < unique.length; at += 300) {
+    const { data, error } = await db
+      .from("programs")
+      .select("id,program_key,school_name,team,status")
+      .in("program_key", unique.slice(at, at + 300));
+    if (error) throw new Error(`Loading programs failed: ${error.message}`);
+    for (const row of data ?? []) {
+      out.push({
+        key: row.program_key as string,
+        id: row.id as string,
+        name: [row.school_name, row.team].filter(Boolean).join(" "),
+        status: (row.status as string) ?? "unclaimed",
+      });
+    }
+  }
+  return out;
+}
+
+/** The admin's own versions of the emails, by email number. */
+export async function loadTemplates(): Promise<Map<number, OutreachTemplate>> {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("outreach_templates")
+    .select("email_no,subject,html,updated_at")
+    .eq("campaign", OUTREACH_CAMPAIGN);
+  if (error)
+    throw new Error(`Loading outreach templates failed: ${error.message}`);
+  return new Map(
+    (data ?? []).map((row) => [
+      row.email_no as number,
+      {
+        emailNo: row.email_no as number,
+        subject: row.subject as string,
+        html: row.html as string,
+        updatedAt: row.updated_at as string,
+      },
+    ]),
+  );
+}
+
+export async function loadTemplate(
+  emailNo: number,
+): Promise<OutreachTemplate | null> {
+  return (await loadTemplates()).get(emailNo) ?? null;
 }

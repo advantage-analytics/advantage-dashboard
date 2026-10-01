@@ -2,7 +2,9 @@ import { expect, test } from "@playwright/test";
 
 import { renderEmail } from "@/lib/services/email/shell";
 import {
+  checkOutreachTemplate,
   OutreachConfigError,
+  outreachTemplateSource,
   renderOutreachEmail,
 } from "@/lib/services/email/templates/outreach";
 import { recipientsFromCsv } from "@/lib/services/outreach/csv";
@@ -41,6 +43,7 @@ function recipient(over: Partial<OutreachRecipient> = {}): OutreachRecipient {
     cc: [{ name: "Sam Assistant", email: "sam@example.edu" }],
     programKeys: ["ExampleUniversityM", "ExampleUniversityW"],
     fields: {},
+    held: false,
     ...over,
   };
 }
@@ -144,4 +147,57 @@ test("the shell is unchanged for mail with no compliance footer", () => {
   });
   expect(html).not.toContain("Unsubscribe");
   expect(html).not.toContain('class="btn2');
+});
+
+test("the editor's starting HTML renders the same email as the built-in copy", () => {
+  const postal = "Advantage Analytics, 1 Main St, Town, ST 00000";
+  for (const emailNo of [6, 7, 8]) {
+    const source = outreachTemplateSource(emailNo);
+    expect(source.html).toContain("{{claim_buttons}}");
+    expect(checkOutreachTemplate(emailNo, source.subject, source.html)).toEqual(
+      [],
+    );
+    const built = renderOutreachEmail(emailNo, recipient(), postal);
+    const edited = renderOutreachEmail(emailNo, recipient(), postal, {
+      template: { emailNo, ...source, updatedAt: "" },
+    });
+    expect(edited.subject).toBe(built.subject);
+    expect(edited.message.html).toBe(built.message.html);
+    expect(edited.message.headers).toEqual(built.message.headers);
+  }
+});
+
+test("a pasted template fills merge fields, escaped", () => {
+  const template = {
+    emailNo: 7,
+    subject: "Hi {{coach}} at {{school}}",
+    html: "<p>{{first_name}} <b>{{school}}</b></p>{{claim_buttons}}<p>{{unsubscribe_url}} {{postal_address}}</p>",
+    updatedAt: "",
+  };
+  const { subject, message } = renderOutreachEmail(
+    7,
+    recipient({ label: "A&M <College>", fields: { first_name: "Pat" } }),
+    "PO Box 1",
+    { template },
+  );
+  expect(subject).toBe("Hi Coach Coach at A&M <College>");
+  expect(message.html).toContain("<b>A&amp;M &lt;College&gt;</b>");
+  expect(message.html).toContain(`${SITE}/claim/ExampleUniversityW`);
+  expect(message.text).toContain("Pat A&M <College>");
+  expect(message.headers?.["List-Unsubscribe"]).toBeTruthy();
+});
+
+test("a cold template without unsubscribe or address can't be saved", () => {
+  expect(
+    checkOutreachTemplate(7, "Hi", "<p>{{school}} {{nonsense}}</p>"),
+  ).toEqual([
+    "Unknown merge field: {{nonsense}}.",
+    "Cold email must include {{unsubscribe_url}} and {{postal_address}} (CAN-SPAM).",
+  ]);
+  expect(checkOutreachTemplate(1, "Hi", "<p>{{school}}</p>")).toEqual([]);
+});
+
+test("held rows are never sendable", () => {
+  const rows = buildRows(7, [recipient({ held: true })], [], new Set());
+  expect(rows[0].state).toBe("held");
 });
