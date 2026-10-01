@@ -145,7 +145,8 @@ test("the Film list is applyMatchFilters(shared) AND the remainder's extras AND 
     shared,
     intent({ ending: "unforced-error" }, "Unforced errors"),
   );
-  expect(band.shared).toBe(shared);
+  // The landing resets the shared filters: Breakpoint is gone.
+  expect(filtersEqual(band.shared, EMPTY_MATCH_FILTERS)).toBe(true);
   const local = { ...NO_FILM_LOCAL_FILTERS, remainder: band.remainder };
   expect(
     ids(
@@ -155,12 +156,16 @@ test("the Film list is applyMatchFilters(shared) AND the remainder's extras AND 
       ),
     ),
   ).toEqual(["b"]);
+  // Breakpoint picked again afterwards ANDs with the extras, as any pick.
   expect(ids(filmListPoints(sharedPoints, local))).toEqual([]);
 
   // A landed pure cut is the shared filters alone — sides resolve through
   // the filter context, never in the cut (Won is read from the viewer's
   // side, so a won cell carries no Hit by).
-  const won = landFilmCut(shared, intent({ resultOutcome: ["won"] }));
+  const won = landFilmCut(
+    EMPTY_MATCH_FILTERS,
+    intent({ scoreType: ["breakpoint"], resultOutcome: ["won"] }),
+  );
   expect(won.remainder).toBeNull();
   expect(
     ids(
@@ -246,7 +251,7 @@ test("a rally band admits only recorded rallies inside it", () => {
   }
 });
 
-test("landing a cut writes its MatchFilters half to the shared filters, key by key", () => {
+test("landing a cut resets the shared filters to the cut's MatchFilters half", () => {
   const shared: MatchFilters = {
     ...EMPTY_MATCH_FILTERS,
     sets: [1],
@@ -260,19 +265,18 @@ test("landing a cut writes its MatchFilters half to the shared filters, key by k
   );
   const landed = landFilmCut(shared, cut);
 
-  // Every key the cut sets is REPLACED by the cut's value (not intersected:
-  // "pressure" is gone); every other key is untouched.
+  // The cut's keys over the EMPTY filters: nothing applied before survives —
+  // not a key the cut also sets ("pressure" is gone), and not one it leaves
+  // alone (Set 1 is gone too).
   expect(landed.shared).toEqual({
-    ...shared,
+    ...EMPTY_MATCH_FILTERS,
     scoreType: ["breakpoint"],
     server: "opponent",
   });
   for (const key of MATCH_FILTER_KEYS) {
-    if (cut.cut[key] !== undefined) {
-      expect(landed.shared[key]).toEqual(cut.cut[key]);
-    } else {
-      expect(landed.shared[key]).toBe(shared[key]);
-    }
+    expect(landed.shared[key]).toEqual(
+      cut.cut[key] !== undefined ? cut.cut[key] : EMPTY_MATCH_FILTERS[key],
+    );
   }
   // The caller's object is never mutated.
   expect(serializeMatchFilters(shared)).toBe(before);
@@ -299,17 +303,53 @@ test("landing a cut writes its MatchFilters half to the shared filters, key by k
   expect(filtersEqual(parsed, landed.shared)).toBe(true);
   expect(parsed.scoreType).toEqual(["breakpoint"]);
   expect(parsed.server).toBe("opponent");
-  expect(parsed.sets).toEqual([1]);
+  expect(parsed.sets).toEqual([]);
   expect(query.get("tab")).toBe("film");
 
   // A cut with no extras (every key a pill) lands no remainder.
   expect(
     landFilmCut(shared, intent({ resultOutcome: ["won"] })).remainder,
   ).toBeNull();
-  // An empty cut (a whole-match row) changes nothing: the same object back.
+  // An empty cut (a whole-match row) is the whole match: every filter off.
   const empty = landFilmCut(shared, intent({}));
-  expect(empty.shared).toBe(shared);
+  expect(filtersEqual(empty.shared, EMPTY_MATCH_FILTERS)).toBe(true);
   expect(empty.remainder).toBeNull();
+  // Landing what is already applied hands the same object back.
+  expect(landFilmCut(landed.shared, cut).shared).toBe(landed.shared);
+});
+
+test("a second statistic's cut replaces the first instead of stacking on it", () => {
+  const firstServe = [
+    pt({ id: "f-won", firstShotType: "First Serve" }),
+    pt({ id: "f-lost", firstShotType: "First Serve", wonByPlayer1: false }),
+    pt({ id: "s-long", firstShotType: "Second Serve", rallyLength: 11 }),
+    pt({ id: "s-short", firstShotType: "Second Serve", rallyLength: 2 }),
+  ];
+  const listOf = (f: { shared: MatchFilters; remainder: unknown }) =>
+    ids(
+      filmListPoints(applyMatchFilters(firstServe, f.shared, ctx()), {
+        remainder: f.remainder as LandedFilmCut | null,
+        savedOnly: false,
+      }),
+    );
+
+  // Head to head: "1st serve points won" for you.
+  const first = held(
+    EMPTY_MATCH_FILTERS,
+    intent(sideCut({ serveType: ["first"] }, "you", "server", true), "1st"),
+  );
+  expect(listOf(first)).toEqual(["f-won"]);
+
+  // Back to Statistics, then "Long rallies": the list is the card's own
+  // count over the whole match, with none of the first click's groups left.
+  const second = held(first.shared, intent(RALLY_BAND_CUTS.long, "Long"));
+  expect(second.shared.serveType).toEqual([]);
+  expect(second.shared.server).toBeNull();
+  expect(second.shared.resultOutcome).toEqual([]);
+  expect(listOf(second)).toEqual(
+    ids(applyFilmCut(firstServe, firstServe, RALLY_BAND_CUTS.long, ctx())),
+  );
+  expect(listOf(second)).toEqual(["s-long"]);
 });
 
 /* ── The drawer shows a landed cut's pills pressed ──────────────────────── */
@@ -465,10 +505,10 @@ test("the strip states the cut in words — the shared filters, then the statist
   // The cut's shared half reads as shared phrases; the label names only the
   // extras still in force.
   expect(filmListSentence({ ...aces, savedOnly: false }, names)).toBe(
-    "Reid serving · Break point · Winners · Reid, from Statistics",
+    "Reid serving · Winners · Reid, from Statistics",
   );
   expect(filmListSentence({ ...aces, savedOnly: true }, names)).toBe(
-    "Reid serving · Break point · Winners · Reid, from Statistics · Saved",
+    "Reid serving · Winners · Reid, from Statistics · Saved",
   );
   // Exactly where the landing put the viewer: the way back out.
   expect(filmStripAction({ ...aces, savedOnly: false })).toBe(
