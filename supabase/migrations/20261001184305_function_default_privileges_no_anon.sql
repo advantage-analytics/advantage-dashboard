@@ -1,0 +1,34 @@
+-- New functions are no longer executable signed out unless a migration says so.
+--
+-- A function created by `postgres` in `public` used to reach `anon` by two
+-- independent routes, and both have to close:
+--
+--   1. Postgres's built-in default grants EXECUTE on every new function to
+--      PUBLIC, which `anon` is part of. It can only be revoked globally:
+--      per-schema default privileges are additive, so an `IN SCHEMA public`
+--      revoke of PUBLIC does nothing.
+--   2. Supabase's per-schema default additionally grants `anon` by name.
+--
+-- `authenticated` and `service_role` keep their per-schema default grants.
+-- Existing functions are untouched: default privileges only apply to
+-- functions created afterwards.
+--
+-- Consequences for later migrations:
+--   - a function meant to be callable signed out must
+--     `grant execute on function … to anon` explicitly;
+--   - a function created by `postgres` outside `public` (a private schema, an
+--     extension installed as `postgres`) gets no grant at all beyond its
+--     owner, and needs one for any role that calls it from invoker context.
+--     Trigger functions and callers inside SECURITY DEFINER functions are
+--     unaffected.
+--
+-- The `supabase_admin` entry in pg_default_acl is left as is: `postgres` is
+-- neither a superuser nor a member of that role, and `supabase_admin` owns no
+-- function in `public`.
+--
+-- Rollback:
+--   alter default privileges for role postgres grant execute on functions to public;
+--   alter default privileges for role postgres in schema public grant execute on functions to anon;
+
+alter default privileges for role postgres revoke execute on functions from public;
+alter default privileges for role postgres in schema public revoke execute on functions from anon;
