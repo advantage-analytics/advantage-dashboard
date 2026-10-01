@@ -60,6 +60,8 @@ export interface OutreachRecipient {
   cc: OutreachCc[];
   programKeys: string[];
   fields: OutreachFields;
+  /** Kept in the list but never sent to. */
+  held: boolean;
 }
 
 export type OutreachSendStatus =
@@ -84,6 +86,7 @@ export type OutreachRowState =
   | "scheduled"
   | "failed"
   | "claimed"
+  | "held"
   | "not_due";
 
 export interface OutreachRow {
@@ -102,6 +105,11 @@ export interface OutreachTrancheInput {
   limit: number;
   /** ISO 8601, or null to send now. */
   scheduledAt: string | null;
+  /**
+   * Send to exactly these rows (still only the ones waiting for this email),
+   * instead of the next `limit` of the division and conference.
+   */
+  recipientIds?: string[] | null;
 }
 
 export interface OutreachTrancheResult {
@@ -113,3 +121,53 @@ export interface OutreachTrancheResult {
   failed: { label: string; error: string }[];
   skipped: { label: string; reason: string }[];
 }
+
+/** A program a list row points at, as the programs table has it now. */
+export interface OutreachProgram {
+  key: string;
+  id: string;
+  name: string;
+  status: string;
+}
+
+/** An admin's own version of one email. */
+export interface OutreachTemplate {
+  emailNo: number;
+  subject: string;
+  html: string;
+  updatedAt: string;
+}
+
+/**
+ * The merge fields a pasted template can use. Values are escaped for HTML,
+ * except `claim_buttons`, which is the button block itself.
+ */
+export const OUTREACH_MERGE_FIELDS: { token: string; means: string }[] = [
+  { token: "school", means: "School name, e.g. Rice University" },
+  { token: "first_name", means: "Recipient's first name, or “there”" },
+  { token: "coach", means: "“Coach Smith”, or “Coach” with no last name" },
+  { token: "last_name", means: "Recipient's last name" },
+  { token: "to_name", means: "Recipient's full name" },
+  { token: "program", means: "Program name (email 4), else the school" },
+  {
+    token: "programs",
+    means: "e.g. Rice University Men's · Rice University Women's",
+  },
+  {
+    token: "plan_detail",
+    means: "“your Pro plan” or “your 2 monthly processing hours” (email 3)",
+  },
+  { token: "claim_url", means: "First team's claim link" },
+  {
+    token: "claim_buttons",
+    means: "The claim button(s): one per team, plus the fallback links",
+  },
+  { token: "app_url", means: "https://app.advantage-analytics.com" },
+  { token: "unsubscribe_url", means: "This recipient's unsubscribe link" },
+  { token: "postal_address", means: "OUTREACH_POSTAL_ADDRESS" },
+];
+
+/** Cold emails must carry these two, by law (CAN-SPAM). */
+export const COLD_REQUIRED_FIELDS = ["unsubscribe_url", "postal_address"];
+
+export const COLD_EMAILS = new Set([6, 7, 8]);

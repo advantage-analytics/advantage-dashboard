@@ -65,6 +65,8 @@ export function buildRows(
       let state: OutreachRow["state"] = "not_sent";
       if (send && LIVE.has(send.status)) {
         state = send.status as "sending" | "sent" | "scheduled";
+      } else if (recipient.held) {
+        state = "held";
       } else if (recipient.programKeys.some((key) => claimed.has(key))) {
         state = "claimed";
       } else if (

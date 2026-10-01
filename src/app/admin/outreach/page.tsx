@@ -1,10 +1,14 @@
 import { OutreachPageContent } from "@/components/admin/outreach-page-content";
 import {
-  loadClaimedKeys,
+  loadPrograms,
   loadRecipients,
   loadSends,
+  loadTemplates,
 } from "@/lib/services/outreach/outreach-server";
-import { OUTREACH_EMAILS } from "@/lib/services/outreach/types";
+import {
+  OUTREACH_EMAILS,
+  type OutreachProgram,
+} from "@/lib/services/outreach/types";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 import { createClient } from "@/lib/supabase/server";
 
@@ -49,22 +53,23 @@ export default async function AdminOutreachPage({
   let setupError: string | null = null;
   let recipients: Awaited<ReturnType<typeof loadRecipients>> = [];
   let sends: Awaited<ReturnType<typeof loadSends>> = [];
-  let claimed: string[] = [];
+  let programs: OutreachProgram[] = [];
+  let customized: number[] = [];
   try {
-    const [loadedRecipients, loadedSends, claimedKeys] = await Promise.all([
+    const [loadedRecipients, loadedSends, templates] = await Promise.all([
       loadRecipients(),
       loadSends(),
-      loadClaimedKeys(),
+      loadTemplates(),
     ]);
     recipients = loadedRecipients;
     sends = loadedSends;
-    // Only the keys this page could show; the client does not need the rest.
-    const listed = new Set(
+    customized = [...templates.keys()];
+    // Only the programs the lists point at; the client needs nothing else.
+    programs = await loadPrograms(
       recipients.flatMap((recipient) => recipient.programKeys),
     );
-    claimed = [...claimedKeys].filter((key) => listed.has(key));
   } catch (error) {
-    // Before the migration runs there are no tables to read. Say so instead of
+    // Before the migrations run there are no tables to read. Say so instead of
     // throwing the whole admin area into its error boundary.
     setupError = (error as Error).message;
   }
@@ -74,7 +79,8 @@ export default async function AdminOutreachPage({
       initialEmailNo={emailNo}
       recipients={recipients}
       sends={sends}
-      claimedKeys={claimed}
+      programs={programs}
+      customizedEmails={customized}
       adminEmail={user?.email ?? ""}
       postalSet={Boolean(process.env.OUTREACH_POSTAL_ADDRESS?.trim())}
       resendSet={Boolean(process.env.RESEND_API_KEY?.trim())}

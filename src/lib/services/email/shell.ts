@@ -257,7 +257,11 @@ function listBlock(rows: EmailRow[], title?: string): string {
                 </tr>`;
 }
 
-function ctaBlock(
+/**
+ * The button row and its paste-this-link fallback. Exported for outreach,
+ * whose admin-edited templates drop it in through `{{claim_buttons}}`.
+ */
+export function ctaBlock(
   cta: { label: string; url: string },
   secondary?: { label: string; url: string },
 ): string {
