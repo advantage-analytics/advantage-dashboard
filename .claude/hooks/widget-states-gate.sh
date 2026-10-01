@@ -11,28 +11,56 @@
 #
 # The receipt is keyed on a hash of the dashboard diff, so any widget edit
 # after the check invalidates it.
+#
+# Every git call names its checkout with `-C "$dir"`. The hook process's own
+# cwd is the session's project dir, which for a `.claude/worktrees/<name>`
+# session is the MAIN checkout — another branch, with another session's
+# uncommitted edits. Judging that diff blocks commits that touch no widget.
+# So `$dir` comes from the payload's `cwd`, then from the command's own
+# `cd <path> &&` / `git -C <path>` when it has one. `mark` has no payload and
+# is run by hand, so there the caller's cwd is the checkout.
 set -uo pipefail
 
-root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 paths=(-- 'src/components/dashboard/*.tsx' 'src/app/dashboard/*.tsx')
-receipt_dir="$root/.git"
-[ -f "$receipt_dir" ] && receipt_dir=$(git rev-parse --git-dir)
+dir=$PWD
 
+g() { git -C "$dir" "$@"; }
+
+# Point $dir at a path named in the command, resolved against the current
+# $dir. A path that is not a directory here (an unexpanded $VAR, a typo) is
+# ignored rather than guessed at.
+enter() {
+  local p=$1
+  case "$p" in \"*\" | \'*\') p=${p:1:${#p}-2} ;; esac
+  case "$p" in
+    '~') p=$HOME ;;
+    '~/'*) p=$HOME/${p:2} ;;
+    /*) ;;
+    *) p=$dir/$p ;;
+  esac
+  [ -d "$p" ] && dir=$p
+}
+
+# Pathspecs are relative to where git runs, so settle on the checkout's root.
+# Not a repository: nothing to gate.
+settle() { dir=$(g rev-parse --show-toplevel 2>/dev/null) || exit 0; }
+
+base() {
+  g merge-base HEAD '@{upstream}' 2>/dev/null || g merge-base HEAD origin/main 2>/dev/null || echo HEAD
+}
 diff_hash() {
   # Everything not yet on the upstream (or main): committed-unpushed + staged + unstaged.
-  local base
-  base=$(git merge-base HEAD '@{upstream}' 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo HEAD)
-  git diff "$base" "${paths[@]}" | shasum | cut -d' ' -f1
+  g diff "$(base)" "${paths[@]}" | shasum | cut -d' ' -f1
 }
 has_widget_changes() {
-  local base
-  base=$(git merge-base HEAD '@{upstream}' 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo HEAD)
-  [ -n "$(git diff --name-only "$base" "${paths[@]}")" ]
+  [ -n "$(g diff --name-only "$(base)" "${paths[@]}")" ]
 }
-receipt="$receipt_dir/widget-states-receipt"
+# Per checkout: `.git` for the main one, `.git/worktrees/<name>` for a worktree.
+receipt() { echo "$(g rev-parse --absolute-git-dir)/widget-states-receipt"; }
 
 if [ "${1:-}" = "mark" ]; then
-  diff_hash > "$receipt"
+  settle
+  diff_hash > "$(receipt)"
   echo "widget-states: recorded check for current dashboard diff"
   exit 0
 fi
@@ -42,9 +70,21 @@ tool=$(printf '%s' "$payload" | jq -r '.tool_name // empty')
 
 if [ "$tool" = "Bash" ]; then
   cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // empty')
-  printf '%s' "$cmd" | grep -Eq '(^|[;&| ])git( -C [^ ]+)? (commit|push)( |$)' || exit 0
+  path_re="(\"[^\"]+\"|'[^']+'|[^[:space:];&|]+)"
+  git_re="(^|[;&|[:space:]])git([[:space:]]+-C[[:space:]]+$path_re)?[[:space:]]+(commit|push)([[:space:]]|$)"
+  cd_re="^[[:space:]]*cd[[:space:]]+$path_re[[:space:]]*(&&|;)"
+  [[ $cmd =~ $git_re ]] || exit 0
+  git_c=${BASH_REMATCH[3]:-}
+
+  cwd=$(printf '%s' "$payload" | jq -r '.cwd // empty')
+  [ -n "$cwd" ] && [ -d "$cwd" ] && dir=$cwd
+  [[ $cmd =~ $cd_re ]] && enter "${BASH_REMATCH[1]}"
+  [ -n "$git_c" ] && enter "$git_c"
+  settle
+
   has_widget_changes || exit 0
-  [ -f "$receipt" ] && [ "$(cat "$receipt")" = "$(diff_hash)" ] && exit 0
+  r=$(receipt)
+  [ -f "$r" ] && [ "$(cat "$r")" = "$(diff_hash)" ] && exit 0
   jq -n '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
