@@ -301,7 +301,7 @@ function SortDropdown({
   // The chosen row is marked by FloatMenu's blue check, as on Schedule. Its
   // second line carries the direction the old ↑/↓ glyph did, and that
   // choosing it again reverses it — `onSort` flips the active field.
-  const chosenNote = `${sortField === "date" ? sortPhrase : dirLabel} · again to reverse`;
+  const chosenNote = `${sortField === "date" ? sortPhrase : dirLabel} · Again to reverse`;
 
   return (
     <FloatMenu

@@ -721,7 +721,7 @@ export function RosterTable({
                   column.col,
                   "eyebrow-sm",
                   column.center && "text-center",
-                  column.label === "Last match" && "flex items-center",
+                  column.label === "Last Match" && "flex items-center",
                 )}
               >
                 {column.label}
@@ -731,7 +731,7 @@ export function RosterTable({
                     the spacer. The column is 250px and its label is short, so
                     the action rides its far end and the headings stay over
                     their values. */}
-                {column.label === "Last match" &&
+                {column.label === "Last Match" &&
                   canManage &&
                   !lineup &&
                   members.length > 1 && (
@@ -814,7 +814,7 @@ export function RosterTable({
                         </span>
                         <span className="text-[11px] text-[var(--ink-400)]">
                           <span className="sr-only">: </span>
-                          drag a row below this line to bench them
+                          Drag a row below this line to bench them
                         </span>
                       </>
                     )}

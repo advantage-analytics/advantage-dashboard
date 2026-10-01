@@ -99,7 +99,7 @@ export function ProgramUsageCard({
               {program.name}
             </span>
             <span className="truncate text-[11px] font-normal text-[var(--ink-500)]">
-              {squad ? `${squad} · shared hours` : "Shared hours"}
+              {squad ? `${squad} · Shared hours` : "Shared hours"}
             </span>
           </span>
         </span>

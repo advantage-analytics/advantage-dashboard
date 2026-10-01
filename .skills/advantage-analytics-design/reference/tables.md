@@ -160,7 +160,9 @@ master-detail split is retired; its detail is the peek drawer below.
    "Opponent" heading. 2–3 options → segmented row with an "Any" default;
    longer lists → checkboxes. Live match count in the footer beside a quiet
    "Clear all". On apply the panel **closes** and a note strip states the cut
-   in words — plain sentence · middot · "N of M" · one quiet "Clear filter" —
+   in words — plain phrases joined by middots, each starting with a capital
+   ("Reid serving · Second serve · Break point", sentence case per segment,
+   2026-09-30) · middot · "N of M" · one quiet "Clear filter" —
    **never chips, never a badge**. Engaged trigger uses the nav-active
    grammar (surface-subtle wash + ink-900, no border/dot/count). Lifecycle
    pills stay independent of the panel — a filter cut is not a lifecycle

@@ -48,7 +48,7 @@ import {
 } from "./styles";
 
 const STATE_LABEL: Record<LineChoice["state"], string> = {
-  result: "Result in · no video",
+  result: "Result in · No video",
   video: "Video in",
   open: "Awaiting result",
   // Unpickable: nobody on it (a dual's "No player" forfeit), or a result that

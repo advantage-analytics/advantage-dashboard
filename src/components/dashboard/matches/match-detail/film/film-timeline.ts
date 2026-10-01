@@ -347,7 +347,7 @@ export function followAffordance(
   if (!playing) return null;
   if (playing.index == null) {
     return {
-      label: "Now playing · not in this cut",
+      label: "Now playing · Not in this cut",
       ariaLabel: "Now playing: a point outside this cut — follow playback",
       inCut: false,
     };

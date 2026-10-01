@@ -209,7 +209,7 @@ export function CrestControl({
             </button>
           )}
           <span className="text-[11px] text-[var(--ink-400)]">
-            PNG, JPG, WebP or SVG · under 512 KB
+            PNG, JPG, WebP or SVG · Under 512 KB
           </span>
         </div>
       </div>

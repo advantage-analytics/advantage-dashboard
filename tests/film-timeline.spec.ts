@@ -465,7 +465,7 @@ test.describe("followAffordance", () => {
 
   test("held, playing point outside the applied cut", () => {
     expect(followAffordance(HELD, { id: "p14", index: null })).toEqual({
-      label: "Now playing · not in this cut",
+      label: "Now playing · Not in this cut",
       ariaLabel: "Now playing: a point outside this cut — follow playback",
       inCut: false,
     });
@@ -482,7 +482,7 @@ test.describe("followAffordance", () => {
       inCut: true,
     });
     expect(followAffordance(HELD, { id: "p9", index: null })).toEqual({
-      label: "Now playing · not in this cut",
+      label: "Now playing · Not in this cut",
       ariaLabel: "Now playing: a point outside this cut — follow playback",
       inCut: false,
     });

@@ -502,7 +502,7 @@ function FileStepContentImpl({
               </span>
               <span className="mono tabular text-micro leading-4">
                 {isVideo
-                  ? (videoFacts ?? `${uploadedFile?.size} · checked`)
+                  ? (videoFacts ?? `${uploadedFile?.size} · Checked`)
                   : `${extension} · ${uploadedFile?.size} · ${exportStatus}`}
               </span>
             </span>

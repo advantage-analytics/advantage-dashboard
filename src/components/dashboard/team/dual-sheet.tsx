@@ -134,7 +134,7 @@ export function DualSheet({ dual }: { dual: WeekendDual }) {
                 <span className="tabular">{dual.lines.length}</span> ·{" "}
               </>
             ) : null}
-            doubles are score only
+            Doubles are score only
           </>
         }
         right={

@@ -201,7 +201,7 @@ test.describe("trayFailureReason's one-line reason per class", () => {
 
   test("retry", () => {
     expect(trayFailureReason({ recovery: "retry" })).toBe(
-      "Analysis stopped · retry available",
+      "Analysis stopped · Retry available",
     );
   });
 

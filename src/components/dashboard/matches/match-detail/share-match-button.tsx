@@ -421,7 +421,7 @@ export function SharePopoverPanel({
         />
         {`Made ${link.madeOn ? `${link.madeOn} ` : ""}by ${
           link.madeBy.isViewer ? "you" : link.madeBy.name
-        } · statistics only`}
+        } · Statistics only`}
       </>
     );
   } else if (team?.teamUrl && !isPublic) {

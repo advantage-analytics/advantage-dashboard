@@ -21,8 +21,8 @@ import {
  * rule 6): a cut reads as ONE sentence in a strip. So each applied value is a
  * lower-case phrase ("second serve", "wide serve", "G. Revelli serving") and
  * the caller joins them with " · ". Only the players' names and the score
- * strings keep their capitals; the caller capitalises the sentence's first
- * letter.
+ * strings keep their capitals here; the caller capitalises the first letter
+ * of each segment (sentence case per segment).
  *
  * Phrases come from the APPLIED filters alone, never from
  * `optionAvailability`: a value the match cannot produce (an `?f=` link
@@ -203,5 +203,5 @@ export function appliedPhrases(
   return out;
 }
 
-/** "second serve · break point" → "Second serve · break point". */
+/** "second serve" → "Second serve" — applied to each segment of the strip. */
 export const capitalizeFirst = capitalize;

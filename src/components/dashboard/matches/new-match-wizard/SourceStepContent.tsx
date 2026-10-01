@@ -110,14 +110,14 @@ const SOURCE_COPY: Partial<
   splitstep: {
     label: "Advantage Intelligence",
     subline:
-      "Match video · court tracking, shot maps, serve placement, commentary",
-    menuSubline: "Match video · we compute the match · singles",
+      "Match video · Court tracking, shot maps, serve placement, commentary",
+    menuSubline: "Match video · We compute the match · Singles",
     types: "MP4 · MOV",
   },
   "swing-vision": {
     label: "SwingVision export",
-    subline: "Session export · shot data already computed · singles",
-    menuSubline: "Session export · stats already computed · singles",
+    subline: "Session export · Shot data already computed · Singles",
+    menuSubline: "Session export · Stats already computed · Singles",
     types: "XLSX",
   },
 };
@@ -136,8 +136,8 @@ function sourceCopy(provider: Provider) {
 /** The subline under a workspace, for the field and for its menu rows. */
 function workspaceSubline(workspace: Workspace): string {
   return workspace.kind === "team"
-    ? "Team workspace · upload for any player on the roster"
-    : "Personal workspace · your matches, your hours";
+    ? "Team workspace · Upload for any player on the roster"
+    : "Personal workspace · Your matches, your hours";
 }
 
 /** The engine mark — the logo's swoosh, white on the ink-900 square. */
@@ -413,7 +413,7 @@ function SourceStepContentImpl({
     <FieldText
       muted
       value="Choose a player"
-      subline="They get the report in their own workspace · you're credited as the uploader"
+      subline="They get the report in their own workspace · You're credited as the uploader"
     />
   ) : subject.kind === "roster" ? (
     <FieldText
@@ -432,7 +432,7 @@ function SourceStepContentImpl({
           {uploaderName} <YouPill />
         </>
       }
-      subline={`Your own match · filed under ${workspaceLabel(active)}`}
+      subline={`Your own match · Filed under ${workspaceLabel(active)}`}
     />
   );
 
@@ -639,7 +639,7 @@ function SourceStepContentImpl({
                   Someone new
                 </span>
                 <span className="min-w-0 truncate text-[11px] text-[var(--ink-500)]">
-                  Invite by email · they claim the match when they join
+                  Invite by email · They claim the match when they join
                 </span>
               </Link>
               <span className="my-[5px] h-px bg-[var(--border-hairline)]" />

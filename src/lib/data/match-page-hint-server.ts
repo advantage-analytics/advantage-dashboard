@@ -67,7 +67,7 @@ export const getMatchPageHint = cache(async function getMatchPageHint(
   const analysis = analysisFor(await loadMatchAnalysis(supabase, [matchId]), {
     id: row.id,
     sourceProvider: row.source_provider ?? undefined,
-    verificationStatus: row.verified ? "Verified Result" : undefined,
+    verificationStatus: row.verified ? "Verified result" : undefined,
   });
   return { analysis, kind: matchPageKind(analysis) };
 });

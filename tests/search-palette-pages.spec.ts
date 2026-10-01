@@ -37,7 +37,7 @@ test("a team workspace lists its live rail pages first, under its own name", () 
   const pages = pagesFor("team", true);
   const workspace = pages.filter((page) => page.group === "workspace");
   expect(workspace.map((page) => page.label)).toEqual([
-    "Team Home",
+    "Team home",
     "Matches",
     "Roster",
   ]);
@@ -64,7 +64,7 @@ test("account pages are the settings sections, then Help Center", () => {
     "Usage",
     "Plan",
     "Teams",
-    "Help Center",
+    "Help center",
   ]);
 });
 
@@ -79,6 +79,6 @@ test("Teams is only listed for someone on a team", () => {
     "Preferences",
     "Usage",
     "Plan",
-    "Help Center",
+    "Help center",
   ]);
 });

@@ -33,8 +33,13 @@ QF · SF · F`).
   the Players block, never repeated as a Context field. Program players are
   edited from the roster, never from a match.
 
-Copy conventions the lists lean on: sentence case; middots join suffixes and
-counts ("Cardinal · M", "12 matches · 8 won"); waiting states say "In line —
+Copy conventions the lists lean on: sentence case **per segment** — a line
+joined by middots is several short sentences, and each one starts with a
+capital ("Set 2 · Game 5 · Lee serving", "One-off · Not on the schedule"); a
+segment that opens on a number or a name is left as it is ("Cardinal · M",
+"12 matches · 8 won"). _Supersedes (2026-09-30): "sentence case; middots join
+suffixes and counts ("Cardinal · M", "12 matches · 8 won")"._ Enforced by
+`scripts/check-design-drift.mjs` check 8. Waiting states say "In line —
 we'll notify you", **never an invented ETA**; chrome copy is one word where
 one will do (Profile · Account · Preferences · Usage · Plan · Team). The design
 project's sample personas: Jordan Lee · Elena Vargas · Meridian State.

@@ -1932,7 +1932,7 @@ test("T19: a playing point the cut excludes reads 'not in this cut', with no che
   await page.keyboard.press("Escape");
 
   const pill = page.locator(PILL);
-  await expect(pill).toHaveText("Now playing · not in this cut");
+  await expect(pill).toHaveText("Now playing · Not in this cut");
   await expect(pill).toHaveAttribute(
     "aria-label",
     "Now playing: a point outside this cut — follow playback",
@@ -2615,7 +2615,7 @@ test("T25: a null hold survives a cut change — the pill says the playing point
 
   await seekTo(page, ROOM, 0.4);
   await expect(page.locator(PILL)).toHaveCount(1);
-  await expect(page.locator(PILL)).toHaveText("Now playing · not in this cut");
+  await expect(page.locator(PILL)).toHaveText("Now playing · Not in this cut");
 });
 
 test("T25: a row click replaces a null hold with a real one", async ({

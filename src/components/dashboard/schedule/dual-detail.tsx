@@ -614,7 +614,7 @@ function LineTableRow({
           <span className="truncate">{theirs}</span>
         ) : forfeitSide === "theirs" ? (
           <span className="truncate text-[var(--ink-500)]">
-            No player · we win by forfeit
+            No player · We win by forfeit
           </span>
         ) : noPlayer ? (
           // The lineup's own words for our forfeit, so the two screens agree.

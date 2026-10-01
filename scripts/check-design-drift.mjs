@@ -180,6 +180,19 @@ const YOU_MARKER_EXEMPT = new Set([
   "src/components/dashboard/loading/settings-pending.tsx",
 ]);
 
+// ── Check 8 — a middot segment that starts lower case ───────────────────────
+// Dashboard copy is sentence case PER SEGMENT (reference/primitives.md, "Copy
+// conventions", 2026-09-30): a line joined by middots is several short
+// sentences and each starts with a capital — "Set 2 · Game 5 · Lee serving".
+// The rule was applied by hand across ~50 files, and every one of those lines
+// is still a hand-typed string, so the next one written can drift straight
+// back. This matches a lower-case letter directly after " · ", and after the
+// `<span>·</span>` form the hint lines use. Dashboard source only, comments
+// stripped. It cannot see a segment that opens on an interpolation
+// (`· ${word}`), so a lower-case value passed in still gets through.
+const MIDDOT_LOWER_RE = / · [a-z]|·<\/span>(?:\{" "\})?\s*[a-z]/g;
+const MIDDOT_SCOPE = ["src/app/dashboard/", "src/components/dashboard/"];
+
 // Blank out every region that can contain a shadcn-looking substring without
 // being a utility class:
 //   - comments, because a docstring may legitimately DISCUSS `bg-accent`
@@ -259,6 +272,7 @@ const findings = {
   transcript: [],
   defaultPalette: [],
   youMarker: [],
+  middotLower: [],
 };
 const SKIP = new Set([AUTHORITY, ...TRANSCRIPTIONS]);
 // Hex-literal checks (1 and 3) only — NOT the full per-file SKIP above, which
@@ -334,6 +348,12 @@ for (const file of (await walk(SRC)).sort()) {
   if (extname(file) === ".tsx" && !YOU_MARKER_EXEMPT.has(file))
     for (const m of hexText.matchAll(YOU_MARKER_RE))
       findings.youMarker.push(`${file}:${lineOf(m.index)}  ${m[0].trim()}`);
+
+  if (MIDDOT_SCOPE.some((dir) => file.startsWith(dir)))
+    for (const m of hexText.matchAll(MIDDOT_LOWER_RE))
+      findings.middotLower.push(
+        `${file}:${lineOf(m.index)}  ${text.split("\n")[lineOf(m.index) - 1].trim().slice(0, 90)}`,
+      );
 }
 
 // ── Seeds. Lower these as tasks clear drift; never raise one. ───────────────
@@ -389,6 +409,18 @@ const CHECKS = [
     seed: 0,
     label: "hand-drawn You marker",
     fix: "render <YouPill /> from components/ui/you-pill.tsx",
+  },
+  {
+    key: "middotLower",
+    // 19 at the seed. Two are a recorded decision to KEEP lower case — "Resets
+    // Oct 1 · in 18 days" (settings/teams/program-hours-summary.tsx and its
+    // skeleton in loading/settings-pending.tsx), where the second segment is
+    // the tail of the first and a capital reads as a new claim. The other 17
+    // were found by this check after the 2026-09-30 sweep and have not been
+    // reviewed; lower the seed as each is capitalised or ruled a keeper.
+    seed: 19,
+    label: "lower-case middot segment",
+    fix: "capitalise the first letter after the middot (sentence case per segment)",
   },
 ];
 

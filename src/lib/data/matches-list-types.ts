@@ -118,7 +118,7 @@ export function transformDbMatch(
     date: formatDisplayDate(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
-    verificationStatus: row.verified ? "Verified Result" : undefined,
+    verificationStatus: row.verified ? "Verified result" : undefined,
     round: row.round ?? undefined,
     matchContext: matchContextCaption(row.result),
     duration: formatDuration(row.duration ?? undefined),

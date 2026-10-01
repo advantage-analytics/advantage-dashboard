@@ -240,8 +240,9 @@ function midSentence(label: string, names: PhraseNames): string {
  * here, like any other pick), then the statistic's label ("…, from
  * Statistics") ONLY while its Film-only extras are in force — a pure cut is
  * all shared phrases already and names nothing twice — then "saved"; joined
- * with " · " and capitalised once. "G. Revelli serving · second serve ·
- * break point". "All points" when nothing is applied.
+ * with " · ", each segment starting with a capital like every other middot
+ * line in the dashboard. "G. Revelli serving · Second serve · Break point".
+ * "All points" when nothing is applied.
  */
 export function filmListSentence(
   f: {
@@ -260,7 +261,9 @@ export function filmListSentence(
     parts.push(`${label}, from Statistics`);
   }
   if (f.savedOnly) parts.push("saved");
-  return parts.length === 0 ? "All points" : capitalizeFirst(parts.join(" · "));
+  return parts.length === 0
+    ? "All points"
+    : parts.map(capitalizeFirst).join(" · ");
 }
 
 /**

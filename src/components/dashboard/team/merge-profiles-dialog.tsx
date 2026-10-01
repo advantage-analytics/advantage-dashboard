@@ -277,7 +277,7 @@ export function MergeProfilesDialog({
           <DialogInfoRow
             icon={<Info className="size-3.5" strokeWidth={1.5} aria-hidden />}
           >
-            Names must match · logged in team activity · cannot be undone
+            Names must match · Logged in team activity · Cannot be undone
           </DialogInfoRow>
         </>
       )}

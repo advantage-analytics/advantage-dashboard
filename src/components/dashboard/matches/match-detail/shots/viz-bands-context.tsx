@@ -253,8 +253,8 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
             showReceipt({
               kind: "saved",
               message: workspaceName
-                ? `Bands saved · every return chart in ${workspaceName}`
-                : "Bands saved · every return chart in this workspace",
+                ? `Bands saved · Every return chart in ${workspaceName}`
+                : "Bands saved · Every return chart in this workspace",
             });
             resolve("saved");
             return;
@@ -264,8 +264,8 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
             kind: "error",
             message:
               result.error === "forbidden"
-                ? "Bands not saved · only coaches and staff can change this team's bands"
-                : "Bands not saved · something went wrong, try again",
+                ? "Bands not saved · Only coaches and staff can change this team's bands"
+                : "Bands not saved · Something went wrong, try again",
           });
           resolve("failed");
         });

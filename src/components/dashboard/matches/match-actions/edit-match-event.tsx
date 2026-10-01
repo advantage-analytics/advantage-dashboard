@@ -110,7 +110,7 @@ export function EventField({
         <span className="flex flex-wrap items-center gap-x-2 pt-0.5 text-[11px] text-[var(--ink-500)]">
           {canAttach ? (
             <>
-              <span>One-off · not on the schedule</span>
+              <span>One-off · Not on the schedule</span>
               <span className="text-[var(--ink-300)]">·</span>
               <button
                 type="button"
@@ -124,7 +124,7 @@ export function EventField({
             </>
           ) : (
             <span>
-              One-off · not on the schedule. A coach who runs the schedule can
+              One-off · Not on the schedule. A coach who runs the schedule can
               add it to an event.
             </span>
           )}

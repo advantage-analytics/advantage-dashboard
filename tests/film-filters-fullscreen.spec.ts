@@ -172,7 +172,7 @@ test("the cut in words — the trigger and the zero state", () => {
       names,
     ),
   ).toBe(
-    "Revelli serving · set 2 · winners · long rally (9+) · winners · Revelli, from Statistics · saved",
+    "Revelli serving · Set 2 · Winners · Long rally (9+) · Winners · Revelli, from Statistics · Saved",
   );
   // A pure cut (every key a shared filter) lands no remainder, so the strip
   // reads its shared phrases alone and names nothing twice.
@@ -182,7 +182,7 @@ test("the cut in words — the trigger and the zero state", () => {
   });
   expect(pure.remainder).toBeNull();
   expect(filmListSentence({ ...pure, savedOnly: false }, names)).toBe(
-    "Revelli serving · set 2",
+    "Revelli serving · Set 2",
   );
 });
 

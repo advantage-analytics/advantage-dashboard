@@ -46,7 +46,7 @@ export function FilmExpiredState({ entry }: { entry: MatchFilmEntry }) {
   const holderLabels = holder ? quotaHolderLabels(holder) : null;
 
   const micro = !quota
-    ? `MP4 up to ${MAX_VIDEO_GB} GB · we index the points, you keep the file`
+    ? `MP4 up to ${MAX_VIDEO_GB} GB · We index the points, you keep the file`
     : atCap
       ? matchVideoCountLabel(quota)
       : `MP4 up to ${MAX_VIDEO_GB} GB · ${matchVideoCountLabel(quota)}`;

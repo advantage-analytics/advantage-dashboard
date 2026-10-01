@@ -1100,7 +1100,7 @@ export function OpponentPairPicker({
           <span className="min-w-0 truncate text-[13px] text-[var(--ink-700)]">
             {line.theirNoPlayer ? (
               <span className="text-[12px] text-[var(--ink-500)]">
-                No pair · we win by forfeit
+                No pair · We win by forfeit
               </span>
             ) : summary === null ? (
               <span className="text-[var(--ink-400)]">Choose pair</span>

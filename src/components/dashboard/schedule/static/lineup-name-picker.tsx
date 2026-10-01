@@ -67,7 +67,7 @@ export const ADD_NAME_REQUIRED = "Type a first and last name to add a player.";
  * possible. What it must not do any more is keep it QUIET: the whole defect
  * was a court that looked filled and was attributed to nobody.
  */
-const UNMATCHED_NOTE = "not on your roster · no player linked";
+const UNMATCHED_NOTE = "Not on your roster · No player linked";
 
 /** How many roster rows the list offers before the escape row. */
 const MAX_SUGGESTIONS = 6;

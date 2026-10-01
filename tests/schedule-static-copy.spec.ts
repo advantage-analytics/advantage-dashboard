@@ -505,9 +505,9 @@ test.describe("/dashboard/team/schedule/new · 3b", () => {
       "Six singles and three doubles against one opponent, shared under one event.",
     );
     // Quoted so the trailing and leading spaces around the tabular `9` are
-    // pinned too — "Creates 9 lines · one team score" is one drawn sentence.
+    // pinned too — "Creates 9 lines · One team score" is one drawn sentence.
     drawn(chooser, file, '"Creates "');
-    drawn(chooser, file, '" lines · one team score"');
+    drawn(chooser, file, '" lines · One team score"');
 
     drawn(chooser, file, "Tournament");
     drawn(
@@ -515,7 +515,7 @@ test.describe("/dashboard/team/schedule/new · 3b", () => {
       file,
       "Players entered into draws; matches get added by round as they're played.",
     );
-    drawn(chooser, file, "Creates entries · draws by round");
+    drawn(chooser, file, "Creates entries · Draws by round");
   });
 
   test("the aside and the footer", () => {
@@ -887,7 +887,7 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
     drawn(
       picker,
       "lineup-name-picker.tsx",
-      "not on your roster · no player linked",
+      "Not on your roster · No player linked",
     );
     drawn(
       picker,
@@ -1025,7 +1025,7 @@ test.describe("/dashboard/team/schedule/new/tournament · 3c", () => {
     //   and the ladder spot is drawn beside the name rather than folded into a
     //   sentence about it.
 
-    drawn(builder, file, "Tournament · name");
+    drawn(builder, file, "Tournament · Name");
     // Still drawn, as the name field's placeholder now rather than as text: a
     // new tournament opens unnamed, and this is the string the empty cell shows.
     drawn(builder, file, "Buckeye Fall Classic");

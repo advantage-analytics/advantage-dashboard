@@ -159,7 +159,7 @@ export function MatchReportScoreboard() {
       status: "live",
       label: "Playing",
       headTime: formatClock(head.time),
-      caption: `Set ${head.point.setNumber} · game ${head.point.gameNumber} · ${surname(server)} serving`,
+      caption: `Set ${head.point.setNumber} · Game ${head.point.gameNumber} · ${surname(server)} serving`,
       players: [
         {
           id: youId,

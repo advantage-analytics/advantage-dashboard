@@ -121,7 +121,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       {
         keys: ["⌘", "U"],
         action: "Start a new match",
-        note: "On pages that show the Create Match button.",
+        note: "On pages that show the Create match button.",
       },
       { keys: ["esc"], action: "Close the active modal, dropdown, or palette" },
       {
@@ -338,12 +338,12 @@ export default function HelpCenterPage() {
                 <SourceCard
                   title="You have video"
                   body="Advantage Intelligence tracks every shot from your own footage. Singles, 1080p+, 30fps+."
-                  cost="Costs analysis hours · takes time · richest report"
+                  cost="Costs analysis hours · Takes time · Richest report"
                 />
                 <SourceCard
                   title="You have a SwingVision export"
                   body="Drop the .xlsx. Stats appear as soon as it parses. Singles only. Add the film later if you have it."
-                  cost="No hours used · instant · video optional"
+                  cost="No hours used · Instant · Video optional"
                 />
               </div>
 
