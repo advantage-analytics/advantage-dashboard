@@ -393,6 +393,11 @@ function noopSubscribe(): () => void {
 }
 
 /* ─── Main content ─── */
+/** A match with no analysis job, or one that has finished, has a report to read. */
+function hasReadableReport(m: DisplayMatch) {
+  return !m.analysis || isAnalysisReady(m.analysis.status);
+}
+
 export function MatchesPageContent({
   matches: serverMatches,
   drafts: allDrafts = NO_DRAFTS,
@@ -513,16 +518,13 @@ export function MatchesPageContent({
     return v === "new" || v === "in-progress" ? v : "all";
   });
   const readyMatchIds = useMemo(
-    () =>
-      matches
-        .filter((m) => !m.analysis || isAnalysisReady(m.analysis.status))
-        .map((m) => m.id),
+    () => matches.filter(hasReadableReport).map((m) => m.id),
     [matches],
   );
   const unseenIds = useUnseenReportIds(readyMatchIds);
   // Rows opened in the drawer this visit. Opening one marks it seen, which
   // would drop it from the "New" view and take its own drawer with it, so the
-  // view keeps what was opened until the filter changes.
+  // view keeps what was opened for the life of this page.
   const [openedIds, setOpenedIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -732,10 +734,7 @@ export function MatchesPageContent({
       // Only a finished report can be read — a queued or processing match
       // opened to check progress must still read as new when it completes.
       const opened = matches.find((m) => m.id === id);
-      if (
-        opened &&
-        (!opened.analysis || isAnalysisReady(opened.analysis.status))
-      ) {
+      if (opened && hasReadableReport(opened)) {
         markReportSeen(id);
         setOpenedIds((prev) => new Set(prev).add(id));
       }
