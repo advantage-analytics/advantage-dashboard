@@ -61,4 +61,39 @@ test.describe("gameNumbersInSet", () => {
       ]),
     ).toEqual([1, 2, 9]);
   });
+
+  test("a tiebreak is one game however often the server changes", () => {
+    // A set that reaches 6-6 plays a tiebreak: the vendor numbers
+    // a new game at each server change while the game score stays 6-6.
+    const rows = [
+      { set_number: 1, game_number: 12, game_score: "5-6" },
+      { set_number: 1, game_number: 13, game_score: "6-6" },
+      { set_number: 1, game_number: 13, game_score: "6-6" },
+      { set_number: 1, game_number: 14, game_score: "6-6" },
+      { set_number: 1, game_number: 15, game_score: "6-6" },
+      { set_number: 1, game_number: 17, game_score: "6-6" },
+    ];
+    expect(rows.map(gameNumbersInSet(rows))).toEqual([12, 13, 13, 13, 13, 13]);
+  });
+
+  test("ordinary games that move the game score stay separate", () => {
+    const rows = [
+      { set_number: 1, game_number: 1, game_score: "0-0" },
+      { set_number: 1, game_number: 2, game_score: "1-0" },
+      { set_number: 1, game_number: 3, game_score: "1-1" },
+    ];
+    expect(rows.map(gameNumbersInSet(rows))).toEqual([1, 2, 3]);
+  });
+
+  test("a tiebreak whose server-first score flips is still one game", () => {
+    // Stored 7-5 / 5-7 alternating with the server, games 24 to 29.
+    const rows = [
+      { set_number: 1, game_number: 23, game_score: "4-7" },
+      { set_number: 1, game_number: 24, game_score: "7-5" },
+      { set_number: 1, game_number: 25, game_score: "5-7" },
+      { set_number: 1, game_number: 26, game_score: "7-5" },
+      { set_number: 1, game_number: 29, game_score: "5-7" },
+    ];
+    expect(rows.map(gameNumbersInSet(rows))).toEqual([23, 24, 24, 24, 24]);
+  });
 });
