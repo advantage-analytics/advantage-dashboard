@@ -571,7 +571,7 @@ function MemberRow({
       {lifted && <SpotBadge spot={spot} />}
       <SpotCell spot={spot} draggable={inLineupMode} lifted={lifted} />
 
-      {/* A fixed track, so Record starts at the same x on every row. The cell
+      {/* One width for every row, so Record starts at the same x on each. The cell
           shares its width with a "Coach-managed" pill; the name truncates
           before it, never the pill. */}
       <span className={cn(COL.player, "flex items-center gap-2.5")}>
