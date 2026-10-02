@@ -45,7 +45,7 @@ master-detail split is retired; its detail is the peek drawer below.
    fixed or bounded so scores and dates start at the same x on every row.
    Where every measure is fixed, **the last column takes the slack**: the
    name and every measure after it are fixed tracks at a constant gap, and the
-   final cell is the one fluid cell, its date or token riding its far end
+   final cell is the one fluid cell, its text in a fixed track and its date or token right after it, the spare width left empty at the end
    (2026-10-02, Roster). The slack never falls between the name and its
    numbers: a spacer there put 300px+ of nothing between a player and their
    record on a wide screen, and the pair a coach compares read as two facts.

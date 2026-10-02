@@ -51,12 +51,12 @@ import type { RosterInvite, RosterMember } from "@/lib/data/team-roster-server";
  * ── 2. Last match takes the slack ───────────────────────────────────────────
  * `#`, Player, Record, Form, Last match. Everything before Last match is a
  * fixed track, so the name, the record and the form read as one line at a
- * constant gap; Last match is the table's one fluid cell and its date rides the
- * far end. The slack used to sit between Player and Record (a spacer packed the
+ * constant gap; Last match is the table's one fluid cell: mark, opponent in a
+ * fixed track, then the date, with the spare width left empty after it. The slack used to sit between Player and Record (a spacer packed the
  * metrics to the right), which on a wide screen put 300px+ of nothing between a
  * player and their record. Before THAT, Last match was fluid with its date
  * pinned to the far edge and the opponent left behind; the difference is that
- * the opponent now sits at a fixed x and only the date travels.
+ * the date no longer trails the opponent by a different distance on every row.
  *
  * Record leads Form: the number a coach ranks by first, the five-tick trail
  * that qualifies it second.
@@ -220,7 +220,7 @@ function RosterAnalysisStatus({
   return (
     <AnalysisStatusLine
       mark={inFlightMark(status)}
-      className="tabular ml-auto shrink-0"
+      className="tabular shrink-0"
     >
       {word}
     </AnalysisStatusLine>
@@ -235,6 +235,14 @@ function MarkSlot({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * The opponent's own track: 180px, shrinking when the column is tight, so the
+ * trailing token starts at the same x on every row instead of trailing each
+ * name by a different amount. The column's spare width falls AFTER the token.
+ */
+const OPPONENT =
+  "w-[180px] min-w-0 shrink truncate text-[12px] text-[var(--ink-700)]";
+
 /** Mark, opponent, and exactly one trailing token. See rule 3 above. */
 function LastMatchCell({
   member,
@@ -243,7 +251,7 @@ function LastMatchCell({
   member: RosterMember;
   /**
    * The row also carries "Possible duplicate" after this cell. Give up the
-   * 224px floor so the pill takes its width from the opponent's name (which
+   * 196px floor so the pill takes its width from the opponent's name (which
    * truncates) instead of overflowing the row at the table's minimum width.
    */
   yielding?: boolean;
@@ -272,9 +280,7 @@ function LastMatchCell({
             className="size-[5px] rounded-full bg-[var(--ink-300)]"
           />
         </MarkSlot>
-        <span className="truncate text-[12px] text-[var(--ink-700)]">
-          {lastMatch.opponent}
-        </span>
+        <span className={OPPONENT}>{lastMatch.opponent}</span>
         <RosterAnalysisStatus analysis={lastMatch.analysis} />
       </span>
     );
@@ -289,12 +295,8 @@ function LastMatchCell({
           </span>
           <span className="sr-only">Result unrecorded against</span>
         </MarkSlot>
-        <span className="truncate text-[12px] text-[var(--ink-700)]">
-          {lastMatch.opponent}
-        </span>
-        <span className={cn(SUBTLE_PILL, "ml-auto shrink-0")}>
-          Review score
-        </span>
+        <span className={OPPONENT}>{lastMatch.opponent}</span>
+        <span className={cn(SUBTLE_PILL, "shrink-0")}>Review score</span>
       </span>
     );
   }
@@ -304,10 +306,8 @@ function LastMatchCell({
       <MarkSlot>
         <ResultMark won={lastMatch.won} />
       </MarkSlot>
-      <span className="truncate text-[12px] text-[var(--ink-700)]">
-        {lastMatch.opponent}
-      </span>
-      <span className="text-micro tabular ml-auto shrink-0 whitespace-nowrap">
+      <span className={OPPONENT}>{lastMatch.opponent}</span>
+      <span className="text-micro tabular shrink-0 whitespace-nowrap">
         {lastMatch.date}
       </span>
     </span>
