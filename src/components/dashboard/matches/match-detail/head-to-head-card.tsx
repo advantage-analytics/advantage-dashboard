@@ -170,14 +170,17 @@ export const SERVE_ROWS: H2HRowConfig[] = [
     noun: "double faults",
   },
   {
-    // The first serves that landed: a point is "played on a first serve"
-    // (Serve type First) exactly when the first serve went in, so this opens
-    // the numerator.
+    // The first serves that landed: Serve type First plus `serveIn`, which
+    // drops a lone first serve in the net whose second serve the vendor never
+    // recorded — Type First alone would count it. Every serve and return row
+    // carries `serveIn` for the same reason: the published figures count only
+    // serves that landed (`s.result = 'In'`), so a double fault is never a
+    // second-serve return point.
     label: "First serve in",
     key: "firstServeInPct",
     isPercentage: true,
     fractionKey: "firstServeInPct",
-    cut: { serveType: ["first"] },
+    cut: { serveType: ["first"], serveIn: true },
     noun: "first-serve points",
     verb: "in",
   },
@@ -186,7 +189,7 @@ export const SERVE_ROWS: H2HRowConfig[] = [
     key: "firstServeWinPct",
     isPercentage: true,
     fractionKey: "firstServeWinPct",
-    cut: { serveType: ["first"] },
+    cut: { serveType: ["first"], serveIn: true },
     sideWon: true,
     noun: "first-serve points",
     verb: "won",
@@ -196,7 +199,7 @@ export const SERVE_ROWS: H2HRowConfig[] = [
     key: "secondServeWinPct",
     isPercentage: true,
     fractionKey: "secondServeWinPct",
-    cut: { serveType: ["second"] },
+    cut: { serveType: ["second"], serveIn: true },
     sideWon: true,
     noun: "second-serve points",
     verb: "won",
@@ -227,7 +230,7 @@ export const RETURN_ROWS: H2HRowConfig[] = [
     key: "firstReturnWonPct",
     isPercentage: true,
     fractionKey: "firstReturnWonPct",
-    cut: { serveType: ["first"] },
+    cut: { serveType: ["first"], serveIn: true },
     sideBy: "returner",
     sideWon: true,
     noun: "first-serve returns",
@@ -238,7 +241,7 @@ export const RETURN_ROWS: H2HRowConfig[] = [
     key: "secondReturnWonPct",
     isPercentage: true,
     fractionKey: "secondReturnWonPct",
-    cut: { serveType: ["second"] },
+    cut: { serveType: ["second"], serveIn: true },
     sideBy: "returner",
     sideWon: true,
     noun: "second-serve returns",
