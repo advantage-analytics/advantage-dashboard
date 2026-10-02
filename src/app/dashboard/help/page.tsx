@@ -49,8 +49,8 @@ const sectionScrollMt = "scroll-mt-[88px] lg:scroll-mt-[72px]";
 const ANALYSIS_JOURNEY: { label: string; mark: StepState }[] = [
   { label: ANALYSIS_LABEL.uploading, mark: "now" },
   { label: ANALYSIS_LABEL.queued, mark: "wait" },
+  // `processing` and `deriving` share the word "Analyzing", so one row.
   { label: ANALYSIS_LABEL.processing, mark: "now" },
-  { label: ANALYSIS_LABEL.deriving, mark: "now" },
   { label: ANALYSIS_LABEL.completed, mark: "done" },
 ];
 

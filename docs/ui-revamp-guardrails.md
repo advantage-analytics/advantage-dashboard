@@ -714,6 +714,11 @@ reintroduces fixed bugs:
 | `isWorking`      | is something happening _right now_? | the animated sheen                                  |
 | `isLiveUpdating` | is a DB update actually coming?     | Realtime subscriptions                              |
 
+`queued` is working (counts, schedules and the admin chip treat it as live) but
+`inFlightMark` still draws it as the still `wait` ring — the vendor has the job
+and nothing is running for the player. Which mark to draw is `inFlightMark`'s
+question, not `isWorking`'s.
+
 `uploaded` is in-flight, not working (nothing to animate), but _is_ live-updating
 (auto-submit fires in seconds). `processed` is in-flight, not working, and **not**
 live-updating — subscribing on it held a WebSocket open forever per user.

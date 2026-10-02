@@ -199,11 +199,9 @@ function RosterAnalysisStatus({
 }) {
   const { status, uploadPercent } = analysis;
   const word =
-    status === "processing" || status === "deriving"
-      ? "Analyzing"
-      : status === "uploading" && uploadPercent !== undefined
-        ? `${ANALYSIS_LABEL.uploading} ${Math.round(uploadPercent)}%`
-        : ANALYSIS_LABEL[status];
+    status === "uploading" && uploadPercent !== undefined
+      ? `${ANALYSIS_LABEL.uploading} ${Math.round(uploadPercent)}%`
+      : ANALYSIS_LABEL[status];
   return (
     <AnalysisStatusLine
       mark={inFlightMark(status)}
