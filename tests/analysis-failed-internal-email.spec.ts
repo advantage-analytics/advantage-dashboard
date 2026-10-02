@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { siteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 import {
   analysisFailedInternalEmail,
   type AnalysisFailedInternalInput,
@@ -58,7 +58,7 @@ test("full input: subject, tags, Stage/Code/Uploader facts and CTA", () => {
   expect(msg.text).toContain("Code: E_DOWNLOAD");
   expect(msg.text).toContain("Uploader: Alex Rivera (alex@example.test)");
 
-  const url = `${siteUrl()}/dashboard/matches/${MATCH_ID}`;
+  const url = `${emailOrigin()}/dashboard/matches/${MATCH_ID}`;
   expect(url).toBe(`${SITE}/dashboard/matches/${MATCH_ID}`);
   expect(msg.html).toContain(`<a href="${url}"`);
   expect(msg.text).toContain(url);

@@ -6,8 +6,9 @@ import { withEnv } from "./fixtures/with-env";
 /**
  * `originFromHeaders()` — the pure half of `requestOrigin()`, the resolver for
  * every link a person reads on screen, every redirect, and every Supabase
- * `redirectTo`. `siteUrl()` stays the resolver for anything that lands in an
- * email or runs without a request (cron, vendor webhooks).
+ * `redirectTo`. `emailOrigin()` is the resolver for anything that lands in an
+ * email, and `siteUrl()` for what runs without a request (vendor webhooks,
+ * `metadataBase`).
  *
  * What this pins: a dev server on port 3002 prints port 3002, not whatever
  * `.env.local` says; behind Vercel's proxy the forwarded host wins over the

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { siteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 import {
   analysisFailedEmail,
   type AnalysisFailedInput,
@@ -71,7 +71,7 @@ test("uncoded 'Failed to fetch' failure with no video: upload_again copy, no raw
   expect(msg.html).not.toContain("failed ·");
   expect(msg.text).not.toContain("failed ·");
 
-  const url = `${siteUrl()}/dashboard/matches/${MATCH_ID}`;
+  const url = `${emailOrigin()}/dashboard/matches/${MATCH_ID}`;
   expect(msg.html).toContain(`<a href="${url}"`);
 });
 
