@@ -16,13 +16,13 @@ With header:
 // Header row
 flex items-center justify-between h-14 px-5
 // Header label
-text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]
+eyebrow   // .eyebrow — 10px · 400 · uppercase · 1.5px · ink-400
 ```
 
 ### Section Label
 
 ```
-text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]
+eyebrow   // .eyebrow — never a hand-rolled uppercase string
 ```
 
 ### Action button — the variant set
@@ -150,7 +150,7 @@ transition-[background-color,transform] duration-200 ease-out
 
 ```
 // Label
-text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px]
+eyebrow-sm   // .eyebrow-sm — 9px · 400 · uppercase · 1.5px · ink-400
 // Value
 text-[13px] font-light text-[#0D0D0D] tabular-nums
 ```

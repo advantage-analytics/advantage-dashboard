@@ -95,7 +95,7 @@ export function MatchCardGallery({
           {/* Header: match context + verified + duration */}
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
+              <span className="eyebrow">
                 {match.matchContext ?? "Final Score"}
               </span>
               {match.verificationStatus && (

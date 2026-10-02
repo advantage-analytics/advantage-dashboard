@@ -65,6 +65,11 @@ import { programEyebrow } from "@/lib/data/programs-server";
  * depending on the letters, worst case 8.53. Round the per-character cost up
  * to 8.6 for margin: 840 ÷ 8.6 ≈ 97.
  *
+ * 2026-10-02: `.eyebrow` moved to Inter 400 with 1.5px letter-spacing. That
+ * takes a full pixel of tracking off every character and thins the strokes,
+ * so the per-character cost only fell — 97 is now a conservative ceiling, not
+ * a stale one. Re-measure before RAISING it; it needs no change to stay safe.
+ *
  * Today's longest real eyebrow is 74 characters, so this is a genuine ceiling
  * with headroom, not a fence around the current data. It fires only when a
  * program arrives whose eyebrow would actually wrap.

@@ -57,10 +57,7 @@ export default function FormField({
 
   return (
     <div className="group flex flex-col gap-[8px]">
-      <label
-        htmlFor={fieldId}
-        className="text-[10px] font-medium tracking-[2.5px] text-[var(--ink-500)] uppercase"
-      >
+      <label htmlFor={fieldId} className="text-[11px] text-[var(--ink-600)]">
         {label}
       </label>
 
