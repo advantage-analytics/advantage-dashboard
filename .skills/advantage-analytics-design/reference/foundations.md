@@ -10,21 +10,23 @@
 
 ### Type Scale
 
-| Token         | Size                                                      | Weight | Use                                        |
-| ------------- | --------------------------------------------------------- | ------ | ------------------------------------------ |
-| heading-xl    | `text-[30px] font-light tracking-[-0.6px] leading-[36px]` | 300    | Page greeting/hero                         |
-| heading-lg    | `text-[28px] font-light tracking-[-0.5px]`                | 300    | KPI values, large numbers                  |
-| title-lg      | `text-[24px] font-light tracking-[-0.4px] leading-[1.2]`  | 300    | Page/section titles (`.text-title-lg`)     |
-| heading-md    | `text-[16px] font-normal tracking-[-0.4px]`               | 400    | Event/tournament names                     |
-| body-lg       | `text-[14px] font-normal`                                 | 400    | Match opponent names, primary body         |
-| body          | `text-[13px]`                                             | 400    | Standard body text, nav items              |
-| body-sm       | `text-[12px] font-normal`                                 | 400    | Descriptions, activity messages            |
-| label-lg      | `text-[11px] font-semibold`                               | 600    | Stat values, emphasis labels               |
-| label         | `text-[10px] font-medium uppercase tracking-[2.5px]`      | 500    | Section headers, card headers              |
-| label-sm      | `text-[9px] font-normal`                                  | 400    | Metadata labels                            |
-| heading-score | `text-[40px] font-bold tracking-[-1px]`                   | 700    | Match result scores (match detail page)    |
-| heading-brand | `text-[56px] font-light tracking-[-1px] leading-[1.05]`   | 300    | Brand panel hero heading (auth pages only) |
-| caption       | `text-[8px] font-medium`                                  | 500    | Chart labels, minimal text                 |
+| Token         | Size                                                           | Weight | Use                                                 |
+| ------------- | -------------------------------------------------------------- | ------ | --------------------------------------------------- |
+| heading-xl    | `text-[30px] font-light tracking-[-0.6px] leading-[36px]`      | 300    | Page greeting/hero                                  |
+| heading-lg    | `text-[28px] font-light tracking-[-0.5px]`                     | 300    | KPI values, large numbers                           |
+| title-lg      | `text-[24px] font-light tracking-[-0.4px] leading-[1.2]`       | 300    | Page/section titles (`.text-title-lg`)              |
+| heading-md    | `text-[16px] font-normal tracking-[-0.4px]`                    | 400    | Event/tournament names                              |
+| body-lg       | `text-[14px] font-normal`                                      | 400    | Match opponent names, primary body                  |
+| body          | `text-[13px]`                                                  | 400    | Standard body text, nav items                       |
+| body-sm       | `text-[12px] font-normal`                                      | 400    | Descriptions, activity messages                     |
+| label-lg      | `text-[11px] font-semibold`                                    | 600    | Stat values, emphasis labels                        |
+| label         | `.eyebrow` — 10px · uppercase · `tracking-[1.5px]` · ink-400   | 400    | Section headers, card headers, KPI labels           |
+| label-sm      | `text-[9px] font-normal`                                       | 400    | Metadata labels                                     |
+| label-xs      | `.eyebrow-sm` — 9px · uppercase · `tracking-[1.5px]` · ink-400 | 400    | Table column headers, in-table group dividers       |
+| field caption | `text-[11px] text-[var(--ink-600)]` (`SettingsField`)          | 400    | Form field labels — sentence case, never an eyebrow |
+| heading-score | `text-[40px] font-bold tracking-[-1px]`                        | 700    | Match result scores (match detail page)             |
+| heading-brand | `text-[56px] font-light tracking-[-1px] leading-[1.05]`        | 300    | Brand panel hero heading (auth pages only)          |
+| caption       | `text-[8px] font-medium`                                       | 500    | Chart labels, minimal text                          |
 
 ### Line Heights
 
@@ -46,9 +48,22 @@
 - `tracking-[0.3px]` — Score text
 - `tracking-[0.5px]` — Button text (CTA buttons)
 - `tracking-[1px]` — Legend labels, compact uppercase
-- `tracking-[1.5px]` — Button text (uppercase)
+- `tracking-[1.5px]` — Button text (uppercase); **every eyebrow** (`.eyebrow`, `.eyebrow-sm`)
 - `tracking-[1.6px]` — Performance rating labels
-- `tracking-[2.5px]` — Section headers (uppercase)
+- ~~`tracking-[2.5px]` — Section headers (uppercase)~~ — retired 2026-10-02: eyebrows moved to 400 · 1.5px
+
+**Eyebrows (2026-10-02).** One uppercase label style, two sizes, both classes in
+`typography.css`: `.eyebrow` (10px) for card/section titles, kickers and KPI
+labels; `.eyebrow-sm` (9px) for table column headers and in-table group
+dividers. Weight 400, `1.5px` tracking, `ink-400`. Never hand-roll an
+`uppercase tracking-[…]` label — a copy does not restyle when the class does,
+which is how the app drifted to five trackings (2.5 / 1.8 / 1.6 / 1.5 / 1.4px).
+Form field labels are not eyebrows: they are the `SettingsField` caption
+(11px · 400 · ink-600 · sentence case), on auth forms too. A control nested in
+an eyebrow (roster "Set lineup") sets `font-sans tracking-normal normal-case`
+itself so it never inherits the label. Out of the eyebrow system on purpose:
+the Beta/Pilot badge, calendar weekday headers, and the film room's mono
+machine labels ("Set 1 · Game 4").
 
 ### Number Styling
 

@@ -102,9 +102,7 @@ export function HomeKpisPending() {
           key={label}
           className="adv-kpi flex min-w-0 flex-1 flex-col gap-3 px-5 py-5"
         >
-          <span className="truncate text-[9px] tracking-[2.5px] text-[var(--ink-400)] uppercase">
-            {label}
-          </span>
+          <span className="eyebrow-sm truncate">{label}</span>
           <div aria-hidden="true" className="flex flex-col gap-3">
             <PendingBar className="h-7 w-16" />
             <PendingBar className="h-[15px] w-20" />

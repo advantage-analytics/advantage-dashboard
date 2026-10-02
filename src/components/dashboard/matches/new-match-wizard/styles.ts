@@ -32,15 +32,6 @@ export const ghostBtnCls =
   "h-9 px-4 rounded-[6px] text-[13px] font-medium bg-white border border-[#EAECF0] text-[#525252] hover:bg-[#F5F5F5] shadow-none transition-colors duration-200";
 
 /**
- * 10px uppercase tracked label — section headings, field labels, eyebrow metadata.
- *
- * Source: SKILL.md › Typography › Type Scale › `label`
- *   text-[10px] font-medium uppercase tracking-[2.5px], color text-label #AAAAAA.
- */
-export const eyebrowLabelCls =
-  "text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]";
-
-/**
  * Focus treatment shared by every interactive element in the modal.
  *
  * The ring itself is NOT set here. `src/styles/design-system/focus.css` draws

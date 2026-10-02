@@ -200,9 +200,7 @@ export function HelpToc() {
         className="hidden w-[200px] shrink-0 self-start lg:sticky lg:top-6 lg:block"
       >
         <div className="mb-2 flex items-baseline justify-between px-2.5">
-          <p className="text-[10px] font-medium tracking-[1.8px] text-[var(--ink-500)] uppercase">
-            On this page
-          </p>
+          <p className="eyebrow">On this page</p>
           <span aria-hidden="true">
             <Kbd size="sm">?</Kbd>
           </span>
