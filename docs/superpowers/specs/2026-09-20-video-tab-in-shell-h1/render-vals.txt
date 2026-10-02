@@ -1,0 +1,213 @@
+// renderVals() of the H1 handoff canvas: sample rows and the copy tables (zeroStates, refusals). Reference only.
+
+const h = React.createElement;
+class Component extends DCLogic {
+  pageMark(kind, initials) {
+    const base = { display: 'flex', width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-button)', font: '500 11px var(--font-sans)', letterSpacing: '0.3px' };
+    return kind === 'you'
+      ? h('span', { style: { ...base, background: 'var(--blue)', color: '#FFFFFF' } }, initials)
+      : h('span', { style: { ...base, background: 'var(--surface-subtle)', color: 'var(--ink-700)' } }, initials);
+  }
+  componentDidMount() {
+    const draw = () => { if (window.lucide && document.querySelector('i[data-lucide]')) window.lucide.createIcons(); };
+    draw();
+    this._t = setInterval(draw, 400);
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+  componentDidUpdate() { if (window.lucide) window.lucide.createIcons(); }
+  renderVals() {
+    const you = { markBg: 'var(--ink-900)', markFg: '#FFFFFF', initials: 'JL' };
+    const opp = { markBg: 'var(--surface-muted)', markFg: 'var(--ink-700)', initials: 'MR' };
+    const mk = (who, title, detail, score, opts = {}) => ({
+      ...who, title, detail, score,
+      bg: opts.playing ? 'var(--surface-subtle)' : 'transparent',
+      barWidth: opts.playing ? '62%' : '0%'
+    });
+
+    const listRows = [
+      mk(you, 'Winner · Lee forehand', 'Set 2 · game 7 · 4 shots', '30-15'),
+      mk(opp, 'Ace · Reid, T', 'Set 2 · game 7', '30-30'),
+      mk(you, 'Unforced error · Lee forehand', 'Set 2 · game 7 · 5 shots', '30-40', { playing: true }),
+      mk(opp, 'Forced error · Reid backhand', 'Set 2 · game 7 · 9 shots', '40-40'),
+      mk(you, 'Winner · Lee backhand', 'Set 2 · game 8 · 3 shots', '0-15')
+    ];
+
+    const cutRows = [
+      mk(you, 'Double fault · Lee', 'Set 1 · game 4 · break point', '30-40'),
+      mk(opp, 'Winner · Reid backhand', 'Set 1 · game 4 · 7 shots', '40-40', { playing: true }),
+      mk(you, 'Forced error · Lee forehand', 'Set 1 · game 8 · 6 shots', '30-40'),
+      mk(opp, 'Unforced error · Reid forehand', 'Set 2 · game 3 · 4 shots', '40-40')
+    ];
+
+    const shot = (who, stroke, type, place, spin, mph, result, opts = {}) => ({
+      ...who,
+      n: opts.n, last: who === you ? 'Lee' : 'Reid',
+      stroke, type, place, spin, mph, result,
+      strokeColor: opts.serve ? 'var(--ink-900)' : 'var(--ink-700)',
+      mphColor: mph === '—' ? 'var(--ink-400)' : 'var(--ink-700)',
+      resultColor: opts.loss ? 'var(--ink-900)' : 'var(--ink-700)',
+      rowBg: opts.selected ? 'var(--surface-subtle)' : 'transparent'
+    });
+
+    const shotRows = [
+      shot(opp, 'Serve', '1st serve', 'Body, deuce court', 'Flat', '112', 'In', { n: 1, serve: true }),
+      shot(you, 'Backhand', 'Return', 'Cross court, deep', 'Slice', '68', 'In', { n: 2 }),
+      shot(opp, 'Forehand', 'Rally', 'Inside-out, deep', 'Topspin', '74', 'In', { n: 3 }),
+      shot(you, 'Forehand', 'Rally', 'Down the line', 'Topspin', '71', 'In', { n: 4 }),
+      shot(opp, 'Backhand', 'Rally', 'Cross court, short', 'Slice', '59', 'In', { n: 5 }),
+      shot(you, 'Forehand', 'Rally', 'Down the line, wide', 'Topspin', '—', 'Out', { n: 6, loss: true, selected: true })
+    ];
+
+    const filterSections = [
+      { name: 'Score', summary: 'Any', color: 'var(--ink-400)' },
+      { name: 'Serve', summary: 'Reid · aces', color: 'var(--blue)' },
+      { name: 'Return', summary: 'Any', color: 'var(--ink-400)' },
+      { name: 'Rally', summary: '9+ shots', color: 'var(--blue)' },
+      { name: 'Result', summary: 'Unforced errors', color: 'var(--blue)' },
+      { name: 'Court', summary: 'Any', color: 'var(--ink-400)' }
+    ];
+
+    const zeroStates = [
+      {
+        when: 'Cut matches nothing',
+        header: 'Break points', glyphColor: 'var(--blue)', count: '0 / 174',
+        title: 'No points match this cut',
+        body: 'Nothing in this match was a break point on Reid’s serve.',
+        action: 'Clear the cut', actionColor: 'var(--blue)',
+        note: 'A filter result, not an empty state — the header keeps the cut so the words and the count agree.'
+      },
+      {
+        when: 'Saved only, nothing saved',
+        header: 'Saved only', glyphColor: 'var(--blue)', count: '0 / 174',
+        title: 'You haven’t saved a point yet',
+        body: 'Hover a point and press the bookmark, or press S while it plays.',
+        action: 'Show all points', actionColor: 'var(--blue)',
+        note: 'Teaches the gesture once, in the only place it matters. Saved points are per person, so this never speaks for the team.'
+      },
+      {
+        when: 'Analysis still running',
+        header: 'All points', glyphColor: 'var(--ink-500)', count: '— / —',
+        title: 'Points are still being detected',
+        body: 'The film plays now; the list fills in as points land. We’ll notify you when it finishes.',
+        action: '', actionColor: 'var(--ink-500)',
+        note: 'Progress, never emptiness, and never an invented ETA. The player above stays usable throughout.'
+      },
+      {
+        when: 'Film has no point data',
+        header: 'All points', glyphColor: 'var(--ink-500)', count: '0 / 0',
+        title: 'No points were detected in this film',
+        body: 'The recording plays, but nothing in it could be broken into points. Camera placement is the usual reason.',
+        action: 'Recording requirements', actionColor: 'var(--blue)',
+        note: 'Permanent statement with a support path — the list column stays, the tab does not collapse to the player.'
+      }
+    ];
+
+    const refusals = [
+      {
+        head: 'This video is no longer attached',
+        body: 'The recording was removed from this match. The statistics and visualizations computed from it are unchanged.',
+        ghost: 'Back to the report', hasPrimary: false, primary: '',
+        when: 'Detached', note: 'No retry — asking again cannot bring it back.'
+      },
+      {
+        head: 'You can no longer watch this video',
+        body: 'The owner stopped sharing it. Ask your coach if you need it back.',
+        ghost: 'Back to the report', hasPrimary: false, primary: '',
+        when: 'Permission withdrawn', note: 'Names who can change it, without a button that refuses on click.'
+      },
+      {
+        head: 'The video could not be reached',
+        body: 'Storage did not answer. Nothing has been lost — the recording is still attached to this match.',
+        ghost: 'Back to the report', hasPrimary: true, primary: 'Try again',
+        when: 'Transient', note: 'Retry earns its place: the answer can change on the next request.'
+      },
+      {
+        head: 'The film stopped loading',
+        body: 'The stream broke partway through. Your position is kept.',
+        ghost: 'Back to the report', hasPrimary: true, primary: 'Try again',
+        when: 'Mid-playback', note: 'Resumes at the kept position rather than restarting the film.'
+      }
+    ];
+
+    const shared = [
+      { piece: 'Quick filter menu', p1: 'Point list header (P3)', p2: 'The room’s list header — FS4, dark tone' },
+      { piece: 'Point row', p1: '52px light row (P1)', p2: 'Same row on rgba(13,13,13,.88) — FS3' },
+      { piece: 'Advanced filters', p1: 'Takes the list column (P4)', p2: 'Same panel, dark tone, over the film' },
+      { piece: 'Shot rows', p1: 'This point feed (T1/T2)', p2: 'Unfolded under the playing point — FS3' }
+    ];
+
+    const splitRow = (id, what, scope, phase, state) => ({
+      id, what, scope, phase,
+      idColor: phase === 'Phase 1' ? 'var(--ink-700)' : 'var(--ink-400)',
+      phaseColor: phase === 'Phase 1' ? 'var(--ink-900)' : 'var(--ink-500)',
+      state,
+      stateBg: state === 'Settled' ? 'rgba(59,130,246,0.1)' : 'var(--surface-subtle)',
+      stateFg: state === 'Settled' ? 'var(--blue)' : 'var(--ink-700)'
+    });
+
+    const splitRows = [
+      splitRow('S1', 'Point list header + quick menu', 'In shell · 320px column', 'Phase 1', 'Settled'),
+      splitRow('S2', 'Advanced filters, in the column', 'In shell · 320px column', 'Phase 1', 'Settled'),
+      splitRow('P1', 'Route, rail open', 'In shell · 1440 frame (was S3c)', 'Phase 1', 'Settled'),
+      splitRow('P2', 'Route, rail collapsed — wide feed', 'In shell · 1440 frame (was S3d)', 'Phase 1', 'Settled'),
+      splitRow('2g', 'This point — widget head + feed', 'In shell · widget', 'Phase 1', 'Settled'),
+      splitRow('1c', 'No playable film — four headings', 'In shell · page condition', 'Phase 1', 'Settled'),
+      splitRow('1a / 1b', 'As-built route and list states', 'In shell · baseline', 'Phase 1', 'Reference'),
+      splitRow('FS1–FS2', 'Room resting · chrome collapsed', 'Fullscreen', 'Phase 2', 'Settled'),
+      splitRow('FS3–FS5', 'Points drawer · cut menu · cut applied', 'Fullscreen', 'Phase 2', 'Settled'),
+      splitRow('FS6–FS9', 'Board drag · between points · match mode · saved', 'Fullscreen', 'Phase 2', 'Settled'),
+      splitRow('FS10–FS11', 'Film unavailable · opening', 'Fullscreen', 'Phase 2', 'Settled'),
+      splitRow('Components', 'FilmBoard · FilmCourt · FilmTransportBar', 'Fullscreen · DC files', 'Phase 2', 'Settled')
+    ];
+
+    const pYou = (t, d, s) => ({ mark: this.pageMark('you', 'JL'), title: t, detail: d, score: s });
+    const pOpp = (t, d, s) => ({ mark: this.pageMark('opp', 'MR'), title: t, detail: d, score: s });
+    const pageGroups = [
+      {
+        head: 'Set 2 · Game 7', meta: '3-3 · Reid serves',
+        rows: [
+          pOpp('Ace', 'Flat First Serve T', '15-0'),
+          pYou('Forehand Winner', 'Topspin Deep cross', '15-15'),
+          pOpp('Service Winner', 'Flat First Serve Body', '30-15'),
+          pOpp('Forehand Unforced Error', 'Topspin Wide', '30-30'),
+          pYou('Backhand Winner', 'Slice Deep middle · Breakpoint', '30-40')
+        ]
+      },
+      {
+        head: 'Set 2 · Game 8', meta: '3-4 · Lee serves',
+        rows: [
+          pYou('Ace', 'Flat First Serve Wide', '15-0'),
+          pOpp('Backhand Forced Error', 'Topspin Deep cross', '30-0'),
+          pYou('Double Fault', 'Second Serve', '30-15'),
+          pOpp('Forehand Winner', 'Topspin Wide', '30-30')
+        ]
+      }
+    ];
+
+    const pageShotTable = [
+      { n: 1, who: 'opp', type: 'Serve', stroke: '', place: 'Wide', result: 'In', spin: 'Slice', mph: '118' },
+      { n: 2, who: 'you', type: 'Return', stroke: 'Backhand', place: 'Cross court', result: 'In', spin: 'Slice', mph: '61' },
+      { n: 3, who: 'opp', type: 'Groundstroke', stroke: 'Forehand', place: 'Inside in', result: 'In', spin: 'Topspin', mph: '78' },
+      { n: 4, who: 'you', type: 'Groundstroke', stroke: 'Backhand', place: 'Cross court', result: 'In', spin: 'Topspin', mph: '72' },
+      { n: 5, who: 'opp', type: 'Groundstroke', stroke: 'Forehand', place: 'Inside out', result: 'Out', spin: 'Topspin', mph: '81' }
+    ];
+    const pageShots = pageShotTable.map((s) => ({
+      ...s,
+      last: s.who === 'you' ? 'Lee' : 'Reid',
+      strokeCellColor: s.stroke ? 'var(--ink-700)' : 'var(--ink-400)',
+      strokeText: s.stroke || '—',
+      strokeCell: s.type === 'Serve' ? 'Serve' : s.stroke,
+      placeText: s.place || '—',
+      placeColor: s.place ? 'var(--ink-700)' : 'var(--ink-400)',
+      mphText: s.mph || '—',
+      rowBg: s.n === 5 ? 'var(--surface-subtle)' : 'transparent',
+      resultColor: s.result === 'In' ? 'var(--ink-700)' : 'var(--ink-900)'
+    }));
+
+    const trayItems = [
+      { kind: 'progress', title: 'Coastal Invitational · R16', detail: 'Analysing', progress: 0.42 }
+    ];
+
+    return { pageGroups, pageShots, trayItems, paused: true, splitRows, listRows, cutRows, shotRows, filterSections, zeroStates, refusals, shared, yes: true, no: false };
+  }
+}

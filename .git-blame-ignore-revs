@@ -1,0 +1,15 @@
+# Commits that changed formatting only, and should never be the answer to
+# "who wrote this line?".
+#
+# GitHub reads this file automatically in its blame view. Local git needs to be
+# told once — the `prepare` script in package.json does it, so `npm install`
+# is the only setup step. By hand:
+#
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# Add a SHA here ONLY if the commit is purely mechanical. A commit that mixes
+# formatting with a real change must not be listed: ignoring it would hide the
+# real change too.
+
+# style: apply Prettier to the codebase
+82e7bf6a08155b7e31b8fde11bce3442c3a12e77

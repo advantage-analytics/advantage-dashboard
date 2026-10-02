@@ -36,18 +36,18 @@ export class ChartErrorBoundary extends Component<
       return (
         <div
           role="alert"
-          className="w-full flex flex-col items-center justify-center gap-2 rounded-[12px] bg-[var(--color-surface-muted)] px-4"
+          className="flex w-full flex-col items-center justify-center gap-2 rounded-[12px] bg-[var(--color-surface-muted)] px-4"
           style={{ minHeight: this.props.minHeight }}
         >
           <AlertTriangle
             aria-hidden="true"
-            className="w-4 h-4 text-[var(--color-text-dim)]"
+            className="h-4 w-4 text-[var(--color-text-dim)]"
             strokeWidth={1.5}
           />
-          <p className="text-[11px] font-normal text-[var(--color-text-secondary)] leading-[16px] text-center">
+          <p className="text-center text-[11px] leading-[16px] font-normal text-[var(--color-text-secondary)]">
             Chart unavailable
           </p>
-          <p className="text-[10px] font-normal text-[var(--color-text-dim)] leading-[15px] text-center">
+          <p className="text-center text-[10px] leading-[15px] font-normal text-[var(--color-text-dim)]">
             {this.props.hint ?? "Refresh to retry."}
           </p>
         </div>

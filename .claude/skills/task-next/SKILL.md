@@ -1,0 +1,326 @@
+---
+name: task-next
+description: Run the next task from this branch's queue in .claude/tasks/ — one task, one subagent on the task's routed model, gated, then committed. Use when working through a queued task file. Drain by looping the plain-text wrapper documented inside.
+argument-hint: "[optional: a task id like T3, to run that one instead of the next]"
+disable-model-invocation: true
+---
+
+# Run one task
+
+One task. One subagent. One commit, or one stash. Then stop.
+
+Stopping is what makes looping safe: each iteration re-enters this procedure
+for the next task rather than letting one context accumulate all of them.
+
+The queue file format — slug derivation, status vocabulary, `needs:`
+semantics, the task-block grammar, id numbering, the `/loop` incantation — is
+shared with `/task-add` and lives in one place:
+[queue-format](../task-add/reference/queue-format.md). Consult it for steps 1
+and 2; this file does not restate it.
+
+## Why this is not `/loop /task-next`
+
+This skill sets `disable-model-invocation: true` because it commits, dispatches
+subagents, and can stash your work. It must never fire on an ambiguous sentence.
+
+That same flag stops a scheduled `/loop` fire from invoking it. Claude Code's
+scheduled-tasks documentation is explicit: a scheduled fire only runs skills the
+model may invoke on its own, and a skill marked `disable-model-invocation: true`
+"reaches Claude as plain text instead of executing". So `/loop /task-next` runs
+exactly once — the time you typed it — and then silently does nothing on every
+fire after. It does not error; it just stops draining.
+
+Loop the plain-text instruction in
+[queue-format](../task-add/reference/queue-format.md) instead. **Do not tidy
+it back into `/loop /task-next`.** It reads better and it does not work.
+
+## 1. Locate the queue
+
+Follow [queue-format](../task-add/reference/queue-format.md) to derive the
+branch slug and locate `.claude/tasks/<slug>.md`. If it does not exist, say so
+and stop — offer to create one, do not invent tasks.
+
+`check.sh` wraps the mechanical half of this:
+
+```bash
+bash .claude/skills/task-next/check.sh slug         # the derived slug, or fails on detached HEAD
+bash .claude/skills/task-next/check.sh queue-paths  # the queue and log file paths
+bash .claude/skills/task-next/check.sh lint         # queue-format grammar: status values, the
+                                                     # middle-dot heading separator, duplicate ids
+                                                     # within the queue, and dangling needs: ids
+```
+
+Run `lint` before picking a task — a malformed heading or an unrecognized
+status value is worth catching before step 2 tries to parse it.
+
+**Re-read this file every run.** The user appends to it while the loop runs.
+
+## 2. Pick the task
+
+If the user passed a task id, use that one. Otherwise:
+
+1. The first task with `status: next`, in file order — the queue-jump.
+2. Otherwise the first with `status: todo`.
+
+`status: later` is never picked by either rule above (see
+[queue-format](../task-add/reference/queue-format.md)) — it is not malformed
+and is not skipped-and-logged; it is simply invisible to the picker.
+
+A task with a `- **needs:**` line follows the eligibility rule in
+[queue-format](../task-add/reference/queue-format.md) — pass over it silently,
+like `later`, and keep scanning. Do not log it as skipped — waiting is normal,
+not malformed.
+
+Skip and log any task whose `done when:` list is missing or empty, then
+**keep scanning past it** to the next candidate in file order — a skip never
+ends the search. Log target is `.claude/tasks/<slug>.log.md`, the same file
+steps 6a/6b append to. **Do not invent criteria for it** — a task without
+criteria cannot be gated, and gating is the entire point.
+
+Nothing eligible → report `queue drained` and stop cleanly. This is a success,
+not an error; it is what lets `/loop` idle instead of spinning. If this scan
+wrote a skip-log entry along the way, commit it before stopping:
+
+```bash
+git add .claude/tasks/<slug>.log.md
+git commit -m "skip: <task id>"
+```
+
+Otherwise a drained run that skipped a malformed task leaves that entry
+uncommitted in the tree. `/loop` re-enters, finds the same malformed task,
+skips and logs it again, and stops dirty again — a permanent dirty tree that
+never surfaces as a failure, just a queue that quietly never drains and sends
+`/pr-check` down its "working tree dirty" branch forever.
+
+## 3. Pre-flight
+
+```bash
+bash .claude/skills/task-next/check.sh preflight
+```
+
+Runs `npm ci` if `node_modules` is missing, a no-op otherwise. A fresh
+worktree never has `node_modules` — the bootstrap hook supplies `.env.local`
+but deliberately does not install, because a `SessionStart` hook must not
+block a session for minutes. So install here and carry on; this skill is
+already a multi-minute operation.
+
+**If the install itself fails, stop.** The gate cannot run without it, and an
+ungated commit is worse than no progress. Report the install error rather than
+proceeding to dispatch.
+
+Then set the task's `status:` to `doing`. Change that line only.
+
+If this run is interrupted before step 6 (crash, cancel, context loss), the
+task is left stuck at `doing` — step 2's pick logic only matches `next` and
+`todo`, so no future invocation will pick it back up. The user will notice it
+as a task sitting at `doing` in `.claude/tasks/<slug>.md` with no matching
+commit or log entry; reset the line to `todo` by hand to make it eligible
+again.
+
+## 4. Dispatch exactly one subagent
+
+One task, one subagent — that is what gives each task a fresh context window,
+and it is why this skill does not do the work itself.
+
+Dispatch it on the task's routed model — see
+[queue-format](../task-add/reference/queue-format.md) for the exact `model:`
+values and the sonnet fallback.
+
+Give the subagent:
+
+- The task block verbatim, `done when:` list included.
+- `MAP.md` — where things are.
+- `AGENTS.md` — how to work here. (`CLAUDE.md` is a one-line import of it.)
+- `docs/ui-revamp-guardrails.md` if the task touches `src/app/dashboard/`,
+  `src/components/dashboard/`, or the upload wizard.
+- The `trace-route` skill if the task touches dashboard UI, so it resolves the
+  route before editing rather than picking by filename.
+
+Tell it: satisfy every `done when:` line, stay inside `files:` unless the work
+genuinely requires more, **do not commit** — this skill owns committing — and
+**never write to `.claude/tasks/`**: a follow-up idea it discovers is plain
+text for its final report, not a queue entry.
+If the task creates a new skill under `.claude/skills/`, also tell it to add a
+matching `!.claude/skills/<name>/` line to `.gitignore` — that directory is
+deny-by-default (see the comment block above the existing entries), so a new
+skill nobody re-includes there cannot be staged, cannot appear in a diff, and
+cannot be committed no matter how correct the skill itself is.
+
+## 5. Gate, in cost order, stopping at the first failure
+
+Mechanical first. It is by far the cheapest, and every review below a red build
+is noise about code that does not compile.
+
+**a. Mechanical**
+
+```bash
+bash .claude/skills/task-next/check.sh gate
+```
+
+Runs lint, typecheck and the full test suite, redirecting each to a scratch
+file so output never lands in this session — the loop's context has to
+survive a whole drain. Prints `GATE PASS` or `GATE FAIL` as its last line;
+read the log tail above it only on failure.
+
+It also handles the one known false failure: `tsconfig.json` pulls in
+`.next/types/**/*.ts` and `.next/dev/types/**/*.ts` — route-type files
+generated by a _previous_ build. A pull that deletes or renames a route
+leaves them pointing at a page that no longer exists, and `tsc` reports an
+error in code nobody wrote:
+
+```
+.next/types/validator.ts(359,39): error TS2307: Cannot find module
+'../../src/app/dashboard/team/compare/page.js'
+```
+
+If — and only if — **every** error path is under `.next/`, `check.sh gate`
+clears the stale output and re-runs typecheck once, automatically. **The
+re-run is the verdict, not the diagnosis.** One error under `src/` means it
+is real and `GATE FAIL` stands — this is exactly how a genuine type error
+would otherwise get waved through as "probably stale".
+
+**b. Completion review** — dispatch `task-completion-reviewer` with the task
+block. Its first line is `VERDICT: pass` or `VERDICT: needs-work`.
+
+**Fail-closed:** a stage that does not return something explicitly parseable
+as clear is a **failure**, not a pass — go to 6b. A crashed subagent,
+truncated output, or a report with prose but no verdict all count. For 5b that
+means anything other than a literal `VERDICT: pass` — including
+`VERDICT: needs-work` or no verdict line at all.
+
+Both stages must clear under that standard.
+
+**The guardrail reviewers do not run here.** `pipeline-guardrails-reviewer`
+and `rls-boundary-reviewer` run once per branch, at `/pr-check` Stage 3, over
+the whole range. They used to run at this gate, on every task's own diff: an
+N-task drain spent 2N reviewer context windows — each re-reading
+`docs/ui-revamp-guardrails.md` and the diff from cold — to find what one pass
+over the finished branch finds once. A violation now lands as a commit and is
+caught before merge instead of before commit. That is the trade; it is
+deliberate. Do not dispatch either agent from this skill, and do not add a
+severity triage here to compensate. `simplify` and `code-review` are likewise
+`/pr-check`'s, over the whole branch diff, where reuse and altitude findings
+can actually be made.
+
+## 6a. All clear — commit
+
+Set the task's `status:` to `done`. Append to `.claude/tasks/<slug>.log.md`:
+a heading naming the task id, title and status (`## T<n> · <title> — done`),
+then two fields — `**gate:**` (the verdict per stage, matching step 7) and
+`**changed:**` (what
+changed, a line or short paragraph) — plus, only when the subagent's report
+surfaced follow-up ideas, a third: `**follow-ups:**`, numbered ideas kept for
+the author to triage through `/task-add` later. Ideas, not tasks — nothing
+here makes them eligible to run. Do **not** add a `**commit:**` field:
+write both **before** committing, because a commit can't record its own SHA
+inside its own content, so the log entry is never in a position to carry one —
+`git rev-parse HEAD` after the commit is where that comes from, for step 7's
+report.
+
+```bash
+git add -A
+git commit -m "T<n>: <title>"
+```
+
+One commit now carries all three together: the task's code changes, `status:
+done`, and the log entry.
+
+```bash
+bash .claude/skills/task-next/check.sh clean
+```
+
+Must pass immediately after — if it doesn't, the bookkeeping got left behind
+again.
+
+**After the last task on a branch.** A merged branch whose queue is fully
+`done` gets its queue pair (`.claude/tasks/<slug>.md` and `<slug>.log.md`)
+deleted in a cleanup commit on the integration branch — git history is the
+archive. Pipeline branches get this from stage 07 automatically; for every
+other branch it is a manual step, and skipping it leaves dead queues that
+later readers mistake for live work.
+
+## 6b. Anything failed — stash
+
+```bash
+git stash push -u -m "blocked: T<n>" -- ':(exclude).claude/tasks/'
+```
+
+The `-- ':(exclude).claude/tasks/'` pathspec is load-bearing — do not drop it.
+Without it, `git stash push -u` sweeps up _everything_ in the tree, bookkeeping
+included: step 3 already wrote `status: doing` into the queue file before
+dispatch, so an unscoped stash captures that `todo → doing` hunk, and after
+this section rewrites the line to `blocked` the mismatch makes `git stash pop`
+conflict on the queue file later — on the one path where the user is already
+dealing with a failure. Excluding `.claude/tasks/` keeps the stash to the
+task's actual (failed) code changes and leaves the queue and log files sitting
+modified in the tree, ready for this section to edit and commit normally.
+
+**Check whether a stash was actually created before recording one.** Because
+the pathspec excludes `.claude/tasks/`, a task that failed without leaving
+anything dirty outside it — a crashed subagent, truncated output, a run that
+died before writing a file, all of which the fail-closed rule in step 5 routes
+straight here — gives `git stash push` nothing to save. It prints `No local
+changes to save`, exits 0, and creates no entry.
+
+`git rev-parse stash@{0}` does **not** fail helpfully in that case: if any
+earlier stash exists it returns _that_ one's SHA with exit 0, and the log then
+durably records another task's stashed work as this task's recoverable work.
+False provenance in the run log is worse than no provenance, because the log
+is the only durable record of what the loop did.
+
+So: if the stash command reported `No local changes to save`, there is no
+stash. Log `no stash — the task produced no changes` in place of a ref. Only
+when a stash was really created, resolve it to a SHA with
+`git rev-parse stash@{0}` and record that — a SHA, not `stash@{0}`, because
+`refs/stash` is shared across worktrees and the index shifts the moment
+anything else stashes.
+
+Then set `status:` to `blocked` and append to the log: which stage failed, the
+specific reason, and the stash SHA or the no-stash note.
+
+```bash
+git add -A
+git commit -m "T<n>: blocked"
+```
+
+The failed work stays out of history on purpose — that's what the stash is
+for — but the bookkeeping still needs to land somewhere durable, and this
+commit is the only vehicle for that.
+
+```bash
+bash .claude/skills/task-next/check.sh clean
+```
+
+Must pass immediately after.
+
+**Never revert, never `git checkout --`, never discard.** The stash exists so
+the tree is clean for the next task while the work stays recoverable.
+
+## 7. Report and stop
+
+Say which task ran, the verdict per gate stage — mechanical and completion;
+the guardrails are `/pr-check`'s and have no verdict to report here — and what
+landed: a commit SHA or a stash ref. If the scan passed
+over tasks waiting on unmet `needs:`, name them and what each waits on —
+the report is where a mistyped id gets noticed. Then stop, even if
+more tasks are eligible. The loop re-enters for the next one.
+
+## Do not
+
+- Do not run more than one task per invocation.
+- Do not write anywhere in the queue file except a `status:` line. The user is
+  typing in that file while you run.
+- Do not invoke `/task-add` — or any queue-writing skill — during a run, and
+  never append a `## T` block anywhere. A follow-up idea's only legal home is
+  the log entry's `**follow-ups:**` line; the queue grows only when a person
+  adds to it.
+- Do not hand-edit the log's history; append only.
+- Do not commit the task's code changes when any gate stage failed, however
+  small the failure looks — stash them in 6b instead. 6b's bookkeeping commit
+  is a separate, deliberate exception: it carries only the `status:` line and
+  the log entry, never the stashed work.
+- Do not run `git add -A` (in 6a or 6b) without checking `git status` first —
+  it stages every unrelated change sitting in the tree, not just this task's,
+  including anything the user has in progress alongside the loop. If
+  unrelated changes are present, stop and ask the user how to handle them
+  rather than folding them into this task's commit or stash.

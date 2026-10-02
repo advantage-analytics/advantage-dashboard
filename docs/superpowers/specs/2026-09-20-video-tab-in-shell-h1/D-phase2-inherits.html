@@ -1,0 +1,25 @@
+<!-- D-phase2-inherits: extracted 2026-09-20 from Claude Design project afde9116… file `H1 - Handoff - Video tab in-shell.dc.html`. Inline SVG stripped. {{ }} bindings resolve against render-vals.txt. Reference only, never shipped. -->
+<section style="display:flex;flex-direction:column;align-items:flex-start">
+<span class="eyebrow">Phase 1 · D — What phase 2 inherits</span>
+<div class="text-display" style="margin-top:16px;max-width:900px">Built once in the shell, reused on the dark scope.</div>
+<div class="text-body" style="margin-top:8px;max-width:960px;text-wrap:pretty">Three phase-1 pieces are the same components the fullscreen room draws. Building them tone-aware now is what makes phase 2 small; building them twice is the failure mode to avoid.</div>
+<div style="display:flex;flex-direction:column;gap:12px;margin-top:32px;width:1060px">
+<div style="border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card);background:var(--surface-card);padding:2px 24px 8px">
+<div style="display:grid;grid-template-columns:200px 1fr 1.1fr;gap:20px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-hairline)">
+<span class="eyebrow-sm">Piece</span>
+<span class="eyebrow-sm">Phase 1 host</span>
+<span class="eyebrow-sm">Phase 2 host</span>
+</div>
+<sc-for list="{{ shared }}" as="h" hint-placeholder-count="4">
+<div style="display:grid;grid-template-columns:200px 1fr 1.1fr;gap:20px;align-items:center;min-height:52px;border-bottom:1px solid var(--border-hairline)">
+<span style="font-size:12px;font-weight:500;color:var(--ink-900)">{{ h.piece }}</span>
+<span style="font-size:12px;color:var(--ink-600)">{{ h.p1 }}</span>
+<span style="font-size:12px;color:var(--ink-600)">{{ h.p2 }}</span>
+</div>
+</sc-for>
+<span style="display:block;padding:12px 0 6px;font-size:12px;line-height:1.6;color:var(--ink-600);max-width:96ch;text-wrap:pretty">Rule for the build: one component, a <span class="mono" style="font-size:11px;color:var(--ink-700)">tone</span> prop, two token sets. The dark values are already specced on <span class="mono" style="font-size:11px;color:var(--ink-700)">FS3</span>–<span class="mono" style="font-size:11px;color:var(--ink-700)">FS5</span> in the source canvas, so phase 2 adds no new geometry to the list or the menu — only the scope they sit on.</span>
+</div>
+</div>
+</section>
+</div>
+</x-dc>

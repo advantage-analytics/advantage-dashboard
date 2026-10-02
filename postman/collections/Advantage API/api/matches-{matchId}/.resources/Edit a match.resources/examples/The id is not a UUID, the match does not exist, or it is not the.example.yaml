@@ -1,0 +1,56 @@
+$kind: http-example
+name: The id is not a UUID, the match does not exist, or it is not the caller's. The three are indistinguishable on purpose.
+request:
+  url: "{{baseUrl}}/api/matches/:matchId"
+  method: PATCH
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  pathVariables:
+    - key: matchId
+      value: <uuid>
+      disabled: false
+      description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+  body:
+    type: json
+    content: |-
+      {
+        "player2_name": "Sam Chen",
+        "score": {
+          "player1": [
+            6,
+            4,
+            7
+          ],
+          "player2": [
+            3,
+            6,
+            6
+          ],
+          "player1_tiebreaks": [
+            null,
+            null,
+            7
+          ],
+          "player2_tiebreaks": [
+            null,
+            null,
+            4
+          ]
+        }
+      }
+response:
+  statusCode: 404
+  statusText: Not Found
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "Not found"
+      }
+order: 4000

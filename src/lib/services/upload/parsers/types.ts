@@ -2,7 +2,7 @@
  * Parser type definitions and interfaces
  */
 
-import { FormData } from '@/components/dashboard/home/upload-match-modal/types';
+import { FormData } from "@/components/dashboard/matches/new-match-wizard/types";
 
 export type { FormData };
 
@@ -34,7 +34,7 @@ export interface SwingVisionSetData {
   guestScore: number;
   hostTiebreak: number | null;
   guestTiebreak: number | null;
-  winner: 'host' | 'guest' | 'draw';
+  winner: "host" | "guest" | "draw";
   duration: number; // Duration in milliseconds
 }
 

@@ -3,4 +3,19 @@ export const MARKETING_SITE_URL = "https://advantage-analytics.com";
 
 // Access requests are captured by the landing page's form, which writes to
 // Airtable. There is no in-app intake; all "request access" CTAs point here.
+// Legal pages live on the marketing site only. A bare `/legal/...` href from
+// the dashboard resolves against app.advantage-analytics.com, which has no
+// such route, so every link here is absolute.
+export const TERMS_URL = `${MARKETING_SITE_URL}/legal/terms-and-conditions`;
+export const PRIVACY_URL = `${MARKETING_SITE_URL}/legal/privacy-policy`;
+export const GUARDIAN_TERMS_URL = `${MARKETING_SITE_URL}/legal/guardian-terms`;
+
 export const REQUEST_ACCESS_URL = `${MARKETING_SITE_URL}/#access`;
+
+// Step-by-step for getting match film off a phone or court camera and into the
+// uploader. Lives on the marketing site because the landing page links it too.
+export const EXPORT_GUIDE_URL = `${MARKETING_SITE_URL}/export-guide`;
+
+// Support address. Was declared in four components, and one copy had already
+// drifted to a domain that does not receive mail.
+export const SUPPORT_EMAIL = "team@advantage-analytics.com";

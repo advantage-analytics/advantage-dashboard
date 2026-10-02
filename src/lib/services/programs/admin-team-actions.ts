@@ -1,0 +1,931 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "./admin-guard";
+import { memberRoleForClaimRole } from "./claim-roles";
+import { resolveRequest } from "./admin-actions";
+import { generateToken, hashToken, INVITE_TTL_HOURS } from "./tokens";
+import {
+  ownershipTransferredEmail,
+  programInviteEmail,
+  sendEmail,
+} from "@/lib/services/email";
+import { programDisplayName } from "@/lib/data/programs-server";
+import { displayName } from "./invite-acceptance";
+import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
+import type { MemberRole } from "@/lib/data/team-settings-server";
+// The dialog-facing result shape, imported rather than re-declared so
+// `adminAddProgramPlayer` and `addProgramPlayer` cannot drift apart while
+// `add-player-dialog.tsx` takes either one as the same action prop.
+import type { AddPlayerResult } from "@/components/dashboard/team/roster-actions";
+import type { EventsPolicy, UploadPolicy } from "@/lib/workspace/types";
+
+/**
+ * The writes the admin console performs on somebody else's program.
+ *
+ * Every one of these is the Settings › Teams action from
+ * `components/dashboard/settings/team-actions.ts` with exactly two things
+ * changed, and nothing else:
+ *
+ *  1. **The gate.** The member-facing actions resolve the caller's workspace
+ *     and refuse an id that is not in `available`. An admin is by definition
+ *     NOT a member of the program they are repairing, so that check would
+ *     refuse every legitimate call. `requireAdmin()` replaces it — the same
+ *     guard every other admin action in this directory uses, returning
+ *     `{ ok: false }` rather than throwing, because these are called from
+ *     client components that render the message.
+ *
+ *  2. **Which RPC, and through which client.** T4 widened
+ *     `set_program_member_role`, `set_program_crest`, `create_program_invite`
+ *     and `revoke_program_invite` in place to also accept `is_admin()`, so
+ *     those are called exactly as the member-facing actions call them.
+ *     Ownership is the exception: `transfer_program_ownership` demotes *the
+ *     caller* and refuses `p_new_owner = auth.uid()`, which is nonsense for an
+ *     admin acting on a program they are not in, so T4 added the separate
+ *     `admin_transfer_program_ownership`.
+ *
+ * ── Session client vs. service role ─────────────────────────────────────────
+ * **Every RPC goes through the SESSION client.** All four widened functions
+ * are `security definer` and write `program_audit_log.actor_user_id` from
+ * `auth.uid()`. Calling them with the service-role key would put a null — or
+ * the service identity — in the actor column of the row that records who
+ * changed a collegiate program's ownership. The audit log is the whole point
+ * of doing this through RPCs rather than table writes, so it has to name the
+ * human who pressed the button.
+ *
+ * **Reads and storage go through the SERVICE-ROLE client**, because they are
+ * the things RLS and the bucket policy genuinely will not let a non-member do:
+ * the `program-crests` bucket's policy is member-scoped, and reading the
+ * target user's email address for the ownership mail is a row an admin has no
+ * membership path to. `createAdminClient` never reaches a client bundle — this
+ * module is `"use server"`.
+ */
+
+/** Everything under the admin console re-renders after any of these. */
+const ADMIN_PATH = "/admin";
+
+type AdminTeamOutcome = { ok: true } | { ok: false; error: string };
+
+type AdminTransferResult =
+  { ok: true; warning?: string } | { ok: false; error: string };
+
+type AdminInviteResult =
+  | { ok: true; warning?: string }
+  | { ok: false; error: string; linkTo?: { profileId: string } };
+
+const NOT_AUTHORIZED = "Not authorized.";
+
+/** Postgres RAISE messages are written for people; pass them straight through. */
+function toMessage(
+  error: { message: string } | null,
+  fallback: string,
+): string {
+  const raw = error?.message?.trim();
+  return raw && raw.length > 0 ? raw : fallback;
+}
+
+/**
+ * What to call this program in an email — the same shared name the
+ * member-facing actions use, so an admin-sent invitation and a coach-sent one
+ * name the program identically.
+ */
+async function programLabel(
+  db: ReturnType<typeof createAdminClient>,
+  programId: string,
+): Promise<string | null> {
+  const { data } = await db
+    .from("programs")
+    .select("school_name, team")
+    .eq("id", programId)
+    .maybeSingle();
+  if (!data) return null;
+  return programDisplayName(
+    data.school_name as string,
+    (data.team as string | null) ?? null,
+  );
+}
+
+/**
+ * Change one member's standing, as an admin.
+ *
+ * Mirrors `setProgramMemberRole`. The RPC still holds every rule — `owner` is
+ * never assignable, the owner's own row moves by transfer, nobody edits their
+ * own row — and T4's one added line is what lets an admin past the
+ * membership gate while leaving all of them in force.
+ */
+export async function adminSetProgramMemberRole(input: {
+  programId: string;
+  userId: string;
+  role: Exclude<MemberRole, "owner">;
+}): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  // SESSION client: `set_program_member_role` stamps `auth.uid()` into
+  // `program_audit_log.actor_user_id`.
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_program_member_role", {
+    p_program_id: input.programId,
+    p_user_id: input.userId,
+    p_role: input.role,
+  });
+
+  if (error) {
+    return { ok: false, error: toMessage(error, "Couldn't change that role.") };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
+}
+
+/**
+ * Hand a program to one of its coaches or staff, as an admin.
+ *
+ * `admin_transfer_program_ownership` is the authority: it demotes whoever
+ * currently holds the role (rather than the caller, who holds nothing here),
+ * copes with a program that has no owner row at all — the state this console
+ * exists to repair — and moves both the member rows and
+ * `programs.owner_user_id` under one lock.
+ *
+ * The email is a courtesy sent afterwards, exactly as in
+ * `transferProgramOwnership`: the row is the truth, a failed send is a
+ * warning, never a failed transfer. The recipient's address is read from
+ * `users` with the service-role client — an admin who is not a member has no
+ * RLS path to it, and `program_roster` is staff-gated.
+ *
+ * `previousOwnerName` is the OUTGOING owner, not the admin. The template's
+ * sentence is "X transferred ownership to you", and naming the platform admin
+ * there would tell the new owner about a person they have never dealt with.
+ * Read before the RPC, because the RPC is what stops them being the owner.
+ */
+export async function adminTransferProgramOwnership(input: {
+  programId: string;
+  newOwnerUserId: string;
+}): Promise<AdminTransferResult> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const db = createAdminClient();
+
+  // SERVICE ROLE, and before the write: after it, this person is a coach.
+  const { data: outgoing } = await db
+    .from("program_members")
+    .select(
+      "user:users!program_members_user_id_fkey(first_name, last_name, email)",
+    )
+    .eq("program_id", input.programId)
+    .eq("role", "owner")
+    .limit(1)
+    .maybeSingle();
+
+  const outgoingUser = (
+    outgoing as {
+      user:
+        | {
+            first_name: string | null;
+            last_name: string | null;
+            email: string | null;
+          }
+        | {
+            first_name: string | null;
+            last_name: string | null;
+            email: string | null;
+          }[]
+        | null;
+    } | null
+  )?.user;
+  const previousOwner = Array.isArray(outgoingUser)
+    ? (outgoingUser[0] ?? null)
+    : (outgoingUser ?? null);
+
+  // SESSION client: the audit row's `actor_user_id` must be this admin.
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_transfer_program_ownership", {
+    p_program_id: input.programId,
+    p_new_owner: input.newOwnerUserId,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't transfer ownership."),
+    };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+
+  const programName = await programLabel(db, input.programId);
+
+  // SERVICE ROLE: the new owner's address, read from the row rather than taken
+  // from the caller.
+  const { data: recipient } = await db
+    .from("users")
+    .select("first_name, last_name, email")
+    .eq("id", input.newOwnerUserId)
+    .maybeSingle();
+
+  const to = (recipient?.email as string | null)?.trim();
+  if (!to || !programName) {
+    return {
+      ok: true,
+      warning: "Ownership moved, but we couldn't find an address to notify.",
+    };
+  }
+
+  const recipientName = displayName(
+    (recipient?.first_name as string | null) ?? null,
+    (recipient?.last_name as string | null) ?? null,
+  );
+
+  const sent = await sendEmail(
+    ownershipTransferredEmail({
+      to,
+      recipientName,
+      programName,
+      programId: input.programId,
+      previousOwnerName: previousOwner
+        ? displayName(
+            (previousOwner.first_name as string | null) ?? null,
+            (previousOwner.last_name as string | null) ?? null,
+          )
+        : null,
+      hadPreviousOwner: previousOwner !== null,
+    }),
+  );
+
+  if (!sent.ok) {
+    const reason = sent.error.replace(/\.$/, "");
+    return {
+      ok: true,
+      warning: `Ownership moved, but we couldn't email ${recipientName ?? to} (${reason}). Let them know yourself.`,
+    };
+  }
+
+  return { ok: true };
+}
+
+const CREST_TYPES: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+};
+
+/** The bucket's own limit, restated so the refusal is a sentence, not a 413. */
+const CREST_MAX_BYTES = 524_288;
+
+/**
+ * Replace a program's crest, as an admin.
+ *
+ * The same three-step sequence as `uploadProgramCrest`, including the
+ * rollback: upload the new object, point the row at it, then remove whatever
+ * it replaced — and if the row write fails, take the new object back down so a
+ * failed save does not leave a stray file under the program's prefix. The key
+ * carries a stamp for the same reason: a fixed key behind the CDN serves the
+ * old image for the cache's lifetime, and a png→svg swap would orphan the old
+ * object.
+ *
+ * SERVICE ROLE for all three storage calls and the `crest_path` read — the
+ * `program-crests` bucket's policy is member-scoped, so a non-member admin's
+ * session key is refused by the bucket no matter what `is_admin()` says.
+ * SESSION client for `set_program_crest`, which is where the authorization
+ * actually happens (T4 widened its staff gate to `or public.is_admin()`) and
+ * which enforces that the path lives under the program's own prefix.
+ */
+export async function adminUploadProgramCrest(
+  formData: FormData,
+): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const programId = String(formData.get("programId") ?? "");
+  const file = formData.get("file");
+
+  if (!programId) return { ok: false, error: "No program named." };
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Choose an image first." };
+  }
+  const ext = CREST_TYPES[file.type];
+  if (!ext) {
+    return { ok: false, error: "Use a PNG, JPG, WebP or SVG." };
+  }
+  if (file.size > CREST_MAX_BYTES) {
+    return { ok: false, error: "Keep the crest under 512 KB." };
+  }
+
+  const db = createAdminClient();
+  const { data: current } = await db
+    .from("programs")
+    .select("crest_path")
+    .eq("id", programId)
+    .maybeSingle();
+  const previous = (current?.crest_path as string | null | undefined) ?? null;
+
+  const path = `${programId}/crest-${Date.now()}.${ext}`;
+  const { error: uploadError } = await db.storage
+    .from(PROGRAM_CRESTS_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: false });
+
+  if (uploadError) {
+    return {
+      ok: false,
+      error: `Couldn't upload the crest: ${uploadError.message}`,
+    };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_program_crest", {
+    p_program_id: programId,
+    p_crest_path: path,
+  });
+
+  if (error) {
+    // The object is up but the row does not point at it. Take it back down.
+    await db.storage.from(PROGRAM_CRESTS_BUCKET).remove([path]);
+    return { ok: false, error: toMessage(error, "Couldn't save the crest.") };
+  }
+
+  if (previous && previous !== path) {
+    await db.storage.from(PROGRAM_CRESTS_BUCKET).remove([previous]);
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
+}
+
+/** Back to the initials mark. Row first, then the object it pointed at. */
+export async function adminRemoveProgramCrest(
+  programId: string,
+): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const db = createAdminClient();
+  const { data: current } = await db
+    .from("programs")
+    .select("crest_path")
+    .eq("id", programId)
+    .maybeSingle();
+  const previous = (current?.crest_path as string | null | undefined) ?? null;
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_program_crest", {
+    p_program_id: programId,
+    p_crest_path: null,
+  });
+  if (error) {
+    return { ok: false, error: toMessage(error, "Couldn't remove the crest.") };
+  }
+
+  if (previous) {
+    await db.storage.from(PROGRAM_CRESTS_BUCKET).remove([previous]);
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
+}
+
+/**
+ * Invite somebody into a program, as an admin.
+ *
+ * Mirrors `inviteMember` step for step: mint the token here and hold it, write
+ * only its hash through `create_program_invite` (six keys always, including an
+ * explicit null, because PostgREST resolves the overload by parameter names),
+ * then send the mail. The row is written before the mail goes out and is NOT
+ * rolled back when the mail fails — the row is what the roster lists and what
+ * acceptance looks up, so a briefly unreachable mail API is not a reason to
+ * throw the durable half away. Hence the third outcome: `ok: true` with a
+ * warning.
+ *
+ * The RPC still enforces seats, the already-a-member refusal and the
+ * `link_player` tripwire; T4 only widened its staff gate. The tripwire's
+ * `hint`/`detail` are carried back the same way, so an admin dialog can reopen
+ * on the roster row the invitation should attach to.
+ *
+ * `inviterName` is deliberately null — "Advantage Analytics invited you" is
+ * what the template falls back to, and naming a platform admin to a recruit
+ * who has never heard of them is worse than naming nobody.
+ */
+export async function adminInviteMember(input: {
+  programId: string;
+  email: string;
+  role: Exclude<MemberRole, "owner">;
+  /** The roster row this invitation binds a login to, if any. */
+  playerId?: string | null;
+}): Promise<AdminInviteResult> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const db = createAdminClient();
+  const programName = await programLabel(db, input.programId);
+  if (!programName) {
+    return { ok: false, error: "That program no longer exists." };
+  }
+
+  const expiresAt = new Date(Date.now() + INVITE_TTL_HOURS * 60 * 60 * 1000);
+  const token = generateToken();
+
+  // SESSION client: `create_program_invite` writes `invited_by` and the
+  // `invite.created` audit row from `auth.uid()`.
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("create_program_invite", {
+    p_program_id: input.programId,
+    p_email: input.email,
+    p_role: input.role,
+    p_token_hash: hashToken(token),
+    p_expires_at: expiresAt.toISOString(),
+    p_player_id: input.playerId ?? null,
+  });
+
+  if (error) {
+    const linkTo =
+      error.hint === "link_player" && error.details
+        ? { profileId: String(error.details) }
+        : undefined;
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't send that invite."),
+      ...(linkTo ? { linkTo } : {}),
+    };
+  }
+
+  // Normalised the way the RPC normalises it, so the address printed in the
+  // mail is the address acceptance compares against.
+  const sent = await sendEmail(
+    programInviteEmail({
+      to: input.email.trim().toLowerCase(),
+      programName,
+      inviterName: null,
+      role: input.role,
+      token,
+      expiresAt,
+    }),
+  );
+
+  revalidatePath(ADMIN_PATH, "layout");
+
+  if (!sent.ok) {
+    return {
+      ok: true,
+      warning: `${sent.error} The invite is saved — press resend to try again.`,
+    };
+  }
+
+  return { ok: true };
+}
+
+/** Withdraw an outstanding invitation. T4 widened the RPC's staff gate. */
+export async function adminRevokeInvite(
+  inviteId: string,
+): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("revoke_program_invite", {
+    p_invite_id: inviteId,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't revoke that invite."),
+    };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
+}
+
+/**
+ * Close one open join request — `program_requests` kind `invite_request`.
+ *
+ * The same two outcomes the roster's own review dialog offers, for the same
+ * reason spelled out on `approveJoinRequest`: membership is only ever
+ * self-created (`program_members.user_id` is NOT NULL and every insert path
+ * keys on `auth.uid()`), so a request carrying an email and no account cannot
+ * be turned straight into a member. "Invite" therefore does what a coach would
+ * do by hand — send a player invitation, which reserves a seat now and mints
+ * the membership on acceptance — and only then clears the request.
+ *
+ * Order matters and is the roster's: the invite is the durable half and goes
+ * first. A refusal leaves the request OPEN on purpose — a full program, a
+ * duplicate address, the `link_player` tripwire are all things somebody has to
+ * fix before this person can be let in, and a request resolved without an
+ * invitation behind it vanishes from the one list that still says they are
+ * waiting.
+ *
+ * The role comes from `memberRoleForClaimRole()`, never straight from the row.
+ * `program_requests.role` holds a CLAIM role (`head_coach`, `assistant_coach`…),
+ * which is not the same vocabulary as `program_members.role`, so it is
+ * translated: the three coach answers become `coach`, and `player`, `other`
+ * or no answer stay `player`. Hard-coding `player` here (as the first version
+ * did) invited every coach who asked to join as an athlete, with nothing on
+ * screen to say so.
+ *
+ * The address is read from the request's own row with the service-role client
+ * and never taken from the caller, and `resolveRequest` — which already
+ * re-checks admin, filters to `status = 'open'`, and sends the decline mail on
+ * the dismiss path — closes the row.
+ */
+export async function adminResolveJoinRequest(
+  requestId: string,
+  action: "invite" | "dismiss",
+): Promise<AdminInviteResult> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  if (action === "dismiss") {
+    // `resolveRequest` owns the decline email and the open-only filter.
+    const dismissed = await resolveRequest(requestId, "dismissed");
+    if (!dismissed.ok) return dismissed;
+    revalidatePath(ADMIN_PATH, "layout");
+    return { ok: true };
+  }
+
+  const db = createAdminClient();
+  const { data: request } = await db
+    .from("program_requests")
+    .select("id, email, program_id, kind, status, role")
+    .eq("id", requestId)
+    .maybeSingle();
+
+  if (
+    !request ||
+    request.kind !== "invite_request" ||
+    request.status !== "open"
+  ) {
+    return { ok: false, error: "That request is no longer open." };
+  }
+  if (!request.program_id) {
+    return { ok: false, error: "That request doesn't name a program." };
+  }
+
+  const invite = await adminInviteMember({
+    programId: request.program_id as string,
+    email: request.email as string,
+    role: memberRoleForClaimRole(request.role as string | null),
+  });
+  if (!invite.ok) return invite;
+
+  const resolved = await resolveRequest(requestId, "resolved");
+  if (!resolved.ok) {
+    // The invite is out and the seat is held; only closing the request failed.
+    // Re-inviting simply refreshes the same row — `create_program_invite`
+    // upserts on the one-open-invite index — so this is a note, not an error
+    // over an invitation that actually went.
+    return {
+      ok: true,
+      warning: `Invite sent, but the request stayed in the queue: ${resolved.error}`,
+    };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return invite;
+}
+
+// ---------------------------------------------------------------------------
+// Details and pilot (T6)
+// ---------------------------------------------------------------------------
+
+/**
+ * The twelve editable columns of a program's Details card, in the console's own
+ * camelCase — the same spelling `AdminTeamProgram` reads them back in, so a
+ * form can round-trip a field without a second naming convention in between.
+ *
+ * A key that is PRESENT is written; `null` clears a nullable column. A key that
+ * is ABSENT is left alone. That distinction is the whole reason
+ * `admin_update_program_details` takes a jsonb patch rather than twelve
+ * nullable parameters, so it has to survive the trip from here: `undefined` is
+ * treated as absent (it is what an optional property reads as, and what
+ * `JSON.stringify` would drop anyway), and only own, defined keys are sent.
+ *
+ * The RPC still owns every rule — the trim, the `''` → null collapse, the
+ * squad/surface/zone/policy vocabularies, "a collegiate program must have a
+ * squad", the companion `players_can_upload` and `primary_domain_inferred`
+ * writes, and the audit diff. Re-validating any of it here would be a second
+ * copy to drift.
+ */
+export type AdminProgramDetailsPatch = {
+  schoolName?: string;
+  team?: "mens" | "womens" | null;
+  city?: string | null;
+  state?: string | null;
+  staffPageUrl?: string | null;
+  primaryDomain?: string | null;
+  homeVenue?: string | null;
+  defaultSurface?: string | null;
+  timeZone?: string;
+  uploadPolicy?: UploadPolicy;
+  eventsPolicy?: EventsPolicy;
+  rosterPublic?: boolean;
+};
+
+/** Patch key → the `programs` column `admin_update_program_details` whitelists. */
+const DETAILS_COLUMNS: Record<keyof AdminProgramDetailsPatch, string> = {
+  schoolName: "school_name",
+  team: "team",
+  city: "city",
+  state: "state",
+  staffPageUrl: "staff_page_url",
+  primaryDomain: "primary_domain",
+  homeVenue: "home_venue",
+  defaultSurface: "default_surface",
+  timeZone: "time_zone",
+  uploadPolicy: "upload_policy",
+  eventsPolicy: "events_policy",
+  rosterPublic: "roster_public",
+};
+
+/**
+ * Edit a program's own details, as an admin.
+ *
+ * Mirrors `adminSetProgramMemberRole`: `requireAdmin()`, then the RPC through
+ * the SESSION client so `program_audit_log.actor_user_id` names this admin —
+ * `admin_update_program_details` writes one `program.details_changed` row per
+ * successful call, and the whole point of routing a details edit through an RPC
+ * rather than an `update` is that the row says who did it.
+ *
+ * An empty patch is not short-circuited here: the RPC raises "Nothing to
+ * change." for it, and duplicating that sentence in TypeScript is a second
+ * place for the two to disagree.
+ */
+export async function adminUpdateProgramDetails(input: {
+  programId: string;
+  patch: AdminProgramDetailsPatch;
+}): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const patch: Record<string, unknown> = {};
+  for (const [key, column] of Object.entries(DETAILS_COLUMNS)) {
+    if (!Object.prototype.hasOwnProperty.call(input.patch, key)) continue;
+    const value = input.patch[key as keyof AdminProgramDetailsPatch];
+    if (value === undefined) continue;
+    patch[column] = value;
+  }
+
+  // SESSION client: `admin_update_program_details` stamps `auth.uid()` into
+  // `program_audit_log.actor_user_id`.
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_update_program_details", {
+    p_program_id: input.programId,
+    p_patch: patch,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't save those details."),
+    };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
+}
+
+/** A calendar date, zero-padded, exactly as `programs.pilot_ends_on` reads. */
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Is this string a real day on the calendar?
+ *
+ * The regex alone accepts `2026-02-30` and `2026-13-01`, which Postgres would
+ * refuse as a `22008` — a raw driver error where the admin deserves a sentence.
+ * Round-tripping through `Date.UTC` is the check: February 30th normalises to
+ * March 2nd and the fields no longer match what was typed.
+ */
+function isCalendarDate(value: string): boolean {
+  if (!ISO_DATE.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  return (
+    probe.getUTCFullYear() === year &&
+    probe.getUTCMonth() === month - 1 &&
+    probe.getUTCDate() === day
+  );
+}
+
+/**
+ * Move a program's pilot end date, as an admin.
+ *
+ * `endsOn` is the LAST FREE DAY, inclusive — a bare calendar date with no zone,
+ * because that is what the column is (T1: "same reasoning as `PILOT_ENDS_AT`").
+ *
+ * ── What this refuses before the RPC, and why here ──────────────────────────
+ *
+ * `admin_set_pilot_end` checks only that the date is not null; it will happily
+ * store a date in the past, and `admin_end_pilot` is the deliberate way to make
+ * a pilot over. So the two refusals are this action's:
+ *
+ *   * MALFORMED — anything that is not `YYYY-MM-DD` naming a real day. Left to
+ *     the driver it is a `22008` with Postgres's own wording, and `''` would
+ *     arrive as a null and read as "date is required".
+ *   * PAST — a date strictly before today. Back-dating an end date is
+ *     `adminEndPilot` spelled ambiguously: it would clear `pilot_ended_at` (the
+ *     RPC always does) while leaving the pilot expired, so the row would say
+ *     "ran out on its own" about a pilot an admin stopped by hand.
+ *
+ * TODAY IS NOT PAST. The date is the last *inclusive* free day, so today means
+ * "free through the end of today" — a real choice, not an expiry.
+ *
+ * ── How "past" is computed ─────────────────────────────────────────────────
+ *
+ * By comparing the two `YYYY-MM-DD` strings, `endsOn < today`. Zero-padded ISO
+ * dates sort lexicographically in calendar order, so no `Date` is parsed for
+ * the comparison at all — which is the point: `new Date("2026-09-26") <
+ * new Date()` parses the left side as midnight UTC and is therefore true for
+ * every hour of today, rejecting the current day as past. Only `today` itself
+ * comes from a clock, via `toISOString()`, which is already the zero-padded
+ * ISO spelling.
+ *
+ * `today` is UTC, not the program's zone. `AdminTeamProgram.timeZone` exists,
+ * but the action is handed only what its caller passes — reading the program row
+ * to validate a bound is a round trip for a one-day edge — and a zone-free
+ * column has no zone of its own to honour. The one consequence is that an admin
+ * west of UTC late in their evening cannot pick their local "today"; they pick
+ * the next day, which for an inclusive last-free-day is a day more of pilot,
+ * never a day less.
+ */
+export async function adminSetPilotEnd(input: {
+  programId: string;
+  /** `YYYY-MM-DD`, the last free day, inclusive. */
+  endsOn: string;
+}): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const endsOn = input.endsOn?.trim() ?? "";
+  if (!isCalendarDate(endsOn)) {
+    return { ok: false, error: "Use a date like 2026-12-31." };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (endsOn < today) {
+    return {
+      ok: false,
+      error: "That date has already passed — end the pilot instead.",
+    };
+  }
+
+  // SESSION client: the `pilot.end_changed` audit row's actor must be the admin.
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_set_pilot_end", {
+    p_program_id: input.programId,
+    p_ends_on: endsOn,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't change the pilot end date."),
+    };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
+}
+
+/**
+ * Stop a pilot now, as an admin.
+ *
+ * Nothing to validate: the RPC stamps `pilot_ended_at = now()`, clamps
+ * `pilot_ends_on` to `least(pilot_ends_on, current_date)` so it can only ever
+ * shorten, is idempotent on an already-ended pilot (no write, no audit row),
+ * and does not touch `programs.status`. This is the thin one — `requireAdmin()`,
+ * the SESSION client for the `pilot.ended` audit row, revalidate.
+ */
+export async function adminEndPilot(
+  programId: string,
+): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_end_pilot", {
+    p_program_id: programId,
+  });
+
+  if (error) {
+    return { ok: false, error: toMessage(error, "Couldn't end the pilot.") };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Member upload switch and roster players (T7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Let one member of somebody else's program spend its analysis budget, or stop
+ * them — the admin console's copy of the Roster page's per-person switch
+ * (`components/dashboard/team/roster-actions.ts`'s `setMemberUploadEnabled`).
+ *
+ * The one difference is `programId`, and it is not an optional convenience: the
+ * member-facing action reads the program out of `getWorkspaceContext()` because
+ * a coach is *in* the program they are editing. An admin is not, so there is no
+ * membership to infer from and the id has to be passed. T3 is what makes that
+ * safe — it widened the RPC's gate to `is_program_staff(p_program_id) or
+ * is_admin()`, so the id is authorised against `users.is_admin` rather than
+ * against a membership the caller does not have.
+ *
+ * SESSION client, like every other write in this module: the RPC is
+ * `security definer`, and a service-role call would be an unidentified actor.
+ *
+ * KNOWN GAP, deliberately not fixed here: `set_member_upload_enabled` writes no
+ * `program_audit_log` row at all, so an admin flipping another program's switch
+ * leaves no trace. That is an open follow-up against the RPC, not something an
+ * action can paper over — a second write from here would be an audit row the
+ * coach-facing path does not produce, i.e. two different histories for one
+ * switch.
+ *
+ * The RPC's two raises carry the same meanings the member action documents —
+ * `42501` for an unauthorised caller, `P0002` for a write that matched no
+ * `program_members` row — and both messages are written for a person, so
+ * `toMessage` passes them straight through.
+ */
+export async function adminSetMemberUploadEnabled(input: {
+  programId: string;
+  userId: string;
+  enabled: boolean;
+}): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_member_upload_enabled", {
+    p_program_id: input.programId,
+    p_user_id: input.userId,
+    p_enabled: input.enabled,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't change that permission."),
+    };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
+}
+
+/**
+ * Add a coach-managed player row to somebody else's roster, as an admin.
+ *
+ * ── Why this returns `AddPlayerResult` and not `AdminTeamOutcome` ───────────
+ *
+ * Because `add-player-dialog.tsx` is going to be handed this function as an
+ * action prop unchanged (T13), and the dialog does not merely check `ok`: on
+ * success it stores `result.profileId` and, when "also invite" is ticked,
+ * invites against that id in the same breath. `AdminTeamOutcome` has no id to
+ * give it, so the dialog would need a second shape — or a re-read of the roster
+ * to guess which row it just wrote. `AddPlayerResult`'s failure arm is already
+ * `{ ok: false; error: string }`, so nothing about the refusal contract changes;
+ * `{ ok: false }` for a non-admin is exactly what `AdminTeamOutcome` would give.
+ *
+ * The input is `addProgramPlayer`'s player fields, spelled identically,
+ * plus the `programId` an admin has no workspace to infer. The dialog's caller
+ * binds that one id and passes the rest through verbatim.
+ *
+ * Every rule stays in `add_program_player`: staff-or-admin, both names
+ * required, the email shape, the seat count (`54000`, in prose) and the two
+ * duplicate checks. Its messages are written for people and pass through.
+ */
+export async function adminAddProgramPlayer(input: {
+  programId: string;
+  firstName: string;
+  lastName: string;
+  classYear?: string | null;
+  lineupSpot?: number | null;
+  email?: string | null;
+  hand?: string | null;
+  backhand?: string | null;
+}): Promise<AddPlayerResult> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("add_program_player", {
+    p_program_id: input.programId,
+    p_first_name: input.firstName,
+    p_last_name: input.lastName,
+    p_class_year: input.classYear ?? null,
+    p_lineup_spot: input.lineupSpot ?? null,
+    p_email: input.email ?? null,
+    // The RPC refuses anything outside the vocabulary in prose; "" is unset.
+    p_hand: input.hand || null,
+    p_backhand: input.backhand || null,
+  });
+
+  if (error) {
+    return { ok: false, error: toMessage(error, "Couldn't add that player.") };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true, profileId: typeof data === "string" ? data : null };
+}

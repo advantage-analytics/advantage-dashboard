@@ -1,0 +1,33 @@
+$kind: http-example
+name: "Past the reservation: the vendor URL could not be minted, the vendor refused the POST, or its answer carried no job id. The reservation is handed back and the job is marked `failed`. The vendor's own text stays in the server log."
+request:
+  url: "{{baseUrl}}/api/splitstep/jobs"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "jobId": "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f",
+        "initialTopPlayerIsPlayer1": true,
+        "adScoring": true,
+        "fixedCamera": true
+      }
+response:
+  statusCode: 502
+  statusText: Bad Gateway
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "Could not submit this match for analysis.",
+        "code": "vendor_rejected"
+      }
+order: 10000

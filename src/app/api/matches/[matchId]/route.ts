@@ -1,176 +1,402 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  purgeMatchStorage,
+  PurgeRefusedError,
+} from "@/lib/services/matches/purge-match-storage";
+import { releaseStoragePurgeClaims } from "@/lib/services/matches/release-storage-purge-claim";
+import { resolveAnalysisStatus } from "@/lib/data/match-analysis";
+import { isUuid } from "@/lib/services/match-video/access";
+import { isPlainObject } from "@/lib/services/match-video/http";
+import {
+  normalizeMatchPatch,
+  type MatchFormat,
+  type MatchScore,
+} from "@/lib/matches/patch-match";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { canManageTeamSchedule } from "@/lib/workspace/types";
+import { takenRoundCodes } from "@/lib/matches/round-options";
+import {
+  rosterPlayerOptions,
+  type RosterFullRow,
+} from "@/lib/data/roster-shared";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // Beta gate: every PATCH forces private = true until we surface the toggle.
 const BETA_FORCE_PRIVATE = true;
 
-type MatchScoreShape = {
-  player1: number[];
-  player2: number[];
-  player1_tiebreaks?: (number | null)[];
-  player2_tiebreaks?: (number | null)[];
-  winner?: "player1" | "player2" | null;
-};
+/**
+ * The Edit Match dialog's read and write.
+ *
+ * GET carries what the dialog decides its layout from, not just the editable
+ * columns: whether the match was analyzed (format is then fixed), the event
+ * line it sits on (E1 — the event owns date, round, type and surface), and
+ * whether this viewer may attach a one-off team match to a line, take it off
+ * one, or change its round on a tournament line.
+ *
+ * PATCH rules live in `normalizeMatchPatch` (`src/lib/matches/patch-match.ts`).
+ */
+
+const MATCH_COLUMNS =
+  "id, tournament_name, round, date, match_type, court_type, player1_id, player1_name, player2_name, score, private, format, duration, player_hand, player_backhand, opponent_hand, opponent_backhand, program_id, event_entry_id, source_provider";
+
+interface MatchRow {
+  id: string;
+  score: MatchScore | null;
+  format: MatchFormat | null;
+  program_id: string | null;
+  event_entry_id: string | null;
+  source_provider: string | null;
+  [key: string]: unknown;
+}
+
+/** The event line a match is filed under, as the dialog's header reads it. */
+export interface MatchEventContext {
+  eventId: string;
+  eventName: string;
+  eventKind: "dual" | "tournament";
+  slot: string | null;
+  discipline: string;
+  startsOn: string;
+  endsOn: string;
+  site: string;
+  surface: string | null;
+  format: { best_of?: number; ad_scoring?: boolean | null } | null;
+  /**
+   * Rounds the line already holds without this match — its other matches'
+   * and its outcomes' — as round codes. The Round menu leaves them out;
+   * `set_match_round_on_line` refuses them either way.
+   */
+  takenRounds: string[];
+}
+
+/**
+ * The route's answer for a match that does not exist for this caller. A
+ * malformed id gets it too, before any Supabase call: Postgres would only
+ * refuse it as an invalid uuid, which the lookup turned into a 500.
+ */
+function notFound() {
+  return NextResponse.json({ error: "Not found" }, { status: 404 });
+}
+
+/** DELETE's answer when the admin console's purge guard refuses the match. */
+const PURGE_PROTECTED_MESSAGE =
+  "Matches recorded or analyzed through the admin console cannot be deleted here.";
+
+/** DELETE's answer when that guard could not be checked, or anything else threw. */
+const PURGE_UNAVAILABLE_MESSAGE = "Match deletion is unavailable. Try again.";
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
 function badRequest(error: string, field?: string) {
-  return NextResponse.json({ error, ...(field ? { field } : {}) }, { status: 400 });
+  return NextResponse.json(
+    { error, ...(field ? { field } : {}) },
+    { status: 400 },
+  );
 }
 
-function isFiniteNonNegInt(n: unknown): n is number {
-  return typeof n === "number" && Number.isFinite(n) && n >= 0 && Number.isInteger(n);
+/**
+ * A 500 whose logged detail (the real Supabase error) never reaches the
+ * client — only `publicMessage` does.
+ */
+function serverError(logLabel: string, cause: unknown, publicMessage: string) {
+  console.error(logLabel, cause);
+  return NextResponse.json({ error: publicMessage }, { status: 500 });
 }
 
-function validateScore(value: unknown): MatchScoreShape | string {
-  if (!value || typeof value !== "object") return "score must be an object";
-  const v = value as Record<string, unknown>;
-  if (!Array.isArray(v.player1) || !Array.isArray(v.player2)) {
-    return "score.player1 and score.player2 must be arrays";
-  }
-  if (v.player1.length !== v.player2.length) {
-    return "score.player1 and score.player2 must have equal length";
-  }
-  if (v.player1.length === 0) return "score must contain at least one set";
-  if (v.player1.length > 7) return "score cannot have more than 7 sets";
-  if (!v.player1.every(isFiniteNonNegInt) || !v.player2.every(isFiniteNonNegInt)) {
-    return "score games must be non-negative integers";
-  }
+type Supabase = Awaited<ReturnType<typeof createClient>>;
 
-  const p1Tb = v.player1_tiebreaks;
-  const p2Tb = v.player2_tiebreaks;
-  const normTb = (arr: unknown): (number | null)[] | string => {
-    if (arr === undefined || arr === null) return [];
-    if (!Array.isArray(arr)) return "tiebreaks must be an array";
-    return arr.map((x) => (x === null || x === undefined || x === "" ? null : Number(x))) as (number | null)[];
-  };
-  const tb1 = normTb(p1Tb);
-  const tb2 = normTb(p2Tb);
-  if (typeof tb1 === "string") return tb1;
-  if (typeof tb2 === "string") return tb2;
+/**
+ * The newest job for the match, in the shared status vocabulary, or null —
+ * with the read's error beside it. A failed read must not pass for "not
+ * analysed": PATCH would then unlock the format and player edits that an
+ * analysed match keeps fixed.
+ */
+async function analysisFor(supabase: Supabase, matchId: string) {
+  const { data, error } = await supabase
+    .from("processing_jobs")
+    .select("status, derivation_version")
+    .eq("match_id", matchId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return { analysis: null, error };
+  if (!data) return { analysis: null, error: null };
+  const row = data as { status: string; derivation_version: string | null };
+  const status = resolveAnalysisStatus(row.status, row.derivation_version);
+  return { analysis: status ? { status } : null, error: null };
+}
 
-  let p1Sets = 0;
-  let p2Sets = 0;
-  for (let i = 0; i < v.player1.length; i++) {
-    const a = v.player1[i] as number;
-    const b = v.player2[i] as number;
-    if (a > b) p1Sets++;
-    else if (b > a) p2Sets++;
-  }
-  const winner: "player1" | "player2" | null =
-    p1Sets === p2Sets ? null : p1Sets > p2Sets ? "player1" : "player2";
-
+async function eventContextFor(
+  supabase: Supabase,
+  entryId: string,
+  matchId: string,
+): Promise<MatchEventContext | null> {
+  const [{ data }, { data: others }, { data: outcomes }] = await Promise.all([
+    supabase
+      .from("program_event_entries")
+      .select(
+        "slot, discipline, event:program_events(id, name, kind, starts_on, ends_on, site, surface, format)",
+      )
+      .eq("id", entryId)
+      .maybeSingle(),
+    supabase
+      .from("matches")
+      .select("round")
+      .eq("event_entry_id", entryId)
+      .neq("id", matchId),
+    supabase
+      .from("program_event_outcomes")
+      .select("round")
+      .eq("entry_id", entryId),
+  ]);
+  const row = data as {
+    slot: string | null;
+    discipline: string;
+    event: {
+      id: string;
+      name: string;
+      kind: "dual" | "tournament";
+      starts_on: string;
+      ends_on: string;
+      site: string;
+      surface: string | null;
+      format: MatchEventContext["format"];
+    } | null;
+  } | null;
+  if (!row?.event) return null;
+  const takenRounds = takenRoundCodes([
+    ...((others ?? []) as { round: string | null }[]),
+    ...((outcomes ?? []) as { round: string | null }[]),
+  ]);
   return {
-    player1: v.player1 as number[],
-    player2: v.player2 as number[],
-    player1_tiebreaks: tb1,
-    player2_tiebreaks: tb2,
-    winner,
+    eventId: row.event.id,
+    eventName: row.event.name,
+    eventKind: row.event.kind,
+    slot: row.slot,
+    discipline: row.discipline,
+    startsOn: row.event.starts_on,
+    endsOn: row.event.ends_on,
+    site: row.event.site,
+    surface: row.event.surface,
+    format: row.event.format,
+    takenRounds,
   };
 }
 
-function trimOrNull(v: unknown): string | null | undefined {
-  if (v === undefined) return undefined;
-  if (v === null) return null;
-  if (typeof v !== "string") return undefined;
-  const t = v.trim();
-  return t === "" ? null : t;
+async function loadOwnMatch(
+  supabase: Supabase,
+  matchId: string,
+  userId: string,
+) {
+  return supabase
+    .from("matches")
+    .select(MATCH_COLUMNS)
+    .eq("id", matchId)
+    .eq("created_by", userId)
+    .maybeSingle();
 }
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ matchId: string }> }
+  { params }: { params: Promise<{ matchId: string }> },
 ) {
   const { matchId } = await params;
+  if (!isUuid(matchId)) return notFound();
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return unauthorized();
 
-  const { data, error } = await supabase
-    .from("matches")
-    .select(
-      "id, tournament_name, round, date, match_type, court_type, player1_name, player2_name, score, private"
-    )
-    .eq("id", matchId)
-    .eq("created_by", user.id)
-    .maybeSingle();
+  const { data, error } = await loadOwnMatch(supabase, matchId, user.id);
+  if (error) {
+    return serverError(
+      "GET /api/matches/[matchId]: failed to load match",
+      error,
+      "Could not load the match",
+    );
+  }
+  if (!data) return notFound();
+  const match = data as unknown as MatchRow;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // Attaching needs a team match that isn't on a line yet, in the workspace
+  // being viewed, by someone the events policy lets run the schedule. The
+  // database re-checks all of it (`attach_match_to_event_line`). Detaching is
+  // the inverse on the same terms: a team match that is on a line. The viewer
+  // is `created_by` already — `loadOwnMatch` reads only their own match — and
+  // `detach_match_from_event_line` re-checks both.
+  const attachable = !!match.program_id && !match.event_entry_id;
+  const detachable = !!match.program_id && !!match.event_entry_id;
+  const [analysisRead, event, workspace] = await Promise.all([
+    analysisFor(supabase, matchId),
+    match.event_entry_id
+      ? eventContextFor(supabase, match.event_entry_id, matchId)
+      : Promise.resolve(null),
+    attachable || detachable ? getWorkspaceContext() : Promise.resolve(null),
+  ]);
+  if (analysisRead.error) {
+    return serverError(
+      "GET /api/matches/[matchId]: failed to load analysis status",
+      analysisRead.error,
+      "Could not load the match",
+    );
+  }
+  const { analysis } = analysisRead;
 
-  return NextResponse.json({ match: data });
+  const active = workspace?.active;
+  const runsSchedule =
+    active?.kind === "team" &&
+    active.id === match.program_id &&
+    canManageTeamSchedule(active);
+  const canAttach = attachable && runsSchedule;
+  const canDetach = detachable && runsSchedule;
+  // A tournament line's round is the match's own, changed through
+  // `set_match_round_on_line` on the detach's terms; a dual line's round is
+  // its slot, and the line decides it.
+  const canEditRound =
+    detachable && event?.eventKind === "tournament" && runsSchedule;
+
+  return NextResponse.json({
+    match,
+    analysis,
+    event,
+    canAttach,
+    canDetach,
+    canEditRound,
+  });
 }
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ matchId: string }> }
+  { params }: { params: Promise<{ matchId: string }> },
 ) {
   const { matchId } = await params;
+  if (!isUuid(matchId)) return notFound();
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return unauthorized();
 
-  let body: Record<string, unknown>;
+  // Valid JSON is not enough: `null`, `42`, `"x"` and `[]` all parse, and
+  // `normalizeMatchPatch` reads the body with `key in body`, which throws on
+  // a primitive. Only an object literal is a patch.
+  let body: unknown;
   try {
     body = await req.json();
   } catch {
     return badRequest("Invalid JSON body");
   }
+  if (!isPlainObject(body)) return badRequest("Invalid JSON body");
 
-  const update: Record<string, unknown> = {};
+  // The analysis read is harmless for a match that turns out not to be ours
+  // (it returns nothing), so it runs beside the ownership lookup.
+  const [{ data: existing, error: lookupError }, analysisRead] =
+    await Promise.all([
+      loadOwnMatch(supabase, matchId, user.id),
+      analysisFor(supabase, matchId),
+    ]);
+  if (lookupError) {
+    return serverError(
+      "PATCH /api/matches/[matchId]: failed to load match",
+      lookupError,
+      "Could not load the match",
+    );
+  }
+  if (!existing) return notFound();
+  if (analysisRead.error) {
+    return serverError(
+      "PATCH /api/matches/[matchId]: failed to load analysis status",
+      analysisRead.error,
+      "Could not load the match",
+    );
+  }
+  const { analysis } = analysisRead;
+  const stored = existing as unknown as MatchRow;
 
-  for (const key of ["tournament_name", "round", "match_type", "court_type", "player1_name", "player2_name"] as const) {
-    if (key in body) {
-      const v = trimOrNull(body[key]);
-      if (v !== undefined) update[key] = v;
+  const result = normalizeMatchPatch(body, {
+    score: stored.score,
+    format: stored.format,
+    linked: stored.event_entry_id !== null,
+    analyzed: analysis !== null || stored.source_provider !== null,
+    teamMatch: stored.program_id !== null,
+    matchType: (stored.match_type as string | null) ?? null,
+    round: (stored.round as string | null) ?? null,
+  });
+  if (!result.ok) return badRequest(result.error, result.field);
+
+  const update = result.update;
+
+  // A roster pick: the id must be a player on this program's roster, and the
+  // name comes from that row — a client-sent name never labels someone else.
+  if (typeof update.player1_id === "string") {
+    if (update.player1_id === stored.player1_id) {
+      delete update.player1_id;
+    } else {
+      const { data: rows, error: rosterError } = await supabase.rpc(
+        "program_roster_full",
+        { p_program_id: stored.program_id },
+      );
+      // A failed roster read is not an off-roster pick: answering "Choose a
+      // player…" would blame the user for our outage.
+      if (rosterError) {
+        return serverError(
+          "PATCH /api/matches/[matchId]: failed to load roster",
+          rosterError,
+          "Could not load the roster",
+        );
+      }
+      const pick = rosterPlayerOptions((rows ?? []) as RosterFullRow[]).find(
+        (option) => option.playerId === update.player1_id,
+      );
+      let ownName: string | null = null;
+      if (!pick) {
+        const { data: own } = await supabase
+          .from("program_players")
+          .select("first_name, last_name")
+          .eq("id", update.player1_id)
+          .eq("program_id", stored.program_id as string)
+          .eq("claimed_by_user_id", user.id)
+          .is("archived_at", null)
+          .is("merged_into_id", null)
+          .maybeSingle();
+        const row = own as { first_name: string; last_name: string } | null;
+        if (row) ownName = `${row.first_name} ${row.last_name}`.trim();
+      }
+      if (!pick && !ownName) {
+        return badRequest(
+          "Choose a player on this team's roster.",
+          "player1_id",
+        );
+      }
+      update.player1_name = pick ? pick.name : ownName;
     }
   }
-
-  if ("player1_name" in update && update.player1_name === null) {
-    return badRequest("Player 1 name is required.", "player1_name");
-  }
-  if ("player2_name" in update && update.player2_name === null) {
-    return badRequest("Player 2 name is required.", "player2_name");
-  }
-
-  if ("date" in body) {
-    const raw = body.date;
-    if (typeof raw !== "string" || raw.trim() === "") {
-      return badRequest("Date is required.", "date");
-    }
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return badRequest("Date is invalid.", "date");
-    update.date = d.toISOString();
-  }
-
-  if ("score" in body) {
-    const parsed = validateScore(body.score);
-    if (typeof parsed === "string") return badRequest(parsed, "score");
-    update.score = parsed;
-    update.result = parsed.winner === "player1" ? "win" : parsed.winner === "player2" ? "loss" : null;
-  }
-
   if (BETA_FORCE_PRIVATE) update.private = true;
-
-  if (Object.keys(update).length === 0) {
-    return badRequest("No fields to update");
-  }
 
   const { data, error } = await supabase
     .from("matches")
     .update(update)
     .eq("id", matchId)
     .eq("created_by", user.id)
-    .select(
-      "id, tournament_name, round, date, match_type, court_type, player1_name, player2_name, score, private"
-    )
+    .select(MATCH_COLUMNS)
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (error) {
+    return serverError(
+      "PATCH /api/matches/[matchId]: failed to save match",
+      error,
+      "Could not save the match",
+    );
+  }
+  if (!data) return notFound();
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/matches");
@@ -181,11 +407,14 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ matchId: string }> }
+  { params }: { params: Promise<{ matchId: string }> },
 ) {
   const { matchId } = await params;
+  if (!isUuid(matchId)) return notFound();
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return unauthorized();
 
   const { data: existing, error: lookupError } = await supabase
@@ -195,34 +424,39 @@ export async function DELETE(
     .eq("created_by", user.id)
     .maybeSingle();
 
-  if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (lookupError) {
+    return serverError(
+      "DELETE /api/matches/[matchId]: failed to load match",
+      lookupError,
+      "Could not load the match",
+    );
+  }
+  if (!existing) return notFound();
 
+  // Storage first, then the row. The ordering is load-bearing and the reason
+  // this is a function call rather than a foreign-key cascade — see
+  // purgeMatchStorage().
+  //
+  // A refusal maps by kind, never by forwarding `error.message`: the console
+  // guard is a 409 with its fixed sentence, and everything else — the guard
+  // unreadable, or any other throw — is a retryable 503.
   try {
-    const { data: files } = await supabase
-      .from("match_files")
-      .select("storage_path, storage_bucket")
-      .eq("match_id", matchId);
-
-    if (files && files.length > 0) {
-      const byBucket = new Map<string, string[]>();
-      for (const f of files) {
-        const bucket = (f.storage_bucket as string | null) ?? "match-data";
-        const path = f.storage_path as string | null;
-        if (!path) continue;
-        const arr = byBucket.get(bucket) ?? [];
-        arr.push(path);
-        byBucket.set(bucket, arr);
-      }
-      for (const [bucket, paths] of byBucket) {
-        const { error: storageError } = await supabase.storage.from(bucket).remove(paths);
-        if (storageError) {
-          console.error(`[match delete] storage cleanup failed for ${bucket}:`, storageError.message);
-        }
-      }
+    await purgeMatchStorage(supabase, [matchId]);
+  } catch (error) {
+    if (error instanceof PurgeRefusedError && error.kind === "protected") {
+      return NextResponse.json(
+        { error: PURGE_PROTECTED_MESSAGE },
+        { status: 409 },
+      );
     }
-  } catch (err) {
-    console.error("[match delete] storage cleanup threw:", err);
+    console.error(
+      "DELETE /api/matches/[matchId]: storage purge unavailable",
+      error instanceof PurgeRefusedError ? (error.cause ?? error) : error,
+    );
+    return NextResponse.json(
+      { error: PURGE_UNAVAILABLE_MESSAGE },
+      { status: 503 },
+    );
   }
 
   const { error: deleteError } = await supabase
@@ -231,7 +465,23 @@ export async function DELETE(
     .eq("id", matchId)
     .eq("created_by", user.id);
 
-  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  if (deleteError) {
+    // The 409 and 503 refusals above take no claim (the claim RPC answers
+    // false, or fails, before its insert), so only this failed-delete branch
+    // releases. The id is the one the `created_by = user.id` lookup already
+    // admitted, never a body field. See `releaseStoragePurgeClaims` for why
+    // this matters.
+    await releaseStoragePurgeClaims(
+      createAdminClient(),
+      [matchId],
+      "match delete",
+    );
+    return serverError(
+      "DELETE /api/matches/[matchId]: failed to delete match",
+      deleteError,
+      "Could not delete the match",
+    );
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/matches");

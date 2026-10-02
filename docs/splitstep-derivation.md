@@ -1,0 +1,327 @@
+# Derivation — vendor strokes to points, shots and statistics
+
+**Current state** of everything on the `splitstep-derivation` branch. Read this
+before touching `src/lib/services/splitstep/derivation/`, the results webhook, or
+anything that averages `match_stats`.
+
+Pairs with [`splitstep-vendor-questions.md`](splitstep-vendor-questions.md),
+which holds the measurements and the open questions to the vendor. This document
+is the _code_; that one is the _evidence_.
+
+---
+
+## 1. What runs, in order
+
+A vendor delivery arrives at `POST /api/webhooks/splitstep`. The route returns
+200 immediately, then does everything else inside `after()`:
+
+```
+verify → record delivery → 200
+  └─ after():
+       storeResults()        results JSON → Supabase `match-results` bucket
+       trimmed video copy    vendor's re-encode → our container
+       deleteSourceVideo()   frees the Azure Blob original
+       gradeResults()        7 quality checks → derivation_confidence
+       deriveAndPublish()    ├ status = 'deriving'
+                             ├ persistTranscript()   points + shots
+                             ├ calculate_match_stats()
+                             ├ backfill_returns_in_and_net_points()
+                             ├ suppress_derived_match_stats()
+                             └ status = 'completed' | 'derivation_failed'
+```
+
+**No Edge Function**, contrary to spec §2. That design assumed one because of the
+60s Vercel ceiling against an unmeasured workload. Measured: parse + grade is
+~3 ms, the whole write is well under 2 s, and `maxDuration = 60` is set
+explicitly on the route. A Deno copy would have meant two implementations of the
+player mapping and the shot numbering — the two places where a silent divergence
+attributes an entire match to the wrong person.
+
+Same sequence is available from the CLI, which calls the same function:
+
+```bash
+npx tsx scripts/splitstep-derive.ts --job <uuid>          # dry run, writes nothing
+npx tsx scripts/splitstep-derive.ts --job <uuid> --write  # full publish
+npx tsx scripts/splitstep-backfill-grades.ts [--force]    # re-grade stored jobs
+```
+
+---
+
+## 2. The library
+
+`src/lib/services/splitstep/derivation/` — pure, no I/O, testable against a
+fixture and against a real payload with identical output.
+
+| Module           | Does                                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------- |
+| `types.ts`       | Raw vendor shape vs cleaned shape. The gap between them is the parse layer's whole job              |
+| `parse.ts`       | **The boundary.** Nulls all sentinels and impossible geometry before anything else touches the data |
+| `court.ts`       | Metre conversion, serve/direction zones, the playing-enclosure bound                                |
+| `rallies.ts`     | Groups strokes into rallies, reports malformed numbering                                            |
+| `serves.ts`      | First/second serve by ordinal; returns **both** readings of every serve stat plus their spread      |
+| `winners.ts`     | Point winners from the score stream. Never from the `in` flag                                       |
+| `reconcile.ts`   | Folds winners forward, checks against `matches.score`, decides player1                              |
+| `result-type.ts` | `result_type`, `shots.result`, shot numbering                                                       |
+| `pressure.ts`    | Break / set / match points                                                                          |
+| `flags.ts`       | Per-row data-quality flags — review only; none of them changes a row (table below)                  |
+| `played.ts`      | Drops phantom strokes at a faulted serve; flags a possible dead ball after an out ball              |
+| `line-calls.ts`  | Our own in/out call per stroke, from the trajectories file (`trajectory.ts` parses it)              |
+| `quality.ts`     | 7 checks → `high`/`medium`/`low`                                                                    |
+| `transcript.ts`  | Assembles database-shaped rows                                                                      |
+| `index.ts`       | Public surface, `analyzeResults()`, `DERIVATION_VERSION`                                            |
+
+Point flags, all review-only since 0.6.0 (`points.flags`; scored against hand labels by
+`scripts/splitstep-eval.ts`):
+
+| Flag                         | Fires when                                                                        |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| `winner_disputed`            | The score fold and the last stroke's `in` flag name different winners             |
+| `same_player_consecutive`    | Two strokes in a row by one player — usually a missed stroke                      |
+| `reserve_after_in`           | A serve called in, then another serve                                             |
+| `service_court_repeat`       | The serve side did not alternate from the previous point in the game              |
+| `score_side_mismatch`        | Points played in the game say one court, the server stood on the other            |
+| `tiebreak_score_off_six_all` | Tiebreak point scores while the game score is not 6-6 (the game count drifted)    |
+| `winner_guessed`             | Collapsed score tail: the winner is the last stroke's guess                       |
+| `result_type_unknown`        | No honest `result_type`                                                           |
+| `phantom_strokes_dropped`    | Strokes at a faulted serve were removed (the one row change `played.ts` makes)    |
+| `second_serve_called_out`    | Out-called second serve with a short tail — a possible double fault               |
+| `winner_to_error_by_bounce`  | The ball before a winner bounced out (trajectories) — demoted from autofix, 0.6.0 |
+| `ending_suspect_line`        | The ball before a winner landed within 1 m of a line, or was confidently out      |
+
+Only `persist-transcript.ts` and `derive-and-publish.ts` (one level up) touch the
+database.
+
+---
+
+## 3. Contracts that will silently break things
+
+Each of these was wrong at some point and produced no error.
+
+### Coordinates are METRES, not normalized 0–1
+
+Spec §4.2 says 0–1 and an earlier `metersToNormalized()` implemented it. Both
+wrong. `shots.contact_x/y` and `landing_x/y` use the court's own frame:
+x metres about the centre line, **y = 0 at one baseline, 11.885 at the net,
+23.77 at the other**. So the transform is one offset:
+
+```ts
+x_ours = x_vendor;
+y_ours = y_vendor + 11.885; // metersToCourtFrame()
+```
+
+Confirmed twice: `serveZone()` compares `abs(landing_x)` to 2.74/1.37 (the
+singles half-width in thirds) and `calculate_match_stats` computes
+`23.77 - contact_y`; and live
+SwingVision in-serve `landing_y` occupies 5.49–11.87 and 11.93–18.29, the two
+service boxes to the centimetre.
+
+**Do not flip y.** `serveSide()` reads the sign of `hittingToward`, which a
+y-only flip inverts, so every serve is attributed to the opposite service box
+and deuce and ad swap wherever they are labelled — while `match_stats` stays
+numerically identical, so nothing fails.
+
+### A faulted serve takes `shot_number` 0
+
+Deciding serve is 1, return is 2. `calculate_match_stats` used to join
+`serve.shot_number = 1` to `ret.shot_number = 2` with **no** `shot_type` or
+`result` filter, so two rows at 1 fanned the join out (1,550 returns produced
+2,534 joined rows, 170 counted as _both_ Crosscourt and Down the Line). The
+join is gone since 2026-09-28 (see below), but `ret.shot_number = 2` still
+means "the return" everywhere else. SwingVision itself puts both serves at 1 —
+do not copy it. `0` is already this database's convention for pre-point rows
+(`Feed`).
+
+### Placement is `shots.zone`, one rule
+
+`calculate_match_stats` counts `serve_wide/body/t` and
+`return_cross_court/down_the_line/middle` from `shots.zone`; it does not
+re-derive them from coordinates. The zone is decided once, where the shot is
+written: `serveZone()` / `directionZone()` in `court.ts` here, and their twins
+in `supabase/functions/process-match` for SwingVision. Direction reads the
+shot's OWN contact against its landing. A new placement (Inside-In,
+Inside-Out) therefore arrives through `shots.zone` alone — widen
+`shots_zone_check` and count the new value.
+
+Return direction also skips a shot 2 hit by the **server**
+(`ret.is_player1 <> p.server_is_player1`): the vendor missed the real return
+(7% of video points, 2% of SwingVision), and that ball is the server's next
+shot, not a return. `return_contact_*` is a different measure (`contact_y`)
+and still counts every shot 2.
+
+### A shot 2 struck by the SERVER is not a return
+
+The vendor sometimes misses the returner's stroke, and then shot 2 is the
+server's next ball: 38 of 570 points on 2026-09-28, every one a far-side server
+whose near-side return is missing (serve to "shot 2" 1.9–3.0 s, against
+0.5–1.2 s for a real return). Every return stat therefore requires
+`is_player1 <> points.server_is_player1` — direction since `20260928153631`,
+contact and returns-in since `20260928160625`. That the server struck again
+proves the return landed in, so `backfill_returns_in_and_net_points` credits the
+returner with it (scoped to `source_provider = 'splitstep'`); contact has no
+position to credit and only skips it. Numbering is left alone: renumbering to
+leave shot 2 empty would still credit nobody and needs a version bump and a
+rebuild.
+
+### Score strings are SERVER-RELATIVE
+
+`pred_point_score`, `pred_game_score` and `pred_set_score` flip every time the
+server changes, even though nothing about the match state did. **Absolutize to
+`{label: value}` or sort the pair before comparing.** Keying a set on the raw
+string splits every game into its own set — set one survives only because "0-0"
+happens to be symmetric.
+
+### Never emit a Forced Error string
+
+`'Forehand Forced Error'` matches neither `LIKE '%Winner%'` nor
+`LIKE '%Unforced Error%'`, so the point vanishes from every aggregate rather than
+landing in the wrong one. `match_stats.forced_errors` is a literal NULL and is
+never read. Forced errors fold into the Unforced Error bucket by construction,
+which is why the UI relabels it **"Errors"** on a derived match.
+
+### Suppression must be atomic within a COALESCE group
+
+`match_stats_with_percentages` computes each placement member's percentage over
+`COALESCE(a,0)+COALESCE(b,0)+COALESCE(c,0)`. Nulling one member of a triple
+silently drops it from its siblings' denominator and **inflates them**. The three
+triples are serve wide/body/T, return direction, and return contact.
+
+### Order: stats → backfill → suppress
+
+`backfill_returns_in_and_net_points` rewrites `first_returns_in` and
+`second_returns_in` with **no provider guard**. Suppressing before it runs
+silently un-suppresses two columns built entirely on phantom return strokes.
+
+---
+
+## 4. Trust tiers
+
+| Tier            | Stats                                                                                         | Treatment                                          |
+| --------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| **Reliable**    | points/games won, service & return games, break points, set points, first/second serve counts | Plain number                                       |
+| **Approximate** | winners, errors, FH/BH breakdown, volley winners, serve placement                             | Prefixed **≈**, ~85–90% point-attribution accuracy |
+| **Unknowable**  | aces, double faults, service winners, rally length, whole return family                       | **Em dash, never 0**                               |
+
+Aces cannot be separated from service winners — nothing records an
+attempted-and-missed swing, so a missed return is not a stroke. The rest are
+contaminated by the vendor recording ~10 points per 100 that ended on the serve
+as multi-stroke rallies (measured unreturned-serve rate 1.9% / 3.5% / 6.0%
+against a real-tennis floor near 15%). That is a **vendor defect**, not something
+derivation can correct.
+
+The Head to head card is the one exception, at widget level only: since T1,
+`head-to-head-card.tsx` on a splitstep match counts an unreturned In serve won
+by the server (`rallyLength === 1`, server won the point) as an ace from the
+points table and subtracts those same points from Winners. It never touches
+`match_stats`, which stays suppressed.
+
+`suppress_derived_match_stats(match_id)` enforces it, scoped to
+`source_provider = 'splitstep'`.
+
+> **Temporarily not applied (2026-09-02).** The call is commented out in
+> `derive-and-publish.ts` by product decision — accept the vendor's data as truth for
+> now — so the Unknowable tier publishes as computed. The RPC still exists; uncomment
+> the step and re-run it for every match published since to restore.
+
+**Absence must survive to the render.** `?? 0` on a stat path is a bug: it turns
+"we did not measure this" into "the player did none of this". Two layers had it —
+the aggregate readers and the single-match reader — and both are fixed.
+`src/lib/data/aggregate.ts` holds the rule: absent is _excluded_ from a mean, and
+a mean over nothing is null.
+
+---
+
+## 5. Gates
+
+**Gate 1 — before any row is written.** The fold of derived point winners must
+reproduce `matches.score` **exactly**. Spec §4.4's "off by ≤1 game is medium" is
+rejected: these rows are the point-by-point timeline and the video seek targets,
+so a wrong point is a specific false claim on a screen. Player1 is decided by the
+fold, **never by string-matching `pred_player_id`** against `matches.player1_name`
+— vendor labels are free text and have been observed misspelled.
+
+**Gate 2 — per stat family**, not a single grade. `derivation_confidence` is
+advisory: the one match with ground truth grades `low` yet reproduces its score
+exactly.
+
+Of three real payloads, **only one passes Gate 1**. Ad-scoring matches are
+refused by design.
+
+**Tiebreaks (2026-09-27).** Tiebreak points now resolve: `winners.ts` rule 2 reads
+the absolutized integer point score across a serve rotation when the absolute game
+count is unchanged (`via: "tiebreak"`). Before this, the last point before every
+rotation resolved no winner and every tiebreak match was refused outright. The fold
+still keys games on the server, so a tiebreak folds as several pseudo-games and the
+match cannot reproduce `matches.score`. Under the Gate 1 bypass below it is written
+unreconciled, and it would be refused again if the gate returned, until the fold
+learns to keep a tiebreak as one game.
+
+**Score-stream flags (0.6.0, 2026-09-29).** `tiebreak_score_off_six_all` marks
+integer (tiebreak) point scores while the game score is not 6-6, or 0-0 in a deciding
+match tiebreak: on Quan v Harazaki the stream ran two games ahead and scored the last
+10 points of a real 5-7 set as a tiebreak. `score_side_mismatch` compares the parity of
+points played in the game with the server's stance (`serveCourtSide`, ignoring the
+0.3 m around the centre mark); it fires in runs from the point a score went off by one
+to the end of that game, and cannot see an even offset. Both are review-only.
+
+**Collapsed score tail (2026-09-28).** When the score stream resets to 0-0 / 0-0 /
+no set at the end of a match and never recovers (job 45ff4bd7), those rallies are
+kept, folded into the last real game, and their winners are guessed from the last
+stroke (`lastStrokeWinner`). Each such point is flagged `winner_guessed`. Only a
+trailing reset qualifies; any other unresolved point still refuses the match.
+
+> **Gate 1 temporarily bypassed (2026-09-02).** `ACCEPT_UNRECONCILED_FOLD` in
+> `derivation/reconcile.ts` is `true`: a fold that misses the entered score is still
+> written, with player1 named from the wizard's top-player input plus court geometry,
+> or failing that from whichever mapping folds closest to the score (a tie is still a
+> refusal). `Reconciliation.ok` stays `false` on that path and `player1Source` records
+> how player1 was chosen; `derive-and-publish` logs `grade: unreconciled`. Rows carry
+> `DERIVATION_VERSION = 0.x-unreconciled` (0.3.1 since the tiebreak rule, 0.4.1 since the collapsed-tail rule, 0.4.2 since phantom strokes are dropped, 0.5.0 since trajectory line calls, 0.6.0 since the dead-ball autofix was demoted to a flag) and must
+> be rebuilt when the gate returns.
+> The unresolved-points gate is untouched.
+
+---
+
+## 6. UI
+
+New analysis state **`timeline`** ("Timeline ready") between "still working" and
+"here are your numbers" — renders point-level sections, withholds aggregates.
+Resolved by `withStatsPublished()`, deliberately kept out of
+`resolveAnalysisStatus()`: that function projects a `processing_jobs` row and the
+realtime hook calls it over a websocket with no access to `match_stats`.
+
+`derivation_version` means **"the engine produced rows"**, and
+`resolveAnalysisStatus()` reads a `completed` job with a non-null version as
+"Analyzed". Do not set it from anything that does not write rows — grading did,
+once, and made a match claim to be analysed with zero points.
+
+---
+
+## 7. Verified / not verified
+
+**Verified end to end** on match `0db449ab` (Revelli vs Stepanov, true score
+6-4 6-4): fold reproduces the score exactly and names player1 with no string
+matching; 114 points / 596 shots; break points reconcile independently (holds +
+breaks = the folded 12-8, set points converted = sets won); suppression and the
+em-dash render confirmed in the browser; serve placement plots into real zones.
+
+**Not verified:** ad-scoring matches, match tiebreaks, a left-handed player (the
+handedness inference validated on two known right-handers only), and any payload
+other than the three analysed.
+
+---
+
+## 8. Left to do
+
+- **Reprocessing.** When `DERIVATION_VERSION` bumps, every stored match needs
+  rebuilding and no webhook will fire. Wants a paged cron route following
+  `src/app/api/cron/cleanup-match-videos/route.ts` (the live cron pattern to copy), calling `deriveAndPublish()` — not a second
+  implementation.
+- **Cross-provider display.** No aggregate reader filters by provider. Nulls no
+  longer corrupt the means, but approximate winners/errors still reach
+  `/dashboard/statistics` unmarked.
+- **`?? 0` on three ratings** in `statistics-server.ts` / `statistics-client.ts`
+  — only bites a player whose every match is derived.
+- **Key Moments prose** is copied from the match record and may describe
+  different data than the derived points.
+- Pre-existing, unrelated: `permission denied for function reap_stalled_uploads`
+  fires on every match-analysis load.

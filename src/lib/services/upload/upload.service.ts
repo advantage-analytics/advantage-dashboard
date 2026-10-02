@@ -5,7 +5,7 @@
  * Follows Single Responsibility Principle - only handles upload orchestration.
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from "@supabase/supabase-js";
 import {
   IUploadService,
   IProviderUploadStrategy,
@@ -15,9 +15,9 @@ import {
   StoragePath,
   MatchFileRecord,
   ProviderId,
-} from './types';
-import { getProviderStrategy } from './providers';
-import { createStorageService } from './storage.service';
+} from "./types";
+import { getProviderStrategy, getImportProviderStrategy } from "./providers";
+import { createStorageService } from "./storage.service";
 
 /**
  * Upload Service Implementation
@@ -44,8 +44,10 @@ export class UploadService implements IUploadService {
   async uploadMatchFile(request: UploadRequest): Promise<UploadResult> {
     const { file, userId, matchId, providerId } = request;
 
-    // 1. Get provider strategy
-    const strategy = this.getProviderStrategy(providerId);
+    // 1. Get provider strategy. Import-only: this method uploads a parseable
+    //    file to the match-data bucket, which is meaningless for a processing
+    //    provider whose video goes through the job pipeline instead.
+    const strategy = getImportProviderStrategy(providerId);
 
     // 2. Validate file
     const validationResult = strategy.validateFile(file);
@@ -81,16 +83,45 @@ export class UploadService implements IUploadService {
       file_size: file.size,
       storage_path: storagePath,
       uploaded_by: userId,
-      status: 'uploaded',
+      status: "uploaded",
     };
 
     const { data, error: dbError } = await this.supabase
-      .from('match_files')
+      .from("match_files")
       .insert(fileRecord)
-      .select('id')
+      .select("id")
       .single();
 
     if (dbError) {
+      // Unique violation on `match_files_one_per_match`: another upload for
+      // this match committed its row between the route's pre-check and this
+      // insert (two tabs, or a double-submit). Matched on SQLSTATE, never on
+      // the message. The object this call just wrote is removed ONLY when the
+      // survivor's `storage_path` differs from ours — both tabs uploading the
+      // same file name share one path under `upsert: true`, so an
+      // unconditional delete would remove the winner's file before
+      // `process-match` downloads it. The survivor is visible through the
+      // caller's own client because both uploads are the same user
+      // (`match_files` "Users can view own files"); if that read fails or
+      // answers empty the object is left in place rather than risk deleting
+      // the winner's bytes.
+      if (dbError.code === "23505") {
+        const { data: survivors } = await this.supabase
+          .from("match_files")
+          .select("storage_path")
+          .eq("match_id", matchId)
+          .limit(1);
+        const survivorPath = survivors?.[0]?.storage_path;
+        if (typeof survivorPath === "string" && survivorPath !== storagePath) {
+          await this.storageService.delete(storagePath);
+        }
+        return {
+          success: false,
+          code: "conflict",
+          error: "This match already has a file",
+        };
+      }
+
       // Cleanup: remove uploaded file if DB insert fails
       await this.storageService.delete(storagePath);
       return {

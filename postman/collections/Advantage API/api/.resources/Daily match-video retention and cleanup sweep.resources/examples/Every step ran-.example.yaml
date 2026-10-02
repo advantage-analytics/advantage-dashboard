@@ -1,0 +1,47 @@
+$kind: http-example
+name: Every step ran.
+request:
+  url: "{{baseUrl}}/api/cron/cleanup-match-videos"
+  method: GET
+  headers:
+    - key: Authorization
+      value: Bearer <token>
+      description: "Added as a part of security scheme: bearer"
+    - key: Accept
+      value: application/json
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Cache-Control
+      value: string
+      disabled: false
+      description: Every answer carries a credential or is per-caller, so none is cacheable.
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "ok": true,
+        "reason": "cron",
+        "expired": 1,
+        "warned": 2,
+        "emailed": 2,
+        "claimed": 4,
+        "outcomes": {
+          "cleaned_up": 3,
+          "staged_shed": 0,
+          "rescheduled": 1,
+          "lease_lost": 0,
+          "version_changed": 0,
+          "failed": 0,
+          "unsettled": 0
+        },
+        "rpcFailures": 0,
+        "durationMs": 1843
+      }
+order: 1000

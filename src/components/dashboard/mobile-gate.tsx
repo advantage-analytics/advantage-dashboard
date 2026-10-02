@@ -27,7 +27,7 @@ export function MobileGate() {
       aria-modal="true"
       aria-labelledby="mobile-gate-title"
       aria-describedby="mobile-gate-desc"
-      className="fixed inset-0 z-[100] flex flex-col bg-[#FAFAFA] overscroll-contain md:hidden"
+      className="fixed inset-0 z-[100] flex flex-col overscroll-contain bg-[#FAFAFA] md:hidden"
     >
       {/* Wordmark */}
       <div className="px-7 pt-10">
@@ -51,12 +51,16 @@ export function MobileGate() {
         >
           {/* Focal: where the dashboard belongs */}
           <div className="flex size-14 items-center justify-center rounded-2xl border border-[#F3F3F3] bg-white shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]">
-            <Monitor className="size-6 text-[#0D0D0D]" strokeWidth={1.5} aria-hidden="true" />
+            <Monitor
+              className="size-6 text-[#0D0D0D]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
           </div>
 
           {/* Eyebrow + hairline rule (system signature) */}
           <div className="mt-8 flex items-center gap-3">
-            <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+            <span className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
               Desktop &amp; Tablet
             </span>
             <span className="h-px flex-1 bg-[#F3F3F3]" />
@@ -64,7 +68,7 @@ export function MobileGate() {
 
           <h1
             id="mobile-gate-title"
-            className="mt-4 text-[30px] font-light leading-[36px] tracking-[-0.6px] text-[#0D0D0D]"
+            className="mt-4 text-[30px] leading-[36px] font-light tracking-[-0.6px] text-[#0D0D0D]"
           >
             Built for the bigger screen
           </h1>
@@ -73,19 +77,27 @@ export function MobileGate() {
             id="mobile-gate-desc"
             className="mt-3 text-[13px] leading-[1.5] text-[#525252]"
           >
-            Advantage&rsquo;s court maps, shot plots, and stat tables need room to
-            read clearly. Open the dashboard on a desktop or tablet for the full
-            picture.
+            Advantage&rsquo;s court maps, shot plots, and stat tables need room
+            to read clearly. Open the dashboard on a desktop or tablet for the
+            full picture.
           </p>
 
           {/* Supported surfaces */}
           <div className="mt-8 flex items-center gap-6 border-t border-[#F3F3F3] pt-6">
             <div className="flex items-center gap-2 text-[#525252]">
-              <Monitor className="size-4 text-[#71717A]" strokeWidth={1.5} aria-hidden="true" />
+              <Monitor
+                className="size-4 text-[#71717A]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
               <span className="text-[12px]">Desktop</span>
             </div>
             <div className="flex items-center gap-2 text-[#525252]">
-              <Tablet className="size-4 text-[#71717A]" strokeWidth={1.5} aria-hidden="true" />
+              <Tablet
+                className="size-4 text-[#71717A]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
               <span className="text-[12px]">Tablet</span>
             </div>
           </div>
@@ -94,7 +106,7 @@ export function MobileGate() {
 
       {/* Precision footnote */}
       <div className="px-7 pb-9">
-        <p className="text-[11px] tabular-nums text-[#AAAAAA]">
+        <p className="text-[11px] text-[#AAAAAA] tabular-nums">
           Optimized for screens 768px and wider
         </p>
       </div>

@@ -25,29 +25,29 @@ function PlayerScoreRow({
   const opponentKey = playerKey === "player1" ? "player2" : "player1";
 
   return (
-    <div className="flex flex-row justify-between items-center">
+    <div className="flex flex-row items-center justify-between">
       <div className="flex flex-row items-center gap-4">
-        <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
-          <span className="text-xs font-medium text-[#BFBFBF]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[#F2F2F2]">
+          <span className="text-xs font-medium text-[var(--ink-400)]">
             {getInitials(playerName)}
           </span>
         </div>
         <p
-          className={`font-semibold text-sm ${
-            isWinner ? "text-[#0D0D0D]" : "text-[#B3B3B3]"
+          className={`text-sm font-semibold ${
+            isWinner ? "text-[#0D0D0D]" : "text-[var(--ink-400)]"
           }`}
         >
           {playerName}
         </p>
       </div>
-      <div className="flex flex-row gap-4 font-semibold text-[18px]">
+      <div className="flex flex-row gap-4 text-[16px] font-semibold">
         {sets.map((set, idx) => (
           <p
             key={idx}
             className={
               set[playerKey] > set[opponentKey]
                 ? "text-[#0D0D0D]"
-                : "text-[#B3B3B3]"
+                : "text-[var(--ink-400)]"
             }
           >
             {set[playerKey]}
@@ -77,12 +77,12 @@ function MatchHeader({
       : "rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#F3F3F3] text-[#888888] group-hover:bg-[#E5E5EA] group-hover:text-[#525252] transition-colors";
 
   return (
-    <div className="flex flex-row justify-between items-center font-normal text-xs text-[#888888]">
+    <div className="flex flex-row items-center justify-between text-xs font-normal text-[#888888]">
       <div className="flex items-center gap-2">
         {matchContext && <p>{matchContext}</p>}
         {round && (
           <>
-            <span className="w-px h-3 bg-[#888888]" />
+            <span className="h-3 w-px bg-[#888888]" />
             <p>{round}</p>
           </>
         )}
@@ -104,9 +104,9 @@ export function MatchScoreSection({
   durationStyle = "default",
 }: MatchScoreSectionProps): React.JSX.Element {
   return (
-    <div className="pl-2 pr-4 py-3 flex flex-row gap-6">
+    <div className="flex flex-row gap-6 py-3 pr-4 pl-2">
       <div className={accentLineClassName} />
-      <div className="flex flex-col space-y-4 flex-1">
+      <div className="flex flex-1 flex-col space-y-4">
         <MatchHeader
           matchContext={match.matchContext}
           round={match.round}

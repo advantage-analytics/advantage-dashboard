@@ -1,0 +1,45 @@
+$kind: http-example
+name: The database or video storage could not be asked. Retryable — the match may well exist.
+request:
+  url: "{{baseUrl}}/api/matches/:matchId/video/uploads"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  pathVariables:
+    - key: matchId
+      value: <uuid>
+      disabled: false
+      description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+  body:
+    type: json
+    content: |-
+      {
+        "filename": "spring-open-r16.mp4",
+        "sizeBytes": 2147483648,
+        "contentType": "video/mp4",
+        "clientRequestId": "3f2e1d0c-9b8a-4765-8432-10fedcba9876",
+        "expectedActive": null
+      }
+response:
+  statusCode: 503
+  statusText: Service Unavailable
+  headers:
+    - key: Cache-Control
+      value: string
+      disabled: false
+      description: Every answer carries a credential or is per-caller, so none is cacheable.
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "Video storage is unavailable right now. Try again in a moment.",
+        "code": "storage_unavailable",
+        "detail": "match_read_failed"
+      }
+order: 11000

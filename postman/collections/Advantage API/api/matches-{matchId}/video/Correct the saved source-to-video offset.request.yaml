@@ -1,0 +1,23 @@
+$kind: http-request
+description: Recomputes the offset of the active attachment from a confirmed video time; no bytes move. Creator only, SwingVision matches only, in the match's own workspace. A no-op correction does not bump `version`.
+url: "{{baseUrl}}/api/matches/:matchId/video/alignment"
+method: PATCH
+headers:
+  Content-Type: application/json
+  Accept: application/json
+pathVariables:
+  - key: matchId
+    value: <uuid>
+    disabled: false
+    description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+body:
+  type: json
+  content: |-
+    {
+      "attachmentId": "<uuid>",
+      "expectedVersion": 0,
+      "confirmedVideoTimeSeconds": 0
+    }
+settings: {}
+examples: ./.resources/Correct the saved source-to-video offset.resources/examples
+order: 3000

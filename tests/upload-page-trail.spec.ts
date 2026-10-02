@@ -1,0 +1,232 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { runInNewContext } from "node:vm";
+import { expect, test } from "@playwright/test";
+import * as jsxRuntime from "react/jsx-runtime";
+import ts from "typescript";
+
+import { resolveUploadTarget } from "@/lib/schedule/upload-target";
+
+/**
+ * `/dashboard/team/upload?entry=` is an upload aimed at one line of one event,
+ * so its header trail sits under that event the way `/edit` and `/score` do:
+ * "Schedule › vs Stanford › Upload video". Every other branch — the bare line
+ * picker, `?match=` alone (a single match, no event), `?draft=` — publishes no
+ * slot and keeps the static "Upload video" crumb from `nav.ts`.
+ *
+ * The real route runs with every import mocked (the
+ * `event-route-loading.spec.ts` pattern) and the returned element tree is
+ * searched for the mocked `EventHeaderSlot`. Nothing is rendered: the slot
+ * publishes from an effect, so what can be pinned server-side is that the page
+ * mounts it with the right props, and `event-header-trail.spec.ts` pins what
+ * those props draw.
+ */
+
+function EventHeaderSlot() {
+  return null;
+}
+function UploadMatchFlow() {
+  return null;
+}
+
+const EVENT = { id: "event-1", name: "Stanford", kind: "dual" as const };
+const SINGLES_ENTRY = {
+  id: "entry-singles",
+  discipline: "singles",
+  slot: "S1",
+  forfeit: null,
+  matches: [{ id: "match-1", round: "S1", hasVideo: false }],
+};
+
+/**
+ * The same line one `router.refresh()` after the wizard created its job: the
+ * match now has video, so the upload QUEUE no longer holds it (T4).
+ */
+const JUST_UPLOADED_ENTRY = {
+  ...SINGLES_ENTRY,
+  id: "entry-just-uploaded",
+  matches: [{ id: "match-2", round: "S1", hasVideo: true }],
+};
+
+function loadPage() {
+  const output = ts.transpileModule(
+    readFileSync(resolve("src/app/dashboard/team/upload/page.tsx"), "utf8"),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        jsx: ts.JsxEmit.ReactJSX,
+      },
+    },
+  ).outputText;
+
+  const exports: {
+    default?: (props: {
+      searchParams: Promise<Record<string, string>>;
+    }) => Promise<unknown>;
+  } = {};
+  const stubs: Record<string, unknown> = {
+    "react/jsx-runtime": jsxRuntime,
+    "next/link": { default: () => null },
+    "lucide-react": { ChevronRight: () => null },
+    "next/navigation": {
+      redirect: (path: string) => {
+        throw new Error(`redirect:${path}`);
+      },
+    },
+    "@/lib/workspace/active-workspace-server": {
+      getWorkspaceContext: async () => ({
+        active: { id: "program-a", kind: "team", role: "coach" },
+        available: [],
+      }),
+    },
+    "@/lib/workspace/types": {
+      canUploadForProgram: () => true,
+      isProgramStaff: (workspace: { role: string }) =>
+        workspace.role === "coach",
+    },
+    "@/lib/data/schedule-server": {
+      getUploadQueue: async () => [{ event: EVENT, entries: [SINGLES_ENTRY] }],
+      // The `?entry=` branch reads THIS, never the queue — the queue drops
+      // the just-uploaded line, the full schedule still holds it.
+      getProgramSchedule: async () => ({
+        events: [EVENT],
+        entriesByEvent: new Map([
+          [EVENT.id, [SINGLES_ENTRY, JUST_UPLOADED_ENTRY]],
+        ]),
+      }),
+      programNamesFor: async () => new Map(),
+    },
+    "@/lib/wizard/actions": {
+      loadMatchDraft: async () => null,
+    },
+    "@/components/dashboard/matches/new-match-wizard/subject-eligibility": {
+      draftBelongsToWorkspace: () => true,
+      draftWorkspaceRefusal: () => "",
+    },
+    "@/lib/schedule/line-choices": {
+      presetFor: (_event: unknown, entry: { id: string }) => ({
+        entryId: entry.id,
+      }),
+      lineupChoices: () => [],
+      singleMatchPreset: () => ({ singleMatchId: "single-1" }),
+    },
+    // The real resolver: it is pure, and it is the thing under test here.
+    "@/lib/schedule/upload-target": { resolveUploadTarget },
+    "@/lib/data/single-match-server": {
+      getTeamSingleMatch: async (_programId: string, id: string) => ({
+        id,
+        context: "Fall Open",
+        round: null,
+        playerName: "A",
+        playerUserId: null,
+        opponentName: "B",
+        date: "2026-09-01",
+        surface: "hard",
+        score: null,
+      }),
+    },
+    "@/lib/schedule/entry-state": { supportsVideo: () => true },
+    "@/lib/schedule/format": {
+      formatEventSpan: () => "",
+      siteLabel: () => "",
+    },
+    "@/components/dashboard/matches/new-match-wizard": { UploadMatchFlow },
+    "@/components/dashboard/schedule/event-header-slot": { EventHeaderSlot },
+    // Either value leaves the trail alone; the flag only retargets the
+    // player redirect and a single match's exit link.
+    "@/lib/schedule/availability": {
+      SCHEDULE_ENABLED: false,
+      scheduleHref: (_schedulePath: string, fallback: string) => fallback,
+    },
+  };
+
+  runInNewContext(output, {
+    exports,
+    require: (id: string) => {
+      if (id in stubs) return stubs[id];
+      throw new Error(`unexpected:${id}`);
+    },
+  });
+  return exports.default!;
+}
+
+type Element = { type: unknown; props: Record<string, unknown> };
+
+function isElement(node: unknown): node is Element {
+  return typeof node === "object" && node !== null && "props" in node;
+}
+
+/** Every element in the returned tree whose type is `type`. */
+function findAll(node: unknown, type: unknown): Element[] {
+  if (Array.isArray(node)) return node.flatMap((child) => findAll(child, type));
+  if (!isElement(node)) return [];
+  return [
+    ...(node.type === type ? [node] : []),
+    ...findAll(node.props.children, type),
+  ];
+}
+
+async function render(searchParams: Record<string, string>) {
+  return loadPage()({ searchParams: Promise.resolve(searchParams) });
+}
+
+test("a staff upload aimed at a line publishes the event's trail", async () => {
+  const tree = await render({ entry: SINGLES_ENTRY.id });
+
+  const slots = findAll(tree, EventHeaderSlot);
+  expect(slots).toHaveLength(1);
+  expect(slots[0].props).toEqual({
+    eventId: "event-1",
+    name: "Stanford",
+    kind: "dual",
+    leaf: "Upload video",
+  });
+
+  // Beside the wizard, with its preset untouched.
+  const flows = findAll(tree, UploadMatchFlow);
+  expect(flows).toHaveLength(1);
+  expect(flows[0].props).toEqual({
+    preset: { entryId: SINGLES_ENTRY.id, lineup: [] },
+  });
+});
+
+test("a refresh after the row is written keeps the same tree (T4)", async () => {
+  // `useUploadMatchWizard` refreshes 300 ms after creating the match and its
+  // job. The line has video now and is gone from the queue; the page must
+  // still render the flow, not redirect to the picker and unmount it.
+  const visits: Record<string, string>[] = [
+    { entry: JUST_UPLOADED_ENTRY.id, match: "match-2" },
+    { entry: JUST_UPLOADED_ENTRY.id },
+  ];
+  for (const params of visits) {
+    const tree = await render(params);
+    expect(findAll(tree, EventHeaderSlot)).toHaveLength(1);
+    const flows = findAll(tree, UploadMatchFlow);
+    expect(flows).toHaveLength(1);
+    expect(flows[0].props).toEqual({
+      preset: { entryId: JUST_UPLOADED_ENTRY.id, lineup: [] },
+    });
+  }
+});
+
+test("an entry outside the program still redirects to the picker", async () => {
+  await expect(render({ entry: "not-ours" })).rejects.toThrow(
+    "redirect:/dashboard/team/upload",
+  );
+});
+
+test("the bare staff line picker publishes no slot", async () => {
+  const tree = await render({});
+  expect(findAll(tree, EventHeaderSlot)).toHaveLength(0);
+});
+
+test("with the Schedule closed, bare staff get the plain wizard, not the line picker", async () => {
+  const tree = await render({});
+  expect(findAll(tree, UploadMatchFlow)).toHaveLength(1);
+});
+
+test("a ?match=-only single match publishes no slot", async () => {
+  const tree = await render({ match: "single-1" });
+  expect(findAll(tree, EventHeaderSlot)).toHaveLength(0);
+  expect(findAll(tree, UploadMatchFlow)).toHaveLength(1);
+});

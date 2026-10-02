@@ -1,0 +1,51 @@
+<!-- FilmTransportBar.dc.html — extracted 2026-09-21. Helmet omitted; markup and logic verbatim. -->
+<div style="display:flex;flex-direction:column;gap:9px;padding:0 24px 14px;font-family:var(--font-sans)">
+  <div style="display:flex;align-items:flex-end;gap:12px;padding-bottom:1px">
+    <div style="display:flex;min-width:0;flex-direction:column;gap:2px">
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:500;color:#FFFFFF">Jordan Lee v Marcus Reid</span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:rgba(255,255,255,0.55)">Coastal Collegiate Invitational · R16 · Sep 14</span>
+    </div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:14px;text-shadow:0 1px 4px rgba(0,0,0,0.8)">
+      <span class="mono" style="font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,0.5)">{{ position }}</span>
+      <span role="button" tabindex="0" aria-label="Previous point" style="display:block;width:14px;height:14px;color:rgba(255,255,255,0.7);cursor:pointer"><i data-lucide="chevron-left" stroke-width="1.6" style="width:14px;height:14px"></i></span>
+      <span role="button" tabindex="0" aria-label="Next point" style="display:block;width:14px;height:14px;color:rgba(255,255,255,0.7);cursor:pointer"><i data-lucide="chevron-right" stroke-width="1.6" style="width:14px;height:14px"></i></span>
+    </div>
+  </div>
+
+  <div role="slider" aria-label="Seek" tabindex="0" style="position:relative;display:flex;height:16px;align-items:center;cursor:pointer">
+    <span style="position:absolute;left:0;width:calc(22% - 2.5px);height:3px;border-radius:var(--radius-pill);background:var(--blue)"></span>
+    <span style="position:absolute;left:calc(22% + 2.5px);width:calc(19% - 5px);height:3px;border-radius:var(--radius-pill);background:linear-gradient(to right,var(--blue) 0 92%,rgba(255,255,255,0.22) 92% 100%)"></span>
+    <span style="position:absolute;left:calc(41% + 2.5px);width:calc(24% - 5px);height:3px;border-radius:var(--radius-pill);background:rgba(255,255,255,0.22)"></span>
+    <span style="position:absolute;left:calc(65% + 2.5px);width:calc(35% - 2.5px);height:3px;border-radius:var(--radius-pill);background:rgba(255,255,255,0.22)"></span>
+    <span style="position:absolute;left:40%;top:50%;width:11px;height:11px;transform:translate(-50%,-50%);border-radius:var(--radius-pill);background:#FFFFFF"></span>
+  </div>
+
+  <div style="display:flex;height:40px;align-items:center;gap:18px">
+    <span role="button" tabindex="0" aria-label="{{ playLabel }}" style="display:block;width:15px;height:15px;color:rgba(255,255,255,0.85);cursor:pointer"><i data-lucide="{{ playGlyph }}" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+    <span role="button" tabindex="0" aria-label="Previous point" style="display:block;width:15px;height:15px;color:rgba(255,255,255,0.85);cursor:pointer"><i data-lucide="skip-back" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+    <span role="button" tabindex="0" aria-label="Next point" style="display:block;width:15px;height:15px;color:rgba(255,255,255,0.85);cursor:pointer"><i data-lucide="skip-forward" stroke-width="1.6" fill="currentColor" style="width:15px;height:15px"></i></span>
+    <span class="mono tabular" style="font-size:11px;color:rgba(255,255,255,0.75)">{{ time }}</span>
+    <div style="flex:1"></div>
+    <span role="button" tabindex="0" aria-label="{{ savedLabel }}" style="display:block;width:15px;height:15px;color:#FFFFFF;cursor:pointer"><i data-lucide="bookmark" stroke-width="1.6" fill="{{ savedFill }}" style="width:15px;height:15px"></i></span>
+    <span role="button" tabindex="0" aria-label="Skip dead time — off" style="display:block;width:15px;height:15px;color:rgba(255,255,255,0.85);cursor:pointer"><i data-lucide="timer-off" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+    <span class="mono" role="button" tabindex="0" aria-label="Playback speed, 1×" style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.85);cursor:pointer">1×</span>
+    <span role="button" tabindex="0" aria-label="Loop this point — off" style="display:block;width:15px;height:15px;color:rgba(255,255,255,0.85);cursor:pointer"><i data-lucide="repeat" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+    <span role="button" tabindex="0" aria-label="Sound — on" style="display:block;width:15px;height:15px;color:rgba(255,255,255,0.85);cursor:pointer"><i data-lucide="volume-2" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+    <span role="button" tabindex="0" aria-label="Show the court — on" style="display:block;width:15px;height:15px;color:{{ courtColor }};cursor:pointer"><i data-lucide="grid-2x2" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+    <span role="button" tabindex="0" aria-label="Exit fullscreen" style="display:block;width:15px;height:15px;color:rgba(255,255,255,0.85);cursor:pointer"><i data-lucide="minimize" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+    <span role="button" tabindex="0" aria-label="More — not available yet" style="display:block;width:15px;height:15px;opacity:0.45;color:rgba(255,255,255,0.85);cursor:default"><i data-lucide="more-vertical" stroke-width="1.6" style="width:15px;height:15px"></i></span>
+  </div>
+</div>
+
+<!--
+Props (tsType): position string "Point 96 / 174" · time string "41:12 / 1:42:18" · playing boolean ·
+saved boolean · courtOff boolean
+
+renderVals():
+  playGlyph: playing ? "pause" : "play";  playLabel: playing ? "Pause" : "Play"
+  savedFill: saved ? "currentColor" : "none";  savedLabel: saved ? "Saved — remove bookmark" : "Save point"
+  courtColor: courtOff ? "rgba(255,255,255,0.45)" : "#FFFFFF"
+
+Frame overrides: R5 position="Point 4 / 14" · R7 position="" (blank, not dashed) · R11 position="" time="—" playing=false
+-->

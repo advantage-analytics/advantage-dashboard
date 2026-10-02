@@ -1,0 +1,22 @@
+$kind: http-request
+description: "Retires the caller's own pending attempt. Idempotent: an already retired attempt answers 200 again. The staged blob is collected later by the cleanup worker, never here. Send `Content-Type: application/json` with no body or `{}`."
+url: "{{baseUrl}}/api/matches/:matchId/video/uploads/:attachmentId"
+method: DELETE
+headers:
+  Content-Type: application/json
+  Accept: application/json
+pathVariables:
+  - key: matchId
+    value: <uuid>
+    disabled: false
+    description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+  - key: attachmentId
+    value: <uuid>
+    disabled: false
+    description: (Required) The upload attempt's id, as returned by the reservation. A value that is not a UUID answers 404 `match_not_found`.
+body:
+  type: json
+  content: <object>
+settings: {}
+examples: ./.resources/Cancel a pending upload attempt.resources/examples
+order: 1000

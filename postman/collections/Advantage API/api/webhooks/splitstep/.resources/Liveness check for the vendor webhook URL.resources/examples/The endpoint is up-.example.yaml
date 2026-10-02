@@ -1,0 +1,28 @@
+$kind: http-example
+name: The endpoint is up.
+request:
+  url: "{{baseUrl}}/api/webhooks/splitstep"
+  method: GET
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "endpoint": "splitstep-webhook",
+        "status": "ready",
+        "method": "POST"
+      }
+order: 1000

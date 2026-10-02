@@ -1,0 +1,37 @@
+$kind: http-example
+name: The vendor accepted the job; the row is `queued`.
+request:
+  url: "{{baseUrl}}/api/splitstep/jobs"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "jobId": "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f",
+        "initialTopPlayerIsPlayer1": true,
+        "adScoring": true,
+        "fixedCamera": true
+      }
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "jobId": "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f",
+        "externalJobId": "ss-job-81f2c0",
+        "status": "queued",
+        "billableSeconds": 5182,
+        "usedSeconds": 5182,
+        "capSeconds": 7200
+      }
+order: 1000

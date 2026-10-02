@@ -1,0 +1,88 @@
+class Component extends DCLogic {
+  componentDidMount() {
+    const draw = () => { if (window.lucide && document.querySelector('i[data-lucide]')) window.lucide.createIcons(); };
+    draw();
+    this._t = setInterval(draw, 400);
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+  componentDidUpdate() { if (window.lucide) window.lucide.createIcons(); }
+
+  renderVals() {
+    const you = { markBg: '#FFFFFF', markFg: '#141416', initials: 'JL' };
+    const opp = { markBg: 'rgba(255,255,255,0.14)', markFg: 'rgba(255,255,255,0.9)', initials: 'MR' };
+
+    /** One shot is highlighted at a time — the one playing now. */
+    const shot = (who, n, stroke, place, result, opts = {}) => ({
+      ...who, n, stroke, place, result,
+      bg: opts.live ? 'rgba(255,255,255,0.12)' : 'transparent',
+      strokeColor: opts.live ? '#FFFFFF' : 'rgba(255,255,255,0.72)',
+      resultColor: 'rgba(255,255,255,0.5)'
+    });
+
+    const playingShots = [
+      shot(opp, 1, 'Serve', 'Body, deuce court', 'In'),
+      shot(you, 2, 'Backhand', 'Cross court, deep', 'In'),
+      shot(opp, 3, 'Forehand', 'Inside-out', 'In'),
+      shot(you, 4, 'Forehand', 'Down the line', 'In', { live: true }),
+      shot(you, 5, 'Forehand', 'Long', 'Out', { loss: true })
+    ];
+
+    const row = (who, title, detail, score, opts = {}) => ({
+      ...who, title, detail, score,
+      bg: opts.playing ? 'rgba(255,255,255,0.08)' : 'transparent',
+      barWidth: opts.playing ? '62%' : '0%',
+      hasShots: !!opts.playing,
+      shots: opts.playing ? playingShots : []
+    });
+
+    const roomRows = [
+      row(you, 'Winner · Lee forehand', 'Set 2 · game 7 · 4 shots', '30-15'),
+      row(opp, 'Ace · Reid, T', 'Set 2 · game 7', '30-30'),
+      row(you, 'Unforced error · Lee forehand', 'Set 2 · game 7 · 5 shots', '30-40', { playing: true }),
+      row(opp, 'Forced error · Reid backhand', 'Set 2 · game 7 · 9 shots', '40-40')
+    ];
+
+    const roomCutRows = [
+      row(you, 'Double fault · Lee', 'Set 1 · game 4 · break point', '30-40'),
+      row(opp, 'Winner · Reid backhand', 'Set 1 · game 4 · 7 shots', '40-40', { playing: true }),
+      row(you, 'Forced error · Lee forehand', 'Set 1 · game 8 · 6 shots', '30-40'),
+      row(opp, 'Unforced error · Reid forehand', 'Set 2 · game 3 · 4 shots', '40-40')
+    ];
+
+    const item = (label, sub, checked) => ({
+      label, sub: sub || '', checked: !!checked,
+      bg: checked ? 'rgba(255,255,255,0.07)' : 'transparent'
+    });
+
+    const menuShow = [
+      item('All points', '', true),
+      item('Break points', 'Points that could break serve', false),
+      item('Saved only', '', false)
+    ];
+    const menuServe = [item('Either', '', true), item('Lee serving', '', false), item('Reid serving', '', false)];
+
+    const doors = [
+      { door: 'Transport expand', opens: 'From the shell player’s own control', carries: 'Position, playing state, applied cut' },
+      { door: '"Open fullscreen"', opens: 'This point’s control strip (phase 1 T1/T2)', carries: 'The selected point and the cut' },
+      { door: 'Point row ⇧-click', opens: 'Any row in the shell list', carries: 'That point, playing from its first shot' },
+      { door: 'Exit', opens: 'Esc · the transport’s minimize · double-click the film', carries: 'Position and cut back into the shell' }
+    ];
+
+    const keys = [
+      { control: 'Play / pause', key: 'Space', note: '"Pause" / "Play" — also click the film' },
+      { control: 'Previous point', key: '←', note: '"Previous point · ←" — obeys the applied cut' },
+      { control: 'Next point', key: '→', note: '"Next point · →" — obeys the applied cut' },
+      { control: 'Seek ±5s', key: '⇧ ← →', note: 'No tooltip — the seek lane is self-evident' },
+      { control: 'Save point', key: 'S', note: '"Save point" / "Saved — remove bookmark"' },
+      { control: 'Loop point', key: 'L', note: '"Loop this point — off" / "— on"' },
+      { control: 'Speed', key: '⇧ . / ,', note: '"Playback speed, 1×" — cycles 0.5 · 1 · 1.5 · 2' },
+      { control: 'Sound', key: 'M', note: '"Sound — on" / "— off"' },
+      { control: 'Show the court', key: 'C', note: '"Show the court — on" / "— off"' },
+      { control: 'Skip dead time', key: 'D', note: '"Skip dead time — off" / "— on"' },
+      { control: 'Points drawer', key: 'P', note: '"Points" — labelled trigger, tooltip carries the key only' },
+      { control: 'Exit fullscreen', key: 'Esc', note: '"Exit fullscreen · Esc" — closes the drawer first if open' }
+    ];
+
+    return { roomRows, roomCutRows, menuShow, menuServe, doors, keys, yes: true, no: false };
+  }
+}

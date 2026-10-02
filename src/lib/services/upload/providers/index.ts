@@ -5,12 +5,21 @@
  * Follows Open/Closed Principle - add new providers without modifying existing code.
  */
 
-import { ProviderId, IProviderUploadStrategy } from '../types';
-import { swingVisionStrategy } from './swingvision';
+import {
+  ProviderId,
+  IProviderUploadStrategy,
+  IImportProviderStrategy,
+} from "../types";
+import { swingVisionStrategy } from "./swingvision";
+import { splitStepStrategy } from "./splitstep";
 
 /** Registry of all provider strategies */
-const providerRegistry: Map<ProviderId, IProviderUploadStrategy> = new Map([
-  ['swing-vision', swingVisionStrategy],
+const providerRegistry: Map<ProviderId, IProviderUploadStrategy> = new Map<
+  ProviderId,
+  IProviderUploadStrategy
+>([
+  ["swing-vision", swingVisionStrategy],
+  ["splitstep", splitStepStrategy],
   // Add more providers here:
   // ['atp-tour', atpTourStrategy],
 ]);
@@ -20,11 +29,38 @@ const providerRegistry: Map<ProviderId, IProviderUploadStrategy> = new Map([
  *
  * @throws Error if provider is not found
  */
-export function getProviderStrategy(providerId: ProviderId): IProviderUploadStrategy {
+export function getProviderStrategy(
+  providerId: ProviderId,
+): IProviderUploadStrategy {
   const strategy = providerRegistry.get(providerId);
 
   if (!strategy) {
-    throw new Error(`Unknown provider: ${providerId}. Available providers: ${Array.from(providerRegistry.keys()).join(', ')}`);
+    throw new Error(
+      `Unknown provider: ${providerId}. Available providers: ${Array.from(providerRegistry.keys()).join(", ")}`,
+    );
+  }
+
+  return strategy;
+}
+
+/**
+ * Get an import provider strategy by ID.
+ *
+ * Use this on the parse-and-upload path. Processing providers (video sent to an
+ * external analysis service) have no parseable file and must never reach that
+ * code — they are rejected here rather than failing further downstream.
+ *
+ * @throws Error if the provider is unknown or is not an import provider
+ */
+export function getImportProviderStrategy(
+  providerId: ProviderId,
+): IImportProviderStrategy {
+  const strategy = getProviderStrategy(providerId);
+
+  if (strategy.kind !== "import") {
+    throw new Error(
+      `Provider ${providerId} is a ${strategy.kind} provider and cannot be used for direct file import.`,
+    );
   }
 
   return strategy;
@@ -33,7 +69,9 @@ export function getProviderStrategy(providerId: ProviderId): IProviderUploadStra
 /**
  * Check if provider is supported
  */
-export function isProviderSupported(providerId: string): providerId is ProviderId {
+export function isProviderSupported(
+  providerId: string,
+): providerId is ProviderId {
   return providerRegistry.has(providerId as ProviderId);
 }
 
@@ -44,5 +82,26 @@ export function getSupportedProviders(): ProviderId[] {
   return Array.from(providerRegistry.keys());
 }
 
+/** Provider kind, without needing the whole strategy. */
+export function getProviderKind(providerId: ProviderId) {
+  return getProviderStrategy(providerId).kind;
+}
+
+/**
+ * Provider kind for an id that may not be registered at all.
+ *
+ * The display list in `lib/providers.ts` is allowed to run ahead of this
+ * registry — ATP is drawn as "Soon" and has no strategy — and
+ * `getProviderKind()` throws on an id it has never heard of. Callers iterating
+ * the display list need the question answered, not thrown at, so the guard
+ * lives here beside the throw rather than being remembered at each call site.
+ */
+export function providerKindOrNull(providerId: string) {
+  return isProviderSupported(providerId)
+    ? getProviderKind(providerId as ProviderId)
+    : null;
+}
+
 // Re-export individual strategies for direct access if needed
-export { swingVisionStrategy } from './swingvision';
+export { swingVisionStrategy } from "./swingvision";
+export { splitStepStrategy } from "./splitstep";

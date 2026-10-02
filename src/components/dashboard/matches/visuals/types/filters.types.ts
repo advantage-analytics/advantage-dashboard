@@ -34,7 +34,7 @@ export interface FilterContextData {
 }
 
 export function isDynamicOption(
-  option: FilterOption | DynamicFilterOption
+  option: FilterOption | DynamicFilterOption,
 ): option is DynamicFilterOption {
   return "labelKey" in option;
 }

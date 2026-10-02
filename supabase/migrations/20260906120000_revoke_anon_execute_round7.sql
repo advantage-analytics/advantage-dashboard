@@ -1,0 +1,20 @@
+-- Take `anon` off `set_program_lineup`. Round 7, same exercise as
+-- 20260822090800.
+--
+-- `revoke all ... from public` in 20260906042127, which created the function,
+-- does NOT do this: Supabase carries a default privilege granting EXECUTE on
+-- new functions in `public` to `anon`, and a role-specific grant is not what
+-- PUBLIC's revoke removes. Verified against the live catalog — the function's
+-- ACL read `anon=X/postgres` despite that revoke, exactly as rounds 4 to 6
+-- describe.
+--
+-- Nothing could have been written through it: the function's first statement
+-- raises 'not authenticated' (28000) when `auth.uid()` is null, which is every
+-- signed-out call. This is the grant matching the guard rather than relying on
+-- it, and it is the whole reason the earlier rounds exist.
+--
+-- Safe to revoke because no RLS policy references this function — see
+-- 20260821144843 for what happens when a policy-referenced function loses its
+-- anon grant. `set_program_lineup` is a staff write called from a server
+-- action, never from a policy.
+revoke execute on function public.set_program_lineup(uuid, uuid[]) from anon;

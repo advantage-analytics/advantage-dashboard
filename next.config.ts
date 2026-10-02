@@ -1,13 +1,81 @@
 import type { NextConfig } from "next";
 import { REQUEST_ACCESS_URL } from "./src/lib/constants";
+import { SCHEDULE_ENABLED } from "./src/lib/schedule/availability";
+
+/**
+ * The Admin › Teams detail page's old tab routes.
+ *
+ * Each was a `page.tsx` under `/admin/teams/[programId]/`; they are now views
+ * of the one page, chosen by `?view=` (`src/components/admin/team-sections.ts`),
+ * so the sub-route URL keeps working by turning into the same view.
+ * `tests/admin-routes.spec.ts` asserts the raw `Location` header.
+ *
+ * 307, not 308, for the reason the rest of this list gives: these paths never
+ * shipped past `splitstep-integration`, so no browser out there holds one,
+ * and a permanent redirect would be cached indefinitely against a path this
+ * console may want back.
+ */
+export const ADMIN_TEAM_SECTION_SLUGS = [
+  "people",
+  "roster",
+  "schedule",
+  "usage",
+  "activity",
+] as const;
 
 const nextConfig: NextConfig = {
   // Mark exceljs as an external package for server components
-  // This prevents it from being bundled in server-side code
-  serverExternalPackages: ['exceljs', '@anthropic-ai/sdk', 'openai'],
+  // This prevents it from being bundled in server-side code.
+  //
+  // @azure/storage-blob is here for the same reason and one more: it signs the
+  // vendor's video SAS, so it must never be reachable from a client bundle.
+  // The browser upload path deliberately does not use it — see
+  // src/lib/services/upload/azure-block-upload.ts.
+  serverExternalPackages: [
+    "exceljs",
+    "@anthropic-ai/sdk",
+    "openai",
+    "@azure/storage-blob",
+  ],
+  // `react-aria-components` is a 60-component barrel: importing `DatePicker`
+  // from it pulls the whole export graph — 106 modules against the 25 the
+  // date field actually reaches. Next optimises a built-in list of packages
+  // this way (lucide-react, recharts) but not this one, and dev never
+  // tree-shakes at all, so every route holding a `DateField` paid for the
+  // barrel. The package publishes per-component subpaths, which is what makes
+  // the rewrite resolve.
+  experimental: {
+    optimizePackageImports: ["react-aria-components"],
+  },
   // Turbopack configuration (Next.js 16+ uses Turbopack by default)
   turbopack: {
     // Turbopack will handle the dynamic imports correctly
+  },
+  // The shared match report's Open Graph image reads its font and the
+  // wordmark PNG from disk at module scope (`src/app/m/[token]/
+  // opengraph-image.tsx`). A `readFile` on a computed path is invisible to
+  // the build's file tracing, so both are named here or the deployed
+  // function 500s looking for them.
+  outputFileTracingIncludes: {
+    "/m/[token]/opengraph-image": [
+      "./src/app/m/[token]/*.woff",
+      "./public/logos/logo-email.png",
+    ],
+  },
+  async headers() {
+    return [
+      {
+        // A shared match report is public by its sharer's choice, but the
+        // token in its URL should not leak further than the person it was
+        // sent to: no caching of the page by shared caches, and no referer
+        // carrying the token to any link the reader follows.
+        source: "/m/:path*",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+    ];
   },
   async redirects() {
     return [
@@ -19,6 +87,49 @@ const nextConfig: NextConfig = {
         destination: REQUEST_ACCESS_URL,
         permanent: true,
       },
+      {
+        // The admin claims console was replaced by Teams/Requests (T9). The
+        // old URL is short-lived — it never shipped past this branch's own
+        // work-in-progress state — so a temporary redirect is enough; no
+        // external link or bookmark depends on it yet.
+        source: "/admin/claims",
+        destination: "/admin/requests",
+        permanent: false,
+      },
+      {
+        // A one-off team match is the ordinary wizard's job. This route wrapped
+        // the same wizard in a preset that answered every question on step one,
+        // including the one it had no business answering — the source — which
+        // left a coach unable to hand in a SwingVision export. Its staff-only
+        // guard also disagreed with the `canUploadForProgram` link that pointed
+        // at it, so a player with an upload grant was bounced back silently.
+        source: "/dashboard/team/schedule/new/single",
+        destination: "/dashboard/matches/new",
+        // 307, not 308. This path never shipped past `splitstep-integration`,
+        // so no browser out there holds it, and a permanent redirect is cached
+        // indefinitely — which would quietly poison the path if a one-off rail
+        // that asks for its source is ever built here.
+        permanent: false,
+      },
+      // While the team Schedule is a coming-soon page, every route under it —
+      // new event, event detail, edit, score, single match — lands on that
+      // page instead of rendering (and reading) a schedule nobody can reach
+      // from the app. `lib/schedule/availability.ts` owns the switch. After
+      // the `new/single` entry above on purpose: the first match wins.
+      ...(SCHEDULE_ENABLED
+        ? []
+        : [
+            {
+              source: "/dashboard/team/schedule/:path+",
+              destination: "/dashboard/team/schedule",
+              permanent: false,
+            },
+          ]),
+      ...ADMIN_TEAM_SECTION_SLUGS.map((slug) => ({
+        source: `/admin/teams/:programId/${slug}`,
+        destination: `/admin/teams/:programId?view=${slug}`,
+        permanent: false,
+      })),
     ];
   },
 };

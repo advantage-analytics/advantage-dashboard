@@ -1,0 +1,18 @@
+$kind: http-request
+description: Admin only (`users.is_admin`), and only for an operation this admin started. The wizard reads it after a submit whose answer was lost.
+url: "{{baseUrl}}/api/admin/uploads/file?operationId=<uuid>&itemId=<uuid>"
+method: GET
+headers:
+  Accept: application/json
+queryParams:
+  - key: operationId
+    value: <uuid>
+    disabled: false
+    description: "(Required) "
+  - key: itemId
+    value: <uuid>
+    disabled: false
+    description: "(Required) "
+settings: {}
+examples: ./.resources/Read an admin-console file submission's durable status.resources/examples
+order: 1000

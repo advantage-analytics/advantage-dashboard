@@ -1,0 +1,38 @@
+
+Advantage — Match report · settled
+Statistics, settled — and every state it has.
+F1
+ is the page: the claim-first insight from 
+16a
+, the title row's steady-state cluster from 
+17b
+, and 03's widget vocabulary refit to the 868px pane. Everything under it is a state of that page rather than another take on it.
+Insight
+Claim first at 15px/300 — the page's other cards lead with eyebrows, so a sentence in the first line is what marks this one as the engine's voice. Evidence follows as prose with the decisive figure in ink-900 and 
+Why this ↗
+ trailing the sentence. The footer credits Advantage Intelligence and carries both exits.
+Two exits
+Collapse
+ is the reversible one — a chevron, folding to the 44px row in 
+F3
+ where 
+Show
+ is the only blue. 
+Dismiss
+ is persistent text and permanent for this match: the card goes and nothing takes its place (
+F4
+) — no undo chip, no residual dot. The insight is derived, so Statistics is always the way back.
+Title row
+Compare is a scope control, so it is drawn only once a second analyzed match exists (
+F5
+ before, 
+F6
+ after) — never greyed out. Share stays in the rail; the ⋯ menu holds Export, Re-run, Review score, and Delete last.
+Widgets
+Head to head keeps 03's two-column grammar at 64px tracks with the counts in a dark hover readout (
+F7
+), never printed on the row. Tracker, rally bands and endings sit at natural height — the pane scrolls rather than clipping a card mid-row.
+Scoreboard
+The rail score marks the winner of each set in ink-900 and the lost set in ink-400, both rows on the same three columns (
+F8
+).

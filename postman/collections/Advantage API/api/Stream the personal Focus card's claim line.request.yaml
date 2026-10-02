@@ -1,0 +1,9 @@
+$kind: http-request
+description: One sentence of at most eight words, no digits, streamed as plain text from `getLLMStream()`. Every figure the prompt uses is recomputed server-side for the signed-in player; no body is read. Answers 204 when the player has no matches, rather than inventing a claim. A stream that fails after the first byte errors the body, not the status.
+url: "{{baseUrl}}/api/home-insight"
+method: POST
+headers:
+  Accept: text/plain
+settings: {}
+examples: ./.resources/Stream the personal Focus card's claim line.resources/examples
+order: 8000

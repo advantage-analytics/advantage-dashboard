@@ -152,7 +152,8 @@ export function useDotExit<T extends { id?: string }>(
         cancelled = true;
       }
     }
-    if (cancelled) setExtra((ex) => ex.filter((d) => !curr.has(d.id as string)));
+    if (cancelled)
+      setExtra((ex) => ex.filter((d) => !curr.has(d.id as string)));
 
     // Newly removed ids start their exit countdown.
     const removed: Array<T & { exiting: true }> = [];
@@ -181,16 +182,21 @@ export function useDotExit<T extends { id?: string }>(
   const currIds = new Set<string>();
   for (const d of dots) if (d.id) currIds.add(d.id);
   const visibleExtra = extra.filter((d) => !currIds.has(d.id as string));
-  return (
-    visibleExtra.length ? [...dots, ...visibleExtra] : dots
-  ) as Array<T & { exiting?: boolean }>;
+  return (visibleExtra.length ? [...dots, ...visibleExtra] : dots) as Array<
+    T & { exiting?: boolean }
+  >;
 }
 
 /** Soft drop-shadow that lifts a hovered/active dot. Referenced via url(#dot-glow). */
 export function CourtGlowFilter() {
   return (
     <filter id="dot-glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="rgba(0,0,0,0.15)" />
+      <feDropShadow
+        dx="0"
+        dy="0"
+        stdDeviation="2"
+        floodColor="rgba(0,0,0,0.15)"
+      />
     </filter>
   );
 }
@@ -209,26 +215,18 @@ function CourtDefs({ interactive }: { interactive: boolean }) {
 function DotTooltipContent({ dot }: { dot: CourtDot }) {
   const meta = dot.meta!;
   return (
-    <div className="flex flex-col w-[200px]">
+    <div className="flex w-[200px] flex-col">
       <div
-        className="flex items-center gap-2 px-3 py-2 rounded-t-xl"
+        className="flex items-center gap-2 rounded-t-xl px-3 py-2"
         style={{ backgroundColor: `${dot.color}18` }}
       >
         {dot.isAce ? (
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 10 10"
-            className="shrink-0"
-          >
-            <polygon
-              points={starPoints(5, 5, 5, 2.5, 5)}
-              fill={dot.color}
-            />
+          <svg width="10" height="10" viewBox="0 0 10 10" className="shrink-0">
+            <polygon points={starPoints(5, 5, 5, 2.5, 5)} fill={dot.color} />
           </svg>
         ) : (
           <span
-            className="w-2 h-2 rounded-full shrink-0"
+            className="h-2 w-2 shrink-0 rounded-full"
             style={{ backgroundColor: dot.color }}
           />
         )}
@@ -241,14 +239,12 @@ function DotTooltipContent({ dot }: { dot: CourtDot }) {
       </div>
       <div className="flex flex-col gap-2 px-3 py-2.5">
         <div className="flex items-baseline justify-between">
-          <span className="text-[11px] font-medium text-[#0D0D0D] tracking-tight">
+          <span className="text-[11px] font-medium tracking-tight text-[#0D0D0D]">
             {meta.gameScore}
           </span>
-          <span className="text-[11px] text-[#525252]">
-            {meta.pointScore}
-          </span>
+          <span className="text-[11px] text-[#525252]">{meta.pointScore}</span>
         </div>
-        <div className="h-px bg-[#F0F0F0]" />
+        <div className="h-px bg-[var(--border-hairline)]" />
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-[#525252]">
             Set {meta.setNumber}
@@ -294,22 +290,73 @@ function staticDotShape(
   i: number,
 ) {
   const dotOpacity = dot.opacity ?? 0.85;
-  const style = { animationDelay: className === "court-dot" ? dotStagger(i) : "0s" };
+  const style = {
+    animationDelay: className === "court-dot" ? dotStagger(i) : "0s",
+  };
   const key = `${className === "court-dot--exit" ? "exit-" : ""}${dot.id ?? i}`;
   if (dot.variant === "contact") {
     return dot.shape === "triangle" ? (
-      <polygon key={key} className={className} style={style} points={trianglePoints(dot.cx, dot.cy, s.rContact)} fill="transparent" stroke={dot.color} strokeWidth={1.5} opacity={dotOpacity} />
+      <polygon
+        key={key}
+        className={className}
+        style={style}
+        points={trianglePoints(dot.cx, dot.cy, s.rContact)}
+        fill="transparent"
+        stroke={dot.color}
+        strokeWidth={1.5}
+        opacity={dotOpacity}
+      />
     ) : (
-      <circle key={key} className={className} style={style} cx={dot.cx} cy={dot.cy} r={s.rContact} fill="transparent" stroke={dot.color} strokeWidth={1.5} opacity={dotOpacity} />
+      <circle
+        key={key}
+        className={className}
+        style={style}
+        cx={dot.cx}
+        cy={dot.cy}
+        r={s.rContact}
+        fill="transparent"
+        stroke={dot.color}
+        strokeWidth={1.5}
+        opacity={dotOpacity}
+      />
     );
   }
   if (dot.shape === "triangle") {
-    return <polygon key={key} className={className} style={style} points={trianglePoints(dot.cx, dot.cy, s.r)} fill={dot.color} opacity={dotOpacity} />;
+    return (
+      <polygon
+        key={key}
+        className={className}
+        style={style}
+        points={trianglePoints(dot.cx, dot.cy, s.r)}
+        fill={dot.color}
+        opacity={dotOpacity}
+      />
+    );
   }
   return dot.isSecondServe ? (
-    <rect key={key} className={className} style={style} x={dot.cx - s.squareHalf} y={dot.cy - s.squareHalf} width={s.squareHalf * 2} height={s.squareHalf * 2} rx={1} fill={dot.color} opacity={dotOpacity} />
+    <rect
+      key={key}
+      className={className}
+      style={style}
+      x={dot.cx - s.squareHalf}
+      y={dot.cy - s.squareHalf}
+      width={s.squareHalf * 2}
+      height={s.squareHalf * 2}
+      rx={1}
+      fill={dot.color}
+      opacity={dotOpacity}
+    />
   ) : (
-    <circle key={key} className={className} style={style} cx={dot.cx} cy={dot.cy} r={s.r} fill={dot.color} opacity={dotOpacity} />
+    <circle
+      key={key}
+      className={className}
+      style={style}
+      cx={dot.cx}
+      cy={dot.cy}
+      r={s.r}
+      fill={dot.color}
+      opacity={dotOpacity}
+    />
   );
 }
 
@@ -319,7 +366,16 @@ function renderDots(
   radius = 3,
 ) {
   const s = dotSizes(radius);
-  const { r, rInactive, rActive, rContact, aceOuter, aceOuterActive, aceInner, aceInnerActive } = s;
+  const {
+    r,
+    rInactive,
+    rActive,
+    rContact,
+    aceOuter,
+    aceOuterActive,
+    aceInner,
+    aceInnerActive,
+  } = s;
 
   return dots.map((dot, i) => {
     const dotOpacity = dot.opacity ?? 0.85;
@@ -337,10 +393,14 @@ function renderDots(
     }
 
     /* Interactive mode */
-    const pairMatch = dot.pairId != null
-      && (interactive.hoveredId === dot.pairId || interactive.pinnedId === dot.pairId);
+    const pairMatch =
+      dot.pairId != null &&
+      (interactive.hoveredId === dot.pairId ||
+        interactive.pinnedId === dot.pairId);
     const isActive =
-      interactive.hoveredId === dot.id || interactive.pinnedId === dot.id || pairMatch;
+      interactive.hoveredId === dot.id ||
+      interactive.pinnedId === dot.id ||
+      pairMatch;
 
     const sharedStyle = {
       transition: "all 0.15s ease",
@@ -437,9 +497,7 @@ function renderDots(
         tabIndex={0}
         role="button"
         aria-label={
-          dot.meta
-            ? `${dot.meta.resultLabel}, ${dot.meta.pointScore}`
-            : "Point"
+          dot.meta ? `${dot.meta.resultLabel}, ${dot.meta.pointScore}` : "Point"
         }
       >
         {shape}
@@ -454,7 +512,7 @@ function renderDots(
         <TooltipContent
           side="top"
           sideOffset={10}
-          className="!bg-white !rounded-xl !px-0 !py-0 !text-left !w-auto !border !border-[#E7E7E7] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] [&>:last-child]:!hidden"
+          className="!w-auto !rounded-xl !border !border-[var(--border-medium)] !bg-white !px-0 !py-0 !text-left !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] [&>:last-child]:!hidden"
         >
           <DotTooltipContent dot={dot} />
         </TooltipContent>
@@ -495,7 +553,7 @@ export function HalfCourtSVG({
   return (
     <svg
       viewBox={`-1 -1 ${COURT_W + 2} ${COURT_H + 2}`}
-      className="w-full h-full"
+      className="h-full w-full"
       preserveAspectRatio="xMidYMid meet"
       role="img"
       aria-label="Serve placement court diagram"
@@ -507,22 +565,70 @@ export function HalfCourtSVG({
       <rect x="0" y="0" width={COURT_W} height={COURT_H} fill={COURT_FILL} />
 
       {/* Doubles outline — top + sides */}
-      <line x1={DOUBLES_LEFT} y1={DOUBLES_TOP} x2={DOUBLES_RIGHT} y2={DOUBLES_TOP} {...lineProps} />
-      <line x1={DOUBLES_LEFT} y1={DOUBLES_TOP} x2={DOUBLES_LEFT} y2={BASELINE_Y} {...lineProps} />
-      <line x1={DOUBLES_RIGHT} y1={DOUBLES_TOP} x2={DOUBLES_RIGHT} y2={BASELINE_Y} {...lineProps} />
+      <line
+        x1={DOUBLES_LEFT}
+        y1={DOUBLES_TOP}
+        x2={DOUBLES_RIGHT}
+        y2={DOUBLES_TOP}
+        {...lineProps}
+      />
+      <line
+        x1={DOUBLES_LEFT}
+        y1={DOUBLES_TOP}
+        x2={DOUBLES_LEFT}
+        y2={BASELINE_Y}
+        {...lineProps}
+      />
+      <line
+        x1={DOUBLES_RIGHT}
+        y1={DOUBLES_TOP}
+        x2={DOUBLES_RIGHT}
+        y2={BASELINE_Y}
+        {...lineProps}
+      />
 
       {/* Singles sidelines */}
-      <line x1={SINGLES_LEFT} y1={DOUBLES_TOP} x2={SINGLES_LEFT} y2={BASELINE_Y} {...lineProps} />
-      <line x1={SINGLES_RIGHT} y1={DOUBLES_TOP} x2={SINGLES_RIGHT} y2={BASELINE_Y} {...lineProps} />
+      <line
+        x1={SINGLES_LEFT}
+        y1={DOUBLES_TOP}
+        x2={SINGLES_LEFT}
+        y2={BASELINE_Y}
+        {...lineProps}
+      />
+      <line
+        x1={SINGLES_RIGHT}
+        y1={DOUBLES_TOP}
+        x2={SINGLES_RIGHT}
+        y2={BASELINE_Y}
+        {...lineProps}
+      />
 
       {/* Service line */}
-      <line x1={SINGLES_LEFT} y1={SERVICE_Y} x2={SINGLES_RIGHT} y2={SERVICE_Y} {...lineProps} />
+      <line
+        x1={SINGLES_LEFT}
+        y1={SERVICE_Y}
+        x2={SINGLES_RIGHT}
+        y2={SERVICE_Y}
+        {...lineProps}
+      />
 
       {/* Baseline */}
-      <line x1={DOUBLES_LEFT} y1={BASELINE_Y} x2={DOUBLES_RIGHT} y2={BASELINE_Y} {...lineProps} />
+      <line
+        x1={DOUBLES_LEFT}
+        y1={BASELINE_Y}
+        x2={DOUBLES_RIGHT}
+        y2={BASELINE_Y}
+        {...lineProps}
+      />
 
       {/* Center service line */}
-      <line x1={CENTER_X} y1={SERVICE_Y} x2={CENTER_X} y2={BASELINE_Y} {...lineProps} />
+      <line
+        x1={CENTER_X}
+        y1={SERVICE_Y}
+        x2={CENTER_X}
+        y2={BASELINE_Y}
+        {...lineProps}
+      />
 
       {/* Dots */}
       {renderDots(dots, interactive)}
@@ -575,11 +681,15 @@ export function FullCourtSVG({
   // popping. Tab/mode switches unmount the whole SVG, so those swap cleanly.
   const dotsWithExit = useDotExit(dots);
 
-  const fullLine = { stroke: COURT_LINE, strokeWidth: 2.25, strokeLinecap: "round" as const };
+  const fullLine = {
+    stroke: COURT_LINE,
+    strokeWidth: 2.25,
+    strokeLinecap: "round" as const,
+  };
   return (
     <svg
       viewBox={`-1 ${-1 - FULL_SVG_PAD_TOP} ${COURT_W + 2} ${FULL_COURT_H + 2 + FULL_SVG_PAD_TOP + FULL_SVG_PAD_BOTTOM}`}
-      className="w-full h-full"
+      className="h-full w-full"
       preserveAspectRatio="xMidYMid meet"
       role="img"
       aria-label={
@@ -592,32 +702,100 @@ export function FullCourtSVG({
       <CourtDefs interactive={!!interactive} />
 
       {/* Court surface */}
-      <rect x="0" y={FAR_BL} width={COURT_W} height={FULL_COURT_H} fill={COURT_FILL} />
+      <rect
+        x="0"
+        y={FAR_BL}
+        width={COURT_W}
+        height={FULL_COURT_H}
+        fill={COURT_FILL}
+      />
 
       {/* Doubles sidelines — full height */}
-      <line x1={DOUBLES_LEFT} y1={FAR_BL} x2={DOUBLES_LEFT} y2={NEAR_BL} {...fullLine} />
-      <line x1={DOUBLES_RIGHT} y1={FAR_BL} x2={DOUBLES_RIGHT} y2={NEAR_BL} {...fullLine} />
+      <line
+        x1={DOUBLES_LEFT}
+        y1={FAR_BL}
+        x2={DOUBLES_LEFT}
+        y2={NEAR_BL}
+        {...fullLine}
+      />
+      <line
+        x1={DOUBLES_RIGHT}
+        y1={FAR_BL}
+        x2={DOUBLES_RIGHT}
+        y2={NEAR_BL}
+        {...fullLine}
+      />
 
       {/* Singles sidelines — full height */}
-      <line x1={SINGLES_LEFT} y1={FAR_BL} x2={SINGLES_LEFT} y2={NEAR_BL} {...fullLine} />
-      <line x1={SINGLES_RIGHT} y1={FAR_BL} x2={SINGLES_RIGHT} y2={NEAR_BL} {...fullLine} />
+      <line
+        x1={SINGLES_LEFT}
+        y1={FAR_BL}
+        x2={SINGLES_LEFT}
+        y2={NEAR_BL}
+        {...fullLine}
+      />
+      <line
+        x1={SINGLES_RIGHT}
+        y1={FAR_BL}
+        x2={SINGLES_RIGHT}
+        y2={NEAR_BL}
+        {...fullLine}
+      />
 
       {/* Far baseline */}
-      <line x1={DOUBLES_LEFT} y1={FAR_BL} x2={DOUBLES_RIGHT} y2={FAR_BL} {...fullLine} />
+      <line
+        x1={DOUBLES_LEFT}
+        y1={FAR_BL}
+        x2={DOUBLES_RIGHT}
+        y2={FAR_BL}
+        {...fullLine}
+      />
 
       {/* Far service line + center */}
-      <line x1={SINGLES_LEFT} y1={FAR_SVC} x2={SINGLES_RIGHT} y2={FAR_SVC} {...fullLine} />
+      <line
+        x1={SINGLES_LEFT}
+        y1={FAR_SVC}
+        x2={SINGLES_RIGHT}
+        y2={FAR_SVC}
+        {...fullLine}
+      />
       <line x1={CENTER_X} y1={FAR_SVC} x2={CENTER_X} y2={NET_Y} {...fullLine} />
 
       {/* Near service line + center */}
-      <line x1={SINGLES_LEFT} y1={NEAR_SVC} x2={SINGLES_RIGHT} y2={NEAR_SVC} {...fullLine} />
-      <line x1={CENTER_X} y1={NET_Y} x2={CENTER_X} y2={NEAR_SVC} {...fullLine} />
+      <line
+        x1={SINGLES_LEFT}
+        y1={NEAR_SVC}
+        x2={SINGLES_RIGHT}
+        y2={NEAR_SVC}
+        {...fullLine}
+      />
+      <line
+        x1={CENTER_X}
+        y1={NET_Y}
+        x2={CENTER_X}
+        y2={NEAR_SVC}
+        {...fullLine}
+      />
 
       {/* Near baseline */}
-      <line x1={DOUBLES_LEFT} y1={NEAR_BL} x2={DOUBLES_RIGHT} y2={NEAR_BL} {...fullLine} />
+      <line
+        x1={DOUBLES_LEFT}
+        y1={NEAR_BL}
+        x2={DOUBLES_RIGHT}
+        y2={NEAR_BL}
+        {...fullLine}
+      />
 
       {/* Net */}
-      <line x1={0} y1={NET_Y} x2={COURT_W} y2={NET_Y} stroke={COURT_LINE} strokeWidth={3} strokeLinecap="round" />
+      <line
+        x1={0}
+        y1={NET_Y}
+        x2={COURT_W}
+        y2={NET_Y}
+        stroke={COURT_LINE}
+        strokeWidth={3}
+        strokeLinecap="round"
+      />
 
       {/* Dots */}
       {renderDots(dotsWithExit, interactive, 3.75)}

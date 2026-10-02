@@ -1,0 +1,78 @@
+# Local Supabase stack — for database-level tests only.
+#
+# `supabase/migrations/` cannot bootstrap a database: it runs roughly 100
+# migrations behind the live project and its first file is a
+# `create or replace function` over tables it never creates (AGENTS.md: "the
+# live database is the only source of truth"). So this stack does NOT apply that
+# folder. It seeds a baseline reconstructed from the live database
+# (`tests/fixtures/local-supabase/live-baseline.sql`, which says what it does
+# and does not reproduce) and then the migrations under test, listed below.
+#
+# Nothing here is used by the deployed app; `supabase link` / `db push` are
+# not part of this repo's workflow.
+#
+#   supabase start                       # first run pulls images
+#   supabase db reset                    # re-seed after editing a listed file
+#   supabase status -o env               # keys the local specs read
+#   supabase stop
+#
+# Ports are offset from the CLI defaults so this stack can run next to another
+# project's default-port stack on the same machine.
+
+project_id = "advantage-dashboard"
+
+[api]
+enabled = true
+port = 55321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 55322
+shadow_port = 55320
+major_version = 17
+
+[db.pooler]
+enabled = false
+
+[db.migrations]
+# See the header. Local tests seed the baseline and the migration under test
+# explicitly instead of replaying the incomplete folder.
+enabled = false
+
+[db.seed]
+enabled = true
+# Order matters: the baseline creates what the migration alters.
+sql_paths = [
+  "../tests/fixtures/local-supabase/live-baseline.sql",
+  "./migrations/20260911000000_upload_eligibility.sql",
+]
+
+[realtime]
+enabled = false
+
+[studio]
+enabled = false
+
+[local_smtp]
+enabled = false
+
+[storage]
+enabled = false
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false

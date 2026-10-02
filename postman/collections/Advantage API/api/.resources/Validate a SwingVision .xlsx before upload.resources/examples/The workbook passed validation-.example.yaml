@@ -1,0 +1,47 @@
+$kind: http-example
+name: The workbook passed validation.
+request:
+  url: "{{baseUrl}}/api/validate-file"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "file": "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,UEsDBBQABgAIAAAAIQ...",
+        "fileName": "match-export.xlsx"
+      }
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "success": true,
+        "message": "File validation passed",
+        "sheets_validated": [
+          "Settings",
+          "Shots",
+          "Points",
+          "Games",
+          "Sets",
+          "Stats"
+        ],
+        "total_rows": {
+          "Settings": 1,
+          "Shots": 812,
+          "Points": 142,
+          "Games": 22,
+          "Sets": 2,
+          "Stats": 48
+        }
+      }
+order: 1000

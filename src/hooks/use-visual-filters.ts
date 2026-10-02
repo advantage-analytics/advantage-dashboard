@@ -38,7 +38,7 @@ function createDefaultState(config: FilterConfig, player: string): FilterState {
 }
 
 export function useVisualFilters(
-  options: UseVisualFiltersOptions = {}
+  options: UseVisualFiltersOptions = {},
 ): UseVisualFiltersReturn {
   const { initialType = "serve", initialPlayer = DEFAULT_PLAYER } = options;
 
@@ -47,11 +47,11 @@ export function useVisualFilters(
 
   const config = useMemo(
     () => getFilterConfig(visualizationType),
-    [visualizationType]
+    [visualizationType],
   );
 
   const [filters, setFilters] = useState<FilterState>(() =>
-    createDefaultState(config, initialPlayer)
+    createDefaultState(config, initialPlayer),
   );
 
   const handleSetVisualizationType = useCallback(
@@ -77,7 +77,7 @@ export function useVisualFilters(
 
       setFilters(newState);
     },
-    [filters]
+    [filters],
   );
 
   const updateFilter = useCallback((key: string, value: string[]) => {
@@ -93,8 +93,12 @@ export function useVisualFilters(
   }, []);
 
   const activeFilterCount = useMemo(
-    () => Object.values(filters).reduce((count, values) => count + values.length, 0),
-    [filters]
+    () =>
+      Object.values(filters).reduce(
+        (count, values) => count + values.length,
+        0,
+      ),
+    [filters],
   );
 
   return {
