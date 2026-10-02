@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { Gauge } from "lucide-react";
+import { HoursRing } from "@/components/dashboard/shared/hours-ring";
 import {
   dualWeekendsLeft,
   formatHoursShort,
   formatResetDate,
+  hoursSeverity,
   secondsLeft,
+  usageFraction,
 } from "@/lib/data/usage-format";
 
 /**
@@ -25,7 +27,7 @@ import {
  *
  * Measured to the round-45 / Platform Audit footer, which Team Home and the
  * personal Home (Pa2) draw identically: 12px above the hairline, 8px between
- * items, a 13px --ink-500 gauge, an 11px --ink-600 sentence, an 11px
+ * items, the beta pill's 14px hours-left ring (`HoursRing`), an 11px --ink-600 sentence, an 11px
  * --border-medium divider — the header's divider token, not a card hairline.
  */
 
@@ -65,10 +67,9 @@ export function UsageFooter({
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-[var(--border-hairline)] pt-3">
-      <Gauge
-        className="size-[13px] shrink-0 text-[var(--ink-500)]"
-        strokeWidth={1.5}
-        aria-hidden
+      <HoursRing
+        share={1 - usageFraction(usedSeconds, capSeconds)}
+        low={hoursSeverity(usageFraction(usedSeconds, capSeconds)) !== "ok"}
       />
 
       <p className="text-[11px] text-[var(--ink-600)]">
