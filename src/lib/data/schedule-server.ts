@@ -20,7 +20,7 @@ import {
   outcomeForMatch,
 } from "@/lib/schedule/entry-state";
 import { roundRank } from "@/lib/schedule/format";
-import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
+import { formatMatchDuration } from "@/lib/format/duration";
 import { compareEntryOrder } from "@/lib/schedule/courts";
 import type {
   EntryOutcome,
@@ -270,7 +270,7 @@ export async function readScheduleWithClient(
       opponentLabels: match.player2_name ? [match.player2_name] : [],
       hasVideo: analysis !== undefined,
       // The matches list's own formatter, so both drawers print one length.
-      duration: formatDuration(match.duration ?? undefined) || null,
+      duration: formatMatchDuration(match.duration) || null,
       sourceProvider: match.source_provider ?? null,
       jobId: analysis?.jobId ?? null,
       updatedAt: analysis?.updatedAt ?? null,
