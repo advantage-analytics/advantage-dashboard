@@ -10,7 +10,7 @@ import {
   RosterHeaderButtons,
   RosterHeaderButtonsPending,
 } from "./roster-header-buttons";
-import { COL, ROSTER_COLUMNS, ROW } from "./roster-table";
+import { COL, ROSTER_COLUMNS, ROSTER_MIN_WIDTH, ROW } from "./roster-table";
 import type { ManagedPlayer } from "./invite-target-picker";
 import type {
   FormerPlayer,
@@ -47,18 +47,12 @@ import type {
  * and a button that refuses on click is worse than no button.
  */
 
-/**
- * The five columns in the real table's own order, with the spacer written
- * where it belongs rather than grown off a magic index. `flex-1` between
- * Player and Record is what the populated row has; without it the three
- * right-hand cells sit under the wrong headings.
- */
-const ROW_RULES: readonly (
-  { spacer: true } | ({ col: string } & React.ComponentProps<typeof GhostRule>)
-)[] = [
+/** The five columns in the real table's own order. */
+const ROW_RULES: readonly ({
+  col: string;
+} & React.ComponentProps<typeof GhostRule>)[] = [
   { col: COL.spot, width: "10px" }, // # — a line number's footprint
   { col: COL.player, width: "58%", tone: "200", shape: "tall" }, // Player — the name
-  { spacer: true },
   { col: COL.record, width: "70%" }, // Record
   { col: COL.form, width: "76%" }, // Form
   { col: COL.last, width: "62%" }, // Last match
@@ -67,15 +61,11 @@ const ROW_RULES: readonly (
 function GhostRow({ opacity }: { opacity: number }) {
   return (
     <div className={`${ROW} h-[52px]`} style={{ opacity }} aria-hidden="true">
-      {ROW_RULES.map((rule, i) =>
-        "spacer" in rule ? (
-          <span key={i} className="flex-1" />
-        ) : (
-          <span key={i} className={`${rule.col} flex items-center`}>
-            <GhostRule {...rule} />
-          </span>
-        ),
-      )}
+      {ROW_RULES.map((rule, i) => (
+        <span key={i} className={`${rule.col} flex items-center`}>
+          <GhostRule {...rule} />
+        </span>
+      ))}
     </div>
   );
 }
@@ -128,7 +118,7 @@ export function RosterDayZero({
             width, the same 24px sides, the same hairline under the header and
             none between the rows. */}
         <div className="surface-card">
-          <div className="min-w-[768px] px-6 pt-0.5 pb-1.5">
+          <div className={`${ROSTER_MIN_WIDTH} px-6 pt-0.5 pb-1.5`}>
             {/* The labels are the payload — # · Player · Record · Form · Last
                 match says what a squad becomes, with no figure invented. They
                 come from the real header by import, so a renamed column cannot
@@ -137,20 +127,16 @@ export function RosterDayZero({
             <div
               className={`${ROW} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
             >
-              {ROSTER_COLUMNS.map((column) =>
-                "spacer" in column ? (
-                  <span key="spacer" className="flex-1" />
-                ) : (
-                  <span
-                    key={column.label}
-                    className={`${column.col} eyebrow-sm${
-                      column.center ? "text-center" : ""
-                    }`}
-                  >
-                    {column.label}
-                  </span>
-                ),
-              )}
+              {ROSTER_COLUMNS.map((column) => (
+                <span
+                  key={column.label}
+                  className={`${column.col} eyebrow-sm${
+                    column.center ? "text-center" : ""
+                  }`}
+                >
+                  {column.label}
+                </span>
+              ))}
             </div>
             {GHOST_OPACITY.map((opacity) => (
               <GhostRow key={opacity} opacity={opacity} />
