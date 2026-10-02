@@ -117,18 +117,6 @@ export function surnameLabels(you: string, opp: string): [string, string] {
 }
 
 /**
- * Format duration in minutes to "XHR YMIN" format
- */
-export function formatDuration(minutes: number): {
-  hours: number;
-  mins: number;
-} {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return { hours, mins };
-}
-
-/**
  * Format raw hand/backhand values into the display strings used in the
  * scoreboard and upload preview. Unknown values are dropped, not echoed —
  * protects the UI from schema drift.

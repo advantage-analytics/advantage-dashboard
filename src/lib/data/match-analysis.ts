@@ -12,6 +12,7 @@
  * was invented; that is gone.
  */
 
+import { formatDuration } from "@/lib/format/duration";
 import { addVideoHref } from "@/lib/matches/add-video-href";
 import type { ProviderId } from "@/lib/services/upload";
 
@@ -777,21 +778,6 @@ export function uploadEtaSeconds(
 export function formatEta(seconds: number): string {
   if (seconds < 90) return "under a minute left";
   return `about ${formatDuration(seconds)} left`;
-}
-
-/**
- * A length of time in whole minutes — "12 min", "1h", "1h 29m". `formatEta`'s
- * own arithmetic, shared so an estimate, an elapsed clock and a reserved
- * allowance ("1h 29m goes back…") cannot phrase the same span two ways.
- * Floors at one minute: a zero reads as nothing having happened.
- */
-export function formatDuration(seconds: number): string {
-  const minutes = Math.max(1, Math.round(seconds / 60));
-  if (minutes < 60) return `${minutes} min`;
-
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
 }
 
 /**

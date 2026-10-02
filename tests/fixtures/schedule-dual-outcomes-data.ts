@@ -121,7 +121,7 @@ export const NORMAL_ENTRIES: EventEntry[] = [
         hasVideo: true,
         // T22: the match's own facts the drawer draws — `duration` arrives
         // pre-formatted by the loader, `sourceProvider` is a `providers` id.
-        duration: "1H 42M",
+        duration: "1h 42m",
         sourceProvider: "swing-vision",
       }),
     ],

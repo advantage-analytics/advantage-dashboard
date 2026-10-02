@@ -19,7 +19,7 @@ import {
   type MatchPoint,
 } from "@/lib/data/match-points-server";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
-import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
+import { formatMatchDuration } from "@/lib/format/duration";
 import { siteUrl } from "@/lib/site-url";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
 import { getInitials } from "@/lib/data/match-utils";
@@ -501,7 +501,7 @@ export const getSharedMatchData = cache(
     match.tournamentName = realTournamentName(dbRow.tournament_name) ?? "";
     if (!(match.durationSec && match.durationSec > 0) && windowSeconds) {
       match.durationSec = windowSeconds;
-      match.duration = formatDuration(windowSeconds * 1000);
+      match.duration = formatMatchDuration(windowSeconds * 1000);
     }
 
     // The single attribution point (guardrails §4), same as `page.tsx`.

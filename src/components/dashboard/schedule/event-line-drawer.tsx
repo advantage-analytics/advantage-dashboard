@@ -321,7 +321,7 @@ export function EventLineDrawer({
         ) : null
       }
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-[22px] pt-5 pb-[22px]">
+      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
         {href ? (
           <DrawerHeading
             href={href}

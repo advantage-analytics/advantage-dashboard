@@ -50,10 +50,13 @@ export function drawerSideName(name: string): string {
 export function DrawerFact({
   label,
   icon,
+  muted = false,
   children,
 }: {
   label: string;
   icon: ReactNode;
+  /** The fact has no value yet ("Not specified", "No event") — read, but quieter. */
+  muted?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -67,7 +70,12 @@ export function DrawerFact({
           {icon}
         </span>
       </dt>
-      <dd className="min-w-0 flex-1 truncate text-[11px] leading-4 text-[var(--ink-700)]">
+      <dd
+        className={cn(
+          "min-w-0 flex-1 truncate text-[11px] leading-4",
+          muted ? "text-[var(--ink-600)]" : "text-[var(--ink-700)]",
+        )}
+      >
         {children}
       </dd>
     </div>
@@ -507,7 +515,7 @@ export function SnapshotSection({ snapshot }: { snapshot: Snapshot }) {
           <div key={label} className="flex flex-col-reverse gap-[3px]">
             <dt className="text-[11px] text-[var(--ink-600)]">{label}</dt>
             <dd className="tabular text-[16px] text-[var(--ink-900)]">
-              {value ?? <span className="text-[var(--ink-400)]">—</span>}
+              {value ?? <span className="text-[var(--ink-600)]">—</span>}
             </dd>
           </div>
         ))}

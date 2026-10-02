@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { formatDuration } from "@/lib/data/match-utils";
+import { durationParts } from "@/lib/format/duration";
 
 interface SummaryStatsRowProps {
   totalPoints: number;
@@ -38,7 +38,7 @@ export function SummaryStatsRow({
   longestRally,
   winner,
 }: SummaryStatsRowProps) {
-  const { hours, mins } = formatDuration(durationMinutes);
+  const { hours, mins } = durationParts(durationMinutes);
 
   const stats = [
     {
