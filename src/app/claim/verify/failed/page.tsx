@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { SwitchAccountButton } from "@/components/claim/switch-account-button";
 import type { ClaimFailure } from "@/lib/services/programs/claim-actions";
 import {
   ClaimShell,
@@ -98,6 +100,18 @@ export default async function ClaimFailedPage({
   const { reason } = await searchParams;
   const copy = COPY[reason as ClaimFailure] ?? COPY.failed;
 
+  // The wrong-account ending is reached signed in, so say which account this
+  // browser is — the one fact that explains why the link did nothing. Only the
+  // session's own address is shown, never the one the link was started from.
+  let signedInAs: string | null = null;
+  if (reason === "wrong-account") {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    signedInAs = user?.email ?? null;
+  }
+
   return (
     <ClaimShell width={720} gap={20} back="/claim/program">
       <ClaimHeading
@@ -109,14 +123,19 @@ export default async function ClaimFailedPage({
       {copy.action === "signIn" ? (
         <>
           <ClaimActions>
-            <Link href="/login" className={CLAIM_BUTTON}>
-              Sign in
-            </Link>
+            {signedInAs ? (
+              <SwitchAccountButton />
+            ) : (
+              <Link href="/login" className={CLAIM_BUTTON}>
+                Sign in
+              </Link>
+            )}
             <Link href="/claim/program" className={CLAIM_LINK}>
               Choose a different program
             </Link>
           </ClaimActions>
           <span className={CLAIM_MICRO}>
+            {signedInAs ? <>You&apos;re signed in as {signedInAs}. </> : null}
             Once you&apos;re signed in with the right account, open the link
             from your email again to finish.
           </span>

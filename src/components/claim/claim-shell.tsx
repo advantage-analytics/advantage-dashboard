@@ -160,7 +160,7 @@ export function ClaimColumn({
 }
 
 /** The design system's `IconButton`, size md, as classes a `<Link>` can wear. */
-const ICON_BUTTON =
+export const ICON_BUTTON =
   "inline-flex size-8 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--nav-fg)] outline-none transition-[color,background-color] duration-[var(--duration-fast)] hover:bg-[var(--surface-subtle)] hover:text-[var(--nav-fg-hover)] focus-visible:shadow-[var(--focus-ring)]";
 
 /**

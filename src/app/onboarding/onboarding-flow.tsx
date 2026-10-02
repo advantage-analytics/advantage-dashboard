@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import posthog from "posthog-js";
 import {
+  ArrowLeft,
   FileSpreadsheet,
   Shield,
   Smartphone,
@@ -20,6 +21,7 @@ import {
   ClaimActions,
   ClaimHeading,
   ClaimSelect,
+  ICON_BUTTON,
   RadioDot,
   TermMark,
 } from "@/components/claim/claim-shell";
@@ -43,7 +45,7 @@ import {
   type RecordingSource,
 } from "./answers";
 import { guardianClassYears } from "./guardian-options";
-import { previousStep, type Step } from "./steps";
+import { previousStep, stepLabel, type Step } from "./steps";
 
 /**
  * The first run — Onboarding & Team Setup screens 1.2 through 1.5 and 1.7,
@@ -56,9 +58,10 @@ import { previousStep, type Step } from "./steps";
  * else; the guardian step has none, because consent is the one answer that
  * can't be deferred.
  *
- * Every step after the first also has a Back, because the step lives in
- * component state rather than the URL and the browser's own Back leaves the
- * page. Back only turns the page (`previousStep` in `steps.ts`) and clears the
+ * Every step after the first also has a Back — the top-left arrow, and the
+ * browser's own Back does the same thing (each forward turn pushes a history
+ * entry) — because the step lives in component state rather than the URL.
+ * Back only turns the page (`previousStep` in `steps.ts`) and clears the
  * error line — every answer already given survives, so the step it returns to
  * re-renders with its choice still selected — and it never writes.
  *
@@ -225,6 +228,40 @@ export function OnboardingFlow() {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // The step lives in component state, so the browser's own Back would leave
+  // the page from step 2. Each forward turn pushes a history entry carrying
+  // its step, and `popstate` turns the page back — the browser button and the
+  // arrow are then the same thing.
+  const pushed = useRef(0);
+  const reached = useRef<Step>(1);
+
+  useEffect(() => {
+    window.history.replaceState(
+      { ...window.history.state, onbStep: 1, onbIdx: 0 },
+      "",
+    );
+    const onPop = (event: PopStateEvent) => {
+      const target = event.state?.onbStep as Step | undefined;
+      const idx = event.state?.onbIdx as number | undefined;
+      // Entries beyond what this load reached (a reload keeps the old forward
+      // entries, but not the answers behind them) are not ours to show.
+      if (!target || idx === undefined || target > reached.current) return;
+      // The entry's own position, so Forward and Back both stay in step.
+      pushed.current = idx;
+      setError(null);
+      setStep(target);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const turnTo = (next: Step) => {
+    pushed.current += 1;
+    reached.current = next;
+    window.history.pushState({ onbStep: next, onbIdx: pushed.current }, "");
+    setStep(next);
+  };
+
   const submit = (choice: OnboardingChoice) => {
     setError(null);
     startTransition(async () => {
@@ -242,7 +279,7 @@ export function OnboardingFlow() {
   const continueFromName = () => {
     if (!nameReady) return;
     setError(null);
-    setStep(2);
+    turnTo(2);
   };
 
   // Page-turn only: no answer is cleared and nothing is written, so this can
@@ -251,18 +288,27 @@ export function OnboardingFlow() {
     const previous = previousStep(step);
     if (previous === null) return;
     setError(null);
+    if (pushed.current > 0) {
+      window.history.back();
+      return;
+    }
     setStep(previous);
   };
 
-  /** The quiet Back link every step after the first carries, before Skip. */
+  /**
+   * The top-left arrow every step after the first carries — the same icon
+   * button the claim flow's pages wear, so Back looks and sits the same on
+   * both. It is the browser's Back too: see the history effect above.
+   */
   const backButton = (
     <button
       type="button"
+      aria-label="Back"
       disabled={isPending}
       onClick={goBack}
-      className={CLAIM_LINK}
+      className={ICON_BUTTON}
     >
-      Back
+      <ArrowLeft className="size-[15px]" strokeWidth={1.5} aria-hidden="true" />
     </button>
   );
 
@@ -273,11 +319,11 @@ export function OnboardingFlow() {
     // to the guardian step. Nothing is written until the branch's own submit,
     // so a guardian who bails on 3.1 is still gated into onboarding next time.
     if (persona === "play") {
-      setStep(3);
+      turnTo(3);
       return;
     }
     if (persona === "junior") {
-      setStep(4);
+      turnTo(4);
       return;
     }
     submit("coach");
@@ -290,13 +336,13 @@ export function OnboardingFlow() {
   const advanceFromCollege = (answer: CollegeAnswer | null) => {
     setCollege(answer);
     setError(null);
-    setStep(5);
+    turnTo(5);
   };
 
   const continueFromRecording = (source: RecordingSource | null) => {
     setRecordingSource(source);
     setError(null);
-    setStep(6);
+    turnTo(6);
   };
 
   /**
@@ -387,7 +433,10 @@ export function OnboardingFlow() {
     : "the player's";
 
   return (
-    <div className="flex min-h-screen items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
+    <div className="relative flex min-h-screen items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
+      {step !== 1 ? (
+        <div className="absolute top-0 left-0 z-10 p-5">{backButton}</div>
+      ) : null}
       <div
         className="mx-auto w-full"
         // The name step shares the persona step's 840 frame rather than the
@@ -421,7 +470,7 @@ export function OnboardingFlow() {
             >
               <ClaimHeading
                 gap={8}
-                step="Step 1"
+                step={stepLabel(1, persona)}
                 title="What should we call you?"
                 body="Coaches and teammates see this name on every match you send. Type it the way you want it read."
                 bodyMax="52ch"
@@ -485,7 +534,7 @@ export function OnboardingFlow() {
             <>
               <ClaimHeading
                 gap={8}
-                step="Step 2"
+                step={stepLabel(2, persona)}
                 title="How do you use Advantage?"
                 body="This sets what your dashboard opens on. You can change it in settings."
                 bodyMax="60ch"
@@ -516,7 +565,6 @@ export function OnboardingFlow() {
                 >
                   Continue
                 </button>
-                {backButton}
                 <span className={CLAIM_MICRO}>
                   Coaches and guardians take a different next step.
                 </span>
@@ -526,7 +574,7 @@ export function OnboardingFlow() {
             <>
               <ClaimHeading
                 gap={8}
-                step="Step 3 of 5"
+                step={stepLabel(3, persona)}
                 title="Do you play for a college program?"
                 body="This decides where your first matches go — and whether your coach is part of it."
                 bodyMax="52ch"
@@ -581,7 +629,6 @@ export function OnboardingFlow() {
                     the step before still counts, only this question goes
                     unanswered (`college` stays null, which resolves to
                     `solo` when 1.7 submits). */}
-                {backButton}
                 <button
                   type="button"
                   disabled={isPending}
@@ -599,7 +646,7 @@ export function OnboardingFlow() {
                   source, it doesn't lock one out. */}
               <ClaimHeading
                 gap={8}
-                step="Step 4 of 5"
+                step={stepLabel(5, persona)}
                 title="How do you record your matches?"
                 body="Your first upload is set up for this. You can use either later."
                 bodyMax="60ch"
@@ -630,7 +677,6 @@ export function OnboardingFlow() {
                 >
                   Continue
                 </button>
-                {backButton}
                 {/* Skip stores null — the wizard then opens with no source
                     preselected, exactly as it does today. */}
                 <button
@@ -652,7 +698,7 @@ export function OnboardingFlow() {
                   only and never sent to analytics. */}
               <ClaimHeading
                 gap={8}
-                step="Step 5 of 5"
+                step={stepLabel(6, persona)}
                 title="How did you hear about Advantage?"
               />
               <div className="flex flex-col gap-4">
@@ -721,7 +767,6 @@ export function OnboardingFlow() {
                       label has to branch too, or it lies on the college path. */}
                   {college === "yes" ? "Find my program" : "Go to my dashboard"}
                 </button>
-                {backButton}
                 <button
                   type="button"
                   disabled={isPending}
@@ -734,11 +779,13 @@ export function OnboardingFlow() {
             </>
           ) : (
             <>
-              {/* Screen 3.1 — the guardian acknowledgment. Unlike 1.2–1.4
-                  there is no step eyebrow and the title is `text-title`, not
-                  `text-title-lg`: the design draws this as the smaller pane
-                  where the account holder stops being the subject. */}
+              {/* Screen 3.1 — the guardian acknowledgment. The title is
+                  `text-title`, not `text-title-lg`: the design draws this as
+                  the smaller pane where the account holder stops being the
+                  subject. The eyebrow is the step counter, so this run reads
+                  Step 3 of 3 like the player's reads Step 5 of 5. */}
               <div className="flex flex-col" style={{ gap: 6 }}>
+                <span className="eyebrow">{stepLabel(4, persona)}</span>
                 <h1 className="text-title">Who&apos;s playing?</h1>
                 <p className="text-body-sm" style={{ maxWidth: "56ch" }}>
                   Everything in Advantage will be about this player. You hold
@@ -853,7 +900,6 @@ export function OnboardingFlow() {
                 >
                   Continue
                 </button>
-                {backButton}
               </ClaimActions>
             </>
           )}

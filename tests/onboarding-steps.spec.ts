@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { previousStep } from "@/app/onboarding/steps";
+import { previousStep, stepLabel } from "@/app/onboarding/steps";
 
 /**
  * The onboarding flow's Back graph. Both persona branches (college question 3,
@@ -31,5 +31,23 @@ test.describe("previousStep", () => {
 
   test("step 6 (1.7, heard about) goes back to the recording source", () => {
     expect(previousStep(6)).toBe(5);
+  });
+});
+
+test.describe("stepLabel", () => {
+  test("steps 1 and 2 carry no total, whatever the persona", () => {
+    expect(stepLabel(1, null)).toBe("Step 1");
+    expect(stepLabel(2, null)).toBe("Step 2");
+    expect(stepLabel(2, "play")).toBe("Step 2");
+  });
+
+  test("the player's run counts 3, 4, 5 of 5 across the skipped guardian step", () => {
+    expect(stepLabel(3, "play")).toBe("Step 3 of 5");
+    expect(stepLabel(5, "play")).toBe("Step 4 of 5");
+    expect(stepLabel(6, "play")).toBe("Step 5 of 5");
+  });
+
+  test("the guardian step is step 3 of 3", () => {
+    expect(stepLabel(4, "junior")).toBe("Step 3 of 3");
   });
 });
