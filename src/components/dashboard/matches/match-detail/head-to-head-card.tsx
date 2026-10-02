@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Check, CirclePlay } from "lucide-react";
 
 import {
@@ -726,8 +726,23 @@ export function withPointRows(
 
 /* ── Rendering ──────────────────────────────────────────────────────────── */
 
-/** Both value columns and both name cells; the artboard's 64 px, right-aligned. */
-const COLUMN = "flex w-[64px] shrink-0 items-center justify-end gap-1";
+/**
+ * Both value columns and both name cells; the artboard's 64 px, right-aligned.
+ * The width is `--h2h-col`, set on the section by `columnWidth()` so a long
+ * surname widens the columns together and every row stays aligned under it.
+ */
+const COLUMN =
+  "flex w-[var(--h2h-col,64px)] shrink-0 items-center justify-end gap-1";
+
+/**
+ * 64 px fits a surname of about nine characters at 12px. A longer one gets
+ * roughly 7px a character (room for the verified check on `you`), capped so
+ * the statistic label keeps its space; `truncate` backstops anything beyond.
+ */
+function columnWidth(youName: string, oppName: string): number {
+  const longest = Math.max(youName.length, oppName.length);
+  return Math.min(120, Math.max(64, Math.ceil(longest * 7) + 8));
+}
 
 const EASE = "duration-200 ease-[var(--ease-primary)]";
 
@@ -1239,7 +1254,12 @@ export function HeadToHeadCard() {
     <section
       aria-labelledby="head-to-head-heading"
       className="surface-card flex flex-col"
-      style={{ padding: "18px 20px 14px" }}
+      style={
+        {
+          padding: "18px 20px 14px",
+          "--h2h-col": `${columnWidth(youName, oppName)}px`,
+        } as CSSProperties
+      }
     >
       <div className="flex items-baseline gap-3 pb-[14px]">
         <span id="head-to-head-heading" className="eyebrow">
