@@ -1,13 +1,3 @@
--- ╔══════════════════════════════════════════════════════════════════════════╗
--- ║  NOT APPLIED — apply at deploy, together with the pilot terms screen    ║
--- ║  (T4). Applying before the screen is in production refuses every coach  ║
--- ║  claim and team creation: no one can reach an "I accept" that does not ║
--- ║  exist yet.                                                             ║
--- ║                                                                         ║
--- ║  Its version stamp will be re-stamped to the live version reported by  ║
--- ║  list_migrations when it is applied.                                    ║
--- ╚══════════════════════════════════════════════════════════════════════════╝
---
 -- Pilot terms enforcement: the three program-creating RPCs a coach can reach
 -- — `create_custom_program`, `complete_program_claim` and
 -- `complete_program_claim_with_token` — refuse unless the acting user holds a
@@ -234,7 +224,7 @@ $$;
 -- This section used to re-create the 7-argument overload and grant it to
 -- `authenticated`. It must never do that again: that overload let any
 -- signed-in user write their own review evidence, and it is dropped by
--- 20261001190000_drop_legacy_complete_program_claim.sql.
+-- 20261002044100_drop_legacy_complete_program_claim.sql.
 
 create or replace function public.complete_program_claim(
   p_claimant_user_id    uuid,

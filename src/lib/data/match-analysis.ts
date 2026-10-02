@@ -12,6 +12,7 @@
  * was invented; that is gone.
  */
 
+import { formatDuration } from "@/lib/format/duration";
 import { addVideoHref } from "@/lib/matches/add-video-href";
 import type { ProviderId } from "@/lib/services/upload";
 
@@ -628,11 +629,11 @@ export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
   uploading: "Uploading",
   uploaded: "Uploaded",
   queued: "Queued",
-  processing: "Processing",
+  processing: "Analyzing",
   deriving: "Analyzing",
   // Same family as "Stats failed" and "Stats unavailable", and deliberately not
-  // a variant of "Processing" — the two would be one letter apart on screen
-  // while meaning opposite things about whether anything is still running.
+  // a variant of "Analyzing" or "Analyzed" — near-identical words on screen
+  // would mean opposite things about whether anything is still running.
   processed: "Stats pending",
   // Says what IS there rather than what is missing. "Partial" or "Stats
   // unavailable" would describe the same row by its gap, and the timeline is
@@ -780,21 +781,6 @@ export function formatEta(seconds: number): string {
 }
 
 /**
- * A length of time in whole minutes — "12 min", "1h", "1h 29m". `formatEta`'s
- * own arithmetic, shared so an estimate, an elapsed clock and a reserved
- * allowance ("1h 29m goes back…") cannot phrase the same span two ways.
- * Floors at one minute: a zero reads as nothing having happened.
- */
-export function formatDuration(seconds: number): string {
-  const minutes = Math.max(1, Math.round(seconds / 60));
-  if (minutes < 60) return `${minutes} min`;
-
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
-}
-
-/**
  * Which milestone a status currently sits in. Failures report the stage they
  * died in rather than collapsing to the start, so the pipeline shows how far
  * the job actually got.
@@ -882,9 +868,17 @@ export function isWorking(status: AnalysisStatus): boolean {
   return IN_FLIGHT.has(status) && !IDLE.has(status);
 }
 
-/** The step mark for an in-flight row: a spinner only while work runs, else a waiting dot. */
+/**
+ * The step mark for an in-flight row: a spinner only while work runs, else the
+ * dashed waiting ring.
+ *
+ * `queued` waits too. It is in `isWorking` because the vendor has the job and
+ * counts, schedules and the admin chip all treat it as live, but nothing is
+ * running for the player yet — the upload stepper already draws it as `wait`,
+ * so the tray, Matches and Roster must not spin it.
+ */
 export function inFlightMark(status: AnalysisStatus): "now" | "wait" {
-  return isWorking(status) ? "now" : "wait";
+  return isWorking(status) && status !== "queued" ? "now" : "wait";
 }
 
 /**

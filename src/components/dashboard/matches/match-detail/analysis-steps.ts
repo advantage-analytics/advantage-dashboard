@@ -15,9 +15,9 @@
  * Pure — no React — so the mapping reads as a table and a spec can pin it.
  */
 
+import { formatDuration } from "@/lib/format/duration";
 import {
   ANALYSIS_LABEL,
-  formatDuration,
   formatEta,
   isAnalysisFailed,
   isInFlight,

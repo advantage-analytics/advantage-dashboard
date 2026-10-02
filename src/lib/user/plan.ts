@@ -86,5 +86,23 @@ export const BETA_PLAN_ROWS: readonly {
   { label: "Match reports and stats", value: "Included" },
 ];
 
+/**
+ * `BETA_PLAN_ROWS` for a pilot individual's personal workspace: 10 hours a
+ * month of video in place of 2 (`PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS`, written
+ * as a literal here for the same reason the 2 is).
+ */
+export function betaPlanRows(individualPilot: boolean | undefined) {
+  if (!individualPilot) return BETA_PLAN_ROWS;
+  return BETA_PLAN_ROWS.map((row) =>
+    row.label === "Video analysis"
+      ? {
+          ...row,
+          value: "10 hours a month",
+          note: "Pilot allowance. Resets on the 1st.",
+        }
+      : row,
+  );
+}
+
 /** When the beta's free terms end, as the landing page and /claim say it. */
 export const PAID_PLANS_BEGIN = "January 2027";

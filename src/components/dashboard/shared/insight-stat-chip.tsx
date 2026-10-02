@@ -50,9 +50,7 @@ export function InsightStatChip({
         className,
       )}
     >
-      <span className="text-[9px] font-normal tracking-[2.5px] whitespace-nowrap text-[var(--ink-400)] uppercase">
-        {label}
-      </span>
+      <span className="eyebrow-sm whitespace-nowrap">{label}</span>
       <span className="tabular text-[12px] font-normal text-[var(--ink-900)]">
         {value}
       </span>

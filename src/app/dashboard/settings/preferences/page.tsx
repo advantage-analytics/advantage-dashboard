@@ -2,6 +2,8 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getPreferences } from "@/lib/data/preferences-server";
 import { PreferencesForm } from "@/components/dashboard/settings/preferences-form";
 
+export const metadata = { title: "Preferences" };
+
 /**
  * Plan comes off the workspace context, so the page needs no `users` query of
  * its own.

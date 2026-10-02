@@ -1,4 +1,4 @@
-import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
+import { formatMatchDuration } from "@/lib/format/duration";
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
 
@@ -121,7 +121,7 @@ export function transformDbMatch(
     verificationStatus: row.verified ? "Verified result" : undefined,
     round: row.round ?? undefined,
     matchContext: matchContextCaption(row.result),
-    duration: formatDuration(row.duration ?? undefined),
+    duration: formatMatchDuration(row.duration),
     sourceProvider: row.source_provider ?? undefined,
     player1: { name: row.player1_name, id: row.player1_id },
     player2: { name: row.player2_name },

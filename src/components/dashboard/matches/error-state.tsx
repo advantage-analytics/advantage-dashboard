@@ -114,9 +114,7 @@ function MetaRow({ item }: { item: MetaItem }) {
   if (!item.copyable) {
     return (
       <div className="flex items-center justify-center gap-2 text-[11px]">
-        <dt className="font-medium tracking-[1.5px] text-[#AAAAAA] uppercase">
-          {item.label}
-        </dt>
+        <dt className="eyebrow">{item.label}</dt>
         <dd className="tracking-[0.3px] text-[#525252] tabular-nums select-all">
           {item.value}
         </dd>
@@ -136,9 +134,7 @@ function MetaRow({ item }: { item: MetaItem }) {
 
   return (
     <div className="flex items-center justify-center gap-2 text-[11px]">
-      <dt className="font-medium tracking-[1.5px] text-[#AAAAAA] uppercase">
-        {item.label}
-      </dt>
+      <dt className="eyebrow">{item.label}</dt>
       <dd className="tracking-[0.3px] text-[#525252] tabular-nums select-all">
         {item.value}
       </dd>

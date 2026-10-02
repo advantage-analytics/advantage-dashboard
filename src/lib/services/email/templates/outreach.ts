@@ -11,7 +11,7 @@ import {
   type EmailContent,
   type EmailFact,
 } from "../shell";
-import { siteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 import {
   COLD_EMAILS,
   COLD_REQUIRED_FIELDS,
@@ -67,7 +67,7 @@ function claimLinks(recipient: OutreachRecipient) {
     .map((key) => ({
       key,
       team: teamOf(key),
-      url: `${siteUrl()}/claim/${encodeURIComponent(key)}`,
+      url: `${emailOrigin()}/claim/${encodeURIComponent(key)}`,
     }))
     .sort((a, b) => a.team.localeCompare(b.team));
 }
@@ -75,7 +75,9 @@ function claimLinks(recipient: OutreachRecipient) {
 function programButtons(recipient: OutreachRecipient) {
   const links = claimLinks(recipient);
   if (links.length === 0) {
-    return { cta: { label: "Set up your program", url: `${siteUrl()}/claim` } };
+    return {
+      cta: { label: "Set up your program", url: `${emailOrigin()}/claim` },
+    };
   }
   if (links.length === 1) {
     return { cta: { label: `Set up ${recipient.label}`, url: links[0].url } };
@@ -129,8 +131,8 @@ function mergeValues(
       recipient.fields.plan === "pro"
         ? "your Pro plan"
         : "your 2 monthly processing hours",
-    claim_url: links[0]?.url ?? `${siteUrl()}/claim`,
-    app_url: siteUrl(),
+    claim_url: links[0]?.url ?? `${emailOrigin()}/claim`,
+    app_url: emailOrigin(),
     unsubscribe_url: outreachUnsubscribeUrl(recipient),
     postal_address: postalAddress?.trim() || NO_ADDRESS,
   };
@@ -145,7 +147,7 @@ function contentFor(
   recipient: OutreachRecipient,
   tokens: boolean,
 ): { subject: string; content: EmailContent } {
-  const app = siteUrl();
+  const app = emailOrigin();
   const real = mergeValues(recipient, null);
   const v = (field: keyof typeof real) =>
     tokens ? `{{${field}}}` : real[field];

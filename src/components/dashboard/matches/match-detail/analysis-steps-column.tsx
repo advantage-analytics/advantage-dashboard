@@ -32,11 +32,8 @@
 import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import {
-  formatDuration,
-  isLiveUpdating,
-  type MatchAnalysis,
-} from "@/lib/data/match-analysis";
+import { formatDuration } from "@/lib/format/duration";
+import { isLiveUpdating, type MatchAnalysis } from "@/lib/data/match-analysis";
 import {
   useLiveMatchAnalysis,
   withLiveAnalysis,

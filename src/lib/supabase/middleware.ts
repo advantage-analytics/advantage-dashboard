@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { REQUEST_PATH_HEADER } from "@/lib/auth/request-path-header";
 
 /**
  * Refreshes the Supabase session cookie on every matched request.
@@ -19,6 +20,17 @@ import { NextResponse, type NextRequest } from "next/server";
  * webhooks, the cron endpoint and the whole anonymous /claim funnel to /login.
  */
 export async function updateSession(request: NextRequest) {
+  // The path and query this request asked for, forwarded to Server Components
+  // (which cannot read the URL on their own) so a layout's login gate can send
+  // a signed-out visitor to `/login?next=…` and land them back here — an
+  // internal "review this request" email links to `/admin/requests?id=…`.
+  // Set, not appended: whatever a client sent under this name is overwritten.
+  // It still goes through `safeNext()` before it is ever used as a redirect.
+  request.headers.set(
+    REQUEST_PATH_HEADER,
+    `${request.nextUrl.pathname}${request.nextUrl.search}`,
+  );
+
   let supabaseResponse = NextResponse.next({
     request,
   });

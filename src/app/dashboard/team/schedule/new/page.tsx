@@ -3,6 +3,8 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { StaticEventChooser } from "@/components/dashboard/schedule/static/static-event-chooser";
 
+export const metadata = { title: "New event" };
+
 /**
  * 3b — New event, as a page rather than a dropdown.
  *

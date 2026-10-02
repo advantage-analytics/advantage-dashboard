@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { siteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 import {
   programLiveInternalEmail,
   type ProgramLiveInternalInput,
@@ -26,7 +26,7 @@ function input(path: "auto" | "reviewed"): ProgramLiveInternalInput {
     claimantName: "Marcus Reid",
     claimantEmail: "marcus@stanford.edu",
     path,
-    adminUrl: `${siteUrl()}/admin`,
+    adminUrl: `${emailOrigin()}/admin`,
   };
 }
 
@@ -53,7 +53,7 @@ for (const [path, label] of [
     expect(msg.text).toContain("Claimant: Marcus Reid (marcus@stanford.edu)");
     expect(msg.html).toContain(label);
 
-    const adminUrl = `${siteUrl()}/admin`;
+    const adminUrl = `${emailOrigin()}/admin`;
     expect(adminUrl).toBe(`${SITE}/admin`);
     expect(msg.html).toContain(`<a href="${adminUrl}"`);
     expect(msg.text).toContain(`Open admin:\n${adminUrl}`);

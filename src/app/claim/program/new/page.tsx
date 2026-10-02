@@ -1,7 +1,7 @@
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { UnlistedProgramForm } from "@/components/claim/unlisted-program-form";
 
-export const metadata = { title: "Tell us about your program" };
+export const metadata = { title: "Program details" };
 
 /**
  * F3.1 — the program isn't listed.

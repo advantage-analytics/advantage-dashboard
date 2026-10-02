@@ -73,13 +73,11 @@ export function RowLifecycle({
   }
 
   if (isInFlight(status)) {
-    // Both analysis engines read as Analyzing; waiting states keep their own
-    // words and a still mark, so queued or stored video never implies work.
+    // Waiting states keep their own words and a still mark, so queued or
+    // stored video never implies work.
     return (
       <AnalysisStatusLine mark={inFlightMark(status)}>
-        {status === "processing" || status === "deriving"
-          ? "Analyzing"
-          : ANALYSIS_LABEL[status]}
+        {ANALYSIS_LABEL[status]}
       </AnalysisStatusLine>
     );
   }

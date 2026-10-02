@@ -34,6 +34,7 @@ import {
   currentBillingMonth,
   getIndividualPoolCapSeconds,
   getMonthlyCapSeconds,
+  getPilotIndividualCapSeconds,
   getOpenBetaCeilingSeconds,
   type AccountType,
 } from "./config";
@@ -92,10 +93,17 @@ export function quotaTierFor(
  * `getMonthlyCapSeconds(quotaTierFor(…))`, because the three surfaces that
  * show a cap (the wizard meter, Settings › Usage, Team home) and the one that
  * enforces it (`reserveQuota`) must all name the same number.
+ *
+ * A pilot individual's PERSONAL workspace draws the pilot figure instead
+ * (`Workspace.individualPilot`); every other workspace — including a team the
+ * pilot belongs to — is unchanged.
  */
 export function monthlyCapSecondsFor(
-  workspace: Pick<Workspace, "kind" | "orgType">,
+  workspace: Pick<Workspace, "kind" | "orgType" | "individualPilot">,
 ): number {
+  if (workspace.kind === "personal" && workspace.individualPilot) {
+    return getPilotIndividualCapSeconds();
+  }
   return getMonthlyCapSeconds(quotaTierFor(workspace));
 }
 

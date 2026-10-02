@@ -126,7 +126,7 @@ export function DraftDrawer({
           <span className="text-[12px] text-[var(--ink-700)]">
             Stopped at step {draft.stepIndex + 1} of {draft.stepCount}
           </span>
-          <p className="text-[12px] leading-[1.6] text-[var(--ink-500)]">
+          <p className="text-[12px] leading-[1.6] text-[var(--ink-600)]">
             It isn&rsquo;t a match until you save it. Continue picks up where
             you left off.
           </p>
@@ -165,7 +165,7 @@ function DiscardMenu({ draftId }: { draftId: string }) {
       <PopoverContent
         align="end"
         sideOffset={6}
-        className="flex w-[280px] flex-col rounded-[var(--radius-dropdown)] border-[var(--border-hairline)] bg-white p-1.5 shadow-[var(--shadow-dropdown)]"
+        className="flex w-[280px] flex-col rounded-[var(--radius-dropdown)] border-[var(--border-hairline)] bg-[var(--surface-card)] p-1.5 shadow-[var(--shadow-dropdown)]"
       >
         <button
           type="button"
@@ -175,7 +175,7 @@ function DiscardMenu({ draftId }: { draftId: string }) {
           <span className="text-[12px] font-medium text-[var(--danger)]">
             Discard
           </span>
-          <span className="text-[11px] text-[var(--ink-500)]">
+          <span className="text-[11px] text-[var(--ink-600)]">
             the answers go; a video already sent stays
           </span>
         </button>

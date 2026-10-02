@@ -322,6 +322,8 @@ interface GameGroup {
   serverName: string;
   /** You-first, en-dashed, or null when the column is empty. */
   gameScore: string | null;
+  /** A tiebreak: the server changes inside the one game. */
+  tiebreak: boolean;
   points: MatchPoint[];
 }
 
@@ -391,6 +393,22 @@ export const PointList = memo(function PointList({
   const { hasGameScore: showGameScore, hasPointScore: showPointScore } =
     useMemo(() => scoreColumns(allPoints), [allPoints]);
 
+  // A tiebreak is the one game whose server changes mid-game. Read off ALL the
+  // points, so a filtered list that happens to keep one server's points still
+  // heads it as a tiebreak — and still names who served FIRST, which the first
+  // visible point need not be. Maps each tiebreak's key to that first server.
+  const tiebreakFirstServer = useMemo(() => {
+    const first = new Map<string, boolean>();
+    const out = new Map<string, boolean>();
+    for (const point of allPoints) {
+      const key = `${point.setNumber}-${point.gameNumber}`;
+      const seen = first.get(key);
+      if (seen === undefined) first.set(key, point.serverIsPlayer1);
+      else if (seen !== point.serverIsPlayer1) out.set(key, seen);
+    }
+    return out;
+  }, [allPoints]);
+
   // Grouped on `gameNumber`, not on the game score: the score is the label,
   // and on a match that has none every group would collapse into one.
   const groups = useMemo(() => {
@@ -398,7 +416,10 @@ export const PointList = memo(function PointList({
     let current: GameGroup | undefined;
 
     for (const point of visiblePoints) {
-      const serverIsYou = point.serverIsPlayer1 === youIsPlayer1;
+      const key = `${point.setNumber}-${point.gameNumber}`;
+      const firstServerIsPlayer1 = tiebreakFirstServer.get(key);
+      const serverIsYou =
+        (firstServerIsPlayer1 ?? point.serverIsPlayer1) === youIsPlayer1;
       if (
         !current ||
         current.setNumber !== point.setNumber ||
@@ -418,6 +439,7 @@ export const PointList = memo(function PointList({
                 youIsPlayer1,
               )
             : null,
+          tiebreak: firstServerIsPlayer1 !== undefined,
           points: [],
         };
         out.push(current);
@@ -426,7 +448,14 @@ export const PointList = memo(function PointList({
     }
 
     return out;
-  }, [visiblePoints, youIsPlayer1, youName, oppName, showGameScore]);
+  }, [
+    visiblePoints,
+    youIsPlayer1,
+    youName,
+    oppName,
+    showGameScore,
+    tiebreakFirstServer,
+  ]);
 
   const clearAll = filmFilters.clearAll;
 
@@ -757,6 +786,7 @@ export const PointList = memo(function PointList({
                       <span className={t.gameMeta}>
                         {group.gameScore ? `${group.gameScore} · ` : ""}
                         {group.serverName} serves
+                        {group.tiebreak ? " first" : ""}
                       </span>
                     </div>
 

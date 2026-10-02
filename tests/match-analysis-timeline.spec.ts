@@ -9,6 +9,7 @@ import {
   isInFlight,
   isLiveUpdating,
   isStalled,
+  inFlightMark,
   isWorking,
   jobTimingFields,
   matchListGroup,
@@ -381,5 +382,16 @@ test.describe("queuedAt, vendorStartedAt and reservedSeconds", () => {
     expect(cancelled?.vendorStartedAt).toBeUndefined();
     // A cancel is not a failure: no recovery class, so no Retry.
     expect(cancelled?.recovery).toBeUndefined();
+  });
+});
+
+test.describe("inFlightMark", () => {
+  test("only running work spins; queued and stored video wait", () => {
+    expect(inFlightMark("uploading")).toBe("now");
+    expect(inFlightMark("processing")).toBe("now");
+    expect(inFlightMark("deriving")).toBe("now");
+    expect(inFlightMark("queued")).toBe("wait");
+    expect(inFlightMark("uploaded")).toBe("wait");
+    expect(inFlightMark("processed")).toBe("wait");
   });
 });

@@ -236,20 +236,46 @@ export function getMonthlyCapHours(accountType: AccountType): number {
 }
 
 /**
+ * A pilot individual's own monthly cap — their PERSONAL workspace only.
+ *
+ * Pilot individuals are hand-picked players (`users.individual_pilot`, added
+ * and removed from Admin › Pilots, at most `PILOT_INDIVIDUAL_MAX_PLAYERS`).
+ * Owner decision 2026-10-02: each gets 10 hours a month of their own, in place
+ * of the 2h individual figure. A team workspace they belong to is unaffected —
+ * a custom org still draws the individual figure, whoever uploads.
+ * `monthlyCapSecondsFor()` is the one place this is applied.
+ */
+export const PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS = 10;
+
+export function getPilotIndividualCapSeconds(): number {
+  return PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS * 60 * 60;
+}
+
+/**
+ * Most players the pilot list may hold. `users_individual_pilot_guard`
+ * (20260925024406_individual_pool_quota.sql) enforces the same 20 in the
+ * database; this copy is for the admin console's "n of 20".
+ */
+export const PILOT_INDIVIDUAL_MAX_PLAYERS = 20;
+
+/**
  * The individual tier's allocation with the vendor, through December, in two
  * bands. Every workspace `quotaTierFor()` puts on the individual figure
- * (personal workspaces and self-serve custom orgs) has its own 2h, and ALSO
+ * (personal workspaces and self-serve custom orgs) has its own cap, and ALSO
  * draws from one of these, by who is uploading:
  *
- * - the PILOT pool: 20 hand-picked players (`users.individual_pilot`, see
- *   20260925024406_individual_pool_quota.sql), under 10 hours between them;
+ * - the PILOT pool: the hand-picked players (`users.individual_pilot`, see
+ *   20260925024406_individual_pool_quota.sql). Sized as a full list at their
+ *   own 10h each, so it never refuses before a player's own cap does — it
+ *   was a shared 10h until 2026-10-02, when pilots moved to 10h per person;
  * - the OPEN-BETA ceiling: everyone else, 2h each, under a house-wide monthly
  *   ceiling so a rush of signups cannot outspend it
  *   (20260925053330_individual_open_tier.sql).
  *
  * See `reserveQuota()`.
  */
-export const INDIVIDUAL_POOL_MONTHLY_CAP_HOURS = 10;
+export const INDIVIDUAL_POOL_MONTHLY_CAP_HOURS =
+  PILOT_INDIVIDUAL_MAX_PLAYERS * PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS;
 
 export function getIndividualPoolCapSeconds(): number {
   return INDIVIDUAL_POOL_MONTHLY_CAP_HOURS * 60 * 60;

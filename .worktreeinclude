@@ -12,6 +12,9 @@
 # file alone, so a copy made here wins and the hook only covers worktrees made
 # some other way (plain `git worktree add`). The trade: a copy is a snapshot,
 # so a rotated key reaches a copied worktree only when the file is replaced.
+#
+# The third net is the `predev` script (scripts/link-env-local.mjs): it runs the
+# same symlink at `npm run dev`, where the failure shows up.
 
 # Local environment — Supabase keys, site URL, the EYES_ON_* verifier account.
 .env.local

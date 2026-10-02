@@ -907,7 +907,7 @@ export function RosterInviteDialog({
  * 9b's left-hand footer action — and it is disabled, deliberately.
  *
  * ── Why there is no URL to copy ─────────────────────────────────────────────
- * An invite link is `${siteUrl()}/join/<token>`, and that token exists for
+ * An invite link is `${emailOrigin()}/join/<token>`, and that token exists for
  * exactly one instant in one place: `inviteMember()` (`settings/team-actions.ts`)
  * mints it with `generateToken()`, hands it to `programInviteEmail()`, and
  * passes only `hashToken(token)` to `create_program_invite` — whose signature
