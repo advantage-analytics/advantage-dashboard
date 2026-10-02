@@ -1,5 +1,7 @@
 import { ComingSoonPage } from "@/components/dashboard/coming-soon";
 
+export const metadata = { title: "Ask" };
+
 export default function AskPage() {
   return (
     <ComingSoonPage

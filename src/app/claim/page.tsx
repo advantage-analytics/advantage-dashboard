@@ -1,7 +1,7 @@
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { RoleChoice } from "@/components/claim/role-choice";
 
-export const metadata = { title: "How do you use Advantage?" };
+export const metadata = { title: "Get started" };
 
 /**
  * F2 — question one, who are you here as.

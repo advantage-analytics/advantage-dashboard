@@ -1,7 +1,7 @@
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { TeamKindChoice } from "@/components/claim/team-kind-choice";
 
-export const metadata = { title: "What kind of team is this?" };
+export const metadata = { title: "Team type" };
 
 /**
  * Screen 5.1 — the fork. The one new junction in the flow: a college program is

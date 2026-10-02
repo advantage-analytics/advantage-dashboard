@@ -41,6 +41,8 @@ import {
 import { HomeWidgetFrame } from "@/components/dashboard/home/home-widget-frame";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 
+export const metadata = { title: "Home" };
+
 export default async function Home() {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");

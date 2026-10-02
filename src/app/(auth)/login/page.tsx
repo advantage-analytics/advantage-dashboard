@@ -1,6 +1,8 @@
 import { LoginForm } from "@/components/auth/login-form";
 import { safeNext } from "@/lib/auth/safe-next";
 
+export const metadata = { title: "Sign in" };
+
 /**
  * Reads `?next=` once and clamps it before the form ever sees it.
  *

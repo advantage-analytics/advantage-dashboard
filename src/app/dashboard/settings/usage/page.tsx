@@ -17,6 +17,8 @@ import {
   getMatchVideoUsage,
 } from "@/lib/data/match-video-usage-server";
 
+export const metadata = { title: "Usage" };
+
 /**
  * Settings › Usage & quota.
  *
