@@ -52,6 +52,15 @@ project's sample personas: Jordan Lee · Elena Vargas · Meridian State.
 digit at 0.6em raised 1.05em, 0.5px off the score. Applies to any score
 anywhere, not a roster-page treatment.
 
+**Score — the winner of each completed set is bold.** In a per-row final
+scoreboard (the match report's rail) the digit of whoever won a set prints
+`font-semibold` in full ink (ink-900) and the loser's stays regular in ink-600, on either row, set by set, never per row: a
+match winner's lost set is regular, and the opponent's winning digit in it is
+bold. This holds in an unfinished match too (Retired, Unfinished, Withdrew,
+Defaulted) for every set that was completed; the last set of such a match is
+the one left open, so it bolds neither digit. A level set has no winner.
+Shipped: `rail-scoreboard.tsx` (`wonSets`).
+
 **`ResultMark`** — `CircleCheck`/`CircleX`/`CircleMinus` at 14px stroke 1.5,
 the outcome triple (green/red/ink-500 for a level dual). **The** outcome
 register, labelled column or not — `Badge`'s word register is retired, see
