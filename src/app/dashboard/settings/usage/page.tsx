@@ -38,6 +38,11 @@ export default async function UsagePage() {
   const workspace = await getWorkspaceContext();
   if (!workspace) return null;
 
+  // Always present — `getWorkspaceContext()` puts personal first.
+  const personalWorkspace =
+    workspace.available.find((candidate) => candidate.kind === "personal") ??
+    workspace.active;
+
   const teams = workspace.available
     .filter((candidate) => candidate.kind === "team")
     .sort(
@@ -51,7 +56,7 @@ export default async function UsagePage() {
   // which program cards exist at all.
   const [videos, personal, ...programs] = await Promise.all([
     getMatchVideoUsage(workspace.active),
-    getPersonalUsage(workspace.viewer.id, billingMonth),
+    getPersonalUsage(personalWorkspace, billingMonth),
     ...teams.map((team) =>
       getProgramUsage(team.id, billingMonth, team.orgType),
     ),
