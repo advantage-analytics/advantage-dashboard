@@ -18,8 +18,8 @@ import { expect, test } from "@playwright/test";
  *  1. `completeClaim()` calls the RPC through the service-role client with
  *     the verified user id passed explicitly — never through the session.
  *  2. No migration from the fix onwards grants `complete_program_claim` to
- *     anything but `service_role`. The un-applied pilot-terms enforcement
- *     file is the one to watch: it re-creates the function, and once
+ *     anything but `service_role`. The pilot-terms enforcement file
+ *     is the one to watch: it re-creates the function, and once
  *     re-created the exposed overload and granted it to `authenticated`.
  *  3. The legacy overload, for as long as it exists, ignores what it is told.
  *
@@ -30,8 +30,7 @@ import { expect, test } from "@playwright/test";
 
 const MIGRATIONS = "supabase/migrations";
 const FIX = "20261001183845_claim_completion_service_role_only.sql";
-/** Written before the fix, but not applied to live — so it still counts. */
-const UNAPPLIED_BEFORE_FIX = ["20260926181600_pilot_terms_enforcement.sql"];
+const PILOT_TERMS = "20261002044101_pilot_terms_enforcement.sql";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
@@ -65,7 +64,7 @@ test("completeClaim calls the RPC through the service role, with the verified us
 test("no migration from the fix onwards grants complete_program_claim beyond the service role", () => {
   const files = readdirSync(MIGRATIONS)
     .filter((f) => f.endsWith(".sql"))
-    .filter((f) => f >= FIX || UNAPPLIED_BEFORE_FIX.includes(f));
+    .filter((f) => f >= FIX);
   expect(files).toContain(FIX);
 
   // `complete_program_claim(` only — the `_with_token` sibling has its own
@@ -89,7 +88,7 @@ test("no migration from the fix onwards grants complete_program_claim beyond the
 test("every create of the service-role overload is followed by a revoke from authenticated", () => {
   // Supabase's default privileges give EXECUTE on a new public function to
   // anon and authenticated, so a `create` without the revoke is an exposure.
-  for (const file of [FIX, ...UNAPPLIED_BEFORE_FIX]) {
+  for (const file of [FIX, PILOT_TERMS]) {
     const sql = statements(file);
     expect(sql, file).toMatch(
       /function public\.complete_program_claim\(\s*p_claimant_user_id\s+uuid,/,
@@ -124,7 +123,7 @@ test("the legacy overload records no caller-supplied evidence", () => {
 });
 
 test("the pilot-terms enforcement file no longer re-creates the exposed overload", () => {
-  const sql = statements(UNAPPLIED_BEFORE_FIX[0]);
+  const sql = statements(PILOT_TERMS);
   expect(sql).not.toMatch(
     /complete_program_claim\(\s*text, text, text, text, boolean, boolean, text\s*\)/,
   );
