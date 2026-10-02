@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { AdminActivityCard } from "@/components/admin/admin-activity-card";
-import { AdminContactsCard } from "@/components/admin/admin-contacts-card";
 import { AdminConferenceCard } from "@/components/admin/admin-conference-card";
+import { AdminContactsCard } from "@/components/admin/admin-contacts-card";
 import { AdminDetailsCard } from "@/components/admin/admin-details-card";
 import { AdminPeopleCard } from "@/components/admin/admin-people-card";
 import { AdminRequestsCard } from "@/components/admin/admin-requests-card";
@@ -18,8 +18,8 @@ import {
   type TeamSectionId,
 } from "@/components/admin/team-sections";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
-import { emailOrigin } from "@/lib/site-url";
 import { conferenceOptionsFor } from "@/lib/services/programs/admin-program-actions";
+import { emailOrigin } from "@/lib/site-url";
 
 /**
  * "Centennial High School · Roster" — the program, then the view when it is
@@ -115,6 +115,7 @@ export default async function AdminTeamPage({
         />
         <AdminContactsCard
           contacts={data.contacts}
+          failed={data.contactsFailed}
           // The same URL the claim-invite email carries (`claim.ts`); only a
           // directory program has a key, so a custom org has no link.
           joinLink={

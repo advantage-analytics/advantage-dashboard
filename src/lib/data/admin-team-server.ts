@@ -346,6 +346,8 @@ interface AdminTeamData {
   program: AdminTeamProgram;
   /** Recorded staff addresses, scraped ones first, then by address. */
   contacts: AdminTeamContact[];
+  /** True when the contacts read failed — `contacts` is then empty, not "none". */
+  contactsFailed: boolean;
   /** The most recent claim, or null for a program nobody has ever claimed. */
   claim: AdminTeamClaim | null;
   members: AdminTeamMember[];
@@ -1363,6 +1365,7 @@ export const getAdminTeam = cache(
     return {
       program,
       contacts,
+      contactsFailed: Boolean(contactsResult.error),
       claim: rawClaim
         ? {
             id: rawClaim.id,

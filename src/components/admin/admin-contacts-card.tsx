@@ -24,9 +24,11 @@ import type { AdminTeamContact } from "@/lib/data/admin-team-server";
  */
 export function AdminContactsCard({
   contacts,
+  failed,
   joinLink,
 }: {
   contacts: AdminTeamContact[];
+  failed: boolean;
   joinLink: string | null;
 }) {
   return (
@@ -57,7 +59,14 @@ export function AdminContactsCard({
         )}
       </div>
 
-      {contacts.length === 0 ? (
+      {failed ? (
+        <p
+          role="alert"
+          className="mt-3 border-t border-[var(--border-hairline)] pt-3 text-[12px] text-[var(--danger)]"
+        >
+          Couldn&apos;t load the recorded addresses — reload to try again.
+        </p>
+      ) : contacts.length === 0 ? (
         <p className="mt-3 border-t border-[var(--border-hairline)] pt-3 text-[12px] text-[var(--ink-500)]">
           No addresses recorded for this program.
         </p>
@@ -110,9 +119,15 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       type="button"
       className={TEXT_ACTION}
       onClick={() => {
-        navigator.clipboard?.writeText(text).catch(() => {});
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        // Only claim "Copied" once the write went through — a blocked or
+        // missing clipboard must not look like success.
+        navigator.clipboard
+          ?.writeText(text)
+          .then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          })
+          .catch(() => {});
       }}
     >
       {copied ? "Copied" : label}
