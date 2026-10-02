@@ -96,4 +96,21 @@ test.describe("gameNumbersInSet", () => {
     ];
     expect(rows.map(gameNumbersInSet(rows))).toEqual([23, 24, 24, 24, 24]);
   });
+
+  test("full-length games that repeat a stale game score are not folded", () => {
+    // Some stored matches keep the game score on 0-0 / 2-1 across two plain
+    // four-point games; those are two games, not a tiebreak.
+    const game = (game_number: number, game_score: string) =>
+      Array.from({ length: 4 }, () => ({
+        set_number: 1,
+        game_number,
+        game_score,
+      }));
+    const rows = [...game(1, "0-0"), ...game(2, "0-0"), ...game(3, "1-0")];
+    expect(rows.map(gameNumbersInSet(rows))).toEqual([
+      ...Array(4).fill(1),
+      ...Array(4).fill(2),
+      ...Array(4).fill(3),
+    ]);
+  });
 });

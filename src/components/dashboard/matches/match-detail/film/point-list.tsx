@@ -395,15 +395,16 @@ export const PointList = memo(function PointList({
 
   // A tiebreak is the one game whose server changes mid-game. Read off ALL the
   // points, so a filtered list that happens to keep one server's points still
-  // heads it as a tiebreak.
-  const tiebreakKeys = useMemo(() => {
+  // heads it as a tiebreak — and still names who served FIRST, which the first
+  // visible point need not be. Maps each tiebreak's key to that first server.
+  const tiebreakFirstServer = useMemo(() => {
     const first = new Map<string, boolean>();
-    const out = new Set<string>();
+    const out = new Map<string, boolean>();
     for (const point of allPoints) {
       const key = `${point.setNumber}-${point.gameNumber}`;
       const seen = first.get(key);
       if (seen === undefined) first.set(key, point.serverIsPlayer1);
-      else if (seen !== point.serverIsPlayer1) out.add(key);
+      else if (seen !== point.serverIsPlayer1) out.set(key, seen);
     }
     return out;
   }, [allPoints]);
@@ -415,7 +416,10 @@ export const PointList = memo(function PointList({
     let current: GameGroup | undefined;
 
     for (const point of visiblePoints) {
-      const serverIsYou = point.serverIsPlayer1 === youIsPlayer1;
+      const key = `${point.setNumber}-${point.gameNumber}`;
+      const firstServerIsPlayer1 = tiebreakFirstServer.get(key);
+      const serverIsYou =
+        (firstServerIsPlayer1 ?? point.serverIsPlayer1) === youIsPlayer1;
       if (
         !current ||
         current.setNumber !== point.setNumber ||
@@ -435,7 +439,7 @@ export const PointList = memo(function PointList({
                 youIsPlayer1,
               )
             : null,
-          tiebreak: tiebreakKeys.has(`${point.setNumber}-${point.gameNumber}`),
+          tiebreak: firstServerIsPlayer1 !== undefined,
           points: [],
         };
         out.push(current);
@@ -450,7 +454,7 @@ export const PointList = memo(function PointList({
     youName,
     oppName,
     showGameScore,
-    tiebreakKeys,
+    tiebreakFirstServer,
   ]);
 
   const clearAll = filmFilters.clearAll;
