@@ -61,6 +61,11 @@ const nextConfig: NextConfig = {
       "./src/app/m/[token]/*.woff",
       "./public/logos/logo-email.png",
     ],
+    // The claim link's card borrows the same font and wordmark.
+    "/claim/[programKey]/opengraph-image": [
+      "./src/app/m/[token]/*.woff",
+      "./public/logos/logo-email.png",
+    ],
   },
   async headers() {
     return [
