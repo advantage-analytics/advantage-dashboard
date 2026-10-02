@@ -42,6 +42,7 @@ interface Harness {
   deps: RederiveDeps;
   calls: string[];
   deriveDeadlines: number[];
+  claimedFrom: string[];
 }
 
 function harness({
@@ -52,9 +53,11 @@ function harness({
 } = {}): Harness {
   const calls: string[] = [];
   const deriveDeadlines: number[] = [];
+  const claimedFrom: string[] = [];
   return {
     calls,
     deriveDeadlines,
+    claimedFrom,
     deps: {
       async currentUserId() {
         calls.push("currentUserId");
@@ -64,8 +67,9 @@ function harness({
         calls.push("loadJob");
         return { job, error: null };
       },
-      async claimJob() {
+      async claimJob(_jobId, from) {
         calls.push("claimJob");
+        claimedFrom.push(from);
         return { claimed, error: null };
       },
       async derive(_jobId, deadline) {
@@ -130,12 +134,34 @@ test.describe("rederive handler", () => {
     expect(h.calls).not.toContain("derive");
   });
 
-  test("409 for a job not in derivation_failed", async () => {
-    const h = harness({ job: jobRow({ status: "completed" }) });
+  test("409 for a job neither completed nor derivation_failed", async () => {
+    for (const status of ["queued", "processing", "deriving", "failed"]) {
+      const h = harness({ job: jobRow({ status }) });
+      const res = await run(h);
+      expect(res.status).toBe(409);
+      expect(h.calls).not.toContain("claimJob");
+      expect(h.calls).not.toContain("derive");
+    }
+  });
+
+  test("a completed job rebuilds after a score edit, claimed from completed", async () => {
+    const h = harness({
+      job: jobRow({ status: "completed", error_code: null }),
+    });
+    const { status, body } = await run(h);
+    expect(status).toBe(200);
+    expect(body).toEqual({ jobId: JOB, status: "completed" });
+    expect(h.claimedFrom).toEqual(["completed"]);
+    expect(h.calls).toEqual(["currentUserId", "loadJob", "claimJob", "derive"]);
+  });
+
+  test("a completed job with no stored results is refused", async () => {
+    const h = harness({
+      job: jobRow({ status: "completed", results_object_key: null }),
+    });
     const { status } = await run(h);
     expect(status).toBe(409);
     expect(h.calls).not.toContain("claimJob");
-    expect(h.calls).not.toContain("derive");
   });
 
   test("409 when the results are gone", async () => {

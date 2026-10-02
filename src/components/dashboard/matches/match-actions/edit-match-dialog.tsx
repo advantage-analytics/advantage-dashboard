@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Info, Loader2 } from "lucide-react";
+import { ArrowUpRight, Info, Loader2, RefreshCw } from "lucide-react";
 import { DateField, type DateFieldHandle } from "@/components/ui/date-field";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { advButton } from "@/lib/ui/adv-button";
@@ -12,6 +12,7 @@ import {
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
 import {
+  DialogInfoRow,
   DialogProblem,
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
@@ -132,6 +133,23 @@ interface Loaded {
    * (`set_match_round_on_line`). Never for a dual: its round is its slot.
    */
   canEditRound: boolean;
+  /**
+   * The analysis a new score can be rebuilt against, and the bookmarks that
+   * rebuild would remove — null when there is nothing to rebuild.
+   */
+  rebuild: { jobId: string; bookmarks: number } | null;
+}
+
+/** Sets and tiebreaks only: `winner` follows from them. */
+function sameScore(a: MatchScore | null, b: MatchScore | null): boolean {
+  const key = (s: MatchScore | null) =>
+    JSON.stringify([
+      s?.player1 ?? [],
+      s?.player2 ?? [],
+      s?.player1_tiebreaks ?? [],
+      s?.player2_tiebreaks ?? [],
+    ]);
+  return key(a) === key(b);
 }
 
 const FORM_ID = "edit-match-form";
@@ -267,6 +285,12 @@ export function EditMatchDialog({
   const [detachError, setDetachError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  /**
+   * The score was saved but the rebuild the viewer asked for failed; the
+   * footer becomes Close / Try again, and the error says what was kept.
+   */
+  const [rebuildFailed, setRebuildFailed] = useState(false);
+
   const p1Ref = useRef<HTMLInputElement>(null);
   const p2Ref = useRef<HTMLInputElement>(null);
   const dateRef = useRef<DateFieldHandle | null>(null);
@@ -280,6 +304,7 @@ export function EditMatchDialog({
     setFieldErrors({});
     setPendingLine(null);
     setPicking(false);
+    setRebuildFailed(false);
     Promise.all([
       fetch(`/api/matches/${matchId}`).then(async (res) => {
         const body = await res.json().catch(() => ({}));
@@ -370,6 +395,22 @@ export function EditMatchDialog({
       ? "import"
       : null;
   const formatEditable = !!match && !linked && !analyzed && !pendingLine;
+  /**
+   * The score in the cells differs from the stored one on a match whose
+   * analysis can be rebuilt: the note shows, and Save splits in two. The
+   * analysis is checked against the entered score (and names the players from
+   * it when the camera can't), so a changed score is a reason to rebuild — on
+   * request, since a rebuild re-creates every point and bookmarks go with them.
+   */
+  const draftScore = match
+    ? scoreForSave(score, (match.score?.player1?.length ?? 0) > 0)
+    : null;
+  const rebuildOffer =
+    !!loaded?.rebuild &&
+    !!draftScore?.ok &&
+    !!draftScore.score &&
+    !sameScore(draftScore.score as MatchScore, match?.score ?? null);
+  const bookmarksLost = rebuildOffer ? (loaded?.rebuild?.bookmarks ?? 0) : 0;
   const roundKind = roundKindFor(matchType || null);
   const storedRound = normalizeRound(match?.round ?? null);
   /** A match already on a tournament line whose round this viewer may change. */
@@ -533,8 +574,11 @@ export function EditMatchDialog({
     changeFrom.current = null;
   }
 
-  async function submit(e?: React.FormEvent) {
+  async function submit(e?: React.FormEvent<HTMLFormElement>) {
     e?.preventDefault();
+    // "Save and rebuild" says so on its button; Enter and Cmd+Enter save only.
+    const submitter = (e?.nativeEvent as SubmitEvent | undefined)?.submitter;
+    const rebuild = submitter?.dataset.rebuild === "true";
     if (!match || saving || invalidSet || lineupBlocks) return;
     const detailsSent = !linked && !pendingLine;
     // A tournament keeps the match's own round, and its date when that falls
@@ -676,6 +720,10 @@ export function EditMatchDialog({
       }
 
       forgetMatchDetails(matchId);
+      if (rebuild && rebuildOffer) {
+        await rebuildStatistics();
+        return;
+      }
       setSaving(false);
       onOpenChange(false);
       router.refresh();
@@ -684,6 +732,45 @@ export function EditMatchDialog({
         "Couldn't reach the server, so this may not have saved. Reload the page to check.",
       );
       setSaving(false);
+    }
+  }
+
+  /**
+   * Re-derive the match from the analysis already delivered, against the
+   * score just saved. Runs with `saving` held, so the dialog can't be closed
+   * half-way; a failure keeps the dialog open on Close / Try again.
+   */
+  async function rebuildStatistics() {
+    const jobId = loaded?.rebuild?.jobId;
+    if (!jobId) return;
+    setSaving(true);
+    setError(null);
+    const failed = (message: string) => {
+      setError(message);
+      setRebuildFailed(true);
+      setSaving(false);
+      router.refresh();
+    };
+    try {
+      const res = await fetch(`/api/splitstep/jobs/${jobId}/rederive`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        failed(
+          "The score is saved, but the statistics couldn't be rebuilt. Try again, or close to keep the statistics as they were.",
+        );
+        return;
+      }
+      setSaving(false);
+      setRebuildFailed(false);
+      onOpenChange(false);
+      push({ tone: "success", title: "Saved and statistics rebuilt" });
+      forgetMatchDetails(matchId);
+      router.refresh();
+    } catch {
+      failed(
+        "The score is saved, but the server couldn't be reached, so the statistics may not have been rebuilt. Reload the page to check.",
+      );
     }
   }
 
@@ -814,26 +901,69 @@ export function EditMatchDialog({
                 Keep as one-off
               </button>
             )}
+            {/* The opt-out, in the footer's quiet left slot so the dialog
+                keeps one primary. It saves every edit, just no rebuild. */}
+            {rebuildOffer && !rebuildFailed && (
+              <button
+                type="submit"
+                form={FORM_ID}
+                data-rebuild="false"
+                disabled={saving || !!invalidSet || lineupBlocks}
+                className="h-9 cursor-pointer text-[12px] font-medium text-[var(--ink-600)] transition-colors hover:text-[var(--ink-900)] disabled:pointer-events-none disabled:opacity-50"
+              >
+                Save without rebuilding
+              </button>
+            )}
             <div className="flex-1" />
-            <button
-              type="button"
-              className={advButton("outline")}
-              disabled={saving}
-              onClick={close}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              form={FORM_ID}
-              className={advButton("primary")}
-              disabled={saving || !!invalidSet || lineupBlocks}
-            >
-              {saving && (
-                <Loader2 className="size-3.5 animate-spin" aria-hidden />
-              )}
-              Save changes
-            </button>
+            {rebuildFailed ? (
+              // Saved; only the rebuild is left to try.
+              <>
+                <button
+                  type="button"
+                  className={advButton("outline")}
+                  disabled={saving}
+                  onClick={close}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className={advButton("primary")}
+                  disabled={saving}
+                  onClick={() => void rebuildStatistics()}
+                >
+                  {saving && (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  )}
+                  {saving ? "Rebuilding…" : "Try again"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className={advButton("outline")}
+                  disabled={saving}
+                  onClick={close}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  form={FORM_ID}
+                  data-rebuild={rebuildOffer ? "true" : undefined}
+                  // Blue even when bookmarks go: rebuilding is the recommended
+                  // path, and the note under the score already states the cost.
+                  className={advButton("primary")}
+                  disabled={saving || !!invalidSet || lineupBlocks}
+                >
+                  {saving && (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  )}
+                  {rebuildOffer ? "Save and rebuild" : "Save changes"}
+                </button>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -867,15 +997,29 @@ export function EditMatchDialog({
           // fields on the shell's inset while giving focus rings room.
           className="-mx-6 flex max-h-[min(66vh,640px)] flex-col gap-10 overflow-y-auto px-6 py-0.5"
         >
-          <EditMatchScore
-            value={score}
-            onChange={setScore}
-            playerName={player.name}
-            opponentName={opponent.name}
-            bestOf={format.bestOf}
-            gamesTo={gamesTo}
-            disabled={saving}
-          />
+          <div className="flex flex-col gap-3">
+            <EditMatchScore
+              value={score}
+              onChange={setScore}
+              playerName={player.name}
+              opponentName={opponent.name}
+              bestOf={format.bestOf}
+              gamesTo={gamesTo}
+              disabled={saving}
+            />
+            {rebuildOffer && !rebuildFailed && (
+              <DialogInfoRow
+                icon={<RefreshCw className="size-[13px]" strokeWidth={1.5} />}
+              >
+                The score changed. Rebuilding checks this match&rsquo;s analysis
+                against it, so its statistics can change.
+                {bookmarksLost > 0 &&
+                  (bookmarksLost === 1
+                    ? " It also removes the 1 bookmarked point on this match."
+                    : ` It also removes the ${bookmarksLost} bookmarked points on this match.`)}
+              </DialogInfoRow>
+            )}
+          </div>
 
           <EditMatchPlayers
             player={player}

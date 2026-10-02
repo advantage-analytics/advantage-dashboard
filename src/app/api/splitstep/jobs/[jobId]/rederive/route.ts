@@ -1,7 +1,8 @@
 /**
  * Rebuild a job's statistics from the results the vendor already delivered —
  * the recovery for a `derivation_failed` row whose build crashed
- * (`DERIVATION_ERROR`). No vendor call and no allowance.
+ * (`DERIVATION_ERROR`), and the rebuild after an analysed match's score is
+ * edited. No vendor call and no allowance.
  *
  * Wiring only: the session, the service-role client and `deriveAndPublish()`.
  * The ladder and its reasoning are in `handler.ts`.
@@ -61,12 +62,12 @@ export async function POST(
       };
     },
 
-    async claimJob(id) {
+    async claimJob(id, from) {
       const { data, error } = await adminClient()
         .from("processing_jobs")
         .update({ status: "deriving" })
         .eq("id", id)
-        .eq("status", "derivation_failed")
+        .eq("status", from)
         .select("id");
       return {
         claimed: (data?.length ?? 0) > 0,

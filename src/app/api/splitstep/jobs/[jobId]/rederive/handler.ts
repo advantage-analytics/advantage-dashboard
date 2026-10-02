@@ -1,6 +1,9 @@
 /**
  * The decision half of `/api/splitstep/jobs/[jobId]/rederive` — the "Rebuild
- * statistics" button on a job whose statistics build crashed.
+ * statistics" button on a job whose statistics build crashed, and the prompt
+ * the edit dialog raises after the entered score of an analysed match changes
+ * (derivation checks the analysis against that score, and names the players
+ * from it when the camera cannot).
  *
  * A rebuild re-runs `deriveAndPublish()` from the results the vendor already
  * delivered. No vendor call, no allowance spent, no attempt counted, and safe
@@ -12,9 +15,14 @@
  *
  * ORDER: signed in → load the job → yours (same 404 for "missing" and "not
  * yours", never confirming another user's job) → is it rebuildable
- * (`derivation_failed`, classified `rederive`, results stored) → claim it
- * (`deriving` only where still `derivation_failed`, so two clicks cannot both
- * derive) → derive once, bounded by a deadline.
+ * (`completed`, or `derivation_failed` classified `rederive`; results stored)
+ * → claim it (`deriving` only where the status is still the one read, so two
+ * clicks cannot both derive) → derive once, bounded by a deadline.
+ *
+ * Rebuilding a `completed` job re-creates every point, and bookmarks on the
+ * old points go with them (`point_bookmarks` cascades). The dialog says so
+ * before it calls this; the "ready" email is deduped per job, so it does not
+ * go out again.
  */
 
 import { NextResponse } from "next/server";
@@ -48,6 +56,9 @@ export interface RederiveJobRow {
 
 export type RederiveOutcome = { ok: true } | { ok: false; reason: string };
 
+/** The statuses a rebuild may start from. */
+export type RebuildableStatus = "derivation_failed" | "completed";
+
 export interface RederiveDeps {
   /** The signed-in login from `auth.getUser()`, or null. */
   currentUserId(): Promise<string | null>;
@@ -56,10 +67,13 @@ export interface RederiveDeps {
     jobId: string,
   ): Promise<{ job: RederiveJobRow | null; error: string | null }>;
   /**
-   * `status = 'deriving'` where `id = jobId AND status = 'derivation_failed'`.
+   * `status = 'deriving'` where `id = jobId AND status = from`.
    * `claimed` is false when zero rows matched — someone else got there first.
    */
-  claimJob(jobId: string): Promise<{ claimed: boolean; error: string | null }>;
+  claimJob(
+    jobId: string,
+    from: RebuildableStatus,
+  ): Promise<{ claimed: boolean; error: string | null }>;
   /** `deriveAndPublish({ supabase: admin, jobId, deadline })`. */
   derive(jobId: string, deadline: number): Promise<RederiveOutcome>;
   /** Epoch ms; injectable so the spec can pin the deadline. */
@@ -93,21 +107,24 @@ export async function handleRederive(
   }
   if (!job || job.created_by !== userId) return refuse("Job not found", 404);
 
-  if (job.status !== "derivation_failed") {
-    return refuse("This match isn't waiting on a statistics rebuild.", 409);
+  if (job.status !== "derivation_failed" && job.status !== "completed") {
+    return refuse("This match isn't ready for a statistics rebuild.", 409);
   }
+  const from: RebuildableStatus = job.status;
 
-  const recovery = classifyFailure({
-    ...jobRecoveryFacts({
-      ...job,
-      hasVideo: Boolean(job.video_object_key),
-      hasResults: Boolean(job.results_object_key),
-    }),
-    // The chain count only matters for `failed` rows; a rebuild counts nothing.
-    attemptsUsed: 1,
-  });
-  if (recovery !== "rederive") {
-    return refuse("The statistics can't be rebuilt for this match.", 409);
+  if (from === "derivation_failed") {
+    const recovery = classifyFailure({
+      ...jobRecoveryFacts({
+        ...job,
+        hasVideo: Boolean(job.video_object_key),
+        hasResults: Boolean(job.results_object_key),
+      }),
+      // The chain count only matters for `failed` rows; a rebuild counts nothing.
+      attemptsUsed: 1,
+    });
+    if (recovery !== "rederive") {
+      return refuse("The statistics can't be rebuilt for this match.", 409);
+    }
   }
   if (!job.results_object_key) {
     return refuse(
@@ -116,7 +133,7 @@ export async function handleRederive(
     );
   }
 
-  const claim = await deps.claimJob(jobId);
+  const claim = await deps.claimJob(jobId, from);
   if (claim.error) {
     pipelineLog.error(`${LOG} claim failed`, { jobId, error: claim.error });
     return refuse("Could not start the rebuild", 500);
