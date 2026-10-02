@@ -1,5 +1,5 @@
 import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
-import { siteUrl } from "@/lib/site-url";
+import { emailSiteUrl } from "@/lib/site-url";
 import {
   preferenceNote,
   renderEmail,
@@ -138,7 +138,7 @@ export function joinRequestOwnerNoticeEmail(
     ],
     cta: {
       label: "Review the request",
-      url: `${siteUrl()}/dashboard/team/roster`,
+      url: `${emailSiteUrl()}/dashboard/team/roster`,
     },
     note: `You decide who joins, not us. If you don't recognise this person, declining is the whole of what you need to do. ${preferenceNote("Team activity")}`,
   };
@@ -235,7 +235,7 @@ export function memberJoinedOwnerEmail(
     ],
     cta: {
       label: "View the roster",
-      url: `${siteUrl()}/dashboard/team/roster`,
+      url: `${emailSiteUrl()}/dashboard/team/roster`,
     },
     note: `If this wasn't somebody you invited, you can remove them from the roster page. ${preferenceNote("Team activity")}`,
   };
@@ -304,7 +304,7 @@ export function expiredInviteNudgeEmail(
     ],
     cta: {
       label: "Send a new invite",
-      url: `${siteUrl()}/dashboard/team/roster`,
+      url: `${emailSiteUrl()}/dashboard/team/roster`,
     },
     note: "Inviting the same address again refreshes the invitation rather than adding a second one. If you would rather not, nothing else happens.",
   };
@@ -348,7 +348,7 @@ export function inviteRequestDeclinedEmail(
       { label: "Program", value: programName },
       ...(reason ? [{ label: "What they said", value: reason }] : []),
     ],
-    cta: { label: "Go to your dashboard", url: `${siteUrl()}/dashboard` },
+    cta: { label: "Go to your dashboard", url: `${emailSiteUrl()}/dashboard` },
     note: "If you think this was a mistake, the fastest fix is to ask a coach at your program directly.",
   };
 

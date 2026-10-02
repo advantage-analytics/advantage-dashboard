@@ -1,4 +1,4 @@
-import { siteUrl } from "@/lib/site-url";
+import { emailSiteUrl } from "@/lib/site-url";
 import {
   preferenceNote,
   renderEmail,
@@ -27,7 +27,7 @@ import {
  */
 
 function matchUrl(matchId: string): string {
-  return `${siteUrl()}/dashboard/matches/${matchId}`;
+  return `${emailSiteUrl()}/dashboard/matches/${matchId}`;
 }
 
 export interface AnalysisReadyInput {

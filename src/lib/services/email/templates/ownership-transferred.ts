@@ -1,4 +1,4 @@
-import { siteUrl } from "@/lib/site-url";
+import { emailSiteUrl } from "@/lib/site-url";
 import { SUPPORT_ADDRESS } from "../config";
 import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
@@ -58,7 +58,7 @@ export function ownershipTransferredEmail(
     ],
     cta: {
       label: "Open team settings",
-      url: `${siteUrl()}/dashboard/settings/teams/${encodeURIComponent(programId)}`,
+      url: `${emailSiteUrl()}/dashboard/settings/teams/${encodeURIComponent(programId)}`,
     },
     note: `If you weren't expecting this, write to ${SUPPORT_ADDRESS} and we'll look into it.`,
   };

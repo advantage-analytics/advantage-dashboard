@@ -1,4 +1,4 @@
-import { siteUrl } from "@/lib/site-url";
+import { emailSiteUrl } from "@/lib/site-url";
 import { verifyIdentityUrl } from "@/lib/services/programs/claim-verification";
 import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
@@ -62,7 +62,7 @@ export function claimVerifyAddressEmail(
     ],
     cta: {
       label: "Confirm and finish setup",
-      url: `${siteUrl()}/claim/verify?token=${encodeURIComponent(token)}`,
+      url: `${emailSiteUrl()}/claim/verify?token=${encodeURIComponent(token)}`,
     },
     note: `The link lasts 24 hours, works once, and only finishes setup for ${accountEmail} — forwarded on, it does nothing. Didn't ask for this? Ignore it; nothing happens without you.`,
   };
@@ -214,7 +214,7 @@ export function programClaimInviteEmail(
     ],
     cta: {
       label: "Set up your program",
-      url: `${siteUrl()}/claim/${encodeURIComponent(programKey)}`,
+      url: `${emailSiteUrl()}/claim/${encodeURIComponent(programKey)}`,
     },
     note: "If this isn't your program, ignoring this email is safe — nothing happens unless you set it up, and the link grants nothing on its own.",
   };
@@ -252,7 +252,7 @@ export function claimApprovedEmail(input: ClaimApprovedInput): EmailMessage {
       { label: "Program", value: programName },
       { label: "You are", value: claimantTitle },
     ],
-    cta: { label: "Open your team", url: `${siteUrl()}/dashboard/team` },
+    cta: { label: "Open your team", url: `${emailSiteUrl()}/dashboard/team` },
     // Said plainly rather than hidden. The window is real, someone at the
     // school can still contest it, and a coach who first hears about that when
     // a colleague objects has been kept in the dark by omission.
@@ -303,7 +303,7 @@ export function claimDeclinedEmail(input: ClaimDeclinedInput): EmailMessage {
     ],
     cta: {
       label: "Request an invite instead",
-      url: `${siteUrl()}/claim/${encodeURIComponent(programKey)}/request`,
+      url: `${emailSiteUrl()}/claim/${encodeURIComponent(programKey)}/request`,
     },
     note: "If you think this is wrong, reply to this email — a person reads it, and a claim can be reopened.",
   };
@@ -366,7 +366,7 @@ export function claimObjectionNoticeEmail(
     ],
     cta: {
       label: "This isn't right",
-      url: `${siteUrl()}/claim/${encodeURIComponent(programKey)}/object`,
+      url: `${emailSiteUrl()}/claim/${encodeURIComponent(programKey)}/object`,
     },
     note: "You're getting this because your address is on file as a contact for this program. We don't add contacts to any mailing list.",
   };

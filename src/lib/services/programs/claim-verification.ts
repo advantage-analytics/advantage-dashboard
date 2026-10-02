@@ -1,4 +1,4 @@
-import { siteUrl } from "@/lib/site-url";
+import { emailSiteUrl } from "@/lib/site-url";
 import { addHours } from "./claim-state";
 import { generateToken, hashToken, tokenMatches } from "./tokens";
 
@@ -139,7 +139,7 @@ export function verifyIdentityPath(token: string): string {
 
 /** Where the emailed button points. */
 export function verifyIdentityUrl(token: string): string {
-  return `${siteUrl()}${verifyIdentityPath(token)}`;
+  return `${emailSiteUrl()}${verifyIdentityPath(token)}`;
 }
 
 export type VoucherNote =

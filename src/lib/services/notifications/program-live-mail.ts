@@ -1,4 +1,4 @@
-import { siteUrl } from "@/lib/site-url";
+import { emailSiteUrl } from "@/lib/site-url";
 import {
   sendEmail,
   programLiveInternalEmail,
@@ -78,7 +78,7 @@ export async function notifyProgramWentLive(
       claimantName: event.claimantName,
       claimantEmail: event.claimantEmail,
       path: event.path,
-      adminUrl: `${siteUrl()}/admin`,
+      adminUrl: `${emailSiteUrl()}/admin`,
     }),
   );
 

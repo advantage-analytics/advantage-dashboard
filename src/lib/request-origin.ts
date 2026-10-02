@@ -10,7 +10,7 @@ import { originFromHeaders } from "./site-url";
  * a dev server on port 3002 gets port 3002, a preview deployment gets itself,
  * production gets whichever domain the person actually arrived on.
  *
- * NOT for anything that lands in an email. Those come from `siteUrl()` —
+ * NOT for anything that lands in an email. Those come from `emailSiteUrl()` —
  * configuration, never the request — because a `Host` an attacker can set
  * must never become the origin of a link somebody else is asked to click.
  * `docs/email-system.md` §5 states the rule; `site-url.ts` explains the split.

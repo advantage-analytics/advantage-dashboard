@@ -11,7 +11,7 @@ import type { EmailMessage } from "../send";
  * `claimedEmail` / `reason` say who is asking and why a human has to look,
  * and `requestsUrl` is the one CTA — a deep link straight to that row in
  * `/admin/requests`, built by the caller (`admin-review-mail.ts`) as
- * `${siteUrl()}/admin/requests?id=<id>` so it lands on the exact row the
+ * `${emailSiteUrl()}/admin/requests?id=<id>` so it lands on the exact row the
  * Requests drawer (T15) opens via its `?id=` param, never a bare list an
  * admin has to search.
  *
@@ -30,7 +30,7 @@ export interface AdminReviewNeededInput {
   claimedEmail: string;
   /** Why this needs a human — `reviewReason()` for a claim, a plain sentence for a request. */
   reason: string;
-  /** Pre-built by the caller: `${siteUrl()}/admin/requests?id=<id>`. */
+  /** Pre-built by the caller: `${emailSiteUrl()}/admin/requests?id=<id>`. */
   requestsUrl: string;
 }
 
@@ -89,7 +89,7 @@ export interface ProgramLiveInternalInput {
   claimantName: string;
   claimantEmail: string;
   path: "auto" | "reviewed";
-  /** Pre-built by the caller: `${siteUrl()}/admin`. */
+  /** Pre-built by the caller: `${emailSiteUrl()}/admin`. */
   adminUrl: string;
 }
 

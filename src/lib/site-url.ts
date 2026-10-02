@@ -66,6 +66,21 @@ export function siteUrl(): string {
 }
 
 /**
+ * The origin every link in an email points at.
+ *
+ * `EMAIL_SITE_URL` when set, otherwise `siteUrl()`. Separate because the
+ * deployment that sends a mail is not always the one the reader should land
+ * on: the vendor webhook returns to whichever deployment submitted the job,
+ * so a job started on staging sends its "analysis ready" mail from staging,
+ * and with only `siteUrl()` that mail links real users to the staging domain.
+ * Set this on every non-production environment that shares production's
+ * users; leave it unset in production, where `siteUrl()` already agrees.
+ */
+export function emailSiteUrl(): string {
+  return process.env.EMAIL_SITE_URL?.trim().replace(/\/+$/, "") || siteUrl();
+}
+
+/**
  * The leading value of a header proxies may have joined with commas
  * (`x-forwarded-host: app.example.com, edge.internal`), trimmed; `undefined`
  * for absent or blank so callers can `??` through to the next candidate.

@@ -1,5 +1,5 @@
 import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
-import { siteUrl } from "@/lib/site-url";
+import { emailSiteUrl } from "@/lib/site-url";
 import {
   preferenceNote,
   renderEmail,
@@ -63,7 +63,7 @@ export function memberLeftOwnerEmail(
     ],
     cta: {
       label: "View the roster",
-      url: `${siteUrl()}/dashboard/team/roster`,
+      url: `${emailSiteUrl()}/dashboard/team/roster`,
     },
     note: preferenceNote("Team activity"),
   };
