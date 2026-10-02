@@ -26,6 +26,7 @@
  *    anchors — without it the button is blue underlined text.
  */
 
+import { MARKETING_SITE_URL } from "@/lib/constants";
 import { SUPPORT_ADDRESS } from "./config";
 
 export interface EmailFact {
@@ -421,8 +422,8 @@ export function renderEmail(content: EmailContent): string {
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                 <tr>
                   <td class="px" style="padding:44px 44px 0 44px;">
-                    <img class="logo-light" src="https://advantage-analytics.com/email/advantage-wordmark.png" width="140" height="25" alt="Advantage" style="display:block; width:140px; height:auto; border:0; outline:none;">
-                    <img class="logo-dark" src="https://advantage-analytics.com/email/advantage-wordmark-white.png" width="140" height="25" alt="Advantage" style="display:none; width:0; max-height:0; overflow:hidden; border:0; outline:none;">
+                    <img class="logo-light" src="${MARKETING_SITE_URL}/email/advantage-wordmark.png" width="140" height="25" alt="Advantage" style="display:block; width:140px; height:auto; border:0; outline:none;">
+                    <img class="logo-dark" src="${MARKETING_SITE_URL}/email/advantage-wordmark-white.png" width="140" height="25" alt="Advantage" style="display:none; width:0; max-height:0; overflow:hidden; border:0; outline:none;">
                   </td>
                 </tr>
 
@@ -467,7 +468,7 @@ ${body.map(paragraph).join("")}${facts && facts.length > 0 ? factsPanel(facts) :
               <p class="ink4" style="margin:0 0 6px 0; font-family:${FONT}; font-size:11px; line-height:17px; color:#AAAAAA;">${esc(compliance.reason)} <a href="${esc(compliance.unsubscribeUrl)}" style="color:#71717A; text-decoration:underline;">Unsubscribe</a></p>`
                 : ""
             }
-              <p class="ink4" style="margin:0; font-family:${FONT}; font-size:11px; line-height:17px; color:#AAAAAA;">&copy; 2026 Advantage Analytics LLC &middot; advantage-analytics.com</p>
+              <p class="ink4" style="margin:0; font-family:${FONT}; font-size:11px; line-height:17px; color:#AAAAAA;">&copy; 2026 Advantage Analytics LLC &middot; ${new URL(MARKETING_SITE_URL).host}</p>
             </td>
           </tr>
 

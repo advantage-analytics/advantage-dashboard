@@ -15,6 +15,8 @@
  * which is what `shell.ts` is for.
  */
 
+import { MARKETING_SITE_URL } from "@/lib/constants";
+
 /**
  * The From header on every product email.
  *
@@ -85,8 +87,7 @@ export const OUTREACH_FROM = "Cj Gimena <team@advantage-analytics.com>";
  * The marketing site's unsubscribe route, which writes the address to the
  * Resend suppression list. `?e=<address>&t=<program keys>`.
  */
-export const OUTREACH_UNSUBSCRIBE_URL =
-  "https://advantage-analytics.com/unsubscribe";
+export const OUTREACH_UNSUBSCRIBE_URL = `${MARKETING_SITE_URL}/unsubscribe`;
 
 /**
  * The largest tranche one press of Send may contain.

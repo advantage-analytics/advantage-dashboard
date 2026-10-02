@@ -8,9 +8,9 @@ import {
   readRetryCount,
   writeRetryCount,
 } from "@/components/dashboard/matches/retry-state";
+import { SUPPORT_EMAIL } from "@/lib/constants";
 
 const ESCALATION_THRESHOLD = 3;
-const SUPPORT_EMAIL = "team@advantage-analytics.com";
 
 function buildSupportMailto(
   matchId: string | undefined,
