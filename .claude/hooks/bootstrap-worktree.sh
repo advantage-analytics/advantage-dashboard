@@ -12,6 +12,9 @@
 # Symlink, not copy: .env.local is not per-branch. Exactly one exists, in the
 # main checkout. Linking keeps the service-role key on disk once, so rotating a
 # key reaches every worktree and there is no second copy to drift or leak.
+#
+# The `predev` script (scripts/link-env-local.mjs) is the third net, running the
+# same link at `npm run dev` for worktrees this hook never saw.
 set -uo pipefail
 
 # Any failure below is a reason to do nothing, never a reason to block a
