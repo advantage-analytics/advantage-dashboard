@@ -258,6 +258,50 @@ function listBlock(rows: EmailRow[], title?: string): string {
                 </tr>`;
 }
 
+/** The single filled button. Kept identical to supabase/email-templates. */
+function oneButton(href: string, label: string): string {
+  return `
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td class="btn" bgcolor="#3B82F6" align="center" style="border-radius:6px; box-shadow:0 1px 3px rgba(57,134,243,0.25);">
+                          <a href="${href}" target="_blank" style="display:block; padding:14px 30px; font-family:${FONT}; font-size:14px; font-weight:500; letter-spacing:0.5px; color:#FFFFFF; border-radius:6px; white-space:nowrap;">${label}</a>
+                        </td>
+                      </tr>
+                    </table>`;
+}
+
+/**
+ * Filled and outlined buttons side by side, each its own inline-block table
+ * with a 12px right and bottom margin. Where they don't fit (a phone) the
+ * second wraps under the first with the same 12px gap. No media query: an
+ * admin's pasted template brings its own <head>, so this block has to keep
+ * its spacing without any CSS from the shell. `font-size:0` on the wrapper
+ * removes the whitespace between the two inline-blocks.
+ */
+function twoButtons(
+  href: string,
+  label: string,
+  secondHref: string,
+  secondLabel: string,
+): string {
+  return `
+                    <div style="font-size:0; line-height:0;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-block; vertical-align:top; margin:0 12px 12px 0;">
+                        <tr>
+                          <td class="btn" bgcolor="#3B82F6" align="center" style="border-radius:6px; box-shadow:0 1px 3px rgba(57,134,243,0.25);">
+                            <a href="${href}" target="_blank" style="display:block; padding:14px 30px; font-family:${FONT}; font-size:14px; line-height:17px; font-weight:500; letter-spacing:0.5px; color:#FFFFFF; border-radius:6px; white-space:nowrap;">${label}</a>
+                          </td>
+                        </tr>
+                      </table><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-block; vertical-align:top; margin:0 0 12px 0;">
+                        <tr>
+                          <td align="center" style="border-radius:6px;">
+                            <a href="${secondHref}" target="_blank" class="btn2" style="display:block; padding:13px 29px; font-family:${FONT}; font-size:14px; line-height:17px; font-weight:500; letter-spacing:0.5px; color:#525252; background:#FFFFFF; border:1px solid #E5E5EA; border-radius:6px; white-space:nowrap;">${secondLabel}</a>
+                          </td>
+                        </tr>
+                      </table>
+                    </div>`;
+}
+
 /**
  * The button row and its paste-this-link fallback. Exported for outreach,
  * whose admin-edited templates drop it in through `{{claim_buttons}}`.
@@ -286,27 +330,12 @@ export function ctaBlock(
                         : ""
                     }
                     <![endif]-->
-                    <!--[if !mso]><!-- -->
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                      <tr>
-                        <td class="btn" bgcolor="#3B82F6" align="center" style="border-radius:6px; box-shadow:0 1px 3px rgba(57,134,243,0.25);">
-                          <a href="${href}" target="_blank" style="display:block; padding:14px 30px; font-family:${FONT}; font-size:14px; font-weight:500; letter-spacing:0.5px; color:#FFFFFF; border-radius:6px; white-space:nowrap;">${label}</a>
-                        </td>${
-                          secondary
-                            ? `
-                        <td style="width:12px; font-size:0; line-height:0;">&nbsp;</td>
-                        <td align="center" style="border-radius:6px;">
-                          <a href="${secondHref}" target="_blank" class="btn2" style="display:block; padding:13px 29px; font-family:${FONT}; font-size:14px; font-weight:500; letter-spacing:0.5px; color:#525252; background:#FFFFFF; border:1px solid #E5E5EA; border-radius:6px; white-space:nowrap;">${secondLabel}</a>
-                        </td>`
-                            : ""
-                        }
-                      </tr>
-                    </table>
+                    <!--[if !mso]><!-- -->${secondary ? twoButtons(href, label, secondHref, secondLabel) : oneButton(href, label)}
                     <!--<![endif]-->
                   </td>
                 </tr>
                 <tr>
-                  <td class="px" style="padding:26px 44px 0 44px;">
+                  <td class="px" style="padding:${secondary ? 14 : 26}px 44px 0 44px;">
                     <p class="ink3" style="margin:0 0 6px 0; font-family:${FONT}; font-size:12px; line-height:20px; color:#71717A;">If the button doesn't work, paste this link into your browser:</p>
                     <p style="margin:0; font-family:${FONT}; font-size:12px; line-height:20px; word-break:break-all;"><a class="accent" href="${href}" style="color:#3B82F6;">${href}</a>${
                       secondary
