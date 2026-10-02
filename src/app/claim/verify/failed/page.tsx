@@ -9,7 +9,7 @@ import {
   CLAIM_MICRO,
 } from "@/components/claim/claim-shell";
 
-export const metadata = { title: "We couldn't finish this" };
+export const metadata = { title: "Verification failed" };
 
 /**
  * The one screen a claim can fail onto.

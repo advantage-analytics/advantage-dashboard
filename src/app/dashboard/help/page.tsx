@@ -9,6 +9,8 @@ import type { StepState } from "@/components/dashboard/shared/vertical-steps";
 import { EXPORT_GUIDE_URL, SUPPORT_EMAIL } from "@/lib/constants";
 import { MAX_VIDEO_SIZE_BYTES } from "@/lib/services/splitstep/config";
 
+export const metadata = { title: "Help" };
+
 const SWINGVISION_TROUBLESHOOTING_URL =
   "https://support.swingvision.com/hc/en-us/articles/360058475731";
 

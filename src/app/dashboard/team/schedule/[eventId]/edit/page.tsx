@@ -12,6 +12,8 @@ import { NewTournamentFlow } from "@/components/dashboard/schedule/static/new-to
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
 import type { EventDetail } from "@/lib/schedule/types";
 
+export const metadata = { title: "Edit event" };
+
 /**
  * Editing an event — a dual or a tournament, each back on the flow it was
  * created on.

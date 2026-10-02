@@ -4,6 +4,8 @@ import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { getTeamSingleMatch } from "@/lib/data/single-match-server";
 import { SingleDetail } from "@/components/dashboard/schedule/single-detail";
 
+export const metadata = { title: "Match" };
+
 /**
  * 25i and 25j — a single match's page.
  *

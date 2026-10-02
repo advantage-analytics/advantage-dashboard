@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/server";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
@@ -92,6 +93,19 @@ const FilmTab = dynamic(
 interface PageProps {
   params: Promise<{ matchId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+// `getMatchDetailData` is `cache()`d, so the layout and page reads this shares
+// cost no extra query. A match the viewer cannot see falls back to the section name.
+export async function generateMetadata({
+  params,
+}: Pick<PageProps, "params">): Promise<Metadata> {
+  const { matchId } = await params;
+  // A transient read error must not take the page down for the sake of a tab
+  // label: the layout and page own that failure and route it to `error.tsx`.
+  const data = await getMatchDetailData(matchId).catch(() => null);
+  if (!data) return { title: "Match" };
+  return { title: `${data.match.player1.name} vs ${data.match.player2.name}` };
 }
 
 export default async function MatchDetailPage({

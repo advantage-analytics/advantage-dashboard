@@ -13,6 +13,8 @@ import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-sl
 import { DualDetail } from "@/components/dashboard/schedule/dual-detail";
 import { TournamentDetail } from "@/components/dashboard/schedule/tournament-detail";
 
+export const metadata = { title: "Event" };
+
 /**
  * One route, one renderer per kind.
  *
