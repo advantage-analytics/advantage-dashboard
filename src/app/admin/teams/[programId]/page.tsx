@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { AdminActivityCard } from "@/components/admin/admin-activity-card";
+import { AdminContactsCard } from "@/components/admin/admin-contacts-card";
 import { AdminConferenceCard } from "@/components/admin/admin-conference-card";
 import { AdminDetailsCard } from "@/components/admin/admin-details-card";
 import { AdminPeopleCard } from "@/components/admin/admin-people-card";
@@ -17,6 +18,7 @@ import {
   type TeamSectionId,
 } from "@/components/admin/team-sections";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
+import { emailOrigin } from "@/lib/site-url";
 import { conferenceOptionsFor } from "@/lib/services/programs/admin-program-actions";
 
 /**
@@ -103,13 +105,25 @@ export default async function AdminTeamPage({
    */
   const cards: Record<TeamSectionId, React.ReactNode> = {
     people: (
-      <AdminPeopleCard
-        programId={programId}
-        programName={data.program.schoolName}
-        members={data.members}
-        invites={data.invites}
-        seats={data.seats}
-      />
+      <div className="flex flex-col gap-6">
+        <AdminPeopleCard
+          programId={programId}
+          programName={data.program.schoolName}
+          members={data.members}
+          invites={data.invites}
+          seats={data.seats}
+        />
+        <AdminContactsCard
+          contacts={data.contacts}
+          // The same URL the claim-invite email carries (`claim.ts`); only a
+          // directory program has a key, so a custom org has no link.
+          joinLink={
+            data.program.programKey
+              ? `${emailOrigin()}/claim/${encodeURIComponent(data.program.programKey)}`
+              : null
+          }
+        />
+      </div>
     ),
     requests: (
       <AdminRequestsCard joinRequests={data.joinRequests} claim={data.claim} />
