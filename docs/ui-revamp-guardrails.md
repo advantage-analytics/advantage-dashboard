@@ -600,6 +600,30 @@ to put a testable seam.
 > `20260930083017_cancel_processing_job_queued_only.sql`, both applied live
 > 2026-09-30.
 
+> **A reviewed exception, added 2026-10-02: pilot individuals at 10 hours, from
+> `claude/admin-pilot-individuals-auth-c53e82`.** Owner decision: new users
+> 2h a month, pilot individuals (`users.individual_pilot`, managed from
+> Admin › Pilots, at most 20) 10h a month in their **personal workspace
+> only**, colleges 75h. Three frozen files changed what the spend allows and
+> nothing else:
+>
+> - `quota.ts` — `monthlyCapSecondsFor()` returns the pilot figure for
+>   `kind === "personal" && individualPilot`, so `reserveQuota()`,
+>   `peekQuota()` and every display read the same 10h. A team workspace never
+>   takes it, whoever uploads.
+> - `config.ts` — `PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS = 10`, and the shared
+>   pilot pool (`INDIVIDUAL_POOL_MONTHLY_CAP_HOURS`, passed to
+>   `reserve_individual_quota` as `p_pool_cap_seconds`) rose from 10h to
+>   20 × 10h so it never refuses before a pilot's own cap. The 20-player limit
+>   in `users_individual_pilot_guard` is what bounds the total; raise one only
+>   with the other.
+> - `resubmit-job.ts` — the auto-retry's personal workspace re-reads
+>   `users.individual_pilot` so a retry draws the same cap a fresh submission
+>   would; a failed read refuses (returns null) rather than defaulting.
+>
+> Unchanged: what is sent to the vendor, the reserve RPCs and their SQL,
+> program and custom-org caps, and the open-beta ceiling. No migration.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 

@@ -44,7 +44,10 @@ function publicUrlOrNull(
  */
 
 /** A cookie naming a workspace the viewer no longer belongs to falls back here. */
-function personalWorkspace(viewer: Viewer): Workspace {
+function personalWorkspace(
+  viewer: Viewer,
+  individualPilot: boolean,
+): Workspace {
   return {
     // Not an invention: `processing_usage` already keys an individual's
     // allowance by user id with account_type 'individual', so this IS the
@@ -64,6 +67,8 @@ function personalWorkspace(viewer: Viewer): Workspace {
     // The workspace is you, so its icon is your photo — see `Workspace.iconUrl`.
     iconUrl: viewer.avatarUrl,
     canSubmitVideo: true,
+    // Read off the viewer's own row — see `Workspace.individualPilot`.
+    individualPilot,
     // No program row, so no status to carry — see `Workspace.programStatus`.
     programStatus: null,
     // A program-wide policy about *other* people, in a workspace whose only
@@ -322,7 +327,7 @@ export const getWorkspaceContext = cache(
       supabase
         .from("users")
         .select(
-          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source",
+          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source, individual_pilot",
         )
         .eq("id", user.id)
         .single(),
@@ -338,7 +343,10 @@ export const getWorkspaceContext = cache(
 
     const viewer = toViewer(user.id, user.email ?? "", row, avatarUrl);
 
-    const available = [personalWorkspace(viewer), ...programs];
+    const available = [
+      personalWorkspace(viewer, row?.individual_pilot === true),
+      ...programs,
+    ];
 
     const cookieStore = await cookies();
     const requested = cookieStore.get(WORKSPACE_COOKIE)?.value;
