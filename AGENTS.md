@@ -1,13 +1,18 @@
 # AGENTS.md
 
 Guidance for coding agents working in this repository — Claude Code, Codex and
-Gemini all read this file. `CLAUDE.md` is a one-line `@AGENTS.md` import and
-`GEMINI.md` is a symlink to it, so there is exactly ONE copy to keep current.
-Edit this file; never edit the other two.
+Gemini all read this file. There is deliberately no `CLAUDE.md`: Claude Code
+reads `AGENTS.md` directly when no `CLAUDE.md` exists (v2.1.277+), and
+`GEMINI.md` is a symlink to this file, so there is exactly ONE copy to keep
+current. Don't add a `CLAUDE.md` — when one exists Claude Code reads it _instead
+of_ this file, so it would need an `@AGENTS.md` import to stay in sync. Personal
+overrides belong in `~/.claude/CLAUDE.md`; a project `CLAUDE.local.md` has the
+same shadowing effect, so set "Project instructions" to
+`claude-md-and-agents-md` in `/config` if you use one.
 
 It also hosts the `nextjs-agent-rules` block that `next dev` maintains. Because
-this file exists and carries that block, `next dev` skips `CLAUDE.md` entirely
-(see `node_modules/next/dist/server/lib/generate-agent-files.js`).
+this file carries that block, `next dev` leaves other files alone (see
+`node_modules/next/dist/server/lib/generate-agent-files.js`).
 
 ## Project Overview
 

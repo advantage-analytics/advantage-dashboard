@@ -79,6 +79,6 @@ against `impeccable`'s own updates, so the lockfile was removed. Run
 ## Where to go next
 
 - [`AGENTS.md`](AGENTS.md) — **how to work here** (architecture, conventions, commands).
-  The single source for every coding agent; `CLAUDE.md` and `GEMINI.md` both point at it.
+  The single source for every coding agent; `GEMINI.md` is a symlink to it, and Claude Code reads it directly.
 - [`MAP.md`](MAP.md) — where things are in this codebase (route table, source layout). Generated: run `npm run map` after adding a route.
 - [`docs/README.md`](docs/README.md) — index of deeper docs (pipeline, onboarding, LLM setup).
