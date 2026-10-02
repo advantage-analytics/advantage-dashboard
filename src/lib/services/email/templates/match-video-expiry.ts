@@ -1,5 +1,5 @@
 import { matchFilmHref } from "@/lib/match-video/film-entry";
-import { siteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
 
@@ -97,7 +97,7 @@ export function matchVideoExpiryEmail(
     ],
     cta: {
       label: "Keep this video",
-      url: `${siteUrl()}${matchFilmHref(matchId)}`,
+      url: `${emailOrigin()}${matchFilmHref(matchId)}`,
     },
     note: "Watching any point of it keeps it too. Nothing to do if you don't need the film.",
     footer,

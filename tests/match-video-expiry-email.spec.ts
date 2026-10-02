@@ -6,7 +6,7 @@ import {
   matchVideoExpiry,
 } from "@/lib/match-video/expiry";
 import { matchFilmHref } from "@/lib/match-video/film-entry";
-import { siteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 import {
   matchVideoExpiryEmail,
   type EmailMessage,
@@ -74,7 +74,7 @@ test("the body names the match in bold, its date, the months unwatched and that 
 
 test("a 'Keep this video' button links to the match's Film", () => {
   const msg = matchVideoExpiryEmail(CANVAS);
-  const url = `${siteUrl()}${matchFilmHref(CANVAS.matchId)}`;
+  const url = `${emailOrigin()}${matchFilmHref(CANVAS.matchId)}`;
   expect(url).toBe(`${SITE}/dashboard/matches/${CANVAS.matchId}?tab=film`);
   const href = url.replace(/&/g, "&amp;");
   expect(msg.html).toMatch(
