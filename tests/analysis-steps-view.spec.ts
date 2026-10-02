@@ -1,10 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-import {
-  formatDuration,
-  formatEta,
-  type MatchAnalysis,
-} from "@/lib/data/match-analysis";
+import { formatDuration } from "@/lib/format/duration";
+import { formatEta, type MatchAnalysis } from "@/lib/data/match-analysis";
 import {
   byClass,
   DRAWER_NO_ACTION_BODY,

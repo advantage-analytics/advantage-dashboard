@@ -1,5 +1,5 @@
 import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
-import { emailSiteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
 
@@ -69,7 +69,7 @@ export function programInviteEmail(input: ProgramInviteInput): EmailMessage {
   const { to, programName, inviterName, role, token, expiresAt } = input;
 
   const inviter = inviterName?.trim() || null;
-  const acceptUrl = `${emailSiteUrl()}/join/${encodeURIComponent(token)}`;
+  const acceptUrl = `${emailOrigin()}/join/${encodeURIComponent(token)}`;
 
   const subject = inviter
     ? `${inviter} invited you to ${programName} on Advantage`

@@ -254,9 +254,8 @@ export function formatFileSize(bytes: number): string {
  * Format a duration in SECONDS as a compact human string ("42s", "3m 12s",
  * "1h 30m").
  *
- * Note the sibling `formatDuration` below takes MILLISECONDS and returns a
- * different shape ("1H 30M"). Keep the names distinct — they are not
- * interchangeable.
+ * For a match length or an allowance in hours and minutes, see
+ * `@/lib/format/duration`.
  */
 export function formatClipLength(seconds: number): string {
   if (seconds < 60) return `${Math.ceil(seconds)}s`;
@@ -329,20 +328,6 @@ export function formatResolution(width: number, height: number): string {
 }
 
 /**
- * Format duration from milliseconds to H:MM format
- * Returns "-:--" if duration is 0 or undefined
- */
-export function formatDuration(ms: number | undefined): string {
-  if (!ms || ms === 0) return "";
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  if (hours === 0) return `${minutes}M`;
-  if (minutes === 0) return `${hours}H`;
-  return `${hours}H ${minutes}M`;
-}
-
-/**
  * Who is ahead on sets.
  *
  * Lives here rather than in a component because BOTH the Match step's WON tag
@@ -386,23 +371,6 @@ export function pulseOnce(el: HTMLElement): void {
     el.removeEventListener("animationend", onEnd);
   };
   el.addEventListener("animationend", onEnd);
-}
-
-/**
- * A span of SECONDS as "1h 47m", "35m", "2h".
- *
- * The third member of this file's formatter family, and the one for spans a
- * person reasons about in hours: a monthly allowance and a match length. Note
- * the siblings above — `formatClipLength` keeps seconds because a trim handle
- * needs them, and `formatDuration` shouts in caps for the eyebrow rows that
- * carry match metadata elsewhere in the app. Same quantity, three audiences.
- */
-export function formatHoursMinutes(seconds: number): string {
-  const total = Math.max(0, Math.round(seconds));
-  const h = Math.floor(total / 3600);
-  const m = Math.round((total % 3600) / 60);
-  if (h === 0) return `${m}m`;
-  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
 /**

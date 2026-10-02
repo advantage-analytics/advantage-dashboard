@@ -3,7 +3,7 @@
 #
 # Fires ONCE per session, the first time a React component under src/app or
 # src/components is touched, and points Claude at the two skills that carry
-# this project's React and design rules. A prose rule in CLAUDE.md is
+# this project's React and design rules. A prose rule in AGENTS.md is
 # something Claude may or may not notice; injected context arrives at the
 # moment the relevant file is open.
 #

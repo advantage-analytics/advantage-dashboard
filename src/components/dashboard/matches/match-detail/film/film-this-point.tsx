@@ -199,14 +199,7 @@ function HeadCell({
   children: React.ReactNode;
   className?: string;
 }) {
-  return (
-    <span
-      className={cn("text-[10px]", className)}
-      style={{ color: "var(--ink-400)" }}
-    >
-      {children}
-    </span>
-  );
+  return <span className={cn("eyebrow-sm", className)}>{children}</span>;
 }
 
 function StepButton({

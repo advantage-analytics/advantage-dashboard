@@ -21,6 +21,7 @@ import {
   COL,
   ROW,
   ROSTER_COLUMNS,
+  ROSTER_MIN_WIDTH,
 } from "@/components/dashboard/team/roster-table-layout";
 import {
   SCHEDULE_COLUMNS,
@@ -79,22 +80,18 @@ export function RosterPageSkeleton() {
           {isProgramStaff(active) && <RosterHeaderButtonsPending />}
         </div>
         <div className="surface-card overflow-x-auto">
-          <div className="min-w-[768px] px-6 pt-0.5 pb-1.5">
+          <div className={`${ROSTER_MIN_WIDTH} px-6 pt-0.5 pb-1.5`}>
             <div
               className={`${ROW} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
             >
-              {ROSTER_COLUMNS.map((column, i) =>
-                "spacer" in column ? (
-                  <span key={i} className="flex-1" />
-                ) : (
-                  <span
-                    key={column.label}
-                    className={`${column.col} eyebrow-sm ${column.center ? "text-center" : ""}`}
-                  >
-                    {column.label}
-                  </span>
-                ),
-              )}
+              {ROSTER_COLUMNS.map((column) => (
+                <span
+                  key={column.label}
+                  className={`${column.col} eyebrow-sm ${column.center ? "text-center" : ""}`}
+                >
+                  {column.label}
+                </span>
+              ))}
             </div>
             <PendingRegion label="roster">
               {Array.from({ length: 6 }, (_, i) => (
@@ -106,7 +103,6 @@ export function RosterPageSkeleton() {
                     <PendingBar className="size-7 shrink-0 rounded-full" />
                     <PendingBar className="w-32" />
                   </div>
-                  <span className="flex-1" />
                   <div className={COL.record}>
                     <PendingBar className="w-8" />
                   </div>

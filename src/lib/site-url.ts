@@ -9,9 +9,10 @@
  * ── Which resolver ──────────────────────────────────────────────────────────
  * Two, on purpose, split by who ends up holding the link:
  *
- * - `siteUrl()` (this) — configured, never the request. For anything that
- *   lands in an email, and anything with no request at all (cron sweeps, the
- *   vendor's webhook, `metadataBase`). A `Host` header an attacker can set
+ * - `siteUrl()` (this) — configured, never the request. For anything with
+ *   no request at all (cron sweeps, the vendor's webhook, `metadataBase`).
+ *   Links that land in an email go through `emailOrigin()` below, which pins
+ *   deployed builds to `PRODUCTION_APP_URL`. A `Host` header an attacker can set
  *   must never become the origin of a link somebody else is asked to click —
  *   `docs/email-system.md` §5.
  * - `requestOrigin()` (`request-origin.ts`, over `originFromHeaders()` below)
@@ -66,18 +67,36 @@ export function siteUrl(): string {
 }
 
 /**
- * The origin every link in an email points at.
+ * The production app — the only origin an email link may carry once deployed.
  *
- * `EMAIL_SITE_URL` when set, otherwise `siteUrl()`. Separate because the
- * deployment that sends a mail is not always the one the reader should land
- * on: the vendor webhook returns to whichever deployment submitted the job,
- * so a job started on staging sends its "analysis ready" mail from staging,
- * and with only `siteUrl()` that mail links real users to the staging domain.
- * Set this on every non-production environment that shares production's
- * users; leave it unset in production, where `siteUrl()` already agrees.
+ * A constant, not an environment variable, because the bug it closes was an
+ * environment variable doing exactly its job: Preview's `NEXT_PUBLIC_SITE_URL`
+ * is `https://www.advantage-analytics.dev`, and preview shares production's
+ * database. So a preview deployment that settled a real athlete's job — the
+ * vendor's webhook registered against it, or someone on the `.dev` matches
+ * page driving the status poll — mailed that athlete a `.dev` link, and
+ * nothing about the send looked wrong. A link that cannot depend on which
+ * deployment sent it cannot be read from that deployment's configuration.
  */
-export function emailSiteUrl(): string {
-  return process.env.EMAIL_SITE_URL?.trim().replace(/\/+$/, "") || siteUrl();
+export const PRODUCTION_APP_URL = "https://app.advantage-analytics.com";
+
+/**
+ * The origin for every link that leaves in an email.
+ *
+ * On any Vercel deployment, production or preview, this is
+ * `PRODUCTION_APP_URL`: they share one database, so the match, invite token
+ * or claim a preview-sent email names exists on production too, and the person
+ * reading it is a real user who should land on the real app. Only a local run
+ * (no `VERCEL_ENV`, or `vercel dev`'s `development`) falls back to `siteUrl()`,
+ * where a localhost link is the right link for whoever is at the machine.
+ *
+ * `siteUrl()` stays for what is about this deployment rather than the person
+ * reading the mail — `metadataBase`, same-origin checks, the vendor webhook.
+ */
+export function emailOrigin(): string {
+  const env = process.env.VERCEL_ENV;
+  if (env === "production" || env === "preview") return PRODUCTION_APP_URL;
+  return siteUrl();
 }
 
 /**

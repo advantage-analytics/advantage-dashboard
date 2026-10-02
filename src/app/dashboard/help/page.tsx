@@ -9,6 +9,8 @@ import type { StepState } from "@/components/dashboard/shared/vertical-steps";
 import { EXPORT_GUIDE_URL, SUPPORT_EMAIL } from "@/lib/constants";
 import { MAX_VIDEO_SIZE_BYTES } from "@/lib/services/splitstep/config";
 
+export const metadata = { title: "Help" };
+
 const SWINGVISION_TROUBLESHOOTING_URL =
   "https://support.swingvision.com/hc/en-us/articles/360058475731";
 
@@ -47,8 +49,8 @@ const sectionScrollMt = "scroll-mt-[88px] lg:scroll-mt-[72px]";
 const ANALYSIS_JOURNEY: { label: string; mark: StepState }[] = [
   { label: ANALYSIS_LABEL.uploading, mark: "now" },
   { label: ANALYSIS_LABEL.queued, mark: "wait" },
+  // `processing` and `deriving` share the word "Analyzing", so one row.
   { label: ANALYSIS_LABEL.processing, mark: "now" },
-  { label: ANALYSIS_LABEL.deriving, mark: "now" },
   { label: ANALYSIS_LABEL.completed, mark: "done" },
 ];
 

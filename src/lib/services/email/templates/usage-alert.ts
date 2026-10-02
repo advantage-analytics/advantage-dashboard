@@ -1,4 +1,4 @@
-import { emailSiteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 import {
   formatHoursLong,
   formatResetDate,
@@ -106,5 +106,5 @@ export function usageAlertEmail(input: UsageAlertInput): EmailMessage {
 }
 
 function usageUrl(): string {
-  return `${emailSiteUrl()}/dashboard/settings/usage`;
+  return `${emailOrigin()}/dashboard/settings/usage`;
 }

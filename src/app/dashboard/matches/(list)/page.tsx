@@ -22,6 +22,8 @@ import { matchesListShape } from "@/components/dashboard/matches/match-list-layo
 import { MatchDrawerSlot } from "@/components/dashboard/matches/match-drawer-slot";
 import { listMatchDrafts } from "@/lib/wizard/actions";
 
+export const metadata = { title: "Matches" };
+
 /**
  * The matches list, scoped to whichever workspace is active.
  *

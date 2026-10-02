@@ -3,6 +3,8 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { crestUrl, listTeamsForViewer } from "@/lib/data/teams-server";
 import { TeamsList } from "@/components/dashboard/settings/teams/teams-list";
 
+export const metadata = { title: "Teams" };
+
 /**
  * Settings › Teams.
  *

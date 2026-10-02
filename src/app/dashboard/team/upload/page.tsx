@@ -27,6 +27,8 @@ import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard
 import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-slot";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
 
+export const metadata = { title: "Upload a match" };
+
 /**
  * Uploading a match video in a team workspace.
  *

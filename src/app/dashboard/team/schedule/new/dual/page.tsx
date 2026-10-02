@@ -10,6 +10,8 @@ import { opponentDualHistory } from "@/lib/schedule/opponent-history";
 import { NewDualDataProvider } from "@/components/dashboard/schedule/static/dual-school-step";
 import { NewDualFlow } from "@/components/dashboard/schedule/static/new-dual-flow";
 
+export const metadata = { title: "New dual" };
+
 /**
  * This program's `programs.program_key`, so step one can drop it from the
  * directory. Read on its own rather than off the directory: the directory is

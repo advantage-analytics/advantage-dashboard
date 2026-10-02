@@ -60,7 +60,7 @@ export async function generateMetadata({
   const data = await load(token);
   if (!data) {
     return {
-      title: "Match report · Advantage",
+      title: { absolute: "Match report · Advantage" },
       robots: { index: false, follow: false },
     };
   }
@@ -71,7 +71,7 @@ export async function generateMetadata({
     .filter((part) => part && part.trim())
     .join(" · ");
   return {
-    title,
+    title: { absolute: title },
     description,
     robots: { index: false, follow: false },
     openGraph: { title, description, type: "article" },

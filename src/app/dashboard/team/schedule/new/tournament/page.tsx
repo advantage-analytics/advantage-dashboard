@@ -5,6 +5,8 @@ import { getLadder } from "@/lib/data/roster-server";
 import { getTeamSettings } from "@/lib/data/team-settings-server";
 import { NewTournamentFlow } from "@/components/dashboard/schedule/static/new-tournament-flow";
 
+export const metadata = { title: "New tournament" };
+
 /**
  * 3c, under the wizard's chrome: the weekend, then the field.
  *

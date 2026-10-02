@@ -9,6 +9,7 @@ import {
   useBetaWelcomeTerms,
 } from "@/components/dashboard/beta-welcome-dialog";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { HoursRing } from "@/components/dashboard/shared/hours-ring";
 import { PendingBar } from "@/components/dashboard/loading/pending";
 import type { HoursLeft } from "@/lib/services/splitstep/quota";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
@@ -123,7 +124,7 @@ export function BetaMeterPill({
         </span>
         {hours === "loading" && (
           <>
-            <HoursRing share={null} />
+            <HoursRing share={null} tone="inverse" />
             {/* Sized to "1.5h left", the figure most people will see. */}
             <PendingBar tone="inverse" className="h-2 w-[46px]" />
           </>
@@ -131,6 +132,7 @@ export function BetaMeterPill({
         {ready && (
           <>
             <HoursRing
+              tone="inverse"
               share={
                 1 -
                 usageFraction(
@@ -176,39 +178,6 @@ function outOfHoursDetail(
   return teamHours
     ? `Your team has used its ${cap} ${unit} this month. They reset on ${resetsOn}.`
     : `You've used your ${cap} ${unit} this month. They reset on ${resetsOn}.`;
-}
-
-/**
- * A 14px ring: the share of the month's hours still left, in white. `null`
- * draws the bare track — the loading shape, which promises no figure.
- */
-function HoursRing({ share }: { share: number | null }) {
-  const r = 6;
-  const c = 2 * Math.PI * r;
-  return (
-    <svg viewBox="0 0 16 16" className="size-3.5 -rotate-90" aria-hidden>
-      <circle
-        cx="8"
-        cy="8"
-        r={r}
-        fill="none"
-        stroke="rgba(255,255,255,0.3)"
-        strokeWidth="2"
-      />
-      {share !== null && (
-        <circle
-          cx="8"
-          cy="8"
-          r={r}
-          fill="none"
-          stroke="white"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeDasharray={`${c * share} ${c}`}
-        />
-      )}
-    </svg>
-  );
 }
 
 /**

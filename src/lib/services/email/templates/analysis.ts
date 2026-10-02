@@ -1,4 +1,4 @@
-import { emailSiteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 import {
   preferenceNote,
   renderEmail,
@@ -27,7 +27,7 @@ import {
  */
 
 function matchUrl(matchId: string): string {
-  return `${emailSiteUrl()}/dashboard/matches/${matchId}`;
+  return `${emailOrigin()}/dashboard/matches/${matchId}`;
 }
 
 export interface AnalysisReadyInput {

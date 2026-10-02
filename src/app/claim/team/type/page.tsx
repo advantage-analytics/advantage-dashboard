@@ -1,7 +1,7 @@
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { TeamTypeChoice } from "@/components/claim/team-type-choice";
 
-export const metadata = { title: "What kind of organization?" };
+export const metadata = { title: "Organization type" };
 
 /**
  * Screen 7.1 — what kind of organization. A radio, not a fork: the answer only

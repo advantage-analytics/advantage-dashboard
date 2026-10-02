@@ -262,9 +262,7 @@ export function KpiTile({
           narrow tile: an ellipsis rather than the clip that used to cut
           "SERVICE GAMES WON" to "SERVICE GAME", which read as a different
           statistic. */}
-      <p className="max-w-full truncate text-[9px] font-normal tracking-[2.5px] text-[var(--color-text-dim)] uppercase">
-        {label}
-      </p>
+      <p className="eyebrow-sm max-w-full truncate">{label}</p>
       <div className="flex items-end overflow-hidden">
         <ValueTransition
           valueKey={value}

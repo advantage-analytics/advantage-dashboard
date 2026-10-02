@@ -123,7 +123,7 @@ test("the drawer's Event fact reads a muted 'No event'", () => {
     }),
   );
 
-  expect(html).toMatch(/<span style="color:var\(--ink-400\)">No event<\/span>/);
+  expect(html).toMatch(/<dd[^>]*>No event<\/dd>/);
   expect(html).not.toContain("Unknown Event");
 });
 

@@ -107,7 +107,8 @@ import {
   focusRingCls,
   noteStripCls,
 } from "./styles";
-import { formatHoursMinutes, setHasData } from "./utils";
+import { formatHoursMinutes } from "@/lib/format/duration";
+import { setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
 import { FieldCaption } from "./FieldCaption";
 import {

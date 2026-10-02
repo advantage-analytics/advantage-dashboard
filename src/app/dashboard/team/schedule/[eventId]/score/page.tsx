@@ -14,6 +14,8 @@ import { nextRound } from "@/lib/schedule/tournament-run";
 import { ScoreOnlyFlow } from "@/components/dashboard/schedule/score-only-flow";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
 
+export const metadata = { title: "Add score" };
+
 /**
  * Scoring an event's lines, one after another — the ONE place a result or a
  * non-played outcome is recorded for a dual line or a tournament entry.

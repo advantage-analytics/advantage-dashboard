@@ -8,7 +8,7 @@ import { inviteSentence } from "@/lib/services/programs/join-role";
 import { createClient } from "@/lib/supabase/server";
 import { OnboardingFlow } from "./onboarding-flow";
 
-export const metadata = { title: "What should we call you?" };
+export const metadata = { title: "Your name" };
 
 /**
  * First-run onboarding — Onboarding & Team Setup screens 1.2 through 1.4, plus

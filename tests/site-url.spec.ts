@@ -4,8 +4,9 @@ import { siteUrl } from "@/lib/site-url";
 import { withEnv } from "./fixtures/with-env";
 
 /**
- * `siteUrl()` — the configured resolver every email template, the vendor
- * webhook URL and `layout.tsx`'s `metadataBase` call. On-screen links,
+ * `siteUrl()` — the configured resolver the vendor webhook URL, same-origin
+ * checks and `layout.tsx`'s `metadataBase` call, and `emailOrigin()`'s local
+ * fallback (`tests/email-origin.spec.ts`). On-screen links,
  * redirects and Supabase `redirectTo`s use `requestOrigin()` instead
  * (`tests/request-origin.spec.ts`).
  *

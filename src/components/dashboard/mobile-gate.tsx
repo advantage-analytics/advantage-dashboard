@@ -60,9 +60,7 @@ export function MobileGate() {
 
           {/* Eyebrow + hairline rule (system signature) */}
           <div className="mt-8 flex items-center gap-3">
-            <span className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
-              Desktop &amp; Tablet
-            </span>
+            <span className="eyebrow">Desktop &amp; Tablet</span>
             <span className="h-px flex-1 bg-[#F3F3F3]" />
           </div>
 

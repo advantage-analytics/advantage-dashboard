@@ -164,10 +164,14 @@ Each of these exists because of a specific failure:
 - **Format dates in UTC.** Expiries are compared against `now()` in Postgres.
   Local-zone formatting prints a date the database disagrees with by up to a day —
   and the day it disagrees is the day someone's link dies early.
-- **Build links with `emailSiteUrl()`** from `@/lib/site-url` — `EMAIL_SITE_URL`
-  when set, else `siteUrl()`. Staging sets it to the production app, because a
-  job submitted on staging sends its mail from staging. It deliberately allows
-  localhost: in development the person clicking is at the machine serving it.
+- **Build links with `emailOrigin()`** from `@/lib/site-url`, never `siteUrl()`.
+  On every Vercel deployment, preview included, it is
+  `https://app.advantage-analytics.com`: preview shares production's database,
+  so a preview deployment settling a real athlete's job used to mail them a
+  `www.advantage-analytics.dev` link (October 2026). Locally it falls back to
+  `siteUrl()`, which deliberately allows localhost: in development the person
+  clicking is at the machine serving it. `tests/email-origin.spec.ts` fails any
+  template or notification that reaches for `siteUrl()` again.
   Never derive an email link's origin from the request's `Host` header — an
   attacker who can set `Host` gets invitation links pointing at their own host,
   and the recipient hands over a valid token by clicking something that looks

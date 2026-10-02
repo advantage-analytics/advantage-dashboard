@@ -46,12 +46,12 @@ const ALL_ROWS: H2HRowConfig[] = H2H_GROUPS.flatMap((group) => group.configs);
 const EXPECTED_CUTS: Record<string, FilmCut> = {
   Aces: { serveResult: ["ace"] },
   "Double faults": { resultEnding: ["error"], resultShot: ["Serve"] },
-  "First serve in": { serveType: ["first"] },
-  "First serve points won": { serveType: ["first"] },
-  "Second serve points won": { serveType: ["second"] },
+  "First serve in": { serveType: ["first"], serveIn: true },
+  "First serve points won": { serveType: ["first"], serveIn: true },
+  "Second serve points won": { serveType: ["second"], serveIn: true },
   "Break points saved": { scoreType: ["breakpoint"] },
-  "First serve returns won": { serveType: ["first"] },
-  "Second serve returns won": { serveType: ["second"] },
+  "First serve returns won": { serveType: ["first"], serveIn: true },
+  "Second serve returns won": { serveType: ["second"], serveIn: true },
   "Break points converted": { scoreType: ["breakpoint"] },
   "Return winners": { returnResult: ["winner"] },
   Winners: { resultEnding: ["winner"], ending: "winner" },
@@ -73,14 +73,16 @@ const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
     resultShot: ["Serve"],
     resultPlayer: "you",
   },
-  "First serve in": { serveType: ["first"], server: "you" },
+  "First serve in": { serveType: ["first"], serveIn: true, server: "you" },
   "First serve points won": {
     serveType: ["first"],
+    serveIn: true,
     server: "you",
     resultOutcome: ["won"],
   },
   "Second serve points won": {
     serveType: ["second"],
+    serveIn: true,
     server: "you",
     resultOutcome: ["won"],
   },
@@ -92,11 +94,13 @@ const EXPECTED_YOU_CUTS: Record<string, FilmCut> = {
   // Your first-serve returns are the opponent's first serves.
   "First serve returns won": {
     serveType: ["first"],
+    serveIn: true,
     server: "opponent",
     resultOutcome: ["won"],
   },
   "Second serve returns won": {
     serveType: ["second"],
+    serveIn: true,
     server: "opponent",
     resultOutcome: ["won"],
   },
@@ -444,6 +448,54 @@ test.describe("a cell opens exactly the points its figure counts", () => {
     }
   });
 
+  test("serve and return rows count only serves that landed", () => {
+    // The opponent serves; you return. Mirrors `s.result = 'In'` in
+    // calculate_match_stats: a double fault is no second-serve return, and a
+    // lone first serve in the net (its second serve never recorded — Rudy
+    // Quan v Asahi Harazaki, point 78) is no first-serve point.
+    const pts = [
+      p({
+        id: "2nd-in-won",
+        serverIsPlayer1: false,
+        firstShotType: "Second Serve",
+        firstShotResult: "In",
+      }),
+      p({
+        id: "2nd-df",
+        serverIsPlayer1: false,
+        resultType: "Double Fault",
+        rallyLength: 0,
+        firstShotType: "Second Serve",
+        firstShotResult: "Net",
+      }),
+      p({
+        id: "1st-in-won",
+        serverIsPlayer1: false,
+        firstShotType: "First Serve",
+        firstShotResult: "In",
+      }),
+      p({
+        id: "1st-net-alone",
+        serverIsPlayer1: false,
+        rallyLength: 1,
+        firstShotType: "First Serve",
+        firstShotResult: "Net",
+      }),
+    ];
+    const ids = (cut: FilmCut) =>
+      applyFilmCut(pts, pts, cut, CTX).map((pt) => pt.id);
+    expect(ids(youCut(byConfig("Second serve returns won")))).toEqual([
+      "2nd-in-won",
+    ]);
+    expect(ids(byConfig("Second serve returns won").cut!)).toEqual([
+      "2nd-in-won",
+    ]);
+    expect(ids(youCut(byConfig("First serve returns won")))).toEqual([
+      "1st-in-won",
+    ]);
+    expect(ids(oppCut(byConfig("First serve in")))).toEqual(["1st-in-won"]);
+  });
+
   test("the count is taken over the shared filters' points", () => {
     // Set 1 only, through the shared filters: the cut is laid over them.
     const all = [
@@ -687,7 +739,7 @@ test.describe("derived (Advantage Intelligence) cuts", () => {
       ...MATCH_FILTER_KEYS,
       ...FILM_CUT_EXTRA_KEYS,
     ]);
-    expect(FILM_CUT_EXTRA_KEYS).toEqual(["ending"]);
+    expect(FILM_CUT_EXTRA_KEYS).toEqual(["ending", "serveIn"]);
     for (const row of DERIVED_ROWS) {
       if (!row.cut) continue;
       for (const key of Object.keys(row.cut)) {

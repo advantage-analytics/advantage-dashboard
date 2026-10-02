@@ -11,6 +11,7 @@ import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { getOverallPerformance } from "@/lib/data/performance-server";
 import { getPersonalSeasonKpis } from "@/lib/data/personal-kpis-server";
 import { getPersonalUsage } from "@/lib/data/usage-server";
+import type { Workspace } from "@/lib/workspace/types";
 import { getPersonalActivity } from "@/lib/data/personal-activity-server";
 import {
   countViewerWins,
@@ -41,6 +42,8 @@ import {
 import { HomeWidgetFrame } from "@/components/dashboard/home/home-widget-frame";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 
+export const metadata = { title: "Home" };
+
 export default async function Home() {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
@@ -69,7 +72,12 @@ export default async function Home() {
     );
   }
   // Past this point the viewer has at least one match.
-  const resources = startHomeResources(supabase, userId, matches, billingMonth);
+  const resources = startHomeResources(
+    supabase,
+    workspace.active,
+    matches,
+    billingMonth,
+  );
   return (
     <div className="flex w-full flex-1 flex-col bg-white">
       {report}
@@ -147,12 +155,14 @@ export default async function Home() {
 
 function startHomeResources(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
+  personal: Workspace,
   matches: Awaited<ReturnType<typeof getPersonalMatches>>,
   billingMonth: string,
 ) {
+  // A personal workspace is keyed by its owner's id.
+  const userId = personal.id;
   const performance = getOverallPerformance();
-  const usage = getPersonalUsage(userId, billingMonth);
+  const usage = getPersonalUsage(personal, billingMonth);
   const season = getPersonalSeasonKpis(userId);
   const activity = getPersonalActivity(userId, matches);
   const players = getMyPlayerIds();
