@@ -16,6 +16,14 @@ import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "advantage.seenReports";
 
+/**
+ * Fired in-tab whenever a report is marked seen. The `storage` event only
+ * reaches OTHER tabs, and the Matches list stays mounted while a report is
+ * open (the router keeps the page alive), so without this the list's dots were
+ * computed once and never cleared after the report had been read.
+ */
+const SEEN_EVENT = "advantage:report-seen";
+
 function readSet(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
@@ -53,6 +61,8 @@ export function markReportSeen(matchId: string): void {
   if (seen.has(matchId)) return;
   seen.add(matchId);
   writeSet(seen);
+  if (typeof window !== "undefined")
+    window.dispatchEvent(new Event(SEEN_EVENT));
 }
 
 /**
@@ -70,7 +80,19 @@ export function useUnseenReportIds(
   const [unseen, setUnseen] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
-    setUnseen(new Set(unseenReportIds(key ? key.split(",") : [])));
+    const sync = () =>
+      setUnseen(new Set(unseenReportIds(key ? key.split(",") : [])));
+    sync();
+    // Re-read when a report is opened here, in another tab, or when this page
+    // is shown again after being kept alive in the background.
+    window.addEventListener(SEEN_EVENT, sync);
+    window.addEventListener("storage", sync);
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      window.removeEventListener(SEEN_EVENT, sync);
+      window.removeEventListener("storage", sync);
+      document.removeEventListener("visibilitychange", sync);
+    };
     // key is a stable join of candidateIds — re-derives whenever the id set changes.
   }, [key]);
 
