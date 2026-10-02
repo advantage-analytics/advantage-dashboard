@@ -85,13 +85,24 @@ export type FilmCutEnding = "winner" | "unforced-error" | "rally-winner";
 export interface FilmCutExtras {
   /** One of the report's own result-type buckets (see `FilmCutEnding`). */
   ending?: FilmCutEnding | null;
+  /**
+   * Only points whose deciding serve landed (`firstShotResult` "In") — the
+   * published serve and return figures' own `s.result = 'In'`. Serve › Type
+   * alone admits a double fault on Second, and on First a point whose second
+   * serve the vendor never recorded (a lone first serve in the net). Serve ›
+   * Result cannot say it either: it reads the return row, not the serve.
+   */
+  serveIn?: boolean | null;
 }
 
 /** A statistic's cut: the shared vocabulary plus the Film-only extras. */
 export type FilmCut = Partial<MatchFilters> & FilmCutExtras;
 
 /** The extras' keys — every other key of a `FilmCut` is a `MatchFilters` key. */
-export const FILM_CUT_EXTRA_KEYS: readonly (keyof FilmCutExtras)[] = ["ending"];
+export const FILM_CUT_EXTRA_KEYS: readonly (keyof FilmCutExtras)[] = [
+  "ending",
+  "serveIn",
+];
 
 /**
  * A cut on its way to the Video tab, and the words the filter strip reads —
@@ -180,6 +191,7 @@ function matchesFilmCutEnding(
 export function matchesFilmCutExtras(point: MatchPoint, cut: FilmCut): boolean {
   const ending = cut.ending ?? null;
   if (ending !== null && !matchesFilmCutEnding(point, ending)) return false;
+  if (cut.serveIn && point.firstShotResult !== "In") return false;
   return true;
 }
 
