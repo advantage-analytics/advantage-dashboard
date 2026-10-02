@@ -34,12 +34,12 @@
 --     was not recorded. That fails closed — a reviewer sees less support for
 --     the claim, never more.
 --
---     It is dropped by 20261001190000_drop_legacy_complete_program_claim.sql
+--     It is dropped by 20261002044100_drop_legacy_complete_program_claim.sql
 --     once the new caller is deployed to production. Until then a direct call can still START a claim (as it
 --     always could), but can no longer decorate it.
 --
 -- Not in this migration: pilot terms enforcement
--- (20260926181600_pilot_terms_enforcement.sql) is still un-applied on live,
+-- (20261002044101_pilot_terms_enforcement.sql) was still un-applied on live,
 -- and these bodies are the LIVE ones (pg_get_functiondef, 2026-10-01), which
 -- carry no TA001 gate. That file is updated in the same PR to target the new
 -- signature, so applying it later cannot resurrect the exposed overload.
