@@ -88,11 +88,20 @@
   line-height: 1.4;
   color: var(--ink-500);
 }
+/* Eyebrows — the ONE uppercase label style. Card and section titles, kickers,
+   KPI labels (.eyebrow); table column headers and in-table group dividers
+   (.eyebrow-sm). Weight 400 and 1.5px tracking ("Tighter, lighter", chosen
+   2026-10-02 over the v2 500 / 2.5px after a side-by-side on real pages):
+   2.5px read as poster spacing next to 11–13px body text. 1.5px is the type
+   scale's existing uppercase step, not a new value. Never hand-roll an
+   `uppercase tracking-[…]` label — use these, so one edit restyles them all.
+   Form field labels are NOT eyebrows: they are the SettingsField caption
+   (11px · 400 · ink-600 · sentence case). */
 .eyebrow {
   font-family: var(--font-sans);
   font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 2.5px;
+  font-weight: 400;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
   color: var(--ink-400);
 }
@@ -100,7 +109,7 @@
   font-family: var(--font-sans);
   font-size: 9px;
   font-weight: 400;
-  letter-spacing: 2.5px;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
   color: var(--ink-400);
 }

@@ -81,7 +81,7 @@ export function KpiStripEmpty({
           {/* One line like the shipped label (see `KpiTile`): the strip drops
               tiles before a default label would need to wrap, so the tile's
               measured height holds at every width. */}
-          <p className="max-w-full truncate text-[9px] leading-[13.5px] font-normal tracking-[2.5px] text-[var(--ink-400)] uppercase">
+          <p className="eyebrow-sm max-w-full truncate leading-[13.5px]">
             {label}
           </p>
           <div className="flex h-7 shrink-0 items-end overflow-hidden">

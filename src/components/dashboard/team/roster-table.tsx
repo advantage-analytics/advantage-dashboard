@@ -752,7 +752,7 @@ export function RosterTable({
                   <button
                     type="button"
                     onClick={onStartLineup}
-                    className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-cell)] text-[11px] font-medium tracking-normal text-[var(--blue)] normal-case transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                    className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-cell)] font-sans text-[11px] font-medium tracking-normal text-[var(--blue)] normal-case transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
                   >
                     <GripVertical
                       className="size-3"

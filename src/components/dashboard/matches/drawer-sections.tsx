@@ -220,9 +220,7 @@ export function DrawerAnalysisSteps({
 
   return (
     <div className="flex flex-col gap-3">
-      <span className="text-[10px] leading-none font-medium tracking-[1.6px] text-[var(--ink-400)] uppercase">
-        Analysis
-      </span>
+      <span className="eyebrow leading-none">Analysis</span>
       <ol className="flex flex-col" aria-label="Progress">
         {view.steps.map((step, index) => (
           <DrawerStep
