@@ -59,8 +59,9 @@ export async function requireAdmin(): Promise<{ id: string } | null> {
  * Defense in depth, not trust in the caller: Next.js does not guarantee a
  * layout has actually run before a nested loader does, so this re-derives the
  * same two outcomes the layout enforces rather than assuming them. No
- * session is genuinely a session problem, so it goes to login — with `?next=` set to the page that
- * was asked for — exactly like the layout does; a signed-in non-admin gets `notFound()` — a 403 would
+ * session is genuinely a session problem, so it goes to login (with `?next=`
+ * set to the page asked for) exactly like the layout does; a signed-in
+ * non-admin gets `notFound()` — a 403 would
  * confirm the route exists and is worth probing, where a 404 says nothing.
  *
  * `cache()`d because the layout and every loader nested under it (e.g.

@@ -166,7 +166,7 @@ export function PilotsPageContent({
         title={
           removing ? `Remove ${removing.name} from the pilot?` : "Remove pilot?"
         }
-        description={`Their personal workspace goes back to the standard individual allowance from now on. Video they already sent this month still counts.`}
+        description="Their personal workspace goes back to the standard individual allowance from now on. Video they already sent this month still counts."
         confirmLabel="Remove pilot"
         pendingLabel="Removing…"
         tone="danger"
