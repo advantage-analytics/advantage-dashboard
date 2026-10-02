@@ -628,11 +628,11 @@ export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
   uploading: "Uploading",
   uploaded: "Uploaded",
   queued: "Queued",
-  processing: "Processing",
+  processing: "Analyzing",
   deriving: "Analyzing",
   // Same family as "Stats failed" and "Stats unavailable", and deliberately not
-  // a variant of "Processing" — the two would be one letter apart on screen
-  // while meaning opposite things about whether anything is still running.
+  // a variant of "Analyzing" or "Analyzed" — near-identical words on screen
+  // would mean opposite things about whether anything is still running.
   processed: "Stats pending",
   // Says what IS there rather than what is missing. "Partial" or "Stats
   // unavailable" would describe the same row by its gap, and the timeline is
@@ -882,9 +882,17 @@ export function isWorking(status: AnalysisStatus): boolean {
   return IN_FLIGHT.has(status) && !IDLE.has(status);
 }
 
-/** The step mark for an in-flight row: a spinner only while work runs, else a waiting dot. */
+/**
+ * The step mark for an in-flight row: a spinner only while work runs, else the
+ * dashed waiting ring.
+ *
+ * `queued` waits too. It is in `isWorking` because the vendor has the job and
+ * counts, schedules and the admin chip all treat it as live, but nothing is
+ * running for the player yet — the upload stepper already draws it as `wait`,
+ * so the tray, Matches and Roster must not spin it.
+ */
 export function inFlightMark(status: AnalysisStatus): "now" | "wait" {
-  return isWorking(status) ? "now" : "wait";
+  return isWorking(status) && status !== "queued" ? "now" : "wait";
 }
 
 /**
