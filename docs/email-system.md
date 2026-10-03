@@ -51,6 +51,51 @@ to the side. Only the first arrow is automated.
 > invite, not the program invite. The program invite is
 > [`templates/program-invite.ts`](../src/lib/services/email/templates/program-invite.ts).
 
+### Auth mail links
+
+Every auth template links to the app's `/confirm` route with the `token_hash`
+OTP flow. Two shapes, and which one a template uses is not a style choice:
+
+- **Static** — `{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=…&next=…`.
+  `invite`, `recovery` and `email_change`. Always the configured Site URL, so
+  always production.
+- **`{{ $link }}`** — `confirmation` and `magic_link`. Set once at the top of the
+  file: the static form, replaced by
+  `{{ .RedirectTo }}&token_hash=…&type=…` when the app supplied a redirect. That
+  is what lets a dev server on another port get its own link back, and what
+  lands the program-claim flow on `/claim/verify` (`claim-actions.ts`).
+
+**`.RedirectTo` is never empty — do not test it with `{{ if .RedirectTo }}`.**
+GoTrue's `GetReferrer` resolves it as: the request's `redirect_to` if the allow
+list accepts it, else the `Referer` header if _that_ passes, else the Site URL.
+So a send with no redirect — a resend from the Supabase dashboard, an admin API
+call, a redirect the allow list rejected — arrives with `.RedirectTo` equal to
+the bare origin, and appending `&token_hash=…` produces
+`https://app.advantage-analytics.com&token_hash=…`, which is not a host. That
+shipped: a confirmation resent from the dashboard on 2026-10-03 could not be
+opened, while app sign-ups kept working because they always pass
+`/confirm?next=…`.
+
+The rule the templates implement: **use `.RedirectTo` only when it contains a
+`?`**, the one shape `&` can be appended to. Go templates here have no
+`contains`, so it is a `range` over the string's bytes looking for 63. Comparing
+against `.SiteURL` is not enough — a Referer fallback can be the origin with a
+trailing slash or an app page. Consequences for callers:
+
+- An `emailRedirectTo` for sign-up or `signInWithOtp` **must be
+  `<origin>/confirm?next=<path>`**. A redirect with no query string is ignored
+  and the mail falls back to `/confirm … &next=/dashboard` on production.
+- The origin must be on the project's redirect allow list, or GoTrue discards
+  it before the template ever sees it — same fallback.
+- `recovery` stays static on purpose: its caller sends a bare path.
+
+`tests/auth-email-links.spec.ts` pins the link shapes. It cannot render a
+template; to see real output, point a throwaway local Supabase project's
+`[auth.email.template.*]` at these files and read the mail in Mailpit, sending
+once with a `redirect_to` and once without. A change to any of these files does
+nothing until it is **pasted into the hosted project** (Authentication → Emails
+→ Templates) — the repo copy is not deployed by anything.
+
 ---
 
 ## 2. The module
