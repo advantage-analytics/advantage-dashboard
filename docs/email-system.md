@@ -37,15 +37,17 @@ across the two would catch real divergence, and has not been written.
 six `.html` files → what is uploaded to Supabase. `shell.ts` is the fourth, off
 to the side. Only the first arrow is automated.
 
-> ⚠️ **The generator and its output have already diverged.** The committed
-> `.html` files carry the `@font-face` block in its own Outlook-hidden `<style>`;
-> `build_email_templates.py:65` still emits an `@import` of the Google Fonts CSS
-> inside the main block — the exact failure `shell.ts` warns about. Someone
-> hand-patched the generated files and never ported it back. **Re-running the
-> generator today reverts that fix in all six templates.** Port the fix into the
-> script before you next run it, and add the equivalent of
-> `tests/generate-map.spec.ts` (run generator, assert no diff) so it cannot
-> happen again.
+The first arrow is enforced: `tests/email-templates-generated.spec.ts` runs the
+generator into a temp directory and fails if any of the six files differs by a
+byte. So a template change is made **in the script**, then
+`python3 scripts/build_email_templates.py` and commit both — an edit made only
+in an `.html` file fails the suite. (The two had drifted once: a font fix and a
+copy change lived only in the `.html` files, and re-running the generator would
+have reverted both.) `--out <dir>` writes somewhere other than the repo.
+
+The second arrow is still by hand. **Subjects are not in the `.html` files** —
+they live in the script's `TEMPLATES` and in the dashboard, so a subject change
+is a paste of its own.
 
 > Naming trap: `supabase/email-templates/invite.html` is **Supabase Auth's**
 > invite, not the program invite. The program invite is

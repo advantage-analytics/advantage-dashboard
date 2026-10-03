@@ -18,12 +18,21 @@ confirmation and magic_link instead use link_prelude(), which prefers the
 app's emailRedirectTo — see that function for why, and for why recovery
 must not follow.
 
-Outputs:
-  - supabase/email-templates/<kind>.html   (version-controlled source)
-  - /tmp/email_templates_patch.json         (Supabase PATCH payload: subjects + content)
+The six .html files and this script must agree byte for byte —
+tests/email-templates-generated.spec.ts runs it into a temp directory and
+fails on any difference. Change the script, re-run it, commit both. Nothing
+deploys the result: paste each changed file, and any changed subject, into the
+hosted project (Authentication → Emails).
+
+    python3 scripts/build_email_templates.py                # write the repo's files
+    python3 scripts/build_email_templates.py --out DIR      # write somewhere else
+    python3 scripts/build_email_templates.py --patch F.json # + Supabase PATCH payload
 """
+import argparse
 import json
 import os
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ---- Design tokens: v2 light ramp (src/styles/design-system/colors.css) ----
 INK_900 = "#0D0D0D"  # headings
@@ -64,7 +73,6 @@ SUPPORT_EMAIL = "team@advantage-analytics.com"
 YEAR = 2026
 
 STYLE = f"""
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
     body {{ margin:0; padding:0; width:100% !important; background:{SURFACE_PAGE};
       -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;
       -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }}
@@ -97,6 +105,27 @@ STYLE = f"""
 """
 
 
+# Verbatim, not an f-string: the braces are CSS.
+FONTS = """  <!-- Inter sits in its own <style> block, deliberately after the layout rules.
+       Gmail strips @font-face and can discard the whole block it lives in, so the
+       expendable thing goes last: losing this costs the font and leaves the
+       responsive rules above untouched. Hidden from Outlook, which ignores
+       @font-face and drops to Times New Roman when it sees one. Order relative to
+       usage doesn't matter — @font-face registers at parse time.
+       One file covers all three weights; Inter v20 is a variable font. -->
+  <!--[if !mso]><!-->
+  <style>
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:300; font-display:swap;
+      src:url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2) format('woff2'); }
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:400; font-display:swap;
+      src:url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2) format('woff2'); }
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:500; font-display:swap;
+      src:url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2) format('woff2'); }
+  </style>
+  <!--<![endif]-->
+"""
+
+
 def shell(title, preheader, eyebrow, heading, blocks):
     """The card. `blocks` are complete <tr> rows slotted under the headline."""
     return f"""<!DOCTYPE html>
@@ -112,7 +141,8 @@ def shell(title, preheader, eyebrow, heading, blocks):
   <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
   <![endif]-->
   <style>{STYLE}</style>
-</head>
+
+{FONTS}</head>
 <body class="bg" style="margin:0; padding:0; background:{SURFACE_PAGE};">
   <span style="display:none !important; visibility:hidden; opacity:0; color:transparent; height:0; width:0; overflow:hidden; mso-hide:all;">{preheader}</span>
 
@@ -337,18 +367,18 @@ def link_body(intro, cta, vml_width, url, expiry, ignore):
 TEMPLATES = {
     "confirmation": dict(
         prelude=link_prelude("email", "/dashboard"),
-        subject="Confirm your email · Advantage Analytics",
+        subject="Confirm your email · Advantage",
         title="Confirm your email",
         eyebrow="ACCOUNT SETUP",
-        preheader="Confirm your email address to finish setting up your Advantage Analytics account.",
+        preheader="Confirm your email address to finish setting up your Advantage account.",
         heading="Confirm your email address",
         body=link_body(
-            "Welcome to Advantage Analytics. Confirm your email to get started — Advantage Intelligence now takes your match video and turns it into court-level performance insight. SwingVision exports work too.",
+            "Welcome to Advantage. Confirm your email to get started — Advantage Intelligence now takes your match video and turns it into court-level performance insight. SwingVision exports work too.",
             "Confirm email",
             170,
             LINK,
             "This link expires in 24 hours.",
-            "If you didn't create an Advantage Analytics account, you can safely ignore this email.",
+            "If you didn't create an Advantage account, you can safely ignore this email.",
         ),
     ),
     "invite": dict(
@@ -368,13 +398,13 @@ TEMPLATES = {
     ),
     "magic_link": dict(
         prelude=link_prelude("magiclink", "/dashboard"),
-        subject="Your sign-in link · Advantage Analytics",
+        subject="Your sign-in link · Advantage",
         title="Sign in",
         eyebrow="SIGN IN",
-        preheader="Your sign-in link for Advantage Analytics. No password needed.",
+        preheader="Your sign-in link for Advantage. No password needed.",
         heading="Your sign-in link",
         body=link_body(
-            "Use the button below to sign in to Advantage Analytics. No password needed.",
+            "Use the button below to sign in to Advantage. No password needed.",
             "Sign in",
             130,
             LINK,
@@ -383,13 +413,13 @@ TEMPLATES = {
         ),
     ),
     "recovery": dict(
-        subject="Reset your password · Advantage Analytics",
+        subject="Reset your password · Advantage",
         title="Reset your password",
         eyebrow="ACCOUNT SECURITY",
-        preheader="Choose a new password for your Advantage Analytics account.",
+        preheader="Choose a new password for your Advantage account.",
         heading="Reset your password",
         body=link_body(
-            "We received a request to reset your Advantage Analytics password. Choose a new one with the button below.",
+            "We received a request to reset your Advantage password. Choose a new one with the button below.",
             "Reset password",
             180,
             confirm_url("recovery", "/update-password"),
@@ -398,7 +428,7 @@ TEMPLATES = {
         ),
     ),
     "email_change": dict(
-        subject="Confirm your new email · Advantage Analytics",
+        subject="Confirm your new email · Advantage",
         title="Confirm email change",
         eyebrow="ACCOUNT SETTINGS",
         preheader="Confirm your new address to finish updating the email on your account.",
@@ -406,7 +436,7 @@ TEMPLATES = {
         body="".join(
             [
                 para(
-                    "Confirm this address to finish updating the email on your Advantage Analytics account."
+                    "Confirm this address to finish updating the email on your Advantage account."
                 ),
                 # The two addresses carry more weight as hairline rows than as prose.
                 hairline(),
@@ -427,10 +457,10 @@ TEMPLATES = {
         ),
     ),
     "reauthentication": dict(
-        subject="Your verification code · Advantage Analytics",
+        subject="Your verification code · Advantage",
         title="Verification code",
         eyebrow="SECURITY CHECK",
-        preheader="Your Advantage Analytics verification code.",
+        preheader="Your Advantage verification code.",
         heading="Your verification code",
         body="".join(
             [
@@ -445,24 +475,45 @@ TEMPLATES = {
 }
 
 
+def render(kind):
+    t = TEMPLATES[kind]
+    return t.get("prelude", "") + shell(
+        t["title"], t["preheader"], t["eyebrow"], t["heading"], t["body"]
+    )
+
+
 def main():
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    out_dir = os.path.join(root, "supabase", "email-templates")
-    os.makedirs(out_dir, exist_ok=True)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--out",
+        default=os.path.join(ROOT, "supabase", "email-templates"),
+        help="directory to write the six .html files to (default: the repo's "
+        "supabase/email-templates). tests/email-templates-generated.spec.ts "
+        "points this at a temp directory.",
+    )
+    parser.add_argument(
+        "--patch",
+        help="also write the Supabase PATCH payload (subjects + content) to this "
+        "JSON file. Not written unless asked for.",
+    )
+    args = parser.parse_args()
+
+    os.makedirs(args.out, exist_ok=True)
     patch = {}
     for kind, t in TEMPLATES.items():
-        html = t.get("prelude", "") + shell(
-            t["title"], t["preheader"], t["eyebrow"], t["heading"], t["body"]
-        )
-        with open(os.path.join(out_dir, f"{kind}.html"), "w") as f:
+        html = render(kind)
+        # newline="\n": the files are compared byte for byte, on any platform.
+        path = os.path.join(args.out, f"{kind}.html")
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
             f.write(html)
         patch[f"mailer_subjects_{kind}"] = t["subject"]
         patch[f"mailer_templates_{kind}_content"] = html
-    with open("/tmp/email_templates_patch.json", "w") as f:
-        json.dump(patch, f)
-    print(f"Wrote {len(TEMPLATES)} templates to {out_dir}")
-    for kind in TEMPLATES:
-        print(f"  - {kind}.html ({len(TEMPLATES[kind]['body'])} body chars)")
+    if args.patch:
+        with open(args.patch, "w", encoding="utf-8") as f:
+            json.dump(patch, f)
+    print(f"Wrote {len(TEMPLATES)} templates to {args.out}")
+    for kind, t in TEMPLATES.items():
+        print(f"  - {kind}.html  subject: {t['subject']}")
 
 
 if __name__ == "__main__":
