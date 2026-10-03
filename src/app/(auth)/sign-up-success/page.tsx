@@ -1,86 +1,63 @@
 "use client";
 
 import Link from "next/link";
-import AccentLine from "@/components/auth/accent-line";
+import FormHeader from "@/components/auth/form-header";
+import AuthButton from "@/components/auth/auth-button";
+import AuthFooter, { AUTH_LINK } from "@/components/auth/auth-footer";
+
+/** What happens next, in the order it happens. */
+const STEPS = [
+  "Open the link from your inbox",
+  "Confirm your email address",
+  "Land on your dashboard",
+];
 
 export default function Page() {
   return (
     <div
-      className="flex w-full max-w-[360px] flex-col items-center gap-[24px]"
+      className="flex w-full max-w-[360px] flex-col gap-[24px]"
       style={{ animation: "fadeUp 0.5s ease-out" }}
     >
-      {/* Accent line */}
-      <div className="w-full">
-        <AccentLine />
-      </div>
+      <FormHeader
+        eyebrow="Account created"
+        title="You've Joined the Team."
+        description="We sent a confirmation link to your email. Open it to activate your account."
+      />
 
-      {/* Check icon */}
-      <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[rgba(0,0,0,0.03)]">
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="var(--color-accent-blue)"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="2" y="4" width="20" height="16" rx="2" />
-          <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-        </svg>
-      </div>
-
-      {/* Header */}
-      <div className="flex w-full flex-col gap-[12px]">
-        <h2 className="text-[28px] leading-[1.1] font-light tracking-[-0.5px] text-[var(--color-text-primary)]">
-          You&apos;ve Joined the Team.
-        </h2>
-        <p className="text-[12px] leading-[1.5] text-[var(--color-text-muted)]">
-          Check your email to confirm your account.
-        </p>
-        <p className="text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
-          We&apos;ve sent a confirmation link to your email address. Please
-          check your inbox and follow the instructions to activate your account.
-        </p>
-      </div>
-
-      {/* Actions */}
-      <div className="flex w-full flex-col items-center gap-[18px]">
-        <button
-          type="button"
-          onClick={() => window.open("mailto:", "_blank")}
-          className="flex h-[44px] w-full items-center justify-center rounded-[6px] border border-[rgba(59,130,246,0.25)] bg-[rgba(59,130,246,0.08)] text-[13px] font-medium tracking-[1px] text-[var(--color-accent-blue)] transition-all duration-200 hover:border-[var(--color-accent-blue)] active:scale-[0.97]"
-        >
-          Open Email App
-        </button>
-
-        <Link href="/login" className="flex items-center gap-[6px]">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--color-text-dim)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+      <ol className="flex flex-col">
+        {STEPS.map((step, index) => (
+          <li
+            key={step}
+            className="flex items-baseline gap-[12px] border-t border-[var(--border-hairline)] py-[10px]"
           >
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-          <span className="text-[12px] text-[var(--color-text-secondary)]">
-            Back to Sign In
-          </span>
-        </Link>
+            <span className="mono tabular text-[11px] text-[var(--ink-500)]">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <span className="text-body-sm">{step}</span>
+          </li>
+        ))}
+      </ol>
 
-        <p className="text-center text-[11px] leading-[1.6] text-[var(--color-text-dim)]">
-          Didn&apos;t receive the email? Check your spam folder or try{" "}
-          <Link href="/sign-up" className="text-[var(--color-accent-blue)]">
-            signing up
-          </Link>{" "}
-          again.
-        </p>
+      <div className="flex flex-col gap-[16px]">
+        <AuthButton onClick={() => window.open("mailto:", "_blank")}>
+          Open Email App
+        </AuthButton>
+
+        <AuthFooter>
+          <span className="text-body-sm">
+            Already confirmed?{" "}
+            <Link href="/login" className={AUTH_LINK}>
+              Sign in
+            </Link>
+          </span>
+          <span className="text-micro">
+            Nothing after a minute? Check your spam folder or{" "}
+            <Link href="/sign-up" className={AUTH_LINK}>
+              sign up again
+            </Link>
+            .
+          </span>
+        </AuthFooter>
       </div>
     </div>
   );

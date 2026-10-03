@@ -327,8 +327,27 @@ export interface AdminTeamEvent {
   result: AdminTeamEventResult;
 }
 
+/**
+ * One `program_contacts` row — a staff address the directory scrape (or an
+ * admin) recorded against the program. Not a member and not an invitation:
+ * nothing here grants access.
+ */
+export interface AdminTeamContact {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string | null;
+  /** `scrape` | `admin` — null only on a row from before the column. */
+  source: string | null;
+  wasEmailed: boolean;
+}
+
 interface AdminTeamData {
   program: AdminTeamProgram;
+  /** Recorded staff addresses, scraped ones first, then by address. */
+  contacts: AdminTeamContact[];
+  /** True when the contacts read failed — `contacts` is then empty, not "none". */
+  contactsFailed: boolean;
   /** The most recent claim, or null for a program nobody has ever claimed. */
   claim: AdminTeamClaim | null;
   members: AdminTeamMember[];
@@ -1210,6 +1229,7 @@ export const getAdminTeam = cache(
       pilot,
       conference,
       activity,
+      contactsResult,
     ] = await Promise.all([
       crestUrl(row.crest_path),
       admin
@@ -1251,6 +1271,14 @@ export const getAdminTeam = cache(
       readPilot(admin, row, viewer.id),
       readConference(admin, programId, row.conference_id),
       readActivity(admin, programId),
+      // Service role: `program_contacts` has no policy and no grant on
+      // purpose — real people's work addresses, readable only from here, and
+      // this loader is already behind `requireAdminOrNotFound()`.
+      admin
+        .from("program_contacts")
+        .select("id, email, name, role, source, was_emailed")
+        .eq("program_id", programId)
+        .order("email", { ascending: true }),
     ]);
 
     if (claimResult.error) {
@@ -1304,8 +1332,40 @@ export const getAdminTeam = cache(
       crestUrl: crest,
     };
 
+    if (contactsResult.error) {
+      console.error("[admin team] could not read contacts", {
+        programId,
+        error: contactsResult.error.message,
+      });
+    }
+
+    const contacts: AdminTeamContact[] = (
+      (contactsResult.data ?? []) as {
+        id: string;
+        email: string;
+        name: string | null;
+        role: string | null;
+        source: string | null;
+        was_emailed: boolean;
+      }[]
+    )
+      .map((contact) => ({
+        id: contact.id,
+        email: contact.email,
+        name: contact.name,
+        role: contact.role,
+        source: contact.source,
+        wasEmailed: contact.was_emailed,
+      }))
+      // Scraped rows first: they are the ones nobody has vouched for.
+      .sort(
+        (a, b) => Number(b.source === "scrape") - Number(a.source === "scrape"),
+      );
+
     return {
       program,
+      contacts,
+      contactsFailed: Boolean(contactsResult.error),
       claim: rawClaim
         ? {
             id: rawClaim.id,
