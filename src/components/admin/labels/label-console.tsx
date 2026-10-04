@@ -701,10 +701,13 @@ export function LabelConsole({
   }, [expanded, placement.shotId]);
 
   function place(point: CourtPoint) {
-    const step = nextPlacement(placement, point);
-    if (!step || placement.shotId === null) return;
+    if (placement.shotId === null) return;
+    const shot = findShot(points, placement.shotId);
+    if (!shot) return;
+    const step = nextPlacement(placement, point, labelShotValues(shot));
+    if (!step) return;
     setPlacement(step.state);
-    void patchShot(placement.shotId, step.patch);
+    void patchShot(shot.id, step.patch);
   }
 
   return (

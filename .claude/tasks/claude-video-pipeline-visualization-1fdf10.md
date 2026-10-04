@@ -152,7 +152,7 @@ ready).
 
 ## T11 · Derive shot Result and Placement from the coordinates
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/services/labels/shot-derived.ts, src/components/admin/labels/court-placement.ts, src/components/admin/labels/label-console.tsx, tests/label-shot-derived.spec.ts, tests/label-console-edit.spec.ts (guess)
 - **done when:**

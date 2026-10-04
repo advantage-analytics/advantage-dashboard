@@ -10,6 +10,10 @@
  */
 
 import type { LabelShotPatch } from "@/lib/services/labels/edit";
+import {
+  deriveShotResult,
+  type ShotGeometry,
+} from "@/lib/services/labels/shot-derived";
 import type { CourtPoint } from "./court-geometry";
 
 export type PlacementTarget = "contact" | "landing";
@@ -34,23 +38,34 @@ const toCm = (n: number) => Math.round(n * 100) / 100;
  * One court click: the patch it writes to the selected stroke and the state
  * the next click starts from. Null when no stroke is selected — the click
  * places nothing.
+ *
+ * `shot` is the stroke being placed, as it stands before the click. When the
+ * click leaves it with both a contact and a landing — the landing click, or a
+ * re-placed contact on a stroke that already has its landing — the patch also
+ * carries the `result` those coordinates derive (shot-derived.ts), so In /
+ * Out / Net is saved in the same write as the position. A stroke still
+ * missing an end gets no `result` key and keeps its stored value.
  */
 export function nextPlacement(
   state: PlacementState,
   point: CourtPoint,
+  shot: ShotGeometry,
 ): { state: PlacementState; patch: LabelShotPatch } | null {
   if (state.shotId === null) return null;
   const x = toCm(point.x);
   const y = toCm(point.y);
-  return state.target === "contact"
-    ? {
-        state: { shotId: state.shotId, target: "landing" },
-        patch: { contact_x: x, contact_y: y },
-      }
-    : {
-        state: { shotId: state.shotId, target: "contact" },
-        patch: { landing_x: x, landing_y: y },
-      };
+  const placed: LabelShotPatch =
+    state.target === "contact"
+      ? { contact_x: x, contact_y: y }
+      : { landing_x: x, landing_y: y };
+  const result = deriveShotResult({ ...shot, ...placed });
+  return {
+    state: {
+      shotId: state.shotId,
+      target: state.target === "contact" ? "landing" : "contact",
+    },
+    patch: result === null ? placed : { ...placed, result },
+  };
 }
 
 /**

@@ -191,3 +191,14 @@ Decisions:
 
 1. A game write is one UPDATE per row with no transaction; a failure midway leaves a partly rotated game (each row consistent on its own).
 2. Moving a point into a tiebreak uses the majority-server rule, which is wrong for a rotated game; re-run the rotation after such a move.
+
+## T11 · Derive shot Result and Placement from the coordinates — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New pure `shot-derived.ts`: `deriveShotResult` (net / in / out from contact and landing, service box for serves) and `shotPlacement` (reusing `serveZone` / `directionZone`). `nextPlacement` now takes the shot and the court click that completes a contact+landing pair carries the derived `result` in the same patch.
+
+**follow-ups:**
+
+1. Changing a shot's stroke (rally ↔ serve) does not re-derive the result.
+2. Shots placed before this change keep their stored result until re-placed.

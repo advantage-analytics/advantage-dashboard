@@ -19,44 +19,90 @@ import {
   saveStatusView,
   type SaveEvent,
 } from "@/components/admin/labels/save-status";
+import type { ShotGeometry } from "@/lib/services/labels/shot-derived";
 
 /**
  * T6's client-side pure pieces: the court's click sequence and its prompt,
  * the header's save line, and the text the time and position cells accept.
  */
 
+/** A stroke nobody has placed yet. */
+const UNPLACED: ShotGeometry = {
+  stroke: "forehand",
+  contact_x: null,
+  contact_y: null,
+  landing_x: null,
+  landing_y: null,
+};
+
 test.describe("court click placement", () => {
   test("first click writes contact_x/y, the second landing_x/y", () => {
     const selected = startPlacement("s-return");
     expect(placementPrompt(selected, 2)).toBe("Click where shot 2 was hit");
 
-    const first = nextPlacement(selected, { x: 1.234, y: 24.567 });
+    const first = nextPlacement(selected, { x: 1.234, y: 24.567 }, UNPLACED);
     expect(first).not.toBeNull();
+    // Only one end is known: no `result` key, so the stored value stands.
     expect(first!.patch).toEqual({ contact_x: 1.23, contact_y: 24.57 });
     expect(placementPrompt(first!.state, 2)).toBe("Click where shot 2 landed");
 
-    const second = nextPlacement(first!.state, { x: -2.1, y: 3.49 });
-    expect(second!.patch).toEqual({ landing_x: -2.1, landing_y: 3.49 });
+    // The landing click completes the pair: `result` rides in the same patch.
+    const hit = { ...UNPLACED, ...first!.patch };
+    const second = nextPlacement(first!.state, { x: -2.1, y: 3.49 }, hit);
+    expect(second!.patch).toEqual({
+      landing_x: -2.1,
+      landing_y: 3.49,
+      result: "in",
+    });
 
     // A third click starts over at the hit, on the same stroke.
     expect(second!.state).toEqual({ shotId: "s-return", target: "contact" });
     expect(placementPrompt(second!.state, 2)).toBe(
       "Click where shot 2 was hit",
     );
-    expect(nextPlacement(second!.state, { x: 0, y: 1 })!.patch).toEqual({
-      contact_x: 0,
-      contact_y: 1,
+    // Re-placing the hit on the landing's own side re-derives the result.
+    const placed = { ...hit, ...second!.patch };
+    expect(nextPlacement(second!.state, { x: 0, y: 1 }, placed)!.patch).toEqual(
+      { contact_x: 0, contact_y: 1, result: "net" },
+    );
+  });
+
+  test("the landing click's result follows the stroke being placed", () => {
+    const landing = { shotId: "s", target: "landing" } as const;
+    const from = (stroke: ShotGeometry["stroke"]): ShotGeometry => ({
+      ...UNPLACED,
+      stroke,
+      contact_x: 1,
+      contact_y: -0.5,
+    });
+    // Deep in the far court, past the service line: a rally ball is in, a
+    // serve is long.
+    const deep = { x: -2, y: 20 };
+    expect(nextPlacement(landing, deep, from("backhand"))!.patch.result).toBe(
+      "in",
+    );
+    expect(
+      nextPlacement(landing, deep, from("first_serve"))!.patch.result,
+    ).toBe("out");
+    // A landing click on a stroke with no contact stored derives nothing.
+    expect(nextPlacement(landing, deep, UNPLACED)!.patch).toEqual({
+      landing_x: -2,
+      landing_y: 20,
     });
   });
 
   test("selecting a stroke always starts at the hit", () => {
-    const halfway = nextPlacement(startPlacement("a"), { x: 0, y: 0 })!.state;
+    const halfway = nextPlacement(
+      startPlacement("a"),
+      { x: 0, y: 0 },
+      UNPLACED,
+    )!.state;
     expect(halfway.target).toBe("landing");
     expect(startPlacement("b")).toEqual({ shotId: "b", target: "contact" });
   });
 
   test("with nothing selected a click places nothing and there is no prompt", () => {
-    expect(nextPlacement(NO_PLACEMENT, { x: 0, y: 0 })).toBeNull();
+    expect(nextPlacement(NO_PLACEMENT, { x: 0, y: 0 }, UNPLACED)).toBeNull();
     expect(placementPrompt(NO_PLACEMENT, null)).toBeNull();
     expect(placementPrompt(startPlacement("gone"), null)).toBeNull();
   });
@@ -64,7 +110,7 @@ test.describe("court click placement", () => {
   test("a click at the art box's percent position becomes metres via toCourt", () => {
     // The centre of the art box is the centre of the court: the net.
     const centre = toCourt({ sx: 50, sy: 50 });
-    const step = nextPlacement(startPlacement("s"), centre)!;
+    const step = nextPlacement(startPlacement("s"), centre, UNPLACED)!;
     expect(Object.keys(step.patch)).toEqual(["contact_x", "contact_y"]);
     expect(step.patch.contact_x).toBe(0);
     expect(Math.abs(step.patch.contact_y! - 11.885)).toBeLessThanOrEqual(
