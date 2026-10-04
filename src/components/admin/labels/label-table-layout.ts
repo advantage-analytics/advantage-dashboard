@@ -15,7 +15,7 @@
  */
 
 export const POINT_GRID =
-  "grid grid-cols-[16px_30px_32px_64px_96px_150px_104px_44px_minmax(220px,1fr)_150px_32px] items-center gap-x-3";
+  "grid grid-cols-[16px_30px_32px_76px_96px_150px_104px_44px_minmax(220px,1fr)_150px_32px] items-center gap-x-3";
 
 /** Each offset column's classes, by name — the header's and the cell's. */
 export const POINT_CELL = {

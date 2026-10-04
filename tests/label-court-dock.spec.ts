@@ -20,6 +20,7 @@ import {
   overlaps,
   videoRect,
   type VideoDockLayout,
+  followInsets,
 } from "@/components/admin/labels/label-court-position";
 import {
   DEFAULT_DOCK_ANCHOR,
@@ -287,5 +288,26 @@ test.describe("the court card", () => {
     expect(render({ video: null })).toMatch(
       /data-label-court-dock=""[^>]*class="[^"]*\binvisible\b/,
     );
+  });
+});
+
+test.describe("the strip the follow scroll keeps clear", () => {
+  const size = { width: 480, height: 302 };
+
+  test("covers the cards' edge, as deep as the taller card", () => {
+    // Nothing measured yet: the video's default corner, bottom right.
+    expect(followInsets(null)).toEqual({ top: 0, bottom: 318 + 24 + 12 });
+    expect(
+      followInsets({ anchor: "bottom-left", size, minimised: false }),
+    ).toEqual({ top: 0, bottom: 318 + 24 + 12 });
+    const top = followInsets({ anchor: "top-right", size, minimised: false });
+    expect(top.bottom).toBe(0);
+    expect(top.top).toBeGreaterThan(318);
+  });
+
+  test("shrinks to the pill when the video is minimised", () => {
+    expect(
+      followInsets({ anchor: "bottom-right", size, minimised: true }).bottom,
+    ).toBeLessThan(80);
   });
 });

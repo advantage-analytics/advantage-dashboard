@@ -181,3 +181,23 @@ export function courtOrigin(anchor: BoardAnchor | null): string {
   const [row, column] = (anchor ?? DEFAULT_COURT_ANCHOR).split("-");
   return `${row} ${column}`;
 }
+
+/**
+ * The strip of the viewport the floating cards cover, for the table's follow
+ * scroll: the video's edge (top or bottom), as deep as the taller card plus
+ * its inset and a gap. The court defaults to the same edge, so one strip
+ * covers both. Without it the playing row is "in view" underneath a card.
+ */
+export function followInsets(video: VideoDockLayout | null): {
+  top: number;
+  bottom: number;
+} {
+  const layout = video ?? DEFAULT_VIDEO_LAYOUT;
+  const top = (layout.anchor ?? DEFAULT_DOCK_ANCHOR).startsWith("top");
+  const height = layout.minimised
+    ? VIDEO_PILL_SIZE.height
+    : Math.max(layout.size.height, COURT_DOCK_SIZE.height);
+  const strip =
+    height + (top ? DOCK_INSETS.top : DOCK_INSETS.bottom) + COURT_DOCK_GAP;
+  return top ? { top: strip, bottom: 0 } : { top: 0, bottom: strip };
+}

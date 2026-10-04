@@ -82,7 +82,7 @@ import {
 import type { LabelConfirm } from "./label-confirm";
 import { LabelConfirmDialog } from "./label-confirm-dialog";
 import { LabelCourtDock } from "./label-court-dock";
-import type { VideoDockLayout } from "./label-court-position";
+import { followInsets, type VideoDockLayout } from "./label-court-position";
 import { sideNames } from "./label-format";
 import {
   LabelPointsTable,
@@ -877,12 +877,12 @@ export function LabelConsole({
 
   // The follow scroll, on the PAGE: the table is in the flow and the viewport
   // is what scrolls (`body` grows with its content), so the hook takes the
-  // window token and measures rows against the viewport. Nothing fixed spans
-  // its top — the admin header scrolls away with the page and the table's
-  // header is in the flow — and the video dock is a corner, not a bar, so the
-  // box carries no insets. Called AFTER the keydown effect above on purpose:
+  // window token and measures rows against the viewport, less the strip the
+  // floating cards cover (`followInsets`) — a row under the video or the
+  // court is not in view. Called AFTER the keydown effect above on purpose:
   // the two listen on the same window, and the hook's reads `defaultPrevented`
   // to tell Space-as-play (handled above) from Space-as-scroll.
+  const insets = useMemo(() => followInsets(videoLayout), [videoLayout]);
   useFollowScroll({
     scroller: "window",
     held,
@@ -892,6 +892,7 @@ export function LabelConsole({
     wellOpen: openPointId !== null && openPointId === playingPointId,
     displayedPointId: openPointId,
     onHoldPoint: holdPoint,
+    insets,
   });
 
   // The way back while held and a point is playing (T23); nothing in follow
