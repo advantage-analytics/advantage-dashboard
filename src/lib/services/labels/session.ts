@@ -91,7 +91,8 @@ export interface LabelPoint {
 
 export interface LabelSession {
   id: string;
-  jobId: string;
+  /** Null once the job row is gone; the labels outlive it. */
+  jobId: string | null;
   matchId: string;
   status: "labelling" | "complete";
   derivationVersion: string;
@@ -134,7 +135,7 @@ export function orderLabelShots<
   );
 }
 
-function compareNullsLast(a: number | null, b: number | null): number {
+export function compareNullsLast(a: number | null, b: number | null): number {
   if (a === null || b === null) {
     if (a === b) return 0;
     return a === null ? 1 : -1;

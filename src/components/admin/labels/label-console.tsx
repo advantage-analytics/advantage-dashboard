@@ -21,6 +21,7 @@ import {
 import {
   applyLabelPointPatch,
   applyLabelShotPatch,
+  labelShotValues,
   type LabelPointPatch,
   type LabelShotPatch,
 } from "@/lib/services/labels/edit";
@@ -75,6 +76,9 @@ import {
   parsePlayingRowKey,
   playingRowKey,
 } from "./video-clock";
+
+/** Ids of rows drawn optimistically while their insert is in flight. */
+const PENDING_SHOT_PREFIX = "pending-shot-";
 
 /**
  * `/admin/labels/[sessionId]` — board 08: the header, the court card, the
@@ -227,6 +231,9 @@ export function LabelConsole({
   }
 
   function selectShot(shotId: string) {
+    // A draft row cannot be placed or edited until its insert lands; it is
+    // selected for placement then (see `addShot`).
+    if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
     setPlacement(startPlacement(shotId));
     const shot = findShot(points, shotId);
     if (shot?.videoTime != null) player.current?.seekTo(shot.videoTime);
@@ -236,6 +243,9 @@ export function LabelConsole({
     async (shotId: string, patch: LabelShotPatch) => {
       const before = findShot(points, shotId);
       if (!before || !onSaveShot) return;
+      // A draft row has no id the server knows yet; its add is still in
+      // flight, and the saved row replaces it when that lands.
+      if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
       const retime = "video_time" in patch;
       setPoints((current) =>
         updateShot(current, shotId, retime, (shot) =>
@@ -247,10 +257,11 @@ export function LabelConsole({
       const result = await settle(onSaveShot(shotId, patch));
       if ("error" in result) {
         // Put back exactly the fields this edit changed, and its status.
+        const prior = labelShotValues(before);
         const undo = Object.fromEntries(
           Object.keys(patch).map((key) => [
             key,
-            shotColumnValue(before, key as keyof LabelShotPatch),
+            prior[key as keyof typeof prior],
           ]),
         ) as LabelShotPatch;
         setPoints((current) =>
@@ -407,7 +418,7 @@ export function LabelConsole({
       return;
     }
     pendingIds.current += 1;
-    const tempId = `pending-shot-${pendingIds.current}`;
+    const tempId = `${PENDING_SHOT_PREFIX}${pendingIds.current}`;
     const draft: LabelShot = {
       id: tempId,
       labelPointId: pointId,
@@ -426,8 +437,10 @@ export function LabelConsole({
       videoTime: plan.write.video_time,
       seed: null,
     };
-    // The new stroke is the one a court click places next.
-    setPlacement(startPlacement(tempId));
+    // The new stroke is the one a court click places next — once it is saved.
+    // Selecting the draft would send its temporary id to the server on the
+    // first court click, which refuses it.
+    const selectedBefore = placement.shotId;
     void runOperation<{ shot: LabelShot }>(
       (rows) => insertShot(rows, pointId, draft),
       () => operations.addShot(pointId, afterShotId),
@@ -435,13 +448,13 @@ export function LabelConsole({
         insertShot(removeShot(rows, tempId), pointId, result.shot),
       (rows) => removeShot(rows, tempId),
     ).then((result) => {
-      // Hand the selection over to the saved row, or drop the failed one.
+      // Select the saved row, unless the labeller picked something else
+      // while the add was in flight.
+      if (!result) return;
       setPlacement((current) =>
-        current.shotId !== tempId
-          ? current
-          : result
-            ? startPlacement(result.shot.id)
-            : NO_PLACEMENT,
+        current.shotId === selectedBefore
+          ? startPlacement(result.shot.id)
+          : current,
       );
     });
   }
@@ -888,33 +901,6 @@ function removeShot(
       ? { ...point, shots: point.shots.filter((shot) => shot.id !== shotId) }
       : point,
   );
-}
-
-/** A shot's current value for one patch column. */
-function shotColumnValue(
-  shot: LabelShot,
-  column: keyof LabelShotPatch,
-): unknown {
-  switch (column) {
-    case "hitter":
-      return shot.hitter;
-    case "stroke":
-      return shot.stroke;
-    case "result":
-      return shot.result;
-    case "contact_x":
-      return shot.contactX;
-    case "contact_y":
-      return shot.contactY;
-    case "landing_x":
-      return shot.landingX;
-    case "landing_y":
-      return shot.landingY;
-    case "video_time":
-      return shot.videoTime;
-    case "unclear":
-      return undefined;
-  }
 }
 
 /** An action's answer, with a thrown request turned into an error answer. */

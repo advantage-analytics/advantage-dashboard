@@ -14,22 +14,25 @@
  * overlay's SVG attributes take verbatim (`cx="43.55%"`), so no call site
  * multiplies by 100.
  *
- * The art box is {@link COURT_VIEW_BOX}: the doubles court plus a 0.715 m
- * apron at each side and 2.1 m behind each baseline — board 08's court card.
- * The near baseline is drawn at the BOTTOM (`sy ≈ 92.5`), so `y` grows up
+ * The art box is {@link COURT_VIEW_BOX}: the doubles court plus a 1.78 m
+ * apron at each side and 4.5 m behind each baseline. Board 08 drew 0.715 m
+ * and 2.1 m, which clipped real contact points: players routinely strike the
+ * ball 3–4 m behind the baseline. The two aprons grew together so the box
+ * keeps board 08's 86 × 194 proportions.
+ * The near baseline is drawn at the BOTTOM (`sy ≈ 86.3`), so `y` grows up
  * the screen while `sy` grows down it:
  *
- *   sx = (x + 6.2) / 12.4 × 100
- *   sy = (25.87 − y) / 27.97 × 100
+ *   sx = (x + 7.265) / 14.53 × 100
+ *   sy = (28.27 − y) / 32.77 × 100
  *
  * {@link toCourt} and {@link fromCourt} are exact inverses of each other
  * (`tests/label-court-geometry.spec.ts` holds them to it).
  */
 
 /** Metres of apron drawn beside each doubles sideline. */
-const SIDE_APRON = 0.715;
+const SIDE_APRON = 1.78;
 /** Metres of apron drawn behind each baseline. */
-const BACK_APRON = 2.1;
+const BACK_APRON = 4.5;
 
 export const COURT_LENGTH = 23.77;
 export const DOUBLES_HALF_WIDTH = 5.485;
@@ -39,15 +42,15 @@ export const NET_Y = COURT_LENGTH / 2;
 export const NEAR_SERVICE_Y = NET_Y - 6.4;
 export const FAR_SERVICE_Y = NET_Y + 6.4;
 
-const LEFT = -(DOUBLES_HALF_WIDTH + SIDE_APRON); // -6.2
-const WIDTH = 2 * (DOUBLES_HALF_WIDTH + SIDE_APRON); // 12.4
-const TOP = -BACK_APRON; // -2.1
-const HEIGHT = COURT_LENGTH + 2 * BACK_APRON; // 27.97
+export const COURT_LEFT = -(DOUBLES_HALF_WIDTH + SIDE_APRON); // -7.265
+export const COURT_WIDTH = 2 * (DOUBLES_HALF_WIDTH + SIDE_APRON); // 14.53
+export const COURT_TOP = -BACK_APRON; // -4.5
+export const COURT_HEIGHT = COURT_LENGTH + 2 * BACK_APRON; // 32.77
 /** Metres of `y` at the top edge of the art box (the far apron's edge). */
-const FAR_EDGE_Y = COURT_LENGTH + BACK_APRON; // 25.87
+const FAR_EDGE_Y = COURT_LENGTH + BACK_APRON; // 28.27
 
-/** The art's `viewBox`: `-6.2 -2.1 12.4 27.97`. */
-export const COURT_VIEW_BOX = [LEFT, TOP, WIDTH, HEIGHT]
+/** The art's `viewBox`: `-7.265 -4.5 14.53 32.77`. */
+export const COURT_VIEW_BOX = [COURT_LEFT, COURT_TOP, COURT_WIDTH, COURT_HEIGHT]
   .map((n) => Number(n.toFixed(3)))
   .join(" ");
 
@@ -66,15 +69,15 @@ export interface ScreenPoint {
 /** Metres → percent of the art box. */
 export function fromCourt({ x, y }: CourtPoint): ScreenPoint {
   return {
-    sx: ((x - LEFT) / WIDTH) * 100,
-    sy: ((FAR_EDGE_Y - y) / HEIGHT) * 100,
+    sx: ((x - COURT_LEFT) / COURT_WIDTH) * 100,
+    sy: ((FAR_EDGE_Y - y) / COURT_HEIGHT) * 100,
   };
 }
 
 /** Percent of the art box → metres. The inverse of {@link fromCourt}. */
 export function toCourt({ sx, sy }: ScreenPoint): CourtPoint {
   return {
-    x: (sx / 100) * WIDTH + LEFT,
-    y: FAR_EDGE_Y - (sy / 100) * HEIGHT,
+    x: (sx / 100) * COURT_WIDTH + COURT_LEFT,
+    y: FAR_EDGE_Y - (sy / 100) * COURT_HEIGHT,
   };
 }

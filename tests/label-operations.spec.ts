@@ -217,11 +217,30 @@ test.describe("add shot", () => {
         after_event_id: 102,
         status: "added",
         hitter: "p2",
-        // The rally's last stroke: no neighbour to sit between, so it waits
-        // for the labeller's time and sorts last meanwhile.
-        video_time: null,
+        // The rally's last stroke: no neighbour to sit between, so it is
+        // timed half a second after s-added (2474.4) and sorts after it.
+        video_time: 2474.9,
       },
     });
+  });
+
+  test("two strokes added in a row at the end keep the order they were added in", () => {
+    const first = planAddedShot(point, "s-added");
+    if (!("ok" in first)) throw new Error("plan refused");
+    const added = {
+      id: "s-added-2",
+      eventId: null,
+      afterEventId: first.write.after_event_id,
+      status: "added" as const,
+      hitter: first.write.hitter,
+      videoTime: first.write.video_time,
+    };
+    const second = planAddedShot(
+      { ...point, shots: [...point.shots, { ...point.shots[0], ...added }] },
+      "s-added-2",
+    );
+    if (!("ok" in second)) throw new Error("plan refused");
+    expect(second.write.video_time).toBeGreaterThan(first.write.video_time!);
   });
 
   test("with no stroke named it goes at the end of the rally", () => {
@@ -762,7 +781,7 @@ test.describe("the services", () => {
         after_event_id: 501,
         status: "added",
         hitter: "p2",
-        video_time: null,
+        video_time: 100.5,
       },
     });
     expect(result).toMatchObject({

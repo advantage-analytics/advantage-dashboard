@@ -210,6 +210,9 @@ export function applyPointRestore(point: LabelPoint): LabelPoint {
 
 // ── Add a stroke ────────────────────────────────────────────────────────────
 
+/** How far after the stroke before it an added end-of-rally stroke is timed. */
+const ADDED_SHOT_GAP_SECONDS = 0.5;
+
 /** What an added stroke is seeded with; the labeller fills in the rest. */
 export interface AddedShotPlan {
   /** Always null: only a labeller-added stroke lacks a vendor id. */
@@ -281,10 +284,17 @@ export function planAddedShot(
       : opponent(before.hitter)
     : point.server;
 
+  // Between two timed strokes it sits halfway. With a timed stroke before it
+  // and nothing timed after — the end of the rally — it sits just after that
+  // stroke, so a run of strokes added one after another keeps the order they
+  // were added in. Without a time each would sort last and fall through to a
+  // random row id, showing the second before the first about half the time.
   const videoTime =
-    before?.videoTime != null && after?.videoTime != null
-      ? round2((before.videoTime + after.videoTime) / 2)
-      : null;
+    before?.videoTime == null
+      ? null
+      : after?.videoTime != null
+        ? round2((before.videoTime + after.videoTime) / 2)
+        : round2(before.videoTime + ADDED_SHOT_GAP_SECONDS);
 
   return {
     ok: true,

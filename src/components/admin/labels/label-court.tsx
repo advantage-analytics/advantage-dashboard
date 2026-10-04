@@ -7,7 +7,11 @@ import type { LabelShot } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import {
   COURT_LENGTH,
+  COURT_HEIGHT,
+  COURT_LEFT,
+  COURT_TOP,
   COURT_VIEW_BOX,
+  COURT_WIDTH,
   DOUBLES_HALF_WIDTH,
   FAR_SERVICE_Y,
   NEAR_SERVICE_Y,
@@ -84,7 +88,7 @@ function marksFor(
 const pct = (n: number) => `${n.toFixed(2)}%`;
 
 /**
- * The art box: 194 × 86, the art's own 27.97 × 12.4 m proportions, so a
+ * The art box: 194 × 86, the art's own 32.77 × 14.53 m proportions, so a
  * click converts to metres without distortion. It sits in a 216px card —
  * the video's height at the band's 384px width — which is why the marks
  * below are drawn smaller than the film tab's.
@@ -324,7 +328,13 @@ function CourtArt() {
       aria-hidden="true"
       data-court-art=""
     >
-      <rect x="-6.2" y="-2.1" width="12.4" height="27.97" fill={APRON_FILL} />
+      <rect
+        x={COURT_LEFT}
+        y={COURT_TOP}
+        width={COURT_WIDTH}
+        height={COURT_HEIGHT}
+        fill={APRON_FILL}
+      />
       <rect
         x={-DOUBLES_HALF_WIDTH}
         y="0"

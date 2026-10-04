@@ -144,7 +144,7 @@ test("the court is board 08's art, with the open point's strokes on it", () => {
     video: null,
     initialExpandedPointId: FIXTURE_POINT_IDS.P1,
   });
-  expect(html).toContain('viewBox="-6.2 -2.1 12.4 27.97"');
+  expect(html).toContain('viewBox="-7.265 -4.5 14.53 32.77"');
   expect(html).toContain('fill="#86AC91"');
   expect(html).toContain('fill="#6092CE"');
   // Three live strokes, each with a hit ring and a landing dot; the
@@ -163,7 +163,7 @@ test("the band holds only the court card, at the video's old height", () => {
     session: labelSessionFixture(),
     video: { url: "https://example.test/v.mp4?sig=x", startTimeSeconds: 0 },
   });
-  // The court keeps the art's 12.4 × 27.97 m proportions (86 / 194 = 0.4433).
+  // The court keeps the art's 14.53 × 32.77 m proportions (86 / 194 = 0.4433).
   const bandStart = html.indexOf('data-label-band=""');
   expect(bandStart).toBeGreaterThan(-1);
   expect(html).toMatch(/aria-label="Court"[^>]*class="[^"]*h-\[216px\]/);

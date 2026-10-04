@@ -13,6 +13,8 @@ import { requireAdmin } from "@/lib/services/programs/admin-guard";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 import { PROVIDER_ID } from "@/lib/services/splitstep/config";
 import { readAllPages } from "@/lib/data/admin-range-read";
+import { isUuid } from "@/lib/admin/validation";
+import { ADMIN_REQUIRED } from "@/lib/services/labels/edit-session";
 import {
   choosePlaybackFile,
   type PlaybackJobRow,
@@ -107,7 +109,7 @@ export async function listLabelJobs(
     return {
       ok: false,
       reason: "admin-required",
-      message: "Administrator access is required.",
+      message: ADMIN_REQUIRED,
     };
   }
 
@@ -283,7 +285,8 @@ const sessionDefaults: SessionDependencies = {
 
 interface DbSessionRow {
   id: string;
-  job_id: string;
+  /** Null once the job row is gone (the key is ON DELETE SET NULL). */
+  job_id: string | null;
   match_id: string;
   status: "labelling" | "complete";
   derivation_version: string;
@@ -324,9 +327,6 @@ interface DbShotRow {
   seed?: unknown;
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * One label session with its match's players, every point (tombstones
  * included — the console draws them as markers) and every point's strokes in
@@ -346,10 +346,10 @@ export async function getLabelSession(
     return {
       ok: false,
       reason: "admin-required",
-      message: "Administrator access is required.",
+      message: ADMIN_REQUIRED,
     };
   }
-  if (!UUID_RE.test(sessionId)) return { ok: false, reason: "not-found" };
+  if (!isUuid(sessionId)) return { ok: false, reason: "not-found" };
 
   const db = deps.createAdminClient();
 
@@ -390,7 +390,11 @@ export async function getLabelSession(
         .order("id"),
       "Could not read label shots",
     ),
-    deps.loadVideo(db, session.job_id).catch((cause: unknown) => {
+    // A session whose job is gone has no video to sign; it still opens.
+    (session.job_id
+      ? deps.loadVideo(db, session.job_id)
+      : Promise.resolve(null)
+    ).catch((cause: unknown) => {
       console.error("[labels] could not load the session's video", {
         sessionId: session.id,
         message: (cause as Error)?.message,
@@ -481,6 +485,16 @@ export function buildLabelSession(
 }
 
 /**
+ * How long the console's playback link lasts. The film tab's 30 minutes is
+ * backed by a credential refresh the console does not have: this URL is
+ * signed once, when the page renders, and a labelling sitting runs for hours
+ * — past expiry every seek to an unbuffered range fails and the player goes
+ * dead with nothing on screen. Eight hours covers a working day's sitting;
+ * the link is read-only, for one blob, and only ever handed to an admin.
+ */
+const LABEL_PLAYBACK_TTL_SECONDS = 8 * 60 * 60;
+
+/**
  * The labelled job's own file, signed for playback.
  *
  * Not `getMatchVideo`: that loader answers "what may this viewer watch of
@@ -513,6 +527,9 @@ async function loadJobVideo(
   );
   if (!choice) return null;
 
-  const { playbackUrl } = mintPlaybackSas({ blobName: choice.blobName });
+  const { playbackUrl } = mintPlaybackSas({
+    blobName: choice.blobName,
+    ttlSeconds: LABEL_PLAYBACK_TTL_SECONDS,
+  });
   return { url: playbackUrl, startTimeSeconds: choice.startTimeSeconds };
 }

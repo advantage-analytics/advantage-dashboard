@@ -27,6 +27,7 @@ import {
   type SplitStepStroke,
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
+import { compareNullsLast } from "./session";
 
 export type LabelSide = "p1" | "p2";
 
@@ -210,18 +211,9 @@ export function endedBy(
 function inVideoOrder<T extends { video_time: number | null }>(
   items: readonly T[],
 ): T[] {
-  return items
-    .map((item, i) => ({ item, i }))
-    .sort((a, b) => {
-      const at = a.item.video_time;
-      const bt = b.item.video_time;
-      if (at === null || bt === null) {
-        if (at === bt) return a.i - b.i;
-        return at === null ? 1 : -1;
-      }
-      return at - bt || a.i - b.i;
-    })
-    .map(({ item }) => item);
+  return [...items].sort((a, b) =>
+    compareNullsLast(a.video_time, b.video_time),
+  );
 }
 
 /** What the seed reads off a shot, whether the transcript kept it or not. */

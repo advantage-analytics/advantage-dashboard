@@ -44,8 +44,7 @@ export interface LabelWriteDependencies {
   requireAdmin: () => Promise<{ id: string } | null>;
   createAdminClient: () => AdminClient;
 }
-type Dependencies = LabelWriteDependencies;
-export const defaultLabelWriteDependencies: Dependencies = {
+export const defaultLabelWriteDependencies: LabelWriteDependencies = {
   requireAdmin,
   createAdminClient,
 };
@@ -53,6 +52,19 @@ const defaults = defaultLabelWriteDependencies;
 
 export const ADMIN_REQUIRED = "Administrator access is required.";
 const FROZEN = "This session is complete, so its labels can no longer change.";
+const BUSY = "This row changed while it was saving. Try again.";
+
+/**
+ * How many times an edit re-reads and retries when the row changed under it.
+ *
+ * The status an edit writes is worked out from the row as it was read, so a
+ * second save landing in between would leave it stale — a changed shot marked
+ * `kept`, with no Reset. Each write is therefore guarded on the `updated_at`
+ * it read (the touch trigger moves it on every update): a write that matches
+ * nothing means the row changed, and the edit starts again from a fresh read.
+ * A delete is such a change too, and the fresh read then refuses the tombstone.
+ */
+const MAX_EDIT_ATTEMPTS = 3;
 
 /** Refuses anything but a `labelling` session. */
 export async function checkSessionOpen(
@@ -72,6 +84,7 @@ export async function checkSessionOpen(
 type ShotRow = LabelShotValues & {
   id: string;
   session_id: string;
+  updated_at: string;
   status: LabelShotStatus;
   /** Raw jsonb — parsed before the status rule trusts it. */
   seed: unknown;
@@ -92,33 +105,42 @@ export async function writeLabelShotEdit(params: {
   const { patch } = parsed;
 
   try {
-    const { data: row, error } = await supabase
-      .from("label_shots")
-      .select(
-        `id, session_id, status, seed, ${LABEL_SHOT_VALUE_FIELDS.join(", ")}`,
-      )
-      .eq("id", shotId)
-      .maybeSingle<ShotRow>();
-    if (error) return { error: `Could not read the shot: ${error.message}` };
-    if (!row) return { error: "Shot not found." };
-    if (row.status === "deleted") {
-      return { error: "Restore this shot before editing it." };
-    }
-    const closed = await checkSessionOpen(supabase, row.session_id);
-    if (closed) return { error: closed };
+    for (let attempt = 0; attempt < MAX_EDIT_ATTEMPTS; attempt += 1) {
+      const { data: row, error } = await supabase
+        .from("label_shots")
+        .select(
+          `id, session_id, updated_at, status, seed, ${LABEL_SHOT_VALUE_FIELDS.join(", ")}`,
+        )
+        .eq("id", shotId)
+        .maybeSingle<ShotRow>();
+      if (error) {
+        return { error: `Could not read the shot: ${error.message}` };
+      }
+      if (!row) return { error: "Shot not found." };
+      if (row.status === "deleted") {
+        return { error: "Restore this shot before editing it." };
+      }
+      if (attempt === 0) {
+        const closed = await checkSessionOpen(supabase, row.session_id);
+        if (closed) return { error: closed };
+      }
 
-    const status = labelShotStatusAfterPatch(
-      { ...row, seed: parseLabelShotSeed(row.seed) },
-      patch,
-    );
-    const { error: writeError } = await supabase
-      .from("label_shots")
-      .update({ ...patch, status })
-      .eq("id", shotId);
-    if (writeError) {
-      return { error: `Could not save the shot: ${writeError.message}` };
+      const status = labelShotStatusAfterPatch(
+        { ...row, seed: parseLabelShotSeed(row.seed) },
+        patch,
+      );
+      const { data: written, error: writeError } = await supabase
+        .from("label_shots")
+        .update({ ...patch, status })
+        .eq("id", shotId)
+        .eq("updated_at", row.updated_at)
+        .select("id");
+      if (writeError) {
+        return { error: `Could not save the shot: ${writeError.message}` };
+      }
+      if (written && written.length > 0) return { ok: true, status };
     }
-    return { ok: true, status };
+    return { error: BUSY };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`${LOG} shot threw`, { shotId, message });
@@ -129,6 +151,7 @@ export async function writeLabelShotEdit(params: {
 type PointRow = LabelPointFields & {
   id: string;
   session_id: string;
+  updated_at: string;
   status: LabelPointStatus;
   /** Raw jsonb — parsed before the status rule trusts it. */
   seed: unknown;
@@ -149,33 +172,42 @@ export async function writeLabelPointEdit(params: {
   const { patch } = parsed;
 
   try {
-    const { data: row, error } = await supabase
-      .from("label_points")
-      .select(
-        `id, session_id, status, seed, ${LABEL_POINT_SEED_FIELDS.join(", ")}`,
-      )
-      .eq("id", pointId)
-      .maybeSingle<PointRow>();
-    if (error) return { error: `Could not read the point: ${error.message}` };
-    if (!row) return { error: "Point not found." };
-    if (row.status === "deleted") {
-      return { error: "Restore this point before editing it." };
-    }
-    const closed = await checkSessionOpen(supabase, row.session_id);
-    if (closed) return { error: closed };
+    for (let attempt = 0; attempt < MAX_EDIT_ATTEMPTS; attempt += 1) {
+      const { data: row, error } = await supabase
+        .from("label_points")
+        .select(
+          `id, session_id, updated_at, status, seed, ${LABEL_POINT_SEED_FIELDS.join(", ")}`,
+        )
+        .eq("id", pointId)
+        .maybeSingle<PointRow>();
+      if (error) {
+        return { error: `Could not read the point: ${error.message}` };
+      }
+      if (!row) return { error: "Point not found." };
+      if (row.status === "deleted") {
+        return { error: "Restore this point before editing it." };
+      }
+      if (attempt === 0) {
+        const closed = await checkSessionOpen(supabase, row.session_id);
+        if (closed) return { error: closed };
+      }
 
-    const status = labelPointStatusAfterPatch(
-      { ...row, seed: parseLabelPointSeed(row.seed) },
-      patch,
-    );
-    const { error: writeError } = await supabase
-      .from("label_points")
-      .update({ ...patch, status })
-      .eq("id", pointId);
-    if (writeError) {
-      return { error: `Could not save the point: ${writeError.message}` };
+      const status = labelPointStatusAfterPatch(
+        { ...row, seed: parseLabelPointSeed(row.seed) },
+        patch,
+      );
+      const { data: written, error: writeError } = await supabase
+        .from("label_points")
+        .update({ ...patch, status })
+        .eq("id", pointId)
+        .eq("updated_at", row.updated_at)
+        .select("id");
+      if (writeError) {
+        return { error: `Could not save the point: ${writeError.message}` };
+      }
+      if (written && written.length > 0) return { ok: true, status };
     }
-    return { ok: true, status };
+    return { error: BUSY };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`${LOG} point threw`, { pointId, message });
@@ -187,7 +219,7 @@ export async function writeLabelPointEdit(params: {
 export async function editLabelShot(
   shotId: unknown,
   patch: unknown,
-  deps: Dependencies = defaults,
+  deps: LabelWriteDependencies = defaults,
 ): Promise<LabelShotEditResult> {
   const actor = await deps.requireAdmin();
   if (!actor) return { error: ADMIN_REQUIRED };
@@ -202,7 +234,7 @@ export async function editLabelShot(
 export async function editLabelPoint(
   pointId: unknown,
   patch: unknown,
-  deps: Dependencies = defaults,
+  deps: LabelWriteDependencies = defaults,
 ): Promise<LabelPointEditResult> {
   const actor = await deps.requireAdmin();
   if (!actor) return { error: ADMIN_REQUIRED };

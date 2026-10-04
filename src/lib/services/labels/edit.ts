@@ -80,7 +80,6 @@ export const LABEL_SHOT_EDIT_FIELDS = [
   ...LABEL_SHOT_VALUE_FIELDS,
   "unclear",
 ] as const;
-export type LabelShotEditField = (typeof LABEL_SHOT_EDIT_FIELDS)[number];
 
 /** A shot's editable values, keyed by column — the same keys as its seed. */
 export type LabelShotValues = LabelShotSeedValues;
@@ -103,14 +102,12 @@ export const LABEL_POINT_VALUE_FIELDS = [
   "ended_by",
   "serve_side",
 ] as const;
-export type LabelPointValueField = (typeof LABEL_POINT_VALUE_FIELDS)[number];
 
 /** Every key `updateLabelPoint` accepts: the values, plus the free-text note. */
 export const LABEL_POINT_EDIT_FIELDS = [
   ...LABEL_POINT_VALUE_FIELDS,
   "note",
 ] as const;
-export type LabelPointEditField = (typeof LABEL_POINT_EDIT_FIELDS)[number];
 
 export interface LabelPointValues {
   winner: LabelSide | null;

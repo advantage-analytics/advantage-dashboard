@@ -13,14 +13,17 @@
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdmin } from "@/lib/services/programs/admin-guard";
-import { UUID_RE } from "@/lib/admin/validation";
+import { UUID_RE, isUuid } from "@/lib/admin/validation";
 import { buildTranscriptForJob } from "@/lib/services/splitstep/persist-transcript";
 import {
   DERIVATION_VERSION,
   type RawSplitStepStroke,
 } from "@/lib/services/splitstep/derivation";
+import {
+  ADMIN_REQUIRED,
+  defaultLabelWriteDependencies,
+  type LabelWriteDependencies,
+} from "./edit-session";
 import { buildLabelSeed } from "./seed";
 
 const LOG = "[labels:seed]";
@@ -206,12 +209,6 @@ async function writeSeedRows(
   return { error: null, shots: shotRows.length };
 }
 
-interface Dependencies {
-  requireAdmin: () => Promise<{ id: string } | null>;
-  createAdminClient: () => AdminClient;
-}
-const defaults: Dependencies = { requireAdmin, createAdminClient };
-
 /**
  * The admin-gated entry point behind the `/admin/labels` server action.
  *
@@ -222,11 +219,11 @@ const defaults: Dependencies = { requireAdmin, createAdminClient };
  */
 export async function seedLabelSession(
   jobId: unknown,
-  deps: Dependencies = defaults,
+  deps: LabelWriteDependencies = defaultLabelWriteDependencies,
 ): Promise<SeedLabelSessionResult> {
   const actor = await deps.requireAdmin();
-  if (!actor) return { error: "Administrator access is required." };
-  if (typeof jobId !== "string" || !UUID_RE.test(jobId)) {
+  if (!actor) return { error: ADMIN_REQUIRED };
+  if (!isUuid(jobId)) {
     return { error: "Invalid job id." };
   }
   return seedLabelSessionForJob({

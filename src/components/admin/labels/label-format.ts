@@ -1,6 +1,5 @@
 import type {
   LabelEnding,
-  LabelServeSide,
   LabelShotResult,
   LabelSide,
   LabelStroke,
@@ -47,11 +46,6 @@ export const DELETE_REASON_LABEL: Record<LabelDeleteReason, string> = {
   not_a_stroke: "Not a stroke",
   duplicate: "Duplicate",
   other: "Other",
-};
-
-export const SERVE_SIDE_LABEL: Record<LabelServeSide, string> = {
-  deuce: "Deuce",
-  ad: "Ad",
 };
 
 /** The two sides' cell labels: surnames, initialled only when they clash. */

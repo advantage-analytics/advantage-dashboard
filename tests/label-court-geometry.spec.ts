@@ -16,7 +16,7 @@ import {
  */
 
 test("the art box is board 08's viewBox", () => {
-  expect(COURT_VIEW_BOX).toBe("-6.2 -2.1 12.4 27.97");
+  expect(COURT_VIEW_BOX).toBe("-7.265 -4.5 14.53 32.77");
 });
 
 test("fixed points land where the board draws them", () => {
@@ -31,26 +31,29 @@ test("fixed points land where the board draws them", () => {
 
   // Net centre: dead centre of the box.
   close(fromCourt({ x: 0, y: NET_Y }), 50, 50);
-  // Near baseline corners, at the bottom: 2.1 m of apron below them.
+  // Near baseline corners, at the bottom: 4.5 m of apron below them.
   close(
     fromCourt({ x: -DOUBLES_HALF_WIDTH, y: 0 }),
-    (0.715 / 12.4) * 100,
-    (25.87 / 27.97) * 100,
+    (1.78 / 14.53) * 100,
+    (28.27 / 32.77) * 100,
   );
   close(
     fromCourt({ x: DOUBLES_HALF_WIDTH, y: 0 }),
-    100 - (0.715 / 12.4) * 100,
-    (25.87 / 27.97) * 100,
+    100 - (1.78 / 14.53) * 100,
+    (28.27 / 32.77) * 100,
   );
   // Far baseline centre, at the top.
-  close(fromCourt({ x: 0, y: COURT_LENGTH }), 50, (2.1 / 27.97) * 100);
+  close(fromCourt({ x: 0, y: COURT_LENGTH }), 50, (4.5 / 32.77) * 100);
   // The box's own corners.
-  close(fromCourt({ x: -6.2, y: 25.87 }), 0, 0);
-  close(fromCourt({ x: 6.2, y: -2.1 }), 100, 100);
-  // A board mark: a serve hit at (-0.80, -0.32) sits at 43.55% / 93.64%.
+  close(fromCourt({ x: -7.265, y: 28.27 }), 0, 0);
+  close(fromCourt({ x: 7.265, y: -4.5 }), 100, 100);
+  // A hit 3.65 m behind the near baseline — the depth that used to clip —
+  // is inside the box.
+  expect(fromCourt({ x: 0, y: -3.65 }).sy).toBeLessThan(100);
+  // A serve hit at (-0.80, -0.32) sits at 44.49% / 87.24%.
   const serve = fromCourt({ x: -0.8, y: -0.32 });
-  expect(serve.sx).toBeCloseTo(43.55, 2);
-  expect(serve.sy).toBeCloseTo(93.64, 2);
+  expect(serve.sx).toBeCloseTo(44.49, 2);
+  expect(serve.sy).toBeCloseTo(87.24, 2);
 });
 
 test("toCourt inverts fromCourt, both ways", () => {
@@ -58,7 +61,7 @@ test("toCourt inverts fromCourt, both ways", () => {
     { x: 0, y: 0 },
     { x: -5.485, y: 23.77 },
     { x: 3.2, y: 17.79 },
-    { x: -6.2, y: -2.1 },
+    { x: -7.265, y: -4.5 },
     { x: 1.234, y: 11.885 },
   ];
   for (const point of metres) {

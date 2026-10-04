@@ -29,6 +29,7 @@
 
 import { readFileSync } from "node:fs";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { UUID_RE } from "@/lib/admin/validation";
 import { buildTranscriptForJob } from "@/lib/services/splitstep/persist-transcript";
 import {
   DERIVATION_VERSION,
@@ -60,14 +61,13 @@ try {
   /* already exported */
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE = 1000;
 
 type Supabase = ReturnType<typeof createAdminClient>;
 
 interface SessionRow {
   id: string;
-  job_id: string;
+  job_id: string | null;
   status: string;
   derivation_version: string;
   results_object_key: string | null;
@@ -130,7 +130,7 @@ async function main() {
   const at = argv.indexOf("--session");
   const sessionId = at === -1 ? null : argv[at + 1];
 
-  if (!sessionId || !UUID.test(sessionId)) {
+  if (!sessionId || !UUID_RE.test(sessionId)) {
     console.error("usage: label-backfill-seed.ts --session <uuid> [--write]");
     process.exit(1);
   }
@@ -145,6 +145,13 @@ async function main() {
   if (sessionError) throw new Error(sessionError.message);
   if (!session) {
     console.error(`REFUSED: no label session ${sessionId}`);
+    process.exit(1);
+  }
+
+  if (!session.job_id) {
+    console.error(
+      `REFUSED: session ${session.id} has no job left to rebuild its seed from`,
+    );
     process.exit(1);
   }
 

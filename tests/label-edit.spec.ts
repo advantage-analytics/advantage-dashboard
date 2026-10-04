@@ -496,6 +496,8 @@ function fakeClient(rows: {
   point?: Record<string, unknown> | null;
   sessionStatus?: string;
   failWrite?: boolean;
+  /** Every write finds the row changed since it was read. */
+  gone?: boolean;
 }) {
   const calls: Call[] = [];
   const client = {
@@ -506,7 +508,7 @@ function fakeClient(rows: {
         if (call.op === "update") {
           return rows.failWrite
             ? { data: null, error: { message: "write refused" } }
-            : { data: null, error: null };
+            : { data: rows.gone ? [] : [{ id: "written" }], error: null };
         }
         if (table === "label_shots") return { data: rows.shot, error: null };
         if (table === "label_points") return { data: rows.point, error: null };
@@ -541,15 +543,18 @@ function fakeClient(rows: {
   return { calls, supabase: client as unknown as AdminClient };
 }
 
+const UPDATED_AT = "2026-10-01T10:00:00.123456+00:00";
 const shotRow = (fields: Record<string, unknown> = {}) => ({
   id: SHOT_ID,
   session_id: SESSION_ID,
+  updated_at: UPDATED_AT,
   ...kept,
   ...fields,
 });
 const pointRow = (fields: Record<string, unknown> = {}) => ({
   id: POINT_ID,
   session_id: SESSION_ID,
+  updated_at: UPDATED_AT,
   winner: "p1",
   ending: "winner",
   ended_by: "p1",
@@ -604,7 +609,8 @@ test.describe("updateLabelShot (editLabelShot)", () => {
         table: "label_shots",
         op: "update",
         values: { contact_x: 2.5, contact_y: 25, status: "edited" },
-        filters: { id: SHOT_ID },
+        // Guarded on the `updated_at` the edit read.
+        filters: { id: SHOT_ID, updated_at: UPDATED_AT },
       },
     ]);
     expect(fake.calls.every((c) => c.table.startsWith("label_"))).toBe(true);
@@ -653,6 +659,25 @@ test.describe("updateLabelShot (editLabelShot)", () => {
       }),
     ).toHaveProperty("error");
     expect(frozen.calls.some((c) => c.op === "update")).toBe(false);
+  });
+
+  test("a row that changed since it was read is re-read and retried, then reported", async () => {
+    const busy = fakeClient({ shot: shotRow(), gone: true });
+    expect(
+      await writeLabelShotEdit({
+        supabase: busy.supabase,
+        shotId: SHOT_ID,
+        patch: { result: "out" },
+      }),
+    ).toEqual({ error: "This row changed while it was saving. Try again." });
+    // Three attempts, each a fresh read and a guarded write; the session is
+    // checked once.
+    const shots = busy.calls.filter((c) => c.table === "label_shots");
+    expect(shots.filter((c) => c.op === "select")).toHaveLength(3);
+    expect(shots.filter((c) => c.op === "update")).toHaveLength(3);
+    expect(busy.calls.filter((c) => c.table === "label_sessions")).toHaveLength(
+      1,
+    );
   });
 
   test("a bad id, a missing row and a refused write are errors", async () => {
@@ -779,7 +804,7 @@ test.describe("updateLabelPoint (editLabelPoint)", () => {
       table: "label_points",
       op: "update",
       values: { ending: "error", status: "edited" },
-      filters: { id: POINT_ID },
+      filters: { id: POINT_ID, updated_at: UPDATED_AT },
     });
 
     const noted = fakeClient({ point: pointRow() });
