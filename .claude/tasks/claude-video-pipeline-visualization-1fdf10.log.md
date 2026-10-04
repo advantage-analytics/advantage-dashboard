@@ -238,3 +238,15 @@ Decisions:
 
 1. Server-menu rows have no player chip (`FloatMenuItem`'s icon slot is 12px).
 2. The console spec stubs the table, so the optimistic state and save line are not asserted directly.
+
+## T15 · Follow playback with hold and "Now playing" — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** The film room rail's hold-intent listeners and keep-in-view / re-follow scroll moved into a shared `use-follow-scroll.ts` hook (element or window scroller); `point-list.tsx` now calls it, behaviour unchanged. The labelling console holds a `PointFocus`: following, the playing point is the open one and is kept in view with its playing stroke lit; clicking a row or stroke, focusing an editor, or scrolling by hand holds; a fixed top-centre "Now playing · Point N" pill re-follows. New `tests/film-follow-scroll.spec.ts`.
+
+**follow-ups:**
+
+1. The console's pill does not hide when the playing row is already in view (the film room's does).
+2. The hook supports insets for fixed chrome; the console passes none, so the video dock can cover the playing row's right-hand cells.
+3. `setRestPointId` is adjusted during render in the console.

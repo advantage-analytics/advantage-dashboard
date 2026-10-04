@@ -210,7 +210,7 @@ ready).
 
 ## T15 · Follow playback with hold and "Now playing"
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T12
 - **files:** src/components/dashboard/matches/match-detail/film/use-follow-scroll.ts (new), src/components/dashboard/matches/match-detail/film/point-list.tsx, src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-points-table.tsx, tests/label-console.spec.ts, tests/film-follow-scroll.spec.ts (guess)

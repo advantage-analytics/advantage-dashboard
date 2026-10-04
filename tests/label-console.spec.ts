@@ -25,6 +25,8 @@ type ConsoleProps = {
   initialSelectedShotId?: string | null;
   initialVideoTime?: number | null;
   initialVideoMinimised?: boolean;
+  initialPointFocus?:
+    { mode: "follow" } | { mode: "held"; pointId: string | null };
   onSaveShot?: (...args: unknown[]) => Promise<unknown>;
   onSavePoint?: (...args: unknown[]) => Promise<unknown>;
 };
@@ -528,6 +530,91 @@ test.describe("the video dock", () => {
   });
 });
 
+test.describe("the Now playing pill", () => {
+  /** The pill's opening tag. */
+  function pill(html: string): string {
+    const at = html.indexOf("data-label-follow-pill");
+    expect(at).toBeGreaterThan(-1);
+    return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
+  }
+
+  test("held while a point plays: the film room's words, fixed top-centre", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialPointFocus: { mode: "held", pointId: FIXTURE_POINT_IDS.P1 },
+      initialVideoTime: 2490.5,
+    });
+    const tag = pill(html);
+    expect(tag).toContain('type="button"');
+    // The table's own number, as the dock bar prints it.
+    expect(tag).toContain(
+      'aria-label="Now playing: point 2 — follow playback"',
+    );
+    expect(text(html.slice(html.indexOf("data-label-follow-pill")))).toContain(
+      "Now playing · Point 2",
+    );
+    // Not in the table's flow: pinned to the viewport, clear of the dock's
+    // corner and above its layer.
+    expect(tag).toMatch(
+      /class="[^"]*\bfixed\b[^"]*\btop-3\b[^"]*\bleft-1\/2\b/,
+    );
+    expect(tag).toMatch(/class="[^"]*\bz-50\b/);
+    expect(tag).toContain("film-follow-pill-in");
+    expect(tag).toContain("shadow-[var(--shadow-floating)]");
+  });
+
+  test("held on the playing point itself still gets one (T24)", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialPointFocus: { mode: "held", pointId: FIXTURE_POINT_IDS.P2 },
+      initialVideoTime: 2490.5,
+    });
+    expect(html).toContain("data-label-follow-pill");
+    expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
+  });
+
+  test("absent while following", () => {
+    for (const initialPointFocus of [undefined, { mode: "follow" } as const]) {
+      const html = render({
+        session: labelSessionFixture(),
+        video: null,
+        initialPointFocus,
+        initialVideoTime: 2490.5,
+      });
+      expect(html).not.toContain("data-label-follow-pill");
+    }
+  });
+
+  test("absent in dead time, and before the video moves", () => {
+    for (const initialVideoTime of [undefined, null, 100, 2480, 9999]) {
+      const html = render({
+        session: labelSessionFixture(),
+        video: null,
+        initialPointFocus: { mode: "held", pointId: FIXTURE_POINT_IDS.P1 },
+        initialVideoTime,
+      });
+      expect(html, String(initialVideoTime)).not.toContain(
+        "data-label-follow-pill",
+      );
+      // Held keeps its point open with nothing playing.
+      expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
+    }
+  });
+
+  test("following with nothing playing keeps the resting point open", () => {
+    // Before the video moves: the first point still to check, as before.
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialVideoTime: 2480,
+    });
+    expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
+    expect(text(html)).toContain("Court · point 1");
+  });
+});
+
 test("no labels component reads a flags field", () => {
   const dir = path.resolve("src/components/admin/labels");
   for (const file of readdirSync(dir)) {
@@ -722,11 +809,37 @@ test.describe("the playing row", () => {
     expect(count(html, EDITORS)).toBe(0);
   });
 
-  test("marks a closed point without opening it", () => {
+  test("following, the playing point is the open one", () => {
     const html = render({
       session: labelSessionFixture(),
       video: null,
       initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      // Point 2's ace.
+      initialVideoTime: 2490.5,
+    });
+    // The point row and, unfolded under it, the playing stroke.
+    expect(count(html, PLAYING)).toBe(2);
+    expect(
+      rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P2}"`),
+    ).toContain('data-playing="true"');
+    expect(rowMarkup(html, 'data-shot-id="s-ace"')).toContain(
+      'data-playing="true"',
+    );
+    // Point 1 folds away; the court moves with the video.
+    expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
+    expect(html).not.toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
+    expect(text(html)).toContain("Court · point 2");
+    // Following: nothing to return to, so no pill.
+    expect(html).not.toContain("data-label-follow-pill");
+    expect(text(html)).not.toContain("Now playing");
+  });
+
+  test("held, it marks a closed point without opening it", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      initialPointFocus: { mode: "held", pointId: FIXTURE_POINT_IDS.P1 },
       // Point 2's ace.
       initialVideoTime: 2490.5,
     });
@@ -765,6 +878,21 @@ test.describe("the playing row", () => {
       expect(count(html, PLAYING), String(initialVideoTime)).toBe(0);
       expect(html).not.toContain("data-playing-mark");
     }
+  });
+
+  test("held with nothing open, the playing point stays folded (T25)", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialPointFocus: { mode: "held", pointId: null },
+      initialVideoTime: 2490.5,
+    });
+    expect(count(html, PLAYING)).toBe(1);
+    expect(html).not.toContain("data-shots-for=");
+    expect(text(html)).toContain("Court ");
+    expect(text(html)).not.toContain("Court · point");
+    // The way back is still there.
+    expect(html).toContain("data-label-follow-pill");
   });
 
   test("the table draws whatever rows it is told are playing", () => {

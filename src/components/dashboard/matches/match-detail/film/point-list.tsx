@@ -34,7 +34,6 @@ import { cn } from "@/lib/utils";
 
 import { filmProgressWidth } from "./film-clock";
 import { FilmAdvancedPanel } from "./film-advanced-panel";
-import { reducedMotionNow } from "./film-motion";
 import { FilmQuickFilters } from "./film-quick-filters";
 import {
   pointDetail,
@@ -57,6 +56,14 @@ import {
   lastNameOf,
   type FilmListFilters,
 } from "./film-list-filters";
+import { useFollowScroll } from "./use-follow-scroll";
+
+// The keep-in-view and hold-intent constants moved with their effects into
+// `use-follow-scroll.ts`; re-exported so the specs that read them here still do.
+export {
+  REFOLLOW_JUMP_INSET_PX,
+  REFOLLOW_JUMP_WINDOW_MS,
+} from "./use-follow-scroll";
 
 /**
  * The Film room's point list (artboard 46c, lines 845–1131).
@@ -145,43 +152,6 @@ const NO_STOPS: ShotStop[] = [];
 /** A list with no owner of the focus state simply follows. */
 const FOLLOW: PointFocus = { mode: "follow" };
 const NOOP = () => {};
-
-/**
- * Keys that scroll a scroller (or the row focused inside it) without a
- * `wheel`, `touchmove` or `pointerdown` — the fourth hold source (author's
- * answer to Open item 3).
- */
-const SCROLL_KEYS = new Set([
-  "PageDown",
-  "PageUp",
-  "Home",
-  "End",
-  " ",
-  "ArrowUp",
-  "ArrowDown",
-]);
-
-/**
- * How long the follow flag stays up when the scroller never reports
- * `scrollend` (Safari). Chromium's smooth scroll eases in about 300ms.
- */
-const FOLLOW_SCROLL_FALLBACK_MS = 400;
-
-/**
- * Where a re-follow JUMP (T26) puts the playing row: its top this far below
- * the scroller's top edge. 8px is the spacing scale's 8px step (`gap-2`,
- * foundations.md) and clears the row's own `py-1.5`, so the row reads as the
- * first thing in the box rather than as one cut off by the edge.
- */
-export const REFOLLOW_JUMP_INSET_PX = 8;
-
-/**
- * How long after a held → follow transition the keep-in-view runs as a jump.
- * A window, not a one-shot: a step re-follows and then seeks, and the seek
- * lands (`activePointId` moves) on a later tick — the crossing that follows
- * inside the window is part of the same jump.
- */
-export const REFOLLOW_JUMP_WINDOW_MS = 800;
 
 /**
  * How long the pill's 100ms exit may take before it unmounts anyway: a page
@@ -472,21 +442,18 @@ export const PointList = memo(function PointList({
   // nothing: the well's rows are seek targets before they are text.
   const wellOpen = onSelectShot != null && wellStops.length > 0;
 
-  // The click wrappers and the intent listeners below read the playing and
-  // displayed ids through refs, written after each commit, so their identity
-  // never moves with the film: `PointRow` and `ShotWellRow` are memoized on
-  // the callbacks they get, and a wrapper re-made on every point crossing
-  // would re-render every row of a 174-point match roughly once every ten
-  // seconds. Written in an effect rather than during render — the handlers
-  // run on a later event, never inside the render that changed the value.
+  // The click wrappers below read the playing id through a ref, written after
+  // each commit, so their identity never moves with the film: `PointRow` and
+  // `ShotWellRow` are memoized on the callbacks they get, and a wrapper
+  // re-made on every point crossing would re-render every row of a 174-point
+  // match roughly once every ten seconds. Written in an effect rather than
+  // during render — the handlers run on a later event, never inside the
+  // render that changed the value. (The hold-intent listeners do the same for
+  // the displayed id, inside `useFollowScroll`.)
   const activePointRef = useRef(activePointId);
-  const displayedPointRef = useRef(displayedPointId);
-  const heldRef = useRef(held);
   useEffect(() => {
     activePointRef.current = activePointId;
-    displayedPointRef.current = displayedPointId;
-    heldRef.current = held;
-  }, [activePointId, displayedPointId, held]);
+  }, [activePointId]);
 
   // A click holds its point — or re-follows, when it is the one already
   // playing: that click is the way back without the pill, and the seek still
@@ -516,156 +483,39 @@ export const PointList = memo(function PointList({
     [holdOrFollow, onSelectShot],
   );
 
-  // Two ways to follow (T26). A re-follow — any held → follow transition: the
-  // pill, a step or transport from held, a click on the playing row from
-  // held, a cut that drops the held point, a null hold (T25) included — is a
-  // JUMP: the playing point's row goes to the top of the box, 8px in
-  // (`REFOLLOW_JUMP_INSET_PX`), clamped at the end of the list, even when it
-  // is already in view. It always targets the point row, never the shot: the
-  // well mounts under the row, so aligning the shot would push the row off
-  // the top. The jump is a window (`REFOLLOW_JUMP_WINDOW_MS`), not one run: a
-  // step re-follows before its seek lands, so the crossing that follows inside
-  // the window is part of the same jump and the second scroll wins. Outside
-  // the window it is CONTINUOUS keep-in-view, below: the minimal scroll that
-  // brings the lit thing inside the box, and nothing when it already is — no
-  // lurch per point. The transition is observed here (`prevHeldRef`), not
-  // signalled by a prop.
+  // Keep whatever is lit in view as the film moves on, jump the playing row
+  // to the top on a re-follow (T26), and read the viewer's own scrolling —
+  // wheel, touch drag, a press on the scroller's gutter, a scrolling key — as
+  // intent to hold the displayed point (T24/T25). All of it is
+  // `useFollowScroll`, shared with the labelling console, which scrolls the
+  // page where this list scrolls itself; the hook's file carries the rules.
   //
-  // Keep whatever is lit in view as the film moves on — the playing shot while
-  // a well is open, the playing row otherwise — and stop entirely while held:
-  // the viewer's own scrolling is what the listeners after this effect read
-  // as intent (`wheel`, `touchmove`, `pointerdown` on the scroller, and the
-  // scrolling keys), never the `scroll` event, which a programmatic scroll
-  // fires exactly as a wheel does. Around its own `scrollTo` the effect
-  // raises `followScrollRef`, so nothing derived from the scroller's motion
-  // can mistake the effect's travel for the viewer's; the intent listeners do
-  // not consult it — a wheel arriving mid-follow-scroll is intent and holds.
-  //
-  // Moves this scroller's own `scrollTop` and nothing else. The DOM's
-  // scroll-an-element-into-view method walks every ancestor instead, and while
-  // the room's drawer is still off-canvas mid-slide that dragged the whole
-  // room — video included — sideways toward the row. The room's retired dark
-  // list hit exactly that, which is why the rule is written down here.
+  // Two things about the keys are this list's own. `ArrowUp`/`ArrowDown`
+  // with focus on a drawer row hold here, and the room's window handler
+  // (film-fullscreen.tsx) then steps on the same key with `preventDefault`,
+  // which re-follows — both updates land in one native event and batch, so
+  // the net result of an arrow is `follow`, as the design wants for a step.
+  // On the shell column an arrow on a focused row is a SCROLL, not a step:
+  // the tab's window handler (film-tab.tsx) returns early for `[role=button]`
+  // targets, so nothing re-follows and the net result there is `held`.
   const listRef = useRef<HTMLDivElement>(null);
-  const followScrollRef = useRef(false);
-  /** Cancels the pending settle of the last follow scroll, flag untouched. */
-  const cancelSettleRef = useRef<() => void>(NOOP);
-  /** `held` as of the effect's last run: the re-follow transition's memory. */
-  const prevHeldRef = useRef(held);
-  /** `performance.now()` until which a follow run is a jump (T26). */
-  const jumpUntilRef = useRef(0);
-  useEffect(() => {
-    const wasHeld = prevHeldRef.current;
-    prevHeldRef.current = held;
-    if (held) return;
-    if (wasHeld)
-      jumpUntilRef.current = performance.now() + REFOLLOW_JUMP_WINDOW_MS;
-    const jump = performance.now() < jumpUntilRef.current;
-    const list = listRef.current;
-    const selector = jump
-      ? activePointId && `[data-point-id="${activePointId}"]`
-      : wellOpen && activeShotId
-        ? `[data-shot-id="${activeShotId}"]`
-        : activePointId && `[data-point-id="${activePointId}"]`;
-    if (!list || !selector) return;
-    const row = list.querySelector<HTMLElement>(selector);
-    if (!row) return;
-    const listBox = list.getBoundingClientRect();
-    const rowBox = row.getBoundingClientRect();
-    let top = list.scrollTop;
-    if (jump) {
-      top += rowBox.top - listBox.top - REFOLLOW_JUMP_INSET_PX;
-      const end = list.scrollHeight - list.clientHeight;
-      top = Math.max(0, Math.min(top, end));
-      if (Math.abs(top - list.scrollTop) < 1) return;
-    } else if (rowBox.top < listBox.top) top += rowBox.top - listBox.top;
-    else if (rowBox.bottom > listBox.bottom)
-      top += rowBox.bottom - listBox.bottom;
-    else return;
-
-    cancelSettleRef.current();
-    followScrollRef.current = true;
-    const settle = () => {
-      cancel();
-      followScrollRef.current = false;
-    };
-    // `scrollend` is the honest end of the travel; the timer is for the
-    // engines that never send it.
-    const timer = window.setTimeout(settle, FOLLOW_SCROLL_FALLBACK_MS);
-    const cancel = () => {
-      window.clearTimeout(timer);
-      list.removeEventListener("scrollend", settle);
-      cancelSettleRef.current = NOOP;
-    };
-    cancelSettleRef.current = cancel;
-    list.addEventListener("scrollend", settle);
-    // Smooth on the list's own scrollTop — Chromium eases it in about 300ms,
-    // no scroll-jacking of our own — and instant under reduced motion.
-    list.scrollTo({ top, behavior: reducedMotionNow() ? "auto" : "smooth" });
-  }, [activePointId, activeShotId, wellOpen, held]);
-
-  // Intent, read where a programmatic scroll never produces it: a wheel, a
-  // touch drag, a press on the scroller's own gutter (the scrollbar is the
-  // only part of the scroller that is not a child), or a scrolling key. Each
-  // holds the displayed point — an ENTER only: scrolling while already held
-  // keeps the held point, so the well never wanders to whatever scrolled into
-  // view. With nothing displayed the hold is `null` — held with no well
-  // (T25). Both tones listen (T24): the room's drawer and the shell column
-  // hold on the same sources, and return by the same pill (T23).
-  //
-  // `ArrowUp`/`ArrowDown` with focus on a drawer row hold here, and the
-  // room's window handler (film-fullscreen.tsx) then steps on the same key
-  // with `preventDefault`, which re-follows — both updates land in one native
-  // event and batch, so the net result of an arrow is `follow`, as the design
-  // wants for a step. On the shell column an arrow on a focused row is a
-  // SCROLL, not a step: the tab's window handler (film-tab.tsx) returns early
-  // for `[role=button]` targets, so nothing re-follows and the net result
-  // there is `held`. `Enter`/`Space` on a row are the row's activation, not
-  // a scroll: the row's React handler prevents them, but it runs after this
-  // native listener, so Space is skipped here by its target instead.
   const scrollerMounted = !advancedOpen && groups.length > 0;
+  useFollowScroll({
+    scroller: listRef,
+    mounted: scrollerMounted,
+    held,
+    activePointId,
+    activeShotId,
+    wellOpen,
+    displayedPointId,
+    onHoldPoint,
+  });
 
   // The return affordance, on every `PointList` surface (T23: the shell's
   // card header line is gone, so the pill is the way back there too), while
   // held and a point is playing — the pill itself hides while the lit row is
   // in view (T24).
   const affordance = followAffordance(pointFocus, nowPlaying);
-  useEffect(() => {
-    if (!scrollerMounted) return;
-    const list = listRef.current;
-    if (!list) return;
-    // Null when nothing is displayed — dead time, or before the first point
-    // — and that still holds (T25): no well opens, and the list stays where
-    // the viewer put it instead of jumping to the next point that lights.
-    const hold = () => {
-      if (heldRef.current) return;
-      onHoldPoint(displayedPointRef.current);
-    };
-    const onPointerDown = (e: PointerEvent) => {
-      if (e.target === list) hold();
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || !SCROLL_KEYS.has(e.key)) return;
-      if (
-        e.key === " " &&
-        e.target instanceof Element &&
-        e.target.closest("button, [role=button]")
-      ) {
-        return;
-      }
-      hold();
-    };
-    list.addEventListener("wheel", hold, { passive: true });
-    list.addEventListener("touchmove", hold, { passive: true });
-    list.addEventListener("pointerdown", onPointerDown);
-    list.addEventListener("keydown", onKeyDown);
-    return () => {
-      list.removeEventListener("wheel", hold);
-      list.removeEventListener("touchmove", hold);
-      list.removeEventListener("pointerdown", onPointerDown);
-      list.removeEventListener("keydown", onKeyDown);
-    };
-  }, [scrollerMounted, onHoldPoint]);
 
   return (
     <section aria-label="Point list" className={t.root} style={t.rootStyle}>

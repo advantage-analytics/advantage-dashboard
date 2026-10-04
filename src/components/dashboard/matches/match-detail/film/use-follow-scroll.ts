@@ -1,0 +1,387 @@
+"use client";
+
+import { useEffect, useRef, type RefObject } from "react";
+
+import { reducedMotionNow } from "./film-motion";
+
+/**
+ * Follow the film, or hold the point being read — the scrolling half of the
+ * T17 design (`2026-09-22-film-follow-hold-design.md`), shared by every
+ * surface that lists points under a playing video: the Film tab's
+ * `PointList` (the report column and the fullscreen room's drawer, which
+ * scroll a list element of their own) and the labelling console's points
+ * table (which scrolls the page). The focus state itself — `PointFocus` in
+ * film-timeline.ts — stays with the caller; this hook does two things
+ * against it:
+ *
+ * **Keep whatever is lit in view while following** — the playing shot while
+ * a well is open, the playing row otherwise — and stop entirely while held.
+ * Two ways to follow (T26). A re-follow — any held → follow transition — is a
+ * JUMP: the playing point's row goes to the top of the box, 8px in
+ * (`REFOLLOW_JUMP_INSET_PX`), clamped at the end of the scroller, even when
+ * it is already in view. It always targets the point row, never the shot:
+ * the well mounts under the row, so aligning the shot would push the row off
+ * the top. The jump is a window (`REFOLLOW_JUMP_WINDOW_MS`), not one run: a
+ * step re-follows before its seek lands, so the crossing that follows inside
+ * the window is part of the same jump and the second scroll wins. Outside the
+ * window it is CONTINUOUS keep-in-view: the minimal scroll that brings the
+ * lit thing inside the box, and nothing when it already is — no lurch per
+ * point. The transition is observed here (`prevHeldRef`), not signalled by a
+ * prop.
+ *
+ * **Read the viewer's own scrolling as intent to hold** — a `wheel`, a touch
+ * drag, a `pointerdown` on the scroller's own gutter (the scrollbar is the
+ * only part of a scroller that is not a child of it), or a scrolling key —
+ * never the `scroll` event, which a programmatic scroll fires exactly as a
+ * wheel does. So the hook's own travel can never hold. Each holds the
+ * DISPLAYED point — an ENTER only: scrolling while already held keeps the
+ * held point, so the well never wanders to whatever scrolled into view. With
+ * nothing displayed the hold is `null` — held with no well (T25).
+ *
+ * Moves the scroller's own offset and nothing else. The DOM's
+ * scroll-an-element-into-view method walks every ancestor instead, and while
+ * the room's drawer is still off-canvas mid-slide that dragged the whole room
+ * — video included — sideways toward the row. The room's retired dark list
+ * hit exactly that, which is why the rule is written down here.
+ *
+ * The scroller is a ref to the element whose `scrollTop` moves, or the token
+ * `"window"` for a page that scrolls the viewport (the labelling console:
+ * `body` grows with its content, so the viewport is what scrolls — a bare
+ * `window` cannot be passed, since it does not exist on the server). For the
+ * window the box is the viewport less `insets`, which is where fixed chrome
+ * over the page is accounted for; an element's box is its own.
+ */
+
+/** A ref to the scrolling element, or `"window"` for the viewport. */
+export type FollowScroller = RefObject<HTMLElement | null> | "window";
+
+/**
+ * Keys that scroll a scroller (or the row focused inside it) without a
+ * `wheel`, `touchmove` or `pointerdown` — the fourth hold source (author's
+ * answer to Open item 3).
+ */
+export const SCROLL_KEYS = new Set([
+  "PageDown",
+  "PageUp",
+  "Home",
+  "End",
+  " ",
+  "ArrowUp",
+  "ArrowDown",
+]);
+
+/**
+ * How long the follow flag stays up when the scroller never reports
+ * `scrollend` (Safari). Chromium's smooth scroll eases in about 300ms.
+ */
+export const FOLLOW_SCROLL_FALLBACK_MS = 400;
+
+/**
+ * Where a re-follow JUMP (T26) puts the playing row: its top this far below
+ * the scroller's top edge. 8px is the spacing scale's 8px step (`gap-2`,
+ * foundations.md) and clears the row's own `py-1.5`, so the row reads as the
+ * first thing in the box rather than as one cut off by the edge.
+ */
+export const REFOLLOW_JUMP_INSET_PX = 8;
+
+/**
+ * How long after a held → follow transition the keep-in-view runs as a jump.
+ * A window, not a one-shot: a step re-follows and then seeks, and the seek
+ * lands (`activePointId` moves) on a later tick — the crossing that follows
+ * inside the window is part of the same jump.
+ */
+export const REFOLLOW_JUMP_WINDOW_MS = 800;
+
+/**
+ * Where a key edits rather than scrolls: inside a form control the scrolling
+ * keys move a caret or change a value, and the page stays put. The Film tab's
+ * lists carry none, so this changes nothing there; the labelling console's
+ * table is made of them.
+ */
+const EDITING_CONTROLS = "input, select, textarea, [contenteditable='true']";
+
+/** The scroller's box as the keep-in-view reads it, in viewport px. */
+export interface FollowBox {
+  top: number;
+  bottom: number;
+  /** The scroller's current offset. */
+  scrollTop: number;
+  /** The furthest the scroller can go — the end a jump is clamped at. */
+  maxScrollTop: number;
+}
+
+/** The lit row's edges, in the same viewport px. */
+export interface FollowRow {
+  top: number;
+  bottom: number;
+}
+
+/** Fixed chrome over the scroller — for the page, the viewport — taken off its box. */
+export interface FollowInsets {
+  top?: number;
+  bottom?: number;
+}
+
+/**
+ * What the follow effect scrolls to: on a jump the playing point's row
+ * (never the shot — see the file comment); otherwise the playing shot while
+ * a well is open, else the playing row. `null` when nothing is lit.
+ */
+export function followTargetSelector(
+  jump: boolean,
+  activePointId: string | null | undefined,
+  activeShotId: string | null | undefined,
+  wellOpen: boolean,
+): string | null {
+  const pointRow = activePointId ? `[data-point-id="${activePointId}"]` : null;
+  if (jump) return pointRow;
+  if (wellOpen && activeShotId) return `[data-shot-id="${activeShotId}"]`;
+  return pointRow;
+}
+
+/**
+ * The offset the scroller should move to, or `null` to leave it where it is.
+ *
+ * `jump`: the row's top `insetPx` under the box's top, clamped to the
+ * scroller's range; `null` only when that is where it already is (within a
+ * pixel). `keep`: the minimal travel that brings the row inside the box —
+ * its top to the box's top, or its bottom to the box's bottom — and `null`
+ * when it is already wholly inside. The same arithmetic for a list element
+ * and for the page: only the box differs.
+ */
+export function followScrollTarget(
+  mode: "jump" | "keep",
+  row: FollowRow,
+  box: FollowBox,
+  insetPx: number = REFOLLOW_JUMP_INSET_PX,
+): number | null {
+  let top = box.scrollTop;
+  if (mode === "jump") {
+    top += row.top - box.top - insetPx;
+    top = Math.max(0, Math.min(top, box.maxScrollTop));
+    return Math.abs(top - box.scrollTop) < 1 ? null : top;
+  }
+  if (row.top < box.top) return top + (row.top - box.top);
+  if (row.bottom > box.bottom) return top + (row.bottom - box.bottom);
+  return null;
+}
+
+/**
+ * Whether a key press is the viewer scrolling. Not when something already
+ * handled it (`defaultPrevented`), not inside a form control, and not Space
+ * on a button or a row acting as one — there it is the control's activation,
+ * not a scroll. (A row's React handler prevents Enter/Space, but it runs
+ * after this native listener, so Space is skipped here by its target.)
+ */
+export function scrollKeyHolds(event: {
+  key: string;
+  defaultPrevented: boolean;
+  target: EventTarget | null;
+}): boolean {
+  if (event.defaultPrevented || !SCROLL_KEYS.has(event.key)) return false;
+  const target =
+    event.target && "closest" in event.target
+      ? (event.target as Element)
+      : null;
+  if (target?.closest(EDITING_CONTROLS)) return false;
+  if (event.key === " " && target?.closest("button, [role=button]")) {
+    return false;
+  }
+  return true;
+}
+
+/** The scroller's own gutter: the one part of it that is not a child. */
+function onGutter(target: HTMLElement | Window, event: Event): boolean {
+  if (target === window) {
+    return (
+      event.target === document.documentElement ||
+      event.target === document.body
+    );
+  }
+  return event.target === target;
+}
+
+function readBox(
+  target: HTMLElement | Window,
+  insetTop: number,
+  insetBottom: number,
+): FollowBox {
+  if (target === window) {
+    return {
+      top: insetTop,
+      bottom: window.innerHeight - insetBottom,
+      scrollTop: window.scrollY,
+      maxScrollTop: Math.max(
+        0,
+        document.documentElement.scrollHeight - window.innerHeight,
+      ),
+    };
+  }
+  const el = target as HTMLElement;
+  const rect = el.getBoundingClientRect();
+  return {
+    top: rect.top + insetTop,
+    bottom: rect.bottom - insetBottom,
+    scrollTop: el.scrollTop,
+    maxScrollTop: el.scrollHeight - el.clientHeight,
+  };
+}
+
+function resolve(scroller: FollowScroller): HTMLElement | Window | null {
+  if (scroller === "window") {
+    return typeof window === "undefined" ? null : window;
+  }
+  return scroller.current;
+}
+
+const NOOP = () => {};
+
+export interface FollowScrollOptions {
+  scroller: FollowScroller;
+  /**
+   * Whether the scroller is on screen. The intent listeners attach only
+   * then; the keep-in-view simply finds no row otherwise. Default `true`.
+   */
+  mounted?: boolean;
+  /** `pointFocus.mode === "held"`. */
+  held: boolean;
+  /** The playing point and shot, as the rows name them in `data-*-id`. */
+  activePointId: string | null | undefined;
+  activeShotId?: string | null;
+  /** Whether the playing shot has a row to scroll to (its well is open). */
+  wellOpen?: boolean;
+  /** The point a hand scroll holds: the displayed one, `null` for none. */
+  displayedPointId: string | null | undefined;
+  /** Stable identity, please — the listeners re-attach on a new one. */
+  onHoldPoint: (pointId: string | null) => void;
+  /** Fixed chrome over the scroller's box, taken off its top and bottom. */
+  insets?: FollowInsets;
+}
+
+export function useFollowScroll({
+  scroller,
+  mounted = true,
+  held,
+  activePointId,
+  activeShotId = null,
+  wellOpen = false,
+  displayedPointId,
+  onHoldPoint,
+  insets,
+}: FollowScrollOptions): {
+  /** Up while the hook's own smooth scroll is in flight. */
+  followScrolling: RefObject<boolean>;
+} {
+  const insetTop = insets?.top ?? 0;
+  const insetBottom = insets?.bottom ?? 0;
+
+  // The intent listeners read the held flag and the displayed id through
+  // refs, written after each commit, so their identity never moves with the
+  // film and they re-attach only on a new `onHoldPoint`. Written in an effect
+  // rather than during render — the handlers run on a later event, never
+  // inside the render that changed the value.
+  const displayedPointRef = useRef(displayedPointId ?? null);
+  const heldRef = useRef(held);
+  useEffect(() => {
+    displayedPointRef.current = displayedPointId ?? null;
+    heldRef.current = held;
+  }, [displayedPointId, held]);
+
+  // Around its own `scrollTo` the effect raises `followScrollRef`, so nothing
+  // derived from the scroller's motion can mistake the effect's travel for
+  // the viewer's; the intent listeners do not consult it — a wheel arriving
+  // mid-follow-scroll is intent and holds.
+  const followScrollRef = useRef(false);
+  /** Cancels the pending settle of the last follow scroll, flag untouched. */
+  const cancelSettleRef = useRef<() => void>(NOOP);
+  /** `held` as of the effect's last run: the re-follow transition's memory. */
+  const prevHeldRef = useRef(held);
+  /** `performance.now()` until which a follow run is a jump (T26). */
+  const jumpUntilRef = useRef(0);
+  useEffect(() => {
+    const wasHeld = prevHeldRef.current;
+    prevHeldRef.current = held;
+    if (held) return;
+    if (wasHeld)
+      jumpUntilRef.current = performance.now() + REFOLLOW_JUMP_WINDOW_MS;
+    const jump = performance.now() < jumpUntilRef.current;
+    const target = resolve(scroller);
+    const selector = followTargetSelector(
+      jump,
+      activePointId,
+      activeShotId,
+      wellOpen,
+    );
+    if (!target || !selector) return;
+    const root: ParentNode =
+      target === window ? document : (target as HTMLElement);
+    const row = root.querySelector<HTMLElement>(selector);
+    if (!row) return;
+    const top = followScrollTarget(
+      jump ? "jump" : "keep",
+      row.getBoundingClientRect(),
+      readBox(target, insetTop, insetBottom),
+      REFOLLOW_JUMP_INSET_PX,
+    );
+    if (top === null) return;
+
+    cancelSettleRef.current();
+    followScrollRef.current = true;
+    const settle = () => {
+      cancel();
+      followScrollRef.current = false;
+    };
+    // `scrollend` is the honest end of the travel; the timer is for the
+    // engines that never send it.
+    const timer = window.setTimeout(settle, FOLLOW_SCROLL_FALLBACK_MS);
+    const cancel = () => {
+      window.clearTimeout(timer);
+      target.removeEventListener("scrollend", settle);
+      cancelSettleRef.current = NOOP;
+    };
+    cancelSettleRef.current = cancel;
+    target.addEventListener("scrollend", settle);
+    // Smooth on the scroller's own offset — Chromium eases it in about 300ms,
+    // no scroll-jacking of our own — and instant under reduced motion.
+    target.scrollTo({ top, behavior: reducedMotionNow() ? "auto" : "smooth" });
+  }, [
+    activePointId,
+    activeShotId,
+    wellOpen,
+    held,
+    scroller,
+    insetTop,
+    insetBottom,
+  ]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const target = resolve(scroller);
+    if (!target) return;
+    // Null when nothing is displayed — dead time, or before the first point
+    // — and that still holds (T25): no well opens, and the list stays where
+    // the viewer put it instead of jumping to the next point that lights.
+    const hold = () => {
+      if (heldRef.current) return;
+      onHoldPoint(displayedPointRef.current);
+    };
+    const onPointerDown = (e: Event) => {
+      if (onGutter(target, e)) hold();
+    };
+    const onKeyDown = (e: Event) => {
+      if (scrollKeyHolds(e as KeyboardEvent)) hold();
+    };
+    target.addEventListener("wheel", hold, { passive: true });
+    target.addEventListener("touchmove", hold, { passive: true });
+    target.addEventListener("pointerdown", onPointerDown);
+    target.addEventListener("keydown", onKeyDown);
+    return () => {
+      target.removeEventListener("wheel", hold);
+      target.removeEventListener("touchmove", hold);
+      target.removeEventListener("pointerdown", onPointerDown);
+      target.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mounted, onHoldPoint, scroller]);
+
+  return { followScrolling: followScrollRef };
+}
