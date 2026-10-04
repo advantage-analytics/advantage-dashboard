@@ -1448,18 +1448,27 @@ function DetailsStepContentImpl({
                   isStoppedResult(formData.result) ? formData.result : null
                 }
                 retiredSide={formData.retiredSide}
+                stopReason={formData.stopReason}
+                // From the line, never `formData.eventKind`: a hand-picked
+                // dual event has no line whose result could have clinched.
+                dualLine={
+                  (attachedLine?.eventKind ?? line?.eventKind) === "dual"
+                }
                 playerName={subject.name}
                 opponentName={formData.opponentName}
-                onAnswer={(result) => {
+                onAnswer={(result, stopReason) => {
                   onInputChange("result", result);
                   onInputChange("retiredSide", undefined);
+                  onInputChange("stopReason", stopReason);
                 }}
                 onRetiredSide={(side) => onInputChange("retiredSide", side)}
                 onChange={() => {
                   onInputChange("result", "");
                   onInputChange("retiredSide", undefined);
+                  onInputChange("stopReason", undefined);
                 }}
                 onFinishScore={() => {
+                  onInputChange("stopReason", undefined);
                   onScoreCheckDismiss();
                   // Into the set nobody has won — its first empty cell, else
                   // its first. Not simply the first empty cell on the card: an

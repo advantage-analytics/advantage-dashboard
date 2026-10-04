@@ -6,7 +6,7 @@ import type { ProviderKind } from "@/lib/services/upload";
 import type { VideoProbe } from "@/lib/video/probe";
 import type { Discipline, EventSite, MatchEnding } from "@/lib/schedule/types";
 import type { Workspace } from "@/lib/workspace/types";
-import type { RetiredSide } from "./score-state";
+import type { RetiredSide, StopReason } from "./score-state";
 import type { StyleSaveChoice } from "./style-save-offer";
 
 /** Wizard step identifiers */
@@ -47,6 +47,12 @@ export interface FormData {
    * NOT retire), never as its own column.
    */
   retiredSide?: RetiredSide;
+  /**
+   * Why play stopped, as the "Did it end early?" answer gave it — detail on
+   * `result`, never the answer itself. Unset until answered, and for a
+   * SwingVision import that arrives "Unfinished". Words the settled line only.
+   */
+  stopReason?: StopReason;
   date: string;
   time: string;
   playerName: string;
@@ -217,6 +223,7 @@ export const DEFAULT_FORM_DATA: FormData = {
   adScoring: undefined,
   playOnLets: false,
   result: "",
+  stopReason: undefined,
   date: "",
   time: "",
   playerName: "",

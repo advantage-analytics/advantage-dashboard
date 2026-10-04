@@ -1,6 +1,6 @@
 import { Answer, SettledNotice, WarningGlyph } from "./ImportIdentityNotice";
 import { noticeEnterCls, warningStripCls } from "./styles";
-import type { RetiredSide, StoppedResult } from "./score-state";
+import type { RetiredSide, StopReason, StoppedResult } from "./score-state";
 
 /**
  * "Did it end early?" — asked when Save meets a score nobody has won.
@@ -15,6 +15,12 @@ import type { RetiredSide, StoppedResult } from "./score-state";
  * stayed on court. It is the same yellow question again, not a control inside
  * the settled line — the answer is still missing, so the page still says so.
  *
+ * Each "Yes" also records why play stopped (`stopReason`) — detail on the
+ * answer, never the answer itself. On a dual line (`dualLine`) the first Yes is
+ * "play stopped once the dual was decided": a line abandoned after the team
+ * result was in is the common way a college singles score ends unwon, and it
+ * records Unfinished like time or weather, but its settled line says why.
+ *
  * The DS warning question (`primitives.md` › Warning question): stacked text
  * answers on amber, a settled answer collapses to a grey line that keeps
  * "Change". "No" isn't an answer to record — it hands focus back to the score.
@@ -22,6 +28,8 @@ import type { RetiredSide, StoppedResult } from "./score-state";
 export function ScoreCheckNotice({
   answer,
   retiredSide,
+  stopReason,
+  dualLine,
   playerName,
   opponentName,
   onAnswer,
@@ -31,9 +39,16 @@ export function ScoreCheckNotice({
 }: {
   answer: StoppedResult | null;
   retiredSide: RetiredSide | undefined;
+  /** Why play stopped; words the settled Unfinished line. */
+  stopReason: StopReason | undefined;
+  /**
+   * The match is on a dual line (an event preset or attached line, never a
+   * hand-picked event kind) — offers "play stopped once the dual was decided".
+   */
+  dualLine: boolean;
   playerName: string;
   opponentName: string;
-  onAnswer: (result: StoppedResult) => void;
+  onAnswer: (result: StoppedResult, stopReason: StopReason) => void;
   onRetiredSide: (side: RetiredSide) => void;
   /** "No, I'll finish the score" — dismiss and put the cursor in the score. */
   onFinishScore: () => void;
@@ -51,7 +66,12 @@ export function ScoreCheckNotice({
   if (answer === "Unfinished") {
     return (
       <SettledNotice
-        message="Marked as unfinished. The score stays as entered."
+        message={
+          // An import arrives Unfinished with no reason and keeps the old line.
+          stopReason === "clinched"
+            ? "Marked as unfinished. Play stopped once the dual was decided."
+            : "Marked as unfinished. The score stays as entered."
+        }
         onChange={onChange}
       />
     );
@@ -110,11 +130,16 @@ export function ScoreCheckNotice({
           Did it end early?
         </p>
         <div className="-ml-2.5 flex flex-col">
-          <Answer onClick={() => onAnswer("Retired")}>
+          {dualLine && (
+            <Answer onClick={() => onAnswer("Unfinished", "clinched")}>
+              Yes, play stopped once the dual was decided
+            </Answer>
+          )}
+          <Answer onClick={() => onAnswer("Retired", "retired")}>
             Yes, a player retired
           </Answer>
-          <Answer onClick={() => onAnswer("Unfinished")}>
-            Yes, it wasn&rsquo;t finished (time, weather)
+          <Answer onClick={() => onAnswer("Unfinished", "time_weather")}>
+            Yes, stopped for time or weather
           </Answer>
           <Answer onClick={onFinishScore}>
             No, I&rsquo;ll finish the score

@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Stop-reason answers in "Did it end early?"
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/new-match-wizard/ScoreCheckNotice.tsx, score-state.ts, types.ts (FormData), DetailsStepContent.tsx (~L1444 ScoreCheckNotice usage), useUploadMatchWizard.ts (the `as const satisfies readonly (keyof MatchFormData)[]` reset list that names `result` and `retiredSide`, ~L192), tests/upload-score-state.spec.ts — guess
 - **routes:** /dashboard/matches/new

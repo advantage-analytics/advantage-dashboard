@@ -4,6 +4,7 @@ import {
   asksIfEndedEarly,
   isStoppedResult,
   scoreCheckAnswered,
+  STOP_REASONS,
   retiredWinner,
   firstOpenSet,
   scoreGames,
@@ -284,6 +285,25 @@ test.describe("scoreUndecided — when Save asks whether the match ended early",
     expect(scoreCheckAnswered({ result: "", retiredSide: "player" })).toBe(
       false,
     );
+  });
+
+  test("STOP_REASONS is exactly the three slugs", () => {
+    expect([...STOP_REASONS]).toEqual(["clinched", "time_weather", "retired"]);
+  });
+
+  test("a stop reason is detail on the answer, never the answer", () => {
+    expect(DEFAULT_FORM_DATA.stopReason).toBeUndefined();
+    expect(scoreCheckAnswered({ result: "Unfinished" })).toBe(true);
+    // The form passes its whole state, stopReason included; the check must
+    // read past it.
+    for (const stopReason of STOP_REASONS) {
+      const answered = (result: string) =>
+        scoreCheckAnswered({ ...scoreState({ result, stopReason }) });
+      expect(answered("Unfinished")).toBe(true);
+      // A reason alone, with no result or no retired side, answers nothing.
+      expect(answered("")).toBe(false);
+      expect(answered("Retired")).toBe(false);
+    }
   });
 
   test("a SwingVision import is never asked", () => {

@@ -214,6 +214,17 @@ export function asksIfEndedEarly(provider: ProviderId | null): boolean {
   return provider !== "swing-vision";
 }
 
+/**
+ * Why play stopped — extra detail on a stopped answer, never the answer
+ * itself. `retired` rides with "Retired"; `time_weather` and `clinched` both
+ * ride with "Unfinished": stopped for time or weather, or stopped because the
+ * dual was already decided (a line abandoned once the team result was in). It
+ * only words the settled line; `scoreCheckAnswered` does not read it, and a
+ * SwingVision import that arrives "Unfinished" carries none.
+ */
+export const STOP_REASONS = ["clinched", "time_weather", "retired"] as const;
+export type StopReason = (typeof STOP_REASONS)[number];
+
 /** Which side stopped a Retired match: the uploader's player, or the opponent. */
 export type RetiredSide = "player" | "opponent";
 

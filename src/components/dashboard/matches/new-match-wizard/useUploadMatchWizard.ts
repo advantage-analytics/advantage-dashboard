@@ -191,6 +191,7 @@ const START_OVER_FIELDS = [
   "numberOfSets",
   "result",
   "retiredSide",
+  "stopReason",
   "videoStartSeconds",
   "videoEndSeconds",
   "fixedCamera",
@@ -1501,6 +1502,7 @@ export function useUploadMatchWizard({
                 numberOfSets: DEFAULT_FORM_DATA.numberOfSets,
                 result: DEFAULT_FORM_DATA.result,
                 retiredSide: DEFAULT_FORM_DATA.retiredSide,
+                stopReason: DEFAULT_FORM_DATA.stopReason,
               }
             : {};
         return {
