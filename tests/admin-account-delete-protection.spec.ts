@@ -109,7 +109,7 @@ function harness(
         effects.push("purge");
         if (scenario.purgeThrows) {
           throw new Error(
-            "Matches recorded or analyzed through the admin console cannot be deleted here.",
+            "Matches recorded, analyzed or hand-labeled through the admin console cannot be deleted here. Contact support to remove them.",
           );
         }
       },
