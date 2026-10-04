@@ -112,7 +112,7 @@ ready).
 
 ## T8 · Derive scores and per-set game numbers (pure module)
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/lib/services/labels/score.ts, tests/label-score.spec.ts (guess)
 - **done when:**

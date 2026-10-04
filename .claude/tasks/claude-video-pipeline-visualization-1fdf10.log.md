@@ -159,3 +159,14 @@ Decisions:
 4. Adding or deleting a shot on a checked point doesn't clear its checked state.
 5. An added shot can't be edited while it is still saving (its temporary id is rejected).
 6. The seed still hard-deletes a half-seeded session on failure (T3, internal).
+
+## T8 · Derive scores and per-set game numbers (pure module) — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New pure `labelScores(points, adScoring)` in `src/lib/services/labels/score.ts` (per-set game number, score before each point with the server first, games score per band; lets, non-points, deleted and winner-less points don't advance it) with `tests/label-score.spec.ts` (20 tests).
+
+**follow-ups:**
+
+1. A stray point inside an already-decided game prints "Game–30"; the point row could style it as a warning.
+2. `labelScores` knows each game's winner but does not return it; the band may want it.
