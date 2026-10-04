@@ -306,3 +306,14 @@ Decisions:
 **follow-ups:**
 
 1. Stale "board 08g grey rule" wording may remain in comments in other label files.
+
+## T21 · The playing row's 2px blue progress rule — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** The playing point row draws the points rail's 2px blue progress rule, driven by the film clock's CSS variables (`useFilmClockVars` writes them onto the console root through a new `clockTargetRef`; no timer). The window comes from `labelFilmStops` on the file clock and reaches only the playing row.
+
+**follow-ups:**
+
+1. Writing the clock variable on the console root each frame invalidates the whole table subtree; narrow the target if a long match janks.
+2. The playing shot row could take the same rule with per-shot windows.

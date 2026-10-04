@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
 } from "react";
 import { Play, VideoOff } from "lucide-react";
 import { FilmFramePending } from "@/components/dashboard/loading/film-frame-pending";
@@ -65,6 +66,13 @@ import { labelFilmStops, type LabelFilmStop } from "./label-film-stops";
  * The element speaks FILE seconds; a label's `videoTime` is on the ANALYSIS
  * clock. `startTimeSeconds` is subtracted on the way in (`seekTo`) and added
  * back on the way out (`onTime`), here and nowhere else in the console.
+ *
+ * ── The clock, as CSS ───────────────────────────────────────────────────────
+ * `useFilmClockVars` writes `--film-t` / `--film-d` (FILE seconds) onto the
+ * frame every animation frame, for the transport's track. `clockTargetRef`
+ * names a second element to write them onto — the console's root, so the
+ * table's playing row can draw its progress rule from the same clock without
+ * a render (`label-point-row.tsx`).
  */
 export interface LabelVideoHandle {
   /** Seek to a label's `videoTime` (analysis clock), converted to this file. */
@@ -102,6 +110,9 @@ const NO_READOUT: LabelVideoReadout = {
 
 const noop = () => {};
 
+/** No second clock target: `useFilmClockVars` writes nothing through it. */
+const NULL_REF: RefObject<HTMLElement | null> = { current: null };
+
 export const LabelVideoPlayer = forwardRef<
   LabelVideoHandle,
   {
@@ -120,6 +131,11 @@ export const LabelVideoPlayer = forwardRef<
     onPlayingChange?: (playing: boolean) => void;
     /** Playable on first render — for specs. A real element starts pending. */
     initialReady?: boolean;
+    /**
+     * A second element to carry `--film-t` / `--film-d`, beside the frame —
+     * an ancestor of whatever else draws from the film's clock.
+     */
+    clockTargetRef?: RefObject<HTMLElement | null>;
   }
 >(function LabelVideoPlayer(
   {
@@ -129,6 +145,7 @@ export const LabelVideoPlayer = forwardRef<
     onTime,
     onPlayingChange,
     initialReady = false,
+    clockTargetRef,
   },
   ref,
 ) {
@@ -148,7 +165,16 @@ export const LabelVideoPlayer = forwardRef<
   const [ready, setReady] = useState(initialReady);
 
   const settling = useSeekSettling({ graceMs: 120, generation: 0 });
-  const syncClock = useFilmClockVars(videoRef, frameRef, playing);
+  const syncFrameClock = useFilmClockVars(videoRef, frameRef, playing);
+  const syncTargetClock = useFilmClockVars(
+    videoRef,
+    clockTargetRef ?? NULL_REF,
+    playing,
+  );
+  const syncClock = useCallback(() => {
+    syncFrameClock();
+    syncTargetClock();
+  }, [syncFrameClock, syncTargetClock]);
 
   const offset = video?.startTimeSeconds ?? 0;
   const stops = useMemo(() => labelFilmStops(points, offset), [points, offset]);

@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
 } from "react";
 import { GripVertical, Maximize2, Minimize2, Pause, Play } from "lucide-react";
 import type {
@@ -160,6 +161,8 @@ export const LabelVideoDock = forwardRef<
     initialMinimised?: boolean;
     /** The video playable on first render — for specs. It starts pending. */
     initialReady?: boolean;
+    /** Handed to the player: a second element for the film's clock variables. */
+    clockTargetRef?: RefObject<HTMLElement | null>;
   }
 >(function LabelVideoDock(
   {
@@ -172,6 +175,7 @@ export const LabelVideoDock = forwardRef<
     onLayout,
     initialMinimised = false,
     initialReady = false,
+    clockTargetRef,
   },
   ref,
 ) {
@@ -398,6 +402,7 @@ export const LabelVideoDock = forwardRef<
               onTime={onTime}
               onPlayingChange={setPlaying}
               initialReady={initialReady}
+              clockTargetRef={clockTargetRef}
             />
           </div>
         </div>

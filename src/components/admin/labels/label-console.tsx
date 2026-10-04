@@ -83,6 +83,7 @@ import type { LabelConfirm } from "./label-confirm";
 import { LabelConfirmDialog } from "./label-confirm-dialog";
 import { LabelCourtDock } from "./label-court-dock";
 import { followInsets, type VideoDockLayout } from "./label-court-position";
+import { labelFilmStops } from "./label-film-stops";
 import { sideNames } from "./label-format";
 import {
   LabelPointsTable,
@@ -270,6 +271,9 @@ export function LabelConsole({
   const player = useRef<LabelVideoHandle>(null);
   // The table card: the one thing on the page that scrolls (T19).
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  // The root: the video writes the film's clock onto it (`--film-t`), so the
+  // playing row's progress rule and the transport read one clock (T21).
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const pendingIds = useRef(0);
   const [clock] = useState(() => createVideoClock(initialVideoTime));
 
@@ -288,6 +292,19 @@ export function LabelConsole({
     () => dockNowPlaying(points, parsePlayingRowKey(playingKey)),
     [points, playingKey],
   );
+  // The playing point's span on the FILE clock — `--film-t` is the element's
+  // own seconds, so the window is the player's stop, not `playingRowAt`'s
+  // analysis-clock one.
+  const fileOffset = video?.startTimeSeconds ?? 0;
+  const stops = useMemo(
+    () => labelFilmStops(points, fileOffset),
+    [points, fileOffset],
+  );
+  const playingWindow = useMemo(() => {
+    if (playingPointId === null) return null;
+    const stop = stops.find((s) => s.point.id === playingPointId);
+    return stop ? { start: stop.start, end: stop.end } : null;
+  }, [stops, playingPointId]);
 
   // The open point: the held one while held (`null` for none), else the
   // playing one, else the one that rested open when the video last had a
@@ -939,7 +956,11 @@ export function LabelConsole({
   }
 
   return (
-    <div data-label-console="" className="flex min-h-0 flex-1 flex-col gap-6">
+    <div
+      ref={rootRef}
+      data-label-console=""
+      className="flex min-h-0 flex-1 flex-col gap-6"
+    >
       <div className="flex shrink-0 items-end justify-between gap-8">
         <div className="flex min-w-0 flex-col gap-1.5">
           <h1 className="text-display truncate">
@@ -989,6 +1010,7 @@ export function LabelConsole({
             onToggleTombstone={toggleTombstone}
             playingPointId={playingPointId}
             playingShotId={playing?.shotId ?? null}
+            playingWindow={playingWindow}
           />
         </div>
 
@@ -1026,6 +1048,7 @@ export function LabelConsole({
         adScoring={session.adScoring}
         onTime={clock.set}
         onLayout={setVideoLayout}
+        clockTargetRef={rootRef}
         initialMinimised={initialVideoMinimised}
       />
 

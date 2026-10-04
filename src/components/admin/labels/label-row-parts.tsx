@@ -63,6 +63,15 @@ export interface EditContext {
 }
 
 /**
+ * The playing point's span on the FILE clock — the `<video>`'s own seconds,
+ * which is what `--film-t` carries — from its `labelFilmStops` stop.
+ */
+export interface PlayingWindow {
+  start: number;
+  end: number;
+}
+
+/**
  * A tombstone: a thin red rule carrying a small pill, board 08's `.dl`. The
  * pill (and the rule) is one button that expands a struck-through ghost of
  * the deleted row underneath, where Undo lives.

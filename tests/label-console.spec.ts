@@ -1136,6 +1136,114 @@ test.describe("the playing row", () => {
     expect(html).toContain("data-label-follow-pill");
   });
 
+  // T21: the points rail's 2px blue rule, on the playing point row only.
+  test.describe("the progress rule", () => {
+    const RULE = /h-0\.5 bg-\[var\(--blue\)\]/g;
+    const ruleOf = (row: string) =>
+      row.match(
+        /<span aria-hidden="true" class="([^"]*h-0\.5 bg-\[var\(--blue\)\][^"]*)" style="width:([^"]*)"/,
+      );
+
+    test("the playing row draws it from the film's clock", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: null,
+        initialPointFocus: { mode: "held", pointId: null },
+        // Inside P1: its serve is at 2472.0.
+        initialVideoTime: 2473.4,
+      });
+      expect(count(html, RULE)).toBe(1);
+      const row = rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P1}"`);
+      expect(row).toContain('data-playing="true"');
+      // The row is the rule's positioning context.
+      expect(row).toMatch(/class="[^"]*\brelative\b[^"]*"/);
+      const rule = ruleOf(row);
+      expect(rule).not.toBeNull();
+      // The rail's classes, whole.
+      expect(rule![1]).toBe("absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]");
+      expect(
+        rule![2].startsWith("clamp(0%, calc((var(--film-t, 0) - 2472)"),
+      ).toBe(true);
+    });
+
+    test("the window is on the FILE clock: the video's offset comes off", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: {
+          url: "https://example.test/v.mp4?sig=x",
+          startTimeSeconds: 2000,
+        },
+        initialPointFocus: { mode: "held", pointId: null },
+        initialVideoTime: 2473.4,
+      });
+      const rule = ruleOf(
+        rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P1}"`),
+      );
+      expect(
+        rule![2].startsWith("clamp(0%, calc((var(--film-t, 0) - 472)"),
+      ).toBe(true);
+    });
+
+    test("a row that is not playing has none", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: null,
+        initialPointFocus: { mode: "held", pointId: null },
+        initialVideoTime: 2473.4,
+      });
+      const rows = html
+        .split('data-row="point"')
+        .slice(1)
+        .filter((row) => !row.includes('data-playing="true"'));
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) expect(count(row, RULE)).toBe(0);
+    });
+
+    test("none in dead time, or before the video moves", () => {
+      for (const initialVideoTime of [undefined, null, 100, 2480, 9999]) {
+        const html = render({
+          session: labelSessionFixture(),
+          video: null,
+          initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+          initialVideoTime,
+        });
+        expect(count(html, RULE), String(initialVideoTime)).toBe(0);
+      }
+    });
+
+    test("the table draws none without a window to fill", () => {
+      const { LabelPointsTable } = createLoader().load(
+        "src/components/admin/labels/label-points-table.tsx",
+      ) as { LabelPointsTable: React.ComponentType<Record<string, unknown>> };
+      const session = labelSessionFixture();
+      const table = (playingWindow?: { start: number; end: number }) =>
+        renderToStaticMarkup(
+          React.createElement(LabelPointsTable, {
+            points: session.points,
+            names: { p1: "Lee", p2: "Vargas" },
+            expandedPointId: null,
+            playingPointId: FIXTURE_POINT_IDS.P1,
+            playingWindow,
+          }),
+        );
+      expect(count(table(), RULE)).toBe(0);
+      expect(count(table({ start: 10, end: 14 }), RULE)).toBe(1);
+      expect(table({ start: 10, end: 14 })).toContain(
+        "width:clamp(0%, calc((var(--film-t, 0) - 10) / 4 * 100%), 100%)",
+      );
+    });
+
+    test("one clock: the film's hook, and no frame loop of the console's own", () => {
+      const dir = path.join(process.cwd(), "src/components/admin/labels");
+      for (const file of readdirSync(dir)) {
+        const source = readFileSync(path.join(dir, file), "utf8");
+        expect(source, file).not.toContain("requestAnimationFrame");
+      }
+      const player = readFileSync(path.join(dir, "label-video.tsx"), "utf8");
+      expect(count(player, /useFilmClockVars\(/g)).toBe(2);
+    });
+  });
+
   test("the table draws whatever rows it is told are playing", () => {
     const { LabelPointsTable } = createLoader().load(
       "src/components/admin/labels/label-points-table.tsx",

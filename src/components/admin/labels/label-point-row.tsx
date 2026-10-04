@@ -15,6 +15,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { filmProgressWidth } from "@/components/dashboard/matches/match-detail/film/film-clock";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import type { LabelPoint, LabelSide } from "@/lib/services/labels/session";
@@ -48,6 +49,7 @@ import {
   sideInitial,
   type EditContext,
   type LabelRowOperations,
+  type PlayingWindow,
 } from "./label-row-parts";
 import {
   POINT_CELL,
@@ -73,6 +75,13 @@ import {
  * game, reset it to its seed, delete it. Each only asks the console
  * (`LabelRowOperations`), which owns the confirm and the write.
  *
+ * The PLAYING row draws the points rail's progress rule (`point-list.tsx`'s
+ * `PointRow`): a bare 2px `--blue` line along the row's foot, growing from its
+ * left edge across its full width — the bleed included, since the row is the
+ * rule's positioning context — as the point plays. Its width is CSS reading
+ * `--film-t`, which the video writes onto the console's root every frame
+ * (`film-clock.ts`), so the row never re-renders to move it.
+ *
  * The strokes arrive as `children`: the table owns the stroke rows and hands
  * the open point's in, so this file never imports the table.
  */
@@ -80,6 +89,7 @@ export function PointRow({
   point,
   open,
   playing,
+  playingWindow = null,
   onToggle,
   edit,
   children,
@@ -87,6 +97,8 @@ export function PointRow({
   point: LabelPoint;
   open: boolean;
   playing: boolean;
+  /** The playing point's span in file seconds; only the playing row gets one. */
+  playingWindow?: PlayingWindow | null;
   onToggle?: (pointId: string) => void;
   edit: EditContext;
   /** The open point's stroke rows; nothing when it has none. */
@@ -111,7 +123,7 @@ export function PointRow({
         }}
         className={cn(
           POINT_GRID,
-          "group/row -mx-4 min-h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 text-[13px] transition-colors duration-200",
+          "group/row relative -mx-4 min-h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 text-[13px] transition-colors duration-200",
           open
             ? "rounded-b-none bg-[var(--surface-muted)]"
             : "hover:bg-[var(--surface-muted)]",
@@ -195,6 +207,18 @@ export function PointRow({
         ) : (
           <span aria-hidden="true" />
         )}
+
+        {/* The playing row's rule, as the points rail draws it: out of the
+            grid's flow, so it takes no track. */}
+        {playing && playingWindow ? (
+          <span
+            aria-hidden="true"
+            className="absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]"
+            style={{
+              width: filmProgressWidth(playingWindow.start, playingWindow.end),
+            }}
+          />
+        ) : null}
       </div>
 
       {open ? (

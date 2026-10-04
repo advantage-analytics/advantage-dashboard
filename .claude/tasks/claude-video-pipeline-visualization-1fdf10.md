@@ -295,7 +295,7 @@ ready).
 
 ## T21 · The playing row's 2px blue progress rule
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T19
 - **files:** src/components/admin/labels/label-video.tsx, src/components/admin/labels/label-video-dock.tsx, src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-points-table.tsx, src/components/admin/labels/label-point-row.tsx, src/components/admin/labels/label-row-parts.tsx, tests/label-console.spec.ts (guess)

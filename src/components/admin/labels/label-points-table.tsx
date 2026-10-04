@@ -23,7 +23,11 @@ import {
 import type { SideNames } from "./label-format";
 import { LabelGameBand } from "./label-game-band";
 import { DeletedPoint, PointRow } from "./label-point-row";
-import type { EditContext, LabelRowOperations } from "./label-row-parts";
+import type {
+  EditContext,
+  LabelRowOperations,
+  PlayingWindow,
+} from "./label-row-parts";
 import { ShotRows } from "./label-shot-row";
 import {
   POINT_COLUMNS,
@@ -88,7 +92,9 @@ export const POINT_HEADER_HEIGHT = 36;
  * `--blue` with a small play glyph after it. It is deliberately none of the
  * other row states — not the open point's grey, not the selected stroke's
  * white with hairlines, not an added stroke's ringed tint — and it changes
- * nothing: no point opens, no stroke is selected, nothing scrolls.
+ * nothing: no point opens, no stroke is selected, nothing scrolls. The
+ * playing POINT row also draws the points rail's 2px blue progress rule along
+ * its foot, when the console hands in `playingWindow`.
  *
  * THE CARD IS THE SCROLLER (T19, `data-label-scroller`): it takes whatever
  * height its flex-column parent has left and scrolls BOTH ways inside itself
@@ -156,6 +162,11 @@ export interface LabelPointsTableViewProps {
   playingPointId?: string | null;
   /** The stroke the video is on, inside `playingPointId`. */
   playingShotId?: string | null;
+  /**
+   * The playing point's span in FILE seconds (its `labelFilmStops` stop) —
+   * what its progress rule fills across. Absent: the row is marked, no rule.
+   */
+  playingWindow?: PlayingWindow | null;
   /** Lands on the scroll element — the card — for the follow scroll. */
   scrollerRef?: RefObject<HTMLDivElement | null>;
 }
@@ -179,6 +190,7 @@ export function LabelPointsTableView({
   onToggleTombstone,
   playingPointId = null,
   playingShotId = null,
+  playingWindow = null,
   scrollerRef,
 }: LabelPointsTableViewProps) {
   const edit: EditContext = {
@@ -269,6 +281,9 @@ export function LabelPointsTableView({
                     point={point}
                     open={point.id === expandedPointId}
                     playing={point.id === playingPointId}
+                    playingWindow={
+                      point.id === playingPointId ? playingWindow : null
+                    }
                     onToggle={onTogglePoint}
                     edit={edit}
                   >
