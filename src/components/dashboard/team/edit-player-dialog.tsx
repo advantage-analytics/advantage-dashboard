@@ -22,7 +22,9 @@ import {
 import {
   PlayerMenuField,
   RosterNote,
+  backhandOptions,
   classYearOptions,
+  handOptions,
   lineupSpotOptions,
   spotHeldNote,
   spotHolders,
@@ -162,7 +164,7 @@ export function EditPlayerDialog({
   // `profile_id` for players — so the menu never offers this for one.
   if (!member || member.profileId === null) return null;
 
-  /** One patch helper, so the five fields cannot drift into five setters. */
+  /** One patch helper, so the fields cannot drift into five setters. */
   function edit<K extends keyof PlayerFields>(key: K, value: PlayerFields[K]) {
     setFields((current) =>
       current === null ? current : { ...current, [key]: value },
@@ -211,6 +213,8 @@ export function EditPlayerDialog({
           classYear: fields.classYear || null,
           lineupSpot: fields.lineupSpot ? Number(fields.lineupSpot) : null,
           email: fields.email.trim() || null,
+          hand: fields.hand || null,
+          backhand: fields.backhand || null,
         });
       } catch {
         setError(
@@ -420,6 +424,25 @@ export function EditPlayerDialog({
           </div>
 
           <RosterNote icon={Users} note={spotNote} />
+
+          {/* For a claimed player this is their own Settings value — one
+              cell, so saving here changes what they see there. */}
+          <div className="grid grid-cols-2 gap-4">
+            <PlayerMenuField
+              label="Hand"
+              value={fields.hand}
+              options={handOptions(fields.hand)}
+              disabled={busy}
+              onChange={(value) => edit("hand", value)}
+            />
+            <PlayerMenuField
+              label="Backhand"
+              value={fields.backhand}
+              options={backhandOptions(fields.backhand)}
+              disabled={busy}
+              onChange={(value) => edit("backhand", value)}
+            />
+          </div>
 
           <SettingsField
             label="Email"

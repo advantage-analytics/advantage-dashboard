@@ -1521,6 +1521,40 @@ test.describe("wizard handlers: only eligible roster subjects are offered or ins
     expect(h.current.whoPlayed.subject).toBeNull();
   });
 
+  test("a style typed for one player drops when another is picked, and stays on a re-pick", async () => {
+    const h = uploadWizardHarness({ team: true });
+    await h.flush();
+    h.current.whoPlayed.choose({
+      kind: "roster",
+      playerId: "first",
+      name: "Player first",
+    });
+    h.render();
+    h.current.handleInputChange("playerHand", "left");
+    h.current.handleInputChange("playerBackhand", "one-handed");
+    h.render();
+
+    // The same player again keeps what the coach typed.
+    h.current.whoPlayed.choose({
+      kind: "roster",
+      playerId: "first",
+      name: "Player first",
+    });
+    h.render();
+    expect(h.current.formData.playerHand).toBe("left");
+
+    // Anyone else must not inherit it — "use for future matches" is ticked by
+    // default and would save it onto their roster profile.
+    h.current.whoPlayed.choose({
+      kind: "roster",
+      playerId: "second",
+      name: "Player second",
+    });
+    h.render();
+    expect(h.current.formData.playerHand).toBeUndefined();
+    expect(h.current.formData.playerBackhand).toBeUndefined();
+  });
+
   test("a seeded subject the roster no longer names returns to selection", async () => {
     const h = uploadWizardHarness({
       team: true,

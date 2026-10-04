@@ -1,6 +1,6 @@
 import { adminUploadCourt } from "@/lib/admin/uploads/court";
 import { createHash } from "node:crypto";
-import { requireAdmin } from "./admin-guard";
+import { checkAdmin } from "./admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getImportProviderStrategy } from "@/lib/services/upload/providers";
@@ -25,11 +25,15 @@ const refusals: Record<string, string> = {
   "processing-in-flight": "Analysis is already in progress for this match.",
   "wrong-program": "This match belongs to another program.",
 };
-function failure(error: string) {
-  return { ok: false as const, message: refusals[error] ?? error };
+/**
+ * A refusal the route answers with its own `status`: 401 with no session, 403
+ * for a signed-in non-admin, 400 for everything the request itself got wrong.
+ */
+function failure(error: string, status: 400 | 401 | 403 = 400) {
+  return { ok: false as const, status, message: refusals[error] ?? error };
 }
 
-const defaults = { requireAdmin, createAdminClient, createClient };
+const defaults = { checkAdmin, createAdminClient, createClient };
 type Dependencies = typeof defaults;
 
 /** This deliberately accepts no form-derived scores/names or caller actor. */
@@ -37,8 +41,9 @@ export async function submitAdminMatchFile(
   form: FormData,
   deps: Dependencies = defaults,
 ) {
-  const actor = await deps.requireAdmin();
-  if (!actor) return failure("Administrator access is required.");
+  const actor = await deps.checkAdmin();
+  if (!actor.ok)
+    return failure("Administrator access is required.", actor.status);
   const keys = [
     "file",
     "operationId",
@@ -203,8 +208,9 @@ export async function getAdminMatchFileStatus(
   itemId: string,
   deps: Dependencies = defaults,
 ) {
-  const actor = await deps.requireAdmin();
-  if (!actor) return failure("Administrator access is required.");
+  const actor = await deps.checkAdmin();
+  if (!actor.ok)
+    return failure("Administrator access is required.", actor.status);
   if (!uuid.test(operationId) || !uuid.test(itemId))
     return failure("Invalid operation.");
   const client = await deps.createClient();

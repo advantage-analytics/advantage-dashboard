@@ -22,7 +22,7 @@ import { CardFooter } from "@/components/dashboard/shared/card-footer";
  */
 
 const STAT_COLUMNS: readonly { label: string; width: string }[] = [
-  { label: "1st serve", width: "64px" },
+  { label: "1st Serve", width: "64px" },
   { label: "Winners", width: "56px" },
   { label: "Errors", width: "52px" },
 ];

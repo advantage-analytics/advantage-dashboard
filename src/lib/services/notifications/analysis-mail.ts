@@ -13,6 +13,12 @@ import {
   scoreSetsFrom,
   type RawMatchScore,
 } from "@/lib/ui/score-format";
+import {
+  chainAttempts,
+  classifyFailure,
+  jobRecoveryFacts,
+  type RecoveryClass,
+} from "@/lib/data/match-analysis";
 import { claimSend, getNotificationPrefs } from "./should-notify";
 
 const LOG = "[notifications:analysis]";
@@ -58,7 +64,7 @@ export async function notifyAnalysisOutcome(params: {
     const { data: job, error: jobError } = await supabase
       .from("processing_jobs")
       .select(
-        "created_by, match_id, status, error_code, error_step, error_message, video_object_key",
+        "created_by, match_id, status, error_code, error_category, error_step, error_message, video_object_key, results_object_key",
       )
       .eq("id", jobId)
       .maybeSingle();
@@ -92,6 +98,53 @@ export async function notifyAnalysisOutcome(params: {
 
     // A retained match whose uploader deleted their account has nobody to tell.
     if (!uploaderId || !matchId) return;
+
+    // Which recovery class the athlete-facing copy should use — decided the
+    // same way the matches list and match page decide it (classifyFailure()),
+    // so the email never disagrees with what the UI is already showing.
+    // `attemptsUsed` is the real chain count (chainAttempts() over every job
+    // row on this match), not a stand-in, because it is what separates a
+    // plain "retry" from the "tried three times, contact us" wait_or_ask
+    // copy — a mistake here would tell someone to press a button the retry
+    // route will refuse.
+    let failureClass: RecoveryClass | null = null;
+    if (outcome === "failed") {
+      const facts = jobRecoveryFacts({
+        status: job.status as string,
+        error_code: job.error_code as string | null,
+        error_category: job.error_category as string | null,
+        error_step: job.error_step as string | null,
+        hasVideo: Boolean(job.video_object_key),
+        hasResults: Boolean(job.results_object_key),
+      });
+      const { data: chainRows } = await supabase
+        .from("processing_jobs")
+        .select("id, resubmitted_from_job_id, status")
+        .eq("match_id", matchId);
+      const attemptsUsed = chainRows ? chainAttempts(chainRows, jobId) : 1;
+      failureClass = classifyFailure({ ...facts, attemptsUsed });
+
+      // `stats_unavailable` is a deterministic derivation refusal, not a
+      // failure — the match renders normally with its unreconciled-score
+      // caveat (T18), so there is nothing to email the athlete about.
+      if (failureClass === "stats_unavailable") {
+        console.warn(
+          `${LOG} stats_unavailable — no athlete email (by design)`,
+          {
+            jobId,
+          },
+        );
+        return;
+      }
+
+      if (!failureClass) {
+        console.warn(
+          `${LOG} failed outcome but the job didn't classify as a failure, athlete email skipped`,
+          { jobId, status: job.status },
+        );
+        return;
+      }
+    }
 
     const key =
       outcome === "ready" ? "notifyAnalysisReady" : "notifyAnalysisFailed";
@@ -137,8 +190,11 @@ export async function notifyAnalysisOutcome(params: {
             matchId,
             matchTitle,
             matchContext,
-            reason: (job.error_message as string | null) || null,
-            videoRetained: Boolean(job.video_object_key),
+            // Non-null: outcome === "failed" always sets failureClass above,
+            // or returns before reaching here.
+            failureClass: failureClass as RecoveryClass,
+            errorCode: (job.error_code as string | null) || null,
+            errorMessage: (job.error_message as string | null) || null,
           });
 
     const sent = await sendEmail(message);

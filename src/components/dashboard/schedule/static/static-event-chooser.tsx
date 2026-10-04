@@ -134,11 +134,11 @@ export const COPY = {
     "Six singles and three doubles against one opponent, shared under one event.",
   dualMetaBefore: "Creates ",
   dualMetaCount: "9",
-  dualMetaAfter: " lines · one team score",
+  dualMetaAfter: " lines · One team score",
   tournamentLabel: "Tournament",
   tournamentBlurb:
     "Players entered into draws; matches get added by round as they're played.",
-  tournamentMeta: "Creates entries · draws by round",
+  tournamentMeta: "Creates entries · Draws by round",
   aside:
     "One player's own match — a challenge, practice set or outside entry — isn't an event.",
   asideLink: "Add a one-off match",

@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Users } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/use-viz-points";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import {
@@ -53,7 +54,7 @@ import {
   tileCountLabel,
   EMPTY_VIZ_FILTERS,
 } from "./viz-model";
-import { truncatePillLabels, VIZ_TILE_GRID_CLASS } from "./viz-labels";
+import { VIZ_TILE_GRID_CLASS } from "./viz-labels";
 import { buildDefaultTiles, type DefaultTile } from "./default-tiles";
 
 // M3: `variant="wall"` never renders a default tile (`viz-wall.tsx` builds
@@ -114,7 +115,7 @@ export function SavedViewsBand({
   variant?: "wall" | "focused";
 }) {
   const router = useRouter();
-  const { points } = useMatchData();
+  const points = useVizPoints(useMatchData());
   const { bands, unit, contactHidden } = useVizBands();
   const { you, opp } = useMatchSides();
   const { state, hrefFor } = useVizState();
@@ -208,7 +209,8 @@ export function SavedViewsBand({
       filters: view.filters,
       viewId: null,
     });
-    const pills = truncatePillLabels(entries.map((entry) => entry.label));
+    // Every active filter, unfolded — `CourtTile` folds by measured width.
+    const pills = entries.map((entry) => entry.label);
     const countLabel = tileCountLabel(result);
     const href = hrefFor({
       cut: view.cut,

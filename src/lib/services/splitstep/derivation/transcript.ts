@@ -23,7 +23,7 @@ import {
   directionZone,
   serveCourtSide,
 } from "./court";
-import { flagPoint, flagStroke } from "./flags";
+import { flagPoint, flagStroke, POINT_FLAGS } from "./flags";
 import {
   ACCEPT_UNRECONCILED_FOLD,
   reconcile,
@@ -38,7 +38,11 @@ import {
   shotResult,
   type ResultType,
 } from "./result-type";
-import { resolvePointWinners } from "./winners";
+import { lastStrokeWinner, resolvePointWinners } from "./winners";
+import { collapsedTailStart, opponentOf } from "./rallies";
+import { frozenGameStarts, frozenStretches, withServer } from "./frozen";
+import { playedRally } from "./played";
+import type { LineCalls } from "./line-calls";
 import { pressureFor } from "./pressure";
 import { pointScoresOf } from "./scores";
 import { bounceVideoTimes } from "./frame-clock";
@@ -111,6 +115,15 @@ export interface Transcript {
   serveGeometryRetention: number;
   /** Rallies whose last stroke was a serve, over points. */
   unreturnedServeRate: number;
+  /**
+   * Rallies whose winner is the last stroke's guess because the score stream
+   * could not name one: a collapsed tail (collapsedTailStart), a frozen
+   * stretch (frozen.ts), or a stall inside a game. Each carries
+   * `winner_guessed`.
+   */
+  guessedRallies: number[];
+  /** Rallies inside a frozen stretch, games read from the serve. */
+  frozenRallies: number[];
 }
 
 /**
@@ -197,21 +210,28 @@ export interface BuildOptions {
   adScoring?: boolean;
   /** matches.format.best_of. Decides when a set point is also a match point. */
   bestOf?: number;
+  /**
+   * Our own line calls from the trajectories file (line-calls.ts). Absent
+   * means no file: the dead-ball and near-line flags then fall back
+   * to what the strokes file alone can say.
+   */
+  lineCalls?: LineCalls;
 }
 
 export function buildTranscript(options: BuildOptions): Transcript {
   const {
-    rallies,
+    rallies: streamRallies,
     labels,
     score,
     initialTopIsPlayer1,
     adScoring = true,
     bestOf = 3,
+    lineCalls: streamLineCalls,
   } = options;
 
   const gameKeyOf = new Map<number, string>();
   const setKeyOf = new Map<number, string>();
-  for (const rally of rallies) {
+  for (const rally of streamRallies) {
     const first = rally.strokes[0];
     // Both score strings are server-relative, so "1-0" and "0-1" are the SAME
     // state seen from opposite ends and the string flips every game. Keying a
@@ -224,8 +244,107 @@ export function buildTranscript(options: BuildOptions): Transcript {
     );
   }
 
-  const winners = resolvePointWinners(rallies, labels);
+  // Winners are read off the stream as the vendor labelled it: its score
+  // strings are relative to ITS server, so absolutizing them against a
+  // corrected one would misread them.
+  const winners = resolvePointWinners(streamRallies, labels);
+  const rallies = [...streamRallies];
+  const tailStart = collapsedTailStart(rallies);
+  const guessedRallies: number[] = [];
+  const guess = (i: number) => {
+    const winner = lastStrokeWinner(rallies[i], labels);
+    if (!winner) return;
+    winners[i] = { ...winners[i], winner, via: "guess" };
+    guessedRallies.push(winners[i].rallyId);
+  };
 
+  // A frozen stretch keeps the vendor's set but not its one endless game: the
+  // serve splits it into games, the server alternates game by game from the
+  // last rally the stream could read, and every point takes the last stroke's
+  // guess — including ones a transition out of the run happened to resolve,
+  // since those read the frozen labels.
+  const frozenRallies = new Set<number>();
+  // Line calls are keyed by stroke object, and relabelling a frozen rally
+  // replaces its strokes, so the calls are carried across to the new objects.
+  let lineCalls = streamLineCalls;
+  const frozenKey = (rallyId: number) =>
+    `${setKeyOf.get(rallyId)}|frozen@${rallyId}`;
+  for (const { start, end } of frozenStretches(
+    rallies,
+    tailStart ?? rallies.length,
+  )) {
+    const run = rallies.slice(start, end);
+    const previous = start > 0 ? rallies[start - 1] : null;
+    const opensGame =
+      !previous ||
+      previous.strokes[0]?.predSetScore !== run[0].strokes[0]?.predSetScore ||
+      previous.strokes[0]?.predGameScore !== run[0].strokes[0]?.predGameScore;
+    let server = !previous
+      ? run[0].server
+      : opensGame
+        ? (opponentOf(previous.server, labels) ?? run[0].server)
+        : previous.server;
+    let gameKey =
+      previous && !opensGame
+        ? (gameKeyOf.get(previous.rallyId) ?? "")
+        : frozenKey(run[0].rallyId);
+
+    frozenGameStarts(run).forEach((startsGame, offset) => {
+      const i = start + offset;
+      const rally = rallies[i];
+      if (startsGame) {
+        server = opponentOf(server, labels) ?? server;
+        gameKey = frozenKey(rally.rallyId);
+      }
+      rallies[i] = withServer(rally, server, labels);
+      if (streamLineCalls && rallies[i] !== rally) {
+        const carried = new Map(lineCalls);
+        rally.strokes.forEach((stroke, k) => {
+          const call = streamLineCalls.get(stroke);
+          if (call) carried.set(rallies[i].strokes[k], call);
+        });
+        lineCalls = carried;
+      }
+      gameKeyOf.set(rally.rallyId, gameKey);
+      frozenRallies.add(rally.rallyId);
+      guess(i);
+    });
+  }
+
+  // A collapsed score tail keeps its rallies. They fold into the game the last
+  // real rally was in (a reset key would open a phantom set), and every point
+  // from that rally on that the stream could not resolve takes the last
+  // stroke's guess. If the vendor's tail actually spanned a game change, it is
+  // one game here — the stream no longer says where that change was.
+  if (tailStart !== null) {
+    const anchor = rallies[tailStart - 1].rallyId;
+    for (const rally of rallies.slice(tailStart)) {
+      gameKeyOf.set(rally.rallyId, gameKeyOf.get(anchor) ?? "");
+      setKeyOf.set(rally.rallyId, setKeyOf.get(anchor) ?? "");
+    }
+    for (let i = tailStart - 1; i < winners.length; i += 1) {
+      if (!winners[i].winner) guess(i);
+    }
+  }
+
+  // Anything else the stream left unresolved is a stall inside a game (the
+  // score repeating for a few rallies, then moving on). The point was played,
+  // so it is kept on the last stroke's guess rather than refusing the match.
+  // The final rally is the exception: reconcile settles it from the entered
+  // score, which beats a guess. So is a warm-up rally before the stream has
+  // read any set score: it has no game to join, and keeping it would open a
+  // phantom first set and push every real point one set up. It stays a
+  // refusal (see collapsedTailStart).
+  const firstScored = rallies.findIndex(
+    (r) => (r.strokes[0]?.predSetScore ?? null) !== null,
+  );
+  const stallsFrom = firstScored === -1 ? winners.length : firstScored;
+  for (let i = stallsFrom; i < winners.length - 1; i += 1) {
+    if (!winners[i].winner) guess(i);
+  }
+  guessedRallies.sort((a, b) => a - b);
+
+  const frozenList = [...frozenRallies];
   const empty: Transcript = {
     ok: false,
     reason: null,
@@ -243,6 +362,8 @@ export function buildTranscript(options: BuildOptions): Transcript {
     winnerShare: 0,
     serveGeometryRetention: 0,
     unreturnedServeRate: 0,
+    guessedRallies,
+    frozenRallies: frozenList,
   };
 
   if (!score) {
@@ -352,7 +473,12 @@ export function buildTranscript(options: BuildOptions): Transcript {
     // winner — reading the raw array here recorded every match's last point as
     // won by player2, because `winner === player1` is false for null.
     const winner = rec.settledWinners[i]?.winner ?? null;
-    const serveIndex = lastServeIndex(rally);
+    // Phantom strokes are removed once, here, so numbering, results,
+    // result_type, flags and rally length all read the same list. Pressure and
+    // the score columns read the raw rally: they come from the score stream.
+    const played = playedRally(rally, { winner, lineCalls });
+    const kept = played.rally;
+    const serveIndex = lastServeIndex(kept);
     const pressure = pressureFor({
       rally,
       labels,
@@ -361,13 +487,13 @@ export function buildTranscript(options: BuildOptions): Transcript {
       adScoring,
       bestOf,
     });
-    const resultType = winner ? classifyPoint(rally, winner) : null;
+    const resultType = winner ? classifyPoint(kept, winner) : null;
     const numbering = gameNumberOf.get(`${gameIndex}`) ?? {
       set: 1,
       game: gameIndex + 1,
     };
 
-    const last = rally.strokes[rally.strokes.length - 1];
+    const last = kept.strokes[kept.strokes.length - 1];
     if (last && last.strokeType !== "serve" && winner) {
       rallyEnders += 1;
       if (last.playerLabel === winner) winnerStruckLast += 1;
@@ -376,7 +502,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
 
     const shots: DerivedShot[] = [];
 
-    rally.strokes.forEach((stroke, index) => {
+    kept.strokes.forEach((stroke, index) => {
       const isServe = stroke.strokeType === "serve";
       if (isServe) servesSeen += 1;
 
@@ -402,7 +528,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
         shot_number: number,
         is_player1: stroke.playerLabel === player1,
         shot_type: isServe
-          ? isFirstServe || rally.serves.length === 1
+          ? isFirstServe || kept.serves.length === 1
             ? "First Serve"
             : "Second Serve"
           : strokeShotType(stroke),
@@ -413,22 +539,26 @@ export function buildTranscript(options: BuildOptions): Transcript {
         landing_x: landing?.x ?? null,
         landing_y: landing?.y ?? null,
         result: winner
-          ? shotResult({ stroke, index, rally, serveIndex, winner })
+          ? shotResult({ stroke, index, rally: kept, serveIndex, winner })
           : null,
         video_time: stroke.videoTime,
         bounce_video_time: bounceTimeOf.get(stroke) ?? null,
         zone: isServe
           ? serveZone(landing?.x ?? null)
           : directionZone(landing?.x ?? null, contact?.x ?? null),
-        flags: flagStroke({ stroke, index, rally, serveIndex }),
+        flags: flagStroke({ stroke, index, rally: kept }),
         derived: true,
       });
     });
 
+    // The clip window spans every detected stroke, dropped ones included, so
+    // the film room still shows the whole exchange.
     const first = rally.strokes[0];
+    const end = rally.strokes[rally.strokes.length - 1];
     const duration =
-      first && last ? Math.max(0, last.videoTime - first.videoTime) : null;
+      first && end ? Math.max(0, end.videoTime - first.videoTime) : null;
 
+    const frozen = frozenRallies.has(rally.rallyId);
     points.push({
       rally_id: rally.rallyId,
       point_number: points.length + 1,
@@ -436,20 +566,35 @@ export function buildTranscript(options: BuildOptions): Transcript {
       game_number: numbering.game,
       server_is_player1: rally.server === player1,
       won_by_player1: winner === player1,
-      rally_length: rally.strokes.length - serveIndex,
+      rally_length: kept.strokes.length - serveIndex,
       result_type: resultType,
       is_break_point: pressure.isBreakPoint,
       is_set_point: pressure.isSetPoint,
       is_match_point: pressure.isMatchPoint,
-      ...pointScoresOf(rally),
+      // A frozen reading is not the score this point started from; the film
+      // room shows nothing rather than the same 0-0 on every point.
+      ...(frozen
+        ? { set_score: null, game_score: null, point_score: null }
+        : pointScoresOf(rally)),
       video_time: first?.videoTime ?? null,
       duration,
-      flags: flagPoint({
-        rally,
-        winner,
-        previousInGame: previousRally,
-        resultType,
-      }),
+      flags: [
+        // score_side_mismatch reads the point score's parity, and a frozen
+        // reading always says "first point": it would flag every ad court.
+        ...flagPoint({
+          rally: kept,
+          winner,
+          previousInGame: previousRally,
+          resultType,
+          adScoring,
+          lineCalls,
+        }).filter((f) => !(frozen && f === POINT_FLAGS.SCORE_SIDE_MISMATCH)),
+        ...(rec.settledWinners[i]?.via === "guess"
+          ? [POINT_FLAGS.WINNER_GUESSED]
+          : []),
+        ...(frozen ? [POINT_FLAGS.SCORE_FROZEN] : []),
+        ...played.flags,
+      ],
       derived: true,
       shots,
     });
@@ -467,6 +612,8 @@ export function buildTranscript(options: BuildOptions): Transcript {
     winnerShare: rallyEnders === 0 ? 0 : winnerStruckLast / rallyEnders,
     serveGeometryRetention: servesSeen === 0 ? 0 : servesKept / servesSeen,
     unreturnedServeRate: rallies.length === 0 ? 0 : unreturned / rallies.length,
+    guessedRallies,
+    frozenRallies: frozenList,
   };
 }
 

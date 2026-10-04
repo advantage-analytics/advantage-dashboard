@@ -281,9 +281,29 @@ test.describe("attachLineGroups", () => {
       entriesByEvent: map,
       match: facts,
     });
-    expect(noRound.sameDay.map((l) => [l.entryId, l.state])).toEqual([
-      ["te", "needsRound"],
-    ]);
+    // Edit Match chooses the round beside the line, so a roundless entry is
+    // open — and, with the player on it, suggested.
+    expect(noRound.sameDay).toEqual([]);
+    expect(noRound.suggested).toHaveLength(1);
+    expect(noRound.suggested[0]).toMatchObject({
+      entryId: "te",
+      round: null,
+      state: "available",
+      reason: null,
+      takenRounds: [],
+    });
+    // The wizard's Round field is on another step: it still asks first.
+    const uploadNoRound = attachLineGroups({
+      events: [tour],
+      entriesByEvent: map,
+      match: facts,
+      mode: "upload",
+    });
+    expect(uploadNoRound.sameDay[0]).toMatchObject({
+      entryId: "te",
+      state: "needsRound",
+      reason: "Set the round first",
+    });
     const withRound = attachLineGroups({
       events: [tour],
       entriesByEvent: map,
@@ -324,6 +344,52 @@ test.describe("attachLineGroups", () => {
     expect(longLabel.sameDay[0]).toMatchObject({
       round: "QF",
       state: "roundTaken",
+      takenRounds: ["QF"],
+    });
+    // Without a round the entry opens, carrying its match's and outcomes'
+    // rounds as codes — whatever spelling they were saved with — for the
+    // dialog's Round menu to leave out.
+    const withOutcome = new Map([
+      [
+        "t",
+        [
+          entry({
+            id: "te",
+            eventId: "t",
+            slot: null,
+            matches: [
+              {
+                id: "qf",
+                round: "Quarterfinal",
+                status: "manual",
+                score: null,
+                opponentLabels: [],
+                hasVideo: false,
+              },
+            ],
+            outcomes: [
+              {
+                id: "o1",
+                round: "R16",
+                kind: "withdrawal",
+                side: "theirs",
+                actorUserId: "u",
+                recordedAt: "2025-01-30T00:00:00Z",
+              },
+            ],
+          }),
+        ],
+      ],
+    ]);
+    const open = attachLineGroups({
+      events: [tour],
+      entriesByEvent: withOutcome,
+      match: facts,
+    });
+    expect(open.suggested[0]).toMatchObject({
+      round: null,
+      state: "available",
+      takenRounds: ["QF", "R16"],
     });
   });
 

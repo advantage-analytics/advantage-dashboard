@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
-import { Activity, ChevronRight, CircleX, Users } from "lucide-react";
+import { Activity, ChevronRight, Users } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -12,6 +12,7 @@ import {
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { WorkspaceScopeChip } from "@/components/dashboard/shared/workspace-scope-chip";
 import { AnalysisProgressTrack } from "@/components/dashboard/matches/analysis-progress-track";
+import { StepMark } from "@/components/dashboard/shared/vertical-steps";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
   useLiveMatchAnalysis,
@@ -19,16 +20,21 @@ import {
 } from "@/hooks/use-live-match-analysis";
 import {
   ANALYSIS_LABEL,
-  isAnalysisFailed,
   isInFlight,
   isLiveUpdating,
-  isWorking,
+  inFlightMark,
 } from "@/lib/data/match-analysis";
 import { invitationHref } from "@/lib/services/programs/join-links";
 import { acceptPendingInvite } from "@/lib/services/programs/join-actions";
 import { inviteSubtitle } from "@/lib/services/programs/join-role";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
 import { trayDetail } from "./tray-detail";
+import { trayStartedDay, trayStartedTitle } from "./tray-started";
+import {
+  isTrayFailure,
+  trayFailureAction,
+  trayFailureReason,
+} from "./tray-failure";
 import type {
   ActivityFeed,
   ActivityItem,
@@ -52,15 +58,22 @@ import { cn } from "@/lib/utils";
  * last two rows of it, so the panel holds two row shapes and one blue.
  *
  * ── The leading column carries state, not air ──────────────────────────────
- * 14px, always present, so every row's text starts on the same x. A blue dot
- * on a row that is moving or waiting; the loss-red circle-x on a failure;
- * the Roster's ink-400 `Users` on a staff-only "joined the team" row, which
- * is news rather than a task. Nothing renders without one.
+ * 14px, always present, so every row's text starts on the same x. Work rows
+ * lead with the match page's own stepper marks at their compact size — the
+ * ink spinner on a row that is moving, the loss-red cross on a failure — so
+ * the tray and the page it opens say "running" and "failed" in one glyph. The
+ * blue dot is left to the one row waiting on the reader, an invitation: blue
+ * in the chrome means "this needs you", on the row and on the trigger alike.
+ * The Roster's ink-400 `Users` marks a staff-only "joined the team" row,
+ * which is news rather than a task. Nothing renders without one.
  *
  * ── Actions are always visible ─────────────────────────────────────────────
  * A popover cannot be hovered on touch, and the rows with an action are the
  * rows the panel exists for. Accept is a word: the row's wash and dot already
- * carry it. Start over keeps its border: it spends video budget.
+ * carry it. A failed row is one link whose trailing grey word says where the
+ * click goes; hover only darkens that word along with the row's wash. The
+ * tray is navigation-only — no row here resubmits, rebuilds or spends video
+ * budget; every recovery control lives on the page the row opens.
  */
 
 /** The one row measure. Every row — div, link or button — draws from it. */
@@ -104,70 +117,101 @@ const RING = (
 
 function InFlightRow({ item }: { item: ActivityItem }) {
   const { analysis, title } = item;
+  const word = ANALYSIS_LABEL[analysis.status];
+  const now = new Date();
 
   return (
     <Link
       href={`/dashboard/matches/${item.matchId}`}
       className={cn(ROW_CLASS, ROW_INTERACTIVE_CLASS)}
     >
-      <Lead>{DOT}</Lead>
-      <span className="flex min-w-0 flex-1 flex-col gap-[7px]">
-        <span className="min-w-0 text-[12px] [text-wrap:pretty] text-[var(--ink-900)]">
-          {ANALYSIS_LABEL[analysis.status]}{" "}
-          <b className="font-medium">{title}</b>
+      <Lead>
+        {/* Down 2px so the 14px mark centres on the title's first line. */}
+        <span className="mt-0.5 flex">
+          {/* Spinner only while work runs; a queued or stored job wears the
+              still `wait` ring, as it does in the Matches and Roster rows. */}
+          <StepMark state={inFlightMark(analysis.status)} size="compact" />
         </span>
-        {/* The bar is the whole estimate. The "about N minutes left" line this
-            used to carry said the same thing a second time, and needed a
-            15-second timer to keep saying it. */}
-        {analysis.progressPercent !== undefined && (
-          <AnalysisProgressTrack
-            percent={analysis.progressPercent}
-            live={isWorking(analysis.status)}
-            label={`${ANALYSIS_LABEL[analysis.status]} ${title}`}
-          />
-        )}
+      </Lead>
+      <span className="flex min-w-0 flex-1 flex-col gap-[7px]">
+        <span className="flex items-baseline gap-2">
+          <span className="min-w-0 flex-1 text-[12px] [text-wrap:pretty] text-[var(--ink-900)]">
+            {word} <b className="font-medium">{title}</b>
+          </span>
+          <ChromeTooltip
+            label={trayStartedTitle(item.at, now)}
+            side="top"
+            align="end"
+          >
+            <span className="shrink-0 text-[11px] text-[var(--ink-500)] tabular-nums">
+              {trayStartedDay(item.at, now)}
+            </span>
+          </ChromeTooltip>
+        </span>
+        {/* The bar belongs to the upload, the one stage with a measured
+            number. Queued and analysing carry a stage position, which is an
+            estimate — the mark alone says which of the two it is, as in the
+            Matches table and the stepper. */}
+        {analysis.status === "uploading" &&
+          analysis.progressPercent !== undefined && (
+            <AnalysisProgressTrack
+              percent={analysis.progressPercent}
+              live
+              label={`${word} ${title}`}
+            />
+          )}
       </span>
     </Link>
   );
 }
 
 /**
- * A failure, with the one thing you can do about it.
+ * A failure, as one link to the one thing you can do about it.
  *
- * "Start over" is `analysisAction()`'s word for this state and it leads where
- * that does — the upload wizard. There is no retry endpoint, so a "Retry" here
- * would be a fourth word for a state the product already names in three
- * places, promising a thing the pipeline cannot do.
+ * The whole row is the link, so there is no second target to aim for: the
+ * match title and `trayFailureReason`'s short reason, each on one truncating
+ * line, then a grey action word and a chevron saying where the click goes.
+ * Word and destination both come from `trayFailureAction`, which reads them
+ * straight out of `analysisAction` — "Add video" into the upload wizard for
+ * this match when the footage is the problem, "Open" onto the match page
+ * when the recovery (retry, rebuild, or waiting on us) lives there, and
+ * `analysisAction`'s "Start over" when a failure carries no classification.
  *
- * The button keeps a border, unlike Accept: it is destructive-adjacent — it
- * spends video budget. Hand-drawn at 24px because `advButton`'s smallest
- * size is 32px, which is a page control, not a row control.
+ * Grey, not blue, and no border: nothing here spends video budget or starts a
+ * job — the tray navigates, and the page it opens owns every control. The
+ * leading mark is the stepper's own compact fail mark, the same cross the
+ * match page draws on the step that failed.
  */
 function FailedRow({ item }: { item: ActivityItem }) {
+  const action = trayFailureAction(item.analysis, item.matchId);
+
   return (
-    <div className={ROW_CLASS}>
+    <Link
+      href={action.href}
+      className={cn(ROW_CLASS, ROW_INTERACTIVE_CLASS, "group items-center")}
+    >
       <Lead>
-        <CircleX
-          className="size-[14px] text-[var(--danger)]"
+        <StepMark state="fail" size="compact" />
+      </Lead>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">
+          {item.title}
+        </span>
+        <span className="mt-[3px] truncate text-[11px] text-[var(--ink-500)]">
+          {trayFailureReason(item.analysis)}
+        </span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1">
+        <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-900)] group-focus-visible:text-[var(--ink-900)]">
+          {action.label}
+        </span>
+        <ChevronRight
+          className="size-[13px] text-[var(--ink-400)]"
           strokeWidth={1.5}
           aria-hidden="true"
         />
-      </Lead>
-      <span className="flex min-w-0 flex-1 items-center gap-3">
-        <Link
-          href={`/dashboard/matches/${item.matchId}`}
-          className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)] hover:underline focus-visible:underline focus-visible:outline-none"
-        >
-          Analysis failed — <b className="font-medium">{item.title}</b>
-        </Link>
-        <Link
-          href="/dashboard/matches/new"
-          className="flex h-6 shrink-0 items-center rounded-[6px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-[9px] text-[12px] text-[var(--ink-700)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-        >
-          Start over
-        </Link>
       </span>
-    </div>
+    </Link>
   );
 }
 
@@ -437,8 +481,19 @@ export function ActivityTray({
     }));
 
     return {
-      inFlight: merged.filter((item) => isInFlight(item.analysis.status)),
-      failed: merged.filter((item) => isAnalysisFailed(item.analysis.status)),
+      // `&& !isTrayFailure(...)`: a stalled `uploaded` hand-off is in flight by
+      // `isInFlight` alone (the status itself never changed), but T34 draws it
+      // as a `FailedRow`, not an `InFlightRow` — the two lists must stay
+      // disjoint so the row renders exactly once.
+      inFlight: merged.filter(
+        (item) =>
+          isInFlight(item.analysis.status) && !isTrayFailure(item.analysis),
+      ),
+      // `isTrayFailure`, not `isAnalysisFailed`: a `stats_unavailable` row is
+      // a failed status whose match renders fine — the matches list files it
+      // under Ready — so it is neither a row here, nor a count in the
+      // tooltip, nor a reason to light the trigger's dot.
+      failed: merged.filter((item) => isTrayFailure(item.analysis)),
     };
     // `feed.items`, not `feed`: the wrapper object is a fresh identity on every
     // RSC payload.
@@ -447,9 +502,9 @@ export function ActivityTray({
   // Everything waiting on the reader or moving for them. Invitations count
   // but NOT toward the live subscription above: they arrive with the RSC
   // payload and change only when a coach sends one, which no socket here
-  // would learn about anyway. Failures count because their row carries a
-  // button now — a dot that vanished the moment an upload failed was saying
-  // "nothing here" over the one row that needed someone.
+  // would learn about anyway. Failures count because their row is a way out
+  // of the failure — a dot that vanished the moment an upload failed was
+  // saying "nothing here" over the one row that needed someone.
   const unread = inFlight.length + invites.length + failed.length;
   const elsewhereCount = elsewhere.reduce((sum, work) => sum + work.count, 0);
 

@@ -16,17 +16,23 @@ import type { TopMover } from "@/lib/data/team-movers";
  * Who changed the most, and in what. The ranking is `lib/data/team-movers.ts`
  * over the Roster page's own per-player measures; this file draws seven rows
  * of it and adds no arithmetic. A row is a link into the player's profile —
- * where the same measure, the same window and the same delta are drawn in
- * full.
+ * where the same measure is drawn in full.
  *
- * **Always on the page.** With nobody moving yet — a new roster, or one
- * whose players have not played their second week — the card holds its slot
- * with three ghost rows and one band saying when the list fills. When the
- * roster itself is empty the band's action is the roster page, because that
- * is the step before any of this.
+ * **Two groups.** Players whose latest match moved against their earlier
+ * ones come first. Players on their first match with stats sit under a
+ * "First match" label below a hairline, at → 0: kept apart so a 0 that means
+ * "nothing to compare yet" never reads as a real "no change" among movers.
+ *
+ * **Always on the page.** With nobody on the roster carrying stats yet, the
+ * card holds its slot with three ghost rows and one band saying when the
+ * list fills. When the roster itself is empty the band's action is the
+ * roster page, because that is the step before any of this.
  */
+// The stat track is fixed rather than a 150–170px range: at 170px the
+// longest label, "Break points saved", overran the value and pushed the
+// delta to the card edge. `pr-4` keeps the delta off that edge.
 const ROW =
-  "grid grid-cols-[26px_minmax(100px,1fr)_74px_minmax(150px,170px)] items-center gap-3.5 rounded-[var(--radius-element)] px-3 py-[11px] -mx-3 transition-colors duration-150 hover:bg-[var(--surface-muted)] has-[:focus-visible]:bg-[var(--surface-muted)]";
+  "grid grid-cols-[26px_minmax(100px,1fr)_74px_230px] items-center gap-3.5 rounded-[var(--radius-element)] py-[11px] pr-4 pl-3 -mx-3 transition-colors duration-150 hover:bg-[var(--surface-muted)] has-[:focus-visible]:bg-[var(--surface-muted)]";
 
 /** The fade the product's day-zero rows share — see `GHOST_OPACITY`. */
 const GHOST_ROWS = GHOST_OPACITY.slice(0, 3);
@@ -44,14 +50,41 @@ export function TopMovers({
   /** Day-zero Home owns all setup actions and links. */
   isPreview?: boolean;
 }) {
+  const moved = movers.filter((mover) => !mover.firstMatch);
+  const firstMatch = movers.filter((mover) => mover.firstMatch);
   return (
     <TopMoversFrame rosterSize={rosterSize} isPreview={isPreview}>
       {movers.length > 0 ? (
-        <div className="mt-2 flex flex-col">
-          {movers.map((mover) => (
-            <Row key={mover.playerId} mover={mover} />
-          ))}
-        </div>
+        <>
+          {moved.length > 0 && (
+            <div className="mt-2 flex flex-col">
+              {moved.map((mover) => (
+                <Row key={mover.playerId} mover={mover} />
+              ))}
+            </div>
+          )}
+          {firstMatch.length > 0 && (
+            <>
+              <div
+                className={`flex items-baseline gap-2.5 ${
+                  moved.length > 0
+                    ? "mt-2.5 border-t border-[var(--border-hairline)] pt-3.5"
+                    : "mt-3"
+                }`}
+              >
+                <span className="eyebrow-sm">First match</span>
+                <span className="text-micro">
+                  a change shows from their second
+                </span>
+              </div>
+              <div className="mt-1 flex flex-col">
+                {firstMatch.map((mover) => (
+                  <Row key={mover.playerId} mover={mover} />
+                ))}
+              </div>
+            </>
+          )}
+        </>
       ) : (
         <Empty
           rosterEmpty={rosterSize === 0}
@@ -64,7 +97,6 @@ export function TopMovers({
 }
 
 function Row({ mover }: { mover: TopMover }) {
-  const delta = formatDelta(mover.delta);
   return (
     <Link href={`/dashboard/team/roster/${mover.playerId}`} className={ROW}>
       <InitialsAvatar name={mover.name} photoUrl={mover.avatarUrl} />
@@ -74,19 +106,32 @@ function Row({ mover }: { mover: TopMover }) {
       <span className="flex items-center">
         <FormTicks form={mover.form} empty={null} />
       </span>
-      <span className="grid grid-cols-[1fr_40px_30px] items-baseline gap-2">
+      <span className="grid grid-cols-[1fr_44px_40px] items-baseline gap-2.5">
         <span className="text-micro whitespace-nowrap">{mover.metric}</span>
         <span className="tabular text-right text-[13px] font-medium text-[var(--ink-900)]">
           {mover.value}%
         </span>
-        <span
-          className="tabular text-right text-[11px] whitespace-nowrap"
-          style={{ color: delta.color }}
-        >
-          {delta.label}
-        </span>
+        <Delta delta={mover.delta} />
       </span>
     </Link>
+  );
+}
+
+/**
+ * The DS `Delta`: the arrow carries the direction's colour, the numeral stays
+ * ink-900. `formatDelta` colours the whole label, so only its colour is used.
+ */
+function Delta({ delta }: { delta: number }) {
+  const { label, color } = formatDelta(delta);
+  const direction = delta > 0 ? "up" : delta < 0 ? "down" : "no change,";
+  return (
+    <span className="tabular text-right text-[11px] whitespace-nowrap text-[var(--ink-900)]">
+      <span aria-hidden style={{ color }}>
+        {label[0]}
+      </span>{" "}
+      <span className="sr-only">{direction} </span>
+      {Math.abs(delta)}
+    </span>
   );
 }
 
@@ -105,7 +150,7 @@ function Empty({
         description={
           rosterEmpty
             ? "Nobody on the roster yet."
-            : "Nobody has enough matches to show a change yet."
+            : "Nobody on the roster has match stats yet."
         }
         className="mt-2 flex flex-col"
       >
@@ -129,7 +174,7 @@ function Empty({
           <span className="block text-[13px] leading-[1.4] font-medium text-[var(--ink-900)]">
             {rosterEmpty
               ? "Nothing here until players are on the roster"
-              : "Movers appear after a player's second week of matches"}
+              : "Movers appear once players have match stats"}
           </span>
           <span
             className="text-body-sm mt-[3px] block"
@@ -137,7 +182,7 @@ function Empty({
           >
             {rosterEmpty
               ? "Add players by name, or invite them to claim a profile. Their matches follow."
-              : "Each player's biggest change in serve and pressure numbers, against everything earlier."}
+              : "Each player's biggest change in serve and pressure numbers, latest match against their earlier ones."}
           </span>
         </div>
         {rosterEmpty && canManage && !isPreview && (
@@ -166,7 +211,9 @@ export function TopMoversFrame({
     <section aria-label="Top movers" className="surface-card min-w-0 p-5">
       <div className="flex items-center gap-3">
         <span className="eyebrow">Top movers</span>
-        <span className="text-micro">biggest change since last week</span>
+        <span className="text-micro">
+          latest match against their earlier ones
+        </span>
         <div className="flex-1" />
         {!isPreview && (
           <Link

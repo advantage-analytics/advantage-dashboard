@@ -2,8 +2,13 @@
 
 Repo-specific facts a re-sync needs. `config.json` holds the values the
 converter reads; this file holds the why and the gotchas. First sync: 2026-09-25,
-into the Claude Design project **Advantage Analytics — Code Components**
-(`235baf04-01f4-4821-b6e2-0431ecb68846`, https://claude.ai/design/p/235baf04-01f4-4821-b6e2-0431ecb68846).
+into a project that later vanished (`235baf04…` 404'd from the Cj account on
+2026-09-28). Re-imported fresh on 2026-09-28 into **Advantage Analytics — Code
+Components** (`b0b0eaac-bc5e-4249-8616-186bc3cc2e24`,
+https://claude.ai/design/p/b0b0eaac-bc5e-4249-8616-186bc3cc2e24), owned by the
+**Cj** claude.ai account — the same one that owns _Advantage Design System v3_.
+A `get_project` 404 means the session is signed into the wrong account (or the
+project was deleted): check `list_projects` before creating another.
 It is the code-derived sibling of the hand-built _Advantage Design System v3_
 project, not a replacement for that rulebook. Re-syncs: fetch its `_ds_sync.json`
 to `.design-sync/.cache/remote-sync.json` and run the driver with `--remote`.
@@ -43,6 +48,11 @@ to `.design-sync/.cache/remote-sync.json` and run the driver with `--remote`.
   them. Dashboard pieces keep their directory names (shared, settings,
   loading, matches, dashboard) — the converter only regroups cards that have
   no directory group.
+- **`MenuSelect` options gained `group?: string`** (2026-09-28, the tournament
+  Round menu); the hand-written `dtsPropsFor.MenuSelect` carries it. Any new
+  option field must be added there by hand — the extractor never sees it.
+- **`PendingBar` gained `tone: "default" | "inverse"`**; its preview has an
+  `Inverse` cell on `.brand-mesh-gradient` (the header Beta pill).
 - **`dtsPropsFor`** overrides seven contracts the extractor flattened wrongly:
   `won: boolean` lost its `null` (ResultMark), `viewer` lost `| null`
   (PlayerMark), and ScoreLine/WorkspaceMark/CardEmpty/MenuSelect/DateField
@@ -73,7 +83,12 @@ to `.design-sync/.cache/remote-sync.json` and run the driver with `--remote`.
 
 ## Known render warns
 
-(none carried — validate is clean after the fixes above)
+- `[TOKENS_MISSING]` for `--claim-aside`, `--tournament-min-width`,
+  `--tournament-tracks`: set inline at runtime by claim-shell.tsx and
+  tournament-detail.tsx, outside the synced scope. Expected.
+- `[TOKENS_MISSING]` for `--red`: a real app bug — `admin-upload-entry.tsx`
+  uses `text-[var(--red)]` and nothing defines `--red` (the token is
+  `--danger`). Not a synced component; fix it in the app and the warn goes.
 
 ## Re-sync risks
 

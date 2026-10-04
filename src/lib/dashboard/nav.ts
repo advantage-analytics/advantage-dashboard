@@ -9,6 +9,7 @@ import {
   Settings,
   HelpCircle,
 } from "lucide-react";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 
 /**
  * The dashboard's destinations, defined once.
@@ -78,11 +79,17 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  * and lets `visible_match_ids()` decide who sees which rows — so the entry is
  * back, and inside a program players have a route to a match list again.
  *
- * The two carry different icons because they are adjacent rows answering
- * different questions — the design's own pairing: `calendar` for Schedule,
- * `gallery-horizontal-end` for Matches. Matches keeps the same glyph
- * `PERSONAL_NAV` gives it, so one destination does not change shape when the
- * workspace switcher moves.
+ * The two carry different icons because they answer different questions —
+ * the design's own pairing: `calendar` for Schedule, `gallery-horizontal-end`
+ * for Matches. Matches keeps the same glyph `PERSONAL_NAV` gives it, so one
+ * destination does not change shape when the workspace switcher moves.
+ *
+ * Schedule is a coming-soon page for now (`lib/schedule/availability.ts`), so
+ * it sits below Roster with the other unfinished entries rather than beside
+ * Matches: the live pages lead the rail and the stubs close it. Its
+ * `comingSoon` below reads `SCHEDULE_ENABLED` rather than a literal, so
+ * turning the flag on only leaves the position to fix by hand: move it back
+ * to second, the design's place for it.
  *
  * Opponents took Compare's slot. Compare answered "which of my two players is
  * holding serve better" and nothing replaces it — that was weighed and
@@ -109,10 +116,15 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  * there is program data to scope.
  */
 export const TEAM_NAV: readonly NavLink[] = [
-  { name: "Team Home", href: "/dashboard/team", icon: Home },
-  { name: "Schedule", href: "/dashboard/team/schedule", icon: Calendar },
+  { name: "Team home", href: "/dashboard/team", icon: Home },
   { name: "Matches", href: "/dashboard/matches", icon: GalleryHorizontalEnd },
   { name: "Roster", href: "/dashboard/team/roster", icon: UsersRound },
+  {
+    name: "Schedule",
+    href: "/dashboard/team/schedule",
+    icon: Calendar,
+    comingSoon: SCHEDULE_ENABLED ? undefined : true,
+  },
   {
     name: "Opponents",
     href: "/dashboard/opponents",
@@ -135,7 +147,7 @@ export const TEAM_NAV: readonly NavLink[] = [
 
 export const PERSONAL_BOTTOM: readonly NavLink[] = [
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
-  { name: "Help Center", href: "/dashboard/help", icon: HelpCircle },
+  { name: "Help center", href: "/dashboard/help", icon: HelpCircle },
 ];
 
 /**
@@ -149,7 +161,7 @@ export const PERSONAL_BOTTOM: readonly NavLink[] = [
  */
 export const TEAM_BOTTOM: readonly NavLink[] = [
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
-  { name: "Help Center", href: "/dashboard/help", icon: HelpCircle },
+  { name: "Help center", href: "/dashboard/help", icon: HelpCircle },
 ];
 
 /**

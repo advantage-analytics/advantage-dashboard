@@ -3,7 +3,7 @@
  */
 
 import { FormData, WinnerLoserResult, MatchData, UploadedFile } from "./types";
-import { retiredWinner } from "./score-state";
+import { lastEnteredSet, retiredWinner } from "./score-state";
 
 /**
  * Get the number of sets to display/edit.
@@ -29,6 +29,20 @@ export function getAdjustedScores(
     return [...currentScores, ...Array(sets - currentScores.length).fill(null)];
   }
   return currentScores.slice(0, sets);
+}
+
+/**
+ * How many sets to keep: the adjusted rows minus their trailing sets where
+ * neither side entered anything, so a best-of-3 that ended in two is not saved
+ * with a 0-0 third set. Nothing entered at all keeps every set.
+ */
+export function playedSetCount(
+  player: readonly (number | null)[],
+  opponent: readonly (number | null)[],
+): number {
+  return (
+    lastEnteredSet(player, opponent) || Math.max(player.length, opponent.length)
+  );
 }
 
 /**
@@ -147,8 +161,13 @@ export function buildMatchData(
     formData.numberOfSets,
   );
 
-  const playerScoresNum = adjustedPlayerScores.map((s) => s ?? 0);
-  const opponentScoresNum = adjustedOpponentScores.map((s) => s ?? 0);
+  const sets = playedSetCount(adjustedPlayerScores, adjustedOpponentScores);
+  const playerScoresNum = adjustedPlayerScores
+    .slice(0, sets)
+    .map((s) => s ?? 0);
+  const opponentScoresNum = adjustedOpponentScores
+    .slice(0, sets)
+    .map((s) => s ?? 0);
 
   return {
     id: matchId,
@@ -180,8 +199,8 @@ export function buildMatchData(
     score: {
       player1: playerScoresNum,
       player2: opponentScoresNum,
-      player1_tiebreaks: adjustedPlayerTiebreaks,
-      player2_tiebreaks: adjustedOpponentTiebreaks,
+      player1_tiebreaks: adjustedPlayerTiebreaks.slice(0, sets),
+      player2_tiebreaks: adjustedOpponentTiebreaks.slice(0, sets),
       // Reads the result the caller settled on, so an early-end answer left
       // over from before the score was finished never names a winner.
       ...(formData.result === "Retired" && formData.retiredSide
@@ -235,9 +254,8 @@ export function formatFileSize(bytes: number): string {
  * Format a duration in SECONDS as a compact human string ("42s", "3m 12s",
  * "1h 30m").
  *
- * Note the sibling `formatDuration` below takes MILLISECONDS and returns a
- * different shape ("1H 30M"). Keep the names distinct — they are not
- * interchangeable.
+ * For a match length or an allowance in hours and minutes, see
+ * `@/lib/format/duration`.
  */
 export function formatClipLength(seconds: number): string {
   if (seconds < 60) return `${Math.ceil(seconds)}s`;
@@ -310,20 +328,6 @@ export function formatResolution(width: number, height: number): string {
 }
 
 /**
- * Format duration from milliseconds to H:MM format
- * Returns "-:--" if duration is 0 or undefined
- */
-export function formatDuration(ms: number | undefined): string {
-  if (!ms || ms === 0) return "";
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  if (hours === 0) return `${minutes}M`;
-  if (minutes === 0) return `${hours}H`;
-  return `${hours}H ${minutes}M`;
-}
-
-/**
  * Who is ahead on sets.
  *
  * Lives here rather than in a component because BOTH the Match step's WON tag
@@ -367,23 +371,6 @@ export function pulseOnce(el: HTMLElement): void {
     el.removeEventListener("animationend", onEnd);
   };
   el.addEventListener("animationend", onEnd);
-}
-
-/**
- * A span of SECONDS as "1h 47m", "35m", "2h".
- *
- * The third member of this file's formatter family, and the one for spans a
- * person reasons about in hours: a monthly allowance and a match length. Note
- * the siblings above — `formatClipLength` keeps seconds because a trim handle
- * needs them, and `formatDuration` shouts in caps for the eyebrow rows that
- * carry match metadata elsewhere in the app. Same quantity, three audiences.
- */
-export function formatHoursMinutes(seconds: number): string {
-  const total = Math.max(0, Math.round(seconds));
-  const h = Math.floor(total / 3600);
-  const m = Math.round((total % 3600) / 60);
-  if (h === 0) return `${m}m`;
-  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
 /**
@@ -495,6 +482,13 @@ export function setHasData(
  */
 export const STORAGE_KEYS = {
   FORM_DATA: "uploadFormData",
+  /**
+   * `kind:id` of the workspace that autosaved `FORM_DATA`. A workspace
+   * pre-selects its own format answers (`workspaceFormatDefaults`), so a form
+   * saved under one must not carry them into another — see
+   * `loadFormDataFromStorage`.
+   */
+  FORM_DATA_WORKSPACE: "uploadFormDataWorkspace",
   UPLOADED_FILE: "uploadedFile",
   SELECTED_PROVIDER: "selectedProvider",
   /**
@@ -512,6 +506,7 @@ export const STORAGE_KEYS = {
  */
 export function clearStorageData(): void {
   localStorage.removeItem(STORAGE_KEYS.FORM_DATA);
+  localStorage.removeItem(STORAGE_KEYS.FORM_DATA_WORKSPACE);
   localStorage.removeItem(STORAGE_KEYS.UPLOADED_FILE);
   localStorage.removeItem(STORAGE_KEYS.SELECTED_PROVIDER);
   localStorage.removeItem(STORAGE_KEYS.DRAFT_KEPT);
@@ -560,12 +555,29 @@ export function formatHoursCap(seconds: number): string {
 }
 
 /**
- * Load form data from localStorage
+ * Load form data from localStorage.
+ *
+ * A form saved under a different workspace — or before
+ * the save was tagged — loses its Scoring and Lets answers, so the current
+ * workspace's own defaults apply. Otherwise a college workspace's pre-selected
+ * No-Ad would reach a personal upload as an answer nobody gave (guardrails
+ * §3.1), and a personal visit's Replay would override the college Play on.
  */
-export function loadFormDataFromStorage(): FormData | null {
+export function loadFormDataFromStorage(workspaceKey: string): FormData | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.FORM_DATA);
-    return stored ? JSON.parse(stored) : null;
+    if (!stored) return null;
+    const formData: FormData = JSON.parse(stored);
+    if (localStorage.getItem(STORAGE_KEYS.FORM_DATA_WORKSPACE) === workspaceKey)
+      return formData;
+    // Removed rather than set to undefined: the caller spreads this over the
+    // defaults, and an own `undefined` key would still overwrite them.
+    const {
+      adScoring: _adScoring,
+      playOnLets: _playOnLets,
+      ...rest
+    } = formData;
+    return rest as FormData;
   } catch (e) {
     console.error("Error parsing form data:", e);
     return null;
@@ -594,8 +606,13 @@ export function loadUploadedFileFromStorage(): StoredUploadedFile | null {
 }
 
 /**
- * Save form data to localStorage
+ * Save form data to localStorage, tagged with the workspace it was answered
+ * in (see `loadFormDataFromStorage`).
  */
-export function saveFormDataToStorage(formData: FormData): void {
+export function saveFormDataToStorage(
+  formData: FormData,
+  workspaceKey: string,
+): void {
   localStorage.setItem(STORAGE_KEYS.FORM_DATA, JSON.stringify(formData));
+  localStorage.setItem(STORAGE_KEYS.FORM_DATA_WORKSPACE, workspaceKey);
 }

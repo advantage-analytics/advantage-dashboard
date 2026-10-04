@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { expect, test } from "@playwright/test";
 import ts from "typescript";
+import { splitInsight } from "../src/components/dashboard/matches/match-detail/insight-text";
 import {
   GENERATE_INSIGHTS_ENV,
   MATCH,
@@ -9,12 +10,14 @@ import {
 } from "./fixtures/edge-function-guard-identities";
 
 /**
- * The Advantage Intelligence summary's length is set by the prompt alone —
- * the expanded insight card renders whatever `meta.summary` holds, unclamped.
- * This spec runs generate-insights in a vm, captures the request body the
- * function sends to Gemini and reads the summary instruction out of it, so a
- * change to the cap is visible in a test rather than only in live output.
- * (The guards spec stubs `fetch` by URL only; this one keeps `init.body`.)
+ * The Advantage Intelligence summary is written as a headline and a
+ * description, and `summary` is composed from them so the report card's
+ * `splitInsight` lands exactly on the headline. This spec runs
+ * generate-insights in a vm with scripted Gemini replies, captures what the
+ * function asks Gemini and what it saves, so the prompt's rules and the
+ * check-and-retry around them are visible in a test rather than only in live
+ * output. (The guards spec stubs `fetch` by URL only; this one keeps
+ * `init.body`.)
  */
 
 const SOURCE = ts.transpileModule(
@@ -36,13 +39,49 @@ interface GeminiRequestBody {
   };
 }
 
-/** Runs the function as the service role and returns what it asked Gemini. */
-async function captureGeminiRequest(): Promise<{
-  url: string;
-  body: GeminiRequestBody;
+type PlayerReply = {
+  focus?: string;
+  headline?: string;
+  description?: string;
+  summary?: string;
+};
+type Reply = { player1?: PlayerReply; player2?: PlayerReply };
+/** A scripted Gemini turn: an answer, or `null` for a refused call. */
+type Turn = Reply | null;
+
+/** A reply whose headlines and descriptions pass the function's check. */
+const GOOD_REPLY: Reply = {
+  player1: {
+    focus: "second-serve points won",
+    headline: "Your second serve held firm under pressure.",
+    description:
+      "You won 67% of second-serve points and saved 70% of break points, so keep trusting that kick serve when the score gets tight.",
+  },
+  player2: {
+    focus: "first-serve points won",
+    headline: "Your first serve set up your best tennis.",
+    description:
+      "You won 66% of first-serve points, so build your service games around landing more first serves in the deuce court.",
+  },
+};
+
+/**
+ * Runs the function as the service role, answering each Gemini call with the
+ * next of `replies` (the last one repeats), and returns every request it made
+ * and the insights it saved.
+ */
+async function runWithReplies(
+  replies: Turn[] = [{}],
+  /** When set, a fake clock the function reads that each Gemini call advances by this much. */
+  msPerCall?: number,
+): Promise<{
+  requests: { url: string; body: GeminiRequestBody }[];
+  saved: Record<string, PlayerReply> | null;
 }> {
   let handler!: (request: Request) => Promise<Response>;
-  let captured: { url: string; body: GeminiRequestBody } | null = null;
+  const requests: { url: string; body: GeminiRequestBody }[] = [];
+  let saved: Record<string, PlayerReply> | null = null;
+  let clock = 0;
 
   const from = (table: string) => {
     const resolve = () => {
@@ -62,7 +101,10 @@ async function captureGeminiRequest(): Promise<{
       lt: () => query,
       in: () => query,
       order: () => query,
-      update: () => query,
+      update: (values: { insights: Record<string, PlayerReply> }) => {
+        saved = values.insights;
+        return query;
+      },
       single: async () => resolve(),
       then: (onFulfilled: (value: unknown) => unknown) =>
         Promise.resolve(resolve()).then(onFulfilled),
@@ -92,17 +134,30 @@ async function captureGeminiRequest(): Promise<{
           },
     Deno: { env: { get: (key: string) => GENERATE_INSIGHTS_ENV[key] } },
     Response,
+    AbortSignal,
+    ...(msPerCall === undefined ? {} : { Date: { now: () => clock } }),
     console: { ...console, warn: () => {}, error: () => {} },
     fetch: async (url: string, init?: RequestInit) => {
       if (url.startsWith("https://generativelanguage.googleapis.com/")) {
-        captured = {
+        clock += msPerCall ?? 0;
+        requests.push({
           url,
           body: JSON.parse(String(init?.body)) as GeminiRequestBody,
-        };
+        });
+        const reply = replies[Math.min(requests.length, replies.length) - 1];
+        if (reply === null) {
+          return Response.json(
+            { error: { message: "refused" } },
+            { status: 400 },
+          );
+        }
+        return Response.json({
+          candidates: [
+            { content: { parts: [{ text: JSON.stringify(reply) }] } },
+          ],
+        });
       }
-      return Response.json({
-        candidates: [{ content: { parts: [{ text: "{}" }] } }],
-      });
+      return Response.json({});
     },
   });
 
@@ -114,32 +169,71 @@ async function captureGeminiRequest(): Promise<{
     }),
   );
   expect(response.status).toBe(200);
-  if (!captured) throw new Error("generate-insights never called Gemini");
-  return captured;
+  if (requests.length === 0) {
+    throw new Error("generate-insights never called Gemini");
+  }
+  return { requests, saved };
 }
 
-test("the summary instruction asks for 4-5 sentences under 600 characters", async () => {
+/** The first request the function sent to Gemini. */
+async function captureGeminiRequest() {
+  const { requests } = await runWithReplies([GOOD_REPLY]);
+  return requests[0];
+}
+
+/** The prompt line that introduces one of the summary's fields. */
+function fieldLine(prompt: string, field: string): string {
+  const line = prompt.split("\n").find((l) => l.includes(`- a '${field}':`));
+  if (!line) throw new Error(`the prompt has no '${field}' instruction`);
+  return line;
+}
+
+test("the prompt asks for a focus, a short headline and a longer description", async () => {
   const { body } = await captureGeminiRequest();
   const prompt = body.contents[0].parts[0].text;
 
-  const summaryLine = prompt
-    .split("\n")
-    .find((line) => line.includes("a 'summary':"));
-  expect(summaryLine).toBeDefined();
-  expect(summaryLine).toContain("4-5 sentences");
-  expect(summaryLine).toContain("under 600 characters");
-  expect(prompt).not.toContain("350");
+  expect(fieldLine(prompt, "focus")).toContain(
+    "the headline and description are both about it and nothing else",
+  );
 
-  // The rules around the length are unchanged.
-  expect(summaryLine).toContain(
-    "The first sentence is the single most important takeaway from this match",
+  const headline = fieldLine(prompt, "headline");
+  expect(headline).toContain("one sentence, under 90 characters");
+  expect(headline).toContain("with no figures");
+  expect(headline).toContain("the single most important takeaway");
+
+  const description = fieldLine(prompt, "description");
+  // Two sentences: the evidence, then what to work on. "One or two" let
+  // flash-lite stop at one thin line under the headline.
+  expect(description).toContain(
+    "exactly two sentences, longer than the headline",
   );
-  expect(summaryLine).toContain(
-    "the rest gives the evidence and what to focus on next",
+  expect(description).toContain(
+    "then, in the second sentence, say what to work on",
   );
-  expect(summaryLine).toContain("Do not greet them");
-  expect(summaryLine).toContain("do not use markdown headers or bullet points");
-  expect(summaryLine).toContain("do not restate the raw numbers as a list");
+  expect(description).toContain("under 350 characters together with it");
+  // The description quotes this match's own figures inline — without this
+  // flash-lite wrote summaries with no numbers at all.
+  expect(description).toContain(
+    "Quote the one or two percentages from THIS match that prove the headline",
+  );
+  // The stat cards round, so the summary must too, or the two disagree by 1.
+  expect(description).toContain("rounded to the nearest whole number");
+  expect(description).toContain("as digits with a percent sign");
+  expect(description).toContain("Stay on the focus: no second topic");
+  expect(description).toContain("Do not greet them");
+  expect(description).toContain("do not use markdown headers or bullet points");
+  expect(description).toContain("do not list stats one after another");
+
+  // No coach voice, and the viewer never sees the prompt's own labels.
+  expect(prompt).toContain('never write "we", "us", "our" or "let\'s"');
+  expect(prompt).toContain(
+    'Call the other player "your opponent", never "Player 1" or "Player 2"',
+  );
+
+  expect(prompt).not.toContain("a 'summary':");
+  expect(prompt).not.toContain("WITHOUT printing raw numbers");
+  expect(prompt).not.toContain("600");
+  expect(prompt).not.toContain("4-5");
 });
 
 test("the summary names no vendor and speaks of Player 1 / Player 2", async () => {
@@ -155,11 +249,245 @@ test("the summary names no vendor and speaks of Player 1 / Player 2", async () =
 
 test("the generation config and model are the ones the prompt was tuned for", async () => {
   const { url, body } = await captureGeminiRequest();
-  expect(url).toContain("/models/gemini-2.5-flash:generateContent");
+  expect(url).toContain("/models/gemini-3.5-flash:generateContent");
   expect(body.generationConfig.temperature).toBe(0.4);
   expect(body.generationConfig.responseMimeType).toBe("application/json");
   expect(body.generationConfig.responseSchema).toMatchObject({
     type: "OBJECT",
     required: ["player1", "player2"],
+    properties: {
+      player1: {
+        required: [
+          "focus",
+          "headline",
+          "description",
+          "strengths",
+          "weaknesses",
+        ],
+        // The model names its subject before writing about it.
+        propertyOrdering: [
+          "focus",
+          "headline",
+          "description",
+          "strengths",
+          "weaknesses",
+        ],
+      },
+    },
   });
+});
+
+test("a valid reply is saved after one call, its summary split exactly on the headline", async () => {
+  const { requests, saved } = await runWithReplies([GOOD_REPLY]);
+  expect(requests).toHaveLength(1);
+  for (const key of ["player1", "player2"] as const) {
+    const player = saved?.[key];
+    expect(player?.summary).toBe(
+      `${GOOD_REPLY[key]!.headline} ${GOOD_REPLY[key]!.description}`,
+    );
+    // The card's own splitter recovers the two fields.
+    expect(splitInsight(player!.summary!)).toEqual({
+      claim: GOOD_REPLY[key]!.headline,
+      evidence: GOOD_REPLY[key]!.description,
+    });
+  }
+});
+
+test("a headline that quotes a figure is asked for again, and the retry is saved", async () => {
+  const bad: Reply = {
+    ...GOOD_REPLY,
+    player1: {
+      ...GOOD_REPLY.player1,
+      headline: "You won 67% of second-serve points under pressure.",
+    },
+  };
+  const { requests, saved } = await runWithReplies([bad, GOOD_REPLY]);
+  expect(requests).toHaveLength(2);
+  expect(requests[1].body.contents[0].parts[0].text).toContain(
+    "A previous answer was rejected because player1: a headline quotes a figure",
+  );
+  expect(saved?.player1?.headline).toBe(GOOD_REPLY.player1!.headline);
+});
+
+test("a reply still off after the retry is saved anyway, never dropped", async () => {
+  const twoSentences: Reply = {
+    ...GOOD_REPLY,
+    player2: {
+      ...GOOD_REPLY.player2,
+      headline: "Strong serving. It carried you.",
+    },
+  };
+  const { requests, saved } = await runWithReplies([twoSentences]);
+  expect(requests).toHaveLength(2);
+  expect(saved?.player2?.summary).toBe(
+    `Strong serving. It carried you. ${GOOD_REPLY.player2!.description}`,
+  );
+});
+
+test("a slow first answer is kept rather than asked for again", async () => {
+  const bad: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline: "You won 67% of points." },
+  };
+  // 20 s in, a second call no longer fits the webhook's 35 s wait.
+  const { requests, saved } = await runWithReplies([bad, GOOD_REPLY], 20_000);
+  expect(requests).toHaveLength(1);
+  expect(saved?.player1?.summary).toBe(
+    `You won 67% of points. ${GOOD_REPLY.player1!.description}`,
+  );
+});
+
+test("a retry that fails keeps the first answer instead of losing the summary", async () => {
+  const bad: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline: "You won 67% of points." },
+  };
+  const { requests, saved } = await runWithReplies([bad, null]);
+  expect(requests).toHaveLength(2);
+  expect(saved?.player1?.summary).toBe(
+    `You won 67% of points. ${GOOD_REPLY.player1!.description}`,
+  );
+});
+
+test("a headline ending on an initial is rejected, because the card would not split it", async () => {
+  const headline = "Your serving plan worked, so stick with plan B.";
+  // The card's splitter reads "B." as an initial and finds no boundary.
+  expect(
+    splitInsight(`${headline} ${GOOD_REPLY.player1!.description}`).evidence,
+  ).toBeNull();
+
+  const bad: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline },
+  };
+  const { requests } = await runWithReplies([bad, GOOD_REPLY]);
+  expect(requests).toHaveLength(2);
+  expect(requests[1].body.contents[0].parts[0].text).toContain(
+    "player1: a headline ends on an abbreviation or initial",
+  );
+});
+
+for (const [label, description, problem] of [
+  [
+    "Player 1",
+    "As Player 1 pressed, you won 67% of second-serve points, so keep trusting your kick serve.",
+    'a summary says "Player 1" or "Player 2"',
+  ],
+  [
+    "we",
+    "You won 67% of second-serve points. We will keep working on your kick serve in practice.",
+    'a summary speaks as "we"',
+  ],
+  [
+    "let's",
+    "You won 67% of second-serve points, so let's keep building your kick serve in practice.",
+    'a summary speaks as "we"',
+  ],
+] as const) {
+  test(`a description that uses "${label}" is asked for again`, async () => {
+    const bad: Reply = {
+      ...GOOD_REPLY,
+      player2: { ...GOOD_REPLY.player2, description },
+    };
+    const { requests } = await runWithReplies([bad, GOOD_REPLY]);
+    expect(requests).toHaveLength(2);
+    expect(requests[1].body.contents[0].parts[0].text).toContain(
+      `player2: ${problem}`,
+    );
+  });
+}
+
+test('naming the US Open is not mistaken for a coach\'s "us"', async () => {
+  const reply: Reply = {
+    ...GOOD_REPLY,
+    player1: {
+      ...GOOD_REPLY.player1,
+      description:
+        "You won 67% of second-serve points in a US Open qualifier, so keep trusting your kick serve.",
+    },
+  };
+  const { requests } = await runWithReplies([reply]);
+  expect(requests).toHaveLength(1);
+});
+
+test("a retry that is no better does not replace the first answer", async () => {
+  const first: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline: "You won 67% of points." },
+  };
+  const worse: Reply = {
+    player1: {
+      ...GOOD_REPLY.player1,
+      headline: "Your 2nd serve held up.",
+    },
+    player2: {
+      ...GOOD_REPLY.player2,
+      headline: "You won 66% on first serve.",
+    },
+  };
+  const { requests, saved } = await runWithReplies([first, worse]);
+  expect(requests).toHaveLength(2);
+  // player1 was off both times, so the first answer stands; player2 was
+  // right the first time, so the retry's broken version never replaces it.
+  expect(saved?.player1?.headline).toBe("You won 67% of points.");
+  expect(saved?.player2?.headline).toBe(GOOD_REPLY.player2!.headline);
+});
+
+test("the retry is taken per player, only where it fixed the first answer", async () => {
+  const first: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline: "You won 67% of points." },
+  };
+  const mixed: Reply = {
+    player1: GOOD_REPLY.player1,
+    player2: { ...GOOD_REPLY.player2, headline: "You won 66% on first serve." },
+  };
+  const { saved } = await runWithReplies([first, mixed]);
+  expect(saved?.player1?.headline).toBe(GOOD_REPLY.player1!.headline);
+  expect(saved?.player2?.headline).toBe(GOOD_REPLY.player2!.headline);
+});
+
+test("a summary over 350 characters is asked for again", async () => {
+  const long: Reply = {
+    ...GOOD_REPLY,
+    player1: {
+      ...GOOD_REPLY.player1,
+      description:
+        `${GOOD_REPLY.player1!.description} ${"Keep building that rhythm in every practice set you play. ".repeat(4)}`.trim(),
+    },
+  };
+  const { requests } = await runWithReplies([long, GOOD_REPLY]);
+  expect(requests).toHaveLength(2);
+  expect(requests[1].body.contents[0].parts[0].text).toMatch(
+    /player1: a summary is \d+ characters, over 350/,
+  );
+});
+
+test("a first answer after 13 s is not retried: the caller's clock started earlier", async () => {
+  const bad: Reply = {
+    ...GOOD_REPLY,
+    player1: { ...GOOD_REPLY.player1, headline: "You won 67% of points." },
+  };
+  // 35 s wait − 3 s head start − 13 s = 19 s left, short of a 20 s call.
+  const { requests } = await runWithReplies([bad, GOOD_REPLY], 13_000);
+  expect(requests).toHaveLength(1);
+});
+
+test("a summary still naming Player 1/2 after the retry is not saved", async () => {
+  const labelled: Reply = {
+    ...GOOD_REPLY,
+    player2: {
+      ...GOOD_REPLY.player2,
+      description:
+        "As Player 1 pressed, you won 66% of first-serve points, so keep landing that first serve.",
+    },
+  };
+  const { requests, saved } = await runWithReplies([labelled]);
+  expect(requests).toHaveLength(2);
+  expect(saved?.player2?.summary).toBeUndefined();
+  expect(saved?.player2?.headline).toBeUndefined();
+  // The other player's summary is untouched.
+  expect(saved?.player1?.summary).toBe(
+    `${GOOD_REPLY.player1!.headline} ${GOOD_REPLY.player1!.description}`,
+  );
 });

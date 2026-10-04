@@ -9,7 +9,7 @@ import {
 } from "@/components/dashboard/settings/settings-card";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
-  BETA_PLAN_ROWS,
+  betaPlanRows,
   PAID_PLANS_BEGIN,
   isProPlan,
   planFacts,
@@ -102,7 +102,7 @@ function PlanContent() {
             Free during the beta
           </SettingsCardTitle>
 
-          {BETA_PLAN_ROWS.map((row) => (
+          {betaPlanRows(active.individualPilot).map((row) => (
             <div
               key={row.label}
               className="flex items-start gap-6 border-t border-[var(--border-hairline)] py-3"

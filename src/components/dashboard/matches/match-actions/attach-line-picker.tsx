@@ -178,7 +178,7 @@ export function AttachLinePicker<L extends AttachLine>({
             {groups.suggested.length > 0 && (
               <>
                 <span className={floatMenuLabelCls}>
-                  Suggested · same day, same player
+                  Suggested · Same day, same player
                 </span>
                 {groups.suggested.map((line) => (
                   <LineRow key={line.entryId} line={line} onPick={onPick} />
@@ -219,7 +219,7 @@ export function AttachLinePicker<L extends AttachLine>({
               <>
                 {!nothingThatDay && <div className={floatMenuDividerCls} />}
                 <span className={floatMenuLabelCls}>
-                  Matching “{query.trim()}” · other days
+                  Matching “{query.trim()}” · Other days
                 </span>
                 {groups.search.map((line) => (
                   <LineRow
@@ -332,7 +332,12 @@ function LineRow<L extends AttachLine>({
         )}
       >
         {line.reason ??
-          (line.existingMatchId ? "Result in · no video" : "Awaiting result")}
+          // A tournament line picked without a round takes one in the dialog.
+          (line.eventKind === "tournament" && line.round === null
+            ? "Choose a round"
+            : line.existingMatchId
+              ? "Result in · No video"
+              : "Awaiting result")}
       </span>
     </button>
   );

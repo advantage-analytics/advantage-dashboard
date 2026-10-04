@@ -1,0 +1,41 @@
+$kind: http-example
+name: "No `Stripe-Signature` header, a signature that does not verify (the Stripe SDK's message follows `Webhook Error: `), or a completed checkout with no user id on it."
+request:
+  url: "{{baseUrl}}/api/webhooks/stripe"
+  method: POST
+  headers:
+    - key: Stripe-Signature
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "id": "evt_1Q2w3E4r5T6y7U8i",
+        "object": "event",
+        "type": "checkout.session.completed",
+        "data": {
+          "object": {
+            "id": "cs_test_a1B2c3D4",
+            "object": "checkout.session",
+            "client_reference_id": "0e9a2b7c-4d1f-4a8e-9b3c-2f1e0d9c8b7a",
+            "metadata": {
+              "user_id": "0e9a2b7c-4d1f-4a8e-9b3c-2f1e0d9c8b7a"
+            }
+          }
+        }
+      }
+response:
+  statusCode: 400
+  statusText: Bad Request
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "No signature"
+      }
+order: 2000

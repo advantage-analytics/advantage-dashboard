@@ -98,6 +98,8 @@ const PLAYER_ARGS = {
   classYear: "2029",
   lineupSpot: 3,
   email: "ada@example.test",
+  hand: "left",
+  backhand: "one-handed",
 };
 
 // ── The gate: a non-admin never reaches either RPC ──────────────────────────
@@ -174,13 +176,15 @@ test("adding a player forwards the dialog's own fields and returns the new id", 
         p_class_year: "2029",
         p_lineup_spot: 3,
         p_email: "ada@example.test",
+        p_hand: "left",
+        p_backhand: "one-handed",
       },
     },
   ]);
   expect(run.refreshed).toEqual([["/admin", "layout"]]);
 });
 
-test("the three optional fields default to null, and a non-uuid return reads as null", async () => {
+test("the optional fields default to null, and a non-uuid return reads as null", async () => {
   const run = actions({ data: null });
   expect(
     await run.actions.adminAddProgramPlayer({
@@ -196,6 +200,8 @@ test("the three optional fields default to null, and a non-uuid return reads as 
     p_class_year: null,
     p_lineup_spot: null,
     p_email: null,
+    p_hand: null,
+    p_backhand: null,
   });
 });
 

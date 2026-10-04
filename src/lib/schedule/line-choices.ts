@@ -22,6 +22,7 @@ import {
 import { compareEntryOrder } from "@/lib/schedule/courts";
 import { nextRound } from "@/lib/schedule/tournament-run";
 import { lineFormat } from "@/lib/schedule/format";
+import { scheduleHref } from "@/lib/schedule/availability";
 
 /**
  * The preset for a match that exists on its own — no event, no line.
@@ -125,7 +126,13 @@ export function presetFor(
     ending: match?.ending ?? null,
     discipline: entry.discipline,
     supportsVideo: entrySupportsVideo(entry),
-    eventHref: `/dashboard/team/schedule/${event.id}`,
+    // Back to the event — or, while the Schedule is a coming-soon page
+    // (`./availability.ts`), to the match itself: an upload reached through
+    // "Add video" should not exit onto the stub.
+    eventHref: scheduleHref(
+      `/dashboard/team/schedule/${event.id}`,
+      match ? `/dashboard/matches/${match.id}` : "/dashboard/matches",
+    ),
     site: event.site,
     eventKind: event.kind,
     opponentProgramKey: entry.opponentProgramId

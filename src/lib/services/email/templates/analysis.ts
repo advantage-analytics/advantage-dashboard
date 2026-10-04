@@ -1,4 +1,4 @@
-import { siteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 import {
   preferenceNote,
   renderEmail,
@@ -6,6 +6,12 @@ import {
   type EmailContent,
 } from "../shell";
 import type { EmailMessage } from "../send";
+import { showsStoredNote, type RecoveryClass } from "@/lib/data/match-analysis";
+import {
+  byClass,
+  WAIT_OR_ASK_VARIANTS,
+  waitOrAskVariant,
+} from "@/components/dashboard/matches/analysis-failure-copy";
 
 /**
  * The two emails a match sends about itself.
@@ -21,7 +27,7 @@ import type { EmailMessage } from "../send";
  */
 
 function matchUrl(matchId: string): string {
-  return `${siteUrl()}/dashboard/matches/${matchId}`;
+  return `${emailOrigin()}/dashboard/matches/${matchId}`;
 }
 
 export interface AnalysisReadyInput {
@@ -92,43 +98,63 @@ export interface AnalysisFailedInput {
   matchTitle: string;
   matchContext: string;
   /**
-   * What went wrong, in the plainest words available.
-   *
-   * The vendor sends free text with no stable error codes, so this can be
-   * anything. Pass it through rather than paraphrasing — a real message a
-   * person can quote back to support beats a friendly one that erases the
-   * detail.
+   * The recovery class `classifyFailure()` (`@/lib/data/match-analysis`)
+   * assigned this job — decided by the caller (`analysis-mail.ts`) from the
+   * same row facts the matches list and match page use, so the email never
+   * disagrees with what the UI is already showing. Never
+   * `"stats_unavailable"` in practice: the caller sends nothing for that
+   * class instead of calling this function.
    */
-  reason: string | null;
+  failureClass: RecoveryClass;
   /**
-   * Whether the upload is still held, and so whether a retry costs another
-   * transfer.
-   *
-   * A failed job keeps its video deliberately — the point of a retry is having
-   * something to retry with — so this is nearly always true, and saying so is
-   * the difference between "start again" and "press the button".
+   * `processing_jobs.error_code`. Used only to choose which `wait_or_ask`
+   * variant applies (`waitOrAskVariant()`) and whether the stored note below
+   * is worth showing (`showsStoredNote()`) — never rendered itself. A vendor
+   * code or a bare "failed" reads as noise to an athlete; the UI's retry
+   * surfaces are where a code belongs.
    */
-  videoRetained: boolean;
+  errorCode: string | null;
+  /**
+   * `processing_jobs.error_message`, verbatim. Shown as a fact only when
+   * `showsStoredNote(errorCode)` allows it — a `DERIVATION_*` code is the
+   * reconciler talking to itself, not something an athlete can read.
+   */
+  errorMessage: string | null;
 }
 
 export function analysisFailedEmail(input: AnalysisFailedInput): EmailMessage {
-  const { to, matchId, matchTitle, matchContext, reason, videoRetained } =
-    input;
+  const {
+    to,
+    matchId,
+    matchTitle,
+    matchContext,
+    failureClass,
+    errorCode,
+    errorMessage,
+  } = input;
+
+  // byClass.wait_or_ask is only the allowance default; the row's error code
+  // picks the variant that actually applies (same rule the match page's
+  // AnalysisSteps and the matches drawer use).
+  const copy =
+    failureClass === "wait_or_ask"
+      ? WAIT_OR_ASK_VARIANTS[waitOrAskVariant(errorCode)]
+      : byClass[failureClass];
+
+  const storedNote =
+    showsStoredNote(errorCode) && errorMessage ? errorMessage : null;
 
   const content: EmailContent = {
     preheader: `We couldn't finish analysing ${matchTitle}.`,
     eyebrow: "Analysis failed",
-    heading: `We couldn't finish ${matchTitle}`,
-    body: [
-      "The analysis stopped before it produced a report. This is on us to look at, and no processing time has been charged against your allowance.",
-      videoRetained
-        ? "Your video is still stored, so trying again costs nothing but the wait — nothing needs uploading a second time."
-        : "The video is no longer held for this attempt, so a retry means uploading it again.",
-    ],
+    heading: copy.title,
+    body: [copy.cardBody],
     facts: [
       { label: "Match", value: matchTitle },
       { label: "Where", value: matchContext },
-      ...(reason ? [{ label: "What we were told", value: reason }] : []),
+      ...(storedNote
+        ? [{ label: "What we were told", value: storedNote }]
+        : []),
     ],
     cta: { label: "Open the match", url: matchUrl(matchId) },
     // Reply, not a help centre link. A failure is the moment a person most

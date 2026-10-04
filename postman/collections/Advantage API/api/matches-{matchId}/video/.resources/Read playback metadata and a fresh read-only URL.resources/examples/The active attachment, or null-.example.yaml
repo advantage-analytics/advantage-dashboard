@@ -1,0 +1,46 @@
+$kind: http-example
+name: The active attachment, or null.
+request:
+  url: "{{baseUrl}}/api/matches/:matchId/video"
+  method: GET
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  pathVariables:
+    - key: matchId
+      value: <uuid>
+      disabled: false
+      description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Cache-Control
+      value: string
+      disabled: false
+      description: Every answer carries a credential or is per-caller, so none is cacheable.
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "attachment": {
+          "id": "7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+          "version": 2,
+          "offsetSeconds": -41.25,
+          "confirmedVideoTimeSeconds": 63.5,
+          "durationSeconds": 5421.04,
+          "contentType": "video/mp4",
+          "filename": "spring-open-r16.mp4",
+          "playbackUrl": "https://example.blob.core.windows.net/match-videos/final/7c1d2e3f.mp4?sv=2025-01-05&sp=r&sig=REDACTED",
+          "playbackExpiresAt": "2026-09-29T15:30:00.000Z"
+        }
+      }
+order: 1000

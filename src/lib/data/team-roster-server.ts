@@ -15,7 +15,8 @@ import { normalizedPersonName } from "@/lib/data/person-name";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
-import { isWorking } from "@/lib/data/match-analysis";
+import { isLiveUpdating, type AnalysisStatus } from "@/lib/data/match-analysis";
+import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
 /**
@@ -67,11 +68,12 @@ export interface RosterMatch {
   won: boolean | null;
   /**
    * Their most recent match is still in analysis — a video the coach uploaded
-   * that has not come back. The cell trades the outcome mark and score for a
-   * live "Analyzing" chip, on the same status vocabulary the matches list uses
-   * (`isWorking`), so one job never reads two ways across two screens.
+   * that has not come back. The cell trades the date for the same mark and
+   * word the matches list draws (`AnalysisStatusLine`), so one job never reads
+   * two ways across two screens. Null once it settles, or while it waits on a
+   * deploy rather than a process (`isLiveUpdating`).
    */
-  analyzing: boolean;
+  analysis: { status: AnalysisStatus; uploadPercent?: number } | null;
   /** "Aug 8". */
   date: string;
 }
@@ -476,6 +478,9 @@ export const getRosterData = cache(async function getRosterData(
   const latestMatchIds = rows
     .map((row) => resultsByMember.get(row.player_id)?.[0]?.match.id)
     .filter((id): id is string => Boolean(id));
+  // Same vendor catch-up the matches list runs, so a job the vendor has
+  // started reads Analyzing here too rather than Queued. Never fatal.
+  await reconcileBeforePageRead(latestMatchIds, "roster");
   const analysisByMatch = await loadMatchAnalysis(supabase, latestMatchIds);
 
   const members: RosterMember[] = rows.map((row) => {
@@ -565,7 +570,13 @@ export const getRosterData = cache(async function getRosterData(
               swap: !latest.isPlayer1,
             }),
             won: latest.won,
-            analyzing: latestJob ? isWorking(latestJob.status) : false,
+            analysis:
+              latestJob && isLiveUpdating(latestJob.status)
+                ? {
+                    status: latestJob.status,
+                    uploadPercent: latestJob.uploadPercent,
+                  }
+                : null,
             date: latest.match.date ? shortDate(latest.match.date) : "",
           }
         : null,

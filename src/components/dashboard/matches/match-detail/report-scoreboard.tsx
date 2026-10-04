@@ -159,7 +159,7 @@ export function MatchReportScoreboard() {
       status: "live",
       label: "Playing",
       headTime: formatClock(head.time),
-      caption: `Set ${head.point.setNumber} · game ${head.point.gameNumber} · ${surname(server)} serving`,
+      caption: `Set ${head.point.setNumber} · Game ${head.point.gameNumber} · ${surname(server)} serving`,
       players: [
         {
           id: youId,
@@ -187,19 +187,31 @@ export function MatchReportScoreboard() {
         ? formatClock(match.durationSec, { alwaysShowHours: true })
         : null;
 
+    // The last set of an unfinished match is the one left open.
+    const completed = (index: number) =>
+      status === "Final" || index < sets.length - 1;
+
     const row = (side: "you" | "opp"): RailScoreboardPlayer => {
       const isYou = side === "you";
-      const lostSets = sets.map((set) => {
-        const outcome = setOutcome(set);
-        return outcome !== "level" && outcome !== side;
-      });
+      const outcomes = sets.map(setOutcome);
       return {
         id: isYou ? youId : oppId,
         name: isYou ? sides.you.name : sides.opp.name,
         sets: sets.map((set) => (isYou ? set.player1 : set.player2)),
         // `tiebreakOf` returns the LOSER's points; only drawn on a lost set.
         tiebreaks: sets.map((set) => tiebreakOf(set)),
-        lostSets,
+        // Only a completed set has a loser: the open last set of an unfinished
+        // match dims neither digit.
+        lostSets: outcomes.map(
+          (outcome, index) =>
+            outcome !== "level" && outcome !== side && completed(index),
+        ),
+        // The set winner's digit prints bold for every COMPLETED set. In an
+        // unfinished match the last set is the one left open, so it bolds
+        // neither digit (DS `Score`, primitives.md).
+        wonSets: outcomes.map(
+          (outcome, index) => outcome === side && completed(index),
+        ),
         won: sets.length > 0 && (isYou ? match.won : !match.won),
       };
     };

@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { REQUEST_ACCESS_URL } from "./src/lib/constants";
+import { SCHEDULE_ENABLED } from "./src/lib/schedule/availability";
 
 /**
  * The Admin › Teams detail page's old tab routes.
@@ -60,6 +61,11 @@ const nextConfig: NextConfig = {
       "./src/app/m/[token]/*.woff",
       "./public/logos/logo-email.png",
     ],
+    // The claim link's card borrows the same font and wordmark.
+    "/claim/[programKey]/opengraph-image": [
+      "./src/app/m/[token]/*.woff",
+      "./public/logos/logo-email.png",
+    ],
   },
   async headers() {
     return [
@@ -110,6 +116,20 @@ const nextConfig: NextConfig = {
         // that asks for its source is ever built here.
         permanent: false,
       },
+      // While the team Schedule is a coming-soon page, every route under it —
+      // new event, event detail, edit, score, single match — lands on that
+      // page instead of rendering (and reading) a schedule nobody can reach
+      // from the app. `lib/schedule/availability.ts` owns the switch. After
+      // the `new/single` entry above on purpose: the first match wins.
+      ...(SCHEDULE_ENABLED
+        ? []
+        : [
+            {
+              source: "/dashboard/team/schedule/:path+",
+              destination: "/dashboard/team/schedule",
+              permanent: false,
+            },
+          ]),
       ...ADMIN_TEAM_SECTION_SLUGS.map((slug) => ({
         source: `/admin/teams/:programId/${slug}`,
         destination: `/admin/teams/:programId?view=${slug}`,

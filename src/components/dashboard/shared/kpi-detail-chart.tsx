@@ -91,9 +91,7 @@ export default function KpiDetailChart({
   return (
     <div className="w-[280px]">
       <div className="mb-3">
-        <p className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
-          {label}
-        </p>
+        <p className="eyebrow">{label}</p>
         <p className="mt-1 text-[11px] font-normal text-[#71717A]">
           {hasData ? `Last ${points.length} matches` : "Match history"}
         </p>

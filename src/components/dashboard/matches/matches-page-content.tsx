@@ -19,10 +19,10 @@ import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { draftHref, type DraftRowData } from "./draft-row";
 import {
-  isAnalysisFailed,
   isAnalysisReady,
   isInFlight,
   isLiveUpdating,
+  matchListGroup,
 } from "@/lib/data/match-analysis";
 import {
   useLiveMatchAnalysis,
@@ -31,7 +31,7 @@ import {
 import { matchesFilterGroups } from "@/lib/data/match-filters";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { providers } from "@/lib/providers";
-import { useUnseenReportIds } from "@/lib/ui/seen-reports";
+import { markReportSeen, useUnseenReportIds } from "@/lib/ui/seen-reports";
 import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
 import { DRAWER_ATTR, MatchDrawer } from "./match-drawer";
 import { DraftDrawer } from "./draft-drawer";
@@ -107,18 +107,14 @@ const FILTER_KEYS: FilterKey[] = [
 /**
  * Collapses the nine job statuses into the four buckets a player actually
  * filters by. This is the analysis queue's filter, folded into the chip row
- * that was already here.
+ * that was already here. The grouping decision itself lives in
+ * `matchListGroup()` (`match-analysis.ts`), which a spec can pin directly.
  */
 function analysisGroup(match: DisplayMatch): string | null {
-  const status = match.analysis?.status;
-  if (!status) return null;
-  if (isInFlight(status)) return "In progress";
-  if (isAnalysisFailed(status)) return "Failed";
-  if (status === "manual") return "No video";
-  return "Ready";
+  return matchListGroup(match.analysis);
 }
 
-const ANALYSIS_GROUP_ORDER = ["In progress", "Ready", "Failed", "No video"];
+const ANALYSIS_GROUP_ORDER = ["In progress", "Ready", "Failed", "Not analyzed"];
 
 interface ActiveFilter {
   key: FilterKey;
@@ -305,7 +301,7 @@ function SortDropdown({
   // The chosen row is marked by FloatMenu's blue check, as on Schedule. Its
   // second line carries the direction the old ↑/↓ glyph did, and that
   // choosing it again reverses it — `onSort` flips the active field.
-  const chosenNote = `${sortField === "date" ? sortPhrase : dirLabel} · again to reverse`;
+  const chosenNote = `${sortField === "date" ? sortPhrase : dirLabel} · Again to reverse`;
 
   return (
     <FloatMenu
@@ -397,6 +393,11 @@ function noopSubscribe(): () => void {
 }
 
 /* ─── Main content ─── */
+/** A match with no analysis job, or one that has finished, has a report to read. */
+function hasReadableReport(m: DisplayMatch) {
+  return !m.analysis || isAnalysisReady(m.analysis.status);
+}
+
 export function MatchesPageContent({
   matches: serverMatches,
   drafts: allDrafts = NO_DRAFTS,
@@ -517,13 +518,16 @@ export function MatchesPageContent({
     return v === "new" || v === "in-progress" ? v : "all";
   });
   const readyMatchIds = useMemo(
-    () =>
-      matches
-        .filter((m) => !m.analysis || isAnalysisReady(m.analysis.status))
-        .map((m) => m.id),
+    () => matches.filter(hasReadableReport).map((m) => m.id),
     [matches],
   );
   const unseenIds = useUnseenReportIds(readyMatchIds);
+  // Rows opened in the drawer this visit. Opening one marks it seen, which
+  // would drop it from the "New" view and take its own drawer with it, so the
+  // view keeps what was opened for the life of this page.
+  const [openedIds, setOpenedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
 
   // Track newly created match for highlight animation
@@ -558,7 +562,7 @@ export function MatchesPageContent({
       const person = normalizedPersonName(search);
       result = result.filter(
         (m) =>
-          m.tournamentName.toLowerCase().includes(q) ||
+          (m.tournamentName?.toLowerCase().includes(q) ?? false) ||
           normalizedPersonName(m.player1.name).includes(person) ||
           normalizedPersonName(m.player2.name).includes(person) ||
           (m.round?.toLowerCase().includes(q) ?? false),
@@ -600,7 +604,7 @@ export function MatchesPageContent({
     // answer "what's the state of this match", the panel answers everything
     // else, and the two never gate on the same predicate.
     if (lifecycle === "new") {
-      result = result.filter((m) => unseenIds.has(m.id));
+      result = result.filter((m) => unseenIds.has(m.id) || openedIds.has(m.id));
     } else if (lifecycle === "in-progress") {
       result = result.filter(
         (m) => !!m.analysis && isInFlight(m.analysis.status),
@@ -608,7 +612,7 @@ export function MatchesPageContent({
     }
 
     return result;
-  }, [matches, search, filters, lifecycle, unseenIds]);
+  }, [matches, search, filters, lifecycle, unseenIds, openedIds]);
 
   // Sort matches
   const sorted = useMemo(() => {
@@ -623,7 +627,17 @@ export function MatchesPageContent({
           cmp = a.player2.name.localeCompare(b.player2.name);
           break;
         case "event":
-          cmp = a.tournamentName.localeCompare(b.tournamentName);
+          // A match with no event sorts after every named one, ascending.
+          if (a.tournamentName === null || b.tournamentName === null) {
+            cmp =
+              a.tournamentName === b.tournamentName
+                ? 0
+                : a.tournamentName === null
+                  ? 1
+                  : -1;
+          } else {
+            cmp = a.tournamentName.localeCompare(b.tournamentName);
+          }
           break;
         case "result": {
           const aWin = a.score.winner === "player1" ? 1 : 0;
@@ -707,14 +721,26 @@ export function MatchesPageContent({
     setClosing(false);
   }, []);
 
-  const selectRow = useCallback((id: string, viaKeyboard: boolean) => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-    setClosing(false);
-    setSelectedId(id);
-    setDrawerId(id);
-    setOpenedByKeyboard(viaKeyboard);
-  }, []);
+  const selectRow = useCallback(
+    (id: string, viaKeyboard: boolean) => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+      setClosing(false);
+      setSelectedId(id);
+      setDrawerId(id);
+      setOpenedByKeyboard(viaKeyboard);
+      // The drawer is the report's front door on this page, so opening a row
+      // reads it: the "New" dot clears here, not only on the detail route.
+      // Only a finished report can be read — a queued or processing match
+      // opened to check progress must still read as new when it completes.
+      const opened = matches.find((m) => m.id === id);
+      if (opened && hasReadableReport(opened)) {
+        markReportSeen(id);
+        setOpenedIds((prev) => new Set(prev).add(id));
+      }
+    },
+    [matches],
+  );
 
   const closeDrawer = useCallback(
     (returnFocusTo: string | null) => {

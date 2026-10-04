@@ -28,7 +28,10 @@
  *   would not re-run anything, and the stats would quietly disagree.
  */
 
-import { setWinner } from "@/components/dashboard/matches/new-match-wizard/score-state";
+import {
+  lastEnteredSet,
+  setWinner,
+} from "@/components/dashboard/matches/new-match-wizard/score-state";
 import { normalizeRound, roundFits, roundKindFor } from "./round-options";
 
 export const HANDS = ["right", "left"] as const;
@@ -67,14 +70,7 @@ export function scoreForSave(
 ):
   | { ok: true; score: Omit<MatchScore, "winner"> | null }
   | { ok: false; error: string } {
-  let sets = Math.max(cells.player.length, cells.opponent.length);
-  while (
-    sets > 0 &&
-    cells.player[sets - 1] == null &&
-    cells.opponent[sets - 1] == null
-  ) {
-    sets--;
-  }
+  const sets = lastEnteredSet(cells.player, cells.opponent);
   if (sets === 0) {
     return storedHadSets
       ? { ok: false, error: "Enter the score." }

@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { redirect, notFound } from "next/navigation";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -18,13 +19,21 @@ import { createClient } from "@/lib/supabase/server";
  * loader inside it — and nothing in a request writes `is_admin` between those
  * reads, so the second and third are the same answer. The cache is
  * per-request: every server action is its own request and still re-checks.
+ *
+ * Two answers, not one: `{ ok: false, status: 401 }` is "no session" and
+ * `{ ok: false, status: 403 }` is "signed in, not an admin", so an API route
+ * can answer the status HTTP means. Server actions that only need yes/no use
+ * `requireAdmin()` below, which is this with the reason dropped.
  */
-export const requireAdmin = cache(async (): Promise<{ id: string } | null> => {
+export type AdminCheck =
+  { ok: true; id: string } | { ok: false; status: 401 | 403 };
+
+export const checkAdmin = cache(async (): Promise<AdminCheck> => {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return null;
+  if (!user) return { ok: false, status: 401 };
 
   const { data } = await supabase
     .from("users")
@@ -32,8 +41,16 @@ export const requireAdmin = cache(async (): Promise<{ id: string } | null> => {
     .eq("id", user.id)
     .maybeSingle();
 
-  return data?.is_admin ? { id: user.id } : null;
+  return data?.is_admin
+    ? { ok: true, id: user.id }
+    : { ok: false, status: 403 };
 });
+
+/** `checkAdmin()` as yes/no: the actor, or `null` for either refusal. */
+export async function requireAdmin(): Promise<{ id: string } | null> {
+  const check = await checkAdmin();
+  return check.ok ? { id: check.id } : null;
+}
 
 /**
  * Same gate as `admin/layout.tsx`, for a server component or loader that is
@@ -42,8 +59,9 @@ export const requireAdmin = cache(async (): Promise<{ id: string } | null> => {
  * Defense in depth, not trust in the caller: Next.js does not guarantee a
  * layout has actually run before a nested loader does, so this re-derives the
  * same two outcomes the layout enforces rather than assuming them. No
- * session is genuinely a session problem, so it goes to login exactly like
- * the layout does; a signed-in non-admin gets `notFound()` — a 403 would
+ * session is genuinely a session problem, so it goes to login (with `?next=`
+ * set to the page asked for) exactly like the layout does; a signed-in
+ * non-admin gets `notFound()` — a 403 would
  * confirm the route exists and is worth probing, where a 404 says nothing.
  *
  * `cache()`d because the layout and every loader nested under it (e.g.
@@ -58,7 +76,10 @@ export const requireAdminOrNotFound = cache(
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user) redirect("/login");
+    // Back to the page that was asked for once signed in: the internal review
+    // emails link straight to `/admin/requests?id=…`, and a bare `/login`
+    // dropped the admin on the personal dashboard instead.
+    if (!user) redirect(await loginRedirectPath("/admin"));
 
     const { data } = await supabase
       .from("users")

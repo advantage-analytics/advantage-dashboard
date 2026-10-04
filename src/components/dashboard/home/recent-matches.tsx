@@ -12,7 +12,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import {
   ANALYSIS_LABEL,
   isAnalysisFailed,
-  isWorking,
+  inFlightMark,
   type AnalysisStatus,
 } from "@/lib/data/match-analysis";
 import { formatScoreText } from "@/lib/ui/score-format";
@@ -35,7 +35,7 @@ const STAT_CELLS: Array<{
   format: (m: MatchRow) => string;
 }> = [
   {
-    label: "1st serve",
+    label: "1st Serve",
     width: "64px",
     format: (m) => (m.firstServePct != null ? `${m.firstServePct}%` : "—"),
   },
@@ -155,7 +155,8 @@ function InFlightLink({ match }: { match: MatchRow }) {
               // happening when nothing is; both are idle until something
               // outside the pipeline moves them.
               // 1.2s per turn, the frame's `advspin`; Tailwind's default spin is 1s.
-              isWorking(status) && "animate-[spin_1.2s_linear_infinite]",
+              inFlightMark(status) === "now" &&
+                "animate-[spin_1.2s_linear_infinite]",
             )}
             strokeWidth={1.5}
             aria-hidden="true"
@@ -168,7 +169,7 @@ function InFlightLink({ match }: { match: MatchRow }) {
       <div className="flex-1" />
       <StatusChip
         tone={failed ? "loss" : "blue"}
-        live={!failed && isWorking(status)}
+        live={!failed && inFlightMark(status) === "now"}
       >
         {ANALYSIS_LABEL[status]}
       </StatusChip>
@@ -290,9 +291,18 @@ export default function RecentMatches({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE_OUT }}
       >
-        <p className="text-[12px] font-medium text-[var(--ink-900)]">
-          {event.tournamentName}
-        </p>
+        {event.tournamentName ? (
+          <p className="text-[12px] font-medium text-[var(--ink-900)]">
+            {event.tournamentName}
+          </p>
+        ) : (
+          <p
+            className="text-[12px] font-medium"
+            style={{ color: "var(--ink-400)" }}
+          >
+            No event
+          </p>
+        )}
         <MatchMetadataRow
           date={event.date}
           matchType={event.matchType ?? undefined}

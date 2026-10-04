@@ -1,0 +1,14 @@
+$kind: http-request
+description: "Restarts the active video's retention clock. For anyone who can see the match. No body is read, so there is no 400 or 413. A match with no active video answers `{\"view\": null}` and nothing is written."
+url: "{{baseUrl}}/api/matches/:matchId/video/viewed"
+method: POST
+headers:
+  Accept: application/json
+pathVariables:
+  - key: matchId
+    value: <uuid>
+    disabled: false
+    description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+settings: {}
+examples: ./.resources/Count a view of the active video.resources/examples
+order: 5000

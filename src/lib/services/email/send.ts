@@ -35,6 +35,28 @@ export interface EmailMessage {
    * else is rejected for the whole message, so keep them machine-shaped.
    */
   tags?: Record<string, string>;
+  /** Defaults to `FROM_ADDRESS`. Outreach signs as a person. */
+  from?: string;
+  /** Additional recipients. Not checked against the suppression list here. */
+  cc?: string[];
+  replyTo?: string;
+  /** Raw MIME headers, e.g. `List-Unsubscribe` or `In-Reply-To`. */
+  headers?: Record<string, string>;
+  /** ISO 8601. Resend holds the message and sends it then. */
+  scheduledAt?: string;
+  /**
+   * Resend drops a second request with the same key for 24 hours, so a retry
+   * after an ambiguous failure cannot send twice.
+   */
+  idempotencyKey?: string;
+}
+
+export interface SendOptions {
+  /**
+   * The caller already removed suppressed addresses (outreach reads the whole
+   * list once per tranche), so skip the per-message lookup.
+   */
+  suppressionChecked?: boolean;
 }
 
 /**
@@ -46,13 +68,16 @@ export interface EmailMessage {
  * the mail goes out, and the resend path is what recovers it. So this returns
  * the failure and lets the caller decide what to say.
  */
-export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
+export async function sendEmail(
+  message: EmailMessage,
+  options: SendOptions = {},
+): Promise<EmailResult> {
   const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey) return logInsteadOfSending(message);
 
   // Asked BEFORE sending, because afterwards is too late to find out.
-  if (await isSuppressed(message.to, apiKey)) {
+  if (!options.suppressionChecked && (await isSuppressed(message.to, apiKey))) {
     console.warn("[email] refusing a suppressed recipient", {
       to: redactAddress(message.to),
       subject: message.subject,
@@ -73,10 +98,17 @@ export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        ...(message.idempotencyKey
+          ? { "Idempotency-Key": message.idempotencyKey }
+          : {}),
       },
       body: JSON.stringify({
-        from: FROM_ADDRESS,
+        from: message.from ?? FROM_ADDRESS,
         to: [message.to],
+        ...(message.cc?.length ? { cc: message.cc } : {}),
+        ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+        ...(message.headers ? { headers: message.headers } : {}),
+        ...(message.scheduledAt ? { scheduled_at: message.scheduledAt } : {}),
         subject: message.subject,
         html: message.html,
         text: message.text,

@@ -1,4 +1,4 @@
-import { siteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 import {
   preferenceNote,
   renderEmail,
@@ -96,7 +96,7 @@ export function teamDigestEmail(input: TeamDigestInput): EmailMessage {
             : `${rosterJoined} joined`,
       },
     ],
-    cta: { label: "Open team home", url: `${siteUrl()}/dashboard/team` },
+    cta: { label: "Open team home", url: `${emailOrigin()}/dashboard/team` },
     note: preferenceNote("Weekly team digest"),
   };
 

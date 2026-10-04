@@ -25,7 +25,7 @@ master-detail split is retired; its detail is the peek drawer below.
    mark (program initials for a dual, the tournament mark for a tournament) ·
    context at 12px ink-600 · then the numbers and the outcome, **flush left in
    fixed tracks** (see the alignment clause below). Canonical orders: **Matches** = Date · Opponent · Result · Score · Event (+ mono round) · Analysis (the fluid cell, heading nothing) — no ⋯ lane: a match's Edit · Delete live in the drawer header, which renders at the same `lg` breakpoint as the table (2026-09-13); a draft row peeks too, into the same rail (Draft n / N, Discard in its header ⋯, Continue as the footer primary), so no row on the page carries a ⋯. The team table puts Player (13/500 ink-900) before Opponent (13/400 ink-700), and gives up Event while the match drawer is open. The glyph leads the score in a fixed track so the outcome sits at one x ("✓ 6-4, 3-6", the drawer's reading); Event trails the numbers as the least-scanned, widest text. The opponent carries no 26px mark — an initials circle read as a profile picture for someone not in the product (2026-09-13). _Supersedes: "Matches = Date · Opponent · Event (+ mono round) · Score · Result · Analysis (the fluid cell, heading nothing) · ⋯ · chevron — the outcome closes the facts, and the lifecycle annotation trails them because it is blank on eight rows in ten"_; **Roster** = # · Player ·
-   Record · Form · Last match (Record leads Form: the number a coach ranks
+   Record · Form · Last match (the fluid cell; Record leads Form: the number a coach ranks
    by first, the five-tick trail that qualifies it second); **Schedule** = Date · Event · Type · Venue ·
    Lines `n / 9` · Score · Result. Text and its header flush left; a numeric
    measure that is compared down its column flush right; **Score and Result
@@ -43,11 +43,16 @@ master-detail split is retired; its detail is the peek drawer below.
    remaining width. **Never center-align anything.**
    Exactly one fluid cell per table (Analysis in Matches) — everything else
    fixed or bounded so scores and dates start at the same x on every row.
-   Where every measure is fixed, **the name takes the slack**: one flex
-   spacer after it and the metrics packed to the right, so the only gap in
-   the row falls on a column boundary. A flexible last cell with its date
-   pinned to the far edge opens ~600px of nothing mid-row and splits one fact
-   — opponent and date — into two. No
+   Where every measure is fixed, **the last column takes the slack**: the
+   name and every measure after it are fixed tracks at a constant gap, and the
+   final cell is the one fluid cell, its text in a fixed track and its date or token right after it, the spare width left empty at the end
+   (2026-10-02, Roster). The slack never falls between the name and its
+   numbers: a spacer there put 300px+ of nothing between a player and their
+   record on a wide screen, and the pair a coach compares read as two facts.
+   _Supersedes: "Where every measure is fixed, the name takes the slack: one
+   flex spacer after it and the metrics packed to the right, so the only gap in
+   the row falls on a column boundary."_ The cost, accepted, is that the row no
+   longer closes on a hard right edge of metrics. No
    column a filter or sort acts on may be merged into another cell; no
    repeated words — noun in the header, qualifier in the cell. Not-yet values
    are an ink-400 em dash — **one mark, one size, and centred under its own
@@ -160,7 +165,9 @@ master-detail split is retired; its detail is the peek drawer below.
    "Opponent" heading. 2–3 options → segmented row with an "Any" default;
    longer lists → checkboxes. Live match count in the footer beside a quiet
    "Clear all". On apply the panel **closes** and a note strip states the cut
-   in words — plain sentence · middot · "N of M" · one quiet "Clear filter" —
+   in words — plain phrases joined by middots, each starting with a capital
+   ("Reid serving · Second serve · Break point", sentence case per segment,
+   2026-09-30) · middot · "N of M" · one quiet "Clear filter" —
    **never chips, never a badge**. Engaged trigger uses the nav-active
    grammar (surface-subtle wash + ink-900, no border/dot/count). Lifecycle
    pills stay independent of the panel — a filter cut is not a lifecycle
@@ -338,7 +345,7 @@ selected, no chevrons, no gutter.
 ### Roster Row (v3) — the row compares, the drawer reads
 
 `#` (11px mono tabular ink-500, "—" when unranked) · Player (26px `Avatar` +
-name 13/500 ink-900 — a link, blue on hover) · spacer · Record (13px tabular
+name 13/500 ink-900 — a link, blue on hover) · Record (13px tabular
 — what coaches rank by) · Form (`FormPills`) · Last match. Invited people
 share the table: dashed-ring avatar, position "—", email as the name,
 "Invited Aug 4 by you · player role", Resend (11px blue) · Revoke (11px

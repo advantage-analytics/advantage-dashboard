@@ -6,6 +6,7 @@ import { TeamSeasonTitleFrame } from "@/components/dashboard/team/team-season-ti
 import { TopMoversFrame } from "@/components/dashboard/team/top-movers";
 import { CourtRecordFrame } from "@/components/dashboard/team/court-record";
 import { DualHistoryFrame } from "@/components/dashboard/team/dual-history";
+import { scheduleSlot } from "@/lib/schedule/availability";
 import {
   FocusCardPending,
   HomeKpisPending,
@@ -180,27 +181,29 @@ export function HistoryBodyPending() {
   );
 }
 export function TeamHomeSkeleton({ action }: { action?: ReactNode }) {
+  // No schedule cards while the Schedule is closed — the page draws none, so
+  // pending bars for them would be a promise the page then breaks.
   return (
     <TeamHomeFrame
       title={<TeamTitlePending action={action} />}
       kpis={<HomeKpisPending />}
-      dual={<DualPending />}
+      dual={scheduleSlot(<DualPending />)}
       movers={
         <TopMoversFrame>
           <MoversBodyPending />
         </TopMoversFrame>
       }
       insight={<FocusCardPending />}
-      court={
+      court={scheduleSlot(
         <CourtRecordFrame>
           <CourtBodyPending />
-        </CourtRecordFrame>
-      }
-      history={
+        </CourtRecordFrame>,
+      )}
+      history={scheduleSlot(
         <DualHistoryFrame>
           <HistoryBodyPending />
-        </DualHistoryFrame>
-      }
+        </DualHistoryFrame>,
+      )}
       footer={<HomeFooterPending />}
     />
   );

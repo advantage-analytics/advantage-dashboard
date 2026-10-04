@@ -234,7 +234,7 @@ function AttachmentFileStepImpl({
               </span>
               <span className="text-micro" data-testid="attachment-zone-facts">
                 {state.status === "checking"
-                  ? `${state.filename} · ${formatFileSize(state.sizeBytes)} · nothing is uploading yet`
+                  ? `${state.filename} · ${formatFileSize(state.sizeBytes)} · Nothing is uploading yet`
                   : `One video per match · ${ATTACHMENT_EXTENSION_LABEL} · ${MATCH_VIDEO_MAX_BYTES_LABEL}`}
               </span>
             </span>

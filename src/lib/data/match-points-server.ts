@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPages } from "@/lib/data/paged-query";
+import { gameNumbersInSet } from "@/lib/data/game-in-set";
 import { pickServeShot, pickReturnShot } from "@/lib/data/serve-return-shots";
 
 /** One shot inside a point, in rally order — the film room's shot feed. */
@@ -38,11 +39,21 @@ export interface MatchPoint {
   id: string;
   pointNumber: number;
   setNumber: number;
+  /** Counted from 1 in each set, as tennis numbers games (`gameNumbersInSet`). */
   gameNumber: number;
   /** Sets won before this point, SERVER-FIRST like the two below ("1-0"). */
   setScore: string;
   gameScore: string;
   pointScore: string;
+  /**
+   * `points.point_score`, untouched — no `?? "0-0"` fallback, unlike
+   * `pointScore` above. The match filters (T3) need to tell a genuinely
+   * unknown score apart from a real "0-0", which the defaulted field cannot
+   * do. Optional so existing full `MatchPoint` object literals in fixtures
+   * (e.g. `tests/fixtures/film-shot-row-reveal-harness.tsx`) stay valid
+   * without every one of them being touched.
+   */
+  pointScoreRaw?: string | null;
   resultType: string;
   eventType: string;
   description: string;
@@ -152,7 +163,7 @@ function buildDescription(
   }
 
   // Append pressure labels
-  if (point.is_break_point) parts.push("Breakpoint");
+  if (point.is_break_point) parts.push("Break point");
   if (point.is_set_point) parts.push("Set point");
   if (point.is_match_point) parts.push("Match point");
 
@@ -341,6 +352,8 @@ export async function getMatchPointsFromSupabase(
     }
   }
 
+  const gameInSet = gameNumbersInSet(points);
+
   return points.map((point): MatchPoint => {
     const pointShots = shotsByPointId.get(point.id) ?? [];
 
@@ -369,10 +382,11 @@ export async function getMatchPointsFromSupabase(
       id: point.id,
       pointNumber: point.point_number,
       setNumber: point.set_number,
-      gameNumber: point.game_number,
+      gameNumber: gameInSet(point),
       setScore: point.set_score ?? "0-0",
       gameScore: point.game_score ?? "0-0",
       pointScore: point.point_score ?? "0-0",
+      pointScoreRaw: point.point_score,
       resultType,
       eventType: buildEventType(resultType),
       description: buildDescription(resultType, firstShot, lastShot, point),

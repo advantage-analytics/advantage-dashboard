@@ -1,10 +1,15 @@
 import { AnalysisProgressTrack } from "./analysis-progress-track";
-import { StatusChip } from "@/components/ui/status-chip";
+import {
+  AnalysisStatusLine,
+  STATUS_LINE_INDENT,
+} from "@/components/dashboard/shared/analysis-status-line";
 import {
   ANALYSIS_LABEL,
-  isAnalysisFailed,
   isInFlight,
   isSubmitStalled,
+  inFlightMark,
+  matchListGroup,
+  matchListStatusLabel,
   type MatchAnalysis,
 } from "@/lib/data/match-analysis";
 
@@ -12,6 +17,11 @@ import {
  * Analysis status in the Matches table. Settled rows name their outcome;
  * provider details belong in the drawer. Only measured upload progress gets
  * a percentage or bar. Partial results retain their truthful availability label.
+ *
+ * Every state leads with the upload stepper's mark (`AnalysisStatusLine`), the
+ * same vocabulary the Roster's Last-match cell uses: a spinner only while work
+ * is running, a dashed ring while it waits — so a queued match no longer reads
+ * as busy as one being analysed.
  */
 
 export function RowLifecycle({
@@ -25,77 +35,76 @@ export function RowLifecycle({
   if (!analysis) return null;
   const { status } = analysis;
 
-  // The one `uploaded` job whose hand-off to the vendor never went through. A
-  // live chip would keep claiming work is under way; nothing is, and nothing
-  // will move until someone retries from the match page.
+  // The one `uploaded` job whose hand-off to the vendor never went through.
+  // Waiting, not working: nothing will move until someone retries from the
+  // match page.
   if (isSubmitStalled(analysis)) {
-    return (
-      <StatusChip dot={false} tone="neutral">
-        Not sent
-      </StatusChip>
-    );
+    return <AnalysisStatusLine mark="wait">Not sent</AnalysisStatusLine>;
   }
 
-  if (isInFlight(status)) {
-    if (status === "uploading") {
-      const percent = analysis.uploadPercent;
-      return (
-        /* Label over track, both taking the cell's width up to a cap. The
-           track was matched to the label at first, which bound the two
-           tightly — and made the bar 89px, too short to read a change in. It
-           takes the column now and stops at 280px, because a 3px rule running
-           the whole of a 391px cell on a large display starts to read as a
-           divider in a table that has none.
-
-           What the earlier version was protecting still holds, differently:
-           the track's length must not move DURING an upload. It is the cell's
-           width now, and the cell is a fixed track for any one viewport, so it
-           does not. */
-        <span className="flex w-full max-w-[280px] flex-col items-stretch gap-[5px]">
-          {/* `tabular` so the label itself does not shimmer as the digits
-              change — the track no longer depends on its width, but the number
-              is still read while it moves. */}
-          <span className="tabular text-[11px] leading-none text-[var(--blue)]">
-            {percent === undefined
-              ? ANALYSIS_LABEL.uploading
-              : `${ANALYSIS_LABEL.uploading} ${Math.round(percent)}%`}
-          </span>
-          {percent !== undefined && (
-            /* The sheen is what separates a moving upload from a stalled one:
-               the percentage is written at most every two points, so the number
-               alone sits still for a minute at a time. */
+  if (status === "uploading") {
+    const percent = analysis.uploadPercent;
+    return (
+      /* Line over track, both taking the cell's width up to a cap: a 3px rule
+         running a whole wide cell starts to read as a divider in a table that
+         has none. The track hangs under the word, past the mark, as it does
+         under the stepper's label. */
+      <span className="flex w-full max-w-[280px] flex-col items-stretch gap-[5px]">
+        <AnalysisStatusLine
+          mark="now"
+          value={percent === undefined ? undefined : `${Math.round(percent)}%`}
+        >
+          {ANALYSIS_LABEL.uploading}
+        </AnalysisStatusLine>
+        {percent !== undefined && (
+          /* The sheen is what separates a moving upload from a stalled one:
+             the percentage is written at most every two points, so the number
+             alone sits still for a minute at a time. */
+          <span className={STATUS_LINE_INDENT}>
             <AnalysisProgressTrack
               percent={percent}
               live
               label={`Uploading ${label}`}
             />
-          )}
-        </span>
-      );
-    }
-
-    // Both analysis engines read as Analyzing; waiting states keep their
-    // distinct labels so queued or stored video never implies active work.
-    return (
-      <StatusChip dot={false} tone="blue">
-        {status === "processing" || status === "deriving"
-          ? "Analyzing"
-          : ANALYSIS_LABEL[status]}
-      </StatusChip>
+          </span>
+        )}
+      </span>
     );
   }
 
-  if (isAnalysisFailed(status)) {
+  if (isInFlight(status)) {
+    // Waiting states keep their own words and a still mark, so queued or
+    // stored video never implies work.
     return (
-      <StatusChip dot={false} tone="loss">
-        Failed
-      </StatusChip>
+      <AnalysisStatusLine mark={inFlightMark(status)}>
+        {ANALYSIS_LABEL[status]}
+      </AnalysisStatusLine>
     );
   }
 
+  // Follows the list's own grouping decision, not isAnalysisFailed() alone:
+  // a `derivation_failed` row classified `stats_unavailable` must not read as
+  // Failed (product decision 2026-09-27, matchListGroup() in match-analysis.ts).
+  if (matchListGroup(analysis) === "Failed") {
+    return <AnalysisStatusLine mark="fail">Failed</AnalysisStatusLine>;
+  }
+
+  // Every settled row leads with a mark. Only a real analysis (or an import)
+  // earns the check; a cancelled job reads as stopped, and a match with no
+  // analysis behind it — hand-scored, or stats our derivation refused — gets
+  // the solid "nothing coming" ring.
+  if (status === "cancelled") {
+    return <AnalysisStatusLine mark="stopped">Cancelled</AnalysisStatusLine>;
+  }
+  if (status === "manual") {
+    return <AnalysisStatusLine mark="none">Not analyzed</AnalysisStatusLine>;
+  }
+  const word = matchListStatusLabel(analysis);
   return (
-    <StatusChip dot={false} tone="neutral">
-      {status === "manual" ? "Not analyzed" : ANALYSIS_LABEL[status]}
-    </StatusChip>
+    <AnalysisStatusLine
+      mark={analysis.recovery === "stats_unavailable" ? "none" : "done"}
+    >
+      {word}
+    </AnalysisStatusLine>
   );
 }

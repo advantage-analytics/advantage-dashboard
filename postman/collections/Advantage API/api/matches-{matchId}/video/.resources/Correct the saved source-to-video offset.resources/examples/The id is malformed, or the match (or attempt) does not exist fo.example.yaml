@@ -1,0 +1,43 @@
+$kind: http-example
+name: The id is malformed, or the match (or attempt) does not exist for this caller. Absent and invisible are the same answer.
+request:
+  url: "{{baseUrl}}/api/matches/:matchId/video/alignment"
+  method: PATCH
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  pathVariables:
+    - key: matchId
+      value: <uuid>
+      disabled: false
+      description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+  body:
+    type: json
+    content: |-
+      {
+        "attachmentId": "7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+        "expectedVersion": 2,
+        "confirmedVideoTimeSeconds": 64.25
+      }
+response:
+  statusCode: 404
+  statusText: Not Found
+  headers:
+    - key: Cache-Control
+      value: string
+      disabled: false
+      description: Every answer carries a credential or is per-caller, so none is cacheable.
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "This match is not available.",
+        "code": "match_not_found",
+        "detail": "not_visible"
+      }
+order: 5000

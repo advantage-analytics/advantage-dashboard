@@ -170,6 +170,23 @@ export async function POST(request: NextRequest) {
       return { error: error?.message ?? null };
     },
 
+    async claimSubmitting(jobId, patch) {
+      // Keyed on the status as well as the id, so two POSTs racing for one
+      // job cannot both win: the second finds no `uploaded` row to update
+      // and gets an empty select back. Same shape as the rederive route's
+      // `claimJob`.
+      const { data, error } = await adminClient()
+        .from("processing_jobs")
+        .update({ status: "submitting", ...patch })
+        .eq("id", jobId)
+        .eq("status", "uploaded")
+        .select("id");
+      return {
+        claimed: (data?.length ?? 0) > 0,
+        error: error?.message ?? null,
+      };
+    },
+
     mintVendorUrl(input) {
       return createVideoUrlStrategy(adminClient()).mint(input);
     },

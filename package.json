@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/link-env-local.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -12,6 +13,9 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "map": "node scripts/generate-map.mjs",
+    "api:lint": "postman spec lint openapi/advantage-api.yaml --fail-severity warning --no-report-events",
+    "api:collection": "postman spec generate collection openapi/advantage-api.yaml -n \"Advantage API\" --force",
+    "api:collection:lint": "postman collection lint postman/collections",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "test:debug": "playwright test --debug",

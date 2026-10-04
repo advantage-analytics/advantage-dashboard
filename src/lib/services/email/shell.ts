@@ -26,6 +26,7 @@
  *    anchors — without it the button is blue underlined text.
  */
 
+import { MARKETING_SITE_URL } from "@/lib/constants";
 import { SUPPORT_ADDRESS } from "./config";
 
 export interface EmailFact {
@@ -80,6 +81,12 @@ export interface EmailContent {
   /** Heading above the list. Omit for an unlabelled list. */
   listTitle?: string;
   cta?: { label: string; url: string };
+  /**
+   * A second, outlined button beside the first, for the one case that has two
+   * equal destinations: a school whose men's and women's teams are separate
+   * programs with separate claim links. Ignored without `cta`.
+   */
+  secondaryCta?: { label: string; url: string };
   /** Small print under the link — expiry, and what to do if unexpected. */
   note?: string;
   /**
@@ -89,6 +96,16 @@ export interface EmailContent {
    * against it reading as unsolicited.
    */
   footer?: string;
+  /**
+   * Cold outreach only. CAN-SPAM wants a postal address and a working
+   * unsubscribe in mail the recipient did not ask for; transactional mail
+   * carries neither, so this is opt-in per template.
+   */
+  compliance?: {
+    postalAddress: string;
+    unsubscribeUrl: string;
+    reason: string;
+  };
 }
 
 /**
@@ -241,34 +258,90 @@ function listBlock(rows: EmailRow[], title?: string): string {
                 </tr>`;
 }
 
-function ctaBlock(cta: { label: string; url: string }): string {
-  const href = esc(cta.url);
-  const label = esc(cta.label);
-
+/** The single filled button. Kept identical to supabase/email-templates. */
+function oneButton(href: string, label: string): string {
   return `
-                <tr>
-                  <td class="px" style="padding:28px 44px 0 44px;">
-                    <!--[if mso]>
-                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${href}" style="height:45px;v-text-anchor:middle;width:${vmlButtonWidth(cta.label)}px;" arcsize="13%" strokecolor="#3B82F6" fillcolor="#3B82F6">
-                    <w:anchorlock/><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:500;">${label}</center>
-                    </v:roundrect>
-                    <![endif]-->
-                    <!--[if !mso]><!-- -->
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                       <tr>
                         <td class="btn" bgcolor="#3B82F6" align="center" style="border-radius:6px; box-shadow:0 1px 3px rgba(57,134,243,0.25);">
                           <a href="${href}" target="_blank" style="display:block; padding:14px 30px; font-family:${FONT}; font-size:14px; font-weight:500; letter-spacing:0.5px; color:#FFFFFF; border-radius:6px; white-space:nowrap;">${label}</a>
                         </td>
                       </tr>
-                    </table>
+                    </table>`;
+}
+
+/**
+ * Filled and outlined buttons side by side, each its own inline-block table
+ * with a 12px right and bottom margin. Where they don't fit (a phone) the
+ * second wraps under the first with the same 12px gap. No media query: an
+ * admin's pasted template brings its own <head>, so this block has to keep
+ * its spacing without any CSS from the shell. `font-size:0` on the wrapper
+ * removes the whitespace between the two inline-blocks.
+ */
+function twoButtons(
+  href: string,
+  label: string,
+  secondHref: string,
+  secondLabel: string,
+): string {
+  return `
+                    <div style="font-size:0; line-height:0;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-block; vertical-align:top; margin:0 12px 12px 0;">
+                        <tr>
+                          <td class="btn" bgcolor="#3B82F6" align="center" style="border-radius:6px; box-shadow:0 1px 3px rgba(57,134,243,0.25);">
+                            <a href="${href}" target="_blank" style="display:block; padding:14px 30px; font-family:${FONT}; font-size:14px; line-height:17px; font-weight:500; letter-spacing:0.5px; color:#FFFFFF; border-radius:6px; white-space:nowrap;">${label}</a>
+                          </td>
+                        </tr>
+                      </table><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-block; vertical-align:top; margin:0 0 12px 0;">
+                        <tr>
+                          <td align="center" style="border-radius:6px;">
+                            <a href="${secondHref}" target="_blank" class="btn2" style="display:block; padding:13px 29px; font-family:${FONT}; font-size:14px; line-height:17px; font-weight:500; letter-spacing:0.5px; color:#525252; background:#FFFFFF; border:1px solid #E5E5EA; border-radius:6px; white-space:nowrap;">${secondLabel}</a>
+                          </td>
+                        </tr>
+                      </table>
+                    </div>`;
+}
+
+/**
+ * The button row and its paste-this-link fallback. Exported for outreach,
+ * whose admin-edited templates drop it in through `{{claim_buttons}}`.
+ */
+export function ctaBlock(
+  cta: { label: string; url: string },
+  secondary?: { label: string; url: string },
+): string {
+  const href = esc(cta.url);
+  const label = esc(cta.label);
+  const secondHref = secondary ? esc(secondary.url) : "";
+  const secondLabel = secondary ? esc(secondary.label) : "";
+  return `
+                <tr>
+                  <td class="px" style="padding:28px 44px 0 44px;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${href}" style="height:45px;v-text-anchor:middle;width:${vmlButtonWidth(cta.label)}px;" arcsize="13%" strokecolor="#3B82F6" fillcolor="#3B82F6">
+                    <w:anchorlock/><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:500;">${label}</center>
+                    </v:roundrect>${
+                      secondary
+                        ? `
+                    &nbsp;&nbsp;
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${secondHref}" style="height:45px;v-text-anchor:middle;width:${vmlButtonWidth(secondary.label)}px;" arcsize="13%" strokecolor="#E5E5EA" fillcolor="#FFFFFF">
+                    <w:anchorlock/><center style="color:#525252;font-family:Arial,sans-serif;font-size:14px;font-weight:500;">${secondLabel}</center>
+                    </v:roundrect>`
+                        : ""
+                    }
+                    <![endif]-->
+                    <!--[if !mso]><!-- -->${secondary ? twoButtons(href, label, secondHref, secondLabel) : oneButton(href, label)}
                     <!--<![endif]-->
                   </td>
                 </tr>
-
                 <tr>
-                  <td class="px" style="padding:26px 44px 0 44px;">
+                  <td class="px" style="padding:${secondary ? 14 : 26}px 44px 0 44px;">
                     <p class="ink3" style="margin:0 0 6px 0; font-family:${FONT}; font-size:12px; line-height:20px; color:#71717A;">If the button doesn't work, paste this link into your browser:</p>
-                    <p style="margin:0; font-family:${FONT}; font-size:12px; line-height:20px; word-break:break-all;"><a class="accent" href="${href}" style="color:#3B82F6;">${href}</a></p>
+                    <p style="margin:0; font-family:${FONT}; font-size:12px; line-height:20px; word-break:break-all;"><a class="accent" href="${href}" style="color:#3B82F6;">${href}</a>${
+                      secondary
+                        ? `<br><a class="accent" href="${secondHref}" style="color:#3B82F6;">${secondHref}</a>`
+                        : ""
+                    }</p>
                   </td>
                 </tr>`;
 }
@@ -296,8 +369,10 @@ export function renderEmail(content: EmailContent): string {
     list,
     listTitle,
     cta,
+    secondaryCta,
     note,
     footer,
+    compliance,
   } = content;
 
   return `<!DOCTYPE html>
@@ -335,6 +410,7 @@ export function renderEmail(content: EmailContent): string {
       .rule { border-color:#1F1F1F !important; }
       .tone { background:#1A1A1C !important; }
       .accent { color:#60A5FA !important; }
+      .btn2 { background:#0E0E10 !important; border-color:#2E2E2E !important; color:#B5B5B5 !important; }
       /* The filled CTA keeps #3B82F6 — white text on the lifted dark blue
          would drop below 3:1. Only unfilled blue lifts. */
       .logo-light { display:none !important; }
@@ -375,8 +451,8 @@ export function renderEmail(content: EmailContent): string {
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                 <tr>
                   <td class="px" style="padding:44px 44px 0 44px;">
-                    <img class="logo-light" src="https://advantage-analytics.com/email/advantage-wordmark.png" width="140" height="25" alt="Advantage" style="display:block; width:140px; height:auto; border:0; outline:none;">
-                    <img class="logo-dark" src="https://advantage-analytics.com/email/advantage-wordmark-white.png" width="140" height="25" alt="Advantage" style="display:none; width:0; max-height:0; overflow:hidden; border:0; outline:none;">
+                    <img class="logo-light" src="${MARKETING_SITE_URL}/email/advantage-wordmark.png" width="140" height="25" alt="Advantage" style="display:block; width:140px; height:auto; border:0; outline:none;">
+                    <img class="logo-dark" src="${MARKETING_SITE_URL}/email/advantage-wordmark-white.png" width="140" height="25" alt="Advantage" style="display:none; width:0; max-height:0; overflow:hidden; border:0; outline:none;">
                   </td>
                 </tr>
 
@@ -386,7 +462,7 @@ export function renderEmail(content: EmailContent): string {
                     <h1 class="h1 ink" style="margin:0; font-family:${FONT}; font-size:24px; line-height:32px; font-weight:300; letter-spacing:-0.5px; color:#0D0D0D;">${esc(heading)}</h1>
                   </td>
                 </tr>
-${body.map(paragraph).join("")}${facts && facts.length > 0 ? factsPanel(facts) : ""}${list && list.length > 0 ? listBlock(list, listTitle) : ""}${cta ? ctaBlock(cta) : ""}${
+${body.map(paragraph).join("")}${facts && facts.length > 0 ? factsPanel(facts) : ""}${list && list.length > 0 ? listBlock(list, listTitle) : ""}${cta ? ctaBlock(cta, secondaryCta) : ""}${
     note
       ? `
                 <tr>
@@ -414,8 +490,14 @@ ${body.map(paragraph).join("")}${facts && facts.length > 0 ? factsPanel(facts) :
           </tr>
 
           <tr>
-            <td align="center" style="padding:24px 40px 8px 40px;">
-              <p class="ink4" style="margin:0; font-family:${FONT}; font-size:11px; line-height:17px; color:#AAAAAA;">&copy; 2026 Advantage Analytics LLC &middot; advantage-analytics.com</p>
+            <td align="center" style="padding:24px 40px 8px 40px;">${
+              compliance
+                ? `
+              <p class="ink4" style="margin:0 0 6px 0; font-family:${FONT}; font-size:11px; line-height:17px; color:#AAAAAA;">Advantage Analytics LLC &middot; ${esc(compliance.postalAddress)}</p>
+              <p class="ink4" style="margin:0 0 6px 0; font-family:${FONT}; font-size:11px; line-height:17px; color:#AAAAAA;">${esc(compliance.reason)} <a href="${esc(compliance.unsubscribeUrl)}" style="color:#71717A; text-decoration:underline;">Unsubscribe</a></p>`
+                : ""
+            }
+              <p class="ink4" style="margin:0; font-family:${FONT}; font-size:11px; line-height:17px; color:#AAAAAA;">&copy; 2026 Advantage Analytics LLC &middot; ${new URL(MARKETING_SITE_URL).host}</p>
             </td>
           </tr>
 
@@ -459,6 +541,13 @@ export function renderText(content: EmailContent): string {
 
   if (content.cta) {
     lines.push("", content.cta.label + ":", content.cta.url);
+    if (content.secondaryCta) {
+      lines.push(
+        "",
+        content.secondaryCta.label + ":",
+        content.secondaryCta.url,
+      );
+    }
   }
 
   if (content.note) lines.push("", content.note);
@@ -466,6 +555,14 @@ export function renderText(content: EmailContent): string {
   if (content.footer) lines.push("", content.footer);
 
   lines.push("", `Need help? Reach us at ${SUPPORT_ADDRESS}.`);
+
+  if (content.compliance) {
+    lines.push(
+      "",
+      `Advantage Analytics LLC · ${content.compliance.postalAddress}`,
+      `${content.compliance.reason} Unsubscribe: ${content.compliance.unsubscribeUrl}`,
+    );
+  }
 
   return lines.join("\n");
 }

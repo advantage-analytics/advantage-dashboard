@@ -17,6 +17,8 @@ import {
 import { StaticSchedule } from "@/components/dashboard/schedule/static/static-schedule";
 import { PresenceReport } from "@/components/dashboard/presence-provider";
 import type { EventDetail } from "@/lib/schedule/types";
+import { ComingSoonPage } from "@/components/dashboard/coming-soon";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 
 export const metadata = { title: "Schedule" };
 
@@ -43,12 +45,26 @@ export const metadata = { title: "Schedule" };
  * schedule: `scheduleCapabilitiesFor` names every Schedule action the page
  * exposes, and `canUploadForProgram` separately gates day zero's "One-off
  * match in Matches".
+ *
+ * While `SCHEDULE_ENABLED` is off the page is a `ComingSoonPage` and reads
+ * nothing; see `lib/schedule/availability.ts` for everything the flag closes.
  */
 export default async function SchedulePage({
   searchParams,
 }: {
   searchParams: Promise<{ event?: string | string[] }>;
 }) {
+  if (!SCHEDULE_ENABLED) {
+    return (
+      <ComingSoonPage
+        title="Schedule"
+        heading="Team schedules are still being built."
+        description="Duals and tournaments on one season calendar, with each lineup and every match filed under the line it was played on. The program's matches are ready now."
+        action={{ label: "View program matches", href: "/dashboard/matches" }}
+      />
+    );
+  }
+
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
 

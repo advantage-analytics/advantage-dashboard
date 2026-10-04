@@ -1,0 +1,17 @@
+$kind: http-request
+description: Checks the workbook's sheets and required columns. The file arrives as base64 (a data URL is accepted) and is refused before decoding when it exceeds SwingVision's 50 MB ceiling. The verdict is advisory; the upload route validates again.
+url: "{{baseUrl}}/api/validate-file"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "file": "<string>",
+      "fileName": "<string>"
+    }
+settings: {}
+examples: ./.resources/Validate a SwingVision .xlsx before upload.resources/examples
+order: 3000

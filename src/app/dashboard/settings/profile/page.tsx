@@ -5,6 +5,8 @@ import {
   type ProfileDraft,
 } from "@/components/dashboard/settings/profile-form";
 
+export const metadata = { title: "Profile" };
+
 const EMPTY_DRAFT: ProfileDraft = {
   firstName: "",
   lastName: "",

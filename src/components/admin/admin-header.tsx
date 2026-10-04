@@ -29,8 +29,10 @@ const TABS = [
   { href: "/admin/teams", label: "Teams" },
   { href: "/admin/requests", label: "Requests" },
   { href: "/admin/conferences", label: "Conferences" },
+  { href: "/admin/pilots", label: "Pilots" },
   { href: "/admin/uploads", label: "Uploads" },
   { href: "/admin/labels", label: "Labels" },
+  { href: "/admin/outreach", label: "Outreach" },
 ] as const;
 
 export function AdminHeader({

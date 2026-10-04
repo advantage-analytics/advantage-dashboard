@@ -248,7 +248,17 @@ export function MatchCardList({
         )}
         style={{ color: "var(--ink-600)" }}
       >
-        <span className="min-w-0 truncate">{match.tournamentName}</span>
+        {match.tournamentName ? (
+          <span className="min-w-0 truncate">{match.tournamentName}</span>
+        ) : (
+          // Filed with no event: say so, muted, rather than invent one.
+          <span
+            className="min-w-0 truncate"
+            style={{ color: "var(--ink-400)" }}
+          >
+            No event
+          </span>
+        )}
         {match.round && (
           <span
             className="mono shrink-0 text-[11px]"
@@ -266,7 +276,9 @@ export function MatchCardList({
       <div className="row-lifecycle grid min-w-0 items-center">
         <RowLifecycle
           analysis={match.analysis}
-          label={`${match.player2.name}, ${match.tournamentName}`}
+          label={[match.player2.name, match.tournamentName]
+            .filter(Boolean)
+            .join(", ")}
         />
       </div>
     </div>

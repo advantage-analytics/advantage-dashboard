@@ -18,7 +18,9 @@
  * absent entry in `raw_webhook_payload`. For `job_failed` it is not: the webhook
  * only releases the quota reservation for a job it can find, so a failure that
  * arrives inside the race window spends the allowance permanently against a
- * 2-hour monthly cap, with no vendor cancel endpoint to recover it.
+ * 2-hour monthly cap. The vendor's cancel (`DELETE {SPLITSTEP_API_URL}/{id}`)
+ * does not recover it: it only removes a job that is still queued, and a job
+ * that failed has left the queue.
  *
  * ── The fix ─────────────────────────────────────────────────────────────────
  * Replay the orphans through `record_splitstep_webhook()` once the id is known.

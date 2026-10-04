@@ -5,6 +5,18 @@ import ts from "typescript";
 import { GENERATE_INSIGHTS_ENV as ENV } from "./fixtures/edge-function-guard-identities";
 
 /**
+ * A review whose headlines pass the function's own check, so the only retry
+ * in play is the transport one this spec is about.
+ */
+const PLAYER = {
+  focus: "first-serve points won",
+  headline: "Your first serve carried the match.",
+  description:
+    "You won 74% of first-serve points, so keep building your service games around it.",
+};
+const REVIEW = JSON.stringify({ player1: PLAYER, player2: PLAYER });
+
+/**
  * generate-insights retries Gemini's transient refusals. A 503 "high demand"
  * used to end the review for good, since every caller swallows the failure.
  * The edge function runs in a vm with a stubbed client, fetch and clock.
@@ -52,6 +64,7 @@ async function run(statuses: number[]) {
           : { createClient: () => ({ from: () => query }) },
       Deno: { env: { get: (key: string) => ENV[key] } },
       Response,
+      AbortSignal,
       console: { ...console, warn: () => {}, error: () => {} },
       setTimeout: (fn: () => void) => setTimeout(fn, 0),
       fetch: async () => {
@@ -59,7 +72,7 @@ async function run(statuses: number[]) {
         calls.push(status);
         return status === 200
           ? Response.json({
-              candidates: [{ content: { parts: [{ text: "{}" }] } }],
+              candidates: [{ content: { parts: [{ text: REVIEW }] } }],
             })
           : Response.json({ error: { message: "high demand" } }, { status });
       },
@@ -79,7 +92,7 @@ test("a 503 is retried and the review is written", async () => {
   const { status, calls, updates } = await run([503, 200]);
   expect(status).toBe(200);
   expect(calls).toEqual([503, 200]);
-  expect(updates).toEqual([{ insights: {} }]);
+  expect(updates).toHaveLength(1);
 });
 
 test("gives up after three attempts", async () => {

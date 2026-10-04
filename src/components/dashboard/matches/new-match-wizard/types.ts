@@ -5,7 +5,9 @@
 import type { ProviderKind } from "@/lib/services/upload";
 import type { VideoProbe } from "@/lib/video/probe";
 import type { Discipline, EventSite, MatchEnding } from "@/lib/schedule/types";
+import type { Workspace } from "@/lib/workspace/types";
 import type { RetiredSide } from "./score-state";
+import type { StyleSaveChoice } from "./style-save-offer";
 
 /** Wizard step identifiers */
 /**
@@ -33,6 +35,8 @@ export interface FormData {
    * control already renders — it styles an undefined value as empty. It used to
    * default to `false`, which meant a player who never opened the field silently
    * declared no-ad, and the submit route silently declared the opposite.
+   * The one deliberate default is a college workspace's No-Ad
+   * (`workspaceFormatDefaults`, guardrails §3.1's recorded exception).
    */
   adScoring?: boolean;
   playOnLets: boolean;
@@ -111,6 +115,12 @@ export interface FormData {
   playerStyleSource?: ValueSource;
   /** Where the opponent's hand and backhand came from. */
   opponentStyleSource?: ValueSource;
+  /**
+   * The coach's answer to "use for future matches" / "update their saved hand
+   * and backhand", tagged with which of the two it answered — see
+   * `style-save-offer.ts`. Undefined means the offer's own default.
+   */
+  saveStyleChoice?: StyleSaveChoice;
   /** Tournament, dual or a one-off — decides whether Round is asked. */
   eventKind?: "tournament" | "dual" | "other";
 }
@@ -229,6 +239,34 @@ export const DEFAULT_FORM_DATA: FormData = {
   videoStartSeconds: undefined,
   videoEndSeconds: undefined,
 };
+
+/**
+ * The format answers a workspace pre-selects over `DEFAULT_FORM_DATA`.
+ *
+ * College tennis plays no-ad with lets played on, so a college team workspace
+ * opens with both chosen. A default only — the player can change either, and
+ * an event or export that declares its own scoring still wins. Every other
+ * workspace keeps the empty Scoring and Replay lets.
+ */
+export type WorkspaceFormatDefaults = Partial<
+  Pick<FormData, "adScoring" | "playOnLets">
+>;
+
+// Module-level so the result is referentially stable across renders — the
+// wizard hook lists it as an effect dependency.
+const COLLEGE_FORMAT_DEFAULTS: WorkspaceFormatDefaults = {
+  adScoring: false,
+  playOnLets: true,
+};
+export const NO_FORMAT_DEFAULTS: WorkspaceFormatDefaults = {};
+
+export function workspaceFormatDefaults(
+  workspace: Pick<Workspace, "kind" | "orgType">,
+): WorkspaceFormatDefaults {
+  return workspace.kind === "team" && workspace.orgType === "college"
+    ? COLLEGE_FORMAT_DEFAULTS
+    : NO_FORMAT_DEFAULTS;
+}
 
 /**
  * Step order, per provider kind.

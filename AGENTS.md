@@ -1,13 +1,18 @@
 # AGENTS.md
 
 Guidance for coding agents working in this repository — Claude Code, Codex and
-Gemini all read this file. `CLAUDE.md` is a one-line `@AGENTS.md` import and
-`GEMINI.md` is a symlink to it, so there is exactly ONE copy to keep current.
-Edit this file; never edit the other two.
+Gemini all read this file. There is deliberately no `CLAUDE.md`: Claude Code
+reads `AGENTS.md` directly when no `CLAUDE.md` exists (v2.1.277+), and
+`GEMINI.md` is a symlink to this file, so there is exactly ONE copy to keep
+current. Don't add a `CLAUDE.md` — when one exists Claude Code reads it _instead
+of_ this file, so it would need an `@AGENTS.md` import to stay in sync. Personal
+overrides belong in `~/.claude/CLAUDE.md`; a project `CLAUDE.local.md` has the
+same shadowing effect, so set "Project instructions" to
+`claude-md-and-agents-md` in `/config` if you use one.
 
 It also hosts the `nextjs-agent-rules` block that `next dev` maintains. Because
-this file exists and carries that block, `next dev` skips `CLAUDE.md` entirely
-(see `node_modules/next/dist/server/lib/generate-agent-files.js`).
+this file carries that block, `next dev` leaves other files alone (see
+`node_modules/next/dist/server/lib/generate-agent-files.js`).
 
 ## Project Overview
 
@@ -74,6 +79,10 @@ Full table in [`MAP.md`](MAP.md). Three things it does not tell you:
   `/dashboard/team/ask` and `/dashboard/opponents` render `ComingSoonPage`. Their
   shape is not settled, so there is no implementation behind them to revive — the
   loaders in `opponents-server.ts` are the exception and are live elsewhere.
+- `/dashboard/team/schedule` is the opposite case: it renders `ComingSoonPage`
+  while `SCHEDULE_ENABLED` (`src/lib/schedule/availability.ts`) is off, but the
+  whole schedule is built and kept behind it. Its sub-routes redirect to the stub
+  and every link into it is gated; that file says how to turn it back on.
 - `/request-access` is a `next.config.ts` redirect to the landing page form, not a page.
 
 ### Data flow
@@ -134,7 +143,18 @@ internal naming only.
 
 `getLLMStream()` (`src/lib/llm/adapter.ts`) streams for `/api/home-insight` and
 `/api/team-insight`; `LLM_PROVIDER=anthropic|openai`, SDKs dynamically imported, mock
-mode with no key (`docs/llm-setup.md`).
+mode with no key (`docs/llm-setup.md`). `openai` is a misnomer: it drives the OpenAI SDK
+against Gemini (`gemini-3.5-flash-lite`), and production runs it.
+
+Match-report insights come from the `generate-insights` edge function (Gemini,
+`GEMINI_KEY`, model in its `GEMINI_MODEL` constant — `gemini-3.5-flash-lite`, since
+2.5-flash is refused to new keys; temperature 0.4, JSON `responseSchema`). The summary
+voice is settled: **2–3 sentences under 350 characters**, spoken to the player, the first
+sentence the single takeaway, key percentages quoted inline, no greeting, headers or
+bullet lists. A 4–5 sentence / 600-character version (`b317a1fe`, reverted) read wordier
+and dropped the statistics — don't lengthen it without sampling live output first.
+`tests/generate-insights-prompt.spec.ts` pins the wording. The function runs from what is
+deployed, not from git: a prompt change needs `deploy_edge_function` too.
 
 Product mail renders through `src/lib/services/email/shell.ts` and sends via Resend;
 auth mail is Supabase's own, in `supabase/email-templates/*.html`. `shell.ts` is a
@@ -203,9 +223,23 @@ this branch's queue, then stop.`
   fails any other PR into it. If a tool reports `main` as the default branch, the clone's
   `origin/HEAD` is stale: `git remote set-head origin splitstep-integration`.
 - `MAP.md` is generated — run `npm run map` after adding a route, or `npm test` fails.
+- **Vercel previews are opt-in**: only `main` and `splitstep-integration` build on
+  push; a `[preview]` tag in the commit message builds any other branch (only when the
+  user asks). A "Canceled" Vercel check on a PR is expected, not a failure.
 - Never hand-format `supabase/migrations/` or `src/styles/design-system/colors.css`.
   `.prettierignore` documents every exclusion and why.
+- **New database functions are not executable signed out by default** (since
+  `20261001184305_function_default_privileges_no_anon`). A function a migration creates
+  in `public` goes to `authenticated` and `service_role` only; one meant to be public
+  must `grant execute on function … to anon` in its own migration. Outside `public` it
+  gets no grant beyond its owner, so add one for any role that calls it directly. A
+  `drop` + `create` resets grants to this default — re-grant `anon` where it was
+  deliberate (`search_programs`, `program_public_status`).
 - No global state library — Context + server-side fetching only.
+- API routes answer refusals as `{ error, code?, detail? }` through `errorResponse()` /
+  `jsonResponse()` in `src/lib/services/match-video/http.ts`: `error` is the sentence
+  clients show, `code` the slug they branch on, and `detail` is dropped in production.
+  Convert a hand-rolled route when you next touch it, never in bulk.
 - `@azure/storage-blob` signs vendor SAS URLs and **must never reach a client bundle**;
   it, `exceljs` and the LLM SDKs are `serverExternalPackages` in `next.config.ts`.
 
@@ -214,7 +248,9 @@ this branch's queue, then stop.`
 Copy `.env.example` to `.env.local` — it documents every variable, which are optional,
 and what leaving one unset actually does. Only the three Supabase keys plus
 `NEXT_PUBLIC_SITE_URL` are needed to boot. In an agent worktree,
-`.claude/hooks/bootstrap-worktree.sh` symlinks it from the main checkout.
+`.worktreeinclude` has Claude Code copy it in when the worktree is created, and
+`.claude/hooks/bootstrap-worktree.sh` symlinks it from the main checkout when
+that did not happen.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

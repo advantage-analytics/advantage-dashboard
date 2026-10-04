@@ -70,6 +70,7 @@ import {
 } from "@/components/ui/popover";
 import { DateField } from "@/components/ui/date-field";
 import { YouPill } from "@/components/ui/you-pill";
+import { Checkbox } from "@/components/ui/checkbox";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Kbd } from "@/components/ui/kbd";
@@ -93,6 +94,7 @@ import {
   type YourEvent,
 } from "@/lib/wizard/actions";
 import { AttachLinePicker } from "@/components/dashboard/matches/match-actions/attach-line-picker";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { rankLineOffers } from "./offer-match";
@@ -105,7 +107,8 @@ import {
   focusRingCls,
   noteStripCls,
 } from "./styles";
-import { formatHoursMinutes, setHasData } from "./utils";
+import { formatHoursMinutes } from "@/lib/format/duration";
+import { setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
 import { FieldCaption } from "./FieldCaption";
 import {
@@ -116,6 +119,13 @@ import {
 import { AnimatedHeight } from "./AnimatedHeight";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
 import { firstOpenSet, isStoppedResult, scoreGames } from "./score-state";
+import {
+  firstNameOf,
+  styleSaveChecked,
+  styleSaveChoice,
+  styleSaveOffer,
+  type SavedStyle,
+} from "./style-save-offer";
 
 export interface DetailsStepContentProps {
   formData: FormData;
@@ -143,6 +153,18 @@ export interface DetailsStepContentProps {
     isSelf: boolean;
     playerId: string | null;
     userId: string | null;
+    /**
+     * The picked player's roster row's saved style, or null when the pick is
+     * not a roster profile (a personal upload, a preset naming nobody). A row
+     * with nothing saved is `{ hand: null, backhand: null }`, not null — the
+     * difference is whether "use for future matches" has somewhere to write.
+     */
+    rosterStyle: SavedStyle | null;
+    /**
+     * Whether the viewer may save that style (`canSaveRosterStyle`): staff, or
+     * the player on their own profile. Everyone else gets the prefill only.
+     */
+    canSaveStyle: boolean;
   };
   /** The event line this flow started from, when it did. */
   preset: EventPreset | null;
@@ -168,7 +190,7 @@ type Backhand = "one-handed" | "two-handed";
 
 const COURT_OPTIONS: readonly { value: string; label: string }[] = [
   { value: "Outdoor Hard Court", label: "Hard" },
-  { value: "Indoor Hard Court", label: "Hard · indoor" },
+  { value: "Indoor Hard Court", label: "Hard · Indoor" },
   { value: "Clay Court", label: "Clay" },
   { value: "Grass Court", label: "Grass" },
 ];
@@ -748,7 +770,7 @@ function ScheduleFooter({
     <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-[var(--ink-500)]">
       {canAttach ? (
         <>
-          <span>One-off · not on the schedule</span>
+          <span>One-off · Not on the schedule</span>
           <span className="text-[var(--ink-300)]">·</span>
           <button
             type="button"
@@ -900,7 +922,7 @@ function provenanceFor(
       return ctx.school ? `from ${ctx.school}'s roster` : "from their roster";
     case "new":
       return ctx.saved && ctx.school
-        ? `new · saved to ${ctx.school}`
+        ? `New · Saved to ${ctx.school}`
         : ctx.isSelf
           ? null
           : "only you see this name";
@@ -960,7 +982,11 @@ function DetailsStepContentImpl({
     [admin],
   );
   const { active: activeWorkspace } = useWorkspace();
+  // The dashboard's schedule doors — line offers, "Add to an event" — stay
+  // shut while the Schedule is a coming-soon page
+  // (`lib/schedule/availability.ts`). The admin console keeps its own.
   const canAttach =
+    SCHEDULE_ENABLED &&
     !admin &&
     workspaceKind === "team" &&
     activeWorkspace.kind === "team" &&
@@ -1037,7 +1063,14 @@ function DetailsStepContentImpl({
   // The schedule only offers in a team workspace, with no line pinned, for a
   // date. Re-asked when the date or the subject changes.
   useEffect(() => {
-    if (admin || workspaceKind !== "team" || line || !formData.date) return;
+    if (
+      !SCHEDULE_ENABLED ||
+      admin ||
+      workspaceKind !== "team" ||
+      line ||
+      !formData.date
+    )
+      return;
     let cancelled = false;
     void findLineOffers({
       scope: lookupScope,
@@ -1076,11 +1109,43 @@ function DetailsStepContentImpl({
     };
   }, [inDual, lineProgramKey, lineSlot, lookupScope]);
 
-  // A roster player has no profile to read; their last match is the record.
+  // A roster player's saved style is the record — coach-set on the roster, or
+  // the player's own once they have claimed the profile. It wins over their
+  // last match, including a last-match guess already on screen because the
+  // roster arrived after this step did. A style the coach typed is never
+  // replaced.
+  const rosterHand = subject.rosterStyle?.hand ?? null;
+  const rosterBackhand = subject.rosterStyle?.backhand ?? null;
+  useEffect(() => {
+    if (subject.isSelf || admin) return;
+    if (!rosterHand && !rosterBackhand) return;
+    const source = formData.playerStyleSource;
+    const untouched =
+      source === "history" ||
+      (!formData.playerHand &&
+        !formData.playerBackhand &&
+        source === undefined);
+    if (!untouched) return;
+    onInputChange("playerHand", rosterHand ?? undefined);
+    onInputChange("playerBackhand", rosterBackhand ?? undefined);
+    onInputChange("playerStyleSource", "roster");
+  }, [
+    subject.isSelf,
+    admin,
+    rosterHand,
+    rosterBackhand,
+    formData.playerStyleSource,
+    formData.playerHand,
+    formData.playerBackhand,
+    onInputChange,
+  ]);
+
+  // Nothing saved on the roster: their last match is the record.
   const styleAsked = useRef(false);
   useEffect(() => {
     if (styleAsked.current || subject.isSelf) return;
     if (formData.playerHand || formData.playerBackhand) return;
+    if (rosterHand || rosterBackhand) return;
     styleAsked.current = true;
     void playerStyleFromMatches({
       scope: lookupScope,
@@ -1108,6 +1173,8 @@ function DetailsStepContentImpl({
     subject.name,
     formData.playerHand,
     formData.playerBackhand,
+    rosterHand,
+    rosterBackhand,
     onInputChange,
   ]);
 
@@ -1262,6 +1329,20 @@ function DetailsStepContentImpl({
   // picked on step 1, and SubjectBar's "Not <name>?" is where it changes. Say
   // so quietly rather than add a second control for the same start-over.
   const pickedOnStepOne = workspaceKind === "team" && !preset;
+  // "Use for future matches" — only for a roster profile, in a team, outside
+  // the admin console (which records for a program it does not coach).
+  const styleOffer =
+    !admin &&
+    workspaceKind === "team" &&
+    subject.canSaveStyle &&
+    subject.rosterStyle
+      ? styleSaveOffer(subject.rosterStyle, playerHand, playerBackhand)
+      : null;
+  const styleSaveTicked = styleSaveChecked(
+    styleOffer,
+    formData.saveStyleChoice,
+  );
+  const playerFirstName = firstNameOf(subject.name);
   const playerProvenance = provenanceFor(formData.playerStyleSource, {
     isSelf: subject.isSelf,
     school: null,
@@ -1270,7 +1351,7 @@ function DetailsStepContentImpl({
   const opponentProvenance =
     formData.opponentSource === "new"
       ? savedSchool
-        ? `new · saved to ${savedSchool}`
+        ? `New · Saved to ${savedSchool}`
         : workspaceKind === "personal"
           ? "only you see this name"
           : "new"
@@ -1286,7 +1367,7 @@ function DetailsStepContentImpl({
   // ---- Context
 
   const contextMicro = line
-    ? "from the lineup · change any of them here"
+    ? "from the lineup · Change any of them here"
     : isProcessingProvider
       ? workspaceKind === "team"
         ? "type what the schedule can't fill"
@@ -1503,6 +1584,37 @@ function DetailsStepContentImpl({
                       : "Save to your profile"}
                 </button>
               )}
+            {/* The roster twin of the link above, as a checkbox because it
+                acts on Save rather than on the click — the same grammar as
+                Add player's "Also send an invite". Ticked when the roster had
+                no answer; unticked when the coach is overriding one, so a
+                match-only difference stays match-only unless they say so. */}
+            {styleOffer && (
+              <label className="flex cursor-pointer items-start gap-2.5 sm:col-span-2 sm:col-start-2">
+                <Checkbox
+                  checked={styleSaveTicked}
+                  onChange={(checked) =>
+                    onInputChange(
+                      "saveStyleChoice",
+                      styleSaveChoice(styleOffer.mode, checked),
+                    )
+                  }
+                  className="mt-px"
+                />
+                <span>
+                  <span className="block text-[12px] text-[var(--ink-700)]">
+                    {styleOffer.mode === "save"
+                      ? `Use for ${playerFirstName}'s future matches`
+                      : `Update ${playerFirstName}'s saved hand and backhand`}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                    {styleOffer.mode === "save"
+                      ? "Saves to their roster profile when you save this match."
+                      : "Leave unticked to change this match only."}
+                  </span>
+                </span>
+              </label>
+            )}
           </div>
 
           {/* The opponent — named here, then read back like the row above. */}
@@ -1636,7 +1748,7 @@ function DetailsStepContentImpl({
                             </span>
                             <span className="text-[11px] text-[var(--ink-500)]">
                               {p.matches}{" "}
-                              {p.matches === 1 ? "match" : "matches"} · last{" "}
+                              {p.matches === 1 ? "match" : "matches"} · Last{" "}
                               {formatMonthDay(p.lastDate)}
                             </span>
                           </button>
@@ -1814,7 +1926,7 @@ function DetailsStepContentImpl({
               kind={formData.eventKind}
               events={events}
               footer={
-                workspaceKind === "team" ? (
+                SCHEDULE_ENABLED && workspaceKind === "team" ? (
                   <ScheduleFooter
                     canAttach={canAttach}
                     onAdd={() => setPickingLine(true)}

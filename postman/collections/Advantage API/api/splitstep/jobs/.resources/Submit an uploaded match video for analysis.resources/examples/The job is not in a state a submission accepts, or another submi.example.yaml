@@ -1,0 +1,32 @@
+$kind: http-example
+name: The job is not in a state a submission accepts, or another submission holds it. Nothing was spent.
+request:
+  url: "{{baseUrl}}/api/splitstep/jobs"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "jobId": "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f",
+        "initialTopPlayerIsPlayer1": true,
+        "adScoring": true,
+        "fixedCamera": true
+      }
+response:
+  statusCode: 409
+  statusText: Conflict
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "This match has already been submitted for analysis."
+      }
+order: 6000

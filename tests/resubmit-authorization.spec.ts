@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
 import type { SplitStepJobRequest } from "@/lib/services/splitstep/job-request";
 import {
   resubmitJob,
@@ -668,6 +669,32 @@ test("a quota refusal removes the child and leaves the parent failed", async () 
   expect(h.db.tables.processing_jobs.map((j) => j.id)).toEqual(["j-parent"]);
 });
 
+test("a reservation RPC that throws removes the child → quota_unavailable, nothing released or sent", async () => {
+  const h = harness({});
+  h.io.reserveQuota = async ({ jobId, workspace, seconds }) => {
+    h.reserved.push({ jobId, workspaceId: workspace.id, seconds });
+    throw Object.assign(
+      new Error("Could not reserve processing quota: connection reset"),
+      { code: "08006" },
+    );
+  };
+  const r = await manual(h);
+  expect(r.ok).toBe(false);
+  if (r.ok) return;
+  expect(r.reason).toBe("quota_unavailable");
+  expect(r.message).toBe("Could not reserve analysis time. Try again.");
+  expect(h.reserved).toHaveLength(1);
+  // The child was inserted, then deleted — no live `uploaded` orphan left for
+  // `processing_jobs_one_live_per_match` to block the next retry on.
+  const child = h.db.inserts[0].row;
+  expect(h.db.row("processing_jobs", child.id)).toBeUndefined();
+  expect(h.db.tables.processing_jobs.map((j) => j.id)).toEqual(["j-parent"]);
+  expect(h.db.row("processing_jobs", "j-parent")?.status).toBe("failed");
+  expect(h.released).toEqual([]);
+  expect(h.minted).toEqual([]);
+  expect(h.sent).toEqual([]);
+});
+
 test("only a failure PAST the reservation marks the child failed — never the contract", async () => {
   const h = harness({ vendor: { ok: false, status: 500, text: "boom" } });
   const r = await manual(h);
@@ -719,4 +746,141 @@ test("an invalid_input failure is refused before the video check, on both paths"
 test("a source blob that is gone → video_unavailable, nothing spent", async () => {
   const h = harness({ blobExists: false });
   expectRefused(h, await manual(h), "video_unavailable");
+});
+
+// ── T11: classifyFailure() gates every non-retry class ────────────────────
+
+test("a no-video failed parent is refused with the plain upload-again message, before any blob check", async () => {
+  const h = harness({ job: parentJob({ video_object_key: null }) });
+  const r = await manual(h);
+  expectRefused(h, r, "video_unavailable");
+  if (r.ok) return;
+  expect(r.message).toBe(byClass.upload_again.cardBody);
+  // classifyFailure() refuses on hasVideo alone — no Azure HEAD is ever made.
+  expect(h.blobChecks).toEqual([]);
+});
+
+test("a failed parent with an INTERNAL_ERROR code and a video is still accepted", async () => {
+  // INTERNAL_ERROR outside the downloading_video step is not a download
+  // failure and not an input rejection, so classifyFailure() calls it
+  // "retry" and the ladder continues past the new check.
+  const h = harness({
+    job: parentJob({
+      error_category: "internal",
+      error_code: "INTERNAL_ERROR",
+      error_step: "some_other_step",
+    }),
+  });
+  const r = await manual(h);
+  expect(r.ok).toBe(true);
+});
+
+test("an automatic retry of a downloading_video failure is not refused by the new check", async () => {
+  // isDownloadFailure() ⊂ retry: the auto path must reach the same
+  // already-auto-resubmitted / reservation / vendor ladder it always did.
+  const h = harness({
+    job: parentJob({
+      error_category: "internal",
+      error_code: "INTERNAL_ERROR",
+      error_step: "downloading_video",
+    }),
+  });
+  const r = await auto(h);
+  expect(r.ok).toBe(true);
+});
+
+// ── "Send for analysis again": a cancelled parent ─────────────────────────
+
+test("a cancelled parent resubmits manually and reserves the month's time anew", async () => {
+  // The cancel released the parent's reservation, so the child reserves again
+  // — exactly as for a failed parent. The cancelled parent must not count as
+  // an analysis in flight, or it would refuse its own resend.
+  const h = harness({
+    job: parentJob({ status: "cancelled", error_code: "CANCELLED" }),
+  });
+  const r = await manual(h);
+  expect(r.ok).toBe(true);
+  if (!r.ok) return;
+
+  expect(h.db.inserts).toHaveLength(1);
+  const child = h.db.inserts[0].row;
+  expect(child.resubmitted_from_job_id).toBe("j-parent");
+  expect(child.auto_resubmitted).toBe(false);
+  expect(h.reserved).toEqual([
+    { jobId: child.id, workspaceId: PROGRAM, seconds: 5182 },
+  ]);
+  expect(h.sent).toHaveLength(1);
+  expect(h.db.row("processing_jobs", child.id)?.status).toBe("queued");
+  // The parent stays cancelled; nothing is released on its behalf.
+  expect(h.db.row("processing_jobs", "j-parent")?.status).toBe("cancelled");
+  expect(h.released).toEqual([]);
+});
+
+test("a cancelled parent is never resent automatically", async () => {
+  const h = harness({
+    job: parentJob({ status: "cancelled", error_code: "CANCELLED" }),
+  });
+  expectRefused(h, await auto(h), "not_failed");
+});
+
+test("a cancelled parent with no video is refused before any blob check", async () => {
+  const h = harness({
+    job: parentJob({
+      status: "cancelled",
+      error_code: "CANCELLED",
+      video_object_key: null,
+    }),
+  });
+  expectRefused(h, await manual(h), "video_unavailable");
+  expect(h.blobChecks).toEqual([]);
+});
+
+// ── The attempt ceiling: cancelled links spend no attempt ────────────────
+
+/** Seed `rows` into the fake beside the parent — earlier links of its chain. */
+function withChain(h: Harness, rows: Row[]): Harness {
+  h.db.tables.processing_jobs.push(
+    ...rows.map((row) => ({
+      match_id: "m-1",
+      auto_resubmitted: false,
+      ...row,
+    })),
+  );
+  return h;
+}
+
+test("a chain with two cancelled links still allows a manual resend", async () => {
+  // j-a (failed) ← j-b (failed) ← j-c (cancelled) ← j-parent (cancelled):
+  // four rows, but only the two failures spent an attempt, so the ceiling of
+  // three is not reached and "Send for analysis again" goes through.
+  const h = withChain(
+    harness({
+      job: parentJob({
+        status: "cancelled",
+        error_code: "CANCELLED",
+        resubmitted_from_job_id: "j-c",
+      }),
+    }),
+    [
+      { id: "j-a", status: "failed", resubmitted_from_job_id: null },
+      { id: "j-b", status: "failed", resubmitted_from_job_id: "j-a" },
+      { id: "j-c", status: "cancelled", resubmitted_from_job_id: "j-b" },
+    ],
+  );
+  const r = await manual(h);
+  expect(r.ok).toBe(true);
+  expect(h.db.inserts).toHaveLength(1);
+  expect(h.db.inserts[0].row.resubmitted_from_job_id).toBe("j-parent");
+  expect(h.sent).toHaveLength(1);
+});
+
+test("three failed attempts still hit the ceiling", async () => {
+  const h = withChain(
+    harness({ job: parentJob({ resubmitted_from_job_id: "j-b" }) }),
+    [
+      { id: "j-a", status: "failed", resubmitted_from_job_id: null },
+      { id: "j-b", status: "failed", resubmitted_from_job_id: "j-a" },
+    ],
+  );
+  expectRefused(h, await manual(h), "attempt_ceiling");
 });

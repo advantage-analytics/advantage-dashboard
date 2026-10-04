@@ -44,19 +44,31 @@
  * is recording the envelope, which is what makes everything else recoverable.
  */
 
-import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
+import {
+  pipelineLog,
+  redactSignedUrls,
+} from "@/lib/services/splitstep/pipeline-log";
 import { NextRequest, NextResponse, after } from "next/server";
-import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  SIGNATURE_HEADERS,
+  verifyWebhookAuth,
+} from "@/lib/services/splitstep/webhook-auth";
 import { parseWebhookPayload } from "@/lib/services/splitstep/webhook-payload";
 import { selectDeliveryStorageKeys } from "@/lib/services/splitstep/delivery-storage-keys";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
+import {
+  isAllowedResultUrl,
+  resultUrlHostname,
+} from "@/lib/services/splitstep/result-url-policy";
 import { releaseQuota } from "@/lib/services/splitstep/quota";
 import {
   isDownloadFailure,
   resubmitJob,
 } from "@/lib/services/splitstep/resubmit-job";
 import { gradeResults } from "@/lib/services/splitstep/grade-results";
+import { secureResults } from "@/lib/services/splitstep/secure-results";
 import { deriveAndPublish } from "@/lib/services/splitstep/derive-and-publish";
 import { deriveAndStoreBallPaths } from "@/lib/services/splitstep/ball-paths-store";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
@@ -98,142 +110,11 @@ const RESULTS_FETCH_TIMEOUT_MS = 25_000;
 const FRAME_DATA_FETCH_TIMEOUT_MS = 20_000;
 
 /**
- * Headers the signature might arrive in.
- *
- * `x-hmac-signature` is the vendor's answer, given by email and since added to
- * their published docs, so it leads. The rest stay for two reasons. They are
- * still a cheap hedge until a real delivery confirms the documented name — the
- * log below prints the full header set whenever none of these match. And this
- * list is also the redaction set for safeHeaders(): dropping `authorization` or
- * `x-api-key` from it would start writing credential values into the delivery
- * row, which is a worse outcome than carrying a few dead candidates.
+ * Tighter clock for the trajectories file when it is fetched ahead of
+ * derivation (~4 MB). Past it, derivation runs on the strokes file alone and
+ * the url stays on the row, as for any other per-frame miss.
  */
-const SIGNATURE_HEADERS = [
-  "x-hmac-signature",
-  "x-splitstep-signature",
-  "x-webhook-signature",
-  "x-signature",
-  "x-signature-256",
-  "x-hub-signature-256",
-  "signature",
-  "x-webhook-secret",
-  "x-api-key",
-  "authorization",
-] as const;
-
-type AuthOutcome = {
-  /** Whether to process this delivery at all. */
-  ok: boolean;
-  /** Recorded on the row. True only for a real HMAC match. */
-  verified: boolean;
-  /** For the log; never includes the signature or the secret. */
-  reason: string;
-};
-
-/**
- * Verify a delivery against the documented scheme:
- * base64(HMAC-SHA256(secret, raw_body)), compared to a signature header.
- *
- *   digest = hmac.new(secret, raw_body, sha256).digest()
- *   expected = base64.b64encode(digest)
- *
- * ── Why a missing signature is accepted, not rejected ────────────────────────
- * The vendor has NO retry policy and a 30s connection timeout, so a delivery we
- * refuse is gone permanently — there is no second attempt to fix it on. Paired
- * with a header name nobody has written down, rejecting on "no signature found"
- * risks discarding perfectly valid results because we looked in the wrong place.
- *
- * So: a signature that is present and WRONG is refused (that is a real failure).
- * A signature we cannot find is accepted, recorded `signature_verified = false`,
- * and logged with the full header set — which is what tells us the header name.
- *
- * Set SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true to flip to fail-closed. Do that
- * as soon as one real delivery has confirmed the header, and before any real
- * athlete video goes through.
- */
-function verifyWebhookAuth(request: NextRequest, rawBody: string): AuthOutcome {
-  const secret = process.env.SPLITSTEP_WEBHOOK_SECRET;
-
-  if (!secret) {
-    pipelineLog.warn(
-      `${LOG} UNSIGNED — SPLITSTEP_WEBHOOK_SECRET is not set. Accepting without ` +
-        `authentication. This must not remain true once real match video is processed.`,
-    );
-    return { ok: true, verified: false, reason: "no secret configured" };
-  }
-
-  const expected = createHmac("sha256", secret)
-    .update(rawBody, "utf8")
-    .digest("base64");
-
-  // Equal-length compare via digests, so nothing leaks through timing or length.
-  const matches = (presented: string, against: string) =>
-    timingSafeEqual(
-      createHash("sha256").update(presented).digest(),
-      createHash("sha256").update(against).digest(),
-    );
-
-  let sawCandidate = false;
-
-  for (const header of SIGNATURE_HEADERS) {
-    const raw = request.headers.get(header);
-    if (!raw) continue;
-    sawCandidate = true;
-
-    const presented =
-      header === "authorization" ? raw.replace(/^Bearer\s+/i, "") : raw.trim();
-
-    if (matches(presented, expected)) {
-      return {
-        ok: true,
-        verified: true,
-        reason: `HMAC verified via ${header}`,
-      };
-    }
-
-    // Tolerated, not trusted: some senders put the shared secret itself in the
-    // header rather than a signature over the body. It proves they hold the
-    // secret, which is worth accepting, but it is not a signature — it says
-    // nothing about whether the body was modified in transit.
-    if (matches(presented, secret)) {
-      pipelineLog.warn(
-        `${LOG} ${header} carried the raw shared secret, not an HMAC of the body. ` +
-          `Accepted, but recorded unverified — ask the vendor to send ` +
-          `base64(HMAC-SHA256(secret, raw_body)).`,
-      );
-      return { ok: true, verified: false, reason: `raw secret via ${header}` };
-    }
-  }
-
-  if (sawCandidate) {
-    // A signature was presented and it did not match. That is a real failure,
-    // not an unknown-header problem.
-    return {
-      ok: false,
-      verified: false,
-      reason: "signature present but did not match",
-    };
-  }
-
-  const requireSignature =
-    process.env.SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE === "true";
-
-  pipelineLog.warn(
-    `${LOG} no signature header found${requireSignature ? " — REJECTING" : " — accepting unverified"}`,
-    {
-      searched: SIGNATURE_HEADERS,
-      // The header NAMES are what identify the right one. Values are redacted
-      // by safeHeaders() before anything is stored or logged.
-      received: [...request.headers.keys()],
-    },
-  );
-
-  return {
-    ok: !requireSignature,
-    verified: false,
-    reason: "no signature header found",
-  };
-}
+const TRAJECTORIES_BEFORE_DERIVE_TIMEOUT_MS = 8_000;
 
 /**
  * Headers worth keeping, without dragging a credential into the database.
@@ -271,7 +152,7 @@ export async function POST(request: NextRequest) {
   pipelineLog.info(`${LOG} received`, {
     bytes: rawBody.length,
     contentType: request.headers.get("content-type"),
-    body: rawBody.slice(0, 4000),
+    body: redactSignedUrls(rawBody).slice(0, 4000),
   });
 
   // 2. Authenticate. Must run against the exact bytes received — the HMAC is
@@ -387,7 +268,26 @@ export async function POST(request: NextRequest) {
   // confirmed no retry policy exists, so a 500 bought nothing and only risked
   // the timeout. Recovery is by hand from the stored strokes url, or via
   // GET {BASE_URL}/jobs/{job_id}, which the docs now expose.
-  if (payload.nextStatus === "completed") {
+  //
+  // Gated on the row, like the failed branch below. A job the user cancelled
+  // while it was queued is terminal (`splitstep_status_rank('cancelled') = 9`),
+  // and they were told nothing would be analysed. If the vendor had already
+  // picked it up when the DELETE raced it, a `job_completed` can still land:
+  // the envelope is recorded above, and nothing is secured, graded or derived.
+  const completedOnCancelledJob =
+    payload.nextStatus === "completed" && record.job_status === "cancelled";
+  if (completedOnCancelledJob) {
+    pipelineLog.warn(
+      `${LOG} SKIPPED — job_completed for a cancelled job; nothing secured or derived`,
+      {
+        deliveryId: record.delivery_id,
+        jobId: record.matched_job_id,
+        externalJobId: payload.externalJobId,
+      },
+    );
+  }
+
+  if (payload.nextStatus === "completed" && !completedOnCancelledJob) {
     const deliveryId = record.delivery_id;
     const jobId = record.matched_job_id;
 
@@ -439,40 +339,23 @@ export async function POST(request: NextRequest) {
         let storedKey = record.results_object_key ?? resultsKey;
 
         if (strokesUrl) {
-          const stored = await storeVendorJson({
+          // Download, store, finalize and log — extracted to secure-results.ts
+          // so the reconciler can run the same step without a delivery.
+          const secured = await secureResults({
             supabase,
-            url: strokesUrl,
+            deliveryId,
+            jobId,
+            strokesUrl,
             objectKey: resultsKey,
             timeoutMs: RESULTS_FETCH_TIMEOUT_MS,
-            // Kept in memory for the grading step below, which would otherwise
-            // read it straight back out of storage.
-            returnBody: true,
+            logPrefix: LOG,
           });
 
-          await supabase.rpc("finalize_splitstep_results", {
-            p_delivery_id: deliveryId,
-            p_job_id: jobId,
-            p_results_object_key: stored.ok ? stored.objectKey : null,
-            p_error: stored.ok ? null : stored.error,
-          });
+          resultsSecured = secured.resultsSecured;
 
-          resultsSecured = stored.ok;
-
-          if (stored.ok) {
-            resultsBody = stored.body;
-            storedKey = stored.objectKey;
-            pipelineLog.info(`${LOG} results stored`, {
-              jobId,
-              objectKey: stored.objectKey,
-              bytes: stored.bytes,
-            });
-          } else {
-            // Loud, because nothing retries this. The url is on the job row
-            // (`sas_url`) and stays valid for days — it can be fetched by hand.
-            pipelineLog.error(
-              `${LOG} results download FAILED — recover from the stored strokes url (processing_jobs.sas_url)`,
-              { deliveryId, jobId, error: stored.error },
-            );
+          if (secured.resultsSecured) {
+            resultsBody = secured.body;
+            storedKey = secured.objectKey;
           }
         }
 
@@ -486,6 +369,24 @@ export async function POST(request: NextRequest) {
         // Gated on resultsSecured rather than on this delivery having done the
         // download, so a redelivery still grades a job whose first attempt
         // stored the analysis but failed to grade it.
+        //
+        // The trajectories file first, though: derivation reads it for its own
+        // line calls (derivation/line-calls.ts), so it has to be in the bucket
+        // before deriveAndPublish runs. It is ~4 MB on a bounded fetch clock;
+        // a miss only means this derivation falls back to the strokes file.
+        await storeFrameData({
+          supabase,
+          jobId,
+          timeoutMs: TRAJECTORIES_BEFORE_DERIVE_TIMEOUT_MS,
+          files: [
+            {
+              kind: "trajectories",
+              url: trajectoriesUrl,
+              objectKey: trajectoriesKey,
+            },
+          ],
+        });
+
         if (jobId && resultsSecured) {
           await gradeResults({
             supabase,
@@ -508,23 +409,16 @@ export async function POST(request: NextRequest) {
           await deriveAndPublish({ supabase, jobId, deadline });
         }
 
-        // The per-frame files, last of all. Nothing reads them yet — they are
-        // kept so metrics can be built on them without waiting another week for
-        // a vendor url — so they must never delay derivation, which is what the
-        // user is waiting on, and they run in whatever budget is left. Each is
-        // best-effort with its own clock; a miss is logged with the recovery
-        // path and the url stays on the job row.
+        // The players file, last of all. Nothing in derivation reads it yet —
+        // it is kept so metrics can be built on it without waiting another
+        // week for a vendor url — and at ~50 MB it must never delay the
+        // derivation the user is waiting on, so it runs in whatever budget is
+        // left. Best-effort with its own clock; a miss is logged with the
+        // recovery path and the url stays on the job row.
         await storeFrameData({
           supabase,
           jobId,
-          files: [
-            { kind: "players", url: playersUrl, objectKey: playersKey },
-            {
-              kind: "trajectories",
-              url: trajectoriesUrl,
-              objectKey: trajectoriesKey,
-            },
-          ],
+          files: [{ kind: "players", url: playersUrl, objectKey: playersKey }],
         });
 
         // Ball paths, after the trajectories file they are derived from is in
@@ -565,8 +459,11 @@ export async function POST(request: NextRequest) {
   // forever. releaseQuota had exactly one caller — the submit-failure path in
   // api/splitstep/jobs, which fires only when the POST itself throws — so a
   // failure during processing left the allowance spent with nothing to show
-  // for it. Against a 2-hour monthly cap and no vendor cancel endpoint, that is
-  // the leak that made automatic submission dangerous rather than merely bold.
+  // for it. Against a 2-hour monthly cap, that is the leak that made automatic
+  // submission dangerous rather than merely bold — the vendor's cancel
+  // (`DELETE {SPLITSTEP_API_URL}/{id}`, behind POST /api/splitstep/jobs/[jobId]/
+  // cancel) only removes a job while it is still queued, and answers 409
+  // JOB_NOT_REMOVABLE once processing starts, so it recovers nothing here.
   //
   // Safe to run on a redelivery: release_processing_quota() updates only where
   // `released = false`, so a second failure notice for the same job credits
@@ -576,7 +473,23 @@ export async function POST(request: NextRequest) {
   // payload carries no duration, and the reservation is already the trim window
   // we asked them to analyse — so the estimate IS the actual, and calling
   // reconcileQuota() would mean inventing a number to pass it.
-  if (payload.nextStatus === "failed" && record.matched_job_id) {
+  //
+  // Gated on the row, not the payload. `job_status` is what the RPC's
+  // rank-guarded update left behind — never backwards, never off a terminal
+  // state — so a `job_failed` for a job already `completed`, `deriving` or
+  // `derivation_failed` leaves it there, and must release no quota, send no
+  // failure mail and trigger no resubmit. Keying on `payload.nextStatus` did
+  // all three for any delivery that merely claimed a failure.
+  //
+  // The payload must still say failed too. A late `job_processing` landing on
+  // a row that is already `failed` carries no error fields, so it would read
+  // as non-retryable and mail "analysis failed" over a job that was quietly
+  // auto-resubmitted — the mail that failure deliberately never sent.
+  if (
+    payload.nextStatus === "failed" &&
+    record.job_status === "failed" &&
+    record.matched_job_id
+  ) {
     const failedJobId = record.matched_job_id;
     // Read once outside after(): the auto-retry decision keys on THIS
     // delivery's error fields, not on whatever the row says by the time the
@@ -676,6 +589,12 @@ export async function POST(request: NextRequest) {
  * straight back out of storage. The per-frame files are tens of megabytes and
  * nothing here reads them, so they go through as a Blob and are never decoded
  * into a string at all.
+ *
+ * The URL is checked against the result-host allowlist before anything is
+ * fetched (result-url-policy.ts): the payload is untrusted input and this is
+ * the server making a request it names. A refusal is an ordinary `ok: false`,
+ * so the caller logs the same recovery path it does for any other miss; the
+ * line here names the host only, never the signed URL.
  */
 async function storeVendorJson(params: {
   supabase: ReturnType<typeof createAdminClient>;
@@ -689,13 +608,23 @@ async function storeVendorJson(params: {
 > {
   const { supabase, url, objectKey, timeoutMs, returnBody = false } = params;
 
+  if (!isAllowedResultUrl(url)) {
+    const hostname = resultUrlHostname(url);
+    pipelineLog.error(`${LOG} result url host not allowed — not fetched`, {
+      objectKey,
+      hostname,
+    });
+    return { ok: false, error: `result url host not allowed: ${hostname}` };
+  }
+
   let body: Blob;
   let text: string | undefined;
   try {
     const response = await fetch(url, {
       signal: AbortSignal.timeout(timeoutMs),
-      // No credentials — the URL carries its own.
-      redirect: "follow",
+      // No credentials — the URL carries its own. A redirect is refused rather
+      // than followed: the allowlist above was checked against THIS host.
+      redirect: "error",
     });
 
     if (!response.ok) {
@@ -760,8 +689,15 @@ async function storeFrameData(params: {
     url: string | null;
     objectKey: string;
   }>;
+  /** Per-file fetch clock. Defaults to FRAME_DATA_FETCH_TIMEOUT_MS. */
+  timeoutMs?: number;
 }): Promise<void> {
-  const { supabase, jobId, files } = params;
+  const {
+    supabase,
+    jobId,
+    files,
+    timeoutMs = FRAME_DATA_FETCH_TIMEOUT_MS,
+  } = params;
 
   await Promise.all(
     files
@@ -771,7 +707,7 @@ async function storeFrameData(params: {
           supabase,
           url: url as string,
           objectKey,
-          timeoutMs: FRAME_DATA_FETCH_TIMEOUT_MS,
+          timeoutMs,
         });
 
         if (!stored.ok) {

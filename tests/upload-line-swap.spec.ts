@@ -575,7 +575,7 @@ test.describe("a server preset for the same line with a new format", () => {
     expect(h.current.formData.playOnLets).toBe(true);
   });
 
-  test("a best-of edit reaches formData, and an unset Ad/No-Ad reads as unset", async () => {
+  test("a best-of edit reaches formData, and a withdrawn Ad/No-Ad falls back to the college default", async () => {
     const lineA = line({ adScoring: true, bestOf: 3 });
     const h = await answeredOnLineA({ lineA });
 
@@ -586,8 +586,26 @@ test.describe("a server preset for the same line with a new format", () => {
     await swapTo(h, followed!);
 
     expect(h.current.formData.bestOf).toBe("1");
-    // Guardrails §3.1: undefined, never a defaulted false.
-    expect(h.current.formData.adScoring).toBeUndefined();
+    // The event's Ad was the form's value, not the coach's, so withdrawing it
+    // resets the field rather than keeping a stale Ad. The harness's team is a
+    // college one, whose reset value is No-Ad (`workspaceFormatDefaults`);
+    // any other workspace resets to undefined (guardrails §3.1).
+    expect(h.current.formData.adScoring).toBe(false);
     expect(h.current.uploadedFile?.name).toBe("court-one.mp4");
+  });
+
+  test("a line that declares no scoring seeds the college No-Ad, and a re-sync keeps the coach's Ad", async () => {
+    const lineA = line({ adScoring: null, bestOf: 3 });
+    const h = await answeredOnLineA({ lineA });
+    expect(h.current.formData.adScoring).toBe(false);
+    h.current.handleInputChange("adScoring", true);
+    h.render();
+
+    await swapTo(
+      h,
+      followServerPreset(lineA, line({ adScoring: null, bestOf: 1 }))!,
+    );
+    expect(h.current.formData.bestOf).toBe("1");
+    expect(h.current.formData.adScoring).toBe(true);
   });
 });

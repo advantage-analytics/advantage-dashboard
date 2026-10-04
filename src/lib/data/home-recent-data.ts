@@ -64,7 +64,8 @@ export interface MatchStats {
 
 export interface EventGroup {
   id: string;
-  tournamentName: string;
+  /** Null when the group's matches were filed with no event. */
+  tournamentName: string | null;
   date: string;
   matchType: string | null;
   courtType: string | null;
@@ -141,7 +142,7 @@ export function countViewerWins(
   return wins;
 }
 
-function groupMatchesIntoEvents(
+export function groupMatchesIntoEvents(
   rows: DbRecentMatch[],
   playerIds: readonly string[],
   viewerId: string,
@@ -152,7 +153,12 @@ function groupMatchesIntoEvents(
   for (const row of rows) {
     const dateOnly =
       row.date && row.date.length >= 10 ? row.date.slice(0, 10) : row.date;
-    const key = `${row.tournament_name ?? ""}|${dateOnly}`;
+    // Same event, same day → one group. A match filed with no event shares an
+    // occasion with nothing, so it is its own group.
+    const key =
+      row.tournament_name === null
+        ? `match:${row.id}`
+        : `${row.tournament_name}|${dateOnly}`;
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key)!.push(row);
   }
@@ -209,7 +215,7 @@ function groupMatchesIntoEvents(
     if (mapped.length === 0) continue;
     events.push({
       id: first.id,
-      tournamentName: first.tournament_name ?? "Unknown event",
+      tournamentName: first.tournament_name,
       date: formatDisplayDate(first.date),
       matchType: first.match_type ?? null,
       courtType: first.court_type ?? null,

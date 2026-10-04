@@ -18,6 +18,14 @@ deleted, and where each deleted file's knowledge landed.
 > prove. Renaming `static/` is a separate decision; this note is so the name
 > is not read as a description.
 
+> **Closed to users for now.** While `SCHEDULE_ENABLED`
+> (`src/lib/schedule/availability.ts`) is off, `/dashboard/team/schedule`
+> renders `ComingSoonPage`, `next.config.ts` redirects every route below it
+> there, and the links into this tree from Team Home, the upload wizard, the
+> match drawer, Edit match, the player profile and the command palette are
+> hidden. Everything described here still exists and still reads the database;
+> that file lists what to undo to turn it back on.
+
 ---
 
 ## 1. The routes

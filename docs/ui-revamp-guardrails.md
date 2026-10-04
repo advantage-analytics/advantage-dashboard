@@ -24,7 +24,7 @@ Verified against a real job (86 min, vendor job `778912d7`, our job
 | Auto-submit on upload completion | vendor accepted, `external_job_id` recorded                                 |
 | `VideoUrl` SAS                   | vendor fetched it                                                           |
 | Webhook receipt + HMAC           | 2 deliveries, both `signature_verified: true`                               |
-| Signature enforcement            | `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true`, suite green                     |
+| Signature enforcement            | fail-closed once the secret is set (`webhook-auth.ts`), suite green         |
 | Results JSON                     | 645 KB → `match-results` bucket                                             |
 | Trimmed video capture            | 1.43 GB copied into our container, `copyStatus: success`                    |
 | Source reclaim                   | 1.54 GB deleted, vendor's SAS neutralised (policy since retired, see below) |
@@ -123,6 +123,72 @@ be. Doubles teams and existing users depend on it.
 > be skipped by a bare client UPDATE. `guard_schedule_result` still refuses a
 > line with a saved outcome. Migration:
 > `supabase/migrations/20260913120000_attach_match_to_event_line.sql`.
+
+> **A fourth reviewed exception, added 2026-09-29: the event-delete detach in
+> `guard_event_delete`.**
+>
+> Deleting a schedule event that holds matches leaves those matches as
+> unassigned program matches (decision 2026-09-22, PR #255). The detach was
+> meant to ride on `matches_event_entry_id_fkey ON DELETE SET NULL`, but that
+> referential UPDATE fires `matches_block_client_regraft`, which refused every
+> entry → NULL move for a signed-in user, so no event with a match could be
+> deleted from the app. The BEFORE DELETE trigger on `program_events` now
+> performs the detach itself, and the regraft trigger accepts the move only
+> while a transaction-local marker names the event the entry belongs to.
+> Allowed on the attach exception's terms: a single explicit action by an
+> owner or coach who runs that program's schedule (`delete_schedule_event`);
+> scoped to the matches on the lines of the one event being deleted; only
+> from a line to no line; touching **only** `event_entry_id`,
+> `tournament_name` and `round` (`date`, `match_type` and `court_type` stay —
+> they hold without a line; a round only means something inside the line
+> that gave it) — **never** `score`, `format`, `player1_id` or
+> `program_id`, and nothing under `match_stats`, `points` or `shots`; and
+> audit-logged to `program_audit_log` as `event.deleted` with
+> `detached_matches`, counted before the detach. A bare client UPDATE that
+> nulls `event_entry_id` is refused exactly as before. Migrations:
+> `supabase/migrations/20260929210705_event_delete_detaches_under_client.sql`,
+> then `round` added to the detach in `20260929213016_detach_clears_round.sql`.
+>
+> The same exception covers `detach_match_from_event_line`, added the same
+> day: the single-match inverse of `attach_match_to_event_line`, from the
+> Edit Match dialog. It is allowed on the attach exception's terms exactly —
+> a single explicit action by the match's own uploader, who must also run
+> that program's schedule; scoped to one match; only from a line to no line;
+> touching **only** `event_entry_id`, `tournament_name` and `round` (`date`,
+> `match_type` and `court_type` stay — they describe the match, not the
+> line) — **never** `score`, `format`, `player1_id` or `program_id`, and
+> nothing under `match_stats`, `points` or `shots`; and audit-logged to
+> `program_audit_log` as `match.detached` with the match, entry and event
+> ids. The regraft trigger accepts the move only while a second
+> transaction-local marker names that one match, so a bare client UPDATE
+> stays refused; a saved outcome on the line does not block the detach and
+> is left untouched. Migrations:
+> `supabase/migrations/20260929210741_detach_match_from_event_line.sql`,
+> then `round` added to the detach in `20260929213016_detach_clears_round.sql`.
+
+> **A fifth reviewed exception, added 2026-09-29: `set_match_round_on_line`.**
+>
+> The Edit Match dialog's "Edit round" changes the round of a match that is
+> already on a tournament line — the one column the attach set on the way on
+> and the detaches cleared on the way off, with no path in between except
+> detach-and-re-attach (two audit rows, and `date`, `match_type` and
+> `court_type` re-derived from the event). Allowed on the attach exception's
+> terms exactly: a single explicit action by the match's own uploader, who
+> must also run that program's schedule; scoped to one match; tournament
+> lines only (a dual line's round is its slot, and the line decides it); the
+> match stays on its line; touching **only** `round` — **never**
+> `event_entry_id`, `tournament_name`, `date`, `match_type`, `court_type`,
+> `score`, `format`, `player1_id` or `program_id`, and nothing under
+> `match_stats`, `points` or `shots`; and audit-logged to `program_audit_log`
+> as `match.round_changed` with the match, entry and event ids and the
+> `from`/`to` rounds. The function refuses a blank round and a round another
+> match on the entry already holds; `guard_schedule_result` still refuses one
+> with a saved outcome. The regraft trigger now also fires on `round`, and
+> accepts a round change on a linked match only while a third
+> transaction-local marker names that one match — so a bare client UPDATE of
+> `round` on a linked match is refused, while a round change on an unlinked
+> match (the Details form) passes as before. Migration:
+> `supabase/migrations/20260929215610_set_match_round_on_line.sql`.
 
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
@@ -280,9 +346,111 @@ to put a testable seam.
 >   `docs/splitstep-vendor-questions.md` was answered 2026-09-28: the vendor's
 >   hard gate is now 25 fps, and it still recommends 29.97 or higher. The
 >   existing 30 fps floor on the browser sample (`MIN_VIDEO_FPS`) is unchanged.
+>   **Revised 2026-09-29:** `MIN_CONTAINER_AVERAGE_FPS` is 29.5 and a new
+>   `RECOMMENDED_CONTAINER_AVERAGE_FPS` (29.97) bounds a band that uploads with
+>   one warning instead of a refusal — both sub-29.97 jobs publish on
+>   derivation 0.6.0, and full-length phone footage averaging 29.74–29.94 was
+>   being turned away. Reasoning under Q14 in the vendor-questions doc. The
+>   same day the container average became the judge whenever it is known: the
+>   browser's 20-frame sample refuses on its own only when the container could
+>   not be read (a 29.94 file was refused on a 29.2 sample from its first
+>   twenty frames).
 >
 > `job-request.ts`, the three inputs in §4, `canSubmitVideo` and the webhook are
 > untouched.
+
+> **A reviewed exception, added 2026-09-28: video failure recovery, from
+> `claude/video-retry-failure-surfacing-055fd8`.** A stuck or failed video job
+> now has a real recovery path instead of a dead "failed" row. Each frozen file
+> gained one narrow capability, never a change to what it sends, bills or
+> computes:
+>
+> - `resubmit-job.ts` — **refusal only.** `resubmitJob()` now classifies the
+>   parent through `classifyFailure()` (the one recovery-class function, also
+>   used by the matches list and match page) instead of its own
+>   `error_category === "invalid_input"` check, and refuses before
+>   `reserveQuota()` for any class but `retry`: `fix_recording` (unchanged
+>   behaviour, now reached through the shared classifier) and the new
+>   `upload_again` (no video to resend from) each return their own refusal
+>   reason; any other class is refused too, as a fail-safe rather than a
+>   fallthrough. `isDownloadFailure` and `MAX_TOTAL_ATTEMPTS` moved to
+>   `src/lib/data/match-analysis.ts` (client code needs them without pulling in
+>   this file's `@azure/storage-blob` dependency) and are re-exported from here
+>   unchanged, so no caller's import broke.
+> - `submit-match-video.ts` — **code write, no overwrite on a handler failure.**
+>   A submit refusal now writes `processing_jobs.error_code` (via the new
+>   `refusal-code.ts`) alongside the existing `error_message`, always
+>   including `null` so a stale code from an earlier refusal cannot survive
+>   onto one that doesn't carry one. It never writes on a 502, because that
+>   status means the handler's own vendor-POST failure path already marked the
+>   row `failed` with the vendor's text; writing here would stomp it. Still
+>   never marks the row `failed` itself — status stays `uploaded`, as before.
+> - `derive-and-publish.ts` — **code and flag write.** A failed derivation now
+>   records `error_code`: `DERIVATION_REFUSED` when `persistTranscript` refused
+>   deterministically (won't reconcile, no results, provider mix), or
+>   `DERIVATION_ERROR` for everything else (a thrown exception, an RPC
+>   failure), read from `persist-transcript.ts`'s new `failure` field (see
+>   below). A successful derivation whose winner fold did not reconcile now
+>   merges `{ fold: { reconciled: false, reason } }` into the existing
+>   `derivation_quality` (read-modify-write, keeping `grade-results.ts`'s
+>   other keys); the merge is logged and swallowed on error so it can never
+>   turn a published match back into a failure. Every row value the
+>   derivation itself computes is unchanged.
+> - `persist-transcript.ts` — **return-shape only.** `PersistOutcome`'s failure
+>   arm and `buildTranscriptForJob()`'s return both gained a
+>   `failure: "refused" | "error"` field, stated at each return site, so a
+>   caller can tell a deterministic refusal from a transient error. No write,
+>   no query and no returned value besides that field changed.
+> - a new `/api/splitstep/jobs/[jobId]/rederive` **route + handler** — the
+>   "Rebuild statistics" action for a `derivation_failed` job classified
+>   `rederive`. `route.ts` is wiring (session, service-role client,
+>   `deriveAndPublish()`); `handler.ts` holds the ladder — signed in, owns the
+>   job (404 either way, never confirming another user's job), rebuildable
+>   (`derivation_failed`, `classifyFailure()` says `rederive`, results already
+>   stored), claim (`status = 'deriving'` only where still
+>   `derivation_failed`, so two clicks can't both derive), then one bounded
+>   derive. No vendor call, no quota spent, no attempt counted — it reruns
+>   `deriveAndPublish()` on results already on disk, and
+>   `persist-transcript.ts` deletes the match's derived points before
+>   inserting, so it is safe to repeat.
+> - `secure-results.ts` — **extraction, plus the webhook's own block replaced
+>   by a call.** The webhook's `completed` branch used to call
+>   `storeVendorJson` and `finalize_splitstep_results` inline; that block moved
+>   into `secure-results.ts`'s `secureResults()` verbatim — same arguments,
+>   log prefix and timeout — so the reconciler's results sweep can run the
+>   identical download → store → finalize step without a webhook delivery.
+>   `deliveryId` is optional for that reason: without one there is no delivery
+>   row for the RPC to update, but the `results_object_key` write on
+>   `processing_jobs` happens exactly as it does for a real delivery. The
+>   webhook route now calls `secureResults()` instead of inlining the steps;
+>   what it sends, stores and finalizes is identical.
+> - `reconcile.ts` — **sweep.** A new `recoverUndeliveredResults()` runs in
+>   `after()`, after the existing status-poll path (unchanged — still one
+>   `GET {BASE_URL}/jobs/{job_id}` per stuck job, capped, rate-limited),
+>   scoped to a page's own RLS-visible match ids. It claims (via a
+>   compare-and-swap on `last_polled_at`) a `completed` job with no
+>   `results_object_key` and no `derivation_version` whose `completed_at` is
+>   more than ten minutes old, then re-runs the webhook's post-download path —
+>   `secureResults` → `gradeResults` → `deriveAndPublish` — for it. A job with
+>   no usable strokes url, or a second failed attempt, is marked
+>   `RESULTS_DELIVERY_LOST` (the same code and copy the status poll already
+>   used for a lost delivery), which refunds the reservation and sends the
+>   failure mail through the existing `applyPolledFailure()` path. Capped
+>   separately from the poll (`RESULTS_SWEEP_CAP = 2`) and budgeted short of a
+>   serverless function's duration ceiling so a stuck job cannot freeze at
+>   `deriving` forever.
+> - `refusal-code.ts` — **new, pure.** `refusalCodeFor(status)` maps a
+>   `/api/splitstep/jobs` submit-refusal HTTP status (429/403/422/503) to the
+>   `error_code` `submit-match-video.ts` now records; any other status returns
+>   `null`. Split out so a spec can import it without `submit-match-video.ts`'s
+>   browser-only dependencies; that file re-exports it unchanged.
+>
+> `calculate_match_stats`, `swingvision-*`, `process-match` and existing match
+> data were not touched by any of the above. No migration was added — every
+> new code is written into the existing `error_code` / `error_category` /
+> `error_step` / `derivation_quality` columns — and no existing row was
+> rewritten: classification of a failed or stuck row happens at read time, in
+> `classifyFailure()`, from columns the row already carries.
 
 > **A reviewed exception, added 2026-09-27: tiebreak point winners, in
 > `derivation/winners.ts`.** A tiebreak changes server every two points without
@@ -323,6 +491,139 @@ to put a testable seam.
 > is written. It corrupts silently the way the §4 inputs do, one level down.
 > `DERIVATION_VERSION` is `0.3.2-unreconciled`.
 
+> **A reviewed exception, added 2026-09-28: a collapsed score tail, in
+> `derivation/rallies.ts` and `transcript.ts`.** On job 45ff4bd7 the vendor's
+> score stream reset to point 0-0 / game 0-0 / set NaN for the last four rallies
+> and never recovered, so the last real rally and every reset one resolved no
+> winner and the match was refused. `collapsedTailStart` finds such a run
+> (trailing only, and only after a real set score). `buildTranscript` keeps the
+> rallies: it folds them into the last real rally's game and set keys, and every
+> point from that rally on that the stream could not resolve takes the last
+> stroke's guess (`lastStrokeWinner`, the same rule `winner_disputed` already
+> used) with `via: "guess"` and the point flag `winner_guessed`. The guess agreed
+> with the score stream on 77 of 96 points on that match: it is an estimate,
+> and the flag says so. Every other unresolved point still refuses the match,
+> the warm-up rally included; `reconcile()`, the player1 mapping,
+> `calculate_match_stats` and the schema are untouched. `DERIVATION_VERSION` is
+> `0.4.1-unreconciled`.
+
+> **A reviewed exception, added 2026-09-28: phantom strokes, in
+> `derivation/played.ts`, `transcript.ts` and `flags.ts`.** A non-serve stroke
+> before the deciding serve (the receiver striking a faulted first serve back)
+> was written to `shots` at `shot_number` 0, tied with the faulted serve, and
+> `pickReturnShot` and the film room took it as the point's return.
+> `playedRally` now removes it before any row is built, so it never reaches
+> `shots`; the point carries `phantom_strokes_dropped` and the raw payload
+> keeps the stroke. Two flag-only changes ride with it: `second_serve_called_out`
+> (review-only; inferring a double fault from it was rejected after 2 of 10
+> checked on video were right) and no `service_court_repeat` on a no-ad 40-40
+> point, where the receiver picks the side. Winners, `result_type` rules,
+> `reconcile()`, `calculate_match_stats` and the schema are untouched.
+> `DERIVATION_VERSION` is `0.4.2-unreconciled`.
+
+> **A reviewed exception, added 2026-09-28: trajectory line calls, in
+> `derivation/trajectory.ts`, `line-calls.ts`, `played.ts`, `flags.ts`,
+> `persist-transcript.ts` and the webhook.** Derivation now reads the vendor's
+> trajectories file for its own in/out call per stroke. When the ball before a
+> derived winner bounced outside the singles lines, the point is flagged
+> `winner_to_error_by_bounce` for review. It shipped as an autofix that dropped
+> the winner's stroke (6 of 6 on one hand-labelled match) and was demoted to a
+> flag in 0.6.0 (2026-09-29) at 14 of 18 across three; `played.ts` carries the
+> criteria, measured with `scripts/splitstep-eval.ts`. A near-line ball flags
+> `ending_suspect_line` for review. To be read before derivation, the webhook now stores the
+> trajectories file (8 s clock) ahead of `deriveAndPublish`; the players file
+> still comes last. A job without a trajectories file derives as before.
+> `reconcile()`, winners, `calculate_match_stats` and the schema are untouched.
+> `DERIVATION_VERSION` is `0.5.0-unreconciled`.
+
+> **A reviewed exception, added 2026-09-30: cancelling a queued analysis, from
+> `claude/matches-rosters-design-consistency-c31a1d`.** An athlete can now
+> withdraw a video that is still waiting in the vendor's queue, and send a
+> cancelled one again. `cancelled` is a new terminal status that outranks every
+> other (`splitstep_status_rank` = 9), so no webhook or poll can move a job off
+> it. Each frozen file gained one narrow capability:
+>
+> - a new `POST /api/splitstep/jobs/[jobId]/cancel` **route + handler** —
+>   "Cancel analysis". `route.ts` is wiring; `handler.ts` holds the ladder:
+>   signed in, a UUID, owns the job (`created_by`, the same 404 for missing and
+>   not-yours), still `submitting|queued` (with no vendor id yet it answers
+>   409 `not_ready`, "still being handed off"), then the vendor's
+>   `DELETE {SPLITSTEP_API_URL}/{id}`. Only when the vendor no longer holds the
+>   job — a 2xx, or a `404 JOB_NOT_FOUND` for a row still `submitting|queued`
+>   — does the `cancel_processing_job` RPC flip the row and release its
+>   **queued** reservation in one transaction (retried twice on a transport
+>   error). The `JOB_NOT_FOUND` branch is what lets a second click recover a
+>   first cancel whose DELETE landed but whose flip failed: the reconciler
+>   never moves a row on `JOB_NOT_FOUND`, so nothing else would. A bare 404
+>   without that code, a `409 JOB_NOT_REMOVABLE` (the vendor started), a 5xx
+>   or no answer change nothing. The RPC is
+>   service-role only and, since `20260930083017`, matches `submitting|queued`
+>   only — the same line as the route — so a started job can never be refunded.
+> - `webhooks/splitstep/route.ts` — **skip.** A `job_completed` that lands for a
+>   row already `cancelled` (the vendor picked it up as the DELETE raced it) is
+>   recorded as a delivery and logged, and nothing is secured, graded or
+>   derived. Every other branch is unchanged.
+> - `derive-and-publish.ts` — **guard.** The move to `deriving` is now
+>   `.neq("status", "cancelled")` and returns without deriving when it matched
+>   no row, so a late completion or a hand re-run cannot resurrect a cancelled
+>   job through the plain update the rank guard never sees.
+> - `reconcile.ts` — **sweep.** `refreshQueuedJobs()` runs after the existing
+>   stale poll (unchanged) for the match ids of the RLS-scoped page read only.
+>   `listInFlightJobs()` makes one vendor `GET /jobs` list call per page read,
+>   cached 60 s, and moves a row `queued` → `processing` (guarded on it still
+>   being `queued`, so a webhook always wins) with `vendor_started_at` set to
+>   the vendor's `updated_at` for that status. Absence from the list is never
+>   read as an outcome. This is what lets the UI stop offering Cancel once the
+>   vendor has started.
+> - `resubmit-job.ts` — **accepts a cancelled parent.** "Send for analysis
+>   again" is a normal resubmission: a new child row, `reserveQuota()` reserves
+>   the month's time anew, and the parent's `initial_top_player_is_player1`,
+>   `ad_scoring` and `fixed_camera` are reused (falling back to the match row)
+>   exactly as for a failed parent.
+>   It is **manual only** — `auto` callers (webhook, reconciler, jobs route) are
+>   refused, because the cancel was a person's decision — and skips
+>   `classifyFailure()`, which has nothing to say about a job that did not fail.
+>   A `cancelled` row spends none of the chain's `MAX_TOTAL_ATTEMPTS`
+>   (`countsAsAttempt()`, shared by the ceiling and `chainAttempts()`), so
+>   cancel → resend cycles never use up the retries meant for vendor failures;
+>   `loadChain()`'s walk bound rose from 10 to 50 links to match.
+>   `cancelled` joins `TERMINAL_STATUSES`. `adopt-deliveries.ts` changed a doc
+>   comment only.
+>
+> Unchanged: what is sent to the vendor (`job-request.ts`, the three §4 inputs,
+> the blob), what is billed (a started job keeps its reservation; only a job the
+> vendor removed from its queue is released, and a resend reserves through the
+> same `reserveQuota()`), and what is computed (`persistTranscript`,
+> `calculate_match_stats`, `swingvision-*`, `process-match` and existing match
+> data). Migrations
+> `supabase/migrations/20260930062236_processing_jobs_cancelled.sql` and
+> `20260930083017_cancel_processing_job_queued_only.sql`, both applied live
+> 2026-09-30.
+
+> **A reviewed exception, added 2026-10-02: pilot individuals at 10 hours, from
+> `claude/admin-pilot-individuals-auth-c53e82`.** Owner decision: new users
+> 2h a month, pilot individuals (`users.individual_pilot`, managed from
+> Admin › Pilots, at most 20) 10h a month in their **personal workspace
+> only**, colleges 75h. Three frozen files changed what the spend allows and
+> nothing else:
+>
+> - `quota.ts` — `monthlyCapSecondsFor()` returns the pilot figure for
+>   `kind === "personal" && individualPilot`, so `reserveQuota()`,
+>   `peekQuota()` and every display read the same 10h. A team workspace never
+>   takes it, whoever uploads.
+> - `config.ts` — `PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS = 10`, and the shared
+>   pilot pool (`INDIVIDUAL_POOL_MONTHLY_CAP_HOURS`, passed to
+>   `reserve_individual_quota` as `p_pool_cap_seconds`) rose from 10h to
+>   20 × 10h so it never refuses before a pilot's own cap. The 20-player limit
+>   in `users_individual_pilot_guard` is what bounds the total; raise one only
+>   with the other.
+> - `resubmit-job.ts` — the auto-retry's personal workspace re-reads
+>   `users.individual_pilot` so a retry draws the same cap a fresh submission
+>   would; a failed read refuses (returns null) rather than defaulting.
+>
+> Unchanged: what is sent to the vendor, the reserve RPCs and their SQL,
+> program and custom-org caps, and the open-beta ceiling. No migration.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 
@@ -351,6 +652,34 @@ submission returns 422 with a field list:
 They are typed `boolean | null | undefined` on purpose. **Do not "simplify" them
 to `boolean` with a default.** A null coerced to `false` is a wrong answer that
 looks like a real one — see §4.
+
+> **A reviewed exception, added 2026-09-29: college workspaces pre-select
+> No-Ad.** In a team workspace whose program is `org_type = 'college'`, the
+> wizard opens with `adScoring: false` (and `playOnLets: true`) —
+> `workspaceFormatDefaults()` in `new-match-wizard/types.ts`. College duals and
+> tournaments are played no-ad, so the default is the known format, not a
+> coerced null; the type stays optional and every other workspace still opens
+> unanswered. It covers event lines too: a line that declares no scoring seeds
+> No-Ad when it is opened or swapped to, and every college line (not only duals
+> and tournaments) seeds Play on.
+>
+> Where it does not reach: an event that declares its scoring owns it, a
+> SwingVision export's scoring replaces it, and the admin console never gets
+> it. The localStorage copy of the form — written by the autosave and by Save
+> draft — is tagged with its workspace and carries its Scoring/Lets only back
+> into that workspace (`loadFormDataFromStorage`); a copy saved before the tag
+> existed loses them once. The `match_drafts` row carries no such tag: its
+> workspace binding is `program_id` (`draftBelongsToWorkspace()`). An in-place
+> switch with nothing stored resets both answers to the new workspace's
+> defaults.
+>
+> Consequences of the same choice: a draft saved without a Scoring answer
+> resumes as No-Ad in a college workspace, and switching into one in place
+> replaces an Ad answer given in another workspace. The cost, accepted: an
+> ad-scored match filed in a college workspace (an exhibition) goes to the
+> vendor as `Ad:false` unless the coach changes the field, and its pressure
+> flags come out wrong (§2's 2026-09-28 ad-scoring note) — attribution is
+> unaffected.
 
 **The trim window is not cosmetic.** `videoStartSeconds`/`videoEndSeconds` become
 `billable_seconds`, which is what the 2-hour monthly cap is charged against, and
@@ -385,6 +714,11 @@ reintroduces fixed bugs:
 | `isWorking`      | is something happening _right now_? | the animated sheen                                  |
 | `isLiveUpdating` | is a DB update actually coming?     | Realtime subscriptions                              |
 
+`queued` is working (counts, schedules and the admin chip treat it as live) but
+`inFlightMark` still draws it as the still `wait` ring — the vendor has the job
+and nothing is running for the player. Which mark to draw is `inFlightMark`'s
+question, not `isWorking`'s.
+
 `uploaded` is in-flight, not working (nothing to animate), but _is_ live-updating
 (auto-submit fires in seconds). `processed` is in-flight, not working, and **not**
 live-updating — subscribing on it held a WebSocket open forever per user.
@@ -398,8 +732,24 @@ serves".
 ### 3.3 The match detail short-circuit — `app/dashboard/matches/(detail)/[matchId]/page.tsx`
 
 When `isInFlight(status) || isAnalysisFailed(status)`, the page renders hero +
-summary + `MatchAnalysisProgress` and **returns early**. Keep that gate. Every
+summary + `AnalysisSteps` and **returns early**. Keep that gate. Every
 stat section below it would draw zeroes.
+
+`cancelled` (a job the player cancelled while it waited in the queue) takes the
+same early return through `matchPageKind()`: nothing was analysed, and the
+stepper's cancelled view is where "Send for analysis again" lives.
+
+**Since 2026-09-28, the gate has exactly one exemption.** A failed status whose
+recovery class (`classifyFailure()`, `src/lib/data/match-analysis.ts`) is
+`stats_unavailable` — a derivation that deterministically refused the vendor's
+data, e.g. points that resolved no winner — skips the short-circuit and
+renders the page normally, with the Statistics view showing a
+statistics-unavailable note instead of a stat section. Product decision,
+2026-09-27: a deterministic derivation failure should not block a player from
+seeing their own match — the score, details and any playable video are fine,
+and nothing about the vendor data will change on a retry. Every other
+in-flight or failed class, including the retryable ones, still returns early
+exactly as before.
 
 ### 3.4 Match deletion — `app/api/matches/[matchId]/route.ts`
 

@@ -12,6 +12,8 @@
  * was invented; that is gone.
  */
 
+import { formatDuration } from "@/lib/format/duration";
+import { addVideoHref } from "@/lib/matches/add-video-href";
 import type { ProviderId } from "@/lib/services/upload";
 
 export type AnalysisStatus =
@@ -74,6 +76,18 @@ export type AnalysisStatus =
    * whether `match_stats` rows actually exist.
    */
   | "timeline"
+  /**
+   * The athlete stopped the analysis before the vendor began it. Terminal:
+   * set only by the cancel route (`cancel_processing_job`) after the vendor
+   * removed the queued job, and its reservation was released in the same
+   * write. The video is still stored — "Send for analysis again" resubmits
+   * from it (resubmitJob() accepts a cancelled parent).
+   *
+   * Settled but neither failed nor ready: nothing went wrong and nothing was
+   * analysed, so it is in none of IN_FLIGHT, FAILED or READY and the matches
+   * list groups it with `manual`.
+   */
+  | "cancelled"
   /* --- derived, not job statuses --- */
   /** Arrived complete from a file import. Never had a processing job. */
   | "imported"
@@ -123,6 +137,13 @@ export interface MatchAnalysis {
   window?: string;
   /** `processing_jobs.id`, so a stalled submission has something to retry. */
   jobId?: string;
+  /**
+   * `processing_jobs.created_by` — the login that submitted this job. The
+   * cancel and resubmit routes act only for this user (anyone else gets "Job
+   * not found"), so the match page offers "Cancel analysis" / "Send for
+   * analysis again" only when the viewer is this id.
+   */
+  createdBy?: string;
   /** When the row last moved, ISO. The staleness input for `isSubmitStalled`. */
   updatedAt?: string;
   jobReference?: string;
@@ -130,16 +151,78 @@ export interface MatchAnalysis {
   stageNote?: string;
   failNote?: string;
   /**
-   * The vendor refused the video itself (`processing_jobs.error_category` is
-   * `invalid_input` — a frame rate too low, say), so resubmitting the same
-   * file cannot succeed and Retry should not be offered. Only ever true on a
-   * `failed` job. Set by `isInputRejected()` in BOTH the server loader and the
-   * realtime hook: a field one path sets and the other does not is how the
-   * match page and the matches list start disagreeing about the same row.
-   * Optional so a projection with no job row (imported, manual) need not state it.
+   * What the player can do about a job that did not finish, from
+   * `classifyFailure()`. Undefined for a healthy or in-flight row. A vendor
+   * refusal of the video itself (`processing_jobs.error_category` is
+   * `invalid_input` — a frame rate too low, say) classifies as
+   * `fix_recording`, so resubmitting the same file cannot succeed and Retry
+   * should not be offered (see `isInputRejected()`, consumed inside
+   * `classifyFailure()`). Set through `jobRecoveryFacts()` +
+   * `classifyFailure()` in BOTH the server loader and the realtime merge
+   * (`withLiveAnalysis`) — a field one path sets and the other does not is
+   * how the match page and the matches list start disagreeing about the same
+   * row.
    */
-  inputRejected?: boolean;
+  recovery?: RecoveryClass;
+  /**
+   * The stored `error_message`, only when `showsStoredNote()` allows it — a
+   * vendor or submit-path explanation, never one of our raw writer strings
+   * ("Failed to fetch", Azure XML). Unlike `failNote`, which is unfiltered.
+   */
+  note?: string;
+  /**
+   * The row's raw `processing_jobs.error_code`, set beside `recovery` and
+   * `note` by `recoveryFields()` so the loader and the live patch both carry
+   * it. Input to `waitOrAskVariant()` only — never rendered.
+   */
+  errorCode?: string;
+  /**
+   * Rows in the newest job's resubmission chain, the original included and
+   * cancelled rows left out — `chainAttempts()`. The ceiling input to
+   * `classifyFailure()`.
+   */
+  attemptsUsed?: number;
+  /**
+   * When the vendor took the job into its queue, ISO —
+   * `queued_ack_at ?? submitted_at`. The acknowledgement is the truer mark;
+   * `submitted_at` stands in when the `job_queued` webhook never arrived. The
+   * "Waiting N min" clock.
+   */
+  queuedAt?: string;
+  /**
+   * When the vendor reported it had begun processing, ISO
+   * (`vendor_started_at`). The "Started N min ago" clock; null-and-cancelled
+   * means the job never cost vendor compute.
+   */
+  vendorStartedAt?: string;
+  /**
+   * Seconds of the month's analysis time this job reserved
+   * (`billable_seconds`) — the "1h 29m goes back" figure on cancel. Raw
+   * seconds, unlike `window`, which is the same number pre-formatted.
+   */
+  reservedSeconds?: number;
   verified?: boolean;
+}
+
+/**
+ * The job-row timing columns → `queuedAt`, `vendorStartedAt`,
+ * `reservedSeconds`. The ONE projection the server loader and the realtime
+ * patch share, so the two cannot read the clocks differently. Every key is
+ * always present so a live patch spread over the server render clears a
+ * field the row no longer carries.
+ */
+export function jobTimingFields(row: {
+  queued_ack_at?: string | null;
+  submitted_at?: string | null;
+  vendor_started_at?: string | null;
+  billable_seconds?: number | null;
+}): Pick<MatchAnalysis, "queuedAt" | "vendorStartedAt" | "reservedSeconds"> {
+  const reserved = row.billable_seconds;
+  return {
+    queuedAt: row.queued_ack_at ?? row.submitted_at ?? undefined,
+    vendorStartedAt: row.vendor_started_at ?? undefined,
+    reservedSeconds: reserved != null && reserved > 0 ? reserved : undefined,
+  };
 }
 
 /**
@@ -166,6 +249,7 @@ export const STATUS_MAP: Record<string, AnalysisStatus> = {
   completed: "completed",
   failed: "failed",
   derivation_failed: "derivation_failed",
+  cancelled: "cancelled",
 };
 
 /**
@@ -256,24 +340,300 @@ export function isInputRejected(
 export function canRetryAnalysis(analysis: {
   status?: AnalysisStatus;
   jobId?: string | null;
-  inputRejected?: boolean | null;
+  recovery?: RecoveryClass | null;
 }): boolean {
   return (
     analysis.status === "failed" &&
     Boolean(analysis.jobId) &&
-    !analysis.inputRejected
+    analysis.recovery !== "fix_recording"
   );
+}
+
+// `isDownloadFailure` and `MAX_TOTAL_ATTEMPTS` live here rather than in
+// `resubmit-job.ts` because classifyFailure() needs them and this file is
+// imported by client components — resubmit-job.ts pulls in
+// `@azure/storage-blob`. It re-exports both, so its importers are unchanged.
+
+/** 1 original + 2 resubmissions. Enforced here and nowhere else. */
+export const MAX_TOTAL_ATTEMPTS = 3;
+
+/**
+ * Whether a job row spends one of the chain's {@link MAX_TOTAL_ATTEMPTS}. A
+ * `cancelled` row does not: the athlete withdrew it from the vendor's queue
+ * before it ran, so cancel → "Send for analysis again" cycles never use up the
+ * retries meant for vendor failures. `resubmitJob()`'s ceiling and
+ * `chainAttempts()` both count through this, so the button and the copy agree.
+ */
+export function countsAsAttempt(status: string | null | undefined): boolean {
+  return status !== "cancelled";
+}
+
+/**
+ * The ONE failure class the system retries on its own.
+ *
+ * A download failure with a valid SAS means the file, submission and metadata
+ * are all good — retrying is nearly free and nearly always works. Step
+ * outranks code because the one real failure arrived as INTERNAL_ERROR at
+ * step 'downloading_video'; a bare INTERNAL_ERROR elsewhere says "contact
+ * support", video-quality rejections can never succeed on retry, and unknown
+ * codes surface without retrying. Exported so the webhook route and the
+ * reconciler classify with the same rule — this is the load-bearing line,
+ * and two copies of it is how one site silently widens the retry class.
+ */
+export function isDownloadFailure(
+  errorCode: string | null,
+  errorStep: string | null,
+): boolean {
+  return errorStep === "downloading_video" || errorCode === "VIDEO_UNREACHABLE";
+}
+
+/**
+ * What a player can do about a job that did not finish. One class per row,
+ * decided by classifyFailure(); the copy and the action for each live in
+ * `analysis-failure-copy.ts`.
+ *
+ *   retry             Retry analysis (failed row) / Try again (stalled submit)
+ *   upload_again      the video never landed — send it again
+ *   fix_recording     the vendor rejected the file itself — a new recording
+ *   wait_or_ask       nothing to press now: allowance, eligibility, or the
+ *                     attempt ceiling
+ *   rederive          our statistics build crashed — rebuild, no vendor call
+ *   stats_unavailable our statistics build refused the data — the match renders
+ */
+export type RecoveryClass =
+  | "retry"
+  | "upload_again"
+  | "fix_recording"
+  | "wait_or_ask"
+  | "rederive"
+  | "stats_unavailable";
+
+/** The row facts classifyFailure() reads — plain values, no DB types. */
+export interface RecoveryInput {
+  /** Raw `processing_jobs.status`, not the resolved AnalysisStatus. */
+  dbStatus: string;
+  errorCode: string | null | undefined;
+  errorCategory: string | null | undefined;
+  errorStep: string | null | undefined;
+  /** Does the source video exist to resend? */
+  hasVideo: boolean;
+  /** Did the vendor deliver results? */
+  hasResults: boolean;
+  /** Rows in this job's resubmission chain, the original included. */
+  attemptsUsed: number;
+  /** An `uploaded` row past the submit threshold — the caller's isSubmitStalled(). */
+  stalledSubmit: boolean;
+}
+
+/**
+ * Codes a submit is refused with that clear on their own (allowance resets,
+ * eligibility is granted) rather than on a retry.
+ */
+const SUBMIT_WAIT_CODES = new Set([
+  "QUOTA_EXCEEDED",
+  "NOT_ELIGIBLE",
+  "NO_BILLING_WORKSPACE",
+]);
+
+/**
+ * Sort a job that did not finish into what the player can do about it.
+ *
+ * First matching rule wins, and the order is the design:
+ *   1. stalled `uploaded` → wait_or_ask for a refusal that clears on its own,
+ *      else retry (a free resubmit — nothing was spent)
+ *   2. `failed` with no video → upload_again, before any code rule: there is
+ *      nothing to resend
+ *   3. `failed` download failure → retry (the auto-retry class stays a subset)
+ *   4. `failed` input rejection → fix_recording
+ *   5. `failed` otherwise → retry
+ *   6. `derivation_failed` → rederive for a crash, stats_unavailable for a
+ *      refusal or no code
+ *
+ * Both `failed` retries (3 and 5) become wait_or_ask once the chain has used
+ * MAX_TOTAL_ATTEMPTS, since resubmitJob() refuses past the ceiling and no
+ * button should offer what the route will refuse.
+ *
+ * Returns null for any other row — healthy, in flight, or `uploaded` but not
+ * yet stalled.
+ */
+export function classifyFailure(input: RecoveryInput): RecoveryClass | null {
+  const errorCode = input.errorCode ?? null;
+
+  if (input.dbStatus === "uploaded") {
+    if (!input.stalledSubmit) return null;
+    return errorCode && SUBMIT_WAIT_CODES.has(errorCode)
+      ? "wait_or_ask"
+      : "retry";
+  }
+
+  if (input.dbStatus === "failed") {
+    if (!input.hasVideo) return "upload_again";
+    const retry: RecoveryClass =
+      input.attemptsUsed >= MAX_TOTAL_ATTEMPTS ? "wait_or_ask" : "retry";
+    if (isDownloadFailure(errorCode, input.errorStep ?? null)) return retry;
+    if (isInputRejected(input.dbStatus, input.errorCategory)) {
+      return "fix_recording";
+    }
+    return retry;
+  }
+
+  if (input.dbStatus === "derivation_failed") {
+    return errorCode === "DERIVATION_ERROR" ? "rederive" : "stats_unavailable";
+  }
+
+  return null;
+}
+
+/**
+ * Is the row's stored `error_code` note worth showing the player?
+ *
+ * `DERIVATION_*` notes are our reconciler talking to itself ("5 point(s)
+ * resolved no winner"); every other code carries a message from the vendor or
+ * the submit path that explains the state.
+ */
+export function showsStoredNote(errorCode: string | null | undefined): boolean {
+  return errorCode != null && !errorCode.startsWith("DERIVATION_");
+}
+
+/**
+ * The `processing_jobs` columns recovery is decided from, as both projections
+ * hold them. The storage keys arrive as `hasVideo` / `hasResults` — the caller
+ * maps them, so a key never lands on anything bound for the client.
+ */
+export interface RecoveryRow {
+  status: string;
+  derivation_version?: string | null;
+  error_code?: string | null;
+  error_category?: string | null;
+  error_step?: string | null;
+  error_message?: string | null;
+  external_job_id?: string | null;
+  updated_at?: string | null;
+  hasVideo: boolean;
+  hasResults: boolean;
+}
+
+/** `RecoveryInput` less the chain count, which only the caller can supply. */
+export type RecoveryFacts = Omit<RecoveryInput, "attemptsUsed">;
+
+/**
+ * One job row → the classifier's inputs, with `stalledSubmit` from the same
+ * `isSubmitStalled()` the surfaces use. The ONE projection the server loader
+ * and the realtime hook share; neither builds a RecoveryInput by hand.
+ */
+export function jobRecoveryFacts(
+  row: RecoveryRow,
+  nowMs: number = Date.now(),
+): RecoveryFacts {
+  const status = resolveAnalysisStatus(row.status, row.derivation_version);
+  return {
+    dbStatus: row.status,
+    errorCode: row.error_code ?? null,
+    errorCategory: row.error_category ?? null,
+    errorStep: row.error_step ?? null,
+    hasVideo: row.hasVideo,
+    hasResults: row.hasResults,
+    stalledSubmit:
+      status !== undefined &&
+      isSubmitStalled(
+        {
+          status,
+          updatedAt: row.updated_at ?? undefined,
+          jobReference: row.external_job_id ?? undefined,
+        },
+        nowMs,
+      ),
+  };
+}
+
+/**
+ * `recovery`, `note` and `errorCode` for one row. All keys are always present
+ * so a patch spread over an earlier failure clears them.
+ */
+export function recoveryFields(
+  facts: RecoveryFacts,
+  attemptsUsed: number,
+  errorMessage: string | null | undefined,
+): {
+  recovery: RecoveryClass | undefined;
+  note: string | undefined;
+  errorCode: string | undefined;
+} {
+  return {
+    recovery: classifyFailure({ ...facts, attemptsUsed }) ?? undefined,
+    note:
+      showsStoredNote(facts.errorCode) && errorMessage
+        ? errorMessage
+        : undefined,
+    errorCode: facts.errorCode ?? undefined,
+  };
+}
+
+/**
+ * How many attempts the newest job's resubmission chain has spent, the
+ * original included: its root (walked up `resubmitted_from_job_id`) plus every
+ * row descending from that root, less any `cancelled` row
+ * ({@link countsAsAttempt}) — the same count `resubmitJob()`'s ceiling uses.
+ * A row without a `status` counts. Counted among `rows` only — the rows a
+ * loader already fetched for one match — so it costs no query.
+ *
+ * An earlier upload for the same match that no link connects is a separate
+ * chain and is not counted: it did not spend this chain's attempts. Returns 1
+ * when `newestId` is not among `rows`. Cycle-safe.
+ */
+export function chainAttempts(
+  rows: readonly {
+    id: string;
+    resubmitted_from_job_id?: string | null;
+    status?: string | null;
+  }[],
+  newestId: string,
+): number {
+  // A chain is a tree, so "root plus descendants" is exactly the rows linked
+  // to the newest one in either direction. Walking links both ways rather than
+  // up-then-down keeps a data cycle from picking two different roots.
+  const ids = new Set(rows.map((row) => row.id));
+  if (!ids.has(newestId)) return 1;
+
+  const linked = new Map<string, string[]>();
+  const link = (a: string, b: string) => {
+    const list = linked.get(a);
+    if (list) list.push(b);
+    else linked.set(a, [b]);
+  };
+  for (const row of rows) {
+    const parent = row.resubmitted_from_job_id;
+    if (parent && ids.has(parent)) {
+      link(row.id, parent);
+      link(parent, row.id);
+    }
+  }
+
+  const seen = new Set<string>([newestId]);
+  const frontier = [newestId];
+  while (frontier.length > 0) {
+    for (const next of linked.get(frontier.pop()!) ?? []) {
+      if (seen.has(next)) continue;
+      seen.add(next);
+      frontier.push(next);
+    }
+  }
+  let spent = 0;
+  for (const row of rows) {
+    if (seen.has(row.id) && countsAsAttempt(row.status)) spent += 1;
+  }
+  return spent;
 }
 
 export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
   uploading: "Uploading",
   uploaded: "Uploaded",
   queued: "Queued",
-  processing: "Processing",
+  processing: "Analyzing",
   deriving: "Analyzing",
   // Same family as "Stats failed" and "Stats unavailable", and deliberately not
-  // a variant of "Processing" — the two would be one letter apart on screen
-  // while meaning opposite things about whether anything is still running.
+  // a variant of "Analyzing" or "Analyzed" — near-identical words on screen
+  // would mean opposite things about whether anything is still running.
   processed: "Stats pending",
   // Says what IS there rather than what is missing. "Partial" or "Stats
   // unavailable" would describe the same row by its gap, and the timeline is
@@ -284,6 +644,7 @@ export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
   derivation_failed: "Stats failed",
   imported: "Imported",
   manual: "Stats unavailable",
+  cancelled: "Cancelled",
 };
 
 /**
@@ -351,8 +712,15 @@ export function pipelinePercent(
   }
 
   // A failure carries no percentage — the component fills the stage it died in
-  // from `failedHere` — and a hand-scored match never had a pipeline.
-  if (isAnalysisFailed(status) || status === "manual") return undefined;
+  // from `failedHere` — and a hand-scored match never had a pipeline. A
+  // cancelled job stopped where it stood; a bar would claim progress.
+  if (
+    isAnalysisFailed(status) ||
+    status === "manual" ||
+    status === "cancelled"
+  ) {
+    return undefined;
+  }
 
   if (status === "completed" || status === "imported") return 100;
 
@@ -409,13 +777,7 @@ export function uploadEtaSeconds(
  */
 export function formatEta(seconds: number): string {
   if (seconds < 90) return "under a minute left";
-
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `about ${minutes} min left`;
-
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest === 0 ? `about ${hours}h left` : `about ${hours}h ${rest}m left`;
+  return `about ${formatDuration(seconds)} left`;
 }
 
 /**
@@ -430,6 +792,9 @@ export function stageIndexFor(status: AnalysisStatus): number {
     case "manual":
       return 0;
     case "queued":
+    // Cancel is offered only while the job waits in the vendor's queue, so a
+    // cancelled job stopped there.
+    case "cancelled":
       return 1;
     case "processing":
     case "deriving":
@@ -504,6 +869,19 @@ export function isWorking(status: AnalysisStatus): boolean {
 }
 
 /**
+ * The step mark for an in-flight row: a spinner only while work runs, else the
+ * dashed waiting ring.
+ *
+ * `queued` waits too. It is in `isWorking` because the vendor has the job and
+ * counts, schedules and the admin chip all treat it as live, but nothing is
+ * running for the player yet — the upload stepper already draws it as `wait`,
+ * so the tray, Matches and Roster must not spin it.
+ */
+export function inFlightMark(status: AnalysisStatus): "now" | "wait" {
+  return isWorking(status) && status !== "queued" ? "now" : "wait";
+}
+
+/**
  * Is a database update actually coming for this row?
  *
  * The question a Realtime subscription should ask, and it is NOT isInFlight.
@@ -545,6 +923,89 @@ export function isAnalysisFailed(status: AnalysisStatus): boolean {
 
 export function isAnalysisReady(status: AnalysisStatus): boolean {
   return READY.has(status);
+}
+
+/**
+ * The one failure that does NOT stop the match page (product decision
+ * 2026-09-27, guardrails §3.3): our derivation deterministically refused the
+ * vendor's data (`derivation_failed` classified `stats_unavailable`, e.g.
+ * points that resolved no winner). Nothing changes on a retry, and the match
+ * itself — score, details, any playable video — is fine, so it renders like
+ * any other match and the Statistics view says, once, that no statistics were
+ * saved. Scoped to a failed status so a stale class can never wave an
+ * in-flight job past the gate.
+ */
+export function isStatsUnavailable({
+  status,
+  recovery,
+}: Pick<MatchAnalysis, "status" | "recovery">): boolean {
+  return isAnalysisFailed(status) && recovery === "stats_unavailable";
+}
+
+/** What the match page draws: the Analysis steps column, or the report. */
+export type MatchPageKind = "steps" | "report";
+
+/**
+ * The match page's layout decision (guardrails §3.3), as a pure function so
+ * the page and its route skeleton answer from one predicate (§3.2's lesson —
+ * two surfaces that each re-derived a row's state disagreed once).
+ *
+ * `"steps"` for every in-flight or failed status — every stat section would
+ * draw zeroes, and the reason it stopped is more use than a page of them —
+ * except the one `isStatsUnavailable` exemption, and for `cancelled`: a job
+ * cancelled in the queue was never analysed, so the report would be empty
+ * sections, and the stepper's cancelled view is where "Send for analysis
+ * again" lives. Everything else is the report.
+ */
+export function matchPageKind({
+  status,
+  recovery,
+}: Pick<MatchAnalysis, "status" | "recovery">): MatchPageKind {
+  if (status === "cancelled") return "steps";
+  return (isInFlight(status) || isAnalysisFailed(status)) &&
+    !isStatsUnavailable({ status, recovery })
+    ? "steps"
+    : "report";
+}
+
+/**
+ * The matches list's own lifecycle grouping — "In progress" / "Ready" /
+ * "Failed" / "Not analyzed" — kept as a named export so the list's decision is a
+ * pure function a spec can pin, not inline logic in the list component.
+ *
+ * Deliberately NOT `isAnalysisFailed(status)` alone. Product decision
+ * 2026-09-27: a `derivation_failed` row classified `stats_unavailable` (our
+ * derivation refused the data — see `classifyFailure`) must not read as a
+ * failed match. The match page still renders; the stats section is what's
+ * missing, and only that section says so. Every other failed row — including
+ * `derivation_failed` classified `rederive`, a real crash — still groups
+ * under Failed.
+ */
+export function matchListGroup(
+  analysis: Pick<MatchAnalysis, "status" | "recovery"> | null | undefined,
+): string | null {
+  const status = analysis?.status;
+  if (!status) return null;
+  if (analysis?.recovery === "stats_unavailable") return "Ready";
+  if (isInFlight(status)) return "In progress";
+  if (isAnalysisFailed(status)) return "Failed";
+  // A cancelled job was never analysed — the same group as a hand-scored
+  // match, and never "Ready".
+  if (status === "manual" || status === "cancelled") return "Not analyzed";
+  return "Ready";
+}
+
+/**
+ * The matches list's own status word for a row — `ANALYSIS_LABEL` with one
+ * override, mirroring `matchListGroup`'s decision: a `stats_unavailable` row
+ * reads "Stats unavailable" (the same word `manual` already uses), never
+ * `ANALYSIS_LABEL.derivation_failed`'s "Stats failed".
+ */
+export function matchListStatusLabel(
+  analysis: Pick<MatchAnalysis, "status" | "recovery">,
+): string {
+  if (analysis.recovery === "stats_unavailable") return "Stats unavailable";
+  return ANALYSIS_LABEL[analysis.status];
 }
 
 /**
@@ -593,10 +1054,39 @@ export function isSubmitStalled(
 
 export interface AnalysisAction {
   label: string;
-  /** Absent for Cancel — there is no cancel endpoint yet, so it does not navigate. */
+  /**
+   * Absent for Cancel — it does not navigate. Cancelling is a POST to
+   * `/api/splitstep/jobs/[jobId]/cancel`, which calls the vendor's
+   * `DELETE {SPLITSTEP_API_URL}/{id}`; that only succeeds while the job is
+   * still queued (409 JOB_NOT_REMOVABLE once processing has started).
+   */
   href?: string;
   ink: string;
   hoverInk: string;
+}
+
+/**
+ * The "Add video" shape — also used for a failed row whose only move is to
+ * resend a file. When `matchId` is given, the href opens the wizard on this
+ * match (`addVideoHref`) rather than a new one.
+ */
+function addVideoAction(matchId?: string): AnalysisAction {
+  return {
+    label: "Add video",
+    href: addVideoHref(matchId ?? null),
+    ink: "#888888",
+    hoverInk: "#525252",
+  };
+}
+
+/** The "View stats" / "View match" shape — a blue link into the match page. */
+function viewMatchAction(label: string, matchId: string): AnalysisAction {
+  return {
+    label,
+    href: `/dashboard/matches/${matchId}`,
+    ink: "#3B82F6",
+    hoverInk: "#2563EB",
+  };
 }
 
 /**
@@ -605,6 +1095,27 @@ export interface AnalysisAction {
  * Null when there is genuinely nothing to offer. `processed` is the case: the
  * vendor has finished, so "Cancel" would be offering to stop work that is over,
  * and "View stats" would lead to the empty page this state exists to prevent.
+ *
+ * A failed row's action follows its `recovery` class (`classifyFailure()`)
+ * rather than a blanket "Start over": that copy sends every failure through
+ * the upload wizard as if no video had ever landed, which is only true for
+ * `upload_again`. A row with a video that simply needs retrying or rebuilding
+ * should not re-spend a video upload.
+ *
+ *   upload_again / fix_recording → Add video, opening the wizard on this
+ *                                   match (`addVideoHref`), not a new match —
+ *                                   the file itself needs resending
+ *   retry / rederive             → View match (nothing to resend; the retry
+ *                                   control and any stored note live there)
+ *   stats_unavailable            → View stats (the match renders; a chart may not)
+ *   wait_or_ask                  → View match — there is no action to offer
+ *                                   (an allowance or ceiling clears on its
+ *                                   own), so this points at the page that
+ *                                   explains why rather than a dead button
+ *
+ * `recovery` absent on a failed row means the loader could not classify it
+ * (see its own doc comment) — falls back to today's "Start over" rather than
+ * guessing.
  */
 export function analysisAction(
   analysis: MatchAnalysis,
@@ -613,28 +1124,35 @@ export function analysisAction(
   if (analysis.status === "processed") return null;
 
   if (isAnalysisReady(analysis.status)) {
-    return {
-      label: "View stats",
-      href: `/dashboard/matches/${matchId}`,
-      ink: "#3B82F6",
-      hoverInk: "#2563EB",
-    };
+    return viewMatchAction("View stats", matchId);
   }
   if (isAnalysisFailed(analysis.status)) {
-    return {
-      label: "Start over",
-      href: "/dashboard/matches/new",
-      ink: "#E51837",
-      hoverInk: "#C41530",
-    };
+    switch (analysis.recovery) {
+      case "upload_again":
+      case "fix_recording":
+        return addVideoAction(matchId);
+      case "retry":
+      case "rederive":
+      case "wait_or_ask":
+        return viewMatchAction("View match", matchId);
+      case "stats_unavailable":
+        return viewMatchAction("View stats", matchId);
+      default:
+        return {
+          label: "Start over",
+          href: "/dashboard/matches/new",
+          ink: "#E51837",
+          hoverInk: "#C41530",
+        };
+    }
   }
   if (analysis.status === "manual") {
-    return {
-      label: "Add video",
-      href: "/dashboard/matches/new",
-      ink: "#888888",
-      hoverInk: "#525252",
-    };
+    return addVideoAction();
+  }
+  // The video is still stored; "Send for analysis again" lives on the match
+  // page. Without this a cancelled row fell through to "Cancel" below.
+  if (analysis.status === "cancelled") {
+    return viewMatchAction("View match", matchId);
   }
   return { label: "Cancel", ink: "#888888", hoverInk: "#525252" };
 }

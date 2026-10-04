@@ -767,23 +767,56 @@ test("the Advantage Intelligence lineage asks for nothing at all", async ({
   expect((await state(page, REPORT))?.time).toBeCloseTo(0.3, 1);
 });
 
-test("Watch point opens the aligned point in the Video room", async ({
+test("entering the room while the report player is PLAYING keeps it playing", async ({
   page,
 }) => {
-  await open(page, "provider-watch", {
-    lineage: "vendor-copy",
-    tab: "film",
-    point: "b",
+  await open(page, "ok-enter-playing");
+  await page.getByRole("button", { name: "Play", exact: true }).first().click();
+  await page.waitForFunction(
+    (sel) => document.querySelector<HTMLVideoElement>(sel)?.paused === false,
+    REPORT,
+  );
+
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+  // No second press: the room picks up playing.
+  await page.waitForFunction(
+    (sel) => document.querySelector<HTMLVideoElement>(sel)?.paused === false,
+    ROOM,
+    { timeout: 5000 },
+  );
+  expect((await state(page, REPORT))?.paused).toBe(true);
+});
+
+test("Watch point lands the aligned point in the Video tab, playing, not the room", async ({
+  page,
+}) => {
+  await open(page, "provider-watch", { lineage: "vendor-copy", tab: "film" });
+  // The viewer's click on a Statistics card is the gesture that lets the film
+  // start with sound; this click stands in for it before the intent lands.
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.evaluate(() => {
+    const q = new URLSearchParams(location.search);
+    q.set("point", "b");
+    history.pushState(null, "", `?${q}`);
+    (window as unknown as FilmRefreshHarnessWindow).remountFilmTab();
   });
-  await expect(page.getByRole("dialog", { name: "Film room" })).toBeVisible();
-  await expect(page).toHaveURL(/fullscreen=1/);
+
+  // Same landing as a statistic's cut: the report player seeks to the point
+  // and plays; the screen-covering room stays shut.
+  await page.waitForFunction(
+    (sel) => {
+      const v = document.querySelector<HTMLVideoElement>(sel);
+      return !!v && v.currentTime >= 0.3 && !v.paused;
+    },
+    REPORT,
+    { timeout: 5000 },
+  );
   await expect(page).not.toHaveURL(/[?&]point=/);
-  await page.waitForFunction(() => {
-    const room = document.querySelector<HTMLVideoElement>(
-      '[data-testid="film-room-video"]',
-    );
-    return !!room && room.currentTime >= 0.3;
-  });
+  await expect(page).not.toHaveURL(/fullscreen=1/);
+  await expect(page.getByRole("dialog", { name: "Film room" })).toHaveCount(0);
 });
 
 test("the provider lineage still answers a media error with Reload", async ({
@@ -1899,7 +1932,7 @@ test("T19: a playing point the cut excludes reads 'not in this cut', with no che
   await page.keyboard.press("Escape");
 
   const pill = page.locator(PILL);
-  await expect(pill).toHaveText("Now playing · not in this cut");
+  await expect(pill).toHaveText("Now playing · Not in this cut");
   await expect(pill).toHaveAttribute(
     "aria-label",
     "Now playing: a point outside this cut — follow playback",
@@ -2582,7 +2615,7 @@ test("T25: a null hold survives a cut change — the pill says the playing point
 
   await seekTo(page, ROOM, 0.4);
   await expect(page.locator(PILL)).toHaveCount(1);
-  await expect(page.locator(PILL)).toHaveText("Now playing · not in this cut");
+  await expect(page.locator(PILL)).toHaveText("Now playing · Not in this cut");
 });
 
 test("T25: a row click replaces a null hold with a real one", async ({
@@ -3568,4 +3601,95 @@ test("T28: under reduced motion the room fades out", async ({ page }) => {
   const rooms = (await readAnimations(page)).filter((r) => r.room);
   expect(rooms).toHaveLength(1);
   expectOpacityFadeOut(rooms[0]);
+});
+
+/* -------------------------------------------------------------------------
+ * The filter strip and the filters drawer (video-stats-filters)
+ * ---------------------------------------------------------------------- */
+
+const STRIP = "[data-film-filter-strip]";
+const FILTERS_DRAWER = "#match-filters-rail";
+
+test("an applied filter reads as one sentence in a strip ABOVE the list, never chips inside it", async ({
+  page,
+}) => {
+  await open(page, "filters-strip");
+  const list = page.locator(SHELL_LIST);
+  // Nothing applied: no strip at all.
+  await expect(page.locator(STRIP)).toHaveCount(0);
+
+  await list.getByRole("button", { name: "All points" }).click();
+  await page
+    .getByRole("menu", { name: "Point filters" })
+    .getByText("Saved only")
+    .click();
+
+  const strip = page.locator(STRIP);
+  await expect(strip).toHaveCount(1);
+  await expect(strip).toContainText("Saved");
+  await expect(strip).toContainText("1 of 4 points");
+  await expect(strip.getByRole("button")).toHaveText("Clear filter");
+  // Page level: outside the point list's card, and the card has no chips
+  // and no header "Clear all" of its own.
+  await expect(list.locator(STRIP)).toHaveCount(0);
+  await expect(
+    list.getByRole("group", { name: "Applied filters" }),
+  ).toHaveCount(0);
+  await expect(list.getByRole("button", { name: "Clear all" })).toHaveCount(0);
+
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect(page.locator(STRIP)).toHaveCount(0);
+  await expect(list.locator("[data-point-id]")).toHaveCount(4);
+});
+
+test("Advanced filters… opens the 340px drawer over the list, counting the draft by the list's rule", async ({
+  page,
+}) => {
+  await open(page, "filters-drawer");
+  const list = page.locator(SHELL_LIST);
+  const menu = page.getByRole("menu", { name: "Point filters" });
+
+  // Saved only on, so the drawer's count has a Film-only layer to honour.
+  await list.getByRole("button", { name: "All points" }).click();
+  await menu.getByText("Saved only").click();
+
+  const trigger = list.getByRole("button", { name: "Saved only" });
+  await trigger.click();
+  await menu.getByText("Advanced filters…").click();
+
+  // The drawer, not the old in-column panel.
+  const drawer = page.locator(FILTERS_DRAWER);
+  await expect(drawer).toBeVisible();
+  await expect(
+    list.getByRole("region", { name: "Advanced filters" }),
+  ).toHaveCount(0);
+  await expect.poll(async () => (await drawer.boundingBox())?.width).toBe(340);
+  // Focus moves in on open.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (sel) =>
+          document.querySelector(sel)?.contains(document.activeElement) ??
+          false,
+        FILTERS_DRAWER,
+      ),
+    )
+    .toBe(true);
+  // The draft is the applied filters (none) under the saved toggle: 1 of 4.
+  await expect(drawer).toContainText("1 of 4 points");
+  await expect(
+    drawer.getByRole("button", { name: "Show 1 point" }),
+  ).toBeDisabled();
+
+  // Esc closes it and hands focus back to the trigger.
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+
+  // Re-picking "Advanced filters…" reopens it; the X closes it.
+  await trigger.click();
+  await menu.getByText("Advanced filters…").click();
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole("button", { name: "Close filters" }).click();
+  await expect(drawer).toHaveCount(0);
 });

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Clock } from "lucide-react";
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import {
   getProgramPublicStatus,
@@ -18,8 +19,41 @@ import {
   CLAIM_MICRO,
 } from "@/components/claim/claim-shell";
 import { ContactOwnerForm } from "@/components/claim/contact-owner-form";
+import { claimPreview } from "@/lib/data/program-claim-preview";
 
-export const metadata = { title: "Program status" };
+/**
+ * The link a coach is sent to set a program up unfurls into this title and
+ * description, under the card in `opengraph-image.tsx`. Public by design — the
+ * route already answers anonymous visitors — but kept out of search indexes:
+ * 2,000 near-identical "Set up …" pages are not something to rank.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ programKey: string }>;
+}): Promise<Metadata> {
+  const { programKey } = await params;
+  const program = await getProgramPublicStatus(
+    await createClient(),
+    programKey,
+  );
+  if (!program) {
+    return { title: "Program status", robots: { index: false, follow: false } };
+  }
+  const { title, description } = claimPreview({
+    schoolName: program.schoolName,
+    teamLabel: teamLabel(program.team),
+    status: program.status,
+  });
+  const socialTitle = `${title} · Advantage`;
+  return {
+    title,
+    description,
+    robots: { index: false, follow: false },
+    openGraph: { title: socialTitle, description, type: "website" },
+    twitter: { card: "summary_large_image", title: socialTitle, description },
+  };
+}
 
 /**
  * F3.2 / F3.3 / F3.4 — program status.

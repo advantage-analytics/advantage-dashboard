@@ -25,6 +25,15 @@ import type { Transcript } from "./derivation";
 
 const LOG = "[splitstep:derive]";
 
+/**
+ * `processing_jobs.error_code` for a failed derivation. The recovery
+ * classifier (`src/lib/data/match-analysis.ts`) offers a rebuild only for
+ * `DERIVATION_ERROR`; `DERIVATION_REFUSED` shows the match without stats,
+ * because re-running a transcript that did not reconcile refuses again.
+ */
+const DERIVATION_REFUSED = "DERIVATION_REFUSED";
+const DERIVATION_ERROR = "DERIVATION_ERROR";
+
 export type DeriveOutcome =
   | {
       ok: true;
@@ -62,10 +71,24 @@ export async function deriveAndPublish(params: {
   const { supabase, jobId, deadline } = params;
 
   try {
-    await supabase
+    // Never off `cancelled`. The user withdrew the job while it was queued
+    // (POST /api/splitstep/jobs/[jobId]/cancel) and was told nothing would be
+    // analysed; a late completion — or a hand re-run — must not resurrect it.
+    // `record_splitstep_webhook` already refuses to move the row (rank 9), but
+    // this write is a plain update that the rank guard never sees. Every
+    // settle write below keys on the id alone, so the guard has to stop the
+    // whole derivation, not just this one write.
+    const { data: moved, error: moveError } = await supabase
       .from("processing_jobs")
       .update({ status: "deriving" })
-      .eq("id", jobId);
+      .eq("id", jobId)
+      .neq("status", "cancelled")
+      .select("id");
+    if (moveError) throw new Error(moveError.message);
+    if (!moved || moved.length === 0) {
+      console.warn(`${LOG} skipped — job is cancelled or missing`, { jobId });
+      return { ok: false, reason: "job is cancelled" };
+    }
 
     const written = await persistTranscript({ supabase, jobId });
 
@@ -74,9 +97,19 @@ export async function deriveAndPublish(params: {
       // the score the player entered and rejected outright when it disagrees,
       // because these rows are the point-by-point timeline and the video seek
       // targets — a wrong point is a specific false claim on a screen.
+      // ...but persistTranscript also returns ok:false for a Supabase or
+      // Storage error on the way (`failure: "error"`), and that one must stay
+      // rebuildable. It states the kind at each return; see PersistFailure.
       await supabase
         .from("processing_jobs")
-        .update({ status: "derivation_failed", error_message: written.reason })
+        .update({
+          status: "derivation_failed",
+          error_message: written.reason,
+          error_code:
+            written.failure === "refused"
+              ? DERIVATION_REFUSED
+              : DERIVATION_ERROR,
+        })
         .eq("id", jobId);
       console.error(`${LOG} refused`, { jobId, reason: written.reason });
       await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
@@ -117,6 +150,7 @@ export async function deriveAndPublish(params: {
         .update({
           status: "derivation_failed",
           error_message: `${fn} failed: ${error.message}`,
+          error_code: DERIVATION_ERROR,
         })
         .eq("id", jobId);
       console.error(`${LOG} ${fn} failed`, {
@@ -151,7 +185,7 @@ export async function deriveAndPublish(params: {
 
     await supabase
       .from("processing_jobs")
-      .update({ status: "completed", error_message: null })
+      .update({ status: "completed", error_message: null, error_code: null })
       .eq("id", jobId);
 
     // The uploader's "Email me when analysis is ready". Here and not in the
@@ -174,6 +208,7 @@ export async function deriveAndPublish(params: {
       player1Source: rec.player1Source,
       reason: rec.ok ? undefined : rec.reason,
     });
+    if (!rec.ok) await recordUnreconciledFold(supabase, jobId, rec.reason);
 
     return {
       ok: true,
@@ -186,7 +221,11 @@ export async function deriveAndPublish(params: {
     const reason = err instanceof Error ? err.message : String(err);
     await supabase
       .from("processing_jobs")
-      .update({ status: "derivation_failed", error_message: reason })
+      .update({
+        status: "derivation_failed",
+        error_message: reason,
+        error_code: DERIVATION_ERROR,
+      })
       .eq("id", jobId)
       .then(
         () => undefined,
@@ -195,5 +234,52 @@ export async function deriveAndPublish(params: {
     console.error(`${LOG} threw`, { jobId, reason });
     await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
     return { ok: false, reason };
+  }
+}
+
+/**
+ * Merge `{ fold: { reconciled: false, reason } }` into the job's
+ * `derivation_quality`, which `grade-results.ts` wrote at grade time — every
+ * key it holds (`grade`, `checks`, `failures`, …) is kept. A read-modify-write
+ * rather than a jsonb `||` because there is no RPC for it and the job is
+ * written by nothing else while it is `deriving`/just `completed`.
+ *
+ * Bookkeeping only: the rows are already published, so a failure here is
+ * logged and swallowed — it must never turn a finished derivation into a
+ * failed one.
+ */
+async function recordUnreconciledFold(
+  supabase: ReturnType<typeof createAdminClient>,
+  jobId: string,
+  reason: string | null | undefined,
+): Promise<void> {
+  try {
+    const { data, error: readError } = await supabase
+      .from("processing_jobs")
+      .select("derivation_quality")
+      .eq("id", jobId)
+      .single<{ derivation_quality: Record<string, unknown> | null }>();
+    if (readError) throw new Error(readError.message);
+
+    const existing = data?.derivation_quality;
+    const base =
+      existing && typeof existing === "object" && !Array.isArray(existing)
+        ? existing
+        : {};
+    const { error: writeError } = await supabase
+      .from("processing_jobs")
+      .update({
+        derivation_quality: {
+          ...base,
+          fold: { reconciled: false, reason: reason ?? null },
+        },
+      })
+      .eq("id", jobId);
+    if (writeError) throw new Error(writeError.message);
+  } catch (err) {
+    console.error(`${LOG} could not record unreconciled fold`, {
+      jobId,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }

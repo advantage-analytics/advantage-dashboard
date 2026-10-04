@@ -11,6 +11,12 @@
  */
 
 import { useAdminWizardMode } from "./admin-mode";
+import {
+  canSaveRosterStyle,
+  styleSaveChecked,
+  styleSaveOffer,
+} from "./style-save-offer";
+import { saveRosterPlayerStyle } from "@/components/dashboard/team/roster-actions";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { capitalize } from "@/lib/utils";
 import { useRouter } from "next/navigation";
@@ -68,8 +74,11 @@ import {
   VideoProbeSummary,
   DEFAULT_FORM_DATA,
   STEP_ORDER_BY_KIND,
+  NO_FORMAT_DEFAULTS,
   presetLineKey,
+  workspaceFormatDefaults,
   type EventPreset,
+  type WorkspaceFormatDefaults,
   type LineOffer,
   type MatchDraft,
   type IdentityMatchStatus,
@@ -86,6 +95,7 @@ import {
   determineWinner,
   buildMatchData,
   getAdjustedScores,
+  playedSetCount,
   formatFileSize,
   clearStorageData,
   loadFormDataFromStorage,
@@ -165,6 +175,7 @@ const START_OVER_FIELDS = [
   "playerHand",
   "playerBackhand",
   "playerStyleSource",
+  "saveStyleChoice",
   "opponentName",
   "opponentSource",
   "opponentPlayerId",
@@ -204,6 +215,7 @@ const LINE_SWAP_FIELDS = [
   "playerHand",
   "playerBackhand",
   "playerStyleSource",
+  "saveStyleChoice",
   "opponentHand",
   "opponentBackhand",
   "opponentStyleSource",
@@ -508,6 +520,8 @@ export interface UseUploadMatchWizardReturn {
   error: string | null;
   uploadError: string | null;
   formData: MatchFormData;
+  /** Tags a stored form with its workspace — `saveFormDataToStorage`. */
+  storageWorkspaceKey: string;
   parsingState: ParsingState;
   importIdentity: ImportIdentityState;
 
@@ -694,6 +708,31 @@ export interface UseUploadMatchWizardReturn {
   handleCreateMatch: () => Promise<void>;
 }
 
+/**
+ * The admin video route's score: the adjusted rows without the trailing sets
+ * nobody entered (`playedSetCount`), so a two-set best-of-3 is not stored with
+ * a blank third set.
+ */
+function adminVideoScore(formData: MatchFormData) {
+  const player1 = getAdjustedScores(
+    formData.playerScores,
+    formData.bestOf,
+    formData.numberOfSets,
+  );
+  const player2 = getAdjustedScores(
+    formData.opponentScores,
+    formData.bestOf,
+    formData.numberOfSets,
+  );
+  const sets = playedSetCount(player1, player2);
+  return {
+    player1: player1.slice(0, sets),
+    player2: player2.slice(0, sets),
+    player1_tiebreaks: formData.playerTiebreaks.slice(0, sets),
+    player2_tiebreaks: formData.opponentTiebreaks.slice(0, sets),
+  };
+}
+
 // Helper to get current date in YYYY-MM-DD format.
 // Use LOCAL date components (not toISOString, which is UTC) so the default date matches
 // the user's local day — otherwise an evening upload behind UTC defaults to tomorrow.
@@ -724,10 +763,14 @@ function getCurrentTime(): string {
   return now.toTimeString().slice(0, 5);
 }
 
-// Get default form data with current date/time
-function getDefaultFormData(): MatchFormData {
+// Get default form data with current date/time, plus the format answers a
+// college team workspace pre-selects (`workspaceFormatDefaults`).
+function getDefaultFormData(
+  formatDefaults: WorkspaceFormatDefaults,
+): MatchFormData {
   return {
     ...DEFAULT_FORM_DATA,
+    ...formatDefaults,
     date: getCurrentDate(),
     time: getCurrentTime(),
   };
@@ -752,6 +795,13 @@ export function useUploadMatchWizard({
   // server-side once per request by the dashboard layout, so reading it here
   // costs nothing and cannot disagree with the sidebar's switcher.
   const { active: activeWorkspace, viewer } = useWorkspace();
+  // No-ad and play-on lets come pre-selected in a college team workspace. Not
+  // in the admin console, which has its own scoring control and presets.
+  const formatDefaults = isAdminMode
+    ? NO_FORMAT_DEFAULTS
+    : workspaceFormatDefaults(activeWorkspace);
+  // Tags the autosaved form, so its format answers stay in this workspace.
+  const storageWorkspaceKey = `${activeWorkspace.kind}:${activeWorkspace.id}`;
 
   /**
    * The source the wizard opens on before localStorage can be read — the
@@ -806,7 +856,9 @@ export function useUploadMatchWizard({
   const [error, setError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isPrivateMatch] = useState(true);
-  const [formData, setFormData] = useState<MatchFormData>(getDefaultFormData);
+  const [formData, setFormData] = useState<MatchFormData>(() =>
+    getDefaultFormData(formatDefaults),
+  );
   /**
    * Must step 1 ask WHO PLAYED? Only a team workspace with no preset: the
    * personal wizard's uploader IS the player, and a preset arrives with the
@@ -1013,7 +1065,7 @@ export function useUploadMatchWizard({
     identityComparison && parsedImport
       ? buildImportIdentityConfirmationKey({
           ...identityComparison,
-          workspaceId: `${activeWorkspace.kind}:${activeWorkspace.id}`,
+          workspaceId: storageWorkspaceKey,
           fileGenerationId: `${selectedProvider}:${parsedImport.generation}`,
         })
       : null;
@@ -1307,11 +1359,11 @@ export function useUploadMatchWizard({
   useEffect(() => {
     if (!open || admin) return;
     const handle = window.setTimeout(() => {
-      saveFormDataToStorage(formData);
+      saveFormDataToStorage(formData, storageWorkspaceKey);
       setLastChangedAt(Date.now());
     }, 400);
     return () => window.clearTimeout(handle);
-  }, [open, formData, admin]);
+  }, [open, formData, admin, storageWorkspaceKey]);
 
   const saveDraft = useCallback(async (): Promise<boolean> => {
     if (admin) return false;
@@ -1469,14 +1521,27 @@ export function useUploadMatchWizard({
             ? surfaceToCourtType(preset.surface)
             : prev.courtType,
           bestOf: String(preset.bestOf),
-          adScoring: preset.adScoring ?? undefined,
-          // College matches (dual or tournament lines) play lets out by
-          // default — see recordResult's format.play_on_lets. A personal
-          // upload never reaches this branch, so DEFAULT_FORM_DATA's `false`
-          // stands for it.
+          // An event that declared its scoring owns it; one that declared
+          // nothing defaults to no-ad in a college workspace when the line is
+          // (re)opened, and stays unanswered elsewhere. As with Lets below, a
+          // resumed draft's saved answer stands on its first seed. A re-run
+          // for the SAME line keeps the live answer only when it was the
+          // coach's — an event that withdrew its declaration resets it.
+          adScoring:
+            preset.adScoring ??
+            (firstSeed || swapped || previousPreset?.adScoring != null
+              ? ((firstSeed ? draft?.formData?.adScoring : undefined) ??
+                formatDefaults.adScoring)
+              : prev.adScoring),
+          // College matches (dual or tournament lines, or any line in a
+          // college workspace) play lets out by default — see recordResult's
+          // format.play_on_lets. A personal upload never reaches this branch,
+          // so DEFAULT_FORM_DATA's `false` stands for it.
           playOnLets:
             defaultLets &&
-            (preset.eventKind === "dual" || preset.eventKind === "tournament")
+            (formatDefaults.playOnLets ||
+              preset.eventKind === "dual" ||
+              preset.eventKind === "tournament")
               ? true
               : // A resumed draft's saved answer on its first seed; after that
                 // the live value — `base` re-spreads the draft, which would
@@ -1525,7 +1590,7 @@ export function useUploadMatchWizard({
           ? (draft.provider as ProviderId)
           : DEFAULT_PROVIDER_ID;
       setSelectedProvider(draftProvider);
-      setFormData({ ...getDefaultFormData(), ...draft.formData });
+      setFormData({ ...getDefaultFormData(formatDefaults), ...draft.formData });
       if (draft.attachedLine) {
         attachedLineRef.current = draft.attachedLine;
         setAttachedLine(draft.attachedLine);
@@ -1545,7 +1610,10 @@ export function useUploadMatchWizard({
     if (isAdminMode) {
       setSelectedProvider(initialProvider ?? DEFAULT_PROVIDER_ID);
       if (seededPlayerName)
-        setFormData({ ...getDefaultFormData(), playerName: seededPlayerName });
+        setFormData({
+          ...getDefaultFormData(formatDefaults),
+          playerName: seededPlayerName,
+        });
       return;
     }
     const existingProvider = localStorage.getItem(
@@ -1576,7 +1644,7 @@ export function useUploadMatchWizard({
       startingProvider === existingProvider;
     if (startingProvider) setSelectedProvider(startingProvider);
 
-    const storedFormData = loadFormDataFromStorage();
+    const storedFormData = loadFormDataFromStorage(storageWorkspaceKey);
     if (storedFormData || seededPlayerName) {
       // Merge over defaults so newly added fields (e.g. player hand/backhand)
       // pick up their preselected values when stored data predates them.
@@ -1586,10 +1654,20 @@ export function useUploadMatchWizard({
       // with the id chosen in the For field is the mismatch the details step
       // exists to make impossible.
       setFormData({
-        ...getDefaultFormData(),
+        ...getDefaultFormData(formatDefaults),
         ...storedFormData,
         ...(seededPlayerName ? { playerName: seededPlayerName } : {}),
       });
+    } else {
+      // Nothing stored to reseed from — a switch in place before the first
+      // autosave, or storage that cannot be written. The live form may still
+      // hold the previous workspace's pre-selected format answers; put this
+      // workspace's own back, or the autosave would stamp them as its own.
+      setFormData((prev) => ({
+        ...prev,
+        adScoring: formatDefaults.adScoring ?? DEFAULT_FORM_DATA.adScoring,
+        playOnLets: formatDefaults.playOnLets ?? DEFAULT_FORM_DATA.playOnLets,
+      }));
     }
 
     const storedFile = loadUploadedFileFromStorage();
@@ -1696,6 +1774,8 @@ export function useUploadMatchWizard({
     resetFileGeneration,
     initialProvider,
     isAdminMode,
+    formatDefaults,
+    storageWorkspaceKey,
   ]);
 
   /**
@@ -1823,7 +1903,7 @@ export function useUploadMatchWizard({
           supabase
             .from("program_players")
             .select(
-              "id, program_id, first_name, last_name, email, class_year, lineup_spot, claimed_by_user_id",
+              "id, program_id, first_name, last_name, email, class_year, lineup_spot, claimed_by_user_id, hand, backhand",
             )
             .eq("program_id", eligibilityWorkspace.id)
             .eq("claimed_by_user_id", viewer.id)
@@ -2025,23 +2105,37 @@ export function useUploadMatchWizard({
         if (teamRoster && rosterSubjectOrNull(subject, teamRoster) === null)
           return;
       }
+      const previous = matchSubjectRef.current;
+      const otherPlayer =
+        previous?.kind !== "roster" ||
+        subject.kind !== "roster" ||
+        previous.playerId !== subject.playerId;
       resetIdentityAnswer();
       applyMatchSubject(subject);
       setFormData((prev) => ({
         ...prev,
         playerName:
           subject.kind === "roster" ? subject.name : (uploaderName ?? ""),
-        // A profile's hand and backhand belong to the uploader. Picking a
-        // roster player drops them — an owner picking their OWN profile too,
-        // since that row is a roster choice like any other and the details
-        // step reads the profile again for it.
-        ...(prev.playerStyleSource === "profile" && subject.kind === "roster"
+        // A style belongs to the player it was answered for. On a roster pick
+        // of anyone else it drops — looked up (the uploader's profile, the
+        // previous pick's roster row or last match) or typed, since a typed
+        // style carried to the next player would be saved onto their roster
+        // profile by the ticked "use for future matches". An owner picking
+        // their OWN profile drops the uploader's too: that row is a roster
+        // choice like any other. Re-picking the same player keeps it. The
+        // details step fills them again: roster profile first, then last match.
+        ...(subject.kind === "roster" &&
+        (otherPlayer ||
+          prev.playerStyleSource === "profile" ||
+          prev.playerStyleSource === "roster" ||
+          prev.playerStyleSource === "history")
           ? {
               playerHand: undefined,
               playerBackhand: undefined,
               playerStyleSource: undefined,
             }
           : {}),
+        saveStyleChoice: undefined,
       }));
     },
     [
@@ -3017,20 +3111,7 @@ export function useUploadMatchWizard({
                   : {
                       opponentName: formData.opponentName,
                       bestOf: Number(formData.bestOf),
-                      score: {
-                        player1: getAdjustedScores(
-                          formData.playerScores,
-                          formData.bestOf,
-                          formData.numberOfSets,
-                        ),
-                        player2: getAdjustedScores(
-                          formData.opponentScores,
-                          formData.bestOf,
-                          formData.numberOfSets,
-                        ),
-                        player1_tiebreaks: formData.playerTiebreaks,
-                        player2_tiebreaks: formData.opponentTiebreaks,
-                      },
+                      score: adminVideoScore(formData),
                     }),
                 startSeconds: formData.videoStartSeconds,
                 endSeconds: formData.videoEndSeconds,
@@ -3206,10 +3287,6 @@ export function useUploadMatchWizard({
           formData.opponentName,
         );
 
-        const eventName =
-          formData.eventName ||
-          `${formData.playerName} vs ${formData.opponentName}`;
-
         // Give the opponent an identity, when the uploader named their program.
         //
         // Best-effort and never blocking: `contribute_opponent_player` refuses
@@ -3295,8 +3372,10 @@ export function useUploadMatchWizard({
         const matchData = buildMatchData(
           matchId,
           {
+            // eventName goes through as typed: an empty Event field saves no
+            // event (null), never a synthesised "P1 vs P2" title. A preset or
+            // attached line has already put its name into formData.eventName.
             ...formData,
-            eventName,
             // An early-end answer left over from before the score was
             // finished would label a decided match "Retired".
             result: stopped ? formData.result : decidedResult,
@@ -3348,6 +3427,13 @@ export function useUploadMatchWizard({
                 ...(opponentPlayerId
                   ? { opponent_player_id: opponentPlayerId }
                   : {}),
+                // Required answers on the details step, so they are written
+                // here as on an insert — this branch used to drop all four,
+                // leaving a filled line's match with no style at all.
+                player_hand: matchRow.player_hand,
+                player_backhand: matchRow.player_backhand,
+                opponent_hand: matchRow.opponent_hand,
+                opponent_backhand: matchRow.opponent_backhand,
                 ...(isProcessingProvider
                   ? {
                       fixed_camera: formData.fixedCamera ?? null,
@@ -3386,6 +3472,51 @@ export function useUploadMatchWizard({
                   "a new result for this line."
               : "The match could not be saved. Nothing was uploaded — try again.",
           );
+        }
+
+        // "Use for future matches", ticked on the details step. Decided from
+        // the same roster row and the same pure rule the checkbox drew from,
+        // so what was on screen is what is written. After the match is in and
+        // never awaited: the match is the upload, and a style that failed to
+        // save costs the coach one re-answer next time, not this match.
+        // The active workspace, like the details step's `workspaceKind` and
+        // `saveRosterPlayerStyle`'s own scope — all three read the same one,
+        // so the box on screen and the write behind it cannot disagree.
+        const styleRow =
+          !admin && activeWorkspace.kind === "team"
+            ? teamRoster?.find((row) => row.playerId === playerUserId)
+            : undefined;
+        if (
+          styleRow &&
+          canSaveRosterStyle({
+            // `isProgramStaff()`'s rule, spelled out: this module's only
+            // import from workspace/types is a type.
+            staff: activeWorkspace.role !== "player",
+            rowUserId: styleRow.userId,
+            viewerId: viewer.id,
+          }) &&
+          styleSaveChecked(
+            styleSaveOffer(
+              { hand: styleRow.hand, backhand: styleRow.backhand },
+              formData.playerHand,
+              formData.playerBackhand,
+            ),
+            formData.saveStyleChoice,
+          )
+        ) {
+          void saveRosterPlayerStyle({
+            profileId: styleRow.playerId,
+            hand: formData.playerHand ?? null,
+            backhand: formData.playerBackhand ?? null,
+          })
+            .then((result) => {
+              if (!result.ok) throw new Error(result.error);
+            })
+            .catch((err) => {
+              console.error("[wizard] could not save the player's style", {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            });
         }
 
         // Match row is in. Close the modal now so the user can move on; the file
@@ -3606,6 +3737,8 @@ export function useUploadMatchWizard({
     refreshApproval,
     refusalForWindow,
     matchSubject,
+    teamRoster,
+    viewer.id,
     isUploading,
     isProbing,
     parsingState.isParsing,
@@ -3627,6 +3760,7 @@ export function useUploadMatchWizard({
     error,
     uploadError,
     formData,
+    storageWorkspaceKey,
     parsingState,
     importIdentity: {
       parsedNames: parsedImport

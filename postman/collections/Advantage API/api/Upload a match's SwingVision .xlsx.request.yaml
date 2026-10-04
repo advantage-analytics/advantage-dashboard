@@ -1,0 +1,26 @@
+$kind: http-request
+description: "Stores the file for a match the caller created and, after the response, invokes the `process-match` edge function to extract points and shots. Once per match: a match that already has a file or points is refused with 409. Only import providers are accepted."
+url: "{{baseUrl}}/api/upload"
+method: POST
+headers:
+  Content-Type: multipart/form-data
+  Accept: application/json
+body:
+  type: formdata
+  content:
+    - type: file
+      key: file
+      src: ""
+      contentType: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      description: (Required) The SwingVision .xlsx export, under 50 MB.
+    - type: text
+      key: matchId
+      value: <uuid>
+      description: "(Required) "
+    - type: text
+      key: providerId
+      value: <string>
+      description: (Required) An import provider. Only `swing-vision` is one today.
+settings: {}
+examples: ./.resources/Upload a match's SwingVision .xlsx.resources/examples
+order: 2000

@@ -28,8 +28,8 @@
  */
 
 import { isPlausibleCourtPosition, metersToCourtFrame } from "./court";
-import { fitFrameToTime, orderedBounceFrame } from "./frame-clock";
-import { num } from "./parse";
+import { fitFrameToTime } from "./frame-clock";
+import { flightSamples, groupTrajectories } from "./trajectory";
 import type { SplitStepStroke } from "./types";
 
 export const BALL_PATHS_VERSION = 1;
@@ -52,15 +52,6 @@ const MIN_SAMPLE_GAP_S = 0.1;
 /** Absorbs float error when comparing 2 dp times against the gap. */
 const GAP_EPSILON = 1e-9;
 
-interface TrajectoryRow {
-  stroke_frame?: unknown;
-  bounce_frame?: unknown;
-  frame?: unknown;
-  ball_x_m?: unknown;
-  ball_y_m?: unknown;
-  ball_z_m?: unknown;
-}
-
 /** Round to 2 dp, never returning -0. */
 function round2(value: number): number {
   return Math.round(value * 100) / 100 + 0;
@@ -70,15 +61,6 @@ export function deriveBallPaths(
   rawTrajectories: unknown,
   strokes: readonly Pick<SplitStepStroke, "trimmedFrame" | "videoTime">[],
 ): BallPathsFile {
-  if (!Array.isArray(rawTrajectories)) {
-    throw new Error(
-      "SplitStep trajectories must be a JSON array of per-frame row objects",
-    );
-  }
-
-  const timeOf = fitFrameToTime(strokes);
-  if (!timeOf) return { version: BALL_PATHS_VERSION, strokes: [] };
-
   // Negative frames are the sentinel, never a real contact; the first stroke
   // wins if the vendor ever repeats a frame.
   const strokeByFrame = new Map<number, number>();
@@ -91,52 +73,30 @@ export function deriveBallPaths(
     }
   }
 
-  const groups = new Map<number, TrajectoryRow[]>();
-  for (const entry of rawTrajectories) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const row = entry as TrajectoryRow;
-    const strokeFrame = num(row.stroke_frame);
-    if (strokeFrame === null || !strokeByFrame.has(strokeFrame)) continue;
-    const group = groups.get(strokeFrame);
-    if (group) group.push(row);
-    else groups.set(strokeFrame, [row]);
-  }
+  // Grouped before the clock check, so a non-array throws either way.
+  const flights = groupTrajectories(
+    rawTrajectories,
+    new Set(strokeByFrame.keys()),
+  );
+
+  const timeOf = fitFrameToTime(strokes);
+  if (!timeOf) return { version: BALL_PATHS_VERSION, strokes: [] };
 
   const result: BallPathStroke[] = [];
 
-  for (const [strokeFrame, rows] of groups) {
-    let bounceFrame: number | null = null;
-    for (const row of rows) {
-      const candidate = num(row.bounce_frame);
-      if (candidate !== null) {
-        bounceFrame = candidate;
-        break;
-      }
-    }
-    bounceFrame = orderedBounceFrame(bounceFrame, strokeFrame);
-
+  for (const [strokeFrame, flight] of flights) {
+    const { bounceFrame } = flight;
     const samples: { frame: number; sample: BallPathSample }[] = [];
-    for (const row of rows) {
-      const frame = num(row.frame);
-      const x = row.ball_x_m;
-      const y = row.ball_y_m;
-      if (frame === null) continue;
-      if (typeof x !== "number" || typeof y !== "number") continue;
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    for (const { frame, x, y, z } of flightSamples(flight)) {
       if (!isPlausibleCourtPosition(x, y)) continue;
-
       const court = metersToCourtFrame(x, y);
-      const z =
-        typeof row.ball_z_m === "number" && Number.isFinite(row.ball_z_m)
-          ? row.ball_z_m
-          : 0;
       samples.push({
         frame,
         sample: [
           round2(timeOf(frame)),
           round2(court.x),
           round2(court.y),
-          round2(z),
+          round2(z ?? 0),
         ],
       });
     }

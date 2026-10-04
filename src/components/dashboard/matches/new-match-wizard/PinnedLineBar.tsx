@@ -48,7 +48,7 @@ import {
 } from "./styles";
 
 const STATE_LABEL: Record<LineChoice["state"], string> = {
-  result: "Result in · no video",
+  result: "Result in · No video",
   video: "Video in",
   open: "Awaiting result",
   // Unpickable: nobody on it (a dual's "No player" forfeit), or a result that
@@ -157,7 +157,7 @@ export function PinnedLineBar({
         >
           <span className={floatMenuLabelCls}>
             {preset.eventName}
-            {preset.eventKind === "dual" ? " dual" : ""} · lineup
+            {preset.eventKind === "dual" ? " dual" : ""} · Lineup
           </span>
           {lineup.map((line) => {
             // By entry, not by slot: a tournament entry's slot is a position

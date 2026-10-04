@@ -15,7 +15,9 @@
  * on `waiting` is the distinction `isWorking` draws — something is queued;
  * nothing is moving.
  *
- * Only the three waiting states are here. `empty`, `no-video` and `ready` end
+ * The three waiting states are here, the outcomes, and `not-analyzed` — a
+ * cancelled analysis, whose video is stored, so the row names it rather than
+ * offering "Add video". `empty`, `no-video` and `ready` end
  * their row with an action or with nothing at all, and what those actions are
  * differs by surface — the event page can write, Team Home cannot — so each
  * file still owns its own.
@@ -35,6 +37,7 @@ export const LINE_STATUS: Partial<Record<EntryState, LineStatus>> = {
   working: { label: "Analyzing", tone: "blue", live: true },
   waiting: { label: "In line", tone: "blue" },
   failed: { label: "Analysis failed", tone: "loss" },
+  "not-analyzed": { label: "Not analyzed", tone: "neutral" },
   forfeited: { label: "Forfeited", tone: "neutral" },
   defaulted: { label: "Defaulted", tone: "neutral" },
   withdrawn: { label: "Withdrawn", tone: "neutral" },

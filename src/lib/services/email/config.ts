@@ -15,6 +15,8 @@
  * which is what `shell.ts` is for.
  */
 
+import { MARKETING_SITE_URL } from "@/lib/constants";
+
 /**
  * The From header on every product email.
  *
@@ -71,3 +73,30 @@ export const RESEND_SUPPRESSION_ENDPOINT =
  * exists precisely so a failed send is recoverable.
  */
 export const SEND_TIMEOUT_MS = 10_000;
+
+/**
+ * Outreach — mail an admin sends from `/admin/outreach` to programs that have
+ * not signed up, as opposed to the product mail above that someone triggered.
+ *
+ * Signed by a person rather than the company: cold mail from "Advantage" reads
+ * as a newsletter, and the replies this exists to get go to the same inbox.
+ */
+export const OUTREACH_FROM = "Cj Gimena <team@advantage-analytics.com>";
+
+/**
+ * The marketing site's unsubscribe route, which writes the address to the
+ * Resend suppression list. `?e=<address>&t=<program keys>`.
+ */
+export const OUTREACH_UNSUBSCRIBE_URL = `${MARKETING_SITE_URL}/unsubscribe`;
+
+/**
+ * The largest tranche one press of Send may contain.
+ *
+ * Resend's free plan stops at 100 sends a day (`docs/email-system.md`), and a
+ * young domain that sends hundreds of cold emails in an afternoon is the
+ * domain the next invitation lands in spam from. The page defaults to 40.
+ */
+export const OUTREACH_TRANCHE_MAX = 100;
+
+/** Resend's rate limit is 2 requests a second; stay under it. */
+export const OUTREACH_SEND_GAP_MS = 600;

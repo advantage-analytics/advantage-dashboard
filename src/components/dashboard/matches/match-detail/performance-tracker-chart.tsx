@@ -4,24 +4,22 @@ import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
-import {
-  scopePoints,
-  useSetScope,
-} from "@/components/dashboard/matches/match-detail/set-scope";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { surnameLabels } from "@/lib/data/match-utils";
+import { cn } from "@/lib/utils";
 
 /**
  * The Statistics tab's performance tracker (artboard 47f).
  *
  * A mirrored momentum area: the running won-point differential drawn from the
  * VIEWER's side of the match, filled `viz-you` above the midline and `viz-opp`
- * below, with dashed set dividers. Breaks of serve are named in the hover
- * annotation rather than drawn as verticals — the 47f chart drops the marks so
- * the trend is the only line on screen.
+ * below. Breaks of serve are drawn as dashed verticals at the point that
+ * ended the game; set boundaries are fainter solid lines, named by the Set
+ * labels underneath.
  *
  * The series is `you − opp`, never `player1 − player2`: which side is "you"
  * comes from `useMatchSides()` and nothing else (guardrails §4). Drawing the
@@ -29,24 +27,41 @@ import { surnameLabels } from "@/lib/data/match-utils";
  * below the line and colour it as the opponent's — a chart that reads as its
  * own mirror image, with nothing on screen indicating the flip.
  *
- * Scope-aware: the series is `scopePoints(points, activeSet)`, the same read
- * every other point-derived card on this view makes (head-to-head-card.tsx
- * makes the identical `useSetScope()` / `scopePoints()` read). `useSetScope`
- * currently always answers the whole match.
+ * Whole match, always: the series is every point in `useMatchData().points`,
+ * the same read every other point-derived card on this view makes. The match
+ * filters live on the Video tab only and never narrow a Statistics card.
  *
  * With a playable video, a click while a timed point is hovered opens that
  * point in the Video tab (`actions.watchPoint`) — hovering alone never moves
  * the video. Without one the markup is exactly the read-only chart.
+ *
+ * Each break line is a target of its own: a 24px-wide strip over it opens the
+ * break's readout on hover and — with a video — clicks through to the point
+ * that broke serve. The readout is the DS dark readout (`ChartTooltip`), hung
+ * ABOVE the plot so it never covers the series.
  */
 
 const CHART_W = 1000;
 const CHART_H = 96;
+/** Rendered plot height in px; the viewBox is stretched to it. */
+const PLOT_H = 104;
+/** Width of each break line's hover/click strip, in px. */
+const BREAK_HIT_W = 24;
 const MID = CHART_H / 2;
 /** Keeps the extreme of the series off the viewBox edge. */
 const Y_PAD = 6;
 
 const EASE_CHART = [0.2, 0, 0.4, 1] as const;
-const EASE_PRIMARY = [0.25, 0.46, 0.45, 0.94] as const;
+
+/**
+ * What the readout describes: a point hovered on the series, or one hovered
+ * through its break line. Both name a point index; `kind` only says which
+ * mark to highlight.
+ */
+interface ReadoutTarget {
+  kind: "point" | "break";
+  index: number;
+}
 
 interface Sample {
   /** Points won by you minus points won by the opponent, after this point. */
@@ -103,7 +118,6 @@ export function PerformanceTrackerChart() {
   const { points } = useMatchData();
   const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
-  const { activeSet } = useSetScope();
   const shouldReduceMotion = useReducedMotion();
   const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
 
@@ -115,35 +129,28 @@ export function PerformanceTrackerChart() {
   const clipBelow = `mom-below-${uid}`;
 
   const svgRef = useRef<SVGSVGElement>(null);
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  // `target` outlives the hover so the readout keeps its text while it fades
+  // out; `open` is what the hover actually controls.
+  const [savedTarget, setTarget] = useState<ReadoutTarget | null>(null);
+  const [open, setOpen] = useState(false);
 
   const youIsPlayer1 = sides.you.isPlayer1;
-
-  // Narrow to the chosen set through the shared helper — the same read every
-  // point-derived card on this tab makes, so the chip selection moves them in
-  // step. `null` is the whole match.
-  const scopedPoints = useMemo(
-    () => scopePoints(points, activeSet),
-    [points, activeSet],
-  );
 
   const samples: Sample[] = useMemo(() => {
     const out: Sample[] = [];
     let diff = 0;
-    for (const p of scopedPoints) {
+    for (const p of points) {
       diff += p.wonByPlayer1 === youIsPlayer1 ? 1 : -1;
       out.push({ diff, setNumber: p.setNumber });
     }
     return out;
-  }, [scopedPoints, youIsPlayer1]);
+  }, [points, youIsPlayer1]);
 
-  // Points that ended a game the server lost, as indices into the scoped
-  // series. The 47f chart draws no break verticals, so this feeds only the
-  // hover annotation's "Break of serve" line; a Set keeps that lookup O(1).
-  const breakIndexSet = useMemo(
-    () => new Set(detectBreakIndices(scopedPoints)),
-    [scopedPoints],
-  );
+  // Points that ended a game the server lost, as indices into the series:
+  // the dashed break lines, and the readout's "Break of serve" line (a Set
+  // keeps that lookup O(1)).
+  const breakIndices = useMemo(() => detectBreakIndices(points), [points]);
+  const breakIndexSet = useMemo(() => new Set(breakIndices), [breakIndices]);
 
   // `match-points-server.ts` coerces a null `game_score`/`point_score` to
   // "0-0" — the Advantage Intelligence derivation writes neither, so an
@@ -203,7 +210,11 @@ export function PerformanceTrackerChart() {
       const rect = svg.getBoundingClientRect();
       const ratio = (clientX - rect.left) / rect.width;
       const idx = Math.round(ratio * (samples.length - 1));
-      setHoverIndex(Math.max(0, Math.min(samples.length - 1, idx)));
+      setTarget({
+        kind: "point",
+        index: Math.max(0, Math.min(samples.length - 1, idx)),
+      });
+      setOpen(true);
     },
     [samples],
   );
@@ -230,7 +241,7 @@ export function PerformanceTrackerChart() {
           viewBox={`0 0 ${CHART_W} ${CHART_H}`}
           preserveAspectRatio="none"
           className="block w-full"
-          style={{ height: 104 }}
+          style={{ height: PLOT_H }}
           aria-hidden="true"
         >
           <line
@@ -249,53 +260,82 @@ export function PerformanceTrackerChart() {
     );
   }
 
-  const hovered = hoverIndex === null ? null : scopedPoints[hoverIndex];
-  const hoveredDiff = hoverIndex === null ? 0 : samples[hoverIndex].diff;
+  // `target` outlives the hover, so a points update (a re-derive, a refresh)
+  // can leave it pointing past the new series. Treat an out-of-range target
+  // as none rather than read an index that no longer exists.
+  const target =
+    savedTarget !== null && savedTarget.index < samples.length
+      ? savedTarget
+      : null;
+
+  const hoverIndex = open && target ? target.index : null;
   const hoverCoord = hoverIndex === null ? null : geometry.coords[hoverIndex];
+  const hoveredBreak = open && target?.kind === "break" ? target.index : null;
+
+  // The readout's point. Read from `target`, not the open flag, so the text
+  // holds while the box fades out.
+  const readoutIndex = target?.index ?? null;
+  const readoutPoint = readoutIndex === null ? null : points[readoutIndex];
+  const readoutDiff = readoutIndex === null ? 0 : samples[readoutIndex].diff;
+  const readoutX = readoutIndex === null ? 0 : geometry.coords[readoutIndex][0];
 
   // Event line, in the spec's precedence: a break of serve outranks the point
   // flags, then match/set/break point, then the bare point number.
-  const eventLine = hovered
-    ? hoverIndex !== null && breakIndexSet.has(hoverIndex)
-      ? `Break of serve · Set ${hovered.setNumber}`
-      : hovered.isMatchPoint
+  const eventLine = !readoutPoint
+    ? ""
+    : readoutIndex !== null && breakIndexSet.has(readoutIndex)
+      ? `Break of serve · Set ${readoutPoint.setNumber}`
+      : readoutPoint.isMatchPoint
         ? "Match point"
-        : hovered.isSetPoint
+        : readoutPoint.isSetPoint
           ? "Set point"
-          : hovered.isBreakPoint
+          : readoutPoint.isBreakPoint
             ? "Break point"
-            : `Point ${hovered.pointNumber}`
-    : "";
+            : `Point ${readoutPoint.pointNumber}`;
 
   // Margin line: the current lead, oriented by `sides` (never player order),
   // with the game score appended ONLY where the column is real (flags-doc #9) —
   // a derived match carries the coerced "0-0", which is not a score.
   const marginBase =
-    hoveredDiff === 0
+    readoutDiff === 0
       ? "Level"
-      : `${hoveredDiff > 0 ? youName : oppName} +${Math.abs(hoveredDiff)} on margin`;
+      : `${readoutDiff > 0 ? youName : oppName} +${Math.abs(readoutDiff)} on margin`;
   const marginLine =
-    showScores && hovered ? `${marginBase} · ${hovered.gameScore}` : marginBase;
+    showScores && readoutPoint
+      ? `${marginBase} · ${readoutPoint.gameScore}`
+      : marginBase;
 
   // Mono line: time from `videoTime`, dropped when the point has none so the
   // point number stands alone — a SwingVision import has no video, a
   // derived match does.
-  const monoLine = hovered
-    ? hovered.videoTime !== null
-      ? `${formatClock(hovered.videoTime)} · point ${hovered.pointNumber}`
-      : `point ${hovered.pointNumber}`
+  const monoLine = readoutPoint
+    ? readoutPoint.videoTime !== null
+      ? `${formatClock(readoutPoint.videoTime)} · Point ${readoutPoint.pointNumber}`
+      : `point ${readoutPoint.pointNumber}`
     : "";
 
-  // The hovered point opens in the Video tab only when there is a video and
-  // the point carries a time to seek to — the same test `viz-focused.tsx`
-  // makes before offering its Watch point action.
-  const watchId =
+  // A point opens in the Video tab only when there is a video and the point
+  // carries a time to seek to — the same test `viz-focused.tsx` makes before
+  // offering its Watch point action.
+  const watchableId = (p: MatchPoint | undefined) =>
     meta.hasPlayableVideo &&
-    hovered &&
-    hovered.videoTime !== null &&
-    Number.isFinite(hovered.videoTime)
-      ? hovered.id
+    p &&
+    p.videoTime !== null &&
+    Number.isFinite(p.videoTime)
+      ? p.id
       : null;
+
+  const watchId = hoverIndex === null ? null : watchableId(points[hoverIndex]);
+
+  const readoutWatchable =
+    readoutPoint !== null && watchableId(readoutPoint) !== null;
+
+  const readoutAlign =
+    readoutX > CHART_W * 0.75
+      ? "end"
+      : readoutX < CHART_W * 0.25
+        ? "start"
+        : "center";
 
   const lineTransition = shouldReduceMotion
     ? { duration: 0 }
@@ -319,7 +359,7 @@ export function PerformanceTrackerChart() {
       <div
         className="relative"
         role="figure"
-        aria-label={`Momentum across ${scopedPoints.length} points. ${sides.you.name} above the midline, ${sides.opp.name} below.`}
+        aria-label={`Momentum across ${points.length} points. ${sides.you.name} above the midline, ${sides.opp.name} below.`}
       >
         {/* Which half is the viewer's: the label sits on a plain card-colour
             backing (not the `surface-card` class, which also adds a border
@@ -337,7 +377,7 @@ export function PerformanceTrackerChart() {
           viewBox={`0 0 ${CHART_W} ${CHART_H}`}
           preserveAspectRatio="none"
           className="block w-full"
-          style={{ height: 104 }}
+          style={{ height: PLOT_H }}
           aria-hidden="true"
         >
           <defs>
@@ -349,6 +389,10 @@ export function PerformanceTrackerChart() {
             </clipPath>
           </defs>
 
+          {/* `non-scaling-stroke`: the viewBox is stretched by
+              `preserveAspectRatio="none"`, which otherwise squashes a vertical
+              line's width to ~0.7px on a 416px card. Set boundaries stay
+              faint and solid; the dashed breaks are the marks to read. */}
           {geometry.setBoundaries.map((x) => (
             <line
               key={`set-${x}`}
@@ -358,7 +402,22 @@ export function PerformanceTrackerChart() {
               y2={CHART_H}
               stroke="var(--ink-200)"
               strokeWidth={1}
-              strokeDasharray="3 3"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+
+          {breakIndices.map((i) => (
+            <line
+              key={`break-${i}`}
+              x1={geometry.coords[i][0]}
+              y1={0}
+              x2={geometry.coords[i][0]}
+              y2={CHART_H}
+              stroke={hoveredBreak === i ? "var(--ink-700)" : "var(--ink-300)"}
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+              vectorEffect="non-scaling-stroke"
+              style={{ transition: "stroke 150ms ease" }}
             />
           ))}
 
@@ -446,32 +505,77 @@ export function PerformanceTrackerChart() {
             className={watchId ? "cursor-pointer" : undefined}
             onClick={watchId ? () => actions.watchPoint(watchId) : undefined}
             onMouseMove={(e) => selectFromClientX(e.clientX)}
-            onMouseLeave={() => setHoverIndex(null)}
+            onMouseLeave={() => setOpen(false)}
           />
         </svg>
 
-        {/* The artboard's `.mom-annot` reveal, rebuilt as component state — the
-            opacity-only fade means reduced motion needs no separate path. */}
-        {hovered && hoverCoord && (
-          <div
+        {/* The hovered point, marked on the line. HTML rather than an SVG
+            circle so the stretched viewBox cannot flatten it to an oval. */}
+        {hoverCoord && hoverIndex !== null && (
+          <span
             aria-hidden="true"
-            className="pointer-events-none absolute z-[3] flex flex-col gap-[3px] rounded-[12px] bg-[var(--ink-900)] px-[11px] py-[9px] whitespace-nowrap"
+            className="pointer-events-none absolute z-[2] size-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface-card)]"
             style={{
-              boxShadow: "var(--shadow-dropdown)",
               left: `${(hoverCoord[0] / CHART_W) * 100}%`,
-              // Parked in the half the series is NOT in, so the readout never
-              // covers the line it describes and never overflows the card.
-              top: hoveredDiff >= 0 ? "auto" : 0,
-              bottom: hoveredDiff >= 0 ? 0 : "auto",
-              transform: `translateX(${
-                hoverCoord[0] > CHART_W * 0.75
-                  ? "-100%"
-                  : hoverCoord[0] < CHART_W * 0.25
-                    ? "0%"
-                    : "-50%"
-              })`,
-              transition: `opacity 200ms cubic-bezier(${EASE_PRIMARY.join(",")})`,
+              top: (hoverCoord[1] / CHART_H) * PLOT_H,
+              background:
+                samples[hoverIndex].diff >= 0
+                  ? "var(--viz-you)"
+                  : "var(--viz-opp)",
+              boxShadow: "0 0 0 1px var(--ink-300)",
             }}
+          />
+        )}
+
+        {/* Break lines as targets: a strip over each dashed line, above the
+            hover rect so the rect cannot swallow it. A button only where it
+            opens something; otherwise a hover-only strip. */}
+        {breakIndices.map((i) => {
+          const breakWatchId = watchableId(points[i]);
+          const hitProps = {
+            className: cn(
+              "absolute inset-y-0 z-[4] -translate-x-1/2 rounded-[6px] border-0 bg-transparent p-0",
+              breakWatchId &&
+                "cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--blue)]",
+            ),
+            style: {
+              left: `${(geometry.coords[i][0] / CHART_W) * 100}%`,
+              width: BREAK_HIT_W,
+            },
+            onMouseEnter: () => {
+              setTarget({ kind: "break", index: i });
+              setOpen(true);
+            },
+            onMouseLeave: () => setOpen(false),
+          };
+          return breakWatchId ? (
+            <button
+              key={`break-hit-${i}`}
+              type="button"
+              aria-label={`Watch the break of serve in set ${points[i].setNumber}, point ${points[i].pointNumber}, in Video`}
+              onClick={() => actions.watchPoint(breakWatchId)}
+              onFocus={hitProps.onMouseEnter}
+              onBlur={hitProps.onMouseLeave}
+              {...hitProps}
+            />
+          ) : (
+            <span key={`break-hit-${i}`} aria-hidden="true" {...hitProps} />
+          );
+        })}
+
+        {/* The DS dark readout, hung above the plot at the hovered x so it
+            never covers the line it describes. A zero-width anchor carries
+            the x; `align` keeps the box inside the card at either edge. */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 z-[5] w-0"
+          style={{ left: `${(readoutX / CHART_W) * 100}%` }}
+        >
+          <ChartTooltip
+            open={open && readoutPoint !== null}
+            align={readoutAlign}
+            offset={8}
+            className="gap-[3px] px-[11px] py-[9px]"
           >
             <span className="text-[12px] font-medium text-white">
               {eventLine}
@@ -482,13 +586,13 @@ export function PerformanceTrackerChart() {
             <span className="mono tabular pt-px text-[10px] text-white/[0.64]">
               {monoLine}
             </span>
-            {watchId && (
+            {readoutWatchable && (
               <span className="text-[10px] text-white/[0.64]">
                 Click to watch in Video
               </span>
             )}
-          </div>
-        )}
+          </ChartTooltip>
+        </span>
       </div>
 
       <div className="flex">
@@ -496,7 +600,7 @@ export function PerformanceTrackerChart() {
           <div
             key={s.setNumber}
             className="flex justify-center"
-            style={{ width: `${(s.count / scopedPoints.length) * 100}%` }}
+            style={{ width: `${(s.count / points.length) * 100}%` }}
           >
             <span
               className="tabular text-[10px] whitespace-nowrap"

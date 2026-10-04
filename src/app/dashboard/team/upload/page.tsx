@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { SCHEDULE_ENABLED, scheduleHref } from "@/lib/schedule/availability";
 import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
 import {
   getProgramSchedule,
@@ -25,6 +26,8 @@ import { formatEventSpan, siteLabel } from "@/lib/schedule/format";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard";
 import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-slot";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
+
+export const metadata = { title: "Upload a match" };
 
 /**
  * Uploading a match video in a team workspace.
@@ -70,7 +73,12 @@ export default async function TeamUploadPage({
   // This is where a *player* is turned away and nowhere else: staff are
   // answered before either flag is read, so no arrangement of switches can
   // bounce a coach off their own program's upload page.
-  if (!canUploadForProgram(active)) redirect("/dashboard/team/schedule");
+  //
+  // Turned away to Team Home rather than the Schedule while the Schedule is a
+  // coming-soon page (`lib/schedule/availability.ts`): landing a player on a
+  // stub reads as a broken link.
+  if (!canUploadForProgram(active))
+    redirect(scheduleHref("/dashboard/team/schedule", "/dashboard/team"));
 
   // Who may open this page and who may attach a match to a SCHEDULED LINE are
   // two different questions, and only the second one is authorization. The
@@ -154,7 +162,10 @@ export default async function TeamUploadPage({
       date: single.date,
       surface: single.surface,
       score: single.score,
-      eventHref: `/dashboard/team/schedule/single/${single.id}`,
+      eventHref: scheduleHref(
+        `/dashboard/team/schedule/single/${single.id}`,
+        `/dashboard/matches/${single.id}`,
+      ),
     });
 
     return <UploadMatchFlow preset={preset} />;
@@ -243,7 +254,11 @@ export default async function TeamUploadPage({
   // a member — their own program, no line, and a `player1_id` that is a
   // `program_members` user of it — which is why this path works where the line
   // picker's does not.
-  if (!staff) return <UploadMatchFlow />;
+  //
+  // Staff get the same while the Schedule is a coming-soon page
+  // (`lib/schedule/availability.ts`): the picker below is a list of scheduled
+  // lines, and this page's own fallback redirects still land here.
+  if (!staff || !SCHEDULE_ENABLED) return <UploadMatchFlow />;
 
   return <LinePicker groups={await getUploadQueue(active.id)} />;
 }

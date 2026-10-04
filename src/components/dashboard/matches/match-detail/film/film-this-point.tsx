@@ -1,15 +1,24 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import {
+  handOf,
+  pointResultLabel,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
+import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
+import type { Hand } from "@/components/dashboard/matches/match-detail/match-filters/shot-geometry";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { cn } from "@/lib/utils";
 
-import { lastNameOf } from "./film-filters";
+import { lastNameOf } from "./film-list-filters";
 import {
+  isRallyOpener,
   pointReturnShotId,
+  rallyNumbering,
+  shotRowAriaLabel,
   shotRowCells,
   shotRowRevealDelay,
   UNMEASURED,
@@ -69,12 +78,19 @@ export const FilmThisPoint = memo(function FilmThisPoint({
 }) {
   const sides = useMatchSides();
   const youIsPlayer1 = sides.you.isPlayer1;
+  // The hands the Direction filter uses, so a row the filter keeps as Inside
+  // Out is labelled Inside Out. Outside the provider they are null and the
+  // stored zone prints as is.
+  const { context: filterContext } = useMatchFilters();
 
   const seconds = point?.duration != null ? Math.round(point.duration) : null;
-  const ended = point ? point.resultType || "Point" : null;
+  const ended = point ? pointResultLabel(point, filterContext) : null;
   // Over ALL the point's shots, timed or not: the return is a role in the
   // rally, and an untimed serve row still decides which shot it is.
   const returnShotId = pointReturnShotId(point?.shots);
+  // The same for the rally's numbers and its length: both serves read 1 and
+  // the return 2, whichever of them the film has a time for.
+  const numbering = useMemo(() => rallyNumbering(point?.shots), [point]);
 
   return (
     <section
@@ -140,7 +156,10 @@ export const FilmThisPoint = memo(function FilmThisPoint({
               key={stop.shot.id}
               stop={stop}
               order={i + 1}
+              rallyNumber={numbering.numbers.get(stop.shot.id) ?? i + 1}
+              isOpener={isRallyOpener(stop.shot.id, numbering)}
               returnShotId={returnShotId}
+              hand={handOf(stop.shot.isPlayer1, filterContext)}
               playerName={lastNameOf(
                 stop.shot.isPlayer1 === youIsPlayer1
                   ? sides.you.name
@@ -155,7 +174,7 @@ export const FilmThisPoint = memo(function FilmThisPoint({
 
       <div className="mx-3 mt-2.5 flex shrink-0 items-center gap-2.5 border-t border-[var(--border-hairline)] pt-3 pb-1">
         <span className="text-micro tabular">
-          {shots.length} {shots.length === 1 ? "shot" : "shots"}
+          {numbering.count} {numbering.count === 1 ? "shot" : "shots"}
           {seconds != null ? ` · ${seconds}s` : ""}
         </span>
         {ended && (
@@ -180,14 +199,7 @@ function HeadCell({
   children: React.ReactNode;
   className?: string;
 }) {
-  return (
-    <span
-      className={cn("text-[10px]", className)}
-      style={{ color: "var(--ink-400)" }}
-    >
-      {children}
-    </span>
-  );
+  return <span className={cn("eyebrow-sm", className)}>{children}</span>;
 }
 
 function StepButton({
@@ -227,28 +239,43 @@ function StepButton({
 const ShotRow = memo(function ShotRow({
   stop,
   order,
+  rallyNumber,
+  isOpener,
   returnShotId,
+  hand,
   playerName,
   isActive,
   onSelect,
 }: {
   stop: ShotStop;
-  /** Position in the rally, 1-based. */
+  /** Place in this list, 1-based — the reveal stagger only. */
   order: number;
+  /** The shot's number in the rally (`rallyNumbering`): what the # cell prints. */
+  rallyNumber: number;
+  /** The shot that opened the rally — the deciding serve — drawn darker. */
+  isOpener: boolean;
   /** The point's return, from all its shots (timed or not), for Type. */
   returnShotId: string | null;
+  /** The hitter's hand, for Placement's Inside-Out / Inside-In. */
+  hand: Hand | null;
   playerName: string;
   isActive: boolean;
   onSelect: (stop: ShotStop) => void;
 }) {
-  const cells = shotRowCells(stop.shot, order, playerName, returnShotId);
+  const cells = shotRowCells(
+    stop.shot,
+    rallyNumber,
+    playerName,
+    returnShotId,
+    hand,
+  );
 
   return (
     <button
       type="button"
       data-shot-id={stop.shot.id}
       aria-current={isActive ? "true" : undefined}
-      aria-label={`${cells.order}. ${cells.player} ${cells.stroke}, ${cells.placement}, ${cells.result} — jump to this shot`}
+      aria-label={shotRowAriaLabel(cells)}
       onClick={() => onSelect(stop)}
       // T9: the same reveal the room's shot well draws, on the shell's own
       // row height. Mount-driven — rows are keyed by `shot.id`, so the card
@@ -273,7 +300,7 @@ const ShotRow = memo(function ShotRow({
       <Cell className={WIDE_ONLY} ink="var(--ink-600)">
         {cells.spin}
       </Cell>
-      <Cell ink={order === 1 ? "var(--ink-900)" : "var(--ink-700)"}>
+      <Cell ink={isOpener ? "var(--ink-900)" : "var(--ink-700)"}>
         {cells.stroke}
       </Cell>
       <Cell className={WIDE_ONLY} ink="var(--ink-700)">

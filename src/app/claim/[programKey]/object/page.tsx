@@ -9,7 +9,7 @@ import {
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { ContactOwnerForm } from "@/components/claim/contact-owner-form";
 
-export const metadata = { title: "This isn't right" };
+export const metadata = { title: "Report a problem" };
 
 /**
  * "They no longer work here" (F3.3) and "This isn't right" (F3.4).

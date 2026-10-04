@@ -32,6 +32,8 @@ export interface RailScoreboardPlayer {
   tiebreaks?: (number | null)[];
   /** Per-set "this row lost it" — final only; unused when omitted. */
   lostSets?: boolean[];
+  /** Per-set "this row won a completed set" — that digit prints bold. */
+  wonSets?: boolean[];
   /** The live points cell ("30", "AD"). Live only; null is a dash. */
   points?: string | null;
   serving?: boolean;
@@ -158,13 +160,23 @@ function ScoreRow({
       ) : (
         <span className="mono tabular inline-flex shrink-0 items-center gap-2 text-[13px] whitespace-nowrap">
           {player.sets.map((games, index) => {
+            const won = player.wonSets?.[index] ?? false;
             const lost = player.lostSets?.[index] ?? false;
             const tiebreak = lost ? (player.tiebreaks?.[index] ?? null) : null;
             return (
               <span
                 key={index}
                 className="w-[11px] text-right"
-                style={{ color: games === null ? "var(--ink-400)" : ink }}
+                style={{
+                  // A set winner's digit is full ink, a set loser's is ink-600.
+                  color:
+                    games === null
+                      ? "var(--ink-400)"
+                      : (won && "var(--ink-900)") ||
+                        (lost && "var(--ink-600)") ||
+                        ink,
+                  fontWeight: won ? 600 : undefined,
+                }}
               >
                 {games === null ? <Dash label="No score" /> : games}
                 {tiebreak !== null ? (

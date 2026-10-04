@@ -61,7 +61,9 @@ export function lastServeIndex(rally: SplitStepRally): number {
  * winner needs to know whether the returner reached the ball, and nothing in
  * the payload records an attempted-and-missed swing — a missed swing simply is
  * not a stroke. Every unreturned serve therefore becomes `Service Winner`, and
- * `match_stats.aces` must be suppressed rather than published as 0.
+ * `match_stats.aces` must be suppressed rather than published as 0. (The Head
+ * to head widget derives its own ace count from unreturned serves, not this
+ * field.)
  */
 export function classifyPoint(
   rally: SplitStepRally,

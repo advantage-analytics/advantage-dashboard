@@ -1,0 +1,14 @@
+$kind: http-request
+description: The caller's own match (`created_by` is the session user), with the latest analysis status, the event line it is filed under, and whether this viewer may attach it to a line. A malformed id, a missing match and someone else's match all answer 404.
+url: "{{baseUrl}}/api/matches/:matchId"
+method: GET
+headers:
+  Accept: application/json
+pathVariables:
+  - key: matchId
+    value: <uuid>
+    disabled: false
+    description: (Required) The match's id. A value that is not a UUID answers 404, never 400.
+settings: {}
+examples: ./.resources/Read a match for the Edit Match dialog.resources/examples
+order: 1000

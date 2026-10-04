@@ -49,7 +49,7 @@ supabase/migrations/
 # Design tokens — EXCLUDED so hex stays uppercase.
 #
 # Prettier lowercases hex colours and offers no option to stop it. This file is
-# a transcription of the Advantage Design System, and CLAUDE.md, AGENTS.md,
+# a transcription of the Advantage Design System, and AGENTS.md,
 # DESIGN.md and .skills/advantage-analytics-design/SKILL.md all quote its
 # values in uppercase (#3B82F6, #5DB955, #E51837, ...). Lowercasing them here
 # would silently break `grep` between the docs and the code.
@@ -71,6 +71,10 @@ src/styles/design-system/colors.css
 #
 # Any future generated file belongs here for the same reason.
 MAP.md
+
+# postman/collections/ is written by `npm run api:collection` (postman spec generate
+# collection) from openapi/advantage-api.yaml; a reformat fights the generator.
+postman/collections/
 
 # supabase/email-templates/*.html are written by scripts/build_email_templates.py.
 # Two reasons beyond "it is generated": the next generator run would clobber any

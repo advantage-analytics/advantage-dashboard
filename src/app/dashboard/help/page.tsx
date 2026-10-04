@@ -4,7 +4,12 @@ import { Check, Eye, EyeOff, Minus, UserCheck } from "lucide-react";
 import { HelpToc } from "./help-toc";
 import { Kbd } from "@/components/ui/kbd";
 import { ANALYSIS_LABEL } from "@/lib/data/match-analysis";
-import { SUPPORT_EMAIL } from "@/lib/constants";
+import { AnalysisStatusLine } from "@/components/dashboard/shared/analysis-status-line";
+import type { StepState } from "@/components/dashboard/shared/vertical-steps";
+import { EXPORT_GUIDE_URL, SUPPORT_EMAIL } from "@/lib/constants";
+import { MAX_VIDEO_SIZE_BYTES } from "@/lib/services/splitstep/config";
+
+export const metadata = { title: "Help" };
 
 const SWINGVISION_TROUBLESHOOTING_URL =
   "https://support.swingvision.com/hc/en-us/articles/360058475731";
@@ -41,27 +46,22 @@ const sectionScrollMt = "scroll-mt-[88px] lg:scroll-mt-[72px]";
  * by that name and it is a different thing: the weighted segments of the
  * progress bar, four of them, sized by how long each takes.
  */
-const ANALYSIS_JOURNEY: { label: string; tone: StatusTone }[] = [
-  { label: ANALYSIS_LABEL.uploading, tone: "blue" },
-  { label: ANALYSIS_LABEL.queued, tone: "neutral" },
-  { label: ANALYSIS_LABEL.processing, tone: "blue" },
-  { label: ANALYSIS_LABEL.deriving, tone: "blue" },
-  { label: ANALYSIS_LABEL.completed, tone: "win" },
+const ANALYSIS_JOURNEY: { label: string; mark: StepState }[] = [
+  { label: ANALYSIS_LABEL.uploading, mark: "now" },
+  { label: ANALYSIS_LABEL.queued, mark: "wait" },
+  // `processing` and `deriving` share the word "Analyzing", so one row.
+  { label: ANALYSIS_LABEL.processing, mark: "now" },
+  { label: ANALYSIS_LABEL.completed, mark: "done" },
 ];
 
-/** Tones from the design system's StatusChip: blue in flight, win at the end. */
-type StatusTone = "blue" | "neutral" | "win";
-
-const STATUS_TONE: Record<StatusTone, string> = {
-  blue: "text-[var(--blue)]",
-  neutral: "text-[var(--ink-500)]",
-  win: "text-[var(--success)]",
-};
+/** The vendor's upload cap, in the whole gigabytes the film empty state prints. */
+const MAX_VIDEO_GB = Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000);
 
 const INTELLIGENCE_REQUIREMENTS = [
   "Singles only",
   "1080p or higher",
   "30 fps or higher",
+  `Under ${MAX_VIDEO_GB} GB`,
   "Trim covers complete games",
 ];
 
@@ -123,7 +123,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       {
         keys: ["⌘", "U"],
         action: "Start a new match",
-        note: "On pages that show the Create Match button.",
+        note: "On pages that show the Create match button.",
       },
       { keys: ["esc"], action: "Close the active modal, dropdown, or palette" },
       {
@@ -340,12 +340,12 @@ export default function HelpCenterPage() {
                 <SourceCard
                   title="You have video"
                   body="Advantage Intelligence tracks every shot from your own footage. Singles, 1080p+, 30fps+."
-                  cost="Costs analysis hours · takes time · richest report"
+                  cost="Costs analysis hours · Takes time · Richest report"
                 />
                 <SourceCard
                   title="You have a SwingVision export"
-                  body="Drop the .xlsx. Stats appear as soon as it parses. Singles only."
-                  cost="No hours used · instant · stats only, no video"
+                  body="Drop the .xlsx. Stats appear as soon as it parses. Singles only. Add the film later if you have it."
+                  cost="No hours used · Instant · Video optional"
                 />
               </div>
 
@@ -355,11 +355,9 @@ export default function HelpCenterPage() {
                   <FeatureRow>
                     Serve, return, rally and break-point breakdowns
                   </FeatureRow>
+                  <FeatureRow>Trends across your matches on Home</FeatureRow>
                   <FeatureRow>
-                    Trends across your season, and Ask over your own matches
-                  </FeatureRow>
-                  <FeatureRow included={false}>
-                    Shot-by-shot video review — Advantage Intelligence only
+                    Every point as a video clip — once the match film is on file
                   </FeatureRow>
                 </div>
               </div>
@@ -403,27 +401,68 @@ export default function HelpCenterPage() {
                   Files are checked when you pick them — a 720p video is
                   rejected before a single byte uploads, with the fix spelled
                   out: Phone settings → Camera → Record at 1080p/30 or higher.
-                  Doubles lines record a score only.
+                  Doubles lines record a score only. Getting the file off a
+                  phone or court camera is covered step by step in the{" "}
+                  <a
+                    href={EXPORT_GUIDE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={linkClass}
+                  >
+                    export guide
+                  </a>
+                  .
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>Filming for analysis</span>
+                <div className="flex flex-col">
+                  <FeatureRow>
+                    The full court in frame, from behind the baseline
+                  </FeatureRow>
+                  <FeatureRow>The whole match, changeovers and all</FeatureRow>
+                  <FeatureRow included={false}>
+                    Cropping or zooming — the court lines have to stay in frame
+                  </FeatureRow>
+                  <FeatureRow included={false}>
+                    Highlight reels — patterns live in the full run of points
+                  </FeatureRow>
+                </div>
+                <p className={proseClass}>
+                  Audio is ignored, so there is nothing to clean up there.
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>
+                  If your file is over {MAX_VIDEO_GB} GB
+                </span>
+                <p className={proseClass}>
+                  Shorten it rather than compress it. Photos on iPhone, Mac and
+                  Windows can trim a video without lowering its resolution —
+                  keep a run of complete games, such as one set, and upload
+                  that. If trimming isn&rsquo;t an option, write to{" "}
+                  <a
+                    href={`mailto:${SUPPORT_EMAIL}?subject=Large%20match%20file`}
+                    className={linkClass}
+                  >
+                    {SUPPORT_EMAIL}
+                  </a>{" "}
+                  and we&rsquo;ll sort it out with you.
                 </p>
               </div>
 
               <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
                 <span className={blockLabelClass}>After you submit</span>
-                {/* Dot + label, no container — the design system's StatusChip
-                    is "quiet inline dot + sentence-case text", and a row of
-                    filled pills would read as five buttons. */}
+                {/* The tables' own mark + word (`AnalysisStatusLine`), so this
+                    legend reads exactly as the Matches and Roster cells do. */}
                 <ol className="flex flex-wrap items-center gap-2.5">
                   {ANALYSIS_JOURNEY.map((stage, index) => (
                     <li key={stage.label} className="flex items-center gap-2.5">
-                      <span
-                        className={`inline-flex items-center gap-1.5 text-[11px] leading-none whitespace-nowrap ${STATUS_TONE[stage.tone]}`}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="size-[5px] shrink-0 rounded-full bg-current"
-                        />
+                      <AnalysisStatusLine mark={stage.mark}>
                         {stage.label}
-                      </span>
+                      </AnalysisStatusLine>
                       {index < ANALYSIS_JOURNEY.length - 1 && (
                         <span
                           aria-hidden="true"

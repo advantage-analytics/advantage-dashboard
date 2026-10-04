@@ -1,4 +1,4 @@
-import { siteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 import {
   sendEmail,
   adminReviewNeededEmail,
@@ -142,7 +142,7 @@ export async function notifyAdminsReviewNeeded(
     INTERNAL_ALERTS_ADDRESS,
   );
 
-  const requestsUrl = `${siteUrl()}/admin/requests?id=${encodeURIComponent(event.id)}`;
+  const requestsUrl = `${emailOrigin()}/admin/requests?id=${encodeURIComponent(event.id)}`;
   const claimantName =
     event.kind === "claim" ? event.claimantName : event.requesterName;
   const claimedEmail =

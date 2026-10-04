@@ -34,6 +34,7 @@ import {
   currentBillingMonth,
   getIndividualPoolCapSeconds,
   getMonthlyCapSeconds,
+  getPilotIndividualCapSeconds,
   getOpenBetaCeilingSeconds,
   type AccountType,
 } from "./config";
@@ -92,10 +93,17 @@ export function quotaTierFor(
  * `getMonthlyCapSeconds(quotaTierFor(…))`, because the three surfaces that
  * show a cap (the wizard meter, Settings › Usage, Team home) and the one that
  * enforces it (`reserveQuota`) must all name the same number.
+ *
+ * A pilot individual's PERSONAL workspace draws the pilot figure instead
+ * (`Workspace.individualPilot`); every other workspace — including a team the
+ * pilot belongs to — is unchanged.
  */
 export function monthlyCapSecondsFor(
-  workspace: Pick<Workspace, "kind" | "orgType">,
+  workspace: Pick<Workspace, "kind" | "orgType" | "individualPilot">,
 ): number {
+  if (workspace.kind === "personal" && workspace.individualPilot) {
+    return getPilotIndividualCapSeconds();
+  }
   return getMonthlyCapSeconds(quotaTierFor(workspace));
 }
 
@@ -116,6 +124,36 @@ export type QuotaReservation =
        */
       permission?: boolean;
     };
+
+/**
+ * A reservation RPC that failed outright — neither granted nor refused.
+ *
+ * Distinct from a refusal (`{ ok: false }`), which is an answer: this is the
+ * absence of one, so nothing was reserved and the caller must not assume
+ * either way. `code` is the RPC error's SQLSTATE when there was one —
+ * `23505` is `processing_usage`'s unique index on `job_id`, i.e. this job
+ * already holds a reservation, which a caller answers as "already submitted"
+ * rather than "try again".
+ */
+export class QuotaReserveError extends Error {
+  readonly code: string | null;
+
+  constructor(message: string, code: string | null = null) {
+    super(message);
+    this.name = "QuotaReserveError";
+    this.code = code;
+  }
+}
+
+/** The one construction both reserve RPCs share. */
+function reserveFailure(
+  error: { message: string; code?: string } | null,
+): QuotaReserveError {
+  return new QuotaReserveError(
+    `Could not reserve processing quota: ${error?.message ?? "no row returned"}`,
+    error?.code ?? null,
+  );
+}
 
 /**
  * Reserve `seconds` against a user's monthly allowance.
@@ -221,11 +259,7 @@ export async function reserveQuota(params: {
     })
     .single();
 
-  if (error || !data) {
-    throw new Error(
-      `Could not reserve processing quota: ${error?.message ?? "no row returned"}`,
-    );
-  }
+  if (error || !data) throw reserveFailure(error);
 
   const row = data as {
     ok: boolean;
@@ -298,18 +332,16 @@ async function reservePooled(params: {
     })
     .single();
 
-  const row = requireRpcRow(
-    data as {
-      ok: boolean;
-      refusal: QuotaLimit | null;
-      used_seconds: number;
-      cap_seconds: number;
-      band_used_seconds: number;
-      band_cap_seconds: number;
-    } | null,
-    error,
-    "reserve processing quota",
-  );
+  if (error || !data) throw reserveFailure(error);
+
+  const row = data as {
+    ok: boolean;
+    refusal: QuotaLimit | null;
+    used_seconds: number;
+    cap_seconds: number;
+    band_used_seconds: number;
+    band_cap_seconds: number;
+  };
 
   if (row.ok) {
     return {

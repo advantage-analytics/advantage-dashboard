@@ -18,8 +18,8 @@ import type { EntryMatch } from "./types";
  * - `outcome` — forfeited, defaulted or withdrawn: the outcome's words, and
  *   the score flow to correct it when the viewer can.
  * - `add-result` — nobody has recorded anything, and the viewer can.
- * - `status` — a waiting state (working, waiting, failed), words from
- *   `LINE_STATUS`.
+ * - `status` — a waiting state (working, waiting, failed) or a cancelled
+ *   analysis (not-analyzed), words from `LINE_STATUS`.
  * - `view-report` — there is a report to read.
  * - `add-video` — a scored singles line nothing was sent for.
  * - `null` — nothing to offer this viewer.
@@ -64,9 +64,10 @@ export function lineAction({
     return canEdit ? { kind: "add-result", href: scoreHref } : null;
   }
 
-  // The waiting states — working, waiting, failed — and their words come from
-  // `LINE_STATUS`, which the dual sheet on Team Home reads too. The words are
-  // not retyped here.
+  // The waiting states — working, waiting, failed — plus not-analyzed (a
+  // cancelled analysis: its video is stored, so no "Add video"). Their words
+  // come from `LINE_STATUS`, which the dual sheet on Team Home reads too. The
+  // words are not retyped here.
   const status = LINE_STATUS[state];
   if (status) return { kind: "status", status };
 

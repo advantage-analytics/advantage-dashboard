@@ -1,5 +1,6 @@
 /**
- * Resubmission — recovery from a *failed* vendor job.
+ * Resubmission — recovery from a *failed* vendor job, or a fresh send of a
+ * *cancelled* one.
  *
  * A resubmission is a NEW `processing_jobs` row linked to its parent via
  * `resubmitted_from_job_id`, never a status rewind on the old one:
@@ -12,7 +13,17 @@
  * columns:
  *   • the webhook's `job_failed` branch (auto — one automatic attempt per
  *     chain, download-step failures only)
- *   • POST /api/splitstep/jobs/[jobId]/resubmit (manual — "Retry analysis")
+ *   • POST /api/splitstep/jobs/[jobId]/resubmit (manual — "Retry analysis"
+ *     on a failed job, and "Send for analysis again" on a cancelled one)
+ *
+ * A `cancelled` parent is the athlete having stopped a queued job themselves
+ * (`cancel_processing_job`, which released its reservation). "Send for
+ * analysis again" is the same resubmission: a new child row that reserves the
+ * month's time anew, exactly as a failed parent's does. It is MANUAL only —
+ * cancelling was a person's decision, so no webhook or reconciler may undo it
+ * — and it skips `classifyFailure()`, which has nothing to say about a job
+ * that did not fail (its `error_code` is `CANCELLED`, which no failure rule
+ * reads).
  *
  * ── Video recovery, and why there is no "re-stage" branch ────────────────────
  * The planning doc for this feature said to re-stage from "the R2 original"
@@ -96,32 +107,38 @@ import { uploadEligibility } from "@/lib/workspace/upload-eligibility";
 import type { RosterIdentity } from "@/lib/workspace/upload-eligibility";
 import type { Workspace } from "@/lib/workspace/types";
 
+import {
+  classifyFailure,
+  countsAsAttempt,
+  isDownloadFailure,
+  MAX_TOTAL_ATTEMPTS,
+} from "@/lib/data/match-analysis";
+import { byClass } from "@/components/dashboard/matches/analysis-failure-copy";
+
+// Defined in match-analysis.ts so client code can classify with them (this
+// file pulls in @azure/storage-blob); re-exported so the webhook route, the
+// jobs route and the reconciler keep importing them from here.
+export { isDownloadFailure, MAX_TOTAL_ATTEMPTS };
+
 const LOG = "[splitstep-resubmit]";
 
-/** 1 original + 2 resubmissions. Enforced here and nowhere else. */
-export const MAX_TOTAL_ATTEMPTS = 3;
-
-/** Statuses that mean "this row will never move again on its own". */
-const TERMINAL_STATUSES = ["failed", "completed", "derivation_failed"];
+/**
+ * Statuses that mean "this row will never move again on its own".
+ * `cancelled` belongs here: without it the cancelled parent itself would read
+ * as an analysis in flight and refuse its own "Send for analysis again".
+ */
+const TERMINAL_STATUSES = [
+  "failed",
+  "completed",
+  "derivation_failed",
+  "cancelled",
+];
 
 /**
- * The ONE failure class the system retries on its own.
- *
- * A download failure with a valid SAS means the file, submission and metadata
- * are all good — retrying is nearly free and nearly always works. Step
- * outranks code because the one real failure arrived as INTERNAL_ERROR at
- * step 'downloading_video'; a bare INTERNAL_ERROR elsewhere says "contact
- * support", video-quality rejections can never succeed on retry, and unknown
- * codes surface without retrying. Exported so the webhook route and the
- * reconciler classify with the same rule — this is the load-bearing line,
- * and two copies of it is how one site silently widens the retry class.
+ * Parent statuses a resubmission may start from. `failed` for "Retry
+ * analysis"; `cancelled` for "Send for analysis again" (manual only).
  */
-export function isDownloadFailure(
-  errorCode: string | null,
-  errorStep: string | null,
-): boolean {
-  return errorStep === "downloading_video" || errorCode === "VIDEO_UNREACHABLE";
-}
+const RESUBMITTABLE_STATUSES = new Set(["failed", "cancelled"]);
 
 export type ResubmitRefusalReason =
   | "not_found"
@@ -138,6 +155,11 @@ export type ResubmitRefusalReason =
   | "already_auto_resubmitted"
   | "video_unavailable"
   | "quota"
+  /**
+   * The reservation RPC failed outright — no answer either way, nothing
+   * spent, the child row removed. The route answers 503 "try again".
+   */
+  | "quota_unavailable"
   | "not_configured"
   | "invalid_metadata"
   | "submit_failed"
@@ -251,6 +273,8 @@ interface ParentJob {
   created_by: string;
   status: string;
   error_category: string | null;
+  error_code: string | null;
+  error_step: string | null;
   video_object_key: string | null;
   start_time_seconds: number | null;
   end_time_seconds: number | null;
@@ -263,7 +287,7 @@ interface ParentJob {
 export async function resubmitJob(params: {
   /** Service-role client — this runs from webhooks and background paths. */
   supabase: SupabaseClient;
-  /** The FAILED job to resubmit from. */
+  /** The FAILED (or, manual only, CANCELLED) job to resubmit from. */
   jobId: string;
   /** True when the system is retrying, false when a user pressed the button. */
   auto: boolean;
@@ -295,13 +319,14 @@ export async function resubmitJob(params: {
     };
   }
 
-  // 1. The parent must exist and be terminally failed. `derivation_failed` is
+  // 1. The parent must exist and be terminally failed — or cancelled by the
+  //    athlete, for "Send for analysis again". `derivation_failed` is
   //    excluded on purpose: its results already exist and resubmitting the
   //    video would spend quota to recompute what a derivation re-run gets free.
   const { data: parentRow, error: parentError } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, created_by, status, error_category, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id",
+      "id, match_id, created_by, status, error_category, error_code, error_step, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id",
     )
     .eq("id", jobId)
     .maybeSingle();
@@ -328,15 +353,48 @@ export async function resubmitJob(params: {
   }
   const parent: ParentJob = { ...raw, created_by: raw.created_by };
 
-  if (parent.status !== "failed") {
+  if (!RESUBMITTABLE_STATUSES.has(parent.status)) {
     return {
       ok: false,
       reason: "not_failed",
-      message: `Only a failed analysis can be retried; this one is ${parent.status}.`,
+      message: `Only a failed or cancelled analysis can be sent again; this one is ${parent.status}.`,
     };
   }
 
-  if (parent.error_category === "invalid_input") {
+  const cancelled = parent.status === "cancelled";
+  if (cancelled && auto) {
+    // A cancel is the athlete's decision; the system never reverses it.
+    return {
+      ok: false,
+      reason: "not_failed",
+      message: "A cancelled analysis is only sent again by the athlete.",
+    };
+  }
+
+  // classifyFailure() is the single source of truth for what a failed row
+  // means for recovery (design §4). attemptsUsed is 0 here on purpose: the
+  // attempt-ceiling gate is a separate check below (`attemptsSpent >=
+  // MAX_TOTAL_ATTEMPTS`) that this call must not pre-empt, and
+  // classifyFailure() only turns a "failed" row's retry into wait_or_ask once
+  // attemptsUsed reaches that ceiling. hasResults is irrelevant for a failed
+  // job, so it is always false.
+  //
+  // A cancelled parent did not fail, so there is nothing to classify: it is
+  // treated as "retry" and meets the same video, chain and duplicate checks.
+  const recoveryClass = cancelled
+    ? "retry"
+    : classifyFailure({
+        dbStatus: parent.status,
+        errorCode: parent.error_code,
+        errorCategory: parent.error_category,
+        errorStep: parent.error_step,
+        hasVideo: parent.video_object_key !== null,
+        hasResults: false,
+        attemptsUsed: 0,
+        stalledSubmit: false,
+      });
+
+  if (recoveryClass === "fix_recording") {
     // The vendor rejected the file itself — a frame-rate, resolution, or
     // similar recording defect. Resubmitting sends the identical blob, so it
     // cannot succeed and would only spend quota. Distinct from the
@@ -348,6 +406,31 @@ export async function resubmitJob(params: {
       reason: "input_rejected",
       message:
         "This video didn't meet one of the recording requirements, so retrying it would stop the same way. Upload a new recording instead.",
+    };
+  }
+
+  if (recoveryClass === "upload_again") {
+    // No video to resend from — refuse here, before the blob HEAD below,
+    // using the same plain copy the recovery card shows for this class.
+    return {
+      ok: false,
+      reason: "video_unavailable",
+      message: byClass.upload_again.cardBody,
+    };
+  }
+
+  if (recoveryClass !== "retry") {
+    // Unreachable today: with dbStatus "failed" and attemptsUsed forced to 0,
+    // classifyFailure() can only return "retry", "fix_recording" or
+    // "upload_again" (the other classes require derivation_failed, or a
+    // failed row past MAX_TOTAL_ATTEMPTS, which attemptsUsed: 0 rules out).
+    // Kept as a refusal rather than a fallthrough so a future change to
+    // classifyFailure()'s rules fails safe — no submit, reservation or vendor
+    // call — instead of silently reaching the retry path below.
+    return {
+      ok: false,
+      reason: "not_failed",
+      message: "This analysis cannot be retried right now.",
     };
   }
 
@@ -377,7 +460,12 @@ export async function resubmitJob(params: {
     };
   }
 
-  if (chain.length >= MAX_TOTAL_ATTEMPTS) {
+  // A cancelled row — the athlete withdrew it from the vendor's queue before
+  // it ran — spends no attempt, so cancel → "Send for analysis again" cycles
+  // never use up the retries meant for vendor failures. `chainAttempts()`
+  // counts the same way, so the "retry" / "wait_or_ask" copy agrees.
+  const attemptsSpent = chain.filter((j) => countsAsAttempt(j.status)).length;
+  if (attemptsSpent >= MAX_TOTAL_ATTEMPTS) {
     return {
       ok: false,
       reason: "attempt_ceiling",
@@ -638,16 +726,38 @@ export async function resubmitJob(params: {
 
   // 7. Reserve quota for the child. The parent's reservation was released on
   //    failure, so this is a fresh spend against the same budget.
-  const reserved = await reserveForChild({
-    supabase,
-    io,
-    auto,
-    workspace,
-    parent,
-    childId,
-    programId: match.program_id,
-    seconds: billableSeconds,
-  });
+  //
+  //    A reservation that THROWS (the RPC failed, or the auto path's
+  //    workspace read did) is not a refusal and holds nothing to release —
+  //    but the child row is already live, and an `uploaded` orphan would
+  //    trip `processing_jobs_one_live_per_match` on every later retry. So it
+  //    gets the same cleanup as a refusal, and a "try again" answer.
+  let reserved: Awaited<ReturnType<typeof reserveForChild>>;
+  try {
+    reserved = await reserveForChild({
+      supabase,
+      io,
+      auto,
+      workspace,
+      parent,
+      childId,
+      programId: match.program_id,
+      seconds: billableSeconds,
+    });
+  } catch (err) {
+    console.error(`${LOG} quota reservation failed`, {
+      jobId: parent.id,
+      childId,
+      code: (err as { code?: unknown } | null)?.code ?? null,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    await supabase.from("processing_jobs").delete().eq("id", childId);
+    return {
+      ok: false,
+      reason: "quota_unavailable",
+      message: "Could not reserve analysis time. Try again.",
+    };
+  }
 
   if (!reserved.ok) {
     // The child row did nothing yet — remove it rather than leaving a
@@ -795,9 +905,17 @@ export async function resubmitJob(params: {
 }
 
 /**
+ * How many links either walk in {@link loadChain} follows. Cancelled rows
+ * spend no attempt, so a chain can run deeper than the attempt ceiling; the
+ * bound only has to outlast any plausible run of cancel → resend cycles while
+ * still stopping a data cycle from spinning the loop.
+ */
+const MAX_CHAIN_DEPTH = 50;
+
+/**
  * Every job in this chain: the root plus all descendants. Returns null on a
- * read error. Bounded — with a ceiling of 3 the loop runs at most a few times,
- * and the bound exists so a data cycle cannot spin it.
+ * read error. Bounded by {@link MAX_CHAIN_DEPTH} so a data cycle cannot spin
+ * it; a normal chain is a handful of rows.
  */
 async function loadChain(
   supabase: SupabaseClient,
@@ -806,7 +924,7 @@ async function loadChain(
   // Up to the root.
   let rootId = from.id;
   let parentId = from.resubmitted_from_job_id;
-  for (let i = 0; parentId && i < 10; i++) {
+  for (let i = 0; parentId && i < MAX_CHAIN_DEPTH; i++) {
     rootId = parentId;
     const { data, error } = await supabase
       .from("processing_jobs")
@@ -831,7 +949,7 @@ async function loadChain(
     rootRow as { id: string; status: string; auto_resubmitted: boolean },
   ];
   let frontier = [rootId];
-  for (let i = 0; frontier.length > 0 && i < 10; i++) {
+  for (let i = 0; frontier.length > 0 && i < MAX_CHAIN_DEPTH; i++) {
     const { data, error } = await supabase
       .from("processing_jobs")
       .select("id, status, auto_resubmitted")
@@ -918,7 +1036,14 @@ async function resolveAutoRetryWorkspace(params: {
   if (programId === null) {
     // Personal workspace: always permitted, matching personalWorkspace() —
     // there is no membership row to consult and the viewer is the only
-    // member of their own workspace.
+    // member of their own workspace. The pilot flag is re-read so a pilot's
+    // retry draws their 10h exactly as a fresh submission would.
+    const { data: owner, error: ownerError } = await supabase
+      .from("users")
+      .select("individual_pilot")
+      .eq("id", userId)
+      .maybeSingle();
+    if (ownerError) return null;
     return {
       id: userId,
       kind: "personal",
@@ -929,6 +1054,7 @@ async function resolveAutoRetryWorkspace(params: {
       role: "owner",
       mark: "",
       canSubmitVideo: true,
+      individualPilot: owner?.individual_pilot === true,
       programStatus: null,
       playersCanUpload: false,
       uploadPolicy: "everyone",

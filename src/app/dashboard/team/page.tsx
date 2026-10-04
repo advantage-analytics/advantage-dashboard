@@ -32,6 +32,7 @@ import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
 import { TeamSetupLine } from "@/components/dashboard/team/team-setup-line";
 import { TeamHomeDayZeroPage } from "@/components/dashboard/team/team-home-day-zero-page";
 import { PresenceReport } from "@/components/dashboard/presence-provider";
+import { SCHEDULE_ENABLED, scheduleSlot } from "@/lib/schedule/availability";
 
 import { topMovers } from "@/lib/data/team-movers";
 import { TopMoversFrame } from "@/components/dashboard/team/top-movers";
@@ -51,7 +52,7 @@ import {
   HistoryBodyPending,
 } from "@/components/dashboard/loading/team-home-skeleton";
 
-export const metadata = { title: "Team Home" };
+export const metadata = { title: "Team home" };
 type Resources = ReturnType<typeof getTeamHomeResources>;
 
 /** Known card frames render immediately; each resource fills its own region. */
@@ -69,16 +70,23 @@ export default async function TeamHomePage() {
     currentBillingMonth(),
     active.orgType,
   );
+  // Nothing below awaits the schedule while it is closed, so a failed read
+  // must not surface as an unhandled rejection.
+  if (!SCHEDULE_ENABLED) resources.schedule.catch(() => {});
   const state = await presence;
   const isStaff = isProgramStaff(active);
-  const isDayZero = !state.hasMatches && !state.hasRoster && !state.hasSchedule;
+  // With the Schedule closed (`lib/schedule/availability.ts`) a program's
+  // events are not something it can see or add to, so they neither keep it
+  // out of day zero nor count as a dual for the loading fallback.
+  const hasSchedule = SCHEDULE_ENABLED && state.hasSchedule;
+  const isDayZero = !state.hasMatches && !state.hasRoster && !hasSchedule;
   // Keeps the loading fallback's day-zero hint honest across navigation.
   const report = (
     <PresenceReport
       workspaceId={active.id}
       matches={state.hasMatches}
       roster={state.hasRoster}
-      duals={state.hasSchedule}
+      duals={hasSchedule}
     />
   );
 
@@ -108,10 +116,18 @@ export default async function TeamHomePage() {
     <HomeKpisPending />,
     <Kpis resources={resources} />,
   );
-  const dual = region(
-    "Dual",
-    <DualPending />,
-    <Dual resources={resources} canSchedule={canManageTeamSchedule(active)} />,
+  // The dual, court-record and dual-history cards are built from the
+  // schedule and link into it; while it is closed they are not drawn at all,
+  // and `TeamHomeRegions` closes up around the gap.
+  const dual = scheduleSlot(
+    region(
+      "Dual",
+      <DualPending />,
+      <Dual
+        resources={resources}
+        canSchedule={canManageTeamSchedule(active)}
+      />,
+    ),
   );
   const movers = region(
     "Top movers",
@@ -125,19 +141,23 @@ export default async function TeamHomePage() {
     <FocusCardPending />,
     <Insight resources={resources} programId={active.id} />,
   );
-  const court = region(
-    "Court record",
-    <CourtRecordFrame>
-      <CourtBodyPending />
-    </CourtRecordFrame>,
-    <Court resources={resources} />,
+  const court = scheduleSlot(
+    region(
+      "Court record",
+      <CourtRecordFrame>
+        <CourtBodyPending />
+      </CourtRecordFrame>,
+      <Court resources={resources} />,
+    ),
   );
-  const history = region(
-    "Dual match history",
-    <DualHistoryFrame>
-      <HistoryBodyPending />
-    </DualHistoryFrame>,
-    <History resources={resources} teamName={active.name} />,
+  const history = scheduleSlot(
+    region(
+      "Dual match history",
+      <DualHistoryFrame>
+        <HistoryBodyPending />
+      </DualHistoryFrame>,
+      <History resources={resources} teamName={active.name} />,
+    ),
   );
   const setupLine = isStaff
     ? region("Getting set up", null, <Setup resources={resources} />)
@@ -315,16 +335,20 @@ async function Footer({ resources }: { resources: Resources }) {
   );
 }
 async function Setup({ resources }: { resources: Resources }) {
-  const [roster, schedule, analytics] = await Promise.all([
+  const [roster, analytics] = await Promise.all([
     resources.roster,
-    resources.schedule,
     resources.analytics,
   ]);
+  // Not read while the Schedule is closed: `TeamSetupLine` drops the step
+  // (`lib/schedule/availability.ts`).
+  const schedule =
+    SCHEDULE_ENABLED &&
+    (await resources.schedule).scheduleRows.some((row) => row.kind === "dual");
   return (
     <TeamSetupLine
       setup={{
         roster: roster.members.some((member) => member.role === "player"),
-        schedule: schedule.scheduleRows.some((row) => row.kind === "dual"),
+        schedule,
         report: analytics.firstReport !== null,
       }}
     />

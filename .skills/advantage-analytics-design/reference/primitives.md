@@ -33,8 +33,13 @@ QF · SF · F`).
   the Players block, never repeated as a Context field. Program players are
   edited from the roster, never from a match.
 
-Copy conventions the lists lean on: sentence case; middots join suffixes and
-counts ("Cardinal · M", "12 matches · 8 won"); waiting states say "In line —
+Copy conventions the lists lean on: sentence case **per segment** — a line
+joined by middots is several short sentences, and each one starts with a
+capital ("Set 2 · Game 5 · Lee serving", "One-off · Not on the schedule"); a
+segment that opens on a number or a name is left as it is ("Cardinal · M",
+"12 matches · 8 won"). _Supersedes (2026-09-30): "sentence case; middots join
+suffixes and counts ("Cardinal · M", "12 matches · 8 won")"._ Enforced by
+`scripts/check-design-drift.mjs` check 8. Waiting states say "In line —
 we'll notify you", **never an invented ETA**; chrome copy is one word where
 one will do (Profile · Account · Preferences · Usage · Plan · Team). The design
 project's sample personas: Jordan Lee · Elena Vargas · Meridian State.
@@ -46,6 +51,15 @@ project's sample personas: Jordan Lee · Elena Vargas · Meridian State.
 **`Score`** — tiebreak scores are superscripts, never parentheses: `7-6⁴`,
 digit at 0.6em raised 1.05em, 0.5px off the score. Applies to any score
 anywhere, not a roster-page treatment.
+
+**Score — the winner of each completed set is bold.** In a per-row final
+scoreboard (the match report's rail) the digit of whoever won a set prints
+`font-semibold` in full ink (ink-900) and the loser's stays regular in ink-600, on either row, set by set, never per row: a
+match winner's lost set is regular, and the opponent's winning digit in it is
+bold. This holds in an unfinished match too (Retired, Unfinished, Withdrew,
+Defaulted) for every set that was completed; the last set of such a match is
+the one left open, so it bolds neither digit. A level set has no winner.
+Shipped: `rail-scoreboard.tsx` (`wonSets`).
 
 **`ResultMark`** — `CircleCheck`/`CircleX`/`CircleMinus` at 14px stroke 1.5,
 the outcome triple (green/red/ink-500 for a level dual). **The** outcome
@@ -176,6 +190,34 @@ dot for single-choice (`Radio`), 4px-radius square for multi-select
 also sets border `--blue` + `--blue-tint-08` wash — the dot marks the
 selected item, it never appears on hover.
 
+**`Checkbox`** (2026-09-29, in-repo, `ui/checkbox.tsx`) — the one checkbox on
+the dashboard, for multi-select and for a yes/no a form asks. 14px square,
+`--radius-cell` (4px) corners; at rest a 1px `--ink-300` ring and no fill (a
+row's hover wash shows through); checked, solid `--blue` with a white Lucide `Check` at 10px,
+stroke 3; disabled, the same mark at 50% opacity. It is the geometry the
+Matches filter menu's checklist rows drew by hand, lifted into a primitive.
+**Never the browser's native box** — `accent-[var(--blue)]` on an
+`<input type="checkbox">` renders at the OS's size, radius and check weight,
+differently per platform, and was how the roster dialog's "Also send an
+invite" and the wizard's "Use for future matches" rows came to look nothing
+like the filter menu. Two exports, one mark:
+
+- **`CheckboxMark`** — the box alone, `aria-hidden`, for a row that is itself
+  the control (`<button role="checkbox" aria-checked>`), as in the filter
+  menu's checklist, where the whole 32px row toggles and a nested input would
+  be a second focus stop.
+- **`Checkbox`** — a visually hidden native `<input type="checkbox">` drawn by
+  the mark, for form rows. It goes **inside** the `<label>` that carries the
+  sentence (12px `--ink-700`, an optional 11px `--ink-500` sub-line), with
+  `mt-px` to sit on the first line; the label's text toggles it. Focus rings
+  the mark (`--focus-ring`), since the input is invisible.
+
+_Shipped:_ `AuthCheckbox` (`components/auth/auth-checkbox.tsx`, 16px,
+`--border-field` ring) on the auth and claim forms, and the Shots tab's
+save-view dialog's "Share with team" box (16px, hand-rolled, with a dark-tone
+variant) predate this and still draw their own — drift to migrate onto
+`Checkbox`, not a second style.
+
 **`SlotLine`** — one sentence, two hosts. When a match belongs to a lineup
 slot the product says so as: line label (11px ink-500; mono only inside a
 lineup list) → `chevron-right` 12px ink-300 → the matchup (12px; the
@@ -301,7 +343,7 @@ layout: `FloatMenuItem` drew "a 12px Signal Blue check" in its leading slot,
 so every `MenuSelect` marked the pick on the left while the hand-built menus —
 workspace switchers, the wizard's roster, source and line menus, the lineup
 pickers — marked it on the right, at three sizes and three stroke weights._
-Single choice = the check-dot `Radio`, multi-select = the square `Checkbox`; a
+Single choice = the check-dot `Radio`, multi-select = the square `Checkbox` (`ui/checkbox.tsx`); a
 dialog carries one primary, never two.
 
 ---

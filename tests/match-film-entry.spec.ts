@@ -755,24 +755,55 @@ const PAGE = readFileSync(
   "src/app/dashboard/matches/(detail)/[matchId]/page.tsx",
   "utf8",
 );
+// The gate's literals moved from the page to the shared predicates it calls
+// (T27, approved as a relocation 2026-09-28): the route's skeleton and the page
+// must decide from one function, so the expressions are pinned where they live.
+const ANALYSIS = readFileSync("src/lib/data/match-analysis.ts", "utf8");
 
 test("the analysing short-circuit still returns before any Film entry", () => {
   // Guardrails §3.3. The gate, its condition and its early return are intact,
   // and the Video view — with its actions — is below it, so an in-flight match
   // still renders hero + progress and nothing else.
   const gate = PAGE.indexOf("if (isAwaitingAnalysis)");
-  const progress = PAGE.indexOf("<MatchAnalysisProgress");
+  const progress = PAGE.indexOf("<AnalysisSteps");
   const film = PAGE.indexOf("<FilmTab");
   expect(gate).toBeGreaterThan(-1);
   expect(progress).toBeGreaterThan(gate);
   expect(film).toBeGreaterThan(progress);
-  expect(PAGE).toContain(
-    "isInFlight(analysis.status) || isAnalysisFailed(analysis.status)",
+  expect(ANALYSIS).toContain(
+    "(isInFlight(status) || isAnalysisFailed(status))",
   );
+  expect(PAGE).toContain('matchPageKind(analysis) === "steps"');
   // The short-circuit's own return carries no view switcher and no FilmTab.
   const shortCircuit = PAGE.slice(gate, PAGE.indexOf("<MarkReportSeen"));
   expect(shortCircuit).not.toContain("FilmTab");
   expect(shortCircuit).not.toContain("MatchReportViewSwitcher");
+});
+
+test("a stats_unavailable match is let past the short-circuit, and only it", () => {
+  // Product decision 2026-09-27: a deterministic derivation refusal must not
+  // block the match behind the progress card. The gate's own condition keeps
+  // every other in-flight or failed class, and the exemption is scoped to a
+  // failed status so a stale class cannot wave an in-flight job through.
+  // The page derives both names only by calling the shared predicates on its
+  // own post-reconcile `analysis`.
+  expect(PAGE).toMatch(
+    /const isAwaitingAnalysis = matchPageKind\(analysis\) === "steps";/,
+  );
+  expect(PAGE).toMatch(
+    /const statsUnavailable = isStatsUnavailable\(analysis\);/,
+  );
+  const decl = ANALYSIS.slice(
+    ANALYSIS.indexOf("export function matchPageKind("),
+    ANALYSIS.indexOf("export function matchListGroup("),
+  );
+  expect(decl).toContain("(isInFlight(status) || isAnalysisFailed(status))");
+  expect(decl).toContain("!isStatsUnavailable(");
+  expect(ANALYSIS).toMatch(
+    /return isAnalysisFailed\(status\) && recovery === "stats_unavailable";/,
+  );
+  // And the report is told, so Statistics draws its note instead of stats.
+  expect(PAGE).toContain("statsUnavailable={statsUnavailable}");
 });
 
 test("the capability is resolved on the server and handed down", () => {

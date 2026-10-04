@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { PointList } from "@/components/dashboard/matches/match-detail/film/point-list";
-import { DEFAULT_FILM_FILTERS } from "@/components/dashboard/matches/match-detail/film/film-filters";
 import type { ShotStop } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import type { Match } from "@/lib/data/types";
@@ -131,12 +130,6 @@ root.render(
       <PointList
         allPoints={[POINT]}
         visiblePoints={[POINT]}
-        filters={DEFAULT_FILM_FILTERS}
-        onFiltersChange={() => {}}
-        advancedOpen={false}
-        onAdvancedOpenChange={() => {}}
-        openSections={[]}
-        onOpenSectionsChange={() => {}}
         activePointId={POINT.id}
         activeStart={0}
         activeEnd={22}

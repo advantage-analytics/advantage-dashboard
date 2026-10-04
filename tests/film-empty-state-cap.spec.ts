@@ -77,7 +77,7 @@ test("a null quota keeps today's copy", () => {
   );
   expect(t).toContain("Add video");
   expect(t).toContain(
-    "MP4 up to 8 GB · we index the points, you keep the file",
+    "MP4 up to 8 GB · We index the points, you keep the file",
   );
   expect(t).not.toContain("match video used");
   expect(hrefs(html)).toEqual([

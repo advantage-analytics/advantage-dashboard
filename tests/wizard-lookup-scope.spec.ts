@@ -83,6 +83,7 @@ function harness(role = "owner", admin = true, personal = false) {
           order: () => q,
           limit: () => q,
           not: () => q,
+          or: () => q,
           eq(key: string, value: unknown) {
             data = data.filter((r) => r[key] === value || table === "programs");
             return q;

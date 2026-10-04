@@ -12,8 +12,7 @@ import { getMyPlayerIds, isMe } from "@/lib/data/player-identity-server";
 import { youSeat } from "@/lib/data/viewer-side";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
-import { UNKNOWN_EVENT_PLACEHOLDER } from "@/lib/data/match-share-format";
-import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
+import { formatMatchDuration } from "@/lib/format/duration";
 import type { Match, SetScore } from "@/lib/data/types";
 
 export interface DbMatch {
@@ -187,15 +186,15 @@ export function transformDbMatchToMatch(
 
   return {
     id: row.id,
-    tournamentName: row.tournament_name ?? UNKNOWN_EVENT_PLACEHOLDER,
+    tournamentName: row.tournament_name,
     date: formatDisplayDate(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
-    verificationStatus: row.verified ? "Verified Result" : undefined,
+    verificationStatus: row.verified ? "Verified result" : undefined,
     sourceProvider: row.source_provider ?? undefined,
     round: row.round ?? undefined,
     matchContext: matchContextCaption(row.result),
-    duration: formatDuration(row.duration ?? undefined),
+    duration: formatMatchDuration(row.duration),
     durationSec: row.duration != null ? Math.round(row.duration / 1000) : null,
     player1: {
       name: row.player1_name,
@@ -415,6 +414,44 @@ export async function resolveAnalysedWindowSeconds(
 }
 
 /**
+ * True only when the match's newest completed job recorded that the derived
+ * point timeline could not be reconciled against the score the player
+ * entered (T13's `deriveAndPublish`, `derivation_quality->fold`). Jobs
+ * derived before that migration carry no `fold` key at all, which reads as
+ * `false` here — no backfill (guardrails §2): an older match simply shows
+ * nothing extra.
+ *
+ * Runs its own `processing_jobs` read rather than sharing
+ * `resolveAnalysedWindowSeconds`'s: that helper only queries when the row has
+ * no stored duration, but the fold flag has to be checked on every splitstep
+ * match regardless of whether a duration is already on file. Same admin
+ * client and RLS reasoning as that helper — see its own comment.
+ */
+async function resolveFoldUnreconciled(dbRow: DbMatch): Promise<boolean> {
+  if (dbRow.source_provider !== "splitstep") return false;
+
+  const { data: jobs, error } = await createAdminClient()
+    .from("processing_jobs")
+    .select("derivation_quality")
+    .eq("match_id", dbRow.id)
+    .eq("status", "completed")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (error) {
+    console.error("[match-detail] could not read the fold reconciliation", {
+      matchId: dbRow.id,
+      message: error.message,
+    });
+    return false;
+  }
+
+  const quality = jobs?.[0]?.derivation_quality as
+    { fold?: { reconciled?: boolean } } | null | undefined;
+  return quality?.fold?.reconciled === false;
+}
+
+/**
  * The `matches` columns the report reads — one string, so the public share
  * loader (`match-share-server.ts`) and this one cannot drift apart on which
  * fields `DbMatch` actually carries.
@@ -462,6 +499,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     uploadedBy,
     profileResult,
     windowSeconds,
+    foldUnreconciled,
   ] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId),
     getMatchPointsFromSupabase(matchId),
@@ -491,6 +529,8 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     // has none (the wizard writes 0 for video). Same wave: it needs only
     // `dbRow`, and it skips the round trip for every match that has one.
     resolveAnalysedWindowSeconds(dbRow),
+    // Same wave, same reason as `windowSeconds` above.
+    resolveFoldUnreconciled(dbRow),
   ]);
 
   const profiles = new Map<string, PlayerProfile>();
@@ -514,7 +554,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   match.uploadedBy = uploadedBy;
   if (!(match.durationSec && match.durationSec > 0) && windowSeconds) {
     match.durationSec = windowSeconds;
-    match.duration = formatDuration(windowSeconds * 1000);
+    match.duration = formatMatchDuration(windowSeconds * 1000);
   }
 
   return {
@@ -533,5 +573,6 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     // (spec 2026-09-15 match report › Decisions 4).
     insights: dbRow.insights ?? null,
     kpiHistory,
+    foldUnreconciled,
   };
 });

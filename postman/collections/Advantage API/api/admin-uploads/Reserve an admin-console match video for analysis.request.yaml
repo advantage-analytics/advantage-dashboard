@@ -1,0 +1,48 @@
+$kind: http-request
+description: Admin only. Validates the trim window and the three vendor answers, builds the vendor request to prove it would be accepted, and reserves the operation through `admin_submit_match_video`, which returns the match and job the upload then targets (`/api/splitstep/upload-url`, then `/api/splitstep/jobs`). For a prepared match (`matchId` + `fingerprint`) the players, score and details come from the recorded match and must not be sent; otherwise `playerId`, `opponentName`, `score`, `date`, `courtType` and `bestOf` describe a new singles match. Unknown keys are refused.
+url: "{{baseUrl}}/api/admin/uploads/video"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "operationId": "<uuid>",
+      "itemId": "<uuid>",
+      "programId": "<uuid>",
+      "startSeconds": 0,
+      "endSeconds": 0,
+      "initialTopPlayerIsPlayer1": true,
+      "adScoring": true,
+      "fixedCamera": true,
+      "matchId": "<string,null-uuid>",
+      "fingerprint": "<string>",
+      "playerId": "<uuid>",
+      "opponentName": "<string>",
+      "score": {
+        "player1": [
+          "<integer,null>",
+          "<integer,null>"
+        ],
+        "player2": [
+          "<integer,null>",
+          "<integer,null>"
+        ],
+        "player1_tiebreaks": [
+          "<integer,null>",
+          "<integer,null>"
+        ],
+        "player2_tiebreaks": [
+          "<integer,null>",
+          "<integer,null>"
+        ]
+      },
+      "date": "2024-01-01",
+      "courtType": "<string,null>",
+      "bestOf": 0
+    }
+settings: {}
+examples: ./.resources/Reserve an admin-console match video for analysis.resources/examples
+order: 2000

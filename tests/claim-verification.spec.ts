@@ -69,7 +69,7 @@ test.describe("claim verification — mint, hash, match", () => {
 
   test("the URL carries the raw token, percent-encoded, over an origin-less path", () => {
     // The admin's "Copy link" prefixes `verifyIdentityPath` with the request's
-    // origin; the email prefixes it with `siteUrl()`. One token, one path, two
+    // origin; the email prefixes it with `emailOrigin()`. One token, one path, two
     // origins — so the path must carry nothing that presumes either.
     const path = verifyIdentityPath("a+b/c=d");
     const url = verifyIdentityUrl("a+b/c=d");

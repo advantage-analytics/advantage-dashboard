@@ -228,8 +228,8 @@ function useFocusWhenRequested(
  * One column, and the text runs the card's full width: the claim at 13px
  * medium ink-900, the evidence under it at 11px, then a foot row with the
  * engine credit and Collapse (sizes reduced at the user's request,
- * 2026-09-16). Across the whole pane a 4–5 sentence summary sets as a few
- * lines. No `max-w`, so the text's edges line up with the widgets row below.
+ * 2026-09-16). Across the whole pane a 2–3 sentence summary sets as a line or
+ * two. No `max-w`, so the text's edges line up with the widgets row below.
  * The card's surface is `MatchReportInsight`'s; this is its content.
  */
 function InsightExpanded({
@@ -247,7 +247,9 @@ function InsightExpanded({
 
   return (
     <div className="flex flex-col gap-2 p-[16px_20px_12px]">
-      <p className="text-body [text-wrap:pretty]" style={CLAIM_STYLE}>
+      {/* The claim is a headline, so it balances; the evidence is prose and
+          stays `pretty`. */}
+      <p className="text-body [text-wrap:balance]" style={CLAIM_STYLE}>
         {claim}
         {!evidence && <WhyThisSuffix readOnly={meta.readOnly} />}
       </p>

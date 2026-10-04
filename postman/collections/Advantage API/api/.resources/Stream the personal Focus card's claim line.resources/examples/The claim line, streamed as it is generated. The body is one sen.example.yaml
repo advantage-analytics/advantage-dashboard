@@ -1,0 +1,23 @@
+$kind: http-example
+name: The claim line, streamed as it is generated. The body is one sentence of plain text with no markup, sent as `text/plain; charset=utf-8` by `textStreamResponse()`.
+request:
+  url: "{{baseUrl}}/api/home-insight"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: text/plain
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: text/plain
+  body:
+    type: text
+    content: Second serves are deciding your losses.
+order: 1000

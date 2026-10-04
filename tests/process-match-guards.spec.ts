@@ -569,7 +569,7 @@ test("each shot's zone is placed from its own hitter's contact, never the oppone
   const rows: ShotRow[] = [
     [1, 1, 1, 1, HOST, "Serve", "first_serve", "Flat", 110, 0.5, -0.3, 3.1, 17.9, "In", 12.5],
     // SwingVision numbers some non-serves 1 too: a stroke, so a direction.
-    [1, 1, 1, 1, GUEST, "Feed", null, "Flat", 30, -2.5, 24, 2.2, 6, "In", 12],
+    [1, 1, 1, 1, GUEST, "Forehand", null, "Flat", 30, -2.5, 24, 2.2, 6, "In", 13],
     [1, 1, 2, 1, HOST, "Serve", "first_serve", "Slice", 92, 0.5, -0.3, -2, 18.2, "In", 20],
     [1, 1, 2, 2, GUEST, "Forehand", null, "Topspin", 65, -2.2, 24.5, 3, 4, "In", 21],
     [1, 1, 2, 3, HOST, "Backhand", null, "Slice", 60, 3.1, 0.4, 2.5, 20, "In", 22],
@@ -587,7 +587,7 @@ test("each shot's zone is placed from its own hitter's contact, never the oppone
   const shots = args.p_shots as Record<string, unknown>[];
   expect(shots.map((s) => [s.shot_number, s.zone])).toEqual([
     [1, "Wide"], // |3.1| >= 2.74
-    [1, "Crosscourt"], // a feed at shot 1 is not a serve
+    [1, "Crosscourt"], // a groundstroke at shot 1 is not a serve
     [1, "Body"], // 1.37 <= |-2| < 2.74
     [2, "Crosscourt"], // struck at -2.2, lands at +3: crosses the line
     [3, "Down the Line"], // struck at +3.1, lands at +2.5: stays on its side
@@ -595,6 +595,57 @@ test("each shot's zone is placed from its own hitter's contact, never the oppone
     [5, null], // no contact: unmeasured, never a guess
     [6, null], // struck on the centre line itself
   ]);
+});
+
+test("a point keeps only its deciding rally, and a played-on first serve lands as the fault", async () => {
+  // SwingVision files every ball struck since the previous point under the
+  // next one, each rally numbered from shot 1 — and now and then the next
+  // point's feed after the rally, numbered on from it. Point 1: a let, the
+  // ace, then a feed and the ball hit back off it. Point 2: the guest's feed,
+  // a first serve the tracker called in that the players called out and
+  // played on (Type none), then the second-serve rally the Points row
+  // scores. Listed out of strike order on purpose.
+  // prettier-ignore
+  const rows: ShotRow[] = [
+    [1, 1, 1, 1, HOST, "Serve", "first_serve", "Flat", 110, 0.5, -0.3, 3.1, 17.9, "In", 12.5],
+    [1, 1, 1, 2, GUEST, "Feed", "none", "Flat", 25, -2, 24, 1, 2, "In", 13.5],
+    [1, 1, 1, 2, HOST, "Backhand", "none", "Flat", 30, 1, 1, -1, 20, "Net", 14.2],
+    [1, 1, 1, 1, HOST, "Serve", "first_serve", "Flat", 108, 0.5, -0.3, 1, 12, "Net", 10],
+    [1, 1, 2, 0, GUEST, "Feed", "none", "Flat", 30, -2.5, 24, 2.2, 6, "In", 14],
+    [1, 1, 2, 1, HOST, "Serve", "first_serve", "Flat", 101, 0.5, -0.3, -2, 18.2, "In", 16],
+    [1, 1, 2, 1, GUEST, "Forehand", "none", "Topspin", 50, -2.2, 24.5, 3, 4, "In", 17],
+    [1, 1, 2, 2, HOST, "Volley", "none", "Flat", 40, 1, 8, -1.5, 20, "In", 18],
+    [1, 1, 2, 1, HOST, "Serve", "second_serve", "Kick", 80, 0.5, -0.3, -1, 18.2, "In", 20],
+    [1, 1, 2, 2, GUEST, "Forehand", "second_return", "Topspin", 65, -1.2, 22, 2, 5, "In", 21],
+    [1, 1, 2, 3, HOST, "Forehand", "serve_plus_one", "Topspin", 70, 2.1, 1.5, -3, 20, "Out", 22.4],
+  ];
+  const { status, argsOf } = await invoke({
+    bearer: SERVICE_ROLE_KEY,
+    body: { matchId: MATCH, fileNames: [OWN_FILE] },
+    workbook: await buildWorkbook(rows),
+  });
+  expect(status).toBe(200);
+  const [args] = argsOf("import_match_rows");
+  const points = args.p_points as Record<string, unknown>[];
+  const shots = args.p_shots as Record<string, unknown>[];
+  const numberOf = new Map(points.map((p) => [p.id, p.point_number]));
+  expect(
+    shots.map((s) => [
+      numberOf.get(s.point_id),
+      s.shot_number,
+      s.shot_type,
+      s.result,
+      s.video_time,
+    ]),
+  ).toEqual([
+    [1, 1, "First Serve", "In", 12.5], // the let before it, the feed after, gone
+    [2, 1, "First Serve", "Out", 16], // the fault, called out by the players
+    [2, 1, "Second Serve", "In", 20],
+    [2, 2, "Forehand", "In", 21],
+    [2, 3, "Forehand", "Out", 22.4],
+  ]);
+  // Rally length is the deciding rally's, not the played-on one's.
+  expect(points.map((p) => p.rally_length)).toEqual([1, 3]);
 });
 
 test("the RPC's unique_violation is answered 409 with the pre-check's body and nothing is invoked", async () => {

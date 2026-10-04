@@ -4,8 +4,9 @@
  * `/api/home-insight` and `/api/team-insight` differ in what they read and
  * what they ask; how they answer is one contract — a plain-text stream of one
  * sentence — and the pipe from the adapter's async iterable to a `Response`
- * was written out in both, and in `/api/chat` before them. Three copies of an
- * encoder loop is three places a stream error handles differently.
+ * was written out in both, and in the since-deleted chat route before them.
+ * Three copies of an encoder loop is three places a stream error handles
+ * differently.
  */
 
 /** An async iterable of text chunks, as a streamed `text/plain` response. */

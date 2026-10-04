@@ -13,6 +13,10 @@ import { PanelRight } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import {
+  isDerivedMatch,
+  pointResultLabel,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { isFormControl } from "@/components/dashboard/matches/new-match-wizard/useWizardKeys";
 import {
   formatClock,
@@ -46,11 +50,11 @@ import {
 } from "./film-court-card";
 import { ANCHOR_LABEL, SETTLE_CLASS, useCornerDrag } from "./use-corner-drag";
 import {
-  cutName,
-  hasActiveFilmFilters,
+  filmListActive,
+  filmListName,
   lastNameOf,
-  type FilmFilters,
-} from "./film-filters";
+  type FilmListFilters,
+} from "./film-list-filters";
 import { FOCUSABLE_SELECTOR, nextFocusTarget } from "./film-focus-trap";
 import { FILM_REFUSAL_COPY } from "./film-refusal-copy";
 import { FilmRoomDrawer } from "./film-room-drawer";
@@ -79,7 +83,11 @@ import {
   roomMotionPath,
   type Rect,
 } from "./film-motion";
-import { activeShotAt, shotStops as buildShotStops } from "./film-shots";
+import {
+  activeShotAt,
+  rallyNumbering,
+  shotStops as buildShotStops,
+} from "./film-shots";
 import {
   activeStopAt,
   setSegments,
@@ -187,8 +195,8 @@ export interface FilmFullscreenProps {
   columns: BoardColumns;
   allPoints: MatchPoint[];
   visiblePoints: MatchPoint[];
-  filters: FilmFilters;
-  onFiltersChange: (filters: FilmFilters) => void;
+  /** The list's filter layers, handed to the drawer's list untouched. */
+  filmFilters: FilmListFilters;
   onToggleSaved: (pointId: string) => void;
   /**
    * Follow-or-hold (T17 design), owned by `FilmRoom` so it outlives this
@@ -636,9 +644,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         youIsPlayer1: sides.you.isPlayer1,
         filmTime: currentTime,
         view: courtView,
+        pointShots: activePoint?.shots,
       },
     );
   }, [
+    activePoint,
     bounceTimes,
     courtView,
     courtOn,
@@ -650,17 +660,24 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   ]);
   const courtTitle =
     courtMode === "match"
-      ? hasActiveFilmFilters(p.filters)
-        ? cutName(p.filters, sides)
+      ? filmListActive(p.filmFilters)
+        ? filmListName(p.filmFilters, {
+            you: lastNameOf(sides.you.name),
+            opponent: lastNameOf(sides.opp.name),
+          })
         : "Whole match"
       : "This point";
-  // The point's caption counts the shots the card can draw and number — the
-  // same total the readout's "shot 3 of 7" is out of — so the two can never
-  // disagree about how long the rally was.
+  // The point's caption is the rally's length (`rallyNumbering`, from the
+  // point's full shot list) — the same total the readout's "shot 3 of 7" is
+  // out of — so the two can never disagree about how long the rally was.
+  const rallyShots = useMemo(
+    () => rallyNumbering(activePoint?.shots).count,
+    [activePoint],
+  );
   const courtCaption =
     courtMode === "match"
       ? `${p.visiblePoints.length} points`
-      : `${pointShotStops.length} shots`;
+      : `${rallyShots} ${rallyShots === 1 ? "shot" : "shots"}`;
 
   /* ── The board's column ──────────────────────────────────────────────── */
 
@@ -1535,7 +1552,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                   // Between points the board says nothing about a point; T4's
                   // foot falls back to the game state on a null name (R7).
                   pointName={
-                    activePoint ? activePoint.resultType || "Point" : null
+                    activePoint
+                      ? pointResultLabel(activePoint, {
+                          isDerived: isDerivedMatch(match),
+                        })
+                      : null
                   }
                   playing={playing}
                   elapsed={formatClock(currentTime)}
@@ -1659,8 +1680,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 onCollapse={collapsePanel}
                 allPoints={p.allPoints}
                 visiblePoints={p.visiblePoints}
-                filters={p.filters}
-                onFiltersChange={p.onFiltersChange}
+                filmFilters={p.filmFilters}
                 // Between points no row is lit, and the progress rule belongs
                 // to the row that is (R7) — so both read the playing point,
                 // never the last one reached.

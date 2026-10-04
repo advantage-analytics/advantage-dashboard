@@ -8,11 +8,15 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
+import { Clock, ExternalLink } from "lucide-react";
+import { ConfirmDialog, ConfirmNote } from "@/components/ui/confirm-dialog";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { formatEta } from "@/lib/data/match-analysis";
-import { ScoreLine } from "@/components/dashboard/score-line";
+import {
+  MatchLine,
+  PAGE_STEPPER_TITLE,
+} from "@/components/dashboard/matches/match-line";
 import {
   useMatchStatsReady,
   type MatchStatsState,
@@ -87,13 +91,15 @@ export function UploadMatchSuccess({
     <div className="mx-auto w-full max-w-[488px] px-6 pt-[clamp(64px,18vh,176px)] pb-24">
       <div className="animate-fadeIn flex flex-col">
         <div className="flex flex-col gap-2">
-          <h1
-            className="text-[24px] leading-[1.2] font-light tracking-[-0.3px] text-[var(--ink-900)]"
-            style={{ textWrap: "balance" }}
-          >
+          <h1 className={PAGE_STEPPER_TITLE} style={{ textWrap: "balance" }}>
             {view.title}
           </h1>
-          <MatchLine match={match} />
+          <MatchLine
+            player={match.playerName}
+            opponent={match.opponentName}
+            won={match.won}
+            sets={match.sets}
+          />
         </div>
 
         <ol className="mt-9 flex flex-col" aria-label="Progress">
@@ -319,7 +325,9 @@ function successView(
         steps: [
           saved,
           uploaded,
-          { key: "analysis", state: "now", label: "Analysis in line" },
+          // Waiting, not running: the vendor has it in line. The same `wait`
+          // mark the match page and the Matches row draw for Queued.
+          { key: "analysis", state: "wait", label: "Analysis in line" },
         ],
         busy: false,
         primary: "view",
@@ -378,22 +386,6 @@ const QUIET_LINK =
   "inline-flex h-9 items-center gap-1.5 text-[13px] text-[var(--ink-700)] transition-colors duration-200 hover:text-[var(--ink-900)] focus-visible:outline-none";
 
 const NOTE = "text-[12px] leading-[1.55] text-[var(--ink-600)]";
-
-function MatchLine({ match }: { match: CreatedMatch }) {
-  const result = match.won === null ? null : match.won ? "Won" : "Lost";
-  return (
-    <p className="text-[13px] text-[var(--ink-600)]">
-      {match.playerName} vs {match.opponentName}
-      {match.sets.length > 0 && (
-        <>
-          {" · "}
-          {result && `${result} `}
-          <ScoreLine sets={match.sets} />
-        </>
-      )}
-    </p>
-  );
-}
 
 function stepBody(
   key: StepKey,
@@ -478,17 +470,9 @@ function stepBody(
               ? "Starting…"
               : progress.stage === "preparing"
                 ? "Cutting your selected window out of the video, on this device"
-                : `${formatFileSize(progress.bytesUploaded)} of ${formatFileSize(progress.bytesTotal)} · ${formatEta(progress.etaSeconds)}`}
+                : `${formatFileSize(progress.bytesUploaded)} of ${formatFileSize(progress.bytesTotal)} · ${sentenceCase(formatEta(progress.etaSeconds))}`}
           </span>
-          {upload?.cancel && (
-            <button
-              type="button"
-              onClick={upload.cancel}
-              className="cursor-pointer text-[11px] text-[var(--ink-500)] transition-colors duration-200 hover:text-[var(--danger)]"
-            >
-              Cancel
-            </button>
-          )}
+          {upload?.cancel && <CancelUploadControl cancel={upload.cancel} />}
         </div>
         {/* The instruction first, in the darker ink; the reassurance under it,
             quieter. Leaving in-app is safe — only closing the tab stops the
@@ -758,5 +742,48 @@ function UploadAnotherAction({
         />
       )}
     </a>
+  );
+}
+
+/** "about 6 min left" -> "About 6 min left"; formatEta stays lowercase for its other callers. */
+function sentenceCase(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * The upload's Cancel link and the question it asks first. Cancelling stops
+ * only the video; the match stays saved. The dialog closes itself if the
+ * upload ends (`cancel` goes away) while it is open.
+ */
+function CancelUploadControl({ cancel }: { cancel: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="cursor-pointer text-[11px] text-[var(--ink-500)] transition-colors duration-200 hover:text-[var(--danger)]"
+      >
+        Cancel
+      </button>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        tone="danger"
+        title="Cancel this upload?"
+        description="The match stays saved with its score. Only the video stops, and you can add it again later from the match page."
+        confirmLabel="Cancel upload"
+        cancelLabel="Keep uploading"
+        onConfirm={() => {
+          cancel();
+          setOpen(false);
+        }}
+      >
+        <ConfirmNote icon={<Clock />}>
+          No analysis time has been used. It&apos;s only counted once the video
+          is sent.
+        </ConfirmNote>
+      </ConfirmDialog>
+    </>
   );
 }

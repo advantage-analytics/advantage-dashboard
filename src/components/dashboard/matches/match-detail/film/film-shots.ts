@@ -1,6 +1,8 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import { isFeedShotType, isServeShotType } from "@/lib/data/serve-return-shots";
 
+import { shotDirection, type Hand } from "../match-filters/shot-geometry";
+import { normalizeServeSpin } from "../match-filters/spin";
 import {
   REACHED_EPSILON_SECONDS,
   toFilmTime,
@@ -108,19 +110,87 @@ export function activeShotAt(
   };
 }
 
-/** "First Serve" + "topspin" → "First serve · topspin". */
-export function shotLabel(shot: MatchShot): string {
-  const type = shot.shotType
-    ? shot.shotType.charAt(0) + shot.shotType.slice(1).toLowerCase()
-    : "Shot";
-  return shot.spinType ? `${type} · ${shot.spinType.toLowerCase()}` : type;
-}
-
 /** The em dash the Current point widget draws for anything unmeasured. */
 export const UNMEASURED = "—";
 
 function sentenceCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+/**
+ * A shot's spin as the filters name it, or null when unrecorded. A serve's is
+ * Serve › Spin's word (`normalizeServeSpin`: the vendor's topspin serve is a
+ * Kick, its sidespin a Slice), so the rows Kick opens say Kick; a value that
+ * filter has no word for, and every rally shot's, prints as recorded.
+ */
+export function shotSpinLabel(
+  shot: Pick<MatchShot, "shotType" | "spinType">,
+): string | null {
+  if (!shot.spinType) return null;
+  const serve = isServeRow(shot.shotType?.trim() ?? "")
+    ? normalizeServeSpin(shot.spinType)
+    : null;
+  return serve ?? sentenceCase(shot.spinType);
+}
+
+/** "First Serve" + "topspin" → "First serve · kick". */
+export function shotLabel(shot: MatchShot): string {
+  const type = shot.shotType ? sentenceCase(shot.shotType) : "Shot";
+  const spin = shotSpinLabel(shot);
+  return spin ? `${type} · ${spin.toLowerCase()}` : type;
+}
+
+const SERVE_RESULT_TYPES = new Set(["Ace", "Service Winner", "Double Fault"]);
+
+/**
+ * The points list's second line: the shot that decided the point, then its
+ * pressure. A serve result (ace, service winner, double fault) describes the
+ * serve played — spin, type, box zone; anything else the rally's last shot —
+ * spin and direction. Built here rather than on the server because the words
+ * are the filters' own: a serve's spin is Serve › Spin's
+ * ({@link shotSpinLabel}) and a rally shot's direction is Custom ›
+ * Direction's (`shotDirection`, which needs the hitter's hand), so a forehand
+ * struck from the backhand half reads Inside Out here as it does in its shot
+ * row. "Break point" is Score › Break point's spelling.
+ */
+export function pointDetail(
+  point: MatchPoint,
+  /** Each seat's hand — the filter context's `hands`. */
+  hands: { player1: Hand | null; player2: Hand | null },
+): string {
+  const parts: string[] = [];
+  const shots = point.shots ?? [];
+
+  if (SERVE_RESULT_TYPES.has(point.resultType)) {
+    // The loader's `firstShot*` is the serve actually played
+    // (`pickServeShot`: the second serve when there was one).
+    const segments = [
+      point.firstShotSpin
+        ? shotSpinLabel({
+            shotType: point.firstShotType ?? "First Serve",
+            spinType: point.firstShotSpin,
+          })
+        : null,
+      point.firstShotType,
+      point.firstShotZone,
+    ].filter(Boolean);
+    if (segments.length > 0) parts.push(segments.join(" "));
+  } else {
+    const last = shots[shots.length - 1];
+    const spin = last ? shotSpinLabel(last) : (point.lastShotSpin ?? null);
+    const direction = last
+      ? (shotDirection(last, last.isPlayer1 ? hands.player1 : hands.player2) ??
+        last.zone)
+      : point.lastShotZone;
+    const segments = [spin, direction].filter(Boolean);
+    if (segments.length > 0) parts.push(segments.join(" "));
+  }
+
+  if (point.isBreakPoint) parts.push("Break point");
+  if (point.isSetPoint) parts.push("Set point");
+  if (point.isMatchPoint) parts.push("Match point");
+
+  return parts.join(" · ") || "Rally";
 }
 
 /** One shot's row in the "Current point" widget, one string per column. */
@@ -142,6 +212,91 @@ export interface ShotRowCells {
  */
 function isServeRow(shotType: string): boolean {
   return isServeShotType(shotType) || /serve/i.test(shotType);
+}
+
+/**
+ * A point's rally, numbered the way the match was played rather than the way
+ * the rows were stored.
+ *
+ * - {@link RallyNumbering.numbers}: shot id → its number. Every serve row
+ *   ({@link isServeRow}) is 1 — a faulted first serve and the serve that
+ *   was played both start the point — and every shot after the LAST serve
+ *   counts on from it: the return is 2, the next shot 3. A non-serve row
+ *   stored ahead of the last serve (a Feed, an untyped row) belongs to the
+ *   serve, not the rally, and is 1 as well. With no serve row at all the
+ *   shots are 1..n in the order given.
+ * - {@link RallyNumbering.count}: the shots from the last serve on — the
+ *   rally's length, the total a "shot 2 of 4" readout is out of. Every shot
+ *   when there is no serve.
+ * - {@link RallyNumbering.openerId}: the shot that opened the rally — the last
+ *   serve (the one that was played: a second serve when there is one, else
+ *   the last serve row), or with no serve the first shot. It is
+ *   the one "shot 1" the "This point" card draws in the darker ink.
+ *
+ * Works from the point's FULL `shots` (`MatchPoint.shots`, already in
+ * `shot_number` order), never the timed-only feed ({@link shotStops}): an
+ * untimed serve still decides where the rally starts. Look a displayed shot
+ * up by id. `shot_number` itself is never read — Advantage Intelligence
+ * stores a faulted serve at 0 and older SwingVision Feed rows are 0 too — and
+ * neither is `rally_length`, which is 0 when the source never recorded it.
+ */
+export interface RallyNumbering {
+  numbers: ReadonlyMap<string, number>;
+  count: number;
+  openerId: string | null;
+}
+
+export function rallyNumbering(
+  shots: readonly MatchShot[] | undefined,
+): RallyNumbering {
+  const list = shots ?? [];
+  const lastServe = list.findLastIndex((s) =>
+    isServeRow(s.shotType?.trim() ?? ""),
+  );
+  // No serve: the rally is every shot, and it starts at the first one.
+  const start = Math.max(lastServe, 0);
+  const numbers = new Map<string, number>();
+  list.forEach((s, i) => {
+    numbers.set(s.id, Math.max(i - start, 0) + 1);
+  });
+  // The opener is the played serve: a row typed second, when there is one.
+  // SwingVision stores both serves at shot_number 1 and the loader breaks
+  // that tie by uuid, so "the last serve row" is the faulted one about half
+  // the time. Stored order is only the fallback (one serve, or bare "Serve").
+  const secondServe = list.find((s) => {
+    const type = s.shotType?.trim() ?? "";
+    return isServeRow(type) && /second|2nd/i.test(type);
+  });
+  return {
+    numbers,
+    count: list.length - start,
+    openerId: secondServe?.id ?? list[start]?.id ?? null,
+  };
+}
+
+/**
+ * A shot row's accessible name. Two serves can both read "1", so a serve row
+ * names which one it was — "Shot 1, first serve" / "Shot 1, second serve" —
+ * and the two rows never share a name; any other row names its stroke.
+ */
+export function shotRowAriaLabel(cells: ShotRowCells): string {
+  const what =
+    cells.stroke === "Serve"
+      ? `${cells.type.toLowerCase()} serve`
+      : cells.stroke;
+  return `Shot ${cells.order}, ${what}, ${cells.player}, ${cells.placement}, ${cells.result} — jump to this shot`;
+}
+
+/**
+ * The "This point" card's Stroke ink: the darker ink marks the shot that
+ * opened the rally ({@link RallyNumbering.openerId}) — the deciding serve —
+ * and never a faulted first serve that also reads "1".
+ */
+export function isRallyOpener(
+  shotId: string,
+  numbering: RallyNumbering,
+): boolean {
+  return shotId === numbering.openerId;
 }
 
 /**
@@ -192,10 +347,16 @@ export function shotTypeLabel(
  * A shot's eight cells (handoff H1 §B, frame `E-route-P1-P2.html`).
  *
  * `MatchShot` carries only `shotType`, `spinType`, `speedMph`, `zone` and
- * `result`, so two columns are derived rather than read: Stroke reads "Serve"
- * for either serve row, and "Type" is {@link shotTypeLabel} — the shot's job
- * in the rally, keyed on `shotType` plus the point's return
- * ({@link pointReturnShotId}), never on `order`.
+ * `result`, so three columns are derived rather than read: Stroke reads
+ * "Serve" for either serve row, "Type" is {@link shotTypeLabel} — the shot's
+ * job in the rally, keyed on `shotType` plus the point's return
+ * ({@link pointReturnShotId}), never on `order` — and Placement is
+ * `shotDirection(shot, hand)` (`shot-geometry.ts`), the same rule the Custom ›
+ * Direction filter selects by: `shots.zone` only ever stores Crosscourt /
+ * Middle / Down the Line, and a forehand struck from the hitter's backhand
+ * half reads Inside Out / Inside In here in the browser. With no `hand`, or
+ * for a backhand, the stored zone prints as it is; Middle and a serve's zone
+ * still print as stored.
  *
  * Nothing unmeasured is ever rendered as `0` or as an empty cell — a null
  * speed, spin, placement, stroke or result is {@link UNMEASURED}, because a
@@ -205,32 +366,39 @@ export function shotTypeLabel(
  */
 export function shotRowCells(
   shot: MatchShot,
-  /** 1-based place in the rally — the row number only. */
+  /** The shot's number in the rally ({@link rallyNumbering}) — the row
+   * number only. Both serves of a faulted first serve are 1. */
   order: number,
   playerName: string,
   /** The point's return ({@link pointReturnShotId}); callers that never draw
    * the Type cell may leave it out. */
   returnShotId: string | null = null,
+  /** The hitter's hand (`handOf` in `match-filters/model.ts`), for the
+   * Inside-Out / Inside-In renaming. Unknown = the stored zone as is. */
+  hand: Hand | null = null,
 ): ShotRowCells {
   const shotType = shot.shotType?.trim() ?? "";
   const isServe = isServeRow(shotType);
+  const direction = shotDirection(shot, hand);
 
   return {
     order: String(order),
     player: playerName || UNMEASURED,
-    spin: shot.spinType ? sentenceCase(shot.spinType) : UNMEASURED,
+    spin: shotSpinLabel(shot) ?? UNMEASURED,
     stroke: isServe ? "Serve" : shotType ? sentenceCase(shotType) : UNMEASURED,
     type: shotTypeLabel(shot, returnShotId),
-    placement: shot.zone ? shot.zone : UNMEASURED,
+    placement: direction ?? (shot.zone || UNMEASURED),
     mph: shot.speedMph == null ? UNMEASURED : String(Math.round(shot.speedMph)),
     result: shot.result ? shot.result : UNMEASURED,
   };
 }
 
 // T9: row 1 arrives with no delay, each row after it 25ms later, capped at
-// row 9 — so a long rally still finishes arriving inside 200ms. Used as the
-// mount-driven `animationDelay` for `film-shot-row-in` (`film-this-point.tsx`,
-// `point-list.tsx`); its cap and reduced-motion opt-out live in globals.css.
+// row 9 — so a long rally still finishes arriving inside 200ms. `order` is
+// the row's place in the LIST, not its rally number, which two serves share.
+// Used as the mount-driven `animationDelay` for `film-shot-row-in`
+// (`film-this-point.tsx`, `point-list.tsx`); its cap and reduced-motion
+// opt-out live in globals.css.
 export function shotRowRevealDelay(order: number): number {
   return Math.min(order - 1, 8) * 25;
 }

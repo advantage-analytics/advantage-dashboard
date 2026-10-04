@@ -874,7 +874,14 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
   // Against the verified session address, not the one typed into the form.
   const check = checkClaimEmail(email, program);
 
-  const { data, error } = await supabase.rpc("complete_program_claim", {
+  // Through the service role, with the verified user passed explicitly — the
+  // same shape as `complete_program_claim_with_token`. The function is not
+  // executable by `authenticated`: it stores the three evidence arguments
+  // below as given, and an admin reads them when deciding the claim, so they
+  // may only ever come from this server code. It re-checks inside the
+  // database that `p_claimed_email` is `p_claimant_user_id`'s own address.
+  const { data, error } = await db.rpc("complete_program_claim", {
+    p_claimant_user_id: user.id,
     p_program_key: pending.programKey,
     p_claimed_email: email,
     p_claimant_name: pending.fullName,

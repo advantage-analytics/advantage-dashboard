@@ -11,24 +11,39 @@
  * than an extra export; `route.ts` supplies the real session, service-role,
  * workspace, roster, Azure and vendor seams and nothing else.
  *
- * ORDER, unchanged from the route this came out of, with one step added:
+ * ORDER, unchanged from the route this came out of, with two steps added:
  * verify ownership → is it submittable → load the match → the three vendor
  * answers → build the payload → the match's billing workspace →
- * `uploadEligibility()` (T16, new) → reserve quota → mint URL → submit →
- * record. Quota is reserved BEFORE the vendor is called, because an allowance
- * only checked afterwards cannot refuse anything; the contract is asked
- * BEFORE quota, because a reservation refused on eligibility would have to be
- * handed straight back. Every failure past the reservation hands it back.
+ * `uploadEligibility()` (T16) → CLAIM the row (T5) → reserve quota → mint
+ * URL → submit → record. Quota is reserved BEFORE the vendor is called,
+ * because an allowance only checked afterwards cannot refuse anything; the
+ * contract is asked BEFORE quota, because a reservation refused on
+ * eligibility would have to be handed straight back. Every failure past the
+ * reservation hands it back.
  *
- * WHAT A REFUSAL DOES TO THE JOB. Nothing. Every return before the `try`
+ * THE CLAIM (T5). The status check above is a plain read, and the wizard
+ * calls this route the moment a transfer finishes — so two POSTs for one job
+ * (a double-fire, a retry racing the original) both used to read `uploaded`,
+ * both reserve quota and both reach the vendor. `claimSubmitting()` is a
+ * compare-and-set: `uploaded → submitting`, keyed on the status it expects,
+ * carrying the answers the row must record; whoever loses answers 409 with
+ * nothing spent. An admin-console submission keeps `claimAdminVideo()` as
+ * its claim — the `admin_video_access` RPC sets `submitting` itself under a
+ * row lock, so the CAS after it would always lose — and writes the same
+ * answers with a plain update once the claim is held.
+ *
+ * WHAT A REFUSAL DOES TO THE JOB. Before the claim, nothing: every return
  * leaves the row exactly as it was found — `uploaded`, no `attempt_count`
  * bump, no vendor answers written — because `uploaded` is the one state a
- * retry needs nothing re-uploaded from. The caller records the sentence in
- * `error_message` (`submit-match-video.ts`) and `isSubmitStalled()` offers
- * "Try again" once the row has sat still. A RETRYABLE refusal (a roster or
- * status read that failed) answers 503, a decided one 403; both leave the
- * job where a retry can pick it up. Only a failure past the reservation —
- * inside the `try` — marks the job `failed`, and that was already so.
+ * retry needs nothing re-uploaded from. A reservation refused AFTER the claim
+ * puts the row back to `uploaded` for every caller; the answers and the
+ * counted attempt stay, which a retry reads as its own. The caller records
+ * the sentence in `error_message` (`submit-match-video.ts`) and
+ * `isSubmitStalled()` offers "Try again" once the row has sat still. A
+ * RETRYABLE refusal (a roster or status read that failed) answers 503, a
+ * decided one 403; both leave the job where a retry can pick it up. Only a
+ * failure past the reservation — inside the `try` — marks the job `failed`,
+ * and that was already so. Nothing leaves the row at `submitting`.
  */
 
 import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
@@ -36,6 +51,7 @@ import { NextResponse } from "next/server";
 
 import { buildSplitStepJobRequest } from "@/lib/services/splitstep/job-request";
 import type { SplitStepJobRequest } from "@/lib/services/splitstep/job-request";
+import { isUuid } from "@/lib/services/match-video/access";
 import { athleteOnRow } from "@/lib/services/splitstep/match-athlete";
 import type { QuotaReservation } from "@/lib/services/splitstep/quota";
 import { parseWebhookPayload } from "@/lib/services/splitstep/webhook-payload";
@@ -165,6 +181,16 @@ export interface SubmitJobDeps {
     jobId: string,
     patch: SubmitJobPatch,
   ): Promise<{ error: string | null }>;
+  /**
+   * The compare-and-set claim: `patch` (which carries `status: "submitting"`)
+   * applied only where the row still reads `uploaded`. `claimed` is false
+   * when another submission got there first — the same shape as the rederive
+   * route's `claimJob`.
+   */
+  claimSubmitting(
+    jobId: string,
+    patch: SubmitJobPatch,
+  ): Promise<{ claimed: boolean; error: string | null }>;
   /** `createVideoUrlStrategy(admin).mint()` — the vendor's read SAS. */
   mintVendorUrl(input: {
     jobId: string;
@@ -231,6 +257,12 @@ export async function handleSubmitJob(
 
   if (!jobId) {
     return NextResponse.json({ error: "jobId is required" }, { status: 400 });
+  }
+
+  // A job id is a UUID. Anything else cannot name a row, and would only reach
+  // the database to fail a cast — answered as the same 404 as a missing job.
+  if (!isUuid(jobId)) {
+    return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
   // The orientation check used to sit here, before anything was loaded. It has
@@ -356,10 +388,12 @@ export async function handleSubmitJob(
   // Three sources because two were not enough, and the reason is worth keeping.
   // Migration 20260807072714 added these columns to `processing_jobs` so the
   // answers would outlive the request — but this route only WRITES them at
-  // submit, and the outer catch marks a failed submit `failed`, not
-  // `uploaded`. So a job still sitting at `uploaded` is precisely one where the
-  // route was never reached or returned early, and its job columns are null.
-  // The retry case and the populated-job case are disjoint.
+  // the claim, and the outer catch marks a failed submit `failed`, not
+  // `uploaded`. So a job still sitting at `uploaded` is one where the route
+  // was never reached or returned early — with its job columns null — or one
+  // whose claim was won and then handed back on a refused reservation, whose
+  // columns hold the answers that attempt would have sent. Either way the
+  // job row, when populated, is what the last attempt used.
   //
   // The match row is what closes that gap: the wizard writes
   // `initial_top_player_is_player1`, `fixed_camera` and `format.ad_scoring`
@@ -511,26 +545,114 @@ export async function handleSubmitJob(
     );
   }
 
-  // A compare-and-set claim serializes admin retries BEFORE quota or vendor I/O.
-  // A crash leaves submitting for review; never replay an uncertain vendor POST.
-  if (adminVideo && !(await deps.claimAdminVideo?.(userId, match.id, job.id)))
-    return NextResponse.json(
-      {
-        error:
-          "This video is already being submitted or is no longer eligible.",
-      },
-      { status: 409 },
-    );
+  // What the claim records. These three have no other home, and the
+  // orientation especially must survive the request: Phase 2 maps
+  // top-of-frame strokes back onto player1/player2 and has no other
+  // authoritative source for which was which.
+  const submitting: SubmitJobPatch = {
+    status: "submitting",
+    billable_seconds: billableSeconds,
+    // Counted, not pinned. This was `1`, which reset the tally on every
+    // resubmission and made "how many times has this been tried" a
+    // question the column could not answer.
+    attempt_count: (job.attempt_count ?? 0) + 1,
+    initial_top_player_is_player1: effectiveTopPlayer,
+    ad_scoring: vendorRequest.Ad,
+    fixed_camera: vendorRequest.FixedCamera,
+  };
 
-  const reservation = await deps.reserveQuota({
-    jobId: job.id,
-    userId,
-    workspace: billingWorkspace,
-    seconds: billableSeconds,
-  });
+  // A compare-and-set claim serializes concurrent submits BEFORE quota or
+  // vendor I/O: `uploaded → submitting`, and whoever loses spends nothing. A
+  // crash past here leaves `submitting` for review; never replay an uncertain
+  // vendor POST. The console's claim is the `admin_video_access` RPC, which
+  // sets `submitting` itself under a row lock (see the header), so its answers
+  // are written by a plain update inside the `try` instead.
+  if (adminVideo) {
+    if (!(await deps.claimAdminVideo?.(userId, match.id, job.id)))
+      return NextResponse.json(
+        {
+          error:
+            "This video is already being submitted or is no longer eligible.",
+        },
+        { status: 409 },
+      );
+  } else {
+    const claim = await deps.claimSubmitting(job.id, submitting);
+
+    if (claim.error) {
+      // The write did not go through, so the row reads as it was found —
+      // `uploaded` — and nothing has been spent. Not reverted: this request
+      // holds no claim to give back, and a blind `uploaded` write could tread
+      // on a submission that does.
+      pipelineLog.error(`${LOG} claim failed`, {
+        jobId: job.id,
+        error: claim.error,
+      });
+      return NextResponse.json(
+        { error: "Could not start the submission. Try again." },
+        { status: 503 },
+      );
+    }
+
+    if (!claim.claimed) {
+      pipelineLog.info(`${LOG} refused — already claimed`, { jobId: job.id });
+      return NextResponse.json(
+        { error: "This match is already being submitted." },
+        { status: 409 },
+      );
+    }
+  }
+
+  // The claim is held and nothing was spent: hand the row back to `uploaded`,
+  // the state "Try again" picks up from. Best effort — a failed revert is
+  // logged, and `isSubmitStalled()` still surfaces the row.
+  const handClaimBack = async () => {
+    const reverted = await deps.updateJob(job.id, { status: "uploaded" });
+    if (reverted.error) {
+      pipelineLog.error(`${LOG} could not hand the claim back`, {
+        jobId: job.id,
+        error: reverted.error,
+      });
+    }
+  };
+
+  // Its own try, not the one below: that catch releases a reservation and
+  // marks the job `failed`, and a reservation RPC that threw holds nothing to
+  // release — the job is as retryable as it was a moment ago. Outside any try,
+  // the throw was a bare 500 with the row stranded at `submitting`.
+  let reservation: QuotaReservation;
+  try {
+    reservation = await deps.reserveQuota({
+      jobId: job.id,
+      userId,
+      workspace: billingWorkspace,
+      seconds: billableSeconds,
+    });
+  } catch (err) {
+    // `QuotaReserveError.code`, read by shape so a stub need not import it.
+    const code = (err as { code?: unknown } | null)?.code;
+    pipelineLog.error(`${LOG} quota reservation failed`, {
+      jobId: job.id,
+      code: typeof code === "string" ? code : null,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    await handClaimBack();
+    // 23505 is `processing_usage`'s unique index on `job_id`: this job already
+    // holds a reservation, so another submission got here first.
+    if (code === "23505") {
+      return NextResponse.json(
+        { error: "This match has already been submitted for analysis." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json(
+      { error: "Could not reserve analysis time. Try again." },
+      { status: 503 },
+    );
+  }
 
   if (!reservation.ok) {
-    if (adminVideo) await deps.updateJob(job.id, { status: "uploaded" });
+    await handClaimBack();
     pipelineLog.info(
       `${LOG} refused — ${reservation.permission ? "not permitted" : "monthly cap"}`,
       {
@@ -554,23 +676,12 @@ export async function handleSubmitJob(
 
   // Everything past here must hand the reservation back on failure.
   try {
-    // Record what we are about to send. These three have no other home, and
-    // the orientation especially must survive the request: Phase 2 maps
-    // top-of-frame strokes back onto player1/player2 and has no other
-    // authoritative source for which was which.
-    const submitting = await deps.updateJob(job.id, {
-      status: "submitting",
-      billable_seconds: billableSeconds,
-      // Counted, not pinned. This was `1`, which reset the tally on every
-      // resubmission and made "how many times has this been tried" a
-      // question the column could not answer.
-      attempt_count: (job.attempt_count ?? 0) + 1,
-      initial_top_player_is_player1: effectiveTopPlayer,
-      ad_scoring: vendorRequest.Ad,
-      fixed_camera: vendorRequest.FixedCamera,
-    });
-
-    if (submitting.error) throw new Error(submitting.error);
+    // The console's claim set `submitting` without the answers; record them
+    // now. The CAS path wrote the whole patch at the claim.
+    if (adminVideo) {
+      const recorded = await deps.updateJob(job.id, submitting);
+      if (recorded.error) throw new Error(recorded.error);
+    }
 
     // 7. Mint the vendor URL — a read-only SAS on our Azure blob. There is no
     //    processing-started signal; the first thing we hear is the webhook.
@@ -706,8 +817,15 @@ export async function handleSubmitJob(
       });
     }
 
+    // The vendor's (or the minter's) own text stays in the log line above:
+    // it can name storage accounts or echo the payload, and the client needs
+    // only the 502 — `submit-match-video.ts` keys its "don't overwrite the
+    // failed row" branch on the status, not the body.
     return NextResponse.json(
-      { error: "Could not submit this match for analysis.", detail: message },
+      {
+        error: "Could not submit this match for analysis.",
+        code: "vendor_rejected",
+      },
       { status: 502 },
     );
   }

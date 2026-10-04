@@ -1,0 +1,9 @@
+$kind: http-request
+description: "Retired 2026-09-25: nothing is sold during the beta. Always answers 410, before any session is read, so an old tab or a hand-made request cannot buy the old Pro plan. `/api/webhooks/stripe` stays."
+url: "{{baseUrl}}/api/create-checkout-session"
+method: POST
+headers:
+  Accept: application/json
+settings: {}
+examples: ./.resources/Retired Pro checkout.resources/examples
+order: 11000

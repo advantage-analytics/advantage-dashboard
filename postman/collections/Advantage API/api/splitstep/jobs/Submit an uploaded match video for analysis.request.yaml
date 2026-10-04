@@ -1,0 +1,19 @@
+$kind: http-request
+description: "Spends a workspace's video allowance and hands the job to the Advantage Intelligence vendor. The upload wizard calls it the moment a transfer finishes; the `processing_jobs` row and the Azure blob already exist. The ladder (`handler.ts`): sign-in → body → job id → deployment config → the caller's own job → submittable → match → the three vendor answers → payload build → the match's billing workspace → the upload contract → a compare-and-set claim (`uploaded → submitting`) → quota reservation → vendor URL → vendor POST. Every refusal before the claim leaves the row `uploaded`; a refused or failed reservation hands the claim back to `uploaded`; only a failure past the reservation marks the job `failed` (502). Billed to the MATCH's workspace, never the active one."
+url: "{{baseUrl}}/api/splitstep/jobs"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "jobId": "<uuid>",
+      "initialTopPlayerIsPlayer1": true,
+      "adScoring": true,
+      "fixedCamera": true
+    }
+settings: {}
+examples: ./.resources/Submit an uploaded match video for analysis.resources/examples
+order: 1000

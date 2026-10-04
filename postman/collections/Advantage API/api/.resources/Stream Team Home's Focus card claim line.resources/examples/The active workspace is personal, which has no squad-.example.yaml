@@ -1,0 +1,23 @@
+$kind: http-example
+name: The active workspace is personal, which has no squad.
+request:
+  url: "{{baseUrl}}/api/team-insight"
+  method: POST
+  headers:
+    - key: sb-pouxujkhtbvkdwbzfvka-auth-token
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: text/plain
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 404
+  statusText: Not Found
+  headers:
+    Content-Type: text/plain
+  body:
+    type: text
+    content: Not a program
+order: 4000

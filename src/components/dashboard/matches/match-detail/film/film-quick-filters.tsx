@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import type { MatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import type { PlayerSide } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import {
   FloatMenu,
   FloatMenuCaption,
@@ -26,50 +27,66 @@ import {
   FilmDarkMenuNote,
 } from "./film-dark-menu";
 import {
-  cutName,
-  DEFAULT_FILM_FILTERS,
-  hasActiveFilmFilters,
+  filmListActive,
+  filmListName,
   lastNameOf,
-  type FilmFilters,
-} from "./film-filters";
+  quickShow,
+  withQuickShow,
+  type FilmListFilters,
+} from "./film-list-filters";
 
 /**
  * The three filters you reach for mid-rally (handoff F4), anchored to the
  * panel's Filters trigger. Quick choices apply on click — they are one tap —
- * and the last row opens the advanced dialog. Filters drive ↑↓ as well as the
- * list; the applied scope is reported in the panel footer, never as chips
- * over the film.
+ * and the last row opens the advanced filters (the report's 340px drawer, or
+ * the room drawer's own column). Filters drive ↑↓ as well as the
+ * list.
+ *
+ * Since T7 the rows write the layers they belong to (`film-list-filters.ts`):
+ * "Break points" is the shared Score › Breakpoint, "{You}/{Opp} serving" the
+ * shared Serve › Player — so a pick here is a pick the Statistics tab shows
+ * too — and "Saved only" is the Film-only saved toggle, never a match filter.
  */
-export function FilmQuickFilters({
-  filters,
-  onFiltersChange,
+export const FilmQuickFilters = memo(function FilmQuickFilters({
+  filmFilters,
   sides,
   onOpenAdvanced,
+  triggerRef,
   tone,
 }: {
-  filters: FilmFilters;
-  onFiltersChange: (next: FilmFilters) => void;
+  filmFilters: FilmListFilters;
   sides: MatchSides;
   /** Absent = no "Advanced filters…" row. */
   onOpenAdvanced?: () => void;
+  /**
+   * The light trigger's element, for the filters drawer to hand focus back
+   * to when it closes (`useFilterRail().registerTrigger`).
+   */
+  triggerRef?: (element: HTMLButtonElement | null) => void;
   /** "dark" is the fullscreen film's menu; "light" is the in-shell list's. */
   tone: "light" | "dark";
 }) {
   const [open, setOpen] = useState(false);
 
-  const show: "all" | "break" | "saved" = filters.savedOnly
-    ? "saved"
-    : filters.pressure === "break"
-      ? "break"
-      : "all";
+  const { shared, setShared, setSavedOnly } = filmFilters;
+  const show = quickShow(filmFilters);
+  const active = filmListActive(filmFilters);
+  const youName = lastNameOf(sides.you.name);
+  const oppName = lastNameOf(sides.opp.name);
 
-  const pick = (next: Partial<FilmFilters>) => {
-    onFiltersChange({ ...filters, ...next });
+  const pickShow = (next: "all" | "break" | "saved") => {
+    setShared(withQuickShow(shared, next));
+    setSavedOnly(next === "saved");
+    setOpen(false);
+  };
+
+  const pickServer = (server: PlayerSide | null) => {
+    setShared({ ...shared, server });
     setOpen(false);
   };
 
   const clearAll = () => {
-    onFiltersChange(DEFAULT_FILM_FILTERS);
+    filmFilters.clearAll();
     setOpen(false);
   };
 
@@ -80,35 +97,35 @@ export function FilmQuickFilters({
     {
       label: "All points",
       chosen: show === "all",
-      onSelect: () => pick({ pressure: "any", savedOnly: false }),
+      onSelect: () => pickShow("all"),
     },
     {
       label: "Break points",
       description: "Points that could break serve",
       chosen: show === "break",
-      onSelect: () => pick({ pressure: "break", savedOnly: false }),
+      onSelect: () => pickShow("break"),
     },
     {
       label: "Saved only",
       chosen: show === "saved",
-      onSelect: () => pick({ pressure: "any", savedOnly: true }),
+      onSelect: () => pickShow("saved"),
     },
   ];
   const serveRows = [
     {
       label: "Either",
-      chosen: filters.server === "any",
-      onSelect: () => pick({ server: "any" }),
+      chosen: shared.server === null,
+      onSelect: () => pickServer(null),
     },
     {
-      label: `${lastNameOf(sides.you.name)} serving`,
-      chosen: filters.server === "you",
-      onSelect: () => pick({ server: "you" }),
+      label: `${youName} serving`,
+      chosen: shared.server === "you",
+      onSelect: () => pickServer("you"),
     },
     {
-      label: `${lastNameOf(sides.opp.name)} serving`,
-      chosen: filters.server === "opp",
-      onSelect: () => pick({ server: "opp" }),
+      label: `${oppName} serving`,
+      chosen: shared.server === "opponent",
+      onSelect: () => pickServer("opponent"),
     },
   ];
 
@@ -124,6 +141,7 @@ export function FilmQuickFilters({
         className="rounded-[12px] [box-shadow:var(--shadow-dropdown)]!"
         trigger={
           <button
+            ref={triggerRef}
             type="button"
             aria-expanded={open}
             className={cn(
@@ -134,14 +152,12 @@ export function FilmQuickFilters({
             <SlidersHorizontal
               className="h-[13px] w-[13px]"
               style={{
-                color: hasActiveFilmFilters(filters)
-                  ? "var(--blue)"
-                  : "var(--ink-500)",
+                color: active ? "var(--blue)" : "var(--ink-500)",
               }}
               strokeWidth={1.5}
               aria-hidden="true"
             />
-            {cutName(filters, sides)}
+            {filmListName(filmFilters, { you: youName, opponent: oppName })}
             {open ? (
               <ChevronUp
                 className="h-3 w-3 text-[var(--ink-400)]"
@@ -167,7 +183,7 @@ export function FilmQuickFilters({
         {serveRows.map((row, i) => (
           <FloatMenuItem key={i} {...row} />
         ))}
-        {hasActiveFilmFilters(filters) ? (
+        {active ? (
           <>
             <FloatMenuDivider />
             <FloatMenuItem label="Clear all filters" onSelect={clearAll} />
@@ -228,7 +244,7 @@ export function FilmQuickFilters({
       {serveRows.map((row, i) => (
         <FilmDarkMenuItem key={i} {...row} />
       ))}
-      {hasActiveFilmFilters(filters) ? (
+      {active ? (
         <>
           <FilmDarkMenuDivider />
           <FilmDarkMenuItem label="Clear all filters" onSelect={clearAll} />
@@ -258,4 +274,4 @@ export function FilmQuickFilters({
       </FilmDarkMenuNote>
     </FilmDarkMenu>
   );
-}
+});

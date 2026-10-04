@@ -86,6 +86,43 @@ export function opponentOf(label: string, labels: string[]): string | null {
   return labels[0] === label ? labels[1] : labels[0];
 }
 
+/** A rally whose score stream reads as a fresh match: 0-0, 0-0, no set. */
+function isResetScore(rally: SplitStepRally): boolean {
+  const first = rally.strokes[0];
+  return (
+    !!first &&
+    first.predSetScore === null &&
+    (first.predGameScore ?? "0-0") === "0-0" &&
+    (first.predPointScore ?? "0-0") === "0-0"
+  );
+}
+
+/**
+ * Where the vendor's score stream collapsed at the end of the match, if it did.
+ *
+ * Job 45ff4bd7 (2026-09-28): four rallies from the end, every score string
+ * reset to point 0-0, game 0-0, set NaN and never recovered. No winner rule can
+ * read a transition into or across a reset, so the last real rally and every
+ * reset one resolved no winner and the whole match was refused. Those rallies
+ * were still played, so the transcript keeps them: it folds them into the game
+ * the last real rally was in, and guesses their winners from the last stroke
+ * (see `lastStrokeWinner`), flagging each one `winner_guessed`.
+ *
+ * Returns the index of the first reset rally, or null. Trailing only, and only
+ * when a real set score came before it. A reset score at the START is the
+ * warm-up rally (see the degraded fixture), which stays a refusal: nothing
+ * about it says which game it belongs to.
+ */
+export function collapsedTailStart(rallies: SplitStepRally[]): number | null {
+  let start = rallies.length;
+  while (start > 0 && isResetScore(rallies[start - 1])) start -= 1;
+  if (start === rallies.length) return null;
+  const scoredBefore = rallies
+    .slice(0, start)
+    .some((r) => (r.strokes[0]?.predSetScore ?? null) !== null);
+  return scoredBefore ? start : null;
+}
+
 /** Seconds from the first stroke of a rally to its last. */
 export function rallyDuration(rally: SplitStepRally): number | null {
   const first = rally.strokes[0];

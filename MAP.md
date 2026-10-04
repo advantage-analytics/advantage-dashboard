@@ -24,7 +24,9 @@ markers is hand-written — edit it as things move.
 | `/admin/conferences` | [`src/app/admin/conferences/page.tsx`](src/app/admin/conferences/page.tsx) |
 | `/admin/labels/[sessionId]` | [`src/app/admin/labels/[sessionId]/page.tsx`](src/app/admin/labels/[sessionId]/page.tsx) |
 | `/admin/labels` | [`src/app/admin/labels/page.tsx`](src/app/admin/labels/page.tsx) |
+| `/admin/outreach` | [`src/app/admin/outreach/page.tsx`](src/app/admin/outreach/page.tsx) |
 | `/admin` | [`src/app/admin/page.tsx`](src/app/admin/page.tsx) |
+| `/admin/pilots` | [`src/app/admin/pilots/page.tsx`](src/app/admin/pilots/page.tsx) |
 | `/admin/requests` | [`src/app/admin/requests/page.tsx`](src/app/admin/requests/page.tsx) |
 | `/admin/teams/[programId]` | [`src/app/admin/teams/[programId]/page.tsx`](src/app/admin/teams/[programId]/page.tsx) |
 | `/admin/teams` | [`src/app/admin/teams/page.tsx`](src/app/admin/teams/page.tsx) |
@@ -109,7 +111,7 @@ which exists four separate times.
 |---|---|
 | `src/app/(auth)/` | Auth route group — dual-panel layout, login/sign-up/password flows |
 | `src/app/dashboard/` | Protected area: sidebar + header shell |
-| `src/app/api/` | Route handlers, one directory per group: `upload`, `validate-file`, `matches/[matchId]`, `matches/[matchId]/video/uploads` plus `.../uploads/[attachmentId]` (DELETE, cancel), `.../uploads/[attachmentId]/renew` and `.../uploads/[attachmentId]/complete`, `matches/[matchId]/video/alignment` (PATCH, offset correction with no upload), `matches/[matchId]/video` (GET, playback metadata + read-only URL for anyone who can see the match; DELETE `{ attachmentId }`, removes the active video — its uploader, or an owner/coach of the match's program), `matches/[matchId]/video/viewed` (POST, counts a view on first play — restarts the retention clock; anyone who can see the match) (SwingVision video attachment — decision modules in `lib/services/match-video/`), `matches/[matchId]/ball-paths` (GET, derived ball paths for anyone who can see the match — decision module `lib/services/splitstep/ball-paths-access.ts`), `home-insight`, `team-insight`, `programs/search` — plus money and webhook infra: `create-checkout-session` + `webhooks/stripe` (Stripe payments), `webhooks/splitstep` + `splitstep/jobs` + `splitstep/upload-url` (Advantage Intelligence pipeline), `cron/cleanup-match-videos` (daily 05:00 UTC attachment cleanup sweep, `CRON_SECRET` bearer; scheduled in `vercel.json`) |
+| `src/app/api/` | Route handlers, one directory per group: `upload`, `validate-file`, `matches/[matchId]`, `matches/[matchId]/video/uploads` plus `.../uploads/[attachmentId]` (DELETE, cancel), `.../uploads/[attachmentId]/renew` and `.../uploads/[attachmentId]/complete`, `matches/[matchId]/video/alignment` (PATCH, offset correction with no upload), `matches/[matchId]/video` (GET, playback metadata + read-only URL for anyone who can see the match; DELETE `{ attachmentId }`, removes the active video — its uploader, or an owner/coach of the match's program), `matches/[matchId]/video/viewed` (POST, counts a view on first play — restarts the retention clock; anyone who can see the match) (SwingVision video attachment — decision modules in `lib/services/match-video/`), `matches/[matchId]/ball-paths` (GET, derived ball paths for anyone who can see the match — decision module `lib/services/splitstep/ball-paths-access.ts`), `home-insight`, `team-insight`, `programs/search` — plus money and webhook infra: `create-checkout-session` + `webhooks/stripe` (Stripe payments), `webhooks/splitstep` + `splitstep/jobs` (plus `jobs/[jobId]/resubmit` and `jobs/[jobId]/rederive`, POST, rebuilds a `DERIVATION_ERROR` job's statistics from stored results — no vendor call; and `jobs/[jobId]/cancel`, POST, removes a still-queued job at the vendor, then flips it to `cancelled` and releases its allowance) + `splitstep/upload-url` (Advantage Intelligence pipeline), `cron/cleanup-match-videos` (daily 05:00 UTC attachment cleanup sweep, `CRON_SECRET` bearer; scheduled in `vercel.json`) |
 | `src/components/ui/` | shadcn/ui primitives |
 | `src/components/dashboard/` | Feature components, mirroring the dashboard routes |
 | `src/lib/supabase/` | Three client factories: `server`, `client`, `admin` (service role) |
@@ -120,6 +122,7 @@ which exists four separate times.
 | `src/hooks/` | Shared React hooks |
 | `supabase/functions/` | Edge functions |
 | `scripts/` | Repo tooling, not shipped |
+| `openapi/` | `advantage-api.yaml` — OpenAPI 3.1 description of the `src/app/api/` route handlers (auth, status codes, request/response schemas, examples); `npm run api:lint` checks it |
 
 ## Data layer
 

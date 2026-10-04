@@ -4,9 +4,10 @@ import type { LucideIcon } from "lucide-react";
 import { SettingsField } from "@/components/dashboard/settings/settings-card";
 import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import type { RosterMember } from "@/lib/data/team-roster-server";
+import { BACKHAND_OPTIONS, HAND_OPTIONS } from "@/lib/matches/hand-options";
 
 /**
- * The five fields a roster profile is made of, and the notes they raise.
+ * The fields a roster profile is made of, and the notes they raise.
  *
  * Add player and Edit player are the same form twice — one against a row that
  * does not exist yet and one against a row that does — so the vocabulary they
@@ -83,7 +84,20 @@ export function lineupSpotOptions(value: string): MenuOption<string>[] {
 }
 
 /**
- * Class year or Lineup spot: a caption over an underline `MenuSelect`, in the
+ * Hand and Backhand — the same rows the upload wizard and Edit match offer, so
+ * a style saved here reads back there word for word. Optional, unlike the
+ * wizard: a coach adding a roster may not know yet, and "Not set" is honest.
+ */
+export function handOptions(value: string): MenuOption<string>[] {
+  return withStored(value, [...HAND_OPTIONS], (stored) => stored);
+}
+
+export function backhandOptions(value: string): MenuOption<string>[] {
+  return withStored(value, [...BACKHAND_OPTIONS], (stored) => stored);
+}
+
+/**
+ * Class year, Lineup spot, Hand or Backhand: a caption over an underline `MenuSelect`, in the
  * form's `""`-means-unset vocabulary.
  *
  * `labelless`, because `SettingsField`'s `<label>` forwards every click inside
@@ -99,7 +113,7 @@ export function PlayerMenuField({
 }: {
   label: string;
   value: string;
-  /** From `classYearOptions` / `lineupSpotOptions`, called with `value`. */
+  /** From `classYearOptions` / `lineupSpotOptions` / `handOptions` / `backhandOptions`, called with `value`. */
   options: MenuOption<string>[];
   onChange: (value: string) => void;
   disabled?: boolean;

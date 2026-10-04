@@ -113,7 +113,7 @@ export function SingleScoreEntry({
 
       <div className="flex items-center gap-3">
         <span className="text-micro" style={{ color: "var(--ink-500)" }}>
-          {playerName}&rsquo;s games first · tiebreak in the small cell
+          {playerName}&rsquo;s games first · Tiebreak in the small cell
         </span>
         <div className="flex-1" />
         {error ? (

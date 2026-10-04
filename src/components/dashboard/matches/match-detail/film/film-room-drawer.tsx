@@ -5,10 +5,9 @@ import { useEffect, useState } from "react";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { cn } from "@/lib/utils";
 
-import type { FilmFilters } from "./film-filters";
+import type { FilmListFilters } from "./film-list-filters";
 import type { ShotStop } from "./film-shots";
 import type { PointFocus } from "./film-timeline";
-import type { FilmSectionId } from "./filters/types";
 import { PointList } from "./point-list";
 
 /**
@@ -23,9 +22,11 @@ import { PointList } from "./point-list";
  * list instead, and Advanced opens in this column through the list's own
  * branch rather than as a modal over the film (R4).
  *
- * Advanced's open flag and its open sections are held here, not by the room:
- * they are the drawer's own view state, and keeping them here means the room
- * re-rendering four times a second while the film plays never touches them.
+ * Advanced's open flag is held here, not by the room: it is the drawer's own
+ * view state, and keeping it here means the room re-rendering four times a
+ * second while the film plays never touches it. The filters themselves are
+ * the film tab's (`filmFilters`), the same object the report column's list
+ * gets, so a pick in either list is the cut both walk.
  */
 export interface FilmRoomDrawerProps {
   /** `open` slides in; `closing` slides out, then `onExited` unmounts it.
@@ -38,8 +39,8 @@ export interface FilmRoomDrawerProps {
   allPoints: MatchPoint[];
   /** The applied cut: the same array the shell's list gets. */
   visiblePoints: MatchPoint[];
-  filters: FilmFilters;
-  onFiltersChange: (filters: FilmFilters) => void;
+  /** The list's filter layers — the same object the report column gets. */
+  filmFilters: FilmListFilters;
   activePointId: string | null;
   /** Film-clock window of the playing point; the progress rule reads `--film-t`. */
   activeStart: number;
@@ -65,8 +66,7 @@ export function FilmRoomDrawer({
   onCollapse,
   allPoints,
   visiblePoints,
-  filters,
-  onFiltersChange,
+  filmFilters,
   activePointId,
   activeStart,
   activeEnd,
@@ -82,7 +82,6 @@ export function FilmRoomDrawer({
   nowPlaying,
 }: FilmRoomDrawerProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [openSections, setOpenSections] = useState<FilmSectionId[]>([]);
 
   // The drawer mounts off-canvas and slides in on the next frame. A CSS
   // transition (not a keyframe) carries both directions, so a close caught
@@ -122,12 +121,9 @@ export function FilmRoomDrawer({
       <PointList
         allPoints={allPoints}
         visiblePoints={visiblePoints}
-        filters={filters}
-        onFiltersChange={onFiltersChange}
+        filmFilters={filmFilters}
         advancedOpen={advancedOpen}
         onAdvancedOpenChange={setAdvancedOpen}
-        openSections={openSections}
-        onOpenSectionsChange={setOpenSections}
         activePointId={activePointId}
         activeStart={activeStart}
         activeEnd={activeEnd}

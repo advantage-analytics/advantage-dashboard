@@ -5,8 +5,6 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import * as nextWebpack from "next/dist/compiled/webpack/webpack";
 
-import { DEFAULT_FILM_FILTERS } from "@/components/dashboard/matches/match-detail/film/film-filters";
-
 const webpack = (
   nextWebpack as unknown as {
     webpack: (
@@ -22,14 +20,15 @@ let server: Server;
 let origin: string;
 
 /**
- * T8: the header's clear control is a labelled "Clear all" text button, not
- * a bare glyph, and it is drawn only while a cut is applied.
+ * T8: the room drawer's header clear is a labelled "Clear all" text button,
+ * not a bare glyph, and it is drawn only while a cut is applied. (The report
+ * column has none — its filter strip carries "Clear filter"; see
+ * film-playback-refresh.spec.ts.)
  *
  * `point-list-clear-all-harness.tsx` mounts the real `PointList` twice —
- * once with `DEFAULT_FILM_FILTERS` (no button), once with
- * `{ ...DEFAULT_FILM_FILTERS, pressure: "break" }` (exactly one button
- * named "Clear all") — through `MatchDataProvider` + `WorkspaceProvider`,
- * exactly as the Film tab does.
+ * once with nothing applied (no button), once with the shared Score ›
+ * Breakpoint applied (exactly one button named "Clear all") — through
+ * `MatchDataProvider` + `WorkspaceProvider`, exactly as the Film tab does.
  */
 test.beforeAll(async () => {
   const outputPath = mkdtempSync(join(tmpdir(), "point-list-clear-all-"));
@@ -116,7 +115,6 @@ test("exactly one Clear all button when a cut is applied, and it resets the filt
 
   await clearButton.click();
 
-  const clearedWith = await header.getAttribute("data-cleared-with");
-  expect(clearedWith).not.toBeNull();
-  expect(JSON.parse(clearedWith!)).toEqual(DEFAULT_FILM_FILTERS);
+  // Every layer at once — the list filters' own `clearAll`.
+  await expect(header).toHaveAttribute("data-cleared", "true");
 });

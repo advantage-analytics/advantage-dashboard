@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
 import { advButton } from "@/lib/ui/adv-button";
+import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 
 /**
  * Team Home before the program has a roster, dual or match.
@@ -10,6 +11,10 @@ import { advButton } from "@/lib/ui/adv-button";
  * setup line, and usage footer stay out of this state; none is useful before
  * a team has anything to report. The preview is only the page's data regions,
  * each responsible for its own empty anatomy and copy.
+ *
+ * While the Schedule is a coming-soon page (`lib/schedule/availability.ts`)
+ * the offer promises no duals and offers no "Schedule a dual": the preview
+ * below draws no dual cards, and the button would land on the stub.
  */
 export function TeamDayZeroHome({
   canManage,
@@ -22,7 +27,11 @@ export function TeamDayZeroHome({
   return (
     <div className="flex flex-1 flex-col gap-4">
       <DayZeroOffer
-        headline="Every court, every dual, and who is moving."
+        headline={
+          SCHEDULE_ENABLED
+            ? "Every court, every dual, and who is moving."
+            : "Every match, every player, and who is moving."
+        }
         headlineMeasure="28ch"
         actions={
           canManage ? (
@@ -33,26 +42,32 @@ export function TeamDayZeroHome({
               >
                 Add players
               </Link>
-              <Link
-                href="/dashboard/team/schedule/new/dual"
-                className={advButton("ghost")}
-              >
-                Schedule a dual
-              </Link>
+              {SCHEDULE_ENABLED && (
+                <Link
+                  href="/dashboard/team/schedule/new/dual"
+                  className={advButton("ghost")}
+                >
+                  Schedule a dual
+                </Link>
+              )}
             </div>
           ) : null
         }
         conditions={
-          canManage
-            ? "Build the roster first, then schedule a dual and send its match video for analysis."
-            : "Your coaching staff build the roster, schedule duals, and send match video. Every report lands here for the team."
+          SCHEDULE_ENABLED
+            ? canManage
+              ? "Build the roster first, then schedule a dual and send its match video for analysis."
+              : "Your coaching staff build the roster, schedule duals, and send match video. Every report lands here for the team."
+            : canManage
+              ? "Build the roster first, then send a match for analysis."
+              : "Your coaching staff build the roster and send match video. Every report lands here for the team."
         }
       />
 
       <p className="sr-only">
-        Once the program&apos;s first match is analysed, this page shows its
-        season numbers, weekend dual, top movers, court record, and dual
-        history. Nothing below is real data yet.
+        {SCHEDULE_ENABLED
+          ? "Once the program's first match is analysed, this page shows its season numbers, weekend dual, top movers, court record, and dual history. Nothing below is real data yet."
+          : "Once the program's first match is analysed, this page shows its season numbers, top movers, and program insight. Nothing below is real data yet."}
       </p>
 
       <div

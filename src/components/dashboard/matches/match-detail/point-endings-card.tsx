@@ -7,17 +7,17 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
-  scopeCut,
+  sideCut,
   watchableSegmentProps,
+  type FilmCut,
 } from "@/components/dashboard/matches/match-detail/film-cut-context";
-import { sideCut } from "@/components/dashboard/matches/match-detail/head-to-head-card";
-import type { FilmFilters } from "@/components/dashboard/matches/match-detail/film/filters/types";
-import {
-  scopePoints,
-  useSetScope,
-} from "@/components/dashboard/matches/match-detail/set-scope";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { EmptyMark } from "@/components/ui/empty-mark";
+import {
+  errorMadeBy,
+  isUnreturnedServe,
+  winnerHitBy,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { surnameLabels } from "@/lib/data/match-utils";
 
@@ -40,21 +40,24 @@ import { surnameLabels } from "@/lib/data/match-utils";
  *                  'Forehand Winner' … all land here, as they do in the
  *                  published card)
  *   unforced errs  `result_type LIKE '%Unforced Error%'`
- * Aces and double faults belong to the server structurally; winners and
- * unforced errors belong to whoever struck the decisive shot (`points.player`).
- * `head-to-head-card.tsx` splits them on exactly the same line.
+ * Aces and double faults belong to the server structurally. Winners are
+ * credited by `winnerHitBy` — a service winner to the SERVER, though its last
+ * shot row is usually the returner's missed return — and unforced errors by
+ * `errorMadeBy`: the rules the Result filters a segment opens read, and the
+ * one `calculate_match_stats` publishes winners by.
  *
- * ACES ON A DERIVED MATCH. `suppress_derived_match_stats()` nulls
- * `match_stats.aces` for every `source_provider = 'splitstep'` match because
- * derivation cannot tell an ace from a service winner — it never emits 'Ace'
- * at all (see `services/splitstep/derivation/result-type.ts`). Counting from
- * points here would therefore print a confident 0, which is a claim about the
- * player rather than about the analysis. The segment is dropped on the same
- * provider test the SQL uses, not on the count being zero.
+ * ACES ON A DERIVED MATCH. The derivation never emits 'Ace' (see
+ * `services/splitstep/derivation/result-type.ts`): every unreturned serve is
+ * a 'Service Winner'. Product decision (2026-09-29): on these matches an
+ * unreturned serve the server won IS an ace (`isUnreturnedServe`), as the
+ * head-to-head Aces row counts it. So the segment counts those, Winners
+ * leaves them out, and Winners' cut narrows to `rally-winner` — the derived
+ * head-to-head Winners row's own — so the two never open the same point.
  *
- * Scope-aware: `scopePoints(points, activeSet)` narrows the tally to the
- * selected set before bucketing, the same read every point-derived card on
- * this tab makes (rally-length-card.tsx takes the identical dependency).
+ * Whole match, always: the tally is taken over every point in
+ * `useMatchData().points`, the same read every point-derived card on this tab
+ * makes (rally-length-card.tsx takes the identical dependency). The match
+ * filters live on the Video tab only.
  *
  * With a playable video each segment opens its points in the Video tab
  * (`outcomeCut`) on click or Enter — hovering only reads. Without one the
@@ -99,30 +102,43 @@ const OUTCOMES: OutcomeMeta[] = [
   },
 ];
 
-/** Each outcome's base cut, before a side is laid over it by `sideCut`. */
-const OUTCOME_BASE_CUT: Record<OutcomeKey, Partial<FilmFilters>> = {
-  winners: { result: ["winner"] },
-  unforcedErrors: { result: ["unforced"] },
-  doubleFaults: { serve: ["double-fault"] },
-  aces: { serve: ["ace"] },
+/**
+ * Each outcome's base cut, before a side is laid over it by `sideCut` — the
+ * shared filters' Result › Ending, narrowed by a Film-only `ending` where
+ * Ending alone would admit points this card counts in another segment (see
+ * `FilmCutEnding`); aces are Serve › Result "Ace", exact on its own. The four
+ * are exclusive, like the tally below: a double fault is Error + Serve, which
+ * no unforced error is.
+ */
+const OUTCOME_BASE_CUT: Record<OutcomeKey, FilmCut> = {
+  winners: { resultEnding: ["winner"], ending: "winner" },
+  unforcedErrors: { resultEnding: ["error"], ending: "unforced-error" },
+  doubleFaults: { resultEnding: ["error"], resultShot: ["Serve"] },
+  aces: { serveResult: ["ace"] },
 };
 
 /**
- * The film cut behind one segment of one side's bar. Aces and double faults
- * belong to whoever SERVED the point (`server`); winners to whoever WON it
- * (`outcome`); unforced errors to whoever LOST it, so a side's errors are the
- * points its opponent won — `outcome` is the point's winner, never the
- * player who struck the last ball. That is exactly the line
- * `head-to-head-card.tsx`'s `sideCut` draws, so this delegates to it rather
- * than re-deriving the same server/outcome, you/opp rule here. `you`/`opp`
- * are relative, resolved by `useMatchSides()` inside the film tab
- * (guardrails §4); nothing here reads player order.
+ * The film cut behind one segment of one side's bar. Aces are the SERVER's
+ * (Serve › Player); the other three are Result › Hit by, the point of view
+ * Ending reads — whoever hit the winner or made the error, the server for a
+ * double fault. That is exactly the line `head-to-head-card.tsx`'s `sideCut`
+ * draws for the same four rows, so this delegates to it rather than
+ * re-deriving it here. `you`/`opp` are relative, resolved through the filter
+ * context's `youIsPlayer1` inside the film tab (guardrails §4); nothing here
+ * reads player order.
  */
 export function outcomeCut(
   key: OutcomeKey,
   side: "you" | "opp",
-): Partial<FilmFilters> {
-  return sideCut(OUTCOME_BASE_CUT[key], side);
+  isDerived = false,
+): FilmCut {
+  return sideCut(
+    isDerived && key === "winners"
+      ? { resultEnding: ["winner"], ending: "rally-winner" }
+      : OUTCOME_BASE_CUT[key],
+    side,
+    key === "aces" ? "server" : "player",
+  );
 }
 
 type Tally = Record<OutcomeKey, number>;
@@ -136,23 +152,25 @@ function emptyTally(): Tally {
  * counted in two segments would make the bar's own total disagree with the
  * counts in its segment hovers.
  */
-function tally(points: MatchPoint[], isPlayer1: boolean): Tally {
+export function outcomeTally(
+  points: MatchPoint[],
+  isPlayer1: boolean,
+  isDerived: boolean,
+): Tally {
   const t = emptyTally();
-  const me = isPlayer1 ? "player1" : "player2";
 
   for (const p of points) {
     const result = (p.resultType ?? "").toLowerCase();
     const iServed = p.serverIsPlayer1 === isPlayer1;
-    const iStruck = p.player === me;
 
-    if (result === "ace") {
+    if (isDerived ? isUnreturnedServe(p) : result === "ace") {
       if (iServed) t.aces += 1;
     } else if (result === "double fault") {
       if (iServed) t.doubleFaults += 1;
     } else if (result.includes("winner")) {
-      if (iStruck) t.winners += 1;
+      if (winnerHitBy(p) === isPlayer1) t.winners += 1;
     } else if (result.includes("unforced error")) {
-      if (iStruck) t.unforcedErrors += 1;
+      if (errorMadeBy(p) === isPlayer1) t.unforcedErrors += 1;
     }
   }
 
@@ -160,40 +178,29 @@ function tally(points: MatchPoint[], isPlayer1: boolean): Tally {
 }
 
 interface PointEndingsCardProps {
-  /** Video-derived match — the Aces segment cannot be measured. */
+  /** Video-derived match — aces are its unreturned serves (`outcomeTally`). */
   isDerived: boolean;
 }
 
 export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
-  const { points } = useMatchData();
   const { meta, actions } = useMatchReport();
   const sides = useMatchSides();
-  const { activeSet } = useSetScope();
+  const { points } = useMatchData();
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<string | null>(null);
 
   const youIsPlayer1 = sides.you.isPlayer1;
 
-  // Narrow to the chosen set through the shared helper — the same read every
-  // point-derived card on this tab makes, so the chip selection moves them
-  // in step. `null` is the whole match.
-  const scopedPoints = useMemo(
-    () => scopePoints(points, activeSet),
-    [points, activeSet],
-  );
-
   const { youTally, oppTally } = useMemo(
     () => ({
-      youTally: tally(scopedPoints, youIsPlayer1),
-      oppTally: tally(scopedPoints, !youIsPlayer1),
+      youTally: outcomeTally(points, youIsPlayer1, isDerived),
+      oppTally: outcomeTally(points, !youIsPlayer1, isDerived),
     }),
-    [scopedPoints, youIsPlayer1],
+    [points, youIsPlayer1, isDerived],
   );
 
-  const outcomes = OUTCOMES.filter((o) => o.key !== "aces" || !isDerived);
-
-  const youTotal = outcomes.reduce((sum, o) => sum + youTally[o.key], 0);
-  const oppTotal = outcomes.reduce((sum, o) => sum + oppTally[o.key], 0);
+  const youTotal = OUTCOMES.reduce((sum, o) => sum + youTally[o.key], 0);
+  const oppTotal = OUTCOMES.reduce((sum, o) => sum + oppTally[o.key], 0);
 
   const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
 
@@ -298,7 +305,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
       </div>
 
       {rows.map((row) => {
-        const segments = outcomes.filter((o) => row.own[o.key] > 0);
+        const segments = OUTCOMES.filter((o) => row.own[o.key] > 0);
 
         return (
           <div key={row.id} className="flex flex-col gap-1.5">
@@ -326,7 +333,8 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
                 const watch = meta.hasPlayableVideo
                   ? () =>
                       actions.watchCut(
-                        scopeCut(outcomeCut(o.key, row.id), activeSet),
+                        outcomeCut(o.key, row.id, isDerived),
+                        `${o.label} · ${row.name}`,
                       )
                   : undefined;
 
@@ -392,7 +400,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
       <div className="flex flex-wrap gap-x-3.5 gap-y-1.5 pt-0.5">
         {/* Local swatch, not the shared `LegendSwatch` — this legend runs at
             6px, smaller than that component's fixed 8px dot. */}
-        {outcomes.map((o) => (
+        {OUTCOMES.map((o) => (
           <span key={o.key} className="inline-flex items-center gap-1.5">
             <span
               aria-hidden="true"

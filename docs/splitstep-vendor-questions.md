@@ -28,20 +28,20 @@ ids.
 
 ## 1. Gate status
 
-|                                                                    | Status                                                |
-| ------------------------------------------------------------------ | ----------------------------------------------------- |
-| Real full-match JSON available                                     | ✅ three of them                                      |
-| Q1 — are faulted serves emitted?                                   | ✅ **answered from data: yes**                        |
-| Q3 — does stroke numbering restart per rally, and do faults count? | ✅ **answered from data: yes to both**                |
-| Q13 — can point winners be derived?                                | ✅ **answered from data: yes, from the score stream** |
-| Q2 — how are lets handled?                                         | ❌ still open                                         |
-| Q4 — webhook authentication                                        | ✅ **answered by email: `x-hmac-signature`**          |
-| Q5 — status endpoint                                               | ✅ **answered: `GET /jobs/{job_id}`**                 |
-| Q6 — queue priority                                                | ❌ not confirmed                                      |
-| Q7 — stable error codes                                            | ✅ **answered by the September 2026 API**             |
-| Q8–Q12                                                             | ❌ open (Q11 partly covered by detection scores)      |
-| Q14 — frame-rate floor                                             | 🟡 **partly answered 2026-09-28: gate is 25 fps**     |
-| Q15 — points with no resolvable winner                             | ❌ new, open                                          |
+|                                                                    | Status                                                                             |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Real full-match JSON available                                     | ✅ three of them                                                                   |
+| Q1 — are faulted serves emitted?                                   | ✅ **answered from data: yes**                                                     |
+| Q3 — does stroke numbering restart per rally, and do faults count? | ✅ **answered from data: yes to both**                                             |
+| Q13 — can point winners be derived?                                | ✅ **answered from data: yes, from the score stream**                              |
+| Q2 — how are lets handled?                                         | ❌ still open                                                                      |
+| Q4 — webhook authentication                                        | ✅ **answered by email: `x-hmac-signature`**                                       |
+| Q5 — status endpoint                                               | ✅ **answered: `GET /jobs/{job_id}`**                                              |
+| Q6 — queue priority                                                | ❌ not confirmed                                                                   |
+| Q7 — stable error codes                                            | ✅ **answered by the September 2026 API**                                          |
+| Q8–Q12                                                             | ❌ open (Q11 partly covered by detection scores)                                   |
+| Q14 — frame-rate floor                                             | 🟡 **partly answered 2026-09-28: gate is 25 fps; our floor 29.5 since 2026-09-29** |
+| Q15 — points with no resolvable winner                             | ❌ new, open                                                                       |
 
 **The gate has substantially lifted.** The third payload settled the question
 that mattered most: its match has a known true final score (6-4, 6-4), and
@@ -249,7 +249,7 @@ Winner indistinguishable. A `rally_end_reason` (`winner` / `out` / `net`), or
 anything marking that a player attempted and missed a shot, would unblock the
 remaining half.
 
-### Q14 — How is the frame-rate floor measured? **Partly answered 2026-09-28 — floor lowered to 25; 29.97 still recommended.**
+### Q14 — How is the frame-rate floor measured? **Partly answered 2026-09-28 — vendor gate 25; 29.97 recommended. Our floor lowered to 29.5 on 2026-09-29.**
 
 A file whose own metadata reports **29.94 fps** was rejected with
 `VIDEO_FRAME_RATE_TOO_LOW` at step `trimming_video`, detail `video is 29.80 fps`,
@@ -302,11 +302,42 @@ What that settles and what it does not:
   the gate at 25 it no longer decides whether a ~29.9 file is accepted.
 - **Question 3 (billing) — not asked** in the email; still open.
 
-**Decision, unchanged:** keep refusing below 29.97 (`MIN_CONTAINER_AVERAGE_FPS`).
+**Decision, 2026-09-28:** keep refusing below 29.97 (`MIN_CONTAINER_AVERAGE_FPS`).
 It is the vendor's own recommendation, and the one sub-29.97 file they accepted
 (29.95, above) was analyzed but lost five point winners and published nothing.
 If users are blocked on footage they need, the fallback is to refuse below 25
 and warn between 25 and 29.97.
+
+**Decision revised, 2026-09-29: refuse below 29.5, warn from 29.5 up to 29.97.**
+`MIN_CONTAINER_AVERAGE_FPS` is now 29.5 and a new
+`RECOMMENDED_CONTAINER_AVERAGE_FPS` (29.97) marks the band that uploads with one
+warning. Two things changed since the day before:
+
+- The "published nothing" claim above is stale. Both sub-29.97 jobs — `b74a1e04`
+  (29.95, 134 points) and `45ff4bd7` (29.94, 101 points) — are `completed` on
+  derivation `0.6.0-unreconciled` and published; their low grades come from
+  score-fold mismatches and net-hit flags, the same checks constant-30 footage
+  trips, not from anything the frame rate explains.
+- A tournament's worth of phone recordings was being refused. Four
+  full-length files measured with ffprobe on 2026-09-29 carry encoded rates of
+  29.97, 29.92, 30 and 59.94 but average 29.78, 29.80, 29.94 and 29.74 over
+  the whole track — a dropped frame every few seconds. That is ordinary phone
+  footage, not an edge case, and the vendor's own 29.9 line (first tried that
+  morning) still refused three of the four.
+
+29.5 is the middle of the two numbers the vendor has given (29.9 in its docs,
+25 as its gate). It admits footage that lost up to about 1.6% of its frames
+and still refuses a genuinely variable-rate file. The 25 fallback was not
+taken outright: between 25 and 29.5 there is no analysed file to point to. An
+env-variable or per-account override was considered and rejected — the check
+runs in the browser, so an override would ship to everyone anyway.
+
+Same day, second finding: with the floor at 29.5 a 29.94 file was still
+refused — by the _other_ gate, the browser's ~20-frame sample played from the
+start of the file, which read 29.2 (one dropped frame in twenty). Twenty frames
+are not a frame rate. The validator now lets the whole-track average decide
+whenever it is known and falls back to the sample only when the container
+could not be read (non-MP4/MOV, or the read timed out).
 
 ### Q15 — Why do some points resolve no winner? **New, 2026-09-28.**
 

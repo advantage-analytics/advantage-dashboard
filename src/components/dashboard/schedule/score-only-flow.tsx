@@ -976,7 +976,7 @@ function ScoreForm({
                   Upload it instead
                 </Link>
                 <span className="text-[11px] text-[var(--ink-500)]">
-                  <span className="text-[var(--ink-300)]">·</span> the score is
+                  <span className="text-[var(--ink-300)]">·</span> The score is
                   entered with the file
                 </span>
               </div>
@@ -1249,13 +1249,13 @@ function EndingLine({
         {winner && typed ? (
           <>
             {" "}
-            <span className="text-[var(--ink-300)]">·</span> the score stays as
+            <span className="text-[var(--ink-300)]">·</span> The score stays as
             entered, marked {endingMark(state.ending)}
           </>
         ) : winner && !retired ? (
           <>
             {" "}
-            <span className="text-[var(--ink-300)]">·</span> leave the score
+            <span className="text-[var(--ink-300)]">·</span> Leave the score
             empty if no ball was hit
           </>
         ) : null}
@@ -1327,8 +1327,8 @@ function LineupForfeitNote({
       <span className="eyebrow">Result</span>
       <p className="text-[13px] text-[var(--ink-900)]">
         {side === "theirs"
-          ? "No player on their side · we win by forfeit"
-          : "No player on our side · they win by forfeit"}
+          ? "No player on their side · We win by forfeit"
+          : "No player on our side · They win by forfeit"}
       </p>
       {tournament ? (
         <button
@@ -1487,8 +1487,8 @@ function SchoolField({
         {value.name.trim() === ""
           ? "Decides whose roster their player is picked from."
           : directory
-            ? "On the directory · their saved roster is offered below."
-            : "Typed · no saved roster, so their player is typed too."}
+            ? "On the directory · Their saved roster is offered below."
+            : "Typed · No saved roster, so their player is typed too."}
       </span>
 
       {listed ? (

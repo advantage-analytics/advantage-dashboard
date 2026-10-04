@@ -149,7 +149,7 @@ export function AvatarControl({
             </button>
           )}
           <span className="text-[11px] text-[var(--ink-400)]">
-            PNG, JPG or WebP · cropped to a circle
+            PNG, JPG or WebP · Cropped to a circle
           </span>
         </div>
 

@@ -430,7 +430,7 @@ function FileStepContentImpl({
                   ? "Nothing is uploading yet."
                   : isVideo
                     ? `One video per match · ${extensionList(acceptString)} · 1080p or better`
-                    : `One export per match · ${extensionList(acceptString)} · from the app's Share → Export`}
+                    : `One export per match · ${extensionList(acceptString)} · From the app's Share → Export`}
               </span>
             </span>
             {input}
@@ -502,7 +502,7 @@ function FileStepContentImpl({
               </span>
               <span className="mono tabular text-micro leading-4">
                 {isVideo
-                  ? (videoFacts ?? `${uploadedFile?.size} · checked`)
+                  ? (videoFacts ?? `${uploadedFile?.size} · Checked`)
                   : `${extension} · ${uploadedFile?.size} · ${exportStatus}`}
               </span>
             </span>

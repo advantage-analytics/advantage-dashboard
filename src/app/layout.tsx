@@ -23,7 +23,9 @@ const mono = Roboto_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: "Advantage Analytics",
+  // Pages name themselves ("Roster"); the template adds the brand once, so a
+  // tab reads "Roster · Advantage" and the landing page keeps the full name.
+  title: { default: "Advantage Analytics", template: "%s · Advantage" },
   description:
     "The world's first centralized hub for tennis analytics. Built for the modern athlete.",
   openGraph: {
