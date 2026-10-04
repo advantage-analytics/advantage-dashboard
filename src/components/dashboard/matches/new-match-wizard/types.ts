@@ -188,6 +188,13 @@ export interface MatchData {
   };
   /** The caption over the score; null when there is none (never ""). */
   result: string | null;
+  /**
+   * Why a match stopped — detail on `result`, which keeps its caption
+   * unchanged. `retired` whenever `result` is "Retired"; `clinched` or
+   * `time_weather` with "Unfinished" when the wizard was told; null for a
+   * decided match and for a SwingVision import, which is never asked.
+   */
+  stop_reason: StopReason | null;
   date: string;
   private: boolean;
   score: {

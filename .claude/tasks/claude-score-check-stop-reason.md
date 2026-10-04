@@ -48,7 +48,7 @@ ready).
 
 ## T3 · Persist matches.stop_reason from the wizard
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1, T2
 - **files:** supabase/migrations/<timestamp>_matches_stop_reason.sql (new), src/components/dashboard/matches/new-match-wizard/types.ts (MatchData), utils.ts (buildMatchData ~L170–215), useUploadMatchWizard.ts (save path ~L3355–3460: insert and the `reusingMatch` update), tests/ (new or existing hook spec using `tests/fixtures/upload-wizard-hook.ts`) — guess

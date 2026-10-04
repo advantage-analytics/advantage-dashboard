@@ -21,3 +21,12 @@ is the runner's. Newest entries at the bottom.
 1. The self case reads "Set to best of 1 · You wins." when the subject name falls back to "You" — the retired line has the same "retired by You" problem; needs a wording decision.
 2. The remembered format is hook state only: a resumed draft loses Undo (the match stays correctly at best of 1).
 3. Hook/notice behaviour (settled line, Undo, fromLine gating) has no automated test beyond the pure helper.
+
+## T3 · Persist matches.stop_reason from the wizard — done
+
+**gate:** mechanical — lint pass, typecheck pass, tests 4486 passed / 38 failed; the 38 are the same container-only video-playback specs logged under T1. completion — VERDICT: pass.
+**changed:** migration `20261004173810_matches_stop_reason.sql` (nullable `stop_reason text` with check `clinched|time_weather|retired`, column comment) — applied to the live project by the runner via Supabase MCP, file renamed to the version the database recorded; `MatchData.stop_reason` filled by new `stopReasonFor()` in utils.ts; the `reusingMatch` update writes it unconditionally (insert already spreads `matchRow`); `tests/upload-stop-reason.spec.ts` asserts the four saves; the upload-wizard harness's `buildMatchData` stub now delegates to the real one so the written row carries its real shape.
+**follow-ups:**
+
+1. `src/lib/matches/patch-match.ts` and `src/lib/schedule/writes-server.ts` also write "Retired"/"Unfinished" and leave `stop_reason` null.
+2. Nothing reads `stop_reason` yet.
