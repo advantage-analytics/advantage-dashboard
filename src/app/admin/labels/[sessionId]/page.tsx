@@ -29,6 +29,12 @@ import {
  * in the console, beside the save line it owns; the page only supplies the
  * way back.
  *
+ * THIS PAGE DOES NOT SCROLL (T19): `main` is bounded to the viewport under
+ * the admin header and clips, so the console's table card is the one thing
+ * that scrolls — like the Film tab's points list. The bound is on this page's
+ * `AdminPage` only; every other admin page keeps the growing column and its
+ * 72px foot, which here is 24px since nothing scrolls up to it.
+ *
  * `force-dynamic` for the same reason as `admin/labels/page.tsx`: every read
  * is service-role and per request, and the video URL is signed per render.
  * `getLabelSession` re-checks `requireAdmin` even though `admin/layout.tsx`
@@ -59,7 +65,7 @@ export default async function AdminLabelSessionPage({
   const { session, video } = result;
 
   return (
-    <AdminPage className="gap-6">
+    <AdminPage className="h-[calc(100dvh-var(--header-h))] overflow-hidden pb-6">
       <LabelConsole
         session={session}
         video={video}

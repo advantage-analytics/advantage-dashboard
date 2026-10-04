@@ -572,6 +572,83 @@ test.describe("the video dock", () => {
   });
 });
 
+test.describe("viewport fit (T19)", () => {
+  /** The opening tag carrying `attr`. */
+  function tagOf(html: string, attr: string): string {
+    const at = html.indexOf(attr);
+    expect(at, attr).toBeGreaterThan(-1);
+    return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
+  }
+
+  test("one root, a flex column that fills what the page gives it", () => {
+    const html = render({ session: labelSessionFixture(), video: null });
+    expect(html.startsWith("<div data-label-console")).toBe(true);
+    expect(count(html, /data-label-console/g)).toBe(1);
+    const root = tagOf(html, "data-label-console");
+    for (const cls of ["flex", "min-h-0", "flex-1", "flex-col"]) {
+      expect(root).toMatch(new RegExp(`class="[^"]*\\b${cls}\\b`));
+    }
+    // The header and its save line sit above the table.
+    expect(html.indexOf("<h1")).toBeLessThan(
+      html.indexOf("data-label-scroller"),
+    );
+  });
+
+  test("the table card is the scroller, both ways", () => {
+    const html = render({ session: labelSessionFixture(), video: null });
+    expect(count(html, /data-label-scroller/g)).toBe(1);
+    const scroller = tagOf(html, "data-label-scroller");
+    for (const cls of [
+      "min-h-0",
+      "flex-1",
+      "overflow-y-auto",
+      "overflow-x-auto",
+    ]) {
+      expect(scroller, cls).toContain(cls);
+    }
+    // Every row is inside it.
+    expect(html.indexOf('data-row="point"')).toBeGreaterThan(
+      html.indexOf("data-label-scroller"),
+    );
+  });
+
+  test("the point header sticks to the scroller's top, on the card's ground", () => {
+    const html = render({ session: labelSessionFixture(), video: null });
+    const at = html.indexOf("data-label-point-header");
+    expect(at).toBeGreaterThan(html.indexOf("data-label-scroller"));
+    expect(at).toBeLessThan(html.indexOf('data-row="point"'));
+    const header = tagOf(html, "data-label-point-header");
+    expect(header).toMatch(/class="[^"]*\bsticky\b[^"]*\btop-0\b/);
+    expect(header).toMatch(/class="[^"]*\bz-10\b/);
+    expect(header).toContain("bg-[var(--surface-card)]");
+    // It names the columns.
+    expect(text(html.slice(at, html.indexOf('data-row="point"')))).toContain(
+      "How it ended",
+    );
+  });
+
+  test("the stuck header's height is the one the follow scroll takes off", () => {
+    const { POINT_HEADER_HEIGHT } = createLoader().load(
+      "src/components/admin/labels/label-points-table.tsx",
+    ) as { POINT_HEADER_HEIGHT: number };
+    const html = render({ session: labelSessionFixture(), video: null });
+    const at = html.indexOf("data-label-point-header");
+    expect(html.slice(at, at + 400)).toContain(
+      `min-h-[${POINT_HEADER_HEIGHT}px]`,
+    );
+  });
+
+  test("the page bounds main to the viewport under the header", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), "src/app/admin/labels/[sessionId]/page.tsx"),
+      "utf8",
+    );
+    expect(source).toContain(
+      'className="h-[calc(100dvh-var(--header-h))] overflow-hidden pb-6"',
+    );
+  });
+});
+
 test.describe("the Now playing pill", () => {
   /** The pill's opening tag. */
   function pill(html: string): string {
@@ -580,7 +657,7 @@ test.describe("the Now playing pill", () => {
     return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
   }
 
-  test("held while a point plays: the film room's words, fixed top-centre", () => {
+  test("held while a point plays: the film room's words, over the table's top-centre", () => {
     const html = render({
       session: labelSessionFixture(),
       video: null,
@@ -596,10 +673,26 @@ test.describe("the Now playing pill", () => {
     expect(text(html.slice(html.indexOf("data-label-follow-pill")))).toContain(
       "Now playing · Point 2",
     );
-    // Not in the table's flow: pinned to the viewport, clear of the dock's
-    // corner and above its layer.
+    // Not in the table's flow and not on the viewport (T19): pinned over the
+    // scroller, clear of the dock's corner and above its layer.
     expect(tag).toMatch(
-      /class="[^"]*\bfixed\b[^"]*\btop-3\b[^"]*\bleft-1\/2\b/,
+      /class="[^"]*\babsolute\b[^"]*\btop-3\b[^"]*\bleft-1\/2\b/,
+    );
+    expect(tag).not.toMatch(/class="[^"]*\bfixed\b/);
+    // Its positioning context is the wrapper around the scroller, which
+    // comes first inside it.
+    const wrapper = html.lastIndexOf(
+      "<div",
+      html.indexOf("data-label-scroller") - 1,
+    );
+    const context = html.lastIndexOf("<div", wrapper - 1);
+    const contextTag = html.slice(
+      html.lastIndexOf("<div", context - 1),
+      html.indexOf(">", context) + 1,
+    );
+    expect(contextTag).toMatch(/class="[^"]*\brelative\b/);
+    expect(html.indexOf("data-label-follow-pill")).toBeGreaterThan(
+      html.indexOf("data-label-scroller"),
     );
     expect(tag).toMatch(/class="[^"]*\bz-50\b/);
     expect(tag).toContain("film-follow-pill-in");

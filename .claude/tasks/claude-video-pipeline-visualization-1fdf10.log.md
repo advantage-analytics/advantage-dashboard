@@ -284,3 +284,15 @@ Decisions:
 **follow-ups:**
 
 1. The full job id is no longer reachable from the list; a copy-id control would fix that.
+
+## T19 · Viewport-fit: the table scrolls, the page does not — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** The labelling page is bounded to the viewport (`page.tsx` className on `AdminPage`); the console has one flex-column root (`data-label-console`) and the table card is the scroller (`data-label-scroller`, both axes) with a sticky column header. `useFollowScroll` now takes the table's scroll element instead of the window; the Now-playing pill sits over the table.
+
+**follow-ups:**
+
+1. The pill at top-3 covers some column header labels while held.
+2. Space with the bare scroller focused both toggles play and holds.
+3. On very short viewports the table card can shrink to almost nothing.

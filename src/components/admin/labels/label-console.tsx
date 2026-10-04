@@ -86,6 +86,7 @@ import { followInsets, type VideoDockLayout } from "./label-court-position";
 import { sideNames } from "./label-format";
 import {
   LabelPointsTable,
+  POINT_HEADER_HEIGHT,
   type LabelRowOperations,
 } from "./label-points-table";
 import { LabelSaveStatus } from "./label-save-status";
@@ -127,16 +128,26 @@ const FOLLOW: PointFocus = { mode: "follow" };
  * against the playing point, exactly as the Film tab's points rail reads it:
  * in `follow` the PLAYING point is the open one — its strokes unfold, the
  * playing stroke is lit, and `useFollowScroll` keeps that row in view as the
- * page scrolls under the floating video; in `held` the open point stays put
+ * table scrolls under the floating video; in `held` the open point stays put
  * while the lit row keeps following the video. A click on a point row, a
  * stroke row or an editor holds (editing is never fought by the video moving
  * on); re-clicking the playing point's row re-follows; a hand scroll of the
- * page — wheel, touch, the scrollbar, a scrolling key — holds too, on the
+ * table — wheel, touch, the scrollbar, a scrolling key — holds too, on the
  * displayed point (T24), with `null` when nothing is open (T25). The way back
- * is the "Now playing · Point N" pill, fixed at the top-centre of the
- * viewport while held and a point is playing (the video dock keeps the
- * bottom-right corner, the court card the bottom-left); pressing
- * it follows again and the hook jumps the playing row to the top (T26).
+ * is the "Now playing · Point N" pill, at the top-centre of the table while
+ * held and a point is playing (the video dock keeps the bottom-right corner,
+ * the court card the bottom-left); pressing it follows again and the hook
+ * jumps the playing row to the top (T26).
+ *
+ * ── The page does not scroll; the table does (T19) ──────────────────────────
+ *
+ * Everything renders inside one root (`data-label-console`), a flex column
+ * filling the height the page bounds `main` to: the header row and its save
+ * line on top, and under them the table card, which takes what is left and
+ * scrolls both ways inside itself (`data-label-scroller`, in
+ * label-points-table.tsx) with its column header stuck to its top — the Film
+ * tab's points list, not a page that grows. The floating cards are `fixed`,
+ * so where they sit in this tree changes nothing.
  *
  * With nothing playing — before the video moves, or in the dead time between
  * points — following shows the last point that was open (`restPointId`:
@@ -257,6 +268,8 @@ export function LabelConsole({
     () => new Set(initialOpenTombstoneIds ?? []),
   );
   const player = useRef<LabelVideoHandle>(null);
+  // The table card: the one thing on the page that scrolls (T19).
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
   const pendingIds = useRef(0);
   const [clock] = useState(() => createVideoClock(initialVideoTime));
 
@@ -875,16 +888,18 @@ export function LabelConsole({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // The follow scroll, on the PAGE: the table is in the flow and the viewport
-  // is what scrolls (`body` grows with its content), so the hook takes the
-  // window token and measures rows against the viewport, less the strip the
-  // floating cards cover (`followInsets`) — a row under the video or the
-  // court is not in view. Called AFTER the keydown effect above on purpose:
-  // the two listen on the same window, and the hook's reads `defaultPrevented`
-  // to tell Space-as-play (handled above) from Space-as-scroll.
-  const insets = useMemo(() => followInsets(videoLayout), [videoLayout]);
+  // The follow scroll, on the TABLE CARD (T19): the page is bounded to the
+  // viewport and the card is what scrolls, so the hook takes its element and
+  // measures rows against the card's own box, less the strip the floating
+  // cards cover (`followInsets`) — a row under the video or the court is not
+  // in view — and less the column header stuck to the card's top, which a
+  // row scrolled to the very top would otherwise sit under.
+  const insets = useMemo(() => {
+    const docks = followInsets(videoLayout);
+    return { top: docks.top + POINT_HEADER_HEIGHT, bottom: docks.bottom };
+  }, [videoLayout]);
   useFollowScroll({
-    scroller: "window",
+    scroller: scrollerRef,
     held,
     activePointId: playingPointId,
     activeShotId: playing?.shotId ?? null,
@@ -924,8 +939,8 @@ export function LabelConsole({
   }
 
   return (
-    <>
-      <div className="flex items-end justify-between gap-8">
+    <div data-label-console="" className="flex min-h-0 flex-1 flex-col gap-6">
+      <div className="flex shrink-0 items-end justify-between gap-8">
         <div className="flex min-w-0 flex-col gap-1.5">
           <h1 className="text-display truncate">
             Label match · {session.player1Name} vs {session.player2Name}
@@ -947,51 +962,60 @@ export function LabelConsole({
         </div>
       </div>
 
-      {/* `onFocusCapture` on the frame, not the rows: a point cell's editor
-          is the only edit that reaches no console handler of its own. */}
-      <div onFocusCapture={holdOnEditorFocus}>
-        <LabelPointsTable
-          points={points}
-          adScoring={session.adScoring}
-          names={names}
-          expandedPointId={openPointId}
-          onTogglePoint={togglePoint}
-          editable={editable}
-          selectedShotId={placement.shotId}
-          onSelectShot={selectShot}
-          onPatchPoint={patchPoint}
-          onPatchShot={patchShot}
-          operations={rowOperations}
-          onSetGameServer={operable ? setGameServer : undefined}
-          onSetGameType={operable ? setGameType : undefined}
-          openTombstoneIds={openTombstones}
-          onToggleTombstone={toggleTombstone}
-          playingPointId={playingPointId}
-          playingShotId={playing?.shotId ?? null}
-        />
-      </div>
-
-      {/* The film room's return pill (point-list.tsx `FollowPill`), fixed to
-          the viewport's top-centre: the page scrolls, so the pill cannot live
-          in the table's flow, and the corners belong to the floating cards.
-          The same dark recipe over the light page, so `--shadow-floating` in
-          place of the room's inset hairline; no chevron, since the lit row is
-          wherever the page is. Above the dock layer (`z-40`). */}
-      {affordance ? (
-        <button
-          type="button"
-          data-label-follow-pill=""
-          aria-label={affordance.ariaLabel}
-          onClick={followPlayback}
-          className={cn(
-            "fixed top-3 left-1/2 z-50 inline-flex h-7 -translate-x-1/2 cursor-pointer items-center rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium whitespace-nowrap text-white shadow-[var(--shadow-floating)] transition-[background-color,transform] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.97]",
-            // Pinned top, so it drops in (the keyframe reads the sign).
-            "film-follow-pill-in [--film-pill-rise:-4px]",
-          )}
+      {/* What is left of the column, and the pill's positioning context. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* `onFocusCapture` on the frame, not the rows: a point cell's editor
+            is the only edit that reaches no console handler of its own. */}
+        <div
+          className="flex min-h-0 flex-1 flex-col"
+          onFocusCapture={holdOnEditorFocus}
         >
-          {affordance.label}
-        </button>
-      ) : null}
+          <LabelPointsTable
+            scrollerRef={scrollerRef}
+            points={points}
+            adScoring={session.adScoring}
+            names={names}
+            expandedPointId={openPointId}
+            onTogglePoint={togglePoint}
+            editable={editable}
+            selectedShotId={placement.shotId}
+            onSelectShot={selectShot}
+            onPatchPoint={patchPoint}
+            onPatchShot={patchShot}
+            operations={rowOperations}
+            onSetGameServer={operable ? setGameServer : undefined}
+            onSetGameType={operable ? setGameType : undefined}
+            openTombstoneIds={openTombstones}
+            onToggleTombstone={toggleTombstone}
+            playingPointId={playingPointId}
+            playingShotId={playing?.shotId ?? null}
+          />
+        </div>
+
+        {/* The film room's return pill (point-list.tsx `FollowPill`), pinned
+            to the table's top-centre: over the scroller rather than inside
+            it, so it stays put while the rows move, and over the table
+            rather than the page header. The corners belong to the floating
+            cards. The same dark recipe over the light page, so
+            `--shadow-floating` in place of the room's inset hairline; no
+            chevron, since the lit row is wherever the table is. Above the
+            dock layer (`z-40`). */}
+        {affordance ? (
+          <button
+            type="button"
+            data-label-follow-pill=""
+            aria-label={affordance.ariaLabel}
+            onClick={followPlayback}
+            className={cn(
+              "absolute top-3 left-1/2 z-50 inline-flex h-7 -translate-x-1/2 cursor-pointer items-center rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium whitespace-nowrap text-white shadow-[var(--shadow-floating)] transition-[background-color,transform] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.97]",
+              // Pinned top, so it drops in (the keyframe reads the sign).
+              "film-follow-pill-in [--film-pill-rise:-4px]",
+            )}
+          >
+            {affordance.label}
+          </button>
+        ) : null}
+      </div>
 
       <LabelVideoDock
         ref={player}
@@ -1029,7 +1053,7 @@ export function LabelConsole({
           onConfirm={confirmed}
         />
       ) : null}
-    </>
+    </div>
   );
 }
 

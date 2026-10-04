@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo } from "react";
+import { Fragment, useMemo, type RefObject } from "react";
 import { ClipboardList } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
@@ -32,6 +32,13 @@ import {
 } from "./label-table-layout";
 
 export type { LabelRowOperations };
+
+/**
+ * The stuck column header's height in px — its `min-h-[36px]`. The console
+ * takes it off the top of the follow scroll's box, so the playing row is
+ * brought to rest under the header rather than behind it.
+ */
+export const POINT_HEADER_HEIGHT = 36;
 
 /**
  * The console's points table — board 08g's lower half.
@@ -80,6 +87,16 @@ export type { LabelRowOperations };
  * other row states — not the open point's grey, not the selected stroke's
  * white with hairlines, not an added stroke's ringed tint — and it changes
  * nothing: no point opens, no stroke is selected, nothing scrolls.
+ *
+ * THE CARD IS THE SCROLLER (T19, `data-label-scroller`): it takes whatever
+ * height its flex-column parent has left and scrolls BOTH ways inside itself
+ * — down through the points, and sideways once the card is narrower than
+ * `TABLE_MIN_WIDTH`. The column header is `sticky top-0` inside that same
+ * element, so it stays at the card's top while the rows pass under it and
+ * still travels sideways with the columns it names. It bleeds through the
+ * table's side padding (`-mx-6 px-6`) so nothing shows beside it — a fold
+ * overhangs the content — while its hairline stays the content's width.
+ * `scrollerRef` hands the element to the console's follow scroll.
  *
  * Stateless but for one memo: which point is open, which stroke is selected,
  * which rows are playing, which tombstones are expanded and the rows
@@ -137,6 +154,8 @@ export interface LabelPointsTableViewProps {
   playingPointId?: string | null;
   /** The stroke the video is on, inside `playingPointId`. */
   playingShotId?: string | null;
+  /** Lands on the scroll element — the card — for the follow scroll. */
+  scrollerRef?: RefObject<HTMLDivElement | null>;
 }
 
 export function LabelPointsTableView({
@@ -158,6 +177,7 @@ export function LabelPointsTableView({
   onToggleTombstone,
   playingPointId = null,
   playingShotId = null,
+  scrollerRef,
 }: LabelPointsTableViewProps) {
   const edit: EditContext = {
     editable,
@@ -189,25 +209,34 @@ export function LabelPointsTableView({
   }
   return (
     <TooltipProvider>
-      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-        <div className={cn(TABLE_MIN_WIDTH, "px-6 pt-0.5 pb-1.5")}>
+      <div
+        ref={scrollerRef}
+        data-label-scroller=""
+        className="min-h-0 flex-1 overflow-x-auto overflow-y-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]"
+      >
+        <div className={cn(TABLE_MIN_WIDTH, "px-6 pb-1.5")}>
           <div
-            className={cn(
-              POINT_GRID,
-              "min-h-[34px] border-b border-[var(--border-hairline)]",
-            )}
+            data-label-point-header=""
+            className="sticky top-0 z-10 -mx-6 bg-[var(--surface-card)] px-6"
           >
-            {POINT_COLUMNS.map((column, i) => (
-              <span
-                key={i}
-                className={cn(
-                  "text-[12px] whitespace-nowrap text-[var(--ink-500)]",
-                  column.className,
-                )}
-              >
-                {column.label}
-              </span>
-            ))}
+            <div
+              className={cn(
+                POINT_GRID,
+                "min-h-[36px] border-b border-[var(--border-hairline)] pt-0.5",
+              )}
+            >
+              {POINT_COLUMNS.map((column, i) => (
+                <span
+                  key={i}
+                  className={cn(
+                    "text-[12px] whitespace-nowrap text-[var(--ink-500)]",
+                    column.className,
+                  )}
+                >
+                  {column.label}
+                </span>
+              ))}
+            </div>
           </div>
 
           {points.length === 0 ? (

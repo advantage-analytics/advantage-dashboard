@@ -266,7 +266,7 @@ ready).
 
 ## T19 · Viewport-fit: the table scrolls, the page does not
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-points-table.tsx, src/app/admin/labels/[sessionId]/page.tsx, tests/label-console.spec.ts (guess)
 - **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947
