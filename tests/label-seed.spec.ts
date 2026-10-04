@@ -83,22 +83,57 @@ test.describe("buildLabelSeed", () => {
     });
   });
 
-  test("one label shot per transcript shot, keyed by unique event ids", () => {
+  test("one label shot per vendor stroke in a seeded rally, keyed by unique event ids", () => {
     const labelIds = seed.points.flatMap((p) => p.shots.map((s) => s.event_id));
-    const derivedIds = transcript.points.flatMap((p) =>
-      p.shots.map((s) => s.event_id),
-    );
-    expect(labelIds).toHaveLength(derivedIds.length);
     expect(new Set(labelIds).size).toBe(labelIds.length);
+    // Every stroke of every rally the transcript turned into a point — the
+    // ones the derivation kept and the phantoms it removed alike.
+    const rallyIds = new Set(transcript.points.map((p) => p.rally_id));
+    const vendorIds = analysis.rallies
+      .filter((r) => rallyIds.has(r.rallyId))
+      .flatMap((r) => r.strokes.map((s) => s.eventId));
     expect([...labelIds].sort((a, b) => a - b)).toEqual(
-      [...derivedIds].sort((a, b) => a - b),
+      [...vendorIds].sort((a, b) => a - b),
     );
     // Per point, too: a stroke never moves to another point.
+    const rallyById = new Map(analysis.rallies.map((r) => [r.rallyId, r]));
     seed.points.forEach((point, i) => {
+      const rally = rallyById.get(transcript.points[i].rally_id)!;
       expect(point.shots.map((s) => s.event_id).sort()).toEqual(
-        transcript.points[i].shots.map((s) => s.event_id).sort(),
+        rally.strokes.map((s) => s.eventId).sort(),
       );
     });
+  });
+
+  test("strokes the derivation removed are seeded as plain rows with no result", () => {
+    const derivedIds = new Set(
+      transcript.points.flatMap((p) => p.shots.map((s) => s.event_id)),
+    );
+    const strokeById = new Map(
+      analysis.rallies.flatMap((r) => r.strokes.map((s) => [s.eventId, s])),
+    );
+    const [p1] = analysis.players;
+    const added = seed.points.flatMap((p) =>
+      p.shots.filter((s) => !derivedIds.has(s.event_id)),
+    );
+    expect(added.length).toBeGreaterThan(0);
+    for (const shot of added) {
+      const stroke = strokeById.get(shot.event_id)!;
+      expect(stroke.strokeType).not.toBe("serve");
+      expect(shot.status).toBe("kept");
+      expect(shot.result).toBeNull();
+      expect(shot.landing_x).toBeNull();
+      expect(shot.landing_y).toBeNull();
+      expect(shot.video_time).toBe(stroke.videoTime);
+      expect(shot.vendor).toEqual(rawById.get(shot.event_id));
+      const p1Hit = stroke.playerLabel === p1;
+      const p1IsPlayer1 = transcript.points
+        .flatMap((p) => p.shots)
+        .some(
+          (s) => s.is_player1 && strokeById.get(s.event_id)?.playerLabel === p1,
+        );
+      expect(shot.hitter).toBe(side(p1Hit === p1IsPlayer1));
+    }
   });
 
   test("each shot freezes its raw vendor stroke verbatim and copies the derived geometry", () => {
@@ -107,8 +142,10 @@ test.describe("buildLabelSeed", () => {
     );
     for (const point of seed.points) {
       for (const shot of point.shots) {
-        const derived = derivedById.get(shot.event_id)!;
+        const derived = derivedById.get(shot.event_id);
         expect(shot.vendor).toEqual(rawById.get(shot.event_id));
+        // A stroke the derivation removed has no derived shot to copy from.
+        if (!derived) continue;
         expect(shot.vendor.event_id).toBe(shot.event_id);
         expect(shot.hitter).toBe(side(derived.is_player1));
         expect(shot.contact_x).toBe(derived.contact_x);

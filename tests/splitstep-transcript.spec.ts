@@ -661,16 +661,31 @@ test.describe("transcript", () => {
     });
     expect(t.ok).toBe(true);
 
-    // The join key back to the vendor stroke: present on every shot, unique
-    // across the match, and one shot per parsed stroke — phantoms included.
+    // The join key back to the vendor stroke: present on every shot and
+    // unique across the match. The transcript no longer carries every parsed
+    // stroke — phantom swings between serves are removed (played.ts) — so the
+    // strokes it lacks must be exactly those: non-serves before a rally's last
+    // serve. The label seed adds them back (label-seed.spec.ts).
     const eventIds = t.points.flatMap((p) => p.shots.map((s) => s.event_id));
     for (const id of eventIds) {
       expect(id).not.toBeNull();
       expect(typeof id).toBe("number");
     }
     expect(new Set(eventIds).size).toBe(eventIds.length);
-    expect(eventIds.length).toBe(strokes.length);
-    expect(new Set(eventIds)).toEqual(new Set(strokes.map((s) => s.eventId)));
+    const kept = new Set(eventIds);
+    const phantoms = a.rallies.flatMap((rally) => {
+      const serveIndex = lastServeIndex(rally);
+      return rally.strokes
+        .filter((s, i) => i < serveIndex && s.strokeType !== "serve")
+        .map((s) => s.eventId);
+    });
+    expect(phantoms.length).toBeGreaterThan(0);
+    expect(
+      strokes
+        .map((s) => s.eventId)
+        .filter((id) => !kept.has(id))
+        .sort(),
+    ).toEqual([...phantoms].sort());
 
     expect(t.points.map((p) => p.rally_id)).toEqual(
       a.rallies.map((r) => r.rallyId),

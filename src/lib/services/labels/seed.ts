@@ -19,10 +19,13 @@
  * the `shots` frame (metres, near baseline at y = 0).
  */
 
-import type {
-  DerivedShot,
-  RawSplitStepStroke,
-  Transcript,
+import {
+  metersToCourtFrame,
+  parseStrokes,
+  type DerivedShot,
+  type RawSplitStepStroke,
+  type SplitStepStroke,
+  type Transcript,
 } from "@/lib/services/splitstep/derivation";
 
 export type LabelSide = "p1" | "p2";
@@ -221,14 +224,102 @@ function inVideoOrder<T extends { video_time: number | null }>(
     .map(({ item }) => item);
 }
 
+/** What the seed reads off a shot, whether the transcript kept it or not. */
+type SeedableShot = Pick<
+  DerivedShot,
+  | "event_id"
+  | "is_player1"
+  | "shot_type"
+  | "result"
+  | "contact_x"
+  | "contact_y"
+  | "landing_x"
+  | "landing_y"
+  | "video_time"
+>;
+
+/**
+ * The strokes the derivation removed before building the transcript (phantom
+ * swings between serves — played.ts), per rally, shaped like the shots it kept.
+ *
+ * The labeller judges that removal, so the console has to show what was
+ * removed: the seed is one row per vendor stroke, not per cleaned shot. They
+ * carry no result and no landing — the derivation never gave them either.
+ *
+ * The transcript's own shots supply the two things a raw stroke does not say:
+ * which vendor label is player 1, and the trim offset on `video_time`.
+ */
+function droppedShotsByRally(
+  transcript: Transcript,
+  rawStrokes: readonly RawSplitStepStroke[],
+): Map<number, SeedableShot[]> {
+  const parsed = new Map<number, SplitStepStroke>();
+  for (const stroke of parseStrokes([...rawStrokes]).strokes) {
+    parsed.set(stroke.eventId, stroke);
+  }
+
+  const kept = new Set<number>();
+  const isPlayer1 = new Map<string, boolean>();
+  let offset: number | null = null;
+  for (const point of transcript.points) {
+    for (const shot of point.shots) {
+      kept.add(shot.event_id);
+      const stroke = parsed.get(shot.event_id);
+      if (!stroke) continue;
+      isPlayer1.set(stroke.playerLabel, shot.is_player1);
+      if (offset === null && shot.video_time !== null) {
+        offset = shot.video_time - stroke.videoTime;
+      }
+    }
+  }
+
+  const rallies = new Set(transcript.points.map((p) => p.rally_id));
+  const dropped = new Map<number, SeedableShot[]>();
+  for (const stroke of parsed.values()) {
+    if (kept.has(stroke.eventId) || !rallies.has(stroke.rallyId)) continue;
+    const hitter = isPlayer1.get(stroke.playerLabel);
+    if (hitter === undefined) continue;
+    const contact =
+      stroke.playerX !== null && stroke.playerY !== null
+        ? metersToCourtFrame(stroke.playerX, stroke.playerY)
+        : null;
+    const list = dropped.get(stroke.rallyId) ?? [];
+    list.push({
+      event_id: stroke.eventId,
+      is_player1: hitter,
+      shot_type: droppedShotType(stroke),
+      result: null,
+      contact_x: contact?.x ?? null,
+      contact_y: contact?.y ?? null,
+      landing_x: null,
+      landing_y: null,
+      video_time: stroke.videoTime + (offset ?? 0),
+    });
+    dropped.set(stroke.rallyId, list);
+  }
+  return dropped;
+}
+
+/** transcript.ts's `strokeShotType`, which a dropped stroke never went through. */
+function droppedShotType(stroke: SplitStepStroke): string | null {
+  if (stroke.strokeType === "serve") return null;
+  if (stroke.strokeType === "volley") return "Volley";
+  if (stroke.strokeSide === "forehand") return "Forehand";
+  if (stroke.strokeSide === "backhand") return "Backhand";
+  if (stroke.strokeSide === "overhead") return "Overhead";
+  return null;
+}
+
 /**
  * Build the seed rows for one transcript.
  *
- * One label point per transcript point and one label shot per transcript shot
- * — never per raw stroke: a stroke the parse layer dropped as unusable never
- * reached the transcript and has nothing to label against. Throws when a
- * transcript shot has no raw stroke, because that means the transcript and
- * the file were not built from the same payload.
+ * One label point per transcript point and one label shot per vendor stroke
+ * in that point's rally — the transcript's shots plus the strokes the
+ * derivation removed (`droppedShotsByRally`), so no auto-fix is already
+ * applied to what the labeller sees. A stroke the parse layer dropped as
+ * unusable is in neither and has nothing to label against. Throws when a
+ * shot has no raw stroke, because that means the transcript and the file
+ * were not built from the same payload.
  */
 export function buildLabelSeed(
   transcript: Transcript,
@@ -248,8 +339,13 @@ export function buildLabelSeed(
     resolved.set(settled.rallyId, settled.winner !== null);
   }
 
+  const dropped = droppedShotsByRally(transcript, rawStrokes);
+
   const points = transcript.points.map((point, index): LabelPointSeed => {
-    const ordered = inVideoOrder(point.shots);
+    const ordered = inVideoOrder<SeedableShot>([
+      ...point.shots,
+      ...(dropped.get(point.rally_id) ?? []),
+    ]);
     const shots = ordered.map((shot): LabelShotSeed => {
       const vendor = rawById.get(shot.event_id);
       if (!vendor) {
