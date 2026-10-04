@@ -173,6 +173,8 @@ test.describe("buildLabelSeed", () => {
       });
       // serve_side is a seed key only, never a seeded column.
       expect("serve_side" in point).toBe(false);
+      // game_type is the opposite: a seeded column that is never a seed key.
+      expect(point.game_type).toBe("game");
       for (const shot of point.shots) {
         expect(shot.seed).toEqual({
           hitter: shot.hitter,

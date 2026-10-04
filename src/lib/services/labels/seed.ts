@@ -116,6 +116,12 @@ export interface LabelPointSeed {
   ending: LabelEnding | null;
   /** Who struck the last ball; null when no stroke carries a result. */
   ended_by: LabelSide | null;
+  /**
+   * Always an ordinary game: the vendor's data cannot tell a tiebreak apart,
+   * so the labeller marks those by hand. Not in `seed` — a game-level
+   * annotation the `unchanged` comparison and Reset leave alone.
+   */
+  game_type: "game";
   status: "unchanged";
   /** The point's fields above (serve_side null), frozen for Reset. */
   seed: LabelPointSeedValues;
@@ -377,6 +383,7 @@ export function buildLabelSeed(
       point_index: index,
       vendor_rally_ids: [point.rally_id],
       ...row,
+      game_type: "game",
       status: "unchanged",
       // serve_side is never seeded (the column stays null), but the frozen
       // seed names it so Reset clears a serve side the labeller set.

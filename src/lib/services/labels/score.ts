@@ -21,18 +21,20 @@
  *   move the score — the next point's `scoreBefore` is theirs.
  */
 
-import type { LabelEnding, LabelPointStatus, LabelSide } from "./session";
+import {
+  LABEL_GAME_TYPES,
+  isLabelGameType,
+  type LabelEnding,
+  type LabelGameType,
+  type LabelPointStatus,
+  type LabelSide,
+} from "./session";
 
-/** `label_points.game_type`, the CHECK vocabulary (T9 adds the column). */
-export const LABEL_GAME_TYPES = ["game", "tiebreak", "match_tiebreak"] as const;
-export type LabelGameType = (typeof LABEL_GAME_TYPES)[number];
-
-export function isLabelGameType(value: unknown): value is LabelGameType {
-  return (
-    typeof value === "string" &&
-    (LABEL_GAME_TYPES as readonly string[]).includes(value)
-  );
-}
+// `label_points.game_type`'s vocabulary lives in session.ts with the row
+// types (this module imports from there, so it cannot be the home); re-exported
+// here because the scoreboard is where the type is read.
+export { LABEL_GAME_TYPES, isLabelGameType };
+export type { LabelGameType };
 
 /** What the scoreboard reads of a point. A `LabelPoint` satisfies it. */
 export interface ScorablePoint {

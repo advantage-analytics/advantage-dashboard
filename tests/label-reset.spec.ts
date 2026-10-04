@@ -19,7 +19,10 @@ import type {
   LabelShotSeedValues,
 } from "@/lib/services/labels/session";
 import type { AdminClient } from "@/lib/supabase/admin";
-import { buildLabelSession } from "@/lib/data/labels-server";
+import {
+  buildLabelSession,
+  resolveLabelAdScoring,
+} from "@/lib/data/labels-server";
 import {
   FIXTURE_POINT_IDS,
   POINT_1_SHOTS,
@@ -90,8 +93,10 @@ test.describe("planPointReset", () => {
       ok: true,
       write: { ...POINT_SEED, status: "unchanged" },
     });
-    // Never the note, the checked mark or anything on the strokes.
+    // Never the note, the checked mark, the game type or anything on the
+    // strokes.
     if ("error" in plan) throw new Error(plan.error);
+    expect(plan.write).not.toHaveProperty("game_type");
     expect(Object.keys(plan.write).sort()).toEqual(
       [
         "ended_by",
@@ -152,11 +157,16 @@ test.describe("the console's rows", () => {
     expect(applyShotReset(added)).toBe(added);
   });
 
-  test("applyPointReset restores the point's fields, not its shots or check", () => {
+  test("applyPointReset restores the point's fields, not its shots, check, note or game type", () => {
     const p1 = labelSessionFixture().points.find(
       (p) => p.id === FIXTURE_POINT_IDS.P1,
     )!;
-    const checked = { ...p1, checkedAt: "2026-09-28T10:00:00Z" };
+    const checked = {
+      ...p1,
+      checkedAt: "2026-09-28T10:00:00Z",
+      note: "long rally",
+      gameType: "tiebreak" as const,
+    };
     const reset = applyPointReset(checked);
     expect(reset).toMatchObject({
       status: "unchanged",
@@ -164,20 +174,25 @@ test.describe("the console's rows", () => {
       ending: "winner",
       endedBy: "p1",
       checkedAt: "2026-09-28T10:00:00Z",
+      note: "long rally",
+      gameType: "tiebreak",
     });
     expect(reset.shots).toBe(checked.shots);
   });
 });
 
+const SESSION_ROW = {
+  id: SESSION_ID,
+  job_id: "job",
+  match_id: "match",
+  status: "labelling" as const,
+  derivation_version: "0.3.2",
+  ad_scoring: null,
+};
+
 test("the loader carries each row's seed, and no seed for a bad one", () => {
   const session = buildLabelSession(
-    {
-      id: SESSION_ID,
-      job_id: "job",
-      match_id: "match",
-      status: "labelling",
-      derivation_version: "0.3.2",
-    },
+    SESSION_ROW,
     null,
     [
       {
@@ -190,9 +205,11 @@ test("the loader carries each row's seed, and no seed for a bad one", () => {
         winner: "p2",
         ending: "winner",
         ended_by: "p1",
+        game_type: "tiebreak",
         status: "edited",
         status_before_delete: null,
         checked_at: null,
+        note: "  ",
         seed: POINT_SEED,
       },
     ],
@@ -228,6 +245,42 @@ test("the loader carries each row's seed, and no seed for a bad one", () => {
   expect(point.shots.map((s) => s.seed)).toEqual([SHOT_SEED, null]);
   expect(canResetPoint(point)).toBe(true);
   expect(canResetShot(point.shots[0])).toBe(true);
+  // game_type and note come through as stored — the note verbatim, since the
+  // write already trimmed it.
+  expect(point.gameType).toBe("tiebreak");
+  expect(point.note).toBe("  ");
+});
+
+test.describe("the session's ad scoring", () => {
+  test("the labeller's answer wins, then the job's, then ad scoring", () => {
+    expect(resolveLabelAdScoring(false, true)).toBe(false);
+    expect(resolveLabelAdScoring(true, false)).toBe(true);
+    expect(resolveLabelAdScoring(null, false)).toBe(false);
+    expect(resolveLabelAdScoring(null, true)).toBe(true);
+    expect(resolveLabelAdScoring(null, null)).toBe(true);
+    expect(resolveLabelAdScoring(null, undefined)).toBe(true);
+  });
+
+  test("the loader applies that order over the session and job rows", () => {
+    const build = (
+      sessionAdScoring: boolean | null,
+      job: { ad_scoring: boolean | null } | null,
+    ) =>
+      buildLabelSession(
+        { ...SESSION_ROW, ad_scoring: sessionAdScoring },
+        null,
+        [],
+        [],
+        job,
+      ).adScoring;
+    // Both sessions live today are null with no-ad jobs: the job stands in.
+    expect(build(null, { ad_scoring: false })).toBe(false);
+    expect(build(true, { ad_scoring: false })).toBe(true);
+    expect(build(false, { ad_scoring: true })).toBe(false);
+    // Job gone, or submitted without saying: ad scoring.
+    expect(build(null, null)).toBe(true);
+    expect(build(null, { ad_scoring: null })).toBe(true);
+  });
 });
 
 // ── The services, over a fake client ───────────────────────────────────────

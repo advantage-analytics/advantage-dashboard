@@ -170,3 +170,13 @@ Decisions:
 
 1. A stray point inside an already-decided game prints "Game–30"; the point row could style it as a warning.
 2. `labelScores` knows each game's winner but does not return it; the band may want it.
+
+## T9 · game_type column, note/game_type/adScoring in the session loader — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Migration `20261004051628_label_points_game_type.sql` (applied live) adds `label_points.game_type`; `LabelPoint` gains `gameType` and `note`, `LabelSession` gains `adScoring` (session value, else the job's, else ad); the seed writes `game_type: game`; game type stays out of the seed comparison, the point patch and Reset, with specs.
+
+**follow-ups:**
+
+1. Seeding never writes `label_sessions.ad_scoring`; the loader falls back to the job's value.

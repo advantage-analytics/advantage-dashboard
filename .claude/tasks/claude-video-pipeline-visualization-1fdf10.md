@@ -125,7 +125,7 @@ ready).
 
 ## T9 · `game_type` column, `note`/`game_type`/`adScoring` in the session loader
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<timestamp>_label_points_game_type.sql, src/lib/services/labels/session.ts, src/lib/services/labels/seed.ts, src/lib/services/labels/edit.ts, src/lib/data/labels-server.ts, tests/fixtures/label-session.ts, tests/label-edit.spec.ts, tests/label-reset.spec.ts (guess)
 - **done when:**

@@ -36,6 +36,24 @@ export type {
 export type LabelPointStatus = "unchanged" | "edited" | "added" | "deleted";
 export type LabelShotStatus = "kept" | "edited" | "added" | "deleted";
 
+/**
+ * `label_points.game_type`, the CHECK vocabulary
+ * (supabase/migrations/..._label_points_game_type.sql). A game-level
+ * annotation stored per point, like `server`: not seeded, not in the
+ * `unchanged` comparison, and never touched by Reset. Declared here, not in
+ * score.ts, because score.ts imports from this file and nothing may import
+ * back.
+ */
+export const LABEL_GAME_TYPES = ["game", "tiebreak", "match_tiebreak"] as const;
+export type LabelGameType = (typeof LABEL_GAME_TYPES)[number];
+
+export function isLabelGameType(value: unknown): value is LabelGameType {
+  return (
+    typeof value === "string" &&
+    (LABEL_GAME_TYPES as readonly string[]).includes(value)
+  );
+}
+
 /** One `label_shots` row. Coordinates are metres, near baseline at y = 0. */
 export interface LabelShot {
   id: string;
@@ -76,10 +94,17 @@ export interface LabelPoint {
   winner: LabelSide | null;
   ending: LabelEnding | null;
   endedBy: LabelSide | null;
+  /**
+   * What kind of game the point sits in — the same value on every point of
+   * the game. Not part of `seed`: a seeded point is always `game`.
+   */
+  gameType: LabelGameType;
   status: LabelPointStatus;
   /** A tombstone's status before it was deleted — what Undo restores. */
   statusBeforeDelete: Exclude<LabelPointStatus, "deleted"> | null;
   checkedAt: string | null;
+  /** The labeller's free-text note on the point (`label_points.note`). */
+  note: string | null;
   /**
    * The point's own fields as seeded (set, game, server, serve side, won by,
    * ending, ended by) — what Reset restores and what `unchanged` is measured
@@ -99,6 +124,13 @@ export interface LabelSession {
   /** `matches.player1_name` — the p1 side every label row means. */
   player1Name: string;
   player2Name: string;
+  /**
+   * Whether the match was played with advantage scoring, for the scoreboard:
+   * `label_sessions.ad_scoring` as the labeller set it, else the job's
+   * `processing_jobs.ad_scoring`, else true (`resolveLabelAdScoring` in
+   * `lib/data/labels-server.ts`).
+   */
+  adScoring: boolean;
   /** In `point_index` order. */
   points: LabelPoint[];
 }

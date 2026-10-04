@@ -147,9 +147,11 @@ function point(
     winner: null,
     ending: null,
     endedBy: null,
+    gameType: "game",
     status: "unchanged",
     statusBeforeDelete: null,
     checkedAt: null,
+    note: null,
     seed: null,
     shots: [],
     ...fields,
@@ -186,6 +188,7 @@ export function labelSessionFixture(): LabelSession {
     derivationVersion: "0.3.2",
     player1Name: "Jordan Lee",
     player2Name: "Elena Vargas",
+    adScoring: true,
     points: [
       point(P1, 0, {
         winner: "p2",
@@ -210,6 +213,7 @@ export function labelSessionFixture(): LabelSession {
         ending: "ace",
         endedBy: "p1",
         checkedAt: "2026-09-28T10:00:00Z",
+        note: "Clean ace down the T.",
         shots: [
           seededShot("s-ace", P2, {
             eventId: 201,

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   LABEL_POINT_EDIT_FIELDS,
+  LABEL_POINT_SEED_FIELDS,
   LABEL_SHOT_EDIT_FIELDS,
   applyLabelShotPatch,
   labelPointStatusAfterPatch,
@@ -88,6 +89,7 @@ test.describe("the allowlists", () => {
     "checked_at",
     "point_index",
     "vendor_rally_ids",
+    "game_type",
   ]) {
     test(`a point patch reaching "${key}" is rejected whole`, () => {
       expect(parseLabelPointPatch({ winner: "p1", [key]: 1 })).toHaveProperty(
@@ -95,6 +97,17 @@ test.describe("the allowlists", () => {
       );
     });
   }
+
+  test("game_type is a game-level annotation, not a point edit or a seed field", () => {
+    // Alone, and with a value the column would accept: still not a point edit.
+    const alone = parseLabelPointPatch({ game_type: "tiebreak" });
+    expect(alone).toHaveProperty("error");
+    expect((alone as { error: string }).error).toContain("game_type");
+    // The status rule never measures it, so marking a tiebreak cannot make a
+    // point `edited`, and Reset cannot put it back.
+    expect(LABEL_POINT_SEED_FIELDS).not.toContain("game_type");
+    expect(LABEL_POINT_EDIT_FIELDS).not.toContain("game_type");
+  });
 
   test("a patch must be a non-empty plain object", () => {
     for (const bad of [null, undefined, "x", 3, [], {}]) {
@@ -479,6 +492,21 @@ test.describe("the stored seed", () => {
     expect(parseLabelPointSeed({ ...pointSeed, ending: "lucky" })).toBeNull();
     const { serve_side: _side, ...noSide } = pointSeed;
     expect(parseLabelPointSeed(noSide)).toBeNull();
+  });
+
+  test("a point seed carrying game_type has it dropped, not trusted", () => {
+    const pointSeed = {
+      set_number: 1,
+      game_number: 13,
+      server: "p1",
+      serve_side: null,
+      winner: "p2",
+      ending: "winner",
+      ended_by: "p2",
+    };
+    const parsed = parseLabelPointSeed({ ...pointSeed, game_type: "tiebreak" });
+    expect(parsed).toEqual(pointSeed);
+    expect(parsed).not.toHaveProperty("game_type");
   });
 });
 

@@ -27,6 +27,7 @@ import {
 import {
   orderLabelShots,
   type LabelEnding,
+  type LabelGameType,
   type LabelPoint,
   type LabelPointStatus,
   type LabelServeSide,
@@ -290,6 +291,12 @@ interface DbSessionRow {
   match_id: string;
   status: "labelling" | "complete";
   derivation_version: string;
+  /** Null until the labeller sets it — then the job's value stands in. */
+  ad_scoring: boolean | null;
+}
+/** The one column of the session's job the console needs. */
+interface DbJobScoringRow {
+  ad_scoring: boolean | null;
 }
 interface DbPointRow {
   id: string;
@@ -301,9 +308,11 @@ interface DbPointRow {
   winner: LabelSide | null;
   ending: LabelEnding | null;
   ended_by: LabelSide | null;
+  game_type: LabelGameType;
   status: LabelPointStatus;
   status_before_delete: Exclude<LabelPointStatus, "deleted"> | null;
   checked_at: string | null;
+  note: string | null;
   /** jsonb, parsed by `parseLabelPointSeed` before anything trusts it. */
   seed?: unknown;
 }
@@ -355,7 +364,7 @@ export async function getLabelSession(
 
   const { data: session, error: sessionError } = await db
     .from("label_sessions")
-    .select("id, job_id, match_id, status, derivation_version")
+    .select("id, job_id, match_id, status, derivation_version, ad_scoring")
     .eq("id", sessionId)
     .maybeSingle<DbSessionRow>();
   if (sessionError) {
@@ -363,47 +372,60 @@ export async function getLabelSession(
   }
   if (!session) return { ok: false, reason: "not-found" };
 
-  const [matchResult, pointRows, shotRows, video] = await Promise.all([
-    db
-      .from("matches")
-      .select("id, player1_name, player2_name")
-      .eq("id", session.match_id)
-      .maybeSingle<DbMatch>(),
-    readAllPages<DbPointRow>(
+  const [matchResult, jobResult, pointRows, shotRows, video] =
+    await Promise.all([
       db
-        .from("label_points")
-        .select(
-          "id, point_index, set_number, game_number, server, serve_side, winner, ending, ended_by, status, status_before_delete, checked_at, seed",
-        )
-        .eq("session_id", session.id)
-        .order("point_index")
-        .order("id"),
-      "Could not read label points",
-    ),
-    readAllPages<DbShotRow>(
-      db
-        .from("label_shots")
-        .select(
-          "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, contact_x, contact_y, landing_x, landing_y, video_time, seed",
-        )
-        .eq("session_id", session.id)
-        .order("id"),
-      "Could not read label shots",
-    ),
-    // A session whose job is gone has no video to sign; it still opens.
-    (session.job_id
-      ? deps.loadVideo(db, session.job_id)
-      : Promise.resolve(null)
-    ).catch((cause: unknown) => {
-      console.error("[labels] could not load the session's video", {
-        sessionId: session.id,
-        message: (cause as Error)?.message,
-      });
-      return null;
-    }),
-  ]);
+        .from("matches")
+        .select("id, player1_name, player2_name")
+        .eq("id", session.match_id)
+        .maybeSingle<DbMatch>(),
+      // The job's scoring is only the fallback for a session that has not
+      // set its own; a session whose job is gone has nothing to fall back to.
+      session.ad_scoring === null && session.job_id
+        ? db
+            .from("processing_jobs")
+            .select("ad_scoring")
+            .eq("id", session.job_id)
+            .maybeSingle<DbJobScoringRow>()
+        : Promise.resolve({ data: null, error: null }),
+      readAllPages<DbPointRow>(
+        db
+          .from("label_points")
+          .select(
+            "id, point_index, set_number, game_number, server, serve_side, winner, ending, ended_by, game_type, status, status_before_delete, checked_at, note, seed",
+          )
+          .eq("session_id", session.id)
+          .order("point_index")
+          .order("id"),
+        "Could not read label points",
+      ),
+      readAllPages<DbShotRow>(
+        db
+          .from("label_shots")
+          .select(
+            "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, contact_x, contact_y, landing_x, landing_y, video_time, seed",
+          )
+          .eq("session_id", session.id)
+          .order("id"),
+        "Could not read label shots",
+      ),
+      // A session whose job is gone has no video to sign; it still opens.
+      (session.job_id
+        ? deps.loadVideo(db, session.job_id)
+        : Promise.resolve(null)
+      ).catch((cause: unknown) => {
+        console.error("[labels] could not load the session's video", {
+          sessionId: session.id,
+          message: (cause as Error)?.message,
+        });
+        return null;
+      }),
+    ]);
   if (matchResult.error) {
     throw new Error(`Could not read match: ${matchResult.error.message}`);
+  }
+  if (jobResult.error) {
+    throw new Error(`Could not read the job: ${jobResult.error.message}`);
   }
 
   return {
@@ -413,21 +435,39 @@ export async function getLabelSession(
       matchResult.data ?? null,
       pointRows,
       shotRows,
+      jobResult.data ?? null,
     ),
     video,
   };
 }
 
 /**
+ * Whether the scoreboard counts advantage: what the labeller set on the
+ * session, else what the job was submitted with, else ad scoring — the
+ * default of every format the wizard offers, and the one a blank reading of
+ * a college match gets wrong least often. Exported for the spec.
+ */
+export function resolveLabelAdScoring(
+  sessionAdScoring: boolean | null,
+  jobAdScoring: boolean | null | undefined,
+): boolean {
+  return sessionAdScoring ?? jobAdScoring ?? true;
+}
+
+/**
  * Rows → the console's session. Pure and exported for the spec: shots fold
  * under their point and are put in video order by `orderLabelShots`, never
  * by the order PostgREST returned them in.
+ *
+ * `job` is the session's `processing_jobs` row (its `ad_scoring`), or null
+ * when the job is gone or was not read because the session has its own.
  */
 export function buildLabelSession(
   session: DbSessionRow,
   match: DbMatch | null,
   pointRows: readonly DbPointRow[],
   shotRows: readonly DbShotRow[],
+  job: DbJobScoringRow | null = null,
 ): LabelSession {
   const shotsByPoint = new Map<string, LabelShot[]>();
   for (const row of shotRows) {
@@ -465,9 +505,11 @@ export function buildLabelSession(
       winner: row.winner,
       ending: row.ending,
       endedBy: row.ended_by,
+      gameType: row.game_type,
       status: row.status,
       statusBeforeDelete: row.status_before_delete ?? null,
       checkedAt: row.checked_at,
+      note: row.note ?? null,
       seed: parseLabelPointSeed(row.seed ?? null),
       shots: orderLabelShots(shotsByPoint.get(row.id) ?? []),
     }));
@@ -480,6 +522,7 @@ export function buildLabelSession(
     derivationVersion: session.derivation_version,
     player1Name: match?.player1_name ?? "Player 1",
     player2Name: match?.player2_name ?? "Player 2",
+    adScoring: resolveLabelAdScoring(session.ad_scoring, job?.ad_scoring),
     points,
   };
 }

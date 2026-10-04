@@ -103,7 +103,11 @@ export const LABEL_POINT_VALUE_FIELDS = [
   "serve_side",
 ] as const;
 
-/** Every key `updateLabelPoint` accepts: the values, plus the free-text note. */
+/**
+ * Every key `updateLabelPoint` accepts: the values, plus the free-text note.
+ * Not `game_type`: that is set for a whole game at once by its own operation,
+ * never through a point edit — a patch naming it is rejected whole.
+ */
 export const LABEL_POINT_EDIT_FIELDS = [
   ...LABEL_POINT_VALUE_FIELDS,
   "note",
@@ -124,6 +128,11 @@ export type LabelPointPatch = Partial<LabelPointValues> & {
  * Every field a point's status is measured on — the patchable values plus
  * set, game and server, which only a move changes — keyed by column, the
  * same keys as `label_points.seed`.
+ *
+ * `game_type` is deliberately absent: marking a game a tiebreak is a
+ * game-level annotation, not a correction of the seed, so it never makes a
+ * point `edited`, is dropped from a stored seed that carries it
+ * (`parseLabelPointSeed`), and is left alone by Reset.
  */
 export const LABEL_POINT_SEED_FIELDS = [
   "set_number",
@@ -588,7 +597,11 @@ export function parseLabelShotSeed(value: unknown): LabelShotSeedValues | null {
   };
 }
 
-/** A `label_points.seed` jsonb, or null — see {@link parseLabelShotSeed}. */
+/**
+ * A `label_points.seed` jsonb, or null — see {@link parseLabelShotSeed}.
+ * Only {@link LABEL_POINT_SEED_FIELDS} come through: a seed that also carries
+ * `game_type` (or anything else) has it dropped, not rejected.
+ */
 export function parseLabelPointSeed(
   value: unknown,
 ): LabelPointSeedValues | null {
