@@ -5,6 +5,10 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import {
+  fromCourt,
+  fromCourtInHalf,
+} from "@/components/admin/labels/court-geometry";
 import type { LabelSession, LabelVideo } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
@@ -416,26 +420,119 @@ test("defaults to the first point still to check", () => {
   expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Point 1</);
 });
 
-test("the court is board 08's art, with the open point's strokes on it", () => {
-  const html = render({
+/** The court's marks layer, the `<svg data-court-marks>` and its children. */
+function courtMarks(html: string): string {
+  const match = /<svg[^>]*data-court-marks=""[^>]*>([\s\S]*?)<\/svg>/.exec(
+    html,
+  );
+  expect(match).not.toBeNull();
+  return match![1];
+}
+
+test("the court is board 08's art, showing the rally one stroke at a time (T22)", () => {
+  // Nothing selected, before the video moves: the whole court, as a picture,
+  // with nothing on it — the marks follow the film, never the whole point.
+  const still = render({
     session: labelSessionFixture(),
     video: null,
     initialExpandedPointId: FIXTURE_POINT_IDS.P1,
   });
-  // Nothing selected: the whole court, as a picture.
-  expect(html).toContain('viewBox="-7.265 -4.5 14.53 32.77"');
-  expect(html).toContain('data-court-view="whole"');
-  expect(html).not.toContain("data-court-target");
-  // Three live strokes, each with a hit ring and a landing dot; the
-  // tombstone draws nothing.
-  expect(html).toContain('aria-label="Court with 3 strokes placed"');
-  expect(count(html, /data-court-hit/g)).toBe(3);
-  expect(count(html, /data-court-landed/g)).toBe(3);
+  expect(still).toContain('viewBox="-7.265 -4.5 14.53 32.77"');
+  expect(still).toContain('data-court-view="whole"');
+  expect(still).not.toContain("data-court-target");
+  expect(still).toContain('aria-label="Court with no strokes placed"');
+  expect(courtMarks(still)).not.toContain("<circle");
   // No list of shots in or beside the card — the table is the list — and
   // no switch until something is being placed.
-  expect(html).toContain("data-court-legend");
-  expect(html).not.toContain("data-court-steps");
-  expect(html).not.toContain("Flip side");
+  expect(still).toContain("data-court-legend");
+  expect(still).not.toContain("data-court-steps");
+  expect(still).not.toContain("Flip side");
+
+  // At the serve's contact (41:12.0): its ring, and the ball not yet down.
+  const serve = render({
+    session: labelSessionFixture(),
+    video: null,
+    initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+    initialVideoTime: 2472.0,
+  });
+  expect(count(serve, /data-court-hit/g)).toBe(1);
+  expect(count(serve, /data-court-landed/g)).toBe(0);
+  const serveAt = fromCourt({ x: -0.8, y: -0.32 });
+  expect(serve).toContain(
+    `data-court-hit="" cx="${serveAt.sx.toFixed(2)}%" cy="${serveAt.sy.toFixed(2)}%"`,
+  );
+  // Full strength, eased and risen in with the Video tab's own motion.
+  expect(serve).toMatch(
+    /data-court-hit=""[^>]*style="opacity:1;transition:opacity 300ms cubic-bezier\(\.25,\.46,\.45,\.94\);animation:film-mark-in var\(--duration-fast\) var\(--ease-primary\) both"/,
+  );
+
+  // 3.3 s after the added forehand (41:14.4): its ring is fading, the return's
+  // (41:13.1, 4.6 s ago) is gone and the serve's (41:12.0) long gone.
+  const late = render({
+    session: labelSessionFixture(),
+    video: null,
+    initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+    initialVideoTime: 2477.7,
+  });
+  expect(late).toContain('data-court-view="whole"');
+  expect(count(late, /data-court-hit/g)).toBe(1);
+  const addedAt = fromCourt({ x: -2.3, y: -1.02 });
+  expect(late).toContain(
+    `data-court-hit="" cx="${addedAt.sx.toFixed(2)}%" cy="${addedAt.sy.toFixed(2)}%"`,
+  );
+  expect(late).not.toContain(`cx="${serveAt.sx.toFixed(2)}%"`);
+  expect(late).toMatch(/data-court-hit=""[^>]*style="opacity:0\.5;/);
+});
+
+test("a selected stroke is on the court alone, at full strength (T22)", () => {
+  // Editable: the zoomed half, the return's ring and dot and nothing else —
+  // not the serve, not the added forehand.
+  const html = render({
+    session: labelSessionFixture(),
+    video: null,
+    initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+    initialSelectedShotId: "s-return",
+    initialVideoTime: 2477.7,
+    ...SAVES,
+  });
+  expect(html).toContain('data-court-view="far"');
+  expect(count(html, /data-court-hit/g)).toBe(1);
+  expect(count(html, /data-court-landed/g)).toBe(1);
+  expect(html).toMatch(/data-court-hit=""[^>]*style="opacity:1;/);
+  expect(html).toMatch(/data-court-landed=""[^>]*style="opacity:1;/);
+  const hitAt = fromCourtInHalf("far", { x: 1.8, y: 24.49 });
+  expect(html).toContain(
+    `data-court-hit="" cx="${hitAt.sx.toFixed(2)}%" cy="${hitAt.sy.toFixed(2)}%"`,
+  );
+  expect(count(html, /data-selected-ring="contact"/g)).toBe(1);
+
+  // Read-only: the whole court, still that one stroke.
+  const readOnly = render({
+    session: labelSessionFixture(),
+    video: null,
+    initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+    initialSelectedShotId: "s-return",
+    initialVideoTime: 2477.7,
+  });
+  expect(readOnly).toContain('data-court-view="whole"');
+  expect(count(readOnly, /data-court-hit/g)).toBe(1);
+  expect(count(readOnly, /data-court-landed/g)).toBe(1);
+  expect(readOnly).not.toContain("data-selected-ring");
+});
+
+test("a selected stroke with no coordinates yet is a blank court, still clickable (T22)", () => {
+  const html = render({
+    session: labelSessionFixture(),
+    video: null,
+    initialExpandedPointId: FIXTURE_POINT_IDS.P2,
+    initialSelectedShotId: "s-ace",
+    initialVideoTime: 2490.2,
+    ...SAVES,
+  });
+  expect(html).toMatch(/<button[^>]*data-court-target/);
+  expect(html).toContain('aria-label="Click where shot 1 was hit. ');
+  expect(courtMarks(html)).not.toContain("<circle");
+  expect(html).not.toContain("data-selected-ring");
 });
 
 test("the court left the band for a floating card of its own", () => {

@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { ArrowUpDown, GripVertical, Maximize2, Minimize2 } from "lucide-react";
 import type {
   BoardAnchor,
@@ -11,7 +18,7 @@ import {
   SETTLE_CLASS,
   useCornerDrag,
 } from "@/components/dashboard/matches/match-detail/film/use-corner-drag";
-import type { LabelPoint } from "@/lib/services/labels/session";
+import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import type { CourtPoint } from "./court-geometry";
 import {
@@ -19,7 +26,12 @@ import {
   type PlacementState,
   type PlacementTarget,
 } from "./court-placement";
-import { LabelCourt } from "./label-court";
+import { LabelCourt, type CourtStroke } from "./label-court";
+import {
+  courtMarksAt,
+  courtMarksKey,
+  parseCourtMarksKey,
+} from "./label-court-marks";
 import {
   COURT_ANCHOR_STORAGE_KEY,
   COURT_DOCK_SIZE,
@@ -31,6 +43,7 @@ import {
 } from "./label-court-position";
 import { DOCK_INSETS, parseDockMinimised } from "./label-dock-position";
 import type { SideNames } from "./label-format";
+import type { VideoClock } from "./video-clock";
 
 /**
  * The console's court, floating (board 08i): a 300 × 318 dark card beside the
@@ -41,14 +54,28 @@ import type { SideNames } from "./label-format";
  *
  * ── Two states ──────────────────────────────────────────────────────────────
  * - **Not placing** (the film is playing, nothing is selected, or the session
- *   is read-only): the WHOLE court, read-only, with the open point's marks
- *   and the playing stroke lit. A click does nothing. There is no shot list —
- *   the table is the list.
+ *   is read-only): the WHOLE court, read-only. A click does nothing. There is
+ *   no shot list — the table is the list.
  * - **Placing** (a stroke is selected and the console is editable): the card
  *   takes a `--blue` outline and ZOOMS to the half the next click belongs on
  *   (court-placement.ts), with the run-off round it clickable for a ball that
  *   went out. The foot holds the Contact / Landing switch — which end the
  *   click places — and "Flip side", for a ball into the net.
+ *
+ * ── What is on the court ────────────────────────────────────────────────────
+ * Never the whole point at once. With nothing selected the marks follow the
+ * film the way the Video tab's court does (`label-court-marks.ts`): each
+ * contact appears at its stroke, each landing when the ball comes down, holds,
+ * fades and goes — so the card reads the rally one stroke at a time, and
+ * pausing freezes it. The card subscribes to the console's `VideoClock`
+ * itself, with the marks' string key as its snapshot, so an opacity step
+ * re-renders this card and nothing else.
+ *
+ * With a stroke selected — editable or not — the court shows THAT stroke
+ * alone, both ends at full strength: the labeller is looking at one shot and
+ * placing it, so the end just clicked appears at once and nothing else
+ * competes with it. A selected stroke with no coordinates yet is a blank
+ * court, still clickable where editable.
  *
  * ── A box that never changes size ───────────────────────────────────────────
  * As the video dock: the layer is `fixed inset-0`, the dock keeps the card's
@@ -61,6 +88,9 @@ import type { SideNames } from "./label-format";
  * 220ms-in / 160ms-out collapse toward the anchored corner, with no scale and
  * no glide under reduced motion.
  */
+
+/** No point open: one shared empty list, so the marks memo holds. */
+const NO_SHOTS: readonly LabelShot[] = [];
 
 const HEADER_BUTTON =
   "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-white/70 transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
@@ -137,6 +167,7 @@ export function LabelCourtDock({
   placement,
   editable,
   playingShotId = null,
+  clock,
   video,
   onPlace,
   onTarget,
@@ -150,8 +181,10 @@ export function LabelCourtDock({
   placement: PlacementState;
   /** Whether a click may write. Read-only: always the whole court. */
   editable: boolean;
-  /** The stroke on screen in the video — lit while nothing is being placed. */
+  /** The stroke on screen in the video — named in the header while nothing is selected. */
   playingShotId?: string | null;
+  /** The console's video clock (analysis seconds): what the marks follow. */
+  clock: VideoClock;
   /** Where the video dock is, to keep clear of it. Null until it is known. */
   video: VideoDockLayout | null;
   /** A click on the zoomed half, in metres. */
@@ -229,7 +262,7 @@ export function LabelCourtDock({
   ];
   const origin = courtOrigin(anchor);
 
-  const shots = point?.shots ?? [];
+  const shots = point?.shots ?? NO_SHOTS;
   const selected =
     placement.shotId === null
       ? null
@@ -247,6 +280,32 @@ export function LabelCourtDock({
     ? shots.filter((shot) => shot.status !== "deleted").indexOf(selected) + 1
     : null;
   const prompt = placing ? placementPrompt(placement, selectedNumber) : null;
+
+  // The marks the film is showing right now, as a string snapshot: React
+  // re-renders this card only when an opacity steps, and the console — which
+  // owns the clock but never subscribes to this — not at all. Taken from the
+  // current strokes on every render, so a retimed stroke moves at once.
+  const marksSnapshot = () => courtMarksKey(courtMarksAt(shots, clock.get()));
+  const marksKey = useSyncExternalStore(
+    clock.subscribe,
+    marksSnapshot,
+    marksSnapshot,
+  );
+  const strokes = useMemo<CourtStroke[]>(() => {
+    // A selected stroke alone, at full strength; none of it yet is a blank court.
+    if (placement.shotId !== null) return selected ? [{ shot: selected }] : [];
+    const byId = new Map(shots.map((shot) => [shot.id, shot]));
+    const out: CourtStroke[] = [];
+    for (const mark of parseCourtMarksKey(marksKey)) {
+      const shot = byId.get(mark.shotId);
+      if (!shot) continue;
+      out.push({
+        shot,
+        opacity: { hit: mark.contactOpacity, landed: mark.landingOpacity },
+      });
+    }
+    return out;
+  }, [placement.shotId, selected, shots, marksKey]);
 
   return (
     <div
@@ -375,9 +434,9 @@ export function LabelCourtDock({
 
             <div className="my-2 flex h-[222px] shrink-0 justify-center">
               <LabelCourt
-                shots={shots}
+                strokes={strokes}
                 view={placing ? placement.half : "whole"}
-                litShotId={placement.shotId ?? playingShotId}
+                targetShotId={placing ? placement.shotId : null}
                 target={placing ? placement.target : null}
                 prompt={prompt}
                 onPlace={placing ? onPlace : undefined}

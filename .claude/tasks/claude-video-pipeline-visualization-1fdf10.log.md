@@ -317,3 +317,14 @@ Decisions:
 
 1. Writing the clock variable on the console root each frame invalidates the whole table subtree; narrow the target if a long match janks.
 2. The playing shot row could take the same rule with per-shot windows.
+
+## T22 · Court marks one at a time, fading; a selected shot alone — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** With no shot selected the court draws each stroke's contact, then its landing, as it is hit and fades them (new pure `label-court-marks.ts` on the film room's `markOpacity` / `bounceEventTime`; the card subscribes to the video clock, the console does not re-render). With a shot selected it draws only that shot, blank when it has no coordinates; zoom and click-to-place are unchanged. Film files: `bounceEventTime` exported and the two mark-fade constants moved to `film-court.ts`.
+
+**follow-ups:**
+
+1. The court's aria-label still says "N strokes placed".
+2. Re-selecting the same shot may replay the fade-in.

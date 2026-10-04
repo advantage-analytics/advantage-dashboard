@@ -310,7 +310,7 @@ ready).
 
 ## T22 · Court marks one at a time, fading; a selected shot alone
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/components/dashboard/matches/match-detail/film/film-court.ts, src/components/dashboard/matches/match-detail/film/film-court-card.tsx, src/components/admin/labels/label-court-marks.ts (new), src/components/admin/labels/label-court.tsx, src/components/admin/labels/label-court-dock.tsx, src/components/admin/labels/label-console.tsx, tests/label-court-marks.spec.ts (new), tests/label-console.spec.ts (guess)
 - **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947

@@ -1062,6 +1062,7 @@ export function LabelConsole({
         placement={placement}
         editable={editable}
         playingShotId={playing?.shotId ?? null}
+        clock={clock}
         video={videoLayout}
         onPlace={place}
         onTarget={setTarget}

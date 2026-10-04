@@ -1,3 +1,7 @@
+import {
+  MARK_FADE_TRANSITION,
+  MARK_IN_ANIMATION,
+} from "@/components/dashboard/matches/match-detail/film/film-court";
 import type { LabelShot } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import {
@@ -29,14 +33,20 @@ import type { PlacementTarget } from "./court-placement";
  * Two views of the same art:
  *
  * - `view="whole"` — the whole court (`COURT_VIEW_BOX`), read-only: a
- *   picture of the point. The lit stroke (the selected one, else the playing
- *   one) is drawn at full strength and the rest stand back.
+ *   picture of the point as it happens.
  * - `view="near" | "far"` — zoomed to that half (`halfCourtViewBox`) with its
  *   run-off, as a button under a crosshair: a click ANYWHERE in the box —
  *   lines or surround, for a ball that went out — becomes metres through
  *   `toCourtInHalf` and goes to `onPlace`. Which end it places is
- *   court-placement.ts's sequence; that end of the lit stroke carries the
+ *   court-placement.ts's sequence; that end of the target stroke carries the
  *   `--blue` ring, so the labeller sees what the click will move.
+ *
+ * What is drawn is the caller's: each stroke comes with an opacity for each
+ * end (`label-court-marks.ts` for the fading rally, 1 for a selected stroke),
+ * an end at 0 is not drawn at all, and the dashed path between them takes the
+ * fainter of the two. Each end eases between opacity steps with the Video
+ * tab's own `MARK_FADE_TRANSITION` and rises in on mount with its
+ * `MARK_IN_ANIMATION`, so the two courts read as one.
  *
  * Both boxes keep the art's own proportions (0.4434 for the whole court,
  * 276 × 222 for a half), so a click converts to metres without distortion.
@@ -60,71 +70,91 @@ const HALF_BOX_WIDTH = 276;
 
 export type CourtView = "whole" | CourtHalf;
 
-/** A stroke on screen: whichever ends are known, in percent of the box. */
-interface Mark {
-  id: string;
-  lit: boolean;
-  hit: ScreenPoint | null;
-  landed: ScreenPoint | null;
+/** How strongly each end of a stroke is drawn, 0–1. An end at 0 is not. */
+export interface MarkOpacity {
+  hit: number;
+  landed: number;
 }
 
-function marksFor(
-  shots: readonly LabelShot[],
-  litShotId: string | null,
-  view: CourtView,
-): Mark[] {
+export const FULL_OPACITY: MarkOpacity = { hit: 1, landed: 1 };
+
+/** One stroke to draw, with its ends' opacities (both 1 when left out). */
+export interface CourtStroke {
+  shot: LabelShot;
+  opacity?: MarkOpacity;
+}
+
+/** A stroke on screen: whichever ends are drawn, in percent of the box. */
+interface Mark {
+  id: string;
+  hit: (ScreenPoint & { opacity: number }) | null;
+  landed: (ScreenPoint & { opacity: number }) | null;
+}
+
+function marksFor(strokes: readonly CourtStroke[], view: CourtView): Mark[] {
   const project = (point: CourtPoint) =>
     view === "whole" ? fromCourt(point) : fromCourtInHalf(view, point);
   const marks: Mark[] = [];
-  for (const shot of shots) {
+  for (const { shot, opacity = FULL_OPACITY } of strokes) {
     if (shot.status === "deleted") continue;
     const hit =
-      shot.contactX !== null && shot.contactY !== null
-        ? project({ x: shot.contactX, y: shot.contactY })
+      opacity.hit > 0 && shot.contactX !== null && shot.contactY !== null
+        ? {
+            ...project({ x: shot.contactX, y: shot.contactY }),
+            opacity: opacity.hit,
+          }
         : null;
     const landed =
-      shot.landingX !== null && shot.landingY !== null
-        ? project({ x: shot.landingX, y: shot.landingY })
+      opacity.landed > 0 && shot.landingX !== null && shot.landingY !== null
+        ? {
+            ...project({ x: shot.landingX, y: shot.landingY }),
+            opacity: opacity.landed,
+          }
         : null;
     if (!hit && !landed) continue;
-    marks.push({ id: shot.id, lit: shot.id === litShotId, hit, landed });
+    marks.push({ id: shot.id, hit, landed });
   }
   return marks;
 }
 
 const pct = (n: number) => `${n.toFixed(2)}%`;
 
+/** A mark's opacity, eased between steps and risen in on mount. */
+const markStyle = (opacity: number) => ({
+  opacity,
+  transition: MARK_FADE_TRANSITION,
+  animation: MARK_IN_ANIMATION,
+});
+
 export function LabelCourt({
-  shots,
+  strokes,
   view,
-  litShotId = null,
+  targetShotId = null,
   target = null,
   prompt = null,
   onPlace,
 }: {
-  /** The open point's strokes, in video order. Tombstones are skipped. */
-  shots: readonly LabelShot[];
+  /** The strokes to draw, each at its ends' opacities. Tombstones are skipped. */
+  strokes: readonly CourtStroke[];
   /** The whole court, or the half a click is being taken on. */
   view: CourtView;
-  /** The stroke drawn at full strength: the selected one, else the playing. */
-  litShotId?: string | null;
-  /** The end of the lit stroke the next click places; it is ringed. */
+  /** The stroke being placed: its `target` end carries the ring. */
+  targetShotId?: string | null;
+  /** The end of the target stroke the next click places; it is ringed. */
   target?: PlacementTarget | null;
   /** "Click where shot 3 was hit" — the button's name while placing. */
   prompt?: string | null;
   /** A click on a half, in metres. Absent: the court is a picture. */
   onPlace?: (point: CourtPoint) => void;
 }) {
-  const marks = marksFor(shots, litShotId, view);
+  const marks = marksFor(strokes, view);
   const placed = marks.length;
   const zoomed = view !== "whole";
   const placing = zoomed && prompt !== null && onPlace !== undefined;
-  const anyLit = marks.some((mark) => mark.lit);
   // Zoomed, a mark covers a fifth more court per pixel, so it is drawn larger.
   const size = zoomed
     ? { hit: 4.5, hitStroke: 2, landed: 4, ring: 10 }
     : { hit: 3, hitStroke: 1.5, landed: 2.5, ring: 6.5 };
-  const strength = (mark: Mark) => (!anyLit ? 0.85 : mark.lit ? 1 : 0.4);
   const description =
     placed === 0
       ? "Court with no strokes placed"
@@ -150,7 +180,9 @@ export function LabelCourt({
               stroke={MARK}
               strokeWidth="1"
               strokeDasharray="3 4"
-              opacity={0.4 * strength(mark)}
+              style={markStyle(
+                0.4 * Math.min(mark.hit.opacity, mark.landed.opacity),
+              )}
             />
           ) : null,
         )}
@@ -165,7 +197,7 @@ export function LabelCourt({
               fill="none"
               stroke={MARK}
               strokeWidth={size.hitStroke}
-              opacity={strength(mark)}
+              style={markStyle(mark.hit.opacity)}
             />
           ) : null,
         )}
@@ -178,12 +210,12 @@ export function LabelCourt({
               cy={pct(mark.landed.sy)}
               r={size.landed}
               fill={MARK}
-              opacity={strength(mark)}
+              style={markStyle(mark.landed.opacity)}
             />
           ) : null,
         )}
         {marks.map((mark) => {
-          if (!mark.lit || target === null) return null;
+          if (mark.id !== targetShotId || target === null) return null;
           const end = target === "contact" ? mark.hit : mark.landed;
           return end ? (
             <circle

@@ -28,6 +28,10 @@ import {
   DOCK_MINIMISED_STORAGE_KEY,
   dockRest,
 } from "@/components/admin/labels/label-dock-position";
+import {
+  createVideoClock,
+  type VideoClock,
+} from "@/components/admin/labels/video-clock";
 import { BOARD_ANCHORS } from "@/components/dashboard/matches/match-detail/film/board-position";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import {
@@ -176,6 +180,7 @@ test.describe("the court card", () => {
     placement: PlacementState;
     editable: boolean;
     playingShotId?: string | null;
+    clock: VideoClock;
     video: VideoDockLayout | null;
     onPlace: () => void;
     onTarget: () => void;
@@ -198,6 +203,7 @@ test.describe("the court card", () => {
         names: NAMES,
         placement: startPlacement(null),
         editable: true,
+        clock: createVideoClock(null),
         video: DEFAULT_VIDEO_LAYOUT,
         onPlace: () => {},
         onTarget: () => {},
