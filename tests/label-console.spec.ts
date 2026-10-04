@@ -429,16 +429,47 @@ test.describe("the video dock", () => {
     expect(box).toMatch(/class="[^"]*\binvisible\b/);
   });
 
-  test("is the film tab's player, minus bookmarks and the film room", () => {
+  test("carries the Video tab's transport, minus what the console has no use for", () => {
     const html = dock(render({ session: labelSessionFixture(), video: VIDEO }));
-    expect(html).toContain('data-testid="film-player-video"');
+    expect(html).toContain('data-testid="label-video"');
     expect(html).toContain('src="https://example.test/v.mp4?sig=x"');
     expect(html).toContain('preload="metadata"');
+    expect(html).toContain('role="slider"');
     expect(html).toContain('aria-label="Previous point"');
     expect(html).toContain('aria-label="Next point"');
+    expect(html).toContain('aria-label="Skip dead time — off"');
     expect(html).toContain('aria-label="Playback speed, 1×"');
+    expect(html).toContain('aria-label="Loop this point — off"');
+    expect(html).toContain('aria-label="Sound — on"');
     expect(html).not.toContain("Save point");
+    expect(html).not.toContain("Show the court");
+    expect(html).not.toContain("Exit fullscreen");
+    expect(html).not.toContain("More — not available yet");
     expect(html).not.toContain("Open the film room fullscreen");
+    // The table already shows the score: nothing on the film repeats it.
+    expect(html).not.toMatch(/scoreboard/i);
+  });
+
+  test("the transport's title row describes the playing point", () => {
+    // Point 1: ended on an error, its last live stroke the added forehand.
+    const html = dock(
+      render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialVideoTime: 2473.4,
+      }),
+    );
+    const words = text(html);
+    expect(words).toContain("Error · Forehand");
+    expect(words).toContain("Set 1 · Game 1 · Lee serves");
+    expect(words).toContain("Point 1 / 4");
+
+    // In dead time there is no point to describe.
+    const idle = text(
+      dock(render({ session: labelSessionFixture(), video: VIDEO })),
+    );
+    expect(idle).toContain("Between points");
+    expect(idle).not.toMatch(/Point \d+ \/ \d+/);
   });
 
   test("the bar is the drag handle, with the playing point and a minimise button", () => {
@@ -482,7 +513,7 @@ test.describe("the video dock", () => {
     expect(card).toContain('aria-hidden="true"');
     expect(card).toMatch(/class="[^"]*pointer-events-none invisible/);
     // Hidden, not unmounted: playback carries on behind the pill.
-    expect(html).toContain('data-testid="film-player-video"');
+    expect(html).toContain('data-testid="label-video"');
 
     const pill = tag(html, "data-dock-pill");
     expect(pill).not.toContain("aria-hidden");

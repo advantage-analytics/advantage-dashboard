@@ -1003,6 +1003,8 @@ export function LabelConsole({
         video={video}
         points={points}
         nowPlaying={nowPlaying}
+        names={names}
+        adScoring={session.adScoring}
         onTime={clock.set}
         initialMinimised={initialVideoMinimised}
       />
@@ -1070,6 +1072,7 @@ function dockNowPlaying(
   const live = point.shots.filter((shot) => shot.status !== "deleted");
   const index = live.findIndex((shot) => shot.id === playing.shotId);
   return {
+    id: point.id,
     point: point.pointIndex + 1,
     shot: index === -1 ? null : index + 1,
   };

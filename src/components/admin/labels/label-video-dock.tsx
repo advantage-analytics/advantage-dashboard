@@ -1,6 +1,13 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { GripVertical, Maximize2, Minimize2, Pause, Play } from "lucide-react";
 import type {
   BoardAnchor,
@@ -12,6 +19,7 @@ import {
   useCornerDrag,
 } from "@/components/dashboard/matches/match-detail/film/use-corner-drag";
 import { cn } from "@/lib/utils";
+import { labelScores, type LabelScores } from "@/lib/services/labels/score";
 import type { LabelPoint, LabelVideo } from "@/lib/services/labels/session";
 import {
   DEFAULT_DOCK_ANCHOR,
@@ -22,7 +30,12 @@ import {
   dockRest,
   parseDockMinimised,
 } from "./label-dock-position";
-import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
+import { ENDING_LABEL, STROKE_LABEL, type SideNames } from "./label-format";
+import {
+  LabelVideoPlayer,
+  type LabelVideoHandle,
+  type LabelVideoReadout,
+} from "./label-video";
 
 /**
  * The console's video, floating: always on screen while the points table
@@ -49,6 +62,14 @@ import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
  * video keeps playing (and keeps driving the table's playing row) behind the
  * pill's own play/pause.
  *
+ * ── What is on the film ─────────────────────────────────────────────────────
+ * The match Video tab's transport (`FilmTransport`, drawn by `label-video.tsx`)
+ * rides over the film's foot, and nothing else covers it: no scoreboard — the
+ * table already shows the score, the server and who won — and no court, which
+ * is a card of its own. This file gives the transport its title row
+ * ({@link dockReadout}): how the playing point ended and on which stroke, its
+ * set, game and server, and "Point N / total" in the table's own numbers.
+ *
  * ── Motion ──────────────────────────────────────────────────────────────────
  * - The corner snap is `SETTLE_CLASS`, the film room's 360ms
  *   `--ease-out-expo` glide, so the two surfaces move as one product. It is
@@ -68,10 +89,54 @@ import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
 const DOCK_WIDTH = 480;
 
 export interface DockNowPlaying {
+  /** The playing point's id. */
+  id: string;
   /** The table's point number, 1-based. */
   point: number;
   /** The stroke's number among the point's live strokes, 1-based. */
   shot: number | null;
+}
+
+/**
+ * The transport's title row for the playing point: "Winner · Forehand" (how
+ * it ended · its last live stroke), "Set 1 · Game 3 · Lee serves" (the game
+ * numbered within its set, as the table's bands number it), and the table's
+ * point number over the table's last. Whatever a point lacks is left out
+ * rather than dashed; in dead time there is no point to describe.
+ */
+export function dockReadout(
+  points: readonly LabelPoint[],
+  nowPlaying: DockNowPlaying | null,
+  names: SideNames,
+  scores: LabelScores,
+): LabelVideoReadout {
+  const point = nowPlaying
+    ? points.find((p) => p.id === nowPlaying.id)
+    : undefined;
+  if (!nowPlaying || !point) {
+    return { title: "Between points", subtitle: null, position: null };
+  }
+  const lastStroke = point.shots.findLast(
+    (shot) => shot.status !== "deleted" && shot.stroke !== null,
+  )?.stroke;
+  const title = [
+    point.ending ? ENDING_LABEL[point.ending] : null,
+    lastStroke ? STROKE_LABEL[lastStroke] : null,
+  ].filter((part) => part !== null);
+  const game = scores.points.get(point.id)?.gameInSet ?? null;
+  const subtitle = [
+    point.setNumber !== null ? `Set ${point.setNumber}` : null,
+    game !== null ? `Game ${game}` : null,
+    point.server ? `${names[point.server]} serves` : null,
+  ].filter((part) => part !== null);
+  return {
+    title: title.length ? title.join(" · ") : `Point ${nowPlaying.point}`,
+    subtitle: subtitle.length ? subtitle.join(" · ") : null,
+    position: {
+      index: nowPlaying.point,
+      total: points.reduce((max, p) => Math.max(max, p.pointIndex + 1), 0),
+    },
+  };
 }
 
 export const LabelVideoDock = forwardRef<
@@ -80,12 +145,27 @@ export const LabelVideoDock = forwardRef<
     video: LabelVideo | null;
     points: readonly LabelPoint[];
     nowPlaying: DockNowPlaying | null;
+    /** The two sides' names, for "<player> serves". */
+    names: SideNames;
+    /** Whether 40–40 goes to Ad — the score rule the game numbers come from. */
+    adScoring: boolean;
     onTime: (videoTime: number) => void;
     /** Minimised on first render — for specs. Otherwise read from storage. */
     initialMinimised?: boolean;
+    /** The video playable on first render — for specs. It starts pending. */
+    initialReady?: boolean;
   }
 >(function LabelVideoDock(
-  { video, points, nowPlaying, onTime, initialMinimised = false },
+  {
+    video,
+    points,
+    nowPlaying,
+    names,
+    adScoring,
+    onTime,
+    initialMinimised = false,
+    initialReady = false,
+  },
   ref,
 ) {
   const [minimised, setMinimised] = useState(initialMinimised);
@@ -161,6 +241,15 @@ export const LabelVideoDock = forwardRef<
       else if (ref) ref.current = handle;
     },
     [ref],
+  );
+
+  const scores = useMemo(
+    () => labelScores(points, adScoring),
+    [points, adScoring],
+  );
+  const readout = useMemo(
+    () => dockReadout(points, nowPlaying, names, scores),
+    [points, nowPlaying, names, scores],
   );
 
   const label = nowPlaying
@@ -291,8 +380,10 @@ export const LabelVideoDock = forwardRef<
               ref={setPlayerRef}
               video={video}
               points={points}
+              readout={readout}
               onTime={onTime}
               onPlayingChange={setPlaying}
+              initialReady={initialReady}
             />
           </div>
         </div>

@@ -225,7 +225,7 @@ ready).
 
 ## T16 · Video dock: the Video tab's transport and a loading state
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/admin/labels/label-video-dock.tsx, src/components/admin/labels/label-video.tsx, src/components/dashboard/matches/match-detail/film/film-transport.tsx, tests/label-video-dock.spec.ts, tests/label-console.spec.ts (guess)
 - **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947

@@ -250,3 +250,15 @@ Decisions:
 1. The console's pill does not hide when the playing row is already in view (the film room's does).
 2. The hook supports insets for fixed chrome; the console passes none, so the video dock can cover the playing row's right-hand cells.
 3. `setRestPointId` is adjusted during render in the console.
+
+## T16 · Video dock: the Video tab's transport and a loading state — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** The dock now shows the Video tab's `FilmTransport` over the film's foot (title, "Set N · Game M · X serves", Point N / total, set-by-set track, play, previous/next point, clock, skip dead time, rate, loop, sound) with no scoreboard, and a pending frame with the transport inert until the video can play. `FilmTransport` gains two optional props (`hide`, `disabled`) that default to today's behaviour. `label-video.tsx` now owns its `<video>` instead of mounting `FilmPlayer`, reusing the film-timeline helpers and keeping the start-time offset.
+
+**follow-ups:**
+
+1. `label-video.tsx` duplicates part of `FilmPlayer`'s playback logic (seek, loop, skip dead time); the two can drift.
+2. Safari may hold at readyState 2 until play, leaving the transport dimmed until the first click or Space.
+3. Dead time reads "Between points"; it could hold the last point instead.
