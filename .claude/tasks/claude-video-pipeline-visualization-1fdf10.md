@@ -195,7 +195,7 @@ ready).
 
 ## T14 · Game bands with game-type and server dropdowns
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8, T10, T12
 - **files:** src/components/admin/labels/label-game-band.tsx (new), src/components/admin/labels/label-points-table.tsx, src/components/admin/labels/label-console.tsx, src/app/admin/labels/[sessionId]/page.tsx, tests/label-console-operations.spec.ts (guess)

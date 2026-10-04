@@ -276,7 +276,8 @@ export function sideInitial(side: LabelSide, names: SideNames): string {
  *
  * At 30px (`.mk.s30`) it is the point row's WINNER mark; at 22px it is the
  * hitter's chip beside a stroke's player name — the same chip, so a player is
- * one colour all the way down the table. `attr` names what the mark says.
+ * one colour all the way down the table; at 18px it is the server's chip in a
+ * game band's trigger. `attr` names what the mark says.
  */
 export function SideMark({
   side,
@@ -286,7 +287,7 @@ export function SideMark({
 }: {
   side: LabelSide | null;
   names: SideNames;
-  size?: 30 | 22;
+  size?: 30 | 22 | 18;
   attr?: "data-winner-mark" | "data-player-mark";
 }) {
   return (
@@ -295,7 +296,9 @@ export function SideMark({
       aria-hidden="true"
       className={cn(
         "flex shrink-0 items-center justify-center rounded-[var(--radius-button)] leading-none font-medium tracking-[0.3px]",
-        size === 30 ? "size-[30px] text-[11px]" : "size-[22px] text-[10px]",
+        size === 30 && "size-[30px] text-[11px]",
+        size === 22 && "size-[22px] text-[10px]",
+        size === 18 && "size-[18px] rounded-[5px] text-[9px] tracking-[0.2px]",
         side === "p1"
           ? "bg-[var(--blue)] text-white"
           : "text-[var(--ink-700)] shadow-[inset_0_0_0_1px_var(--border-hairline)]",

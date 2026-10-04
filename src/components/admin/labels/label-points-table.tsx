@@ -1,17 +1,27 @@
 "use client";
 
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { ClipboardList } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import { cn } from "@/lib/utils";
-import type { LabelPoint } from "@/lib/services/labels/session";
+import type {
+  LabelGameType,
+  LabelPoint,
+  LabelSide,
+} from "@/lib/services/labels/session";
 import type {
   LabelPointPatch,
   LabelShotPatch,
 } from "@/lib/services/labels/edit";
-import { labelScores, type LabelPointScore } from "@/lib/services/labels/score";
+import type { LabelGame } from "@/lib/services/labels/operations";
+import {
+  labelScores,
+  type LabelGameBand as LabelGameBandScore,
+  type LabelPointScore,
+} from "@/lib/services/labels/score";
 import type { SideNames } from "./label-format";
+import { LabelGameBand } from "./label-game-band";
 import { DeletedPoint, PointRow } from "./label-point-row";
 import type { EditContext, LabelRowOperations } from "./label-row-parts";
 import { ShotRows } from "./label-shot-row";
@@ -57,6 +67,12 @@ export type { LabelRowOperations };
  * point to check or a stroke to count. The pill expands the rule to a
  * struck-through ghost of the row, with Undo.
  *
+ * A GAME BAND (`LabelGameBand`, T14) is drawn above the first live point of
+ * every `(set_number, game_number)` the scoreboard found: "Set 1 · Game 3",
+ * the set's games before it, and who serves. A game with only tombstones in
+ * it has no band. With `onSetGameType` / `onSetGameServer` the band's two
+ * menus ask the console to change the whole game.
+ *
  * The PLAYING point and stroke — the rows the video is on — carry
  * `data-playing="true"`: a light blue wash (on a point row only while it is
  * closed; open, it already has its own ground) and the row number in
@@ -76,22 +92,33 @@ export type { LabelRowOperations };
 export function LabelPointsTable({
   adScoring = true,
   ...props
-}: Omit<LabelPointsTableViewProps, "scores"> & {
+}: Omit<LabelPointsTableViewProps, "scores" | "games"> & {
   /** `session.adScoring`: whether 40–40 goes to Ad, or the next point ends it. */
   adScoring?: boolean;
 }) {
   const { points } = props;
   const scores = useMemo(
-    () => labelScores(points, adScoring).points,
+    () => labelScores(points, adScoring),
     [points, adScoring],
   );
-  return <LabelPointsTableView {...props} scores={scores} />;
+  return (
+    <LabelPointsTableView
+      {...props}
+      scores={scores.points}
+      games={scores.games}
+    />
+  );
 }
 
 export interface LabelPointsTableViewProps {
   points: readonly LabelPoint[];
   /** Each live point's score before it, by id — `labelScores(…).points`. */
   scores: ReadonlyMap<string, LabelPointScore>;
+  /** One band per game with a live point — `labelScores(…).games`. */
+  games?: readonly LabelGameBandScore[];
+  /** With both, and `editable`: the bands' game-type and server menus. */
+  onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
+  onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
   names: SideNames;
   expandedPointId: string | null;
   onTogglePoint?: (pointId: string) => void;
@@ -115,6 +142,9 @@ export interface LabelPointsTableViewProps {
 export function LabelPointsTableView({
   points,
   scores,
+  games = NO_GAMES,
+  onSetGameType,
+  onSetGameServer,
   names,
   expandedPointId,
   onTogglePoint,
@@ -143,6 +173,20 @@ export function LabelPointsTableView({
     scores,
     playingShotId,
   };
+  // Each game's band goes above its first live point, once: a point moved
+  // out of order never repeats it, and a tombstone never carries one.
+  const bandByGame = new Map(
+    games.map((band) => [`${band.setNumber}·${band.gameNumber}`, band]),
+  );
+  const bandBefore = new Map<string, LabelGameBandScore>();
+  for (const point of points) {
+    if (point.status === "deleted") continue;
+    const key = `${point.setNumber}·${point.gameNumber}`;
+    const band = bandByGame.get(key);
+    if (!band) continue;
+    bandBefore.set(point.id, band);
+    bandByGame.delete(key);
+  }
   return (
     <TooltipProvider>
       <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
@@ -172,24 +216,39 @@ export function LabelPointsTableView({
               title="This session has no points"
             />
           ) : (
-            points.map((point) =>
-              point.status === "deleted" ? (
-                <DeletedPoint key={point.id} point={point} edit={edit} />
-              ) : (
-                <PointRow
-                  key={point.id}
-                  point={point}
-                  open={point.id === expandedPointId}
-                  playing={point.id === playingPointId}
-                  onToggle={onTogglePoint}
-                  edit={edit}
-                >
-                  {point.id === expandedPointId && point.shots.length > 0 ? (
-                    <ShotRows point={point} edit={edit} />
+            points.map((point, index) => {
+              if (point.status === "deleted") {
+                return (
+                  <DeletedPoint key={point.id} point={point} edit={edit} />
+                );
+              }
+              const band = bandBefore.get(point.id);
+              return (
+                <Fragment key={point.id}>
+                  {band ? (
+                    <LabelGameBand
+                      band={band}
+                      points={points}
+                      names={names}
+                      first={index === 0}
+                      onSetGameType={editable ? onSetGameType : undefined}
+                      onSetGameServer={editable ? onSetGameServer : undefined}
+                    />
                   ) : null}
-                </PointRow>
-              ),
-            )
+                  <PointRow
+                    point={point}
+                    open={point.id === expandedPointId}
+                    playing={point.id === playingPointId}
+                    onToggle={onTogglePoint}
+                    edit={edit}
+                  >
+                    {point.id === expandedPointId && point.shots.length > 0 ? (
+                      <ShotRows point={point} edit={edit} />
+                    ) : null}
+                  </PointRow>
+                </Fragment>
+              );
+            })
           )}
         </div>
       </div>
@@ -198,3 +257,4 @@ export function LabelPointsTableView({
 }
 
 const NO_IDS: ReadonlySet<string> = new Set();
+const NO_GAMES: readonly LabelGameBandScore[] = [];

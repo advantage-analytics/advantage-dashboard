@@ -12,6 +12,8 @@ import {
   resetLabelShotAction,
   restoreLabelPointAction,
   restoreLabelShotAction,
+  setLabelGameServerAction,
+  setLabelGameTypeAction,
   setLabelPointCheckedAction,
   updateLabelPoint,
   updateLabelShot,
@@ -22,7 +24,7 @@ import {
  * header, the video + court band and the points table, every label field
  * autosaving through `updateLabelShot` / `updateLabelPoint`, and the row
  * operations (delete and Undo, add a shot, move a point, mark it checked,
- * reset an edited row to its seed)
+ * reset an edited row to its seed, set a game's server or type)
  * through the rest of `../actions`. The header lives
  * in the console, beside the save line it owns; the page only supplies the
  * way back.
@@ -73,6 +75,8 @@ export default async function AdminLabelSessionPage({
           setChecked: setLabelPointCheckedAction,
           resetShot: resetLabelShotAction,
           resetPoint: resetLabelPointAction,
+          setGameServer: setLabelGameServerAction,
+          setGameType: setLabelGameTypeAction,
         }}
         headerAction={
           <Link

@@ -227,3 +227,14 @@ Decisions:
 1. The shot header is still rendered by the point row, above the card; moving it into `ShotRows` would let the calculated-column glyph sit on the header as the board draws it.
 2. `nextPlacement` and `positionPatch` share derive-and-merge logic.
 3. Table min width is now 1184px.
+
+## T14 · Game bands with game-type and server dropdowns — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New `label-game-band.tsx`: a band before each game's first live point reading "Set N · Game M" (or Tiebreak / Match tiebreak), the set's games score and who serves, with a game-type menu and a server menu. The console gains `setGameServer` / `setGameType` (optimistic via `applyGameWrites`, reverted on failure, reported on the save line), wired in `page.tsx` to the T10 actions; scores re-derive after either change. `SideMark` gains an 18px size.
+
+**follow-ups:**
+
+1. Server-menu rows have no player chip (`FloatMenuItem`'s icon slot is 12px).
+2. The console spec stubs the table, so the optimistic state and save line are not asserted directly.

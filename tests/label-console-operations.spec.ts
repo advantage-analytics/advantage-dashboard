@@ -2,6 +2,10 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import {
+  applyGameWrites,
+  planGameServer,
+} from "@/lib/services/labels/game-operations";
 import { labelScores } from "@/lib/services/labels/score";
 import type { LabelSession, LabelVideo } from "@/lib/services/labels/session";
 import {
@@ -52,6 +56,8 @@ function spies() {
     setChecked: record("setChecked", { ok: true, checkedAt: null }),
     resetShot: record("resetShot", { ok: true, status: "kept" }),
     resetPoint: record("resetPoint", { ok: true, status: "unchanged" }),
+    setGameServer: record("setGameServer", { ok: true, points: [] }),
+    setGameType: record("setGameType", { ok: true, points: [] }),
   };
   return { calls, operations };
 }
@@ -656,5 +662,265 @@ test.describe("reset", () => {
     (dialog.onConfirm as () => void)();
     await Promise.resolve();
     expect(calls).toEqual({ resetPoint: [[P1]] });
+  });
+});
+
+// ── Game bands (T14) ───────────────────────────────────────────────────────
+
+type BandRow = {
+  key: string;
+  label: string;
+  description?: string;
+  chosen: boolean;
+  run: () => void;
+};
+
+/** Each band's text, in table order, with the server chip's initial dropped. */
+function bands(html: string): string[] {
+  return html
+    .split(/(?=<div data-game-band=)/)
+    .slice(1)
+    .map((chunk) => {
+      // The band is one flat <div>: two <span> groups, no nested <div>.
+      const band = chunk.slice(0, chunk.indexOf("</div>"));
+      return text(
+        band.replace(/<span data-player-mark[^>]*>[^<]*<\/span>/, ""),
+      );
+    });
+}
+
+function renderTable(props: Props): string {
+  const { LabelPointsTableView } = loader().load(
+    "src/components/admin/labels/label-points-table.tsx",
+  ) as { LabelPointsTableView: React.ComponentType<Props> };
+  const session = (props.session as LabelSession) ?? labelSessionFixture();
+  const scores = labelScores(session.points, session.adScoring);
+  return renderToStaticMarkup(
+    React.createElement(LabelPointsTableView, {
+      points: session.points,
+      scores: scores.points,
+      games: scores.games,
+      names: NAMES,
+      expandedPointId: null,
+      ...props,
+    }),
+  );
+}
+
+function bandModule() {
+  return loader().load("src/components/admin/labels/label-game-band.tsx") as {
+    gameBandModel: (band: unknown, points: unknown) => Props;
+    gameBandMenus: (
+      model: unknown,
+      names: unknown,
+      handlers: unknown,
+    ) => { type: BandRow[]; server: BandRow[] };
+  };
+}
+
+test.describe("game bands", () => {
+  test("one band above the first live point of each game: set, game in set, games before, server", () => {
+    const html = renderConsole({ ...SAVES, operations: spies().operations });
+    expect(bands(html)).toEqual([
+      "Set 1 · Game 1 0–0 · Lee serves",
+      "Set 1 · Game 2 1–0 · Vargas serves",
+    ]);
+    // Above its game's first live point: band 1, points 1–2, band 2, point 4.
+    const at = (attr: string) => html.indexOf(attr);
+    expect(at('data-game-band="1-1"')).toBeLessThan(
+      at(`data-point-id="${P1}"`),
+    );
+    expect(at(`data-point-id="${P2}"`)).toBeLessThan(
+      at('data-game-band="1-2"'),
+    );
+    expect(at('data-game-band="1-2"')).toBeLessThan(
+      at(`data-point-id="${P4}"`),
+    );
+  });
+
+  test("the game's number is its rank in the set; a tiebreak and a match tiebreak say so", () => {
+    const session = labelSessionFixture();
+    const [first, second, , last] = session.points;
+    session.points = [
+      first,
+      second,
+      // The vendor's match-cumulative numbering: set 2 opens with game 7.
+      { ...last, id: "p-set2", pointIndex: 3, setNumber: 2, gameNumber: 7 },
+      {
+        ...last,
+        id: "p-tb",
+        pointIndex: 4,
+        setNumber: 2,
+        gameNumber: 8,
+        gameType: "tiebreak",
+      },
+      {
+        ...last,
+        id: "p-mtb",
+        pointIndex: 5,
+        setNumber: 3,
+        gameNumber: 9,
+        gameType: "match_tiebreak",
+        server: "p1",
+      },
+    ];
+    expect(bands(renderTable({ session }))).toEqual([
+      "Set 1 · Game 1 0–0 · Lee serves",
+      "Set 2 · Game 1 0–0 · Vargas serves",
+      "Set 2 · Tiebreak 0–0 · Vargas serves first",
+      "Match tiebreak 0–0 · Lee serves first",
+    ]);
+  });
+
+  test("a game with only deleted points has no band", () => {
+    const session = labelSessionFixture();
+    session.points = session.points.map((point) =>
+      point.id === P4 ? { ...point, status: "deleted" as const } : point,
+    );
+    const html = renderTable({ session });
+    expect(bands(html)).toEqual(["Set 1 · Game 1 0–0 · Lee serves"]);
+    expect(html).not.toContain('data-game-band="1-2"');
+  });
+
+  test("the two menus: Game / Tiebreak / Match tiebreak, and both players", () => {
+    const session = labelSessionFixture();
+    const { gameBandModel, gameBandMenus } = bandModule();
+    const asked: unknown[][] = [];
+    const menus = gameBandMenus(
+      gameBandModel(labelScores(session.points, true).games[0], session.points),
+      NAMES,
+      {
+        onSetGameType: (...args: unknown[]) => asked.push(["type", ...args]),
+        onSetGameServer: (...args: unknown[]) =>
+          asked.push(["server", ...args]),
+      },
+    );
+    expect(menus.type.map((row) => [row.label, row.chosen])).toEqual([
+      ["Game", true],
+      ["Tiebreak", false],
+      ["Match tiebreak", false],
+    ]);
+    expect(menus.type[0].description).toBe("Points to 4, deuce at 40–40");
+    expect(menus.server.map((row) => [row.label, row.chosen])).toEqual([
+      ["Lee", true],
+      ["Vargas", false],
+    ]);
+    expect(menus.server[0].description).toBeUndefined();
+    expect(menus.server[1].description).toBe(
+      "Changes the server on all 2 points and recalculates the scores after them",
+    );
+
+    // The chosen row asks for nothing; another hands the game to the console.
+    menus.type[0].run();
+    menus.server[0].run();
+    expect(asked).toEqual([]);
+    menus.type[1].run();
+    menus.server[1].run();
+    const game = { setNumber: 1, gameNumber: 1 };
+    expect(asked).toEqual([
+      ["type", game, "tiebreak"],
+      ["server", game, "p2"],
+    ]);
+  });
+
+  test("the menus' triggers render only when the console can write", () => {
+    const { operations } = spies();
+    const editable = renderConsole({ ...SAVES, operations });
+    expect(count(editable, /data-game-menu="type"/g)).toBe(2);
+    expect(count(editable, /data-game-menu="server"/g)).toBe(2);
+    expect(editable).toContain('aria-label="Game type: Game 1"');
+    expect(editable).toContain('aria-label="Server: Vargas"');
+
+    const complete = { ...labelSessionFixture(), status: "complete" as const };
+    for (const readOnly of [
+      renderConsole({}),
+      renderConsole({ ...SAVES }),
+      renderConsole({ ...SAVES, operations, session: complete }),
+    ]) {
+      expect(readOnly).not.toContain("data-game-menu");
+      // The band itself still reads.
+      expect(bands(readOnly)).toHaveLength(2);
+    }
+  });
+
+  test("the console plans the game on the client, then calls the action with the session", async () => {
+    const { calls, operations } = spies();
+    let table: Props = {};
+    const { LabelConsole } = createLoader({
+      stubs: {
+        "@/components/ui/confirm-dialog": { ConfirmDialog: PrintProps },
+        "@/components/admin/labels/label-points-table": {
+          LabelPointsTable: (props: Props) => {
+            table = props;
+            return null;
+          },
+        },
+      },
+    }).load("src/components/admin/labels/label-console.tsx") as {
+      LabelConsole: React.ComponentType<Props>;
+    };
+    const session = labelSessionFixture();
+    renderToStaticMarkup(
+      React.createElement(LabelConsole, {
+        session,
+        video: null,
+        ...SAVES,
+        operations,
+      }),
+    );
+    const game = { setNumber: 1, gameNumber: 1 };
+    (table.onSetGameServer as (...args: unknown[]) => void)(game, "p2");
+    (table.onSetGameType as (...args: unknown[]) => void)(game, "tiebreak");
+    await Promise.resolve();
+    expect(calls).toEqual({
+      setGameServer: [[session.id, game, "p2"]],
+      setGameType: [[session.id, game, "tiebreak"]],
+    });
+
+    // A game the planner refuses is never sent.
+    (table.onSetGameServer as (...args: unknown[]) => void)(
+      { setNumber: 9, gameNumber: 9 },
+      "p1",
+    );
+    await Promise.resolve();
+    expect(calls.setGameServer).toHaveLength(1);
+
+    // Read-only, the table is handed neither callback.
+    renderToStaticMarkup(
+      React.createElement(LabelConsole, { session, video: null, ...SAVES }),
+    );
+    expect(table.onSetGameServer).toBeUndefined();
+    expect(table.onSetGameType).toBeUndefined();
+  });
+
+  test("swapping a game's server re-derives the Score column and the band", () => {
+    const session = labelSessionFixture();
+    const plan = planGameServer(
+      session.points,
+      { setNumber: 1, gameNumber: 1 },
+      "p2",
+    );
+    if (!("ok" in plan)) throw new Error(plan.error);
+    const swapped = {
+      ...session,
+      points: applyGameWrites(session.points, plan.writes),
+    };
+
+    // Point 2 follows a point Vargas won: server-first, 0–15 with Lee
+    // serving and 15–0 once Vargas is.
+    const scoreOf = (s: LabelSession) =>
+      labelScores(s.points, s.adScoring).points.get(P2)?.scoreBefore;
+    expect(scoreOf(session)).toBe("0–15");
+    expect(scoreOf(swapped)).toBe("15–0");
+
+    const row = (html: string) =>
+      text(after(html, `data-point-id="${P2}"`).split("data-point-id=")[0]);
+    const before = renderTable({ session });
+    const afterSwap = renderTable({ session: swapped });
+    expect(row(before)).toContain("0–15");
+    expect(row(before)).not.toContain("15–0");
+    expect(row(afterSwap)).toContain("15–0");
+    expect(row(afterSwap)).not.toContain("0–15");
+    expect(bands(afterSwap)[0]).toBe("Set 1 · Game 1 0–0 · Vargas serves");
   });
 });

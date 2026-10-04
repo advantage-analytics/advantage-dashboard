@@ -13,9 +13,11 @@ import {
 import {
   labelProgress,
   orderLabelShots,
+  type LabelGameType,
   type LabelPoint,
   type LabelSession,
   type LabelShot,
+  type LabelSide,
   type LabelVideo,
 } from "@/lib/services/labels/session";
 import {
@@ -29,6 +31,13 @@ import type {
   LabelPointEditResult,
   LabelShotEditResult,
 } from "@/lib/services/labels/edit-session";
+import {
+  applyGameWrites,
+  planGameServer,
+  planGameType,
+  type PlannedGameWrites,
+} from "@/lib/services/labels/game-operations";
+import type { LabelGameWriteResult } from "@/lib/services/labels/game-operations-session";
 import {
   applyPointDelete,
   applyPointMove,
@@ -99,7 +108,8 @@ const PENDING_SHOT_PREFIX = "pending-shot-";
  *
  * Row operations (T7) follow the same optimistic contract through
  * `operations`: delete and Undo, add a stroke, move a point, mark it checked,
- * and reset an edited stroke or point to the values it was seeded with.
+ * reset an edited stroke or point to the values it was seeded with, and —
+ * from a game band (T14) — set a whole game's server or its type.
  * Three of them ask first — a delete and a reset always, a move only into a
  * game someone else serves — and those open `LabelConfirmDialog` WITHOUT
  * writing: the write happens on the dialog's action, and Cancel changes
@@ -522,6 +532,69 @@ export function LabelConsole({
     );
   }
 
+  /**
+   * A whole game's server, or its type: the pure planner's writes are the
+   * optimistic step (`applyGameWrites`), the action's rows the last word.
+   */
+  function runGameOperation(
+    plan: PlannedGameWrites,
+    call: () => Promise<LabelGameWriteResult>,
+  ) {
+    if ("error" in plan) {
+      dispatchSave({ type: "start" });
+      dispatchSave({ type: "failure", message: plan.error });
+      return;
+    }
+    const written = new Set(plan.writes.map((write) => write.id));
+    const before = new Map(
+      points.filter((p) => written.has(p.id)).map((p) => [p.id, p]),
+    );
+    void runOperation(
+      (rows) => applyGameWrites(rows, plan.writes),
+      call,
+      (rows, result) => {
+        const saved = new Map(result.points.map((p) => [p.id, p]));
+        return rows.map((p) => {
+          const row = saved.get(p.id);
+          return row
+            ? {
+                ...p,
+                server: row.server,
+                gameType: row.gameType,
+                status: row.status,
+              }
+            : p;
+        });
+      },
+      (rows) =>
+        rows.map((p) => {
+          const row = before.get(p.id);
+          return row
+            ? {
+                ...p,
+                server: row.server,
+                gameType: row.gameType,
+                status: row.status,
+              }
+            : p;
+        }),
+    );
+  }
+
+  function setGameServer(game: LabelGame, server: LabelSide) {
+    if (!operations) return;
+    runGameOperation(planGameServer(points, game, server), () =>
+      operations.setGameServer(session.id, game, server),
+    );
+  }
+
+  function setGameType(game: LabelGame, type: LabelGameType) {
+    if (!operations) return;
+    runGameOperation(planGameType(points, game, type), () =>
+      operations.setGameType(session.id, game, type),
+    );
+  }
+
   function setChecked(pointId: string, value: boolean) {
     const before = points.find((p) => p.id === pointId);
     if (!before || !operations || before.status === "deleted") return;
@@ -771,6 +844,8 @@ export function LabelConsole({
         onPatchPoint={patchPoint}
         onPatchShot={patchShot}
         operations={rowOperations}
+        onSetGameServer={operable ? setGameServer : undefined}
+        onSetGameType={operable ? setGameType : undefined}
         openTombstoneIds={openTombstones}
         onToggleTombstone={toggleTombstone}
         playingPointId={playing?.pointId ?? null}
@@ -824,6 +899,18 @@ export interface LabelConsoleOperations {
   resetShot: (shotId: string) => Promise<LabelShotStatusResult>;
   /** The point's own fields back to the seed: status `unchanged`. */
   resetPoint: (pointId: string) => Promise<LabelPointStatusResult>;
+  /** Who serves a whole game (in a tiebreak, who serves first). */
+  setGameServer: (
+    sessionId: string,
+    game: LabelGame,
+    server: LabelSide,
+  ) => Promise<LabelGameWriteResult>;
+  /** Game, tiebreak or match tiebreak, for a whole game. */
+  setGameType: (
+    sessionId: string,
+    game: LabelGame,
+    type: LabelGameType,
+  ) => Promise<LabelGameWriteResult>;
 }
 
 /** The dock bar's "Point N · shot M", numbered as the table numbers them. */
