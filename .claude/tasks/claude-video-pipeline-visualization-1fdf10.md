@@ -395,7 +395,7 @@ ready).
 
 ## T28 · How it ended follows the shot rows
 
-- **status:** doing
+- **status:** done
 - **model:** opus
 - **files:** src/lib/services/labels/ending-derived.ts (new), src/components/admin/labels/label-console.tsx, tests/label-ending-derived.spec.ts (new), tests/label-console-operations.spec.ts (guess)
 - **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947

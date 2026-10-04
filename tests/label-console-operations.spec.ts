@@ -924,3 +924,143 @@ test.describe("game bands", () => {
     expect(bands(afterSwap)[0]).toBe("Set 1 · Game 1 0–0 · Vargas serves");
   });
 });
+
+// ── How it ended follows the shot rows (T28) ───────────────────────────────
+
+test.describe("how it ended follows the shot rows", () => {
+  /** Every write the console hands each autosave, in order. */
+  function saveSpies(shotAnswer: unknown = { ok: true, status: "edited" }) {
+    const shot: unknown[][] = [];
+    const point: unknown[][] = [];
+    return {
+      shot,
+      point,
+      saves: {
+        onSaveShot: async (...args: unknown[]) => {
+          shot.push(args);
+          return shotAnswer;
+        },
+        onSavePoint: async (...args: unknown[]) => {
+          point.push(args);
+          return { ok: true, status: "edited" };
+        },
+      },
+    };
+  }
+
+  /**
+   * The fixture with point 1 ending on Lee's winner: serve, return, and a
+   * last forehand by Lee that stayed in.
+   */
+  function winnerSession(): LabelSession {
+    const session = labelSessionFixture();
+    const first = session.points[0];
+    session.points[0] = {
+      ...first,
+      winner: "p1",
+      ending: "winner",
+      endedBy: "p1",
+      shots: first.shots.map((shot) =>
+        shot.id === "s-added" ? { ...shot, result: "in" } : shot,
+      ),
+    };
+    return session;
+  }
+
+  function consoleTable(props: Props): Props {
+    let table: Props = {};
+    const { LabelConsole } = createLoader({
+      stubs: {
+        "@/components/ui/confirm-dialog": { ConfirmDialog: PrintProps },
+        "@/components/admin/labels/label-points-table": {
+          LabelPointsTable: (tableProps: Props) => {
+            table = tableProps;
+            return null;
+          },
+        },
+      },
+    }).load("src/components/admin/labels/label-console.tsx") as {
+      LabelConsole: React.ComponentType<Props>;
+    };
+    renderToStaticMarkup(
+      React.createElement(LabelConsole, {
+        session: winnerSession(),
+        video: null,
+        ...props,
+      }),
+    );
+    return table;
+  }
+
+  type PatchShot = (shotId: string, patch: Props) => Promise<void>;
+
+  /** Let the point patch, sent once the shot write has settled, go out. */
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  test("flipping the last stroke to out sends exactly one point patch", async () => {
+    const { shot, point, saves } = saveSpies();
+    const table = consoleTable({ ...saves, operations: spies().operations });
+    await (table.onPatchShot as PatchShot)("s-added", { result: "out" });
+    await settled();
+    expect(shot).toEqual([["s-added", { result: "out" }]]);
+    expect(point).toEqual([[P1, { ending: "error", ended_by: "p1" }]]);
+  });
+
+  test("a spin edit sends none", async () => {
+    const { shot, point, saves } = saveSpies();
+    const table = consoleTable({ ...saves, operations: spies().operations });
+    await (table.onPatchShot as PatchShot)("s-added", { spin: "flat" });
+    await settled();
+    expect(shot).toEqual([["s-added", { spin: "flat" }]]);
+    expect(point).toEqual([]);
+  });
+
+  test("a shot write that fails leaves the ending alone", async () => {
+    const { shot, point, saves } = saveSpies({ error: "refused" });
+    const table = consoleTable({ ...saves, operations: spies().operations });
+    await (table.onPatchShot as PatchShot)("s-added", { result: "out" });
+    await settled();
+    expect(shot).toHaveLength(1);
+    expect(point).toEqual([]);
+  });
+
+  test("Undo on the last stroke moves the ending back onto it, once", async () => {
+    // Lee's last forehand is a tombstone: the point ends on Vargas's return.
+    const session = winnerSession();
+    const first = session.points[0];
+    session.points[0] = {
+      ...first,
+      winner: "p2",
+      endedBy: "p2",
+      shots: first.shots.map((shot) =>
+        shot.id === "s-added"
+          ? { ...shot, status: "deleted", statusBeforeDelete: "added" }
+          : shot,
+      ),
+    };
+    const { point, saves } = saveSpies();
+    const { calls, operations } = spies();
+    const table = consoleTable({ ...saves, operations, session });
+    const rows = table.operations as Record<string, (id: string) => void>;
+
+    rows.onRestoreShot("s-added");
+    await settled();
+    expect(calls.restoreShot).toEqual([["s-added"]]);
+    // In, but hit by the player labelled as having lost the point.
+    expect(point).toEqual([[P1, { ending: "error", ended_by: "p1" }]]);
+  });
+
+  test("a point reset is not a shot change: no ending patch follows it", async () => {
+    const { point, saves } = saveSpies();
+    const { calls, operations } = spies();
+    consoleTable({
+      ...saves,
+      operations,
+      initialConfirm: { kind: "reset-point", pointId: P1, pointNumber: 1 },
+    });
+    (dialogs.at(-1)!.onConfirm as () => void)();
+    await settled();
+    expect(calls).toEqual({ resetPoint: [[P1]] });
+    expect(point).toEqual([]);
+  });
+});

@@ -385,3 +385,15 @@ Decisions:
 1. `SideMark`'s 22px branch is now unused.
 2. The menu opens with focus on the first row, not the chosen one; arrow navigation lives in `SelectEditor` rather than `FloatMenu`.
 3. Safari does not focus a button on click, so a pointer-opened How it ended menu may not hold follow mode there.
+
+## T28 · How it ended follows the shot rows — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New pure `ending-derived.ts`: `deriveEnding(point)` reads the live strokes and the labelled winner (ace, service winner, double fault, winner, error) and `endingPatchForShotChange` decides when a shot change should rewrite the point. The console's shot paths (field patch, delete, undo, add, reset) call one `syncEnding` helper after the shot write succeeds; it sends a single `{ ending, ended_by }` point patch only when the derived answer changed. Lets and non-points are never rewritten; the winner is never changed.
+
+**follow-ups:**
+
+1. The derived ending can contradict the labelled winner (e.g. last ball out, hit by the labelled winner); flag it or offer to set the winner.
+2. Adding a blank shot usually rewrites the ending, since it becomes the last stroke.
+3. The ending cell updates one round trip after the shot row.

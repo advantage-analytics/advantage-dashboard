@@ -40,6 +40,7 @@ import {
   type PlannedGameWrites,
 } from "@/lib/services/labels/game-operations";
 import type { LabelGameWriteResult } from "@/lib/services/labels/game-operations-session";
+import { endingPatchForShotChange } from "@/lib/services/labels/ending-derived";
 import { labelScores } from "@/lib/services/labels/score";
 import {
   applyPointDelete,
@@ -632,51 +633,6 @@ export function LabelConsole({
     holdPoint(openPointId);
   }
 
-  const patchShot = useCallback(
-    async (shotId: string, patch: LabelShotPatch) => {
-      const before = findShot(points, shotId);
-      if (!before || !onSaveShot) return;
-      // A draft row has no id the server knows yet; its add is still in
-      // flight, and the saved row replaces it when that lands.
-      if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
-      const retime = "video_time" in patch;
-      setPoints((current) =>
-        updateShot(current, shotId, retime, (shot) =>
-          applyLabelShotPatch(shot, patch),
-        ),
-      );
-
-      dispatchSave({ type: "start" });
-      const result = await settle(onSaveShot(shotId, patch));
-      if ("error" in result) {
-        // Put back exactly the fields this edit changed, and its status.
-        const prior = labelShotValues(before);
-        const undo = Object.fromEntries(
-          Object.keys(patch).map((key) => [
-            key,
-            prior[key as keyof typeof prior],
-          ]),
-        ) as LabelShotPatch;
-        setPoints((current) =>
-          updateShot(current, shotId, retime, (shot) => ({
-            ...applyLabelShotPatch(shot, undo),
-            status: before.status,
-          })),
-        );
-        dispatchSave({ type: "failure", message: result.error });
-        return;
-      }
-      setPoints((current) =>
-        updateShot(current, shotId, false, (shot) => ({
-          ...shot,
-          status: result.status,
-        })),
-      );
-      dispatchSave({ type: "success", at: Date.now() });
-    },
-    [points, onSaveShot],
-  );
-
   const patchPoint = useCallback(
     async (pointId: string, patch: LabelPointPatch) => {
       const before = points.find((point) => point.id === pointId);
@@ -724,6 +680,78 @@ export function LabelConsole({
   );
 
   /**
+   * "How it ended" follows the shot rows. Called by every shot path once its
+   * write has SAVED, with the shot's point as it was and the change the write
+   * made: when that change moved what the rows say (`deriveEnding`), the new
+   * ending goes out as one point patch through the point autosave. A failed
+   * shot write never reaches here, so a reverted row cannot leave an ending
+   * behind. A point reset is not a shot change and does not call this.
+   */
+  const syncEnding = useCallback(
+    (
+      before: LabelPoint | null,
+      change: (rows: LabelPoint[]) => LabelPoint[],
+    ) => {
+      if (!before) return;
+      const after = change([before])[0];
+      const patch = after && endingPatchForShotChange(before, after);
+      if (patch) void patchPoint(before.id, patch);
+    },
+    [patchPoint],
+  );
+
+  const patchShot = useCallback(
+    async (shotId: string, patch: LabelShotPatch) => {
+      const before = findShot(points, shotId);
+      if (!before || !onSaveShot) return;
+      const owner = pointOfShot(points, shotId);
+      // A draft row has no id the server knows yet; its add is still in
+      // flight, and the saved row replaces it when that lands.
+      if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
+      const retime = "video_time" in patch;
+      setPoints((current) =>
+        updateShot(current, shotId, retime, (shot) =>
+          applyLabelShotPatch(shot, patch),
+        ),
+      );
+
+      dispatchSave({ type: "start" });
+      const result = await settle(onSaveShot(shotId, patch));
+      if ("error" in result) {
+        // Put back exactly the fields this edit changed, and its status.
+        const prior = labelShotValues(before);
+        const undo = Object.fromEntries(
+          Object.keys(patch).map((key) => [
+            key,
+            prior[key as keyof typeof prior],
+          ]),
+        ) as LabelShotPatch;
+        setPoints((current) =>
+          updateShot(current, shotId, retime, (shot) => ({
+            ...applyLabelShotPatch(shot, undo),
+            status: before.status,
+          })),
+        );
+        dispatchSave({ type: "failure", message: result.error });
+        return;
+      }
+      setPoints((current) =>
+        updateShot(current, shotId, false, (shot) => ({
+          ...shot,
+          status: result.status,
+        })),
+      );
+      dispatchSave({ type: "success", at: Date.now() });
+      syncEnding(owner, (rows) =>
+        updateShot(rows, shotId, retime, (shot) =>
+          applyLabelShotPatch(shot, patch),
+        ),
+      );
+    },
+    [points, onSaveShot, syncEnding],
+  );
+
+  /**
    * One row operation: apply `optimistic` to the rows at once, call the
    * server, then `settleRows` with its answer — or put back what the
    * operation changed (`revert`) and report the error on the save line.
@@ -751,24 +779,34 @@ export function LabelConsole({
     const before = findShot(points, shotId);
     if (!before || !operations) return;
     if (placement.shotId === shotId) setPlacement(NO_PLACEMENT);
+    const owner = pointOfShot(points, shotId);
+    const change = (rows: LabelPoint[]) =>
+      replaceShot(rows, shotId, (s) => applyShotDelete(s, reason));
     void runOperation(
-      (rows) => replaceShot(rows, shotId, (s) => applyShotDelete(s, reason)),
+      change,
       () => operations.deleteShot(shotId, reason),
       (rows) => rows,
       (rows) => replaceShot(rows, shotId, () => before),
-    );
+    ).then((saved) => {
+      if (saved) syncEnding(owner, change);
+    });
   }
 
   function restoreShot(shotId: string) {
     const before = findShot(points, shotId);
     if (!before || !operations) return;
+    const owner = pointOfShot(points, shotId);
+    const change = (rows: LabelPoint[]) =>
+      replaceShot(rows, shotId, applyShotRestore);
     void runOperation(
-      (rows) => replaceShot(rows, shotId, applyShotRestore),
+      change,
       () => operations.restoreShot(shotId),
       (rows, result) =>
         replaceShot(rows, shotId, (s) => ({ ...s, status: result.status })),
       (rows) => replaceShot(rows, shotId, () => before),
-    );
+    ).then((saved) => {
+      if (saved) syncEnding(owner, change);
+    });
     closeTombstone(shotId);
   }
 
@@ -853,6 +891,7 @@ export function LabelConsole({
       // Select the saved row, unless the labeller picked something else
       // while the add was in flight.
       if (!result) return;
+      syncEnding(point, (rows) => insertShot(rows, pointId, result.shot));
       setPlacement((current) =>
         current.shotId === selectedBefore
           ? placementOf(
@@ -1010,13 +1049,18 @@ export function LabelConsole({
     const before = findShot(points, shotId);
     if (!before || !operations) return;
     // A reset can move the stroke's time, so it re-sorts like a time edit.
+    const owner = pointOfShot(points, shotId);
+    const change = (rows: LabelPoint[]) =>
+      updateShot(rows, shotId, true, applyShotReset);
     void runOperation(
-      (rows) => updateShot(rows, shotId, true, applyShotReset),
+      change,
       () => operations.resetShot(shotId),
       (rows, result) =>
         replaceShot(rows, shotId, (s) => ({ ...s, status: result.status })),
       (rows) => updateShot(rows, shotId, true, () => before),
-    );
+    ).then((saved) => {
+      if (saved) syncEnding(owner, change);
+    });
   }
 
   /** The point's own fields back to the seed; its strokes are not touched. */
