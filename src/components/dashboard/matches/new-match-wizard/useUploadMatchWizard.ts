@@ -3417,14 +3417,19 @@ export function useUploadMatchWizard({
                 player2_name: matchRow.player2_name,
                 // The score page can have written "Retired"/"Defaulted"; a
                 // refill that no longer stopped must not keep that label.
+                // `stop_reason` travels with `result`: written exactly when
+                // `result` is, so the two never disagree on the row.
                 ...(stopped
-                  ? { result: matchRow.result }
+                  ? {
+                      result: matchRow.result,
+                      stop_reason: matchRow.stop_reason,
+                    }
                   : preset?.ending
-                    ? { result: matchRow.result || "Final Score" }
+                    ? {
+                        result: matchRow.result || "Final Score",
+                        stop_reason: matchRow.stop_reason,
+                      }
                     : {}),
-                // Unconditionally, for the same reason: a refill that no
-                // longer stopped clears the reason it stopped for.
-                stop_reason: matchRow.stop_reason,
                 // Only when one was resolved. Spreading it unconditionally would
                 // write null over an identity a previous pass established, which
                 // is worse than never having set it — the opponent's profile
