@@ -263,3 +263,132 @@ ready).
   - [ ] A new offline spec (`createLoader` from `tests/fixtures/vm-modules.ts`) renders `LabelsTable` with two rows for the same players and different `jobId`/`completedAt` and asserts both short ids and both times appear
   - [ ] A row with `completedAt: null` renders an `EmptyMark` in the Job column instead of "Invalid Date"
 - **notes:** `listLabelJobs` already returns `completedAt` and `jobId`; no loader change needed. Live check: no two completed jobs currently share a match, so the fixture is the proof.
+
+## T19 · Viewport-fit: the table scrolls, the page does not
+
+- **status:** todo
+- **model:** opus
+- **files:** src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-points-table.tsx, src/app/admin/labels/[sessionId]/page.tsx, tests/label-console.spec.ts (guess)
+- **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947
+- **done when:**
+  - [ ] The console renders inside one root element (`data-label-console`) that is a flex column filling the admin page's remaining viewport height — `page.tsx` passes `AdminPage` a className bounding `main` to `calc(100dvh - var(--header-h))` with `overflow-hidden` (its `pb-[72px]` reduced for this page), the header row + save line sit above, and the table card is `min-h-0 flex-1 overflow-y-auto` (keeping `overflow-x-auto`) so the body never scrolls; the point column header is `sticky top-0 z-10` on `bg-[var(--surface-card)]` inside that scroller
+  - [ ] `LabelPointsTable` / `LabelPointsTableView` accept a `scrollerRef: RefObject<HTMLDivElement | null>` forwarded onto the scroll element (`data-label-scroller`), and the console's `useFollowScroll` call passes `scroller: scrollerRef` instead of `"window"` (the `insets` from `followInsets` are still passed — T24 turns them off for docked modes)
+  - [ ] The "Now playing" pill (`data-label-follow-pill`) moves from `fixed top-3` on the viewport to `absolute top-3 left-1/2` inside a `relative` wrapper around the scroller, so it sits over the table, not over the page header
+  - [ ] `tests/label-console.spec.ts` asserts `data-label-scroller` is present, the point header inside it carries `sticky`, and a held render's pill markup carries no `fixed` class; every existing label spec still passes
+  - [ ] No file under `src/components/dashboard/matches/match-detail/film/` changes
+- **notes:** Admin layout = `min-h-screen flex-col` → sticky `--header-h` header → `flex flex-1` around `AdminPage`'s `main` (`px-14 pt-7 pb-[72px]`). `label-console.tsx` is 1,202 lines — Read with offset/limit. The floating docks are `fixed` and unaffected. `useFollowScroll` already accepts an element ref (`FollowScroller`).
+
+## T20 · Game headers from the points rail, column headers from the DS
+
+- **status:** todo
+- **model:** opus
+- **needs:** T19
+- **files:** src/components/admin/labels/label-game-band.tsx, src/components/admin/labels/label-points-table.tsx, src/components/admin/labels/label-point-row.tsx, tests/label-console.spec.ts, tests/label-console-operations.spec.ts (guess)
+- **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947
+- **done when:**
+  - [ ] `LabelGameBand` drops its `bg-[var(--surface-subtle)]` ground, `-mx-6` bleed, `h-9` and `mt-4`, and takes the points rail's game header (`LIST_TONE.light` in `point-list.tsx`): `flex items-center px-3 pt-3 pb-[5px]`, left label "Set N · Game M" (or Tiebreak / Match tiebreak) in `mono text-[9px] tracking-[1.4px] uppercase` ink-400, a `flex-1` spacer, right meta "{gamesBefore} · {player} serves" ("serves first" for a tiebreak) in `mono tabular text-[10px]` ink-400; the `SideMark` chip goes (the rail draws none)
+  - [ ] The game-type and server `FloatMenu` triggers (`data-game-menu="type"` / `"server"`) stay in the band, still call `onSetGameType` / `onSetGameServer` with the same rows, and their trigger text takes the rail's classes (hover wash and open state unchanged); a read-only console renders the same text with no buttons; `data-game-band` / `data-game-type` attributes stay
+  - [ ] The point column header cells (`POINT_COLUMNS` loop in `label-points-table.tsx`) and the shot column header cells (`SHOT_COLUMNS` loop in `label-point-row.tsx`) use the DS `eyebrow-sm` class instead of `text-[12px] text-[var(--ink-500|400)]`; the hairline under the point header, the `POINT_CELL` offsets/`text-right` and T19's sticky header are kept; nothing is centred
+  - [ ] `tests/label-console.spec.ts` asserts every point and shot header label sits in an element carrying `eyebrow-sm`, and that the band `data-game-band="1-1"`'s markup contains no `surface-subtle` and reads "Set 1 · Game 1" before its games score before "serves"; `tests/label-console-operations.spec.ts`'s band assertions pass (updated only for the removed chip)
+  - [ ] `point-list.tsx` is not edited
+- **notes:** Read `.skills/advantage-analytics-design/SKILL.md` + `reference/tables.md` + `reference/foundations.md` (eyebrows: "`.eyebrow-sm` — table column headers, in-table group dividers"; shipped in `admin/requests-table.tsx`). Band = the rail's look as the user asked (its mono 9px/1.4px/ink-400 is `.eyebrow-sm` in mono); column headers = DS. The rail's header is at `point-list.tsx` ~lines 180–183 and 631–641.
+
+## T21 · The playing row's 2px blue progress rule
+
+- **status:** todo
+- **model:** opus
+- **needs:** T19
+- **files:** src/components/admin/labels/label-video.tsx, src/components/admin/labels/label-video-dock.tsx, src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-points-table.tsx, src/components/admin/labels/label-point-row.tsx, src/components/admin/labels/label-row-parts.tsx, tests/label-console.spec.ts (guess)
+- **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947
+- **done when:**
+  - [ ] `LabelVideoPlayer` gains an optional `clockTargetRef?: RefObject<HTMLElement | null>` and writes `--film-t` / `--film-d` onto it as well as onto its own frame through a second `useFilmClockVars(videoRef, clockTargetRef ?? NULL_REF, playing)` call (film-clock.ts, unchanged) — no hand-rolled rAF or timer anywhere under `labels/`; `LabelVideoDock` forwards the prop; the console passes a ref to its T19 root so every table row inherits the variables
+  - [ ] The console derives the playing point's window in FILE seconds from `labelFilmStops(points, video?.startTimeSeconds ?? 0)` (the stop whose `point.id === playingPointId`) and hands `{ start, end }` to the table as `playingWindow`; `EditContext` (or a `PointRow` prop) carries it to the playing row only
+  - [ ] `PointRow` is `relative` and, only when `playing`, draws an `aria-hidden` span `absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]` with `style.width = filmProgressWidth(start, end)` imported from `film-clock.ts` — the rail's `PointRow` rule, same classes
+  - [ ] `tests/label-console.spec.ts` renders with `initialVideoTime` inside a fixture point and asserts the playing row's markup contains `h-0.5 bg-[var(--blue)]` with a width starting `clamp(0%, calc((var(--film-t, 0) -`, that a non-playing row has none, and that a dead-time render has none
+  - [ ] `film-clock.ts`, `point-list.tsx` and `film-transport.tsx` are not edited
+- **notes:** The mechanism is `point-list.tsx` lines ~1151–1160 + `film-clock.ts`: CSS variables written per frame, rows never re-render. `--film-t` is the `<video>`'s FILE clock, which is why the window comes from `labelFilmStops` (file seconds), not from `playingRowAt` (analysis clock). The video dock is a DOM child of the console root even when `fixed`, so one target serves both the transport track and the rows.
+
+## T22 · Court marks one at a time, fading; a selected shot alone
+
+- **status:** todo
+- **model:** fable
+- **files:** src/components/dashboard/matches/match-detail/film/film-court.ts, src/components/dashboard/matches/match-detail/film/film-court-card.tsx, src/components/admin/labels/label-court-marks.ts (new), src/components/admin/labels/label-court.tsx, src/components/admin/labels/label-court-dock.tsx, src/components/admin/labels/label-console.tsx, tests/label-court-marks.spec.ts (new), tests/label-console.spec.ts (guess)
+- **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947
+- **done when:**
+  - [ ] The only film edits are exports: `film-court.ts` exports its private `bounceEventTime`, and `MARK_FADE_TRANSITION` + `MARK_IN_ANIMATION` are exported from `film-court-card.tsx` (or moved to `film-court.ts` and imported back) — no other line in any `film-*` file changes, every `tests/film-*.spec.ts` passes unchanged, and `docs/ui-revamp-guardrails.md` is read first
+  - [ ] New pure `label-court-marks.ts`: `courtMarksAt(shots, filmTime)` takes the open point's live, timed strokes in `videoTime` order and returns, per stroke, `{ shotId, contactOpacity, landingOpacity }` where `contactOpacity = markOpacity(filmTime, videoTime)` and `landingOpacity = markOpacity(filmTime, bounceEventTime({ contactTime: videoTime }, nextVideoTime))`, both imported from `film-court.ts`; strokes with both at 0, tombstones and untimed strokes are omitted; `courtMarksKey(marks)` returns a string snapshot. Both clocks are the analysis clock (label `videoTime` and the console's `VideoClock`), so no offset conversion; coordinates stay `LabelCourt`'s own metres→percent (`fromCourt` / `fromCourtInHalf`), never `toCourtPercent`
+  - [ ] `LabelCourt` accepts per-stroke `opacity: { hit, landed }` (default 1 each) and draws each end at its opacity with `transition: MARK_FADE_TRANSITION` and `animation: MARK_IN_ANIMATION`, the dashed path at the lesser of the two, an end at 0 not drawn; the `strength()` dimming of unlit strokes is removed in favour of these opacities; the `--blue` target ring is unchanged
+  - [ ] `LabelCourtDock` gains a `clock: VideoClock` prop (the console passes its `clock`) and subscribes with `useSyncExternalStore(clock.subscribe, () => courtMarksKey(courtMarksAt(…)))` so the card re-renders on an opacity step while the console does not. With `placement.shotId === null` the whole-court view draws only `courtMarksAt`'s marks (never the whole point at once); with a shot selected — `placement.shotId !== null`, editable or not — it draws ONLY that shot's contact/landing at full opacity, a blank court when it has none; the half-court zoom, Contact/Landing switch, Flip side and the `onPlace` → `nextPlacement` patch (coordinates + derived `result`) are unchanged — `tests/label-court-dock.spec.ts` and the placement assertions in `tests/label-console.spec.ts` pass
+  - [ ] `tests/label-court-marks.spec.ts` covers: before contact → omitted; within `MARK_HOLD_SECONDS` → 1; the landing appears at the estimated bounce time, not at contact; after hold + `MARK_FADE_SECONDS` → omitted; the last stroke uses `BOUNCE_REVEAL_SECONDS`; `tests/label-console.spec.ts` renders (a) `initialVideoTime` at a fixture stroke's time with no selection and asserts one `data-court-hit` and that an earlier, faded stroke's is absent, (b) a selected shot and asserts at most one `data-court-hit` and one `data-court-landed`, (c) a selected shot without coordinates and asserts the `data-court-marks` svg holds no `<circle>`
+- **notes:** Opacity is a pure function of film time (film-court.ts header): pausing freezes the court, seeking back un-draws. `MARK_OPACITY_STEP` quantises, so the key changes at most ~20 times per mark. The fade-in keyframe `film-mark-in` already lives in `globals.css`. The Video tab's `FilmCourt` must render identically. `label-console.tsx` edits = the `clock` prop only.
+
+## T23 · Click a shot: loop that shot
+
+- **status:** todo
+- **model:** opus
+- **files:** src/components/admin/labels/label-shot-loop.ts (new), src/components/admin/labels/label-video.tsx, src/components/admin/labels/label-console.tsx, tests/label-shot-loop.spec.ts (new) (guess)
+- **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947
+- **done when:**
+  - [ ] Pure `shotLoopWindow(point, shotId, offset)` in new `label-shot-loop.ts` returns FILE-second `{ start, end }`: `start` = the stroke's `videoTime − offset` clamped at 0; `end` = the next live timed stroke's `videoTime − offset`; for the point's last stroke `min(videoTime + SHOT_LOOP_TAIL_SECONDS, that point's stop end from labelFilmStops)` on the file clock; `null` when the stroke is deleted or has no `videoTime`; `SHOT_LOOP_TAIL_SECONDS` exported (1.5)
+  - [ ] `LabelVideoHandle` gains `loopShot(window: { start: number; end: number } | null)`: `label-video.tsx` holds the window in a ref, seeks to `start` and plays when one is set, and in `onPlayhead` — before the point-loop check — seeks back to `start` once `t >= end − REACHED_EPSILON_SECONDS`; `togglePlay()`, `seek()` (the transport/track) and `step()` clear the window; the transport's Loop button, `looping` state and the `L` key keep meaning "loop the point"
+  - [ ] The console's `selectShot` calls `player.current?.loopShot(shotLoopWindow(owner, shotId, offset))` in place of `seekTo`; `togglePoint` and `followPlayback` (the Now-playing pill) call `loopShot(null)` first (togglePoint then seeks the point as today); no other console line changes
+  - [ ] `tests/label-shot-loop.spec.ts` covers: a middle stroke's window ends at the next stroke; the last stroke's window uses the tail and is capped by the point end; a `null` `videoTime` → null; a non-zero offset is subtracted and the start never goes below 0
+  - [ ] `film-player.tsx` and `film-timeline.ts` are not edited
+- **notes:** `label-video.tsx` already runs the point loop and skip-dead-time from `film-timeline.ts` helpers (`onPlayhead`); the shot loop is a second, higher-priority window in the same function. `useImperativeHandle` does not run in a static render, so the handle is covered by typecheck + the pure spec, not by `renderToStaticMarkup`. T22 makes the court show only the selected shot while this loops.
+
+## T24 · Layout modes: Overlay, Docked top, Docked side
+
+- **status:** todo
+- **model:** fable
+- **needs:** T19, T21, T22, T23
+- **files:** src/components/admin/labels/label-layout.ts (new), src/components/admin/labels/label-layout-control.tsx (new), src/components/admin/labels/label-court-panel.tsx (new), src/components/admin/labels/label-court-dock.tsx, src/components/admin/labels/label-console.tsx, tests/label-layout.spec.ts (new), tests/label-console.spec.ts (guess)
+- **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947
+- **done when:**
+  - [ ] Pure `label-layout.ts`: `type LabelLayoutMode = "overlay" | "docked-top" | "docked-side"`, `DEFAULT_LAYOUT_MODE = "overlay"`, `LAYOUT_MODE_STORAGE_KEY = "labels-layout-mode"`, `LAYOUT_SIZE_STORAGE_KEY = "labels-layout-size"`, `parseLayoutMode(raw)` (anything unknown → overlay), `DEFAULT_DOCK_SIZE` per docked mode, `MIN_DOCK_PX`, `MIN_TABLE_PX`, and `clampDockSize(mode, px, available)`; `tests/label-layout.spec.ts` covers the parse fallback, both clamp ends, and that a viewport smaller than both minimums yields `MIN_DOCK_PX` rather than a negative table
+  - [ ] The court card's body — readout header, `LabelCourt`, Contact/Landing switch, Flip side, legend — moves out of `label-court-dock.tsx` into `LabelCourtPanel` (new `label-court-panel.tsx`), which `LabelCourtDock` renders inside its floating shell; Overlay is unchanged (`tests/label-court-dock.spec.ts` and the console's court assertions pass as they are)
+  - [ ] A "Layout" `FloatMenu` trigger (`data-label-layout`) in the console header beside the save line lists Overlay / Docked top / Docked side with `chosen` on the current mode; the mode is read in a lazy initialiser via `parseLayoutMode(localStorage)` and written on change; an `initialLayoutMode` prop exists for specs
+  - [ ] Overlay renders `LabelVideoDock` + `LabelCourtDock` exactly as today, with `followInsets`; `docked-top` renders a band above the table (`data-label-dock="top"`) holding `LabelVideoPlayer` (the same `player` ref, `readout` from `dockReadout`, `onTime={clock.set}`, `clockTargetRef`) and `LabelCourtPanel` side by side; `docked-side` renders a right column (`data-label-dock="side"`) with the player above the court panel and the table on the left; in docked modes the band/column is `DEFAULT_DOCK_SIZE`, there is no corner drag and no minimise pill, the transport stays, and `useFollowScroll` gets no `insets`; the table keeps `min-h-0 flex-1`
+  - [ ] `tests/label-console.spec.ts` renders each mode via `initialLayoutMode` and asserts: overlay → no `data-label-dock` and the existing dock assertions hold; docked-top → `data-label-dock="top"` containing `data-label-video-frame` and `data-court-art` and no `data-dock-minimised`; docked-side → the same with `"side"`; a selected shot in a docked mode still yields `data-court-view="near"|"far"`
+- **notes:** Read `.skills/advantage-analytics-design/SKILL.md` first. The decided three modes: Overlay = today's floating cards; Docked top = video and court side by side above the table; Docked side = video over court in a right column. Switching mode remounts the `<video>` — re-seek to `clock.get()` once `canplay` if it fits, else say so in the report. `dockReadout` / `DockNowPlaying` are already exported from `label-video-dock.tsx`. `label-console.tsx` edits: the mode state, the header control, and one branch choosing which of the two renderings to mount.
+
+## T25 · Drag the divider between the dock and the table
+
+- **status:** todo
+- **model:** opus
+- **needs:** T24
+- **files:** src/components/admin/labels/label-divider.tsx (new), src/components/admin/labels/label-layout.ts, src/components/admin/labels/label-console.tsx, tests/label-layout.spec.ts, tests/label-console.spec.ts (guess)
+- **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947
+- **done when:**
+  - [ ] `LabelDivider` renders `role="separator"`, `aria-orientation="horizontal"` in docked-top and `"vertical"` in docked-side, `aria-valuemin` / `aria-valuemax` / `aria-valuenow` in px, `aria-label="Resize video and court"`, `tabIndex={0}`; Arrow Up/Down (top) or Left/Right (side) move by `DIVIDER_KEY_STEP_PX` (new in `label-layout.ts`, 16), Home/End go to min/max; pointer drag uses `pointerdown` + `setPointerCapture` + `pointermove` / `pointerup` — no HTML5 drag-and-drop
+  - [ ] The dock size lives in console state, clamped through `clampDockSize`, persisted under `LAYOUT_SIZE_STORAGE_KEY` as `{ "docked-top": px, "docked-side": px }` and read in a lazy initialiser; the band's height / column's width is an inline style from it and the table takes the rest (`min-h-0 flex-1`); an `initialDockSize` prop exists for specs
+  - [ ] `clampDockSize` honours `MIN_DOCK_PX` (the video stays ≥ 240px tall in docked-top / ≥ 360px wide in docked-side) and `MIN_TABLE_PX` (≥ 240px); `tests/label-layout.spec.ts` gains a case per bound and one for the key step
+  - [ ] `tests/label-console.spec.ts` renders docked-top with `initialDockSize` and asserts the separator's `aria-valuenow`, `aria-orientation` and the band's inline height; docked-side asserts the column's inline width; overlay renders no `role="separator"`
+  - [ ] `use-corner-drag.ts` and the Overlay rendering are not edited
+- **notes:** The DS has no divider primitive and nothing in `src/` renders `role="separator"` with a value yet; hand-build (appearance-only, SKILL.md's "hand-build" row), `--border-hairline` at rest, `--blue` while dragging/focused, 8px grab area. Reorder Mode's rule applies: pointer drag, never native DnD.
+
+## T26 · Spin on label shots
+
+- **status:** todo
+- **model:** fable
+- **files:** supabase/migrations/20261004060000_label_shots_spin.sql, src/lib/services/labels/seed.ts, src/lib/services/labels/session.ts, src/lib/services/labels/edit.ts, src/lib/services/labels/reset.ts, src/lib/data/labels-server.ts, tests/fixtures/label-session.ts, tests/label-edit.spec.ts, tests/label-seed.spec.ts (guess)
+- **done when:**
+  - [ ] A new migration adds nullable `spin text` to `public.label_shots` with `check (spin in ('topspin', 'flat', 'backspin', 'sidespin'))`, backfills `spin` on existing rows from `vendor->>'spin_type'` where that value is one of the four, and adds the same value as a `spin` key to each backfilled row's `seed` jsonb (rows with a null `seed` are left alone); it contains no statement touching `points`, `shots`, `matches` or `processing_jobs`
+  - [ ] `LabelSpin` type and `LABEL_SPINS` list exist; `LabelShot` gains `spin: LabelSpin | null` and `LabelShotSeedValues` gains `spin`; `buildLabelSeed` seeds it from the stroke's vendor spin (anything outside the four → null) for transcript shots and for dropped strokes alike; `getLabelSession` selects and maps it
+  - [ ] `spin` is an editable shot value: it is in `LABEL_SHOT_VALUE_FIELDS`, `parseLabelShotPatch` accepts the four values and null and rejects anything else, a shot whose spin differs from its seed is `edited` and one set back is `kept`, and Reset restores the seeded spin — specs assert each; a stored seed with no `spin` key parses as `spin: null` rather than failing
+  - [ ] `tests/fixtures/label-session.ts` shots carry `spin`, and `npm run typecheck` passes
+- **notes:** Do NOT apply the migration — the orchestrator applies it through the Supabase MCP and renames the file to the live version. Live check 2026-10-04: `label_shots.vendor->>'spin_type'` holds topspin 1148, flat 330, backspin 112, sidespin 61, "None" 1. No auto-fix: the seed copies the vendor's value as is. The row UI is T27.
+
+## T27 · Shot row: Spin column, no crest, no target icon, DS dropdowns
+
+- **status:** todo
+- **model:** opus
+- **needs:** T20, T26
+- **files:** src/components/admin/labels/label-shot-row.tsx, src/components/admin/labels/label-cells.tsx, src/components/admin/labels/label-table-layout.ts, src/components/admin/labels/label-format.ts, tests/label-console.spec.ts, tests/label-console-edit.spec.ts (guess)
+- **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947
+- **done when:**
+  - [ ] `SHOT_COLUMNS` reads "Shot", "Time", "Player", "Stroke", "Spin", "Hit at", "Landed at", "Placement", "Result", "Status" plus the unlabelled delete track; the Spin cell shows the shot's spin in the words the match Video tab uses for the same vendor values (reuse that label source; an em-dash when null) and, on an editable row, is a dropdown saving `{ spin }`; the Hit at / Landed at tracks stay at least 112px and the spec's whole-coordinate assertion still passes
+  - [ ] The shot row's Player cell renders the name only — no `SideMark` chip (`data-player-mark` is gone from shot rows; the point row's winner chip is untouched)
+  - [ ] The hover/selected `Crosshair` glyph and its tooltip are removed from the Placement and Result cells; both stay display-only text with `data-calculated`
+  - [ ] Every dropdown in the point and shot rows (How it ended, Player, Stroke, Spin) renders through the design system's menu (`MenuSelect` in `src/components/ui/menu-select.tsx`, or `FloatMenu`) instead of a native `<select>`: `SelectEditor` in `label-cells.tsx` no longer renders `<select`, keeps its props and commit/cancel contract, and specs assert no `<select` in a rendered table and that choosing an option sends the same single-field patch as before
+  - [ ] `label-point-row.tsx`, the court and the video files are not edited
+- **notes:** Read `.skills/advantage-analytics-design/SKILL.md` and its components/tables references first. User's words: "remove the target icon on hover for the shot rows, make sure that the rows have spin, remove the crest from the shot rows, make sure the dropdown menu follows the DS". Never create `foo.tsx` beside `foo.ts`; off-palette hex fails the design-drift spec.
