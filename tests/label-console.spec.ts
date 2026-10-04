@@ -262,6 +262,78 @@ test("point rows: who won, then the point, how it ended, its note and status", (
   );
 });
 
+test("column headers are the DS table header; game bands the points rail's", () => {
+  const html = render({
+    session: labelSessionFixture(),
+    video: null,
+    initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+  });
+  const { POINT_COLUMNS, SHOT_COLUMNS } = createLoader().load(
+    "src/components/admin/labels/label-table-layout.ts",
+  ) as {
+    POINT_COLUMNS: readonly { label: string }[];
+    SHOT_COLUMNS: readonly string[];
+  };
+  /** Every element whose whole text is `label`, by its class. */
+  const classesOf = (markup: string, label: string) =>
+    [...markup.matchAll(/<span class="([^"]*)">([^<]*)<\/span>/g)]
+      .filter((match) => match[2] === label)
+      .map((match) => match[1].split(" "));
+
+  // The point header: everything in the stuck strip, before the first band.
+  const headerAt = html.indexOf("data-label-point-header");
+  const pointHeader = html.slice(headerAt, html.indexOf("data-game-band="));
+  const pointLabels = POINT_COLUMNS.map((c) => c.label).filter(Boolean);
+  expect(pointLabels).toHaveLength(9);
+  for (const label of pointLabels) {
+    const found = classesOf(pointHeader, label);
+    expect(found, label).toHaveLength(1);
+    expect(found[0], label).toContain("eyebrow-sm");
+    // Left-aligned over its column, bar Rally's right-aligned number.
+    expect(found[0], label).not.toContain("text-center");
+  }
+  expect(pointHeader).not.toContain("text-[12px]");
+  // The hairline under it stays.
+  expect(pointHeader).toContain("border-b border-[var(--border-hairline)]");
+
+  // The shot header: the fold's first grid, before its first stroke.
+  const panel = shotPanel(html, FIXTURE_POINT_IDS.P1);
+  const shotHeader = panel.slice(0, panel.indexOf("data-row="));
+  const shotLabels = SHOT_COLUMNS.filter(Boolean);
+  expect(shotLabels).toHaveLength(9);
+  for (const label of shotLabels) {
+    const found = classesOf(shotHeader, label);
+    expect(found, label).toHaveLength(1);
+    expect(found[0], label).toContain("eyebrow-sm");
+    expect(found[0], label).not.toContain("text-center");
+  }
+
+  // The first game's band: the rail's header — no ground, the label, a
+  // spacer, then the games before it and who serves.
+  const bandAt = html.indexOf('data-game-band="1-1"');
+  expect(bandAt).toBeGreaterThan(-1);
+  const band = html.slice(
+    html.lastIndexOf("<div", bandAt),
+    html.indexOf("</div>", bandAt),
+  );
+  expect(band).not.toContain("surface-subtle");
+  expect(band).not.toContain("data-player-mark");
+  expect(band).toContain("flex items-center px-3 pt-3 pb-[5px]");
+  expect(band).toContain(
+    "mono text-[9px] tracking-[1.4px] uppercase text-[var(--ink-400)]",
+  );
+  expect(band).toContain("mono tabular text-[10px] text-[var(--ink-400)]");
+  expect(band).toContain('<span class="flex-1"></span>');
+  const words = text(band);
+  expect(words).toBe("Set 1 · Game 1 0–0 · Lee serves");
+  const label = words.indexOf("Set 1 · Game 1");
+  const score = words.indexOf("0–0");
+  const serves = words.indexOf("serves");
+  expect(label).toBe(0);
+  expect(score).toBeGreaterThan(label);
+  expect(serves).toBeGreaterThan(score);
+});
+
 test("a point row's winner chip, score, last shot and rally", () => {
   const html = render({
     session: labelSessionFixture(),

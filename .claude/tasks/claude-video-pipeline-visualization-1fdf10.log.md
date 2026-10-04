@@ -296,3 +296,13 @@ Decisions:
 1. The pill at top-3 covers some column header labels while held.
 2. Space with the bare scroller focused both toggles play and holds.
 3. On very short viewports the table card can shrink to almost nothing.
+
+## T20 · Game headers from the points rail, column headers from the DS — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Game bands take the points rail's header look (mono 9px label, mono 10px meta, no grey ground, no chip) and keep the game-type and server menus; point and shot column headers use the DS `eyebrow-sm`. The band trigger's hover wash is `--surface-subtle` (the old card wash was white on white once the ground went).
+
+**follow-ups:**
+
+1. Stale "board 08g grey rule" wording may remain in comments in other label files.

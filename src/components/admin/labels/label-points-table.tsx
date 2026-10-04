@@ -76,7 +76,9 @@ export const POINT_HEADER_HEIGHT = 36;
  *
  * A GAME BAND (`LabelGameBand`, T14) is drawn above the first live point of
  * every `(set_number, game_number)` the scoreboard found: "Set 1 · Game 3",
- * the set's games before it, and who serves. A game with only tombstones in
+ * the set's games before it, and who serves — the match Video tab's points
+ * rail header, so the two lists read alike. The column headers are the DS
+ * table header, `.eyebrow-sm`, here and over a point's strokes. A game with only tombstones in
  * it has no band. With `onSetGameType` / `onSetGameServer` the band's two
  * menus ask the console to change the whole game.
  *
@@ -229,7 +231,7 @@ export function LabelPointsTableView({
                 <span
                   key={i}
                   className={cn(
-                    "text-[12px] whitespace-nowrap text-[var(--ink-500)]",
+                    "eyebrow-sm whitespace-nowrap",
                     column.className,
                   )}
                 >
@@ -245,7 +247,7 @@ export function LabelPointsTableView({
               title="This session has no points"
             />
           ) : (
-            points.map((point, index) => {
+            points.map((point) => {
               if (point.status === "deleted") {
                 return (
                   <DeletedPoint key={point.id} point={point} edit={edit} />
@@ -259,7 +261,6 @@ export function LabelPointsTableView({
                       band={band}
                       points={points}
                       names={names}
-                      first={index === 0}
                       onSetGameType={editable ? onSetGameType : undefined}
                       onSetGameServer={editable ? onSetGameServer : undefined}
                     />

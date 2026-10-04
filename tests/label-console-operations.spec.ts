@@ -675,17 +675,17 @@ type BandRow = {
   run: () => void;
 };
 
-/** Each band's text, in table order, with the server chip's initial dropped. */
+/** Each band's text, in table order. */
 function bands(html: string): string[] {
   return html
     .split(/(?=<div data-game-band=)/)
     .slice(1)
     .map((chunk) => {
-      // The band is one flat <div>: two <span> groups, no nested <div>.
+      // The band is one flat <div>: label, spacer and meta are <span>s, with
+      // no nested <div> and no server chip.
       const band = chunk.slice(0, chunk.indexOf("</div>"));
-      return text(
-        band.replace(/<span data-player-mark[^>]*>[^<]*<\/span>/, ""),
-      );
+      expect(band).not.toContain("data-player-mark");
+      return text(band);
     });
 }
 

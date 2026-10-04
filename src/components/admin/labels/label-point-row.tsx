@@ -205,10 +205,7 @@ export function PointRow({
         >
           <div className={cn(SHOT_GRID, "min-h-[34px]")}>
             {SHOT_COLUMNS.map((label) => (
-              <span
-                key={label}
-                className="text-[12px] whitespace-nowrap text-[var(--ink-400)]"
-              >
+              <span key={label} className="eyebrow-sm whitespace-nowrap">
                 {label}
               </span>
             ))}

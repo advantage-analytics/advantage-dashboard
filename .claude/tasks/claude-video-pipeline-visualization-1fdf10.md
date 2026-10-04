@@ -280,7 +280,7 @@ ready).
 
 ## T20 · Game headers from the points rail, column headers from the DS
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T19
 - **files:** src/components/admin/labels/label-game-band.tsx, src/components/admin/labels/label-points-table.tsx, src/components/admin/labels/label-point-row.tsx, tests/label-console.spec.ts, tests/label-console-operations.spec.ts (guess)

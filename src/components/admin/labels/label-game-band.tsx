@@ -21,7 +21,6 @@ import type {
   LabelSide,
 } from "@/lib/services/labels/session";
 import type { SideNames } from "./label-format";
-import { SideMark } from "./label-row-parts";
 
 /**
  * What one game band says, as plain data: the band draws it, and a spec can
@@ -145,19 +144,33 @@ export function gameBandMenus(
   };
 }
 
-const LABEL_TEXT =
-  "font-mono text-[11px] leading-none tracking-[1.4px] uppercase";
-const META_TEXT = "font-mono text-[11px] leading-none tabular-nums";
+/**
+ * The points rail's game header, as `LIST_TONE.light` draws it on the match
+ * Video tab (`film/point-list.tsx`: `gameHeader` / `gameLabel` / `gameMeta`).
+ * Copied, not imported — the rail keeps its tones private — so a change there
+ * is a change here too.
+ *
+ * `-mx-3` is the one addition: the rail's header and rows share an inset, and
+ * here a point row bleeds out of the table's content box so its own content
+ * starts on that box's edge. Pulling the band out by its `px-3` puts its label
+ * on that same edge, over the rows' first column.
+ */
+const BAND = "-mx-3 flex items-center px-3 pt-3 pb-[5px]";
+const BAND_LABEL = "mono text-[9px] tracking-[1.4px] uppercase";
+const BAND_META = "mono tabular text-[10px]";
+const BAND_INK = "text-[var(--ink-400)]";
 
 /**
- * A game band — board 08g's `.gG`: the grey rule drawn above the first live
- * point of each `(set_number, game_number)`.
+ * A game band — the points rail's game header, drawn above the first live
+ * point of each `(set_number, game_number)`. No ground and no rule: the
+ * rows' own spacing separates the games, as it does in the rail.
  *
- * Left, "Set N ·" and what the game is ("Game M", M being its rank in the
- * set, or "Tiebreak" / "Match tiebreak"); right, the set's games before it
+ * Left, "Set N · Game M" (M being the game's rank in the set), or
+ * "Set N · Tiebreak" / "Match tiebreak"; right, the set's games before it
  * and who serves. With both callbacks, the game's name and its server are
- * text-button triggers, each opening a `FloatMenu`: the game-type menu and
- * the server menu. Without them — a read-only console — the band is text.
+ * text-button triggers in that same type, each opening a `FloatMenu`: the
+ * game-type menu and the server menu. Without them — a read-only console —
+ * the band is the same text with no buttons.
  *
  * Stateless: the two menus keep their own open state (`BandMenu`), so a spec
  * can read the band by walking the element tree. Changing a game here is a
@@ -168,15 +181,12 @@ export function LabelGameBand({
   band,
   points,
   names,
-  first = false,
   onSetGameType,
   onSetGameServer,
 }: {
   band: LabelGameBandScore;
   points: readonly LabelPoint[];
   names: SideNames;
-  /** The first thing under the header: no gap above it. */
-  first?: boolean;
   /** Both absent: no menus, the band only reads. */
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
@@ -187,53 +197,40 @@ export function LabelGameBand({
     onSetGameType && onSetGameServer
       ? gameBandMenus(model, names, { onSetGameType, onSetGameServer })
       : null;
-  const mark = (
-    <SideMark
-      side={model.server}
-      names={names}
-      size={18}
-      attr="data-player-mark"
-    />
-  );
   return (
     <div
       data-game-band={`${band.setNumber}-${band.gameNumber}`}
       data-game-type={model.type}
-      // Full-bleed across the table's 24px inset; 52px puts the label over the
-      // Won column and leaves a trigger's own 8px inside it.
-      className={cn(
-        "-mx-6 flex h-9 items-center justify-between bg-[var(--surface-subtle)] px-[52px]",
-        !first && "mt-4",
-      )}
+      className={BAND}
     >
-      <span className="flex items-center gap-0.5">
-        {model.setLabel ? (
-          <span className={cn(LABEL_TEXT, "text-[var(--ink-500)]")}>
-            {model.setLabel} ·
-          </span>
-        ) : null}
-        {menus ? (
+      {menus ? (
+        <span className="flex items-center">
+          {model.setLabel ? (
+            <span className={cn(BAND_LABEL, BAND_INK)}>{model.setLabel} ·</span>
+          ) : null}
           <BandMenu
             kind="type"
             name={`Game type: ${model.gameLabel}`}
             menuLabel="Game type"
             align="start"
             rows={menus.type}
-            textClassName={LABEL_TEXT}
+            // With no set before it, the trigger's text starts the band.
+            className={cn(BAND_LABEL, !model.setLabel && "-ml-1.5")}
           >
             {model.gameLabel}
           </BandMenu>
-        ) : (
-          <span className={cn(LABEL_TEXT, "px-2 text-[var(--ink-700)]")}>
-            {model.gameLabel}
-          </span>
-        )}
-      </span>
-      <span className="flex items-center gap-0.5">
-        <span className={cn(META_TEXT, "text-[var(--ink-500)]")}>
-          {model.score} ·
         </span>
-        {menus ? (
+      ) : (
+        <span className={cn(BAND_LABEL, BAND_INK)}>
+          {model.setLabel ? `${model.setLabel} · ` : ""}
+          {model.gameLabel}
+        </span>
+      )}
+      {/* The rail's spacer. A span, so the band stays one flat <div>. */}
+      <span className="flex-1" />
+      {menus ? (
+        <span className="flex items-center">
+          <span className={cn(BAND_META, BAND_INK)}>{model.score} ·</span>
           <BandMenu
             kind="server"
             name={
@@ -245,28 +242,27 @@ export function LabelGameBand({
             }
             align="end"
             rows={menus.server}
-            textClassName={cn(META_TEXT, "pl-1")}
+            className={cn(BAND_META, "-mr-1.5")}
           >
-            {mark}
             {serves}
           </BandMenu>
-        ) : (
-          <span
-            className={cn(
-              META_TEXT,
-              "flex items-center gap-1.5 pr-2 pl-1 text-[var(--ink-700)]",
-            )}
-          >
-            {mark}
-            {serves}
-          </span>
-        )}
-      </span>
+        </span>
+      ) : (
+        <span className={cn(BAND_META, BAND_INK)}>
+          {model.score} · {serves}
+        </span>
+      )}
     </div>
   );
 }
 
-/** One of the band's triggers and its menu — board 08g's `.btrig` + `.bmenu`. */
+/**
+ * One of the band's triggers and its menu — board 08g's `.btrig` + `.bmenu`.
+ *
+ * The trigger is 22px tall for the pointer and takes 14px of the band
+ * (`-my-1`), so a band with menus is exactly as tall as one without — and as
+ * the rail's header.
+ */
 function BandMenu({
   kind,
   name,
@@ -274,7 +270,7 @@ function BandMenu({
   caption,
   align,
   rows,
-  textClassName,
+  className,
   children,
 }: {
   kind: "type" | "server";
@@ -284,7 +280,8 @@ function BandMenu({
   caption?: string;
   align: "start" | "end";
   rows: readonly GameBandMenuRow[];
-  textClassName: string;
+  /** The trigger's type — the rail's label or meta — and any edge pull. */
+  className: string;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -304,11 +301,11 @@ function BandMenu({
           aria-expanded={open}
           data-game-menu={kind}
           className={cn(
-            "flex h-[26px] cursor-pointer items-center gap-1.5 rounded-[6px] px-2 transition-[color,background-color,box-shadow] duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-            textClassName,
+            "-my-1 flex h-[22px] cursor-pointer items-center gap-1 rounded-[6px] px-1.5 transition-[color,background-color,box-shadow] duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+            className,
             open
               ? "bg-[var(--surface-card)] text-[var(--ink-900)] shadow-[0_0_0_1px_var(--border-hairline)]"
-              : "text-[var(--ink-700)] hover:bg-[var(--surface-card)] hover:text-[var(--ink-900)]",
+              : "text-[var(--ink-400)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]",
           )}
         >
           {children}
