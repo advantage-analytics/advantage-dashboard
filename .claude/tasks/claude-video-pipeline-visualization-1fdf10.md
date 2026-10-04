@@ -338,7 +338,7 @@ ready).
 
 ## T24 · Layout modes: Overlay, Docked top, Docked side
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T19, T21, T22, T23
 - **files:** src/components/admin/labels/label-layout.ts (new), src/components/admin/labels/label-layout-control.tsx (new), src/components/admin/labels/label-court-panel.tsx (new), src/components/admin/labels/label-court-dock.tsx, src/components/admin/labels/label-console.tsx, tests/label-layout.spec.ts (new), tests/label-console.spec.ts (guess)

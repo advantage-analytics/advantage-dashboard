@@ -31,6 +31,7 @@ type ConsoleProps = {
   initialVideoMinimised?: boolean;
   initialPointFocus?:
     { mode: "follow" } | { mode: "held"; pointId: string | null };
+  initialLayoutMode?: "overlay" | "docked-top" | "docked-side";
   onSaveShot?: (...args: unknown[]) => Promise<unknown>;
   onSavePoint?: (...args: unknown[]) => Promise<unknown>;
 };
@@ -1362,5 +1363,219 @@ test.describe("the playing row", () => {
     expect(rowMarkup(html, 'data-shot-id="s-return"')).not.toContain(
       "data-playing",
     );
+  });
+});
+
+test.describe("layout modes (T24)", () => {
+  const VIDEO = {
+    url: "https://example.test/v.mp4?sig=x",
+    startTimeSeconds: 0,
+  };
+
+  /** The opening tag carrying `attr`. */
+  function tagOf(html: string, attr: string): string {
+    const at = html.indexOf(attr);
+    expect(at, attr).toBeGreaterThan(-1);
+    return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
+  }
+
+  /** The dock band or column: from its marker to the table's scroller or the end. */
+  function dockOf(html: string, mode: "top" | "side"): string {
+    const start = html.indexOf(`data-label-dock="${mode}"`);
+    expect(start, mode).toBeGreaterThan(-1);
+    const from = html.lastIndexOf("<", start);
+    // Docked top: the band ends where the table begins. Docked side: the
+    // column comes after the table, so it runs to the render's end (before
+    // the confirm dialog, which a read-only render has none of).
+    const scroller = html.indexOf("data-label-scroller", start);
+    return html.slice(from, scroller === -1 ? undefined : scroller);
+  }
+
+  test("the header carries one Layout menu trigger, the current mode on it", () => {
+    const html = render({ session: labelSessionFixture(), video: VIDEO });
+    const trigger = tagOf(html, 'data-label-layout=""');
+    expect(trigger).toContain('type="button"');
+    expect(trigger).toContain('aria-haspopup="menu"');
+    expect(trigger).toContain('aria-expanded="false"');
+    expect(trigger).toContain('data-layout-mode="overlay"');
+    expect(trigger).toContain('aria-label="Layout: Overlay"');
+    expect(count(html, /data-label-layout=""/g)).toBe(1);
+    // Beside the save line, in the header's trailing cluster.
+    expect(html.indexOf('data-label-layout=""')).toBeGreaterThan(
+      html.indexOf("data-save-status"),
+    );
+    expect(html.indexOf('data-label-layout=""')).toBeLessThan(
+      html.indexOf("data-label-scroller"),
+    );
+    // No native tooltip anywhere on it.
+    expect(trigger).not.toMatch(/\stitle=/);
+
+    const side = render({
+      session: labelSessionFixture(),
+      video: VIDEO,
+      initialLayoutMode: "docked-side",
+    });
+    expect(tagOf(side, 'data-label-layout=""')).toContain(
+      'data-layout-mode="docked-side"',
+    );
+    expect(tagOf(side, 'data-label-layout=""')).toContain(
+      'aria-label="Layout: Docked side"',
+    );
+  });
+
+  test("overlay: today's floating cards, and nothing docked", () => {
+    for (const html of [
+      render({ session: labelSessionFixture(), video: VIDEO }),
+      render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "overlay",
+      }),
+    ]) {
+      expect(html).not.toMatch(/data-label-dock="(top|side)"/);
+      expect(tagOf(html, "data-label-console")).toContain(
+        'data-label-layout-mode="overlay"',
+      );
+      // Both floating layers, each in its default corner, the court's last.
+      expect(tagOf(html, 'data-label-dock=""')).toContain(
+        'data-dock-anchor="bottom-right"',
+      );
+      expect(tagOf(html, "data-label-court-dock")).toContain(
+        'data-dock-anchor="bottom-left"',
+      );
+      expect(html.indexOf("data-label-court-layer")).toBeGreaterThan(
+        html.indexOf("data-label-dock-layer"),
+      );
+      expect(html).toContain('aria-label="Minimise the video"');
+      expect(html).toContain('aria-label="Minimise the court"');
+      // The video's own frame, once, inside the floating dock.
+      expect(count(html, /data-label-video-frame/g)).toBe(1);
+      expect(html.indexOf("data-label-video-frame")).toBeGreaterThan(
+        html.indexOf("data-label-dock-layer"),
+      );
+    }
+  });
+
+  test("docked top: a band above the table holding the player and the court panel", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: VIDEO,
+      initialLayoutMode: "docked-top",
+      initialVideoTime: 2473.4,
+    });
+    expect(tagOf(html, "data-label-console")).toContain(
+      'data-label-layout-mode="docked-top"',
+    );
+    const band = dockOf(html, "top");
+    expect(tagOf(band, 'data-label-dock="top"')).toContain("height:318px");
+    expect(band).toContain("data-label-video-frame");
+    expect(band).toContain('data-testid="label-video"');
+    expect(band).toContain("data-court-art");
+    expect(band).toContain('data-court-view="whole"');
+    // The video before the court, side by side; the court card at its
+    // floating width.
+    expect(band.indexOf("data-label-dock-video")).toBeLessThan(
+      band.indexOf("data-label-dock-court"),
+    );
+    expect(tagOf(band, "data-label-dock-video")).toMatch(
+      /class="[^"]*\baspect-video\b[^"]*\bh-full\b/,
+    );
+    expect(tagOf(band, "data-label-dock-court")).toContain("width:300px");
+    // The transport stays; the floating shell does not.
+    expect(band).toContain('aria-label="Previous point"');
+    expect(band).toContain('role="slider"');
+    expect(text(band)).toContain("Error · Forehand");
+    expect(text(band)).toContain("Point 1 / 4");
+    expect(html).not.toContain("data-dock-minimised");
+    expect(html).not.toContain("data-label-dock-layer");
+    expect(html).not.toContain("data-label-court-layer");
+    expect(html).not.toContain("data-court-handle");
+    expect(html).not.toContain('aria-label="Minimise the video"');
+    expect(html).not.toContain('aria-label="Minimise the court"');
+    expect(html).not.toContain("lucide-grip-vertical");
+    // Above the table, which keeps the rest and scrolls.
+    expect(html.indexOf('data-label-dock="top"')).toBeLessThan(
+      html.indexOf("data-label-scroller"),
+    );
+    expect(tagOf(html, "data-label-scroller")).toMatch(
+      /class="[^"]*\bmin-h-0\b[^"]*\bflex-1\b/,
+    );
+    // The court header reads the playing stroke, as the floating card does.
+    expect(band).toMatch(/data-court-title="[^"]*"[^>]*>Point 1</);
+    expect(band).toMatch(/data-court-subtitle="[^"]*"[^>]*>Shot 2 of 3 · /);
+  });
+
+  test("docked side: a column beside the table, the player over the court", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: VIDEO,
+      initialLayoutMode: "docked-side",
+    });
+    expect(tagOf(html, "data-label-console")).toContain(
+      'data-label-layout-mode="docked-side"',
+    );
+    const column = dockOf(html, "side");
+    const open = tagOf(column, 'data-label-dock="side"');
+    expect(open).toContain("width:480px");
+    expect(open).toMatch(/class="[^"]*\bflex-col\b/);
+    expect(open).toMatch(/class="[^"]*\bmax-w-\[45%\]/);
+    expect(column).toContain("data-label-video-frame");
+    expect(column).toContain("data-court-art");
+    expect(column.indexOf("data-label-dock-video")).toBeLessThan(
+      column.indexOf("data-label-dock-court"),
+    );
+    expect(tagOf(column, "data-label-dock-video")).toMatch(
+      /class="[^"]*\bw-full\b/,
+    );
+    expect(tagOf(column, "data-label-dock-court")).toMatch(
+      /class="[^"]*\bmin-h-0\b[^"]*\bflex-1\b/,
+    );
+    expect(html).not.toContain("data-dock-minimised");
+    expect(html).not.toContain("data-label-dock-layer");
+    expect(html).not.toContain("data-label-court-layer");
+    // The table comes first, on the left, and narrows rather than pushing.
+    expect(html.indexOf("data-label-scroller")).toBeLessThan(
+      html.indexOf('data-label-dock="side"'),
+    );
+    expect(count(html, /data-label-video-frame/g)).toBe(1);
+  });
+
+  test("a selected shot in a docked mode still zooms the court to its half", () => {
+    for (const mode of ["docked-top", "docked-side"] as const) {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: mode,
+        initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+        initialSelectedShotId: "s-return",
+        ...SAVES,
+      });
+      const dock = dockOf(html, mode === "docked-top" ? "top" : "side");
+      expect(dock, mode).toMatch(/data-court-view="(near|far)"/);
+      expect(dock, mode).toMatch(/<button[^>]*data-court-target/);
+      expect(dock, mode).toContain("data-court-steps");
+      expect(dock, mode).toMatch(
+        /data-court-title="[^"]*"[^>]*>Shot 2 · contact</,
+      );
+      // The card wears the blue outline while placing, as the floating one does.
+      expect(tagOf(dock, "data-label-dock-court"), mode).toContain(
+        'data-court-placing="true"',
+      );
+      expect(tagOf(dock, "data-label-dock-court"), mode).toContain(
+        "shadow-[0_0_0_1.5px_var(--blue)",
+      );
+    }
+  });
+
+  test("without a video, a docked mode still frames the quiet placeholder", () => {
+    const html = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialLayoutMode: "docked-top",
+    });
+    const band = dockOf(html, "top");
+    expect(band).not.toContain("<video");
+    expect(text(band)).toContain("No video for this job");
+    expect(band).toContain("data-court-art");
   });
 });

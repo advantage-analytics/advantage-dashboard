@@ -340,3 +340,15 @@ Decisions:
 1. Nothing on screen says a shot is looping.
 2. The loop can overrun its end by up to ~0.25 s (timeupdate cadence).
 3. Editing or deleting the looping shot does not refresh the held window.
+
+## T24 · Layout modes: Overlay, Docked top, Docked side — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** A Layout menu in the console header switches between Overlay (today's floating cards), Docked top (video and court side by side in a band above the table) and Docked side (video over court in a right column). New pure `label-layout.ts` (modes, keys, default and minimum sizes, `clampDockSize`), `label-layout-control.tsx`, and `label-court-panel.tsx` (the court card's body, shared by the floating dock and the docked panel). The mode is read from storage after mount; the playhead is carried across a switch (paused).
+
+**follow-ups:**
+
+1. Below 318px the docked court art clips rather than scales — T25 lets the band go to 240.
+2. Playback does not resume after a mode switch; a running shot loop lets go.
+3. Docked top leaves the band's remaining width empty.

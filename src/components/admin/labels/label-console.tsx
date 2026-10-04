@@ -39,6 +39,7 @@ import {
   type PlannedGameWrites,
 } from "@/lib/services/labels/game-operations";
 import type { LabelGameWriteResult } from "@/lib/services/labels/game-operations-session";
+import { labelScores } from "@/lib/services/labels/score";
 import {
   applyPointDelete,
   applyPointMove,
@@ -82,8 +83,21 @@ import {
 import type { LabelConfirm } from "./label-confirm";
 import { LabelConfirmDialog } from "./label-confirm-dialog";
 import { LabelCourtDock } from "./label-court-dock";
-import { followInsets, type VideoDockLayout } from "./label-court-position";
+import { LabelCourtPanel, isPlacing } from "./label-court-panel";
+import {
+  COURT_DOCK_SIZE,
+  followInsets,
+  type VideoDockLayout,
+} from "./label-court-position";
 import { labelFilmStops } from "./label-film-stops";
+import {
+  DEFAULT_DOCK_SIZE,
+  DEFAULT_LAYOUT_MODE,
+  LAYOUT_MODE_STORAGE_KEY,
+  parseLayoutMode,
+  type LabelLayoutMode,
+} from "./label-layout";
+import { LabelLayoutControl } from "./label-layout-control";
 import { shotLoopWindow } from "./label-shot-loop";
 import { sideNames } from "./label-format";
 import {
@@ -92,8 +106,12 @@ import {
   type LabelRowOperations,
 } from "./label-points-table";
 import { LabelSaveStatus } from "./label-save-status";
-import type { LabelVideoHandle } from "./label-video";
-import { LabelVideoDock, type DockNowPlaying } from "./label-video-dock";
+import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
+import {
+  LabelVideoDock,
+  dockReadout,
+  type DockNowPlaying,
+} from "./label-video-dock";
 import { INITIAL_SAVE_STATUS, saveStatusReducer } from "./save-status";
 import {
   createVideoClock,
@@ -175,6 +193,28 @@ const FOLLOW: PointFocus = { mode: "follow" };
  * selects a stroke; whether it opens the point and scrolls to it is the
  * follow-or-hold state above — held, the labeller stays in charge of both.
  *
+ * ── Three layouts (T24) ─────────────────────────────────────────────────────
+ *
+ * That floating arrangement is **Overlay**, one of three the header's Layout
+ * menu offers (`label-layout.ts`). **Docked top** puts the video and the court
+ * side by side in a band above the table; **Docked side** puts the video over
+ * the court in a column to the table's right. In a docked mode the same
+ * `LabelVideoPlayer` (the dock's inner player — same `player` ref, same
+ * transport, same clock) and the same `LabelCourtPanel` (the court card's
+ * body) render straight into the band or column, which is `DEFAULT_DOCK_SIZE`
+ * tall or wide until the divider (T25) moves it; the table takes the rest and
+ * still scrolls inside itself. Nothing floats, so the follow scroll keeps
+ * clear of the sticky column header only. The choice is remembered under
+ * `LAYOUT_MODE_STORAGE_KEY`, read after mount like the docks read their own
+ * keys — the page is server-rendered, and a first client render that read
+ * storage would not hydrate.
+ *
+ * Switching mode moves the `<video>` to another parent, which remounts it. The
+ * playhead carries over: once the new element is in, the console seeks it to
+ * where the clock says the film was (`seekTo` before metadata sets the
+ * element's default start position, which it honours when the metadata
+ * lands). Playback resumes paused, and a shot loop lets go.
+ *
  * Outside a control, Space plays and pauses and ← / → step to the previous or
  * next point — the keys the player's own tooltips name.
  */
@@ -191,6 +231,7 @@ export function LabelConsole({
   initialVideoTime = null,
   initialVideoMinimised,
   initialPointFocus,
+  initialLayoutMode,
   headerAction,
 }: {
   session: LabelSession;
@@ -227,6 +268,12 @@ export function LabelConsole({
   initialVideoMinimised?: boolean;
   /** Follow or hold on first render — for specs. Follows by default. */
   initialPointFocus?: PointFocus;
+  /**
+   * Overlay, docked top or docked side on first render — for specs. Given,
+   * storage is not consulted. Otherwise the overlay, then the stored mode
+   * once the client can read it.
+   */
+  initialLayoutMode?: LabelLayoutMode;
   /** The header's trailing link, rendered by the page. */
   headerAction?: ReactNode;
 }) {
@@ -281,6 +328,50 @@ export function LabelConsole({
   const pendingIds = useRef(0);
   const [clock] = useState(() => createVideoClock(initialVideoTime));
 
+  // Overlay, docked top or docked side (label-layout.ts). The stored choice is
+  // read after mount, as the docks read theirs: the page is server-rendered
+  // and the server has no storage, so a first client render that disagreed
+  // with the server's would not hydrate. The overlay's cards are invisible
+  // until measured, so a stored docked mode never shows the cards first.
+  const [layoutMode, setLayoutMode] = useState<LabelLayoutMode>(
+    initialLayoutMode ?? DEFAULT_LAYOUT_MODE,
+  );
+  useEffect(() => {
+    if (initialLayoutMode !== undefined) return;
+    try {
+      const stored = localStorage.getItem(LAYOUT_MODE_STORAGE_KEY);
+      // Storage is the external system here, readable only after mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (stored !== null) setLayoutMode(parseLayoutMode(stored));
+    } catch {
+      /* storage blocked — the console just starts in the overlay */
+    }
+  }, [initialLayoutMode]);
+  const chooseLayout = useCallback((mode: LabelLayoutMode) => {
+    setLayoutMode(mode);
+    try {
+      localStorage.setItem(LAYOUT_MODE_STORAGE_KEY, mode);
+    } catch {
+      /* private window — the choice just isn't kept */
+    }
+  }, []);
+  const docked = layoutMode !== "overlay";
+
+  // A mode change moves the `<video>` to another parent, which remounts it at
+  // zero. Put the new element where the clock says the film was: `seekTo`
+  // before its metadata is in sets the element's default start position,
+  // which it takes up when the metadata lands; after, it is a plain seek. Not
+  // on mount — the first element starts where `initialVideoTime` put the
+  // clock only in specs, and a real one starts at the film's first frame.
+  const mountedLayout = useRef<LabelLayoutMode | null>(null);
+  useEffect(() => {
+    const previous = mountedLayout.current;
+    mountedLayout.current = layoutMode;
+    if (previous === null || previous === layoutMode) return;
+    const at = clock.get();
+    if (at !== null) player.current?.seekTo(at);
+  }, [layoutMode, clock]);
+
   // Re-renders only when the video crosses into another row; taken from the
   // current rows every render, so a retimed stroke moves the mark at once.
   const playingSnapshot = () =>
@@ -296,6 +387,13 @@ export function LabelConsole({
     () => dockNowPlaying(points, parsePlayingRowKey(playingKey)),
     [points, playingKey],
   );
+  // The docked player's transport title row — the dock derives the same for
+  // the floating one. Nothing in the overlay reads it, so it stays `null`.
+  const dockedReadout = useMemo(() => {
+    if (!docked) return null;
+    const scores = labelScores(points, session.adScoring);
+    return dockReadout(points, nowPlaying, names, scores);
+  }, [docked, points, session.adScoring, nowPlaying, names]);
   // The playing point's span on the FILE clock — `--film-t` is the element's
   // own seconds, so the window is the player's stop, not `playingRowAt`'s
   // analysis-clock one.
@@ -918,11 +1016,13 @@ export function LabelConsole({
   // measures rows against the card's own box, less the strip the floating
   // cards cover (`followInsets`) — a row under the video or the court is not
   // in view — and less the column header stuck to the card's top, which a
-  // row scrolled to the very top would otherwise sit under.
+  // row scrolled to the very top would otherwise sit under. Docked, nothing
+  // floats over the table: only the column header is kept clear.
   const insets = useMemo(() => {
+    if (docked) return { top: POINT_HEADER_HEIGHT, bottom: 0 };
     const docks = followInsets(videoLayout);
     return { top: docks.top + POINT_HEADER_HEIGHT, bottom: docks.bottom };
-  }, [videoLayout]);
+  }, [docked, videoLayout]);
   useFollowScroll({
     scroller: scrollerRef,
     held,
@@ -963,10 +1063,111 @@ export function LabelConsole({
     setPlacement(setPlacementTarget(placement, target, shot?.contactY ?? null));
   }
 
+  // The table card and the Now-playing pill: one tree, wherever the layout
+  // puts it. What is left of the column (or the row, docked side), and the
+  // pill's positioning context. `min-w-0` so that, beside the docked column,
+  // the card narrows and scrolls sideways rather than pushing the column off.
+  const table = (
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* `onFocusCapture` on the frame, not the rows: a point cell's editor
+          is the only edit that reaches no console handler of its own. */}
+      <div
+        className="flex min-h-0 flex-1 flex-col"
+        onFocusCapture={holdOnEditorFocus}
+      >
+        <LabelPointsTable
+          scrollerRef={scrollerRef}
+          points={points}
+          adScoring={session.adScoring}
+          names={names}
+          expandedPointId={openPointId}
+          onTogglePoint={togglePoint}
+          editable={editable}
+          selectedShotId={placement.shotId}
+          onSelectShot={selectShot}
+          onPatchPoint={patchPoint}
+          onPatchShot={patchShot}
+          operations={rowOperations}
+          onSetGameServer={operable ? setGameServer : undefined}
+          onSetGameType={operable ? setGameType : undefined}
+          openTombstoneIds={openTombstones}
+          onToggleTombstone={toggleTombstone}
+          playingPointId={playingPointId}
+          playingShotId={playing?.shotId ?? null}
+          playingWindow={playingWindow}
+        />
+      </div>
+
+      {/* The film room's return pill (point-list.tsx `FollowPill`), pinned
+          to the table's top-centre: over the scroller rather than inside
+          it, so it stays put while the rows move, and over the table
+          rather than the page header. The corners belong to the floating
+          cards. The same dark recipe over the light page, so
+          `--shadow-floating` in place of the room's inset hairline; no
+          chevron, since the lit row is wherever the table is. Above the
+          dock layer (`z-40`). */}
+      {affordance ? (
+        <button
+          type="button"
+          data-label-follow-pill=""
+          aria-label={affordance.ariaLabel}
+          onClick={followPlayback}
+          className={cn(
+            "absolute top-3 left-1/2 z-50 inline-flex h-7 -translate-x-1/2 cursor-pointer items-center rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium whitespace-nowrap text-white shadow-[var(--shadow-floating)] transition-[background-color,transform] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.97]",
+            // Pinned top, so it drops in (the keyframe reads the sign).
+            "film-follow-pill-in [--film-pill-rise:-4px]",
+          )}
+        >
+          {affordance.label}
+        </button>
+      ) : null}
+    </div>
+  );
+
+  // Docked (T24): the dock's inner player and the court card's body, bare,
+  // on the court card's own dark ground. The player is the SAME component the
+  // floating dock wraps — same `player` ref, transport, clock target — so
+  // Space, ← / →, the shot loop and the progress rule never notice the move.
+  // The court card keeps its blue outline while placing, as the floating one
+  // does; `fill` lets the court centre in whatever height the panel has.
+  const placing = isPlacing(expanded, placement, editable);
+  const DOCK_CARD =
+    "rounded-[var(--radius-card)] bg-[#1A1A1C] shadow-[var(--shadow-card)]";
+  const dockedVideo = (
+    <LabelVideoPlayer
+      ref={player}
+      video={video}
+      points={points}
+      readout={dockedReadout ?? undefined}
+      onTime={clock.set}
+      clockTargetRef={rootRef}
+    />
+  );
+  const dockedCourt = (
+    <LabelCourtPanel
+      point={expanded}
+      names={names}
+      placement={placement}
+      editable={editable}
+      playingShotId={playing?.shotId ?? null}
+      clock={clock}
+      onPlace={place}
+      onTarget={setTarget}
+      onFlip={() => setPlacement(flipPlacement)}
+      fill
+    />
+  );
+  const courtCardClass = cn(
+    DOCK_CARD,
+    "flex flex-col px-3 pt-3 pb-2.5 transition-[box-shadow] duration-150",
+    placing && "shadow-[0_0_0_1.5px_var(--blue),var(--shadow-card)]",
+  );
+
   return (
     <div
       ref={rootRef}
       data-label-console=""
+      data-label-layout-mode={layoutMode}
       className="flex min-h-0 flex-1 flex-col gap-6"
     >
       <div className="flex shrink-0 items-end justify-between gap-8">
@@ -987,95 +1188,105 @@ export function LabelConsole({
         </div>
         <div className="flex shrink-0 items-center gap-5">
           <LabelSaveStatus status={saveStatus} />
+          <LabelLayoutControl mode={layoutMode} onChange={chooseLayout} />
           {headerAction}
         </div>
       </div>
 
-      {/* What is left of the column, and the pill's positioning context. */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        {/* `onFocusCapture` on the frame, not the rows: a point cell's editor
-            is the only edit that reaches no console handler of its own. */}
-        <div
-          className="flex min-h-0 flex-1 flex-col"
-          onFocusCapture={holdOnEditorFocus}
-        >
-          <LabelPointsTable
-            scrollerRef={scrollerRef}
-            points={points}
-            adScoring={session.adScoring}
-            names={names}
-            expandedPointId={openPointId}
-            onTogglePoint={togglePoint}
-            editable={editable}
-            selectedShotId={placement.shotId}
-            onSelectShot={selectShot}
-            onPatchPoint={patchPoint}
-            onPatchShot={patchShot}
-            operations={rowOperations}
-            onSetGameServer={operable ? setGameServer : undefined}
-            onSetGameType={operable ? setGameType : undefined}
-            openTombstoneIds={openTombstones}
-            onToggleTombstone={toggleTombstone}
-            playingPointId={playingPointId}
-            playingShotId={playing?.shotId ?? null}
-            playingWindow={playingWindow}
-          />
-        </div>
-
-        {/* The film room's return pill (point-list.tsx `FollowPill`), pinned
-            to the table's top-centre: over the scroller rather than inside
-            it, so it stays put while the rows move, and over the table
-            rather than the page header. The corners belong to the floating
-            cards. The same dark recipe over the light page, so
-            `--shadow-floating` in place of the room's inset hairline; no
-            chevron, since the lit row is wherever the table is. Above the
-            dock layer (`z-40`). */}
-        {affordance ? (
-          <button
-            type="button"
-            data-label-follow-pill=""
-            aria-label={affordance.ariaLabel}
-            onClick={followPlayback}
-            className={cn(
-              "absolute top-3 left-1/2 z-50 inline-flex h-7 -translate-x-1/2 cursor-pointer items-center rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium whitespace-nowrap text-white shadow-[var(--shadow-floating)] transition-[background-color,transform] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.97]",
-              // Pinned top, so it drops in (the keyframe reads the sign).
-              "film-follow-pill-in [--film-pill-rise:-4px]",
-            )}
+      {layoutMode === "docked-top" ? (
+        // A band above the table, `DEFAULT_DOCK_SIZE` tall: the video at
+        // 16:9 from that height (565 wide at 318), the court card beside it
+        // at the floating card's own width, the rest of the band open. The
+        // table takes what is left below.
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
+          <div
+            data-label-dock="top"
+            className="flex shrink-0 gap-4"
+            style={{ height: DEFAULT_DOCK_SIZE["docked-top"] }}
           >
-            {affordance.label}
-          </button>
-        ) : null}
-      </div>
+            <div
+              data-label-dock-video=""
+              className={cn(
+                DOCK_CARD,
+                "aspect-video h-full shrink-0 overflow-hidden",
+              )}
+            >
+              {dockedVideo}
+            </div>
+            <div
+              data-label-dock-court=""
+              data-court-placing={placing ? "true" : "false"}
+              className={cn(courtCardClass, "shrink-0")}
+              style={{ width: COURT_DOCK_SIZE.width }}
+            >
+              {dockedCourt}
+            </div>
+          </div>
+          {table}
+        </div>
+      ) : layoutMode === "docked-side" ? (
+        // A column to the table's right, `DEFAULT_DOCK_SIZE` wide and never
+        // more than 45% of the row: the video at 16:9 from that width (270
+        // tall at 480), the court card under it taking the rest of the
+        // height. The table narrows beside it and scrolls sideways.
+        <div className="flex min-h-0 flex-1 gap-4">
+          {table}
+          <div
+            data-label-dock="side"
+            className="flex max-w-[45%] shrink-0 flex-col gap-4"
+            style={{ width: DEFAULT_DOCK_SIZE["docked-side"] }}
+          >
+            <div
+              data-label-dock-video=""
+              className={cn(DOCK_CARD, "w-full shrink-0 overflow-hidden")}
+            >
+              {dockedVideo}
+            </div>
+            <div
+              data-label-dock-court=""
+              data-court-placing={placing ? "true" : "false"}
+              className={cn(courtCardClass, "min-h-0 flex-1")}
+            >
+              {dockedCourt}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {table}
 
-      <LabelVideoDock
-        ref={player}
-        video={video}
-        points={points}
-        nowPlaying={nowPlaying}
-        names={names}
-        adScoring={session.adScoring}
-        onTime={clock.set}
-        onLayout={setVideoLayout}
-        clockTargetRef={rootRef}
-        initialMinimised={initialVideoMinimised}
-      />
+          <LabelVideoDock
+            ref={player}
+            video={video}
+            points={points}
+            nowPlaying={nowPlaying}
+            names={names}
+            adScoring={session.adScoring}
+            onTime={clock.set}
+            onLayout={setVideoLayout}
+            clockTargetRef={rootRef}
+            initialMinimised={initialVideoMinimised}
+          />
 
-      {/* The court floats too (board 08i): the whole court, read-only, until
-          a stroke is selected in an editable session — then the half its
-          next click belongs on. After the video in the DOM, so where the two
-          ever meet the court, the card being worked on, is on top. */}
-      <LabelCourtDock
-        point={expanded}
-        names={names}
-        placement={placement}
-        editable={editable}
-        playingShotId={playing?.shotId ?? null}
-        clock={clock}
-        video={videoLayout}
-        onPlace={place}
-        onTarget={setTarget}
-        onFlip={() => setPlacement(flipPlacement)}
-      />
+          {/* The court floats too (board 08i): the whole court, read-only,
+              until a stroke is selected in an editable session — then the
+              half its next click belongs on. After the video in the DOM, so
+              where the two ever meet the court, the card being worked on, is
+              on top. */}
+          <LabelCourtDock
+            point={expanded}
+            names={names}
+            placement={placement}
+            editable={editable}
+            playingShotId={playing?.shotId ?? null}
+            clock={clock}
+            video={videoLayout}
+            onPlace={place}
+            onTarget={setTarget}
+            onFlip={() => setPlacement(flipPlacement)}
+          />
+        </>
+      )}
 
       {operable ? (
         <LabelConfirmDialog

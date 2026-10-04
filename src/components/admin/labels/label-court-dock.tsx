@@ -1,14 +1,7 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import { ArrowUpDown, GripVertical, Maximize2, Minimize2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { GripVertical, Maximize2, Minimize2 } from "lucide-react";
 import type {
   BoardAnchor,
   BoardSize,
@@ -18,20 +11,11 @@ import {
   SETTLE_CLASS,
   useCornerDrag,
 } from "@/components/dashboard/matches/match-detail/film/use-corner-drag";
-import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
+import type { LabelPoint } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import type { CourtPoint } from "./court-geometry";
-import {
-  placementPrompt,
-  type PlacementState,
-  type PlacementTarget,
-} from "./court-placement";
-import { LabelCourt, type CourtStroke } from "./label-court";
-import {
-  courtMarksAt,
-  courtMarksKey,
-  parseCourtMarksKey,
-} from "./label-court-marks";
+import type { PlacementState, PlacementTarget } from "./court-placement";
+import { LabelCourtPanel, isPlacing } from "./label-court-panel";
 import {
   COURT_ANCHOR_STORAGE_KEY,
   COURT_DOCK_SIZE,
@@ -52,30 +36,12 @@ import type { VideoClock } from "./video-clock";
  * labeller moves it, and it yields to the video (`courtRest`): dropped into
  * the video's corner it lands beside it, never on it.
  *
- * ── Two states ──────────────────────────────────────────────────────────────
- * - **Not placing** (the film is playing, nothing is selected, or the session
- *   is read-only): the WHOLE court, read-only. A click does nothing. There is
- *   no shot list — the table is the list.
- * - **Placing** (a stroke is selected and the console is editable): the card
- *   takes a `--blue` outline and ZOOMS to the half the next click belongs on
- *   (court-placement.ts), with the run-off round it clickable for a ball that
- *   went out. The foot holds the Contact / Landing switch — which end the
- *   click places — and "Flip side", for a ball into the net.
- *
- * ── What is on the court ────────────────────────────────────────────────────
- * Never the whole point at once. With nothing selected the marks follow the
- * film the way the Video tab's court does (`label-court-marks.ts`): each
- * contact appears at its stroke, each landing when the ball comes down, holds,
- * fades and goes — so the card reads the rally one stroke at a time, and
- * pausing freezes it. The card subscribes to the console's `VideoClock`
- * itself, with the marks' string key as its snapshot, so an opacity step
- * re-renders this card and nothing else.
- *
- * With a stroke selected — editable or not — the court shows THAT stroke
- * alone, both ends at full strength: the labeller is looking at one shot and
- * placing it, so the end just clicked appears at once and nothing else
- * competes with it. A selected stroke with no coordinates yet is a blank
- * court, still clickable where editable.
+ * This file is the SHELL — the fixed layer, the corner drag, the minimise
+ * pill, the dark card and its blue outline while placing. What is on the card
+ * (the readout header, the court, the Contact / Landing switch, Flip side and
+ * the legend) is `LabelCourtPanel` (`label-court-panel.tsx`), which the
+ * console also renders bare in its docked layouts (T24); the two states the
+ * card can be in, and what the court shows, are documented there.
  *
  * ── A box that never changes size ───────────────────────────────────────────
  * As the video dock: the layer is `fixed inset-0`, the dock keeps the card's
@@ -89,77 +55,10 @@ import type { VideoClock } from "./video-clock";
  * no glide under reduced motion.
  */
 
-/** No point open: one shared empty list, so the marks memo holds. */
-const NO_SHOTS: readonly LabelShot[] = [];
-
 const HEADER_BUTTON =
   "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-white/70 transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
 
-export interface CourtReadout {
-  title: string;
-  subtitle: string | null;
-}
-
-/**
- * The card's two header lines.
- *
- * Placing: "Shot 3 · contact" over whose half is on screen — the hitter's
- * for a contact, the other player's for a landing, and "Flipped to <hitter>'s
- * side · Net" when Flip side has brought a landing back across.
- *
- * Otherwise: "Point 15" over "Shot 3 of 4 · Ace" for the lit (playing)
- * stroke, or just the stroke count; "Court" with no point open.
- */
-export function courtReadout(
-  point: LabelPoint | null,
-  placement: PlacementState | null,
-  litShotId: string | null,
-  names: SideNames,
-): CourtReadout {
-  if (!point) return { title: "Court", subtitle: "No point open" };
-  const live = point.shots.filter((shot) => shot.status !== "deleted");
-  const numberOf = (shotId: string | null) => {
-    const index = live.findIndex((shot) => shot.id === shotId);
-    return index === -1 ? null : index + 1;
-  };
-
-  const placing = placement ? numberOf(placement.shotId) : null;
-  if (placement && placing !== null) {
-    const hitter = live[placing - 1].hitter;
-    const own = hitter ? `${names[hitter]}’s side` : "The hitter’s side";
-    const other = hitter
-      ? `${names[hitter === "p1" ? "p2" : "p1"]}’s side`
-      : "The other side";
-    return {
-      title: `Shot ${placing} · ${placement.target}`,
-      subtitle:
-        placement.target === "contact"
-          ? own
-          : placement.flipped
-            ? `Flipped to ${hitter ? own : "the hitter’s side"} · Net`
-            : other,
-    };
-  }
-
-  const title = `Point ${point.pointIndex + 1}`;
-  const lit = numberOf(litShotId);
-  if (lit !== null) {
-    const hitter = live[lit - 1].hitter;
-    return {
-      title,
-      subtitle: [`Shot ${lit} of ${live.length}`, hitter ? names[hitter] : null]
-        .filter((part) => part !== null)
-        .join(" · "),
-    };
-  }
-  return {
-    title,
-    subtitle:
-      live.length === 0
-        ? "No shots"
-        : `${live.length} ${live.length === 1 ? "shot" : "shots"}`,
-  };
-}
+export { courtReadout, type CourtReadout } from "./label-court-panel";
 
 export function LabelCourtDock({
   point,
@@ -262,50 +161,7 @@ export function LabelCourtDock({
   ];
   const origin = courtOrigin(anchor);
 
-  const shots = point?.shots ?? NO_SHOTS;
-  const selected =
-    placement.shotId === null
-      ? null
-      : (shots.find(
-          (shot) => shot.id === placement.shotId && shot.status !== "deleted",
-        ) ?? null);
-  const placing = editable && selected !== null;
-  const readout = courtReadout(
-    point,
-    placing ? placement : null,
-    placement.shotId ?? playingShotId,
-    names,
-  );
-  const selectedNumber = placing
-    ? shots.filter((shot) => shot.status !== "deleted").indexOf(selected) + 1
-    : null;
-  const prompt = placing ? placementPrompt(placement, selectedNumber) : null;
-
-  // The marks the film is showing right now, as a string snapshot: React
-  // re-renders this card only when an opacity steps, and the console — which
-  // owns the clock but never subscribes to this — not at all. Taken from the
-  // current strokes on every render, so a retimed stroke moves at once.
-  const marksSnapshot = () => courtMarksKey(courtMarksAt(shots, clock.get()));
-  const marksKey = useSyncExternalStore(
-    clock.subscribe,
-    marksSnapshot,
-    marksSnapshot,
-  );
-  const strokes = useMemo<CourtStroke[]>(() => {
-    // A selected stroke alone, at full strength; none of it yet is a blank court.
-    if (placement.shotId !== null) return selected ? [{ shot: selected }] : [];
-    const byId = new Map(shots.map((shot) => [shot.id, shot]));
-    const out: CourtStroke[] = [];
-    for (const mark of parseCourtMarksKey(marksKey)) {
-      const shot = byId.get(mark.shotId);
-      if (!shot) continue;
-      out.push({
-        shot,
-        opacity: { hit: mark.contactOpacity, landed: mark.landingOpacity },
-      });
-    }
-    return out;
-  }, [placement.shotId, selected, shots, marksKey]);
+  const placing = isPlacing(point, placement, editable);
 
   return (
     <div
@@ -355,9 +211,6 @@ export function LabelCourtDock({
             <span key={move.announcement.seq}>{move.announcement.text}</span>
           )}
         </span>
-        <span aria-live="polite" className="sr-only" data-court-prompt="">
-          {prompt}
-        </span>
 
         {/* Expanded: collapses toward the anchored corner. */}
         <div
@@ -383,139 +236,54 @@ export function LabelCourtDock({
                   : "scale-100 shadow-[var(--shadow-floating)] duration-150",
             )}
           >
-            <div
-              {...move.handleProps}
-              data-court-handle=""
-              // A press on the minimise button is that button's.
-              onPointerDown={(e) => {
-                if ((e.target as HTMLElement).closest("button")) return;
-                move.handleProps.onPointerDown(e);
+            <LabelCourtPanel
+              point={point}
+              names={names}
+              placement={placement}
+              editable={editable}
+              playingShotId={playingShotId}
+              clock={clock}
+              onPlace={onPlace}
+              onTarget={onTarget}
+              onFlip={onFlip}
+              // The header is the drag handle. A press on the minimise button
+              // is that button's: capturing the pointer here would move the
+              // click off it.
+              headerProps={{
+                ...move.handleProps,
+                "data-court-handle": "",
+                onPointerDown: (e) => {
+                  if ((e.target as HTMLElement).closest("button")) return;
+                  move.handleProps.onPointerDown(e);
+                },
               }}
-              className={cn(
-                "flex h-[34px] shrink-0 touch-none items-start justify-between gap-2 select-none",
+              headerClassName={cn(
+                "touch-none select-none",
                 move.free ? "cursor-grabbing" : "cursor-grab",
               )}
-            >
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <span
-                  data-court-title=""
-                  className="tabular truncate text-[12px] leading-[15px] font-medium text-white"
-                >
-                  {readout.title}
-                </span>
-                <span
-                  data-court-subtitle=""
-                  className="truncate text-[10px] leading-[13px] text-white/55"
-                >
-                  {readout.subtitle}
-                </span>
-              </div>
-              <span className="-mt-1 -mr-1 flex shrink-0 items-center gap-1">
-                <GripVertical
-                  className="size-3.5 text-white/45"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                <button
-                  type="button"
-                  ref={minimiseButton}
-                  aria-label="Minimise the court"
-                  onClick={() => setMinimisedAndRemember(true)}
-                  className={HEADER_BUTTON}
-                >
-                  <Minimize2
-                    className="size-3.5"
-                    strokeWidth={1.6}
+              headerTrailing={
+                <span className="-mt-1 -mr-1 flex shrink-0 items-center gap-1">
+                  <GripVertical
+                    className="size-3.5 text-white/45"
+                    strokeWidth={1.5}
                     aria-hidden="true"
                   />
-                </button>
-              </span>
-            </div>
-
-            <div className="my-2 flex h-[222px] shrink-0 justify-center">
-              <LabelCourt
-                strokes={strokes}
-                view={placing ? placement.half : "whole"}
-                targetShotId={placing ? placement.shotId : null}
-                target={placing ? placement.target : null}
-                prompt={prompt}
-                onPlace={placing ? onPlace : undefined}
-              />
-            </div>
-
-            <div className="flex h-6 shrink-0 items-center gap-3 text-[10px] text-white/55">
-              {placing ? (
-                <>
-                  <span
-                    role="group"
-                    aria-label="What you are placing"
-                    data-court-steps=""
-                    className="inline-flex rounded-[7px] bg-white/[0.08] p-0.5"
-                  >
-                    {(["contact", "landing"] as const).map((target) => {
-                      const on = placement.target === target;
-                      return (
-                        <button
-                          key={target}
-                          type="button"
-                          aria-pressed={on}
-                          data-court-step={target}
-                          onClick={() => onTarget(target)}
-                          className={cn(
-                            "h-5 cursor-pointer rounded-[5px] px-[9px] text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                            on
-                              ? "bg-white/[0.16] font-medium text-white"
-                              : "text-white/60 hover:text-white",
-                          )}
-                        >
-                          {target === "contact" ? "Contact" : "Landing"}
-                        </button>
-                      );
-                    })}
-                  </span>
-                  <span className="flex-1" />
                   <button
                     type="button"
-                    aria-pressed={placement.flipped}
-                    data-court-flip=""
-                    onClick={onFlip}
-                    className={cn(
-                      "inline-flex h-6 cursor-pointer items-center gap-[5px] rounded-[6px] px-2 text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                      placement.flipped
-                        ? "bg-white/[0.16] text-white"
-                        : "text-white/70 hover:bg-white/[0.08] hover:text-white",
-                    )}
+                    ref={minimiseButton}
+                    aria-label="Minimise the court"
+                    onClick={() => setMinimisedAndRemember(true)}
+                    className={HEADER_BUTTON}
                   >
-                    <ArrowUpDown
-                      className="size-[13px]"
+                    <Minimize2
+                      className="size-3.5"
                       strokeWidth={1.6}
                       aria-hidden="true"
                     />
-                    Flip side
                   </button>
-                </>
-              ) : (
-                <span
-                  data-court-legend=""
-                  className="flex w-full items-center justify-center gap-3"
-                >
-                  <span className="inline-flex items-center gap-[5px]">
-                    <span
-                      aria-hidden="true"
-                      className="size-[7px] rounded-full border-[1.5px] border-white"
-                    />
-                    Hit
-                  </span>
-                  <span className="inline-flex items-center gap-[5px]">
-                    <span
-                      aria-hidden="true"
-                      className="size-1.5 rounded-full bg-white"
-                    />
-                    Landed
-                  </span>
                 </span>
-              )}
-            </div>
+              }
+            />
           </div>
         </div>
 
