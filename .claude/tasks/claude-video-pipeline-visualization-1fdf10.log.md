@@ -262,3 +262,15 @@ Decisions:
 1. `label-video.tsx` duplicates part of `FilmPlayer`'s playback logic (seek, loop, skip dead time); the two can drift.
 2. Safari may hold at readyState 2 until play, leaving the transport dimmed until the first click or Space.
 3. Dead time reads "Between points"; it could hold the last point instead.
+
+## T17 · Court widget as its own floating card with half-court zoom — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** The court left the top band for `LabelCourtDock`: a 300×318 dark floating card (own corner and minimised keys, default bottom-left, yields to the video's corner via `courtRest`). Not placing, it draws the whole court read-only with the open point's marks and no shot list; placing, it zooms to one half with the run-off clickable, a Contact/Landing switch and Flip side. `court-geometry.ts` gains the half-court frame helpers; `PlacementState` gains `half` and `flipped`. The hitter's half follows the stroke's own contact, else the previous stroke (same side when the same player hit it), else near. `label-video-dock.tsx` reports its layout through an optional `onLayout`.
+
+**follow-ups:**
+
+1. After a landing click the card cycles back to the contact half, so the mark just placed leaves the screen; staying on Landing may be better.
+2. The minimised video pill's size is approximated (176×36) for overlap avoidance.
+3. The board's placement preview in the subtitle was left out; pills have no drag handle.

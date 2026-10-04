@@ -239,7 +239,7 @@ ready).
 
 ## T17 · Court widget as its own floating card with half-court zoom
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T11
 - **files:** src/components/admin/labels/label-court-dock.tsx (new), src/components/admin/labels/label-court-position.ts (new), src/components/admin/labels/label-court.tsx, src/components/admin/labels/court-geometry.ts, src/components/admin/labels/court-placement.ts, src/components/admin/labels/label-console.tsx, tests/label-court-geometry.spec.ts, tests/label-console.spec.ts (guess)

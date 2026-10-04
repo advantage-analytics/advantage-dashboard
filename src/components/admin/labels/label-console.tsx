@@ -71,14 +71,18 @@ import { cn } from "@/lib/utils";
 import type { CourtPoint } from "./court-geometry";
 import {
   NO_PLACEMENT,
+  flipPlacement,
+  hitterHalf,
   nextPlacement,
-  placementPrompt,
+  setPlacementTarget,
   startPlacement,
   type PlacementState,
+  type PlacementTarget,
 } from "./court-placement";
 import type { LabelConfirm } from "./label-confirm";
 import { LabelConfirmDialog } from "./label-confirm-dialog";
-import { LabelCourt } from "./label-court";
+import { LabelCourtDock } from "./label-court-dock";
+import type { VideoDockLayout } from "./label-court-position";
 import { sideNames } from "./label-format";
 import {
   LabelPointsTable,
@@ -101,8 +105,8 @@ const PENDING_SHOT_PREFIX = "pending-shot-";
 const FOLLOW: PointFocus = { mode: "follow" };
 
 /**
- * `/admin/labels/[sessionId]` — board 08: the header, the court card, the
- * points table, and the video floating over them in a corner.
+ * `/admin/labels/[sessionId]` — board 08: the header and the points table,
+ * with the video and the court card floating over them, a corner each.
  *
  * Owns the session's rows for this visit and every edit to them. There is no
  * Save button: a change is applied to the rows at once (optimistic), handed to
@@ -131,7 +135,7 @@ const FOLLOW: PointFocus = { mode: "follow" };
  * displayed point (T24), with `null` when nothing is open (T25). The way back
  * is the "Now playing · Point N" pill, fixed at the top-centre of the
  * viewport while held and a point is playing (the video dock keeps the
- * bottom-right corner, the court card will take the bottom-left); pressing
+ * bottom-right corner, the court card the bottom-left); pressing
  * it follows again and the hook jumps the playing row to the top (T26).
  *
  * With nothing playing — before the video moves, or in the dead time between
@@ -150,8 +154,9 @@ const FOLLOW: PointFocus = { mode: "follow" };
  *
  * The video is the match film tab's player in a floating dock
  * (`label-video-dock.tsx`): always on screen while the table scrolls, dragged
- * to any corner or minimised to a pill. The band above the table holds only
- * the 320 × 216 court card, so the table keeps the screen. As the video plays
+ * to any corner or minimised to a pill. The court is a floating card of its
+ * own (`label-court-dock.tsx`, board 08i) — nothing sits above the table, so
+ * the table keeps the screen. As the video plays
  * (or is scrubbed) the table marks the point and the stroke on screen
  * (`playingRowAt`, via the video clock in video-clock.ts). The mark never
  * selects a stroke; whether it opens the point and scrolls to it is the
@@ -238,8 +243,11 @@ export function LabelConsole({
   const followPlayback = useCallback(() => setPointFocus(FOLLOW), []);
   const held = pointFocus.mode === "held";
   const [placement, setPlacement] = useState<PlacementState>(() =>
-    startPlacement(initialSelectedShotId),
+    placementOf(session.points, initialSelectedShotId),
   );
+  // Where the floating video rests, as it reports it: the court card keeps
+  // clear of it (label-court-position.ts).
+  const [videoLayout, setVideoLayout] = useState<VideoDockLayout | null>(null);
   const [saveStatus, dispatchSave] = useReducer(
     saveStatusReducer,
     INITIAL_SAVE_STATUS,
@@ -321,7 +329,7 @@ export function LabelConsole({
     // A draft row cannot be placed or edited until its insert lands; it is
     // selected for placement then (see `addShot`).
     if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
-    setPlacement(startPlacement(shotId));
+    setPlacement(placementOf(points, shotId));
     const shot = findShot(points, shotId);
     if (shot?.videoTime != null) player.current?.seekTo(shot.videoTime);
   }
@@ -562,7 +570,10 @@ export function LabelConsole({
       if (!result) return;
       setPlacement((current) =>
         current.shotId === selectedBefore
-          ? startPlacement(result.shot.id)
+          ? placementOf(
+              insertShot(points, pointId, result.shot),
+              result.shot.id,
+            )
           : current,
       );
     });
@@ -893,14 +904,6 @@ export function LabelConsole({
       : null,
   );
 
-  // The selected stroke's number as the table shows it: live strokes, 1…n.
-  const selectedNumber = useMemo(() => {
-    if (!expanded || placement.shotId === null) return null;
-    const live = expanded.shots.filter((shot) => shot.status !== "deleted");
-    const index = live.findIndex((shot) => shot.id === placement.shotId);
-    return index === -1 ? null : index + 1;
-  }, [expanded, placement.shotId]);
-
   function place(point: CourtPoint) {
     if (placement.shotId === null) return;
     const shot = findShot(points, placement.shotId);
@@ -909,6 +912,14 @@ export function LabelConsole({
     if (!step) return;
     setPlacement(step.state);
     void patchShot(shot.id, step.patch);
+  }
+
+  // The card's Contact / Landing switch: the stored contact, when there is
+  // one, says which half the hitter was on.
+  function setTarget(target: PlacementTarget) {
+    const shot =
+      placement.shotId === null ? null : findShot(points, placement.shotId);
+    setPlacement(setPlacementTarget(placement, target, shot?.contactY ?? null));
   }
 
   return (
@@ -933,23 +944,6 @@ export function LabelConsole({
           <LabelSaveStatus status={saveStatus} />
           {headerAction}
         </div>
-      </div>
-
-      {/* The video is not in the band: it floats (`LabelVideoDock`, fixed to
-          the viewport), because `position: sticky` never engages anywhere in
-          the admin — `body` is its own overflow container (globals.css) — so
-          a video in the flow scrolls away with the header. */}
-      <div data-label-band="" className="flex">
-        <LabelCourt
-          title={
-            expanded ? `Court · point ${expanded.pointIndex + 1}` : "Court"
-          }
-          shots={expanded?.shots ?? []}
-          names={names}
-          selectedShotId={placement.shotId}
-          prompt={editable ? placementPrompt(placement, selectedNumber) : null}
-          onPlace={editable ? place : undefined}
-        />
       </div>
 
       {/* `onFocusCapture` on the frame, not the rows: a point cell's editor
@@ -1006,7 +1000,24 @@ export function LabelConsole({
         names={names}
         adScoring={session.adScoring}
         onTime={clock.set}
+        onLayout={setVideoLayout}
         initialMinimised={initialVideoMinimised}
+      />
+
+      {/* The court floats too (board 08i): the whole court, read-only, until
+          a stroke is selected in an editable session — then the half its
+          next click belongs on. After the video in the DOM, so where the two
+          ever meet the court, the card being worked on, is on top. */}
+      <LabelCourtDock
+        point={expanded}
+        names={names}
+        placement={placement}
+        editable={editable}
+        playingShotId={playing?.shotId ?? null}
+        video={videoLayout}
+        onPlace={place}
+        onTarget={setTarget}
+        onFlip={() => setPlacement(flipPlacement)}
       />
 
       {operable ? (
@@ -1101,6 +1112,23 @@ function pointOfShot(
 ): LabelPoint | null {
   return (
     points.find((point) => point.shots.some((s) => s.id === shotId)) ?? null
+  );
+}
+
+/**
+ * Selecting a stroke for the court: the first click is its contact, on the
+ * half its hitter stood in (court-placement.ts `hitterHalf`).
+ */
+function placementOf(
+  points: readonly LabelPoint[],
+  shotId: string | null,
+): PlacementState {
+  const owner = shotId === null ? null : pointOfShot(points, shotId);
+  if (!owner) return startPlacement(shotId);
+  const index = owner.shots.findIndex((shot) => shot.id === shotId);
+  return startPlacement(
+    shotId,
+    hitterHalf(owner.shots[index], owner.shots.slice(0, index)),
   );
 }
 

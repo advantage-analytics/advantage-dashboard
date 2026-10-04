@@ -1,15 +1,8 @@
-import {
-  APRON_FILL,
-  COURT_FILL,
-  LINE_COLOR,
-} from "@/components/dashboard/matches/match-detail/shots/court-art";
 import type { LabelShot } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import {
-  COURT_LENGTH,
   COURT_HEIGHT,
-  COURT_LEFT,
-  COURT_TOP,
+  COURT_LENGTH,
   COURT_VIEW_BOX,
   COURT_WIDTH,
   DOUBLES_HALF_WIDTH,
@@ -18,115 +11,131 @@ import {
   NET_Y,
   SINGLES_HALF_WIDTH,
   fromCourt,
-  toCourt,
+  fromCourtInHalf,
+  halfCourtViewBox,
+  toCourtInHalf,
+  type CourtHalf,
   type CourtPoint,
+  type ScreenPoint,
 } from "./court-geometry";
-import type { SideNames } from "./label-format";
+import type { PlacementTarget } from "./court-placement";
 
 /**
- * Board 08's court card, cut down to sit beside the band's small video: the
- * vertical court on its apron down the card's left edge, with the selected
- * point's strokes marked — hollow ring where the ball was hit, filled dot
- * where it landed, a dashed line between. Player 1's marks are white,
- * player 2's black, as the legend beside the court says.
+ * Board 08i's court, as it is drawn inside the floating card
+ * (`label-court-dock.tsx`): white lines on the card's dark ground, the open
+ * point's strokes marked on it — a hollow ring where the ball was hit, a
+ * filled dot where it landed, a dashed line between.
  *
- * With a stroke selected (and the session open), the art box is a button
- * under a crosshair: a click is converted to metres with `toCourt` and handed
- * to `onPlace` — which end it places is court-placement.ts's sequence, and
- * the prompt at the foot of the card says which. The selected stroke's marks carry a
- * `--blue` ring so the labeller can see what they are moving.
+ * Two views of the same art:
  *
- * The court palette comes from `court-art.tsx`'s exports rather than a second
- * copy of the literals — `scripts/check-design-drift.mjs` allowlists them in
- * that one file.
+ * - `view="whole"` — the whole court (`COURT_VIEW_BOX`), read-only: a
+ *   picture of the point. The lit stroke (the selected one, else the playing
+ *   one) is drawn at full strength and the rest stand back.
+ * - `view="near" | "far"` — zoomed to that half (`halfCourtViewBox`) with its
+ *   run-off, as a button under a crosshair: a click ANYWHERE in the box —
+ *   lines or surround, for a ball that went out — becomes metres through
+ *   `toCourtInHalf` and goes to `onPlace`. Which end it places is
+ *   court-placement.ts's sequence; that end of the lit stroke carries the
+ *   `--blue` ring, so the labeller sees what the click will move.
+ *
+ * Both boxes keep the art's own proportions (0.4434 for the whole court,
+ * 276 × 222 for a half), so a click converts to metres without distortion.
+ * Marks whose end is off the zoomed half are clipped by the box, and their
+ * dashed path runs out to the edge toward it.
  */
 
-/** The dark mark: ink-900, the same near-black the board draws player 2 in. */
-const DARK_MARK = "#0D0D0D";
-const MARK_COLOR = { p1: LINE_COLOR, p2: DARK_MARK } as const;
-const MARK_OUTLINE = { p1: DARK_MARK, p2: LINE_COLOR } as const;
+/** One step up from the card's ground, for the court's surface. */
+const SURFACE_FILL = "rgba(255,255,255,0.07)";
+const LINE_STRONG = "rgba(255,255,255,0.55)";
+const LINE_THIN = "rgba(255,255,255,0.32)";
+const NET_LINE = "rgba(255,255,255,0.85)";
+const MARK = "rgba(255,255,255,1)";
 
-/** A stroke on screen: its hitter's colour and whichever ends are known. */
+/** The card's body height; both views fill it. */
+const BOX_HEIGHT = 222;
+/** The whole court at that height, in the art's 14.53 × 32.77 proportions. */
+const WHOLE_WIDTH = (BOX_HEIGHT * COURT_WIDTH) / COURT_HEIGHT;
+/** A half at that height: the card's full inner width. */
+const HALF_BOX_WIDTH = 276;
+
+export type CourtView = "whole" | CourtHalf;
+
+/** A stroke on screen: whichever ends are known, in percent of the box. */
 interface Mark {
   id: string;
-  selected: boolean;
-  color: string;
-  outline: string;
-  hit: { sx: number; sy: number } | null;
-  landed: { sx: number; sy: number } | null;
+  lit: boolean;
+  hit: ScreenPoint | null;
+  landed: ScreenPoint | null;
 }
 
 function marksFor(
   shots: readonly LabelShot[],
-  selectedShotId: string | null,
+  litShotId: string | null,
+  view: CourtView,
 ): Mark[] {
+  const project = (point: CourtPoint) =>
+    view === "whole" ? fromCourt(point) : fromCourtInHalf(view, point);
   const marks: Mark[] = [];
   for (const shot of shots) {
     if (shot.status === "deleted") continue;
     const hit =
       shot.contactX !== null && shot.contactY !== null
-        ? fromCourt({ x: shot.contactX, y: shot.contactY })
+        ? project({ x: shot.contactX, y: shot.contactY })
         : null;
     const landed =
       shot.landingX !== null && shot.landingY !== null
-        ? fromCourt({ x: shot.landingX, y: shot.landingY })
+        ? project({ x: shot.landingX, y: shot.landingY })
         : null;
     if (!hit && !landed) continue;
-    const side = shot.hitter ?? "p1";
-    marks.push({
-      id: shot.id,
-      selected: shot.id === selectedShotId,
-      color: MARK_COLOR[side],
-      outline: MARK_OUTLINE[side],
-      hit,
-      landed,
-    });
+    marks.push({ id: shot.id, lit: shot.id === litShotId, hit, landed });
   }
   return marks;
 }
 
 const pct = (n: number) => `${n.toFixed(2)}%`;
 
-/**
- * The art box: 194 × 86, the art's own 32.77 × 14.53 m proportions, so a
- * click converts to metres without distortion. It sits in a 216px card —
- * the video's height at the band's 384px width — which is why the marks
- * below are drawn smaller than the film tab's.
- */
-const COURT_BOX = "relative h-[194px] w-[86px]";
-
 export function LabelCourt({
-  title,
   shots,
-  names,
-  selectedShotId = null,
+  view,
+  litShotId = null,
+  target = null,
   prompt = null,
   onPlace,
 }: {
-  /** The card's eyebrow: "Court · point 12", or "Court" with nothing chosen. */
-  title: string;
-  /** The selected point's strokes, in video order. Tombstones are skipped. */
+  /** The open point's strokes, in video order. Tombstones are skipped. */
   shots: readonly LabelShot[];
-  names: SideNames;
-  /** The stroke a click places; its marks are ringed. */
-  selectedShotId?: string | null;
-  /** "Click where shot 3 was hit" — null when a click would place nothing. */
+  /** The whole court, or the half a click is being taken on. */
+  view: CourtView;
+  /** The stroke drawn at full strength: the selected one, else the playing. */
+  litShotId?: string | null;
+  /** The end of the lit stroke the next click places; it is ringed. */
+  target?: PlacementTarget | null;
+  /** "Click where shot 3 was hit" — the button's name while placing. */
   prompt?: string | null;
-  /** A click on the court, in metres. Absent: the court is a picture. */
+  /** A click on a half, in metres. Absent: the court is a picture. */
   onPlace?: (point: CourtPoint) => void;
 }) {
-  const marks = marksFor(shots, selectedShotId);
+  const marks = marksFor(shots, litShotId, view);
   const placed = marks.length;
-  const placing = prompt !== null && onPlace !== undefined;
+  const zoomed = view !== "whole";
+  const placing = zoomed && prompt !== null && onPlace !== undefined;
+  const anyLit = marks.some((mark) => mark.lit);
+  // Zoomed, a mark covers a fifth more court per pixel, so it is drawn larger.
+  const size = zoomed
+    ? { hit: 4.5, hitStroke: 2, landed: 4, ring: 10 }
+    : { hit: 3, hitStroke: 1.5, landed: 2.5, ring: 6.5 };
+  const strength = (mark: Mark) => (!anyLit ? 0.85 : mark.lit ? 1 : 0.4);
   const description =
     placed === 0
       ? "Court with no strokes placed"
       : `Court with ${placed} ${placed === 1 ? "stroke" : "strokes"} placed`;
+  const net = zoomed ? fromCourtInHalf(view, { x: 6.9, y: NET_Y }) : null;
+
   const art = (
     <>
-      <CourtArt />
+      <CourtArt view={view} />
       <svg
-        className="absolute inset-0 block h-full w-full overflow-visible"
+        className="absolute inset-0 block h-full w-full"
         aria-hidden="true"
         data-court-marks=""
       >
@@ -138,41 +147,25 @@ export function LabelCourt({
               y1={pct(mark.hit.sy)}
               x2={pct(mark.landed.sx)}
               y2={pct(mark.landed.sy)}
-              stroke={mark.color}
+              stroke={MARK}
               strokeWidth="1"
-              strokeDasharray="2 2"
-              opacity="0.6"
+              strokeDasharray="3 4"
+              opacity={0.4 * strength(mark)}
             />
           ) : null,
-        )}
-        {marks.map((mark) =>
-          mark.selected
-            ? [mark.hit, mark.landed].map((end, i) =>
-                end ? (
-                  <circle
-                    key={`${mark.id}-ring-${i}`}
-                    data-selected-ring=""
-                    cx={pct(end.sx)}
-                    cy={pct(end.sy)}
-                    r="5.5"
-                    fill="none"
-                    strokeWidth="1.25"
-                    style={{ stroke: "var(--blue)" }}
-                  />
-                ) : null,
-              )
-            : null,
         )}
         {marks.map((mark) =>
           mark.hit ? (
             <circle
               key={`${mark.id}-hit`}
+              data-court-hit=""
               cx={pct(mark.hit.sx)}
               cy={pct(mark.hit.sy)}
-              r="3"
+              r={size.hit}
               fill="none"
-              stroke={mark.color}
-              strokeWidth="1.25"
+              stroke={MARK}
+              strokeWidth={size.hitStroke}
+              opacity={strength(mark)}
             />
           ) : null,
         )}
@@ -180,176 +173,117 @@ export function LabelCourt({
           mark.landed ? (
             <circle
               key={`${mark.id}-landed`}
+              data-court-landed=""
               cx={pct(mark.landed.sx)}
               cy={pct(mark.landed.sy)}
-              r="2.5"
-              fill={mark.color}
-              stroke={mark.outline}
-              strokeWidth="0.5"
+              r={size.landed}
+              fill={MARK}
+              opacity={strength(mark)}
             />
           ) : null,
         )}
+        {marks.map((mark) => {
+          if (!mark.lit || target === null) return null;
+          const end = target === "contact" ? mark.hit : mark.landed;
+          return end ? (
+            <circle
+              key={`${mark.id}-ring`}
+              data-selected-ring={target}
+              cx={pct(end.sx)}
+              cy={pct(end.sy)}
+              r={size.ring}
+              fill="none"
+              strokeWidth="1.5"
+              style={{ stroke: "var(--blue)" }}
+            />
+          ) : null;
+        })}
       </svg>
+      {net ? (
+        <span
+          aria-hidden="true"
+          className="mono pointer-events-none absolute -translate-y-1/2 text-[8px] tracking-[1px] text-white/50 uppercase"
+          style={{ left: pct(net.sx), top: pct(net.sy) }}
+        >
+          Net
+        </span>
+      ) : null}
     </>
   );
 
-  return (
-    <section
-      aria-label="Court"
-      className="flex h-[216px] w-[320px] shrink-0 overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]"
-    >
-      <div
-        className="flex shrink-0 items-center justify-center px-3"
-        style={{ background: APRON_FILL }}
-      >
-        {placing ? (
-          <button
-            type="button"
-            data-court-target=""
-            aria-label={`${prompt}. ${description}. Positions can also be typed in the stroke's row.`}
-            onClick={(event) => {
-              // A keyboard press has no position to place.
-              if (event.detail === 0) return;
-              const box = event.currentTarget.getBoundingClientRect();
-              if (box.width === 0 || box.height === 0) return;
-              onPlace(
-                toCourt({
-                  sx: ((event.clientX - box.left) / box.width) * 100,
-                  sy: ((event.clientY - box.top) / box.height) * 100,
-                }),
-              );
-            }}
-            className={cn(
-              COURT_BOX,
-              "block cursor-crosshair rounded-[var(--radius-element)] border-0 bg-transparent p-0",
-            )}
-          >
-            {art}
-          </button>
-        ) : (
-          <div className={COURT_BOX} role="img" aria-label={description}>
-            {art}
-          </div>
-        )}
-      </div>
-
-      <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
-        <span className="eyebrow truncate">{title}</span>
-        <div className="flex flex-col gap-1.5 text-[11px] text-[var(--ink-700)]">
-          <LegendSwatch color={LINE_COLOR} ring="rgba(0,0,0,0.35)">
-            {names.p1}
-          </LegendSwatch>
-          <LegendSwatch color={DARK_MARK} ring="rgba(0,0,0,0.35)">
-            {names.p2}
-          </LegendSwatch>
-          <span className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5">
-              <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true">
-                <circle
-                  cx="5"
-                  cy="5"
-                  r="3.6"
-                  fill="none"
-                  strokeWidth="1.5"
-                  style={{ stroke: "var(--ink-700)" }}
-                />
-              </svg>
-              Hit
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true">
-                <circle
-                  cx="5"
-                  cy="5"
-                  r="3.6"
-                  style={{ fill: "var(--ink-700)" }}
-                />
-              </svg>
-              Landed
-            </span>
-          </span>
-        </div>
-
-        <div
-          className={cn(
-            "mt-auto text-[12px] leading-[18px]",
-            placing
-              ? "font-medium text-[var(--ink-900)]"
-              : "text-[var(--ink-600)]",
-          )}
-          data-court-prompt={placing ? "" : undefined}
-          aria-live="polite"
-        >
-          {placing
-            ? prompt
-            : placed === 0
-              ? "No strokes placed on this point"
-              : `${placed} ${placed === 1 ? "stroke" : "strokes"} placed`}
-        </div>
-      </div>
-    </section>
+  const box = cn(
+    "relative block shrink-0 overflow-hidden",
+    zoomed &&
+      "rounded-[8px] border border-dashed border-white/[0.22] bg-white/[0.07]",
   );
-}
+  const style = {
+    width: zoomed ? HALF_BOX_WIDTH : WHOLE_WIDTH,
+    height: BOX_HEIGHT,
+  };
 
-function LegendSwatch({
-  color,
-  ring,
-  children,
-}: {
-  color: string;
-  ring: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        className="size-2 rounded-full"
-        style={{ background: color, boxShadow: `0 0 0 1px ${ring}` }}
-        aria-hidden="true"
-      />
-      {children}
-    </span>
+  return placing ? (
+    <button
+      type="button"
+      data-court-target=""
+      data-court-view={view}
+      aria-label={`${prompt}. ${description}. Anywhere in the box counts, including outside the lines for a ball that went out. Positions can also be typed in the stroke's row.`}
+      onClick={(event) => {
+        // A keyboard press has no position to place.
+        if (event.detail === 0) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+        onPlace(
+          toCourtInHalf(view, {
+            sx: ((event.clientX - rect.left) / rect.width) * 100,
+            sy: ((event.clientY - rect.top) / rect.height) * 100,
+          }),
+        );
+      }}
+      className={cn(
+        box,
+        "cursor-crosshair p-0 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+      )}
+      style={style}
+    >
+      {art}
+    </button>
+  ) : (
+    <div
+      className={box}
+      style={style}
+      role="img"
+      aria-label={description}
+      data-court-view={view}
+    >
+      {art}
+    </div>
   );
 }
 
 /**
- * The court itself, in metres: `viewBox` is the art box, the court rect runs
- * `y = 0 … 23.77`. It is drawn top-down in SVG space while `fromCourt` puts
- * the near baseline at the bottom; the lines are symmetric about the net, so
- * both frames draw the same picture.
+ * The court itself, in metres: the court rect runs `y = 0 … 23.77`, drawn
+ * top-down in SVG space while the conversions put the near baseline at the
+ * bottom; the lines are symmetric about the net, so both frames draw the
+ * same picture — and a half is just a different `viewBox` onto it.
  */
-function CourtArt() {
+function CourtArt({ view }: { view: CourtView }) {
   const lines = { vectorEffect: "non-scaling-stroke" } as const;
   return (
     <svg
-      viewBox={COURT_VIEW_BOX}
+      viewBox={view === "whole" ? COURT_VIEW_BOX : halfCourtViewBox(view)}
       preserveAspectRatio="none"
       className="absolute inset-0 block h-full w-full"
       aria-hidden="true"
       data-court-art=""
     >
       <rect
-        x={COURT_LEFT}
-        y={COURT_TOP}
-        width={COURT_WIDTH}
-        height={COURT_HEIGHT}
-        fill={APRON_FILL}
-      />
-      <rect
         x={-DOUBLES_HALF_WIDTH}
         y="0"
         width={2 * DOUBLES_HALF_WIDTH}
         height={COURT_LENGTH}
-        fill={COURT_FILL}
+        fill={SURFACE_FILL}
       />
-      <g fill="none" stroke={LINE_COLOR} strokeWidth="1.5">
-        <rect
-          x={-DOUBLES_HALF_WIDTH}
-          y="0"
-          width={2 * DOUBLES_HALF_WIDTH}
-          height={COURT_LENGTH}
-          style={lines}
-        />
+      <g fill="none" stroke={LINE_THIN} strokeWidth="1">
         <line
           x1={-SINGLES_HALF_WIDTH}
           y1="0"
@@ -385,22 +319,32 @@ function CourtArt() {
           y2={FAR_SERVICE_Y}
           style={lines}
         />
-        <line x1="0" y1="0" x2="0" y2="0.3" style={lines} />
+        <line x1="0" y1="0" x2="0" y2="0.36" style={lines} />
         <line
           x1="0"
-          y1={COURT_LENGTH - 0.3}
+          y1={COURT_LENGTH - 0.36}
           x2="0"
           y2={COURT_LENGTH}
           style={lines}
         />
       </g>
+      <rect
+        x={-DOUBLES_HALF_WIDTH}
+        y="0"
+        width={2 * DOUBLES_HALF_WIDTH}
+        height={COURT_LENGTH}
+        fill="none"
+        stroke={LINE_STRONG}
+        strokeWidth="1"
+        style={lines}
+      />
       <line
-        x1="-6.2"
+        x1="-6.36"
         y1={NET_Y}
-        x2="6.2"
+        x2="6.36"
         y2={NET_Y}
-        stroke={LINE_COLOR}
-        strokeWidth="2.5"
+        stroke={NET_LINE}
+        strokeWidth="2"
         style={lines}
       />
     </svg>

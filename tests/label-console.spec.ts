@@ -341,7 +341,7 @@ test("the rally counts from the last serve, tombstones left out", () => {
 test("defaults to the first point still to check", () => {
   const html = render({ session: labelSessionFixture(), video: null });
   expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
-  expect(text(html)).toContain("Court · point 1");
+  expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Point 1</);
 });
 
 test("the court is board 08's art, with the open point's strokes on it", () => {
@@ -350,35 +350,46 @@ test("the court is board 08's art, with the open point's strokes on it", () => {
     video: null,
     initialExpandedPointId: FIXTURE_POINT_IDS.P1,
   });
+  // Nothing selected: the whole court, as a picture.
   expect(html).toContain('viewBox="-7.265 -4.5 14.53 32.77"');
-  expect(html).toContain('fill="#86AC91"');
-  expect(html).toContain('fill="#6092CE"');
+  expect(html).toContain('data-court-view="whole"');
+  expect(html).not.toContain("data-court-target");
   // Three live strokes, each with a hit ring and a landing dot; the
   // tombstone draws nothing.
-  expect(text(html)).toContain("3 strokes placed");
-  expect(
-    count(
-      html,
-      /<circle[^>]*fill="none"[^>]*r="3"|<circle[^>]*r="3"[^>]*fill="none"/g,
-    ),
-  ).toBe(3);
+  expect(html).toContain('aria-label="Court with 3 strokes placed"');
+  expect(count(html, /data-court-hit/g)).toBe(3);
+  expect(count(html, /data-court-landed/g)).toBe(3);
+  // No list of shots in or beside the card — the table is the list — and
+  // no switch until something is being placed.
+  expect(html).toContain("data-court-legend");
+  expect(html).not.toContain("data-court-steps");
+  expect(html).not.toContain("Flip side");
 });
 
-test("the band holds only the court card, at the video's old height", () => {
+test("the court left the band for a floating card of its own", () => {
   const html = render({
     session: labelSessionFixture(),
     video: { url: "https://example.test/v.mp4?sig=x", startTimeSeconds: 0 },
   });
-  // The court keeps the art's 14.53 × 32.77 m proportions (86 / 194 = 0.4433).
-  const bandStart = html.indexOf('data-label-band=""');
-  expect(bandStart).toBeGreaterThan(-1);
-  expect(html).toMatch(/aria-label="Court"[^>]*class="[^"]*h-\[216px\]/);
-  expect(html).toContain("h-[194px] w-[86px]");
-  expect(html).not.toContain("h-[430px]");
-  // The video left the band for the dock.
-  expect(html).not.toContain("w-[384px]");
+  expect(html).not.toContain("data-label-band");
+  // Board 08i's 300 × 318 card, in its own fixed layer after the video's.
+  expect(html).toMatch(
+    /data-label-court-dock=""[^>]*style="[^"]*width:300px;height:318px/,
+  );
+  expect(html).toMatch(
+    /data-label-court-dock=""[^>]*data-dock-anchor="bottom-left"/,
+  );
+  expect(html).toMatch(
+    /data-label-dock=""[^>]*data-dock-anchor="bottom-right"/,
+  );
+  expect(html.indexOf("data-label-court-layer")).toBeGreaterThan(
+    html.indexOf("data-label-dock-layer"),
+  );
+  expect(html).toContain('aria-label="Minimise the court"');
+  expect(html).toContain('aria-label="Expand the court"');
+  // The table follows the header directly: nothing sits above it.
   expect(html.indexOf("<video")).toBeGreaterThan(
-    html.indexOf('data-label-dock=""'),
+    html.indexOf('data-row="point"'),
   );
 });
 
@@ -642,7 +653,7 @@ test.describe("the Now playing pill", () => {
       initialVideoTime: 2480,
     });
     expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
-    expect(text(html)).toContain("Court · point 1");
+    expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Point 1</);
   });
 });
 
@@ -708,7 +719,7 @@ test.describe("editing (T6)", () => {
     expect(count(html, EDITORS)).toBe(5);
   });
 
-  test("the court asks where the selected stroke was hit", () => {
+  test("selecting a stroke zooms the court to the hitter's half", () => {
     const html = render({
       session: labelSessionFixture(),
       video: null,
@@ -716,13 +727,40 @@ test.describe("editing (T6)", () => {
       initialSelectedShotId: "s-return",
       ...SAVES,
     });
-    // The art box is the control; the line under it is the prompt.
+    // The return was hit from the far side (contact_y 24.49): the far half,
+    // run-off and all, is the control.
     expect(html).toMatch(/<button[^>]*data-court-target/);
+    expect(html).toContain('data-court-view="far"');
+    expect(html).toContain('viewBox="-10.085 -3.5 20.17 16.224"');
+    expect(html).not.toContain('viewBox="-7.265 -4.5 14.53 32.77"');
+    expect(html).toMatch(/aria-label="Click where shot 2 was hit\. /);
+    expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Shot 2 · contact</);
+    expect(html).toMatch(/data-court-subtitle="[^"]*"[^>]*>Vargas’s side</);
+    // The end the click places is ringed: the contact, not the landing.
+    expect(count(html, /data-selected-ring="contact"/g)).toBe(1);
+    expect(count(html, /data-selected-ring/g)).toBe(1);
+
+    // The Contact / Landing switch, on Contact; Flip side, not pressed.
+    expect(html).toMatch(/role="group" aria-label="What you are placing"/);
     expect(html).toMatch(
-      /data-court-prompt="[^"]*"[^>]*>Click where shot 2 was hit</,
+      /aria-pressed="true" data-court-step="contact"[^>]*>Contact</,
     );
-    // Its marks are ringed: a hit and a landing.
-    expect(count(html, /data-selected-ring/g)).toBe(2);
+    expect(html).toMatch(
+      /aria-pressed="false" data-court-step="landing"[^>]*>Landing</,
+    );
+    expect(html).toMatch(/aria-pressed="false" data-court-flip=""/);
+    expect(html).not.toContain("data-court-legend");
+
+    // The serve was hit from the near side: the near half.
+    const serve = render({
+      session: labelSessionFixture(),
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      initialSelectedShotId: "s-serve",
+      ...SAVES,
+    });
+    expect(serve).toContain('viewBox="-10.085 11.046 20.17 16.224"');
+    expect(serve).toContain('data-court-view="near"');
 
     const none = render({
       session: labelSessionFixture(),
@@ -731,8 +769,10 @@ test.describe("editing (T6)", () => {
       ...SAVES,
     });
     expect(none).not.toContain("data-court-target");
-    expect(text(none)).not.toContain("Click where");
-    expect(text(none)).toContain("3 strokes placed");
+    expect(none).not.toContain("Click where");
+    expect(none).toContain('viewBox="-7.265 -4.5 14.53 32.77"');
+    expect(none).not.toContain("16.224");
+    expect(none).not.toContain("data-court-steps");
   });
 
   test("without a way to save, the console is read-only", () => {
@@ -744,7 +784,10 @@ test.describe("editing (T6)", () => {
     });
     expect(count(html, EDITORS)).toBe(0);
     expect(html).not.toContain('role="button" tabindex="0"');
+    // Read-only: the whole court, nothing to click, no switch.
     expect(html).not.toContain("data-court-target");
+    expect(html).toContain('data-court-view="whole"');
+    expect(html).not.toContain("data-court-steps");
   });
 
   test("a complete session is read-only too", () => {
@@ -859,7 +902,9 @@ test.describe("the playing row", () => {
     // Point 1 folds away; the court moves with the video.
     expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
     expect(html).not.toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
-    expect(text(html)).toContain("Court · point 2");
+    expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Point 2</);
+    // The playing stroke is the lit one: "Shot 1 of 1 · <its hitter>".
+    expect(html).toMatch(/data-court-subtitle="[^"]*"[^>]*>Shot 1 of 1 · /);
     // Following: nothing to return to, so no pill.
     expect(html).not.toContain("data-label-follow-pill");
     expect(text(html)).not.toContain("Now playing");
@@ -881,7 +926,7 @@ test.describe("the playing row", () => {
     // Point 1 stays the open one; point 2's strokes stay folded away.
     expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
     expect(html).not.toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
-    expect(text(html)).toContain("Court · point 1");
+    expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Point 1</);
   });
 
   test("the playing stroke can also be the selected one", () => {
@@ -920,8 +965,8 @@ test.describe("the playing row", () => {
     });
     expect(count(html, PLAYING)).toBe(1);
     expect(html).not.toContain("data-shots-for=");
-    expect(text(html)).toContain("Court ");
-    expect(text(html)).not.toContain("Court · point");
+    expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Court</);
+    expect(html).toMatch(/data-court-subtitle="[^"]*"[^>]*>No point open</);
     // The way back is still there.
     expect(html).toContain("data-label-follow-pill");
   });

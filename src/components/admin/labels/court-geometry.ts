@@ -27,6 +27,18 @@
  *
  * {@link toCourt} and {@link fromCourt} are exact inverses of each other
  * (`tests/label-court-geometry.spec.ts` holds them to it).
+ *
+ * ── The half-court frame (board 08i) ────────────────────────────────────────
+ * While a stroke is being placed the court card zooms to ONE half, with a
+ * wide clickable surround for out balls and deep contact: 4.6 m beside each
+ * doubles sideline and 3.5 m behind the baseline, in the board's 276 × 222
+ * box (13.7px to the metre, so nothing is stretched). What is left of the
+ * height runs 0.84 m past the net, so a ball on the tape is still on screen.
+ * The orientation is the whole court's — near baseline toward the bottom —
+ * so the near half shows the net along its top and the far half along its
+ * bottom. {@link halfCourtViewBox} is that window in the art's own SVG frame
+ * (drawn top-down, far baseline at `0`); {@link toCourtInHalf} and
+ * {@link fromCourtInHalf} are its percent conversions, exact inverses too.
  */
 
 /** Metres of apron drawn beside each doubles sideline. */
@@ -79,5 +91,74 @@ export function toCourt({ sx, sy }: ScreenPoint): CourtPoint {
   return {
     x: (sx / 100) * COURT_WIDTH + COURT_LEFT,
     y: FAR_EDGE_Y - (sy / 100) * COURT_HEIGHT,
+  };
+}
+
+/** Which side of the net: `near` is `y < 11.885`, the bottom of the art. */
+export type CourtHalf = "near" | "far";
+
+export function otherHalf(half: CourtHalf): CourtHalf {
+  return half === "near" ? "far" : "near";
+}
+
+/** The half a `y` in metres is in. A ball on the net line counts as far. */
+export function halfOf(y: number): CourtHalf {
+  return y < NET_Y ? "near" : "far";
+}
+
+/** Metres of run-off drawn beside each doubles sideline in the half view. */
+const HALF_SIDE_RUNOFF = 4.6;
+/** Metres of run-off drawn behind the baseline in the half view. */
+const HALF_BACK_RUNOFF = 3.5;
+
+export const HALF_LEFT = -(DOUBLES_HALF_WIDTH + HALF_SIDE_RUNOFF); // -10.085
+export const HALF_WIDTH = 2 * (DOUBLES_HALF_WIDTH + HALF_SIDE_RUNOFF); // 20.17
+/** The board's 276 × 222 box, in metres: 16.224. */
+export const HALF_HEIGHT = (HALF_WIDTH * 222) / 276;
+
+/** Metres of `y` at the top edge of a half's box. */
+function halfTopY(half: CourtHalf): number {
+  return half === "near"
+    ? HALF_HEIGHT - HALF_BACK_RUNOFF // 12.724 — just past the net
+    : COURT_LENGTH + HALF_BACK_RUNOFF; // 27.27 — the far run-off's edge
+}
+
+/**
+ * A half's window in the art's SVG frame, as `[x, y, width, height]`: the
+ * art is drawn top-down with the far baseline at `0`, so the SVG `y` of a
+ * court `y` is `23.77 − y`.
+ */
+export function halfCourtFrame(
+  half: CourtHalf,
+): [number, number, number, number] {
+  return [HALF_LEFT, COURT_LENGTH - halfTopY(half), HALF_WIDTH, HALF_HEIGHT];
+}
+
+/** The zoomed art's `viewBox`: `-10.085 11.046 20.17 16.224` for `near`. */
+export function halfCourtViewBox(half: CourtHalf): string {
+  return halfCourtFrame(half)
+    .map((n) => Number(n.toFixed(3)))
+    .join(" ");
+}
+
+/** Metres → percent of a half's box. Off the box is outside 0–100. */
+export function fromCourtInHalf(
+  half: CourtHalf,
+  { x, y }: CourtPoint,
+): ScreenPoint {
+  return {
+    sx: ((x - HALF_LEFT) / HALF_WIDTH) * 100,
+    sy: ((halfTopY(half) - y) / HALF_HEIGHT) * 100,
+  };
+}
+
+/** Percent of a half's box → metres. The inverse of {@link fromCourtInHalf}. */
+export function toCourtInHalf(
+  half: CourtHalf,
+  { sx, sy }: ScreenPoint,
+): CourtPoint {
+  return {
+    x: (sx / 100) * HALF_WIDTH + HALF_LEFT,
+    y: halfTopY(half) - (sy / 100) * HALF_HEIGHT,
   };
 }

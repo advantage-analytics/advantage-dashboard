@@ -1,11 +1,17 @@
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 
-import { toCourt } from "@/components/admin/labels/court-geometry";
+import {
+  toCourt,
+  toCourtInHalf,
+} from "@/components/admin/labels/court-geometry";
 import {
   NO_PLACEMENT,
+  flipPlacement,
+  hitterHalf,
   nextPlacement,
   placementPrompt,
+  setPlacementTarget,
   startPlacement,
 } from "@/components/admin/labels/court-placement";
 import {
@@ -65,7 +71,13 @@ test.describe("court click placement", () => {
     });
 
     // A third click starts over at the hit, on the same stroke.
-    expect(second!.state).toEqual({ shotId: "s-return", target: "contact" });
+    // The contact was on the far side, so that is the half it returns to.
+    expect(second!.state).toEqual({
+      shotId: "s-return",
+      target: "contact",
+      half: "far",
+      flipped: false,
+    });
     expect(placementPrompt(second!.state, 2)).toBe(
       "Click where shot 2 was hit",
     );
@@ -77,7 +89,12 @@ test.describe("court click placement", () => {
   });
 
   test("the landing click's result follows the stroke being placed", () => {
-    const landing = { shotId: "s", target: "landing" } as const;
+    const landing = {
+      shotId: "s",
+      target: "landing",
+      half: "far",
+      flipped: false,
+    } as const;
     const from = (stroke: ShotGeometry["stroke"]): ShotGeometry => ({
       ...UNPLACED,
       stroke,
@@ -107,7 +124,12 @@ test.describe("court click placement", () => {
       UNPLACED,
     )!.state;
     expect(halfway.target).toBe("landing");
-    expect(startPlacement("b")).toEqual({ shotId: "b", target: "contact" });
+    expect(startPlacement("b")).toEqual({
+      shotId: "b",
+      target: "contact",
+      half: "near",
+      flipped: false,
+    });
   });
 
   test("with nothing selected a click places nothing and there is no prompt", () => {
@@ -125,6 +147,140 @@ test.describe("court click placement", () => {
     expect(Math.abs(step.patch.contact_y! - 11.885)).toBeLessThanOrEqual(
       0.0051,
     );
+  });
+});
+
+test.describe("which half the court zooms to", () => {
+  const clue = (hitter: "p1" | "p2" | null, contactY: number | null) => ({
+    hitter,
+    contactY,
+  });
+
+  test("the hitter's half: the stored contact, else read off the stroke before, else near", () => {
+    // Its own contact wins, whatever came before.
+    expect(hitterHalf(clue("p1", 24.5), [clue("p2", 25)])).toBe("far");
+    expect(hitterHalf(clue("p1", -0.3))).toBe("near");
+    // Unplaced: across the net from the other player's last contact…
+    expect(hitterHalf(clue("p2", null), [clue("p1", -0.3)])).toBe("far");
+    expect(hitterHalf(clue("p1", null), [clue("p2", 24.5)])).toBe("near");
+    // …on the same side as this player's own (a second serve after a fault).
+    expect(hitterHalf(clue("p1", null), [clue("p1", 24.5)])).toBe("far");
+    // The nearest earlier stroke WITH a contact; tombstones say nothing.
+    expect(
+      hitterHalf(clue("p1", null), [
+        clue("p2", 24.5),
+        clue("p1", null),
+        { ...clue("p1", 20), status: "deleted" },
+      ]),
+    ).toBe("near");
+    // Nothing to go on: near.
+    expect(hitterHalf(clue("p1", null))).toBe("near");
+    expect(hitterHalf(clue("p1", null), [clue("p2", null)])).toBe("near");
+  });
+
+  test("contact shows the hitter's half, landing the other", () => {
+    const contact = startPlacement("s", "far");
+    expect(contact).toEqual({
+      shotId: "s",
+      target: "contact",
+      half: "far",
+      flipped: false,
+    });
+    const landing = setPlacementTarget(contact, "landing");
+    expect(landing).toMatchObject({ target: "landing", half: "near" });
+    expect(setPlacementTarget(landing, "contact")).toEqual(contact);
+    // The same target changes nothing; nothing selected has no target to set.
+    expect(setPlacementTarget(contact, "contact")).toBe(contact);
+    expect(setPlacementTarget(NO_PLACEMENT, "landing")).toBe(NO_PLACEMENT);
+  });
+
+  test("a click moves on to the other end, on the half that end belongs on", () => {
+    // Contact placed in the near half: the landing is asked for on the far.
+    const first = nextPlacement(
+      startPlacement("s", "near"),
+      { x: 1, y: -0.5 },
+      UNPLACED,
+    )!;
+    expect(first.state).toEqual({
+      shotId: "s",
+      target: "landing",
+      half: "far",
+      flipped: false,
+    });
+    // A contact placed just across the net line still decides by its own y.
+    const across = nextPlacement(
+      startPlacement("s", "near"),
+      { x: 0, y: 12.2 },
+      UNPLACED,
+    )!;
+    expect(across.state.half).toBe("near");
+  });
+
+  test("Flip side shows the other half, and is dropped with the end it was for", () => {
+    const landing = setPlacementTarget(startPlacement("s", "near"), "landing");
+    const flipped = flipPlacement(landing);
+    expect(flipped).toEqual({
+      shotId: "s",
+      target: "landing",
+      half: "near",
+      flipped: true,
+    });
+    expect(flipPlacement(flipped)).toEqual(landing);
+    expect(flipPlacement(NO_PLACEMENT)).toBe(NO_PLACEMENT);
+
+    // A net ball: the landing click on the hitter's own half derives "net",
+    // and the cycle returns to the contact on that same half, unflipped.
+    const hit = { ...UNPLACED, contact_x: 1, contact_y: -0.5 };
+    const net = nextPlacement(flipped, { x: 0.4, y: 11.2 }, hit)!;
+    expect(net.patch).toEqual({
+      landing_x: 0.4,
+      landing_y: 11.2,
+      result: "net",
+    });
+    expect(net.state).toEqual({
+      shotId: "s",
+      target: "contact",
+      half: "near",
+      flipped: false,
+    });
+
+    // Switching ends drops the flip: back to the contact on the hitter's
+    // half, and the landing is across the net again.
+    expect(setPlacementTarget(flipped, "contact")).toEqual(
+      startPlacement("s", "near"),
+    );
+    // A flipped CONTACT is the labeller saying the hitter stood on the other
+    // side — so the landing goes across from where they put it…
+    const wrongGuess = flipPlacement(startPlacement("s", "near"));
+    expect(wrongGuess).toMatchObject({ half: "far", flipped: true });
+    expect(setPlacementTarget(wrongGuess, "landing")).toMatchObject({
+      half: "near",
+      flipped: false,
+    });
+    // …unless a contact is already stored, which outranks the screen.
+    expect(setPlacementTarget(wrongGuess, "landing", -0.5)).toMatchObject({
+      half: "far",
+    });
+  });
+
+  test("a click in the surround still writes a coordinate, and the pair's result", () => {
+    // The far half's top-left corner region: long and wide of the lines.
+    const out = toCourtInHalf("far", { sx: 4, sy: 3 });
+    expect(out.x).toBeLessThan(-5.485);
+    expect(out.y).toBeGreaterThan(23.77);
+    const hit = { ...UNPLACED, contact_x: 1, contact_y: -0.5 };
+    const landing = setPlacementTarget(startPlacement("s", "near"), "landing");
+    const step = nextPlacement(landing, out, hit)!;
+    expect(step.patch).toEqual({
+      landing_x: -9.28,
+      landing_y: 26.78,
+      result: "out",
+    });
+
+    // Deep contact, in the run-off behind the near baseline.
+    const deep = toCourtInHalf("near", { sx: 50, sy: 97 });
+    const contact = nextPlacement(startPlacement("s", "near"), deep, UNPLACED)!;
+    expect(contact.patch).toEqual({ contact_x: 0, contact_y: -3.01 });
   });
 });
 

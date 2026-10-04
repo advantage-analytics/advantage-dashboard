@@ -30,6 +30,7 @@ import {
   dockRest,
   parseDockMinimised,
 } from "./label-dock-position";
+import type { VideoDockLayout } from "./label-court-position";
 import { ENDING_LABEL, STROKE_LABEL, type SideNames } from "./label-format";
 import {
   LabelVideoPlayer,
@@ -150,6 +151,11 @@ export const LabelVideoDock = forwardRef<
     /** Whether 40–40 goes to Ad — the score rule the game numbers come from. */
     adScoring: boolean;
     onTime: (videoTime: number) => void;
+    /**
+     * Where the dock rests and whether it is folded, once measured and on
+     * every change — what the court card needs to keep clear of it.
+     */
+    onLayout?: (layout: VideoDockLayout) => void;
     /** Minimised on first render — for specs. Otherwise read from storage. */
     initialMinimised?: boolean;
     /** The video playable on first render — for specs. It starts pending. */
@@ -163,6 +169,7 @@ export const LabelVideoDock = forwardRef<
     names,
     adScoring,
     onTime,
+    onLayout,
     initialMinimised = false,
     initialReady = false,
   },
@@ -232,6 +239,13 @@ export const LabelVideoDock = forwardRef<
     "left" | "right",
   ];
   const origin = dockOrigin(anchor);
+
+  const width = sizes?.self.width;
+  const height = sizes?.self.height;
+  useEffect(() => {
+    if (width === undefined || height === undefined) return;
+    onLayout?.({ anchor, minimised, size: { width, height } });
+  }, [onLayout, anchor, minimised, width, height]);
 
   // The console's ref is this dock's player; the pill needs it too.
   const setPlayerRef = useCallback(
