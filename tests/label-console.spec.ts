@@ -1206,7 +1206,7 @@ test.describe("the playing row", () => {
     expect(text(html)).not.toContain("Now playing");
   });
 
-  test("held, it marks a closed point without opening it", () => {
+  test("held, the playing point still unfolds beside the held one", () => {
     const html = render({
       session: labelSessionFixture(),
       video: null,
@@ -1215,14 +1215,17 @@ test.describe("the playing row", () => {
       // Point 2's ace.
       initialVideoTime: 2490.5,
     });
-    expect(count(html, PLAYING)).toBe(1);
+    // The point row and its playing stroke.
+    expect(count(html, PLAYING)).toBe(2);
     expect(
       rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P2}"`),
     ).toContain('data-playing="true"');
-    // Point 1 stays the open one; point 2's strokes stay folded away.
+    // Point 1 stays open, and point 2 opens because it is playing; the court
+    // stays on the held point.
     expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
-    expect(html).not.toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
+    expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
     expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Point 1</);
+    expect(html).toContain("data-label-follow-pill");
   });
 
   test("the playing stroke can also be the selected one", () => {
@@ -1252,15 +1255,16 @@ test.describe("the playing row", () => {
     }
   });
 
-  test("held with nothing open, the playing point stays folded (T25)", () => {
+  test("held with nothing held open, the playing point still unfolds", () => {
     const html = render({
       session: labelSessionFixture(),
       video: null,
       initialPointFocus: { mode: "held", pointId: null },
       initialVideoTime: 2490.5,
     });
-    expect(count(html, PLAYING)).toBe(1);
-    expect(html).not.toContain("data-shots-for=");
+    expect(count(html, PLAYING)).toBe(2);
+    expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
+    expect(html).not.toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
     expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Court</);
     expect(html).toMatch(/data-court-subtitle="[^"]*"[^>]*>No point open</);
     // The way back is still there.

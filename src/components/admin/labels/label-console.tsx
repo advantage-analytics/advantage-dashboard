@@ -577,13 +577,13 @@ export function LabelConsole({
 
   // A row click holds its point — or re-follows, when it is the one already
   // playing (the way back without the pill) — and seeks to its first stroke,
-  // as it always did. The open row folds instead: a hold with nothing open
-  // (T25), so the video moving on does not pop another point open under the
-  // labeller's hands; clicking the playing row again then re-follows.
+  // as it always did. An open row that is NOT playing folds instead: a hold
+  // with nothing held open. The playing point never folds — the table keeps
+  // it unfolded whatever is held — so a click on it is always a re-follow.
   function togglePoint(pointId: string) {
     player.current?.loopShot(null);
     setPlacement(NO_PLACEMENT);
-    if (pointId === openPointId) {
+    if (pointId === openPointId && pointId !== playingPointId) {
       holdPoint(null);
       return;
     }
@@ -1177,8 +1177,8 @@ export function LabelConsole({
     held,
     activePointId: playingPointId,
     activeShotId: playing?.shotId ?? null,
-    // The playing stroke has a row only while its point is the open one.
-    wellOpen: openPointId !== null && openPointId === playingPointId,
+    // The playing point is always unfolded, so its playing stroke has a row.
+    wellOpen: playingPointId !== null,
     displayedPointId: openPointId,
     onHoldPoint: holdPoint,
     insets,

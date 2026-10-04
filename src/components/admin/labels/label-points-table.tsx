@@ -266,6 +266,11 @@ export function LabelPointsTableView({
                 );
               }
               const band = bandBefore.get(point.id);
+              // The playing point is always unfolded, whatever is held: the
+              // labeller sees its strokes light as they are hit. A held
+              // point stays open beside it.
+              const open =
+                point.id === expandedPointId || point.id === playingPointId;
               return (
                 <Fragment key={point.id}>
                   {band ? (
@@ -279,7 +284,7 @@ export function LabelPointsTableView({
                   ) : null}
                   <PointRow
                     point={point}
-                    open={point.id === expandedPointId}
+                    open={open}
                     playing={point.id === playingPointId}
                     playingWindow={
                       point.id === playingPointId ? playingWindow : null
@@ -287,7 +292,7 @@ export function LabelPointsTableView({
                     onToggle={onTogglePoint}
                     edit={edit}
                   >
-                    {point.id === expandedPointId && point.shots.length > 0 ? (
+                    {open && point.shots.length > 0 ? (
                       <ShotRows point={point} edit={edit} />
                     ) : null}
                   </PointRow>
