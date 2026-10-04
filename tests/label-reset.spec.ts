@@ -44,6 +44,7 @@ const SHOT_SEED: LabelShotSeedValues = {
   hitter: "p2",
   stroke: "backhand",
   result: "in",
+  spin: "topspin",
   contact_x: 1.8,
   contact_y: 24.49,
   landing_x: -2.1,
@@ -64,10 +65,20 @@ const POINT_SEED: LabelPointSeedValues = {
 
 test.describe("planShotReset", () => {
   test("writes the seed back, and kept", () => {
-    expect(planShotReset({ status: "edited", seed: SHOT_SEED })).toEqual({
+    const plan = planShotReset({ status: "edited", seed: SHOT_SEED });
+    expect(plan).toEqual({
       ok: true,
       write: { ...SHOT_SEED, status: "kept" },
     });
+    // Spin is one of the columns a reset writes, seeded value and null alike.
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.write.spin).toBe("topspin");
+    const unspun = planShotReset({
+      status: "edited",
+      seed: { ...SHOT_SEED, spin: null },
+    });
+    if ("error" in unspun) throw new Error(unspun.error);
+    expect(unspun.write).toHaveProperty("spin", null);
   });
 
   test("refuses without a seed, on a tombstone and on an added shot", () => {
@@ -149,9 +160,13 @@ test.describe("the console's rows", () => {
       eventId: 102,
       status: "kept",
       stroke: "forehand",
+      spin: "topspin",
       contactX: 2.1,
       seed: edited.seed,
     });
+    // A spin the labeller changed goes back to the seeded one.
+    const respun = applyShotReset({ ...edited, spin: "sidespin" });
+    expect(respun).toMatchObject({ status: "kept", spin: "topspin" });
     // Refused: the row comes back as it was.
     const added = POINT_1_SHOTS.find((s) => s.id === "s-added")!;
     expect(applyShotReset(added)).toBe(added);
@@ -245,6 +260,8 @@ test("the loader carries each row's seed, and no seed for a bad one", () => {
   expect(point.shots.map((s) => s.seed)).toEqual([SHOT_SEED, null]);
   expect(canResetPoint(point)).toBe(true);
   expect(canResetShot(point.shots[0])).toBe(true);
+  // The loader maps `spin` from the row, like every other value column.
+  expect(point.shots.map((s) => s.spin)).toEqual(["topspin", "topspin"]);
   // game_type and note come through as stored — the note verbatim, since the
   // write already trimmed it.
   expect(point.gameType).toBe("tiebreak");

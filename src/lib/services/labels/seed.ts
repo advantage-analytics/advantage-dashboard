@@ -27,7 +27,7 @@ import {
   type SplitStepStroke,
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
-import { compareNullsLast } from "./session";
+import { compareNullsLast, isLabelSpin, type LabelSpin } from "./session";
 
 export type LabelSide = "p1" | "p2";
 
@@ -67,6 +67,12 @@ export interface LabelShotSeedValues {
   hitter: LabelSide | null;
   stroke: LabelStroke | null;
   result: LabelShotResult | null;
+  /**
+   * The vendor's `spin_type`, lower-cased ({@link labelSpin}). Added after
+   * the other keys: a stored seed without it reads as null
+   * (edit.ts `parseLabelShotSeed`), never as no seed.
+   */
+  spin: LabelSpin | null;
   contact_x: number | null;
   contact_y: number | null;
   landing_x: number | null;
@@ -94,13 +100,14 @@ export interface LabelShotSeed {
   hitter: LabelSide;
   stroke: LabelStroke | null;
   result: LabelShotResult | null;
+  spin: LabelSpin | null;
   contact_x: number | null;
   contact_y: number | null;
   landing_x: number | null;
   landing_y: number | null;
   video_time: number | null;
   unclear: string[];
-  /** The eight value fields above, frozen — what Reset writes back. */
+  /** The nine value fields above, frozen — what Reset writes back. */
   seed: LabelShotSeedValues;
 }
 
@@ -196,6 +203,18 @@ export function labelShotResult(result: string | null): LabelShotResult | null {
   if (result === "Out") return "out";
   if (result === "Net") return "net";
   return null;
+}
+
+/**
+ * The vendor stroke's `spin_type` → `label_shots.spin`: lower-cased, and
+ * null for anything outside the four the column accepts (the vendor's
+ * `None`, or a value it has not used yet). No auto-fix — the seed copies what
+ * the vendor said; the labeller corrects it from the video.
+ */
+export function labelSpin(spinType: unknown): LabelSpin | null {
+  if (typeof spinType !== "string") return null;
+  const lowered = spinType.trim().toLowerCase();
+  return isLabelSpin(lowered) ? lowered : null;
 }
 
 /**
@@ -355,6 +374,9 @@ export function buildLabelSeed(
         hitter: side(shot.is_player1),
         stroke: labelStroke(shot.shot_type, vendor.stroke_side),
         result: labelShotResult(shot.result),
+        // Off the raw stroke, so a transcript shot and a dropped stroke read
+        // it the same way (the transcript's `spin_type` is the same string).
+        spin: labelSpin(vendor.spin_type),
         contact_x: shot.contact_x,
         contact_y: shot.contact_y,
         landing_x: shot.landing_x,

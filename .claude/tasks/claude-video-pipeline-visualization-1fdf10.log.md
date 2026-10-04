@@ -363,3 +363,13 @@ Decisions:
 
 1. Storage is written on every pointer move during a drag.
 2. Court mark radii are fixed px, so they read large on a small court.
+
+## T26 · Spin on label shots — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Migration `20261004164750_label_shots_spin.sql` (applied live) adds nullable `label_shots.spin` (topspin / flat / backspin / sidespin), backfilled from the vendor's `spin_type` and added to each row's seed. `LabelShot.spin` is seeded from the vendor's value, editable through the shot patch, counted for kept / edited, and restored by Reset; the loader and the operations service return it.
+
+**follow-ups:**
+
+1. The comparison script does not read spin yet.

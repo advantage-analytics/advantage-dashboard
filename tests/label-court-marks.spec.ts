@@ -36,6 +36,7 @@ function stroke(
     hitter: "p1",
     stroke: null,
     result: null,
+    spin: null,
     contactX: 0,
     contactY: 0,
     landingX: 0,

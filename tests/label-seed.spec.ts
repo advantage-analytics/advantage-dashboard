@@ -15,8 +15,10 @@ import {
   endedBy,
   labelEnding,
   labelShotResult,
+  labelSpin,
   labelStroke,
 } from "@/lib/services/labels/seed";
+import { LABEL_SPINS } from "@/lib/services/labels/session";
 import {
   seedLabelSession,
   seedLabelSessionForJob,
@@ -125,6 +127,8 @@ test.describe("buildLabelSeed", () => {
       expect(shot.landing_x).toBeNull();
       expect(shot.landing_y).toBeNull();
       expect(shot.video_time).toBe(stroke.videoTime);
+      // A dropped stroke still has a vendor spin, and it is seeded.
+      expect(shot.spin).toBe(labelSpin(stroke.spinType));
       expect(shot.vendor).toEqual(rawById.get(shot.event_id));
       const p1Hit = stroke.playerLabel === p1;
       const p1IsPlayer1 = transcript.points
@@ -154,10 +158,25 @@ test.describe("buildLabelSeed", () => {
         expect(shot.landing_y).toBe(derived.landing_y);
         expect(shot.video_time).toBe(derived.video_time);
         expect(shot.result).toBe(labelShotResult(derived.result));
+        expect(shot.spin).toBe(labelSpin(derived.spin_type));
         expect(shot.status).toBe("kept");
         expect(shot.unclear).toEqual([]);
       }
     }
+  });
+
+  test("spin is the vendor's spin_type, lower-cased, and only the four", () => {
+    const spins = seed.points.flatMap((p) => p.shots.map((s) => s.spin));
+    for (const point of seed.points) {
+      for (const shot of point.shots) {
+        const vendor = rawById.get(shot.event_id)!;
+        expect(shot.spin).toBe(labelSpin(vendor.spin_type));
+        expect(shot.spin).toBe(vendor.spin_type.toLowerCase());
+        if (shot.spin !== null) expect(LABEL_SPINS).toContain(shot.spin);
+      }
+    }
+    // Not vacuous: the fixture carries every spin the column accepts.
+    expect(new Set(spins)).toEqual(new Set(LABEL_SPINS));
   });
 
   test("every row freezes its own values as its seed", () => {
@@ -180,6 +199,7 @@ test.describe("buildLabelSeed", () => {
           hitter: shot.hitter,
           stroke: shot.stroke,
           result: shot.result,
+          spin: shot.spin,
           contact_x: shot.contact_x,
           contact_y: shot.contact_y,
           landing_x: shot.landing_x,
@@ -307,6 +327,21 @@ test.describe("label vocabulary", () => {
     expect(labelShotResult("Out")).toBe("out");
     expect(labelShotResult("Net")).toBe("net");
     expect(labelShotResult(null)).toBeNull();
+  });
+
+  test("spin_type maps to the four spins, lower-cased, else null", () => {
+    expect(labelSpin("topspin")).toBe("topspin");
+    expect(labelSpin("Flat")).toBe("flat");
+    expect(labelSpin(" BACKSPIN ")).toBe("backspin");
+    expect(labelSpin("sidespin")).toBe("sidespin");
+    // The vendor's "None", and anything it has not said yet, is no spin —
+    // copied as is, never guessed.
+    expect(labelSpin("None")).toBeNull();
+    expect(labelSpin("slice")).toBeNull();
+    expect(labelSpin("")).toBeNull();
+    expect(labelSpin(null)).toBeNull();
+    expect(labelSpin(undefined)).toBeNull();
+    expect(labelSpin(3)).toBeNull();
   });
 
   test("ended_by skips result-less strokes and is null without any", () => {
@@ -514,12 +549,15 @@ test.describe("seedLabelSessionForJob", () => {
         hitter: shot.hitter,
         stroke: shot.stroke,
         result: shot.result,
+        spin: shot.spin,
         contact_x: shot.contact_x,
         contact_y: shot.contact_y,
         landing_x: shot.landing_x,
         landing_y: shot.landing_y,
         video_time: shot.video_time,
       });
+      // The `spin` column is written alongside the other value columns.
+      expect(shot).toHaveProperty("spin");
     }
   });
 

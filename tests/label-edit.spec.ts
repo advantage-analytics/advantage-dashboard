@@ -4,6 +4,7 @@ import {
   LABEL_POINT_EDIT_FIELDS,
   LABEL_POINT_SEED_FIELDS,
   LABEL_SHOT_EDIT_FIELDS,
+  LABEL_SPINS,
   applyLabelShotPatch,
   labelPointStatusAfterPatch,
   labelShotStatusAfterPatch,
@@ -39,6 +40,7 @@ const SEEDED: LabelShotValues = {
   hitter: "p2",
   stroke: "backhand",
   result: "in",
+  spin: "topspin",
   contact_x: 1.8,
   contact_y: 24.49,
   landing_x: -2.1,
@@ -57,6 +59,7 @@ test.describe("the allowlists", () => {
         "landing_x",
         "landing_y",
         "result",
+        "spin",
         "stroke",
         "unclear",
         "video_time",
@@ -135,6 +138,29 @@ test.describe("shot values", () => {
       ok: true,
       patch: { result: null },
     });
+  });
+
+  test("spin is one of the four, lower-case, or null", () => {
+    expect(LABEL_SPINS).toEqual(["topspin", "flat", "backspin", "sidespin"]);
+    for (const spin of LABEL_SPINS) {
+      expect(parseLabelShotPatch({ spin })).toEqual({
+        ok: true,
+        patch: { spin },
+      });
+    }
+    expect(parseLabelShotPatch({ spin: null })).toEqual({
+      ok: true,
+      patch: { spin: null },
+    });
+    for (const bad of ["Topspin", "None", "slice", "kick", "", 1, true, {}]) {
+      const result = parseLabelShotPatch({ spin: bad });
+      expect(result, JSON.stringify(bad)).toHaveProperty("error");
+      expect((result as { error: string }).error).toContain("Spin");
+    }
+    // Rejected whole: nothing else in the patch gets through.
+    expect(parseLabelShotPatch({ result: "in", spin: "slice" })).toHaveProperty(
+      "error",
+    );
   });
 
   test("positions travel as finite pairs", () => {
@@ -247,11 +273,14 @@ test.describe("labelShotStatusAfterPatch — the edited rule", () => {
       labelShotStatusAfterPatch(kept, { landing_x: -2.1, landing_y: 3.6 }),
     ).toBe("edited");
     expect(labelShotStatusAfterPatch(kept, { result: null })).toBe("edited");
+    expect(labelShotStatusAfterPatch(kept, { spin: "flat" })).toBe("edited");
+    expect(labelShotStatusAfterPatch(kept, { spin: null })).toBe("edited");
   });
 
   test("a kept shot stays kept when the patch says what the seed said", () => {
     expect(labelShotStatusAfterPatch(kept, { result: "in" })).toBe("kept");
     expect(labelShotStatusAfterPatch(kept, { hitter: "p2" })).toBe("kept");
+    expect(labelShotStatusAfterPatch(kept, { spin: "topspin" })).toBe("kept");
     // Within 1 cm and half a tenth of a second.
     expect(
       labelShotStatusAfterPatch(kept, { contact_x: 1.8049, contact_y: 24.485 }),
@@ -307,6 +336,30 @@ test.describe("labelShotStatusAfterPatch — the edited rule", () => {
     expect(labelShotStatusAfterPatch(edited, { result: "in" })).toBe("kept");
     // Still off the seed on another field: stays edited.
     expect(labelShotStatusAfterPatch(edited, { hitter: "p1" })).toBe("edited");
+    // Spin follows the same rule, both ways.
+    const respun = {
+      ...SEEDED,
+      spin: "backspin" as const,
+      status: "edited" as const,
+      seed: SEEDED,
+    };
+    expect(labelShotStatusAfterPatch(respun, { spin: "topspin" })).toBe("kept");
+    expect(labelShotStatusAfterPatch(respun, { spin: "flat" })).toBe("edited");
+    expect(labelShotStatusAfterPatch(respun, { result: "in" })).toBe("edited");
+    // A seed with no spin key (seeded before the column) reads spin as null,
+    // so clearing the spin on such a row is a revert, not an edit.
+    const { spin: _unseeded, ...seedWithoutSpin } = SEEDED;
+    const legacy = {
+      ...SEEDED,
+      spin: "flat" as const,
+      status: "edited" as const,
+      seed: parseLabelShotSeed(seedWithoutSpin),
+    };
+    expect(legacy.seed).not.toBeNull();
+    expect(labelShotStatusAfterPatch(legacy, { spin: null })).toBe("kept");
+    expect(labelShotStatusAfterPatch(legacy, { spin: "topspin" })).toBe(
+      "edited",
+    );
     // Set back within tolerance counts as set back.
     const moved = {
       ...SEEDED,
@@ -366,6 +419,13 @@ test.describe("labelShotStatusAfterPatch — the edited rule", () => {
       landingY: 18,
     });
     expect(applyLabelShotPatch(serve, { result: "in" }).status).toBe("kept");
+    // Spin: the fixture's serve is seeded flat.
+    const kicked = applyLabelShotPatch(serve, { spin: "topspin" });
+    expect(kicked).toMatchObject({ status: "edited", spin: "topspin" });
+    expect(applyLabelShotPatch(kicked, { spin: "flat" })).toMatchObject({
+      status: "kept",
+      spin: "flat",
+    });
     expect(applyLabelShotPatch(added, { result: "in" })).toMatchObject({
       status: "added",
       result: "in",
@@ -477,6 +537,19 @@ test.describe("the stored seed", () => {
     expect(parseLabelShotSeed({ ...SEEDED, contact_x: "1.8" })).toBeNull();
     expect(parseLabelShotSeed(null)).toBeNull();
     expect(parseLabelShotSeed([SEEDED])).toBeNull();
+    // A spin the column would refuse is no seed; a null spin is fine.
+    expect(parseLabelShotSeed({ ...SEEDED, spin: "Topspin" })).toBeNull();
+    expect(parseLabelShotSeed({ ...SEEDED, spin: null })).toEqual({
+      ...SEEDED,
+      spin: null,
+    });
+  });
+
+  test("a shot seed with no spin key parses with spin null, not as no seed", () => {
+    // Every seed written before ..._label_shots_spin.sql lacks the key; the
+    // migration adds it only where the vendor spin was one of the four.
+    const { spin: _dropped, ...legacy } = SEEDED;
+    expect(parseLabelShotSeed(legacy)).toEqual({ ...SEEDED, spin: null });
 
     const pointSeed = {
       set_number: 1,
@@ -749,6 +822,41 @@ test.describe("status against the stored seed, on the server", () => {
       result: "in",
       status: "kept",
     });
+  });
+
+  test("a spin set back to its seed writes kept; a changed one writes edited", async () => {
+    const back = fakeClient({
+      shot: shotRow({ status: "edited", spin: "backspin" }),
+    });
+    expect(
+      await writeLabelShotEdit({
+        supabase: back.supabase,
+        shotId: SHOT_ID,
+        patch: { spin: "topspin" },
+      }),
+    ).toEqual({ ok: true, status: "kept" });
+    expect(back.calls.find((c) => c.op === "update")?.values).toEqual({
+      spin: "topspin",
+      status: "kept",
+    });
+    // The row is read with its spin, so the comparison sees it.
+    expect(back.calls[0]).toMatchObject({ table: "label_shots", op: "select" });
+
+    const away = fakeClient({ shot: shotRow() });
+    expect(
+      await writeLabelShotEdit({
+        supabase: away.supabase,
+        shotId: SHOT_ID,
+        patch: { spin: "sidespin" },
+      }),
+    ).toEqual({ ok: true, status: "edited" });
+    expect(
+      await writeLabelShotEdit({
+        supabase: fakeClient({ shot: shotRow() }).supabase,
+        shotId: SHOT_ID,
+        patch: { spin: "slice" },
+      }),
+    ).toHaveProperty("error");
   });
 
   test("a malformed stored seed falls back to the seedless rule", async () => {

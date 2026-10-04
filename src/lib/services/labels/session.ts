@@ -54,6 +54,24 @@ export function isLabelGameType(value: unknown): value is LabelGameType {
   );
 }
 
+/**
+ * `label_shots.spin`, the CHECK vocabulary
+ * (supabase/migrations/..._label_shots_spin.sql): the vendor's `spin_type`,
+ * lower-cased. A value field like `stroke` — seeded, in the `kept`
+ * comparison, restored by Reset. Declared here, not in seed.ts, because
+ * seed.ts imports from this file and the `"use client"` console must reach
+ * the list without dragging the derivation in.
+ */
+export const LABEL_SPINS = ["topspin", "flat", "backspin", "sidespin"] as const;
+export type LabelSpin = (typeof LABEL_SPINS)[number];
+
+export function isLabelSpin(value: unknown): value is LabelSpin {
+  return (
+    typeof value === "string" &&
+    (LABEL_SPINS as readonly string[]).includes(value)
+  );
+}
+
 /** One `label_shots` row. Coordinates are metres, near baseline at y = 0. */
 export interface LabelShot {
   id: string;
@@ -69,6 +87,8 @@ export interface LabelShot {
   hitter: LabelSide | null;
   stroke: LabelStroke | null;
   result: LabelShotResult | null;
+  /** The ball's spin as the vendor read it, lower-cased; null for `None`. */
+  spin: LabelSpin | null;
   contactX: number | null;
   contactY: number | null;
   landingX: number | null;

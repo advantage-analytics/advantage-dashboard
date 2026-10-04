@@ -103,6 +103,7 @@ export function applyShotReset(shot: LabelShot): LabelShot {
     hitter: write.hitter,
     stroke: write.stroke,
     result: write.result,
+    spin: write.spin,
     contactX: write.contact_x,
     contactY: write.contact_y,
     landingX: write.landing_x,

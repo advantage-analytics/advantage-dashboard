@@ -49,6 +49,7 @@ import {
   type LabelShotResult,
   type LabelShotStatus,
   type LabelSide,
+  type LabelSpin,
   type LabelStroke,
 } from "./session";
 
@@ -207,6 +208,7 @@ interface ShotRow {
   hitter: LabelSide | null;
   stroke: LabelStroke | null;
   result: LabelShotResult | null;
+  spin: LabelSpin | null;
   contact_x: number | null;
   contact_y: number | null;
   landing_x: number | null;
@@ -216,7 +218,7 @@ interface ShotRow {
 }
 
 const SHOT_COLUMNS =
-  "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, contact_x, contact_y, landing_x, landing_y, video_time, seed";
+  "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, spin, contact_x, contact_y, landing_x, landing_y, video_time, seed";
 
 function toLabelShot(row: ShotRow): LabelShot {
   return {
@@ -230,6 +232,7 @@ function toLabelShot(row: ShotRow): LabelShot {
     hitter: row.hitter,
     stroke: row.stroke,
     result: row.result,
+    spin: row.spin,
     contactX: row.contact_x,
     contactY: row.contact_y,
     landingX: row.landing_x,

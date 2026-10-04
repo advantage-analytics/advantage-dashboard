@@ -14,19 +14,22 @@
  * so a patch that parses here can never be refused by the table.
  */
 
-import type {
-  LabelEnding,
-  LabelPoint,
-  LabelPointSeedValues,
-  LabelPointStatus,
-  LabelServeSide,
-  LabelShot,
-  LabelShotResult,
-  LabelShotSeedValues,
-  LabelShotStatus,
-  LabelSide,
-  LabelStroke,
+import {
+  LABEL_SPINS,
+  type LabelEnding,
+  type LabelPoint,
+  type LabelPointSeedValues,
+  type LabelPointStatus,
+  type LabelServeSide,
+  type LabelShot,
+  type LabelShotResult,
+  type LabelShotSeedValues,
+  type LabelShotStatus,
+  type LabelSide,
+  type LabelStroke,
 } from "./session";
+
+export { LABEL_SPINS };
 
 // ── Vocabularies (one per CHECK list in the migration) ─────────────────────
 
@@ -67,6 +70,7 @@ export const LABEL_SHOT_VALUE_FIELDS = [
   "hitter",
   "stroke",
   "result",
+  "spin",
   "contact_x",
   "contact_y",
   "landing_x",
@@ -228,6 +232,13 @@ export function parseLabelShotPatch(
     const v = vocab(input.result, LABEL_SHOT_RESULTS);
     if (v === undefined) return { error: "Result must be in, out or net." };
     patch.result = v;
+  }
+  if ("spin" in input) {
+    const v = vocab(input.spin, LABEL_SPINS);
+    if (v === undefined) {
+      return { error: "Spin must be topspin, flat, backspin or sidespin." };
+    }
+    patch.spin = v;
   }
 
   for (const [x, y, name] of [
@@ -425,7 +436,7 @@ export type LabelPointState = LabelPointFields & {
  * currently in the row, which an edit overwrites.
  *
  * Why not re-derive each baseline from the `vendor` jsonb instead: three of
- * the eight fields cannot be derived from one stroke at all —
+ * the nine fields cannot be derived from one stroke at all —
  *   hitter  the vendor names a free-text player label; which label is p1 is
  *           the fold's call over the whole match (transcript.ts `player1`);
  *   result  structural, from the stroke's rally position and the point's
@@ -433,9 +444,9 @@ export type LabelPointState = LabelPointFields & {
  *           is contradicted on 16–38% of rally strokes;
  *   stroke  for a serve, first vs second depends on the other serves in the
  *           rally; the vendor says only "serve".
- * The other five (positions via `metersToCourtFrame`, time via the job's
- * `start_time_seconds`) could be re-derived, but only with TODAY's
- * derivation code, while the seed used the session's pinned
+ * The other six (positions via `metersToCourtFrame`, time via the job's
+ * `start_time_seconds`, spin via `labelSpin`) could be re-derived, but only
+ * with TODAY's derivation code, while the seed used the session's pinned
  * `derivation_version` — once the two drift, a no-op edit would read as a
  * change. The frozen seed has neither problem.
  *
@@ -533,6 +544,7 @@ function pickShotValues(row: LabelShotValues): LabelShotValues {
     hitter: row.hitter,
     stroke: row.stroke,
     result: row.result,
+    spin: row.spin,
     contact_x: row.contact_x,
     contact_y: row.contact_y,
     landing_x: row.landing_x,
@@ -556,18 +568,33 @@ function pickPointFields(row: LabelPointFields): LabelPointFields {
 // ── The stored seed ─────────────────────────────────────────────────────────
 
 /**
+ * The seed keys every stored shot seed has carried since the column existed.
+ * `spin` is the exception: it joined later (..._label_shots_spin.sql), and a
+ * seed written before then simply has no key for it.
+ */
+const LABEL_SHOT_SEED_REQUIRED_FIELDS = LABEL_SHOT_VALUE_FIELDS.filter(
+  (field) => field !== "spin",
+);
+
+/**
  * A `label_shots.seed` jsonb as the status rule can trust it, or null.
  *
- * All eight keys must be present with a value the column would accept; a
- * seed missing one, or holding anything else, is treated as no seed at all —
- * a half-trusted baseline would read a real edit as a revert.
+ * Every key but `spin` must be present with a value the column would accept;
+ * a seed missing one, or holding anything else, is treated as no seed at all —
+ * a half-trusted baseline would read a real edit as a revert. A seed with no
+ * `spin` key parses with `spin: null`: the vendor spin on such a row was never
+ * part of its baseline, and refusing the whole seed would strip Reset from
+ * every row seeded before the column existed.
  */
 export function parseLabelShotSeed(value: unknown): LabelShotSeedValues | null {
   if (!isPlainObject(value)) return null;
-  if (!LABEL_SHOT_VALUE_FIELDS.every((field) => field in value)) return null;
+  if (!LABEL_SHOT_SEED_REQUIRED_FIELDS.every((field) => field in value)) {
+    return null;
+  }
   const hitter = vocab(value.hitter, LABEL_SIDES);
   const stroke = vocab(value.stroke, LABEL_STROKES);
   const result = vocab(value.result, LABEL_SHOT_RESULTS);
+  const spin = "spin" in value ? vocab(value.spin, LABEL_SPINS) : null;
   const contactX = finite(value.contact_x);
   const contactY = finite(value.contact_y);
   const landingX = finite(value.landing_x);
@@ -577,6 +604,7 @@ export function parseLabelShotSeed(value: unknown): LabelShotSeedValues | null {
     hitter === undefined ||
     stroke === undefined ||
     result === undefined ||
+    spin === undefined ||
     contactX === undefined ||
     contactY === undefined ||
     landingX === undefined ||
@@ -589,6 +617,7 @@ export function parseLabelShotSeed(value: unknown): LabelShotSeedValues | null {
     hitter,
     stroke,
     result,
+    spin,
     contact_x: contactX,
     contact_y: contactY,
     landing_x: landingX,
@@ -652,6 +681,7 @@ export function labelShotValues(shot: LabelShot): LabelShotValues {
     hitter: shot.hitter,
     stroke: shot.stroke,
     result: shot.result,
+    spin: shot.spin,
     contact_x: shot.contactX,
     contact_y: shot.contactY,
     landing_x: shot.landingX,
@@ -706,6 +736,7 @@ export function applyLabelShotPatch(
   if ("hitter" in patch) next.hitter = patch.hitter ?? null;
   if ("stroke" in patch) next.stroke = patch.stroke ?? null;
   if ("result" in patch) next.result = patch.result ?? null;
+  if ("spin" in patch) next.spin = patch.spin ?? null;
   if ("contact_x" in patch) next.contactX = patch.contact_x ?? null;
   if ("contact_y" in patch) next.contactY = patch.contact_y ?? null;
   if ("landing_x" in patch) next.landingX = patch.landing_x ?? null;

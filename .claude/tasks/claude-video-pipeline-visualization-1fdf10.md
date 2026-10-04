@@ -368,7 +368,7 @@ ready).
 
 ## T26 · Spin on label shots
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/20261004060000_label_shots_spin.sql, src/lib/services/labels/seed.ts, src/lib/services/labels/session.ts, src/lib/services/labels/edit.ts, src/lib/services/labels/reset.ts, src/lib/data/labels-server.ts, tests/fixtures/label-session.ts, tests/label-edit.spec.ts, tests/label-seed.spec.ts (guess)
 - **done when:**
