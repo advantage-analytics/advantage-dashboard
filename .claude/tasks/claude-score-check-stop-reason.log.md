@@ -11,3 +11,13 @@ is the runner's. Newest entries at the bottom.
 
 1. `.skills/advantage-analytics-design/reference/primitives.md` › "Warning question" still describes the early-end check as three answers; it is conditional now.
 2. `tests/upload-score-regression.spec.ts` (opt-in browser spec) does not cover the dual answer.
+
+## T2 · "No, it was a one-set match" with settled line and Undo — done
+
+**gate:** mechanical — lint pass, typecheck pass, tests 4482 passed / 38 failed; the 38 are the same container-only video-playback specs logged under T1 (identical set, fail on base). completion — VERDICT: pass.
+**changed:** `offersOneSet()` in score-state.ts (best of 3/5, exactly one finished set, nothing typed past set 1); `useScoreCheck` takes `handleFormatChange`, remembers the prior format, and exposes `chooseOneSet`/`undoOneSet`/`oneSetSettled`; `ScoreCheckNotice` offers "No, it was a one-set match" off-preset and off-dual, settling to "Set to best of 1 · <name> wins." with Undo; `SettledNotice` gains `actionLabel` (default "Change"); pure tests for `offersOneSet`.
+**follow-ups:**
+
+1. The self case reads "Set to best of 1 · You wins." when the subject name falls back to "You" — the retired line has the same "retired by You" problem; needs a wording decision.
+2. The remembered format is hook state only: a resumed draft loses Undo (the match stays correctly at best of 1).
+3. Hook/notice behaviour (settled line, Undo, fromLine gating) has no automated test beyond the pure helper.

@@ -118,7 +118,13 @@ import {
 } from "@/components/ui/float-menu";
 import { AnimatedHeight } from "./AnimatedHeight";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
-import { firstOpenSet, isStoppedResult, scoreGames } from "./score-state";
+import {
+  firstOpenSet,
+  isStoppedResult,
+  offersOneSet,
+  scoreGames,
+  setWinner,
+} from "./score-state";
 import {
   firstNameOf,
   styleSaveChecked,
@@ -183,6 +189,15 @@ export interface DetailsStepContentProps {
   scoreCheckVisible: boolean;
   /** "No, I'll finish the score" — the flow hides the question again. */
   onScoreCheckDismiss: () => void;
+  /**
+   * "No, it was a one-set match" switched the format to best of 1 and is still
+   * in force — the notice is its settled line with Undo. The flow owns it.
+   */
+  oneSetSettled: boolean;
+  /** Switch to best of 1 (the flow remembers the format to Undo back to). */
+  onOneSet: () => void;
+  /** Back to the remembered format, with the question open again. */
+  onUndoOneSet: () => void;
 }
 
 type Hand = "right" | "left";
@@ -952,6 +967,9 @@ function DetailsStepContentImpl({
   error,
   scoreCheckVisible,
   onScoreCheckDismiss,
+  oneSetSettled,
+  onOneSet,
+  onUndoOneSet,
 }: DetailsStepContentProps) {
   const scoreRef = useRef<HTMLDivElement>(null);
   // A preset IS the line it came from; the name is what reads at the use
@@ -1454,6 +1472,26 @@ function DetailsStepContentImpl({
                 dualLine={
                   (attachedLine?.eventKind ?? line?.eventKind) === "dual"
                 }
+                // Only off a line: a preset or attached line's event owns the
+                // format, so the score check never rewrites it.
+                offerOneSet={!fromLine && offersOneSet(scoreGames(formData))}
+                oneSetWinner={
+                  oneSetSettled
+                    ? setWinner(
+                        formData.playerScores[0],
+                        formData.opponentScores[0],
+                      )
+                    : null
+                }
+                onOneSet={() => {
+                  // Lossless by `offersOneSet`'s guard, so the Format
+                  // select's "loses a populated set" confirm doesn't apply.
+                  onInputChange("result", "");
+                  onInputChange("retiredSide", undefined);
+                  onInputChange("stopReason", undefined);
+                  onOneSet();
+                }}
+                onUndoOneSet={onUndoOneSet}
                 playerName={subject.name}
                 opponentName={formData.opponentName}
                 onAnswer={(result, stopReason) => {

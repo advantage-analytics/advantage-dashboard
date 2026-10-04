@@ -21,6 +21,13 @@ import type { RetiredSide, StopReason, StoppedResult } from "./score-state";
  * result was in is the common way a college singles score ends unwon, and it
  * records Unfinished like time or weather, but its settled line says why.
  *
+ * "No, it was a one-set match" is offered (`offerOneSet`) when set 1 is the
+ * only set finished and nothing is typed past it, off a line only — a preset
+ * or attached line's event owns the format, a dual's most of all. It answers
+ * by switching the format to best of 1, which decides the score; the settled
+ * line (`oneSetWinner`) says so and keeps "Undo" rather than "Change", since
+ * undoing puts the format back, not just the answer.
+ *
  * The DS warning question (`primitives.md` › Warning question): stacked text
  * answers on amber, a settled answer collapses to a grey line that keeps
  * "Change". "No" isn't an answer to record — it hands focus back to the score.
@@ -30,6 +37,10 @@ export function ScoreCheckNotice({
   retiredSide,
   stopReason,
   dualLine,
+  offerOneSet,
+  oneSetWinner,
+  onOneSet,
+  onUndoOneSet,
   playerName,
   opponentName,
   onAnswer,
@@ -46,6 +57,16 @@ export function ScoreCheckNotice({
    * hand-picked event kind) — offers "play stopped once the dual was decided".
    */
   dualLine: boolean;
+  /** Offer "No, it was a one-set match" (`offersOneSet`, and not from a line). */
+  offerOneSet: boolean;
+  /**
+   * Who took set 1 while the one-set switch is in force — non-null means the
+   * settled "Set to best of 1" line with Undo.
+   */
+  oneSetWinner: RetiredSide | null;
+  onOneSet: () => void;
+  /** Restores the previous format and reopens the question. */
+  onUndoOneSet: () => void;
   playerName: string;
   opponentName: string;
   onAnswer: (result: StoppedResult, stopReason: StopReason) => void;
@@ -63,6 +84,16 @@ export function ScoreCheckNotice({
 
   // Each state is its own element type, never the same box restyled: the
   // yellow question and the grey line would otherwise morph into each other.
+  if (oneSetWinner) {
+    return (
+      <SettledNotice
+        message={`Set to best of 1 · ${names[oneSetWinner]} wins.`}
+        onChange={onUndoOneSet}
+        actionLabel="Undo"
+      />
+    );
+  }
+
   if (answer === "Unfinished") {
     return (
       <SettledNotice
@@ -141,6 +172,9 @@ export function ScoreCheckNotice({
           <Answer onClick={() => onAnswer("Unfinished", "time_weather")}>
             Yes, stopped for time or weather
           </Answer>
+          {offerOneSet && !dualLine && (
+            <Answer onClick={onOneSet}>No, it was a one-set match</Answer>
+          )}
           <Answer onClick={onFinishScore}>
             No, I&rsquo;ll finish the score
           </Answer>

@@ -190,6 +190,26 @@ export function firstOpenSet(input: ScoreGames): number {
 }
 
 /**
+ * Does "did it end early?" offer "No, it was a one-set match"?
+ *
+ * Only when switching the format to best of 1 would decide the match without
+ * losing anything: a best of 3 or 5 with exactly set 1 finished, nobody yet
+ * through, and nothing typed past it. `handleFormatChange("1")` slices every
+ * score array to one set, so a half-typed second set would be silently dropped
+ * — that case is refused rather than offered. Best of 1 is already one set; a
+ * 1-1 split or an undecided first set is not a one-set match.
+ */
+export function offersOneSet(input: ScoreGames): boolean {
+  if (input.bestOf !== 3 && input.bestOf !== 5) return false;
+  const { finished, decided } = progress(input);
+  if (decided || finished !== 1) return false;
+  const cells = (games: Cells) => games.map((v) => v ?? null);
+  return (
+    lastEnteredSet(cells(input.playerScores), cells(input.opponentScores)) === 1
+  );
+}
+
+/**
  * The two ways a match can end without the score deciding it, spelled the way
  * `matches.result` stores them. "Unfinished" is the literal the SwingVision
  * parser already writes, so a typed score and an imported one land on one

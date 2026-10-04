@@ -22,27 +22,62 @@ import type { FormData as MatchFormData, Step } from "./types";
  *
  * A SwingVision import is never asked and never held (`asksIfEndedEarly`):
  * its "Unfinished" line still shows, but Save goes straight through.
+ *
+ * "No, it was a one-set match" (`chooseOneSet`) answers by changing the
+ * format, not by recording a result: it switches to best of 1, which decides
+ * the score, so the question would vanish with it. The hook remembers the
+ * format it switched from and keeps the notice up as a settled line with
+ * "Undo" (`oneSetSettled`) until Undo, or until Format is changed by hand.
  */
 export function useScoreCheck({
   step,
   formData,
   provider,
   handleCreateMatch,
+  handleFormatChange,
 }: {
   step: Step;
   formData: MatchFormData;
   provider: ProviderId | null;
   handleCreateMatch: () => void;
+  handleFormatChange: (bestOf: string) => void;
 }) {
   const [asked, setAsked] = useState(false);
+  // The format "one-set match" switched away from; null when it isn't in force.
+  const [oneSetFrom, setOneSetFrom] = useState<string | null>(null);
+  // Format changed by hand since: the switch is no longer this line's to undo.
+  // Adjusted during render, not in an effect, so no frame shows a stale line.
+  if (oneSetFrom !== null && formData.bestOf !== "1") setOneSetFrom(null);
+
   const undecided = step === "match" && scoreUndecided(scoreGames(formData));
   // `started` keeps the notice up while Retired waits for "who retired?";
   // only a complete answer lets Save through.
   const started = isStoppedResult(formData.result);
   const answered = !asksIfEndedEarly(provider) || scoreCheckAnswered(formData);
-  const visible = undecided && (asked || started);
+  // Undecided again at best of 1 (set 1 edited after the switch) is the plain
+  // question once more — `asked` is still true from when it was answered.
+  const oneSetSettled =
+    step === "match" &&
+    oneSetFrom !== null &&
+    formData.bestOf === "1" &&
+    !undecided;
+  const visible = (undecided && (asked || started)) || oneSetSettled;
 
   const dismiss = useCallback(() => setAsked(false), []);
+
+  /** "No, it was a one-set match" — the caller clears the stopped answer. */
+  const chooseOneSet = useCallback(() => {
+    setOneSetFrom(formData.bestOf);
+    handleFormatChange("1");
+  }, [formData.bestOf, handleFormatChange]);
+
+  /** Back to the format it was, with the question open as before the switch. */
+  const undoOneSet = useCallback(() => {
+    if (oneSetFrom === null) return;
+    handleFormatChange(oneSetFrom);
+    setOneSetFrom(null);
+    setAsked(true);
+  }, [oneSetFrom, handleFormatChange]);
 
   /** Save match: reveals the question instead of saving while it is unanswered. */
   const saveMatch = useCallback(() => {
@@ -55,8 +90,14 @@ export function useScoreCheck({
 
   return {
     visible,
-    /** On screen and still waiting — one more unanswered field for the gate. */
-    unanswered: visible && !answered,
+    /**
+     * On screen and still waiting — one more unanswered field for the gate.
+     * The one-set line is settled: best of 1 decided the score.
+     */
+    unanswered: visible && undecided && !answered,
+    oneSetSettled,
+    chooseOneSet,
+    undoOneSet,
     dismiss,
     saveMatch,
   };

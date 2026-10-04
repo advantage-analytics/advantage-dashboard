@@ -33,7 +33,7 @@ ready).
 
 ## T2 · "No, it was a one-set match" with settled line and Undo
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/components/dashboard/matches/new-match-wizard/score-state.ts, useScoreCheck.ts, ScoreCheckNotice.tsx, ImportIdentityNotice.tsx (SettledNotice), UploadWizardProvider.tsx (~L153 useScoreCheck call), UploadWizardSteps.tsx (~L415–428 DetailsStepContent props), DetailsStepContent.tsx, tests/upload-score-state.spec.ts — guess

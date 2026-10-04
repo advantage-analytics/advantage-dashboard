@@ -52,6 +52,8 @@ export interface UploadWizardContextValue {
     continueLabel: string;
     subjectFirstName: string | null;
     scoreCheckVisible: boolean;
+    /** "No, it was a one-set match" is in force — the notice's Undo line. */
+    oneSetSettled: boolean;
   };
   /** What the page itself adds on top of the hook's handlers. */
   actions: {
@@ -60,6 +62,9 @@ export interface UploadWizardContextValue {
     /** Writes the draft row, then leaves — only if the write worked. */
     saveDraft: () => Promise<void>;
     dismissScoreCheck: () => void;
+    /** Switches to best of 1, remembering the format to Undo back to. */
+    chooseOneSet: () => void;
+    undoOneSet: () => void;
   };
   meta: {
     /** The content column, for the keyboard walk and the missing-field jump. */
@@ -155,6 +160,7 @@ export function UploadWizardProvider({
     formData: wizard.formData,
     provider: wizard.selectedProvider,
     handleCreateMatch: wizard.handleCreateMatch,
+    handleFormatChange: wizard.handleFormatChange,
   });
   const gates = useWizardGates(wizard, scoreCheck.unanswered);
 
@@ -199,11 +205,14 @@ export function UploadWizardProvider({
       continueLabel: continueLabelFor(step, wizard.isCreating),
       subjectFirstName,
       scoreCheckVisible: scoreCheck.visible,
+      oneSetSettled: scoreCheck.oneSetSettled,
     },
     actions: {
       continue: continueHandler,
       saveDraft,
       dismissScoreCheck: scoreCheck.dismiss,
+      chooseOneSet: scoreCheck.chooseOneSet,
+      undoOneSet: scoreCheck.undoOneSet,
     },
     meta: {
       contentRef,
