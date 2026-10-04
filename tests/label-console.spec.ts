@@ -51,7 +51,8 @@ function rowMarkup(html: string, attr: string): string {
   return html.slice(start, next === -1 ? undefined : next);
 }
 
-const EDITORS = /<select|<input|<textarea/g;
+/** A mounted editor: a text field, or a dropdown (`SelectEditor`). */
+const EDITORS = /data-select-editor|<input|<textarea/g;
 
 function render(props: ConsoleProps): string {
   const { LabelConsole } = createLoader().load(
@@ -114,26 +115,27 @@ test("an expanded point folds its shots out in video order", () => {
   const ids = [...panel.matchAll(/data-shot-id="([^"]+)"/g)].map((m) => m[1]);
   expect(ids).toEqual(["s-serve", "s-return", "s-added"]);
   const panelText = text(panel);
-  // Shot · time · player chip and name · stroke · hit at · landed at ·
-  // placement · result · status. There is no Type, Spin or Speed column.
+  // Shot · time · player's name · stroke · spin · hit at · landed at ·
+  // placement · result · status. There is no Type or Speed column.
   expect(panelText).toContain(
-    "Shot Time Player Stroke Hit at Landed at Placement Result Status 1 ",
+    "Shot Time Player Stroke Spin Hit at Landed at Placement Result Status 1 ",
   );
   expect(panelText).toContain(
-    "1 41:12.0 L Lee First serve -0.80, -0.32 0.60, 17.79 T In 2 ",
+    "1 41:12.0 Lee First serve Flat -0.80, -0.32 0.60, 17.79 T In 2 ",
   );
   expect(panelText).toContain(
-    "2 41:13.1 V Vargas Backhand 1.80, 24.49 -2.10, 3.49 Crosscourt In Edited",
+    "2 41:13.1 Vargas Backhand Topspin 1.80, 24.49 -2.10, 3.49 Crosscourt In Edited",
   );
+  // The added stroke has no spin yet: an em dash, named.
   expect(panelText).toContain(
-    "3 41:14.4 L Lee Forehand -2.30, -1.02 4.20, 24.90 Crosscourt Out Added",
+    "3 41:14.4 Lee Forehand — Not set -2.30, -1.02 4.20, 24.90 Crosscourt Out Added",
   );
   expect(panelText.indexOf("Deleted shot")).toBeLessThan(
     panelText.indexOf("41:14.4"),
   );
 });
 
-test("shot columns: the two positions, whole, and nothing typed for Result", () => {
+test("shot columns: spin, the two positions, whole, and nothing typed for Result", () => {
   const { SHOT_COLUMNS, SHOT_TRACKS } = createLoader().load(
     "src/components/admin/labels/label-table-layout.ts",
   ) as { SHOT_COLUMNS: readonly string[]; SHOT_TRACKS: string };
@@ -143,6 +145,7 @@ test("shot columns: the two positions, whole, and nothing typed for Result", () 
     "Time",
     "Player",
     "Stroke",
+    "Spin",
     "Hit at",
     "Landed at",
     "Placement",
@@ -150,7 +153,7 @@ test("shot columns: the two positions, whole, and nothing typed for Result", () 
     "Status",
     "",
   ]);
-  for (const gone of ["Type", "Spin", "Speed"]) {
+  for (const gone of ["Type", "Speed"]) {
     expect(SHOT_COLUMNS.join(" ")).not.toContain(gone);
   }
   // One track per column, and the two positions at least 112px wide.
@@ -192,7 +195,7 @@ test("shot columns: the two positions, whole, and nothing typed for Result", () 
   );
 });
 
-test("shot rows: a card of strokes, the hitter's chip, calculated cells, faults", () => {
+test("shot rows: a card of strokes, the hitter by name, calculated cells, faults", () => {
   const session = structuredClone(labelSessionFixture());
   const shots = session.points.flatMap((point) => point.shots);
   // The serve goes long, and the return has not been placed.
@@ -222,16 +225,13 @@ test("shot rows: a card of strokes, the hitter's chip, calculated cells, faults"
     panel.indexOf('data-row="shot"'),
   );
 
-  // The player chip is the winner mark at 22px, in the same two grounds —
-  // and is not counted as a winner mark.
+  // The Player cell is the name alone: no chip of either kind in the fold.
   const serve = rowMarkup(html, 'data-shot-id="s-serve"');
-  expect(serve).toMatch(
-    /data-player-mark="p1"[^>]*size-\[22px\][^>]*bg-\[var\(--blue\)\]/,
-  );
-  expect(rowMarkup(html, 'data-shot-id="s-return"')).toMatch(
-    /data-player-mark="p2"[^>]*bg-\[var\(--surface-subtle\)\]/,
-  );
+  expect(panel).not.toContain("data-player-mark");
   expect(count(panel, /data-winner-mark/g)).toBe(0);
+  expect(serve).toMatch(
+    /data-cell="Shot 1 player"[^>]*><span[^>]*>Lee<\/span><\/span>/,
+  );
 
   // A serve that did not go in is muted, and says so.
   expect(serve).toContain("data-fault");
@@ -243,6 +243,25 @@ test("shot rows: a card of strokes, the hitter's chip, calculated cells, faults"
   const unplaced = rowMarkup(html, 'data-shot-id="s-return"');
   expect(unplaced).toMatch(/data-calculated="placement"[^>]*><span[^>]*>—</);
   expect(unplaced).toMatch(/data-calculated="result"[^>]*><span[^>]*>—</);
+
+  // Calculated cells are text and nothing else — no aim glyph, no tooltip —
+  // on a resting row and on the selected one.
+  const selected = rowMarkup(
+    render({
+      session,
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      initialSelectedShotId: "s-added",
+      ...SAVES,
+    }),
+    'data-shot-id="s-added"',
+  );
+  for (const row of [serve, selected]) {
+    expect(row).toMatch(/data-calculated="placement"[^>]*>[^<]+<\/span>/);
+    expect(row).toMatch(/data-calculated="result"[^>]*>[^<]+<\/span>/);
+    expect(row).not.toContain("lucide-crosshair");
+  }
+  expect(html).not.toContain("Set by where the shot was hit");
 });
 
 test("point rows: who won, then the point, how it ended, its note and status", () => {
@@ -306,7 +325,7 @@ test("column headers are the DS table header; game bands the points rail's", () 
   const panel = shotPanel(html, FIXTURE_POINT_IDS.P1);
   const shotHeader = panel.slice(0, panel.indexOf("data-row="));
   const shotLabels = SHOT_COLUMNS.filter(Boolean);
-  expect(shotLabels).toHaveLength(9);
+  expect(shotLabels).toHaveLength(10);
   for (const label of shotLabels) {
     const found = classesOf(shotHeader, label);
     expect(found, label).toHaveLength(1);
@@ -944,11 +963,13 @@ test.describe("editing (T6)", () => {
     expect(html).toContain('aria-label="Point 1 ending: Error"');
     expect(html).toContain('aria-label="Point 1 note: None"');
     expect(html).toContain('aria-label="Shot 2 stroke: Backhand"');
+    expect(html).toContain('aria-label="Shot 2 spin: Topspin"');
+    expect(html).toContain('aria-label="Shot 3 spin: Not set"');
     expect(html).toContain('aria-label="Shot 1 hit at: -0.80, -0.32"');
     expect(count(html, /role="button" tabindex="0"/g)).toBeGreaterThanOrEqual(
-      // Two per point (ending, note); five per stroke — time, player,
-      // stroke, hit at, landed at. Placement and Result are not stops.
-      3 * 2 + 3 * 5,
+      // Two per point (ending, note); six per stroke — time, player,
+      // stroke, spin, hit at, landed at. Placement and Result are not stops.
+      3 * 2 + 3 * 6,
     );
   });
 
@@ -962,15 +983,26 @@ test.describe("editing (T6)", () => {
     });
     const selected = rowMarkup(html, 'data-shot-id="s-return"');
     expect(selected).toContain("data-selected");
-    // Player and stroke as selects; time, hit at, landed at as inputs. The
-    // result follows the coordinates: it is text, never a select.
-    expect(count(selected, /<select/g)).toBe(2);
+    // Player, stroke and spin as the design system's menu — a button that
+    // opens one, showing the value — and time, hit at, landed at as inputs.
+    // The result follows the coordinates: it is text, never a dropdown.
+    expect(html).not.toContain("<select");
+    expect(count(selected, /data-select-editor/g)).toBe(3);
     expect(count(selected, /<input/g)).toBe(3);
     expect(selected).not.toContain('aria-label="Shot 2 result"');
     expect(selected).toMatch(/data-calculated="result"[^>]*>In</);
     expect(selected).toMatch(/data-calculated="placement"[^>]*>Crosscourt</);
-    expect(selected).toContain('aria-label="Shot 2 stroke"');
-    expect(selected).toMatch(/<option value="backhand" selected="">/);
+    for (const [name, value] of [
+      ["player", "Vargas"],
+      ["stroke", "Backhand"],
+      ["spin", "Topspin"],
+    ]) {
+      expect(selected, name).toMatch(
+        new RegExp(
+          `<button[^>]*aria-label="Shot 2 ${name}"[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"[^>]*><span[^>]*>${value}</span>`,
+        ),
+      );
+    }
 
     expect(count(rowMarkup(html, 'data-shot-id="s-serve"'), EDITORS)).toBe(0);
     expect(count(rowMarkup(html, 'data-shot-id="s-added"'), EDITORS)).toBe(0);
@@ -980,7 +1012,7 @@ test.describe("editing (T6)", () => {
         EDITORS,
       ),
     ).toBe(0);
-    expect(count(html, EDITORS)).toBe(5);
+    expect(count(html, EDITORS)).toBe(6);
   });
 
   test("selecting a stroke zooms the court to the hitter's half", () => {
@@ -1135,7 +1167,7 @@ test.describe("the playing row", () => {
     const playing = rowMarkup(html, 'data-shot-id="s-return"');
     expect(playing).toContain('data-playing="true"');
     expect(playing).toContain("data-playing-mark");
-    expect(text(playing)).toContain("2 , playing 41:13.1 V Vargas");
+    expect(text(playing)).toContain("2 , playing 41:13.1 Vargas");
     expect(rowMarkup(html, 'data-shot-id="s-serve"')).not.toContain(
       "data-playing",
     );

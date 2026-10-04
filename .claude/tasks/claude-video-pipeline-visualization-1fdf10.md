@@ -380,7 +380,7 @@ ready).
 
 ## T27 · Shot row: Spin column, no crest, no target icon, DS dropdowns
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T20, T26
 - **files:** src/components/admin/labels/label-shot-row.tsx, src/components/admin/labels/label-cells.tsx, src/components/admin/labels/label-table-layout.ts, src/components/admin/labels/label-format.ts, tests/label-console.spec.ts, tests/label-console-edit.spec.ts (guess)

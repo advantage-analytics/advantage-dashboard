@@ -1,8 +1,11 @@
-import type {
-  LabelEnding,
-  LabelShotResult,
-  LabelSide,
-  LabelStroke,
+import { shotSpinLabel } from "@/components/dashboard/matches/match-detail/film/film-shots";
+import {
+  LABEL_SPINS,
+  type LabelEnding,
+  type LabelShotResult,
+  type LabelSide,
+  type LabelSpin,
+  type LabelStroke,
 } from "@/lib/services/labels/session";
 import type { LabelDeleteReason } from "@/lib/services/labels/operations";
 import { surnameLabels } from "@/lib/data/match-utils";
@@ -38,6 +41,33 @@ export const RESULT_LABEL: Record<LabelShotResult, string> = {
   out: "Out",
   net: "Net",
 };
+
+/**
+ * A stroke's spin in the words the match Video tab prints for the same vendor
+ * value — `shotSpinLabel` (`film-shots.ts`), the Current point table's own
+ * source, handed the stroke the way that table's rows carry it. So a serve's
+ * topspin is a "Kick" and its sidespin a "Slice", and a rally shot's prints
+ * as recorded ("Topspin", "Backspin"); null when there is no spin.
+ */
+export function spinLabel(
+  stroke: LabelStroke | null,
+  spin: LabelSpin | null,
+): string | null {
+  return shotSpinLabel({
+    shotType: stroke ? STROKE_LABEL[stroke] : null,
+    spinType: spin,
+  });
+}
+
+/** The Spin dropdown's rows for a stroke: every vendor value, in its words. */
+export function spinOptions(
+  stroke: LabelStroke | null,
+): { value: LabelSpin; label: string }[] {
+  return LABEL_SPINS.map((value) => ({
+    value,
+    label: spinLabel(stroke, value) ?? value,
+  }));
+}
 
 /** Why a stroke was deleted, in the delete dialog's and the ghost row's words. */
 export const DELETE_REASON_LABEL: Record<LabelDeleteReason, string> = {

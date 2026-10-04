@@ -367,7 +367,7 @@ test.describe("cell text", () => {
   });
 });
 
-test.describe("a typed position (T13)", () => {
+test.describe("a typed position (T13) and a picked value (T27)", () => {
   type Props = Record<string, unknown>;
   type Element = React.ReactElement<Props & { children?: React.ReactNode }>;
 
@@ -407,6 +407,7 @@ test.describe("a typed position (T13)", () => {
     ) as { LabelPointsTableView: (p: Props) => React.ReactNode };
     const session = labelSessionFixture();
     const patches: [string, LabelShotPatch][] = [];
+    const pointPatches: [string, unknown][] = [];
     const tree = LabelPointsTableView({
       points: session.points,
       scores: labelScores(session.points, session.adScoring).points,
@@ -415,6 +416,8 @@ test.describe("a typed position (T13)", () => {
       editable: true,
       onPatchShot: (id: string, patch: LabelShotPatch) =>
         patches.push([id, patch]),
+      onPatchPoint: (id: string, patch: unknown) =>
+        pointPatches.push([id, patch]),
     });
     /** Type `value` into the position input named `label`, and commit. */
     const type = (label: string, value: { x: number; y: number } | null) => {
@@ -424,8 +427,119 @@ test.describe("a typed position (T13)", () => {
       expect(input, label).toBeDefined();
       (input!.props.onCommit as (v: unknown) => void)(value);
     };
-    return { patches, type };
+    /**
+     * The dropdown named `label`: the menu `SelectEditor` renders, with the
+     * rows it offers and the row it shows as chosen.
+     */
+    const dropdown = (label: string) => {
+      const all = elements(tree);
+      const editor = all.find(
+        (el) =>
+          typeof el.type === "function" &&
+          el.type.name === "SelectEditor" &&
+          el.props.label === label,
+      );
+      expect(editor, label).toBeDefined();
+      const drawn = elements(editor);
+      // The design system's menu, never the browser's.
+      expect(drawn.map((el) => el.type)).not.toContain("select");
+      const menu = drawn.find(
+        (el) => typeof el.type === "function" && el.type.name === "MenuSelect",
+      );
+      expect(menu, `${label}'s MenuSelect`).toBeDefined();
+      const props = menu!.props as {
+        label: string;
+        value: string | undefined;
+        options: { value: string; label: string }[];
+        onChange: (value: string) => void;
+      };
+      expect(props.label).toBe(label);
+      return {
+        value: props.value,
+        rows: props.options.map((option) => option.label),
+        /** Pick the row reading `row`, as a click on it does. */
+        pick(row: string) {
+          const option = props.options.find((o) => o.label === row);
+          expect(option, row).toBeDefined();
+          props.onChange(option!.value);
+        },
+      };
+    };
+    return { patches, pointPatches, type, dropdown };
   }
+
+  test("every dropdown is the DS menu, and a pick sends that one field", () => {
+    const { patches, pointPatches, dropdown } = table();
+
+    const player = dropdown("Shot 2 player");
+    expect(player.value).toBe("p2");
+    expect(player.rows).toEqual(["Lee", "Vargas"]);
+    player.pick("Lee");
+
+    const stroke = dropdown("Shot 2 stroke");
+    expect(stroke.value).toBe("backhand");
+    expect(stroke.rows).toContain("Backhand volley");
+    stroke.pick("Forehand");
+
+    // A rally shot's spin prints as recorded…
+    const spin = dropdown("Shot 2 spin");
+    expect(spin.value).toBe("topspin");
+    expect(spin.rows).toEqual(["Topspin", "Flat", "Backspin", "Sidespin"]);
+    spin.pick("Backspin");
+    // …a serve's in Serve › Spin's words, for the same four values.
+    const serveSpin = dropdown("Shot 1 spin");
+    expect(serveSpin.value).toBe("flat");
+    expect(serveSpin.rows).toEqual(["Kick", "Flat", "Backspin", "Slice"]);
+    serveSpin.pick("Kick");
+    // Not set yet: no row is chosen, and any of them can be.
+    const unset = dropdown("Shot 3 spin");
+    expect(unset.value).toBeUndefined();
+    unset.pick("Flat");
+
+    expect(patches).toEqual([
+      ["s-return", { hitter: "p1" }],
+      ["s-return", { stroke: "forehand" }],
+      ["s-return", { spin: "backspin" }],
+      ["s-serve", { spin: "topspin" }],
+      ["s-added", { spin: "flat" }],
+    ]);
+
+    const ending = dropdown("Point 1 ending");
+    expect(ending.value).toBe("error");
+    ending.pick("Winner");
+    expect(pointPatches).toEqual([
+      [FIXTURE_POINT_IDS.P1, { ending: "winner" }],
+    ]);
+  });
+
+  test("spin reads as the match Video tab prints it", () => {
+    const { spinLabel } = createLoader().load(
+      "src/components/admin/labels/label-format.ts",
+    ) as {
+      spinLabel: (stroke: string | null, spin: string | null) => string | null;
+    };
+    const { shotSpinLabel } = createLoader().load(
+      "src/components/dashboard/matches/match-detail/film/film-shots.ts",
+    ) as {
+      shotSpinLabel: (shot: {
+        shotType: string | null;
+        spinType: string | null;
+      }) => string | null;
+    };
+    // The same vendor value, on the row the Video tab would draw it on.
+    for (const spin of ["topspin", "flat", "backspin", "sidespin"]) {
+      expect(spinLabel("second_serve", spin)).toBe(
+        shotSpinLabel({ shotType: "Second Serve", spinType: spin }),
+      );
+      expect(spinLabel("backhand", spin)).toBe(
+        shotSpinLabel({ shotType: "Backhand", spinType: spin }),
+      );
+    }
+    expect(spinLabel("first_serve", "topspin")).toBe("Kick");
+    expect(spinLabel("forehand", "topspin")).toBe("Topspin");
+    expect(spinLabel("forehand", null)).toBeNull();
+    expect(spinLabel(null, "sidespin")).toBe("Sidespin");
+  });
 
   // The fixture's return: hit at (1.80, 24.49), landed at (-2.10, 3.49), In.
 

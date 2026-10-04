@@ -48,18 +48,20 @@ export const POINT_COLUMNS: readonly {
 ];
 
 /**
- * The shot tracks — board 08g's `.srw`, with the board's Type, Spin and Speed
+ * The shot tracks — board 08g's `.srw`, with the board's Type and Speed
  * columns dropped for the two positions:
  *
- *   Shot 32 · Time 76 · Player 144 · Stroke 132 · Hit at 124 · Landed at 124 ·
- *   Placement 104 · Result 64 · Status (124px, then the slack) · ✕ 28
+ *   Shot 32 · Time 76 · Player 120 · Stroke 132 · Spin 96 · Hit at 124 ·
+ *   Landed at 124 · Placement 104 · Result 64 · Status (124px, then the
+ *   slack) · ✕ 28
  *
- * with 16px between them. Hit at and Landed at are sized for the longest pair
- * the court can give ("-10.00, 23.77") in the text AND in the editor's field
- * chrome, so a coordinate is never cut. Fixed tracks and gaps come to 1096px.
+ * with 16px between them. Player holds a name alone (no chip). Hit at and
+ * Landed at are sized for the longest pair the court can give
+ * ("-10.00, 23.77") in the text AND in the editor's field chrome, so a
+ * coordinate is never cut. Fixed tracks and gaps come to 1184px.
  */
 export const SHOT_TRACKS =
-  "grid grid-cols-[32px_76px_144px_132px_124px_124px_104px_64px_minmax(124px,1fr)_28px] items-center gap-x-4";
+  "grid grid-cols-[32px_76px_120px_132px_96px_124px_124px_104px_64px_minmax(124px,1fr)_28px] items-center gap-x-4";
 
 /**
  * The shot HEADER's grid, on the fold's own ground. Its padding is the shot
@@ -73,11 +75,11 @@ export const SHOT_GRID = `${SHOT_TRACKS} pr-7 pl-11`;
 export const SHOT_ROW_GRID = `${SHOT_TRACKS} px-[11px]`;
 
 /**
- * The points table's least width: the shot tracks (1096) inside the header's
- * padding (72) is the fold's 1168, the fold overhangs the table's content by
+ * The points table's least width: the shot tracks (1184) inside the header's
+ * padding (72) is the fold's 1256, the fold overhangs the table's content by
  * 16px a side, and the table pads that content by 24px a side.
  */
-export const TABLE_MIN_WIDTH = "min-w-[1184px]";
+export const TABLE_MIN_WIDTH = "min-w-[1272px]";
 
 /** Placement and Result follow the positions; the last track is the ✕. */
 export const SHOT_COLUMNS: readonly string[] = [
@@ -85,6 +87,7 @@ export const SHOT_COLUMNS: readonly string[] = [
   "Time",
   "Player",
   "Stroke",
+  "Spin",
   "Hit at",
   "Landed at",
   "Placement",

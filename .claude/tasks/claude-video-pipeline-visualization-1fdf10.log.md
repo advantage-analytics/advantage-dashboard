@@ -373,3 +373,15 @@ Decisions:
 **follow-ups:**
 
 1. The comparison script does not read spin yet.
+
+## T27 · Shot row: Spin column, no crest, no target icon, DS dropdowns — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Shot rows gain a Spin column (the Video tab's words via `shotSpinLabel`; a dropdown saving `{ spin }`), lose the player chip and the hover crosshair on Placement / Result, and every row dropdown (How it ended, Player, Stroke, Spin) is the DS `MenuSelect` instead of a native select. Table min width is now 1272px. The console's editor-focus hold also matches a menu trigger.
+
+**follow-ups:**
+
+1. `SideMark`'s 22px branch is now unused.
+2. The menu opens with focus on the first row, not the chosen one; arrow navigation lives in `SelectEditor` rather than `FloatMenu`.
+3. Safari does not focus a button on click, so a pointer-opened How it ended menu may not hold follow mode there.

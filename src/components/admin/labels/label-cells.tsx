@@ -5,16 +5,18 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
 } from "react";
-import { AdvSelect } from "@/components/ui/adv-select";
+import { MenuSelect } from "@/components/ui/menu-select";
 import { cn } from "@/lib/utils";
 
 /**
  * The console's editable cells — board 08's `.ms` field.
  *
- * A cell is TEXT until someone reaches for it. The editor (a native select or
- * a text input, in the board's field chrome) mounts only while the cell is
+ * A cell is TEXT until someone reaches for it. The editor (the design
+ * system's menu select or a text input, in the board's field chrome) mounts
+ * only while the cell is
  *   · hovered by a pointer,
  *   · in the selected row (a selected shot shows every field, as `.sel .ms`),
  *   · or being edited — opened from the keyboard (Tab to the cell,
@@ -22,8 +24,13 @@ import { cn } from "@/lib/utils";
  * A table of a hundred points therefore carries no form controls until one is
  * wanted, and a row reads as data, not as a form.
  *
- * Escape cancels: a text draft goes back to the stored value, and a cell
- * opened from the keyboard closes and hands focus back to its text.
+ * Escape cancels: a text draft goes back to the stored value, an open menu
+ * closes, and a cell opened from the keyboard closes and hands focus back to
+ * its text.
+ *
+ * A dropdown's menu is drawn in a portal, outside the cell's DOM (which is
+ * what keeps the table's scroll container from clipping it) but inside its
+ * React tree — so focus moving into the menu is not the cell being left.
  *
  * The editor's text sits exactly where the cell's text sat — the chrome's
  * 10px padding plus 1px border is pulled back out with `-ml-[11px]` — so a
@@ -72,7 +79,7 @@ export function EditableCell({
       textFocused.current = false;
       focusNext.current = null;
       wrapper.current
-        ?.querySelector<HTMLElement>("select, input, textarea")
+        ?.querySelector<HTMLElement>("input, textarea, button")
         ?.focus();
     } else if (!mounted && focusNext.current === "text") {
       focusNext.current = null;
@@ -111,7 +118,9 @@ export function EditableCell({
         if (event.target !== text.current) setEditing(true);
       }}
       onBlur={(event) => {
-        const next = event.relatedTarget as Node | null;
+        const next = event.relatedTarget as Element | null;
+        // Into the dropdown's own menu: still this cell.
+        if (next?.closest?.("[role='menu']")) return;
         if (!next || !wrapper.current?.contains(next)) setEditing(false);
       }}
     >
@@ -139,9 +148,17 @@ export function EditableCell({
   );
 }
 
-/** The board's `.ms` chrome, shared by both editors. */
+/** The board's `.ms` chrome: the text editor's field. */
 const FIELD =
   "-ml-[11px] flex h-[30px] w-[calc(100%+11px)] min-w-0 items-center rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)] transition-colors duration-200 focus-within:border-[var(--blue)]";
+
+/**
+ * The same box on `MenuSelect`'s pill trigger, which already is one (30px,
+ * `--border-field`, `--blue` while open): pulled back over the cell's text
+ * and filling its track, at the row's 13px.
+ */
+const SELECT_TRIGGER =
+  "-ml-[11px] w-[calc(100%+11px)] min-w-0 shrink px-[10px] text-[13px]";
 
 export interface SelectOption {
   value: string;
@@ -149,10 +166,58 @@ export interface SelectOption {
 }
 
 /**
- * A native select in the field chrome. It writes the moment the value
- * changes — there is no confirm step and no Save button. The focus shows as
- * the chrome's border turning `--blue` (the board's `.ms.open`), which is why
- * `AdvSelect`'s `bare` kind opts out of the ring.
+ * A menu's keys, from its trigger or its rows (the menu portals out of the
+ * DOM but its events still bubble here through React): ↓ on the closed
+ * trigger opens it; ↑ ↓ Home End walk the rows. Enter picks and Escape closes
+ * on their own — the row is a button, and the menu's surface owns Escape.
+ */
+function menuKeys(event: KeyboardEvent<HTMLElement>) {
+  const target = event.target as HTMLElement;
+  const menu = target.closest("[role='menu']");
+  if (!menu) {
+    if (
+      event.key === "ArrowDown" &&
+      target.getAttribute("aria-expanded") === "false"
+    ) {
+      event.preventDefault();
+      target.click();
+    }
+    return;
+  }
+  const rows = [...menu.querySelectorAll<HTMLElement>("[role^='menuitem']")];
+  const at = rows.indexOf(target);
+  const next =
+    event.key === "ArrowDown"
+      ? (at + 1) % rows.length
+      : event.key === "ArrowUp"
+        ? (at - 1 + rows.length) % rows.length
+        : event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? rows.length - 1
+            : -1;
+  if (next === -1 || rows.length === 0) return;
+  event.preventDefault();
+  rows[next].focus();
+}
+
+/**
+ * A click in the menu is a pick, not a click on the row the cell sits in: it
+ * reaches that row only through React's tree, where the row cannot tell it
+ * from a click on itself (a point row would fold). The trigger's own click
+ * passes — it is in the row, and selects it.
+ */
+function keepMenuClicks(event: MouseEvent<HTMLElement>) {
+  if (!event.currentTarget.contains(event.target as Node)) {
+    event.stopPropagation();
+  }
+}
+
+/**
+ * The design system's select (`MenuSelect`, a `FloatMenu`) in the field
+ * chrome. It writes the moment a row is picked — there is no confirm step
+ * and no Save button — and never for the row already chosen. A value not set
+ * yet shows an em dash, and no row as chosen.
  */
 export function SelectEditor({
   label,
@@ -166,25 +231,23 @@ export function SelectEditor({
   onChange: (value: string | null) => void;
 }) {
   return (
-    <AdvSelect
-      kind="bare"
-      aria-label={label}
-      value={value ?? ""}
-      onChange={(event) => {
-        const next = event.target.value === "" ? null : event.target.value;
-        if (next !== value) onChange(next);
-      }}
-      wrapperClassName={FIELD}
-      className="h-full min-w-0 truncate pl-[10px] text-[13px] text-[var(--ink-900)]"
-      chevronClassName="right-2.5 size-3 text-[var(--ink-400)]"
+    <span
+      data-select-editor=""
+      className="contents"
+      onClick={keepMenuClicks}
+      onKeyDown={menuKeys}
     >
-      {value === null ? <option value="">—</option> : null}
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </AdvSelect>
+      <MenuSelect
+        label={label}
+        value={value ?? undefined}
+        options={options}
+        onChange={onChange}
+        placeholder="—"
+        align="start"
+        width="trigger"
+        className={SELECT_TRIGGER}
+      />
+    </span>
   );
 }
 
@@ -232,7 +295,7 @@ export function TextEditor({
         type="text"
         aria-label={label}
         aria-invalid={invalid || undefined}
-        // The chrome's border change is the focus indicator, as on the select.
+        // The chrome's border change is the focus indicator.
         data-focus-ring="none"
         value={shown}
         onChange={(event) => setDraft(event.target.value)}

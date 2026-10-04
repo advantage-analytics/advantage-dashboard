@@ -584,7 +584,12 @@ export function LabelConsole({
   function holdOnEditorFocus(event: FocusEvent<HTMLDivElement>) {
     if (held) return;
     const target = event.target as Element;
-    if (!target.closest("input, select, textarea, [contenteditable='true']"))
+    // A dropdown's trigger is a button (`SelectEditor`), not a form control.
+    if (
+      !target.closest(
+        "input, select, textarea, [data-select-editor] button, [contenteditable='true']",
+      )
+    )
       return;
     if (!target.closest("[data-point-id]")) return;
     holdPoint(openPointId);

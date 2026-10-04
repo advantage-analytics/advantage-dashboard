@@ -1,6 +1,6 @@
 "use client";
 
-import { Crosshair, X } from "lucide-react";
+import { X } from "lucide-react";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { StatePill } from "@/components/ui/state-pill";
 import {
@@ -39,6 +39,8 @@ import {
   formatVideoTime,
   parseCourtPoint,
   parseVideoTime,
+  spinLabel,
+  spinOptions,
   type SideNames,
 } from "./label-format";
 import {
@@ -47,7 +49,6 @@ import {
   PLAYING_WASH,
   ResetRowButton,
   RowNumber,
-  SideMark,
   UndoButton,
   sideLabel,
   type EditContext,
@@ -59,16 +60,17 @@ import { SHOT_ROW_GRID } from "./label-table-layout";
  *
  * The strokes sit in one bordered card folded under their point, on the
  * fold's grey ground: 40px rows split by hairlines, the stroke's number and
- * time in mono, a 22px player chip (the point row's winner mark, smaller)
- * beside the hitter's name.
+ * time in mono, the hitter by name alone.
  *
- * Left to right: Shot · Time · Player · Stroke · Hit at · Landed at ·
- * Placement · Result · Status · the row's ✕. Time, Player, Stroke and the two
- * positions are `EditableCell`s — text until hovered, selected or opened from
- * the keyboard. PLACEMENT and RESULT are never typed or picked: they follow
- * the two positions (`shot-derived.ts`), so they are plain text with a small
- * aim glyph and a tooltip saying so, and a typed position sends the result it
- * derives in the same patch (`positionPatch`), exactly as a court click does.
+ * Left to right: Shot · Time · Player · Stroke · Spin · Hit at · Landed at ·
+ * Placement · Result · Status · the row's ✕. Time, Player, Stroke, Spin and
+ * the two positions are `EditableCell`s — text until hovered, selected or
+ * opened from the keyboard; Player, Stroke and Spin open the design system's
+ * menu. SPIN is in the match Video tab's words (`spinLabel`). PLACEMENT and
+ * RESULT are never typed or picked: they follow the two positions
+ * (`shot-derived.ts`), so they are plain, quieter text, and a typed position
+ * sends the result it derives in the same patch (`positionPatch`), exactly as
+ * a court click does.
  *
  * A FAULT — a serve that did not go in — is muted to `--ink-500` and says
  * "Fault" in its Status cell: it is part of the point, but not of the rally.
@@ -150,8 +152,6 @@ export function positionPatch(
   const result = deriveShotResult({ ...labelShotValues(shot), ...placed });
   return result === null ? placed : { ...placed, result };
 }
-
-const CALCULATED_HINT = "Set by where the shot was hit and where it landed";
 
 function sideOptions(names: SideNames): SelectOption[] {
   return [
@@ -248,25 +248,14 @@ export function ShotRow({
           />
         }
       />
-      {/* The chip keeps 14px clear of the name: the editor's chrome reaches
-          11px back from its text, and must not run under the chip. */}
-      <span className="flex min-w-0 items-center gap-3.5">
-        <SideMark
-          side={shot.hitter}
-          names={names}
-          size={22}
-          attr="data-player-mark"
-        />
-        <ShotSelectCell
-          {...cell}
-          className="flex-1"
-          label={`Shot ${number} player`}
-          value={shot.hitter}
-          text={sideLabel(shot.hitter, names)}
-          options={sideOptions(names)}
-          onChange={(value) => patch({ hitter: value as LabelSide | null })}
-        />
-      </span>
+      <ShotSelectCell
+        {...cell}
+        label={`Shot ${number} player`}
+        value={shot.hitter}
+        text={sideLabel(shot.hitter, names)}
+        options={sideOptions(names)}
+        onChange={(value) => patch({ hitter: value as LabelSide | null })}
+      />
       <ShotSelectCell
         {...cell}
         label={`Shot ${number} stroke`}
@@ -276,6 +265,14 @@ export function ShotRow({
         onChange={(value) =>
           patch({ stroke: value as LabelShotPatch["stroke"] })
         }
+      />
+      <ShotSelectCell
+        {...cell}
+        label={`Shot ${number} spin`}
+        value={shot.spin}
+        text={spinLabel(shot.stroke, shot.spin)}
+        options={spinOptions(shot.stroke)}
+        onChange={(value) => patch({ spin: value as LabelShotPatch["spin"] })}
       />
       <PositionCell
         {...cell}
@@ -289,10 +286,10 @@ export function ShotRow({
         text={formatCourtPoint(shot.landingX, shot.landingY)}
         onCommit={(p) => patch(positionPatch(shot, "landing", p))}
       />
-      <CalculatedCell name="placement" revealed={selected} muted={fault}>
+      <CalculatedCell name="placement" muted={fault}>
         {placement ?? <EmptyMark label="No placement" />}
       </CalculatedCell>
-      <CalculatedCell name="result" revealed={selected} muted={fault}>
+      <CalculatedCell name="result" muted={fault}>
         {shot.result ? (
           RESULT_LABEL[shot.result]
         ) : (
@@ -367,6 +364,7 @@ export function DeletedShot({
           <Ghost className="font-mono text-[12px]">{time}</Ghost>
           <Ghost>{sideLabel(shot.hitter, names)}</Ghost>
           <Ghost>{shot.stroke ? STROKE_LABEL[shot.stroke] : null}</Ghost>
+          <Ghost>{spinLabel(shot.stroke, shot.spin)}</Ghost>
           <Ghost>{formatCourtPoint(shot.contactX, shot.contactY)}</Ghost>
           <Ghost>{formatCourtPoint(shot.landingX, shot.landingY)}</Ghost>
           <Ghost className="text-[12px]">
@@ -445,45 +443,28 @@ function Value({ children }: { children: React.ReactNode }) {
 
 /**
  * A value nobody types: it follows the stroke's two positions. Quieter than
- * an editable value (12px, `--ink-600`), never a control — and on the row
- * being hovered or selected, where a labeller would reach to change it, an
- * aim glyph appears after it; the tooltip says what sets it.
+ * an editable value (12px, `--ink-600`) and never a control.
  */
 function CalculatedCell({
   name,
-  revealed,
   muted,
   children,
 }: {
   name: "placement" | "result";
-  revealed: boolean;
   /** A fault row: the row's own muted ink, not this cell's. */
   muted: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          data-calculated={name}
-          className={cn(
-            "flex min-w-0 items-center gap-1 justify-self-start text-[12px] whitespace-nowrap",
-            !muted && "text-[var(--ink-600)]",
-          )}
-        >
-          {children}
-          <Crosshair
-            className={cn(
-              "size-[11px] shrink-0 text-[var(--ink-400)] transition-opacity duration-200 group-hover/row:opacity-100",
-              revealed ? "opacity-100" : "opacity-0",
-            )}
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top">{CALCULATED_HINT}</TooltipContent>
-    </Tooltip>
+    <span
+      data-calculated={name}
+      className={cn(
+        "min-w-0 justify-self-start text-[12px] whitespace-nowrap",
+        !muted && "text-[var(--ink-600)]",
+      )}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -495,7 +476,6 @@ function ShotSelectCell({
   text,
   options,
   onChange,
-  className,
 }: {
   editable: boolean;
   rowSelected: boolean;
@@ -504,13 +484,11 @@ function ShotSelectCell({
   text: string | null;
   options: readonly SelectOption[];
   onChange: (value: string | null) => void;
-  className?: string;
 }) {
   return (
     <EditableCell
       editable={editable}
       rowSelected={rowSelected}
-      className={className}
       label={label}
       valueText={text ?? "Not set"}
       display={<Value>{text}</Value>}
