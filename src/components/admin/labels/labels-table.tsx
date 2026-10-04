@@ -11,6 +11,29 @@ import {
 } from "@/components/admin/labels/labels-table-layout";
 
 /**
+ * A job's completion instant as date + time, e.g. "Oct 3, 2026, 2:14 PM UTC".
+ *
+ * UTC, with the zone named — the same fixed-zone rule as `formatWindowClose`
+ * and `formatPilotEnd`. `toLocaleString` reads the runtime's own zone, so the
+ * server render and the admin's browser would disagree and trip hydration. A
+ * null or unparseable timestamp returns null so the caller draws `EmptyMark`
+ * rather than "Invalid Date".
+ */
+function formatCompletedAt(iso: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(date)} UTC`;
+}
+
+/**
  * The Admin › Labels list — every completed Advantage Intelligence job an
  * admin could hand-label, T4.
  *
@@ -26,7 +49,7 @@ import {
 export function LabelsTable({ rows }: { rows: readonly LabelJobRow[] }) {
   return (
     <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="min-w-[640px] px-6 pt-0.5 pb-1.5">
+      <div className="min-w-[808px] px-6 pt-0.5 pb-1.5">
         <div
           className={cn(
             ROW,
@@ -55,6 +78,7 @@ export function LabelsTable({ rows }: { rows: readonly LabelJobRow[] }) {
 }
 
 function LabelJobRowView({ row }: { row: LabelJobRow }) {
+  const completedAt = formatCompletedAt(row.completedAt);
   return (
     <div className={cn(ROW, "-mx-4 min-h-[52px] px-4 py-2")}>
       {/* Match — both players, no crest: a job has no program to draw one
@@ -62,6 +86,24 @@ function LabelJobRowView({ row }: { row: LabelJobRow }) {
       <span className={cn(COL.players, "flex min-w-0 flex-col justify-center")}>
         <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
           {row.player1Name} vs {row.player2Name}
+        </span>
+      </span>
+
+      {/* Job — two jobs can cover the same players, so the completion time
+          and the first 8 characters of the job id are what tell them apart. */}
+      <span className={cn(COL.job, "flex min-w-0 flex-col justify-center")}>
+        {completedAt ? (
+          <time
+            dateTime={row.completedAt ?? undefined}
+            className="tabular truncate text-[12px] text-[var(--ink-700)]"
+          >
+            {completedAt}
+          </time>
+        ) : (
+          <EmptyMark label="No completion time" />
+        )}
+        <span className="font-mono text-[11px] text-[var(--ink-500)]">
+          {row.jobId.slice(0, 8)}
         </span>
       </span>
 

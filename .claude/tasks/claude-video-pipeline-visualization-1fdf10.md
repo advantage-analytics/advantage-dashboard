@@ -254,7 +254,7 @@ ready).
 
 ## T18 · Tell duplicate jobs apart on the Labels list
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/admin/labels/labels-table.tsx, src/components/admin/labels/labels-table-layout.ts, tests/labels-table.spec.ts (guess)
 - **routes:** /admin/labels

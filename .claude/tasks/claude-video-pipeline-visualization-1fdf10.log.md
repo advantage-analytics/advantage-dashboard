@@ -274,3 +274,13 @@ Decisions:
 1. After a landing click the card cycles back to the contact half, so the mark just placed leaves the screen; staying on Landing may be better.
 2. The minimised video pill's size is approximated (176×36) for overlap avoidance.
 3. The board's placement preview in the subtitle was left out; pills have no drag handle.
+
+## T18 · Tell duplicate jobs apart on the Labels list — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** The Labels list gains a Job column: the job's completion date and time (UTC) over the first 8 characters of its id in mono, with an empty mark when there is no completion time. New `tests/labels-table.spec.ts`.
+
+**follow-ups:**
+
+1. The full job id is no longer reachable from the list; a copy-id control would fix that.
