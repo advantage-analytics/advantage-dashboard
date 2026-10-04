@@ -215,3 +215,15 @@ Decisions:
 2. An edited, unchecked point has no row ✓; it is checked from the footer.
 3. Click-to-seek on Time; Split point / Add point before; 22px marks in the winner menu.
 4. No spec covers the note revert on a failed save.
+
+## T13 · Extract the shot row and redesign it to 08g — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Shot rows moved to `label-shot-row.tsx` (table file now ~200 lines) and drawn in a bordered card under the point: Shot · Time · Player (22px chip) · Stroke · Hit at · Landed at · Placement · Result · Status · ✕, with 124px coordinate tracks so values show whole. Result and Placement are calculated text (no select); a typed coordinate sends one patch with the derived `result`. Serves that are out or net read as muted Fault rows. `WinnerMark` moved to `label-row-parts.tsx` as `SideMark`.
+
+**follow-ups:**
+
+1. The shot header is still rendered by the point row, above the card; moving it into `ShotRows` would let the calculated-column glyph sit on the header as the board draws it.
+2. `nextPlacement` and `positionPatch` share derive-and-merge logic.
+3. Table min width is now 1184px.

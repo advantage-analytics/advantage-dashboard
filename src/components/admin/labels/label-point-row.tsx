@@ -43,7 +43,9 @@ import {
   PLAYING_WASH,
   ResetRowButton,
   RowNumber,
+  SideMark as WinnerMark,
   UndoButton,
+  sideInitial,
   type EditContext,
   type LabelRowOperations,
 } from "./label-row-parts";
@@ -256,42 +258,6 @@ export function pointSummary(point: Pick<LabelPoint, "shots">): {
 }
 
 // ── The winner mark ────────────────────────────────────────────────────────
-
-/** The chip's letter: the side's cell label's first character. */
-function sideInitial(side: LabelSide, names: SideNames): string {
-  return names[side].trim().charAt(0).toUpperCase();
-}
-
-/**
- * Board 08g's `.mk.s30`: a 30px square carrying the winner's initial — p1 on
- * `--blue` with white text, p2 on `--surface-subtle` inside a hairline. Two
- * grounds, not two hues: down a column of marks the blue squares are one
- * player and the grey ones the other, before a letter is read. A point with
- * no winner yet is an empty hairline square with a dash.
- */
-function WinnerMark({
-  side,
-  names,
-}: {
-  side: LabelSide | null;
-  names: SideNames;
-}) {
-  return (
-    <span
-      data-winner-mark={side ?? "none"}
-      aria-hidden="true"
-      className={cn(
-        "flex size-[30px] shrink-0 items-center justify-center rounded-[var(--radius-button)] text-[11px] leading-none font-medium tracking-[0.3px]",
-        side === "p1"
-          ? "bg-[var(--blue)] text-white"
-          : "text-[var(--ink-700)] shadow-[inset_0_0_0_1px_var(--border-hairline)]",
-        side === "p2" && "bg-[var(--surface-subtle)]",
-      )}
-    >
-      {side ? sideInitial(side, names) : "—"}
-    </span>
-  );
-}
 
 const SIDES: readonly LabelSide[] = ["p1", "p2"];
 

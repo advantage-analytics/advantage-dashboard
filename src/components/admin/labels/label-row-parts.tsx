@@ -15,8 +15,8 @@ import type { SideNames } from "./label-format";
  * What the points table's two kinds of row share: the context every row
  * draws and saves from, the requests a row can make of the console, and the
  * small controls both a point row (`label-point-row.tsx`) and a stroke row
- * (`label-points-table.tsx`) carry. It imports neither, so the two can import
- * it — and the table the point row — without a cycle.
+ * (`label-shot-row.tsx`) carry. It imports neither, so the two can import
+ * it — and the table both — without a cycle.
  */
 
 /**
@@ -85,7 +85,8 @@ export function DeletedMarker({
       data-tombstone-id={id}
       className={cn(
         "flex h-7 items-center",
-        kind === "shot" ? "pr-4 pl-11" : "",
+        // A shot's marker sits in the shot card, at a row's own padding.
+        kind === "shot" ? "px-[11px]" : "",
       )}
     >
       <button
@@ -257,6 +258,51 @@ export function RowNumber({
           <span className="sr-only">, playing</span>
         </>
       ) : null}
+    </span>
+  );
+}
+
+/** A side's chip letter: its cell label's first character. */
+export function sideInitial(side: LabelSide, names: SideNames): string {
+  return names[side].trim().charAt(0).toUpperCase();
+}
+
+/**
+ * Board 08g's `.mk`: a square carrying a player's initial — p1 on `--blue`
+ * with white text, p2 on `--surface-subtle` inside a hairline. Two grounds,
+ * not two hues: down a column of marks the blue squares are one player and
+ * the grey ones the other, before a letter is read. No side yet is an empty
+ * hairline square with a dash.
+ *
+ * At 30px (`.mk.s30`) it is the point row's WINNER mark; at 22px it is the
+ * hitter's chip beside a stroke's player name — the same chip, so a player is
+ * one colour all the way down the table. `attr` names what the mark says.
+ */
+export function SideMark({
+  side,
+  names,
+  size = 30,
+  attr = "data-winner-mark",
+}: {
+  side: LabelSide | null;
+  names: SideNames;
+  size?: 30 | 22;
+  attr?: "data-winner-mark" | "data-player-mark";
+}) {
+  return (
+    <span
+      {...{ [attr]: side ?? "none" }}
+      aria-hidden="true"
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-[var(--radius-button)] leading-none font-medium tracking-[0.3px]",
+        size === 30 ? "size-[30px] text-[11px]" : "size-[22px] text-[10px]",
+        side === "p1"
+          ? "bg-[var(--blue)] text-white"
+          : "text-[var(--ink-700)] shadow-[inset_0_0_0_1px_var(--border-hairline)]",
+        side === "p2" && "bg-[var(--surface-subtle)]",
+      )}
+    >
+      {side ? sideInitial(side, names) : "—"}
     </span>
   );
 }

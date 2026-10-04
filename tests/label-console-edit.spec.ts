@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import * as React from "react";
 
 import { toCourt } from "@/components/admin/labels/court-geometry";
 import {
@@ -19,7 +20,15 @@ import {
   saveStatusView,
   type SaveEvent,
 } from "@/components/admin/labels/save-status";
+import type { LabelShotPatch } from "@/lib/services/labels/edit";
+import { labelScores } from "@/lib/services/labels/score";
+import type { LabelShot } from "@/lib/services/labels/session";
 import type { ShotGeometry } from "@/lib/services/labels/shot-derived";
+import {
+  FIXTURE_POINT_IDS,
+  labelSessionFixture,
+} from "./fixtures/label-session";
+import { createLoader } from "./fixtures/vm-modules";
 
 /**
  * T6's client-side pure pieces: the court's click sequence and its prompt,
@@ -199,5 +208,115 @@ test.describe("cell text", () => {
     for (const bad of ["1.2", "1, 2, 3", "x, 2", "1e3, 2"]) {
       expect(parseCourtPoint(bad), bad).toBeUndefined();
     }
+  });
+});
+
+test.describe("a typed position (T13)", () => {
+  type Props = Record<string, unknown>;
+  type Element = React.ReactElement<Props & { children?: React.ReactNode }>;
+
+  /**
+   * Every element under `node`, components included. A component that needs
+   * hooks (an `EditableCell`, a tooltip root) cannot run outside a render, so
+   * its children are walked in its place — and its `editor`, which is where
+   * a cell keeps the input it mounts.
+   */
+  function elements(node: React.ReactNode, out: Element[] = []): Element[] {
+    if (Array.isArray(node)) {
+      for (const child of node) elements(child, out);
+      return out;
+    }
+    if (!React.isValidElement(node)) return out;
+    const element = node as Element;
+    out.push(element);
+    if (typeof element.type === "function") {
+      const error = console.error;
+      console.error = () => {};
+      try {
+        const render = element.type as (p: Props) => React.ReactNode;
+        return elements(render(element.props), out);
+      } catch {
+        elements(element.props.editor as React.ReactNode, out);
+      } finally {
+        console.error = error;
+      }
+    }
+    return elements(element.props.children, out);
+  }
+
+  /** The open point's table, and every patch its rows send. */
+  function table() {
+    const { LabelPointsTableView } = createLoader().load(
+      "src/components/admin/labels/label-points-table.tsx",
+    ) as { LabelPointsTableView: (p: Props) => React.ReactNode };
+    const session = labelSessionFixture();
+    const patches: [string, LabelShotPatch][] = [];
+    const tree = LabelPointsTableView({
+      points: session.points,
+      scores: labelScores(session.points, session.adScoring).points,
+      names: { p1: "Lee", p2: "Vargas" },
+      expandedPointId: FIXTURE_POINT_IDS.P1,
+      editable: true,
+      onPatchShot: (id: string, patch: LabelShotPatch) =>
+        patches.push([id, patch]),
+    });
+    /** Type `value` into the position input named `label`, and commit. */
+    const type = (label: string, value: { x: number; y: number } | null) => {
+      const input = elements(tree).find(
+        (el) => el.props.label === `${label}, metres x, y`,
+      );
+      expect(input, label).toBeDefined();
+      (input!.props.onCommit as (v: unknown) => void)(value);
+    };
+    return { patches, type };
+  }
+
+  // The fixture's return: hit at (1.80, 24.49), landed at (-2.10, 3.49), In.
+
+  test("Hit at sends the contact and the result it now derives, in one patch", () => {
+    const { patches, type } = table();
+    // Hit from the landing's own side of the net: it never crossed.
+    type("Shot 2 hit at", { x: 1.8, y: 1 });
+    expect(patches).toEqual([
+      ["s-return", { contact_x: 1.8, contact_y: 1, result: "net" }],
+    ]);
+  });
+
+  test("Landed at sends the landing and the result it now derives, in one patch", () => {
+    const { patches, type } = table();
+    // Past the singles sideline.
+    type("Shot 2 landed at", { x: -5, y: 3.49 });
+    expect(patches).toEqual([
+      ["s-return", { landing_x: -5, landing_y: 3.49, result: "out" }],
+    ]);
+  });
+
+  test("the result is deriveShotResult of the row after the edit", () => {
+    const { positionPatch } = createLoader().load(
+      "src/components/admin/labels/label-shot-row.tsx",
+    ) as {
+      positionPatch: (
+        shot: LabelShot,
+        end: "contact" | "landing",
+        point: { x: number; y: number } | null,
+      ) => LabelShotPatch;
+    };
+    const shots = labelSessionFixture().points.flatMap((p) => p.shots);
+    const serve = shots.find((shot) => shot.id === "s-serve")!;
+    // The stroke decides: 20.0 m deep is long for a serve…
+    expect(positionPatch(serve, "landing", { x: 0.6, y: 20 })).toEqual({
+      landing_x: 0.6,
+      landing_y: 20,
+      result: "out",
+    });
+    // …and in for the return, whose contact is on the far side.
+    const back = shots.find((shot) => shot.id === "s-return")!;
+    expect(positionPatch(back, "landing", { x: 0.6, y: 2 }).result).toBe("in");
+    // A cleared end leaves nothing to derive from: no `result` key, so the
+    // stored value stands — the court click's own rule.
+    expect(positionPatch(back, "landing", null)).toEqual({
+      landing_x: null,
+      landing_y: null,
+    });
   });
 });

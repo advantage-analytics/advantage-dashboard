@@ -180,7 +180,7 @@ ready).
 
 ## T13 · Extract the shot row and redesign it to 08g
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T11
 - **files:** src/components/admin/labels/label-shot-row.tsx (new), src/components/admin/labels/label-points-table.tsx, src/components/admin/labels/label-table-layout.ts, tests/label-console.spec.ts, tests/label-console-edit.spec.ts (guess)

@@ -106,14 +106,135 @@ test("an expanded point folds its shots out in video order", () => {
   const ids = [...panel.matchAll(/data-shot-id="([^"]+)"/g)].map((m) => m[1]);
   expect(ids).toEqual(["s-serve", "s-return", "s-added"]);
   const panelText = text(panel);
-  expect(panelText).toMatch(
-    /1 41:12\.0 Lee First serve In -0\.80, -0\.32 0\.60, 17\.79/,
+  // Shot · time · player chip and name · stroke · hit at · landed at ·
+  // placement · result · status. There is no Type, Spin or Speed column.
+  expect(panelText).toContain(
+    "Shot Time Player Stroke Hit at Landed at Placement Result Status 1 ",
   );
-  expect(panelText).toMatch(/2 41:13\.1 Vargas Backhand In .* Edited/);
-  expect(panelText).toMatch(/3 41:14\.4 Lee Forehand Out .* Added/);
+  expect(panelText).toContain(
+    "1 41:12.0 L Lee First serve -0.80, -0.32 0.60, 17.79 T In 2 ",
+  );
+  expect(panelText).toContain(
+    "2 41:13.1 V Vargas Backhand 1.80, 24.49 -2.10, 3.49 Crosscourt In Edited",
+  );
+  expect(panelText).toContain(
+    "3 41:14.4 L Lee Forehand -2.30, -1.02 4.20, 24.90 Crosscourt Out Added",
+  );
   expect(panelText.indexOf("Deleted shot")).toBeLessThan(
     panelText.indexOf("41:14.4"),
   );
+});
+
+test("shot columns: the two positions, whole, and nothing typed for Result", () => {
+  const { SHOT_COLUMNS, SHOT_TRACKS } = createLoader().load(
+    "src/components/admin/labels/label-table-layout.ts",
+  ) as { SHOT_COLUMNS: readonly string[]; SHOT_TRACKS: string };
+  // The last, unlabelled track is the row's ✕.
+  expect(SHOT_COLUMNS).toEqual([
+    "Shot",
+    "Time",
+    "Player",
+    "Stroke",
+    "Hit at",
+    "Landed at",
+    "Placement",
+    "Result",
+    "Status",
+    "",
+  ]);
+  for (const gone of ["Type", "Spin", "Speed"]) {
+    expect(SHOT_COLUMNS.join(" ")).not.toContain(gone);
+  }
+  // One track per column, and the two positions at least 112px wide.
+  const tracks = /grid-cols-\[([^\]]+)\]/.exec(SHOT_TRACKS)![1].split("_");
+  expect(tracks).toHaveLength(SHOT_COLUMNS.length);
+  for (const name of ["Hit at", "Landed at"]) {
+    const track = tracks[SHOT_COLUMNS.indexOf(name)];
+    expect(track, name).toMatch(/^\d+px$/);
+    expect(parseInt(track, 10), name).toBeGreaterThanOrEqual(112);
+  }
+
+  // A wide pair is in the markup whole — as text, and in the editor.
+  // A copy: the fixture's rows are shared between calls.
+  const session = structuredClone(labelSessionFixture());
+  const serve = session.points
+    .flatMap((point) => point.shots)
+    .find((shot) => shot.id === "s-serve")!;
+  Object.assign(serve, { contactX: -3.21, contactY: 18.4 });
+  const asText = render({
+    session,
+    video: null,
+    initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+  });
+  expect(rowMarkup(asText, 'data-shot-id="s-serve"')).toContain(
+    ">-3.21, 18.40<",
+  );
+  const editing = rowMarkup(
+    render({
+      session,
+      video: null,
+      initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      initialSelectedShotId: "s-serve",
+      ...SAVES,
+    }),
+    'data-shot-id="s-serve"',
+  );
+  expect(editing).toMatch(
+    /<input[^>]*aria-label="Shot 1 hit at, metres x, y"[^>]*value="-3\.21, 18\.40"/,
+  );
+});
+
+test("shot rows: a card of strokes, the hitter's chip, calculated cells, faults", () => {
+  const session = structuredClone(labelSessionFixture());
+  const shots = session.points.flatMap((point) => point.shots);
+  // The serve goes long, and the return has not been placed.
+  Object.assign(
+    shots.find((shot) => shot.id === "s-serve")!,
+    {
+      result: "out",
+    },
+  );
+  Object.assign(
+    shots.find((shot) => shot.id === "s-return")!,
+    {
+      landingX: null,
+      landingY: null,
+      result: null,
+    },
+  );
+  const html = render({
+    session,
+    video: null,
+    initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+  });
+  const panel = shotPanel(html, FIXTURE_POINT_IDS.P1);
+  // One bordered card holds every stroke row.
+  expect(count(panel, /data-shot-card/g)).toBe(1);
+  expect(panel.indexOf("data-shot-card")).toBeLessThan(
+    panel.indexOf('data-row="shot"'),
+  );
+
+  // The player chip is the winner mark at 22px, in the same two grounds —
+  // and is not counted as a winner mark.
+  const serve = rowMarkup(html, 'data-shot-id="s-serve"');
+  expect(serve).toMatch(
+    /data-player-mark="p1"[^>]*size-\[22px\][^>]*bg-\[var\(--blue\)\]/,
+  );
+  expect(rowMarkup(html, 'data-shot-id="s-return"')).toMatch(
+    /data-player-mark="p2"[^>]*bg-\[var\(--surface-subtle\)\]/,
+  );
+  expect(count(panel, /data-winner-mark/g)).toBe(0);
+
+  // A serve that did not go in is muted, and says so.
+  expect(serve).toContain("data-fault");
+  expect(serve).toContain("text-[var(--ink-500)]");
+  expect(text(serve)).toMatch(/T Out Fault/);
+  expect(rowMarkup(html, 'data-shot-id="s-added"')).not.toContain("data-fault");
+
+  // Unplaced: Placement and Result are an em dash, never a guess.
+  const unplaced = rowMarkup(html, 'data-shot-id="s-return"');
+  expect(unplaced).toMatch(/data-calculated="placement"[^>]*><span[^>]*>—</);
+  expect(unplaced).toMatch(/data-calculated="result"[^>]*><span[^>]*>—</);
 });
 
 test("point rows: who won, then the point, how it ended, its note and status", () => {
@@ -432,7 +553,9 @@ test.describe("editing (T6)", () => {
     expect(html).toContain('aria-label="Shot 2 stroke: Backhand"');
     expect(html).toContain('aria-label="Shot 1 hit at: -0.80, -0.32"');
     expect(count(html, /role="button" tabindex="0"/g)).toBeGreaterThanOrEqual(
-      3 * 2 + 3 * 6,
+      // Two per point (ending, note); five per stroke — time, player,
+      // stroke, hit at, landed at. Placement and Result are not stops.
+      3 * 2 + 3 * 5,
     );
   });
 
@@ -446,9 +569,13 @@ test.describe("editing (T6)", () => {
     });
     const selected = rowMarkup(html, 'data-shot-id="s-return"');
     expect(selected).toContain("data-selected");
-    // Player, stroke, result as selects; time, hit at, landed at as inputs.
-    expect(count(selected, /<select/g)).toBe(3);
+    // Player and stroke as selects; time, hit at, landed at as inputs. The
+    // result follows the coordinates: it is text, never a select.
+    expect(count(selected, /<select/g)).toBe(2);
     expect(count(selected, /<input/g)).toBe(3);
+    expect(selected).not.toContain('aria-label="Shot 2 result"');
+    expect(selected).toMatch(/data-calculated="result"[^>]*>In</);
+    expect(selected).toMatch(/data-calculated="placement"[^>]*>Crosscourt</);
     expect(selected).toContain('aria-label="Shot 2 stroke"');
     expect(selected).toMatch(/<option value="backhand" selected="">/);
 
@@ -460,7 +587,7 @@ test.describe("editing (T6)", () => {
         EDITORS,
       ),
     ).toBe(0);
-    expect(count(html, EDITORS)).toBe(6);
+    expect(count(html, EDITORS)).toBe(5);
   });
 
   test("the court asks where the selected stroke was hit", () => {
@@ -583,7 +710,7 @@ test.describe("the playing row", () => {
     const playing = rowMarkup(html, 'data-shot-id="s-return"');
     expect(playing).toContain('data-playing="true"');
     expect(playing).toContain("data-playing-mark");
-    expect(text(playing)).toContain("2 , playing 41:13.1 Vargas");
+    expect(text(playing)).toContain("2 , playing 41:13.1 V Vargas");
     expect(rowMarkup(html, 'data-shot-id="s-serve"')).not.toContain(
       "data-playing",
     );

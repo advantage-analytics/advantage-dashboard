@@ -386,7 +386,7 @@ test.describe("tombstones", () => {
     );
     const ghostShot = after(open, 'data-ghost-id="s-phantom"');
     expect(text(ghostShot)).toMatch(
-      /^– 41:13\.6 Lee Forehand — — — Not a stroke Undo/,
+      /^– 41:13\.6 Lee Forehand — — — — Not a stroke Undo/,
     );
     expect(open).toMatch(
       /data-ghost-id="s-phantom"[^>]*>(?:(?!data-row=)[\s\S])*line-through/,

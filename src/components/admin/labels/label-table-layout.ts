@@ -1,6 +1,6 @@
 /**
  * The labelling console's two grids — board 08g's `.pr` (point) and board
- * 08's `.srow` (shot) tracks.
+ * 08g's `.srw` (shot) tracks.
  *
  * A point row reads left to right as the board does: the fold caret, WHO WON
  * (the winner mark leads — it is the one thing a labeller scans the column
@@ -47,17 +47,48 @@ export const POINT_COLUMNS: readonly {
   { label: "" },
 ];
 
-/** Shots indent under their point: 44px, the board's `.srow` left padding. */
-export const SHOT_GRID =
-  "grid grid-cols-[32px_76px_96px_128px_64px_112px_112px_minmax(0,1fr)] items-center gap-x-3 pr-4 pl-11";
+/**
+ * The shot tracks — board 08g's `.srw`, with the board's Type, Spin and Speed
+ * columns dropped for the two positions:
+ *
+ *   Shot 32 · Time 76 · Player 144 · Stroke 132 · Hit at 124 · Landed at 124 ·
+ *   Placement 104 · Result 64 · Status (124px, then the slack) · ✕ 28
+ *
+ * with 16px between them. Hit at and Landed at are sized for the longest pair
+ * the court can give ("-10.00, 23.77") in the text AND in the editor's field
+ * chrome, so a coordinate is never cut. Fixed tracks and gaps come to 1096px.
+ */
+export const SHOT_TRACKS =
+  "grid grid-cols-[32px_76px_144px_132px_124px_124px_104px_64px_minmax(124px,1fr)_28px] items-center gap-x-4";
 
+/**
+ * The shot HEADER's grid, on the fold's own ground. Its padding is the shot
+ * card's inset plus the card's border plus a row's padding — 32 + 1 + 11 on
+ * the left, 16 + 1 + 11 on the right — so each label sits over its column in
+ * the card (`label-shot-row.tsx`).
+ */
+export const SHOT_GRID = `${SHOT_TRACKS} pr-7 pl-11`;
+
+/** A shot ROW's grid, inside the card. */
+export const SHOT_ROW_GRID = `${SHOT_TRACKS} px-[11px]`;
+
+/**
+ * The points table's least width: the shot tracks (1096) inside the header's
+ * padding (72) is the fold's 1168, the fold overhangs the table's content by
+ * 16px a side, and the table pads that content by 24px a side.
+ */
+export const TABLE_MIN_WIDTH = "min-w-[1184px]";
+
+/** Placement and Result follow the positions; the last track is the ✕. */
 export const SHOT_COLUMNS: readonly string[] = [
   "Shot",
   "Time",
   "Player",
   "Stroke",
-  "Result",
   "Hit at",
   "Landed at",
+  "Placement",
+  "Result",
   "Status",
+  "",
 ];
