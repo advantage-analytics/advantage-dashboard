@@ -180,3 +180,14 @@ Decisions:
 **follow-ups:**
 
 1. Seeding never writes `label_sessions.ad_scoring`; the loader falls back to the job's value.
+
+## T10 · Game operations: set a game's server, set a game's type — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New pure `game-operations.ts` (`planGameServer`, `planGameType`, `applyGameWrites`; 1-2-2 tiebreak rotation, lets take the next served point's server) and `game-operations-session.ts` (`setLabelGameServer`, `setLabelGameType`: admin-gated, open session only, UPDATEs on `label_points` with compare-and-set on `updated_at`), wrapped in `actions.ts`, with `tests/label-game-operations.spec.ts` (24 tests). A point with no winner yet still takes a serve turn in the rotation.
+
+**follow-ups:**
+
+1. A game write is one UPDATE per row with no transaction; a failure midway leaves a partly rotated game (each row consistent on its own).
+2. Moving a point into a tiebreak uses the majority-server rule, which is wrong for a rotated game; re-run the rotation after such a move.

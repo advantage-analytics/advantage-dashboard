@@ -138,7 +138,7 @@ ready).
 
 ## T10 · Game operations: set a game's server, set a game's type
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T9
 - **files:** src/lib/services/labels/game-operations.ts, src/lib/services/labels/game-operations-session.ts, src/app/admin/labels/actions.ts, tests/label-game-operations.spec.ts (guess)

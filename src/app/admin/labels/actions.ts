@@ -29,7 +29,13 @@ import {
   resetLabelPoint,
   resetLabelShot,
 } from "@/lib/services/labels/reset-session";
+import {
+  setLabelGameServer,
+  setLabelGameType,
+  type LabelGameWriteResult,
+} from "@/lib/services/labels/game-operations-session";
 import type { LabelGame } from "@/lib/services/labels/operations";
+import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
 
 /**
  * Start a hand-labelling session for an Advantage Intelligence job, or reopen
@@ -120,6 +126,32 @@ export async function moveLabelPointAction(
   switchServer: boolean,
 ): Promise<LabelMovePointResult> {
   return moveLabelPoint(pointId, to, switchServer);
+}
+
+/**
+ * Set who serves game `game` of the session: every live point of the game
+ * gets `server` — in a tiebreak, `server` serves point 1 and the rest follow
+ * the 1-2-2 rotation. Returns each point as it now stands.
+ */
+export async function setLabelGameServerAction(
+  sessionId: string,
+  game: LabelGame,
+  server: LabelSide,
+): Promise<LabelGameWriteResult> {
+  return setLabelGameServer(sessionId, game, server);
+}
+
+/**
+ * Make game `game` of the session a `type` (game, tiebreak or match
+ * tiebreak), re-rotating its servers from the game's current first server.
+ * Returns each point as it now stands.
+ */
+export async function setLabelGameTypeAction(
+  sessionId: string,
+  game: LabelGame,
+  type: LabelGameType,
+): Promise<LabelGameWriteResult> {
+  return setLabelGameType(sessionId, game, type);
 }
 
 /** Mark a point checked (`checked_at` = now) or, with `checked` false, clear it. */
