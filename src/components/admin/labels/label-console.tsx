@@ -350,7 +350,12 @@ export function LabelConsole({
   );
   const player = useRef<LabelVideoHandle>(null);
   // The table card: the one thing on the page that scrolls (T19).
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  // One ref per layout: each mode mounts its own table, and the follow
+  // scroll hangs its hold listeners on the element behind the ref it is
+  // given — a single ref would keep them on the table that just unmounted.
+  const overlayScrollerRef = useRef<HTMLDivElement | null>(null);
+  const topScrollerRef = useRef<HTMLDivElement | null>(null);
+  const sideScrollerRef = useRef<HTMLDivElement | null>(null);
   // The root: the video writes the film's clock onto it (`--film-t`), so the
   // playing row's progress rule and the transport read one clock (T21).
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -376,8 +381,32 @@ export function LabelConsole({
       /* storage blocked — the console just starts in the overlay */
     }
   }, [initialLayoutMode]);
+  // A mode change remounts the `<video>`, which stops it: remember whether
+  // the film was running so the new element can carry on.
+  const resumeAfterLayout = useRef(false);
   const chooseLayout = useCallback((mode: LabelLayoutMode) => {
+    resumeAfterLayout.current = player.current?.isPlaying() ?? false;
     setLayoutMode(mode);
+    // The menu hands focus back to its trigger once it has closed (some
+    // 400ms later), and a focused button swallows Space and the arrows the
+    // film is driven by. Let go of it as it arrives, so the keys work
+    // straight after a switch; stop waiting if it never does.
+    const release = (event: Event) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest("[data-label-layout]")
+      ) {
+        target.blur();
+        stop();
+      }
+    };
+    const stop = () => {
+      document.removeEventListener("focusin", release);
+      window.clearTimeout(giveUp);
+    };
+    const giveUp = window.setTimeout(stop, 1500);
+    document.addEventListener("focusin", release);
     try {
       localStorage.setItem(LAYOUT_MODE_STORAGE_KEY, mode);
     } catch {
@@ -386,6 +415,12 @@ export function LabelConsole({
   }, []);
   const docked = layoutMode !== "overlay";
   const dockMode = layoutMode === "overlay" ? null : layoutMode;
+  const scrollerRef =
+    layoutMode === "docked-top"
+      ? topScrollerRef
+      : layoutMode === "docked-side"
+        ? sideScrollerRef
+        : overlayScrollerRef;
 
   // The dock's size as the labeller left it, per docked mode (T25). Read from
   // storage in the initialiser: the server has none and gets the defaults,
@@ -476,6 +511,8 @@ export function LabelConsole({
     if (previous === null || previous === layoutMode) return;
     const at = clock.get();
     if (at !== null) player.current?.seekTo(at);
+    if (resumeAfterLayout.current) player.current?.play();
+    resumeAfterLayout.current = false;
   }, [layoutMode, clock]);
 
   // Re-renders only when the video crosses into another row; taken from the
@@ -1225,7 +1262,7 @@ export function LabelConsole({
           aria-label={affordance.ariaLabel}
           onClick={followPlayback}
           className={cn(
-            "absolute top-3 left-1/2 z-50 inline-flex h-7 -translate-x-1/2 cursor-pointer items-center rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium whitespace-nowrap text-white shadow-[var(--shadow-floating)] transition-[background-color,transform] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.97]",
+            "absolute top-12 left-1/2 z-50 inline-flex h-7 -translate-x-1/2 cursor-pointer items-center rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium whitespace-nowrap text-white shadow-[var(--shadow-floating)] transition-[background-color,transform] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.97]",
             // Pinned top, so it drops in (the keyframe reads the sign).
             "film-follow-pill-in [--film-pill-rise:-4px]",
           )}

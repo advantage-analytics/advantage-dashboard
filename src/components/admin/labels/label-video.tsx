@@ -95,6 +95,10 @@ export interface LabelVideoHandle {
   /** Seek to a second of the FILE — what the transport's track speaks. */
   seek: (seconds: number) => void;
   togglePlay: () => void;
+  /** Whether the film is running — read before a remount that would stop it. */
+  isPlaying: () => boolean;
+  /** Start the film without touching a shot loop; a no-op while it plays. */
+  play: () => void;
   /** The previous (-1) or next (1) point, as the transport's glyphs step. */
   step: (direction: -1 | 1) => void;
   cycleRate: () => void;
@@ -407,6 +411,14 @@ export const LabelVideoPlayer = forwardRef<
       },
       seek,
       togglePlay,
+      isPlaying() {
+        const el = videoRef.current;
+        return el !== null && !el.paused && !el.ended;
+      },
+      play() {
+        const el = videoRef.current;
+        if (el?.paused) void el.play().catch(noop);
+      },
       step,
       cycleRate,
       toggleLoop,

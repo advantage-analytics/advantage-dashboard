@@ -866,7 +866,7 @@ test.describe("the Now playing pill", () => {
     // Not in the table's flow and not on the viewport (T19): pinned over the
     // scroller, clear of the dock's corner and above its layer.
     expect(tag).toMatch(
-      /class="[^"]*\babsolute\b[^"]*\btop-3\b[^"]*\bleft-1\/2\b/,
+      /class="[^"]*\babsolute\b[^"]*\btop-12\b[^"]*\bleft-1\/2\b/,
     );
     expect(tag).not.toMatch(/class="[^"]*\bfixed\b/);
     // Its positioning context is the wrapper around the scroller, which
