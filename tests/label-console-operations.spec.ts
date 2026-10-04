@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { labelScores } from "@/lib/services/labels/score";
 import type { LabelSession, LabelVideo } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
@@ -11,9 +12,9 @@ import { createLoader } from "./fixtures/vm-modules";
 
 /**
  * T7 in the console, rendered offline through `fixtures/vm-modules`: the ✕
- * that asks before deleting, the tombstone that expands to a ghost row with
- * Undo, the move question, the point's checked footer, and Reset on an edited
- * row that has a seed.
+ * (a stroke's) and the ⋯ menu (a point's) that ask before deleting, the
+ * tombstone that expands to a ghost row with Undo, the move question, the
+ * point's checked footer, and Reset on an edited row that has a seed.
  *
  * Radix portals render nothing under `renderToStaticMarkup`, so
  * `ConfirmDialog` is stubbed to print its props — and to hand the spec its
@@ -23,7 +24,9 @@ import { createLoader } from "./fixtures/vm-modules";
  *
  * Clicks in the (stateless) table are pressed by walking its element tree:
  * {@link press} finds a control by its accessible name and calls its
- * `onClick`, exactly as React would, without a DOM.
+ * `onClick`, exactly as React would, without a DOM. A point's ⋯ menu is a
+ * popover with state of its own, which that walk cannot open — its rows are
+ * `pointMenuActions`, plain data the menu draws, run here directly.
  */
 
 type Props = Record<string, unknown>;
@@ -197,25 +200,57 @@ function tableTree(overrides: Props = {}) {
     onAskResetShot: ask("onAskResetShot"),
     onAskResetPoint: ask("onAskResetPoint"),
   };
-  const { LabelPointsTable } = loader().load(
+  // The hook-free table: `LabelPointsTable` is this plus the scores' memo.
+  const { LabelPointsTableView } = loader().load(
     "src/components/admin/labels/label-points-table.tsx",
-  ) as { LabelPointsTable: (p: Props) => React.ReactNode };
+  ) as { LabelPointsTableView: (p: Props) => React.ReactNode };
   const session: LabelSession = labelSessionFixture();
-  const tree = LabelPointsTable({
+  const tree = LabelPointsTableView({
     points: session.points,
-    names: { p1: "Lee", p2: "Vargas" },
+    scores: labelScores(session.points, session.adScoring).points,
+    names: NAMES,
     expandedPointId: P1,
     editable: true,
     operations,
     ...overrides,
   });
-  return { tree, asked };
+  return { tree, asked, operations, session };
+}
+
+const NAMES = { p1: "Lee", p2: "Vargas" };
+
+type MenuActions = {
+  move: { label: string; description?: string; run: () => void }[];
+  reset: (() => void) | null;
+  remove: () => void;
+};
+
+/** What point `pointId`'s ⋯ menu offers, against the fixture session. */
+function menuActions(
+  pointId: string,
+  operations: Props,
+  session: LabelSession = labelSessionFixture(),
+): MenuActions {
+  const { pointMenuActions } = loader().load(
+    "src/components/admin/labels/label-point-menu.tsx",
+  ) as {
+    pointMenuActions: (
+      point: unknown,
+      context: unknown,
+      operations: unknown,
+    ) => MenuActions;
+  };
+  return pointMenuActions(
+    session.points.find((point) => point.id === pointId),
+    { points: session.points, names: NAMES },
+    operations,
+  );
 }
 
 // ── Delete asks first ──────────────────────────────────────────────────────
 
 test.describe("delete", () => {
-  test("every live row carries a ✕, and no dialog is open", () => {
+  test("every live stroke carries a ✕, every live point a ⋯, and no dialog is open", () => {
     const { operations } = spies();
     const html = renderConsole({
       ...SAVES,
@@ -223,26 +258,27 @@ test.describe("delete", () => {
       initialExpandedPointId: P1,
     });
     for (const name of [
-      "Delete point 1",
-      "Delete point 2",
-      "Delete point 4",
+      "Point 1 actions",
+      "Point 2 actions",
+      "Point 4 actions",
       "Delete shot 1",
       "Delete shot 2",
       "Delete shot 3",
     ]) {
       expect(html).toContain(`aria-label="${name}"`);
     }
-    expect(count(html, /data-delete-row/g)).toBe(6);
+    expect(count(html, /data-point-menu/g)).toBe(3);
+    expect(count(html, /data-delete-row/g)).toBe(3);
     expect(html).not.toContain("data-confirm");
   });
 
-  test("✕ only asks: the table hands the request up and deletes nothing", () => {
+  test("delete only asks: the table hands the request up and deletes nothing", () => {
     const { tree, asked } = tableTree();
     press(tree, "Delete shot 2");
     expect(asked).toEqual({ onAskDeleteShot: [["s-return", 2, 1]] });
 
     const again = tableTree();
-    press(again.tree, "Delete point 4");
+    menuActions(P4, again.operations).remove();
     expect(again.asked).toEqual({ onAskDeletePoint: [[P4]] });
   });
 
@@ -358,7 +394,9 @@ test.describe("tombstones", () => {
     expect(open).toContain('aria-label="Undo delete shot at 41:13.6"');
 
     const ghostPoint = after(open, `data-ghost-id="${P3}"`);
-    expect(text(ghostPoint)).toMatch(/^– 1 · 1 Lee 0 — Let, replayed — Undo/);
+    // No winner, no number, no time, (no score), the ending, no last shot,
+    // a rally of 0, no note — then Undo, in the Status column.
+    expect(text(ghostPoint)).toMatch(/^— – — Let, replayed — 0 — Undo/);
     expect(open).toContain('aria-label="Undo delete point 3"');
   });
 
@@ -388,13 +426,23 @@ test.describe("tombstones", () => {
 // ── Move ───────────────────────────────────────────────────────────────────
 
 test.describe("move point", () => {
-  test("the set · game cell is the move control where a neighbouring game exists", () => {
-    const { operations } = spies();
-    const html = renderConsole({ ...SAVES, operations });
+  test("the ⋯ menu offers the neighbouring games, where there is one", () => {
+    const { operations, asked } = tableTree();
     // P1's neighbours share its game; P2 and P4 each have one to move to.
-    expect(html).not.toContain('aria-label="Move point 1 to another game"');
-    expect(html).toContain('aria-label="Move point 2 to another game"');
-    expect(html).toContain('aria-label="Move point 4 to another game"');
+    expect(menuActions(P1, operations).move).toEqual([]);
+    const from2 = menuActions(P2, operations).move;
+    expect(from2.map((game) => [game.label, game.description])).toEqual([
+      ["Set 1 · Game 2", "Vargas serving"],
+    ]);
+    expect(menuActions(P4, operations).move.map((game) => game.label)).toEqual([
+      "Set 1 · Game 1",
+    ]);
+
+    // Picking one only asks: the console owns the "switch players?" confirm.
+    from2[0].run();
+    expect(asked).toEqual({
+      onMovePoint: [[P2, { setNumber: 1, gameNumber: 2 }]],
+    });
   });
 
   test('into a game someone else serves: "<player> is serving this game, switch players?"', async () => {
@@ -546,6 +594,14 @@ test.describe("reset", () => {
       onAskResetShot: [["s-return", 2, 1]],
       onAskResetPoint: [[P1]],
     });
+  });
+
+  test("the ⋯ menu carries Reset too, on the same rows", () => {
+    const { operations, asked } = tableTree();
+    expect(menuActions(P2, operations).reset).toBeNull();
+    expect(menuActions(P4, operations).reset).toBeNull();
+    menuActions(P1, operations).reset?.();
+    expect(asked).toEqual({ onAskResetPoint: [[P1]] });
   });
 
   test("the shot confirm asks, and the reset waits for its action", async () => {

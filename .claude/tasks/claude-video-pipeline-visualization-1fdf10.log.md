@@ -202,3 +202,16 @@ Decisions:
 
 1. Changing a shot's stroke (rally ↔ serve) does not re-derive the result.
 2. Shots placed before this change keep their stored result until re-placed.
+
+## T12 · Extract the point row and redesign it to 08g — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Point rows moved to `label-point-row.tsx` (⋯ menu in `label-point-menu.tsx`, shared row helpers in `label-row-parts.tsx`); the table file drops from 1,229 to 590 lines. Row is now caret · winner chip (menu) · # · Time · Score · How it ended · Last shot · Rally · Note · Status · ⋯, with Score from `labelScores`, an editable Note, and Move to game / Reset / Delete in the ⋯ menu. `MoveGameCell` became `pointMenuActions().move`.
+
+**follow-ups:**
+
+1. `ended_by` is no longer editable from the row (the column is gone).
+2. An edited, unchecked point has no row ✓; it is checked from the footer.
+3. Click-to-seek on Time; Split point / Add point before; 22px marks in the winner menu.
+4. No spec covers the note revert on a failed save.

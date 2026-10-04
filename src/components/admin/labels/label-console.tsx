@@ -290,7 +290,14 @@ export function LabelConsole({
       if (!before || !onSavePoint) return;
       setPoints((current) =>
         current.map((point) =>
-          point.id === pointId ? applyLabelPointPatch(point, patch) : point,
+          point.id === pointId
+            ? {
+                ...applyLabelPointPatch(point, patch),
+                // The note annotates the point: it is not one of the values
+                // `applyLabelPointPatch` moves, and it never moves the status.
+                note: "note" in patch ? (patch.note ?? null) : point.note,
+              }
+            : point,
         ),
       );
 
@@ -307,6 +314,7 @@ export function LabelConsole({
               endedBy: "ended_by" in patch ? before.endedBy : point.endedBy,
               serveSide:
                 "serve_side" in patch ? before.serveSide : point.serveSide,
+              note: "note" in patch ? before.note : point.note,
               status: before.status,
             };
           }
@@ -753,6 +761,7 @@ export function LabelConsole({
 
       <LabelPointsTable
         points={points}
+        adScoring={session.adScoring}
         names={names}
         expandedPointId={expandedPointId}
         onTogglePoint={togglePoint}

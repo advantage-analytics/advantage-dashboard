@@ -116,7 +116,7 @@ test("an expanded point folds its shots out in video order", () => {
   );
 });
 
-test("point rows: calculated on the left, labels and status on the right", () => {
+test("point rows: who won, then the point, how it ended, its note and status", () => {
   const html = render({
     session: labelSessionFixture(),
     video: null,
@@ -124,12 +124,95 @@ test("point rows: calculated on the left, labels and status on the right", () =>
   });
   const out = text(html);
   expect(out).toContain(
-    "Point Set · game Server Shots Won by Ending Ended by Status",
+    "Won # Time Score How it ended Last shot Rally Note Status",
   );
-  expect(out).toMatch(/1 1 · 1 Lee 3 Vargas Error Lee To check/);
-  expect(out).toMatch(/2 1 · 1 Lee 1 Lee Ace Lee Checked/);
-  // Nothing labelled yet: three dashes, each named for assistive technology.
-  expect(out).toMatch(/4 1 · 2 Vargas 0 (— Not labelled ){3}To check/);
+  // Winner initial · # · time · score before · ending · last shot · rally ·
+  // note · status. Read-only, an empty note is a dash, not "Add note".
+  expect(out).toMatch(/V 1 41:12\.0 0–0 Error Forehand 3 — No note Edited/);
+  expect(out).toMatch(
+    /L 2 41:30\.2 0–15 Ace First serve 1 Clean ace down the T\. Checked/,
+  );
+  // Nothing labelled and no strokes yet: each gap is a dash, named for
+  // assistive technology — and a new game starts at 0–0.
+  expect(out).toMatch(
+    /— 4 — No timed shot 0–0 — Not labelled — No shot 0 — No note To check/,
+  );
+});
+
+test("a point row's winner chip, score, last shot and rally", () => {
+  const html = render({
+    session: labelSessionFixture(),
+    video: null,
+    initialExpandedPointId: null,
+    ...SAVES,
+  });
+  const cell = (row: string, attr: string) =>
+    row.match(new RegExp(`${attr}[^>]*>([^<]*)<`))?.[1];
+
+  // Point 1: Vargas (p2) won it; Lee serves the first point of the game; the
+  // live strokes are serve, return, forehand — the tombstone is not counted.
+  const first = rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P1}"`);
+  expect(cell(first, 'data-winner-mark="p2"')).toBe("V");
+  expect(first).toMatch(
+    /data-winner-mark="p2"[^>]*bg-\[var\(--surface-subtle\)\]/,
+  );
+  expect(cell(first, "data-point-score")).toBe("0–0");
+  expect(cell(first, "data-point-last-shot")).toBe("Forehand");
+  expect(cell(first, "data-point-rally")).toBe("3");
+  // Editable, the chip is the menu's trigger and an empty note invites one.
+  expect(first).toMatch(
+    /<button[^>]*aria-label="Point 1 won by Vargas"[^>]*aria-haspopup="menu"/,
+  );
+  expect(text(first)).toContain("Add note");
+
+  // Point 2: Lee (p1) on blue, at 0–15 after losing the first point.
+  const second = rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P2}"`);
+  expect(cell(second, 'data-winner-mark="p1"')).toBe("L");
+  expect(second).toMatch(/data-winner-mark="p1"[^>]*bg-\[var\(--blue\)\]/);
+  expect(cell(second, "data-point-score")).toBe("0–15");
+  expect(cell(second, "data-point-last-shot")).toBe("First serve");
+  expect(cell(second, "data-point-rally")).toBe("1");
+  expect(html).toContain('aria-label="Point 2 note: Clean ace down the T."');
+});
+
+test("the rally counts from the last serve, tombstones left out", () => {
+  const { pointSummary } = createLoader().load(
+    "src/components/admin/labels/label-point-row.tsx",
+  ) as {
+    pointSummary: (point: { shots: unknown[] }) => {
+      time: string | null;
+      lastShot: string | null;
+      rally: number;
+    };
+  };
+  const stroke = (
+    stroke: string,
+    videoTime: number | null,
+    status = "kept",
+  ) => ({
+    stroke,
+    videoTime,
+    status,
+  });
+  // A fault, the second serve, two groundstrokes — and a deleted phantom.
+  expect(
+    pointSummary({
+      shots: [
+        stroke("first_serve", null),
+        stroke("second_serve", 61.5),
+        stroke("forehand", 62.4, "deleted"),
+        stroke("backhand", 63),
+        stroke("forehand_volley", 64.2),
+      ],
+    }),
+  ).toEqual({ time: "1:01.5", lastShot: "Forehand volley", rally: 3 });
+  // No serve labelled: every live stroke counts. No strokes: nothing to say.
+  expect(pointSummary({ shots: [stroke("backhand", 5)] }).rally).toBe(1);
+  expect(pointSummary({ shots: [] })).toEqual({
+    time: null,
+    lastShot: null,
+    rally: 0,
+  });
 });
 
 test("defaults to the first point still to check", () => {
@@ -344,11 +427,12 @@ test.describe("editing (T6)", () => {
     expect(count(html, /data-row="shot"/g)).toBe(3);
     expect(count(html, EDITORS)).toBe(0);
     // Each cell is a keyboard stop that names what it edits.
-    expect(html).toContain('aria-label="Point 1 won by: Vargas"');
+    expect(html).toContain('aria-label="Point 1 ending: Error"');
+    expect(html).toContain('aria-label="Point 1 note: None"');
     expect(html).toContain('aria-label="Shot 2 stroke: Backhand"');
     expect(html).toContain('aria-label="Shot 1 hit at: -0.80, -0.32"');
     expect(count(html, /role="button" tabindex="0"/g)).toBeGreaterThanOrEqual(
-      3 * 3 + 3 * 6,
+      3 * 2 + 3 * 6,
     );
   });
 

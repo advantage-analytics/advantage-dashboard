@@ -165,7 +165,7 @@ ready).
 
 ## T12 · Extract the point row and redesign it to 08g
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8, T9
 - **files:** src/components/admin/labels/label-point-row.tsx (new), src/components/admin/labels/label-points-table.tsx, src/components/admin/labels/label-table-layout.ts, src/components/admin/labels/label-console.tsx, tests/label-console.spec.ts (guess)
