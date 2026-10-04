@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -90,11 +91,19 @@ import {
   type VideoDockLayout,
 } from "./label-court-position";
 import { labelFilmStops } from "./label-film-stops";
+import { LabelDivider } from "./label-divider";
 import {
   DEFAULT_DOCK_SIZE,
   DEFAULT_LAYOUT_MODE,
   LAYOUT_MODE_STORAGE_KEY,
+  LAYOUT_SIZE_STORAGE_KEY,
+  MIN_DOCK_PX,
+  clampDockSize,
+  dockRoom,
+  maxDockSize,
+  parseDockSizes,
   parseLayoutMode,
+  type DockSizes,
   type LabelLayoutMode,
 } from "./label-layout";
 import { LabelLayoutControl } from "./label-layout-control";
@@ -202,12 +211,26 @@ const FOLLOW: PointFocus = { mode: "follow" };
  * `LabelVideoPlayer` (the dock's inner player — same `player` ref, same
  * transport, same clock) and the same `LabelCourtPanel` (the court card's
  * body) render straight into the band or column, which is `DEFAULT_DOCK_SIZE`
- * tall or wide until the divider (T25) moves it; the table takes the rest and
+ * tall or wide until the divider moves it; the table takes the rest and
  * still scrolls inside itself. Nothing floats, so the follow scroll keeps
  * clear of the sticky column header only. The choice is remembered under
  * `LAYOUT_MODE_STORAGE_KEY`, read after mount like the docks read their own
  * keys — the page is server-rendered, and a first client render that read
  * storage would not hydrate.
+ *
+ * ── The divider (T25) ───────────────────────────────────────────────────────
+ *
+ * Between the dock and the table, in the gap they already had, sits
+ * `LabelDivider`: drag it (or arrow it) and the band's height or the column's
+ * width follows, the video — 16:9 from that one number — and the court with
+ * it, the table taking what is left. The console keeps the size the labeller
+ * ASKED for, per mode, under `LAYOUT_SIZE_STORAGE_KEY`, and draws it through
+ * `clampDockSize` against the docked layout's measured box (`dockRoom`, a
+ * `ResizeObserver`): a size left in a bigger window is held to what this one
+ * allows, and comes back when the window does. That clamp is the only cap —
+ * nothing in the markup limits the dock a second time. Until the box is
+ * measured (the server's render, the first client one) only the minimum
+ * applies.
  *
  * Switching mode moves the `<video>` to another parent, which remounts it. The
  * playhead carries over: once the new element is in, the console seeks it to
@@ -232,6 +255,7 @@ export function LabelConsole({
   initialVideoMinimised,
   initialPointFocus,
   initialLayoutMode,
+  initialDockSize,
   headerAction,
 }: {
   session: LabelSession;
@@ -274,6 +298,11 @@ export function LabelConsole({
    * once the client can read it.
    */
   initialLayoutMode?: LabelLayoutMode;
+  /**
+   * The docked band's height or column's width on first render, in px — for
+   * specs. Given, storage is not consulted.
+   */
+  initialDockSize?: number;
   /** The header's trailing link, rendered by the page. */
   headerAction?: ReactNode;
 }) {
@@ -356,6 +385,83 @@ export function LabelConsole({
     }
   }, []);
   const docked = layoutMode !== "overlay";
+  const dockMode = layoutMode === "overlay" ? null : layoutMode;
+
+  // The dock's size as the labeller left it, per docked mode (T25). Read from
+  // storage in the initialiser: the server has none and gets the defaults,
+  // and the client's first render is the overlay (the stored MODE arrives
+  // after mount, above), which draws no size — so the two still agree. A
+  // spec that pins the mode or the size never reads storage.
+  const [dockSizes, setDockSizes] = useState<DockSizes>(() => {
+    if (initialDockSize !== undefined) {
+      return { "docked-top": initialDockSize, "docked-side": initialDockSize };
+    }
+    if (initialLayoutMode !== undefined || typeof window === "undefined") {
+      return { ...DEFAULT_DOCK_SIZE };
+    }
+    try {
+      return parseDockSizes(localStorage.getItem(LAYOUT_SIZE_STORAGE_KEY));
+    } catch {
+      /* storage blocked — the defaults */
+      return { ...DEFAULT_DOCK_SIZE };
+    }
+  });
+  // The docked layout's own box — the dock, the divider and the table — as
+  // last measured: what the size is clamped against. Observed before the
+  // first paint of a docked mode, so a stored size too big for this window
+  // never shows unclamped.
+  const dockLayoutRef = useRef<HTMLDivElement | null>(null);
+  const [dockBox, setDockBox] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const element = dockLayoutRef.current;
+    if (!docked || !element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const { clientWidth: width, clientHeight: height } = element;
+      setDockBox((box) =>
+        box && box.width === width && box.height === height
+          ? box
+          : { width, height },
+      );
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [docked, layoutMode]);
+  const dockAvailable =
+    dockMode && dockBox ? dockRoom(dockMode, dockBox) : null;
+  const dockSize = dockMode
+    ? clampDockSize(
+        dockMode,
+        dockSizes[dockMode],
+        dockAvailable ?? Number.POSITIVE_INFINITY,
+      )
+    : null;
+  const resizeDock = useCallback(
+    (px: number) => {
+      if (!dockMode) return;
+      const next = {
+        ...dockSizes,
+        [dockMode]: clampDockSize(
+          dockMode,
+          px,
+          dockAvailable ?? Number.POSITIVE_INFINITY,
+        ),
+      };
+      if (next[dockMode] === dockSizes[dockMode]) return;
+      setDockSizes(next);
+      try {
+        localStorage.setItem(LAYOUT_SIZE_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* private window — the size just isn't kept */
+      }
+    },
+    [dockMode, dockSizes, dockAvailable],
+  );
+  const resetDock = useCallback(() => {
+    if (dockMode) resizeDock(DEFAULT_DOCK_SIZE[dockMode]);
+  }, [dockMode, resizeDock]);
 
   // A mode change moves the `<video>` to another parent, which remounts it at
   // zero. Put the new element where the clock says the film was: `seekTo`
@@ -1157,6 +1263,23 @@ export function LabelConsole({
       fill
     />
   );
+  // The divider's value and bounds, in px. Unmeasured, the most is not known
+  // yet, so it is wherever the dock already is.
+  const divider =
+    dockMode && dockSize !== null ? (
+      <LabelDivider
+        mode={dockMode}
+        value={dockSize}
+        min={MIN_DOCK_PX[dockMode]}
+        max={
+          dockAvailable === null
+            ? dockSize
+            : maxDockSize(dockMode, dockAvailable)
+        }
+        onResize={resizeDock}
+        onReset={resetDock}
+      />
+    ) : null;
   const courtCardClass = cn(
     DOCK_CARD,
     "flex flex-col px-3 pt-3 pb-2.5 transition-[box-shadow] duration-150",
@@ -1194,21 +1317,24 @@ export function LabelConsole({
       </div>
 
       {layoutMode === "docked-top" ? (
-        // A band above the table, `DEFAULT_DOCK_SIZE` tall: the video at
-        // 16:9 from that height (565 wide at 318), the court card beside it
-        // at the floating card's own width, the rest of the band open. The
-        // table takes what is left below.
-        <div className="flex min-h-0 flex-1 flex-col gap-4">
+        // A band above the table, `dockSize` tall (`DEFAULT_DOCK_SIZE` until
+        // the divider moves it): the video at 16:9 from that height (565
+        // wide at 318), the court card beside it at the floating card's own
+        // width, the rest of the band open. A band taller than the row is
+        // wide narrows the video's card instead of pushing the court off —
+        // the frame keeps 16:9 inside it, centred on the card's dark ground.
+        // The divider sits in the gap; the table takes what is left below.
+        <div ref={dockLayoutRef} className="flex min-h-0 flex-1 flex-col">
           <div
             data-label-dock="top"
             className="flex shrink-0 gap-4"
-            style={{ height: DEFAULT_DOCK_SIZE["docked-top"] }}
+            style={{ height: dockSize ?? undefined }}
           >
             <div
               data-label-dock-video=""
               className={cn(
                 DOCK_CARD,
-                "aspect-video h-full shrink-0 overflow-hidden",
+                "flex aspect-video h-full min-w-0 items-center overflow-hidden",
               )}
             >
               {dockedVideo}
@@ -1222,19 +1348,22 @@ export function LabelConsole({
               {dockedCourt}
             </div>
           </div>
+          {divider}
           {table}
         </div>
       ) : layoutMode === "docked-side" ? (
-        // A column to the table's right, `DEFAULT_DOCK_SIZE` wide and never
-        // more than 45% of the row: the video at 16:9 from that width (270
+        // A column to the table's right, `dockSize` wide (`DEFAULT_DOCK_SIZE`
+        // until the divider moves it): the video at 16:9 from that width (270
         // tall at 480), the court card under it taking the rest of the
-        // height. The table narrows beside it and scrolls sideways.
-        <div className="flex min-h-0 flex-1 gap-4">
+        // height. The clamp is the column's only cap. The divider sits in the
+        // gap; the table narrows beside it and scrolls sideways.
+        <div ref={dockLayoutRef} className="flex min-h-0 flex-1">
           {table}
+          {divider}
           <div
             data-label-dock="side"
-            className="flex max-w-[45%] shrink-0 flex-col gap-4"
-            style={{ width: DEFAULT_DOCK_SIZE["docked-side"] }}
+            className="flex shrink-0 flex-col gap-4"
+            style={{ width: dockSize ?? undefined }}
           >
             <div
               data-label-dock-video=""

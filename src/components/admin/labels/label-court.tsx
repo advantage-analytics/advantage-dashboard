@@ -48,6 +48,12 @@ import type { PlacementTarget } from "./court-placement";
  * tab's own `MARK_FADE_TRANSITION` and rises in on mount with its
  * `MARK_IN_ANIMATION`, so the two courts read as one.
  *
+ * Floating, the box is the card's fixed art size (222 tall). Docked (`fit`),
+ * it is the largest box of the same proportions that fits its size container
+ * — the panel's court box — so it shrinks and grows with the dock. The marks
+ * are placed in percent and a click is read against the box's own bounding
+ * rect, so neither notices the scale.
+ *
  * Both boxes keep the art's own proportions (0.4434 for the whole court,
  * 276 × 222 for a half), so a click converts to metres without distortion.
  * Marks whose end is off the zoomed half are clipped by the box, and their
@@ -133,6 +139,7 @@ export function LabelCourt({
   target = null,
   prompt = null,
   onPlace,
+  fit = false,
 }: {
   /** The strokes to draw, each at its ends' opacities. Tombstones are skipped. */
   strokes: readonly CourtStroke[];
@@ -146,6 +153,11 @@ export function LabelCourt({
   prompt?: string | null;
   /** A click on a half, in metres. Absent: the court is a picture. */
   onPlace?: (point: CourtPoint) => void;
+  /**
+   * `false`: the floating card's fixed art box. `true`: scale to fit the
+   * nearest size container (`container-type: size`), proportions kept.
+   */
+  fit?: boolean;
 }) {
   const marks = marksFor(strokes, view);
   const placed = marks.length;
@@ -248,10 +260,14 @@ export function LabelCourt({
     zoomed &&
       "rounded-[8px] border border-dashed border-white/[0.22] bg-white/[0.07]",
   );
-  const style = {
-    width: zoomed ? HALF_BOX_WIDTH : WHOLE_WIDTH,
-    height: BOX_HEIGHT,
-  };
+  const width = zoomed ? HALF_BOX_WIDTH : WHOLE_WIDTH;
+  const style = fit
+    ? {
+        // "Contain": as wide as the container, unless its height runs out first.
+        width: `min(100cqw, calc(100cqh * ${(width / BOX_HEIGHT).toFixed(4)}))`,
+        aspectRatio: `${width.toFixed(2)} / ${BOX_HEIGHT}`,
+      }
+    : { width, height: BOX_HEIGHT };
 
   return placing ? (
     <button

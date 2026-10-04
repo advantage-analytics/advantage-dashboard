@@ -32,6 +32,7 @@ type ConsoleProps = {
   initialPointFocus?:
     { mode: "follow" } | { mode: "held"; pointId: string | null };
   initialLayoutMode?: "overlay" | "docked-top" | "docked-side";
+  initialDockSize?: number;
   onSaveShot?: (...args: unknown[]) => Promise<unknown>;
   onSavePoint?: (...args: unknown[]) => Promise<unknown>;
 };
@@ -1518,7 +1519,8 @@ test.describe("layout modes (T24)", () => {
     const open = tagOf(column, 'data-label-dock="side"');
     expect(open).toContain("width:480px");
     expect(open).toMatch(/class="[^"]*\bflex-col\b/);
-    expect(open).toMatch(/class="[^"]*\bmax-w-\[45%\]/);
+    // The clamp is the column's only cap: no second limit in the markup.
+    expect(open).not.toContain("max-w-");
     expect(column).toContain("data-label-video-frame");
     expect(column).toContain("data-court-art");
     expect(column.indexOf("data-label-dock-video")).toBeLessThan(
@@ -1577,5 +1579,141 @@ test.describe("layout modes (T24)", () => {
     expect(band).not.toContain("<video");
     expect(text(band)).toContain("No video for this job");
     expect(band).toContain("data-court-art");
+  });
+
+  test.describe("the divider (T25)", () => {
+    test("docked top: a horizontal separator between the band and the table, the band as tall as asked", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "docked-top",
+        initialDockSize: 402,
+      });
+      expect(count(html, /role="separator"/g)).toBe(1);
+      const separator = tagOf(html, 'role="separator"');
+      expect(separator).toContain('aria-orientation="horizontal"');
+      expect(separator).toContain('aria-valuenow="402"');
+      expect(separator).toContain('aria-valuemin="240"');
+      expect(separator).toMatch(/aria-valuemax="\d+"/);
+      expect(separator).toContain('aria-label="Resize video and court"');
+      expect(separator).toContain('tabindex="0"');
+      expect(separator).toContain('data-label-divider="docked-top"');
+      expect(separator).toMatch(/class="[^"]*\bcursor-row-resize\b/);
+      // An 8px grab area in the 16px gap, never a native drag or tooltip.
+      expect(separator).toMatch(/class="[^"]*\bmy-1\b[^"]*\bh-2\b/);
+      expect(separator).not.toContain("draggable");
+      expect(separator).not.toMatch(/\stitle=/);
+      // The band's height is that one number, inline.
+      expect(tagOf(html, 'data-label-dock="top"')).toContain("height:402px");
+      // Band, then the divider, then the table — which takes the rest.
+      const at = html.indexOf('role="separator"');
+      expect(at).toBeGreaterThan(html.indexOf('data-label-dock="top"'));
+      expect(at).toBeGreaterThan(html.indexOf("data-label-dock-court"));
+      expect(at).toBeLessThan(html.indexOf("data-label-scroller"));
+      expect(tagOf(html, "data-label-scroller")).toMatch(
+        /class="[^"]*\bmin-h-0\b[^"]*\bflex-1\b/,
+      );
+      // A hairline at rest, blue once focused.
+      const line = html.slice(at, html.indexOf("</div>", at));
+      expect(line).toContain("bg-[var(--border-hairline)]");
+      expect(line).toContain("group-focus-visible:bg-[var(--blue)]");
+    });
+
+    test("docked side: a vertical separator between the table and the column, the column as wide as asked", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "docked-side",
+        initialDockSize: 612,
+      });
+      expect(count(html, /role="separator"/g)).toBe(1);
+      const separator = tagOf(html, 'role="separator"');
+      expect(separator).toContain('aria-orientation="vertical"');
+      expect(separator).toContain('aria-valuenow="612"');
+      expect(separator).toContain('aria-valuemin="360"');
+      expect(separator).toContain('data-label-divider="docked-side"');
+      expect(separator).toMatch(/class="[^"]*\bcursor-col-resize\b/);
+      expect(tagOf(html, 'data-label-dock="side"')).toContain("width:612px");
+      const at = html.indexOf('role="separator"');
+      expect(at).toBeGreaterThan(html.indexOf("data-label-scroller"));
+      expect(at).toBeLessThan(html.indexOf('data-label-dock="side"'));
+    });
+
+    test("with no size given a docked mode is its default, and an asked size under the minimum is the minimum", () => {
+      const top = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "docked-top",
+      });
+      expect(tagOf(top, 'role="separator"')).toContain('aria-valuenow="318"');
+      expect(tagOf(top, 'data-label-dock="top"')).toContain("height:318px");
+
+      const small = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "docked-side",
+        initialDockSize: 100,
+      });
+      expect(tagOf(small, 'role="separator"')).toContain('aria-valuenow="360"');
+      expect(tagOf(small, 'data-label-dock="side"')).toContain("width:360px");
+    });
+
+    test("overlay: no separator", () => {
+      for (const html of [
+        render({ session: labelSessionFixture(), video: VIDEO }),
+        render({
+          session: labelSessionFixture(),
+          video: VIDEO,
+          initialLayoutMode: "overlay",
+          initialDockSize: 402,
+        }),
+      ]) {
+        expect(html).not.toContain('role="separator"');
+        expect(html).not.toContain("data-label-divider");
+      }
+    });
+
+    test("the docked court scales to its panel; the floating card keeps its fixed art box", () => {
+      const overlay = render({ session: labelSessionFixture(), video: VIDEO });
+      const floating = tagOf(overlay, 'data-court-view="whole"');
+      expect(floating).toMatch(/style="width:98\.4\d+px;height:222px"/);
+      expect(floating).not.toContain("cqh");
+      expect(tagOf(overlay, "data-court-box")).toMatch(
+        /class="[^"]*\bh-\[222px\][^"]*\bshrink-0\b/,
+      );
+      expect(tagOf(overlay, "data-court-box")).not.toContain("container-type");
+
+      for (const mode of ["docked-top", "docked-side"] as const) {
+        const html = render({
+          session: labelSessionFixture(),
+          video: VIDEO,
+          initialLayoutMode: mode,
+        });
+        // The box is the size container; the court is the largest 14.53 ×
+        // 32.77 box that fits it — no fixed height to clip.
+        expect(tagOf(html, "data-court-box"), mode).toMatch(
+          /class="[^"]*\[container-type:size\][^"]*\bmin-h-0\b[^"]*\bflex-1\b/,
+        );
+        const court = tagOf(html, 'data-court-view="whole"');
+        expect(court, mode).toContain(
+          "width:min(100cqw, calc(100cqh * 0.4434))",
+        );
+        expect(court, mode).toMatch(/aspect-ratio:98\.43 ?\/ ?222/);
+        expect(court, mode).not.toContain("height:222px");
+      }
+
+      // Placing, docked: the half's own 276 × 222 proportions, still a button.
+      const placing = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "docked-top",
+        initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+        initialSelectedShotId: "s-return",
+        ...SAVES,
+      });
+      const target = tagOf(placing, "data-court-target");
+      expect(target).toContain("width:min(100cqw, calc(100cqh * 1.2432))");
+      expect(target).toMatch(/aspect-ratio:276\.00 ?\/ ?222/);
+    });
   });
 });

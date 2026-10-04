@@ -199,9 +199,11 @@ export function LabelCourtPanel({
   headerTrailing?: ReactNode;
   /**
    * `false` (the floating card): the court box is the art's own 222px.
-   * `true` (a docked panel): the box takes the rest of the panel's height,
-   * the court centred in it — and clipped rather than pushing the foot out,
-   * should the panel be shorter than the art.
+   * `true` (a docked panel): the box takes the rest of the panel's height
+   * and is the court's size container — the court scales to the largest box
+   * of its own proportions that fits (`LabelCourt`'s `fit`), centred, so a
+   * panel the divider has made shorter or taller than the art shrinks or
+   * grows the court rather than clipping it.
    */
   fill?: boolean;
 }) {
@@ -281,7 +283,7 @@ export function LabelCourtPanel({
         className={cn(
           "my-2 flex justify-center",
           fill
-            ? "min-h-0 flex-1 items-center overflow-hidden"
+            ? "[container-type:size] min-h-0 flex-1 items-center overflow-hidden"
             : "h-[222px] shrink-0",
         )}
       >
@@ -292,6 +294,7 @@ export function LabelCourtPanel({
           target={placing ? placement.target : null}
           prompt={prompt}
           onPlace={placing ? onPlace : undefined}
+          fit={fill}
         />
       </div>
 

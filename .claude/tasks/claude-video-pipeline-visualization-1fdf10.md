@@ -353,7 +353,7 @@ ready).
 
 ## T25 · Drag the divider between the dock and the table
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T24
 - **files:** src/components/admin/labels/label-divider.tsx (new), src/components/admin/labels/label-layout.ts, src/components/admin/labels/label-console.tsx, tests/label-layout.spec.ts, tests/label-console.spec.ts (guess)

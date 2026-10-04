@@ -352,3 +352,14 @@ Decisions:
 1. Below 318px the docked court art clips rather than scales — T25 lets the band go to 240.
 2. Playback does not resume after a mode switch; a running shot loop lets go.
 3. Docked top leaves the band's remaining width empty.
+
+## T25 · Drag the divider between the dock and the table — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New `LabelDivider` (`role=separator`, pointer-capture drag, arrow / Home / End keys, Enter or double-click to reset) between the docked band or column and the table. The size is kept per mode in console state, clamped by `clampDockSize` against the measured room (ResizeObserver) and stored under `labels-layout-size`; the side column's 45% class is gone in favour of the clamp. The docked court now scales to its panel (`fit`) instead of clipping; the floating court is unchanged.
+
+**follow-ups:**
+
+1. Storage is written on every pointer move during a drag.
+2. Court mark radii are fixed px, so they read large on a small court.
