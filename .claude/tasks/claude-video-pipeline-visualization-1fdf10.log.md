@@ -328,3 +328,15 @@ Decisions:
 
 1. The court's aria-label still says "N strokes placed".
 2. Re-selecting the same shot may replay the fade-in.
+
+## T23 · Click a shot: loop that shot — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Clicking a stroke now loops it: new pure `shotLoopWindow` (contact to the next live stroke; the last stroke gets a 1.5 s tail capped by the point's end; 0.5 s minimum) and `LabelVideoHandle.loopShot`. Space, the transport, stepping, a point-row click, another shot or the Now-playing pill clear it; the transport's Loop still loops the point.
+
+**follow-ups:**
+
+1. Nothing on screen says a shot is looping.
+2. The loop can overrun its end by up to ~0.25 s (timeupdate cadence).
+3. Editing or deleting the looping shot does not refresh the held window.

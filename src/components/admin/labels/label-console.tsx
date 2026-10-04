@@ -84,6 +84,7 @@ import { LabelConfirmDialog } from "./label-confirm-dialog";
 import { LabelCourtDock } from "./label-court-dock";
 import { followInsets, type VideoDockLayout } from "./label-court-position";
 import { labelFilmStops } from "./label-film-stops";
+import { shotLoopWindow } from "./label-shot-loop";
 import { sideNames } from "./label-format";
 import {
   LabelPointsTable,
@@ -252,7 +253,10 @@ export function LabelConsole({
     (pointId: string | null) => setPointFocus({ mode: "held", pointId }),
     [],
   );
-  const followPlayback = useCallback(() => setPointFocus(FOLLOW), []);
+  const followPlayback = useCallback(() => {
+    player.current?.loopShot(null);
+    setPointFocus(FOLLOW);
+  }, []);
   const held = pointFocus.mode === "held";
   const [placement, setPlacement] = useState<PlacementState>(() =>
     placementOf(session.points, initialSelectedShotId),
@@ -336,6 +340,7 @@ export function LabelConsole({
   // (T25), so the video moving on does not pop another point open under the
   // labeller's hands; clicking the playing row again then re-follows.
   function togglePoint(pointId: string) {
+    player.current?.loopShot(null);
     setPlacement(NO_PLACEMENT);
     if (pointId === openPointId) {
       holdPoint(null);
@@ -360,8 +365,11 @@ export function LabelConsole({
     // selected for placement then (see `addShot`).
     if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
     setPlacement(placementOf(points, shotId));
-    const shot = findShot(points, shotId);
-    if (shot?.videoTime != null) player.current?.seekTo(shot.videoTime);
+    // A shot click replays that shot alone, on a loop (`label-shot-loop.ts`);
+    // a stroke with no place on the video's clock just lets go of the last.
+    player.current?.loopShot(
+      owner ? shotLoopWindow(owner, shotId, fileOffset, stops) : null,
+    );
   }
 
   // An editor opening on a point row's own cells (winner, ending, note…) is

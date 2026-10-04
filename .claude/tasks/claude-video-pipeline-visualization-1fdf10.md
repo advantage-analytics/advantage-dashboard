@@ -324,7 +324,7 @@ ready).
 
 ## T23 · Click a shot: loop that shot
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/admin/labels/label-shot-loop.ts (new), src/components/admin/labels/label-video.tsx, src/components/admin/labels/label-console.tsx, tests/label-shot-loop.spec.ts (new) (guess)
 - **routes:** /admin/labels/54097a66-c5f1-4697-a85f-8a97e5a8f947
