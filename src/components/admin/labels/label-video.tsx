@@ -84,7 +84,14 @@ import { labelFilmStops, type LabelFilmStop } from "./label-film-stops";
  * ── The frame's corners ─────────────────────────────────────────────────────
  * The frame itself is square; the pending skeleton over it rounds its own
  * corners (`FilmFramePending`), which suits a card. `square` switches that
- * off for a frame flush to a black stage (the full-screen view).
+ * off for a frame flush to a black stage (the full-screen views).
+ *
+ * ── The frame's box ─────────────────────────────────────────────────────────
+ * A 16:9 box as wide as its parent, for a card or a stage — or, with `fill`,
+ * the whole of a positioned parent (the film view's layer), the picture
+ * `object-contain` on black so it is never cropped, the transport at the
+ * room's own scale on its foot and, with `transportInset`, stopping that many
+ * px short of the right edge, where the view's rail sits.
  */
 export interface LabelVideoHandle {
   /** Seek to a label's `videoTime` (analysis clock), converted to this file. */
@@ -159,6 +166,13 @@ export const LabelVideoPlayer = forwardRef<
      * players.
      */
     square?: boolean;
+    /**
+     * The frame fills its positioned parent instead of drawing a 16:9 box —
+     * the film view's layer — with the transport at the room's scale.
+     */
+    fill?: boolean;
+    /** How far short of the frame's right edge the transport stops, in px. */
+    transportInset?: number;
   }
 >(function LabelVideoPlayer(
   {
@@ -170,6 +184,8 @@ export const LabelVideoPlayer = forwardRef<
     initialReady = false,
     clockTargetRef,
     square = false,
+    fill = false,
+    transportInset = 0,
   },
   ref,
 ) {
@@ -444,7 +460,11 @@ export const LabelVideoPlayer = forwardRef<
         ref={frameRef}
         data-label-video-frame=""
         data-video-ready={ready ? "true" : "false"}
-        className="relative aspect-video w-full overflow-hidden bg-[#1A1A1C]"
+        className={
+          fill
+            ? "absolute inset-0 overflow-hidden bg-black"
+            : "relative aspect-video w-full overflow-hidden bg-[#1A1A1C]"
+        }
       >
         <video
           ref={videoRef}
@@ -523,15 +543,20 @@ export const LabelVideoPlayer = forwardRef<
           </button>
         )}
 
-        {/* The room's scrim, at dock scale: the transport has no ground of
-            its own. */}
+        {/* The room's scrim, at dock scale — or the room's own 240px when
+            the frame is the screen: the transport has no ground of its own. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-[150px] bg-[linear-gradient(180deg,rgba(13,13,13,0)_0%,rgba(13,13,13,0.78)_70%,rgba(13,13,13,0.88)_100%)]"
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-0",
+            fill ? "h-[240px]" : "h-[150px]",
+            "bg-[linear-gradient(180deg,rgba(13,13,13,0)_0%,rgba(13,13,13,0.78)_70%,rgba(13,13,13,0.88)_100%)]",
+          )}
         />
 
         <FilmTransport
-          className="gap-[7px] px-4 pb-1.5"
+          className={fill ? undefined : "gap-[7px] px-4 pb-1.5"}
+          style={transportInset > 0 ? { right: transportInset } : undefined}
           hide={HIDDEN}
           disabled={!ready}
           title={readout.title}

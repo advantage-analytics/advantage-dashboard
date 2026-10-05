@@ -12,6 +12,7 @@ import {
 
 import {
   BASE_BOARD_INSETS,
+  DEFAULT_BOARD_ANCHOR,
   clampBoardPosition,
   nearestAnchor,
   nudgeBoard,
@@ -126,6 +127,11 @@ export interface CornerDrag {
   placed: boolean;
   /** The last landing, counted so the same corner twice is announced twice. */
   announcement: { text: string; seq: number } | null;
+  /**
+   * Back to `defaultAnchor` (the room's own top-left when there is none), as
+   * a landing: remembered and announced like any other.
+   */
+  reset: () => void;
   containerProps: {
     ref: React.RefObject<HTMLDivElement | null>;
     tabIndex: number;
@@ -272,6 +278,7 @@ export function useCornerDrag({
     announcement: landed
       ? { text: announce(landed.anchor), seq: landed.seq }
       : null,
+    reset: () => settle(defaultAnchor ?? DEFAULT_BOARD_ANCHOR),
     containerProps: {
       ref,
       tabIndex: 0,

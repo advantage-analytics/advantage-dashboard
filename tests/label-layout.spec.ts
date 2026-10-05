@@ -19,6 +19,7 @@ import {
   clampDockSize,
   clampRailWidth,
   dockRoom,
+  isFullScreenMode,
   maxDockSize,
   parseDockSizes,
   parseLayoutMode,
@@ -39,12 +40,13 @@ import {
  * column where both the video and the table still work.
  */
 
-test("four modes, the overlay by default, under keys of their own", () => {
+test("five modes, the overlay by default, under keys of their own", () => {
   expect(LAYOUT_MODES).toEqual([
     "overlay",
     "docked-top",
     "docked-side",
     "black",
+    "film",
   ]);
   expect(DEFAULT_LAYOUT_MODE).toBe("overlay");
   expect(LAYOUT_MODE_STORAGE_KEY).toBe("labels-layout-mode");
@@ -67,6 +69,7 @@ test("four modes, the overlay by default, under keys of their own", () => {
   expect(LAYOUT_MODE_LABEL["docked-top"].label).toBe("Docked top");
   expect(LAYOUT_MODE_LABEL["docked-side"].label).toBe("Docked side");
   expect(LAYOUT_MODE_LABEL.black.label).toBe("Full screen");
+  expect(LAYOUT_MODE_LABEL.film.label).toBe("Film full screen");
 });
 
 test("a stored mode parses; anything unknown is the overlay", () => {
@@ -87,9 +90,9 @@ test.describe("the black full-screen view", () => {
       description:
         "Black to the edges: film and court on the left, the points rail on the right",
     });
-    // Last in the Layout menu (T33): Overlay / Docked top / Docked side /
-    // Full screen.
-    expect(LAYOUT_MODES[LAYOUT_MODES.length - 1]).toBe("black");
+    // After the docked modes in the Layout menu (T33): Overlay / Docked top
+    // / Docked side / Full screen — then the film full screen, last.
+    expect(LAYOUT_MODES[LAYOUT_MODES.length - 2]).toBe("black");
     // No dock, so no dock size: the records stay the two docked modes'.
     expect(Object.keys(DEFAULT_DOCK_SIZE)).toEqual([
       "docked-top",
@@ -129,6 +132,35 @@ test.describe("the black full-screen view", () => {
     for (const raw of [null, undefined, "", "  ", "wide", "{}", "640px"]) {
       expect(parseRailWidth(raw), String(raw)).toBe(640);
     }
+  });
+});
+
+test.describe("the film full-screen view (board 08n)", () => {
+  test("the fifth mode parses, has its words, and the menu lists it last", () => {
+    expect(parseLayoutMode("film")).toBe("film");
+    expect(parseLayoutMode("FILM")).toBe("overlay");
+    expect(parseLayoutMode("film ")).toBe("overlay");
+    expect(LAYOUT_MODE_LABEL.film).toEqual({
+      label: "Film full screen",
+      description: "The video fills the screen; the list and court sit over it",
+    });
+    expect(LAYOUT_MODES[LAYOUT_MODES.length - 1]).toBe("film");
+    expect(LAYOUT_MODES).toHaveLength(5);
+    expect(new Set(LAYOUT_MODES).size).toBe(5);
+    // Still no dock: the dock records are untouched.
+    expect(Object.keys(DEFAULT_DOCK_SIZE)).toEqual([
+      "docked-top",
+      "docked-side",
+    ]);
+  });
+
+  test("black and film are the two full-screen modes; nothing else is", () => {
+    expect(isFullScreenMode("black")).toBe(true);
+    expect(isFullScreenMode("film")).toBe(true);
+    expect(isFullScreenMode("overlay")).toBe(false);
+    expect(isFullScreenMode("docked-top")).toBe(false);
+    expect(isFullScreenMode("docked-side")).toBe(false);
+    expect(LAYOUT_MODES.filter(isFullScreenMode)).toEqual(["black", "film"]);
   });
 });
 

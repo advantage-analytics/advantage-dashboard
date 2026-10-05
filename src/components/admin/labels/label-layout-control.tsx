@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   ChevronDown,
+  Fullscreen,
   Layers,
   Maximize2,
   PanelRight,
@@ -18,15 +19,16 @@ import {
 
 /**
  * The console header's "Layout" control (T24): a `FloatMenu` listing the
- * three ways the video and the court can sit against the table — Overlay,
- * Docked top, Docked side — with the current one checked.
+ * ways the video and the court can sit against the table — Overlay, Docked
+ * top, Docked side, then the two full screens — with the current one checked.
  *
  * The trigger is `MenuSelect`'s pill, drawn by hand because it names the
  * control ("Layout") rather than the value: the glyph beside the word is the
  * mode — stacked layers for the floating cards, a top panel for the band, a
- * right panel for the column — so the current choice still reads at a glance
- * without the pill growing to "Docked side". Each row carries a second line
- * saying what choosing it does, since "Overlay" alone would not.
+ * right panel for the column, the expand arrows for the black full screen
+ * and the frame corners for the film one — so the current choice still reads
+ * at a glance without the pill growing to "Docked side". Each row carries a
+ * second line saying what choosing it does, since "Overlay" alone would not.
  */
 
 const MODE_ICON: Record<LabelLayoutMode, typeof Layers> = {
@@ -34,6 +36,7 @@ const MODE_ICON: Record<LabelLayoutMode, typeof Layers> = {
   "docked-top": PanelTop,
   "docked-side": PanelRight,
   black: Maximize2,
+  film: Fullscreen,
 };
 
 export function LabelLayoutControl({

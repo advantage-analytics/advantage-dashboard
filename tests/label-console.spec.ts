@@ -31,9 +31,12 @@ type ConsoleProps = {
   initialVideoMinimised?: boolean;
   initialPointFocus?:
     { mode: "follow" } | { mode: "held"; pointId: string | null };
-  initialLayoutMode?: "overlay" | "docked-top" | "docked-side" | "black";
+  initialLayoutMode?:
+    "overlay" | "docked-top" | "docked-side" | "black" | "film";
   initialDockSize?: number;
   initialRailWidth?: number;
+  initialFilmRailHidden?: boolean;
+  initialFilmCourtHidden?: boolean;
   onSaveShot?: (...args: unknown[]) => Promise<unknown>;
   onSavePoint?: (...args: unknown[]) => Promise<unknown>;
 };
@@ -2030,6 +2033,356 @@ test.describe("layout modes (T24)", () => {
       );
       expect(count(rail, /data-selected=""/g)).toBe(1);
       expect(rail).toMatch(EDITORS);
+    });
+  });
+
+  test.describe("the film full-screen view (board 08n)", () => {
+    /** The film layer's markup: from its marker to the end. */
+    function filmOf(html: string): string {
+      const start = html.indexOf('data-label-film=""');
+      expect(start).toBeGreaterThan(-1);
+      return html.slice(html.lastIndexOf("<", start));
+    }
+
+    /** The rail's markup, from its marker to the end of the layer. */
+    function railOf(html: string): string {
+      const film = filmOf(html);
+      const start = film.indexOf('data-label-rail=""');
+      expect(start).toBeGreaterThan(-1);
+      return film.slice(film.lastIndexOf("<", start));
+    }
+
+    /** The court card's markup, up to the rail. */
+    function courtOf(html: string): string {
+      const film = filmOf(html);
+      const start = film.indexOf("data-label-film-court=");
+      expect(start).toBeGreaterThan(-1);
+      const end = film.indexOf('data-label-rail=""', start);
+      return film.slice(
+        film.lastIndexOf("<", start),
+        end === -1 ? undefined : end,
+      );
+    }
+
+    const PANEL_GROUND = "bg-[rgba(13,13,13,0.86)]";
+    const PANEL_SHADOW =
+      "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1),0_18px_44px_rgba(0,0,0,0.35)]";
+
+    test("a fixed layer the film fills, the rail and the court laid over it", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "film",
+        initialRailWidth: 700,
+        initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      });
+      expect(tagOf(html, "data-label-console")).toContain(
+        'data-label-layout-mode="film"',
+      );
+      // The black view's mechanism: fixed, over everything, inside the root.
+      const layer = tagOf(html, 'data-label-film=""');
+      expect(layer).toMatch(/class="[^"]*\bfixed\b[^"]*\binset-0\b/);
+      expect(layer).toMatch(/class="[^"]*\bz-50\b/);
+      expect(layer).toMatch(/class="[^"]*\bbg-black\b/);
+      expect(html.indexOf('data-label-film=""')).toBeGreaterThan(
+        html.indexOf("data-label-console"),
+      );
+      const view = readFileSync(
+        "src/components/admin/labels/label-film-view.tsx",
+        "utf8",
+      );
+      expect(view).toContain("ref={inertOutside}");
+      expect(view).toContain("useRailWidth(initialRailWidth)");
+
+      const film = filmOf(html);
+      // The film fills the layer: the frame is the whole of it, not a 16:9
+      // box, the picture contained on black, never cropped.
+      const frame = tagOf(film, "data-label-video-frame");
+      expect(frame).toMatch(/class="[^"]*\babsolute\b[^"]*\binset-0\b/);
+      expect(frame).not.toContain("aspect-video");
+      expect(frame).toContain("bg-black");
+      expect(tagOf(film, 'data-testid="label-video"')).toContain(
+        "object-contain",
+      );
+      expect(count(html, /data-label-video-frame/g)).toBe(1);
+      expect(tagOf(film, "data-label-video-pending")).toMatch(
+        /class="[^"]*\[&amp;_\*\]:rounded-none/,
+      );
+      // DOM order is paint order: the film, the top scrim, the court, the rail.
+      const order = [
+        "data-label-film-video",
+        "data-label-film-scrim",
+        "data-label-film-court=",
+        'data-label-rail=""',
+      ].map((marker) => film.indexOf(marker));
+      expect(order.every((at) => at > -1)).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+      expect(tagOf(film, "data-label-film-scrim")).toMatch(
+        /class="[^"]*\bpointer-events-none\b[^"]*\babsolute\b/,
+      );
+
+      // The transport stays with the player — its title line and stepping —
+      // at the room's own scale, and stops at the rail's left edge (its own
+      // 24px padding keeps the breathing room).
+      expect(film).toContain('aria-label="Previous point"');
+      expect(film).toContain('aria-label="Next point"');
+      expect(film).toContain('role="slider"');
+      expect(film).toContain('style="right:700px"');
+      expect(film).not.toContain("px-4 pb-1.5");
+
+      // The rail: the black rail unchanged, flush to the right edge from top
+      // to bottom (screen B) on the translucent ground — never the opaque
+      // one — with a left hairline only: no inset, no corner, no drop. As
+      // wide as asked, its handle on its left edge.
+      const rail = tagOf(film, 'data-label-rail=""');
+      expect(rail).toMatch(
+        /class="[^"]*\babsolute\b[^"]*\binset-y-0\b[^"]*\bright-0\b/,
+      );
+      expect(rail).not.toMatch(/\b(top|right|bottom)-3\b/);
+      expect(rail).not.toContain("rounded");
+      expect(rail).toContain(PANEL_GROUND);
+      expect(rail).toContain("shadow-[inset_1px_0_0_rgba(255,255,255,0.1)]");
+      expect(rail).not.toContain(PANEL_SHADOW);
+      expect(rail).not.toContain("bg-[var(--surface-dark)]");
+      expect(rail).not.toContain("overflow-hidden");
+      expect(rail).toContain("width:700px");
+      const railBox = tagOf(film, "data-label-film-rail-box");
+      expect(railBox).toMatch(/class="[^"]*\boverflow-hidden\b/);
+      expect(railBox).not.toContain("rounded");
+      expect(count(html, /role="separator"/g)).toBe(1);
+      const separator = tagOf(film, 'role="separator"');
+      expect(separator).toContain('aria-label="Resize the points list"');
+      expect(separator).toContain('aria-valuenow="700"');
+      expect(separator).toContain('aria-valuemin="520"');
+      expect(separator).toContain('aria-valuemax="880"');
+      const railHtml = railOf(html);
+      const header = railHtml.slice(
+        railHtml.indexOf("data-label-rail-header"),
+        railHtml.indexOf("data-label-rail-scroller"),
+      );
+      expect(text(header)).toContain("Jordan Lee vs Elena Vargas");
+      expect(header).toContain("data-save-status");
+      expect(header).toContain('aria-label="Hide the points list"');
+      expect(header).toContain("lucide-panel-right-close");
+      expect(header).toContain('aria-label="Exit full screen"');
+      expect(header.indexOf("data-label-rail-hide")).toBeLessThan(
+        header.indexOf("data-label-black-exit"),
+      );
+      expect(count(railHtml, /data-row="point"/g)).toBe(3);
+      expect(count(railHtml, /data-shots-well/g)).toBe(1);
+      expect(railHtml).toContain("data-label-rail-scroller");
+
+      // The court: a card over the film, the same ground, at the default
+      // spot and size before it is measured, invisible until it is — its
+      // header the drag handle, with the grip and the hide button.
+      const court = tagOf(film, "data-label-film-court=");
+      expect(court).toContain('role="group"');
+      expect(court).toContain('aria-label="Court"');
+      expect(court).toContain('data-dock-anchor="top-left"');
+      expect(court).toContain('data-court-placing="false"');
+      expect(court).toMatch(/class="[^"]*\babsolute\b/);
+      expect(court).toMatch(/class="[^"]*\binvisible\b/);
+      expect(court).toContain(PANEL_GROUND);
+      expect(court).toContain(PANEL_SHADOW);
+      expect(court).toContain(
+        'style="left:20px;top:20px;width:214px;height:392px"',
+      );
+      const courtHtml = courtOf(html);
+      expect(courtHtml).toContain("data-court-handle");
+      expect(courtHtml).toContain("lucide-grip-vertical");
+      expect(courtHtml).toContain('aria-label="Hide the court"');
+      expect(courtHtml).toContain("data-court-panel");
+      expect(courtHtml).toContain('data-court-view="whole"');
+      expect(courtHtml).toContain("data-court-legend");
+      expect(tagOf(courtHtml, "data-court-box")).toMatch(
+        /class="[^"]*\[container-type:size\][^"]*\bflex-1\b/,
+      );
+      expect(tagOf(courtHtml, "data-court-handle")).toMatch(
+        /class="[^"]*\bcursor-grab\b/,
+      );
+
+      // Nothing docked, nothing of the overlay, nothing of the black view,
+      // no light table and no light header.
+      expect(html).not.toMatch(/data-label-dock\b/);
+      expect(html).not.toContain("data-label-dock-layer");
+      expect(html).not.toContain("data-label-court-layer");
+      expect(html).not.toContain("data-label-court-dock");
+      expect(html).not.toContain('data-label-black=""');
+      expect(html).not.toContain("data-label-black-stage");
+      expect(html).not.toContain("data-label-black-video");
+      expect(html).not.toContain("data-label-black-court");
+      expect(html).not.toContain("data-label-scroller");
+      expect(html).not.toContain("data-label-point-header");
+      expect(html).not.toContain("data-console-header");
+      expect(html).not.toContain("<h1");
+      expect(html).not.toContain("data-label-divider");
+      expect(html).not.toContain("data-label-film-rail-pill");
+      expect(html).not.toContain("data-label-film-court-pill");
+    });
+
+    test("the transport's inset follows the rail's width: 640 by default", () => {
+      const byDefault = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "film",
+      });
+      expect(tagOf(byDefault, 'data-label-rail=""')).toContain("width:640px");
+      expect(byDefault).toContain('style="right:640px"');
+      const widest = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "film",
+        initialRailWidth: 5000,
+      });
+      expect(tagOf(widest, 'data-label-rail=""')).toContain("width:880px");
+      expect(widest).toContain('style="right:880px"');
+    });
+
+    test("the rail hidden: a Points pill and the way out, no rail, the transport across the film", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "film",
+        initialFilmRailHidden: true,
+      });
+      const film = filmOf(html);
+      expect(html).not.toContain('data-label-rail=""');
+      expect(html).not.toContain('role="separator"');
+      expect(html).not.toContain("data-label-rail-scroller");
+      expect(html).not.toContain("data-label-rail-hide");
+      // The pills, top-right, 18px down.
+      expect(tagOf(film, "data-label-film-rail-pills")).toMatch(
+        /class="[^"]*\babsolute\b[^"]*\btop-\[18px\][^"]*\bright-6\b/,
+      );
+      const pill = tagOf(film, 'data-label-film-rail-pill=""');
+      expect(pill).toContain("<button");
+      for (const cls of [
+        "h-7",
+        "rounded-[var(--radius-button)]",
+        "bg-[rgba(13,13,13,0.72)]",
+        "px-2.5",
+        "text-[11px]",
+        "font-medium",
+        "text-white/90",
+      ]) {
+        expect(pill, cls).toContain(cls);
+      }
+      const pills = film.slice(film.indexOf("data-label-film-rail-pills"));
+      expect(pills).toContain("lucide-list");
+      expect(text(pills)).toMatch(/Points · \d+ \/ \d+/);
+      // The way out stays reachable: the rail's own exit went with the rail.
+      expect(count(html, /aria-label="Exit full screen"/g)).toBe(1);
+      const exit = tagOf(film, "data-label-film-exit");
+      expect(exit).toContain('aria-label="Exit full screen"');
+      expect(pills).toContain("lucide-minimize-2");
+      // Full width for the transport.
+      expect(film).not.toContain('style="right:');
+      expect(film).toContain('aria-label="Previous point"');
+      // The court is still there.
+      expect(film).toContain("data-label-film-court=");
+    });
+
+    test("the court hidden: a Court pill top-left and no card; both hidden: two pills", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "film",
+        initialFilmCourtHidden: true,
+      });
+      const film = filmOf(html);
+      expect(html).not.toContain("data-label-film-court=");
+      expect(html).not.toContain("data-court-panel");
+      expect(html).not.toContain("data-court-handle");
+      const pill = tagOf(film, "data-label-film-court-pill");
+      expect(pill).toContain('aria-label="Show the court"');
+      expect(pill).toMatch(
+        /class="[^"]*\babsolute\b[^"]*\btop-\[18px\][^"]*\bleft-6\b/,
+      );
+      expect(pill).toContain("bg-[rgba(13,13,13,0.72)]");
+      expect(film).toContain("lucide-rectangle-vertical");
+      // The rail stays.
+      expect(film).toContain('data-label-rail=""');
+      expect(film).toContain('style="right:640px"');
+
+      const both = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "film",
+        initialFilmRailHidden: true,
+        initialFilmCourtHidden: true,
+      });
+      expect(both).toContain("data-label-film-court-pill");
+      expect(both).toContain("data-label-film-rail-pill");
+      expect(both).not.toContain('data-label-rail=""');
+      expect(both).not.toContain("data-label-film-court=");
+      expect(both).toContain('data-testid="label-video"');
+    });
+
+    test("a selected shot zooms the card's court to its half and outlines the card", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "film",
+        initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+        initialSelectedShotId: "s-return",
+        ...SAVES,
+      });
+      const courtHtml = courtOf(html);
+      expect(courtHtml).toMatch(/data-court-view="(near|far)"/);
+      expect(courtHtml).toMatch(/<button[^>]*data-court-target/);
+      expect(courtHtml).toContain("data-court-steps");
+      expect(courtHtml).toContain("data-court-flip");
+      const court = tagOf(html, "data-label-film-court=");
+      expect(court).toContain('data-court-placing="true"');
+      expect(court).toContain("shadow-[0_0_0_1.5px_var(--blue)");
+      // The selected row mounts its editors, and only that row.
+      const rail = railOf(html);
+      expect(rail).toMatch(
+        /data-row="shot" data-shot-id="s-return" data-selected=""/,
+      );
+      expect(count(rail, /data-selected=""/g)).toBe(1);
+      expect(rail).toMatch(EDITORS);
+    });
+
+    test("held while a point plays, the Now playing pill sits inside the rail", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "film",
+        initialPointFocus: { mode: "held", pointId: FIXTURE_POINT_IDS.P1 },
+        initialVideoTime: 2490.5,
+      });
+      const rail = railOf(html);
+      const pill = tagOf(rail, "data-label-follow-pill");
+      expect(pill).toContain(
+        'aria-label="Now playing: point 2 — follow playback"',
+      );
+      expect(pill).toMatch(/class="[^"]*\babsolute\b[^"]*\bleft-1\/2\b/);
+      expect(rail.indexOf("data-label-follow-pill")).toBeGreaterThan(
+        rail.indexOf("data-label-rail-scroller"),
+      );
+      expect(rail).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
+      expect(rail).toMatch(/data-point-id="[^"]*"[^>]*data-playing="true"/);
+    });
+
+    test("the black view draws none of it, and keeps its opaque rail", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "black",
+        initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      });
+      expect(html).not.toContain("data-label-film");
+      expect(html).not.toContain("data-label-rail-hide");
+      expect(html).not.toContain("data-label-film-court");
+      expect(html).not.toContain('aria-label="Hide the points list"');
+      expect(html).not.toContain("data-court-handle");
+      expect(html).not.toContain('style="right:');
+      expect(tagOf(html, 'data-label-rail=""')).toContain(
+        "bg-[var(--surface-dark)]",
+      );
+      expect(tagOf(html, 'data-label-rail=""')).not.toContain(PANEL_GROUND);
+      expect(tagOf(html, "data-label-video-frame")).toContain("aspect-video");
     });
   });
 });

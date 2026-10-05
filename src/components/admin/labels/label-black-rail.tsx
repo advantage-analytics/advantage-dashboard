@@ -7,7 +7,7 @@ import {
   type FocusEvent,
   type RefObject,
 } from "react";
-import { Flag, Minimize2, WandSparkles } from "lucide-react";
+import { Flag, Minimize2, PanelRightClose, WandSparkles } from "lucide-react";
 import type { FollowAffordance } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
@@ -82,8 +82,10 @@ import type { SaveStatus } from "./save-status";
  * points make a set score the entered one disagrees with, the score chip
  * (`ScoreChip`: the labelled pair against the entered one, in amber, opening
  * the three answers as a dark menu; only with marks built, and not once the
- * labeller has said the video ends early), the save line in its dark tone
- * and the way out (`Minimize2`, "Exit full screen") — over the ONE scroller
+ * labeller has said the video ends early), the save line in its dark tone,
+ * in the film view a way to tuck the rail away (`PanelRightClose`, "Hide the
+ * points list", only with `onHide`) and the way out (`Minimize2`, "Exit full
+ * screen") — over the ONE scroller
  * (`data-label-rail-scroller`), which is what the console's follow scroll
  * moves: a `LabelGameBand` (dark) before each game's first live point, a
  * `BlackPointRow` per point with the score before it and its marks (board
@@ -107,6 +109,11 @@ import type { SaveStatus } from "./save-status";
  * menus work here as they do in the light table — only the paint is this
  * file's.
  */
+
+/** The header's icon buttons: the hide and the exit, one recipe. */
+const HEADER_BUTTON =
+  "flex size-[26px] shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-white/70 transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
+
 export function LabelBlackRail({
   player1Name,
   player2Name,
@@ -114,6 +121,8 @@ export function LabelBlackRail({
   total,
   saveStatus,
   onExit,
+  onHide,
+  hideButtonRef,
   scrollerRef,
   onFocusCapture,
   affordance,
@@ -155,6 +164,13 @@ export function LabelBlackRail({
   saveStatus: SaveStatus;
   /** Back to the layout the console was in before this one. */
   onExit: () => void;
+  /**
+   * Tuck the rail away (the film view, whose "Points" pill brings it back).
+   * Absent — the black view — there is no hide button.
+   */
+  onHide?: () => void;
+  /** Lands on the hide button, so the view can hand focus to it. */
+  hideButtonRef?: RefObject<HTMLButtonElement | null>;
   /** Lands on the scroller, for the console's follow scroll. */
   scrollerRef?: RefObject<HTMLDivElement | null>;
   /** The console's editor-focus hold, on the rows' frame. */
@@ -317,13 +333,31 @@ export function LabelBlackRail({
         ) : null}
         <span className="flex-1" />
         <LabelSaveStatus status={saveStatus} tone="dark" />
+        {onHide ? (
+          <ChromeTooltip label="Hide the points list" side="bottom" align="end">
+            <button
+              type="button"
+              ref={hideButtonRef}
+              data-label-rail-hide=""
+              aria-label="Hide the points list"
+              onClick={onHide}
+              className={HEADER_BUTTON}
+            >
+              <PanelRightClose
+                className="size-3.5"
+                strokeWidth={1.6}
+                aria-hidden="true"
+              />
+            </button>
+          </ChromeTooltip>
+        ) : null}
         <ChromeTooltip label="Exit full screen" side="bottom" align="end">
           <button
             type="button"
             data-label-black-exit=""
             aria-label="Exit full screen"
             onClick={onExit}
-            className="flex size-[26px] shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-white/70 transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+            className={HEADER_BUTTON}
           >
             <Minimize2
               className="size-3.5"

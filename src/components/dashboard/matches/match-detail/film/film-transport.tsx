@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import {
   Bookmark,
   ChevronLeft,
@@ -85,6 +86,12 @@ export type FilmTransportControl = "saved" | "court" | "exit" | "more";
 export interface FilmTransportProps {
   /** Extra classes on the block — the room passes its pointer-events state. */
   className?: string;
+  /**
+   * Inline style on the block — a host that ends the bar short of its right
+   * edge (the labelling console's film view, whose rail sits there) passes a
+   * `right` in px, which no class can carry.
+   */
+  style?: CSSProperties;
   title: string;
   subtitle: string | null;
   /** 1-based position of the playing point in the walked sequence, and its size. */
@@ -177,6 +184,7 @@ export function FilmTransport(p: FilmTransportProps) {
         p.disabled && "opacity-45",
         p.className,
       )}
+      style={p.style}
     >
       <div className="flex items-end gap-3 pb-px">
         <div className="flex min-w-0 flex-col gap-0.5">

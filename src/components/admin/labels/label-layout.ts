@@ -14,11 +14,17 @@
  * - **docked-side** — a column to the right of the table holding the video
  *   over the court; the table takes what is left and scrolls both ways.
  *
- * And a fourth, **black** — the full-screen view (board 08l,
- * `label-black-view.tsx`): black to the edges, the film and the court on the
- * left and the points rail on the right. It has no dock and no divider; its
- * one size is the rail's width ({@link clampRailWidth}), kept under
- * {@link RAIL_WIDTH_STORAGE_KEY}. The menu lists it last, as "Full screen".
+ * And two full-screen views ({@link isFullScreenMode}), neither with a dock
+ * or a divider, both sized by the rail's width alone ({@link clampRailWidth},
+ * kept under {@link RAIL_WIDTH_STORAGE_KEY}):
+ *
+ * - **black** (board 08l, `label-black-view.tsx`): black to the edges, the
+ *   film and the court on the left and the points rail on the right. The menu
+ *   calls it "Full screen".
+ * - **film** (board 08n, `label-film-view.tsx`): the film fills the screen
+ *   and the rail, the court and the transport are laid over it, as the match
+ *   Video tab's full screen does. The menu lists it last, as "Film full
+ *   screen".
  *
  * In a docked mode the band's height or the column's width is ONE number,
  * {@link DEFAULT_DOCK_SIZE} until the divider moves it, and the table takes
@@ -32,14 +38,28 @@
  */
 
 export type LabelLayoutMode =
-  "overlay" | "docked-top" | "docked-side" | "black";
+  "overlay" | "docked-top" | "docked-side" | "black" | "film";
 
 /**
  * The two modes with a dock whose size the divider drives. Spelled out, not
- * `Exclude<LabelLayoutMode, "overlay">`: the black view has no dock, and must
- * not turn up in a `Record<DockedLayoutMode, …>`.
+ * `Exclude<LabelLayoutMode, "overlay">`: the full-screen views have no dock,
+ * and must not turn up in a `Record<DockedLayoutMode, …>`.
  */
 export type DockedLayoutMode = "docked-top" | "docked-side";
+
+/**
+ * The two modes that cover the whole page in a `fixed inset-0 z-50` layer:
+ * no admin header, the page's chrome made inert, the points rail in place of
+ * the light table, and the film's frame square. Everything the console does
+ * for one it does for the other; only the view differs.
+ */
+export type FullScreenLayoutMode = "black" | "film";
+
+export function isFullScreenMode(
+  mode: LabelLayoutMode,
+): mode is FullScreenLayoutMode {
+  return mode === "black" || mode === "film";
+}
 
 /** In the order the Layout menu lists them. */
 export const LAYOUT_MODES: readonly LabelLayoutMode[] = [
@@ -47,6 +67,7 @@ export const LAYOUT_MODES: readonly LabelLayoutMode[] = [
   "docked-top",
   "docked-side",
   "black",
+  "film",
 ];
 
 export const DEFAULT_LAYOUT_MODE: LabelLayoutMode = "overlay";
@@ -78,13 +99,20 @@ export const LAYOUT_MODE_LABEL: Record<
     description:
       "Black to the edges: film and court on the left, the points rail on the right",
   },
+  film: {
+    label: "Film full screen",
+    description: "The video fills the screen; the list and court sit over it",
+  },
 };
 
 /** A stored mode. Anything unknown — or nothing — is the overlay. */
 export function parseLayoutMode(
   raw: string | null | undefined,
 ): LabelLayoutMode {
-  return raw === "docked-top" || raw === "docked-side" || raw === "black"
+  return raw === "docked-top" ||
+    raw === "docked-side" ||
+    raw === "black" ||
+    raw === "film"
     ? raw
     : DEFAULT_LAYOUT_MODE;
 }
@@ -197,7 +225,7 @@ export function parseDockSizes(raw: string | null | undefined): DockSizes {
   return sizes;
 }
 
-// ── The black view's rail ──────────────────────────────────────────────────
+// ── The full-screen views' rail ────────────────────────────────────────────
 
 /** The least the points rail may be: its rows still read whole. */
 export const RAIL_MIN_PX = 520;

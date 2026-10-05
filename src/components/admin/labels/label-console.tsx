@@ -12,6 +12,7 @@ import {
   type Dispatch,
   type FocusEvent,
   type ReactNode,
+  type RefObject,
   type SetStateAction,
 } from "react";
 import {
@@ -135,6 +136,7 @@ import {
 } from "./court-placement";
 import { LabelBlackRail } from "./label-black-rail";
 import { LabelBlackView } from "./label-black-view";
+import { LabelFilmView } from "./label-film-view";
 import type { LabelConfirm } from "./label-confirm";
 import { LabelConfirmDialog } from "./label-confirm-dialog";
 import { LabelCourtDock } from "./label-court-dock";
@@ -154,6 +156,7 @@ import {
   MIN_DOCK_PX,
   clampDockSize,
   dockRoom,
+  isFullScreenMode,
   maxDockSize,
   parseDockSizes,
   parseLayoutMode,
@@ -356,14 +359,18 @@ function removeFrom(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
  *
  * ── Full screen (T33) ───────────────────────────────────────────────────────
  *
- * The fourth mode, **black** (`label-black-view.tsx`, board 08l): a
- * `fixed inset-0 z-50` layer over the whole page — the film room's own
- * mechanism, which is what hides the admin header — holding the same player
- * and court panel on the left and the points rail (`label-black-rail.tsx`)
- * on the right. The layer stays a child of this root, not a portal, so the
- * `--film-t` clock still reaches its rows and every callback below is handed
- * down unchanged. The rail's exit button returns to the mode the console was
- * in before — the last non-black one, the overlay by default.
+ * Two modes (`isFullScreenMode`) put a `fixed inset-0 z-50` layer over the
+ * whole page — the film room's own mechanism, which is what hides the admin
+ * header — holding the same player and court panel and the points rail
+ * (`label-black-rail.tsx`) in place of the light table. **black**
+ * (`label-black-view.tsx`, board 08l) sets the film and court on the left
+ * and the rail on the right; **film** (`label-film-view.tsx`, board 08n)
+ * fills the screen with the film and lays the rail, the court and the
+ * transport over it. Either layer stays a child of this root, not a portal,
+ * so the `--film-t` clock still reaches its rows, and every callback below
+ * is handed down unchanged — the same rail, the same player ref. The exit
+ * button returns to the mode the console was in before — the last one that
+ * was not a full screen, the overlay by default.
  */
 export function LabelConsole({
   session,
@@ -383,6 +390,8 @@ export function LabelConsole({
   initialLayoutMode,
   initialDockSize,
   initialRailWidth,
+  initialFilmRailHidden,
+  initialFilmCourtHidden,
   headerAction,
 }: {
   session: LabelSession;
@@ -439,8 +448,11 @@ export function LabelConsole({
    * specs. Given, storage is not consulted.
    */
   initialDockSize?: number;
-  /** The black view's rail width on first render, in px — for specs. */
+  /** The full-screen views' rail width on first render, in px — for specs. */
   initialRailWidth?: number;
+  /** The film view's rail and court tucked away on first render — for specs. */
+  initialFilmRailHidden?: boolean;
+  initialFilmCourtHidden?: boolean;
   /** The header's trailing link, rendered by the page. */
   headerAction?: ReactNode;
 }) {
@@ -504,8 +516,8 @@ export function LabelConsole({
   const [openTombstones, setOpenTombstones] = useState<ReadonlySet<string>>(
     () => new Set(initialOpenTombstoneIds ?? []),
   );
-  // The ghosts (site-removed strokes, board 08m §3) the black view shows as
-  // their struck-through row. Only that view reads it.
+  // The ghosts (site-removed strokes, board 08m §3) the full-screen rail
+  // shows as their struck-through row. Only that rail reads it.
   const [openGhosts, setOpenGhosts] = useState<ReadonlySet<string>>(
     () => new Set(initialOpenGhostIds ?? []),
   );
@@ -517,7 +529,8 @@ export function LabelConsole({
   const overlayScrollerRef = useRef<HTMLDivElement | null>(null);
   const topScrollerRef = useRef<HTMLDivElement | null>(null);
   const sideScrollerRef = useRef<HTMLDivElement | null>(null);
-  const blackScrollerRef = useRef<HTMLDivElement | null>(null);
+  // The full-screen rail's, shared by both views: one rail, one scroller.
+  const railScrollerRef = useRef<HTMLDivElement | null>(null);
   // The root: the video writes the film's clock onto it (`--film-t`), so the
   // playing row's progress rule and the transport read one clock (T21).
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -575,29 +588,31 @@ export function LabelConsole({
       /* private window — the choice just isn't kept */
     }
   }, []);
-  // The two modes with a dock. The black full-screen view (T33) has none.
+  // The two modes with a dock. The full-screen views (T33) have none.
   const dockMode =
     layoutMode === "docked-top" || layoutMode === "docked-side"
       ? layoutMode
       : null;
   const docked = dockMode !== null;
-  const black = layoutMode === "black";
+  // Black or film: the fixed layer, the rail, no light header.
+  const fullScreen = isFullScreenMode(layoutMode);
   const scrollerRef =
     layoutMode === "docked-top"
       ? topScrollerRef
       : layoutMode === "docked-side"
         ? sideScrollerRef
-        : black
-          ? blackScrollerRef
+        : fullScreen
+          ? railScrollerRef
           : overlayScrollerRef;
-  // Where "Exit full screen" goes: the last mode that was not the black view
-  // — the overlay when the console arrived in black, or never left it.
-  const modeBeforeBlack = useRef<LabelLayoutMode>(DEFAULT_LAYOUT_MODE);
+  // Where "Exit full screen" goes: the last mode that was not a full screen
+  // — the overlay when the console arrived in one, or never left it.
+  const modeBeforeFullScreen = useRef<LabelLayoutMode>(DEFAULT_LAYOUT_MODE);
   useEffect(() => {
-    if (layoutMode !== "black") modeBeforeBlack.current = layoutMode;
+    if (!isFullScreenMode(layoutMode))
+      modeBeforeFullScreen.current = layoutMode;
   }, [layoutMode]);
-  const exitBlack = useCallback(
-    () => chooseLayout(modeBeforeBlack.current),
+  const exitFullScreen = useCallback(
+    () => chooseLayout(modeBeforeFullScreen.current),
     [chooseLayout],
   );
 
@@ -709,9 +724,9 @@ export function LabelConsole({
     () => dockNowPlaying(points, parsePlayingRowKey(playingKey)),
     [points, playingKey],
   );
-  // The docked (and black) player's transport title row — the dock derives
-  // the same for the floating one. Nothing in the overlay reads it, so it
-  // stays `null`.
+  // The docked (and full-screen) player's transport title row — the dock
+  // derives the same for the floating one. Nothing in the overlay reads it,
+  // so it stays `null`.
   // The scoreboard over the rows as they stand, once: the rail's scores and
   // bands and the dock's readout all read this.
   const scores = useMemo(
@@ -719,9 +734,9 @@ export function LabelConsole({
     [points, session.adScoring],
   );
   const dockedReadout = useMemo(() => {
-    if (!docked && !black) return null;
+    if (!docked && !fullScreen) return null;
     return dockReadout(points, nowPlaying, names, scores);
-  }, [docked, black, points, scores, nowPlaying, names]);
+  }, [docked, fullScreen, points, scores, nowPlaying, names]);
   // The playing point's span on the FILE clock — `--film-t` is the element's
   // own seconds, so the window is the player's stop, not `playingRowAt`'s
   // analysis-clock one.
@@ -1648,14 +1663,15 @@ export function LabelConsole({
   // cards cover (`followInsets`) — a row under the video or the court is not
   // in view — and less the column header stuck to the card's top, which a
   // row scrolled to the very top would otherwise sit under. Docked, nothing
-  // floats over the table: only the column header is kept clear. The black
-  // rail has neither — no column header, nothing over it — so no insets.
+  // floats over the table: only the column header is kept clear. The
+  // full-screen rail has neither — no column header, nothing over it — so no
+  // insets.
   const insets = useMemo(() => {
-    if (black) return { top: 0, bottom: 0 };
+    if (fullScreen) return { top: 0, bottom: 0 };
     if (docked) return { top: POINT_HEADER_HEIGHT, bottom: 0 };
     const docks = followInsets(videoLayout);
     return { top: docks.top + POINT_HEADER_HEIGHT, bottom: docks.bottom };
-  }, [black, docked, videoLayout]);
+  }, [fullScreen, docked, videoLayout]);
   useFollowScroll({
     scroller: scrollerRef,
     held,
@@ -1757,36 +1773,34 @@ export function LabelConsole({
   // floating dock wraps — same `player` ref, transport, clock target — so
   // Space, ← / → and the progress rule never notice the move. The court card
   // keeps its blue outline while placing, as the floating one does; `fill`
-  // lets the court centre in whatever height the panel has. In the black
-  // view the frame is flush to the stage, so nothing in it rounds a corner.
+  // lets the court centre in whatever height the panel has. Full screen the
+  // frame is flush to the stage (or is the screen), so nothing in it rounds
+  // a corner. The film view takes the same two as render functions, since
+  // it adds the transport's inset to the one and the drag handle to the other.
   const placing = isPlacing(expanded, placement, editable);
   const DOCK_CARD =
     "rounded-[var(--radius-card)] bg-[#1A1A1C] shadow-[var(--shadow-card)]";
-  const dockedVideo = (
-    <LabelVideoPlayer
-      ref={player}
-      video={video}
-      points={points}
-      readout={dockedReadout ?? undefined}
-      onTime={clock.set}
-      clockTargetRef={rootRef}
-      square={black}
-    />
-  );
-  const dockedCourt = (
-    <LabelCourtPanel
-      point={expanded}
-      names={names}
-      placement={placement}
-      editable={editable}
-      playingShotId={playing?.shotId ?? null}
-      clock={clock}
-      onPlace={place}
-      onTarget={setTarget}
-      onFlip={() => setPlacement(flipPlacement)}
-      fill
-    />
-  );
+  const videoProps = {
+    video,
+    points,
+    readout: dockedReadout ?? undefined,
+    onTime: clock.set,
+    clockTargetRef: rootRef,
+    square: fullScreen,
+  };
+  const dockedVideo = <LabelVideoPlayer ref={player} {...videoProps} />;
+  const courtProps = {
+    point: expanded,
+    names,
+    placement,
+    editable,
+    playingShotId: playing?.shotId ?? null,
+    clock,
+    onPlace: place,
+    onTarget: setTarget,
+    onFlip: () => setPlacement(flipPlacement),
+  };
+  const dockedCourt = <LabelCourtPanel {...courtProps} fill />;
   // The divider's value and bounds, in px. Unmeasured, the most is not known
   // yet, so it is wherever the dock already is.
   const divider =
@@ -1809,6 +1823,64 @@ export function LabelConsole({
     "flex flex-col px-3 pt-3 pb-2.5 transition-[box-shadow] duration-150",
     placing && "shadow-[0_0_0_1.5px_var(--blue),var(--shadow-card)]",
   );
+  // The full-screen rail, the same for both views: every callback the light
+  // table takes, unchanged. The film view hands it a hide button; the black
+  // view has none.
+  const railFor = (hide?: {
+    onHide: () => void;
+    hideButtonRef: RefObject<HTMLButtonElement | null>;
+  }) => (
+    <LabelBlackRail
+      scores={scores}
+      player1Name={session.player1Name}
+      player2Name={session.player2Name}
+      checked={checked}
+      total={total}
+      saveStatus={saveStatus}
+      onExit={exitFullScreen}
+      onHide={hide?.onHide}
+      hideButtonRef={hide?.hideButtonRef}
+      scrollerRef={scrollerRef}
+      onFocusCapture={holdOnEditorFocus}
+      affordance={affordance}
+      onFollow={followPlayback}
+      points={points}
+      adScoring={session.adScoring}
+      names={names}
+      marks={liveMarks}
+      expandedPointId={currentPointId}
+      onTogglePoint={togglePoint}
+      editable={editable}
+      selectedShotId={placement.shotId}
+      onSelectShot={selectShot}
+      onPatchPoint={patchPoint}
+      onPatchShot={patchShot}
+      operations={rowOperations}
+      onSetGameServer={operable ? setGameServer : undefined}
+      onSetGameType={operable ? setGameType : undefined}
+      openTombstoneIds={openTombstones}
+      onToggleTombstone={toggleTombstone}
+      openGhostIds={openGhosts}
+      onToggleGhost={toggleGhost}
+      playingPointId={playingPointId}
+      playingShotId={playing?.shotId ?? null}
+      playingWindow={playingWindow}
+      finalScore={sessionFields.finalScore}
+      videoEndsEarly={sessionFields.videoEndsEarly}
+      matchScore={session.matchScore}
+      onFixEnteredScore={
+        operable
+          ? (sets) => void updateSessionFields({ final_score: sets })
+          : undefined
+      }
+      onVideoEndsEarly={
+        operable
+          ? () => void updateSessionFields({ video_ends_early: true })
+          : undefined
+      }
+      onFindGap={operable ? findGap : undefined}
+    />
+  );
 
   return (
     <div
@@ -1817,11 +1889,11 @@ export function LabelConsole({
       data-label-layout-mode={layoutMode}
       className="flex min-h-0 flex-1 flex-col gap-6"
     >
-      {/* Not in the black view: it covers the whole page, and a header drawn
+      {/* Not full screen: the layer covers the whole page, and a header drawn
           under it is a row of Tab stops nobody can see. Its title, progress
           and save line are the rail header's there; the way out is the
           rail's own "Exit full screen". */}
-      {black ? null : (
+      {fullScreen ? null : (
         <div
           data-console-header=""
           className="flex shrink-0 items-end justify-between gap-8"
@@ -1849,7 +1921,7 @@ export function LabelConsole({
         </div>
       )}
 
-      {black ? (
+      {layoutMode === "black" ? (
         // Full screen (T33): the film room's `fixed inset-0 z-50` layer, a
         // child of this root so `--film-t` reaches the rail's rows. The same
         // player and court panel the docked modes mount; the rail takes
@@ -1860,55 +1932,34 @@ export function LabelConsole({
           court={dockedCourt}
           placing={placing}
         >
-          <LabelBlackRail
-            scores={scores}
-            player1Name={session.player1Name}
-            player2Name={session.player2Name}
-            checked={checked}
-            total={total}
-            saveStatus={saveStatus}
-            onExit={exitBlack}
-            scrollerRef={scrollerRef}
-            onFocusCapture={holdOnEditorFocus}
-            affordance={affordance}
-            onFollow={followPlayback}
-            points={points}
-            adScoring={session.adScoring}
-            names={names}
-            marks={liveMarks}
-            expandedPointId={currentPointId}
-            onTogglePoint={togglePoint}
-            editable={editable}
-            selectedShotId={placement.shotId}
-            onSelectShot={selectShot}
-            onPatchPoint={patchPoint}
-            onPatchShot={patchShot}
-            operations={rowOperations}
-            onSetGameServer={operable ? setGameServer : undefined}
-            onSetGameType={operable ? setGameType : undefined}
-            openTombstoneIds={openTombstones}
-            onToggleTombstone={toggleTombstone}
-            openGhostIds={openGhosts}
-            onToggleGhost={toggleGhost}
-            playingPointId={playingPointId}
-            playingShotId={playing?.shotId ?? null}
-            playingWindow={playingWindow}
-            finalScore={sessionFields.finalScore}
-            videoEndsEarly={sessionFields.videoEndsEarly}
-            matchScore={session.matchScore}
-            onFixEnteredScore={
-              operable
-                ? (sets) => void updateSessionFields({ final_score: sets })
-                : undefined
-            }
-            onVideoEndsEarly={
-              operable
-                ? () => void updateSessionFields({ video_ends_early: true })
-                : undefined
-            }
-            onFindGap={operable ? findGap : undefined}
-          />
+          {railFor()}
         </LabelBlackView>
+      ) : layoutMode === "film" ? (
+        // Film full screen (board 08n): the same layer, the film filling it
+        // and the same rail, court panel and player over it — the player
+        // told how far short of the rail its transport stops, the court
+        // panel given the header that drags it.
+        <LabelFilmView
+          initialRailWidth={initialRailWidth}
+          initialRailHidden={initialFilmRailHidden}
+          initialCourtHidden={initialFilmCourtHidden}
+          checked={checked}
+          total={total}
+          onExit={exitFullScreen}
+          placing={placing}
+          video={(transportInset) => (
+            <LabelVideoPlayer
+              ref={player}
+              {...videoProps}
+              fill
+              transportInset={transportInset}
+            />
+          )}
+          court={(handle) => (
+            <LabelCourtPanel {...courtProps} {...handle} fill />
+          )}
+          rail={railFor}
+        />
       ) : layoutMode === "docked-top" ? (
         // A band above the table, `dockSize` tall (`DEFAULT_DOCK_SIZE` until
         // the divider moves it): the video at 16:9 from that height (565

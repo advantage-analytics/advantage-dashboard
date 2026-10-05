@@ -97,7 +97,9 @@ export const BLACK_VIDEO_WIDTH = `min(100cqw, max(calc((100cqh - ${BLACK_COURT_M
  * document and its return runs when the layer leaves it, which is the whole
  * lifetime wanted — there is no state for an effect to read.
  */
-function inertOutside(layer: HTMLElement | null): (() => void) | undefined {
+export function inertOutside(
+  layer: HTMLElement | null,
+): (() => void) | undefined {
   if (!layer) return undefined;
   const covered: HTMLElement[] = [];
   for (
@@ -117,24 +119,19 @@ function inertOutside(layer: HTMLElement | null): (() => void) | undefined {
   };
 }
 
-export function LabelBlackView({
-  initialRailWidth,
-  video,
-  court,
-  placing = false,
-  children,
-}: {
-  /** The rail's width on first render, in px — for specs. */
-  initialRailWidth?: number;
-  /** The shared `LabelVideoPlayer`. */
-  video: ReactNode;
-  /** The shared `LabelCourtPanel`, with `fill`. */
-  court: ReactNode;
-  /** A stroke is selected and a court click would write: the court's outline. */
-  placing?: boolean;
-  /** The rail's contents — `LabelBlackRail`. */
-  children: ReactNode;
-}) {
+/**
+ * The rail's width, as the file comment has it: the default, then the stored
+ * width after mount, then whatever the handle asks for — clamped, and written
+ * to storage once it settles. Shared with the film view (`label-film-view.tsx`),
+ * whose rail is the same rail at the same width under the same key.
+ */
+export function useRailWidth(initialRailWidth?: number): {
+  railWidth: number;
+  /** The width asked for, in px; clamped here. */
+  resizeRail: (px: number) => void;
+  /** Back to `RAIL_DEFAULT_PX`. */
+  resetRail: () => void;
+} {
   const [railWidth, setRailWidth] = useState(() =>
     initialRailWidth !== undefined
       ? clampRailWidth(initialRailWidth)
@@ -192,6 +189,28 @@ export function LabelBlackView({
     () => resizeRail(RAIL_DEFAULT_PX),
     [resizeRail],
   );
+  return { railWidth, resizeRail, resetRail };
+}
+
+export function LabelBlackView({
+  initialRailWidth,
+  video,
+  court,
+  placing = false,
+  children,
+}: {
+  /** The rail's width on first render, in px — for specs. */
+  initialRailWidth?: number;
+  /** The shared `LabelVideoPlayer`. */
+  video: ReactNode;
+  /** The shared `LabelCourtPanel`, with `fill`. */
+  court: ReactNode;
+  /** A stroke is selected and a court click would write: the court's outline. */
+  placing?: boolean;
+  /** The rail's contents — `LabelBlackRail`. */
+  children: ReactNode;
+}) {
+  const { railWidth, resizeRail, resetRail } = useRailWidth(initialRailWidth);
 
   return (
     <div
