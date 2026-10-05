@@ -33,8 +33,13 @@ QF · SF · F`).
   the Players block, never repeated as a Context field. Program players are
   edited from the roster, never from a match.
 
-Copy conventions the lists lean on: sentence case; middots join suffixes and
-counts ("Cardinal · M", "12 matches · 8 won"); waiting states say "In line —
+Copy conventions the lists lean on: sentence case **per segment** — a line
+joined by middots is several short sentences, and each one starts with a
+capital ("Set 2 · Game 5 · Lee serving", "One-off · Not on the schedule"); a
+segment that opens on a number or a name is left as it is ("Cardinal · M",
+"12 matches · 8 won"). _Supersedes (2026-09-30): "sentence case; middots join
+suffixes and counts ("Cardinal · M", "12 matches · 8 won")"._ Enforced by
+`scripts/check-design-drift.mjs` check 8. Waiting states say "In line —
 we'll notify you", **never an invented ETA**; chrome copy is one word where
 one will do (Profile · Account · Preferences · Usage · Plan · Team). The design
 project's sample personas: Jordan Lee · Elena Vargas · Meridian State.
@@ -46,6 +51,15 @@ project's sample personas: Jordan Lee · Elena Vargas · Meridian State.
 **`Score`** — tiebreak scores are superscripts, never parentheses: `7-6⁴`,
 digit at 0.6em raised 1.05em, 0.5px off the score. Applies to any score
 anywhere, not a roster-page treatment.
+
+**Score — the winner of each completed set is bold.** In a per-row final
+scoreboard (the match report's rail) the digit of whoever won a set prints
+`font-semibold` in full ink (ink-900) and the loser's stays regular in ink-600, on either row, set by set, never per row: a
+match winner's lost set is regular, and the opponent's winning digit in it is
+bold. This holds in an unfinished match too (Retired, Unfinished, Withdrew,
+Defaulted) for every set that was completed; the last set of such a match is
+the one left open, so it bolds neither digit. A level set has no winner.
+Shipped: `rail-scoreboard.tsx` (`wonSets`).
 
 **`ResultMark`** — `CircleCheck`/`CircleX`/`CircleMinus` at 14px stroke 1.5,
 the outcome triple (green/red/ink-500 for a level dual). **The** outcome

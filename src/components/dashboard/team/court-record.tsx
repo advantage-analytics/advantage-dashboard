@@ -57,7 +57,7 @@ export function CourtRecord({ record }: { record: CourtRecord }) {
             <>
               {dualsPlayed > columns.length ? "Last " : ""}
               <span className="tabular">{columns.length}</span>{" "}
-              {columns.length === 1 ? "dual" : "duals"} · singles only
+              {columns.length === 1 ? "dual" : "duals"} · Singles only
             </>
           ) : (
             "Fills in court by court after the first dual"

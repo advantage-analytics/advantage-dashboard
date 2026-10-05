@@ -17,6 +17,8 @@ import {
   getMatchVideoUsage,
 } from "@/lib/data/match-video-usage-server";
 
+export const metadata = { title: "Usage" };
+
 /**
  * Settings › Usage & quota.
  *
@@ -38,6 +40,11 @@ export default async function UsagePage() {
   const workspace = await getWorkspaceContext();
   if (!workspace) return null;
 
+  // Always present — `getWorkspaceContext()` puts personal first.
+  const personalWorkspace =
+    workspace.available.find((candidate) => candidate.kind === "personal") ??
+    workspace.active;
+
   const teams = workspace.available
     .filter((candidate) => candidate.kind === "team")
     .sort(
@@ -51,7 +58,7 @@ export default async function UsagePage() {
   // which program cards exist at all.
   const [videos, personal, ...programs] = await Promise.all([
     getMatchVideoUsage(workspace.active),
-    getPersonalUsage(workspace.viewer.id, billingMonth),
+    getPersonalUsage(personalWorkspace, billingMonth),
     ...teams.map((team) =>
       getProgramUsage(team.id, billingMonth, team.orgType),
     ),
@@ -89,8 +96,8 @@ export default async function UsagePage() {
         </div>
 
         <span className="text-[11px] text-[var(--ink-500)]">
-          Personal uploads only · resets{" "}
-          {formatResetDate(personal.billingMonth)} · free through Dec 31, 2026
+          Personal uploads only · Resets{" "}
+          {formatResetDate(personal.billingMonth)} · Free through Dec 31, 2026
         </span>
       </SettingsCard>
 

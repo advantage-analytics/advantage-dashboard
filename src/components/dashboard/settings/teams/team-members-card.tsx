@@ -197,7 +197,7 @@ export function TeamMembersCard({
             {/* The role is the one thing an invitation row cannot show in
                 the pill column — that says Invited — so it leads the meta. */}
             <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
-              {capitalize(invite.role)} · sent{" "}
+              {capitalize(invite.role)} · Sent{" "}
               {formatInviteDate(invite.createdAt)}
             </span>
             <StatePill outline>Invited</StatePill>
@@ -266,7 +266,7 @@ function SeatPips({ seats }: { seats: SeatUsage }) {
       <span className="text-[11px] text-[var(--ink-500)]">
         {seats.used} of {total} player seats
         {held > 0 && ` · ${held} held`}
-        {free === 0 && held === 0 && " · full"}
+        {free === 0 && held === 0 && " · Full"}
       </span>
     </div>
   );

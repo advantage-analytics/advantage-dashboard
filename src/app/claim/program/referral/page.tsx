@@ -9,7 +9,7 @@ import { ReferralLink } from "@/components/claim/referral-link";
 import { advButton } from "@/lib/ui/adv-button";
 import { requestOrigin } from "@/lib/request-origin";
 
-export const metadata = { title: "Not on Advantage yet" };
+export const metadata = { title: "Program not found" };
 
 /** Longer than any real school name; a URL parameter is not a length promise. */
 const MAX_SCHOOL = 60;

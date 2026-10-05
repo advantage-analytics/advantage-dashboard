@@ -52,7 +52,7 @@ import {
   HistoryBodyPending,
 } from "@/components/dashboard/loading/team-home-skeleton";
 
-export const metadata = { title: "Team Home" };
+export const metadata = { title: "Team home" };
 type Resources = ReturnType<typeof getTeamHomeResources>;
 
 /** Known card frames render immediately; each resource fills its own region. */

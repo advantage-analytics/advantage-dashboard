@@ -17,7 +17,7 @@ import {
 } from "../match-filters/model";
 import {
   filmCutExtras,
-  overlayCutFilters,
+  filmCutFilters,
   matchesFilmCutExtras,
   type FilmCutIntent,
   type FilmCutRemainder,
@@ -31,7 +31,8 @@ import {
  * 1. `shared` — the match report's `MatchFilters` (`MatchFiltersProvider`),
  *    mirrored to `?f=`. Film edits it through the quick menu and the filters
  *    drawer (`FiltersPanel`), and a statistic's cut LANDS its `MatchFilters`
- *    half here (`landFilmCut`), so the drawer shows those pills pressed.
+ *    half here (`landFilmCut`), replacing whatever was applied, so the
+ *    drawer shows exactly those pills pressed.
  * 2. `remainder` — what of a landed cut `MatchFilters` cannot say (its
  *    `FilmCutExtras`) and the statistic's label, Film only: named in the
  *    filter strip, never a pill. Held by `MatchFiltersProvider` beside the
@@ -109,13 +110,15 @@ export function filmListPoints(
 }
 
 /**
- * Land a statistic's cut. `shared` comes back with every `MatchFilters` key
- * the cut sets REPLACED by the cut's value — the clicked figure's own groups
- * win, rather than intersecting with whatever was picked there — and every
- * other key untouched, so any other applied group still ANDs and the list
- * never exceeds the card's count. (The same object back when that changes
- * nothing.) `remainder` holds ONLY the cut's `FilmCutExtras` and its label,
- * or is `null` when the cut has no extras: a pure cut is just pills.
+ * Land a statistic's cut. `shared` comes back as the cut's `MatchFilters`
+ * half over the EMPTY filters (`filmCutFilters`) — a landing RESETS the
+ * Video filters, it never stacks on them. Whatever was applied before (an
+ * earlier figure's cut, a drawer pick) is dropped, so the list is exactly
+ * the points the card counted over the whole match; overlaying instead left
+ * the previous click's groups ANDed in, and a second figure opened on a
+ * narrower list than its own number. (The same object back when that
+ * changes nothing.) `remainder` holds ONLY the cut's `FilmCutExtras` and its
+ * label, or is `null` when the cut has no extras: a pure cut is just pills.
  *
  * The caller writes `shared` through `setShared`, holds the remainder with
  * `landed: shared` beside it, and turns the saved toggle off (the card
@@ -125,7 +128,7 @@ export function landFilmCut(
   shared: MatchFilters,
   intent: FilmCutIntent,
 ): { shared: MatchFilters; remainder: FilmCutRemainder | null } {
-  const landed = overlayCutFilters(shared, intent.cut);
+  const landed = filmCutFilters(intent.cut);
   const extras = filmCutExtras(intent.cut);
   return {
     shared: filtersEqual(landed, shared) ? shared : landed,
@@ -240,8 +243,9 @@ function midSentence(label: string, names: PhraseNames): string {
  * here, like any other pick), then the statistic's label ("…, from
  * Statistics") ONLY while its Film-only extras are in force — a pure cut is
  * all shared phrases already and names nothing twice — then "saved"; joined
- * with " · " and capitalised once. "G. Revelli serving · second serve ·
- * break point". "All points" when nothing is applied.
+ * with " · ", each segment starting with a capital like every other middot
+ * line in the dashboard. "G. Revelli serving · Second serve · Break point".
+ * "All points" when nothing is applied.
  */
 export function filmListSentence(
   f: {
@@ -260,7 +264,9 @@ export function filmListSentence(
     parts.push(`${label}, from Statistics`);
   }
   if (f.savedOnly) parts.push("saved");
-  return parts.length === 0 ? "All points" : capitalizeFirst(parts.join(" · "));
+  return parts.length === 0
+    ? "All points"
+    : parts.map(capitalizeFirst).join(" · ");
 }
 
 /**

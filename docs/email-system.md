@@ -37,19 +37,66 @@ across the two would catch real divergence, and has not been written.
 six `.html` files → what is uploaded to Supabase. `shell.ts` is the fourth, off
 to the side. Only the first arrow is automated.
 
-> ⚠️ **The generator and its output have already diverged.** The committed
-> `.html` files carry the `@font-face` block in its own Outlook-hidden `<style>`;
-> `build_email_templates.py:65` still emits an `@import` of the Google Fonts CSS
-> inside the main block — the exact failure `shell.ts` warns about. Someone
-> hand-patched the generated files and never ported it back. **Re-running the
-> generator today reverts that fix in all six templates.** Port the fix into the
-> script before you next run it, and add the equivalent of
-> `tests/generate-map.spec.ts` (run generator, assert no diff) so it cannot
-> happen again.
+The first arrow is enforced: `tests/email-templates-generated.spec.ts` runs the
+generator into a temp directory and fails if any of the six files differs by a
+byte. So a template change is made **in the script**, then
+`python3 scripts/build_email_templates.py` and commit both — an edit made only
+in an `.html` file fails the suite. (The two had drifted once: a font fix and a
+copy change lived only in the `.html` files, and re-running the generator would
+have reverted both.) `--out <dir>` writes somewhere other than the repo.
+
+The second arrow is still by hand. **Subjects are not in the `.html` files** —
+they live in the script's `TEMPLATES` and in the dashboard, so a subject change
+is a paste of its own.
 
 > Naming trap: `supabase/email-templates/invite.html` is **Supabase Auth's**
 > invite, not the program invite. The program invite is
 > [`templates/program-invite.ts`](../src/lib/services/email/templates/program-invite.ts).
+
+### Auth mail links
+
+Every auth template links to the app's `/confirm` route with the `token_hash`
+OTP flow. Two shapes, and which one a template uses is not a style choice:
+
+- **Static** — `{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=…&next=…`.
+  `invite`, `recovery` and `email_change`. Always the configured Site URL, so
+  always production.
+- **`{{ $link }}`** — `confirmation` and `magic_link`. Set once at the top of the
+  file: the static form, replaced by
+  `{{ .RedirectTo }}&token_hash=…&type=…` when the app supplied a redirect. That
+  is what lets a dev server on another port get its own link back, and what
+  lands the program-claim flow on `/claim/verify` (`claim-actions.ts`).
+
+**`.RedirectTo` is never empty — do not test it with `{{ if .RedirectTo }}`.**
+GoTrue's `GetReferrer` resolves it as: the request's `redirect_to` if the allow
+list accepts it, else the `Referer` header if _that_ passes, else the Site URL.
+So a send with no redirect — a resend from the Supabase dashboard, an admin API
+call, a redirect the allow list rejected — arrives with `.RedirectTo` equal to
+the bare origin, and appending `&token_hash=…` produces
+`https://app.advantage-analytics.com&token_hash=…`, which is not a host. That
+shipped: a confirmation resent from the dashboard on 2026-10-03 could not be
+opened, while app sign-ups kept working because they always pass
+`/confirm?next=…`.
+
+The rule the templates implement: **use `.RedirectTo` only when it contains a
+`?`**, the one shape `&` can be appended to. Go templates here have no
+`contains`, so it is a `range` over the string's bytes looking for 63. Comparing
+against `.SiteURL` is not enough — a Referer fallback can be the origin with a
+trailing slash or an app page. Consequences for callers:
+
+- An `emailRedirectTo` for sign-up or `signInWithOtp` **must be
+  `<origin>/confirm?next=<path>`**. A redirect with no query string is ignored
+  and the mail falls back to `/confirm … &next=/dashboard` on production.
+- The origin must be on the project's redirect allow list, or GoTrue discards
+  it before the template ever sees it — same fallback.
+- `recovery` stays static on purpose: its caller sends a bare path.
+
+`tests/auth-email-links.spec.ts` pins the link shapes. It cannot render a
+template; to see real output, point a throwaway local Supabase project's
+`[auth.email.template.*]` at these files and read the mail in Mailpit, sending
+once with a `redirect_to` and once without. A change to any of these files does
+nothing until it is **pasted into the hosted project** (Authentication → Emails
+→ Templates) — the repo copy is not deployed by anything.
 
 ---
 
@@ -164,8 +211,14 @@ Each of these exists because of a specific failure:
 - **Format dates in UTC.** Expiries are compared against `now()` in Postgres.
   Local-zone formatting prints a date the database disagrees with by up to a day —
   and the day it disagrees is the day someone's link dies early.
-- **Build links with `siteUrl()`** from `@/lib/site-url`. It deliberately allows
-  localhost: in development the person clicking is at the machine serving it.
+- **Build links with `emailOrigin()`** from `@/lib/site-url`, never `siteUrl()`.
+  On every Vercel deployment, preview included, it is
+  `https://app.advantage-analytics.com`: preview shares production's database,
+  so a preview deployment settling a real athlete's job used to mail them a
+  `www.advantage-analytics.dev` link (October 2026). Locally it falls back to
+  `siteUrl()`, which deliberately allows localhost: in development the person
+  clicking is at the machine serving it. `tests/email-origin.spec.ts` fails any
+  template or notification that reaches for `siteUrl()` again.
   Never derive an email link's origin from the request's `Host` header — an
   attacker who can set `Host` gets invitation links pointing at their own host,
   and the recipient hands over a valid token by clicking something that looks

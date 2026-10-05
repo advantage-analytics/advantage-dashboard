@@ -955,7 +955,7 @@ test.describe("the opponent's school on a tournament round", () => {
     await page.getByRole("menuitemradio", { name: /^R32\b/ }).click();
     await expect(schoolField(page)).toHaveValue("Rival State");
     await expect(
-      page.getByText("On the directory · their saved roster is offered below."),
+      page.getByText("On the directory · Their saved roster is offered below."),
     ).toBeVisible();
     await expect
       .poll(() => page.evaluate(() => window.rosterCalls))
@@ -1032,7 +1032,7 @@ test.describe("the opponent's school on a tournament round", () => {
     await field.press("Enter");
     await expect(field).toHaveValue("Valley Club");
     await expect(
-      page.getByText("Typed · no saved roster, so their player is typed too."),
+      page.getByText("Typed · No saved roster, so their player is typed too."),
     ).toBeVisible();
     expect(await page.evaluate(() => window.rosterCalls)).toEqual([]);
 

@@ -107,7 +107,8 @@ import {
   focusRingCls,
   noteStripCls,
 } from "./styles";
-import { formatHoursMinutes, setHasData } from "./utils";
+import { formatHoursMinutes } from "@/lib/format/duration";
+import { setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
 import { FieldCaption } from "./FieldCaption";
 import {
@@ -117,7 +118,13 @@ import {
 } from "@/components/ui/float-menu";
 import { AnimatedHeight } from "./AnimatedHeight";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
-import { firstOpenSet, isStoppedResult, scoreGames } from "./score-state";
+import {
+  firstOpenSet,
+  isStoppedResult,
+  offersOneSet,
+  scoreGames,
+  setWinner,
+} from "./score-state";
 import {
   firstNameOf,
   styleSaveChecked,
@@ -182,6 +189,15 @@ export interface DetailsStepContentProps {
   scoreCheckVisible: boolean;
   /** "No, I'll finish the score" — the flow hides the question again. */
   onScoreCheckDismiss: () => void;
+  /**
+   * "No, it was a one-set match" switched the format to best of 1 and is still
+   * in force — the notice is its settled line with Undo. The flow owns it.
+   */
+  oneSetSettled: boolean;
+  /** Switch to best of 1 (the flow remembers the format to Undo back to). */
+  onOneSet: () => void;
+  /** Back to the remembered format, with the question open again. */
+  onUndoOneSet: () => void;
 }
 
 type Hand = "right" | "left";
@@ -189,7 +205,7 @@ type Backhand = "one-handed" | "two-handed";
 
 const COURT_OPTIONS: readonly { value: string; label: string }[] = [
   { value: "Outdoor Hard Court", label: "Hard" },
-  { value: "Indoor Hard Court", label: "Hard · indoor" },
+  { value: "Indoor Hard Court", label: "Hard · Indoor" },
   { value: "Clay Court", label: "Clay" },
   { value: "Grass Court", label: "Grass" },
 ];
@@ -769,7 +785,7 @@ function ScheduleFooter({
     <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-[var(--ink-500)]">
       {canAttach ? (
         <>
-          <span>One-off · not on the schedule</span>
+          <span>One-off · Not on the schedule</span>
           <span className="text-[var(--ink-300)]">·</span>
           <button
             type="button"
@@ -921,7 +937,7 @@ function provenanceFor(
       return ctx.school ? `from ${ctx.school}'s roster` : "from their roster";
     case "new":
       return ctx.saved && ctx.school
-        ? `new · saved to ${ctx.school}`
+        ? `New · Saved to ${ctx.school}`
         : ctx.isSelf
           ? null
           : "only you see this name";
@@ -951,6 +967,9 @@ function DetailsStepContentImpl({
   error,
   scoreCheckVisible,
   onScoreCheckDismiss,
+  oneSetSettled,
+  onOneSet,
+  onUndoOneSet,
 }: DetailsStepContentProps) {
   const scoreRef = useRef<HTMLDivElement>(null);
   // A preset IS the line it came from; the name is what reads at the use
@@ -1350,7 +1369,7 @@ function DetailsStepContentImpl({
   const opponentProvenance =
     formData.opponentSource === "new"
       ? savedSchool
-        ? `new · saved to ${savedSchool}`
+        ? `New · Saved to ${savedSchool}`
         : workspaceKind === "personal"
           ? "only you see this name"
           : "new"
@@ -1366,7 +1385,7 @@ function DetailsStepContentImpl({
   // ---- Context
 
   const contextMicro = line
-    ? "from the lineup · change any of them here"
+    ? "from the lineup · Change any of them here"
     : isProcessingProvider
       ? workspaceKind === "team"
         ? "type what the schedule can't fill"
@@ -1447,18 +1466,47 @@ function DetailsStepContentImpl({
                   isStoppedResult(formData.result) ? formData.result : null
                 }
                 retiredSide={formData.retiredSide}
+                stopReason={formData.stopReason}
+                // From the line, never `formData.eventKind`: a hand-picked
+                // dual event has no line whose result could have clinched.
+                dualLine={
+                  (attachedLine?.eventKind ?? line?.eventKind) === "dual"
+                }
+                // Only off a line: a preset or attached line's event owns the
+                // format, so the score check never rewrites it.
+                offerOneSet={!fromLine && offersOneSet(scoreGames(formData))}
+                oneSetWinner={
+                  oneSetSettled
+                    ? setWinner(
+                        formData.playerScores[0],
+                        formData.opponentScores[0],
+                      )
+                    : null
+                }
+                onOneSet={() => {
+                  // Lossless by `offersOneSet`'s guard, so the Format
+                  // select's "loses a populated set" confirm doesn't apply.
+                  onInputChange("result", "");
+                  onInputChange("retiredSide", undefined);
+                  onInputChange("stopReason", undefined);
+                  onOneSet();
+                }}
+                onUndoOneSet={onUndoOneSet}
                 playerName={subject.name}
                 opponentName={formData.opponentName}
-                onAnswer={(result) => {
+                onAnswer={(result, stopReason) => {
                   onInputChange("result", result);
                   onInputChange("retiredSide", undefined);
+                  onInputChange("stopReason", stopReason);
                 }}
                 onRetiredSide={(side) => onInputChange("retiredSide", side)}
                 onChange={() => {
                   onInputChange("result", "");
                   onInputChange("retiredSide", undefined);
+                  onInputChange("stopReason", undefined);
                 }}
                 onFinishScore={() => {
+                  onInputChange("stopReason", undefined);
                   onScoreCheckDismiss();
                   // Into the set nobody has won — its first empty cell, else
                   // its first. Not simply the first empty cell on the card: an
@@ -1747,7 +1795,7 @@ function DetailsStepContentImpl({
                             </span>
                             <span className="text-[11px] text-[var(--ink-500)]">
                               {p.matches}{" "}
-                              {p.matches === 1 ? "match" : "matches"} · last{" "}
+                              {p.matches === 1 ? "match" : "matches"} · Last{" "}
                               {formatMonthDay(p.lastDate)}
                             </span>
                           </button>

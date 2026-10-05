@@ -29,6 +29,16 @@
 
 create schema if not exists schedule_private;
 
+-- Live's function defaults since 20261001184305_function_default_privileges_no_anon:
+-- no EXECUTE for PUBLIC or `anon` on new functions. Set before any function
+-- below is created, so the local stack hands out the same grants live does.
+-- The `matches` SELECT policy further down is still the 2026-09-11 snapshot
+-- with no `TO` clause (live's is `TO authenticated` since
+-- 20261001074428_rls_helpers_authenticated_only), so a signed-out read of
+-- `matches` here fails on `my_player_ids()` where live returns no rows.
+alter default privileges for role postgres revoke execute on functions from public;
+alter default privileges for role postgres in schema public revoke execute on functions from anon;
+
 -- ---------------------------------------------------------------------------
 -- Tables
 -- ---------------------------------------------------------------------------

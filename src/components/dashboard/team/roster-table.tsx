@@ -48,12 +48,15 @@ import type { RosterInvite, RosterMember } from "@/lib/data/team-roster-server";
  * in a sentence under the table now, and managed in Settings › Team. The page
  * filters them out; this component never sees one.
  *
- * ── 2. The name takes the slack ─────────────────────────────────────────────
- * `#`, Player, then a spacer, then Record, Form, Last match. Every metric is
- * fixed-width and packs to the right, so the only gap in the row falls on a
- * column boundary. Before this, Last match was the flexible cell with the date
- * pinned to its far edge, which opened ~600px of nothing mid-row and left
- * "A. Castillo" and "Aug 8" — one fact — reading as two.
+ * ── 2. Last match takes the slack ───────────────────────────────────────────
+ * `#`, Player, Record, Form, Last match. Everything before Last match is a
+ * fixed track, so the name, the record and the form read as one line at a
+ * constant gap; Last match is the table's one fluid cell: mark, opponent in a
+ * fixed track, then the date, with the spare width left empty after it. The slack used to sit between Player and Record (a spacer packed the
+ * metrics to the right), which on a wide screen put 300px+ of nothing between a
+ * player and their record. Before THAT, Last match was fluid with its date
+ * pinned to the far edge and the opponent left behind; the difference is that
+ * the date no longer trails the opponent by a different distance on every row.
  *
  * Record leads Form: the number a coach ranks by first, the five-tick trail
  * that qualifies it second.
@@ -127,14 +130,24 @@ const DIVIDER_OUT = { duration: 0.16, ease: EASE_OUT_EXPO };
  */
 const ROW_SETTLE = { bounceStiffness: 600, bounceDamping: 50 };
 
-/** Column widths. Only the spacer flexes. */
+/** Column widths. Only Last match flexes. */
 /**
  * Exported for `roster-day-zero.tsx`, which draws this table holding nothing.
  * A ghost row that restates its own widths drifts from the real one silently;
  * importing them makes that impossible.
  */
-export { COL, ROW, ROSTER_COLUMNS } from "./roster-table-layout";
-import { COL, ROW, ROSTER_COLUMNS } from "./roster-table-layout";
+export {
+  COL,
+  ROW,
+  ROSTER_COLUMNS,
+  ROSTER_MIN_WIDTH,
+} from "./roster-table-layout";
+import {
+  COL,
+  ROW,
+  ROSTER_COLUMNS,
+  ROSTER_MIN_WIDTH,
+} from "./roster-table-layout";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 
 /**
@@ -199,15 +212,13 @@ function RosterAnalysisStatus({
 }) {
   const { status, uploadPercent } = analysis;
   const word =
-    status === "processing" || status === "deriving"
-      ? "Analyzing"
-      : status === "uploading" && uploadPercent !== undefined
-        ? `${ANALYSIS_LABEL.uploading} ${Math.round(uploadPercent)}%`
-        : ANALYSIS_LABEL[status];
+    status === "uploading" && uploadPercent !== undefined
+      ? `${ANALYSIS_LABEL.uploading} ${Math.round(uploadPercent)}%`
+      : ANALYSIS_LABEL[status];
   return (
     <AnalysisStatusLine
       mark={inFlightMark(status)}
-      className="tabular ml-auto shrink-0"
+      className="tabular shrink-0"
     >
       {word}
     </AnalysisStatusLine>
@@ -222,9 +233,29 @@ function MarkSlot({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * The opponent's own track: 180px, shrinking when the column is tight, so the
+ * trailing token starts at the same x on every row instead of trailing each
+ * name by a different amount. The column's spare width falls AFTER the token.
+ */
+const OPPONENT =
+  "w-[180px] min-w-0 shrink truncate text-[12px] text-[var(--ink-700)]";
+
 /** Mark, opponent, and exactly one trailing token. See rule 3 above. */
-function LastMatchCell({ member }: { member: RosterMember }) {
+function LastMatchCell({
+  member,
+  yielding,
+}: {
+  member: RosterMember;
+  /**
+   * The row also carries "Possible duplicate" after this cell. Give up the
+   * 196px floor so the pill takes its width from the opponent's name (which
+   * truncates) instead of overflowing the row at the table's minimum width.
+   */
+  yielding?: boolean;
+}) {
   const { lastMatch } = member;
+  const cell = cn(COL.last, yielding && "min-w-0");
 
   if (lastMatch === null) {
     // The mark alone. Three dashes under three headings already say "nothing
@@ -232,7 +263,7 @@ function LastMatchCell({ member }: { member: RosterMember }) {
     // different voice, and pulled the eye to the one row with the least in
     // it. The words stay for a screen reader, which cannot read a dash.
     return (
-      <span className={cn(COL.last, "flex items-center")}>
+      <span className={cn(cell, "flex items-center")}>
         <EmptyMark label="No matches yet" />
       </span>
     );
@@ -240,16 +271,14 @@ function LastMatchCell({ member }: { member: RosterMember }) {
 
   if (lastMatch.analysis) {
     return (
-      <span className={cn(COL.last, "flex items-center gap-2.5")}>
+      <span className={cn(cell, "flex items-center gap-2.5")}>
         <MarkSlot>
           <span
             aria-hidden
             className="size-[5px] rounded-full bg-[var(--ink-300)]"
           />
         </MarkSlot>
-        <span className="truncate text-[12px] text-[var(--ink-700)]">
-          {lastMatch.opponent}
-        </span>
+        <span className={OPPONENT}>{lastMatch.opponent}</span>
         <RosterAnalysisStatus analysis={lastMatch.analysis} />
       </span>
     );
@@ -257,32 +286,26 @@ function LastMatchCell({ member }: { member: RosterMember }) {
 
   if (lastMatch.won === null) {
     return (
-      <span className={cn(COL.last, "flex items-center gap-2.5")}>
+      <span className={cn(cell, "flex items-center gap-2.5")}>
         <MarkSlot>
           <span aria-hidden className="text-[11px] text-[var(--ink-400)]">
             –
           </span>
           <span className="sr-only">Result unrecorded against</span>
         </MarkSlot>
-        <span className="truncate text-[12px] text-[var(--ink-700)]">
-          {lastMatch.opponent}
-        </span>
-        <span className={cn(SUBTLE_PILL, "ml-auto shrink-0")}>
-          Review score
-        </span>
+        <span className={OPPONENT}>{lastMatch.opponent}</span>
+        <span className={cn(SUBTLE_PILL, "shrink-0")}>Review score</span>
       </span>
     );
   }
 
   return (
-    <span className={cn(COL.last, "flex items-center gap-2.5")}>
+    <span className={cn(cell, "flex items-center gap-2.5")}>
       <MarkSlot>
         <ResultMark won={lastMatch.won} />
       </MarkSlot>
-      <span className="truncate text-[12px] text-[var(--ink-700)]">
-        {lastMatch.opponent}
-      </span>
-      <span className="text-micro tabular ml-auto shrink-0 whitespace-nowrap">
+      <span className={OPPONENT}>{lastMatch.opponent}</span>
+      <span className="text-micro tabular shrink-0 whitespace-nowrap">
         {lastMatch.date}
       </span>
     </span>
@@ -546,13 +569,10 @@ function MemberRow({
       {lifted && <SpotBadge spot={spot} />}
       <SpotCell spot={spot} draggable={inLineupMode} lifted={lifted} />
 
-      {/* A floor of the header's 230px rather than a fixed width: the name
-          now shares the cell with a "Coach-managed" pill, and at a fixed 230
-          the pill ate the name ("Peyton Cap…") with half the row empty beside
-          it. The slack after this cell absorbs the growth, so the right-packed
-          columns stay under their headers; when the drawer squeezes the table
-          the cell shrinks back to the floor and the name truncates as before. */}
-      <span className="flex max-w-[420px] min-w-[230px] shrink items-center gap-2.5">
+      {/* One width for every row, so Record starts at the same x on each. The cell
+          shares its width with a "Coach-managed" pill; the name truncates
+          before it, never the pill. */}
+      <span className={cn(COL.player, "flex items-center gap-2.5")}>
         <PlayerMark
           name={member.name}
           viewer={isViewer ? viewer : null}
@@ -590,8 +610,14 @@ function MemberRow({
         </span>
       </span>
 
-      {/* The slack. Everything after it packs to the right. */}
-      <span className="flex-1" />
+      <Record wins={member.wins} losses={member.losses} />
+      <span className={cn(COL.form, "flex items-center gap-[3px]")}>
+        <FormTicks form={member.form} slots={5} />
+      </span>
+      <LastMatchCell
+        member={member}
+        yielding={canManage && !inLineupMode && !!member.duplicateOfPlayerId}
+      />
 
       {/* The merge repair is entered from the row, because a duplicate is
           found by looking at the list. Quiet — a question, not an alarm. */}
@@ -608,12 +634,6 @@ function MemberRow({
           Possible duplicate
         </button>
       )}
-
-      <Record wins={member.wins} losses={member.losses} />
-      <span className={cn(COL.form, "flex items-center gap-[3px]")}>
-        <FormTicks form={member.form} slots={5} />
-      </span>
-      <LastMatchCell member={member} />
     </Reorder.Item>
   );
 }
@@ -697,12 +717,7 @@ export function RosterTable({
         lineup ? "overflow-visible" : "overflow-x-auto",
       )}
     >
-      {/* 768px is the row's actual intrinsic width, not a round number:
-          24 + 230 + 56 + 80 + 250 of fixed columns, five 16px gaps between
-          the six items, and the 48px this box pads by. The old 760 was 8px
-          short, so at the threshold the shrink-0 cells overflowed their own
-          padding box before `overflow-x-auto` caught them. */}
-      <div className="min-w-[768px] px-6 pt-0.5 pb-1.5">
+      <div className={cn(ROSTER_MIN_WIDTH, "px-6 pt-0.5 pb-1.5")}>
         {/* Set lineup rides this row rather than a card header of its own —
             the eyebrow row already spans the table. */}
         <div
@@ -711,46 +726,42 @@ export function RosterTable({
             "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
           )}
         >
-          {ROSTER_COLUMNS.map((column) =>
-            "spacer" in column ? (
-              <span key="spacer" className="flex-1" />
-            ) : (
-              <span
-                key={column.label}
-                className={cn(
-                  column.col,
-                  "eyebrow-sm",
-                  column.center && "text-center",
-                  column.label === "Last match" && "flex items-center",
-                )}
-              >
-                {column.label}
-                {/* Set lineup rides INSIDE the last column, not after it. As a
+          {ROSTER_COLUMNS.map((column) => (
+            <span
+              key={column.label}
+              className={cn(
+                column.col,
+                "eyebrow-sm",
+                column.center && "text-center",
+                column.label === "Last Match" && "flex items-center",
+              )}
+            >
+              {column.label}
+              {/* Set lineup rides INSIDE the last column, not after it. As a
                     sibling it took a column's worth of the row and pushed every
-                    heading ~100px left of the cells beneath — Record sat over
-                    the spacer. The column is 250px and its label is short, so
-                    the action rides its far end and the headings stay over
+                    heading ~100px left of the cells beneath. The column is the
+                    fluid one and its label is short, so the action rides its
+                    far end and the headings stay over
                     their values. */}
-                {column.label === "Last match" &&
-                  canManage &&
-                  !lineup &&
-                  members.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={onStartLineup}
-                      className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-cell)] text-[11px] font-medium tracking-normal text-[var(--blue)] normal-case transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-                    >
-                      <GripVertical
-                        className="size-3"
-                        strokeWidth={1.5}
-                        aria-hidden
-                      />
-                      Set lineup
-                    </button>
-                  )}
-              </span>
-            ),
-          )}
+              {column.label === "Last Match" &&
+                canManage &&
+                !lineup &&
+                members.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={onStartLineup}
+                    className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-cell)] font-sans text-[11px] font-medium tracking-normal text-[var(--blue)] normal-case transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                  >
+                    <GripVertical
+                      className="size-3"
+                      strokeWidth={1.5}
+                      aria-hidden
+                    />
+                    Set lineup
+                  </button>
+                )}
+            </span>
+          ))}
         </div>
 
         <Reorder.Group
@@ -814,7 +825,7 @@ export function RosterTable({
                         </span>
                         <span className="text-[11px] text-[var(--ink-400)]">
                           <span className="sr-only">: </span>
-                          drag a row below this line to bench them
+                          Drag a row below this line to bench them
                         </span>
                       </>
                     )}

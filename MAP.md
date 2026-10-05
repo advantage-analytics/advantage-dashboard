@@ -22,7 +22,9 @@ markers is hand-written — edit it as things move.
 | `/sign-up` | [`src/app/(auth)/sign-up/page.tsx`](src/app/(auth)/sign-up/page.tsx) |
 | `/update-password` | [`src/app/(auth)/update-password/page.tsx`](src/app/(auth)/update-password/page.tsx) |
 | `/admin/conferences` | [`src/app/admin/conferences/page.tsx`](src/app/admin/conferences/page.tsx) |
+| `/admin/outreach` | [`src/app/admin/outreach/page.tsx`](src/app/admin/outreach/page.tsx) |
 | `/admin` | [`src/app/admin/page.tsx`](src/app/admin/page.tsx) |
+| `/admin/pilots` | [`src/app/admin/pilots/page.tsx`](src/app/admin/pilots/page.tsx) |
 | `/admin/requests` | [`src/app/admin/requests/page.tsx`](src/app/admin/requests/page.tsx) |
 | `/admin/teams/[programId]` | [`src/app/admin/teams/[programId]/page.tsx`](src/app/admin/teams/[programId]/page.tsx) |
 | `/admin/teams` | [`src/app/admin/teams/page.tsx`](src/app/admin/teams/page.tsx) |

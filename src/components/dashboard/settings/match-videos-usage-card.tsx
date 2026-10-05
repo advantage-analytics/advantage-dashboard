@@ -255,8 +255,8 @@ export function MatchVideosUsageCard({
             />
             <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
               {squad
-                ? `${workspace.name} · ${squad} · match videos`
-                : `${workspace.name} · match videos`}
+                ? `${workspace.name} · ${squad} · Match videos`
+                : `${workspace.name} · Match videos`}
             </span>
           </span>
         ) : (

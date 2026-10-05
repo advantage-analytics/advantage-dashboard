@@ -542,14 +542,14 @@ export function ScoreBlock({
         {ghost && (
           <>
             {" "}
-            <span className="text-[var(--ink-300)]">·</span> type in the dashed
+            <span className="text-[var(--ink-300)]">·</span> Type in the dashed
             column to add a set
           </>
         )}
         {fromLine && (
           <>
             {" "}
-            <span className="text-[var(--ink-300)]">·</span> format from the
+            <span className="text-[var(--ink-300)]">·</span> Format from the
             event
           </>
         )}

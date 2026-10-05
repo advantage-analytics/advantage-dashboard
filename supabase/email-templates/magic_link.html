@@ -1,3 +1,9 @@
+{{- /* The link. .RedirectTo is never empty: with no valid redirect_to GoTrue fills it
+       from the Referer, then the Site URL. So it is used only when it carries a query
+       string (the app's /confirm?next=...), the one shape "&token_hash" can be appended
+       to. 63 is "?". See docs/email-system.md, "Auth mail links". */ -}}
+{{- $link := print .SiteURL "/confirm?token_hash=" .TokenHash "&type=magiclink&next=/dashboard" -}}
+{{- range $i := len .RedirectTo }}{{ if eq (index $.RedirectTo $i) 63 }}{{ $link = print $.RedirectTo "&token_hash=" $.TokenHash "&type=magiclink" }}{{ end }}{{ end -}}
 <!DOCTYPE html>
 <html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
@@ -97,7 +103,7 @@
                 <tr>
                   <td class="px" style="padding:28px 44px 0 44px;">
                     <!--[if mso]>
-                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ if .RedirectTo }}{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink{{ else }}{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard{{ end }}" style="height:45px;v-text-anchor:middle;width:130px;" arcsize="13%" strokecolor="#3B82F6" fillcolor="#3B82F6">
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ $link }}" style="height:45px;v-text-anchor:middle;width:130px;" arcsize="13%" strokecolor="#3B82F6" fillcolor="#3B82F6">
                     <w:anchorlock/><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:500;">Sign in</center>
                     </v:roundrect>
                     <![endif]-->
@@ -105,7 +111,7 @@
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                       <tr>
                         <td class="btn" bgcolor="#3B82F6" align="center" style="border-radius:6px; box-shadow:0 1px 3px rgba(57,134,243,0.25);">
-                          <a href="{{ if .RedirectTo }}{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink{{ else }}{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard{{ end }}" target="_blank" style="display:block; padding:14px 30px; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:14px; font-weight:500; letter-spacing:0.5px; color:#FFFFFF; border-radius:6px; white-space:nowrap;">Sign in</a>
+                          <a href="{{ $link }}" target="_blank" style="display:block; padding:14px 30px; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:14px; font-weight:500; letter-spacing:0.5px; color:#FFFFFF; border-radius:6px; white-space:nowrap;">Sign in</a>
                         </td>
                       </tr>
                     </table>
@@ -116,7 +122,7 @@
                 <tr>
                   <td class="px" style="padding:26px 44px 0 44px;">
                     <p class="ink3" style="margin:0 0 6px 0; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:12px; line-height:20px; color:#71717A;">If the button doesn't work, paste this link into your browser:</p>
-                    <p style="margin:0; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:12px; line-height:20px; word-break:break-all;"><a class="accent" href="{{ if .RedirectTo }}{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink{{ else }}{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard{{ end }}" style="color:#3B82F6;">{{ if .RedirectTo }}{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink{{ else }}{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard{{ end }}</a></p>
+                    <p style="margin:0; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:12px; line-height:20px; word-break:break-all;"><a class="accent" href="{{ $link }}" style="color:#3B82F6;">{{ $link }}</a></p>
                   </td>
                 </tr>
 

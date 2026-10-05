@@ -105,7 +105,7 @@ export function depthPresets(unit: DistanceUnit): {
     },
     {
       scheme: "deepMidShort",
-      label: "Deep · mid · short",
+      label: "Deep · Mid · Short",
       description: deepMidShortDescription(unit),
     },
   ];

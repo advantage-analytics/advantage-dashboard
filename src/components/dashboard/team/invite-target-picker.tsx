@@ -173,7 +173,7 @@ export function InviteTargetPicker({
                 aria-hidden
                 className="px-2.5 pt-0.5 pb-1.5 text-[11px] text-[var(--ink-400)]"
               >
-                On your roster · no login yet
+                On your roster · No login yet
               </li>
             </>
           )}

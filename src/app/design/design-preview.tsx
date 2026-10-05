@@ -8,6 +8,7 @@ import {
 import { advButton } from "@/lib/ui/adv-button";
 import { HeaderPreview } from "./header-preview";
 import { AnalysisStepsPreview } from "./analysis-steps-preview";
+import { ScoreboardPreview } from "./scoreboard-preview";
 
 const VARIANTS: readonly {
   id: string;
@@ -136,6 +137,7 @@ export function DesignPreview() {
       </div>
 
       <AnalysisStepsPreview />
+      <ScoreboardPreview />
 
       <BetaWelcomeDialog
         open={open}

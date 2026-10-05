@@ -12,7 +12,7 @@ import { getMyPlayerIds, isMe } from "@/lib/data/player-identity-server";
 import { youSeat } from "@/lib/data/viewer-side";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
-import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
+import { formatMatchDuration } from "@/lib/format/duration";
 import type { Match, SetScore } from "@/lib/data/types";
 
 export interface DbMatch {
@@ -190,11 +190,11 @@ export function transformDbMatchToMatch(
     date: formatDisplayDate(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
-    verificationStatus: row.verified ? "Verified Result" : undefined,
+    verificationStatus: row.verified ? "Verified result" : undefined,
     sourceProvider: row.source_provider ?? undefined,
     round: row.round ?? undefined,
     matchContext: matchContextCaption(row.result),
-    duration: formatDuration(row.duration ?? undefined),
+    duration: formatMatchDuration(row.duration),
     durationSec: row.duration != null ? Math.round(row.duration / 1000) : null,
     player1: {
       name: row.player1_name,
@@ -554,7 +554,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   match.uploadedBy = uploadedBy;
   if (!(match.durationSec && match.durationSec > 0) && windowSeconds) {
     match.durationSec = windowSeconds;
-    match.duration = formatDuration(windowSeconds * 1000);
+    match.duration = formatMatchDuration(windowSeconds * 1000);
   }
 
   return {

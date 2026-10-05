@@ -1,13 +1,18 @@
 # AGENTS.md
 
 Guidance for coding agents working in this repository — Claude Code, Codex and
-Gemini all read this file. `CLAUDE.md` is a one-line `@AGENTS.md` import and
-`GEMINI.md` is a symlink to it, so there is exactly ONE copy to keep current.
-Edit this file; never edit the other two.
+Gemini all read this file. There is deliberately no `CLAUDE.md`: Claude Code
+reads `AGENTS.md` directly when no `CLAUDE.md` exists (v2.1.277+), and
+`GEMINI.md` is a symlink to this file, so there is exactly ONE copy to keep
+current. Don't add a `CLAUDE.md` — when one exists Claude Code reads it _instead
+of_ this file, so it would need an `@AGENTS.md` import to stay in sync. Personal
+overrides belong in `~/.claude/CLAUDE.md`; a project `CLAUDE.local.md` has the
+same shadowing effect, so set "Project instructions" to
+`claude-md-and-agents-md` in `/config` if you use one.
 
 It also hosts the `nextjs-agent-rules` block that `next dev` maintains. Because
-this file exists and carries that block, `next dev` skips `CLAUDE.md` entirely
-(see `node_modules/next/dist/server/lib/generate-agent-files.js`).
+this file carries that block, `next dev` leaves other files alone (see
+`node_modules/next/dist/server/lib/generate-agent-files.js`).
 
 ## Project Overview
 
@@ -223,6 +228,13 @@ this branch's queue, then stop.`
   user asks). A "Canceled" Vercel check on a PR is expected, not a failure.
 - Never hand-format `supabase/migrations/` or `src/styles/design-system/colors.css`.
   `.prettierignore` documents every exclusion and why.
+- **New database functions are not executable signed out by default** (since
+  `20261001184305_function_default_privileges_no_anon`). A function a migration creates
+  in `public` goes to `authenticated` and `service_role` only; one meant to be public
+  must `grant execute on function … to anon` in its own migration. Outside `public` it
+  gets no grant beyond its owner, so add one for any role that calls it directly. A
+  `drop` + `create` resets grants to this default — re-grant `anon` where it was
+  deliberate (`search_programs`, `program_public_status`).
 - No global state library — Context + server-side fetching only.
 - API routes answer refusals as `{ error, code?, detail? }` through `errorResponse()` /
   `jsonResponse()` in `src/lib/services/match-video/http.ts`: `error` is the sentence
@@ -236,7 +248,9 @@ this branch's queue, then stop.`
 Copy `.env.example` to `.env.local` — it documents every variable, which are optional,
 and what leaving one unset actually does. Only the three Supabase keys plus
 `NEXT_PUBLIC_SITE_URL` are needed to boot. In an agent worktree,
-`.claude/hooks/bootstrap-worktree.sh` symlinks it from the main checkout.
+`.worktreeinclude` has Claude Code copy it in when the worktree is created, and
+`.claude/hooks/bootstrap-worktree.sh` symlinks it from the main checkout when
+that did not happen.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

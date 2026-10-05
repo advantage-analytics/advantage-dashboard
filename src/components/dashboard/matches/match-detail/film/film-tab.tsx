@@ -275,6 +275,16 @@ function FilmRoom({
     [],
   );
   const followPlayback = useCallback(() => setPointFocus(FOLLOW), []);
+  // A Statistics click-through lands on a rally playing, so it starts without
+  // a second press, and holds its row.
+  const landOnStop = useCallback(
+    (stop: { start: number; point: { id: string } }) => {
+      playerRef.current?.seekTo(stop.start);
+      playerRef.current?.play();
+      holdPoint(stop.point.id);
+    },
+    [holdPoint],
+  );
   // Fetch the room's code once the tab is idle, so the fullscreen glyph opens
   // it on the click rather than after a network round trip with nothing on
   // screen. Still off the page's first load.
@@ -433,9 +443,10 @@ function FilmRoom({
    * filters it sets have been applied.
    *
    * 1. Take the pending cut and land it (`landFilmCut`): its `MatchFilters`
-   *    keys REPLACE those keys of the shared filters, written through
-   *    `setShared` (so the drawer's pills show them pressed and `?f=`
-   *    carries them); its extras and label become the provider's remainder,
+   *    half REPLACES the shared filters outright — an earlier cut or drawer
+   *    pick never stacks under it — written through `setShared` (so the
+   *    drawer's pills show it pressed and `?f=` carries it); its extras and
+   *    label become the provider's remainder,
    *    replacing any earlier one, with `landed` = the shared filters just
    *    written; the saved toggle goes off, since the card counted every
    *    point. The same values are remembered as the `landing`, and the
@@ -488,10 +499,7 @@ function FilmRoom({
     }
     if (!playback.url) return;
     const first = walkStops[0];
-    if (first) {
-      playerRef.current?.seekTo(first.start);
-      holdPoint(first.point.id);
-    }
+    if (first) landOnStop(first);
     setLanding(null);
   }, [
     landing,
@@ -500,7 +508,7 @@ function FilmRoom({
     shared,
     walkStops,
     playback.url,
-    holdPoint,
+    landOnStop,
   ]);
 
   const columns = useMemo(() => scoreColumns(points), [points]);
@@ -768,26 +776,28 @@ function FilmRoom({
     writeRoomParam(false);
   }, [writeRoomParam]);
 
-  // A visualization's Watch point action carries the source point ID, not a
-  // timestamp: `stops` owns the attachment/trim alignment. Wait for playable
-  // media and the resolved clock, then consume the one-shot intent so later
-  // filter or credential updates cannot restart the point.
+  // `watchPoint` (the performance tracker's click-through) carries the source
+  // point ID, not a timestamp: `stops` owns the attachment/trim alignment.
+  // Wait for playable media and the resolved clock, then land the shell
+  // player on the point, playing, and hold its row — the same landing a
+  // statistic's `watchCut` makes, so every Statistics card opens the tab,
+  // never the screen-covering room. The intent is consumed once so later filter or
+  // credential updates cannot restart the point.
   const pointToWatch = searchParams?.get("point") ?? null;
   useEffect(() => {
     if (!pointToWatch || !playback.url) return;
     const stop = stops.find((candidate) => candidate.point.id === pointToWatch);
     if (!stop) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRoom({ time: stop.start, playing: true });
+    landOnStop(stop);
     const query = new URLSearchParams(window.location.search);
     query.delete("point");
-    query.set("fullscreen", "1");
     window.history.replaceState(
       null,
       "",
       `${window.location.pathname}?${query.toString()}${window.location.hash}`,
     );
-  }, [pointToWatch, playback.url, stops]);
+  }, [pointToWatch, playback.url, stops, landOnStop]);
 
   /** Door one: the report player's maximize control, from wherever it is. */
   const enterRoom = useCallback(() => {

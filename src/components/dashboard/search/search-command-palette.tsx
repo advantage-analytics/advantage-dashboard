@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Search,
   X,
@@ -9,12 +9,16 @@ import {
   Calendar,
   CalendarPlus,
   CircleHelp,
+  CreditCard,
+  KeyRound,
   SlidersHorizontal,
   Timer,
   Trophy,
   Upload,
   UserPlus,
+  UserRound,
   Users,
+  UsersRound,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -31,7 +35,15 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { createClient } from "@/lib/supabase/client";
-import { navLabel, settingsSection } from "@/lib/dashboard/nav";
+import {
+  PERSONAL_BOTTOM,
+  PERSONAL_NAV,
+  SETTINGS_SECTIONS,
+  TEAM_BOTTOM,
+  TEAM_NAV,
+  navLabel,
+  settingsSection,
+} from "@/lib/dashboard/nav";
 import { matchOutcome, setTally } from "@/lib/data/match-utils";
 import {
   rosterPlayerOptions,
@@ -44,6 +56,7 @@ import {
   isProgramStaff,
   type Workspace,
 } from "@/lib/workspace/types";
+import { youSeat } from "@/lib/data/viewer-side";
 import { countEvents } from "@/components/dashboard/search/event-counts";
 import { cn } from "@/lib/utils";
 import {
@@ -63,8 +76,8 @@ import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
  *   cannot touch it. Losing the workspace to a keystroke meant for the query
  *   would silently change what is being searched.
  * - The BLUE chip is what you are looking for: a mode, typed with a prefix
- *   (`>` commands, `@` people, `#` events) and cleared with Backspace on an
- *   empty query.
+ *   (`>` commands, `@` people, `#` events, `/` pages) and cleared with
+ *   Backspace on an empty query.
  *
  * The two are independent axes. A prefix survives a workspace switch and a
  * workspace switch survives a prefix; neither resets the other. The footer
@@ -84,11 +97,18 @@ import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
  * are ABSENT in a personal workspace, never disabled — a greyed-out "Invite a
  * player" is a promise the workspace cannot keep. Each command's hint is the route table's own label for its href, so a
  * rename in `nav.ts` reaches here without a second edit.
+ *
+ * ── Pages ──────────────────────────────────────────────────────────────────
+ * Every live page by name, read from `nav.ts` — the rail's own lists and
+ * `SETTINGS_SECTIONS` — so a page the rail drops, renames or marks
+ * `comingSoon` leaves or changes here with it. A plain search ranks matching
+ * pages under the commands; `/` lists them all, the workspace's first and
+ * the viewer's own account after.
  */
 
 // --- Types ---
 
-type Mode = ">" | "@" | "#";
+type Mode = ">" | "@" | "#" | "/";
 
 /**
  * Everything a mode changes, in one row per mode. Adding a fourth mode is
@@ -103,6 +123,8 @@ const MODES: Record<
     hint: string | null;
     /** The columns the query is matched against. */
     columns: readonly string[];
+    /** Answered from lists already in hand — no query ever goes out. */
+    local: boolean;
   }
 > = {
   ">": {
@@ -110,18 +132,28 @@ const MODES: Record<
     placeholder: "Run a command",
     hint: null,
     columns: [],
+    local: true,
   },
   "@": {
     label: "Player",
     placeholder: "Search players",
     hint: "Type a player's name",
     columns: ["player1_name", "player2_name"],
+    local: false,
   },
   "#": {
     label: "Event",
     placeholder: "Search events",
     hint: "Type an event",
     columns: ["tournament_name", "round"],
+    local: false,
+  },
+  "/": {
+    label: "Page",
+    placeholder: "Go to a page",
+    hint: null,
+    columns: [],
+    local: true,
   },
 };
 
@@ -134,6 +166,8 @@ const ALL_COLUMNS = [
 
 interface MatchResult {
   id: string;
+  /** The viewer's side — the row reads "player vs. opponent". */
+  playerName: string;
   opponentName: string;
   /** Null when the match was filed with no event. */
   tournamentName: string | null;
@@ -180,8 +214,21 @@ interface Action {
   icon: typeof Upload;
 }
 
+interface PageLink {
+  id: string;
+  label: string;
+  href: string;
+  icon: typeof Upload;
+  /** Which `/` group it lists under. */
+  group: "workspace" | "account";
+  /** Where it lives, as a plain search's row says on its right. */
+  area: string;
+}
+
 type FlatItem =
   | { type: "action"; data: Action }
+  /** `hint` is null in `/`, where the eyebrow already says the area. */
+  | { type: "page"; data: PageLink; hint: string | null }
   | { type: "match"; data: MatchResult }
   | { type: "opponent"; data: GroupedResult }
   | { type: "event"; data: GroupedResult }
@@ -204,7 +251,7 @@ const MAX_PER_CATEGORY = 3;
 const MAX_MATCHES = 20;
 
 function isMode(value: string): value is Mode {
-  return value === ">" || value === "@" || value === "#";
+  return value === ">" || value === "@" || value === "#" || value === "/";
 }
 
 function loadRecent(): string[] {
@@ -321,6 +368,68 @@ function hintFor(href: string): string {
   return settingsSection(href) ? "Settings" : (navLabel(href) ?? "");
 }
 
+/**
+ * Settings sections carry no icon of their own — the settings rail is six
+ * words — so the palette's row tile needs one. Keyed by section id.
+ */
+const SETTINGS_ICONS: Record<string, typeof Upload> = {
+  profile: UserRound,
+  account: KeyRound,
+  preferences: SlidersHorizontal,
+  usage: Timer,
+  plan: CreditCard,
+  teams: UsersRound,
+};
+
+/**
+ * Every page the viewer can open by name. The workspace's rail first, stubs
+ * left out — a shortcut to a placeholder is worse than none — then the
+ * settings sections the settings rail would show (Teams only for someone on
+ * one), then Help. Settings itself is absent: its sections are the pages.
+ */
+export function pagesFor(active: Workspace, hasTeam: boolean): PageLink[] {
+  const rail = active.kind === "team" ? TEAM_NAV : PERSONAL_NAV;
+  const bottom = active.kind === "team" ? TEAM_BOTTOM : PERSONAL_BOTTOM;
+  const workspace: PageLink[] = rail
+    .filter((link) => !link.comingSoon)
+    .map((link) => ({
+      id: link.href,
+      label: link.name,
+      href: link.href,
+      icon: link.icon as typeof Upload,
+      group: "workspace",
+      area: active.name,
+    }));
+  const settings: PageLink[] = SETTINGS_SECTIONS.filter(
+    (section) => !section.teamMemberOnly || hasTeam,
+  ).map((section) => ({
+    id: section.href,
+    label: section.label,
+    href: section.href,
+    icon: SETTINGS_ICONS[section.id] ?? SlidersHorizontal,
+    group: "account",
+    area: "Settings",
+  }));
+  const help: PageLink[] = bottom
+    .filter((link) => link.href === "/dashboard/help")
+    .map((link) => ({
+      id: link.href,
+      label: link.name,
+      href: link.href,
+      icon: link.icon as typeof Upload,
+      group: "account",
+      area: "Help",
+    }));
+  return [...workspace, ...settings, ...help];
+}
+
+/** A page matches on its name, and a settings page on "settings" too. */
+function pageMatches(page: PageLink, q: string): boolean {
+  if (q === "") return true;
+  const text = page.area === "Settings" ? `${page.label} settings` : page.label;
+  return text.toLowerCase().includes(q);
+}
+
 // --- Small pieces ---
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
@@ -342,6 +451,7 @@ export function SearchCommandPalette({
   onOpenChange,
 }: SearchCommandPaletteProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { active, available } = useWorkspace();
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -361,6 +471,14 @@ export function SearchCommandPalette({
   const hasScope = available.length > 1;
 
   const actions = useMemo(() => actionsFor(active), [active]);
+  const pages = useMemo(
+    () =>
+      pagesFor(
+        active,
+        available.some((workspace) => workspace.kind === "team"),
+      ),
+    [active, available],
+  );
 
   // `program_id` → the workspace's name, for the eyebrows a wide search
   // groups under. A null program is the viewer's own play.
@@ -386,7 +504,7 @@ export function SearchCommandPalette({
 
   // Debounce query. Commands are local, so they do not wait.
   useEffect(() => {
-    if (!query.trim() || mode === ">") {
+    if (!query.trim() || (mode && MODES[mode].local)) {
       setDebouncedQuery("");
       setResults(null);
       return;
@@ -465,7 +583,7 @@ export function SearchCommandPalette({
       let scoped = supabase
         .from("matches")
         .select(
-          "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, program_id",
+          "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, program_id",
           { count: "exact" },
         )
         .or(needle)
@@ -523,7 +641,6 @@ export function SearchCommandPalette({
         );
       }
       const mine = mineRef.current ?? new Set<string>([user.id]);
-      const isMine = (id: string | null) => Boolean(id && mine.has(id));
 
       if (rosterRows) {
         rosterRef.current = {
@@ -556,12 +673,52 @@ export function SearchCommandPalette({
 
       const rows = data ?? [];
 
+      // `youSeat` — the match page's own rule: the viewer's seat, else a seat
+      // held by a roster profile, else seat two. A coach sits in neither
+      // seat, so without the roster step their search drew the opponent as
+      // "us". Same lookup as `resolveRosterSeatIds`, once for all the rows;
+      // archived profiles count, since a removed player's matches keep the id.
+      const myIds = Array.from(mine);
+      const seatIds = Array.from(
+        new Set(
+          rows
+            .filter((m) => m.program_id)
+            .flatMap((m) => [m.player1_id, m.player2_id])
+            .filter((id): id is string => id != null && !mine.has(id)),
+        ),
+      );
+      const { data: seatRows } = seatIds.length
+        ? await supabase
+            .from("program_players")
+            .select("id, program_id")
+            .in("id", seatIds)
+        : { data: null };
+      if (stale) return;
+      // Keyed by program: a profile counts only on its own program's matches,
+      // as `resolveRosterSeatIds` checks per row.
+      const rosterByProgram = new Map<string, string[]>();
+      for (const row of (seatRows ?? []) as {
+        id: string;
+        program_id: string;
+      }[]) {
+        const ids = rosterByProgram.get(row.program_id) ?? [];
+        ids.push(row.id);
+        rosterByProgram.set(row.program_id, ids);
+      }
+      const isP1Row = (m: (typeof rows)[number]) =>
+        youSeat(
+          m,
+          myIds,
+          (m.program_id && rosterByProgram.get(m.program_id)) || [],
+        ) === "player1";
+
       const matches: MatchResult[] = rows
         .slice(0, allWorkspaces ? MAX_MATCHES : MAX_PER_CATEGORY)
         .map((m) => {
-          const isP1 = isMine(m.player1_id);
+          const isP1 = isP1Row(m);
           return {
             id: m.id,
+            playerName: isP1 ? m.player1_name : m.player2_name,
             opponentName: isP1 ? m.player2_name : m.player1_name,
             tournamentName: m.tournament_name,
             // `swap` when the viewer is stored as player2, so the row reads
@@ -577,7 +734,7 @@ export function SearchCommandPalette({
       const oppCounts = new Map<string, number>();
       const eventCounts = countEvents(rows);
       for (const m of rows) {
-        const opp = isMine(m.player1_id) ? m.player2_name : m.player1_name;
+        const opp = isP1Row(m) ? m.player2_name : m.player1_name;
         oppCounts.set(opp, (oppCounts.get(opp) ?? 0) + 1);
       }
       const topCounts = (counts: Map<string, number>): GroupedResult[] =>
@@ -661,6 +818,24 @@ export function SearchCommandPalette({
       return out;
     }
 
+    const matchingPages = pages.filter((page) => pageMatches(page, q));
+
+    if (mode === "/") {
+      // The eyebrow names the area, so the row's right side is free to say
+      // the one thing it cannot: that you are already there.
+      const pageItems = (group: PageLink["group"]): FlatItem[] =>
+        matchingPages
+          .filter((page) => page.group === group)
+          .map((data) => ({
+            type: "page",
+            data,
+            hint: pathname === data.href ? "You are here" : null,
+          }));
+      add(active.name, pageItems("workspace"));
+      add("Your account", pageItems("account"));
+      return out;
+    }
+
     // Nothing typed: the things people open this for, then what they last
     // looked for. It replaces a magnifier illustration that explained what a
     // search box is.
@@ -675,6 +850,23 @@ export function SearchCommandPalette({
     }
 
     add("Actions", actionItems);
+    // Pages under the commands: a verb that matched is the likelier intent.
+    // A page a matched command already opens (Usage, Preferences, Help) is
+    // not listed twice.
+    if (q !== "") {
+      const commandHrefs = new Set(
+        actionItems.flatMap((item) =>
+          item.type === "action" ? [item.data.href] : [],
+        ),
+      );
+      add(
+        "Pages",
+        matchingPages
+          .filter((page) => !commandHrefs.has(page.href))
+          .slice(0, MAX_PER_CATEGORY)
+          .map((data) => ({ type: "page", data, hint: data.area })),
+      );
+    }
 
     if (allWorkspaces) {
       // Grouped by where the match lives, and matches ONLY — see the header
@@ -705,7 +897,17 @@ export function SearchCommandPalette({
       results.events.map((data) => ({ type: "event", data })),
     );
     return out;
-  }, [query, mode, actions, results, recentSearches, allWorkspaces]);
+  }, [
+    query,
+    mode,
+    actions,
+    pages,
+    pathname,
+    active.name,
+    results,
+    recentSearches,
+    allWorkspaces,
+  ]);
 
   const flatItems = useMemo(
     () => sections.flatMap((section) => section.items),
@@ -729,10 +931,13 @@ export function SearchCommandPalette({
         setQuery(item.query);
         return;
       }
-      if (query.trim() && item.type !== "action") saveRecent(query.trim());
+      if (query.trim() && item.type !== "action" && item.type !== "page") {
+        saveRecent(query.trim());
+      }
       onOpenChange(false);
       switch (item.type) {
         case "action":
+        case "page":
           router.push(item.data.href);
           return;
         case "match":
@@ -820,7 +1025,8 @@ export function SearchCommandPalette({
    * overlapping booleans; one value, so they cannot both be true.
    */
   const hasQuery =
-    debouncedQuery.length > 0 || (mode === ">" && query.trim() !== "");
+    debouncedQuery.length > 0 ||
+    (mode !== null && MODES[mode].local && query.trim() !== "");
   const modeHint = mode ? MODES[mode].hint : null;
   const pane: "loading" | "list" | "empty" | "hint" | null = isLoading
     ? "loading"
@@ -964,17 +1170,21 @@ export function SearchCommandPalette({
               >
                 <p className="text-[13px] font-medium text-[var(--ink-900)]">
                   No results for &ldquo;{query.trim()}&rdquo;
-                  {hasScope && !allWorkspaces && mode !== ">" && (
-                    <span className="font-normal text-[var(--ink-500)]">
-                      {" "}
-                      in {active.name}
-                    </span>
-                  )}
+                  {hasScope &&
+                    !allWorkspaces &&
+                    !(mode && MODES[mode].local) && (
+                      <span className="font-normal text-[var(--ink-500)]">
+                        {" "}
+                        in {active.name}
+                      </span>
+                    )}
                 </p>
                 <p className="text-[12px] leading-[1.6] text-[var(--ink-500)]">
                   {mode === ">"
                     ? "No command by that name"
-                    : "Try a different opponent, tournament or round"}
+                    : mode === "/"
+                      ? "No page by that name"
+                      : "Try a different opponent, tournament or round"}
                 </p>
               </motion.div>
             )}
@@ -1062,6 +1272,9 @@ export function SearchCommandPalette({
           <FooterHint keycap="#" mono>
             events
           </FooterHint>
+          <FooterHint keycap="/" mono>
+            pages
+          </FooterHint>
           {hasScope && (
             <span className="ml-auto">
               <FooterHint keycap="⇧↵">
@@ -1113,6 +1326,24 @@ export function ResultRow({ item }: { item: FlatItem }) {
         </>
       );
     }
+    case "page": {
+      const Icon = item.data.icon;
+      return (
+        <>
+          <span className="flex size-[26px] shrink-0 items-center justify-center rounded-[7px] bg-[var(--surface-subtle)] text-[var(--ink-700)]">
+            <Icon className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink-900)]">
+            {item.data.label}
+          </span>
+          {item.hint && (
+            <span className="shrink-0 text-[11px] text-[var(--ink-400)]">
+              {item.hint}
+            </span>
+          )}
+        </>
+      );
+    }
     case "match":
       return (
         <>
@@ -1124,7 +1355,9 @@ export function ResultRow({ item }: { item: FlatItem }) {
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="flex min-w-0 items-center gap-2">
               <span className="truncate text-[13px] text-[var(--ink-900)]">
-                vs. {item.data.opponentName}
+                {item.data.playerName}{" "}
+                <span className="text-[var(--ink-500)]">vs.</span>{" "}
+                {item.data.opponentName}
               </span>
               {/* The one outcome register — see `ResultMark`. Nothing for an
                   unscored match: undecided is not a result. */}
@@ -1133,10 +1366,13 @@ export function ResultRow({ item }: { item: FlatItem }) {
               )}
             </span>
             <span className="text-[12px] text-[var(--ink-500)]">
-              {item.data.tournamentName ?? (
-                <span style={{ color: "var(--ink-400)" }}>No event</span>
+              {/* No event, no segment — the line starts at the score. */}
+              {item.data.tournamentName && (
+                <>
+                  {item.data.tournamentName}
+                  <span className="mx-1 text-[var(--ink-300)]">&middot;</span>
+                </>
               )}
-              <span className="mx-1 text-[var(--ink-300)]">&middot;</span>
               <ScoreLine sets={item.data.score} />
               <span className="mx-1 text-[var(--ink-300)]">&middot;</span>
               {item.data.date}

@@ -227,7 +227,7 @@ export function MatchDrawer({
         </>
       }
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-[22px] pt-5 pb-[22px]">
+      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
         <DrawerHeading
           href={href}
           label={`${match.player1.name} vs ${match.player2.name}`}
@@ -243,6 +243,7 @@ export function MatchDrawer({
             </DrawerFact>
             <DrawerFact
               label="Court"
+              muted={!match.courtType}
               icon={
                 <Image
                   src="/icons/tennis-court-icon.svg"
@@ -254,13 +255,19 @@ export function MatchDrawer({
             >
               {match.courtType ? capitalize(match.courtType) : "Not specified"}
             </DrawerFact>
-            <DrawerFact label="Home/Away" icon={<MapPin />}>
+            <DrawerFact
+              label="Home/Away"
+              muted={!schedule?.site}
+              icon={<MapPin />}
+            >
               {schedule?.site ? capitalize(schedule.site) : "Not specified"}
             </DrawerFact>
-            <DrawerFact label="Event" icon={<Trophy />}>
-              {match.tournamentName || schedule?.name || (
-                <span style={{ color: "var(--ink-400)" }}>No event</span>
-              )}
+            <DrawerFact
+              label="Event"
+              muted={!match.tournamentName && !schedule?.name}
+              icon={<Trophy />}
+            >
+              {match.tournamentName || schedule?.name || "No event"}
               {match.round && (
                 <span className="ml-1 text-[11px] text-[var(--ink-500)]">
                   {match.round}

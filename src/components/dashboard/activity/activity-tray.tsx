@@ -23,13 +23,13 @@ import {
   isInFlight,
   isLiveUpdating,
   inFlightMark,
-  isWorking,
 } from "@/lib/data/match-analysis";
 import { invitationHref } from "@/lib/services/programs/join-links";
 import { acceptPendingInvite } from "@/lib/services/programs/join-actions";
 import { inviteSubtitle } from "@/lib/services/programs/join-role";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
 import { trayDetail } from "./tray-detail";
+import { trayStartedDay, trayStartedTitle } from "./tray-started";
 import {
   isTrayFailure,
   trayFailureAction,
@@ -117,6 +117,8 @@ const RING = (
 
 function InFlightRow({ item }: { item: ActivityItem }) {
   const { analysis, title } = item;
+  const word = ANALYSIS_LABEL[analysis.status];
+  const now = new Date();
 
   return (
     <Link
@@ -132,20 +134,32 @@ function InFlightRow({ item }: { item: ActivityItem }) {
         </span>
       </Lead>
       <span className="flex min-w-0 flex-1 flex-col gap-[7px]">
-        <span className="min-w-0 text-[12px] [text-wrap:pretty] text-[var(--ink-900)]">
-          {ANALYSIS_LABEL[analysis.status]}{" "}
-          <b className="font-medium">{title}</b>
+        <span className="flex items-baseline gap-2">
+          <span className="min-w-0 flex-1 text-[12px] [text-wrap:pretty] text-[var(--ink-900)]">
+            {word} <b className="font-medium">{title}</b>
+          </span>
+          <ChromeTooltip
+            label={trayStartedTitle(item.at, now)}
+            side="top"
+            align="end"
+          >
+            <span className="shrink-0 text-[11px] text-[var(--ink-500)] tabular-nums">
+              {trayStartedDay(item.at, now)}
+            </span>
+          </ChromeTooltip>
         </span>
-        {/* The bar is the whole estimate. The "about N minutes left" line this
-            used to carry said the same thing a second time, and needed a
-            15-second timer to keep saying it. */}
-        {analysis.progressPercent !== undefined && (
-          <AnalysisProgressTrack
-            percent={analysis.progressPercent}
-            live={isWorking(analysis.status)}
-            label={`${ANALYSIS_LABEL[analysis.status]} ${title}`}
-          />
-        )}
+        {/* The bar belongs to the upload, the one stage with a measured
+            number. Queued and analysing carry a stage position, which is an
+            estimate — the mark alone says which of the two it is, as in the
+            Matches table and the stepper. */}
+        {analysis.status === "uploading" &&
+          analysis.progressPercent !== undefined && (
+            <AnalysisProgressTrack
+              percent={analysis.progressPercent}
+              live
+              label={`${word} ${title}`}
+            />
+          )}
       </span>
     </Link>
   );

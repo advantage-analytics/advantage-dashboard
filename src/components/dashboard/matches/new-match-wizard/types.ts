@@ -6,7 +6,7 @@ import type { ProviderKind } from "@/lib/services/upload";
 import type { VideoProbe } from "@/lib/video/probe";
 import type { Discipline, EventSite, MatchEnding } from "@/lib/schedule/types";
 import type { Workspace } from "@/lib/workspace/types";
-import type { RetiredSide } from "./score-state";
+import type { RetiredSide, StopReason } from "./score-state";
 import type { StyleSaveChoice } from "./style-save-offer";
 
 /** Wizard step identifiers */
@@ -47,6 +47,12 @@ export interface FormData {
    * NOT retire), never as its own column.
    */
   retiredSide?: RetiredSide;
+  /**
+   * Why play stopped, as the "Did it end early?" answer gave it — detail on
+   * `result`, never the answer itself. Unset until answered, and for a
+   * SwingVision import that arrives "Unfinished". Words the settled line only.
+   */
+  stopReason?: StopReason;
   date: string;
   time: string;
   playerName: string;
@@ -182,6 +188,13 @@ export interface MatchData {
   };
   /** The caption over the score; null when there is none (never ""). */
   result: string | null;
+  /**
+   * Why a match stopped — detail on `result`, which keeps its caption
+   * unchanged. `retired` whenever `result` is "Retired"; `clinched` or
+   * `time_weather` with "Unfinished" when the wizard was told; null for a
+   * decided match and for a SwingVision import, which is never asked.
+   */
+  stop_reason: StopReason | null;
   date: string;
   private: boolean;
   score: {
@@ -217,6 +230,7 @@ export const DEFAULT_FORM_DATA: FormData = {
   adScoring: undefined,
   playOnLets: false,
   result: "",
+  stopReason: undefined,
   date: "",
   time: "",
   playerName: "",

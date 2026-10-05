@@ -134,6 +134,34 @@ const MARK_GLYPH: Record<StepMarkSize, string> = {
   compact: "size-[9px]",
 };
 
+/**
+ * The dashed ring of `wait` and `later`: twelve dashes, drawn rather than
+ * bordered. A CSS `dashed` border at 14-16px gets about four fat dashes with
+ * wide gaps, which beside the spinner's dark arc read as a stalled spinner;
+ * `pathLength` lets the dash count be the design's choice. Fills its box, so
+ * both mark sizes share it.
+ */
+const RING_DASHES = 12;
+const RING_PERIOD = 100 / RING_DASHES;
+
+function DashRing({ ink }: { ink: string }) {
+  return (
+    <svg viewBox="0 0 14 14" className="size-full" aria-hidden="true">
+      <circle
+        cx="7"
+        cy="7"
+        r="5.9"
+        fill="none"
+        stroke={ink}
+        strokeWidth="1.5"
+        pathLength="100"
+        strokeDasharray={`${RING_PERIOD * 0.55} ${RING_PERIOD * 0.45}`}
+        transform="rotate(-90 7 7)"
+      />
+    </svg>
+  );
+}
+
 export function StepMark({
   state,
   size = "default",
@@ -195,19 +223,16 @@ export function StepMark({
       );
     case "wait":
       return (
-        <span
-          className={`${box} rounded-full border-[1.5px] border-dashed border-[var(--ink-400)]`}
-          role="status"
-        >
+        <span className={`flex ${box}`} role="status">
+          <DashRing ink="var(--ink-400)" />
           <span className="sr-only">Waiting:</span>
         </span>
       );
     case "later":
       // Dashed means waiting for something real.
       return (
-        <span
-          className={`${box} rounded-full border-[1.5px] border-dashed border-[var(--ink-300)]`}
-        >
+        <span className={`flex ${box}`}>
+          <DashRing ink="var(--ink-300)" />
           <span className="sr-only">Not started:</span>
         </span>
       );

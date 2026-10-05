@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
 import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
-import type { ProgramOrgType } from "@/lib/workspace/types";
+import type { ProgramOrgType, Workspace } from "@/lib/workspace/types";
 
 /**
  * What Settings › Usage reads.
@@ -41,16 +41,19 @@ export interface ProgramUsage {
 /**
  * The viewer's own allowance, for the month they are looking at.
  *
- * Takes the id rather than resolving it: every caller already holds the
- * workspace context, and asking GoTrue again only serialized a round trip in
- * front of a query that was ready to run.
+ * Takes the personal workspace rather than resolving it: every caller already
+ * holds the workspace context, and asking GoTrue again only serialized a round
+ * trip in front of a query that was ready to run. The workspace, not just the
+ * id, because a pilot individual's cap is 10h rather than 2h —
+ * `monthlyCapSecondsFor()` answers that, the same as the spend.
  */
 export async function getPersonalUsage(
-  userId: string,
+  personal: Pick<Workspace, "id" | "kind" | "orgType" | "individualPilot">,
   billingMonth: string,
 ): Promise<PersonalUsage> {
   const supabase = await createClient();
-  const capSeconds = getMonthlyCapSeconds("individual");
+  const userId = personal.id;
+  const capSeconds = monthlyCapSecondsFor(personal);
 
   // RLS already restricts this to `created_by = auth.uid()`; the account filter
   // is what separates a personal upload from one the same person made inside a

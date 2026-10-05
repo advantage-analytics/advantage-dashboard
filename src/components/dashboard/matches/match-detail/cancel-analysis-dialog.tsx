@@ -24,7 +24,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Clock } from "lucide-react";
 import { ConfirmDialog, ConfirmNote, Em } from "@/components/ui/confirm-dialog";
-import { formatDuration } from "@/lib/data/match-analysis";
+import { formatDuration } from "@/lib/format/duration";
 
 export const CANCEL_DIALOG_COPY = {
   title: "Cancel this analysis?",

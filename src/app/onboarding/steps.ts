@@ -30,3 +30,29 @@ const PREVIOUS: Record<Step, Step | null> = {
 export function previousStep(step: Step): Step | null {
   return PREVIOUS[step];
 }
+
+/**
+ * The screens each persona actually walks through, in order. "Coach" finishes
+ * on the persona step itself, so its run is two screens long.
+ */
+type PathPersona = "play" | "junior" | "coach";
+
+const PATH: Record<PathPersona, readonly Step[]> = {
+  play: [1, 2, 3, 5, 6],
+  junior: [1, 2, 4],
+  coach: [1, 2],
+};
+
+/**
+ * The eyebrow for a step: "Step n" until the persona is picked (the length of
+ * the run isn't known yet), then "Step n of total" counted along the path that
+ * persona takes. Counting by position, not by the step's own number, is what
+ * keeps the player's run reading 3, 4, 5 across the skipped guardian step.
+ * Steps 1 and 2 stay un-totalled: the persona is chosen ON step 2.
+ */
+export function stepLabel(step: Step, persona: PathPersona | null): string {
+  if (!persona || step <= 2) return `Step ${step}`;
+  const path = PATH[persona];
+  const position = path.indexOf(step) + 1;
+  return position > 0 ? `Step ${position} of ${path.length}` : `Step ${step}`;
+}

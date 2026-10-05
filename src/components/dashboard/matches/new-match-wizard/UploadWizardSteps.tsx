@@ -300,8 +300,8 @@ export function MatchStep() {
       parsingState,
       error,
     },
-    view: { scoreCheckVisible },
-    actions: { dismissScoreCheck },
+    view: { scoreCheckVisible, oneSetSettled },
+    actions: { dismissScoreCheck, chooseOneSet, undoOneSet },
     meta: { workspaceKind, preset },
   } = useUploadWizard();
   const workspaces = useWorkspace();
@@ -426,6 +426,9 @@ export function MatchStep() {
       error={error}
       scoreCheckVisible={scoreCheckVisible}
       onScoreCheckDismiss={dismissScoreCheck}
+      oneSetSettled={oneSetSettled}
+      onOneSet={chooseOneSet}
+      onUndoOneSet={undoOneSet}
     />
   );
 }

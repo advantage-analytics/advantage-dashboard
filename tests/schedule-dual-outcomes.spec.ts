@@ -411,7 +411,7 @@ test("a played singles line opens the drawer with its match, facts and follow-up
         has: page.locator("dt", { hasText: new RegExp(`^${label}$`) }),
       })
       .locator("dd");
-  await expect(fact("Duration")).toHaveText("1H 42M");
+  await expect(fact("Duration")).toHaveText("1h 42m");
   await expect(fact("Provider")).toHaveText("SwingVision");
   // The line has its video, and a coach sees ⋯.
   await expect(panel.getByRole("link", { name: "Add video" })).toHaveCount(0);

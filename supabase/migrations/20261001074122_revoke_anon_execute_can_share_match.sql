@@ -1,0 +1,23 @@
+-- Supabase security advisor 0028 (anon_security_definer_function_executable),
+-- part 1 of 2.
+--
+-- `can_share_match` is SECURITY DEFINER and was executable by `anon` only
+-- because the schema's default privileges grant EXECUTE on every new function
+-- to it. Nothing signed out reaches it: its three policies
+-- (`match_share_links_{select,insert,delete}_sharers`) are all
+-- `TO authenticated`, and its one caller (`getMatchShareState` in
+-- `src/lib/data/match-share-server.ts`) runs on the dashboard match page. With
+-- no session it already answered false, so this closes a lint, not a leak.
+--
+-- The ACL carries no PUBLIC entry (read from `pg_proc.proacl` on 2026-10-01),
+-- so `anon` is the only revoke needed. `authenticated` and `service_role` keep
+-- theirs.
+--
+-- Applied to the live database via the Supabase MCP as
+-- `revoke_anon_execute_can_share_match`; this file carries the version the
+-- live project recorded on apply.
+--
+-- Rollback:
+--   grant execute on function public.can_share_match(uuid) to anon;
+
+revoke execute on function public.can_share_match(uuid) from anon;

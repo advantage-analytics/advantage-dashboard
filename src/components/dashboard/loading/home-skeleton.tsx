@@ -102,9 +102,7 @@ export function HomeKpisPending() {
           key={label}
           className="adv-kpi flex min-w-0 flex-1 flex-col gap-3 px-5 py-5"
         >
-          <span className="truncate text-[9px] tracking-[2.5px] text-[var(--ink-400)] uppercase">
-            {label}
-          </span>
+          <span className="eyebrow-sm truncate">{label}</span>
           <div aria-hidden="true" className="flex flex-col gap-3">
             <PendingBar className="h-7 w-16" />
             <PendingBar className="h-[15px] w-20" />
@@ -186,9 +184,17 @@ export function FocusCardPending() {
   );
 }
 export function HomeFooterPending() {
+  // The usage footer's own row is 16.5px (an 11px sentence at 1.5), so the
+  // bars sit centred in one — a 12px bar alone is 4.5px short and the page
+  // jumps when the figure arrives. `Footer` is not reused: the Advantage
+  // Intelligence card closes on it too, and that row is 12px.
   return (
-    <div aria-hidden="true">
-      <Footer />
+    <div
+      aria-hidden="true"
+      className="flex min-h-[29.5px] items-center justify-between border-t border-[var(--border-hairline)] pt-3"
+    >
+      <PendingBar className="h-3 w-24" />
+      <PendingBar className="h-3 w-28" />
     </div>
   );
 }

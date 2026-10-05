@@ -133,7 +133,7 @@ export interface EntryMatch {
   /** Has a processing job, i.e. video was actually sent. */
   hasVideo: boolean;
   /**
-   * `matches.duration` run through the matches list's own formatter ("1H 42M"),
+   * `matches.duration` run through the matches list's own formatter ("1h 42m"),
    * so the event drawer reads the same length the Matches drawer does. Null or
    * empty when nobody recorded one. Optional so older fixtures need not state it.
    */

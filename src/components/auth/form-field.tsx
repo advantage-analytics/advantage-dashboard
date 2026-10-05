@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { ErrorText } from "./form-error";
 
@@ -45,6 +45,7 @@ export default function FormField({
   autoComplete,
 }: FormFieldProps) {
   const [showPassword, setShowPassword] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const generatedId = useId();
   const fieldId = id ?? generatedId;
   const messageId = `${fieldId}-message`;
@@ -55,17 +56,26 @@ export default function FormField({
       : "password"
     : type;
 
+  // Chrome keeps a browser-autofilled password masked when `type` flips to
+  // text, so the reveal toggle appears dead. Re-writing the value once the type
+  // has changed drops the autofill state and lets the new type render.
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!showPasswordToggle || !input || !input.value) return;
+    const current = input.value;
+    input.value = "";
+    input.value = current;
+  }, [showPassword, showPasswordToggle]);
+
   return (
     <div className="group flex flex-col gap-[8px]">
-      <label
-        htmlFor={fieldId}
-        className="text-[10px] font-medium tracking-[2.5px] text-[var(--ink-500)] uppercase"
-      >
+      <label htmlFor={fieldId} className="text-[11px] text-[var(--ink-600)]">
         {label}
       </label>
 
       <div className="flex w-full items-center justify-between pb-[10px]">
         <input
+          ref={inputRef}
           id={fieldId}
           name={name}
           type={inputType}

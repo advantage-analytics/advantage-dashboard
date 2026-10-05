@@ -17,9 +17,9 @@ import { cn } from "@/lib/utils";
  *
  * A mirrored momentum area: the running won-point differential drawn from the
  * VIEWER's side of the match, filled `viz-you` above the midline and `viz-opp`
- * below, with dashed set dividers. Breaks of serve are named in the hover
- * annotation rather than drawn as verticals — the 47f chart drops the marks so
- * the trend is the only line on screen.
+ * below. Breaks of serve are drawn as dashed verticals at the point that
+ * ended the game; set boundaries are fainter solid lines, named by the Set
+ * labels underneath.
  *
  * The series is `you − opp`, never `player1 − player2`: which side is "you"
  * comes from `useMatchSides()` and nothing else (guardrails §4). Drawing the
@@ -35,27 +35,33 @@ import { cn } from "@/lib/utils";
  * point in the Video tab (`actions.watchPoint`) — hovering alone never moves
  * the video. Without one the markup is exactly the read-only chart.
  *
- * The set dividers are targets of their own: a 24px-wide strip over each
- * dashed line names the set it opens, and — with a video — clicks through to
- * that set's first timed point. Both readouts are the DS dark readout
- * (`ChartTooltip`), hung ABOVE the plot so neither ever covers the series.
+ * Each break line is a target of its own: a 24px-wide strip over it opens the
+ * break's readout on hover and — with a video — clicks through to the point
+ * that broke serve. The readout is the DS dark readout (`ChartTooltip`), hung
+ * ABOVE the plot so it never covers the series.
  */
 
 const CHART_W = 1000;
 const CHART_H = 96;
 /** Rendered plot height in px; the viewBox is stretched to it. */
 const PLOT_H = 104;
-/** Width of each set divider's hover/click strip, in px. */
-const DIVIDER_HIT_W = 24;
+/** Width of each break line's hover/click strip, in px. */
+const BREAK_HIT_W = 24;
 const MID = CHART_H / 2;
 /** Keeps the extreme of the series off the viewBox edge. */
 const Y_PAD = 6;
 
 const EASE_CHART = [0.2, 0, 0.4, 1] as const;
 
-/** What the readout describes: a hovered point, or a hovered set divider. */
-type ReadoutTarget =
-  { kind: "point"; index: number } | { kind: "set"; boundary: number };
+/**
+ * What the readout describes: a point hovered on the series, or one hovered
+ * through its break line. Both name a point index; `kind` only says which
+ * mark to highlight.
+ */
+interface ReadoutTarget {
+  kind: "point" | "break";
+  index: number;
+}
 
 interface Sample {
   /** Points won by you minus points won by the opponent, after this point. */
@@ -140,13 +146,11 @@ export function PerformanceTrackerChart() {
     return out;
   }, [points, youIsPlayer1]);
 
-  // Points that ended a game the server lost, as indices into the series.
-  // The 47f chart draws no break verticals, so this feeds only the hover
-  // annotation's "Break of serve" line; a Set keeps that lookup O(1).
-  const breakIndexSet = useMemo(
-    () => new Set(detectBreakIndices(points)),
-    [points],
-  );
+  // Points that ended a game the server lost, as indices into the series:
+  // the dashed break lines, and the readout's "Break of serve" line (a Set
+  // keeps that lookup O(1)).
+  const breakIndices = useMemo(() => detectBreakIndices(points), [points]);
+  const breakIndexSet = useMemo(() => new Set(breakIndices), [breakIndices]);
 
   // `match-points-server.ts` coerces a null `game_score`/`point_score` to
   // "0-0" — the Advantage Intelligence derivation writes neither, so an
@@ -180,15 +184,10 @@ export function PerformanceTrackerChart() {
       "Z",
     ].join(" ");
 
-    // `index` is the first point of the new set — the one the divider opens.
-    const setBoundaries: { x: number; index: number; setNumber: number }[] = [];
+    const setBoundaries: number[] = [];
     for (let i = 1; i < samples.length; i += 1) {
       if (samples[i].setNumber !== samples[i - 1].setNumber) {
-        setBoundaries.push({
-          x: x(i),
-          index: i,
-          setNumber: samples[i].setNumber,
-        });
+        setBoundaries.push(x(i));
       }
     }
 
@@ -265,60 +264,34 @@ export function PerformanceTrackerChart() {
   // can leave it pointing past the new series. Treat an out-of-range target
   // as none rather than read an index that no longer exists.
   const target =
-    savedTarget === null ||
-    (savedTarget.kind === "point"
-      ? savedTarget.index < samples.length
-      : savedTarget.boundary < geometry.setBoundaries.length)
+    savedTarget !== null && savedTarget.index < samples.length
       ? savedTarget
       : null;
 
-  const hoverIndex = open && target?.kind === "point" ? target.index : null;
+  const hoverIndex = open && target ? target.index : null;
   const hoverCoord = hoverIndex === null ? null : geometry.coords[hoverIndex];
-  const hoveredBoundary =
-    open && target?.kind === "set" ? target.boundary : null;
+  const hoveredBreak = open && target?.kind === "break" ? target.index : null;
 
-  // The set whose label lights up while its divider is hovered.
-  const hoveredSetNumber =
-    hoveredBoundary === null
-      ? null
-      : geometry.setBoundaries[hoveredBoundary].setNumber;
-
-  // The readout's point: the hovered point, or the first point of the hovered
-  // divider's set. Read from `target`, not the open flags, so the text holds
-  // while the box fades out.
-  const boundary =
-    target?.kind === "set" ? geometry.setBoundaries[target.boundary] : null;
-  const readoutIndex =
-    target === null
-      ? null
-      : target.kind === "point"
-        ? target.index
-        : (boundary?.index ?? null);
+  // The readout's point. Read from `target`, not the open flag, so the text
+  // holds while the box fades out.
+  const readoutIndex = target?.index ?? null;
   const readoutPoint = readoutIndex === null ? null : points[readoutIndex];
   const readoutDiff = readoutIndex === null ? 0 : samples[readoutIndex].diff;
-  const readoutX =
-    target?.kind === "set"
-      ? (boundary?.x ?? 0)
-      : readoutIndex === null
-        ? 0
-        : geometry.coords[readoutIndex][0];
+  const readoutX = readoutIndex === null ? 0 : geometry.coords[readoutIndex][0];
 
   // Event line, in the spec's precedence: a break of serve outranks the point
-  // flags, then match/set/break point, then the bare point number. A divider
-  // names the set it opens.
+  // flags, then match/set/break point, then the bare point number.
   const eventLine = !readoutPoint
     ? ""
-    : target?.kind === "set"
-      ? `Set ${readoutPoint.setNumber} starts`
-      : readoutIndex !== null && breakIndexSet.has(readoutIndex)
-        ? `Break of serve · Set ${readoutPoint.setNumber}`
-        : readoutPoint.isMatchPoint
-          ? "Match point"
-          : readoutPoint.isSetPoint
-            ? "Set point"
-            : readoutPoint.isBreakPoint
-              ? "Break point"
-              : `Point ${readoutPoint.pointNumber}`;
+    : readoutIndex !== null && breakIndexSet.has(readoutIndex)
+      ? `Break of serve · Set ${readoutPoint.setNumber}`
+      : readoutPoint.isMatchPoint
+        ? "Match point"
+        : readoutPoint.isSetPoint
+          ? "Set point"
+          : readoutPoint.isBreakPoint
+            ? "Break point"
+            : `Point ${readoutPoint.pointNumber}`;
 
   // Margin line: the current lead, oriented by `sides` (never player order),
   // with the game score appended ONLY where the column is real (flags-doc #9) —
@@ -337,7 +310,7 @@ export function PerformanceTrackerChart() {
   // derived match does.
   const monoLine = readoutPoint
     ? readoutPoint.videoTime !== null
-      ? `${formatClock(readoutPoint.videoTime)} · point ${readoutPoint.pointNumber}`
+      ? `${formatClock(readoutPoint.videoTime)} · Point ${readoutPoint.pointNumber}`
       : `point ${readoutPoint.pointNumber}`
     : "";
 
@@ -354,20 +327,8 @@ export function PerformanceTrackerChart() {
 
   const watchId = hoverIndex === null ? null : watchableId(points[hoverIndex]);
 
-  // A set opens at its first TIMED point — a derived match can leave the
-  // opening point of a set without a time.
-  const setWatchIds = geometry.setBoundaries.map((b) => {
-    for (let i = b.index; i < points.length; i += 1) {
-      if (points[i].setNumber !== b.setNumber) break;
-      const id = watchableId(points[i]);
-      if (id) return id;
-    }
-    return null;
-  });
   const readoutWatchable =
-    target?.kind === "set"
-      ? setWatchIds[target.boundary] !== null
-      : readoutPoint !== null && watchableId(readoutPoint) !== null;
+    readoutPoint !== null && watchableId(readoutPoint) !== null;
 
   const readoutAlign =
     readoutX > CHART_W * 0.75
@@ -430,17 +391,29 @@ export function PerformanceTrackerChart() {
 
           {/* `non-scaling-stroke`: the viewBox is stretched by
               `preserveAspectRatio="none"`, which otherwise squashes a vertical
-              line's width to ~0.7px on a 416px card. */}
-          {geometry.setBoundaries.map((b, i) => (
+              line's width to ~0.7px on a 416px card. Set boundaries stay
+              faint and solid; the dashed breaks are the marks to read. */}
+          {geometry.setBoundaries.map((x) => (
             <line
-              key={`set-${b.setNumber}`}
-              x1={b.x}
+              key={`set-${x}`}
+              x1={x}
               y1={0}
-              x2={b.x}
+              x2={x}
               y2={CHART_H}
-              stroke={
-                hoveredBoundary === i ? "var(--ink-700)" : "var(--ink-300)"
-              }
+              stroke="var(--ink-200)"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+
+          {breakIndices.map((i) => (
+            <line
+              key={`break-${i}`}
+              x1={geometry.coords[i][0]}
+              y1={0}
+              x2={geometry.coords[i][0]}
+              y2={CHART_H}
+              stroke={hoveredBreak === i ? "var(--ink-700)" : "var(--ink-300)"}
               strokeWidth={1.5}
               strokeDasharray="4 3"
               vectorEffect="non-scaling-stroke"
@@ -554,43 +527,39 @@ export function PerformanceTrackerChart() {
           />
         )}
 
-        {/* Set dividers as targets: a strip over each dashed line, above the
+        {/* Break lines as targets: a strip over each dashed line, above the
             hover rect so the rect cannot swallow it. A button only where it
             opens something; otherwise a hover-only strip. */}
-        {geometry.setBoundaries.map((b, i) => {
-          const setWatchId = setWatchIds[i];
+        {breakIndices.map((i) => {
+          const breakWatchId = watchableId(points[i]);
           const hitProps = {
             className: cn(
               "absolute inset-y-0 z-[4] -translate-x-1/2 rounded-[6px] border-0 bg-transparent p-0",
-              setWatchId &&
+              breakWatchId &&
                 "cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--blue)]",
             ),
             style: {
-              left: `${(b.x / CHART_W) * 100}%`,
-              width: DIVIDER_HIT_W,
+              left: `${(geometry.coords[i][0] / CHART_W) * 100}%`,
+              width: BREAK_HIT_W,
             },
             onMouseEnter: () => {
-              setTarget({ kind: "set", boundary: i });
+              setTarget({ kind: "break", index: i });
               setOpen(true);
             },
             onMouseLeave: () => setOpen(false),
           };
-          return setWatchId ? (
+          return breakWatchId ? (
             <button
-              key={`set-hit-${b.setNumber}`}
+              key={`break-hit-${i}`}
               type="button"
-              aria-label={`Watch set ${b.setNumber} from its first point in Video`}
-              onClick={() => actions.watchPoint(setWatchId)}
+              aria-label={`Watch the break of serve in set ${points[i].setNumber}, point ${points[i].pointNumber}, in Video`}
+              onClick={() => actions.watchPoint(breakWatchId)}
               onFocus={hitProps.onMouseEnter}
               onBlur={hitProps.onMouseLeave}
               {...hitProps}
             />
           ) : (
-            <span
-              key={`set-hit-${b.setNumber}`}
-              aria-hidden="true"
-              {...hitProps}
-            />
+            <span key={`break-hit-${i}`} aria-hidden="true" {...hitProps} />
           );
         })}
 
@@ -619,9 +588,7 @@ export function PerformanceTrackerChart() {
             </span>
             {readoutWatchable && (
               <span className="text-[10px] text-white/[0.64]">
-                {target?.kind === "set"
-                  ? "Click to watch from here"
-                  : "Click to watch in Video"}
+                Click to watch in Video
               </span>
             )}
           </ChartTooltip>
@@ -636,16 +603,8 @@ export function PerformanceTrackerChart() {
             style={{ width: `${(s.count / points.length) * 100}%` }}
           >
             <span
-              className={cn(
-                "tabular text-[10px] whitespace-nowrap transition-colors",
-                hoveredSetNumber === s.setNumber && "font-medium",
-              )}
-              style={{
-                color:
-                  hoveredSetNumber === s.setNumber
-                    ? "var(--ink-900)"
-                    : "var(--ink-400)",
-              }}
+              className="tabular text-[10px] whitespace-nowrap"
+              style={{ color: "var(--ink-400)" }}
             >
               Set {s.setNumber}
             </span>

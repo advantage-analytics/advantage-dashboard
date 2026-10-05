@@ -5,6 +5,7 @@ import {
   getOpenBetaCeilingSeconds,
 } from "@/lib/services/splitstep/config";
 import {
+  monthlyCapSecondsFor,
   peekRefusalMessage,
   pickPeek,
   quotaTierFor,
@@ -30,8 +31,39 @@ function own(usedSeconds: number, capSeconds = 2 * HOUR): QuotaPeek {
   };
 }
 
-test("the pool is 10 hours", () => {
-  expect(POOL_CAP).toBe(10 * HOUR);
+test("the pilot pool fits a full list at 10 hours each, so it never refuses first", () => {
+  expect(POOL_CAP).toBe(20 * 10 * HOUR);
+});
+
+test("a pilot's personal workspace gets 10 hours; nothing else changes", () => {
+  expect(
+    monthlyCapSecondsFor({
+      kind: "personal",
+      orgType: null,
+      individualPilot: true,
+    }),
+  ).toBe(10 * HOUR);
+  expect(
+    monthlyCapSecondsFor({
+      kind: "personal",
+      orgType: null,
+      individualPilot: false,
+    }),
+  ).toBe(2 * HOUR);
+  expect(monthlyCapSecondsFor({ kind: "personal", orgType: null })).toBe(
+    2 * HOUR,
+  );
+  // A team never takes the pilot figure, even if the flag were set on it.
+  expect(
+    monthlyCapSecondsFor({
+      kind: "team",
+      orgType: "club",
+      individualPilot: true,
+    }),
+  ).toBe(2 * HOUR);
+  expect(monthlyCapSecondsFor({ kind: "team", orgType: "college" })).toBe(
+    75 * HOUR,
+  );
 });
 
 test("personal workspaces and custom orgs draw from the pool; colleges do not", () => {

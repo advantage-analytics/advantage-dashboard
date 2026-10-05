@@ -7,6 +7,7 @@ import * as validation from "@/components/dashboard/matches/new-match-wizard/val
 import * as scoreState from "@/components/dashboard/matches/new-match-wizard/score-state";
 import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import * as styleSaveOffer from "@/components/dashboard/matches/new-match-wizard/style-save-offer";
+import { buildMatchData } from "@/components/dashboard/matches/new-match-wizard/utils";
 import * as scoreFormat from "@/lib/ui/score-format";
 import * as quota from "@/lib/services/splitstep/quota";
 import * as draftTarget from "@/lib/wizard/draft-target";
@@ -405,7 +406,12 @@ export function uploadWizardHarness(
         winnerCalls.push(args);
         return { winner: {}, loser: {} };
       },
-      buildMatchData: (_id: unknown, form: unknown) => form,
+      // The real row builder, so `writes[0]` IS the row the hook would send:
+      // `result`, `score.winner` and `stop_reason` are read off it by the
+      // specs, and a stand-in that echoed the form would pass them all
+      // without the hook ever building a row. Pure; its only inputs are the
+      // settled form and the stubbed winner/loser above.
+      buildMatchData,
     },
   };
   const source = fs.readFileSync(

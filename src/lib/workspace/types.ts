@@ -157,6 +157,15 @@ export interface Workspace {
    */
   canSubmitVideo: boolean;
   /**
+   * A personal workspace whose owner is a pilot individual
+   * (`users.individual_pilot`) — it draws the pilot's 10h a month instead of
+   * the 2h individual figure. See `monthlyCapSecondsFor()`.
+   *
+   * Absent or false for everyone else, and always for a team workspace: the
+   * pilot raises the player's own allowance, never a team's.
+   */
+  individualPilot?: boolean;
+  /**
    * `programs.status` as the server read it — the column `canSubmitVideo` is
    * derived from, carried raw. Null for a personal workspace, which has no
    * program row.

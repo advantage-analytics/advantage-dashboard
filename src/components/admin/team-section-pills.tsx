@@ -48,7 +48,7 @@ export function TeamSectionView({
   // The server set the title for the view it rendered; this keeps it in step
   // after a client-side switch, which fetches no new metadata.
   useEffect(() => {
-    document.title = teamViewTitle(programName, view);
+    document.title = `${teamViewTitle(programName, view)} · Advantage`;
   }, [programName, view]);
 
   const select = (id: string) => (event: React.MouseEvent) => {

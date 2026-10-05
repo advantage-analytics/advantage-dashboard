@@ -1,0 +1,26 @@
+# Gitignored files Claude Code copies into every worktree it creates.
+# .gitignore syntax; a pattern only takes effect for a file that is BOTH
+# matched here and ignored by git — tracked files come with the checkout.
+#
+# A worktree is a fresh checkout, so without this the dev server dies in
+# src/proxy.ts with "Your project's URL and Key are required to create a
+# Supabase client!" and every gate that reads env vars fails without naming
+# the cause.
+#
+# This is the first line of defence; .claude/hooks/bootstrap-worktree.sh is the
+# second. The hook symlinks .env.local at session start but leaves an existing
+# file alone, so a copy made here wins and the hook only covers worktrees made
+# some other way (plain `git worktree add`). The trade: a copy is a snapshot,
+# so a rotated key reaches a copied worktree only when the file is replaced.
+#
+# The third net is the `predev` script (scripts/link-env-local.mjs): it runs the
+# same symlink at `npm run dev`, where the failure shows up.
+
+# Local environment — Supabase keys, site URL, the EYES_ON_* verifier account.
+.env.local
+
+# Deliberately NOT listed:
+#   node_modules/                 a copied or linked tree panics Turbopack — run `npm ci`
+#   .next/                        build output, regenerated
+#   .claude/settings.local.json   one person's permission allowlist
+#   .claude/launch.json           points at its own worktree's paths
