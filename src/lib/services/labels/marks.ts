@@ -43,11 +43,12 @@ import {
   type SplitStepRally,
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
-import type {
-  LabelPoint,
-  LabelServeSide,
-  LabelShot,
-  LabelSide,
+import {
+  opponent,
+  type LabelPoint,
+  type LabelServeSide,
+  type LabelShot,
+  type LabelSide,
 } from "./session";
 
 export type LabelMarkKind = "flag" | "fix";
@@ -100,7 +101,7 @@ export function isLabelMarkCode(value: string): value is LabelMarkCode {
 type NoParams = Record<string, never>;
 
 /**
- * What each mark carries for its hover line (T35's `markHover`). Sides, never
+ * What each mark carries for its hover line (`markHover`). Sides, never
  * names — the console substitutes the players' names at render time.
  */
 export interface LabelMarkParams {
@@ -195,7 +196,6 @@ export type MarkablePoint = Pick<LabelPoint, "id" | "vendorRallyIds"> & {
 };
 
 const side = (isPlayer1: boolean): LabelSide => (isPlayer1 ? "p1" : "p2");
-const otherSide = (s: LabelSide): LabelSide => (s === "p1" ? "p2" : "p1");
 
 const SERVE_SHOT_TYPES = new Set(["First Serve", "Second Serve"]);
 const isServeShot = (shot: Pick<DerivedShot, "shot_type">) =>
@@ -243,7 +243,7 @@ function labelSides(
     const direct = known.get(label);
     if (direct) return direct;
     for (const [other, s] of known) {
-      if (other !== label) return otherSide(s);
+      if (other !== label) return opponent(s);
     }
     return label === player1Label ? "p1" : "p2";
   };
@@ -278,7 +278,7 @@ function pointMarks(
       }
       case POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE: {
         if (!winner) break;
-        marks.push(mark(code, { loser: otherSide(winner) }));
+        marks.push(mark(code, { loser: opponent(winner) }));
         break;
       }
       case POINT_FLAGS.SAME_PLAYER_CONSECUTIVE: {
@@ -498,7 +498,7 @@ export function buildLabelMarks(
           key: `missing_shot:${a.event_id}`,
           pointId,
           afterShotId,
-          hitter: otherSide(side(a.is_player1)),
+          hitter: opponent(side(a.is_player1)),
           videoTime: midpoint(a.video_time, b.video_time),
         });
       }

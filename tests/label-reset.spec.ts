@@ -19,10 +19,8 @@ import type {
   LabelShotSeedValues,
 } from "@/lib/services/labels/session";
 import type { AdminClient } from "@/lib/supabase/admin";
-import {
-  buildLabelSession,
-  resolveLabelAdScoring,
-} from "@/lib/data/labels-server";
+import { buildLabelSession } from "@/lib/data/labels-server";
+import { resolveLabelAdScoring } from "@/lib/services/labels/ad-scoring";
 import {
   FIXTURE_POINT_IDS,
   POINT_1_SHOTS,

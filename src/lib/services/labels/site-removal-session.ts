@@ -8,8 +8,8 @@
  * the one the console ran for its optimistic update.
  *
  * Two things are this write's own. It also refuses a session whose
- * `marks_enabled` is false (`checkSessionOpenWithMarks`, the gate every marks
- * write shares): that session's labels were made blind to the derivation and
+ * `marks_enabled` is false (`checkSessionOpen` with `blind`, the gate every
+ * marks write shares): that session's labels were made blind to the derivation and
  * carry no ghost to restore — the ground-truth match is never written from
  * here. And its ONE write is an UPDATE of `label_shots` setting
  * `site_removal_restored_at`, matched on the id AND on the two columns the
@@ -21,13 +21,14 @@
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
+  checkSessionOpen,
   defaultLabelWriteDependencies,
   type LabelWriteDependencies,
 } from "./edit-session";
 import {
-  checkSessionOpenWithMarks,
   gated,
   normaliseId,
+  racedMessage,
   type LabelOpResult,
 } from "./operations-session";
 import type { LabelShotStatus, LabelSiteRemoval } from "./session";
@@ -37,7 +38,7 @@ export type LabelSiteRemovalRestoreResult = LabelOpResult<{
   siteRemovalRestoredAt: string;
 }>;
 
-const RACED = "This row changed in another tab. Reload to see it.";
+const RACED = racedMessage("row");
 const BLIND =
   "This session is labelled without the site's marks, so there is nothing to restore.";
 
@@ -68,11 +69,9 @@ export async function writeLabelSiteRemovalRestore(params: {
   if (error) return { error: `Could not read the shot: ${error.message}` };
   if (!row) return { error: "Shot not found." };
 
-  const refused = await checkSessionOpenWithMarks(
-    supabase,
-    row.session_id,
-    BLIND,
-  );
+  const refused = await checkSessionOpen(supabase, row.session_id, {
+    blind: BLIND,
+  });
   if (refused) return { error: refused };
 
   const at = params.at ?? new Date().toISOString();

@@ -385,7 +385,6 @@ function editContext(overrides: Record<string, unknown> = {}) {
     onPatchShot: noop,
     operations: OPERATIONS,
     openTombstoneIds: new Set<string>(),
-    marksEnabled: true,
     openGhostIds: new Set<string>(),
     onToggleGhost: noop,
     points: session.points,
@@ -659,11 +658,7 @@ test.describe("a ghost in the black well", () => {
   test("with marks off, or none built, the ghost is an ordinary numbered row", () => {
     const point = point4();
     const marks = marksOf(point, [phantomMark()]);
-    for (const html of [
-      renderWell(point, marks, editContext({ marksEnabled: false })),
-      renderWell(point, marks, editContext({ marksEnabled: undefined })),
-      renderWell(point, null),
-    ]) {
+    for (const html of [renderWell(point, null)]) {
       expect(html).not.toContain("data-shot-ghost");
       expect(html).not.toContain("1 shot removed");
       expect(html.match(/data-row="shot"/g)).toHaveLength(3);
@@ -720,12 +715,9 @@ test.describe("the point row over a ghost", () => {
       "2 shot rally",
     );
     // An ordinary row — marks off, or none — and it counts.
-    expect(
-      inner(
-        renderRow(point, marks, editContext({ marksEnabled: false })),
-        "data-point-detail",
-      ),
-    ).toBe("3 shot rally");
+    expect(inner(renderRow(point, null), "data-point-detail")).toBe(
+      "3 shot rally",
+    );
     expect(inner(renderRow(point, null), "data-point-detail")).toBe(
       "3 shot rally",
     );
@@ -834,7 +826,7 @@ test.describe("the console", () => {
     const off = renderConsole({
       session: { ...session, marksEnabled: false },
       video: null,
-      marks,
+      marks: null,
       initialLayoutMode: "black",
       initialExpandedPointId: P4,
       ...SAVES,

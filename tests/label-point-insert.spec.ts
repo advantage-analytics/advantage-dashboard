@@ -891,7 +891,6 @@ test.describe("a suggested point on the black rail", () => {
         onDismissSuggestion: record("onDismissSuggestion"),
       },
       openTombstoneIds: new Set<string>(),
-      marksEnabled: true,
       points: session.points,
       scores: new Map(),
       playingShotId: null,
@@ -1004,7 +1003,7 @@ test.describe("a suggested point on the black rail", () => {
 
   test("with marks off, none built, a pair that is not two live rows, or no way to write — no slot, or no answers", () => {
     const session = labelSessionFixture();
-    expect(black({ ...session, marksEnabled: false }, marksOf())).not.toContain(
+    expect(black({ ...session, marksEnabled: false }, null)).not.toContain(
       "data-point-suggestion=",
     );
     expect(black(session, null)).not.toContain("data-point-suggestion=");

@@ -24,6 +24,11 @@ import { shotPlacement } from "@/lib/services/labels/shot-derived";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import { courtPair, withoutGhosts } from "./label-black-format";
 import {
+  AMBER_SUGGESTION_INK,
+  BlackTextAction,
+  BlackUndoButton,
+} from "./label-black-parts";
+import {
   MarkChip,
   PencilMark,
   collapseShotMarks,
@@ -148,11 +153,6 @@ export const WELL_STYLE = {
   "--shot-tail": `${SHOT_TAIL_PX}px`,
 } as React.CSSProperties;
 
-/** A stroke row's mark without the key it is listed by. */
-function chipProps({ code: _code, ...chip }: ShotRowMark) {
-  return chip;
-}
-
 /**
  * The ground under the row's two requests: the rail's own `--surface-dark`
  * with the washes the row is wearing painted back over it — the well's, then
@@ -179,15 +179,13 @@ const GONE_INK = "rgba(255,255,255,0.32)";
 
 /**
  * Whether the black view draws a site-removed stroke as a ghost (board 08m
- * §3): only on a session that computes marks, and only while it has them.
- * Otherwise — the ground-truth session, or a build that failed — a ghost is
- * an ordinary numbered row, exactly as in the three light layouts.
+ * §3): only while the session has marks. The loader builds them only for a
+ * session that computes marks, so `marks` being there says both; otherwise
+ * — the ground-truth session, or a build that failed — a ghost is an
+ * ordinary numbered row, exactly as in the three light layouts.
  */
-export function drawsGhosts(
-  edit: Pick<EditContext, "marksEnabled">,
-  marks: LabelMarks | null | undefined,
-): boolean {
-  return edit.marksEnabled === true && marks !== null && marks !== undefined;
+export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
+  return marks !== null && marks !== undefined;
 }
 
 /**
@@ -218,10 +216,10 @@ export function BlackShotsWell({
 }) {
   const { operations } = edit;
   const pointNumber = point.pointIndex + 1;
-  const ghosts = drawsGhosts(edit, marks);
+  const ghosts = drawsGhosts(marks);
   // The point as the rail reads it: without its ghosts while they are ghosts.
   const shown = ghosts ? withoutGhosts(point) : point;
-  const suggested = openShotSuggestions(point, edit, marks);
+  const suggested = openShotSuggestions(point, marks);
   const rows: React.ReactNode[] = [];
   let n = 0;
   for (const shot of point.shots) {
@@ -503,7 +501,7 @@ export function BlackShotRow({
             data-shot-marks=""
             className="inline-flex shrink-0 items-center gap-1 justify-self-end"
           >
-            {mark ? <MarkChip {...chipProps(mark)} /> : null}
+            {mark ? <MarkChip {...mark} /> : null}
             {/* The pencil is the row's Reset too, when there is one to
                 offer — the same ask as the overlay's button, in the slot
                 the overlay stops short of. */}
@@ -707,8 +705,8 @@ export function BlackGhostShot({
         />
         <span className="min-w-0 flex-1 truncate">{words}</span>
         {onToggleGhost ? (
-          <button
-            type="button"
+          <BlackTextAction
+            ink="plain"
             data-ghost-toggle=""
             aria-expanded={open}
             aria-controls={open ? rowId : undefined}
@@ -717,10 +715,9 @@ export function BlackGhostShot({
               event.stopPropagation();
               onToggleGhost(shot.id);
             }}
-            className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-white/70 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
           >
             {open ? "Hide" : "Show"}
-          </button>
+          </BlackTextAction>
         ) : null}
       </div>
       {open ? (
@@ -798,10 +795,9 @@ type ShotSuggestion = Extract<LabelSuggestion, { kind: "missing_shot" }>;
  */
 export function openShotSuggestions(
   point: LabelPoint,
-  edit: Pick<EditContext, "marksEnabled">,
   marks: LabelMarks | null | undefined,
 ): ShotSuggestion[] {
-  if (!marks || !drawsGhosts(edit, marks)) return [];
+  if (!marks) return [];
   return marks.suggestions.filter(
     (s): s is ShotSuggestion =>
       s.kind === "missing_shot" &&
@@ -809,9 +805,6 @@ export function openShotSuggestions(
       suggestionState(s, point) === "open",
   );
 }
-
-/** The suggestion's own ink — the frame's `.fx-sug .bk-n, .bk-tm, .bk-pl`. */
-const SUGGESTION_INK = "rgba(252,211,77,0.75)";
 
 /**
  * A suggested stroke (board 08m §4, the frame's `.fx-sug`): two strokes in a
@@ -863,19 +856,19 @@ function BlackSuggestedShot({
     >
       <Plus
         className="size-2.5"
-        style={{ color: SUGGESTION_INK }}
+        style={{ color: AMBER_SUGGESTION_INK }}
         strokeWidth={2}
         aria-hidden="true"
       />
       <span
         className="mono tabular min-w-0 truncate text-[10px]"
-        style={{ color: SUGGESTION_INK }}
+        style={{ color: AMBER_SUGGESTION_INK }}
       >
         {time ?? <Dash label="No time" />}
       </span>
       <span
         className="min-w-0 truncate text-[11px]"
-        style={{ color: SUGGESTION_INK }}
+        style={{ color: AMBER_SUGGESTION_INK }}
       >
         {name ?? <Dash label="No player" />}
       </span>
@@ -893,8 +886,8 @@ function BlackSuggestedShot({
           data-suggestion-actions=""
           className="col-[7/-1] flex min-w-0 items-center justify-end gap-[14px]"
         >
-          <button
-            type="button"
+          <BlackTextAction
+            ink="amber"
             data-suggestion-add=""
             aria-label={
               name
@@ -905,22 +898,20 @@ function BlackSuggestedShot({
               event.stopPropagation();
               operations.onAddShot(point.id, suggestion.afterShotId);
             }}
-            className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-[rgba(252,211,77,1)] transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
           >
             Add shot
-          </button>
-          <button
-            type="button"
+          </BlackTextAction>
+          <BlackTextAction
+            ink="quiet"
             data-suggestion-dismiss=""
             aria-label={`Dismiss the suggested shot${where}`}
             onClick={(event) => {
               event.stopPropagation();
               operations.onDismissSuggestion(point.id, suggestion.key);
             }}
-            className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-white/50 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
           >
             Dismiss
-          </button>
+          </BlackTextAction>
         </span>
       ) : null}
     </div>
@@ -1007,34 +998,6 @@ function GhostPosition({
         </>
       )}
     </span>
-  );
-}
-
-/**
- * Undo, on black: the light table's blue words are the room's white ones —
- * 70% to full on hover, as every text action in the dark tone. It never
- * reaches the row under it.
- */
-export function BlackUndoButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      data-undo-delete=""
-      aria-label={label}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-white/70 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-    >
-      Undo
-    </button>
   );
 }
 

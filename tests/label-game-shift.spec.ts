@@ -242,9 +242,7 @@ test.describe("planGameShift", () => {
       expect(plan.summary).toEqual({
         points: 2,
         games: 1,
-        fromGame: { set: 1, gameInSet: 1 },
         nextGame: { set: 1, gameInSet: 2 },
-        toGame: { set: 1, gameInSet: 2 },
       });
 
       const after = applyGameShift(points, plan.writes);
@@ -287,9 +285,7 @@ test.describe("planGameShift", () => {
     expect(plan.summary).toEqual({
       points: 6,
       games: 3,
-      fromGame: { set: 1, gameInSet: 1 },
       nextGame: { set: 1, gameInSet: 2 },
-      toGame: { set: 1, gameInSet: 4 },
     });
     expect(gameOverflow(applyGameShift(points, plan.writes), true)).toEqual([]);
   });
@@ -319,7 +315,6 @@ test.describe("planGameShift", () => {
     expect(plan.summary).toMatchObject({
       games: 1,
       nextGame: { set: 1, gameInSet: 2 },
-      toGame: { set: 1, gameInSet: 2 },
     });
     // The number is the session's highest plus one — a later set's included.
     const later = [
@@ -432,6 +427,8 @@ interface Call {
   op: "select" | "update";
   values?: Record<string, unknown>;
   filters: Record<string, unknown>;
+  /** `.in(column, values)`, as the writes name their rows. */
+  in?: Record<string, readonly unknown[]>;
 }
 
 function rowsOf(points: readonly LabelPoint[]) {
@@ -464,7 +461,11 @@ function fakeClient(rows: {
       calls.push(call);
       const answer = () => {
         if (call.op === "update") {
-          if (rows.failUpdate && call.filters.id === rows.failUpdate) {
+          if (
+            rows.failUpdate &&
+            (call.filters.id === rows.failUpdate ||
+              call.in?.id?.includes(rows.failUpdate))
+          ) {
             return { data: null, error: { message: "boom" } };
           }
           return { data: [{ id: call.filters.id }], error: null };
@@ -504,6 +505,10 @@ function fakeClient(rows: {
           call.filters[column] = value;
           return builder;
         },
+        in: (column: string, values: readonly unknown[]) => {
+          call.in = { ...call.in, [column]: values };
+          return builder;
+        },
         maybeSingle: async () => answer(),
         single: async () => answer(),
         then: (
@@ -521,7 +526,7 @@ const writes = (fake: ReturnType<typeof fakeClient>) =>
   fake.calls.filter((c) => c.op !== "select");
 
 test.describe("writeLabelGameShift", () => {
-  test("the gate, the scoring, the read, then one update per moved point in the plan's order — label_points only", async () => {
+  test("the gate and the scoring in one read, the points, then one update per destination by id list — label_points only", async () => {
     const fake = fakeClient({});
     const result = await writeLabelGameShift({
       supabase: fake.supabase,
@@ -530,19 +535,15 @@ test.describe("writeLabelGameShift", () => {
     });
     expect(result).toMatchObject({
       ok: true,
-      summary: { points: 2, games: 1 },
+      writes: [expect.anything(), expect.anything()],
     });
     expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
       ["label_sessions", "select"],
-      ["label_sessions", "select"],
       ["label_points", "select"],
       ["label_points", "update"],
-      ["label_points", "update"],
     ]);
-    expect(writes(fake).map((c) => c.filters)).toEqual([
-      { id: UUID(7) },
-      { id: UUID(8) },
-    ]);
+    // Both go to the same game with the same server: one write names both.
+    expect(writes(fake).map((c) => c.in)).toEqual([{ id: [UUID(7), UUID(8)] }]);
     for (const call of writes(fake)) {
       expect(Object.keys(call.values ?? {}).sort()).toEqual([
         "game_number",
@@ -584,7 +585,10 @@ test.describe("writeLabelGameShift", () => {
         sessionId: SESSION_ID,
         fromPointId: UUID(8),
       }),
-    ).toMatchObject({ ok: true, summary: { points: 2 } });
+    ).toMatchObject({
+      ok: true,
+      writes: [expect.anything(), expect.anything()],
+    });
     expect(noAd.calls.map((c) => c.table)).not.toContain("processing_jobs");
 
     // The session has not said: the job's answer stands.
@@ -599,7 +603,10 @@ test.describe("writeLabelGameShift", () => {
         sessionId: SESSION_ID,
         fromPointId: UUID(8),
       }),
-    ).toMatchObject({ ok: true, summary: { points: 2 } });
+    ).toMatchObject({
+      ok: true,
+      writes: [expect.anything(), expect.anything()],
+    });
     expect(fromJob.calls.map((c) => c.table)).toContain("processing_jobs");
     expect(
       fromJob.calls.find((c) => c.table === "processing_jobs")?.filters,
@@ -648,7 +655,7 @@ test.describe("writeLabelGameShift", () => {
         fromPointId: UUID(7),
       }),
     ).toMatchObject({ ok: true });
-    expect(writes(blind)).toHaveLength(2);
+    expect(writes(blind)).toHaveLength(1);
   });
 
   test("a bad id, a point inside its game and a failed write each stop the run", async () => {
@@ -893,10 +900,15 @@ test.describe("the slot on the black rail", () => {
       adScoring,
       playingShotId: null,
     });
+    const summaryOf = (rows: LabelPoint[], from: string) => {
+      const plan = planGameShift(rows, true, from);
+      return "error" in plan ? null : plan.summary;
+    };
     const points = usersCase();
     const overflow = gameOverflow(points, true)[0];
     const tree = BlackGameOverflow({
       overflow,
+      summary: summaryOf(points, points[6].id),
       point: points[6],
       edit: edit(points),
     });
@@ -919,6 +931,7 @@ test.describe("the slot on the black rail", () => {
     ]);
     const far = BlackGameOverflow({
       overflow: gameOverflow(cascade, true)[0],
+      summary: summaryOf(cascade, cascade[4].id),
       point: cascade[4],
       edit: edit(cascade),
     });

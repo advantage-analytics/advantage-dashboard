@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { cn } from "@/lib/utils";
 import {
   RAIL_DEFAULT_PX,
@@ -10,8 +16,11 @@ import {
 } from "./label-layout";
 import { LabelRailResize } from "./label-rail-resize";
 
+/** How long after the last resize the rail's width is written to storage. */
+const RAIL_WIDTH_PERSIST_MS = 150;
+
 /**
- * The console's full-screen view (T33, board 08l) — the layout the Layout
+ * The console's full-screen view (board 08l) — the layout the Layout
  * menu calls "Full screen": black to the edges, with no admin header and no
  * nav; the film top-left with its transport, the court drawn straight onto
  * the black under it, and the points rail down the right.
@@ -144,15 +153,41 @@ export function LabelBlackView({
     }
   }, [initialRailWidth]);
 
-  const resizeRail = useCallback((px: number) => {
-    const next = clampRailWidth(px);
-    setRailWidth(next);
+  // Storage is written once the width settles, not on every pointermove of a
+  // drag: the pending width and its timer, flushed on unmount so a width the
+  // labeller left the view on is kept.
+  const pending = useRef<{
+    px: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+  const persistRail = useCallback((px: number) => {
+    pending.current = null;
     try {
-      localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(next));
+      localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(px));
     } catch {
       /* private window — the width just isn't kept */
     }
   }, []);
+  useEffect(
+    () => () => {
+      if (!pending.current) return;
+      clearTimeout(pending.current.timer);
+      persistRail(pending.current.px);
+    },
+    [persistRail],
+  );
+  const resizeRail = useCallback(
+    (px: number) => {
+      const next = clampRailWidth(px);
+      setRailWidth(next);
+      if (pending.current) clearTimeout(pending.current.timer);
+      pending.current = {
+        px: next,
+        timer: setTimeout(() => persistRail(next), RAIL_WIDTH_PERSIST_MS),
+      };
+    },
+    [persistRail],
+  );
   const resetRail = useCallback(
     () => resizeRail(RAIL_DEFAULT_PX),
     [resizeRail],

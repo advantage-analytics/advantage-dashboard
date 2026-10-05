@@ -4,8 +4,9 @@
  * (board 08m, `BANNER`).
  *
  * Pure, over `score.ts`: a set's games are its `LabelGameBand`s counted for
- * their `winner`, so the same rows that draw the scoreboard draw the tally,
- * and a corrected winner moves both at once. Nothing here is stored.
+ * their `winner` — the caller hands in the bands it already scored, so the
+ * same rows that draw the scoreboard draw the tally, and a corrected winner
+ * moves both at once. Nothing here is stored.
  *
  * The entered score is a set total — `label_sessions.final_score` as the
  * labeller read it off the video, else `matches.score` as the match record
@@ -14,7 +15,7 @@
  * live point, which is where "Find the gap" goes.
  */
 
-import { labelScores, type ScorablePoint } from "./score";
+import type { LabelGameBand, ScorablePoint } from "./score";
 import type { LabelSide, MatchScore } from "./session";
 
 /** One set's games as the labelled points make them, p1 first. */
@@ -32,9 +33,9 @@ export interface LabelSetScore {
  */
 export function labelSetScores(
   points: readonly ScorablePoint[],
-  adScoring: boolean,
+  /** `labelScores(points, adScoring).games` — scored once by the caller. */
+  games: readonly LabelGameBand[],
 ): LabelSetScore[] {
-  const { games } = labelScores(points, adScoring);
   const sets = new Map<number, LabelSetScore>();
   for (const point of points) {
     if (point.status === "deleted" || point.setNumber === null) continue;

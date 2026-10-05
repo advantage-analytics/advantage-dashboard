@@ -44,22 +44,27 @@
 
 import { labelPointFields, labelPointStatusAfterChange } from "./edit";
 import { gameFirstServer, type GamePoint } from "./game-operations";
-import { gameDecided, isCountedPoint, labelScores } from "./score";
-import type { LabelGameType, LabelPoint, LabelSide } from "./session";
+import { gameDecided, gameKey, isCountedPoint, labelScores } from "./score";
+import {
+  opponent,
+  type LabelGameType,
+  type LabelPoint,
+  type LabelSide,
+} from "./session";
 
 type LivePointStatus = Exclude<GamePoint["status"], "deleted">;
 
-/** What the shift reads of a point: a `LabelPoint` satisfies it. */
-export type ShiftablePoint = GamePoint;
-
-/** One ordinary game with rows sitting past the row that decided it. */
-export interface GameOverflow<T extends ShiftablePoint = ShiftablePoint> {
+/**
+ * One ordinary game with rows sitting past the row that decided it. The
+ * shift reads a `GamePoint` of each row; a `LabelPoint` satisfies it.
+ */
+export interface GameOverflow {
   setNumber: number;
   gameNumber: number;
   /** Who the game was decided for. */
   decidedBy: LabelSide;
   /** The live rows after the deciding one, in `point_index` order. */
-  leftovers: T[];
+  leftovers: GamePoint[];
 }
 
 /** The columns one moved point is written with. Nothing else. */
@@ -84,34 +89,22 @@ export interface GameShiftSummary {
   points: number;
   /** Games the moved points went INTO — the cascade's length. */
   games: number;
-  /** The game the shift started from. */
-  fromGame: GameShiftGameRef;
   /** The first game the leftovers move into — the button's name. */
   nextGame: GameShiftGameRef;
-  /** The last game the cascade reached. `nextGame` when it is one step. */
-  toGame: GameShiftGameRef;
 }
 
 export type PlannedGameShift =
   | { ok: true; writes: GameShiftWrite[]; summary: GameShiftSummary }
   | { error: string };
 
-interface Accumulator<T extends ShiftablePoint> {
+interface Accumulator {
   setNumber: number;
   gameNumber: number;
   /** The game's first live point's type speaks for the whole game. */
   gameType: LabelGameType;
   points: Record<LabelSide, number>;
   decidedBy: LabelSide | null;
-  leftovers: T[];
-}
-
-function keyOf(point: { setNumber: number | null; gameNumber: number | null }) {
-  return `${point.setNumber}·${point.gameNumber}`;
-}
-
-function opponent(side: LabelSide): LabelSide {
-  return side === "p1" ? "p2" : "p1";
+  leftovers: GamePoint[];
 }
 
 /**
@@ -119,18 +112,18 @@ function opponent(side: LabelSide): LabelSide {
  * the games first appear. A tiebreak never overflows; a game decided on its
  * last row is not listed.
  */
-export function gameOverflow<T extends ShiftablePoint>(
-  points: readonly T[],
+export function gameOverflow(
+  points: readonly GamePoint[],
   adScoring: boolean,
-): GameOverflow<T>[] {
-  const games: Accumulator<T>[] = [];
-  const byKey = new Map<string, Accumulator<T>>();
+): GameOverflow[] {
+  const games: Accumulator[] = [];
+  const byKey = new Map<string, Accumulator>();
   const live = [...points]
     .filter((p) => p.status !== "deleted")
     .sort((a, b) => a.pointIndex - b.pointIndex);
   for (const point of live) {
     if (point.setNumber === null || point.gameNumber === null) continue;
-    const key = keyOf(point);
+    const key = gameKey(point);
     let game = byKey.get(key);
     if (!game) {
       game = {
@@ -166,7 +159,7 @@ export function gameOverflow<T extends ShiftablePoint>(
 
 /** The ids of every leftover row, across every overflowing game. */
 export function leftoverIds(
-  points: readonly ShiftablePoint[],
+  points: readonly GamePoint[],
   adScoring: boolean,
 ): ReadonlySet<string> {
   const ids = new Set<string>();
@@ -190,18 +183,18 @@ interface Destination {
  * The game after `leftovers`: that of the first live point past the last of
  * them whose game is not `from`. Null when nothing follows.
  */
-function gameAfter<T extends ShiftablePoint>(
-  live: readonly T[],
+function gameAfter(
+  live: readonly GamePoint[],
   from: { setNumber: number; gameNumber: number },
-  leftovers: readonly T[],
+  leftovers: readonly GamePoint[],
 ): Destination | null {
   const lastIndex = leftovers[leftovers.length - 1].pointIndex;
-  const fromKey = keyOf(from);
+  const fromKey = gameKey(from);
   for (const point of live) {
     if (point.pointIndex <= lastIndex) continue;
     if (point.setNumber === null || point.gameNumber === null) continue;
-    if (keyOf(point) === fromKey) continue;
-    const members = live.filter((p) => keyOf(p) === keyOf(point));
+    if (gameKey(point) === fromKey) continue;
+    const members = live.filter((p) => gameKey(p) === gameKey(point));
     return {
       setNumber: point.setNumber,
       gameNumber: point.gameNumber,
@@ -215,10 +208,10 @@ function gameAfter<T extends ShiftablePoint>(
 
 /** A new game after `from`: same set, the next number, the other server. */
 function openGameAfter(
-  points: readonly ShiftablePoint[],
-  live: readonly ShiftablePoint[],
+  points: readonly GamePoint[],
+  live: readonly GamePoint[],
   from: { setNumber: number; gameNumber: number },
-  leftovers: readonly ShiftablePoint[],
+  leftovers: readonly GamePoint[],
 ): Destination {
   let highest = 0;
   for (const point of points) {
@@ -227,7 +220,7 @@ function openGameAfter(
     }
   }
   const server =
-    gameFirstServer(live.filter((p) => keyOf(p) === keyOf(from))) ??
+    gameFirstServer(live.filter((p) => gameKey(p) === gameKey(from))) ??
     gameFirstServer(leftovers);
   return {
     setNumber: from.setNumber,
@@ -238,10 +231,7 @@ function openGameAfter(
   };
 }
 
-function statusAfterShift(
-  point: ShiftablePoint,
-  to: Destination,
-): LivePointStatus {
+function statusAfterShift(point: GamePoint, to: Destination): LivePointStatus {
   const server = to.server ?? point.server;
   const status = labelPointStatusAfterChange(
     { ...labelPointFields(point), status: point.status, seed: point.seed },
@@ -257,8 +247,8 @@ function statusAfterShift(
  * moved point — a point moved twice along the cascade appears once, with
  * where it ends up — and a summary for the button and its tooltip.
  */
-export function planGameShift<T extends ShiftablePoint>(
-  points: readonly T[],
+export function planGameShift(
+  points: readonly GamePoint[],
   adScoring: boolean,
   fromPointId: string,
 ): PlannedGameShift {
@@ -283,7 +273,7 @@ export function planGameShift<T extends ShiftablePoint>(
   const rank = new Map<string, number>();
   const gamesInSet = new Map<number, number>();
   for (const band of labelScores(points, adScoring).games) {
-    rank.set(keyOf(band), band.gameInSet);
+    rank.set(gameKey(band), band.gameInSet);
     gamesInSet.set(band.setNumber, band.gameInSet);
   }
   const ref = (game: {
@@ -292,19 +282,18 @@ export function planGameShift<T extends ShiftablePoint>(
   }): GameShiftGameRef => ({
     set: game.setNumber,
     gameInSet:
-      rank.get(keyOf(game)) ?? (gamesInSet.get(game.setNumber) ?? 0) + 1,
+      rank.get(gameKey(game)) ?? (gamesInSet.get(game.setNumber) ?? 0) + 1,
   });
 
   // The rows the cascade reads from after each step: the originals, with
   // the writes so far applied. A point's status is always measured from its
   // ORIGINAL state, as one move would.
   const original = new Map(points.map((point) => [point.id, point]));
-  let working: T[] = [...points];
+  let working: GamePoint[] = [...points];
   const writes = new Map<string, GameShiftWrite>();
-  let current: GameOverflow<T> = overflow;
-  let games = 0;
-  let nextGame: GameShiftGameRef | null = null;
-  let toGame: GameShiftGameRef = ref(overflow);
+  let current: GameOverflow = overflow;
+  /** The game each step moved into, in order. */
+  const steps: GameShiftGameRef[] = [];
 
   // Bounded for safety; the anchor rule already guarantees an end.
   const bound = working.filter((p) => p.status !== "deleted").length + 1;
@@ -315,10 +304,7 @@ export function planGameShift<T extends ShiftablePoint>(
     const to =
       gameAfter(live, current, current.leftovers) ??
       openGameAfter(working, live, current, current.leftovers);
-    games += 1;
-    const toRef = ref(to);
-    if (!nextGame) nextGame = toRef;
-    toGame = toRef;
+    steps.push(ref(to));
 
     for (const point of current.leftovers) {
       const base = original.get(point.id) ?? point;
@@ -349,10 +335,8 @@ export function planGameShift<T extends ShiftablePoint>(
     writes: [...writes.values()],
     summary: {
       points: writes.size,
-      games,
-      fromGame: ref(overflow),
-      nextGame: nextGame ?? toGame,
-      toGame,
+      games: steps.length,
+      nextGame: steps[0],
     },
   };
 }

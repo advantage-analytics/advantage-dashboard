@@ -14,14 +14,16 @@
  * labeller rejected a vendor stroke, not merely that it is missing.
  */
 
-import type {
-  LabelPoint,
-  LabelPointStatus,
-  LabelShot,
-  LabelShotStatus,
-  LabelSide,
+import {
+  opponent,
+  type LabelPoint,
+  type LabelPointStatus,
+  type LabelShot,
+  type LabelShotStatus,
+  type LabelSide,
 } from "./session";
 import { labelPointFields, labelPointStatusAfterChange } from "./edit";
+import { gameKey } from "./score";
 
 // ── Delete and Undo ─────────────────────────────────────────────────────────
 
@@ -326,10 +328,6 @@ export function planAddedShot(
   };
 }
 
-function opponent(side: LabelSide): LabelSide {
-  return side === "p1" ? "p2" : "p1";
-}
-
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -505,7 +503,7 @@ export function neighbourGames(
   if (index === -1) return [];
   const self = live[index];
   const games: LabelGame[] = [];
-  const seen = new Set<string>([`${self.setNumber}·${self.gameNumber}`]);
+  const seen = new Set<string>([gameKey(self)]);
   for (const neighbour of [live[index - 1], live[index + 1]]) {
     if (
       !neighbour ||
@@ -514,7 +512,7 @@ export function neighbourGames(
     ) {
       continue;
     }
-    const key = `${neighbour.setNumber}·${neighbour.gameNumber}`;
+    const key = gameKey(neighbour);
     if (seen.has(key)) continue;
     seen.add(key);
     games.push({

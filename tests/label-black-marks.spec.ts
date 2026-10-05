@@ -611,8 +611,10 @@ test.describe("a mark's hover is the dark tooltip's two lines", () => {
       shot: LabelShot,
       marks: LabelMarks,
       names: typeof NAMES,
-    ) => (Hover & { code: string })[];
-    collapseShotMarks: (marks: readonly Hover[]) => Hover | null;
+    ) => { name: string; detail: string | null }[];
+    collapseShotMarks: (
+      marks: readonly { name: string; detail: string | null }[],
+    ) => Hover | null;
   };
   const load = () => createLoader().load(MARK) as MarkModule;
   const IGNORED = mark("out_ball_rally_continued", { nextHitter: "p2" });

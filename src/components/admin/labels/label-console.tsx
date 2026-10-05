@@ -9,8 +9,10 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type Dispatch,
   type FocusEvent,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import {
   labelProgress,
@@ -113,6 +115,7 @@ import {
   type PointFocus,
 } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import { reducedMotionNow } from "@/components/dashboard/matches/match-detail/film/film-motion";
+import { LabelFollowPill } from "./label-follow-pill";
 import {
   REFOLLOW_JUMP_INSET_PX,
   followScrollTarget,
@@ -184,6 +187,51 @@ const PENDING_POINT_PREFIX = "pending-point-";
 
 /** One frozen `follow`, so re-following while following changes no identity. */
 const FOLLOW: PointFocus = { mode: "follow" };
+
+/** What a game operation writes back, and a game shift on top of it. */
+const GAME_WRITE_FIELDS = ["server", "gameType", "status"] as const;
+const GAME_SHIFT_FIELDS = [
+  "setNumber",
+  "gameNumber",
+  ...GAME_WRITE_FIELDS,
+] as const;
+
+/**
+ * `rows` with each row `from` names taking `keys` from there — the settle
+ * and the revert of an operation that rewrites a few fields of many rows.
+ */
+function takeFields<K extends keyof LabelPoint>(
+  rows: LabelPoint[],
+  from: ReadonlyMap<string, Pick<LabelPoint, K>>,
+  keys: readonly K[],
+): LabelPoint[] {
+  return rows.map((row) => {
+    const source = from.get(row.id);
+    if (!source) return row;
+    const next = { ...row };
+    for (const key of keys) next[key] = source[key];
+    return next;
+  });
+}
+
+/** `(id) => toggle id in the set` / `(id) => drop id from the set`, on a Set state. */
+function toggleIn(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
+  return (id: string) =>
+    set((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+}
+function removeFrom(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
+  return (id: string) =>
+    set((current) => {
+      if (!current.has(id)) return current;
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+}
 
 /**
  * `/admin/labels/[sessionId]` — board 08: the header and the points table,
@@ -663,11 +711,16 @@ export function LabelConsole({
   // The docked (and black) player's transport title row — the dock derives
   // the same for the floating one. Nothing in the overlay reads it, so it
   // stays `null`.
+  // The scoreboard over the rows as they stand, once: the rail's scores and
+  // bands and the dock's readout all read this.
+  const scores = useMemo(
+    () => labelScores(points, session.adScoring),
+    [points, session.adScoring],
+  );
   const dockedReadout = useMemo(() => {
     if (!docked && !black) return null;
-    const scores = labelScores(points, session.adScoring);
     return dockReadout(points, nowPlaying, names, scores);
-  }, [docked, black, points, session.adScoring, nowPlaying, names]);
+  }, [docked, black, points, scores, nowPlaying, names]);
   // The playing point's span on the FILE clock — `--film-t` is the element's
   // own seconds, so the window is the player's stop, not `playingRowAt`'s
   // analysis-clock one.
@@ -711,11 +764,7 @@ export function LabelConsole({
     setRestPointId(pointId);
     if (pointId === playingPointId) followPlayback();
     else holdPoint(pointId);
-    const point = points.find((p) => p.id === pointId);
-    const first = point?.shots.find(
-      (shot) => shot.status !== "deleted" && shot.videoTime !== null,
-    );
-    if (first?.videoTime != null) player.current?.seekTo(first.videoTime);
+    seekToPointStart(points.find((p) => p.id === pointId));
   }
 
   // Selecting a stroke is the start of an edit, so it holds the rail (the
@@ -898,6 +947,25 @@ export function LabelConsole({
     return result;
   }
 
+  /** A plan the console refused before any write: the status bar says why. */
+  function refuse(message: string) {
+    dispatchSave({ type: "start" });
+    dispatchSave({ type: "failure", message });
+  }
+
+  /** The revert of a one-shot operation: the row as it was read. */
+  const putBackShot =
+    (shotId: string, before: LabelShot) => (rows: LabelPoint[]) =>
+      replaceShot(rows, shotId, () => before);
+
+  /** Seek the film to the point's first live timed stroke, when it has one. */
+  function seekToPointStart(point: LabelPoint | undefined) {
+    const first = point?.shots.find(
+      (shot) => shot.status !== "deleted" && shot.videoTime !== null,
+    );
+    if (first?.videoTime != null) player.current?.seekTo(first.videoTime);
+  }
+
   function deleteShot(shotId: string, reason: LabelDeleteReason) {
     const before = findShot(points, shotId);
     if (!before || !operations) return;
@@ -909,7 +977,7 @@ export function LabelConsole({
       change,
       () => operations.deleteShot(shotId, reason),
       (rows) => rows,
-      (rows) => replaceShot(rows, shotId, () => before),
+      putBackShot(shotId, before),
     ).then((saved) => {
       if (saved) syncEnding(owner, change);
     });
@@ -926,7 +994,7 @@ export function LabelConsole({
       () => operations.restoreShot(shotId),
       (rows, result) =>
         replaceShot(rows, shotId, (s) => ({ ...s, status: result.status })),
-      (rows) => replaceShot(rows, shotId, () => before),
+      putBackShot(shotId, before),
     ).then((saved) => {
       if (saved) syncEnding(owner, change);
     });
@@ -953,7 +1021,7 @@ export function LabelConsole({
           ...s,
           siteRemovalRestoredAt: result.siteRemovalRestoredAt,
         })),
-      (rows) => replaceShot(rows, shotId, () => before),
+      putBackShot(shotId, before),
     );
     closeGhost(shotId);
   }
@@ -1002,8 +1070,7 @@ export function LabelConsole({
     if (!operations) return;
     const plan = planInsertedPoint(points, anchorPointId, position);
     if ("error" in plan) {
-      dispatchSave({ type: "start" });
-      dispatchSave({ type: "failure", message: plan.error });
+      refuse(plan.error);
       return;
     }
     pendingIds.current += 1;
@@ -1035,26 +1102,15 @@ export function LabelConsole({
     if (!operations) return;
     const plan = planGameShift(points, session.adScoring, fromPointId);
     if ("error" in plan) {
-      dispatchSave({ type: "start" });
-      dispatchSave({ type: "failure", message: plan.error });
+      refuse(plan.error);
       return;
     }
-    const before = new Map(points.map((point) => [point.id, point]));
+    const written = new Set(plan.writes.map((write) => write.id));
+    const before = new Map(
+      points.filter((p) => written.has(p.id)).map((p) => [p.id, p]),
+    );
     const revert = (rows: LabelPoint[]) =>
-      rows.map((row) => {
-        const was = before.get(row.id);
-        if (!was || !plan.writes.some((write) => write.id === row.id)) {
-          return row;
-        }
-        return {
-          ...row,
-          setNumber: was.setNumber,
-          gameNumber: was.gameNumber,
-          server: was.server,
-          gameType: was.gameType,
-          status: was.status,
-        };
-      });
+      takeFields(rows, before, GAME_SHIFT_FIELDS);
     void runOperation(
       (rows) => applyGameShift(rows, plan.writes),
       () => operations.shiftGameOverflow(session.id, fromPointId),
@@ -1081,8 +1137,7 @@ export function LabelConsole({
     if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
     const plan = planPointSplit(points, pointId, shotId);
     if ("error" in plan) {
-      dispatchSave({ type: "start" });
-      dispatchSave({ type: "failure", message: plan.error });
+      refuse(plan.error);
       return;
     }
     pendingIds.current += 1;
@@ -1118,8 +1173,7 @@ export function LabelConsole({
     if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
     const plan = planPointCombine(points, pointId, direction);
     if ("error" in plan) {
-      dispatchSave({ type: "start" });
-      dispatchSave({ type: "failure", message: plan.error });
+      refuse(plan.error);
       return;
     }
     const kept = points.find((point) => point.id === plan.write.keptId);
@@ -1179,11 +1233,7 @@ export function LabelConsole({
     setPlacement(clearPlacement);
     setRestPointId(target);
     holdPoint(target);
-    const point = live.find((p) => p.id === target);
-    const first = point?.shots.find(
-      (shot) => shot.status !== "deleted" && shot.videoTime !== null,
-    );
-    if (first?.videoTime != null) player.current?.seekTo(first.videoTime);
+    seekToPointStart(live.find((p) => p.id === target));
     jumpToPointId.current = target;
   }
   // The follow scroll moves nothing while held, so the jump — "Find the
@@ -1266,8 +1316,7 @@ export function LabelConsole({
     if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
     const plan = planAddedShot(point, afterShotId);
     if ("error" in plan) {
-      dispatchSave({ type: "start" });
-      dispatchSave({ type: "failure", message: plan.error });
+      refuse(plan.error);
       return;
     }
     pendingIds.current += 1;
@@ -1344,8 +1393,7 @@ export function LabelConsole({
       switchServer,
     );
     if ("error" in plan) {
-      dispatchSave({ type: "start" });
-      dispatchSave({ type: "failure", message: plan.error });
+      refuse(plan.error);
       return;
     }
     void runOperation(
@@ -1380,8 +1428,7 @@ export function LabelConsole({
     call: () => Promise<LabelGameWriteResult>,
   ) {
     if ("error" in plan) {
-      dispatchSave({ type: "start" });
-      dispatchSave({ type: "failure", message: plan.error });
+      refuse(plan.error);
       return;
     }
     const written = new Set(plan.writes.map((write) => write.id));
@@ -1391,32 +1438,13 @@ export function LabelConsole({
     void runOperation(
       (rows) => applyGameWrites(rows, plan.writes),
       call,
-      (rows, result) => {
-        const saved = new Map(result.points.map((p) => [p.id, p]));
-        return rows.map((p) => {
-          const row = saved.get(p.id);
-          return row
-            ? {
-                ...p,
-                server: row.server,
-                gameType: row.gameType,
-                status: row.status,
-              }
-            : p;
-        });
-      },
-      (rows) =>
-        rows.map((p) => {
-          const row = before.get(p.id);
-          return row
-            ? {
-                ...p,
-                server: row.server,
-                gameType: row.gameType,
-                status: row.status,
-              }
-            : p;
-        }),
+      (rows, result) =>
+        takeFields(
+          rows,
+          new Map(result.points.map((p) => [p.id, p])),
+          GAME_WRITE_FIELDS,
+        ),
+      (rows) => takeFields(rows, before, GAME_WRITE_FIELDS),
     );
   }
 
@@ -1500,39 +1528,10 @@ export function LabelConsole({
     );
   }
 
-  function toggleTombstone(id: string) {
-    setOpenTombstones((current) => {
-      const next = new Set(current);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  }
-
-  function closeTombstone(id: string) {
-    setOpenTombstones((current) => {
-      if (!current.has(id)) return current;
-      const next = new Set(current);
-      next.delete(id);
-      return next;
-    });
-  }
-
-  function toggleGhost(id: string) {
-    setOpenGhosts((current) => {
-      const next = new Set(current);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  }
-
-  function closeGhost(id: string) {
-    setOpenGhosts((current) => {
-      if (!current.has(id)) return current;
-      const next = new Set(current);
-      next.delete(id);
-      return next;
-    });
-  }
+  const toggleTombstone = toggleIn(setOpenTombstones);
+  const closeTombstone = removeFrom(setOpenTombstones);
+  const toggleGhost = toggleIn(setOpenGhosts);
+  const closeGhost = removeFrom(setOpenGhosts);
 
   function confirmed(question: LabelConfirm, reason: LabelDeleteReason | null) {
     setConfirm(null);
@@ -1738,19 +1737,11 @@ export function LabelConsole({
           chevron, since the lit row is wherever the table is. Above the
           dock layer (`z-40`). */}
       {affordance ? (
-        <button
-          type="button"
-          data-label-follow-pill=""
-          aria-label={affordance.ariaLabel}
-          onClick={followPlayback}
-          className={cn(
-            "absolute top-12 left-1/2 z-50 inline-flex h-7 -translate-x-1/2 cursor-pointer items-center rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium whitespace-nowrap text-white shadow-[var(--shadow-floating)] transition-[background-color,transform] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.97]",
-            // Pinned top, so it drops in (the keyframe reads the sign).
-            "film-follow-pill-in [--film-pill-rise:-4px]",
-          )}
-        >
-          {affordance.label}
-        </button>
+        <LabelFollowPill
+          affordance={affordance}
+          onFollow={followPlayback}
+          placement="page"
+        />
       ) : null}
     </div>
   );
@@ -1864,6 +1855,7 @@ export function LabelConsole({
           placing={placing}
         >
           <LabelBlackRail
+            scores={scores}
             player1Name={session.player1Name}
             player2Name={session.player2Name}
             checked={checked}
@@ -1890,7 +1882,6 @@ export function LabelConsole({
             onSetGameType={operable ? setGameType : undefined}
             openTombstoneIds={openTombstones}
             onToggleTombstone={toggleTombstone}
-            marksEnabled={session.marksEnabled}
             openGhostIds={openGhosts}
             onToggleGhost={toggleGhost}
             playingPointId={playingPointId}

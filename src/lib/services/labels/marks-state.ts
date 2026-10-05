@@ -20,7 +20,11 @@
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
 import { fixLabel, MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import { isGhostShot, type LabelPoint, type LabelShot } from "./session";
-import { addedPointBetween, type SuggestionNeighbour } from "./suggestions";
+import {
+  addedPointBetween,
+  MISSING_SHOT_PREFIX,
+  type SuggestionNeighbour,
+} from "./suggestions";
 
 export type MarkState =
   "open" | "settled" | "checked" | "checked-as-is" | "dismissed";
@@ -51,8 +55,6 @@ export function pointChanged(point: MarkStatePoint): boolean {
   if (point.status === "edited" || point.status === "added") return true;
   return point.shots.some((shot) => shotChanged(shot));
 }
-
-const MISSING_SHOT_PREFIX = "missing_shot:";
 
 /**
  * Whether the suggestion a flag opened was dismissed.
@@ -159,18 +161,40 @@ export function stateHover(
   pointAdded = false,
 ): string {
   if (mark.kind === "fix" || state === "open") return markHover(mark, names);
+  return hoverLine(answeredParts(mark, state, sentence, pointAdded));
+}
+
+/**
+ * A flag's line once it is answered, in its two parts: "{label} · {state}"
+ * over what the labeller did — nothing under a dismissal, which says it all.
+ */
+function answeredParts(
+  mark: LabelMark,
+  state: Exclude<MarkState, "open">,
+  sentence: string,
+  pointAdded: boolean,
+): MarkHoverParts {
   const label = MARK_LABEL[mark.code];
   switch (state) {
     case "settled":
     case "checked":
       if (pointAdded && mark.code === "service_court_repeat") {
-        return `${label} · settled. You added the missing point.`;
+        return {
+          name: `${label} · settled`,
+          detail: "You added the missing point.",
+        };
       }
-      return `${label} · settled. You changed the ending to ${sentence}.`;
+      return {
+        name: `${label} · settled`,
+        detail: `You changed the ending to ${sentence}.`,
+      };
     case "checked-as-is":
-      return `${label} · checked as is. You confirmed the point without changing it.`;
+      return {
+        name: `${label} · checked as is`,
+        detail: "You confirmed the point without changing it.",
+      };
     case "dismissed":
-      return `${label} · dismissed.`;
+      return { name: `${label} · dismissed`, detail: null };
   }
 }
 
@@ -185,9 +209,8 @@ export interface MarkHoverParts {
 /**
  * `stateHover` in two parts, for a tooltip that names first and explains
  * second. An open flag and a fix are named by their chip label
- * (`fixLabel`) over their own line; every other state is `stateHover`'s
- * sentence cut at its first full stop — "Check the ending · settled" over
- * "You changed the ending to …".
+ * (`fixLabel`) over their own line; every other state is the answered line
+ * — "Check the ending · settled" over "You changed the ending to …".
  */
 export function stateHoverParts(
   mark: LabelMark,
@@ -199,10 +222,7 @@ export function stateHoverParts(
   if (mark.kind === "fix" || state === "open") {
     return { name: fixLabel(mark), detail: markHover(mark, names) };
   }
-  const line = stateHover(mark, state, names, sentence, pointAdded);
-  const cut = line.indexOf(". ");
-  if (cut === -1) return { name: line.replace(/\.$/, ""), detail: null };
-  return { name: line.slice(0, cut), detail: line.slice(cut + 2) };
+  return answeredParts(mark, state, sentence, pointAdded);
 }
 
 /**

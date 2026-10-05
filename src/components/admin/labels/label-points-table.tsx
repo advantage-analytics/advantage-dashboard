@@ -16,6 +16,7 @@ import type {
 } from "@/lib/services/labels/edit";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
+  bandsBeforePoints,
   labelScores,
   type LabelGameBand as LabelGameBandScore,
   type LabelPointScore,
@@ -217,18 +218,7 @@ export function LabelPointsTableView({
   };
   // Each game's band goes above its first live point, once: a point moved
   // out of order never repeats it, and a tombstone never carries one.
-  const bandByGame = new Map(
-    games.map((band) => [`${band.setNumber}·${band.gameNumber}`, band]),
-  );
-  const bandBefore = new Map<string, LabelGameBandScore>();
-  for (const point of points) {
-    if (point.status === "deleted") continue;
-    const key = `${point.setNumber}·${point.gameNumber}`;
-    const band = bandByGame.get(key);
-    if (!band) continue;
-    bandBefore.set(point.id, band);
-    bandByGame.delete(key);
-  }
+  const bandBefore = bandsBeforePoints(points, games);
   return (
     <TooltipProvider>
       <div

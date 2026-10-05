@@ -74,6 +74,11 @@ export function isLabelSpin(value: unknown): value is LabelSpin {
   );
 }
 
+/** The other player. */
+export function opponent(side: LabelSide): LabelSide {
+  return side === "p1" ? "p2" : "p1";
+}
+
 /**
  * `label_shots.site_removal`, the CHECK vocabulary
  * (supabase/migrations/..._label_marks_and_site_removals.sql): why the SITE
@@ -194,8 +199,8 @@ export interface LabelSession {
   /**
    * Whether the match was played with advantage scoring, for the scoreboard:
    * `label_sessions.ad_scoring` as the labeller set it, else the job's
-   * `processing_jobs.ad_scoring`, else true (`resolveLabelAdScoring` in
-   * `lib/data/labels-server.ts`).
+   * `processing_jobs.ad_scoring`, else true (`resolveLabelAdScoring`,
+   * ad-scoring.ts).
    */
   adScoring: boolean;
   /**

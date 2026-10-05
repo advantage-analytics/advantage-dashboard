@@ -8,7 +8,7 @@
  * `requireAdmin`, runs on the service-role client, refuses a session that is
  * not `labelling` (`checkSessionOpen`, the gate every row operation shares),
  * and decides what to write with the pure plan the console ran for its
- * optimistic rows. NOT the marks gate (`checkSessionOpenWithMarks`): adding
+ * optimistic rows. NOT the marks gate (`checkSessionOpen`'s `blind`): adding
  * a point is a manual label edit, not an answer to a mark, so a session
  * labelled without marks — the ground-truth match — takes one too. The
  * suggestion slot that also calls this only draws when marks are on.
@@ -34,12 +34,11 @@ import {
   type InsertablePoint,
   type InsertPosition,
 } from "./point-insert";
+import { LABEL_POINT_COLUMNS, toLabelPoint, type LabelPointRow } from "./rows";
 import type {
-  LabelEnding,
   LabelGameType,
   LabelPoint,
   LabelPointStatus,
-  LabelServeSide,
   LabelSide,
 } from "./session";
 
@@ -64,21 +63,6 @@ interface IndexRow {
 const INDEX_COLUMNS =
   "id, point_index, status, set_number, game_number, server, game_type";
 
-/** The inserted row, read back whole. */
-interface InsertedRow extends IndexRow {
-  vendor_rally_ids: number[] | null;
-  serve_side: LabelServeSide | null;
-  winner: LabelSide | null;
-  ending: LabelEnding | null;
-  ended_by: LabelSide | null;
-  status_before_delete: Exclude<LabelPointStatus, "deleted"> | null;
-  checked_at: string | null;
-  note: string | null;
-  dismissed: string[] | null;
-}
-
-const POINT_COLUMNS = `${INDEX_COLUMNS}, vendor_rally_ids, serve_side, winner, ending, ended_by, status_before_delete, checked_at, note, dismissed`;
-
 function toInsertable(row: IndexRow): InsertablePoint {
   return {
     id: row.id,
@@ -88,30 +72,6 @@ function toInsertable(row: IndexRow): InsertablePoint {
     gameNumber: row.game_number,
     server: row.server,
     gameType: row.game_type,
-  };
-}
-
-/** The inserted row as the console draws it: an added point with no seed. */
-function toLabelPoint(row: InsertedRow): LabelPoint {
-  return {
-    id: row.id,
-    pointIndex: row.point_index,
-    vendorRallyIds: row.vendor_rally_ids ?? [],
-    setNumber: row.set_number,
-    gameNumber: row.game_number,
-    server: row.server,
-    serveSide: row.serve_side ?? null,
-    winner: row.winner ?? null,
-    ending: row.ending ?? null,
-    endedBy: row.ended_by ?? null,
-    gameType: row.game_type,
-    status: row.status,
-    statusBeforeDelete: row.status_before_delete ?? null,
-    checkedAt: row.checked_at ?? null,
-    note: row.note ?? null,
-    dismissed: row.dismissed ?? [],
-    seed: null,
-    shots: [],
   };
 }
 
@@ -179,13 +139,15 @@ export async function writeLabelPointInsert(params: {
       seed: null,
       checked_at: null,
     })
-    .select(POINT_COLUMNS)
-    .single<InsertedRow>();
+    .select(LABEL_POINT_COLUMNS)
+    .single<LabelPointRow>();
   if (insertError || !inserted) {
     return {
       error: `Could not add the point: ${insertError?.message ?? "no row came back"}`,
     };
   }
+  // The row read back whole, as the console draws it: an added point with no
+  // seed and no shots.
   return { ok: true, point: toLabelPoint(inserted) };
 }
 

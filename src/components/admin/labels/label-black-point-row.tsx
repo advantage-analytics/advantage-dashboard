@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   Check,
-  ChevronDown,
   CornerDownRight,
   GripVertical,
   Plus,
@@ -23,18 +22,12 @@ import {
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { filmProgressWidth } from "@/components/dashboard/matches/match-detail/film/film-clock";
 import { cn } from "@/lib/utils";
-import {
-  planGameShift,
-  type GameOverflow,
+import type {
+  GameOverflow,
+  GameShiftSummary,
 } from "@/lib/services/labels/game-shift";
 import type { LabelMarks, LabelSuggestion } from "@/lib/services/labels/marks";
-import type { LabelGame } from "@/lib/services/labels/operations";
-import type { LabelGameBand as LabelGameBandScore } from "@/lib/services/labels/score";
-import type {
-  LabelGameType,
-  LabelPoint,
-  LabelSide,
-} from "@/lib/services/labels/session";
+import type { LabelPoint, LabelSide } from "@/lib/services/labels/session";
 import { canResetPoint } from "@/lib/services/labels/reset";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import {
@@ -46,17 +39,18 @@ import {
 import { MarkChip, PencilMark, pointRowMarks } from "./label-black-mark";
 import { EditableCell, TextEditor } from "./label-cells";
 import type { SideNames } from "./label-format";
-import {
-  gameBandMenus,
-  gameBandModel,
-  gameBandServes,
-  type GameBandMenuRow,
-} from "./label-game-band";
 import { PointMenu } from "./label-point-menu";
 import { isCombinedTombstone } from "@/lib/services/labels/point-combine";
-import { BlackUndoButton, drawsGhosts } from "./label-black-shot-row";
+import {
+  AMBER_SLOT_ICON_INK,
+  BLACK_SLOT,
+  BlackTextAction,
+  BlackUndoButton,
+} from "./label-black-parts";
+import { drawsGhosts } from "./label-black-shot-row";
 import { parseNote, pointSummary } from "./label-point-row";
 import {
+  SIDES,
   sideInitial,
   type EditContext,
   type PlayingWindow,
@@ -154,14 +148,14 @@ export function BlackPointRow({
   // site removed while the well draws them as ghosts, so the sentence, the
   // deciding stroke and the rally count say what the rally is now. With the
   // session's marks off or none built, a ghost is a stroke like any other.
-  const shown = drawsGhosts(edit, marks) ? withoutGhosts(point) : point;
+  const shown = drawsGhosts(marks) ? withoutGhosts(point) : point;
   // A point the labeller just added (board 08m §5's "New point"): nothing on
   // it yet, so the two lines say what to do next rather than how it ended.
   const fresh = isNewPoint(point);
   const sentence = fresh ? NEW_POINT_TITLE : pointSentence(shown, names);
   const detail = fresh
     ? newPointDetail(point, edit.points)
-    : pointDetail(shown, names);
+    : pointDetail(shown);
   // The rail's rows go along so a "Same side twice" question reads settled
   // once a point the labeller added sits between the two (marks-state.ts).
   const rowMarks = pointRowMarks(point, marks, names, sentence, edit.points);
@@ -402,20 +396,16 @@ export function newPointDetail(
   if (at === -1) return NEW_POINT_DETAIL;
   const live = (p: LabelPoint) =>
     p.shots.filter((shot) => shot.status !== "deleted");
-  let t1: number | null = null;
-  for (let i = at - 1; i >= 0 && t1 === null; i -= 1) {
-    const p = points[i];
-    if (p.status === "deleted") continue;
-    t1 = live(p).findLast((shot) => shot.videoTime !== null)?.videoTime ?? null;
-    break;
-  }
-  let t2: number | null = null;
-  for (let i = at + 1; i < points.length && t2 === null; i += 1) {
-    const p = points[i];
-    if (p.status === "deleted") continue;
-    t2 = live(p).find((shot) => shot.videoTime !== null)?.videoTime ?? null;
-    break;
-  }
+  const isLive = (p: LabelPoint) => p.status !== "deleted";
+  const before = points.slice(0, at).findLast(isLive);
+  const after = points.slice(at + 1).find(isLive);
+  const t1 = before
+    ? (live(before).findLast((shot) => shot.videoTime !== null)?.videoTime ??
+      null)
+    : null;
+  const t2 = after
+    ? (live(after).find((shot) => shot.videoTime !== null)?.videoTime ?? null)
+    : null;
   if (t1 !== null && t2 !== null) {
     return `${NEW_POINT_DETAIL} · between ${formatClockTime(t1)} and ${formatClockTime(t2)}`;
   }
@@ -438,11 +428,10 @@ type PointSuggestion = Extract<LabelSuggestion, { kind: "missing_point" }>;
  */
 export function openPointSuggestions(
   points: readonly LabelPoint[],
-  edit: Pick<EditContext, "marksEnabled">,
   marks: LabelMarks | null | undefined,
 ): ReadonlyMap<string, PointSuggestion> {
   const open = new Map<string, PointSuggestion>();
-  if (!marks || !drawsGhosts(edit, marks)) return open;
+  if (!marks) return open;
   const byId = new Map(points.map((point) => [point.id, point]));
   for (const suggestion of marks.suggestions) {
     if (suggestion.kind !== "missing_point") continue;
@@ -455,9 +444,6 @@ export function openPointSuggestions(
   }
   return open;
 }
-
-/** The frame's `.fx-pi`: the plus in the slot's first track. */
-const SLOT_PLUS_INK = "rgba(252,211,77,0.8)";
 
 /**
  * A suggested point (board 08m §5, the frame's `.fx-psug`): two points of a
@@ -495,11 +481,11 @@ export function BlackSuggestedPoint({
     <div
       data-row="suggested-point"
       data-point-suggestion={point.id}
-      className="mx-2 my-0.5 grid min-h-[44px] grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-[10px] rounded-lg border border-dashed border-[rgba(252,211,77,0.45)] bg-[rgba(253,230,138,0.06)] py-1.5 pr-[10px] pl-1.5"
+      className={BLACK_SLOT}
     >
       <Plus
         className="size-3"
-        style={{ color: SLOT_PLUS_INK }}
+        style={{ color: AMBER_SLOT_ICON_INK }}
         strokeWidth={2}
         aria-hidden="true"
       />
@@ -524,42 +510,39 @@ export function BlackSuggestedPoint({
           data-point-suggestion-actions=""
           className="flex shrink-0 items-center justify-end gap-[14px]"
         >
-          <button
-            type="button"
+          <BlackTextAction
+            ink="amber"
             data-point-suggestion-add=""
             aria-label={`Add a point between points ${a} and ${b}`}
             onClick={(event) => {
               event.stopPropagation();
               operations.onInsertPoint(point.id);
             }}
-            className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-[rgba(252,211,77,1)] transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
           >
             Add point
-          </button>
-          <button
-            type="button"
+          </BlackTextAction>
+          <BlackTextAction
+            ink="quiet"
             data-point-suggestion-let=""
             aria-label={`Point ${b} was a let, replayed`}
             onClick={(event) => {
               event.stopPropagation();
               edit.onPatchPoint?.(point.id, { ending: "let_replayed" });
             }}
-            className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-white/50 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
           >
             {b} was a let
-          </button>
-          <button
-            type="button"
+          </BlackTextAction>
+          <BlackTextAction
+            ink="quiet"
             data-point-suggestion-dismiss=""
             aria-label={`Dismiss the suggested point between points ${a} and ${b}`}
             onClick={(event) => {
               event.stopPropagation();
               operations.onDismissSuggestion(point.id, suggestion.key);
             }}
-            className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-white/50 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
           >
             Dismiss
-          </button>
+          </BlackTextAction>
         </span>
       ) : null}
     </div>
@@ -585,21 +568,20 @@ export function BlackSuggestedPoint({
  */
 export function BlackGameOverflow({
   overflow,
+  summary,
   point,
   edit,
 }: {
-  overflow: GameOverflow<LabelPoint>;
+  overflow: GameOverflow;
+  /** `planGameShift` from the first leftover; null when it cannot be planned. */
+  summary: GameShiftSummary | null;
   /** The first leftover — the row that follows the slot. */
   point: LabelPoint;
   edit: EditContext;
 }) {
   const operations = edit.editable ? edit.operations : undefined;
-  const adScoring = edit.adScoring ?? true;
   const count = overflow.leftovers.length;
-  const plan = planGameShift(edit.points, adScoring, point.id);
-  const summary = "error" in plan ? null : plan.summary;
-  const gameInSet =
-    summary?.fromGame.gameInSet ?? edit.scores.get(point.id)?.gameInSet ?? null;
+  const gameInSet = edit.scores.get(point.id)?.gameInSet ?? null;
   const title =
     gameInSet === null
       ? "This game is already won"
@@ -612,28 +594,27 @@ export function BlackGameOverflow({
   const move = `Move to game ${to}`;
   const cascades = summary !== null && summary.games > 1;
   const button = (
-    <button
-      type="button"
+    <BlackTextAction
+      ink="amber"
       data-game-overflow-move=""
       aria-label={`${move}: ${reason}`}
       onClick={(event) => {
         event.stopPropagation();
         operations?.onShiftGameOverflow(point.id);
       }}
-      className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-[rgba(252,211,77,1)] transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
     >
       {move}
-    </button>
+    </BlackTextAction>
   );
   return (
     <div
       data-row="game-overflow"
       data-game-overflow={point.id}
-      className="mx-2 my-0.5 grid min-h-[44px] grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-[10px] rounded-lg border border-dashed border-[rgba(252,211,77,0.45)] bg-[rgba(253,230,138,0.06)] py-1.5 pr-[10px] pl-1.5"
+      className={BLACK_SLOT}
     >
       <CornerDownRight
         className="size-3"
-        style={{ color: SLOT_PLUS_INK }}
+        style={{ color: AMBER_SLOT_ICON_INK }}
         strokeWidth={2}
         aria-hidden="true"
       />
@@ -731,8 +712,6 @@ export function BlackDeletedPoint({
 }
 
 // ── The winner mark ────────────────────────────────────────────────────────
-
-const SIDES: readonly LabelSide[] = ["p1", "p2"];
 
 /**
  * The frame's `.bk-mk`: a 30px square with the winner's initial — p1 on
@@ -941,188 +920,5 @@ function BlackNoteAction({
         </div>
       </PopoverContent>
     </Popover>
-  );
-}
-
-// ── The game band ──────────────────────────────────────────────────────────
-
-/** `LIST_TONE.dark`'s game header, on the row's own 14px inset. */
-const BAND = "flex items-center px-[14px] pt-[13px] pb-[5px]";
-const BAND_LABEL = "mono text-[9px] tracking-[1.4px] uppercase";
-const BAND_META = "mono tabular text-[10px]";
-/** The frame's `.bk-gl` and `.bk-gm` inks. */
-const BAND_LABEL_INK = "text-white/45";
-const BAND_META_INK = "text-white/40";
-
-/**
- * A game band in the rail's dark tone — the frame's `.bk-gh`, and
- * `LabelGameBand` (`label-game-band.tsx`) word for word: "Set N · Game M"
- * (or "Set N · Tiebreak" / "Match tiebreak") on the left, the set's games
- * before it and who serves on the right. With both callbacks the game's name
- * and its server are triggers opening the same two menus on the dark
- * surface; without them — a read-only console — the band only reads.
- *
- * The model, the words and the menus' rows are that file's (`gameBandModel`,
- * `gameBandServes`, `gameBandMenus`); only the paint is this one's.
- */
-export function BlackGameBand({
-  band,
-  points,
-  names,
-  onSetGameType,
-  onSetGameServer,
-}: {
-  band: LabelGameBandScore;
-  points: readonly LabelPoint[];
-  names: SideNames;
-  /** Both absent: no menus, the band only reads. */
-  onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
-  onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
-}) {
-  const model = gameBandModel(band, points);
-  const serves = gameBandServes(model, names);
-  const menus =
-    onSetGameType && onSetGameServer
-      ? gameBandMenus(model, names, { onSetGameType, onSetGameServer })
-      : null;
-  return (
-    <div
-      data-game-band={`${band.setNumber}-${band.gameNumber}`}
-      data-game-type={model.type}
-      className={BAND}
-    >
-      {menus ? (
-        <span className="flex items-center">
-          {model.setLabel ? (
-            <span className={cn(BAND_LABEL, BAND_LABEL_INK)}>
-              {model.setLabel} ·
-            </span>
-          ) : null}
-          <BlackBandMenu
-            kind="type"
-            name={`Game type: ${model.gameLabel}`}
-            menuLabel="Game type"
-            align="start"
-            rows={menus.type}
-            ink={BAND_LABEL_INK}
-            // With no set before it, the trigger's text starts the band.
-            className={cn(BAND_LABEL, !model.setLabel && "-ml-1.5")}
-          >
-            {model.gameLabel}
-          </BlackBandMenu>
-        </span>
-      ) : (
-        <span className={cn(BAND_LABEL, BAND_LABEL_INK)}>
-          {model.setLabel ? `${model.setLabel} · ` : ""}
-          {model.gameLabel}
-        </span>
-      )}
-      <span className="flex-1" />
-      {menus ? (
-        <span className="flex items-center">
-          <span className={cn(BAND_META, BAND_META_INK)}>{model.score} ·</span>
-          <BlackBandMenu
-            kind="server"
-            name={
-              model.server ? `Server: ${names[model.server]}` : "Server: none"
-            }
-            menuLabel={`Who serves ${model.gameLabel}`}
-            caption={
-              model.type === "game" ? "Serving this game" : "Serving first"
-            }
-            align="end"
-            rows={menus.server}
-            ink={BAND_META_INK}
-            className={cn(BAND_META, "-mr-1.5")}
-          >
-            {serves}
-          </BlackBandMenu>
-        </span>
-      ) : (
-        <span className={cn(BAND_META, BAND_META_INK)}>
-          {model.score} · {serves}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/**
- * One of the dark band's triggers and its menu — `label-game-band.tsx`'s
- * `BandMenu` on the dark surface. 22px tall for the pointer, taking 14px of
- * the band (`-my-1`), so a band with menus is as tall as one without.
- */
-function BlackBandMenu({
-  kind,
-  name,
-  menuLabel,
-  caption,
-  align,
-  rows,
-  ink,
-  className,
-  children,
-}: {
-  kind: "type" | "server";
-  /** The trigger's accessible name: what it is, and what it is set to. */
-  name: string;
-  menuLabel: string;
-  caption?: string;
-  align: "start" | "end";
-  rows: readonly GameBandMenuRow[];
-  /** The trigger's resting ink — the label's or the meta's. */
-  ink: string;
-  /** The trigger's type, and any edge pull. */
-  className: string;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <FloatMenu
-      open={open}
-      onOpenChange={setOpen}
-      align={align}
-      sideOffset={6}
-      width={290}
-      tone="dark"
-      label={menuLabel}
-      trigger={
-        <button
-          type="button"
-          aria-label={name}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          data-game-menu={kind}
-          className={cn(
-            "-my-1 flex h-[22px] cursor-pointer items-center gap-[5px] rounded-[6px] px-1.5 transition-[color,background-color] duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-            className,
-            open
-              ? "bg-white/[0.12] text-white"
-              : cn(ink, "hover:bg-white/[0.08] hover:text-white"),
-          )}
-        >
-          {children}
-          <ChevronDown
-            className="size-2.5 shrink-0 opacity-70"
-            strokeWidth={1.6}
-            aria-hidden="true"
-          />
-        </button>
-      }
-    >
-      {caption ? <FloatMenuLabel>{caption}</FloatMenuLabel> : null}
-      {rows.map((row) => (
-        <FloatMenuItem
-          key={row.key}
-          label={row.label}
-          description={row.description}
-          chosen={row.chosen}
-          onSelect={() => {
-            setOpen(false);
-            row.run();
-          }}
-        />
-      ))}
-    </FloatMenu>
   );
 }

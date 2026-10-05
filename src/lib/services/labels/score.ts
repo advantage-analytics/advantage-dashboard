@@ -24,6 +24,7 @@
 import {
   LABEL_GAME_TYPES,
   isLabelGameType,
+  opponent,
   type LabelEnding,
   type LabelGameType,
   type LabelPointStatus,
@@ -122,6 +123,39 @@ interface GameAccumulator {
  * order; `adScoring` is whether a game at 40–40 goes to Ad (true) or ends on
  * the next point (false, "no-ad").
  */
+/**
+ * `"{set}·{game}"` — the one key a point's game goes by in every map keyed
+ * on games, here and in the console.
+ */
+export function gameKey(point: {
+  setNumber: number | null;
+  gameNumber: number | null;
+}): string {
+  return `${point.setNumber}·${point.gameNumber}`;
+}
+
+/**
+ * Each game's band, keyed by the id of the first live point of that game in
+ * `points` — where the console draws it, once: a point moved out of order
+ * never repeats it, and a tombstone never carries one.
+ */
+export function bandsBeforePoints(
+  points: readonly ScorablePoint[],
+  games: readonly LabelGameBand[],
+): ReadonlyMap<string, LabelGameBand> {
+  const bandByGame = new Map(games.map((band) => [gameKey(band), band]));
+  const bandBefore = new Map<string, LabelGameBand>();
+  for (const point of points) {
+    if (point.status === "deleted") continue;
+    const key = gameKey(point);
+    const band = bandByGame.get(key);
+    if (!band) continue;
+    bandBefore.set(point.id, band);
+    bandByGame.delete(key);
+  }
+  return bandBefore;
+}
+
 export function labelScores(
   points: readonly ScorablePoint[],
   adScoring: boolean,
@@ -140,7 +174,7 @@ export function labelScores(
       rows.push({ id: point.id, game: null, scoreBefore: null });
       continue;
     }
-    const key = `${point.setNumber}·${point.gameNumber}`;
+    const key = gameKey(point);
     let game = gameByKey.get(key);
     if (!game) {
       game = {
@@ -217,7 +251,7 @@ function formatScore(
   server: LabelSide,
   adScoring: boolean,
 ): string {
-  const receiver: LabelSide = server === "p1" ? "p2" : "p1";
+  const receiver = opponent(server);
   const s = game.points[server];
   const r = game.points[receiver];
   if (game.gameType !== "game") return `${s}–${r}`;

@@ -38,7 +38,7 @@
  */
 
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
-import { gameDecided, isCountedPoint, labelScores } from "./score";
+import { gameDecided, gameKey, isCountedPoint, labelScores } from "./score";
 import type {
   LabelGameType,
   LabelPoint,
@@ -112,7 +112,7 @@ export function liveScoreMarks(
   for (const point of points) {
     if (point.status === "deleted") continue;
     if (point.setNumber === null || point.gameNumber === null) continue;
-    const key = `${point.setNumber}·${point.gameNumber}`;
+    const key = gameKey(point);
     let run = runs.get(key);
     if (!run) {
       run = {

@@ -32,12 +32,13 @@ type Names = { p1: string; p2: string };
 
 const FORMAT = "src/components/admin/labels/label-black-format.ts";
 const ROW = "src/components/admin/labels/label-black-point-row.tsx";
+const BAND = "src/components/admin/labels/label-game-band.tsx";
 const MENU_SELECT = "src/components/ui/menu-select.tsx";
 
 function format() {
   return createLoader().load(FORMAT) as {
     pointSentence: (point: LabelPoint, names: Names) => string;
-    pointDetail: (point: LabelPoint, names: Names) => string;
+    pointDetail: (point: LabelPoint) => string;
     formatClockTime: (seconds: number) => string;
   };
 }
@@ -131,7 +132,7 @@ test.describe("the two lines", () => {
       ],
     });
     expect(pointSentence(error, FRAME)).toBe("Forehand error by Goodman");
-    expect(pointDetail(error, FRAME)).toBe(
+    expect(pointDetail(error)).toBe(
       "Flat Down the Line · 12:45 · 3 shot rally",
     );
   });
@@ -156,7 +157,7 @@ test.describe("the two lines", () => {
       ],
     });
     expect(pointSentence(winner, FRAME)).toBe("Forehand winner by Ace");
-    expect(pointDetail(winner, FRAME)).toBe(
+    expect(pointDetail(winner)).toBe(
       "Topspin Crosscourt · 15:17 · 2 shot rally",
     );
     // Nobody named, no stroke named: the sentence still reads.
@@ -191,7 +192,7 @@ test.describe("the two lines", () => {
     });
     expect(pointSentence(doubleFault, FRAME)).toBe("Double fault by Ace");
     // A serve's topspin is a Kick, and the serve is named before its box.
-    expect(pointDetail(doubleFault, FRAME)).toBe(
+    expect(pointDetail(doubleFault)).toBe(
       "Kick Second Serve T · 19:10 · serve only",
     );
   });
@@ -212,7 +213,7 @@ test.describe("the two lines", () => {
       ],
     });
     expect(pointSentence(ace, FRAME)).toBe("Ace by Ace");
-    expect(pointDetail(ace, FRAME)).toBe(
+    expect(pointDetail(ace)).toBe(
       "Slice First Serve Wide · 1:02:03 · serve only",
     );
 
@@ -232,12 +233,11 @@ test.describe("the two lines", () => {
     // Not labelled yet: the point's number. No stroke: nothing but the rally.
     const blank = point({ pointIndex: 41 });
     expect(pointSentence(blank, FRAME)).toBe("Point 42");
-    expect(pointDetail(blank, FRAME)).toBe("serve only");
+    expect(pointDetail(blank)).toBe("serve only");
     // One stroke that is not a serve is a rally of one, not a serve.
     expect(
       pointDetail(
         point({ shots: [shot("a", { stroke: "backhand", videoTime: 5 })] }),
-        FRAME,
       ),
     ).toBe("0:05 · 1 shot rally");
   });
@@ -272,12 +272,12 @@ type BandProps = {
   names: Names;
   onSetGameType?: (...args: unknown[]) => void;
   onSetGameServer?: (...args: unknown[]) => void;
+  tone?: "light" | "dark";
 };
 
 function components() {
   return createLoader().load(ROW) as {
     BlackPointRow: React.ComponentType<RowProps>;
-    BlackGameBand: React.ComponentType<BandProps>;
     pointChangedByYou: (point: LabelPoint) => boolean;
   };
 }
@@ -608,13 +608,16 @@ test.describe("the black point row", () => {
 test.describe("the black game band", () => {
   function renderBand(editable: boolean, index = 0): string {
     const session = labelSessionFixture();
-    const { BlackGameBand } = components();
+    const { LabelGameBand } = createLoader().load(BAND) as {
+      LabelGameBand: React.ComponentType<BandProps>;
+    };
     const band = labelScores(session.points, session.adScoring).games[index];
     return renderToStaticMarkup(
-      React.createElement(BlackGameBand, {
+      React.createElement(LabelGameBand, {
         band,
         points: session.points,
         names: NAMES,
+        tone: "dark",
         ...(editable ? { onSetGameType: noop, onSetGameServer: noop } : {}),
       }),
     );

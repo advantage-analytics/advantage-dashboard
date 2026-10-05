@@ -6,8 +6,8 @@
  *
  * Same shape as suggestions-session.ts: the entry point re-checks
  * `requireAdmin`, runs on the service-role client, refuses a `complete`
- * session and one whose `marks_enabled` is false (`checkSessionOpenWithMarks`,
- * the gate every marks write shares — the ground-truth match is never written
+ * session and one whose `marks_enabled` is false (`checkSessionOpen` with
+ * `blind`, the gate every marks write shares — the ground-truth match is never written
  * from here) and validates the patch with the pure rule
  * (`parseLabelSessionPatch`) before touching anything.
  *
@@ -21,13 +21,14 @@
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
+  checkSessionOpen,
   defaultLabelWriteDependencies,
   type LabelWriteDependencies,
 } from "./edit-session";
 import {
-  checkSessionOpenWithMarks,
   gated,
   normaliseId,
+  racedMessage,
   type LabelOpResult,
 } from "./operations-session";
 import {
@@ -42,7 +43,7 @@ export type LabelSessionFieldsResult = LabelOpResult<{
 
 const BLIND =
   "This session is labelled without the site's marks, so its score is not held against the entered one.";
-const RACED = "This session changed in another tab. Reload to see it.";
+const RACED = racedMessage("session");
 
 /** Validate, check the session, write the one row. Never throws. */
 export async function writeLabelSessionFields(params: {
@@ -57,7 +58,7 @@ export async function writeLabelSessionFields(params: {
   const parsed = parseLabelSessionPatch(params.patch);
   if ("error" in parsed) return parsed;
 
-  const refused = await checkSessionOpenWithMarks(supabase, sessionId, BLIND);
+  const refused = await checkSessionOpen(supabase, sessionId, { blind: BLIND });
   if (refused) return { error: refused };
 
   const { data, error } = await supabase

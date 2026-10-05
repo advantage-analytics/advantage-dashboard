@@ -6,7 +6,13 @@ import {
   type LabelSide,
 } from "@/lib/services/labels/session";
 import { shotPlacement } from "@/lib/services/labels/shot-derived";
-import { STROKE_LABEL, spinLabel, type SideNames } from "./label-format";
+import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
+import {
+  ENDING_LABEL,
+  STROKE_LABEL,
+  spinLabel,
+  type SideNames,
+} from "./label-format";
 import { pointSummary } from "./label-point-row";
 
 /**
@@ -66,28 +72,22 @@ function by(side: LabelSide | null, names: SideNames): string {
  *   · "Point N" when the ending is not labelled yet.
  */
 export function pointSentence(point: SentencePoint, names: SideNames): string {
-  switch (point.ending) {
+  const { ending } = point;
+  switch (ending) {
     case null:
       return `Point ${point.pointIndex + 1}`;
     case "ace":
-      return `Ace${by(point.endedBy ?? point.server, names)}`;
     case "service_winner":
-      return `Service winner${by(point.endedBy ?? point.server, names)}`;
     case "double_fault":
-      return `Double fault${by(point.endedBy ?? point.server, names)}`;
+      return `${ENDING_LABEL[ending]}${by(point.endedBy ?? point.server, names)}`;
     case "let_replayed":
-      return "Let, replayed";
     case "not_a_point":
-      return "Not a point";
+      return ENDING_LABEL[ending];
     case "winner":
     case "error": {
       const last = liveShots(point).at(-1);
       const stroke = last?.stroke ? STROKE_LABEL[last.stroke] : null;
-      const how = stroke
-        ? `${stroke} ${point.ending}`
-        : point.ending === "winner"
-          ? "Winner"
-          : "Error";
+      const how = stroke ? `${stroke} ${ending}` : ENDING_LABEL[ending];
       return `${how}${by(point.endedBy, names)}`;
     }
   }
@@ -97,14 +97,10 @@ export function pointSentence(point: SentencePoint, names: SideNames): string {
  * Seconds → the rail's clock: "12:45", or "1:02:03" past the hour. Whole
  * seconds, no tenths — the second the stroke falls in, as a player's clock
  * shows it. (`formatVideoTime` keeps the tenths, for the strokes' own cells.)
+ * The match page's `formatClock`, under the name the rail knows it by.
  */
-export function formatClockTime(seconds: number): string {
-  const whole = Math.floor(Math.max(0, seconds));
-  const h = Math.floor(whole / 3600);
-  const m = Math.floor((whole % 3600) / 60);
-  const s = String(whole % 60).padStart(2, "0");
-  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
-}
+export const formatClockTime = (seconds: number): string =>
+  formatClock(seconds);
 
 /** "Second serve" → "Second Serve", as the rail's detail line spells a serve. */
 function titleCase(text: string): string {
@@ -123,11 +119,7 @@ function titleCase(text: string): string {
  *     does one with no stroke in its rally at all.
  * A part with nothing to say is left out, with its middot.
  */
-export function pointDetail(
-  point: Pick<LabelPoint, "shots">,
-  // Kept beside `pointSentence`'s: the line names no player today.
-  _names?: SideNames,
-): string {
+export function pointDetail(point: Pick<LabelPoint, "shots">): string {
   const live = liveShots(point);
   const last = live.at(-1);
   const parts: string[] = [];

@@ -547,7 +547,6 @@ function editContext(overrides: Record<string, unknown> = {}) {
     onPatchShot: noop,
     operations: recordingOperations().operations,
     openTombstoneIds: new Set<string>(),
-    marksEnabled: true,
     openGhostIds: new Set<string>(),
     onToggleGhost: noop,
     points: session.points,
@@ -779,12 +778,6 @@ test.describe("a suggested shot in the black well", () => {
   test("with marks off, or none built, no suggestion renders", () => {
     const point = pairPoint();
     const marks = marksOf(point);
-    expect(
-      renderWell(point, marks, editContext({ marksEnabled: false })),
-    ).not.toContain("data-shot-suggestion");
-    expect(
-      renderWell(point, marks, editContext({ marksEnabled: undefined })),
-    ).not.toContain("data-shot-suggestion");
     expect(renderWell(point, null)).not.toContain("data-shot-suggestion");
     // Another point's suggestion is not this one's.
     expect(
@@ -916,7 +909,7 @@ test.describe("the console", () => {
     const off = renderConsole({
       session: { ...sessionWithPair(), marksEnabled: false },
       video: null,
-      marks: marksOf(pairPoint()),
+      marks: null,
       initialLayoutMode: "black",
       initialExpandedPointId: P4,
       operations,

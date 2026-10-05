@@ -31,12 +31,10 @@ import {
   type SplittablePoint,
   type SplittableShot,
 } from "./point-split";
+import { LABEL_POINT_COLUMNS, toLabelPoint, type LabelPointRow } from "./rows";
 import type {
-  LabelEnding,
   LabelGameType,
-  LabelPoint,
   LabelPointStatus,
-  LabelServeSide,
   LabelShotStatus,
   LabelSide,
 } from "./session";
@@ -58,20 +56,6 @@ interface PointRow {
 
 const POINT_INDEX_COLUMNS =
   "id, session_id, point_index, status, set_number, game_number, server, game_type, vendor_rally_ids";
-
-/** The inserted row, read back whole. */
-interface InsertedRow extends PointRow {
-  serve_side: LabelServeSide | null;
-  winner: LabelSide | null;
-  ending: LabelEnding | null;
-  ended_by: LabelSide | null;
-  status_before_delete: Exclude<LabelPointStatus, "deleted"> | null;
-  checked_at: string | null;
-  note: string | null;
-  dismissed: string[] | null;
-}
-
-const INSERTED_COLUMNS = `${POINT_INDEX_COLUMNS}, serve_side, winner, ending, ended_by, status_before_delete, checked_at, note, dismissed`;
 
 /**
  * What the plan reads of the anchor's shots. `rally` is the frozen vendor
@@ -128,30 +112,6 @@ function rallyId(text: string | null): number | null {
   if (text === null || text === undefined) return null;
   const value = Number(text);
   return Number.isInteger(value) ? value : null;
-}
-
-/** The inserted row as the console draws it: an added point with no seed. */
-function toLabelPoint(row: InsertedRow): LabelPoint {
-  return {
-    id: row.id,
-    pointIndex: row.point_index,
-    vendorRallyIds: row.vendor_rally_ids ?? [],
-    setNumber: row.set_number,
-    gameNumber: row.game_number,
-    server: row.server,
-    serveSide: row.serve_side ?? null,
-    winner: row.winner ?? null,
-    ending: row.ending ?? null,
-    endedBy: row.ended_by ?? null,
-    gameType: row.game_type,
-    status: row.status,
-    statusBeforeDelete: row.status_before_delete ?? null,
-    checkedAt: row.checked_at ?? null,
-    note: row.note ?? null,
-    dismissed: row.dismissed ?? [],
-    seed: null,
-    shots: [],
-  };
 }
 
 /**
@@ -234,8 +194,8 @@ export async function writeLabelPointSplit(params: {
       seed: null,
       checked_at: null,
     })
-    .select(INSERTED_COLUMNS)
-    .single<InsertedRow>();
+    .select(LABEL_POINT_COLUMNS)
+    .single<LabelPointRow>();
   if (insertError || !inserted) {
     return {
       error: `Could not add the point: ${insertError?.message ?? "no row came back"}`,
@@ -262,6 +222,7 @@ export async function writeLabelPointSplit(params: {
 
   return {
     ok: true,
+    // The row read back whole: an added point with no seed and no shots.
     point: toLabelPoint(inserted),
     anchor: { id: pointId, ...write.anchor },
   };

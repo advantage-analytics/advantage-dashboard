@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { FloatMenuTone } from "@/components/ui/float-menu";
 import { saveStatusView, type SaveStatus } from "./save-status";
 
 /**
@@ -25,7 +26,7 @@ export function LabelSaveStatus({
   /** For a spec: render at this clock instead of the live one. */
   now?: number;
   /** The ground it sits on: the page header, or the black rail's. */
-  tone?: "light" | "dark";
+  tone?: FloatMenuTone;
 }) {
   const [clock, setClock] = useState(() => fixedNow ?? Date.now());
   useEffect(() => {

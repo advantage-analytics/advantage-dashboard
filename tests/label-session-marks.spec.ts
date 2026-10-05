@@ -214,7 +214,7 @@ test.describe("getLabelSession's marks", () => {
       [];
     const result = await getLabelSession(
       SESSION_ID,
-      depsWith(db, async (_db, jobId, points) => {
+      depsWith(db, async (_db, jobId) => (points) => {
         calls.push({
           jobId,
           pointIds: points.map((p) => p.id),
@@ -244,7 +244,7 @@ test.describe("getLabelSession's marks", () => {
         SESSION_ID,
         depsWith(db, async () => {
           called += 1;
-          return FIXTURE_MARKS;
+          return () => FIXTURE_MARKS;
         }),
       ),
     );
@@ -267,7 +267,7 @@ test.describe("getLabelSession's marks", () => {
       SESSION_ID,
       depsWith(db, async () => {
         called += 1;
-        return FIXTURE_MARKS;
+        return () => FIXTURE_MARKS;
       }),
     );
     expect(result.ok).toBe(true);
@@ -306,7 +306,7 @@ test.describe("getLabelSession's marks", () => {
     const { db, selects } = stubSessionClient();
     const result = await getLabelSession(
       SESSION_ID,
-      depsWith(db, async () => FIXTURE_MARKS),
+      depsWith(db, async () => () => FIXTURE_MARKS),
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -474,7 +474,8 @@ function labelPointsFrom(): MarkablePoint[] {
 test.describe("buildJobMarks", () => {
   test("derives the job's file with the current code and joins the marks onto the rows", async () => {
     const points = labelPointsFrom();
-    const marks = await buildJobMarks(stubJobClient(JOB_ROW), JOB_ID, points);
+    const join = await buildJobMarks(stubJobClient(JOB_ROW), JOB_ID);
+    const marks = join(points);
     const transcript = buildTranscript({
       rallies: analysis.rallies,
       labels: analysis.players,
@@ -495,7 +496,7 @@ test.describe("buildJobMarks", () => {
 
   test("a job without stored results throws, which the loader turns into marks: null", async () => {
     const db = stubJobClient({ ...JOB_ROW, results_object_key: null });
-    await expect(buildJobMarks(db, JOB_ID, [])).rejects.toThrow(
+    await expect(buildJobMarks(db, JOB_ID)).rejects.toThrow(
       "job has no stored results",
     );
   });

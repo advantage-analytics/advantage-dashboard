@@ -63,11 +63,12 @@ const INVALID_GAME = "A game is a set and a game number, both 1 or more.";
 /** How many times a game is re-read and re-planned when a row changed under it. */
 const MAX_GAME_ATTEMPTS = 3;
 
-interface GameRow {
+/** A `label_points` row as the game operations and the game shift read it. */
+export interface GameRow {
   id: string;
   point_index: number;
   updated_at: string;
-  status: Exclude<LabelPointStatus, "deleted">;
+  status: LabelPointStatus;
   server: LabelSide | null;
   set_number: number | null;
   game_number: number | null;
@@ -79,10 +80,10 @@ interface GameRow {
   seed: unknown;
 }
 
-const GAME_COLUMNS =
+export const GAME_COLUMNS =
   "id, point_index, updated_at, status, server, set_number, game_number, serve_side, winner, ending, ended_by, game_type, seed";
 
-function toGamePoint(row: GameRow): GamePoint {
+export function toGamePoint(row: GameRow): GamePoint {
   return {
     id: row.id,
     pointIndex: row.point_index,

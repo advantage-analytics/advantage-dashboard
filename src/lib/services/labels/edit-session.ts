@@ -68,19 +68,29 @@ const BUSY = "This row changed while it was saving. Try again.";
  */
 const MAX_EDIT_ATTEMPTS = 3;
 
-/** Refuses anything but a `labelling` session. */
+/**
+ * Refuses anything but a `labelling` session — an error sentence, or null to
+ * proceed. With `blind`, the gate the marks' own writes share (board 08m:
+ * Restore a ghost, Dismiss a suggestion): a session whose `marks_enabled` is
+ * false was labelled blind to the derivation and carries no mark to act on —
+ * the ground-truth match is never written from there — and `blind` is the
+ * sentence that says so for the write at hand.
+ */
 export async function checkSessionOpen(
   supabase: AdminClient,
   sessionId: string,
+  { blind }: { blind?: string } = {},
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from("label_sessions")
-    .select("status")
+    .select(blind === undefined ? "status" : "status, marks_enabled")
     .eq("id", sessionId)
-    .maybeSingle<{ status: string }>();
+    .maybeSingle<{ status: string; marks_enabled?: boolean | null }>();
   if (error) return `Could not read the session: ${error.message}`;
   if (!data) return "Session not found.";
-  return data.status === "labelling" ? null : FROZEN;
+  if (data.status !== "labelling") return FROZEN;
+  if (blind !== undefined && data.marks_enabled !== true) return blind;
+  return null;
 }
 
 type ShotRow = LabelShotValues & {

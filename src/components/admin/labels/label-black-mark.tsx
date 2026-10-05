@@ -2,11 +2,7 @@
 
 import { Flag, Pencil, WandSparkles } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
-import type {
-  LabelMark,
-  LabelMarkKind,
-  LabelMarks,
-} from "@/lib/services/labels/marks";
+import type { LabelMarkKind, LabelMarks } from "@/lib/services/labels/marks";
 import {
   hoverLine,
   markState,
@@ -31,8 +27,8 @@ import type { SideNames } from "./label-format";
  * Two things live here. `MarkChip` and `PencilMark` only DRAW — the frame's
  * `.bk-flag`, `.fx-auto`, `.fx-io`, `.fx-res` and `.fx-pen`. `pointRowMarks`
  * and `shotRowMarks` turn a row and the session's `LabelMarks` into the chips
- * to draw; every word, state and hover line in them is T35's
- * (`marks-copy.ts`, `marks-state.ts`).
+ * to draw; every word, state and hover line in them is `marks-copy.ts`'s and
+ * `marks-state.ts`'s.
  *
  * Colours are the frame's, written as rgba because its amber and its blue
  * are not palette hexes: amber on an amber wash for a flag still open, white
@@ -333,12 +329,15 @@ export function pointRowMarks(
   };
 }
 
-/** One of a stroke row's chips, keyed by the mark it draws. */
-export type ShotRowMark = MarkChipProps & { code: LabelMark["code"] };
+/** One of a stroke row's marks: its kind, its state and its hover's two parts. */
+export interface ShotRowMark extends MarkHoverParts {
+  kind: LabelMarkKind;
+  state: MarkState;
+}
 
 /**
- * A stroke's own marks, one icon-only chip each, in the derivation's order.
- * Empty when the session has no marks.
+ * A stroke's own marks, in the derivation's order — what `collapseShotMarks`
+ * draws as one disc. Empty when the session has no marks.
  */
 export function shotRowMarks(
   point: LabelPoint,
@@ -352,13 +351,9 @@ export function shotRowMarks(
   return own.map((mark) => {
     const state = markState(mark, point, shot, marks.suggestions);
     return {
-      code: mark.code,
       kind: mark.kind,
-      text: null,
-      count: 1,
       state,
-      ...chipHover([stateHoverParts(mark, state, names, sentence)], ""),
-      compact: true,
+      ...stateHoverParts(mark, state, names, sentence),
     };
   });
 }
@@ -373,25 +368,18 @@ export function shotRowMarks(
  */
 export function collapseShotMarks(
   marks: readonly ShotRowMark[],
-): ShotRowMark | null {
+): MarkChipProps | null {
   if (marks.length === 0) return null;
-  if (marks.length === 1) return marks[0];
-  const flag = marks.find((m) => m.kind === "flag");
-  const kind: LabelMarkKind = flag ? "flag" : "fix";
+  const kind: LabelMarkKind = marks.some((m) => m.kind === "flag")
+    ? "flag"
+    : "fix";
   const same = marks.filter((m) => m.kind === kind);
   return {
-    code: (flag ?? marks[0]).code,
     kind,
     text: null,
     count: marks.length,
     state: mostOpen(same.map((m) => m.state)),
-    ...chipHover(
-      marks.map((m) => ({
-        name: m.name,
-        detail: typeof m.detail === "string" ? m.detail : null,
-      })),
-      `${marks.length} marks`,
-    ),
+    ...chipHover(marks, marks.length === 1 ? "" : `${marks.length} marks`),
     compact: true,
   };
 }

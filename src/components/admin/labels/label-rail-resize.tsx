@@ -18,12 +18,12 @@ export function railWidthFromDrag(
 }
 
 /**
- * The handle on the left edge of the black view's points rail (T32, board
- * 08l's "The rail's edge"): drag it and the rail runs from `RAIL_MIN_PX` to
+ * The handle on the left edge of the black view's points rail (board 08l's
+ * "The rail's edge"): drag it and the rail runs from `RAIL_MIN_PX` to
  * `RAIL_MAX_PX`, the film taking whatever is left.
  *
- * Stateless — the view owns the width. This reports the width asked for,
- * already clamped (`onResize`), and that the default is wanted back
+ * Stateless — the view owns the width and clamps it. This reports the width
+ * asked for (`onResize`), and that the default is wanted back
  * (`onReset`: a double-click, or Enter). The pointer and key mechanics are
  * `LabelDivider`'s own (`useSeparatorDrag`): pointer capture, ← / → by
  * `DIVIDER_KEY_STEP_PX` (← widens, the edge going the way the arrow points),
@@ -46,7 +46,7 @@ export function LabelRailResize({
 }: {
   /** The rail's width now, in px. */
   width: number;
-  /** The width asked for, in px, inside the rail's bounds. */
+  /** The width asked for, in px; the view clamps it. */
   onResize: (px: number) => void;
   /** Back to `RAIL_DEFAULT_PX`. */
   onReset: () => void;
@@ -59,7 +59,7 @@ export function LabelRailResize({
     growKey: "ArrowLeft",
     shrinkKey: "ArrowRight",
     sizeFromDrag: railWidthFromDrag,
-    onResize: (px) => onResize(clampRailWidth(px)),
+    onResize,
     onReset,
   });
 

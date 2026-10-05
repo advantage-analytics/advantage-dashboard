@@ -5,8 +5,8 @@
  *
  * Same shape as site-removal-session.ts: the entry point re-checks
  * `requireAdmin`, runs on the service-role client, refuses a `complete`
- * session and one whose `marks_enabled` is false (`checkSessionOpenWithMarks`,
- * the gate every marks write shares — that session's labels were made blind
+ * session and one whose `marks_enabled` is false (`checkSessionOpen` with
+ * `blind`, the gate every marks write shares — that session's labels were made blind
  * to the derivation and has no suggestion to dismiss; the ground-truth match
  * is never written from here) and decides what to write with the pure rule
  * the console ran for its optimistic update.
@@ -20,11 +20,11 @@
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
+  checkSessionOpen,
   defaultLabelWriteDependencies,
   type LabelWriteDependencies,
 } from "./edit-session";
 import {
-  checkSessionOpenWithMarks,
   gated,
   normaliseId,
   updateIfUnchanged,
@@ -72,11 +72,9 @@ export async function writeLabelSuggestionDismiss(params: {
   if (error) return { error: `Could not read the point: ${error.message}` };
   if (!row) return { error: "Point not found." };
 
-  const refused = await checkSessionOpenWithMarks(
-    supabase,
-    row.session_id,
-    BLIND,
-  );
+  const refused = await checkSessionOpen(supabase, row.session_id, {
+    blind: BLIND,
+  });
   if (refused) return { error: refused };
 
   const plan = planDismiss({ dismissed: keysOf(row.dismissed) }, params.key);

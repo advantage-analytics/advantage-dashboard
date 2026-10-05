@@ -8,6 +8,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import type { FloatMenuTone } from "@/components/ui/float-menu";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { cn } from "@/lib/utils";
 
@@ -210,7 +211,7 @@ const SELECT_TRIGGER =
  * there while focused (`data-invalid`): the blue focus border must not
  * outrank it, since the field is always focused while the mistake is typed.
  */
-export type EditorTone = "light" | "dark";
+export type EditorTone = FloatMenuTone;
 
 const FIELD_DARK =
   "-ml-[4px] flex h-[26px] w-[calc(100%+9px)] min-w-0 items-center rounded-[var(--radius-button)] border border-white/20 bg-white/[0.08] transition-colors duration-200 focus-within:border-[var(--blue)] data-[invalid]:focus-within:border-[var(--danger)]";

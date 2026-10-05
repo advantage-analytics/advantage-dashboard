@@ -55,7 +55,7 @@ type StatefulSuggestion = Pick<LabelSuggestion, "kind" | "key"> & {
   beforePointId?: string;
 };
 
-const MISSING_SHOT_PREFIX = "missing_shot:";
+export const MISSING_SHOT_PREFIX = "missing_shot:";
 
 /** The vendor stroke a `missing_shot` key names — the pair's first. */
 function afterEventIdOf(key: string): number | null {

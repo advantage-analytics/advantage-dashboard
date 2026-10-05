@@ -45,6 +45,7 @@ import {
   PLAYING_WASH,
   ResetRowButton,
   RowNumber,
+  SIDES,
   SideMark as WinnerMark,
   UndoButton,
   sideInitial,
@@ -276,8 +277,6 @@ export function pointSummary(point: Pick<LabelPoint, "shots">): {
 }
 
 // ── The winner mark ────────────────────────────────────────────────────────
-
-const SIDES: readonly LabelSide[] = ["p1", "p2"];
 
 /**
  * The winner mark as the control that changes it: a menu of the two players,

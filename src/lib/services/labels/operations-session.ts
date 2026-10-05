@@ -28,6 +28,7 @@ import {
   defaultLabelWriteDependencies,
   type LabelWriteDependencies,
 } from "./edit-session";
+import { LABEL_SHOT_COLUMNS, toLabelShot, type LabelShotRow } from "./rows";
 import {
   gameServer,
   isLabelGame,
@@ -73,7 +74,12 @@ export type LabelMovePointResult = LabelOpResult<{
 }>;
 export type LabelCheckedResult = LabelOpResult<{ checkedAt: string | null }>;
 
-const RACED = "This row changed in another tab. Reload to see it.";
+/** The row (or session) the write was aimed at is no longer in the state it was read in. */
+export function racedMessage(noun: "row" | "session"): string {
+  return `This ${noun} changed in another tab. Reload to see it.`;
+}
+
+const RACED = racedMessage("row");
 
 export function normaliseId(id: unknown): string | null {
   if (typeof id !== "string") return null;
@@ -99,36 +105,6 @@ export async function gated<T extends object>(
     console.error(`${LOG} ${what} threw`, { message: message(err) });
     return { error: `Could not ${what}: ${message(err)}` };
   }
-}
-
-interface MarksSessionGate {
-  status: string;
-  marks_enabled: boolean | null;
-}
-
-/**
- * The gate the marks' own writes share (board 08m: Restore a ghost, Dismiss a
- * suggestion, Add a point): refuses anything but an open session that
- * computes marks. A session whose `marks_enabled` is false was labelled blind
- * to the derivation and carries no mark to act on — the ground-truth match is
- * never written from here — and `blind` is the sentence that says so for the
- * write at hand. Returns an error sentence, or null to proceed.
- */
-export async function checkSessionOpenWithMarks(
-  supabase: AdminClient,
-  sessionId: string,
-  blind: string,
-): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("label_sessions")
-    .select("status, marks_enabled")
-    .eq("id", sessionId)
-    .maybeSingle<MarksSessionGate>();
-  if (error) return `Could not read the session: ${error.message}`;
-  if (!data) return "Session not found.";
-  if (data.status !== "labelling") return FROZEN;
-  if (data.marks_enabled !== true) return blind;
-  return null;
 }
 
 /**
@@ -229,57 +205,6 @@ export async function writeLabelShotRestore(params: {
   return failed ? { error: failed } : { ok: true, status: plan.write.status };
 }
 
-interface ShotRow {
-  id: string;
-  label_point_id: string;
-  event_id: number | null;
-  after_event_id: number | null;
-  status: LabelShotStatus;
-  status_before_delete: Exclude<LabelShotStatus, "deleted"> | null;
-  delete_reason: string | null;
-  hitter: LabelSide | null;
-  stroke: LabelStroke | null;
-  result: LabelShotResult | null;
-  spin: LabelSpin | null;
-  contact_x: number | null;
-  contact_y: number | null;
-  landing_x: number | null;
-  landing_y: number | null;
-  video_time: number | null;
-  site_removal: LabelSiteRemoval | null;
-  site_removal_restored_at: string | null;
-  seed: unknown;
-}
-
-const SHOT_COLUMNS =
-  "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, spin, contact_x, contact_y, landing_x, landing_y, video_time, site_removal, site_removal_restored_at, seed";
-
-function toLabelShot(row: ShotRow): LabelShot {
-  return {
-    id: row.id,
-    labelPointId: row.label_point_id,
-    eventId: row.event_id,
-    afterEventId: row.after_event_id,
-    status: row.status,
-    statusBeforeDelete: row.status_before_delete ?? null,
-    deleteReason: row.delete_reason,
-    hitter: row.hitter,
-    stroke: row.stroke,
-    result: row.result,
-    spin: row.spin,
-    contactX: row.contact_x,
-    contactY: row.contact_y,
-    landingX: row.landing_x,
-    landingY: row.landing_y,
-    videoTime: row.video_time,
-    // An inserted stroke is the labeller's, never the site's removal.
-    siteRemoval: row.site_removal ?? null,
-    siteRemovalRestoredAt: row.site_removal_restored_at ?? null,
-    // An inserted stroke comes back without one (`seed` is null on it).
-    seed: parseLabelShotSeed(row.seed ?? null),
-  };
-}
-
 /**
  * INSERT one labeller-added stroke into a point, after `afterShotId` (or at
  * the end of the rally when null) — see `planAddedShot` for what it is seeded
@@ -304,9 +229,9 @@ export async function writeLabelShotAdd(params: {
 
   const { data: shotRows, error: shotsError } = await supabase
     .from("label_shots")
-    .select(SHOT_COLUMNS)
+    .select(LABEL_SHOT_COLUMNS)
     .eq("label_point_id", pointId)
-    .returns<ShotRow[]>();
+    .returns<LabelShotRow[]>();
   if (shotsError) {
     return { error: `Could not read the point's shots: ${shotsError.message}` };
   }
@@ -324,8 +249,8 @@ export async function writeLabelShotAdd(params: {
       label_point_id: pointId,
       ...plan.write,
     })
-    .select(SHOT_COLUMNS)
-    .single<ShotRow>();
+    .select(LABEL_SHOT_COLUMNS)
+    .single<LabelShotRow>();
   if (insertError || !inserted) {
     return {
       error: `Could not add the shot: ${insertError?.message ?? "no row came back"}`,

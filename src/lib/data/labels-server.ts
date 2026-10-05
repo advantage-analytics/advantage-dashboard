@@ -26,26 +26,25 @@ import {
 } from "@/lib/services/splitstep/video-url/azure-sas";
 import {
   orderLabelShots,
-  type LabelEnding,
-  type LabelGameType,
   type LabelPoint,
-  type LabelPointStatus,
-  type LabelServeSide,
   type LabelSession,
   type LabelShot,
-  type LabelShotResult,
-  type LabelShotStatus,
-  type LabelSide,
-  type LabelSiteRemoval,
-  type LabelSpin,
-  type LabelStroke,
   type LabelVideo,
   type MatchScore,
 } from "@/lib/services/labels/session";
 import {
-  parseLabelPointSeed,
-  parseLabelShotSeed,
-} from "@/lib/services/labels/edit";
+  readJobAdScoring,
+  resolveLabelAdScoring,
+  type JobScoringRow,
+} from "@/lib/services/labels/ad-scoring";
+import {
+  LABEL_POINT_COLUMNS,
+  LABEL_SHOT_COLUMNS,
+  toLabelPoint,
+  toLabelShot,
+  type LabelPointRow,
+  type LabelShotRow,
+} from "@/lib/services/labels/rows";
 import {
   buildLabelMarks,
   type LabelMarks,
@@ -305,16 +304,17 @@ export interface SessionDependencies extends Dependencies {
    */
   loadVideo: (db: AdminClient, jobId: string) => Promise<LabelVideo | null>;
   /**
-   * The marks for the session's rows, from the job's raw results file.
-   * Allowed to fail — a throw is logged and the console opens without marks.
-   * Called only when the session has `marks_enabled` and a job.
+   * The marks' source — the job's raw results file, downloaded and derived
+   * — as a join onto the session's rows once they are built. Allowed to
+   * fail — a throw is logged and the console opens without marks. Called
+   * only when the session has `marks_enabled` and a job, and started beside
+   * the row reads, since it needs only the job id.
    */
-  buildMarks: (
-    db: AdminClient,
-    jobId: string,
-    points: readonly MarkablePoint[],
-  ) => Promise<LabelMarks>;
+  buildMarks: (db: AdminClient, jobId: string) => Promise<MarksJoin>;
 }
+
+/** The pure half of the marks: the derivation joined onto the built points. */
+export type MarksJoin = (points: readonly MarkablePoint[]) => LabelMarks;
 const sessionDefaults: SessionDependencies = {
   ...defaults,
   loadVideo: loadJobVideo,
@@ -335,52 +335,6 @@ interface DbSessionRow {
   /** jsonb array of `[p1, p2]` pairs, parsed by `parseFinalScore`; null until set. */
   final_score?: unknown;
   video_ends_early?: boolean | null;
-}
-/** The one column of the session's job the console needs. */
-interface DbJobScoringRow {
-  ad_scoring: boolean | null;
-}
-interface DbPointRow {
-  id: string;
-  point_index: number;
-  vendor_rally_ids: number[];
-  set_number: number | null;
-  game_number: number | null;
-  server: LabelSide | null;
-  serve_side: LabelServeSide | null;
-  winner: LabelSide | null;
-  ending: LabelEnding | null;
-  ended_by: LabelSide | null;
-  game_type: LabelGameType;
-  status: LabelPointStatus;
-  status_before_delete: Exclude<LabelPointStatus, "deleted"> | null;
-  checked_at: string | null;
-  note: string | null;
-  dismissed: string[];
-  /** jsonb, parsed by `parseLabelPointSeed` before anything trusts it. */
-  seed?: unknown;
-}
-interface DbShotRow {
-  id: string;
-  label_point_id: string;
-  event_id: number | null;
-  after_event_id: number | null;
-  status: LabelShotStatus;
-  status_before_delete: Exclude<LabelShotStatus, "deleted"> | null;
-  delete_reason: string | null;
-  hitter: LabelSide | null;
-  stroke: LabelStroke | null;
-  result: LabelShotResult | null;
-  spin: LabelSpin | null;
-  contact_x: number | null;
-  contact_y: number | null;
-  landing_x: number | null;
-  landing_y: number | null;
-  video_time: number | null;
-  site_removal: LabelSiteRemoval | null;
-  site_removal_restored_at: string | null;
-  /** jsonb, parsed by `parseLabelShotSeed` before anything trusts it. */
-  seed?: unknown;
 }
 
 /**
@@ -421,6 +375,19 @@ export async function getLabelSession(
   }
   if (!session) return { ok: false, reason: "not-found" };
 
+  // The marks' transcript needs only the job id, so its fetch runs beside
+  // the row reads and the join waits for the built points. Only a session
+  // that computes marks and still has a job has any (the ground-truth
+  // session's labels were made blind to the derivation and stay that way);
+  // a failure is held here and logged by `joinMarks`, never thrown.
+  const marksFetch =
+    session.marks_enabled && session.job_id
+      ? deps.buildMarks(db, session.job_id).then(
+          (join) => ({ join }),
+          (cause: unknown) => ({ cause }),
+        )
+      : null;
+
   const [matchResult, jobResult, pointRows, shotRows, video] =
     await Promise.all([
       db
@@ -430,30 +397,20 @@ export async function getLabelSession(
         .maybeSingle<DbMatch>(),
       // The job's scoring is only the fallback for a session that has not
       // set its own; a session whose job is gone has nothing to fall back to.
-      session.ad_scoring === null && session.job_id
-        ? db
-            .from("processing_jobs")
-            .select("ad_scoring")
-            .eq("id", session.job_id)
-            .maybeSingle<DbJobScoringRow>()
-        : Promise.resolve({ data: null, error: null }),
-      readAllPages<DbPointRow>(
+      readJobAdScoring(db, session),
+      readAllPages<LabelPointRow>(
         db
           .from("label_points")
-          .select(
-            "id, point_index, vendor_rally_ids, set_number, game_number, server, serve_side, winner, ending, ended_by, game_type, status, status_before_delete, checked_at, note, dismissed, seed",
-          )
+          .select(LABEL_POINT_COLUMNS)
           .eq("session_id", session.id)
           .order("point_index")
           .order("id"),
         "Could not read label points",
       ),
-      readAllPages<DbShotRow>(
+      readAllPages<LabelShotRow>(
         db
           .from("label_shots")
-          .select(
-            "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, spin, contact_x, contact_y, landing_x, landing_y, video_time, site_removal, site_removal_restored_at, seed",
-          )
+          .select(LABEL_SHOT_COLUMNS)
           .eq("session_id", session.id)
           .order("id"),
         "Could not read label shots",
@@ -489,28 +446,23 @@ export async function getLabelSession(
     ok: true,
     session: built,
     video,
-    marks: await loadMarks(db, built, deps),
+    marks: marksFetch ? await joinMarks(marksFetch, built) : null,
   };
 }
 
 /**
- * The session's marks, or null — never a throw. Only a session with
- * `marks_enabled` and a job has any: the ground-truth session's labels were
- * made blind to the derivation and stay that way, and a session whose job is
- * gone has no file to derive from. A download or derivation failure is
- * logged and the console opens without marks, as it opens without a video.
- *
- * The points are the built session's — `point_index` order, tombstones
- * included — which is the order `buildLabelMarks` numbers them in.
+ * The session's marks, or null — never a throw. A fetch that failed, or a
+ * join that does, is logged and leaves the session intact: the console is
+ * usable without them.
  */
-async function loadMarks(
-  db: AdminClient,
+async function joinMarks(
+  fetch: Promise<{ join: MarksJoin } | { cause: unknown }>,
   session: LabelSession,
-  deps: SessionDependencies,
 ): Promise<LabelMarks | null> {
-  if (!session.marksEnabled || !session.jobId) return null;
+  const settled = await fetch;
   try {
-    return await deps.buildMarks(db, session.jobId, session.points);
+    if ("cause" in settled) throw settled.cause;
+    return settled.join(session.points);
   } catch (cause: unknown) {
     console.error("[labels] marks unavailable", {
       sessionId: session.id,
@@ -522,10 +474,11 @@ async function loadMarks(
 }
 
 /**
- * The default `buildMarks`: download the job's results file, derive it with
- * the current code and join the flags onto the label rows. Throws when the
- * transcript could not be built or did not reconcile — `loadMarks` turns that
- * into a logged null. Exported for the spec.
+ * The default `buildMarks`: download the job's results file and derive it
+ * with the current code; the join of its flags onto the label rows comes
+ * back as a function, for the points once they are built. Throws when the
+ * transcript could not be built or did not reconcile — `joinMarks` turns
+ * that into a logged null. Exported for the spec.
  *
  * Reads nothing from `points.flags` or `shots.flags`: a stored flag is what
  * the derivation thought when the rows were written, a mark is what it thinks
@@ -534,8 +487,7 @@ async function loadMarks(
 export async function buildJobMarks(
   db: AdminClient,
   jobId: string,
-  points: readonly MarkablePoint[],
-): Promise<LabelMarks> {
+): Promise<MarksJoin> {
   const { transcript, rallies, reason } = await buildTranscriptForJob({
     supabase: db,
     jobId,
@@ -543,7 +495,7 @@ export async function buildJobMarks(
   if (!transcript || !transcript.ok || !rallies) {
     throw new Error(reason ?? "transcript could not be built");
   }
-  return buildLabelMarks(transcript, rallies, points);
+  return (points) => buildLabelMarks(transcript, rallies, points);
 }
 
 /**
@@ -584,19 +536,6 @@ export function parseMatchScore(value: unknown): MatchScore | null {
 }
 
 /**
- * Whether the scoreboard counts advantage: what the labeller set on the
- * session, else what the job was submitted with, else ad scoring — the
- * default of every format the wizard offers, and the one a blank reading of
- * a college match gets wrong least often. Exported for the spec.
- */
-export function resolveLabelAdScoring(
-  sessionAdScoring: boolean | null,
-  jobAdScoring: boolean | null | undefined,
-): boolean {
-  return sessionAdScoring ?? jobAdScoring ?? true;
-}
-
-/**
  * Rows → the console's session. Pure and exported for the spec: shots fold
  * under their point and are put in video order by `orderLabelShots`, never
  * by the order PostgREST returned them in.
@@ -607,59 +546,22 @@ export function resolveLabelAdScoring(
 export function buildLabelSession(
   session: DbSessionRow,
   match: DbMatch | null,
-  pointRows: readonly DbPointRow[],
-  shotRows: readonly DbShotRow[],
-  job: DbJobScoringRow | null = null,
+  pointRows: readonly LabelPointRow[],
+  shotRows: readonly LabelShotRow[],
+  job: JobScoringRow | null = null,
 ): LabelSession {
   const shotsByPoint = new Map<string, LabelShot[]>();
   for (const row of shotRows) {
     const list = shotsByPoint.get(row.label_point_id) ?? [];
-    list.push({
-      id: row.id,
-      labelPointId: row.label_point_id,
-      eventId: row.event_id,
-      afterEventId: row.after_event_id,
-      status: row.status,
-      statusBeforeDelete: row.status_before_delete ?? null,
-      deleteReason: row.delete_reason,
-      hitter: row.hitter,
-      stroke: row.stroke,
-      result: row.result,
-      spin: row.spin,
-      contactX: row.contact_x,
-      contactY: row.contact_y,
-      landingX: row.landing_x,
-      landingY: row.landing_y,
-      videoTime: row.video_time,
-      siteRemoval: row.site_removal ?? null,
-      siteRemovalRestoredAt: row.site_removal_restored_at ?? null,
-      seed: parseLabelShotSeed(row.seed ?? null),
-    });
+    list.push(toLabelShot(row));
     shotsByPoint.set(row.label_point_id, list);
   }
 
   const points: LabelPoint[] = [...pointRows]
     .sort((a, b) => a.point_index - b.point_index)
-    .map((row) => ({
-      id: row.id,
-      pointIndex: row.point_index,
-      vendorRallyIds: row.vendor_rally_ids ?? [],
-      setNumber: row.set_number,
-      gameNumber: row.game_number,
-      server: row.server,
-      serveSide: row.serve_side,
-      winner: row.winner,
-      ending: row.ending,
-      endedBy: row.ended_by,
-      gameType: row.game_type,
-      status: row.status,
-      statusBeforeDelete: row.status_before_delete ?? null,
-      checkedAt: row.checked_at,
-      note: row.note ?? null,
-      dismissed: row.dismissed ?? [],
-      seed: parseLabelPointSeed(row.seed ?? null),
-      shots: orderLabelShots(shotsByPoint.get(row.id) ?? []),
-    }));
+    .map((row) =>
+      toLabelPoint(row, orderLabelShots(shotsByPoint.get(row.id) ?? [])),
+    );
 
   return {
     id: session.id,

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import {
   FloatMenu,
   FloatMenuItem,
   FloatMenuLabel,
+  type FloatMenuTone,
 } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 import {
@@ -155,10 +156,57 @@ export function gameBandMenus(
  * starts on that box's edge. Pulling the band out by its `px-3` puts its label
  * on that same edge, over the rows' first column.
  */
-const BAND = "-mx-3 flex items-center px-3 pt-3 pb-[5px]";
 const BAND_LABEL = "mono text-[9px] tracking-[1.4px] uppercase";
 const BAND_META = "mono tabular text-[10px]";
-const BAND_INK = "text-[var(--ink-400)]";
+
+/**
+ * The paint of each tone. `light` is the table's (above); `dark` is the
+ * black view's rail — `LIST_TONE.dark`'s game header on the row's own 14px
+ * inset, the frame's `.bk-gl` / `.bk-gm` inks, and the trigger on the dark
+ * surface (board 08l's `.bk-gh`). Words, data attributes and menus are the
+ * same in both.
+ */
+const TONE: Record<
+  FloatMenuTone,
+  {
+    band: string;
+    labelInk: string;
+    metaInk: string;
+    trigger: string;
+    triggerOpen: string;
+    triggerRest: string;
+    chevron: (open: boolean) => string;
+    chevronStroke: number;
+  }
+> = {
+  light: {
+    band: "-mx-3 flex items-center px-3 pt-3 pb-[5px]",
+    labelInk: "text-[var(--ink-400)]",
+    metaInk: "text-[var(--ink-400)]",
+    trigger:
+      "-my-1 flex h-[22px] cursor-pointer items-center gap-1 rounded-[6px] px-1.5 transition-[color,background-color,box-shadow] duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+    triggerOpen:
+      "bg-[var(--surface-card)] text-[var(--ink-900)] shadow-[0_0_0_1px_var(--border-hairline)]",
+    triggerRest: "hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]",
+    chevron: (open) =>
+      cn(
+        "size-2.5 shrink-0",
+        open ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]",
+      ),
+    chevronStroke: 1.5,
+  },
+  dark: {
+    band: "flex items-center px-[14px] pt-[13px] pb-[5px]",
+    labelInk: "text-white/45",
+    metaInk: "text-white/40",
+    trigger:
+      "-my-1 flex h-[22px] cursor-pointer items-center gap-[5px] rounded-[6px] px-1.5 transition-[color,background-color] duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+    triggerOpen: "bg-white/[0.12] text-white",
+    triggerRest: "hover:bg-white/[0.08] hover:text-white",
+    chevron: () => "size-2.5 shrink-0 opacity-70",
+    chevronStroke: 1.6,
+  },
+};
 
 /**
  * A game band — the points rail's game header, drawn above the first live
@@ -176,6 +224,9 @@ const BAND_INK = "text-[var(--ink-400)]";
  * can read the band by walking the element tree. Changing a game here is a
  * REQUEST to the console, which owns the write; moving ONE point to another
  * game stays in that point's ⋯ menu.
+ *
+ * `tone="dark"` is the black view's rail (`TONE.dark`): the same band, word
+ * for word, on the dark surface.
  */
 export function LabelGameBand({
   band,
@@ -183,6 +234,7 @@ export function LabelGameBand({
   names,
   onSetGameType,
   onSetGameServer,
+  tone = "light",
 }: {
   band: LabelGameBandScore;
   points: readonly LabelPoint[];
@@ -190,8 +242,12 @@ export function LabelGameBand({
   /** Both absent: no menus, the band only reads. */
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
+  tone?: FloatMenuTone;
 }) {
-  const model = gameBandModel(band, points);
+  const paint = TONE[tone];
+  // The model reads every row of the game: once per band and rows, not on
+  // every playback crossing.
+  const model = useMemo(() => gameBandModel(band, points), [band, points]);
   const serves = gameBandServes(model, names);
   const menus =
     onSetGameType && onSetGameServer
@@ -201,12 +257,14 @@ export function LabelGameBand({
     <div
       data-game-band={`${band.setNumber}-${band.gameNumber}`}
       data-game-type={model.type}
-      className={BAND}
+      className={paint.band}
     >
       {menus ? (
         <span className="flex items-center">
           {model.setLabel ? (
-            <span className={cn(BAND_LABEL, BAND_INK)}>{model.setLabel} ·</span>
+            <span className={cn(BAND_LABEL, paint.labelInk)}>
+              {model.setLabel} ·
+            </span>
           ) : null}
           <BandMenu
             kind="type"
@@ -214,6 +272,8 @@ export function LabelGameBand({
             menuLabel="Game type"
             align="start"
             rows={menus.type}
+            tone={tone}
+            ink={paint.labelInk}
             // With no set before it, the trigger's text starts the band.
             className={cn(BAND_LABEL, !model.setLabel && "-ml-1.5")}
           >
@@ -221,7 +281,7 @@ export function LabelGameBand({
           </BandMenu>
         </span>
       ) : (
-        <span className={cn(BAND_LABEL, BAND_INK)}>
+        <span className={cn(BAND_LABEL, paint.labelInk)}>
           {model.setLabel ? `${model.setLabel} · ` : ""}
           {model.gameLabel}
         </span>
@@ -230,7 +290,7 @@ export function LabelGameBand({
       <span className="flex-1" />
       {menus ? (
         <span className="flex items-center">
-          <span className={cn(BAND_META, BAND_INK)}>{model.score} ·</span>
+          <span className={cn(BAND_META, paint.metaInk)}>{model.score} ·</span>
           <BandMenu
             kind="server"
             name={
@@ -242,13 +302,15 @@ export function LabelGameBand({
             }
             align="end"
             rows={menus.server}
+            tone={tone}
+            ink={paint.metaInk}
             className={cn(BAND_META, "-mr-1.5")}
           >
             {serves}
           </BandMenu>
         </span>
       ) : (
-        <span className={cn(BAND_META, BAND_INK)}>
+        <span className={cn(BAND_META, paint.metaInk)}>
           {model.score} · {serves}
         </span>
       )}
@@ -270,6 +332,8 @@ function BandMenu({
   caption,
   align,
   rows,
+  tone,
+  ink,
   className,
   children,
 }: {
@@ -280,10 +344,14 @@ function BandMenu({
   caption?: string;
   align: "start" | "end";
   rows: readonly GameBandMenuRow[];
+  tone: FloatMenuTone;
+  /** The trigger's resting ink — the label's or the meta's. */
+  ink: string;
   /** The trigger's type — the rail's label or meta — and any edge pull. */
   className: string;
   children: React.ReactNode;
 }) {
+  const paint = TONE[tone];
   const [open, setOpen] = useState(false);
   return (
     <FloatMenu
@@ -292,6 +360,7 @@ function BandMenu({
       align={align}
       sideOffset={6}
       width={290}
+      tone={tone}
       label={menuLabel}
       trigger={
         <button
@@ -301,20 +370,15 @@ function BandMenu({
           aria-expanded={open}
           data-game-menu={kind}
           className={cn(
-            "-my-1 flex h-[22px] cursor-pointer items-center gap-1 rounded-[6px] px-1.5 transition-[color,background-color,box-shadow] duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+            paint.trigger,
             className,
-            open
-              ? "bg-[var(--surface-card)] text-[var(--ink-900)] shadow-[0_0_0_1px_var(--border-hairline)]"
-              : "text-[var(--ink-400)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]",
+            open ? paint.triggerOpen : cn(ink, paint.triggerRest),
           )}
         >
           {children}
           <ChevronDown
-            className={cn(
-              "size-2.5 shrink-0",
-              open ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]",
-            )}
-            strokeWidth={1.5}
+            className={paint.chevron(open)}
+            strokeWidth={paint.chevronStroke}
             aria-hidden="true"
           />
         </button>

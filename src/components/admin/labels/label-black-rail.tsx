@@ -18,7 +18,9 @@ import type {
 } from "@/lib/services/labels/edit";
 import {
   gameOverflow,
+  planGameShift,
   type GameOverflow,
+  type GameShiftSummary,
 } from "@/lib/services/labels/game-shift";
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import {
@@ -34,8 +36,8 @@ import {
 import { markSummary } from "@/lib/services/labels/marks-state";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
-  labelScores,
-  type LabelGameBand as LabelGameBandScore,
+  bandsBeforePoints,
+  type LabelScores,
 } from "@/lib/services/labels/score";
 import type {
   LabelGameType,
@@ -50,9 +52,10 @@ import {
   type LabelScoreMismatch,
 } from "@/lib/services/labels/set-scores";
 import { cn } from "@/lib/utils";
+import { LabelFollowPill } from "./label-follow-pill";
+import { LabelGameBand } from "./label-game-band";
 import {
   BlackDeletedPoint,
-  BlackGameBand,
   BlackGameOverflow,
   BlackPointRow,
   BlackSuggestedPoint,
@@ -69,7 +72,7 @@ import { LabelSaveStatus } from "./label-save-status";
 import type { SaveStatus } from "./save-status";
 
 /**
- * The black view's points rail (T33, board 08l's `.bk-rail`): the Video
+ * The black view's points rail (board 08l's `.bk-rail`): the Video
  * tab's points list in its dark tone, carrying labels.
  *
  * A 46px header — "{player1} vs {player2}", "{checked} / {total} checked",
@@ -82,7 +85,7 @@ import type { SaveStatus } from "./save-status";
  * labeller has said the video ends early), the save line in its dark tone
  * and the way out (`Minimize2`, "Exit full screen") — over the ONE scroller
  * (`data-label-rail-scroller`), which is what the console's follow scroll
- * moves: a `BlackGameBand` before each game's first live point, a
+ * moves: a `LabelGameBand` (dark) before each game's first live point, a
  * `BlackPointRow` per point with the score before it and its marks (board
  * 08m, `label-black-mark.tsx`) in its tail, a one-line dark tombstone with
  * its Undo (`BlackDeletedPoint`) for a deleted one, a dashed slot
@@ -116,6 +119,7 @@ export function LabelBlackRail({
   affordance,
   onFollow,
   points,
+  scores,
   adScoring = true,
   names,
   marks = null,
@@ -131,7 +135,6 @@ export function LabelBlackRail({
   onSetGameType,
   openTombstoneIds = NO_IDS,
   onToggleTombstone,
-  marksEnabled = false,
   openGhostIds = NO_IDS,
   onToggleGhost,
   playingPointId = null,
@@ -160,6 +163,8 @@ export function LabelBlackRail({
   affordance: FollowAffordance | null;
   onFollow: () => void;
   points: readonly LabelPoint[];
+  /** `labelScores(points, adScoring)`, computed once by the console. */
+  scores: LabelScores;
   /** `session.adScoring`. */
   adScoring?: boolean;
   names: SideNames;
@@ -181,11 +186,6 @@ export function LabelBlackRail({
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   openTombstoneIds?: ReadonlySet<string>;
   onToggleTombstone?: (id: string) => void;
-  /**
-   * `session.marksEnabled`: with it, and `marks` built, a stroke the site
-   * removed is drawn as a ghost (board 08m §3); without, an ordinary row.
-   */
-  marksEnabled?: boolean;
   /** Ghosts shown as their struck-through row (the console's state). */
   openGhostIds?: ReadonlySet<string>;
   onToggleGhost?: (id: string) => void;
@@ -209,16 +209,12 @@ export function LabelBlackRail({
   onVideoEndsEarly?: () => void;
   onFindGap?: (pointId: string | null) => void;
 }) {
-  const scores = useMemo(
-    () => labelScores(points, adScoring),
-    [points, adScoring],
-  );
   // The chip's arithmetic, over the same rows as the scoreboard: shown only
   // with marks built (never on a session labelled blind), not once the
   // labeller has said the video ends early, and only on a disagreement.
   const labelledSets = useMemo(
-    () => labelSetScores(points, adScoring),
-    [points, adScoring],
+    () => labelSetScores(points, scores.games),
+    [points, scores],
   );
   const mismatch =
     marks !== null && videoEndsEarly !== true
@@ -240,7 +236,6 @@ export function LabelBlackRail({
     operations: editable ? operations : undefined,
     openTombstoneIds,
     onToggleTombstone,
-    marksEnabled,
     openGhostIds,
     onToggleGhost,
     points,
@@ -248,9 +243,15 @@ export function LabelBlackRail({
     adScoring,
     playingShotId,
   };
-  const bandBefore = bandsBeforePoints(points, scores.games);
+  const bandBefore = useMemo(
+    () => bandsBeforePoints(points, scores.games),
+    [points, scores],
+  );
   // The slots still waiting for an answer, by the point whose row follows.
-  const slotBefore = openPointSuggestions(points, edit, marks);
+  const slotBefore = useMemo(
+    () => openPointSuggestions(points, marks),
+    [points, marks],
+  );
   // The games that run over, by their first leftover point. Read off the
   // labeller's own rows, so on every editable session — marks on or off.
   const overflowBefore = useMemo(
@@ -360,12 +361,13 @@ export function LabelBlackRail({
               return (
                 <Fragment key={point.id}>
                   {band ? (
-                    <BlackGameBand
+                    <LabelGameBand
                       band={band}
                       points={points}
                       names={names}
                       onSetGameType={editable ? onSetGameType : undefined}
                       onSetGameServer={editable ? onSetGameServer : undefined}
+                      tone="dark"
                     />
                   ) : null}
                   {/* The slot sits between the pair's two rows: after the
@@ -381,7 +383,8 @@ export function LabelBlackRail({
                       is already won, these rows belong to the next one. */}
                   {overflow ? (
                     <BlackGameOverflow
-                      overflow={overflow}
+                      overflow={overflow.overflow}
+                      summary={overflow.summary}
                       point={point}
                       edit={edit}
                     />
@@ -413,19 +416,11 @@ export function LabelBlackRail({
             as dark as the room — pinned to the scroller's top-centre, over
             the rows. */}
         {affordance ? (
-          <button
-            type="button"
-            data-label-follow-pill=""
-            aria-label={affordance.ariaLabel}
-            onClick={onFollow}
-            className={cn(
-              "absolute top-3 left-1/2 z-10 inline-flex h-7 -translate-x-1/2 cursor-pointer items-center rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium whitespace-nowrap text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)] transition-[background-color,transform] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.97]",
-              // Pinned top, so it drops in (the keyframe reads the sign).
-              "film-follow-pill-in [--film-pill-rise:-4px]",
-            )}
-          >
-            {affordance.label}
-          </button>
+          <LabelFollowPill
+            affordance={affordance}
+            onFollow={onFollow}
+            placement="rail"
+          />
         ) : null}
       </div>
     </TooltipProvider>
@@ -604,44 +599,33 @@ function ScoreChip({
   );
 }
 
-/**
- * Each game's band goes above its first live point, once — as
- * `LabelPointsTableView` places them: a point moved out of order never
- * repeats it, and a tombstone never carries one.
- */
-function bandsBeforePoints(
-  points: readonly LabelPoint[],
-  games: readonly LabelGameBandScore[],
-): ReadonlyMap<string, LabelGameBandScore> {
-  const bandByGame = new Map(
-    games.map((band) => [`${band.setNumber}·${band.gameNumber}`, band]),
-  );
-  const bandBefore = new Map<string, LabelGameBandScore>();
-  for (const point of points) {
-    if (point.status === "deleted") continue;
-    const key = `${point.setNumber}·${point.gameNumber}`;
-    const band = bandByGame.get(key);
-    if (!band) continue;
-    bandBefore.set(point.id, band);
-    bandByGame.delete(key);
-  }
-  return bandBefore;
+/** A game that runs over, and what moving its leftovers on would do. */
+interface OverflowSlot {
+  overflow: GameOverflow;
+  /** The cascade's summary from the first leftover; null when it cannot be planned. */
+  summary: GameShiftSummary | null;
 }
 
 /**
  * Each overflowing game's rows past its end, keyed by the first of them —
- * the row the "already won" slot goes before.
+ * the row the "already won" slot goes before — with the shift's summary,
+ * planned once here rather than on every render of the slot.
  */
 function overflowBeforePoints(
   points: readonly LabelPoint[],
   adScoring: boolean,
-): ReadonlyMap<string, GameOverflow<LabelPoint>> {
-  const before = new Map<string, GameOverflow<LabelPoint>>();
-  for (const game of gameOverflow(points, adScoring)) {
-    before.set(game.leftovers[0].id, game);
+): ReadonlyMap<string, OverflowSlot> {
+  const before = new Map<string, OverflowSlot>();
+  for (const overflow of gameOverflow(points, adScoring)) {
+    const from = overflow.leftovers[0].id;
+    const plan = planGameShift(points, adScoring, from);
+    before.set(from, {
+      overflow,
+      summary: "error" in plan ? null : plan.summary,
+    });
   }
   return before;
 }
 
 const NO_IDS: ReadonlySet<string> = new Set();
-const NO_OVERFLOW: ReadonlyMap<string, GameOverflow<LabelPoint>> = new Map();
+const NO_OVERFLOW: ReadonlyMap<string, OverflowSlot> = new Map();

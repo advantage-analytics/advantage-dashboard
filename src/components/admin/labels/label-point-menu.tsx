@@ -138,11 +138,20 @@ export function PointMenu({
   const dark = tone === "dark";
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<"actions" | "move">("actions");
-  const actions = pointMenuActions(point, edit, operations);
+  // The requests are planned only while the menu is open: planning rescans
+  // the session's rows, and a closed menu on every row would do it per render.
+  const actions = open ? pointMenuActions(point, edit, operations) : null;
   const close = () => {
     setOpen(false);
     setPanel("actions");
   };
+  /** Close, then run the request — every row's `onSelect`. */
+  const pick = (run: () => void) => () => {
+    close();
+    run();
+  };
+  const iconInk = dark ? "text-white/50" : "text-[var(--ink-500)]";
+  const iconClass = cn("size-3", iconInk);
   const now =
     point.setNumber !== null && point.gameNumber !== null
       ? `Now in set ${point.setNumber} · game ${point.gameNumber}`
@@ -193,16 +202,13 @@ export function PointMenu({
               </button>
             }
           >
-            {panel === "move" ? (
+            {!actions ? null : panel === "move" ? (
               <>
                 <FloatMenuItem
                   label="Back"
                   icon={
                     <ChevronLeft
-                      className={cn(
-                        "size-3",
-                        dark ? "text-white/50" : "text-[var(--ink-500)]",
-                      )}
+                      className={iconClass}
                       strokeWidth={1.5}
                       aria-hidden="true"
                     />
@@ -216,10 +222,7 @@ export function PointMenu({
                     key={game.key}
                     label={game.label}
                     description={game.description}
-                    onSelect={() => {
-                      close();
-                      game.run();
-                    }}
+                    onSelect={pick(game.run)}
                   />
                 ))}
                 <FloatMenuNote>
@@ -233,36 +236,24 @@ export function PointMenu({
                   description={`An empty point before point ${number}`}
                   icon={
                     <ArrowUpToLine
-                      className={cn(
-                        "size-3",
-                        dark ? "text-white/50" : "text-[var(--ink-500)]",
-                      )}
+                      className={iconClass}
                       strokeWidth={1.5}
                       aria-hidden="true"
                     />
                   }
-                  onSelect={() => {
-                    close();
-                    actions.addAbove();
-                  }}
+                  onSelect={pick(actions.addAbove)}
                 />
                 <FloatMenuItem
                   label="Add point below"
                   description={`An empty point after point ${number}`}
                   icon={
                     <ArrowDownToLine
-                      className={cn(
-                        "size-3",
-                        dark ? "text-white/50" : "text-[var(--ink-500)]",
-                      )}
+                      className={iconClass}
                       strokeWidth={1.5}
                       aria-hidden="true"
                     />
                   }
-                  onSelect={() => {
-                    close();
-                    actions.addBelow();
-                  }}
+                  onSelect={pick(actions.addBelow)}
                 />
                 {actions.combineAbove ? (
                   <FloatMenuItem
@@ -270,18 +261,12 @@ export function PointMenu({
                     description={actions.combineAbove.description}
                     icon={
                       <Merge
-                        className={cn(
-                          "size-3",
-                          dark ? "text-white/50" : "text-[var(--ink-500)]",
-                        )}
+                        className={iconClass}
                         strokeWidth={1.5}
                         aria-hidden="true"
                       />
                     }
-                    onSelect={() => {
-                      close();
-                      actions.combineAbove?.run();
-                    }}
+                    onSelect={pick(actions.combineAbove.run)}
                   />
                 ) : null}
                 {actions.combineBelow ? (
@@ -290,18 +275,12 @@ export function PointMenu({
                     description={actions.combineBelow.description}
                     icon={
                       <Merge
-                        className={cn(
-                          "size-3 rotate-180",
-                          dark ? "text-white/50" : "text-[var(--ink-500)]",
-                        )}
+                        className={cn("size-3 rotate-180", iconInk)}
                         strokeWidth={1.5}
                         aria-hidden="true"
                       />
                     }
-                    onSelect={() => {
-                      close();
-                      actions.combineBelow?.run();
-                    }}
+                    onSelect={pick(actions.combineBelow.run)}
                   />
                 ) : null}
                 <FloatMenuDivider />
@@ -325,28 +304,19 @@ export function PointMenu({
                     description="This game is already won before this point"
                     icon={
                       <CornerDownRight
-                        className={cn(
-                          "size-3",
-                          dark ? "text-white/50" : "text-[var(--ink-500)]",
-                        )}
+                        className={iconClass}
                         strokeWidth={1.5}
                         aria-hidden="true"
                       />
                     }
-                    onSelect={() => {
-                      close();
-                      actions.shiftOverflow?.();
-                    }}
+                    onSelect={pick(actions.shiftOverflow)}
                   />
                 ) : null}
                 {actions.reset ? (
                   <FloatMenuItem
                     label="Reset"
                     description="Back to the values it was seeded with"
-                    onSelect={() => {
-                      close();
-                      actions.reset?.();
-                    }}
+                    onSelect={pick(actions.reset)}
                   />
                 ) : null}
                 {actions.move.length > 0 ||
@@ -356,10 +326,7 @@ export function PointMenu({
                 ) : null}
                 <FloatMenuItem
                   label="Delete point"
-                  onSelect={() => {
-                    close();
-                    actions.remove();
-                  }}
+                  onSelect={pick(actions.remove)}
                 />
               </>
             )}

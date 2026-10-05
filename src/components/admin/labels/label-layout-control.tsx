@@ -33,7 +33,6 @@ const MODE_ICON: Record<LabelLayoutMode, typeof Layers> = {
   overlay: Layers,
   "docked-top": PanelTop,
   "docked-side": PanelRight,
-  // The full-screen black view; listed once `LAYOUT_MODES` carries it.
   black: Maximize2,
 };
 

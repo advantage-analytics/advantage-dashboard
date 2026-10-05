@@ -27,11 +27,12 @@
  * winners are in, and the rotation must not wait for them.
  */
 
-import type {
-  LabelGameType,
-  LabelPoint,
-  LabelPointStatus,
-  LabelSide,
+import {
+  opponent,
+  type LabelGameType,
+  type LabelPoint,
+  type LabelPointStatus,
+  type LabelSide,
 } from "./session";
 import { labelPointFields, labelPointStatusAfterChange } from "./edit";
 import type { LabelGame } from "./operations";
@@ -118,10 +119,6 @@ export function gameTypeOf(
   live: readonly Pick<GamePoint, "gameType">[],
 ): LabelGameType {
   return live[0]?.gameType ?? "game";
-}
-
-function opponent(side: LabelSide): LabelSide {
-  return side === "p1" ? "p2" : "p1";
 }
 
 /**

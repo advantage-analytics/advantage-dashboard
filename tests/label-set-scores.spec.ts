@@ -84,10 +84,14 @@ test.describe("LabelGameBand.winner", () => {
   });
 });
 
+/** The tally over `points` under ad scoring, from the bands `labelScores` makes. */
+const setsOf = (points: readonly ScorablePoint[]) =>
+  labelSetScores(points, labelScores(points, true).games);
+
 test.describe("labelSetScores", () => {
   test("counts each game for its winner, per set, with the set's first live point", () => {
     const points = twoSets();
-    expect(labelSetScores(points, true)).toEqual([
+    expect(setsOf(points)).toEqual([
       { setNumber: 1, games: [2, 1], firstPointId: "pt-1" },
       { setNumber: 2, games: [0, 1], firstPointId: "pt-13" },
     ]);
@@ -96,26 +100,22 @@ test.describe("labelSetScores", () => {
   test("a deleted first point is not the set's first; a set with no live point is absent", () => {
     const points = twoSets();
     points[0] = { ...points[0], status: "deleted" };
-    const sets = labelSetScores(points, true);
+    const sets = setsOf(points);
     expect(sets[0].firstPointId).toBe("pt-2");
     // Set 2 deleted whole: the tally has one set.
     const oneSet = points.map((p) =>
       p.setNumber === 2 ? { ...p, status: "deleted" as const } : p,
     );
-    expect(labelSetScores(oneSet, true)).toEqual([
+    expect(setsOf(oneSet)).toEqual([
       { setNumber: 1, games: [2, 1], firstPointId: "pt-2" },
     ]);
     // Points with no set are not a set.
-    expect(
-      labelSetScores([{ ...won(1, 1, "p1"), setNumber: null }], true),
-    ).toEqual([]);
+    expect(setsOf([{ ...won(1, 1, "p1"), setNumber: null }])).toEqual([]);
   });
 
   test("sets come back in set order whatever the row order", () => {
     const points = [...game(2, 3, "p2"), ...game(1, 1, "p1")];
-    expect(labelSetScores(points, true).map((s) => s.setNumber)).toEqual([
-      1, 2,
-    ]);
+    expect(setsOf(points).map((s) => s.setNumber)).toEqual([1, 2]);
   });
 });
 
@@ -138,7 +138,7 @@ test.describe("enteredScore", () => {
 });
 
 test.describe("scoreMismatch", () => {
-  const labelled = () => labelSetScores(twoSets(), true);
+  const labelled = () => setsOf(twoSets());
 
   test("names the first set whose pair differs, with the labelled and entered pairs and the set's first point", () => {
     expect(

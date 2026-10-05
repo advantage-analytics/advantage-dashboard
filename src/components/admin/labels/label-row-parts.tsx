@@ -98,12 +98,6 @@ export interface EditContext {
   operations?: LabelRowOperations;
   openTombstoneIds: ReadonlySet<string>;
   onToggleTombstone?: (id: string) => void;
-  /**
-   * `session.marksEnabled`: the session computes the derivation's marks, so
-   * the black view may draw a site-removed stroke as a ghost. Absent (the
-   * light table never sets it) or false, a ghost is an ordinary row.
-   */
-  marksEnabled?: boolean;
   /** Ghosts folded open to their struck-through row (the black view only). */
   openGhostIds?: ReadonlySet<string>;
   onToggleGhost?: (id: string) => void;
@@ -406,6 +400,9 @@ export function SideMark({
     </span>
   );
 }
+
+/** The two players, in the order every menu of them lists them. */
+export const SIDES: readonly LabelSide[] = ["p1", "p2"];
 
 export function sideLabel(
   side: LabelSide | null,
