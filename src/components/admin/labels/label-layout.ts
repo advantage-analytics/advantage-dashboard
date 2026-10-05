@@ -4,7 +4,7 @@
  * (T25, `label-divider.tsx`) drives the size; this file is the vocabulary and
  * the arithmetic.
  *
- * Three modes, the labeller's choice:
+ * Three modes the Layout menu lists, the labeller's choice:
  *
  * - **overlay** — the floating cards (`label-video-dock.tsx`,
  *   `label-court-dock.tsx`): the table keeps the whole screen and the two
@@ -13,6 +13,12 @@
  *   side by side; the table takes what is left below and scrolls.
  * - **docked-side** — a column to the right of the table holding the video
  *   over the court; the table takes what is left and scrolls both ways.
+ *
+ * And a fourth, **black** — the full-screen view (board 08l): black to the
+ * edges, the film and the court on the left and the points rail on the right.
+ * It has no dock and no divider; its one size is the rail's width
+ * ({@link clampRailWidth}), kept under {@link RAIL_WIDTH_STORAGE_KEY}. It is
+ * in the vocabulary here and joins {@link LAYOUT_MODES} once the view exists.
  *
  * In a docked mode the band's height or the column's width is ONE number,
  * {@link DEFAULT_DOCK_SIZE} until the divider moves it, and the table takes
@@ -25,10 +31,15 @@
  * {@link LAYOUT_SIZE_STORAGE_KEY}.
  */
 
-export type LabelLayoutMode = "overlay" | "docked-top" | "docked-side";
+export type LabelLayoutMode =
+  "overlay" | "docked-top" | "docked-side" | "black";
 
-/** The two modes with a dock whose size the divider drives. */
-export type DockedLayoutMode = Exclude<LabelLayoutMode, "overlay">;
+/**
+ * The two modes with a dock whose size the divider drives. Spelled out, not
+ * `Exclude<LabelLayoutMode, "overlay">`: the black view has no dock, and must
+ * not turn up in a `Record<DockedLayoutMode, …>`.
+ */
+export type DockedLayoutMode = "docked-top" | "docked-side";
 
 /** In the order the Layout menu lists them. */
 export const LAYOUT_MODES: readonly LabelLayoutMode[] = [
@@ -61,13 +72,18 @@ export const LAYOUT_MODE_LABEL: Record<
     label: "Docked side",
     description: "Video over the court in a column beside the table",
   },
+  black: {
+    label: "Full screen",
+    description:
+      "Black to the edges: film and court on the left, the points rail on the right",
+  },
 };
 
 /** A stored mode. Anything unknown — or nothing — is the overlay. */
 export function parseLayoutMode(
   raw: string | null | undefined,
 ): LabelLayoutMode {
-  return raw === "docked-top" || raw === "docked-side"
+  return raw === "docked-top" || raw === "docked-side" || raw === "black"
     ? raw
     : DEFAULT_LAYOUT_MODE;
 }
@@ -178,4 +194,36 @@ export function parseDockSizes(raw: string | null | undefined): DockSizes {
     /* not JSON — the defaults */
   }
   return sizes;
+}
+
+// ── The black view's rail ──────────────────────────────────────────────────
+
+/** The least the points rail may be: its rows still read whole. */
+export const RAIL_MIN_PX = 520;
+/** The most: past this the film is the one being squeezed. */
+export const RAIL_MAX_PX = 880;
+/** Board 08l's rail, and where a double-click on its handle puts it back. */
+export const RAIL_DEFAULT_PX = 640;
+
+/** The rail's width in px, once its handle has moved. A key of its own. */
+export const RAIL_WIDTH_STORAGE_KEY = "labels-rail-width";
+
+/**
+ * `px` held inside `[RAIL_MIN_PX, RAIL_MAX_PX]`, in whole pixels. Anything
+ * that is not a finite number is the default.
+ */
+export function clampRailWidth(px: number): number {
+  if (!Number.isFinite(px)) return RAIL_DEFAULT_PX;
+  return Math.min(RAIL_MAX_PX, Math.max(RAIL_MIN_PX, Math.round(px)));
+}
+
+/**
+ * The stored rail width (a bare number of px). Nothing, or anything that is
+ * not a number, is the default; a number outside the bounds is clamped.
+ */
+export function parseRailWidth(raw: string | null | undefined): number {
+  if (raw === null || raw === undefined || raw.trim() === "") {
+    return RAIL_DEFAULT_PX;
+  }
+  return clampRailWidth(Number(raw));
 }

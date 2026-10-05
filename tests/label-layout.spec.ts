@@ -12,11 +12,17 @@ import {
   MIN_DOCK_PX,
   MIN_SIDE_COURT_PX,
   MIN_TABLE_PX,
+  RAIL_DEFAULT_PX,
+  RAIL_MAX_PX,
+  RAIL_MIN_PX,
+  RAIL_WIDTH_STORAGE_KEY,
   clampDockSize,
+  clampRailWidth,
   dockRoom,
   maxDockSize,
   parseDockSizes,
   parseLayoutMode,
+  parseRailWidth,
 } from "@/components/admin/labels/label-layout";
 import {
   COURT_ANCHOR_STORAGE_KEY,
@@ -64,6 +70,59 @@ test("a stored mode parses; anything unknown is the overlay", () => {
   for (const raw of [null, undefined, "", "docked", "DOCKED-TOP", "1", "{}"]) {
     expect(parseLayoutMode(raw), String(raw)).toBe("overlay");
   }
+});
+
+test.describe("the black full-screen view", () => {
+  test("the mode parses and has its words, and the menu does not list it yet", () => {
+    expect(parseLayoutMode("black")).toBe("black");
+    expect(parseLayoutMode("BLACK")).toBe("overlay");
+    expect(LAYOUT_MODE_LABEL.black).toEqual({
+      label: "Full screen",
+      description:
+        "Black to the edges: film and court on the left, the points rail on the right",
+    });
+    // T33 appends it once the view exists.
+    expect(LAYOUT_MODES).not.toContain("black");
+    // No dock, so no dock size: the records stay the two docked modes'.
+    expect(Object.keys(DEFAULT_DOCK_SIZE)).toEqual([
+      "docked-top",
+      "docked-side",
+    ]);
+    expect(Object.keys(MIN_DOCK_PX)).toEqual(["docked-top", "docked-side"]);
+  });
+
+  test("the rail's width holds between 520 and 880, 640 by default", () => {
+    expect(RAIL_MIN_PX).toBe(520);
+    expect(RAIL_MAX_PX).toBe(880);
+    expect(RAIL_DEFAULT_PX).toBe(640);
+    expect(RAIL_WIDTH_STORAGE_KEY).toBe("labels-rail-width");
+    expect([LAYOUT_MODE_STORAGE_KEY, LAYOUT_SIZE_STORAGE_KEY]).not.toContain(
+      RAIL_WIDTH_STORAGE_KEY,
+    );
+
+    // Both ends, and the ends themselves.
+    expect(clampRailWidth(100)).toBe(520);
+    expect(clampRailWidth(519.4)).toBe(520);
+    expect(clampRailWidth(520)).toBe(520);
+    expect(clampRailWidth(2000)).toBe(880);
+    expect(clampRailWidth(880)).toBe(880);
+    // Inside, whole pixels.
+    expect(clampRailWidth(700.6)).toBe(701);
+    // Not a number: the default.
+    for (const px of [Number.NaN, Infinity, -Infinity]) {
+      expect(clampRailWidth(px), String(px)).toBe(640);
+    }
+  });
+
+  test("a stored rail width parses; anything else is the default", () => {
+    expect(parseRailWidth("700")).toBe(700);
+    expect(parseRailWidth("612.5")).toBe(613);
+    expect(parseRailWidth("300")).toBe(520);
+    expect(parseRailWidth("5000")).toBe(880);
+    for (const raw of [null, undefined, "", "  ", "wide", "{}", "640px"]) {
+      expect(parseRailWidth(raw), String(raw)).toBe(640);
+    }
+  });
 });
 
 test.describe("the dock's size", () => {

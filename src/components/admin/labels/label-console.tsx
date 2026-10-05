@@ -414,8 +414,12 @@ export function LabelConsole({
       /* private window — the choice just isn't kept */
     }
   }, []);
-  const docked = layoutMode !== "overlay";
-  const dockMode = layoutMode === "overlay" ? null : layoutMode;
+  // The two modes with a dock. The black full-screen view (T33) has none.
+  const dockMode =
+    layoutMode === "docked-top" || layoutMode === "docked-side"
+      ? layoutMode
+      : null;
+  const docked = dockMode !== null;
   const scrollerRef =
     layoutMode === "docked-top"
       ? topScrollerRef

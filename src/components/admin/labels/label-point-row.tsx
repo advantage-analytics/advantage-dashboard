@@ -417,7 +417,7 @@ function EndingCell({
 }
 
 /** Typed text → the note to store: null when cleared, undefined when too long. */
-function parseNote(text: string): string | null | undefined {
+export function parseNote(text: string): string | null | undefined {
   const note = text.trim();
   if (note === "") return null;
   return note.length > LABEL_NOTE_MAX ? undefined : note;

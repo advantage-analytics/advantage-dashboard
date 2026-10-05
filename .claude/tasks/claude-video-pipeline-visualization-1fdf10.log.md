@@ -409,3 +409,16 @@ Decisions:
 1. `scripts/label-backfill-seed.ts` does not know `site_removal` (harmless; not a seed value).
 2. A second removal reason needs the DB check and `LabelSiteRemoval` grown together.
 3. A grep spec pinning `site_removal` writes to the Restore service once T38 lands.
+
+## T30 · Black mode vocabulary, rail constants, and the two-line black point row — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `LabelLayoutMode` gains `black` (not yet in the menu), with the rail constants and `clampRailWidth` / `parseRailWidth`. New `label-black-format.ts` (`pointSentence`, `pointDetail`, `formatClockTime`) and `label-black-point-row.tsx` (`BlackPointRow`, `BlackGameBand`, `pointChangedByYou`): the two-line dark row with winner mark, pencil, score, hover actions (Note, menu) and a fixed tick. `PointMenu` gains a `tone` prop; `parseNote` is exported; the console's dock narrowing names the two docked modes.
+
+**follow-ups:**
+
+1. The note popover holds the light `TextEditor`; a dark tone would suit it and the shot cells.
+2. `pointSummary` still counts ghost strokes in the rally; T38 settles the count.
+3. `BlackGameBand` / the dark winner cell duplicate their light twins; a `tone` prop would remove that.
+4. "serve only" also reads for a one-stroke rally whose stroke is a serve (rally counts the serve).

@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Layers, PanelRight, PanelTop } from "lucide-react";
+import {
+  ChevronDown,
+  Layers,
+  Maximize2,
+  PanelRight,
+  PanelTop,
+} from "lucide-react";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 import {
@@ -27,6 +33,8 @@ const MODE_ICON: Record<LabelLayoutMode, typeof Layers> = {
   overlay: Layers,
   "docked-top": PanelTop,
   "docked-side": PanelRight,
+  // The full-screen black view; listed once `LAYOUT_MODES` carries it.
+  black: Maximize2,
 };
 
 export function LabelLayoutControl({

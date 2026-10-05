@@ -8,6 +8,7 @@ import {
   FloatMenuItem,
   FloatMenuLabel,
   FloatMenuNote,
+  type FloatMenuTone,
 } from "@/components/ui/float-menu";
 import {
   Tooltip,
@@ -63,6 +64,10 @@ export function pointMenuActions(
  * The row's ⋯ — board 08g's `.mo`, revealed on the row's hover, on focus and
  * on the open point. Two panels in one menu: the actions, and — behind
  * "Move to game…" — the games either side of the point.
+ *
+ * `tone="dark"` is the black full-screen view's rail (board 08l's `.bk-ib`):
+ * the same menu on the dark surface behind a 22px white trigger. Paint only —
+ * every row and every request is the light one's.
  */
 export function PointMenu({
   point,
@@ -70,13 +75,16 @@ export function PointMenu({
   open: rowOpen,
   edit,
   operations,
+  tone = "light",
 }: {
   point: LabelPoint;
   number: number;
   open: boolean;
   edit: EditContext;
   operations: LabelRowOperations;
+  tone?: FloatMenuTone;
 }) {
+  const dark = tone === "dark";
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<"actions" | "move">("actions");
   const actions = pointMenuActions(point, edit, operations);
@@ -99,6 +107,7 @@ export function PointMenu({
           open={open}
           onOpenChange={(next) => (next ? setOpen(true) : close())}
           width={232}
+          tone={tone}
           label={`Point ${number} actions`}
           trigger={
             <TooltipTrigger asChild>
@@ -109,15 +118,22 @@ export function PointMenu({
                 aria-expanded={open}
                 data-point-menu=""
                 className={cn(
-                  "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-[opacity,color,background-color] duration-200 group-hover/row:opacity-100 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                  open
-                    ? "bg-[var(--surface-subtle)] text-[var(--ink-900)]"
-                    : "text-[var(--ink-500)]",
+                  "flex shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-[opacity,color,background-color] duration-200 group-hover/row:opacity-100 focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                  dark
+                    ? "size-[22px] hover:bg-white/[0.08] hover:text-white"
+                    : "size-7 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]",
+                  dark
+                    ? open
+                      ? "bg-white/[0.08] text-white"
+                      : "text-white/55"
+                    : open
+                      ? "bg-[var(--surface-subtle)] text-[var(--ink-900)]"
+                      : "text-[var(--ink-500)]",
                   open || rowOpen ? "opacity-100" : "opacity-0",
                 )}
               >
                 <MoreHorizontal
-                  className="size-[15px]"
+                  className={dark ? "size-3.5" : "size-[15px]"}
                   strokeWidth={1.5}
                   aria-hidden="true"
                 />
@@ -131,7 +147,10 @@ export function PointMenu({
                 label="Back"
                 icon={
                   <ChevronLeft
-                    className="size-3 text-[var(--ink-500)]"
+                    className={cn(
+                      "size-3",
+                      dark ? "text-white/50" : "text-[var(--ink-500)]",
+                    )}
                     strokeWidth={1.5}
                     aria-hidden="true"
                   />

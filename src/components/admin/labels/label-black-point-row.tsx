@@ -1,0 +1,710 @@
+"use client";
+
+import { useState } from "react";
+import {
+  Check,
+  ChevronDown,
+  GripVertical,
+  Pencil,
+  StickyNote,
+} from "lucide-react";
+import {
+  FloatMenu,
+  FloatMenuItem,
+  FloatMenuLabel,
+  floatMenuToneClasses,
+} from "@/components/ui/float-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { filmProgressWidth } from "@/components/dashboard/matches/match-detail/film/film-clock";
+import { cn } from "@/lib/utils";
+import type { LabelGame } from "@/lib/services/labels/operations";
+import type { LabelGameBand as LabelGameBandScore } from "@/lib/services/labels/score";
+import type {
+  LabelGameType,
+  LabelPoint,
+  LabelSide,
+} from "@/lib/services/labels/session";
+import { pointDetail, pointSentence } from "./label-black-format";
+import { EditableCell, TextEditor } from "./label-cells";
+import type { SideNames } from "./label-format";
+import {
+  gameBandMenus,
+  gameBandModel,
+  gameBandServes,
+  type GameBandMenuRow,
+} from "./label-game-band";
+import { PointMenu } from "./label-point-menu";
+import { parseNote } from "./label-point-row";
+import {
+  sideInitial,
+  type EditContext,
+  type PlayingWindow,
+} from "./label-row-parts";
+
+/**
+ * The black full-screen view's rows (board 08l): the film room's points rail
+ * (`film/point-list.tsx`, `ROW_TONE.dark` / `LIST_TONE.dark`) carrying the
+ * labelling console's point. Same labels, same writes and the same requests
+ * as the table's row (`label-point-row.tsx`) — two lines instead of eleven
+ * columns, on black.
+ *
+ * Colours are the frame's: white at an alpha on the room's black, `--blue`
+ * for the one player's mark, the progress rule and the "changed" pencil,
+ * `--success` for a checked tick. Nothing here is a light token — the row
+ * never sits on a light ground.
+ */
+
+/**
+ * The frame's `.bk-row` tracks: number · winner mark · the two lines · tail ·
+ * score · actions · tick. The actions track is `auto` and empty until the
+ * row is reached for, so the score sits against the tick and slides left
+ * when they appear; the tick's own track never moves.
+ */
+const ROW_GRID =
+  "grid grid-cols-[22px_30px_minmax(0,1fr)_auto_48px_auto_22px] items-center gap-x-[10px] min-h-[52px] px-[14px] py-1.5";
+
+/** A point the labeller has changed: itself, or any of its strokes. */
+export function pointChangedByYou(
+  point: Pick<LabelPoint, "status" | "shots">,
+): boolean {
+  return (
+    point.status === "edited" ||
+    point.status === "added" ||
+    point.shots.some(
+      (shot) =>
+        shot.status === "edited" ||
+        shot.status === "added" ||
+        shot.status === "deleted",
+    )
+  );
+}
+
+/**
+ * One point of the black rail — the frame's `.bk-row`.
+ *
+ * Left to right: the point's number (a grip in its place while the row is
+ * hovered or playing — drawn as the frame draws it; nothing reorders) · the
+ * WINNER mark, which is the menu that changes who won · how the point ended
+ * as a sentence over the deciding shot, the time and the rally · a tail slot
+ * carrying the blue pencil on a point the labeller has changed · the score
+ * before the point · the row's actions (Note and ⋯), there only on hover, on
+ * focus and on the playing row · the tick that marks the point checked.
+ *
+ * The PLAYING row draws the rail's progress rule along its foot, its width
+ * CSS reading `--film-t` (`film-clock.ts`) so the row never re-renders to
+ * move it.
+ *
+ * The strokes arrive as `children` and are drawn under the open row.
+ */
+export function BlackPointRow({
+  point,
+  open,
+  playing,
+  playingWindow = null,
+  score,
+  edit,
+  onToggle,
+  children,
+}: {
+  point: LabelPoint;
+  open: boolean;
+  playing: boolean;
+  /** The playing point's span in file seconds; only the playing row gets one. */
+  playingWindow?: PlayingWindow | null;
+  /** The score before the point, as the scoreboard words it; null for none. */
+  score: string | null;
+  edit: EditContext;
+  onToggle?: (pointId: string) => void;
+  /** The open point's strokes; nothing when it is folded. */
+  children?: React.ReactNode;
+}) {
+  const { operations, names } = edit;
+  const number = point.pointIndex + 1;
+  const shotsId = `label-black-point-${point.id}-shots`;
+  const checked = point.checkedAt !== null;
+  const showNote = edit.editable || point.note !== null;
+
+  return (
+    <>
+      <div
+        data-row="point"
+        data-point-id={point.id}
+        data-playing={playing ? "true" : undefined}
+        onClick={(event) => {
+          // A click that lands in a control is that control's, not a toggle.
+          if ((event.target as Element).closest("[data-cell]")) return;
+          onToggle?.(point.id);
+        }}
+        className={cn(
+          ROW_GRID,
+          "group/row relative cursor-pointer transition-colors duration-200",
+          playing ? "bg-white/[0.08]" : "hover:bg-white/[0.06]",
+        )}
+      >
+        {/* The number, and the frame's grip over it once the row is reached. */}
+        <span className="mono tabular relative inline-flex items-center text-[10px] text-white/35">
+          <span
+            className={cn(
+              "transition-opacity duration-200",
+              playing ? "opacity-0" : "group-hover/row:opacity-0",
+            )}
+          >
+            {number}
+          </span>
+          <GripVertical
+            data-row-handle=""
+            aria-hidden="true"
+            strokeWidth={1.6}
+            className={cn(
+              "absolute left-0 size-3.5 cursor-grab text-white/60 transition-opacity duration-200",
+              playing ? "opacity-100" : "opacity-0 group-hover/row:opacity-100",
+            )}
+          />
+        </span>
+
+        <BlackWinnerCell point={point} number={number} edit={edit} />
+
+        {/* The two lines, and the row's fold control for a keyboard and a
+            screen reader — the row's own click does the same for a mouse. */}
+        <button
+          type="button"
+          data-point-fold=""
+          aria-expanded={open}
+          aria-controls={open ? shotsId : undefined}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggle?.(point.id);
+          }}
+          className="flex min-w-0 cursor-pointer flex-col gap-px rounded-[var(--radius-button)] text-left focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+        >
+          <span
+            data-point-sentence=""
+            className="truncate text-[12px] font-medium text-white"
+          >
+            {pointSentence(point, names)}
+          </span>
+          <span
+            data-point-detail=""
+            className="truncate text-[11px]"
+            style={{ color: "rgba(255,255,255,0.45)" }}
+          >
+            {pointDetail(point, names)}
+          </span>
+        </button>
+
+        <span data-row-tail="" className="inline-flex items-center gap-2">
+          {pointChangedByYou(point) ? (
+            <span
+              role="img"
+              aria-label="Changed by you"
+              className="inline-flex"
+            >
+              <Pencil
+                className="size-[11px] text-[var(--blue)]"
+                strokeWidth={2}
+                aria-hidden="true"
+              />
+            </span>
+          ) : null}
+        </span>
+
+        <span
+          data-point-score=""
+          className="mono tabular truncate text-right text-[11px]"
+          style={{ color: "rgba(255,255,255,0.85)" }}
+        >
+          {score ?? (
+            <>
+              <span aria-hidden="true" className="text-white/35">
+                —
+              </span>
+              <span className="sr-only">No score</span>
+            </>
+          )}
+        </span>
+
+        {/* Collapsed to nothing until the row is reached for, so the score
+            keeps the tick's side; open, it takes its width and the score
+            slides left. A menu open from here holds it open. */}
+        <span
+          data-row-actions=""
+          data-cell=""
+          onClick={(event) => event.stopPropagation()}
+          className={cn(
+            "inline-flex items-center gap-0.5 transition-opacity duration-200",
+            playing
+              ? "opacity-100"
+              : "w-0 overflow-hidden opacity-0 group-focus-within/row:w-auto group-focus-within/row:overflow-visible group-focus-within/row:opacity-100 group-hover/row:w-auto group-hover/row:overflow-visible group-hover/row:opacity-100 has-[[aria-expanded=true]]:w-auto has-[[aria-expanded=true]]:overflow-visible has-[[aria-expanded=true]]:opacity-100",
+          )}
+        >
+          {showNote ? (
+            <BlackNoteAction point={point} number={number} edit={edit} />
+          ) : null}
+          {operations ? (
+            <PointMenu
+              point={point}
+              number={number}
+              // The group above owns the reveal; inside it the ⋯ is just there.
+              open
+              edit={edit}
+              operations={operations}
+              tone="dark"
+            />
+          ) : null}
+        </span>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-cell=""
+              data-check-row=""
+              aria-pressed={checked}
+              aria-label={`Point ${number} checked`}
+              disabled={!operations}
+              onClick={(event) => {
+                event.stopPropagation();
+                operations?.onSetChecked(point.id, !checked);
+              }}
+              className={cn(
+                "flex size-[22px] items-center justify-center rounded-[var(--radius-button)] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                operations && "cursor-pointer",
+                checked
+                  ? "text-[var(--success)]"
+                  : playing
+                    ? "text-white/50"
+                    : "text-white/[0.22] group-hover/row:text-white/50",
+                operations && !checked && "hover:text-white",
+              )}
+            >
+              <Check
+                className="size-3.5"
+                strokeWidth={2.2}
+                aria-hidden="true"
+              />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            {checked ? "Point checked" : "Mark point checked"}
+          </TooltipContent>
+        </Tooltip>
+
+        {/* The playing row's rule, as the points rail draws it: out of the
+            grid's flow, so it takes no track. */}
+        {playing && playingWindow ? (
+          <span
+            aria-hidden="true"
+            data-playing-rule=""
+            className="absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]"
+            style={{
+              width: filmProgressWidth(playingWindow.start, playingWindow.end),
+            }}
+          />
+        ) : null}
+      </div>
+
+      {open ? (
+        <div id={shotsId} data-shots-for={point.id}>
+          {children}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+// ── The winner mark ────────────────────────────────────────────────────────
+
+const SIDES: readonly LabelSide[] = ["p1", "p2"];
+
+/**
+ * The frame's `.bk-mk`: a 30px square with the winner's initial — p1 on
+ * `--blue`, p2 on a white wash. Two grounds, not two hues, as down the
+ * table's own column. No winner yet is the wash with a dash.
+ */
+function BlackWinnerMark({
+  side,
+  names,
+}: {
+  side: LabelSide | null;
+  names: SideNames;
+}) {
+  return (
+    <span
+      data-winner-mark={side ?? "none"}
+      aria-hidden="true"
+      className={cn(
+        "flex size-[30px] shrink-0 items-center justify-center rounded-[var(--radius-button)] text-[11px] leading-none font-medium tracking-[0.3px]",
+        side === "p1"
+          ? "bg-[var(--blue)] text-white"
+          : "bg-white/[0.14] text-white/90",
+      )}
+    >
+      {side ? sideInitial(side, names) : "—"}
+    </span>
+  );
+}
+
+/**
+ * The winner mark as the control that changes it — the table row's menu
+ * (`label-point-row.tsx`'s `WinnerCell`) on the dark surface: the two players,
+ * the current one checked; choosing the other saves `{ winner }`. Read-only,
+ * it is the mark alone.
+ */
+function BlackWinnerCell({
+  point,
+  number,
+  edit,
+}: {
+  point: LabelPoint;
+  number: number;
+  edit: EditContext;
+}) {
+  const [open, setOpen] = useState(false);
+  const { names } = edit;
+  const name = point.winner
+    ? `Point ${number} won by ${names[point.winner]}`
+    : `Point ${number} winner not labelled`;
+  if (!edit.editable) {
+    return (
+      <span role="img" aria-label={name} className="flex">
+        <BlackWinnerMark side={point.winner} names={names} />
+      </span>
+    );
+  }
+  return (
+    // `data-cell` keeps the row from toggling; the stopPropagation catches
+    // clicks inside the menu, which portals out of the row's DOM but still
+    // bubbles through its React tree.
+    <span
+      data-cell=""
+      className="flex"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <FloatMenu
+        open={open}
+        onOpenChange={setOpen}
+        align="start"
+        sideOffset={8}
+        width={260}
+        tone="dark"
+        label={`Who won point ${number}`}
+        trigger={
+          <button
+            type="button"
+            aria-label={name}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            className={cn(
+              "cursor-pointer rounded-[var(--radius-button)] transition-shadow duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+              open && "shadow-[0_0_0_1.5px_rgba(255,255,255,0.5)]",
+            )}
+          >
+            <BlackWinnerMark side={point.winner} names={names} />
+          </button>
+        }
+      >
+        <FloatMenuLabel>Won the point</FloatMenuLabel>
+        {SIDES.map((side) => {
+          const chosen = side === point.winner;
+          return (
+            <FloatMenuItem
+              key={side}
+              label={names[side]}
+              description={
+                chosen ? undefined : "Recalculates the scores after this point"
+              }
+              chosen={chosen}
+              onSelect={() => {
+                setOpen(false);
+                if (!chosen) edit.onPatchPoint?.(point.id, { winner: side });
+              }}
+            />
+          );
+        })}
+      </FloatMenu>
+    </span>
+  );
+}
+
+// ── The note ───────────────────────────────────────────────────────────────
+
+/**
+ * The row's Note action — the frame's `.bk-ib`, white once the point has a
+ * note. It opens the table row's own note cell (`EditableCell` + `TextEditor`,
+ * the same parse and the same `{ note }` patch) on the dark menu surface: the
+ * field is there at once, Enter or leaving it saves, and a saved note closes
+ * the popover. Read-only, the popover is the note's text.
+ */
+function BlackNoteAction({
+  point,
+  number,
+  edit,
+}: {
+  point: LabelPoint;
+  number: number;
+  edit: EditContext;
+}) {
+  const [open, setOpen] = useState(false);
+  const { note } = point;
+  const label = `Point ${number} note`;
+  return (
+    <Tooltip>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-note-action=""
+              data-has-note={note ? "" : undefined}
+              aria-label={note ? `${label}: ${note}` : label}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+              className={cn(
+                "flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                note ? "text-white" : "text-white/55",
+                open && "bg-white/[0.08] text-white",
+              )}
+            >
+              <StickyNote
+                className="size-[13px]"
+                strokeWidth={1.6}
+                aria-hidden="true"
+              />
+            </button>
+          </TooltipTrigger>
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          sideOffset={4}
+          aria-label={label}
+          className={cn(floatMenuToneClasses("dark"), "w-[300px]")}
+        >
+          <p className="px-[9px] pt-[7px] pb-[5px] text-[11px] text-white/50">
+            Note on point {number}
+          </p>
+          {/* The field pulls itself 11px left to sit over a table cell's
+              text; the inset here hands that back. */}
+          <div className="pt-0.5 pr-[9px] pb-[7px] pl-5">
+            <EditableCell
+              editable={edit.editable}
+              rowSelected
+              label={label}
+              valueText={note ?? "None"}
+              display={
+                <span className="-ml-[11px] block text-[12px] whitespace-normal text-white/85">
+                  {note}
+                </span>
+              }
+              editor={
+                <TextEditor
+                  label={label}
+                  text={note ?? ""}
+                  parse={parseNote}
+                  onCommit={(value) => {
+                    edit.onPatchPoint?.(point.id, {
+                      note: value as string | null,
+                    });
+                    setOpen(false);
+                  }}
+                />
+              }
+            />
+          </div>
+        </PopoverContent>
+      </Popover>
+      {open ? null : <TooltipContent side="top">Note</TooltipContent>}
+    </Tooltip>
+  );
+}
+
+// ── The game band ──────────────────────────────────────────────────────────
+
+/** `LIST_TONE.dark`'s game header, on the row's own 14px inset. */
+const BAND = "flex items-center px-[14px] pt-[13px] pb-[5px]";
+const BAND_LABEL = "mono text-[9px] tracking-[1.4px] uppercase";
+const BAND_META = "mono tabular text-[10px]";
+/** The frame's `.bk-gl` and `.bk-gm` inks. */
+const BAND_LABEL_INK = "text-white/45";
+const BAND_META_INK = "text-white/40";
+
+/**
+ * A game band in the rail's dark tone — the frame's `.bk-gh`, and
+ * `LabelGameBand` (`label-game-band.tsx`) word for word: "Set N · Game M"
+ * (or "Set N · Tiebreak" / "Match tiebreak") on the left, the set's games
+ * before it and who serves on the right. With both callbacks the game's name
+ * and its server are triggers opening the same two menus on the dark
+ * surface; without them — a read-only console — the band only reads.
+ *
+ * The model, the words and the menus' rows are that file's (`gameBandModel`,
+ * `gameBandServes`, `gameBandMenus`); only the paint is this one's.
+ */
+export function BlackGameBand({
+  band,
+  points,
+  names,
+  onSetGameType,
+  onSetGameServer,
+}: {
+  band: LabelGameBandScore;
+  points: readonly LabelPoint[];
+  names: SideNames;
+  /** Both absent: no menus, the band only reads. */
+  onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
+  onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
+}) {
+  const model = gameBandModel(band, points);
+  const serves = gameBandServes(model, names);
+  const menus =
+    onSetGameType && onSetGameServer
+      ? gameBandMenus(model, names, { onSetGameType, onSetGameServer })
+      : null;
+  return (
+    <div
+      data-game-band={`${band.setNumber}-${band.gameNumber}`}
+      data-game-type={model.type}
+      className={BAND}
+    >
+      {menus ? (
+        <span className="flex items-center">
+          {model.setLabel ? (
+            <span className={cn(BAND_LABEL, BAND_LABEL_INK)}>
+              {model.setLabel} ·
+            </span>
+          ) : null}
+          <BlackBandMenu
+            kind="type"
+            name={`Game type: ${model.gameLabel}`}
+            menuLabel="Game type"
+            align="start"
+            rows={menus.type}
+            ink={BAND_LABEL_INK}
+            // With no set before it, the trigger's text starts the band.
+            className={cn(BAND_LABEL, !model.setLabel && "-ml-1.5")}
+          >
+            {model.gameLabel}
+          </BlackBandMenu>
+        </span>
+      ) : (
+        <span className={cn(BAND_LABEL, BAND_LABEL_INK)}>
+          {model.setLabel ? `${model.setLabel} · ` : ""}
+          {model.gameLabel}
+        </span>
+      )}
+      <span className="flex-1" />
+      {menus ? (
+        <span className="flex items-center">
+          <span className={cn(BAND_META, BAND_META_INK)}>{model.score} ·</span>
+          <BlackBandMenu
+            kind="server"
+            name={
+              model.server ? `Server: ${names[model.server]}` : "Server: none"
+            }
+            menuLabel={`Who serves ${model.gameLabel}`}
+            caption={
+              model.type === "game" ? "Serving this game" : "Serving first"
+            }
+            align="end"
+            rows={menus.server}
+            ink={BAND_META_INK}
+            className={cn(BAND_META, "-mr-1.5")}
+          >
+            {serves}
+          </BlackBandMenu>
+        </span>
+      ) : (
+        <span className={cn(BAND_META, BAND_META_INK)}>
+          {model.score} · {serves}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One of the dark band's triggers and its menu — `label-game-band.tsx`'s
+ * `BandMenu` on the dark surface. 22px tall for the pointer, taking 14px of
+ * the band (`-my-1`), so a band with menus is as tall as one without.
+ */
+function BlackBandMenu({
+  kind,
+  name,
+  menuLabel,
+  caption,
+  align,
+  rows,
+  ink,
+  className,
+  children,
+}: {
+  kind: "type" | "server";
+  /** The trigger's accessible name: what it is, and what it is set to. */
+  name: string;
+  menuLabel: string;
+  caption?: string;
+  align: "start" | "end";
+  rows: readonly GameBandMenuRow[];
+  /** The trigger's resting ink — the label's or the meta's. */
+  ink: string;
+  /** The trigger's type, and any edge pull. */
+  className: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <FloatMenu
+      open={open}
+      onOpenChange={setOpen}
+      align={align}
+      sideOffset={6}
+      width={290}
+      tone="dark"
+      label={menuLabel}
+      trigger={
+        <button
+          type="button"
+          aria-label={name}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          data-game-menu={kind}
+          className={cn(
+            "-my-1 flex h-[22px] cursor-pointer items-center gap-[5px] rounded-[6px] px-1.5 transition-[color,background-color] duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+            className,
+            open
+              ? "bg-white/[0.12] text-white"
+              : cn(ink, "hover:bg-white/[0.08] hover:text-white"),
+          )}
+        >
+          {children}
+          <ChevronDown
+            className="size-2.5 shrink-0 opacity-70"
+            strokeWidth={1.6}
+            aria-hidden="true"
+          />
+        </button>
+      }
+    >
+      {caption ? <FloatMenuLabel>{caption}</FloatMenuLabel> : null}
+      {rows.map((row) => (
+        <FloatMenuItem
+          key={row.key}
+          label={row.label}
+          description={row.description}
+          chosen={row.chosen}
+          onSelect={() => {
+            setOpen(false);
+            row.run();
+          }}
+        />
+      ))}
+    </FloatMenu>
+  );
+}

@@ -1,0 +1,141 @@
+import { labelShotValues } from "@/lib/services/labels/edit";
+import {
+  isGhostShot,
+  type LabelPoint,
+  type LabelShot,
+  type LabelSide,
+} from "@/lib/services/labels/session";
+import { shotPlacement } from "@/lib/services/labels/shot-derived";
+import { STROKE_LABEL, spinLabel, type SideNames } from "./label-format";
+import { pointSummary } from "./label-point-row";
+
+/**
+ * The black full-screen view's two lines for a point (board 08l's `.bk-t` and
+ * `.bk-d`) — the points rail's sentence and detail, read off the LABELS rather
+ * than the derived match: "Forehand error by Goodman" over
+ * "Flat Down the Line · 12:45 · 7 shot rally".
+ *
+ * Pure: the row (`label-black-point-row.tsx`) prints these, and a spec reads
+ * them without rendering.
+ */
+
+type SentencePoint = Pick<
+  LabelPoint,
+  "pointIndex" | "ending" | "endedBy" | "server" | "shots"
+>;
+
+/** The strokes the rally is made of now: no tombstones, no site-removed ghosts. */
+function liveShots(point: Pick<LabelPoint, "shots">): LabelShot[] {
+  return point.shots.filter(
+    (shot) => shot.status !== "deleted" && !isGhostShot(shot),
+  );
+}
+
+function isServe(shot: Pick<LabelShot, "stroke">): boolean {
+  return shot.stroke === "first_serve" || shot.stroke === "second_serve";
+}
+
+/** " by Goodman", or nothing when nobody is named. */
+function by(side: LabelSide | null, names: SideNames): string {
+  return side ? ` by ${names[side]}` : "";
+}
+
+/**
+ * How the point ended, as a sentence:
+ *   · "{Stroke} winner by {name}" / "{Stroke} error by {name}" — the last live
+ *     stroke's name and who `endedBy` says ended it ("Winner by …" when the
+ *     point has no stroke named);
+ *   · "Ace by {name}", "Service winner by {name}", "Double fault by {name}" —
+ *     `endedBy`, or the server when it is not set, since only the server can;
+ *   · "Let, replayed", "Not a point";
+ *   · "Point N" when the ending is not labelled yet.
+ */
+export function pointSentence(point: SentencePoint, names: SideNames): string {
+  switch (point.ending) {
+    case null:
+      return `Point ${point.pointIndex + 1}`;
+    case "ace":
+      return `Ace${by(point.endedBy ?? point.server, names)}`;
+    case "service_winner":
+      return `Service winner${by(point.endedBy ?? point.server, names)}`;
+    case "double_fault":
+      return `Double fault${by(point.endedBy ?? point.server, names)}`;
+    case "let_replayed":
+      return "Let, replayed";
+    case "not_a_point":
+      return "Not a point";
+    case "winner":
+    case "error": {
+      const last = liveShots(point).at(-1);
+      const stroke = last?.stroke ? STROKE_LABEL[last.stroke] : null;
+      const how = stroke
+        ? `${stroke} ${point.ending}`
+        : point.ending === "winner"
+          ? "Winner"
+          : "Error";
+      return `${how}${by(point.endedBy, names)}`;
+    }
+  }
+}
+
+/**
+ * Seconds → the rail's clock: "12:45", or "1:02:03" past the hour. Whole
+ * seconds, no tenths — the second the stroke falls in, as a player's clock
+ * shows it. (`formatVideoTime` keeps the tenths, for the strokes' own cells.)
+ */
+export function formatClockTime(seconds: number): string {
+  const whole = Math.floor(Math.max(0, seconds));
+  const h = Math.floor(whole / 3600);
+  const m = Math.floor((whole % 3600) / 60);
+  const s = String(whole % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}
+
+/** "Second serve" → "Second Serve", as the rail's detail line spells a serve. */
+function titleCase(text: string): string {
+  return text.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+}
+
+/**
+ * The second line: "{spin} {placement} · {m:ss} · {n} shot rally".
+ *   · spin and placement are the LAST live stroke's — the shot that decided
+ *     the point — in the shot row's own words (`spinLabel`, `shotPlacement`);
+ *     a serve is named before its placement ("Kick Second Serve T");
+ *   · the time is the first live stroke's that has one, where the point
+ *     starts on the film;
+ *   · the rally is `pointSummary`'s count, which includes the serve — so a
+ *     point of the serve alone (an ace, a double fault) says "serve only", as
+ *     does one with no stroke in its rally at all.
+ * A part with nothing to say is left out, with its middot.
+ */
+export function pointDetail(
+  point: Pick<LabelPoint, "shots">,
+  // Kept beside `pointSentence`'s: the line names no player today.
+  _names?: SideNames,
+): string {
+  const live = liveShots(point);
+  const last = live.at(-1);
+  const parts: string[] = [];
+
+  if (last) {
+    const shot = [
+      spinLabel(last.stroke, last.spin),
+      isServe(last) && last.stroke
+        ? titleCase(STROKE_LABEL[last.stroke])
+        : null,
+      shotPlacement(labelShotValues(last)),
+    ].filter(Boolean);
+    if (shot.length > 0) parts.push(shot.join(" "));
+  }
+
+  const timed = live.find((shot) => shot.videoTime !== null);
+  if (timed && timed.videoTime !== null) {
+    parts.push(formatClockTime(timed.videoTime));
+  }
+
+  const { rally } = pointSummary(point);
+  const serveOnly = rally === 0 || (rally === 1 && !!last && isServe(last));
+  parts.push(serveOnly ? "serve only" : `${rally} shot rally`);
+
+  return parts.join(" · ");
+}

@@ -422,7 +422,7 @@ ready).
 
 ## T30 · Black mode vocabulary, rail constants, and the two-line black point row
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/admin/labels/label-layout.ts, src/components/admin/labels/label-layout-control.tsx, src/components/admin/labels/label-black-format.ts (new), src/components/admin/labels/label-black-point-row.tsx (new), tests/label-layout.spec.ts, tests/label-black-rows.spec.ts (new) (guess)
 - **routes:** /admin/labels/2c862516-2f3b-49e8-b336-0485483839bd
