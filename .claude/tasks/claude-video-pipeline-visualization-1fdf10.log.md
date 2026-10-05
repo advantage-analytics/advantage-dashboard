@@ -471,3 +471,16 @@ Decisions:
 
 1. `missing_point.pointNumbers` assume points are passed in `point_index` order.
 2. Some params are nullable in type only; drop the mark rather than widen the hover copy if that matters.
+
+## T35 · Mark copy (08m word for word), flag life-cycle, and the row roll-up — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New pure `marks-copy.ts` (`MARK_LABEL`, `fixLabel`, `markHover` with the players' names, wording from 08m) and `marks-state.ts` (`markState`: open / settled / checked / checked-as-is / dismissed, derived from the point, its shots and `dismissed`; `stateHover`; `markStates` and `rollupMarks` for the row's flag chip, fix chip and pencil).
+
+**follow-ups:**
+
+1. Restore should drop or quieten the `phantom_strokes_dropped` chip (T38).
+2. A dismissed-then-edited flag reads dismissed, not settled.
+3. The settled hover names the ending even for flags not about the ending.
+4. Four fallback hover lines (null params, plural removed shots) are not from the board.

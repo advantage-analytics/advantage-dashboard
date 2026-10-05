@@ -493,7 +493,7 @@ ready).
 
 ## T35 · Mark copy (08m word for word), flag life-cycle, and the row roll-up
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T34
 - **files:** src/lib/services/labels/marks-copy.ts (new), src/lib/services/labels/marks-state.ts (new), tests/label-marks-copy.spec.ts (new) (guess)
