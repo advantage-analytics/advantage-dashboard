@@ -290,11 +290,35 @@ test.describe("games and sets", () => {
     ];
     const { games } = labelScores(points, true);
     expect(games).toEqual([
-      { setNumber: 1, gameNumber: 1, gameInSet: 1, gamesBefore: "0–0" },
-      { setNumber: 1, gameNumber: 2, gameInSet: 2, gamesBefore: "1–0" },
-      { setNumber: 1, gameNumber: 3, gameInSet: 3, gamesBefore: "2–0" },
+      {
+        setNumber: 1,
+        gameNumber: 1,
+        gameInSet: 1,
+        gamesBefore: "0–0",
+        winner: "p1",
+      },
+      {
+        setNumber: 1,
+        gameNumber: 2,
+        gameInSet: 2,
+        gamesBefore: "1–0",
+        winner: "p1",
+      },
+      {
+        setNumber: 1,
+        gameNumber: 3,
+        gameInSet: 3,
+        gamesBefore: "2–0",
+        winner: "p2",
+      },
       // A new set starts from nothing.
-      { setNumber: 2, gameNumber: 4, gameInSet: 1, gamesBefore: "0–0" },
+      {
+        setNumber: 2,
+        gameNumber: 4,
+        gameInSet: 1,
+        gamesBefore: "0–0",
+        winner: "p2",
+      },
     ]);
   });
 

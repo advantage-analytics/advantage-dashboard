@@ -46,6 +46,11 @@ import {
   insertLabelPoint,
   type LabelInsertPointResult,
 } from "@/lib/services/labels/point-insert-session";
+import type { LabelSessionFieldsPatch } from "@/lib/services/labels/session-fields";
+import {
+  updateLabelSessionFields,
+  type LabelSessionFieldsResult,
+} from "@/lib/services/labels/session-fields-session";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
 
@@ -236,4 +241,18 @@ export async function insertLabelPointAction(
   beforePointId: string,
 ): Promise<LabelInsertPointResult> {
   return insertLabelPoint(sessionId, beforePointId);
+}
+
+/**
+ * The "Score doesn't add up" banner's answers (board 08m): `final_score`
+ * (the match's score as the labeller reads it, `[p1, p2]` games per set) and
+ * `video_ends_early`, on `label_sessions` and nothing else — `matches` is
+ * never written. Refused on a complete session, on one labelled without
+ * marks, and for any other key.
+ */
+export async function updateLabelSessionFieldsAction(
+  sessionId: string,
+  patch: LabelSessionFieldsPatch,
+): Promise<LabelSessionFieldsResult> {
+  return updateLabelSessionFields(sessionId, patch);
 }

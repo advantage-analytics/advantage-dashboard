@@ -18,8 +18,15 @@ import type {
   LabelGameType,
   LabelPoint,
   LabelSide,
+  MatchScore,
 } from "@/lib/services/labels/session";
+import {
+  enteredScore,
+  labelSetScores,
+  scoreMismatch,
+} from "@/lib/services/labels/set-scores";
 import { cn } from "@/lib/utils";
+import { LabelScoreBanner } from "./label-black-banner";
 import {
   BlackDeletedPoint,
   BlackGameBand,
@@ -43,7 +50,11 @@ import type { SaveStatus } from "./save-status";
  *
  * A 46px header — "{player1} vs {player2}", "{checked} / {total} checked",
  * the save line in its dark tone and the way out (`Minimize2`, "Exit full
- * screen") — over the ONE scroller (`data-label-rail-scroller`), which is
+ * screen") — then, when the labelled points make a set score the entered one
+ * disagrees with, the "Score doesn't add up" banner (`LabelScoreBanner`,
+ * board 08m's `BANNER`; only with marks built, and not once the labeller has
+ * said the video ends early) — over the ONE scroller
+ * (`data-label-rail-scroller`), which is
  * what the console's follow scroll moves: a `BlackGameBand` before each
  * game's first live point, a `BlackPointRow` per point with the score before
  * it and its marks (board 08m, `label-black-mark.tsx`) in its tail, a
@@ -94,6 +105,12 @@ export function LabelBlackRail({
   playingPointId = null,
   playingShotId = null,
   playingWindow = null,
+  finalScore = null,
+  videoEndsEarly = null,
+  matchScore = null,
+  onFixEnteredScore,
+  onVideoEndsEarly,
+  onFindGap,
 }: {
   player1Name: string;
   player2Name: string;
@@ -143,11 +160,38 @@ export function LabelBlackRail({
   playingPointId?: string | null;
   playingShotId?: string | null;
   playingWindow?: PlayingWindow | null;
+  /**
+   * The banner's reading (the console's session state): the score the
+   * labeller entered, whether they said the video ends early, and the match
+   * record's score as the fallback the labelled points are held against.
+   */
+  finalScore?: number[][] | null;
+  videoEndsEarly?: boolean | null;
+  matchScore?: MatchScore | null;
+  /**
+   * The banner's answers. Given all three, the banner carries them; absent,
+   * it is words alone. `onFixEnteredScore` gets the labelled sets as
+   * `[p1, p2]` pairs — what `final_score` stores.
+   */
+  onFixEnteredScore?: (finalScore: number[][]) => void;
+  onVideoEndsEarly?: () => void;
+  onFindGap?: (pointId: string | null) => void;
 }) {
   const scores = useMemo(
     () => labelScores(points, adScoring),
     [points, adScoring],
   );
+  // The banner's arithmetic, over the same rows as the scoreboard: shown
+  // only with marks built (never on a session labelled blind), not once the
+  // labeller has said the video ends early, and only on a disagreement.
+  const labelledSets = useMemo(
+    () => labelSetScores(points, adScoring),
+    [points, adScoring],
+  );
+  const mismatch =
+    marks !== null && videoEndsEarly !== true
+      ? scoreMismatch(labelledSets, enteredScore(finalScore, matchScore))
+      : null;
   const edit: EditContext = {
     editable,
     names,
@@ -203,6 +247,22 @@ export function LabelBlackRail({
           />
         </button>
       </div>
+
+      {mismatch ? (
+        <LabelScoreBanner
+          mismatch={mismatch}
+          onFixEnteredScore={
+            onFixEnteredScore && editable
+              ? () =>
+                  onFixEnteredScore(
+                    labelledSets.map((set) => [set.games[0], set.games[1]]),
+                  )
+              : undefined
+          }
+          onVideoEndsEarly={editable ? onVideoEndsEarly : undefined}
+          onFindGap={editable ? onFindGap : undefined}
+        />
+      ) : null}
 
       {/* The scroller and the pill's positioning context: the pill sits over
           the rows rather than among them, so it stays put while they move. */}

@@ -72,6 +72,12 @@ import {
 } from "@/lib/services/labels/point-insert";
 import type { LabelInsertPointResult } from "@/lib/services/labels/point-insert-session";
 import { applyPointReset, applyShotReset } from "@/lib/services/labels/reset";
+import {
+  applyLabelSessionPatch,
+  type LabelSessionFields,
+  type LabelSessionFieldsPatch,
+} from "@/lib/services/labels/session-fields";
+import type { LabelSessionFieldsResult } from "@/lib/services/labels/session-fields-session";
 import { applySiteRemovalRestore } from "@/lib/services/labels/site-removal";
 import type { LabelSiteRemovalRestoreResult } from "@/lib/services/labels/site-removal-session";
 import { applyDismiss } from "@/lib/services/labels/suggestions";
@@ -81,7 +87,12 @@ import {
   followAffordance,
   type PointFocus,
 } from "@/components/dashboard/matches/match-detail/film/film-timeline";
-import { useFollowScroll } from "@/components/dashboard/matches/match-detail/film/use-follow-scroll";
+import { reducedMotionNow } from "@/components/dashboard/matches/match-detail/film/film-motion";
+import {
+  REFOLLOW_JUMP_INSET_PX,
+  followScrollTarget,
+  useFollowScroll,
+} from "@/components/dashboard/matches/match-detail/film/use-follow-scroll";
 import { cn } from "@/lib/utils";
 import type { CourtPoint } from "./court-geometry";
 import {
@@ -361,6 +372,12 @@ export function LabelConsole({
   // The marks beside those points. State, not a prop read: the page builds
   // them once per render and later tasks revise them as rows change.
   const [marks] = useState<LabelMarks | null>(initialMarks);
+  // The two session fields the score banner writes (board 08m), held beside
+  // the rows so an answer re-evaluates the banner at once.
+  const [sessionFields, setSessionFields] = useState<LabelSessionFields>({
+    finalScore: session.finalScore,
+    videoEndsEarly: session.videoEndsEarly,
+  });
   // The point open while nothing is playing: see the file comment.
   const [restPointId, setRestPointId] = useState<string | null>(() =>
     initialExpandedPointId !== undefined
@@ -962,6 +979,85 @@ export function LabelConsole({
       if (result) holdPoint(result.point.id);
     });
   }
+
+  /**
+   * One of the score banner's two writes (board 08m's "Fix the entered
+   * score" / "Video ends early"): the session's fields change at once, the
+   * server is asked, and they come back on a refusal — `runOperation`'s
+   * shape, on the session's two fields rather than the rows. `label_sessions`
+   * only; the match record is never written.
+   */
+  async function updateSessionFields(patch: LabelSessionFieldsPatch) {
+    if (!operations) return;
+    const before = sessionFields;
+    setSessionFields((fields) => applyLabelSessionPatch(fields, patch));
+    dispatchSave({ type: "start" });
+    const result = await settle(
+      operations.updateSessionFields(session.id, patch),
+    );
+    if ("error" in result) {
+      setSessionFields(before);
+      dispatchSave({ type: "failure", message: result.error });
+      return;
+    }
+    setSessionFields((fields) => applyLabelSessionPatch(fields, result.fields));
+    dispatchSave({ type: "success", at: Date.now() });
+  }
+
+  /**
+   * "Find the gap": navigation only. The mismatching set's first point is
+   * held open and the video seeks to its first stroke, as a row click does;
+   * the row is then brought to the rail's top (`gapScrollTo`, below). With
+   * no such point — the rows stop before that set — the last labelled point
+   * is where the gap begins. Nothing is written.
+   */
+  const gapScrollTo = useRef<string | null>(null);
+  function findGap(pointId: string | null) {
+    const live = points.filter((point) => point.status !== "deleted");
+    const target = pointId ?? live[live.length - 1]?.id ?? null;
+    if (target === null) return;
+    player.current?.loopShot(null);
+    setPlacement(NO_PLACEMENT);
+    holdPoint(target);
+    const point = live.find((p) => p.id === target);
+    const first = point?.shots.find(
+      (shot) => shot.status !== "deleted" && shot.videoTime !== null,
+    );
+    if (first?.videoTime != null) player.current?.seekTo(first.videoTime);
+    gapScrollTo.current = target;
+  }
+  // The follow scroll moves nothing while held, so the jump is made here
+  // with its own arithmetic once the hold has rendered the row: its top
+  // `REFOLLOW_JUMP_INSET_PX` under the rail's, as a re-follow jump lands. A
+  // ref, not state: the request is consumed by the commit after the hold
+  // and must not render anything itself.
+  useEffect(() => {
+    const gapPointId = gapScrollTo.current;
+    if (gapPointId === null) return;
+    gapScrollTo.current = null;
+    const scroller = scrollerRef.current;
+    const row = scroller?.querySelector<HTMLElement>(
+      `[data-point-id="${gapPointId}"]`,
+    );
+    if (!scroller || !row) return;
+    const box = scroller.getBoundingClientRect();
+    const top = followScrollTarget(
+      "jump",
+      row.getBoundingClientRect(),
+      {
+        top: box.top,
+        bottom: box.bottom,
+        scrollTop: scroller.scrollTop,
+        maxScrollTop: scroller.scrollHeight - scroller.clientHeight,
+      },
+      REFOLLOW_JUMP_INSET_PX,
+    );
+    if (top === null) return;
+    scroller.scrollTo({
+      top,
+      behavior: reducedMotionNow() ? "auto" : "smooth",
+    });
+  });
 
   function deletePoint(pointId: string) {
     const before = points.find((point) => point.id === pointId);
@@ -1638,6 +1734,20 @@ export function LabelConsole({
             playingPointId={playingPointId}
             playingShotId={playing?.shotId ?? null}
             playingWindow={playingWindow}
+            finalScore={sessionFields.finalScore}
+            videoEndsEarly={sessionFields.videoEndsEarly}
+            matchScore={session.matchScore}
+            onFixEnteredScore={
+              operable
+                ? (sets) => void updateSessionFields({ final_score: sets })
+                : undefined
+            }
+            onVideoEndsEarly={
+              operable
+                ? () => void updateSessionFields({ video_ends_early: true })
+                : undefined
+            }
+            onFindGap={operable ? findGap : undefined}
           />
         </LabelBlackView>
       ) : layoutMode === "docked-top" ? (
@@ -1814,6 +1924,14 @@ export interface LabelConsoleOperations {
     sessionId: string,
     beforePointId: string,
   ) => Promise<LabelInsertPointResult>;
+  /**
+   * The score banner's answers (board 08m): `final_score` and
+   * `video_ends_early` on `label_sessions`, the only table it writes.
+   */
+  updateSessionFields: (
+    sessionId: string,
+    patch: LabelSessionFieldsPatch,
+  ) => Promise<LabelSessionFieldsResult>;
 }
 
 /** The dock bar's "Point N · shot M", numbered as the table numbers them. */

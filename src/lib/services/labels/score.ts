@@ -71,6 +71,11 @@ export interface LabelGameBand {
   gameInSet: number;
   /** Games already won in this set before this one, p1 first: "2–0". */
   gamesBefore: string;
+  /**
+   * Who won the game: the winner of its last counted point, or null while
+   * no point of it counts. What `set-scores.ts` tallies a set from.
+   */
+  winner: LabelSide | null;
 }
 
 export interface LabelScores {
@@ -188,6 +193,7 @@ export function labelScores(
       gameNumber: game.gameNumber,
       gameInSet: set.rank,
       gamesBefore: `${set.won.p1}–${set.won.p2}`,
+      winner: game.winner,
     });
     if (game.winner) set.won[game.winner] += 1;
   }

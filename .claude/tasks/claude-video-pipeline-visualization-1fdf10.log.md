@@ -545,3 +545,15 @@ Decisions:
 1. The shift and insert are separate statements; a failure midway leaves a gap in `point_index`.
 2. Later points keep their score before a New point has a winner (score.ts unchanged); the frame shows a dash.
 3. The light layouts draw an added point as a plain row.
+
+## T41 · "Score doesn't add up" banner with its label_sessions-only actions — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New `set-scores.ts` (`labelSetScores`, `enteredScore`, `scoreMismatch`) and `LabelScoreBanner` above the rail's list when marks are on, the video is not marked as ending early and the labelled set score differs from the entered one. "Fix the entered score" and "Video ends early" write only `label_sessions` (`final_score`, `video_ends_early`) through new `session-fields*.ts` and an action; "Find the gap" holds and scrolls to the mismatching set's first point and writes nothing. `LabelGameBand` gains `winner`.
+
+**follow-ups:**
+
+1. No way to clear `video_ends_early` or `final_score` once set.
+2. The banner shows from the first open on any session whose derived set score differs from the entered one.
+3. When the entered score has more sets than the rows, Find the gap goes to the last labelled point.

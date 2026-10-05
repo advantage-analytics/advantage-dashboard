@@ -580,7 +580,7 @@ ready).
 
 ## T41 · "Score doesn't add up" banner with its label_sessions-only actions
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T33, T36
 - **files:** src/lib/services/labels/set-scores.ts (new), src/lib/services/labels/score.ts, src/lib/services/labels/session-fields.ts (new), src/lib/services/labels/session-fields-session.ts (new), src/app/admin/labels/actions.ts, src/app/admin/labels/[sessionId]/page.tsx, src/components/admin/labels/label-black-banner.tsx (new), src/components/admin/labels/label-black-rail.tsx, src/components/admin/labels/label-console.tsx, tests/label-set-scores.spec.ts (new), tests/label-session-fields.spec.ts (new) (guess)
