@@ -43,7 +43,8 @@ import {
   type GameBandMenuRow,
 } from "./label-game-band";
 import { PointMenu } from "./label-point-menu";
-import { parseNote } from "./label-point-row";
+import { BlackUndoButton } from "./label-black-shot-row";
+import { parseNote, pointSummary } from "./label-point-row";
 import {
   sideInitial,
   type EditContext,
@@ -318,6 +319,52 @@ export function BlackPointRow({
         </div>
       ) : null}
     </>
+  );
+}
+
+// ── A deleted point ────────────────────────────────────────────────────────
+
+/**
+ * A deleted point, in the rail: ONE quiet line on the row's own first track
+ * and padding — a dash where the number was, "Deleted point" and where it
+ * was on the film — with Undo always at the right edge.
+ *
+ * The light table's tombstone (`DeletedPoint`) folds open to a ghost of the
+ * row on the light table's eleven tracks, far wider than the rail, with Undo
+ * in a column the rail never reaches and light-theme ink throughout. Nothing
+ * folds open here, so `openTombstoneIds` is not read. A deleted point has no
+ * score and no band. Undo is the same request (`onRestorePoint`), absent on
+ * a session that cannot be written.
+ */
+export function BlackDeletedPoint({
+  point,
+  edit,
+}: {
+  point: LabelPoint;
+  edit: EditContext;
+}) {
+  const { operations } = edit;
+  const time = pointSummary(point).time;
+  return (
+    <div
+      data-row="deleted-point"
+      data-tombstone-id={point.id}
+      className="grid h-[30px] grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-[10px] px-[14px]"
+    >
+      <span aria-hidden="true" className="mono text-[10px] text-white/25">
+        –
+      </span>
+      <span className="min-w-0 truncate text-[11px] text-white/45">
+        Deleted point
+        {time ? <span className="text-white/35"> · {time}</span> : null}
+      </span>
+      {operations ? (
+        <BlackUndoButton
+          label={`Undo delete point ${point.pointIndex + 1}`}
+          onClick={() => operations.onRestorePoint(point.id)}
+        />
+      ) : null}
+    </div>
   );
 }
 

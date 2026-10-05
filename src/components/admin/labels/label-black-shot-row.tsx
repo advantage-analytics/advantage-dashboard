@@ -16,6 +16,7 @@ import {
   labelShotValues,
   type LabelShotPatch,
 } from "@/lib/services/labels/edit";
+import { isLabelDeleteReason } from "@/lib/services/labels/operations";
 import { canResetShot } from "@/lib/services/labels/reset";
 import { shotPlacement } from "@/lib/services/labels/shot-derived";
 import { courtPair } from "./label-black-format";
@@ -26,6 +27,7 @@ import {
   type SelectOption,
 } from "./label-cells";
 import {
+  DELETE_REASON_LABEL,
   RESULT_LABEL,
   STROKE_LABEL,
   formatCourtPoint,
@@ -37,7 +39,6 @@ import {
 } from "./label-format";
 import { sideLabel, type EditContext } from "./label-row-parts";
 import {
-  DeletedShot,
   STROKE_OPTIONS,
   isFault,
   positionPatch,
@@ -61,9 +62,35 @@ import {
 /**
  * The frame's `.bk-sr` tracks: number · time · player · stroke · spin ·
  * hit at · landed at · placement · result.
+ *
+ * The frame draws them for a 640px rail — 22 · 48 · 54 · 80 · 52 · 88 · 88 ·
+ * 88 and what is left — and that is exactly what each `minmax()` here grows
+ * to: a grid fills every track to its maximum before the `1fr` takes
+ * anything, so at 640 and wider the row is the frame's. But the rail goes
+ * down to 520 (`RAIL_MIN_PX`), where those fixed tracks alone need 612 and
+ * pushed the result off the rail. So the words give: each track's MINIMUM is
+ * what its shortest useful reading needs, the minimums with the gaps and the
+ * padding come to 518, and a word that no longer fits truncates (a select's
+ * whole word is in its menu, the placement's in a tooltip). The two positions never give — they are the numbers being checked.
+ *
+ * The row's two requests take NO track: they are an overlay on its right
+ * edge (`data-shot-actions`), so reaching for a row never moves a column.
  */
 const ROW_GRID =
-  "grid grid-cols-[22px_48px_54px_80px_52px_88px_88px_88px_minmax(0,1fr)] items-center gap-x-2 h-[34px] px-[14px]";
+  "relative grid grid-cols-[22px_minmax(44px,48px)_minmax(36px,54px)_minmax(52px,80px)_minmax(30px,52px)_88px_88px_minmax(38px,88px)_minmax(28px,1fr)] items-center gap-x-2 h-[34px] px-[14px]";
+
+/**
+ * The ground under the row's two requests: the rail's own `--surface-dark`
+ * with the washes the row is wearing painted back over it — the well's, then
+ * the lit row's or the hovered one's — so the patch is the row's colour and
+ * the result text it covers does not show through the buttons. Its left 16px
+ * fade in (a mask), so the words run under it rather than into an edge.
+ */
+const WELL_WASH = "rgba(255,255,255,0.035)";
+function actionsGround(lit: boolean): string {
+  const wash = lit ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)";
+  return `linear-gradient(${wash},${wash}),linear-gradient(${WELL_WASH},${WELL_WASH})`;
+}
 
 /** The frame's `.bk-em`: a value that is not there. */
 const EMPTY_INK = "rgba(255,255,255,0.25)";
@@ -93,18 +120,7 @@ export function BlackShotsWell({
   let n = 0;
   for (const shot of point.shots) {
     if (shot.status === "deleted") {
-      rows.push(
-        // The tombstone is the light table's, on its own wide tracks: inset
-        // to the well's 14px, and scrolled rather than cut when it is open,
-        // so its Undo can always be reached.
-        <div
-          key={shot.id}
-          data-well-tombstone=""
-          className="overflow-x-auto px-[3px]"
-        >
-          <DeletedShot shot={shot} edit={edit} />
-        </div>,
-      );
+      rows.push(<BlackDeletedShot key={shot.id} shot={shot} edit={edit} />);
       continue;
     }
     n += 1;
@@ -129,6 +145,8 @@ export function BlackShotsWell({
           type="button"
           data-add-shot=""
           onClick={() => operations.onAddShot(point.id, null)}
+          // The row's own first track and gap, so the plus sits under the
+          // numbers and the words under the times, at any rail width.
           className="grid h-[34px] w-full cursor-pointer grid-cols-[22px_minmax(0,1fr)] items-center gap-x-2 px-[14px] text-left text-[11px] font-medium text-white/70 transition-colors duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
         >
           <Plus
@@ -158,9 +176,10 @@ export function BlackShotsWell({
  * (`positionPatch`), exactly as a court click does.
  *
  * The row's two requests — Reset (an edited stroke with a seed) and Delete —
- * sit at the result cell's right edge, there only on hover, on focus and on
- * the selected row, so the row at rest is the frame's. Each only ASKS, as the
- * light row's do: the console opens the confirm.
+ * are an overlay on the row's right edge, out of the grid, there only on
+ * hover, on focus and on the selected row, so the row at rest is the frame's
+ * and no column moves when they appear. Each only ASKS, as the light row's
+ * do: the console opens the confirm.
  *
  * LIT — selected, or the stroke the film is on — is the frame's `.bk-lit`
  * wash. A FAULT, a serve that did not go in, is a step quieter throughout:
@@ -297,12 +316,28 @@ export function BlackShotRow({
         muted={fault}
         onCommit={(p) => patch(positionPatch(shot, "landing", p))}
       />
-      <span
-        data-calculated="placement"
-        className={cn("min-w-0 truncate text-[11px]", words)}
-      >
-        {placement ?? <Dash label="No placement" />}
-      </span>
+      {placement ? (
+        // The one word here nobody can open an editor on, in a track that
+        // narrows with the rail: whole in the tooltip when it is cut.
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              data-calculated="placement"
+              className={cn("min-w-0 truncate text-[11px]", words)}
+            >
+              {placement}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top">{placement}</TooltipContent>
+        </Tooltip>
+      ) : (
+        <span
+          data-calculated="placement"
+          className={cn("min-w-0 truncate text-[11px]", words)}
+        >
+          <Dash label="No placement" />
+        </span>
+      )}
       <span
         data-calculated="result"
         className={cn(
@@ -320,44 +355,130 @@ export function BlackShotRow({
             />
           </span>
         ) : null}
-        {operations ? (
-          <span
-            data-shot-actions=""
-            className={cn(
-              "ml-auto inline-flex items-center gap-0.5 transition-opacity duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
-              selected ? "opacity-100" : "opacity-0",
-            )}
-          >
-            {canResetShot(shot) ? (
-              <RowAction
-                attr="data-reset-row"
-                label={`Reset shot ${number}`}
-                tooltip="Reset shot"
-                onClick={() =>
-                  operations.onAskResetShot(shot.id, number, pointNumber)
-                }
-              >
-                <RotateCcw
-                  className="size-3"
-                  strokeWidth={1.6}
-                  aria-hidden="true"
-                />
-              </RowAction>
-            ) : null}
+      </span>
+      {operations ? (
+        <span
+          data-shot-actions=""
+          className={cn(
+            "absolute inset-y-0 right-0 flex items-center gap-0.5 bg-[var(--surface-dark)] [mask-image:linear-gradient(to_right,transparent,black_16px)] pr-[10px] pl-5 transition-opacity duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
+            // Hidden, it is not in the pointer's way either: a click on the
+            // result under it selects the row. A selected row waits for the
+            // pointer or the keyboard too, so its result stays readable.
+            "pointer-events-none opacity-0 group-focus-within/row:pointer-events-auto group-hover/row:pointer-events-auto",
+          )}
+          style={{ backgroundImage: actionsGround(lit) }}
+        >
+          {canResetShot(shot) ? (
             <RowAction
-              attr="data-delete-row"
-              label={`Delete shot ${number}`}
-              tooltip="Delete shot"
+              attr="data-reset-row"
+              label={`Reset shot ${number}`}
+              tooltip="Reset shot"
               onClick={() =>
-                operations.onAskDeleteShot(shot.id, number, pointNumber)
+                operations.onAskResetShot(shot.id, number, pointNumber)
               }
             >
-              <X className="size-3" strokeWidth={1.6} aria-hidden="true" />
+              <RotateCcw
+                className="size-3"
+                strokeWidth={1.6}
+                aria-hidden="true"
+              />
             </RowAction>
-          </span>
-        ) : null}
-      </span>
+          ) : null}
+          <RowAction
+            attr="data-delete-row"
+            label={`Delete shot ${number}`}
+            tooltip="Delete shot"
+            onClick={() =>
+              operations.onAskDeleteShot(shot.id, number, pointNumber)
+            }
+          >
+            <X className="size-3" strokeWidth={1.6} aria-hidden="true" />
+          </RowAction>
+        </span>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * A deleted stroke, in the well: ONE quiet line on the row's own first track
+ * and padding — a dash where the number was, "Deleted shot", its time and
+ * why it went — with Undo always at the right edge, on a track of its own so
+ * the words truncate before it moves.
+ *
+ * The light table's tombstone (`DeletedShot`) folds open to a ghost of the
+ * row on the light table's eleven tracks; in a rail a third that width the
+ * ghost ran 1,195px and took Undo off-screen with it, in light-theme ink.
+ * There is nothing to fold open here, so `openTombstoneIds` is not read. Undo
+ * is the same request (`onRestoreShot`), and is absent on a session that
+ * cannot be written.
+ */
+export function BlackDeletedShot({
+  shot,
+  edit,
+}: {
+  shot: LabelShot;
+  edit: EditContext;
+}) {
+  const { operations } = edit;
+  const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
+  const reason = isLabelDeleteReason(shot.deleteReason)
+    ? DELETE_REASON_LABEL[shot.deleteReason]
+    : null;
+  const facts = [time, reason].filter(Boolean).join(" · ");
+  return (
+    <div
+      data-row="deleted-shot"
+      data-tombstone-id={shot.id}
+      data-well-tombstone=""
+      className="grid h-[30px] grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-2 px-[14px]"
+    >
+      <span
+        aria-hidden="true"
+        className="mono text-[10px]"
+        style={{ color: EMPTY_INK }}
+      >
+        –
+      </span>
+      <span className="min-w-0 truncate text-[11px] text-white/45">
+        Deleted shot
+        {facts ? <span className="text-white/35"> · {facts}</span> : null}
+      </span>
+      {operations ? (
+        <BlackUndoButton
+          label={time ? `Undo delete shot at ${time}` : "Undo delete shot"}
+          onClick={() => operations.onRestoreShot(shot.id)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Undo, on black: the light table's blue words are the room's white ones —
+ * 70% to full on hover, as every text action in the dark tone. It never
+ * reaches the row under it.
+ */
+export function BlackUndoButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-undo-delete=""
+      aria-label={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-white/70 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+    >
+      Undo
+    </button>
   );
 }
 
@@ -473,7 +594,9 @@ const NUM = "mono tabular w-8 flex-none text-right text-[10px]";
  * one em dash in the first slot, the second left empty.
  *
  * The mark stays put while the two numbers give way to the light table's
- * field — "x, y" in metres, typed; the court click is the other way in.
+ * field — "x, y" in metres, typed; the court click is the other way in. The
+ * dark field (`FIELD_DARK`, label-cells.tsx) is sized for the longest pair,
+ * thirteen characters ("-10.10, 24.82"), in what this 88px track leaves.
  */
 function BlackPositionCell({
   editable,

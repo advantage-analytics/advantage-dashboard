@@ -167,6 +167,28 @@ export function followScrollTarget(
 }
 
 /**
+ * What the continuous keep-in-view holds when the surface asks for the
+ * playing point's own row to stay on screen with its lit shot
+ * (`keepPointRow`): the span from the point row to the shot, while that span
+ * fits the box — so a seek BACK to an earlier point, whose shot then sits
+ * above the box, brings the row down with it instead of parking the shot at
+ * the box's top edge with its row cut off above. A rally longer than the box
+ * cannot show both; there the shot wins, as it does without the option. With
+ * no shot row to be found (a point with no stroke yet, a stroke that is a
+ * tombstone) the point row is the whole of it.
+ */
+export function followKeepSpan(
+  shot: FollowRow | null,
+  pointRow: FollowRow | null,
+  boxHeight: number,
+): FollowRow | null {
+  if (!shot || !pointRow) return shot ?? pointRow;
+  const top = Math.min(pointRow.top, shot.top);
+  const bottom = Math.max(pointRow.bottom, shot.bottom);
+  return bottom - top <= boxHeight ? { top, bottom } : shot;
+}
+
+/**
  * Whether a key press is the viewer scrolling. Not when something already
  * handled it (`defaultPrevented`), not inside a form control, and not Space
  * on a button or a row acting as one — there it is the control's activation,
@@ -256,6 +278,12 @@ export interface FollowScrollOptions {
   onHoldPoint: (pointId: string | null) => void;
   /** Fixed chrome over the scroller's box, taken off its top and bottom. */
   insets?: FollowInsets;
+  /**
+   * Keep the playing point's own row in the box along with its lit shot
+   * (`followKeepSpan`). For a list whose point row is what says which point
+   * the open well belongs to — the labelling console. Default `false`.
+   */
+  keepPointRow?: boolean;
 }
 
 export function useFollowScroll({
@@ -268,6 +296,7 @@ export function useFollowScroll({
   displayedPointId,
   onHoldPoint,
   insets,
+  keepPointRow = false,
 }: FollowScrollOptions): {
   /** Up while the hook's own smooth scroll is in flight. */
   followScrolling: RefObject<boolean>;
@@ -315,12 +344,22 @@ export function useFollowScroll({
     if (!target || !selector) return;
     const root: ParentNode =
       target === window ? document : (target as HTMLElement);
-    const row = root.querySelector<HTMLElement>(selector);
+    const box = readBox(target, insetTop, insetBottom);
+    const lit =
+      root.querySelector<HTMLElement>(selector)?.getBoundingClientRect() ??
+      null;
+    const pointRow =
+      keepPointRow && !jump && activePointId
+        ? (root
+            .querySelector<HTMLElement>(`[data-point-id="${activePointId}"]`)
+            ?.getBoundingClientRect() ?? null)
+        : null;
+    const row = followKeepSpan(lit, pointRow, box.bottom - box.top);
     if (!row) return;
     const top = followScrollTarget(
       jump ? "jump" : "keep",
-      row.getBoundingClientRect(),
-      readBox(target, insetTop, insetBottom),
+      row,
+      box,
       REFOLLOW_JUMP_INSET_PX,
     );
     if (top === null) return;
@@ -352,6 +391,7 @@ export function useFollowScroll({
     scroller,
     insetTop,
     insetBottom,
+    keepPointRow,
   ]);
 
   useEffect(() => {

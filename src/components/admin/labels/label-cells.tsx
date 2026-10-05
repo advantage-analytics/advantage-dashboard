@@ -164,14 +164,24 @@ const SELECT_TRIGGER =
  * The black full-screen view's fields (`label-black-shot-row.tsx`): the same
  * two boxes on the room's black — a white wash inside a white hairline, 26px
  * for a 34px row, at the row's own 10/11px. Its tracks are a third the light
- * table's, so the chrome is 4px of padding (pulled back with `-ml-[5px]`),
- * runs 2px into the gap after it, and the select drops its chevron: the box
- * already says it is a control, and the word needs the room.
+ * table's, so the chrome is 3–4px of padding (pulled back by that plus the
+ * 1px border), runs into the gap after it, and the select drops its chevron:
+ * the box already says it is a control, and the word needs the room.
+ *
+ * The text field is the tighter of the two — 3px of padding, 5px into the
+ * 8px gap, its mono digits tracked in by 0.05em — because a position is the
+ * longest thing typed here: "-10.10, 24.82" is thirteen characters, and in
+ * its 88px track (less the ring or dot before it) the looser box cut the
+ * last one off.
+ *
+ * Text that does not parse turns this field's border `--danger` and keeps it
+ * there while focused (`data-invalid`): the blue focus border must not
+ * outrank it, since the field is always focused while the mistake is typed.
  */
 export type EditorTone = "light" | "dark";
 
 const FIELD_DARK =
-  "-ml-[5px] flex h-[26px] w-[calc(100%+7px)] min-w-0 items-center rounded-[var(--radius-button)] border border-white/20 bg-white/[0.08] transition-colors duration-200 focus-within:border-[var(--blue)]";
+  "-ml-[4px] flex h-[26px] w-[calc(100%+9px)] min-w-0 items-center rounded-[var(--radius-button)] border border-white/20 bg-white/[0.08] transition-colors duration-200 focus-within:border-[var(--blue)] data-[invalid]:focus-within:border-[var(--danger)]";
 
 const SELECT_TRIGGER_DARK =
   "-ml-[5px] h-[26px] w-[calc(100%+7px)] min-w-0 shrink border-white/20 bg-white/[0.08] px-1 text-[11px] text-white hover:bg-white/[0.14] aria-expanded:border-[var(--blue)] [&>svg]:hidden";
@@ -246,7 +256,7 @@ export function SelectEditor({
   value: string | null;
   options: readonly SelectOption[];
   onChange: (value: string | null) => void;
-  /** The trigger's chrome; the menu it opens is the design system's own. */
+  /** The trigger's chrome, and the tone of the menu it opens. */
   tone?: EditorTone;
 }) {
   return (
@@ -264,6 +274,7 @@ export function SelectEditor({
         placeholder="—"
         align="start"
         width="trigger"
+        tone={tone}
         className={tone === "dark" ? SELECT_TRIGGER_DARK : SELECT_TRIGGER}
       />
     </span>
@@ -338,7 +349,7 @@ export function TextEditor({
         }}
         className={
           tone === "dark"
-            ? "mono tabular h-full w-full min-w-0 bg-transparent px-1 text-[10px] text-white outline-none"
+            ? "mono tabular h-full w-full min-w-0 bg-transparent px-[3px] text-[10px] tracking-[-0.05em] text-white outline-none"
             : "tabular h-full w-full min-w-0 bg-transparent px-[10px] text-[13px] text-[var(--ink-900)] outline-none"
         }
       />

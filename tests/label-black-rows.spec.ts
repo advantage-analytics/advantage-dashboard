@@ -4,6 +4,10 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import {
+  RAIL_DEFAULT_PX,
+  RAIL_MIN_PX,
+} from "@/components/admin/labels/label-layout";
 import { labelScores } from "@/lib/services/labels/score";
 import type {
   LabelPoint,
@@ -27,6 +31,7 @@ type Names = { p1: string; p2: string };
 
 const FORMAT = "src/components/admin/labels/label-black-format.ts";
 const ROW = "src/components/admin/labels/label-black-point-row.tsx";
+const MENU_SELECT = "src/components/ui/menu-select.tsx";
 
 function format() {
   return createLoader().load(FORMAT) as {
@@ -722,7 +727,7 @@ test.describe("the black shots well", () => {
     expect(html).not.toContain("--ink-900");
 
     // Four live strokes, numbered 1…4 as the light table numbers them; the
-    // tombstone between them takes no number and is the light table's own.
+    // tombstone between them takes no number.
     const ids = [...html.matchAll(/data-shot-id="([^"]+)"/g)].map((m) => m[1]);
     expect(ids).toEqual(["w-fault", "w-serve", "w-return", "w-lit"]);
     for (const [index, id] of ids.entries()) {
@@ -789,12 +794,52 @@ test.describe("the black shots well", () => {
     const html = renderWell();
     const row = shotRow(html, "w-return");
     const open = tag(row, 'data-row="shot"');
-    expect(open).toContain(
-      "grid-cols-[22px_48px_54px_80px_52px_88px_88px_88px_minmax(0,1fr)]",
-    );
-    for (const cls of ["gap-x-2", "h-[34px]", "px-[14px]"]) {
+    for (const cls of ["relative", "gap-x-2", "h-[34px]", "px-[14px]"]) {
       expect(open).toContain(cls);
     }
+
+    // The tracks: the frame's at 640 — every `minmax()` grows to the frame's
+    // width before the 1fr takes anything — and narrow enough at their
+    // minimums to fit the rail's narrowest, with the gaps and the padding.
+    const tracks = /grid-cols-\[([^\]]+)\]/.exec(open)![1].split("_");
+    expect(tracks).toHaveLength(9);
+    const bounds = tracks.map((track) => {
+      const range = /^minmax\((\d+)px,(\d+px|1fr)\)$/.exec(track);
+      if (range) {
+        return {
+          min: Number(range[1]),
+          max: range[2] === "1fr" ? null : parseInt(range[2], 10),
+        };
+      }
+      const fixed = /^(\d+)px$/.exec(track);
+      expect(fixed, track).not.toBeNull();
+      return { min: Number(fixed![1]), max: Number(fixed![1]) };
+    });
+    // number · time · player · stroke · spin · hit · landed · placement.
+    expect(bounds.slice(0, 8).map((b) => b.max)).toEqual([
+      22, 48, 54, 80, 52, 88, 88, 88,
+    ]);
+    // The result is the one flexible track, and never nothing.
+    expect(bounds[8]).toEqual({ min: 28, max: null });
+    // The two positions never give.
+    expect(bounds[5]).toEqual({ min: 88, max: 88 });
+    expect(bounds[6]).toEqual({ min: 88, max: 88 });
+    const GAPS = 8 * 8;
+    const PADDING = 2 * 14;
+    const narrowest =
+      bounds.reduce((sum, b) => sum + b.min, 0) + GAPS + PADDING;
+    expect(narrowest).toBeLessThanOrEqual(RAIL_MIN_PX);
+    // At the default rail the frame's eight tracks fit whole, with the
+    // result's minimum.
+    expect(
+      bounds.slice(0, 8).reduce((sum, b) => sum + b.max!, 0) +
+        bounds[8].min +
+        GAPS +
+        PADDING,
+    ).toBeLessThanOrEqual(RAIL_DEFAULT_PX);
+
+    // A word its track can no longer hold truncates.
+    expect(tag(row, 'data-calculated="placement"')).toContain("truncate");
     expect(open).not.toContain("data-selected");
     expect(open).not.toContain("data-playing");
     expect(open).not.toContain("bg-white/[0.12]");
@@ -988,13 +1033,35 @@ test.describe("the black shots well", () => {
     ]);
   });
 
-  test("Delete and Reset: hidden at rest, there on the selected row, asking the console", () => {
+  test("Delete and Reset: hidden at rest, shown on hover or focus, asking the console", () => {
     const html = renderWell({ selectedShotId: "w-return" });
     // The edited, seeded stroke, selected: both, Reset before Delete.
     const edited = shotRow(html, "w-return");
     const group = tag(edited, "data-shot-actions");
     expect(group).toContain("opacity-100");
-    expect(group).not.toContain(" opacity-0");
+    expect(group).toContain(" opacity-0");
+    // An overlay on the row's right edge, out of the grid: it takes no
+    // track, so nothing moves when it appears, and it cannot be cut off by
+    // a narrow rail. On the rail's own ground, faded in from the left.
+    for (const cls of [
+      "absolute",
+      "inset-y-0",
+      "right-0",
+      "bg-[var(--surface-dark)]",
+      "[mask-image:linear-gradient(to_right,transparent,black_16px)]",
+    ]) {
+      expect(group, cls).toContain(cls);
+    }
+    expect(group).not.toContain("ml-auto");
+    expect(group).toContain("background-image:linear-gradient(");
+    // Not inside the result cell any more: a sibling of it, the row's last.
+    const resultCell = edited.slice(
+      edited.indexOf('data-calculated="result"'),
+      edited.indexOf("data-shot-actions"),
+    );
+    expect(resultCell.match(/<span/g)?.length ?? 0).toBe(
+      resultCell.match(/<\/span>/g)?.length ?? 0,
+    );
     expect(edited.indexOf("data-shot-actions")).toBeGreaterThan(
       edited.indexOf('data-calculated="result"'),
     );
@@ -1016,6 +1083,8 @@ test.describe("the black shots well", () => {
     expect(kept).not.toContain("data-reset-row");
     const hidden = tag(kept, "data-shot-actions");
     expect(hidden).toContain("opacity-0");
+    expect(hidden).toContain("pointer-events-none");
+    expect(hidden).toContain("absolute");
     expect(hidden).toContain("group-hover/row:opacity-100");
     expect(hidden).toContain("group-focus-within/row:opacity-100");
     expect(tag(kept, 'data-row="shot"')).toContain("group/row");
@@ -1086,6 +1155,141 @@ test.describe("the black shots well", () => {
       ["delete", "w-return", 3, 7],
     ]);
     expect(selected).toEqual([]);
+  });
+
+  test("a deleted stroke is one dark line that fits the rail, with Undo", () => {
+    const restored: string[] = [];
+    const operations = {
+      ...OPERATIONS,
+      onRestoreShot: (id: string) => restored.push(id),
+    };
+    const html = renderWell({ operations });
+    const at = html.indexOf('data-tombstone-id="w-gone"');
+    const line = html.slice(
+      html.lastIndexOf("<div", at),
+      html.indexOf('<div data-row="shot"', at),
+    );
+    const open = tag(line, "data-tombstone-id");
+    expect(open).toContain('data-row="deleted-shot"');
+    expect(open).toContain("data-well-tombstone");
+    // Three tracks — the number's, the words, Undo — none of them the
+    // light table's, and nothing to fold open.
+    expect(open).toContain("grid-cols-[22px_minmax(0,1fr)_auto]");
+    expect(open).toContain("px-[14px]");
+    expect(line).not.toContain("aria-expanded");
+    expect(line).not.toContain("ghost-shot");
+    expect(line).not.toContain("overflow-x-auto");
+    expect(text(line)).toMatch(/^– Deleted shot( · .+)? Undo$/);
+    expect(line).toContain("text-white/45");
+    expect(line).toContain("truncate");
+    // No light-theme ink.
+    expect(line).not.toMatch(/--ink-|--danger|--surface-card/);
+    const undo = tag(line, "data-undo-delete");
+    expect(undo).toMatch(/aria-label="Undo delete shot( at [\d:.]+)?"/);
+    expect(undo).toContain("text-white/70");
+    expect(undo).toContain("shrink-0");
+
+    // The same restore the light tombstone asks for, and not a row click.
+    const { BlackDeletedShot } = createLoader().load(WELL) as {
+      BlackDeletedShot: (props: Record<string, unknown>) => React.ReactElement;
+    };
+    const gone = rally().shots.find((s) => s.id === "w-gone");
+    const tree = BlackDeletedShot({
+      shot: gone,
+      edit: wellEdit({ operations }),
+    });
+    const button = (
+      React.Children.toArray(
+        (tree.props as { children: React.ReactNode }).children,
+      ) as React.ReactElement<Record<string, unknown>>[]
+    ).at(-1)!;
+    const rendered = (button.type as (p: unknown) => React.ReactElement)(
+      button.props,
+    ) as React.ReactElement<Record<string, unknown>>;
+    let stopped = 0;
+    (rendered.props.onClick as (e: unknown) => void)({
+      stopPropagation: () => (stopped += 1),
+    });
+    expect(restored).toEqual(["w-gone"]);
+    expect(stopped).toBe(1);
+
+    // Read-only, or with nothing to ask: the line, no Undo.
+    for (const frozen of [
+      renderWell({}, false),
+      renderWell({ operations: undefined }),
+    ]) {
+      expect(frozen).toContain('data-tombstone-id="w-gone"');
+      expect(frozen).not.toContain("data-undo-delete");
+    }
+  });
+
+  test("a deleted point is the same line in the rail", () => {
+    const { BlackDeletedPoint } = createLoader().load(ROW) as {
+      BlackDeletedPoint: (props: Record<string, unknown>) => React.ReactElement;
+    };
+    const restored: string[] = [];
+    const point = { ...rally(), id: "p-gone", status: "deleted" };
+    const html = renderToStaticMarkup(
+      React.createElement(BlackDeletedPoint, {
+        point,
+        edit: wellEdit({
+          operations: {
+            ...OPERATIONS,
+            onRestorePoint: (id: string) => restored.push(id),
+          },
+        }),
+      }),
+    );
+    const open = tag(html, "data-tombstone-id");
+    expect(open).toContain('data-row="deleted-point"');
+    expect(open).toContain('data-tombstone-id="p-gone"');
+    expect(open).toContain("grid-cols-[22px_minmax(0,1fr)_auto]");
+    expect(html).not.toContain("aria-expanded");
+    expect(html).not.toMatch(/--ink-|--danger|--surface-card/);
+    expect(text(html)).toMatch(/^– Deleted point( · .+)? Undo$/);
+    expect(tag(html, "data-undo-delete")).toContain(
+      `aria-label="Undo delete point ${point.pointIndex + 1}"`,
+    );
+    const frozen = renderToStaticMarkup(
+      React.createElement(BlackDeletedPoint, {
+        point,
+        edit: wellEdit({}, false),
+      }),
+    );
+    expect(frozen).toContain("Deleted point");
+    expect(frozen).not.toContain("data-undo-delete");
+  });
+
+  test("the dark fields: a menu in the dark tone, room for a position, danger while invalid", () => {
+    const cells = readFileSync(CELLS, "utf8");
+    // The select hands its tone to the menu it opens.
+    expect(cells).toMatch(
+      /<MenuSelect[\s\S]*?\btone=\{tone\}[\s\S]*?className=\{tone === "dark" \? SELECT_TRIGGER_DARK : SELECT_TRIGGER\}/,
+    );
+    const menu = readFileSync(MENU_SELECT, "utf8");
+    expect(menu).toContain('tone = "light",');
+    expect(menu).toContain("tone?: FloatMenuTone;");
+    expect(menu).toMatch(/<FloatMenu\b[\s\S]*?\btone=\{tone\}/);
+
+    // The text field: 3px of padding and tracked-in digits, 9px wider than
+    // its cell — thirteen characters of a position in an 88px track.
+    const dark = /const FIELD_DARK =\s*"([^"]+)"/.exec(cells)![1];
+    expect(dark).toContain("-ml-[4px]");
+    expect(dark).toContain("w-[calc(100%+9px)]");
+    expect(cells).toContain("px-[3px] text-[10px] tracking-[-0.05em]");
+    // 88px track − 7px mark − 6px gap = 75px cell; + 9px, − 2px border,
+    // − 6px padding = 76px for 13 characters at 10px mono (0.6em advance)
+    // less the tracking, with the caret's 2px.
+    const room = 88 - 7 - 6 + 9 - 2 - 6;
+    const need = 13 * (6 - 0.5) + 2;
+    expect(need).toBeLessThanOrEqual(room);
+
+    // Invalid outranks focus.
+    expect(dark).toContain("focus-within:border-[var(--blue)]");
+    expect(dark).toContain(
+      "data-[invalid]:focus-within:border-[var(--danger)]",
+    );
+    expect(cells).toContain('data-invalid={invalid ? "" : undefined}');
   });
 
   test("the light table's cells are untouched but for exports and a tone", () => {

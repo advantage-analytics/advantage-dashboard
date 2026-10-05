@@ -9,6 +9,7 @@ import {
   FloatMenuLabel,
   FloatMenuNote,
 } from "@/components/ui/float-menu";
+import type { FloatMenuTone } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 
 export interface MenuOption<T extends string> {
@@ -53,6 +54,7 @@ export function MenuSelect<T extends string>({
   placeholder,
   align,
   scroll = false,
+  tone = "light",
 }: {
   /** Accessible name — the visible caption or row label sits beside it. */
   label: string;
@@ -88,6 +90,14 @@ export function MenuSelect<T extends string>({
    * length of — a division's conferences run to forty — rather than a design.
    */
   scroll?: boolean;
+  /**
+   * The MENU's tone, handed straight to `FloatMenu`: `"dark"` for a select on
+   * a black surface (the label console's full-screen rows), where a white
+   * menu would be the brightest thing in the room. The trigger is not
+   * touched — a dark surface styles its own through `className`. Default
+   * `"light"`.
+   */
+  tone?: FloatMenuTone;
 }) {
   const [open, setOpen] = useState(false);
   const current = options.find((option) => option.value === value);
@@ -158,6 +168,7 @@ export function MenuSelect<T extends string>({
       onOpenChange={setOpen}
       trigger={trigger}
       label={label}
+      tone={tone}
       align={align ?? (variant === "underline" ? "start" : "end")}
       width={width ?? (variant === "underline" ? "trigger" : 232)}
       className={

@@ -1265,6 +1265,9 @@ export function LabelConsole({
     displayedPointId: openPointId,
     onHoldPoint: holdPoint,
     insets,
+    // The point row with its lit stroke: after a seek back to an earlier
+    // point the stroke alone would park at the box's top, its row cut above.
+    keepPointRow: true,
   });
 
   // The way back while held and a point is playing (T23); nothing in follow
@@ -1419,28 +1422,37 @@ export function LabelConsole({
       data-label-layout-mode={layoutMode}
       className="flex min-h-0 flex-1 flex-col gap-6"
     >
-      <div className="flex shrink-0 items-end justify-between gap-8">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <h1 className="text-display truncate">
-            Label match · {session.player1Name} vs {session.player2Name}
-          </h1>
-          <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--ink-600)]">
-            <span className="tabular">
-              {checked} of {total} points checked
-            </span>
-            {session.status === "complete" ? <span>· Complete</span> : null}
-            <span aria-hidden="true">·</span>
-            <span className="mono text-[11px] text-[var(--ink-500)]">
-              derivation {session.derivationVersion}
-            </span>
-          </p>
+      {/* Not in the black view: it covers the whole page, and a header drawn
+          under it is a row of Tab stops nobody can see. Its title, progress
+          and save line are the rail header's there; the way out is the
+          rail's own "Exit full screen". */}
+      {black ? null : (
+        <div
+          data-console-header=""
+          className="flex shrink-0 items-end justify-between gap-8"
+        >
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <h1 className="text-display truncate">
+              Label match · {session.player1Name} vs {session.player2Name}
+            </h1>
+            <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--ink-600)]">
+              <span className="tabular">
+                {checked} of {total} points checked
+              </span>
+              {session.status === "complete" ? <span>· Complete</span> : null}
+              <span aria-hidden="true">·</span>
+              <span className="mono text-[11px] text-[var(--ink-500)]">
+                derivation {session.derivationVersion}
+              </span>
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-5">
+            <LabelSaveStatus status={saveStatus} />
+            <LabelLayoutControl mode={layoutMode} onChange={chooseLayout} />
+            {headerAction}
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-5">
-          <LabelSaveStatus status={saveStatus} />
-          <LabelLayoutControl mode={layoutMode} onChange={chooseLayout} />
-          {headerAction}
-        </div>
-      </div>
+      )}
 
       {black ? (
         // Full screen (T33): the film room's `fixed inset-0 z-50` layer, a

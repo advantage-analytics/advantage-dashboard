@@ -19,10 +19,13 @@ import type {
   LabelSide,
 } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
-import { BlackGameBand, BlackPointRow } from "./label-black-point-row";
+import {
+  BlackDeletedPoint,
+  BlackGameBand,
+  BlackPointRow,
+} from "./label-black-point-row";
 import { BlackShotsWell } from "./label-black-shot-row";
 import type { SideNames } from "./label-format";
-import { DeletedPoint } from "./label-point-row";
 import type {
   EditContext,
   LabelRowOperations,
@@ -40,8 +43,10 @@ import type { SaveStatus } from "./save-status";
  * screen") — over the ONE scroller (`data-label-rail-scroller`), which is
  * what the console's follow scroll moves: a `BlackGameBand` before each
  * game's first live point, a `BlackPointRow` per point with the score before
- * it, the light table's own tombstone (`DeletedPoint`) for a deleted one,
- * and the recessed shots well (`BlackShotsWell`) under the open point only.
+ * it, a one-line dark tombstone with its Undo (`BlackDeletedPoint`) for a
+ * deleted one, and the recessed shots well (`BlackShotsWell`) under the open
+ * point only. The scroller never scrolls sideways: every row is built to fit
+ * the rail from its narrowest (520px), and `overflow-x-hidden` holds that.
  * The "Now playing" pill is pinned over the scroller's top-centre while held
  * and a point is playing, as it is over the light table.
  *
@@ -181,14 +186,12 @@ export function LabelBlackRail({
           <div
             ref={scrollerRef}
             data-label-rail-scroller=""
-            className="min-h-0 flex-1 overflow-y-auto pb-2"
+            className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-2"
           >
             {points.map((point) => {
               if (point.status === "deleted") {
                 return (
-                  <div key={point.id} className="px-[14px]">
-                    <DeletedPoint point={point} edit={edit} />
-                  </div>
+                  <BlackDeletedPoint key={point.id} point={point} edit={edit} />
                 );
               }
               const band = bandBefore.get(point.id);

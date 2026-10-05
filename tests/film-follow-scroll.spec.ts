@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  followKeepSpan,
   followScrollTarget,
   followTargetSelector,
   REFOLLOW_JUMP_INSET_PX,
@@ -149,6 +150,79 @@ test.describe("continuous keep-in-view", () => {
     expect(
       followScrollTarget("keep", { top: 56, bottom: 108 }, inset),
     ).toBeNull();
+  });
+});
+
+test.describe("keeping the point row with its lit shot (the label console)", () => {
+  /** The console's black rail: a scroller from y=46 to the window's foot. */
+  const RAIL_BOX: FollowBox = {
+    top: 46,
+    bottom: 900,
+    scrollTop: 2400,
+    maxScrollTop: 9000,
+  };
+  const height = RAIL_BOX.bottom - RAIL_BOX.top;
+
+  test("a seek back: the row comes down with its shot, not the shot alone", () => {
+    // The earlier point's row is 180px above the box, its first shot right
+    // under it. Keeping the shot alone parks the shot at the box's top and
+    // leaves the 52px row cut off above it — the reported position.
+    const pointRow = { top: 46 - 180, bottom: 46 - 180 + 52 };
+    const shot = { top: pointRow.bottom + 4, bottom: pointRow.bottom + 38 };
+    const alone = followScrollTarget("keep", shot, RAIL_BOX)!;
+    expect(pointRow.top - (alone - RAIL_BOX.scrollTop)).toBeLessThan(
+      RAIL_BOX.top,
+    );
+
+    const span = followKeepSpan(shot, pointRow, height)!;
+    expect(span).toEqual({ top: pointRow.top, bottom: shot.bottom });
+    const top = followScrollTarget("keep", span, RAIL_BOX)!;
+    const travel = top - RAIL_BOX.scrollTop;
+    // After the scroll the whole row is inside the box, flush to its top.
+    expect(pointRow.top - travel).toBe(RAIL_BOX.top);
+    expect(pointRow.bottom - travel).toBeLessThanOrEqual(RAIL_BOX.bottom);
+    expect(shot.bottom - travel).toBeLessThanOrEqual(RAIL_BOX.bottom);
+  });
+
+  test("a seek forward: the shot rises to the box's foot with its row above it", () => {
+    const pointRow = { top: 900 + 120, bottom: 900 + 172 };
+    const shot = { top: pointRow.bottom + 4, bottom: pointRow.bottom + 38 };
+    const span = followKeepSpan(shot, pointRow, height)!;
+    const travel = followScrollTarget("keep", span, RAIL_BOX)! - 2400;
+    expect(shot.bottom - travel).toBe(RAIL_BOX.bottom);
+    expect(pointRow.top - travel).toBeGreaterThanOrEqual(RAIL_BOX.top);
+    expect(pointRow.bottom - travel).toBeLessThanOrEqual(RAIL_BOX.bottom);
+  });
+
+  test("row and shot both in the box: nothing moves", () => {
+    const pointRow = { top: 200, bottom: 252 };
+    const shot = { top: 324, bottom: 358 };
+    expect(
+      followScrollTarget(
+        "keep",
+        followKeepSpan(shot, pointRow, height)!,
+        RAIL_BOX,
+      ),
+    ).toBeNull();
+    // The shot in view but its row cut by the top edge: the row comes down.
+    const cut = { top: 20, bottom: 72 };
+    const under = { top: 144, bottom: 178 };
+    expect(
+      followScrollTarget("keep", followKeepSpan(under, cut, height)!, RAIL_BOX),
+    ).toBe(2400 - 26);
+  });
+
+  test("a rally longer than the box: the shot wins", () => {
+    const pointRow = { top: -1200, bottom: -1148 };
+    const shot = { top: 500, bottom: 534 };
+    expect(followKeepSpan(shot, pointRow, height)).toEqual(shot);
+  });
+
+  test("no shot row to find: the point row is the whole of it; neither: nothing", () => {
+    const pointRow = { top: -100, bottom: -48 };
+    expect(followKeepSpan(null, pointRow, height)).toEqual(pointRow);
+    expect(followKeepSpan(pointRow, null, height)).toEqual(pointRow);
+    expect(followKeepSpan(null, null, height)).toBeNull();
   });
 });
 

@@ -1801,8 +1801,17 @@ test.describe("layout modes (T24)", () => {
       expect(black.indexOf("data-label-video-frame")).toBeLessThan(
         black.indexOf("data-label-black-court"),
       );
-      expect(tagOf(black, "data-label-black-video")).toMatch(
-        /class="[^"]*\baspect-video\b[^"]*\bw-full\b/,
+      // The film: 16:9, centred, and capped so the court always keeps two
+      // fifths of the stage (320px at least) — the stage a size container.
+      const film = tagOf(black, "data-label-black-video");
+      expect(film).toMatch(/class="[^"]*\bmx-auto\b[^"]*\baspect-video\b/);
+      expect(film).toMatch(/class="[^"]*\bmax-w-full\b/);
+      expect(film).not.toMatch(/class="(?:[^"]* )?w-full\b/);
+      expect(film).toContain(
+        "width:min(100cqw, max(calc((100cqh - max(320px, 40cqh)) * 16 / 9), 213px))",
+      );
+      expect(tagOf(black, "data-label-black-stage")).toMatch(
+        /class="[^"]*\[container-type:size\]/,
       );
       const court = tagOf(black, "data-label-black-court");
       expect(court).not.toContain("rounded-[var(--radius-card)]");
@@ -1835,6 +1844,27 @@ test.describe("layout modes (T24)", () => {
       expect(separator).toContain('aria-valuemax="880"');
       expect(html).not.toContain('aria-label="Resize video and court"');
       expect(html).not.toContain("data-label-divider");
+
+      // Nothing under the layer to Tab through: the console's own light
+      // header is not drawn at all (the rail's header carries its facts and
+      // the way out), and the page's chrome is made inert on mount.
+      expect(html).not.toContain("data-console-header");
+      expect(html).not.toContain("<h1");
+      expect(html).not.toContain('data-label-layout=""');
+      expect(html.startsWith("<div data-label-console")).toBe(true);
+      expect(html.slice(html.indexOf(">") + 1).startsWith("<div")).toBe(true);
+      expect(html.indexOf('data-label-black=""')).toBeLessThan(
+        html.indexOf(">") + 1 + 200,
+      );
+      const view = readFileSync(
+        "src/components/admin/labels/label-black-view.tsx",
+        "utf8",
+      );
+      expect(view).toContain("ref={inertOutside}");
+      expect(view).toContain("sibling.inert = true;");
+      expect(view).toContain("element.inert = false;");
+      // Never `body`'s own children: Radix portals live there.
+      expect(view).toContain("node.parentElement !== document.body");
 
       // Nothing docked, nothing floating, no light table.
       expect(html).not.toMatch(/data-label-dock\b/);
@@ -1869,12 +1899,21 @@ test.describe("layout modes (T24)", () => {
       expect(rail).not.toContain("Hit at</span>");
       // The scroller is the rail's own, taking the rest of its height.
       expect(tagOf(rail, "data-label-rail-scroller")).toMatch(
-        /class="[^"]*\bmin-h-0\b[^"]*\bflex-1\b[^"]*\boverflow-y-auto\b/,
+        /class="[^"]*\bmin-h-0\b[^"]*\bflex-1\b[^"]*\boverflow-x-hidden\b[^"]*\boverflow-y-auto\b/,
       );
       // The black rows: one per live point, the tombstone's marker, the
       // bands, and the well under the open point only.
       expect(count(rail, /data-row="point"/g)).toBe(3);
       expect(count(rail, /data-row="deleted-point"/g)).toBe(1);
+      // The tombstone is the rail's own dark line — not the light table's
+      // marker and ghost. (Its Undo is label-black-rows.spec.ts's.)
+      const gone = rail.slice(rail.indexOf('data-row="deleted-point"'));
+      const line = gone.slice(0, gone.indexOf("</div>"));
+      expect(line).toContain("Deleted point");
+      expect(line).toContain("text-white/45");
+      expect(line).not.toContain("aria-expanded");
+      expect(rail).not.toContain("ghost-point");
+      expect(rail).not.toContain("ghost-shot");
       expect(count(rail, /data-game-band="/g)).toBeGreaterThan(0);
       expect(rail).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
       expect(count(rail, /data-shots-well/g)).toBe(1);
@@ -1911,18 +1950,7 @@ test.describe("layout modes (T24)", () => {
       expect(rail).toMatch(/data-point-id="[^"]*"[^>]*data-playing="true"/);
     });
 
-    test("the Layout menu lists it, and the other modes draw none of it", () => {
-      const html = render({
-        session: labelSessionFixture(),
-        video: VIDEO,
-        initialLayoutMode: "black",
-      });
-      expect(tagOf(html, 'data-label-layout=""')).toContain(
-        'data-layout-mode="black"',
-      );
-      expect(tagOf(html, 'data-label-layout=""')).toContain(
-        'aria-label="Layout: Full screen"',
-      );
+    test("the other modes draw none of it, and keep the light header it drops", () => {
       for (const initialLayoutMode of [
         undefined,
         "overlay",
@@ -1939,6 +1967,12 @@ test.describe("layout modes (T24)", () => {
         );
         expect(other, String(initialLayoutMode)).not.toContain(
           "data-label-rail",
+        );
+        expect(other, String(initialLayoutMode)).toContain(
+          "data-console-header",
+        );
+        expect(other, String(initialLayoutMode)).toContain(
+          'data-label-layout=""',
         );
       }
     });

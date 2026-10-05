@@ -40,7 +40,74 @@ import { LabelRailResize } from "./label-rail-resize";
  * for, clamped through `clampRailWidth` and kept under
  * `RAIL_WIDTH_STORAGE_KEY`. The stage takes what is left. A spec pins the
  * width with `initialRailWidth`, and storage is not consulted.
+ *
+ * ── The film's box ──────────────────────────────────────────────────────────
+ *
+ * 16:9 of the stage's width, as the frame draws it at 1440×900 (800×450) —
+ * until that would leave the court too little. On a wide window the stage is
+ * wider than it is tall, and a full-width film took all of it: the court
+ * drew 114px across at 1920×1080 and 52px at 2560×1300. So the film's WIDTH
+ * is capped (`BLACK_VIDEO_WIDTH`) at what keeps `BLACK_COURT_MIN` of the
+ * stage's height — two fifths of it, and never under 320px — for the court;
+ * the film stays 16:9 at that width, centred on the black, top edge flush,
+ * its transport still its own foot. The stage is a size container, so the
+ * cap is plain CSS and follows the rail's handle and the window with no
+ * measuring.
+ *
+ * ── What is under it ────────────────────────────────────────────────────────
+ *
+ * The layer covers the admin header and nav, and whatever else the page
+ * draws beside the console — and covered is not unreachable: Tab still
+ * walked every link under the black before it got to Play. While this view
+ * is mounted, everything beside it is `inert` (`inertOutside`): each
+ * sibling of the layer and of its ancestors, up to but not including
+ * `body`'s own children. Stopping there is what keeps the menus, the confirm
+ * and the tooltips alive — Radix portals them to `body`, as siblings of the
+ * page's root, not of anything inside it. (An ancestor cannot be made inert:
+ * this layer is inside it.) Unmounting — Exit full screen, or leaving the
+ * page — hands each one back exactly as it was.
  */
+
+/** What the court always keeps of the stage's height. */
+export const BLACK_COURT_MIN = "max(320px, 40cqh)";
+
+/**
+ * The film's width: the stage's, or — where that would crowd the court out —
+ * 16:9 of the height the court leaves. Never under 16:9 of 120px, for a
+ * window too short to honour both.
+ */
+export const BLACK_VIDEO_WIDTH = `min(100cqw, max(calc((100cqh - ${BLACK_COURT_MIN}) * 16 / 9), 213px))`;
+
+/**
+ * Makes everything beside `layer` unreachable while it is mounted: `inert`
+ * on each sibling of the element and of each of its ancestors, below
+ * `body`'s children. Only what was not already inert is touched, and exactly
+ * that is restored.
+ *
+ * A REF CALLBACK, with React 19's cleanup: it runs when the layer is in the
+ * document and its return runs when the layer leaves it, which is the whole
+ * lifetime wanted — there is no state for an effect to read.
+ */
+function inertOutside(layer: HTMLElement | null): (() => void) | undefined {
+  if (!layer) return undefined;
+  const covered: HTMLElement[] = [];
+  for (
+    let node: HTMLElement = layer;
+    node.parentElement && node.parentElement !== document.body;
+    node = node.parentElement
+  ) {
+    for (const sibling of node.parentElement.children) {
+      if (sibling === node || !(sibling instanceof HTMLElement)) continue;
+      if (sibling.inert) continue;
+      sibling.inert = true;
+      covered.push(sibling);
+    }
+  }
+  return () => {
+    for (const element of covered) element.inert = false;
+  };
+}
+
 export function LabelBlackView({
   initialRailWidth,
   video,
@@ -93,19 +160,22 @@ export function LabelBlackView({
 
   return (
     <div
+      ref={inertOutside}
       data-label-black=""
       className="fixed inset-0 z-50 flex bg-black text-white"
     >
-      {/* The stage: the film at 16:9 of the stage's width, flush top-left,
+      {/* The stage: the film at 16:9 of the stage's width, flush to the top,
           and the court on the black under it taking the rest — no card
-          ground, radius or shadow, as the frame draws it. */}
+          ground, radius or shadow, as the frame draws it. A size container,
+          for the film's cap (`BLACK_VIDEO_WIDTH`). */}
       <div
         data-label-black-stage=""
-        className="flex min-h-0 min-w-0 flex-1 flex-col"
+        className="[container-type:size] flex min-h-0 min-w-0 flex-1 flex-col"
       >
         <div
           data-label-black-video=""
-          className="aspect-video w-full shrink-0 overflow-hidden"
+          className="mx-auto aspect-video max-w-full shrink-0 overflow-hidden"
+          style={{ width: BLACK_VIDEO_WIDTH }}
         >
           {video}
         </div>
