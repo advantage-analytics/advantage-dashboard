@@ -506,7 +506,7 @@ ready).
 
 ## T36 · Loader builds the marks when `marks_enabled`; session gains the banner's fields
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T29, T34
 - **files:** src/lib/data/labels-server.ts, src/lib/services/splitstep/persist-transcript.ts, src/lib/services/labels/session.ts, src/app/admin/labels/[sessionId]/page.tsx, src/components/admin/labels/label-console.tsx, tests/label-session-marks.spec.ts (new), tests/fixtures/label-session.ts (guess)

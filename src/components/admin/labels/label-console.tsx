@@ -40,6 +40,7 @@ import {
   type PlannedGameWrites,
 } from "@/lib/services/labels/game-operations";
 import type { LabelGameWriteResult } from "@/lib/services/labels/game-operations-session";
+import type { LabelMarks } from "@/lib/services/labels/marks";
 import { endingPatchForShotChange } from "@/lib/services/labels/ending-derived";
 import { labelScores } from "@/lib/services/labels/score";
 import {
@@ -258,6 +259,7 @@ const FOLLOW: PointFocus = { mode: "follow" };
 export function LabelConsole({
   session,
   video,
+  marks: initialMarks = null,
   initialExpandedPointId,
   initialSelectedShotId = null,
   onSaveShot,
@@ -275,6 +277,13 @@ export function LabelConsole({
 }: {
   session: LabelSession;
   video: LabelVideo | null;
+  /**
+   * The derivation's marks on the session's rows (`getLabelSession`'s
+   * `marks`), plain data across the RSC boundary. Null when the session has
+   * them off, or when the page could not build them — the rows then carry
+   * none. Held in state beside `points`, where the black rail reads them.
+   */
+  marks?: LabelMarks | null;
   /**
    * The point open on first render. Defaults to the first point still to
    * check — where a labeller returning to a session picks up — or the first
@@ -333,6 +342,9 @@ export function LabelConsole({
     onSavePoint !== undefined;
 
   const [points, setPoints] = useState<LabelPoint[]>(session.points);
+  // The marks beside those points. State, not a prop read: the page builds
+  // them once per render and later tasks revise them as rows change.
+  const [marks] = useState<LabelMarks | null>(initialMarks);
   // The point open while nothing is playing: see the file comment.
   const [restPointId, setRestPointId] = useState<string | null>(() =>
     initialExpandedPointId !== undefined

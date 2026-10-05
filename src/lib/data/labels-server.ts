@@ -40,11 +40,18 @@ import {
   type LabelSpin,
   type LabelStroke,
   type LabelVideo,
+  type MatchScore,
 } from "@/lib/services/labels/session";
 import {
   parseLabelPointSeed,
   parseLabelShotSeed,
 } from "@/lib/services/labels/edit";
+import {
+  buildLabelMarks,
+  type LabelMarks,
+  type MarkablePoint,
+} from "@/lib/services/labels/marks";
+import { buildTranscriptForJob } from "@/lib/services/splitstep/persist-transcript";
 
 /** One completed job an admin could start or continue labelling. */
 export interface LabelJobRow {
@@ -85,6 +92,11 @@ interface DbMatch {
   id: string;
   player1_name: string | null;
   player2_name: string | null;
+  /**
+   * `matches.score` (jsonb), read by the session loader only — the list does
+   * not select it. Parsed by `parseMatchScore` before anything trusts it.
+   */
+  score?: unknown;
 }
 interface DbSession {
   id: string;
@@ -270,20 +282,43 @@ async function countLabelPointProgress(
  * ---------------------------------------------------------------------- */
 
 export type GetLabelSessionResult =
-  | { ok: true; session: LabelSession; video: LabelVideo | null }
+  | {
+      ok: true;
+      session: LabelSession;
+      video: LabelVideo | null;
+      /**
+       * The derivation's marks on this session's rows (T34), built from the
+       * job's raw results file with the CURRENT derivation code. Null when the
+       * session has `marks_enabled` off (the ground-truth session), when its
+       * job is gone, or when the file could not be downloaded or derived — the
+       * console is usable without them.
+       */
+      marks: LabelMarks | null;
+    }
   | { ok: false; reason: "admin-required"; message: string }
   | { ok: false; reason: "not-found" };
 
-interface SessionDependencies extends Dependencies {
+export interface SessionDependencies extends Dependencies {
   /**
    * The job's playable file, or null. Allowed to fail: a video that cannot be
    * signed leaves the console without a player, never without its table.
    */
   loadVideo: (db: AdminClient, jobId: string) => Promise<LabelVideo | null>;
+  /**
+   * The marks for the session's rows, from the job's raw results file.
+   * Allowed to fail — a throw is logged and the console opens without marks.
+   * Called only when the session has `marks_enabled` and a job.
+   */
+  buildMarks: (
+    db: AdminClient,
+    jobId: string,
+    points: readonly MarkablePoint[],
+  ) => Promise<LabelMarks>;
 }
 const sessionDefaults: SessionDependencies = {
   ...defaults,
   loadVideo: loadJobVideo,
+  buildMarks: buildJobMarks,
 };
 
 interface DbSessionRow {
@@ -297,6 +332,9 @@ interface DbSessionRow {
   ad_scoring: boolean | null;
   /** False on the ground-truth session; marks are never computed for it. */
   marks_enabled: boolean;
+  /** jsonb array of `[p1, p2]` pairs, parsed by `parseFinalScore`; null until set. */
+  final_score?: unknown;
+  video_ends_early?: boolean | null;
 }
 /** The one column of the session's job the console needs. */
 interface DbJobScoringRow {
@@ -374,7 +412,7 @@ export async function getLabelSession(
   const { data: session, error: sessionError } = await db
     .from("label_sessions")
     .select(
-      "id, job_id, match_id, status, derivation_version, ad_scoring, marks_enabled",
+      "id, job_id, match_id, status, derivation_version, ad_scoring, marks_enabled, final_score, video_ends_early",
     )
     .eq("id", sessionId)
     .maybeSingle<DbSessionRow>();
@@ -387,7 +425,7 @@ export async function getLabelSession(
     await Promise.all([
       db
         .from("matches")
-        .select("id, player1_name, player2_name")
+        .select("id, player1_name, player2_name, score")
         .eq("id", session.match_id)
         .maybeSingle<DbMatch>(),
       // The job's scoring is only the fallback for a session that has not
@@ -439,17 +477,110 @@ export async function getLabelSession(
     throw new Error(`Could not read the job: ${jobResult.error.message}`);
   }
 
+  const built = buildLabelSession(
+    session,
+    matchResult.data ?? null,
+    pointRows,
+    shotRows,
+    jobResult.data ?? null,
+  );
+
   return {
     ok: true,
-    session: buildLabelSession(
-      session,
-      matchResult.data ?? null,
-      pointRows,
-      shotRows,
-      jobResult.data ?? null,
-    ),
+    session: built,
     video,
+    marks: await loadMarks(db, built, deps),
   };
+}
+
+/**
+ * The session's marks, or null — never a throw. Only a session with
+ * `marks_enabled` and a job has any: the ground-truth session's labels were
+ * made blind to the derivation and stay that way, and a session whose job is
+ * gone has no file to derive from. A download or derivation failure is
+ * logged and the console opens without marks, as it opens without a video.
+ *
+ * The points are the built session's — `point_index` order, tombstones
+ * included — which is the order `buildLabelMarks` numbers them in.
+ */
+async function loadMarks(
+  db: AdminClient,
+  session: LabelSession,
+  deps: SessionDependencies,
+): Promise<LabelMarks | null> {
+  if (!session.marksEnabled || !session.jobId) return null;
+  try {
+    return await deps.buildMarks(db, session.jobId, session.points);
+  } catch (cause: unknown) {
+    console.error("[labels] marks unavailable", {
+      sessionId: session.id,
+      jobId: session.jobId,
+      message: (cause as Error)?.message,
+    });
+    return null;
+  }
+}
+
+/**
+ * The default `buildMarks`: download the job's results file, derive it with
+ * the current code and join the flags onto the label rows. Throws when the
+ * transcript could not be built or did not reconcile — `loadMarks` turns that
+ * into a logged null. Exported for the spec.
+ *
+ * Reads nothing from `points.flags` or `shots.flags`: a stored flag is what
+ * the derivation thought when the rows were written, a mark is what it thinks
+ * now (marks.ts).
+ */
+export async function buildJobMarks(
+  db: AdminClient,
+  jobId: string,
+  points: readonly MarkablePoint[],
+): Promise<LabelMarks> {
+  const { transcript, rallies, reason } = await buildTranscriptForJob({
+    supabase: db,
+    jobId,
+  });
+  if (!transcript || !transcript.ok || !rallies) {
+    throw new Error(reason ?? "transcript could not be built");
+  }
+  return buildLabelMarks(transcript, rallies, points);
+}
+
+/**
+ * `label_sessions.final_score` as the console reads it: an array of `[p1, p2]`
+ * games pairs, one per set. Anything else — the column is jsonb and its CHECK
+ * only asks for an array — reads as null rather than as a score. Exported for
+ * the spec.
+ */
+export function parseFinalScore(value: unknown): number[][] | null {
+  if (!Array.isArray(value)) return null;
+  const sets: number[][] = [];
+  for (const entry of value) {
+    if (
+      !Array.isArray(entry) ||
+      entry.length !== 2 ||
+      !entry.every((n) => typeof n === "number" && Number.isFinite(n))
+    ) {
+      return null;
+    }
+    sets.push([entry[0], entry[1]]);
+  }
+  return sets;
+}
+
+/**
+ * `matches.score` as the derivation reads it (`{ player1: number[]; player2:
+ * number[] }`), or null for a record without one or with a shape the console
+ * cannot use. Any further keys (`winner`, tiebreaks) are left where they are.
+ */
+export function parseMatchScore(value: unknown): MatchScore | null {
+  if (!value || typeof value !== "object") return null;
+  const { player1, player2 } = value as Record<string, unknown>;
+  const isGames = (list: unknown): list is number[] =>
+    Array.isArray(list) &&
+    list.every((n) => typeof n === "number" && Number.isFinite(n));
+  if (!isGames(player1) || !isGames(player2)) return null;
+  return { ...(value as MatchScore), player1, player2 };
 }
 
 /**
@@ -540,6 +671,9 @@ export function buildLabelSession(
     player2Name: match?.player2_name ?? "Player 2",
     adScoring: resolveLabelAdScoring(session.ad_scoring, job?.ad_scoring),
     marksEnabled: session.marks_enabled,
+    finalScore: parseFinalScore(session.final_score ?? null),
+    videoEndsEarly: session.video_ends_early ?? null,
+    matchScore: parseMatchScore(match?.score ?? null),
     points,
   };
 }

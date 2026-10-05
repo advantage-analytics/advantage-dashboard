@@ -484,3 +484,14 @@ Decisions:
 2. A dismissed-then-edited flag reads dismissed, not settled.
 3. The settled hover names the ending even for flags not about the ending.
 4. Four fallback hover lines (null params, plural removed shots) are not from the board.
+
+## T36 · Loader builds the marks when `marks_enabled`; session gains the banner's fields — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `getLabelSession` returns `marks`: built with current derivation code from the session's stored results file (`buildTranscriptForJob` now also returns the rallies) only when `marks_enabled` and the job exists; a failure logs and returns null with the session intact. `LabelSession` gains `finalScore`, `videoEndsEarly` and `matchScore`. The page passes `marks` to the console, which holds it.
+
+**follow-ups:**
+
+1. The results file is downloaded and re-derived on every page render; could start in parallel with the row reads.
+2. `marks` is static per render; a refresh after a write will be wanted.

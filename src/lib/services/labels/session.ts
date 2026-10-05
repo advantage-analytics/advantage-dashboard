@@ -13,6 +13,7 @@
  * per render, gated by `marksEnabled`, and never stored on a row.
  */
 
+import type { MatchScore } from "@/lib/services/splitstep/derivation";
 import type {
   LabelEnding,
   LabelPointSeedValues,
@@ -31,6 +32,7 @@ export type {
   LabelShotSeedValues,
   LabelSide,
   LabelStroke,
+  MatchScore,
 };
 
 export type LabelPointStatus = "unchanged" | "edited" | "added" | "deleted";
@@ -202,6 +204,24 @@ export interface LabelSession {
    * whose labels were made blind to the derivation and must stay that way.
    */
   marksEnabled: boolean;
+  /**
+   * The match's final score as the labeller read it off the video
+   * (`label_sessions.final_score`): one `[p1, p2]` games pair per set. Null
+   * until the labeller sets it. What the "Score doesn't add up" banner holds
+   * the labelled points against.
+   */
+  finalScore: number[][] | null;
+  /**
+   * Whether the video stops before the match does
+   * (`label_sessions.video_ends_early`); null until the labeller says.
+   */
+  videoEndsEarly: boolean | null;
+  /**
+   * The score the match record carries (`matches.score`) — the one the
+   * derivation folded the vendor's stream under. Null when the record has
+   * none. Read-only here: labels code never writes `matches`.
+   */
+  matchScore: MatchScore | null;
   /** In `point_index` order. */
   points: LabelPoint[];
 }

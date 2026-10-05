@@ -22,6 +22,7 @@ import {
   lineCallsFor,
   type LineCalls,
   type MatchScore,
+  type SplitStepRally,
   type SplitStepStroke,
   type Transcript,
 } from "./derivation";
@@ -117,6 +118,13 @@ export async function buildTranscriptForJob(params: {
    * serves both the transcript and the seed.
    */
   raw?: unknown;
+  /**
+   * The rallies the transcript was built from (`analyzeResults(raw).rallies`),
+   * set whenever `raw` is. The labels console's marks (src/lib/services/labels/
+   * marks.ts) read the rally beside the derived point — a serve called out, a
+   * stroke the derivation dropped — so the same download serves them too.
+   */
+  rallies?: SplitStepRally[];
 }> {
   const { supabase, jobId } = params;
 
@@ -207,6 +215,7 @@ export async function buildTranscriptForJob(params: {
     failure: transcript.ok ? null : "refused",
     job,
     raw,
+    rallies: analysis.rallies,
   };
 }
 

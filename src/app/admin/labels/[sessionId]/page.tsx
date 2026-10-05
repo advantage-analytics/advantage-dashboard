@@ -62,13 +62,14 @@ export default async function AdminLabelSessionPage({
     );
   }
 
-  const { session, video } = result;
+  const { session, video, marks } = result;
 
   return (
     <AdminPage className="h-[calc(100dvh-var(--header-h))] overflow-hidden pb-6">
       <LabelConsole
         session={session}
         video={video}
+        marks={marks}
         onSaveShot={updateLabelShot}
         onSavePoint={updateLabelPoint}
         operations={{
