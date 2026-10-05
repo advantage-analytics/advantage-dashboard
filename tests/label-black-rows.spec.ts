@@ -863,10 +863,12 @@ test.describe("the black shots well", () => {
     for (const cls of [
       "bg-white/[0.035]",
       "shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]",
-      "py-1",
     ]) {
       expect(frame).toContain(cls);
     }
+    // No air above the first row or under the last: the rows meet the well's
+    // two hairlines.
+    expect(frame).not.toMatch(/\bp[ytb]-/);
 
     // No header: no eyebrow, and the two column names are never text.
     expect(html).not.toContain("eyebrow-sm");

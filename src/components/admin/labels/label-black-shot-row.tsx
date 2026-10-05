@@ -261,7 +261,7 @@ export function BlackShotsWell({
   return (
     <div
       data-shots-well={point.id}
-      className="flex flex-col bg-white/[0.035] py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]"
+      className="flex flex-col bg-white/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]"
       style={WELL_STYLE}
     >
       {rows}
