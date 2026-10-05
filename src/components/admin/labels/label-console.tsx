@@ -67,6 +67,8 @@ import { playingRowAt } from "@/lib/services/labels/playback";
 import { applyPointReset, applyShotReset } from "@/lib/services/labels/reset";
 import { applySiteRemovalRestore } from "@/lib/services/labels/site-removal";
 import type { LabelSiteRemovalRestoreResult } from "@/lib/services/labels/site-removal-session";
+import { applyDismiss } from "@/lib/services/labels/suggestions";
+import type { LabelDismissSuggestionResult } from "@/lib/services/labels/suggestions-session";
 import {
   displayedPointId,
   followAffordance,
@@ -892,6 +894,32 @@ export function LabelConsole({
     closeGhost(shotId);
   }
 
+  /**
+   * Dismiss a suggestion (board 08m §4): its key joins the point's
+   * `dismissed`, the one stored piece of a mark's life — the dashed row goes
+   * and the chip that opened it reads dismissed. Nothing else on the point
+   * changes, so it is not `edited` and nothing is re-derived.
+   */
+  function dismissSuggestion(pointId: string, key: string) {
+    const before = points.find((point) => point.id === pointId);
+    if (!before || !operations) return;
+    if (applyDismiss(before, key) === before) return;
+    void runOperation(
+      (rows) => replacePoint(rows, pointId, (p) => applyDismiss(p, key)),
+      () => operations.dismissSuggestion(pointId, key),
+      (rows, result) =>
+        replacePoint(rows, pointId, (p) => ({
+          ...p,
+          dismissed: result.dismissed,
+        })),
+      (rows) =>
+        replacePoint(rows, pointId, (p) => ({
+          ...p,
+          dismissed: before.dismissed,
+        })),
+    );
+  }
+
   function deletePoint(pointId: string) {
     const before = points.find((point) => point.id === pointId);
     if (!before || !operations) return;
@@ -1245,6 +1273,7 @@ export function LabelConsole({
         onRestoreShot: restoreShot,
         onRestorePoint: restorePoint,
         onRestoreSiteRemoval: restoreSiteRemoval,
+        onDismissSuggestion: dismissSuggestion,
         onMovePoint: requestMove,
         onSetChecked: setChecked,
         onAddShot: addShot,
@@ -1723,6 +1752,14 @@ export interface LabelConsoleOperations {
   restoreSiteRemoval: (
     shotId: string,
   ) => Promise<LabelSiteRemovalRestoreResult>;
+  /**
+   * Dismiss a suggestion on a point (board 08m §4): its key appended to
+   * `label_points.dismissed`, the one column it writes.
+   */
+  dismissSuggestion: (
+    pointId: string,
+    key: string,
+  ) => Promise<LabelDismissSuggestionResult>;
 }
 
 /** The dock bar's "Point N · shot M", numbered as the table numbers them. */

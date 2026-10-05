@@ -48,6 +48,12 @@ export interface LabelRowOperations {
    * table shows them as ordinary rows and never calls this.
    */
   onRestoreSiteRemoval: (shotId: string) => void;
+  /**
+   * Say no to a suggestion the marks made on a point (board 08m §4): `key`
+   * is the suggestion's own (`missing_shot:<vendor stroke id>`). Only the
+   * black view draws suggestions, so only it asks.
+   */
+  onDismissSuggestion: (pointId: string, key: string) => void;
 }
 
 /** What every row needs to draw and save its editors. */

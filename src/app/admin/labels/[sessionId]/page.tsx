@@ -12,6 +12,7 @@ import {
   resetLabelShotAction,
   restoreLabelPointAction,
   restoreLabelShotAction,
+  dismissLabelSuggestionAction,
   restoreLabelSiteRemovalAction,
   setLabelGameServerAction,
   setLabelGameTypeAction,
@@ -86,6 +87,7 @@ export default async function AdminLabelSessionPage({
           setGameServer: setLabelGameServerAction,
           setGameType: setLabelGameTypeAction,
           restoreSiteRemoval: restoreLabelSiteRemovalAction,
+          dismissSuggestion: dismissLabelSuggestionAction,
         }}
         headerAction={
           <Link

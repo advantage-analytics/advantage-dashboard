@@ -38,6 +38,10 @@ import {
   restoreLabelSiteRemoval,
   type LabelSiteRemovalRestoreResult,
 } from "@/lib/services/labels/site-removal-session";
+import {
+  dismissLabelSuggestion,
+  type LabelDismissSuggestionResult,
+} from "@/lib/services/labels/suggestions-session";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
 
@@ -200,4 +204,18 @@ export async function restoreLabelSiteRemovalAction(
   shotId: string,
 ): Promise<LabelSiteRemovalRestoreResult> {
   return restoreLabelSiteRemoval(shotId);
+}
+
+/**
+ * Dismiss a suggestion the marks made on a point — a stroke probably missing
+ * (`missing_shot:<vendor stroke id>`) or a point (`missing_point`): the key
+ * is appended to `label_points.dismissed`, and nothing else is written.
+ * Refused on a complete session, on one labelled without marks, on a key of
+ * any other shape and on one already dismissed.
+ */
+export async function dismissLabelSuggestionAction(
+  pointId: string,
+  key: string,
+): Promise<LabelDismissSuggestionResult> {
+  return dismissLabelSuggestion(pointId, key);
 }

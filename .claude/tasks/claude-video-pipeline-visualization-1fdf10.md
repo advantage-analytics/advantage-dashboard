@@ -550,7 +550,7 @@ ready).
 
 ## T39 · Suggested shot: dashed row, Add shot, Dismiss (new label_points write)
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T37
 - **files:** src/lib/services/labels/suggestions.ts (new), src/lib/services/labels/suggestions-session.ts (new), src/app/admin/labels/actions.ts, src/app/admin/labels/[sessionId]/page.tsx, src/components/admin/labels/label-black-shot-row.tsx, src/components/admin/labels/label-row-parts.ts, src/components/admin/labels/label-console.tsx, tests/label-suggestions.spec.ts (new), tests/label-operations.spec.ts (guess)

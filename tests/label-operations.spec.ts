@@ -938,6 +938,8 @@ test("no operation issues a SQL DELETE on a label_* row", () => {
     "src/lib/services/labels/reset-session.ts",
     "src/lib/services/labels/site-removal.ts",
     "src/lib/services/labels/site-removal-session.ts",
+    "src/lib/services/labels/suggestions.ts",
+    "src/lib/services/labels/suggestions-session.ts",
     "src/app/admin/labels/actions.ts",
   ]) {
     const source = readFileSync(path.resolve(file), "utf8");

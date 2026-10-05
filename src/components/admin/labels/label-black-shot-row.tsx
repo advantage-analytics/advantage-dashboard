@@ -17,10 +17,14 @@ import {
   labelShotValues,
   type LabelShotPatch,
 } from "@/lib/services/labels/edit";
-import type { LabelMarks } from "@/lib/services/labels/marks";
-import { isLabelDeleteReason } from "@/lib/services/labels/operations";
+import type { LabelMarks, LabelSuggestion } from "@/lib/services/labels/marks";
+import {
+  isLabelDeleteReason,
+  planAddedShot,
+} from "@/lib/services/labels/operations";
 import { canResetShot } from "@/lib/services/labels/reset";
 import { shotPlacement } from "@/lib/services/labels/shot-derived";
+import { suggestionState } from "@/lib/services/labels/suggestions";
 import { courtPair, withoutGhosts } from "./label-black-format";
 import {
   MarkChip,
@@ -151,6 +155,11 @@ export function drawsGhosts(
  * point's two lines and the marks' hover sentence skip it. The trailing "Add
  * shot" appends to the rally; it is there only while the session can be
  * written.
+ *
+ * A stroke the marks think is missing (`openShotSuggestions`) is a dashed row
+ * right after the stroke it would follow. It is a proposal, not a stroke: no
+ * number, not in the rally count, and nothing is added until "Add shot" is
+ * clicked.
  */
 export function BlackShotsWell({
   point,
@@ -167,6 +176,7 @@ export function BlackShotsWell({
   const ghosts = drawsGhosts(edit, marks);
   // The point as the rail reads it: without its ghosts while they are ghosts.
   const shown = ghosts ? withoutGhosts(point) : point;
+  const suggested = openShotSuggestions(point, edit, marks);
   const rows: React.ReactNode[] = [];
   let n = 0;
   for (const shot of point.shots) {
@@ -176,19 +186,30 @@ export function BlackShotsWell({
     }
     if (ghosts && isGhostShot(shot)) {
       rows.push(<BlackGhostShot key={shot.id} shot={shot} edit={edit} />);
-      continue;
+    } else {
+      n += 1;
+      rows.push(
+        <BlackShotRow
+          key={shot.id}
+          shot={shot}
+          number={n}
+          pointNumber={pointNumber}
+          edit={edit}
+          marks={shotRowMarks(shown, shot, marks, edit.names)}
+        />,
+      );
     }
-    n += 1;
-    rows.push(
-      <BlackShotRow
-        key={shot.id}
-        shot={shot}
-        number={n}
-        pointNumber={pointNumber}
-        edit={edit}
-        marks={shotRowMarks(shown, shot, marks, edit.names)}
-      />,
-    );
+    for (const suggestion of suggested) {
+      if (suggestion.afterShotId !== shot.id) continue;
+      rows.push(
+        <BlackSuggestedShot
+          key={suggestion.key}
+          suggestion={suggestion}
+          point={point}
+          edit={edit}
+        />,
+      );
+    }
   }
   return (
     <div
@@ -665,6 +686,148 @@ export function BlackGhostShot({
         </div>
       ) : null}
     </>
+  );
+}
+
+type ShotSuggestion = Extract<LabelSuggestion, { kind: "missing_shot" }>;
+
+/**
+ * The point's stroke suggestions still waiting for an answer (board 08m §4):
+ * the session computes marks and has them, the suggestion is this point's,
+ * and it is neither dismissed nor already answered with an added stroke
+ * (`suggestionState`). With marks off, or none built, there is none.
+ */
+export function openShotSuggestions(
+  point: LabelPoint,
+  edit: Pick<EditContext, "marksEnabled">,
+  marks: LabelMarks | null | undefined,
+): ShotSuggestion[] {
+  if (!marks || !drawsGhosts(edit, marks)) return [];
+  return marks.suggestions.filter(
+    (s): s is ShotSuggestion =>
+      s.kind === "missing_shot" &&
+      s.pointId === point.id &&
+      suggestionState(s, point) === "open",
+  );
+}
+
+/** The suggestion's own ink — the frame's `.fx-sug .bk-n, .bk-tm, .bk-pl`. */
+const SUGGESTION_INK = "rgba(252,211,77,0.75)";
+
+/**
+ * A suggested stroke (board 08m §4, the frame's `.fx-sug`): two strokes in a
+ * row by one player, so the other's is probably missing between them. A
+ * dashed amber row where it would go, on the stroke row's own first tracks —
+ * a plus where the number would be, the time and the player it would be
+ * added with — then the sentence and its two answers.
+ *
+ * The time and the player are what "Add shot" WILL write (`planAddedShot`,
+ * the console's own rule: the midpoint of its two live neighbours, the
+ * opponent of the stroke before it), falling back to the marks' reading; when
+ * that rule refuses — the stroke it would follow is no longer live — there is
+ * no row to draw. "Add shot" is the existing request (`onAddShot` after that
+ * stroke); "Dismiss" stores the suggestion's key. Both are absent on a
+ * session that cannot be written.
+ *
+ * It sits on the ghost row's tracks (`GHOST_ROW_GRID`), so its first three
+ * columns line up with the strokes around it: the sentence takes the stroke,
+ * spin and hit-at tracks, the answers the last two — 172px at a 520px rail,
+ * which holds both whole — and the sentence is what truncates.
+ */
+function BlackSuggestedShot({
+  suggestion,
+  point,
+  edit,
+}: {
+  suggestion: ShotSuggestion;
+  point: LabelPoint;
+  edit: EditContext;
+}) {
+  const plan = planAddedShot(point, suggestion.afterShotId);
+  if ("error" in plan) return null;
+  const operations = edit.editable ? edit.operations : undefined;
+  const seconds = plan.write.video_time ?? suggestion.videoTime;
+  const time = seconds !== null ? formatVideoTime(seconds) : null;
+  const name = sideLabel(plan.write.hitter ?? suggestion.hitter, edit.names);
+  const words = name
+    ? `A shot by ${name} is probably missing here`
+    : "A shot is probably missing here";
+  const where = time ? ` at ${time}` : "";
+  return (
+    <div
+      data-row="suggested-shot"
+      data-shot-suggestion={suggestion.key}
+      className={cn(
+        GHOST_ROW_GRID,
+        "cursor-default rounded-lg bg-[rgba(253,230,138,0.06)] outline-1 -outline-offset-4 outline-[rgba(252,211,77,0.45)] outline-dashed",
+      )}
+    >
+      <Plus
+        className="size-2.5"
+        style={{ color: SUGGESTION_INK }}
+        strokeWidth={2}
+        aria-hidden="true"
+      />
+      <span
+        className="mono tabular min-w-0 truncate text-[10px]"
+        style={{ color: SUGGESTION_INK }}
+      >
+        {time ?? <Dash label="No time" />}
+      </span>
+      <span
+        className="min-w-0 truncate text-[11px]"
+        style={{ color: SUGGESTION_INK }}
+      >
+        {name ?? <Dash label="No player" />}
+      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            data-suggestion-text=""
+            className="col-[4/7] min-w-0 truncate text-[11px]"
+            style={{ color: VALUE_INK }}
+          >
+            {words}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top">{words}</TooltipContent>
+      </Tooltip>
+      {operations ? (
+        <span
+          data-suggestion-actions=""
+          className="col-[7/-1] flex min-w-0 items-center justify-end gap-[14px]"
+        >
+          <button
+            type="button"
+            data-suggestion-add=""
+            aria-label={
+              name
+                ? `Add the missing shot by ${name}${where}`
+                : `Add the missing shot${where}`
+            }
+            onClick={(event) => {
+              event.stopPropagation();
+              operations.onAddShot(point.id, suggestion.afterShotId);
+            }}
+            className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-[rgba(252,211,77,1)] transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            Add shot
+          </button>
+          <button
+            type="button"
+            data-suggestion-dismiss=""
+            aria-label={`Dismiss the suggested shot${where}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              operations.onDismissSuggestion(point.id, suggestion.key);
+            }}
+            className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-white/50 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            Dismiss
+          </button>
+        </span>
+      ) : null}
+    </div>
   );
 }
 

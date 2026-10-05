@@ -521,3 +521,15 @@ Decisions:
 2. No way to undo a Restore from the console.
 3. The ghost line carries no hover copy of its own.
 4. At a 520px rail the shown ghost row's Restore and shot-row chips overflow the rail (fix follows).
+
+## T39 · Suggested shot: dashed row, Add shot, Dismiss (new label_points write) — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** For each open `missing_shot` suggestion the black well draws a dashed amber row after the first of the pair ("A shot by {name} is probably missing here" · Add shot · Dismiss). Add shot uses the existing add operation at that place; Dismiss is the one new write (`label_points.dismissed`, new `suggestions.ts` / `suggestions-session.ts` / action), refused on a complete or marks-off session. Afterwards the row is gone and the chip reads settled or dismissed.
+
+**follow-ups:**
+
+1. No way to undo a Dismiss from the console.
+2. The session gate (status + marks_enabled) is duplicated in two services.
+3. The server checks the key's shape only, not that the suggestion exists.
