@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Plus, RotateCcw, X } from "lucide-react";
+import { Plus, RotateCcw, X } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -16,10 +16,17 @@ import {
   labelShotValues,
   type LabelShotPatch,
 } from "@/lib/services/labels/edit";
+import type { LabelMarks } from "@/lib/services/labels/marks";
 import { isLabelDeleteReason } from "@/lib/services/labels/operations";
 import { canResetShot } from "@/lib/services/labels/reset";
 import { shotPlacement } from "@/lib/services/labels/shot-derived";
 import { courtPair } from "./label-black-format";
+import {
+  MarkChip,
+  PencilMark,
+  shotRowMarks,
+  type ShotRowMark,
+} from "./label-black-mark";
 import {
   EditableCell,
   SelectEditor,
@@ -92,6 +99,8 @@ function actionsGround(lit: boolean): string {
   return `linear-gradient(${wash},${wash}),linear-gradient(${WELL_WASH},${WELL_WASH})`;
 }
 
+const NO_MARKS: readonly ShotRowMark[] = [];
+
 /** The frame's `.bk-em`: a value that is not there. */
 const EMPTY_INK = "rgba(255,255,255,0.25)";
 /** `.bk-tm`'s ink, and a faulted serve's stroke and numbers. */
@@ -110,9 +119,12 @@ const VALUE_INK = "rgba(255,255,255,0.72)";
 export function BlackShotsWell({
   point,
   edit,
+  marks = null,
 }: {
   point: LabelPoint;
   edit: EditContext;
+  /** The session's marks; null draws no chip on any stroke. */
+  marks?: LabelMarks | null;
 }) {
   const { operations } = edit;
   const pointNumber = point.pointIndex + 1;
@@ -131,6 +143,7 @@ export function BlackShotsWell({
         number={n}
         pointNumber={pointNumber}
         edit={edit}
+        marks={shotRowMarks(point, shot, marks, edit.names)}
       />,
     );
   }
@@ -168,7 +181,8 @@ export function BlackShotsWell({
  * Left to right: its number · its time on the film, to the tenth · who hit
  * it · the stroke · its spin · where it was hit (the ring) · where it landed
  * (the dot) · the placement and the result those two positions give, which
- * nobody types · the blue pencil on a stroke the labeller changed or added.
+ * nobody types · the stroke's own marks (board 08m), an icon each, hover for
+ * the reason · the blue pencil on a stroke the labeller changed or added.
  *
  * Time, Player, Stroke, Spin and the two positions are the light table's
  * `EditableCell`s: text until hovered, and every one a field on the SELECTED
@@ -190,12 +204,15 @@ export function BlackShotRow({
   number,
   pointNumber,
   edit,
+  marks = NO_MARKS,
 }: {
   shot: LabelShot;
   number: number;
   /** The point's number, for the confirm the console opens. */
   pointNumber: number;
   edit: EditContext;
+  /** This stroke's own marks (`shotRowMarks`), drawn after its result. */
+  marks?: readonly ShotRowMark[];
 }) {
   const { names, editable, onSelectShot, onPatchShot } = edit;
   const operations = editable ? edit.operations : undefined;
@@ -227,7 +244,8 @@ export function BlackShotRow({
       onFocus={select}
       className={cn(
         ROW_GRID,
-        "group/row transition-colors duration-200",
+        // A size container, for a mark that narrows with the rail.
+        "group/row @container transition-colors duration-200",
         lit
           ? "bg-white/[0.12]"
           : editable && "cursor-pointer hover:bg-white/[0.06]",
@@ -346,15 +364,10 @@ export function BlackShotRow({
         )}
       >
         {shot.result ? RESULT_LABEL[shot.result] : <Dash label="No result" />}
-        {changed ? (
-          <span role="img" aria-label="Changed by you" className="inline-flex">
-            <Pencil
-              className="size-[11px] text-[var(--blue)]"
-              strokeWidth={2}
-              aria-hidden="true"
-            />
-          </span>
-        ) : null}
+        {marks.map(({ code, ...chip }) => (
+          <MarkChip key={code} {...chip} />
+        ))}
+        {changed ? <PencilMark /> : null}
       </span>
       {operations ? (
         <span

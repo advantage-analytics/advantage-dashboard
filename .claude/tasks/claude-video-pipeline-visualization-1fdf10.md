@@ -521,7 +521,7 @@ ready).
 
 ## T37 · Marks on the black rail's point and shot rows
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T33, T35, T36
 - **files:** src/components/admin/labels/label-black-mark.tsx (new), src/components/admin/labels/label-black-point-row.tsx, src/components/admin/labels/label-black-shot-row.tsx, src/components/admin/labels/label-black-rail.tsx, src/components/admin/labels/label-black-view.tsx, src/components/admin/labels/label-console.tsx, tests/label-black-marks.spec.ts (new) (guess)

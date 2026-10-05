@@ -1491,6 +1491,7 @@ export function LabelConsole({
             points={points}
             adScoring={session.adScoring}
             names={names}
+            marks={marks}
             expandedPointId={openPointId}
             onTogglePoint={togglePoint}
             editable={editable}

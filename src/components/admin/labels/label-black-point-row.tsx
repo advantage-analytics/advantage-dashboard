@@ -1,13 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  GripVertical,
-  Pencil,
-  StickyNote,
-} from "lucide-react";
+import { Check, ChevronDown, GripVertical, StickyNote } from "lucide-react";
 import {
   FloatMenu,
   FloatMenuItem,
@@ -26,6 +20,7 @@ import {
 } from "@/components/ui/tooltip";
 import { filmProgressWidth } from "@/components/dashboard/matches/match-detail/film/film-clock";
 import { cn } from "@/lib/utils";
+import type { LabelMarks } from "@/lib/services/labels/marks";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameBand as LabelGameBandScore } from "@/lib/services/labels/score";
 import type {
@@ -34,6 +29,7 @@ import type {
   LabelSide,
 } from "@/lib/services/labels/session";
 import { pointDetail, pointSentence } from "./label-black-format";
+import { MarkChip, PencilMark, pointRowMarks } from "./label-black-mark";
 import { EditableCell, TextEditor } from "./label-cells";
 import type { SideNames } from "./label-format";
 import {
@@ -96,7 +92,8 @@ export function pointChangedByYou(
  * hovered or playing — drawn as the frame draws it; nothing reorders) · the
  * WINNER mark, which is the menu that changes who won · how the point ended
  * as a sentence over the deciding shot, the time and the rally · a tail slot
- * carrying the blue pencil on a point the labeller has changed · the score
+ * carrying the point's marks (board 08m: what to check, what the site fixed)
+ * and the blue pencil on a point the labeller has changed · the score
  * before the point · the row's actions (Note and ⋯), there only on hover, on
  * focus and on the playing row · the tick that marks the point checked.
  *
@@ -113,6 +110,7 @@ export function BlackPointRow({
   playingWindow = null,
   score,
   edit,
+  marks = null,
   onToggle,
   children,
 }: {
@@ -124,6 +122,11 @@ export function BlackPointRow({
   /** The score before the point, as the scoreboard words it; null for none. */
   score: string | null;
   edit: EditContext;
+  /**
+   * The session's marks (`getLabelSession`'s `marks`). Null — a session
+   * seeded without them, or a build that failed — draws no chip at all.
+   */
+  marks?: LabelMarks | null;
   onToggle?: (pointId: string) => void;
   /** The open point's strokes; nothing when it is folded. */
   children?: React.ReactNode;
@@ -133,6 +136,10 @@ export function BlackPointRow({
   const shotsId = `label-black-point-${point.id}-shots`;
   const checked = point.checkedAt !== null;
   const showNote = edit.editable || point.note !== null;
+  const rowMarks = pointRowMarks(point, marks, names);
+  // ONE pencil: the roll-up's when the session has marks (it also counts a
+  // removed stroke the labeller put back), the row's own rule when not.
+  const changed = rowMarks ? rowMarks.pencil : pointChangedByYou(point);
 
   return (
     <>
@@ -147,7 +154,8 @@ export function BlackPointRow({
         }}
         className={cn(
           ROW_GRID,
-          "group/row relative cursor-pointer transition-colors duration-200",
+          // A size container: a mark's words give way under 600px of row.
+          "group/row @container relative cursor-pointer transition-colors duration-200",
           playing ? "bg-white/[0.08]" : "hover:bg-white/[0.06]",
         )}
       >
@@ -202,20 +210,13 @@ export function BlackPointRow({
           </span>
         </button>
 
+        {/* The marks, in the frame's order: what to check, what was fixed,
+            then the pencil. A chip's words go before the two lines do — see
+            `MarkChip` — so the tail never takes the score's room. */}
         <span data-row-tail="" className="inline-flex items-center gap-2">
-          {pointChangedByYou(point) ? (
-            <span
-              role="img"
-              aria-label="Changed by you"
-              className="inline-flex"
-            >
-              <Pencil
-                className="size-[11px] text-[var(--blue)]"
-                strokeWidth={2}
-                aria-hidden="true"
-              />
-            </span>
-          ) : null}
+          {rowMarks?.flag ? <MarkChip {...rowMarks.flag} /> : null}
+          {rowMarks?.fix ? <MarkChip {...rowMarks.fix} /> : null}
+          {changed ? <PencilMark /> : null}
         </span>
 
         <span

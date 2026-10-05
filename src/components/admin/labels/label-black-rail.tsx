@@ -8,6 +8,7 @@ import type {
   LabelPointPatch,
   LabelShotPatch,
 } from "@/lib/services/labels/edit";
+import type { LabelMarks } from "@/lib/services/labels/marks";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
   labelScores,
@@ -43,7 +44,8 @@ import type { SaveStatus } from "./save-status";
  * screen") — over the ONE scroller (`data-label-rail-scroller`), which is
  * what the console's follow scroll moves: a `BlackGameBand` before each
  * game's first live point, a `BlackPointRow` per point with the score before
- * it, a one-line dark tombstone with its Undo (`BlackDeletedPoint`) for a
+ * it and its marks (board 08m, `label-black-mark.tsx`) in its tail, a
+ * one-line dark tombstone with its Undo (`BlackDeletedPoint`) for a
  * deleted one, and the recessed shots well (`BlackShotsWell`) under the open
  * point only. The scroller never scrolls sideways: every row is built to fit
  * the rail from its narrowest (520px), and `overflow-x-hidden` holds that.
@@ -69,6 +71,7 @@ export function LabelBlackRail({
   points,
   adScoring = true,
   names,
+  marks = null,
   expandedPointId,
   onTogglePoint,
   editable = false,
@@ -104,6 +107,11 @@ export function LabelBlackRail({
   /** `session.adScoring`. */
   adScoring?: boolean;
   names: SideNames;
+  /**
+   * The derivation's marks on these rows (the console's `marks` state). Null
+   * draws the rows with no chip, no hover line and no suggestion.
+   */
+  marks?: LabelMarks | null;
   expandedPointId: string | null;
   onTogglePoint?: (pointId: string) => void;
   editable?: boolean;
@@ -221,8 +229,11 @@ export function LabelBlackRail({
                     score={scores.points.get(point.id)?.scoreBefore ?? null}
                     onToggle={onTogglePoint}
                     edit={edit}
+                    marks={marks}
                   >
-                    {open ? <BlackShotsWell point={point} edit={edit} /> : null}
+                    {open ? (
+                      <BlackShotsWell point={point} edit={edit} marks={marks} />
+                    ) : null}
                   </BlackPointRow>
                 </Fragment>
               );

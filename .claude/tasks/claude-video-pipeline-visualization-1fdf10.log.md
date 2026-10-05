@@ -495,3 +495,16 @@ Decisions:
 
 1. The results file is downloaded and re-derived on every page render; could start in parallel with the row reads.
 2. `marks` is static per render; a refresh after a write will be wanted.
+
+## T37 · Marks on the black rail's point and shot rows — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New `label-black-mark.tsx` (`MarkChip`, `PencilMark`, `pointRowMarks`, `shotRowMarks`): the point row's tail draws the flag chip, the fix chip and one pencil from the roll-up, with the 08m hover line in a wrapping tooltip; shot rows draw their own marks after the result. "Out call ignored" stays on the shot only. Chip words hide below a 600px row. With `marks` null (Ace v Goodman) rows draw no chips. `ChromeTooltip` gains an optional `wrap`.
+
+**follow-ups:**
+
+1. Chips are not keyboard-reachable (role=img); a keyboard path to the hover line.
+2. A multi-mark chip's hover joins every line; may want a shorter form.
+3. At a 520px rail a shot row with a chip and a pencil can clip at the right edge.
+4. `pointChangedByYou` could become `pointChanged` from marks-state.

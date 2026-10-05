@@ -36,6 +36,7 @@ export function ChromeTooltip({
   align = "center",
   sideOffset = 6,
   hidden = false,
+  wrap = false,
   children,
 }: {
   label: string;
@@ -48,6 +49,11 @@ export function ChromeTooltip({
   sideOffset?: number;
   /** An open menu, or an expanded panel — the control already says its name. */
   hidden?: boolean;
+  /**
+   * The label is a sentence, not a name: it wraps inside 280px instead of
+   * running on one line. For a mark's hover line on the labelling rail.
+   */
+  wrap?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -61,7 +67,13 @@ export function ChromeTooltip({
         hidden={hidden}
         className={SURFACE}
       >
-        <span className="flex items-center gap-2.5 whitespace-nowrap">
+        <span
+          className={
+            wrap
+              ? "block max-w-[280px] font-normal whitespace-normal"
+              : "flex items-center gap-2.5 whitespace-nowrap"
+          }
+        >
           {label}
           {shortcut && (
             <span className="font-mono text-[11px] font-normal text-white/[0.64]">
