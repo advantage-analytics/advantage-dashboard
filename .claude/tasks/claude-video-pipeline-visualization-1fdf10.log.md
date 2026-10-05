@@ -446,3 +446,17 @@ Decisions:
 
 1. The rail must be `relative` and not clip its left 4px.
 2. A browser-level spec for the drag once the handle is mounted.
+
+## T33 · The full-screen black view: shell, stage, rail, console hook-up — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** The Layout menu gains Full screen. New `LabelBlackView` (a fixed black layer inside the console root: video top-left, bare court under it, rail on the right with `LabelRailResize`, width remembered) and `LabelBlackRail` (46px header with names, checked count, dark save line and exit; one scroller of game bands, black point rows, tombstones and the open point's shots well; the Now-playing pill). The console hands every existing callback down unchanged, follows a fourth scroller, and exit returns to the mode it came from. `LabelSaveStatus` gains a dark tone.
+
+**follow-ups:**
+
+1. Esc to exit full screen.
+2. A very wide stage makes the 16:9 video taller than the viewport and squeezes the court; cap and letterbox it.
+3. The deleted-point tombstone is the light component on the dark rail.
+4. The rail title truncates before the progress at 520px with long names.
+5. `bandsBeforePoints` is a local copy of the table's loop.

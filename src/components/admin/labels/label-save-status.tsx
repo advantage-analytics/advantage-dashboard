@@ -11,14 +11,21 @@ import { saveStatusView, type SaveStatus } from "./save-status";
  *
  * A failure is `role="alert"`, so it is announced the moment it happens; the
  * routine saving/saved chatter is a polite status.
+ *
+ * `tone="dark"` is the same line on the black view's rail header (board 08l's
+ * `.bk-sv`): 11px at white/55 with the dot as before — the words and the
+ * roles do not change with the ground.
  */
 export function LabelSaveStatus({
   status,
   now: fixedNow,
+  tone = "light",
 }: {
   status: SaveStatus;
   /** For a spec: render at this clock instead of the live one. */
   now?: number;
+  /** The ground it sits on: the page header, or the black rail's. */
+  tone?: "light" | "dark";
 }) {
   const [clock, setClock] = useState(() => fixedNow ?? Date.now());
   useEffect(() => {
@@ -32,22 +39,36 @@ export function LabelSaveStatus({
     return <span data-save-status="idle" role="status" aria-live="polite" />;
   }
 
+  const dark = tone === "dark";
   const dot =
     view.tone === "error"
       ? "var(--danger)"
       : view.tone === "saved"
         ? "var(--success)"
-        : "var(--ink-300)";
+        : dark
+          ? "rgba(255,255,255,0.35)"
+          : "var(--ink-300)";
+  const ink =
+    view.tone === "error"
+      ? dark
+        ? "var(--danger)"
+        : "var(--danger-hover)"
+      : dark
+        ? "rgba(255,255,255,0.55)"
+        : "var(--ink-500)";
 
   return (
     <span
       data-save-status={view.tone}
+      data-save-tone={dark ? "dark" : undefined}
       role={view.tone === "error" ? "alert" : "status"}
       aria-live={view.tone === "error" ? "assertive" : "polite"}
-      className="inline-flex max-w-[420px] items-center gap-1.5 text-[12px] whitespace-nowrap"
-      style={{
-        color: view.tone === "error" ? "var(--danger-hover)" : "var(--ink-500)",
-      }}
+      className={
+        dark
+          ? "inline-flex max-w-[280px] items-center gap-1.5 text-[11px] whitespace-nowrap"
+          : "inline-flex max-w-[420px] items-center gap-1.5 text-[12px] whitespace-nowrap"
+      }
+      style={{ color: ink }}
     >
       <span
         className="size-1.5 shrink-0 rounded-full"

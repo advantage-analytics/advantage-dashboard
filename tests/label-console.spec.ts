@@ -31,8 +31,9 @@ type ConsoleProps = {
   initialVideoMinimised?: boolean;
   initialPointFocus?:
     { mode: "follow" } | { mode: "held"; pointId: string | null };
-  initialLayoutMode?: "overlay" | "docked-top" | "docked-side";
+  initialLayoutMode?: "overlay" | "docked-top" | "docked-side" | "black";
   initialDockSize?: number;
+  initialRailWidth?: number;
   onSaveShot?: (...args: unknown[]) => Promise<unknown>;
   onSavePoint?: (...args: unknown[]) => Promise<unknown>;
 };
@@ -1750,6 +1751,221 @@ test.describe("layout modes (T24)", () => {
       const target = tagOf(placing, "data-court-target");
       expect(target).toContain("width:min(100cqw, calc(100cqh * 1.2432))");
       expect(target).toMatch(/aspect-ratio:276\.00 ?\/ ?222/);
+    });
+  });
+
+  test.describe("the full-screen black view (T33)", () => {
+    /** The black layer's markup: from its marker to the confirm dialog or the end. */
+    function blackOf(html: string): string {
+      const start = html.indexOf('data-label-black=""');
+      expect(start).toBeGreaterThan(-1);
+      return html.slice(html.lastIndexOf("<", start));
+    }
+
+    /** The rail's markup, from its marker to the end of the layer. */
+    function railOf(html: string): string {
+      const black = blackOf(html);
+      const start = black.indexOf('data-label-rail=""');
+      expect(start).toBeGreaterThan(-1);
+      return black.slice(black.lastIndexOf("<", start));
+    }
+
+    test("a fixed layer over the page: the film and court on the left, the rail on the right", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "black",
+        initialRailWidth: 700,
+        initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      });
+      expect(tagOf(html, "data-label-console")).toContain(
+        'data-label-layout-mode="black"',
+      );
+      // The film room's own mechanism, inside the console's root — not a
+      // portal — so `--film-t` reaches the rows.
+      const layer = tagOf(html, 'data-label-black=""');
+      expect(layer).toMatch(/class="[^"]*\bfixed\b[^"]*\binset-0\b/);
+      expect(layer).toMatch(/class="[^"]*\bz-50\b/);
+      expect(layer).toMatch(/class="[^"]*\bbg-black\b/);
+      expect(html.indexOf('data-label-black=""')).toBeGreaterThan(
+        html.indexOf("data-label-console"),
+      );
+
+      const black = blackOf(html);
+      // The stage: the same player, then the court panel, bare on the black.
+      expect(black).toContain("data-label-black-stage");
+      expect(black).toContain("data-label-video-frame");
+      expect(black).toContain('data-testid="label-video"');
+      expect(black).toContain("data-court-art");
+      expect(black).toContain('data-court-view="whole"');
+      expect(black.indexOf("data-label-video-frame")).toBeLessThan(
+        black.indexOf("data-label-black-court"),
+      );
+      expect(tagOf(black, "data-label-black-video")).toMatch(
+        /class="[^"]*\baspect-video\b[^"]*\bw-full\b/,
+      );
+      const court = tagOf(black, "data-label-black-court");
+      expect(court).not.toContain("rounded-[var(--radius-card)]");
+      expect(court).not.toContain("bg-[#1A1A1C]");
+      expect(court).not.toContain("shadow-[var(--shadow-card)]");
+      expect(tagOf(black, "data-court-box")).toMatch(
+        /class="[^"]*\[container-type:size\][^"]*\bflex-1\b/,
+      );
+      expect(black).toContain("data-court-legend");
+      // The transport stays with the player.
+      expect(black).toContain('aria-label="Previous point"');
+      expect(black).toContain('role="slider"');
+      expect(count(html, /data-label-video-frame/g)).toBe(1);
+
+      // The rail, as wide as asked, its handle on its left edge.
+      const rail = railOf(html);
+      expect(tagOf(rail, 'data-label-rail=""')).toContain("width:700px");
+      expect(tagOf(rail, 'data-label-rail=""')).toMatch(
+        /class="[^"]*\brelative\b/,
+      );
+      expect(tagOf(rail, 'data-label-rail=""')).toContain(
+        "bg-[var(--surface-dark)]",
+      );
+      expect(count(html, /role="separator"/g)).toBe(1);
+      const separator = tagOf(rail, 'role="separator"');
+      expect(separator).toContain('aria-label="Resize the points list"');
+      expect(separator).toContain('aria-orientation="vertical"');
+      expect(separator).toContain('aria-valuenow="700"');
+      expect(separator).toContain('aria-valuemin="520"');
+      expect(separator).toContain('aria-valuemax="880"');
+      expect(html).not.toContain('aria-label="Resize video and court"');
+      expect(html).not.toContain("data-label-divider");
+
+      // Nothing docked, nothing floating, no light table.
+      expect(html).not.toMatch(/data-label-dock\b/);
+      expect(html).not.toContain("data-label-dock-layer");
+      expect(html).not.toContain("data-label-court-layer");
+      expect(html).not.toContain("data-label-scroller");
+      expect(html).not.toContain("data-label-point-header");
+    });
+
+    test("the rail: a header with the match, the progress, the save line and the way out, over one scroller", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "black",
+        initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+      });
+      const rail = railOf(html);
+      const header = rail.slice(
+        rail.indexOf("data-label-rail-header"),
+        rail.indexOf("data-label-rail-scroller"),
+      );
+      expect(text(header)).toContain("Jordan Lee vs Elena Vargas");
+      expect(text(header)).toMatch(/\d+ \/ \d+ checked/);
+      expect(header).toContain("data-save-status");
+      expect(header).toContain('aria-label="Exit full screen"');
+      expect(header).toContain("lucide-minimize-2");
+      expect(tagOf(rail, "data-label-rail-header")).toMatch(
+        /class="[^"]*\bh-\[46px\]/,
+      );
+      // No column header anywhere in it: the rows are two lines, not columns.
+      expect(rail).not.toContain("eyebrow-sm");
+      expect(rail).not.toContain("Hit at</span>");
+      // The scroller is the rail's own, taking the rest of its height.
+      expect(tagOf(rail, "data-label-rail-scroller")).toMatch(
+        /class="[^"]*\bmin-h-0\b[^"]*\bflex-1\b[^"]*\boverflow-y-auto\b/,
+      );
+      // The black rows: one per live point, the tombstone's marker, the
+      // bands, and the well under the open point only.
+      expect(count(rail, /data-row="point"/g)).toBe(3);
+      expect(count(rail, /data-row="deleted-point"/g)).toBe(1);
+      expect(count(rail, /data-game-band="/g)).toBeGreaterThan(0);
+      expect(rail).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
+      expect(count(rail, /data-shots-well/g)).toBe(1);
+      expect(rail).toContain("data-point-sentence");
+      expect(rail).toContain('data-row="shot"');
+      // The default width, when none is asked for.
+      expect(tagOf(rail, 'data-label-rail=""')).toContain("width:640px");
+      expect(tagOf(rail, 'role="separator"')).toContain('aria-valuenow="640"');
+    });
+
+    test("held while a point plays, the Now playing pill sits inside the rail", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "black",
+        initialPointFocus: { mode: "held", pointId: FIXTURE_POINT_IDS.P1 },
+        initialVideoTime: 2490.5,
+      });
+      const rail = railOf(html);
+      expect(rail).toContain("data-label-follow-pill");
+      const pill = tagOf(rail, "data-label-follow-pill");
+      expect(pill).toContain(
+        'aria-label="Now playing: point 2 — follow playback"',
+      );
+      expect(pill).toMatch(/class="[^"]*\babsolute\b[^"]*\bleft-1\/2\b/);
+      expect(pill).not.toMatch(/class="[^"]*\bfixed\b/);
+      // Over the scroller, after it in the DOM.
+      expect(rail.indexOf("data-label-follow-pill")).toBeGreaterThan(
+        rail.indexOf("data-label-rail-scroller"),
+      );
+      // The playing point unfolds beside the held one.
+      expect(rail).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
+      expect(rail).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P2}"`);
+      expect(rail).toMatch(/data-point-id="[^"]*"[^>]*data-playing="true"/);
+    });
+
+    test("the Layout menu lists it, and the other modes draw none of it", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "black",
+      });
+      expect(tagOf(html, 'data-label-layout=""')).toContain(
+        'data-layout-mode="black"',
+      );
+      expect(tagOf(html, 'data-label-layout=""')).toContain(
+        'aria-label="Layout: Full screen"',
+      );
+      for (const initialLayoutMode of [
+        undefined,
+        "overlay",
+        "docked-top",
+        "docked-side",
+      ] as const) {
+        const other = render({
+          session: labelSessionFixture(),
+          video: VIDEO,
+          initialLayoutMode,
+        });
+        expect(other, String(initialLayoutMode)).not.toContain(
+          "data-label-black",
+        );
+        expect(other, String(initialLayoutMode)).not.toContain(
+          "data-label-rail",
+        );
+      }
+    });
+
+    test("a selected shot zooms the court to its half and outlines the court", () => {
+      const html = render({
+        session: labelSessionFixture(),
+        video: VIDEO,
+        initialLayoutMode: "black",
+        initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+        initialSelectedShotId: "s-return",
+        ...SAVES,
+      });
+      const black = blackOf(html);
+      expect(black).toMatch(/data-court-view="(near|far)"/);
+      expect(black).toMatch(/<button[^>]*data-court-target/);
+      expect(black).toContain("data-court-steps");
+      expect(tagOf(black, "data-label-black-court")).toContain(
+        'data-court-placing="true"',
+      );
+      // The selected row mounts its editors, and only that row.
+      const rail = railOf(html);
+      expect(rail).toMatch(
+        /data-row="shot" data-shot-id="s-return" data-selected=""/,
+      );
+      expect(count(rail, /data-selected=""/g)).toBe(1);
+      expect(rail).toMatch(EDITORS);
     });
   });
 });

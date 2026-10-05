@@ -14,11 +14,11 @@
  * - **docked-side** — a column to the right of the table holding the video
  *   over the court; the table takes what is left and scrolls both ways.
  *
- * And a fourth, **black** — the full-screen view (board 08l): black to the
- * edges, the film and the court on the left and the points rail on the right.
- * It has no dock and no divider; its one size is the rail's width
- * ({@link clampRailWidth}), kept under {@link RAIL_WIDTH_STORAGE_KEY}. It is
- * in the vocabulary here and joins {@link LAYOUT_MODES} once the view exists.
+ * And a fourth, **black** — the full-screen view (board 08l,
+ * `label-black-view.tsx`): black to the edges, the film and the court on the
+ * left and the points rail on the right. It has no dock and no divider; its
+ * one size is the rail's width ({@link clampRailWidth}), kept under
+ * {@link RAIL_WIDTH_STORAGE_KEY}. The menu lists it last, as "Full screen".
  *
  * In a docked mode the band's height or the column's width is ONE number,
  * {@link DEFAULT_DOCK_SIZE} until the divider moves it, and the table takes
@@ -46,6 +46,7 @@ export const LAYOUT_MODES: readonly LabelLayoutMode[] = [
   "overlay",
   "docked-top",
   "docked-side",
+  "black",
 ];
 
 export const DEFAULT_LAYOUT_MODE: LabelLayoutMode = "overlay";

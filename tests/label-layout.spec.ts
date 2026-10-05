@@ -39,8 +39,13 @@ import {
  * column where both the video and the table still work.
  */
 
-test("three modes, the overlay by default, under keys of their own", () => {
-  expect(LAYOUT_MODES).toEqual(["overlay", "docked-top", "docked-side"]);
+test("four modes, the overlay by default, under keys of their own", () => {
+  expect(LAYOUT_MODES).toEqual([
+    "overlay",
+    "docked-top",
+    "docked-side",
+    "black",
+  ]);
   expect(DEFAULT_LAYOUT_MODE).toBe("overlay");
   expect(LAYOUT_MODE_STORAGE_KEY).toBe("labels-layout-mode");
   expect(LAYOUT_SIZE_STORAGE_KEY).toBe("labels-layout-size");
@@ -61,6 +66,7 @@ test("three modes, the overlay by default, under keys of their own", () => {
   expect(LAYOUT_MODE_LABEL.overlay.label).toBe("Overlay");
   expect(LAYOUT_MODE_LABEL["docked-top"].label).toBe("Docked top");
   expect(LAYOUT_MODE_LABEL["docked-side"].label).toBe("Docked side");
+  expect(LAYOUT_MODE_LABEL.black.label).toBe("Full screen");
 });
 
 test("a stored mode parses; anything unknown is the overlay", () => {
@@ -73,7 +79,7 @@ test("a stored mode parses; anything unknown is the overlay", () => {
 });
 
 test.describe("the black full-screen view", () => {
-  test("the mode parses and has its words, and the menu does not list it yet", () => {
+  test("the mode parses and has its words, and the menu lists it last", () => {
     expect(parseLayoutMode("black")).toBe("black");
     expect(parseLayoutMode("BLACK")).toBe("overlay");
     expect(LAYOUT_MODE_LABEL.black).toEqual({
@@ -81,8 +87,9 @@ test.describe("the black full-screen view", () => {
       description:
         "Black to the edges: film and court on the left, the points rail on the right",
     });
-    // T33 appends it once the view exists.
-    expect(LAYOUT_MODES).not.toContain("black");
+    // Last in the Layout menu (T33): Overlay / Docked top / Docked side /
+    // Full screen.
+    expect(LAYOUT_MODES[LAYOUT_MODES.length - 1]).toBe("black");
     // No dock, so no dock size: the records stay the two docked modes'.
     expect(Object.keys(DEFAULT_DOCK_SIZE)).toEqual([
       "docked-top",

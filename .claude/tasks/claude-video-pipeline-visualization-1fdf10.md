@@ -464,7 +464,7 @@ ready).
 
 ## T33 · The full-screen black view: shell, stage, rail, console hook-up
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T30, T31, T32
 - **files:** src/components/admin/labels/label-black-view.tsx (new), src/components/admin/labels/label-black-rail.tsx (new), src/components/admin/labels/label-layout.ts, src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-save-status.tsx, tests/label-console.spec.ts, tests/label-layout.spec.ts (guess)
