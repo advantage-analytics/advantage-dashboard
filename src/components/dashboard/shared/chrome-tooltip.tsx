@@ -40,8 +40,11 @@ export function ChromeTooltip({
   children,
 }: {
   label: string;
-  /** Second line, for controls whose name alone is not the whole story. */
-  detail?: string;
+  /**
+   * Second line, for controls whose name alone is not the whole story. An
+   * array is one line each — a chip standing for several marks lists them.
+   */
+  detail?: string | readonly string[];
   /** Sits beside the label, in mono. */
   shortcut?: string;
   side?: "top" | "right" | "bottom" | "left";
@@ -50,12 +53,18 @@ export function ChromeTooltip({
   /** An open menu, or an expanded panel — the control already says its name. */
   hidden?: boolean;
   /**
-   * The label is a sentence, not a name: it wraps inside 280px instead of
-   * running on one line. For a mark's hover line on the labelling rail.
+   * The sentence wraps inside 280px instead of running on one line. With a
+   * `detail`, the sentence is the detail: the label stays a one-line name
+   * (12px/500) and each detail line wraps under it. Without one, the label
+   * itself is the sentence — the whole of a text the row had to cut.
    */
   wrap?: boolean;
   children: React.ReactNode;
 }) {
+  const lines = (typeof detail === "string" ? [detail] : (detail ?? [])).filter(
+    Boolean,
+  );
+  const labelWraps = wrap && lines.length === 0;
   return (
     <Tooltip delayDuration={CHROME_TOOLTIP_DELAY_MS}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
@@ -69,7 +78,7 @@ export function ChromeTooltip({
       >
         <span
           className={
-            wrap
+            labelWraps
               ? "block max-w-[280px] font-normal whitespace-normal"
               : "flex items-center gap-2.5 whitespace-nowrap"
           }
@@ -81,11 +90,18 @@ export function ChromeTooltip({
             </span>
           )}
         </span>
-        {detail && (
-          <span className="text-[11px] font-normal whitespace-nowrap text-white/[0.64]">
-            {detail}
+        {lines.map((line, i) => (
+          <span
+            key={i}
+            className={
+              wrap
+                ? "block max-w-[280px] text-[11px] font-normal whitespace-normal text-white/[0.64]"
+                : "text-[11px] font-normal whitespace-nowrap text-white/[0.64]"
+            }
+          >
+            {line}
           </span>
-        )}
+        ))}
       </TooltipContent>
     </Tooltip>
   );

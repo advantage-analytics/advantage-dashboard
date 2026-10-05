@@ -19,11 +19,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { filmProgressWidth } from "@/components/dashboard/matches/match-detail/film/film-clock";
 import { cn } from "@/lib/utils";
 import type { LabelMarks, LabelSuggestion } from "@/lib/services/labels/marks";
@@ -316,41 +312,35 @@ export function BlackPointRow({
           ) : null}
         </span>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              data-cell=""
-              data-check-row=""
-              aria-pressed={checked}
-              aria-label={`Point ${number} checked`}
-              disabled={!operations}
-              onClick={(event) => {
-                event.stopPropagation();
-                operations?.onSetChecked(point.id, !checked);
-              }}
-              className={cn(
-                "flex size-[22px] items-center justify-center rounded-[var(--radius-button)] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                operations && "cursor-pointer",
-                checked
-                  ? "text-[var(--success)]"
-                  : playing
-                    ? "text-white/50"
-                    : "text-white/[0.22] group-hover/row:text-white/50",
-                operations && !checked && "hover:text-white",
-              )}
-            >
-              <Check
-                className="size-3.5"
-                strokeWidth={2.2}
-                aria-hidden="true"
-              />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            {checked ? "Point checked" : "Mark point checked"}
-          </TooltipContent>
-        </Tooltip>
+        <ChromeTooltip
+          label={checked ? "Point checked" : "Mark point checked"}
+          side="top"
+        >
+          <button
+            type="button"
+            data-cell=""
+            data-check-row=""
+            aria-pressed={checked}
+            aria-label={`Point ${number} checked`}
+            disabled={!operations}
+            onClick={(event) => {
+              event.stopPropagation();
+              operations?.onSetChecked(point.id, !checked);
+            }}
+            className={cn(
+              "flex size-[22px] items-center justify-center rounded-[var(--radius-button)] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+              operations && "cursor-pointer",
+              checked
+                ? "text-[var(--success)]"
+                : playing
+                  ? "text-white/50"
+                  : "text-white/[0.22] group-hover/row:text-white/50",
+              operations && !checked && "hover:text-white",
+            )}
+          >
+            <Check className="size-3.5" strokeWidth={2.2} aria-hidden="true" />
+          </button>
+        </ChromeTooltip>
 
         {/* The playing row's rule, as the points rail draws it: out of the
             grid's flow, so it takes no track. */}
@@ -519,17 +509,14 @@ export function BlackSuggestedPoint({
         >
           A point is probably missing here
         </span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              data-point-suggestion-detail=""
-              className="truncate text-[11px] text-white/50"
-            >
-              {reason}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top">{reason}</TooltipContent>
-        </Tooltip>
+        <ChromeTooltip label={reason} side="top" wrap>
+          <span
+            data-point-suggestion-detail=""
+            className="truncate text-[11px] text-white/50"
+          >
+            {reason}
+          </span>
+        </ChromeTooltip>
       </span>
       {operations ? (
         <span
@@ -769,73 +756,72 @@ function BlackNoteAction({
   const { note } = point;
   const label = `Point ${number} note`;
   return (
-    <Tooltip>
-      <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen}>
+      {/* The tooltip's trigger is the popover's: Radix merges the two onto
+          the one button. Open, the popover already says its name. */}
+      <ChromeTooltip label="Note" side="top" hidden={open}>
         <PopoverTrigger asChild>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              data-note-action=""
-              data-has-note={note ? "" : undefined}
-              aria-label={note ? `${label}: ${note}` : label}
-              aria-haspopup="dialog"
-              aria-expanded={open}
-              className={cn(
-                "flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                note ? "text-white" : "text-white/55",
-                open && "bg-white/[0.08] text-white",
-              )}
-            >
-              <StickyNote
-                className="size-[13px]"
-                strokeWidth={1.6}
-                aria-hidden="true"
-              />
-            </button>
-          </TooltipTrigger>
-        </PopoverTrigger>
-        <PopoverContent
-          align="end"
-          sideOffset={4}
-          aria-label={label}
-          className={cn(floatMenuToneClasses("dark"), "w-[300px]")}
-        >
-          <p className="px-[9px] pt-[7px] pb-[5px] text-[11px] text-white/50">
-            Note on point {number}
-          </p>
-          {/* The dark field pulls itself 5px left to sit over a cell's text
-              and runs 2px past it; the inset here hands both back. */}
-          <div className="pt-0.5 pr-[11px] pb-[7px] pl-[14px]">
-            <EditableCell
-              editable={edit.editable}
-              rowSelected
-              label={label}
-              valueText={note ?? "None"}
-              display={
-                <span className="-ml-[5px] block text-[12px] whitespace-normal text-white/85">
-                  {note}
-                </span>
-              }
-              editor={
-                <TextEditor
-                  tone="dark"
-                  label={label}
-                  text={note ?? ""}
-                  parse={parseNote}
-                  onCommit={(value) => {
-                    edit.onPatchPoint?.(point.id, {
-                      note: value as string | null,
-                    });
-                    setOpen(false);
-                  }}
-                />
-              }
+          <button
+            type="button"
+            data-note-action=""
+            data-has-note={note ? "" : undefined}
+            aria-label={note ? `${label}: ${note}` : label}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            className={cn(
+              "flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+              note ? "text-white" : "text-white/55",
+              open && "bg-white/[0.08] text-white",
+            )}
+          >
+            <StickyNote
+              className="size-[13px]"
+              strokeWidth={1.6}
+              aria-hidden="true"
             />
-          </div>
-        </PopoverContent>
-      </Popover>
-      {open ? null : <TooltipContent side="top">Note</TooltipContent>}
-    </Tooltip>
+          </button>
+        </PopoverTrigger>
+      </ChromeTooltip>
+      <PopoverContent
+        align="end"
+        sideOffset={4}
+        aria-label={label}
+        className={cn(floatMenuToneClasses("dark"), "w-[300px]")}
+      >
+        <p className="px-[9px] pt-[7px] pb-[5px] text-[11px] text-white/50">
+          Note on point {number}
+        </p>
+        {/* The dark field pulls itself 5px left to sit over a cell's text
+              and runs 2px past it; the inset here hands both back. */}
+        <div className="pt-0.5 pr-[11px] pb-[7px] pl-[14px]">
+          <EditableCell
+            editable={edit.editable}
+            rowSelected
+            label={label}
+            valueText={note ?? "None"}
+            display={
+              <span className="-ml-[5px] block text-[12px] whitespace-normal text-white/85">
+                {note}
+              </span>
+            }
+            editor={
+              <TextEditor
+                tone="dark"
+                label={label}
+                text={note ?? ""}
+                parse={parseNote}
+                onCommit={(value) => {
+                  edit.onPatchPoint?.(point.id, {
+                    note: value as string | null,
+                  });
+                  setOpen(false);
+                }}
+              />
+            }
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

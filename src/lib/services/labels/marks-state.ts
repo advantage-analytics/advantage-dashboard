@@ -169,6 +169,46 @@ export function stateHover(
   }
 }
 
+/** A hover in the dark tooltip's two lines: the name, then what it means. */
+export interface MarkHoverParts {
+  /** The mark's short name, with its state once it is no longer open. */
+  name: string;
+  /** The sentence under it; null when the name says everything. */
+  detail: string | null;
+}
+
+/**
+ * `stateHover` in two parts, for a tooltip that names first and explains
+ * second. An open flag and a fix are named by their chip label
+ * (`fixLabel`) over their own line; every other state is `stateHover`'s
+ * sentence cut at its first full stop — "Check the ending · settled" over
+ * "You changed the ending to …".
+ */
+export function stateHoverParts(
+  mark: LabelMark,
+  state: MarkState,
+  names: MarkNames,
+  sentence: string,
+  pointAdded = false,
+): MarkHoverParts {
+  if (mark.kind === "fix" || state === "open") {
+    return { name: fixLabel(mark), detail: markHover(mark, names) };
+  }
+  const line = stateHover(mark, state, names, sentence, pointAdded);
+  const cut = line.indexOf(". ");
+  if (cut === -1) return { name: line.replace(/\.$/, ""), detail: null };
+  return { name: line.slice(0, cut), detail: line.slice(cut + 2) };
+}
+
+/**
+ * A hover's two parts as one line — the chip's accessible name. A name that
+ * is a question ("Net or out?") already ends itself.
+ */
+export function hoverLine({ name, detail }: MarkHoverParts): string {
+  const stop = /[.?!]$/.test(name) ? "" : ".";
+  return detail ? `${name}${stop} ${detail}` : `${name}${stop}`;
+}
+
 /** The states of a point's marks, and whether the labeller changed it. */
 export interface MarkStates {
   /** One per point mark, in order. */

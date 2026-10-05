@@ -8,12 +8,14 @@ import type {
   LabelMarks,
 } from "@/lib/services/labels/marks";
 import {
+  hoverLine,
   markState,
   markStates,
   missingPointAdded,
   mostOpen,
   rollupMarks,
-  stateHover,
+  stateHoverParts,
+  type MarkHoverParts,
   type MarkState,
 } from "@/lib/services/labels/marks-state";
 import {
@@ -48,8 +50,23 @@ export interface MarkChipProps {
   /** How many marks it stands for — drawn only without words, past one. */
   count: number;
   state: MarkState;
-  /** The hover line: the tooltip's text and the chip's accessible name. */
+  /**
+   * The chip's accessible name: the tooltip's two lines as one, "name.
+   * sentence" — a Radix tooltip renders nothing until it opens.
+   */
   hover: string;
+  /**
+   * The tooltip's first line: the mark's short name ("Out call ignored"),
+   * with its state once it has one ("Check the ending · settled"), or what a
+   * chip standing for several says ("3 to check").
+   */
+  name: string;
+  /**
+   * The tooltip's second line: the sentence that explains the name. Several
+   * marks are a line each, "name — sentence". Absent when the name says it
+   * all (a dismissed question).
+   */
+  detail?: string | readonly string[];
   /**
    * A stroke row's chip: its result track is 36px at the rail's narrowest
    * and grows only past 640, so the pill gives up its words and its side
@@ -74,8 +91,8 @@ function isQuiet(kind: LabelMarkKind, state: MarkState): boolean {
  * Its words are the first thing to give when the rail narrows: under a 600px
  * row (the nearest `@container`, which each black row is) they are not drawn
  * and the chip is its icon, so the point's own two lines keep their room and
- * the score never moves. The hover line says everything either way, and is
- * the accessible name — a Radix tooltip renders nothing until it opens.
+ * the score never moves. The hover says everything either way, in the dark
+ * tooltip's two lines — the mark's name, then the sentence under it.
  *
  * Not a tab stop: the rail's rows already are, and a chip per row would
  * double them. A click on it is a click on its row.
@@ -86,6 +103,8 @@ export function MarkChip({
   count,
   state,
   hover,
+  name,
+  detail,
   compact = false,
 }: MarkChipProps) {
   const quiet = isQuiet(kind, state);
@@ -95,7 +114,12 @@ export function MarkChip({
   // not both; the count says more.
   const counted = compact && count > 1;
   return (
-    <ChromeTooltip label={hover} side="top" wrap>
+    <ChromeTooltip
+      label={name}
+      detail={detail}
+      side="top"
+      wrap={detail !== undefined}
+    >
       <span
         role="img"
         data-mark-kind={kind}
@@ -143,10 +167,13 @@ export function MarkChip({
  *
  * With `reset`, it is the row's Reset as well: a button the size of the
  * glyph, named for what it does ("Reset shot 3"), its hover saying both
- * things. It only ASKS — the console opens the confirm — and a click on it
- * is not a click on its row. Without `reset` (an added row, a row with no
- * seed, a session that cannot be written) it is the plain indicator. Either
- * way it is 11px wide: the marks slot that holds it never grows.
+ * things — "Changed by you" over "Click to reset". It only ASKS — the
+ * console opens the confirm — and a click on it is not a click on its row.
+ * Without `reset` (an added row, a row with no seed, a session that cannot
+ * be written) it is the plain indicator, and has no tooltip: the dark
+ * tooltip names a control, and this is not one (its accessible name still
+ * says "Changed by you"). Either way it is 11px wide: the marks slot that
+ * holds it never grows.
  */
 export function PencilMark({
   reset,
@@ -173,7 +200,7 @@ export function PencilMark({
     );
   }
   return (
-    <ChromeTooltip label="Changed by you · click to reset" side="top">
+    <ChromeTooltip label="Changed by you" detail="Click to reset" side="top">
       <button
         type="button"
         data-pencil=""
@@ -208,9 +235,37 @@ export interface PointRowMarks {
  */
 const SHOT_ONLY_CODE = "out_ball_rally_continued";
 
-/** The lines of several marks as one hover, each said once. */
-function joinHovers(lines: readonly string[]): string {
-  return [...new Set(lines)].join(" ");
+/** What a chip's hover says: its accessible name and the tooltip's lines. */
+type ChipHover = Pick<MarkChipProps, "hover" | "name" | "detail">;
+
+/**
+ * The hover of a chip standing for `parts`, each said once. One mark is its
+ * own name over its own sentence. Several are named by `many` — what the
+ * chip itself says, "3 to check" — over a line each, "name — sentence".
+ */
+function chipHover(parts: readonly MarkHoverParts[], many: string): ChipHover {
+  const said = new Set<string>();
+  const unique = parts.filter((part) => {
+    const line = hoverLine(part);
+    if (said.has(line)) return false;
+    said.add(line);
+    return true;
+  });
+  if (unique.length === 1) {
+    const [only] = unique;
+    return {
+      hover: hoverLine(only),
+      name: only.name,
+      detail: only.detail ?? undefined,
+    };
+  }
+  return {
+    hover: `${many}. ${unique.map(hoverLine).join(" ")}`,
+    name: many,
+    detail: unique.map((part) =>
+      part.detail ? `${part.name} — ${part.detail}` : part.name,
+    ),
+  };
 }
 
 /**
@@ -286,22 +341,32 @@ export function pointRowMarks(
     ...pointMarks.map((mark, i) => ({ mark, state: states.point[i] })),
     ...shotMarks.map((mark, i) => ({ mark, state: states.shots[i] })),
   ];
-  const hoverOf = (kind: LabelMarkKind): string => {
+  const hoverOf = (kind: LabelMarkKind, many: string): ChipHover => {
     const members = all.filter((m) => m.mark.kind === kind);
     const open = members.filter((m) => m.state === "open");
-    return joinHovers(
+    return chipHover(
       (open.length > 0 ? open : members).map((m) =>
-        stateHover(m.mark, m.state, names, sentence, pointAdded),
+        stateHoverParts(m.mark, m.state, names, sentence, pointAdded),
       ),
+      many,
     );
   };
 
   return {
     flag: rollup.flag
-      ? { kind: "flag", ...rollup.flag, hover: hoverOf("flag") }
+      ? {
+          kind: "flag",
+          ...rollup.flag,
+          // Several still open are the chip's own words, "3 to check".
+          ...hoverOf("flag", rollup.flag.text ?? "Nothing left to check"),
+        }
       : null,
     fix: rollup.fix
-      ? { kind: "fix", ...rollup.fix, hover: hoverOf("fix") }
+      ? {
+          kind: "fix",
+          ...rollup.fix,
+          ...hoverOf("fix", `${rollup.fix.count} fixes`),
+        }
       : null,
     pencil: rollup.pencil,
   };
@@ -331,7 +396,7 @@ export function shotRowMarks(
       text: null,
       count: 1,
       state,
-      hover: stateHover(mark, state, names, sentence),
+      ...chipHover([stateHoverParts(mark, state, names, sentence)], ""),
       compact: true,
     };
   });
@@ -359,7 +424,13 @@ export function collapseShotMarks(
     text: null,
     count: marks.length,
     state: mostOpen(same.map((m) => m.state)),
-    hover: joinHovers(marks.map((m) => m.hover)),
+    ...chipHover(
+      marks.map((m) => ({
+        name: m.name,
+        detail: typeof m.detail === "string" ? m.detail : null,
+      })),
+      `${marks.length} marks`,
+    ),
     compact: true,
   };
 }

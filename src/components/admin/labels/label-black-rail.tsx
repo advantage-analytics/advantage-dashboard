@@ -3,6 +3,7 @@
 import { Fragment, useMemo, type FocusEvent, type RefObject } from "react";
 import { Minimize2 } from "lucide-react";
 import type { FollowAffordance } from "@/components/dashboard/matches/match-detail/film/film-timeline";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type {
   LabelPointPatch,
@@ -233,19 +234,21 @@ export function LabelBlackRail({
         </span>
         <span className="flex-1" />
         <LabelSaveStatus status={saveStatus} tone="dark" />
-        <button
-          type="button"
-          data-label-black-exit=""
-          aria-label="Exit full screen"
-          onClick={onExit}
-          className="flex size-[26px] shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-white/70 transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-        >
-          <Minimize2
-            className="size-3.5"
-            strokeWidth={1.6}
-            aria-hidden="true"
-          />
-        </button>
+        <ChromeTooltip label="Exit full screen" side="bottom" align="end">
+          <button
+            type="button"
+            data-label-black-exit=""
+            aria-label="Exit full screen"
+            onClick={onExit}
+            className="flex size-[26px] shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-white/70 transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            <Minimize2
+              className="size-3.5"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          </button>
+        </ChromeTooltip>
       </div>
 
       {mismatch ? (

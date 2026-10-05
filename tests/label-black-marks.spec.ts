@@ -129,12 +129,20 @@ function renderRow(point: LabelPoint, marks: LabelMarks | null): string {
   );
 }
 
-function renderWell(point: LabelPoint, marks: LabelMarks | null): string {
+function renderWell(
+  point: LabelPoint,
+  marks: LabelMarks | null,
+  edit: Record<string, unknown> = {},
+): string {
   const { BlackShotsWell } = createLoader().load(WELL) as {
     BlackShotsWell: React.ComponentType<WellProps>;
   };
   return renderToStaticMarkup(
-    React.createElement(BlackShotsWell, { point, edit: editContext(), marks }),
+    React.createElement(BlackShotsWell, {
+      point,
+      edit: { ...editContext(), ...edit },
+      marks,
+    }),
   );
 }
 
@@ -213,7 +221,8 @@ test.describe("a flag on the point row", () => {
     expect(chip.kind).toBe("flag");
     expect(chip.state).toBe("open");
     expect(chip.text).toBe("Check the ending");
-    expect(chip.label).toBe(DISPUTED_HOVER);
+    // The accessible name is the tooltip's two lines as one.
+    expect(chip.label).toBe(`Check the ending. ${DISPUTED_HOVER}`);
     expect(chip.count).toBeNull();
     // The frame's pill: 18px, 10px/500, amber on an amber wash.
     for (const cls of [
@@ -465,7 +474,7 @@ test.describe("a stroke's own marks", () => {
     expect(slot).toContain("justify-self-end");
     expect(result.indexOf("data-shot-marks")).toBeLessThan(chip.at);
     expect(chip.label).toBe(
-      "The vendor called this ball out, but Vargas played the next shot, so it’s stored as in.",
+      "Out call ignored. The vendor called this ball out, but Vargas played the next shot, so it’s stored as in.",
     );
     expect(row.slice(0, row.indexOf(">") + 1)).toContain("@container");
 
@@ -561,7 +570,7 @@ test.describe("a stroke's own marks", () => {
     expect(open[0].state).toBe("open");
     expect(open[0].tag).toContain(AMBER);
     expect(open[0].label).toBe(
-      "Marked as hitting the net, but the ball’s height says it cleared it.",
+      "Net or out? Marked as hitting the net, but the ball’s height says it cleared it.",
     );
 
     const edited: LabelPoint = {
@@ -576,6 +585,297 @@ test.describe("a stroke's own marks", () => {
     expect(chip.tag).toContain(QUIET);
     // The stroke's own pencil is still the only one in its row.
     expect(pencils(shotRow(html, "s-reply"))).toBe(1);
+  });
+});
+
+test.describe("a mark's hover is the dark tooltip's two lines", () => {
+  type Hover = {
+    hover: string;
+    name: string;
+    detail?: string | readonly string[];
+  };
+  type MarkModule = {
+    pointRowMarks: (
+      point: LabelPoint,
+      marks: LabelMarks,
+      names: typeof NAMES,
+      sentence?: string,
+    ) => { flag: Hover | null; fix: Hover | null };
+    shotRowMarks: (
+      point: LabelPoint,
+      shot: LabelShot,
+      marks: LabelMarks,
+      names: typeof NAMES,
+    ) => (Hover & { code: string })[];
+    collapseShotMarks: (marks: readonly Hover[]) => Hover | null;
+  };
+  const load = () => createLoader().load(MARK) as MarkModule;
+  const IGNORED = mark("out_ball_rally_continued", { nextHitter: "p2" });
+  const IGNORED_HOVER =
+    "The vendor called this ball out, but Vargas played the next shot, so it’s stored as in.";
+
+  test("one mark: its name over its sentence", () => {
+    const { pointRowMarks, shotRowMarks } = load();
+    const point = fixturePoint();
+
+    const open = pointRowMarks(point, marksOf(point, [DISPUTED]), NAMES)!.flag!;
+    expect(open.name).toBe("Check the ending");
+    expect(open.detail).toBe(DISPUTED_HOVER);
+    expect(open.hover).toBe(`Check the ending. ${DISPUTED_HOVER}`);
+
+    const shot = point.shots[0];
+    const [fix] = shotRowMarks(
+      point,
+      shot,
+      marksOf(point, [], { [shot.id]: [IGNORED] }),
+      NAMES,
+    );
+    expect(fix.name).toBe("Out call ignored");
+    expect(fix.detail).toBe(IGNORED_HOVER);
+  });
+
+  test("a state rides on the name; the sentence is what the labeller did", () => {
+    const { pointRowMarks } = load();
+    const wrongSide = mark("score_side_mismatch", {
+      score: null,
+      expected: null,
+      actual: null,
+    } as LabelMarkParams["score_side_mismatch"]);
+    const checked = fixturePoint({ checkedAt: "2026-10-01T10:00:00Z" });
+    const asIs = pointRowMarks(
+      checked,
+      marksOf(checked, [wrongSide]),
+      NAMES,
+    )!.flag!;
+    expect(asIs.name).toBe("Wrong side for the score · checked as is");
+    expect(asIs.detail).toBe("You confirmed the point without changing it.");
+    expect(asIs.hover).toBe(
+      "Wrong side for the score · checked as is. You confirmed the point without changing it.",
+    );
+
+    const edited = fixturePoint({ status: "edited" });
+    const settled = pointRowMarks(
+      edited,
+      marksOf(edited, [DISPUTED]),
+      NAMES,
+      "Lee ace",
+    )!.flag!;
+    expect(settled.name).toBe("Check the ending · settled");
+    expect(settled.detail).toBe("You changed the ending to Lee ace.");
+
+    // Dismissed says everything in its name: no second line.
+    const dropped = fixturePoint({ dismissed: ["missing_point"] });
+    const dismissed = pointRowMarks(
+      dropped,
+      marksOf(dropped, [mark("service_court_repeat", { side: "ad" })]),
+      NAMES,
+    )!.flag!;
+    expect(dismissed.name).toBe("Same side twice · dismissed");
+    expect(dismissed.detail).toBeUndefined();
+    expect(dismissed.hover).toBe("Same side twice · dismissed.");
+  });
+
+  test("a chip standing for several names the count, a line per mark", () => {
+    const { pointRowMarks, shotRowMarks, collapseShotMarks } = load();
+    const point = fixturePoint();
+    const three = pointRowMarks(
+      point,
+      marksOf(point, [
+        DISPUTED,
+        mark("ending_suspect_line", {}),
+        mark("second_serve_called_out", {}),
+      ]),
+      NAMES,
+    )!.flag!;
+    expect(three.name).toBe("3 to check");
+    expect(three.detail).toEqual([
+      `Check the ending — ${DISPUTED_HOVER}`,
+      "Close to the line — The ball before this winner landed within 1 m of a line. Most like this turn out to be errors.",
+      "Double fault? — The second serve was called out, but one or two shots followed. Check whether it was a double fault.",
+    ]);
+    expect(three.hover.startsWith("3 to check. Check the ending. ")).toBe(true);
+
+    const shot = point.shots[0];
+    const marks = marksOf(point, [], {
+      [shot.id]: [IGNORED, mark("net_hit_contradicts_height", {})],
+    });
+    const disc = collapseShotMarks(shotRowMarks(point, shot, marks, NAMES))!;
+    expect(disc.name).toBe("2 marks");
+    expect(disc.detail).toEqual([
+      `Out call ignored — ${IGNORED_HOVER}`,
+      "Net or out? — Marked as hitting the net, but the ball’s height says it cleared it.",
+    ]);
+  });
+
+  test("the tooltip keeps the name on one line and wraps the sentence under it", () => {
+    const inline = ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children);
+    const { ChromeTooltip } = createLoader({
+      stubs: {
+        "@/components/ui/tooltip": {
+          Tooltip: inline,
+          TooltipTrigger: inline,
+          TooltipContent: ({
+            className,
+            children,
+          }: {
+            className?: string;
+            children?: React.ReactNode;
+          }) =>
+            React.createElement("div", { "data-tip": "", className }, children),
+        },
+      },
+    }).load("src/components/dashboard/shared/chrome-tooltip.tsx") as {
+      ChromeTooltip: React.ComponentType<Record<string, unknown>>;
+    };
+    const tip = (props: Record<string, unknown>) => {
+      const html = renderToStaticMarkup(
+        React.createElement(
+          ChromeTooltip,
+          props,
+          React.createElement("i", null),
+        ),
+      );
+      return html.slice(html.indexOf("<div data-tip"));
+    };
+    const NAME = "flex items-center gap-2.5 whitespace-nowrap";
+    const DETAIL =
+      "text-[11px] font-normal whitespace-nowrap text-white/[0.64]";
+    const WRAPPED =
+      "block max-w-[280px] text-[11px] font-normal whitespace-normal text-white/[0.64]";
+
+    // Every other caller: a name, and a detail that runs on one line.
+    const plain = tip({ label: "Activity", detail: "2 in progress" });
+    expect(plain).toContain(
+      `<span class="${NAME}">Activity</span><span class="${DETAIL}">2 in progress</span>`,
+    );
+    for (const cls of [
+      "rounded-[12px]",
+      "bg-[var(--ink-900)]",
+      "text-[12px]",
+      "font-medium",
+      "text-white",
+      "shadow-[var(--shadow-dropdown)]",
+    ]) {
+      expect(plain, cls).toContain(cls);
+    }
+
+    // A mark: the name as it was, the sentence wrapping inside 280px.
+    const mark = tip({ label: "Check the ending", detail: "Why.", wrap: true });
+    expect(mark).toContain(
+      `<span class="${NAME}">Check the ending</span><span class="${WRAPPED}">Why.</span>`,
+    );
+    // Several marks: a line each.
+    const many = tip({
+      label: "2 marks",
+      detail: ["One.", "Two."],
+      wrap: true,
+    });
+    expect(many.match(new RegExp("max-w-\\[280px\\]", "g"))).toHaveLength(2);
+    expect(many).toContain(`">One.</span><span class="${WRAPPED}">Two.</span>`);
+
+    // A cut text shown whole: with no detail, the label is the sentence.
+    const whole = tip({ label: "Down the line", wrap: true });
+    expect(whole).toContain(
+      '<span class="block max-w-[280px] font-normal whitespace-normal">Down the line</span>',
+    );
+    expect(whole).not.toContain("text-white/[0.64]");
+  });
+
+  test("the pencil names itself, then what a click does — and only as a button", () => {
+    const source = readFileSync(MARK, "utf8");
+    expect(source).toContain(
+      '<ChromeTooltip label="Changed by you" detail="Click to reset" side="top">',
+    );
+    // The chip passes its two lines apart, and wraps only a sentence.
+    expect(source).toContain("label={name}");
+    expect(source).toContain("detail={detail}");
+    expect(source).toContain("wrap={detail !== undefined}");
+    expect(source).toContain("aria-label={hover}");
+  });
+
+  test("no raw tooltip is left in the black view", () => {
+    for (const file of [
+      MARK,
+      ROW,
+      WELL,
+      "src/components/admin/labels/label-black-banner.tsx",
+      "src/components/admin/labels/label-black-view.tsx",
+      "src/components/admin/labels/label-rail-resize.tsx",
+      "src/components/admin/labels/label-point-menu.tsx",
+    ]) {
+      const source = readFileSync(file, "utf8");
+      expect(source, file).not.toMatch(
+        /<Tooltip\b|TooltipContent|TooltipTrigger/,
+      );
+    }
+    // The rail groups its rows under one provider, and draws none itself.
+    const rail = readFileSync(
+      "src/components/admin/labels/label-black-rail.tsx",
+      "utf8",
+    );
+    expect(rail.match(/<TooltipProvider>/g)).toHaveLength(1);
+    expect(rail).not.toMatch(/<Tooltip\b|TooltipContent|TooltipTrigger/);
+    expect(rail).toContain('<ChromeTooltip label="Exit full screen"');
+  });
+});
+
+test.describe("a selected stroke's mark stays in reach", () => {
+  test("the row's requests end left of the marks slot, and nothing sits over it", () => {
+    const point = fixturePoint();
+    const shot = point.shots[0];
+    const fix = mark("out_ball_rally_continued", { nextHitter: "p2" });
+    const edited: LabelPoint = {
+      ...point,
+      shots: [{ ...shot, status: "edited" }],
+    };
+    const html = renderWell(edited, marksOf(edited, [], { [shot.id]: [fix] }), {
+      selectedShotId: shot.id,
+    });
+    const row = tagOf(html, 'data-row="shot"');
+    expect(row).toContain('data-selected=""');
+    expect(row).toContain("relative");
+
+    // The result is the row's LAST track and the one that grows, inside
+    // 14px of padding: its right edge is the row's at every rail width.
+    const tracks = /grid-cols-\[([^\]]+)\]/.exec(row)![1].split("_");
+    expect(tracks.at(-1)).toBe("minmax(36px,1fr)");
+    expect(tracks.filter((t) => t.includes("fr"))).toHaveLength(1);
+    expect(row).toContain("px-[14px]");
+
+    // The slot is pinned to that edge, the cell's last child, and holds the
+    // disc and the pencil — both drawn on the selected row.
+    const cellAt = html.indexOf('data-calculated="result"');
+    const actionsAt = html.indexOf("data-shot-actions");
+    expect(actionsAt).toBeGreaterThan(cellAt);
+    const cell = html.slice(cellAt, actionsAt);
+    const resultTag = tagOf(html, 'data-calculated="result"');
+    const slot = tagOf(cell, "data-shot-marks");
+    expect(slot).toContain("justify-self-end");
+    expect(slot).toContain("shrink-0");
+    const [chip] = chips(cell);
+    expect(chip.kind).toBe("fix");
+    expect(pencils(cell)).toBe(1);
+
+    // The overlay stops 4px short of the slot at its widest: the row's
+    // padding, the disc, the gap and the pencil.
+    const { SHOT_TAIL_PX } = createLoader().load(WELL) as {
+      SHOT_TAIL_PX: number;
+    };
+    const overlay = tagOf(html, "data-shot-actions");
+    const right = Number(/ right-\[(\d+)px\]/.exec(overlay)![1]);
+    expect(right).toBe(14 + SHOT_TAIL_PX + 4);
+    expect(overlay).toContain("absolute");
+    expect(overlay).not.toMatch(/\binset-0\b|\binset-x-0\b|\bleft-/);
+    // The slot fits the cell at its 36px minimum, gap included.
+    const gap = Number(/ gap-\[(\d+)px\]/.exec(resultTag)![1]);
+    expect(SHOT_TAIL_PX + gap).toBeLessThanOrEqual(36);
+
+    // Nothing takes the pointer from the chip or lifts itself over it.
+    for (const tag of [slot, chip.tag, resultTag]) {
+      expect(tag).not.toContain("pointer-events-none");
+    }
+    expect(row + cell + overlay).not.toMatch(/\bz-(\d|\[)/);
   });
 });
 

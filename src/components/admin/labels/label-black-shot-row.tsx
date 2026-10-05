@@ -1,11 +1,7 @@
 "use client";
 
 import { Plus, RotateCcw, Undo2, WandSparkles, X } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
 import {
   isGhostShot,
@@ -405,17 +401,14 @@ export function BlackShotRow({
       {placement ? (
         // The one word here nobody can open an editor on, in a track that
         // narrows with the rail: whole in the tooltip when it is cut.
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              data-calculated="placement"
-              className={cn("min-w-0 truncate text-[11px]", words)}
-            >
-              {placement}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top">{placement}</TooltipContent>
-        </Tooltip>
+        <ChromeTooltip label={placement} side="top" wrap>
+          <span
+            data-calculated="placement"
+            className={cn("min-w-0 truncate text-[11px]", words)}
+          >
+            {placement}
+          </span>
+        </ChromeTooltip>
       ) : (
         <span
           data-calculated="placement"
@@ -427,11 +420,13 @@ export function BlackShotRow({
       {/* The word, then a fixed right-aligned slot for the row's marks and
           pencil. The word's column can go to nothing and the cell clips, so
           the slot never grows the grid and never passes the rail's edge: the
-          word truncates before a mark is touched. */}
+          word truncates before a mark is touched. The 3px between them is
+          what the cell's 36px minimum leaves beside the slot's 33
+          (`SHOT_TAIL_PX`) — at 4 the pencil's last pixel was clipped. */}
       <span
         data-calculated="result"
         className={cn(
-          "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden text-[11px] whitespace-nowrap",
+          "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-[3px] overflow-hidden text-[11px] whitespace-nowrap",
           words,
         )}
       >
@@ -801,18 +796,15 @@ function BlackSuggestedShot({
       >
         {name ?? <Dash label="No player" />}
       </span>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span
-            data-suggestion-text=""
-            className="col-[4/7] min-w-0 truncate text-[11px]"
-            style={{ color: VALUE_INK }}
-          >
-            {words}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="top">{words}</TooltipContent>
-      </Tooltip>
+      <ChromeTooltip label={words} side="top" wrap>
+        <span
+          data-suggestion-text=""
+          className="col-[4/7] min-w-0 truncate text-[11px]"
+          style={{ color: VALUE_INK }}
+        >
+          {words}
+        </span>
+      </ChromeTooltip>
       {operations ? (
         <span
           data-suggestion-actions=""
@@ -981,23 +973,20 @@ function RowAction({
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          {...{ [attr]: "" }}
-          aria-label={label}
-          onClick={(event) => {
-            event.stopPropagation();
-            onClick();
-          }}
-          className="flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/[0.45] transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-        >
-          {children}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top">{tooltip}</TooltipContent>
-    </Tooltip>
+    <ChromeTooltip label={tooltip} side="top">
+      <button
+        type="button"
+        {...{ [attr]: "" }}
+        aria-label={label}
+        onClick={(event) => {
+          event.stopPropagation();
+          onClick();
+        }}
+        className="flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/[0.45] transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+      >
+        {children}
+      </button>
+    </ChromeTooltip>
   );
 }
 

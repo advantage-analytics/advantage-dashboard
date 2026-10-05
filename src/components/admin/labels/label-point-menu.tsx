@@ -16,11 +16,7 @@ import {
   FloatMenuNote,
   type FloatMenuTone,
 } from "@/components/ui/float-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import {
@@ -116,15 +112,17 @@ export function PointMenu({
       className="flex justify-end"
       onClick={(event) => event.stopPropagation()}
     >
-      <Tooltip>
-        <FloatMenu
-          open={open}
-          onOpenChange={(next) => (next ? setOpen(true) : close())}
-          width={232}
-          tone={tone}
-          label={`Point ${number} actions`}
-          trigger={
-            <TooltipTrigger asChild>
+      {/* The dark tooltip around the menu, as every row's ⋯ wears it
+          (`match-actions-menu.tsx`): open, the menu already says its name. */}
+      <ChromeTooltip label="Point actions" side="top" hidden={open}>
+        <span className="inline-flex">
+          <FloatMenu
+            open={open}
+            onOpenChange={(next) => (next ? setOpen(true) : close())}
+            width={232}
+            tone={tone}
+            label={`Point ${number} actions`}
+            trigger={
               <button
                 type="button"
                 aria-label={`Point ${number} actions`}
@@ -152,122 +150,119 @@ export function PointMenu({
                   aria-hidden="true"
                 />
               </button>
-            </TooltipTrigger>
-          }
-        >
-          {panel === "move" ? (
-            <>
-              <FloatMenuItem
-                label="Back"
-                icon={
-                  <ChevronLeft
-                    className={cn(
-                      "size-3",
-                      dark ? "text-white/50" : "text-[var(--ink-500)]",
-                    )}
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                }
-                onSelect={() => setPanel("actions")}
-              />
-              <FloatMenuDivider />
-              <FloatMenuLabel>Move point {number} to</FloatMenuLabel>
-              {actions.move.map((game) => (
+            }
+          >
+            {panel === "move" ? (
+              <>
                 <FloatMenuItem
-                  key={game.key}
-                  label={game.label}
-                  description={game.description}
-                  onSelect={() => {
-                    close();
-                    game.run();
-                  }}
-                />
-              ))}
-              <FloatMenuNote>
-                Only the games either side of this point.
-              </FloatMenuNote>
-            </>
-          ) : (
-            <>
-              <FloatMenuItem
-                label="Add point above"
-                description={`An empty point before point ${number}`}
-                icon={
-                  <ArrowUpToLine
-                    className={cn(
-                      "size-3",
-                      dark ? "text-white/50" : "text-[var(--ink-500)]",
-                    )}
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                }
-                onSelect={() => {
-                  close();
-                  actions.addAbove();
-                }}
-              />
-              <FloatMenuItem
-                label="Add point below"
-                description={`An empty point after point ${number}`}
-                icon={
-                  <ArrowDownToLine
-                    className={cn(
-                      "size-3",
-                      dark ? "text-white/50" : "text-[var(--ink-500)]",
-                    )}
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                }
-                onSelect={() => {
-                  close();
-                  actions.addBelow();
-                }}
-              />
-              <FloatMenuDivider />
-              {actions.move.length > 0 ? (
-                <FloatMenuItem
-                  label="Move to game…"
-                  description={now}
-                  trailing={
-                    <ChevronRight
-                      className="size-3"
+                  label="Back"
+                  icon={
+                    <ChevronLeft
+                      className={cn(
+                        "size-3",
+                        dark ? "text-white/50" : "text-[var(--ink-500)]",
+                      )}
                       strokeWidth={1.5}
                       aria-hidden="true"
                     />
                   }
-                  onSelect={() => setPanel("move")}
+                  onSelect={() => setPanel("actions")}
                 />
-              ) : null}
-              {actions.reset ? (
+                <FloatMenuDivider />
+                <FloatMenuLabel>Move point {number} to</FloatMenuLabel>
+                {actions.move.map((game) => (
+                  <FloatMenuItem
+                    key={game.key}
+                    label={game.label}
+                    description={game.description}
+                    onSelect={() => {
+                      close();
+                      game.run();
+                    }}
+                  />
+                ))}
+                <FloatMenuNote>
+                  Only the games either side of this point.
+                </FloatMenuNote>
+              </>
+            ) : (
+              <>
                 <FloatMenuItem
-                  label="Reset"
-                  description="Back to the values it was seeded with"
+                  label="Add point above"
+                  description={`An empty point before point ${number}`}
+                  icon={
+                    <ArrowUpToLine
+                      className={cn(
+                        "size-3",
+                        dark ? "text-white/50" : "text-[var(--ink-500)]",
+                      )}
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                  }
                   onSelect={() => {
                     close();
-                    actions.reset?.();
+                    actions.addAbove();
                   }}
                 />
-              ) : null}
-              {actions.move.length > 0 || actions.reset ? (
+                <FloatMenuItem
+                  label="Add point below"
+                  description={`An empty point after point ${number}`}
+                  icon={
+                    <ArrowDownToLine
+                      className={cn(
+                        "size-3",
+                        dark ? "text-white/50" : "text-[var(--ink-500)]",
+                      )}
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                  }
+                  onSelect={() => {
+                    close();
+                    actions.addBelow();
+                  }}
+                />
                 <FloatMenuDivider />
-              ) : null}
-              <FloatMenuItem
-                label="Delete point"
-                onSelect={() => {
-                  close();
-                  actions.remove();
-                }}
-              />
-            </>
-          )}
-        </FloatMenu>
-        {open ? null : (
-          <TooltipContent side="top">Point actions</TooltipContent>
-        )}
-      </Tooltip>
+                {actions.move.length > 0 ? (
+                  <FloatMenuItem
+                    label="Move to game…"
+                    description={now}
+                    trailing={
+                      <ChevronRight
+                        className="size-3"
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                    }
+                    onSelect={() => setPanel("move")}
+                  />
+                ) : null}
+                {actions.reset ? (
+                  <FloatMenuItem
+                    label="Reset"
+                    description="Back to the values it was seeded with"
+                    onSelect={() => {
+                      close();
+                      actions.reset?.();
+                    }}
+                  />
+                ) : null}
+                {actions.move.length > 0 || actions.reset ? (
+                  <FloatMenuDivider />
+                ) : null}
+                <FloatMenuItem
+                  label="Delete point"
+                  onSelect={() => {
+                    close();
+                    actions.remove();
+                  }}
+                />
+              </>
+            )}
+          </FloatMenu>
+        </span>
+      </ChromeTooltip>
     </span>
   );
 }
