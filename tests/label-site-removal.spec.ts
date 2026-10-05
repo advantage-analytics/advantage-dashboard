@@ -539,6 +539,44 @@ test.describe("a ghost in the black well", () => {
     expect(open).toContain('data-row="ghost-shot-row"');
     expect(open).toContain("h-[34px]");
     expect(open).toContain("bg-white/[0.03]");
+    // The stroke row's first seven tracks, then ONE track whose minimum
+    // holds Restore whole (`GHOST_TAIL_PX`): a grid fills minmax tracks to
+    // their maximum before a 1fr takes anything, so a 0 minimum left Restore
+    // 56px past a 520px rail. Fixed minimums 360 + gaps 56 + padding 28 + 76
+    // = 520 exactly: nothing passes the rail's edge, and the columns line up
+    // with the stroke row's.
+    const { GHOST_TAIL_PX, SHOT_TAIL_PX } = createLoader().load(WELL) as {
+      GHOST_TAIL_PX: number;
+      SHOT_TAIL_PX: number;
+    };
+    expect(GHOST_TAIL_PX).toBe(76);
+    expect(open).toContain(
+      `grid-cols-[22px_minmax(44px,48px)_minmax(36px,54px)_minmax(52px,80px)_minmax(30px,52px)_88px_88px_minmax(${GHOST_TAIL_PX}px,1fr)]`,
+    );
+    expect(open).toContain("gap-x-2");
+    expect(open).toContain("px-[14px]");
+    expect(22 + 44 + 36 + 52 + 30 + 88 + 88 + 7 * 8 + 28 + GHOST_TAIL_PX).toBe(
+      520,
+    );
+    // The stroke row beside it: its placement + gap + result minimums are
+    // the ghost's one tail, so the two rows' columns line up at 520 and the
+    // result holds its marks slot (`SHOT_TAIL_PX`) at its narrowest.
+    const serve = tag(html, 'data-shot-id="s-p4-serve"');
+    expect(serve).toContain(
+      "grid-cols-[22px_minmax(44px,48px)_minmax(36px,54px)_minmax(52px,80px)_minmax(30px,52px)_88px_88px_minmax(30px,80px)_minmax(36px,1fr)]",
+    );
+    expect(SHOT_TAIL_PX).toBeLessThanOrEqual(36);
+    expect(30 + 8 + 36).toBeLessThanOrEqual(GHOST_TAIL_PX);
+    // At 640 the stroke row's maximums fill the rail exactly, as the frame
+    // draws it: 22+48+54+80+52+88+88+80+36 + 64 + 28.
+    expect(22 + 48 + 54 + 80 + 52 + 88 + 88 + 80 + 36 + 8 * 8 + 28).toBe(640);
+    // The reason's words give before Restore does.
+    const reason = tag(row, "data-ghost-reason");
+    expect(reason).toContain("min-w-0");
+    expect(row).toMatch(
+      /data-ghost-reason=""[^>]*><span class="min-w-0 truncate">Hit after the fault<\/span>/,
+    );
+    expect(tag(row, "data-restore-site-removal")).toContain("shrink-0");
     // The number's dash, then the struck values.
     expect(text(row)).toMatch(/^– /);
     expect(text(row)).toContain("Lee Forehand Topspin");

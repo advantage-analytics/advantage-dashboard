@@ -10,6 +10,7 @@ import type {
 import {
   markState,
   markStates,
+  mostOpen,
   rollupMarks,
   stateHover,
   type MarkState,
@@ -49,8 +50,11 @@ export interface MarkChipProps {
   /** The hover line: the tooltip's text and the chip's accessible name. */
   hover: string;
   /**
-   * A stroke row's chip: its result track is 28px at the rail's narrowest,
-   * so there the pill gives up its side padding and is an 18px disc.
+   * A stroke row's chip: its result track is 36px at the rail's narrowest
+   * and grows only past 640, so the pill gives up its words and its side
+   * padding for good and is an 18px disc — the icon, or the count when it
+   * stands for more than one mark (`collapseShotMarks`). The hover says the
+   * rest.
    */
   compact?: boolean;
 }
@@ -86,12 +90,16 @@ export function MarkChip({
   const quiet = isQuiet(kind, state);
   const words = quiet ? null : text;
   const Icon = kind === "flag" ? Flag : WandSparkles;
+  // A disc standing for several marks has room for the count or the icon,
+  // not both; the count says more.
+  const counted = compact && count > 1;
   return (
     <ChromeTooltip label={hover} side="top" wrap>
       <span
         role="img"
         data-mark-kind={kind}
         data-mark-state={state}
+        data-mark-count={counted ? count : undefined}
         aria-label={hover}
         className={cn(
           "inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full text-[10px] font-medium whitespace-nowrap",
@@ -101,23 +109,27 @@ export function MarkChip({
               ? "bg-[rgba(253,230,138,0.14)] text-[rgba(252,211,77,1)]"
               : "bg-white/10 text-[rgba(255,255,255,0.78)]",
           compact
-            ? "w-[18px] justify-center px-0 @min-[600px]:w-auto @min-[600px]:px-1.5"
+            ? "w-[18px] justify-center px-0"
             : words
               ? "px-1.5 @min-[600px]:px-[7px]"
               : "px-1.5",
         )}
       >
-        <Icon
-          className={kind === "flag" ? "size-2.5" : "size-[11px]"}
-          strokeWidth={1.8}
-          aria-hidden="true"
-        />
+        {counted ? (
+          <b className="font-medium tabular-nums">{count}</b>
+        ) : (
+          <Icon
+            className={kind === "flag" ? "size-2.5" : "size-[11px]"}
+            strokeWidth={1.8}
+            aria-hidden="true"
+          />
+        )}
         {words ? (
           <span data-mark-text="" className="hidden @min-[600px]:inline">
             {words}
           </span>
         ) : null}
-        {!quiet && text === null && count > 1 ? (
+        {!compact && !quiet && text === null && count > 1 ? (
           <b className="font-medium tabular-nums">{count}</b>
         ) : null}
       </span>
@@ -271,4 +283,31 @@ export function shotRowMarks(
       compact: true,
     };
   });
+}
+
+/**
+ * What the stroke row draws of its marks: ONE 18px disc, or nothing. Its
+ * result track is 36px at the rail's narrowest and no wider until the rail
+ * passes 640, so the row never has room for a chip per mark — one mark is
+ * its icon, several are their count, and the hover reads every line. The
+ * disc is as loud as its loudest member: a flag if any is one, in the most
+ * open state among them.
+ */
+export function collapseShotMarks(
+  marks: readonly ShotRowMark[],
+): ShotRowMark | null {
+  if (marks.length === 0) return null;
+  if (marks.length === 1) return marks[0];
+  const flag = marks.find((m) => m.kind === "flag");
+  const kind: LabelMarkKind = flag ? "flag" : "fix";
+  const same = marks.filter((m) => m.kind === kind);
+  return {
+    code: (flag ?? marks[0]).code,
+    kind,
+    text: null,
+    count: marks.length,
+    state: mostOpen(same.map((m) => m.state)),
+    hover: joinHovers(marks.map((m) => m.hover)),
+    compact: true,
+  };
 }

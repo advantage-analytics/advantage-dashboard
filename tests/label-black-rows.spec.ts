@@ -817,12 +817,17 @@ test.describe("the black shots well", () => {
       expect(fixed, track).not.toBeNull();
       return { min: Number(fixed![1]), max: Number(fixed![1]) };
     });
-    // number · time · player · stroke · spin · hit · landed · placement.
+    // number · time · player · stroke · spin · hit · landed · placement —
+    // the frame's, but for 8px the placement gave to the result, whose
+    // frame width (28) could not hold a mark disc and the pencil.
     expect(bounds.slice(0, 8).map((b) => b.max)).toEqual([
-      22, 48, 54, 80, 52, 88, 88, 88,
+      22, 48, 54, 80, 52, 88, 88, 80,
     ]);
-    // The result is the one flexible track, and never nothing.
-    expect(bounds[8]).toEqual({ min: 28, max: null });
+    // The result is the one flexible track, and never narrower than its
+    // marks slot — an 18px disc, a 4px gap and the 11px pencil — so the
+    // slot never grows the grid past the rail.
+    expect(bounds[8]).toEqual({ min: 36, max: null });
+    expect(bounds[8].min).toBeGreaterThanOrEqual(18 + 4 + 11);
     // The two positions never give.
     expect(bounds[5]).toEqual({ min: 88, max: 88 });
     expect(bounds[6]).toEqual({ min: 88, max: 88 });

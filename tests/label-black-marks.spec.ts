@@ -192,6 +192,13 @@ function chips(html: string): Chip[] {
   });
 }
 
+/** The opening tag carrying `attr`. */
+function tagOf(html: string, attr: string): string {
+  const at = html.indexOf(attr);
+  expect(at, attr).toBeGreaterThan(-1);
+  return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
+}
+
 const pencils = (html: string) =>
   html.match(/aria-label="Changed by you"/g)?.length ?? 0;
 
@@ -430,11 +437,34 @@ test.describe("a stroke's own marks", () => {
     expect(rest).toHaveLength(0);
     expect(chip.kind).toBe("fix");
     expect(chip.state).toBe("settled");
-    // An icon: no words, no count, and a disc at the rail's narrowest.
+    // An icon: no words, no count, and an 18px disc at every rail width —
+    // the result track has no room for more until the rail passes 640.
     expect(chip.text).toBeNull();
     expect(chip.count).toBeNull();
     expect(chip.tag).toContain("w-[18px]");
-    expect(chip.tag).toContain("@min-[600px]:px-1.5");
+    expect(chip.tag).toContain("px-0");
+    expect(chip.tag).not.toContain("@min-[600px]");
+    expect(chip.tag).not.toContain("data-mark-count");
+
+    // The cell: the word in a column that can go to nothing, the marks in
+    // a fixed right-aligned slot, and the cell clips — so the slot never
+    // grows the grid and the word truncates before a mark is cut.
+    const cell = tagOf(row, 'data-calculated="result"');
+    for (const cls of [
+      "grid",
+      "grid-cols-[minmax(0,1fr)_auto]",
+      "min-w-0",
+      "overflow-hidden",
+    ]) {
+      expect(cell, cls).toContain(cls);
+    }
+    expect(result).toMatch(
+      /data-calculated="result"[^>]*><span class="min-w-0 truncate">In<\/span>/,
+    );
+    const slot = tagOf(result, "data-shot-marks");
+    expect(slot).toContain("shrink-0");
+    expect(slot).toContain("justify-self-end");
+    expect(result.indexOf("data-shot-marks")).toBeLessThan(chip.at);
     expect(chip.label).toBe(
       "The vendor called this ball out, but Vargas played the next shot, so it’s stored as in.",
     );
@@ -443,6 +473,62 @@ test.describe("a stroke's own marks", () => {
     // Nowhere else in the well.
     expect(chips(shotRow(html, "s-reply"))).toHaveLength(0);
     expect(chips(html)).toHaveLength(1);
+  });
+
+  test("two or more marks on a stroke collapse to one disc carrying their count", () => {
+    const point = twoShots();
+    const net = mark("net_hit_contradicts_height", {});
+    const html = renderWell(
+      point,
+      marksOf(point, [], { [SERVE]: [IGNORED, net] }),
+    );
+    const row = shotRow(html, SERVE);
+    const all = chips(row);
+    expect(all).toHaveLength(1);
+    const [chip] = all;
+    // As loud as its loudest member: the open flag.
+    expect(chip.kind).toBe("flag");
+    expect(chip.state).toBe("open");
+    expect(chip.tag).toContain(AMBER);
+    expect(chip.tag).toContain("w-[18px]");
+    expect(chip.tag).toContain('data-mark-count="2"');
+    // The count stands in for the icon; the hover reads both lines.
+    expect(chip.count).toBe("2");
+    expect(row.slice(chip.at, row.indexOf("</span>", chip.at))).not.toContain(
+      "<svg",
+    );
+    expect(chip.label).toContain("Marked as hitting the net");
+    expect(chip.label).toContain("The vendor called this ball out");
+    // One slot, the pencil beside it on a changed stroke.
+    expect(row.match(/data-shot-marks/g)).toHaveLength(1);
+    const edited: LabelPoint = {
+      ...point,
+      shots: point.shots.map((s) =>
+        s.id === SERVE ? { ...s, status: "edited" } : s,
+      ),
+    };
+    const changed = shotRow(
+      renderWell(edited, marksOf(edited, [], { [SERVE]: [IGNORED, net] })),
+      SERVE,
+    );
+    const slot = changed.slice(changed.indexOf("data-shot-marks"));
+    expect(chips(slot)).toHaveLength(1);
+    expect(pencils(slot)).toBe(1);
+    // Two fixes: a fix disc, still counted.
+    const fixes = chips(
+      shotRow(
+        renderWell(
+          point,
+          marksOf(point, [], {
+            [SERVE]: [IGNORED, mark("geometry_discarded", {})],
+          }),
+        ),
+        SERVE,
+      ),
+    );
+    expect(fixes).toHaveLength(1);
+    expect(fixes[0].kind).toBe("fix");
+    expect(fixes[0].count).toBe("2");
   });
 
   test("it is never raised to the point row; any other shot mark is", () => {

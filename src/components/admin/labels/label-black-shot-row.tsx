@@ -25,6 +25,7 @@ import { courtPair, withoutGhosts } from "./label-black-format";
 import {
   MarkChip,
   PencilMark,
+  collapseShotMarks,
   shotRowMarks,
   type ShotRowMark,
 } from "./label-black-mark";
@@ -72,20 +73,36 @@ import {
  * hit at · landed at · placement · result.
  *
  * The frame draws them for a 640px rail — 22 · 48 · 54 · 80 · 52 · 88 · 88 ·
- * 88 and what is left — and that is exactly what each `minmax()` here grows
+ * 88 and what is left — and that is nearly what each `minmax()` here grows
  * to: a grid fills every track to its maximum before the `1fr` takes
- * anything, so at 640 and wider the row is the frame's. But the rail goes
- * down to 520 (`RAIL_MIN_PX`), where those fixed tracks alone need 612 and
- * pushed the result off the rail. So the words give: each track's MINIMUM is
- * what its shortest useful reading needs, the minimums with the gaps and the
- * padding come to 518, and a word that no longer fits truncates (a select's
- * whole word is in its menu, the placement's in a tooltip). The two positions never give — they are the numbers being checked.
+ * anything, so at 640 and wider the row is the frame's, but for 8px moved
+ * from the placement (80) to the result (36), which the frame's 28 could
+ * not hold a mark and a pencil in. But the rail goes down to 520
+ * (`RAIL_MIN_PX`), where those fixed tracks alone need 612 and pushed the
+ * result off the rail. So the words give: each track's MINIMUM is what its
+ * shortest useful reading needs, the minimums with the gaps and the padding
+ * come to 518, and a word that no longer fits truncates (a select's whole
+ * word is in its menu, the placement's in a tooltip). The two positions
+ * never give — they are the numbers being checked.
+ *
+ * The result's minimum, 36, is its tail's room — one 18px mark disc, a gap
+ * and the 11px pencil (`SHOT_TAIL_PX`) — so the tail never grows the grid:
+ * the result word truncates first, and nothing in the row ever passes the
+ * rail's edge at any width from 520 up.
  *
  * The row's two requests take NO track: they are an overlay on its right
  * edge (`data-shot-actions`), so reaching for a row never moves a column.
  */
 const ROW_GRID =
-  "relative grid grid-cols-[22px_minmax(44px,48px)_minmax(36px,54px)_minmax(52px,80px)_minmax(30px,52px)_88px_88px_minmax(38px,88px)_minmax(28px,1fr)] items-center gap-x-2 h-[34px] px-[14px]";
+  "relative grid grid-cols-[22px_minmax(44px,48px)_minmax(36px,54px)_minmax(52px,80px)_minmax(30px,52px)_88px_88px_minmax(30px,80px)_minmax(36px,1fr)] items-center gap-x-2 h-[34px] px-[14px]";
+
+/** The widest the result cell's tail gets: 18px disc + 4px gap + 11px pencil. */
+export const SHOT_TAIL_PX = 33;
+
+/** A stroke row's mark without the key it is listed by. */
+function chipProps({ code: _code, ...chip }: ShotRowMark) {
+  return chip;
+}
 
 /**
  * The ground under the row's two requests: the rail's own `--surface-dark`
@@ -256,6 +273,8 @@ export function BlackShotRow({
   const placement = shotPlacement(labelShotValues(shot));
   /** The words' ink — `.bk-pl`, `.bk-sp`, `.bk-cv` — a step down on a fault. */
   const words = fault ? "text-white/35" : "text-white/50";
+  // ONE disc for the row's marks, however many (`collapseShotMarks`).
+  const mark = collapseShotMarks(marks);
 
   return (
     // Selecting is a pointer convenience; the keyboard selects by focusing
@@ -382,18 +401,29 @@ export function BlackShotRow({
           <Dash label="No placement" />
         </span>
       )}
+      {/* The word, then a fixed right-aligned slot for the row's marks and
+          pencil. The word's column can go to nothing and the cell clips, so
+          the slot never grows the grid and never passes the rail's edge: the
+          word truncates before a mark is touched. */}
       <span
         data-calculated="result"
         className={cn(
-          "inline-flex min-w-0 items-center gap-1.5 text-[11px] whitespace-nowrap",
+          "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden text-[11px] whitespace-nowrap",
           words,
         )}
       >
-        {shot.result ? RESULT_LABEL[shot.result] : <Dash label="No result" />}
-        {marks.map(({ code, ...chip }) => (
-          <MarkChip key={code} {...chip} />
-        ))}
-        {changed ? <PencilMark /> : null}
+        <span className="min-w-0 truncate">
+          {shot.result ? RESULT_LABEL[shot.result] : <Dash label="No result" />}
+        </span>
+        {mark || changed ? (
+          <span
+            data-shot-marks=""
+            className="inline-flex shrink-0 items-center gap-1 justify-self-end"
+          >
+            {mark ? <MarkChip {...chipProps(mark)} /> : null}
+            {changed ? <PencilMark /> : null}
+          </span>
+        ) : null}
       </span>
       {operations ? (
         <span
@@ -498,12 +528,22 @@ export function BlackDeletedShot({
  * player · stroke · spin · hit at · landed at — then ONE track for the reason
  * and Restore where the row's placement and result would be (the frame's
  * `.fx-gt`, `grid-column: 8 / -1`): nobody derives a placement for a stroke
- * that is out of the rally. Its minimums are the stroke row's, so the two
- * rows' columns line up and the ghost fits the rail at 520px like every
- * other row; the reason's words truncate before Restore moves.
+ * that is out of the rally.
+ *
+ * That last track's MINIMUM is what Restore needs whole — the button (the
+ * icon, "Restore", its padding) and the gap before it, `GHOST_TAIL_PX` —
+ * because a grid fills every `minmax()` track to its maximum before a `1fr`
+ * takes anything: a `minmax(0,1fr)` tail was handed 4px at 520 and Restore
+ * ran 56px past the rail. With 76 reserved, 520 − 28 − 56 − 76 leaves the
+ * seven tracks exactly their minimums, so the columns still line up with the
+ * stroke row's at every width, and the reason's words are what give —
+ * truncating to nothing before Restore moves or is cut.
  */
 const GHOST_ROW_GRID =
-  "grid grid-cols-[22px_minmax(44px,48px)_minmax(36px,54px)_minmax(52px,80px)_minmax(30px,52px)_88px_88px_minmax(0,1fr)] items-center gap-x-2 h-[34px] px-[14px]";
+  "grid grid-cols-[22px_minmax(44px,48px)_minmax(36px,54px)_minmax(52px,80px)_minmax(30px,52px)_88px_88px_minmax(76px,1fr)] items-center gap-x-2 h-[34px] px-[14px]";
+
+/** The ghost row's reason track at its narrowest: Restore whole, plus the gap. */
+export const GHOST_TAIL_PX = 76;
 
 /**
  * A ghost (board 08m §3, the frame's `.fx-gl` and `.fx-gone`): a stroke the

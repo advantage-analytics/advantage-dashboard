@@ -186,7 +186,7 @@ const OPENNESS: readonly MarkState[] = [
   "checked",
 ];
 
-function mostOpen(states: readonly MarkState[]): MarkState {
+export function mostOpen(states: readonly MarkState[]): MarkState {
   return OPENNESS.find((state) => states.includes(state)) ?? "checked";
 }
 
