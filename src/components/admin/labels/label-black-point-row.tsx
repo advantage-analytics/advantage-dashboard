@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   Check,
   ChevronDown,
+  CornerDownRight,
   GripVertical,
   Plus,
   StickyNote,
@@ -22,6 +23,10 @@ import {
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { filmProgressWidth } from "@/components/dashboard/matches/match-detail/film/film-clock";
 import { cn } from "@/lib/utils";
+import {
+  planGameShift,
+  type GameOverflow,
+} from "@/lib/services/labels/game-shift";
 import type { LabelMarks, LabelSuggestion } from "@/lib/services/labels/marks";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameBand as LabelGameBandScore } from "@/lib/services/labels/score";
@@ -559,6 +564,117 @@ export function BlackSuggestedPoint({
           >
             Dismiss
           </button>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+// ── A game that runs over ──────────────────────────────────────────────────
+
+/**
+ * A game already won with rows still sitting in it (`game-shift.ts`): the
+ * rows after the one that decided it read "Game–30", and they belong to the
+ * next game. The same dashed amber slot as the suggested point, before the
+ * first of them — a corner arrow on the number track, "Game {n} is already
+ * won" over how many rows sit past it, and ONE answer: "Move to game {m}",
+ * the console's `onShiftGameOverflow` from that first row. No Dismiss: the
+ * score column keeps reading "Game–30" until the rows move, and that is the
+ * cue. When the move cascades past one game, the button's tooltip says how
+ * far. Absent on a session that cannot be written. Read off the labeller's
+ * own rows, so it draws on every session — marks on or off.
+ *
+ * Built to fit the rail from 520px as the suggested point is: the two lines
+ * truncate, the one button never shrinks or wraps.
+ */
+export function BlackGameOverflow({
+  overflow,
+  point,
+  edit,
+}: {
+  overflow: GameOverflow<LabelPoint>;
+  /** The first leftover — the row that follows the slot. */
+  point: LabelPoint;
+  edit: EditContext;
+}) {
+  const operations = edit.editable ? edit.operations : undefined;
+  const adScoring = edit.adScoring ?? true;
+  const count = overflow.leftovers.length;
+  const plan = planGameShift(edit.points, adScoring, point.id);
+  const summary = "error" in plan ? null : plan.summary;
+  const gameInSet =
+    summary?.fromGame.gameInSet ?? edit.scores.get(point.id)?.gameInSet ?? null;
+  const title =
+    gameInSet === null
+      ? "This game is already won"
+      : `Game ${gameInSet} is already won`;
+  const reason =
+    count === 1
+      ? "1 point after it belongs to the next game"
+      : `${count} points after it belong to the next game`;
+  const to = summary?.nextGame.gameInSet ?? (gameInSet ?? 0) + 1;
+  const move = `Move to game ${to}`;
+  const cascades = summary !== null && summary.games > 1;
+  const button = (
+    <button
+      type="button"
+      data-game-overflow-move=""
+      aria-label={`${move}: ${reason}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        operations?.onShiftGameOverflow(point.id);
+      }}
+      className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-[rgba(252,211,77,1)] transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+    >
+      {move}
+    </button>
+  );
+  return (
+    <div
+      data-row="game-overflow"
+      data-game-overflow={point.id}
+      className="mx-2 my-0.5 grid min-h-[44px] grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-[10px] rounded-lg border border-dashed border-[rgba(252,211,77,0.45)] bg-[rgba(253,230,138,0.06)] py-1.5 pr-[10px] pl-1.5"
+    >
+      <CornerDownRight
+        className="size-3"
+        style={{ color: SLOT_PLUS_INK }}
+        strokeWidth={2}
+        aria-hidden="true"
+      />
+      <span className="flex min-w-0 flex-col gap-px">
+        <span
+          data-game-overflow-title=""
+          className="truncate text-[12px] font-medium text-white"
+        >
+          {title}
+        </span>
+        <ChromeTooltip label={reason} side="top" wrap>
+          <span
+            data-game-overflow-detail=""
+            className="truncate text-[11px] text-white/50"
+          >
+            {reason}
+          </span>
+        </ChromeTooltip>
+      </span>
+      {operations ? (
+        <span
+          data-game-overflow-actions=""
+          className="flex shrink-0 items-center justify-end"
+        >
+          {cascades ? (
+            <ChromeTooltip
+              label={move}
+              detail={`Moves ${summary.points} points across ${summary.games} games`}
+              side="top"
+              align="end"
+              wrap
+            >
+              {button}
+            </ChromeTooltip>
+          ) : (
+            button
+          )}
         </span>
       ) : null}
     </div>

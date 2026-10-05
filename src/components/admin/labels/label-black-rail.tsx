@@ -9,6 +9,10 @@ import type {
   LabelPointPatch,
   LabelShotPatch,
 } from "@/lib/services/labels/edit";
+import {
+  gameOverflow,
+  type GameOverflow,
+} from "@/lib/services/labels/game-shift";
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
@@ -31,6 +35,7 @@ import { LabelScoreBanner } from "./label-black-banner";
 import {
   BlackDeletedPoint,
   BlackGameBand,
+  BlackGameOverflow,
   BlackPointRow,
   BlackSuggestedPoint,
   openPointSuggestions,
@@ -61,7 +66,9 @@ import type { SaveStatus } from "./save-status";
  * it and its marks (board 08m, `label-black-mark.tsx`) in its tail, a
  * one-line dark tombstone with its Undo (`BlackDeletedPoint`) for a
  * deleted one, a dashed slot (`BlackSuggestedPoint`, board 08m §5) before a
- * point the marks think is missing a point in front of it, and the recessed
+ * point the marks think is missing a point in front of it, a second dashed
+ * slot (`BlackGameOverflow`) before the first row sitting past a game's end
+ * — the "Game–30" rows, offered a move into the next game — and the recessed
  * shots well (`BlackShotsWell`) under the open point only. The scroller
  * never scrolls sideways: every row is built to fit the rail from its
  * narrowest (520px), and `overflow-x-hidden` holds that.
@@ -208,11 +215,18 @@ export function LabelBlackRail({
     onToggleGhost,
     points,
     scores: scores.points,
+    adScoring,
     playingShotId,
   };
   const bandBefore = bandsBeforePoints(points, scores.games);
   // The slots still waiting for an answer, by the point whose row follows.
   const slotBefore = openPointSuggestions(points, edit, marks);
+  // The games that run over, by their first leftover point. Read off the
+  // labeller's own rows, so on every editable session — marks on or off.
+  const overflowBefore = useMemo(
+    () => (editable ? overflowBeforePoints(points, adScoring) : NO_OVERFLOW),
+    [editable, points, adScoring],
+  );
 
   return (
     <TooltipProvider>
@@ -287,6 +301,7 @@ export function LabelBlackRail({
               }
               const band = bandBefore.get(point.id);
               const slot = slotBefore.get(point.id);
+              const overflow = overflowBefore.get(point.id);
               // The playing point is always unfolded, whatever is held: the
               // labeller sees its strokes light as they are hit. A held
               // point stays open beside it.
@@ -308,6 +323,15 @@ export function LabelBlackRail({
                   {slot ? (
                     <BlackSuggestedPoint
                       suggestion={slot}
+                      point={point}
+                      edit={edit}
+                    />
+                  ) : null}
+                  {/* Before the first row that reads "Game–30": the game
+                      is already won, these rows belong to the next one. */}
+                  {overflow ? (
+                    <BlackGameOverflow
+                      overflow={overflow}
                       point={point}
                       edit={edit}
                     />
@@ -382,4 +406,20 @@ function bandsBeforePoints(
   return bandBefore;
 }
 
+/**
+ * Each overflowing game's rows past its end, keyed by the first of them —
+ * the row the "already won" slot goes before.
+ */
+function overflowBeforePoints(
+  points: readonly LabelPoint[],
+  adScoring: boolean,
+): ReadonlyMap<string, GameOverflow<LabelPoint>> {
+  const before = new Map<string, GameOverflow<LabelPoint>>();
+  for (const game of gameOverflow(points, adScoring)) {
+    before.set(game.leftovers[0].id, game);
+  }
+  return before;
+}
+
 const NO_IDS: ReadonlySet<string> = new Set();
+const NO_OVERFLOW: ReadonlyMap<string, GameOverflow<LabelPoint>> = new Map();

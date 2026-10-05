@@ -47,6 +47,10 @@ import {
   insertLabelPoint,
   type LabelInsertPointResult,
 } from "@/lib/services/labels/point-insert-session";
+import {
+  shiftLabelGameOverflow,
+  type LabelGameShiftResult,
+} from "@/lib/services/labels/game-shift-session";
 import type { LabelSessionFieldsPatch } from "@/lib/services/labels/session-fields";
 import {
   updateLabelSessionFields,
@@ -246,6 +250,24 @@ export async function insertLabelPointAction(
   position: InsertPosition = "before",
 ): Promise<LabelInsertPointResult> {
   return insertLabelPoint(sessionId, anchorPointId, position);
+}
+
+/**
+ * Move the points left over past a game's end into the next game: from the
+ * game that holds `fromPointId` (one of its leftovers — the rows after the
+ * one that decided it, which read "Game–30"), its leftovers take the next
+ * game's set, game, server and type, and if that game then runs over, its
+ * leftovers move on, down the match. With no game after, they open a new
+ * one. `label_points` only, one update per moved point; no index moves.
+ * Refused on a session that is not labelling and on a point inside its
+ * game; a session labelled without marks is fine — the leftovers are read
+ * off the labeller's own rows.
+ */
+export async function shiftLabelGameOverflowAction(
+  sessionId: string,
+  fromPointId: string,
+): Promise<LabelGameShiftResult> {
+  return shiftLabelGameOverflow(sessionId, fromPointId);
 }
 
 /**

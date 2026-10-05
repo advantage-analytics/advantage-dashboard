@@ -6,6 +6,7 @@ import {
   ArrowUpToLine,
   ChevronLeft,
   ChevronRight,
+  CornerDownRight,
   MoreHorizontal,
 } from "lucide-react";
 import {
@@ -19,6 +20,7 @@ import {
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
 import type { LabelPoint } from "@/lib/services/labels/session";
+import { leftoverIds } from "@/lib/services/labels/game-shift";
 import {
   destinationServerIn,
   neighbourGames,
@@ -37,23 +39,32 @@ import type { EditContext, LabelRowOperations } from "./label-row-parts";
  *     picking one hands it to the console, which asks "switch players?" first
  *     when that is not this point's server. Empty when the point has no
  *     neighbouring game.
+ *   · `shiftOverflow` — only on a leftover: a row sitting past the row that
+ *     decided its game, whose score reads "Game–30" (`game-shift.ts`). Moves
+ *     every leftover of that game into the next one, and on down the match.
  *   · `reset` — only on a point that has changed and has a stored seed.
  *   · `remove` — always.
  */
 export function pointMenuActions(
   point: LabelPoint,
-  context: Pick<EditContext, "points" | "names">,
+  context: Pick<EditContext, "points" | "names" | "adScoring">,
   operations: LabelRowOperations,
 ): {
   addAbove: () => void;
   addBelow: () => void;
   move: { key: string; label: string; description?: string; run: () => void }[];
+  shiftOverflow: (() => void) | null;
   reset: (() => void) | null;
   remove: () => void;
 } {
   return {
     addAbove: () => operations.onInsertPoint(point.id, "before"),
     addBelow: () => operations.onInsertPoint(point.id, "after"),
+    shiftOverflow: leftoverIds(context.points, context.adScoring ?? true).has(
+      point.id,
+    )
+      ? () => operations.onShiftGameOverflow(point.id)
+      : null,
     move: neighbourGames(context.points, point.id).map((game) => {
       const server = destinationServerIn(context.points, point.id, game);
       return {
@@ -238,6 +249,26 @@ export function PointMenu({
                     onSelect={() => setPanel("move")}
                   />
                 ) : null}
+                {actions.shiftOverflow ? (
+                  <FloatMenuItem
+                    label="Move leftover points to the next game"
+                    description="This game is already won before this point"
+                    icon={
+                      <CornerDownRight
+                        className={cn(
+                          "size-3",
+                          dark ? "text-white/50" : "text-[var(--ink-500)]",
+                        )}
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                    }
+                    onSelect={() => {
+                      close();
+                      actions.shiftOverflow?.();
+                    }}
+                  />
+                ) : null}
                 {actions.reset ? (
                   <FloatMenuItem
                     label="Reset"
@@ -248,7 +279,9 @@ export function PointMenu({
                     }}
                   />
                 ) : null}
-                {actions.move.length > 0 || actions.reset ? (
+                {actions.move.length > 0 ||
+                actions.shiftOverflow ||
+                actions.reset ? (
                   <FloatMenuDivider />
                 ) : null}
                 <FloatMenuItem

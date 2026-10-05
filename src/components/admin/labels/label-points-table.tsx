@@ -129,6 +129,7 @@ export function LabelPointsTable({
   return (
     <LabelPointsTableView
       {...props}
+      adScoring={adScoring}
       scores={scores.points}
       games={scores.games}
     />
@@ -139,6 +140,11 @@ export interface LabelPointsTableViewProps {
   points: readonly LabelPoint[];
   /** Each live point's score before it, by id — `labelScores(…).points`. */
   scores: ReadonlyMap<string, LabelPointScore>;
+  /**
+   * The scoring `scores` were made with, for the rows' own re-reading of it
+   * (a leftover point's "Move leftover points to the next game").
+   */
+  adScoring?: boolean;
   /** One band per game with a live point — `labelScores(…).games`. */
   games?: readonly LabelGameBandScore[];
   /** With both, and `editable`: the bands' game-type and server menus. */
@@ -174,6 +180,7 @@ export interface LabelPointsTableViewProps {
 export function LabelPointsTableView({
   points,
   scores,
+  adScoring = true,
   games = NO_GAMES,
   onSetGameType,
   onSetGameServer,
@@ -205,6 +212,7 @@ export function LabelPointsTableView({
     onToggleTombstone,
     points,
     scores,
+    adScoring,
     playingShotId,
   };
   // Each game's band goes above its first live point, once: a point moved

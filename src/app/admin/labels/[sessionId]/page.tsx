@@ -18,6 +18,7 @@ import {
   setLabelGameServerAction,
   setLabelGameTypeAction,
   setLabelPointCheckedAction,
+  shiftLabelGameOverflowAction,
   updateLabelPoint,
   updateLabelSessionFieldsAction,
   updateLabelShot,
@@ -29,8 +30,9 @@ import {
  * autosaving through `updateLabelShot` / `updateLabelPoint`, and the row
  * operations (delete and Undo, add a shot, move a point, mark it checked,
  * reset an edited row to its seed, set a game's server or type, put back a
- * stroke the site removed, dismiss a suggestion, add a suggested point, store
- * the score the labeller read or that the video ends early) through the rest
+ * stroke the site removed, dismiss a suggestion, add a suggested point, move
+ * a game's leftover points into the next game, store the score the labeller
+ * read or that the video ends early) through the rest
  * of `../actions`. The header lives
  * in the console, beside the save line it owns; the page only supplies the
  * way back.
@@ -93,6 +95,7 @@ export default async function AdminLabelSessionPage({
           restoreSiteRemoval: restoreLabelSiteRemovalAction,
           dismissSuggestion: dismissLabelSuggestionAction,
           insertPoint: insertLabelPointAction,
+          shiftGameOverflow: shiftLabelGameOverflowAction,
           updateSessionFields: updateLabelSessionFieldsAction,
         }}
         headerAction={

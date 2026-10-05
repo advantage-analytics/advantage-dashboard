@@ -63,6 +63,14 @@ export interface LabelRowOperations {
    * and the new one takes the slot, in the anchor's game.
    */
   onInsertPoint: (anchorPointId: string, position?: InsertPosition) => void;
+  /**
+   * Move the points left over past a game's end — the rows after the one
+   * that decided it, which read "Game–30" — into the next game, and on down
+   * the match while games run over (`game-shift.ts`). `fromPointId` is one of
+   * those leftovers. The black rail's slot before the first of them asks;
+   * so does a leftover's ⋯ menu in the light table.
+   */
+  onShiftGameOverflow: (fromPointId: string) => void;
 }
 
 /** What every row needs to draw and save its editors. */
@@ -89,6 +97,12 @@ export interface EditContext {
   points: readonly LabelPoint[];
   /** `labelScores(points, adScoring).points`, computed once by the table. */
   scores: ReadonlyMap<string, LabelPointScore>;
+  /**
+   * `session.adScoring`, for the rows that re-run the scoreboard's rule —
+   * the leftover check behind "Move leftover points to the next game".
+   * Absent means ad scoring, as the loader's own fallback does.
+   */
+  adScoring?: boolean;
   playingShotId: string | null;
 }
 

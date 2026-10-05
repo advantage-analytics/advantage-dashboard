@@ -942,6 +942,8 @@ test("no operation issues a SQL DELETE on a label_* row", () => {
     "src/lib/services/labels/suggestions-session.ts",
     "src/lib/services/labels/point-insert.ts",
     "src/lib/services/labels/point-insert-session.ts",
+    "src/lib/services/labels/game-shift.ts",
+    "src/lib/services/labels/game-shift-session.ts",
     "src/lib/services/labels/session-fields.ts",
     "src/lib/services/labels/session-fields-session.ts",
     "src/app/admin/labels/actions.ts",

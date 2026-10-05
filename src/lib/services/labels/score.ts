@@ -247,9 +247,10 @@ function gameCall(s: number, r: number): string {
 /**
  * Whether the points so far have settled an ordinary game: four points and
  * two clear with ad scoring; four points at all without it, since the point
- * at 40–40 decides.
+ * at 40–40 decides. Exported for `game-shift.ts`, which finds the points
+ * sitting past a game's end by the same rule the "Game–30" call reads by.
  */
-function gameDecided(
+export function gameDecided(
   points: Record<LabelSide, number>,
   adScoring: boolean,
 ): boolean {

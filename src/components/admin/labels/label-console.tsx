@@ -40,6 +40,11 @@ import {
   type PlannedGameWrites,
 } from "@/lib/services/labels/game-operations";
 import type { LabelGameWriteResult } from "@/lib/services/labels/game-operations-session";
+import {
+  applyGameShift,
+  planGameShift,
+} from "@/lib/services/labels/game-shift";
+import type { LabelGameShiftResult } from "@/lib/services/labels/game-shift-session";
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import { endingPatchForShotChange } from "@/lib/services/labels/ending-derived";
 import { labelScores } from "@/lib/services/labels/score";
@@ -989,6 +994,47 @@ export function LabelConsole({
   }
 
   /**
+   * Move the rows left over past a game's end into the next game, and on
+   * down the match while games run over (`game-shift.ts`): the rows take
+   * their new games at once (`applyGameShift` over the same plan the server
+   * runs), the server's own writes are the last word, and on a refusal every
+   * moved row gets its old game, server and status back. No index moves, so
+   * nothing renumbers; the bands, scores and the score banner re-read the
+   * rows as they stand. Nothing is re-derived — no stroke changed.
+   */
+  function shiftGameOverflow(fromPointId: string) {
+    if (!operations) return;
+    const plan = planGameShift(points, session.adScoring, fromPointId);
+    if ("error" in plan) {
+      dispatchSave({ type: "start" });
+      dispatchSave({ type: "failure", message: plan.error });
+      return;
+    }
+    const before = new Map(points.map((point) => [point.id, point]));
+    const revert = (rows: LabelPoint[]) =>
+      rows.map((row) => {
+        const was = before.get(row.id);
+        if (!was || !plan.writes.some((write) => write.id === row.id)) {
+          return row;
+        }
+        return {
+          ...row,
+          setNumber: was.setNumber,
+          gameNumber: was.gameNumber,
+          server: was.server,
+          gameType: was.gameType,
+          status: was.status,
+        };
+      });
+    void runOperation(
+      (rows) => applyGameShift(rows, plan.writes),
+      () => operations.shiftGameOverflow(session.id, fromPointId),
+      (rows, result) => applyGameShift(revert(rows), result.writes),
+      revert,
+    );
+  }
+
+  /**
    * One of the score banner's two writes (board 08m's "Fix the entered
    * score" / "Video ends early"): the session's fields change at once, the
    * server is asked, and they come back on a refusal — `runOperation`'s
@@ -1425,6 +1471,7 @@ export function LabelConsole({
         onRestoreSiteRemoval: restoreSiteRemoval,
         onDismissSuggestion: dismissSuggestion,
         onInsertPoint: insertPoint,
+        onShiftGameOverflow: shiftGameOverflow,
         onMovePoint: requestMove,
         onSetChecked: setChecked,
         onAddShot: addShot,
@@ -1935,6 +1982,16 @@ export interface LabelConsoleOperations {
     anchorPointId: string,
     position: InsertPosition,
   ) => Promise<LabelInsertPointResult>;
+  /**
+   * Move the rows left over past a game's end — from the game that holds
+   * `fromPointId`, one of them — into the next game, and on while games run
+   * over: `set_number`, `game_number`, `server`, `game_type` and `status` on
+   * each moved point, `label_points` only. Returns the moved rows.
+   */
+  shiftGameOverflow: (
+    sessionId: string,
+    fromPointId: string,
+  ) => Promise<LabelGameShiftResult>;
   /**
    * The score banner's answers (board 08m): `final_score` and
    * `video_ends_early` on `label_sessions`, the only table it writes.
