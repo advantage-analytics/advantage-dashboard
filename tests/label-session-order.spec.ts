@@ -86,9 +86,12 @@ test.describe("isGhostShot", () => {
 
   test("a stroke the site never removed is not a ghost", () => {
     expect(isGhostShot({ ...ghost, siteRemoval: null })).toBe(false);
-    // Every fixture row is a kept, edited, added or labeller-deleted stroke.
+    // Every fixture row but point 4's one site-removed stroke is a kept,
+    // edited, added or labeller-deleted stroke.
     for (const point of labelSessionFixture().points) {
-      for (const shot of point.shots) expect(isGhostShot(shot)).toBe(false);
+      for (const shot of point.shots) {
+        expect(isGhostShot(shot), shot.id).toBe(shot.id === "s-p4-ghost");
+      }
     }
   });
 });

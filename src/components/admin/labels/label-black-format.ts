@@ -24,11 +24,26 @@ type SentencePoint = Pick<
   "pointIndex" | "ending" | "endedBy" | "server" | "shots"
 >;
 
-/** The strokes the rally is made of now: no tombstones, no site-removed ghosts. */
+/** The strokes the rally is made of now: no tombstones. */
 function liveShots(point: Pick<LabelPoint, "shots">): LabelShot[] {
-  return point.shots.filter(
-    (shot) => shot.status !== "deleted" && !isGhostShot(shot),
-  );
+  return point.shots.filter((shot) => shot.status !== "deleted");
+}
+
+/**
+ * The point without its ghosts — the strokes the site removed that the
+ * labeller has neither restored nor deleted (`isGhostShot`) — for every
+ * reading the black view makes while it DRAWS them as ghosts: the sentence,
+ * the detail line's deciding stroke and rally count, the marks' hover
+ * sentence and the shot numbering all skip a ghost then, and only then. With
+ * the session's marks off, or none built, a ghost is an ordinary stroke and
+ * the point is handed over as it is — the same object, so nothing downstream
+ * re-computes for a point that has no ghost either.
+ */
+export function withoutGhosts<T extends Pick<LabelPoint, "shots">>(
+  point: T,
+): T {
+  if (!point.shots.some(isGhostShot)) return point;
+  return { ...point, shots: point.shots.filter((shot) => !isGhostShot(shot)) };
 }
 
 function isServe(shot: Pick<LabelShot, "stroke">): boolean {

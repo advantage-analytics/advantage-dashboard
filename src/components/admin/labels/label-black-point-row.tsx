@@ -28,7 +28,11 @@ import type {
   LabelPoint,
   LabelSide,
 } from "@/lib/services/labels/session";
-import { pointDetail, pointSentence } from "./label-black-format";
+import {
+  pointDetail,
+  pointSentence,
+  withoutGhosts,
+} from "./label-black-format";
 import { MarkChip, PencilMark, pointRowMarks } from "./label-black-mark";
 import { EditableCell, TextEditor } from "./label-cells";
 import type { SideNames } from "./label-format";
@@ -39,7 +43,7 @@ import {
   type GameBandMenuRow,
 } from "./label-game-band";
 import { PointMenu } from "./label-point-menu";
-import { BlackUndoButton } from "./label-black-shot-row";
+import { BlackUndoButton, drawsGhosts } from "./label-black-shot-row";
 import { parseNote, pointSummary } from "./label-point-row";
 import {
   sideInitial,
@@ -136,7 +140,13 @@ export function BlackPointRow({
   const shotsId = `label-black-point-${point.id}-shots`;
   const checked = point.checkedAt !== null;
   const showNote = edit.editable || point.note !== null;
-  const rowMarks = pointRowMarks(point, marks, names);
+  // The point as the rail reads it (board 08m §3): without the strokes the
+  // site removed while the well draws them as ghosts, so the sentence, the
+  // deciding stroke and the rally count say what the rally is now. With the
+  // session's marks off or none built, a ghost is a stroke like any other.
+  const shown = drawsGhosts(edit, marks) ? withoutGhosts(point) : point;
+  const sentence = pointSentence(shown, names);
+  const rowMarks = pointRowMarks(point, marks, names, sentence);
   // ONE pencil: the roll-up's when the session has marks (it also counts a
   // removed stroke the labeller put back), the row's own rule when not.
   const changed = rowMarks ? rowMarks.pencil : pointChangedByYou(point);
@@ -199,14 +209,14 @@ export function BlackPointRow({
             data-point-sentence=""
             className="truncate text-[12px] font-medium text-white"
           >
-            {pointSentence(point, names)}
+            {sentence}
           </span>
           <span
             data-point-detail=""
             className="truncate text-[11px]"
             style={{ color: "rgba(255,255,255,0.45)" }}
           >
-            {pointDetail(point, names)}
+            {pointDetail(shown, names)}
           </span>
         </button>
 

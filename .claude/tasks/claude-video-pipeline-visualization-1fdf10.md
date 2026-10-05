@@ -535,7 +535,7 @@ ready).
 
 ## T38 · Ghost shot: quiet line, Show, Restore (new label_shots write)
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T37
 - **files:** src/lib/services/labels/site-removal.ts (new), src/lib/services/labels/site-removal-session.ts (new), src/app/admin/labels/actions.ts, src/app/admin/labels/[sessionId]/page.tsx, src/components/admin/labels/label-black-shot-row.tsx, src/components/admin/labels/label-black-point-row.tsx, src/components/admin/labels/label-row-parts.ts, src/components/admin/labels/label-console.tsx, tests/fixtures/label-session.ts, tests/label-site-removal.spec.ts (new), tests/label-operations.spec.ts (guess)

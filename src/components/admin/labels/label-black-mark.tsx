@@ -14,7 +14,11 @@ import {
   stateHover,
   type MarkState,
 } from "@/lib/services/labels/marks-state";
-import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
+import {
+  isGhostShot,
+  type LabelPoint,
+  type LabelShot,
+} from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import { pointSentence } from "./label-black-format";
 import type { SideNames } from "./label-format";
@@ -156,9 +160,43 @@ function joinHovers(lines: readonly string[]): string {
 }
 
 /**
+ * "1 shot removed" stands for the point's ghosts — the strokes the site
+ * removed that are still out of the rally (`isGhostShot`). Restore puts one
+ * back and the chip must follow: it counts the ghosts still live, and goes
+ * when none is (board 08m §3: "Restore … drops the grey mark from the
+ * point"). The mark's `eventIds` are narrowed to the live ghosts' vendor ids
+ * where they line up, so "2 shots removed" reads "1 shot removed" after one
+ * Restore; where they do not, the mark keeps its own count.
+ */
+function liveGhostFixes(
+  point: Pick<LabelPoint, "shots">,
+  pointMarks: readonly LabelMark[],
+): LabelMark[] {
+  const ghosts = point.shots.filter(isGhostShot);
+  return pointMarks.flatMap((mark): LabelMark[] => {
+    if (mark.code !== "phantom_strokes_dropped") return [mark];
+    if (ghosts.length === 0) return [];
+    const live = new Set(ghosts.map((shot) => shot.eventId));
+    const eventIds = mark.params.eventIds.filter((id) => live.has(id));
+    if (eventIds.length === 0) return [mark];
+    const narrowed: LabelMark = {
+      ...mark,
+      params: { ...mark.params, eventIds },
+    };
+    return [narrowed];
+  });
+}
+
+/**
  * What the point row draws of its marks — `rollupMarks` over the point's own
  * marks and those of its live strokes — or null when the session has no
  * marks at all, which is the row exactly as it was before them.
+ *
+ * `point` is the row as stored, ghosts and all: the life-cycle reads every
+ * stroke's status, and the removed-shot fix counts the ghosts still live.
+ * `sentence` is the point as the row READS it (`pointSentence` over the
+ * point without its ghosts while they are drawn as ghosts), for the settled
+ * hover line; by default the point's own.
  *
  * A chip standing for several marks hovers every line it stands for: the
  * open ones while any flag is open, every flag once none is, every fix.
@@ -167,9 +205,10 @@ export function pointRowMarks(
   point: LabelPoint,
   marks: LabelMarks | null | undefined,
   names: SideNames,
+  sentence: string = pointSentence(point, names),
 ): PointRowMarks | null {
   if (!marks) return null;
-  const pointMarks = marks.points[point.id] ?? [];
+  const pointMarks = liveGhostFixes(point, marks.points[point.id] ?? []);
   const shotMarks = point.shots
     // A deleted stroke's row is a tombstone and carries no chip, so its
     // marks are not counted toward what "open the point" would show.
@@ -179,7 +218,6 @@ export function pointRowMarks(
   const states = markStates(pointMarks, shotMarks, point, marks.suggestions);
   const rollup = rollupMarks(pointMarks, shotMarks, states);
 
-  const sentence = pointSentence(point, names);
   const all = [
     ...pointMarks.map((mark, i) => ({ mark, state: states.point[i] })),
     ...shotMarks.map((mark, i) => ({ mark, state: states.shots[i] })),

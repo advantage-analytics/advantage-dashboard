@@ -65,6 +65,8 @@ import type {
 } from "@/lib/services/labels/operations-session";
 import { playingRowAt } from "@/lib/services/labels/playback";
 import { applyPointReset, applyShotReset } from "@/lib/services/labels/reset";
+import { applySiteRemovalRestore } from "@/lib/services/labels/site-removal";
+import type { LabelSiteRemovalRestoreResult } from "@/lib/services/labels/site-removal-session";
 import {
   displayedPointId,
   followAffordance,
@@ -267,6 +269,7 @@ export function LabelConsole({
   operations,
   initialConfirm = null,
   initialOpenTombstoneIds,
+  initialOpenGhostIds,
   initialVideoTime = null,
   initialVideoMinimised,
   initialPointFocus,
@@ -310,6 +313,8 @@ export function LabelConsole({
   initialConfirm?: LabelConfirm | null;
   /** Tombstones expanded to their ghost row on first render. */
   initialOpenTombstoneIds?: readonly string[];
+  /** Site-removed strokes shown as their struck-through row on first render. */
+  initialOpenGhostIds?: readonly string[];
   /** The video's position on first render, on the analysis clock — for specs. */
   initialVideoTime?: number | null;
   /** The video dock minimised on first render — for specs. */
@@ -376,6 +381,11 @@ export function LabelConsole({
   const [confirm, setConfirm] = useState<LabelConfirm | null>(initialConfirm);
   const [openTombstones, setOpenTombstones] = useState<ReadonlySet<string>>(
     () => new Set(initialOpenTombstoneIds ?? []),
+  );
+  // The ghosts (site-removed strokes, board 08m §3) the black view shows as
+  // their struck-through row. Only that view reads it.
+  const [openGhosts, setOpenGhosts] = useState<ReadonlySet<string>>(
+    () => new Set(initialOpenGhostIds ?? []),
   );
   const player = useRef<LabelVideoHandle>(null);
   // The table card: the one thing on the page that scrolls (T19).
@@ -857,6 +867,31 @@ export function LabelConsole({
     closeTombstone(shotId);
   }
 
+  /**
+   * Put a ghost back (board 08m §3's Restore): `siteRemovalRestoredAt` set,
+   * nothing else on the row — it is `kept` with the vendor's values. The
+   * ending is not re-derived: `deriveEnding` never skipped the ghost (a
+   * ghost precedes the point's last serve, so it is never the last stroke),
+   * and the rows say the same thing after as before.
+   */
+  function restoreSiteRemoval(shotId: string) {
+    const before = findShot(points, shotId);
+    if (!before || !operations) return;
+    const at = new Date().toISOString();
+    void runOperation(
+      (rows) =>
+        replaceShot(rows, shotId, (s) => applySiteRemovalRestore(s, at)),
+      () => operations.restoreSiteRemoval(shotId),
+      (rows, result) =>
+        replaceShot(rows, shotId, (s) => ({
+          ...s,
+          siteRemovalRestoredAt: result.siteRemovalRestoredAt,
+        })),
+      (rows) => replaceShot(rows, shotId, () => before),
+    );
+    closeGhost(shotId);
+  }
+
   function deletePoint(pointId: string) {
     const before = points.find((point) => point.id === pointId);
     if (!before || !operations) return;
@@ -1153,6 +1188,23 @@ export function LabelConsole({
     });
   }
 
+  function toggleGhost(id: string) {
+    setOpenGhosts((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  function closeGhost(id: string) {
+    setOpenGhosts((current) => {
+      if (!current.has(id)) return current;
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+  }
+
   function confirmed(question: LabelConfirm, reason: LabelDeleteReason | null) {
     setConfirm(null);
     switch (question.kind) {
@@ -1192,6 +1244,7 @@ export function LabelConsole({
         },
         onRestoreShot: restoreShot,
         onRestorePoint: restorePoint,
+        onRestoreSiteRemoval: restoreSiteRemoval,
         onMovePoint: requestMove,
         onSetChecked: setChecked,
         onAddShot: addShot,
@@ -1504,6 +1557,9 @@ export function LabelConsole({
             onSetGameType={operable ? setGameType : undefined}
             openTombstoneIds={openTombstones}
             onToggleTombstone={toggleTombstone}
+            marksEnabled={session.marksEnabled}
+            openGhostIds={openGhosts}
+            onToggleGhost={toggleGhost}
             playingPointId={playingPointId}
             playingShotId={playing?.shotId ?? null}
             playingWindow={playingWindow}
@@ -1660,6 +1716,13 @@ export interface LabelConsoleOperations {
     game: LabelGame,
     type: LabelGameType,
   ) => Promise<LabelGameWriteResult>;
+  /**
+   * Put a stroke the site removed back into the rally (board 08m §3):
+   * `site_removal_restored_at` = now, the one column it writes.
+   */
+  restoreSiteRemoval: (
+    shotId: string,
+  ) => Promise<LabelSiteRemovalRestoreResult>;
 }
 
 /** The dock bar's "Point N · shot M", numbered as the table numbers them. */

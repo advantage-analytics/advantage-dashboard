@@ -7,8 +7,12 @@ import {
 
 /**
  * A small hand-labelling session for the console specs: four points, one of
- * them a tombstone, one checked, and a first point whose strokes cover every
- * shot state the table draws — kept, edited, added and deleted.
+ * them a tombstone, one checked, a first point whose strokes cover every
+ * shot state the table draws — kept, edited, added and deleted — and a fourth
+ * whose strokes are untimed (so it has no place on the film) and carry the
+ * one ghost: a stroke the SITE removed (`siteRemoval`) between a faulted
+ * first serve and the second serve, which the black rail draws as a quiet
+ * line and the three light layouts as an ordinary row.
  *
  * Seeds: every vendor row carries the values it was seeded with, and the two
  * edited rows (point 1 and its return, `s-return`) carry seeds that differ
@@ -243,9 +247,44 @@ export function labelSessionFixture(): LabelSession {
         statusBeforeDelete: "unchanged",
         ending: "let_replayed",
       }),
-      seededPoint(P4, 3, { gameNumber: 2, server: "p2" }),
+      seededPoint(P4, 3, {
+        gameNumber: 2,
+        server: "p2",
+        shots: orderLabelShots(POINT_4_SHOTS),
+      }),
     ],
   };
 }
+
+/**
+ * Point 4's strokes: Vargas's faulted first serve, Lee's swing at it — the
+ * ghost, removed by the site before the transcript was built — and the second
+ * serve. None is timed, so the point never plays and the strokes order by
+ * vendor id.
+ */
+export const POINT_4_SHOTS: LabelShot[] = [
+  seededShot("s-p4-fault", P4, {
+    eventId: 401,
+    hitter: "p2",
+    stroke: "first_serve",
+    result: "net",
+    spin: "flat",
+  }),
+  seededShot("s-p4-ghost", P4, {
+    eventId: 402,
+    hitter: "p1",
+    stroke: "forehand",
+    spin: "topspin",
+    contactX: 1.92,
+    contactY: 24.6,
+    siteRemoval: "hit_after_fault",
+  }),
+  seededShot("s-p4-serve", P4, {
+    eventId: 403,
+    hitter: "p2",
+    stroke: "second_serve",
+    result: "in",
+  }),
+];
 
 export const FIXTURE_POINT_IDS = { P1, P2, P3, P4 } as const;

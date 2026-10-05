@@ -508,3 +508,16 @@ Decisions:
 2. A multi-mark chip's hover joins every line; may want a shorter form.
 3. At a 520px rail a shot row with a chip and a pencil can clip at the right edge.
 4. `pointChangedByYou` could become `pointChanged` from marks-state.
+
+## T38 · Ghost shot: quiet line, Show, Restore (new label_shots write) — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** In the black view with marks on, a site-removed shot draws as one quiet line ("1 shot removed: {hitter} hit the fault back" · Show/Hide) with no number and outside the rally count; Show reveals it struck through with "Hit after the fault" and Restore. Restore is the one new write (`label_shots.site_removal_restored_at`, new `site-removal.ts` / `site-removal-session.ts` / action), refused on a complete or marks-off session; afterwards the row is ordinary, the removed-shot chip goes and the pencil shows. Marks off or null, and the light layouts, keep ghosts as ordinary rows.
+
+**follow-ups:**
+
+1. The now-playing readout and film stops still count a ghost.
+2. No way to undo a Restore from the console.
+3. The ghost line carries no hover copy of its own.
+4. At a 520px rail the shown ghost row's Restore and shot-row chips overflow the rail (fix follows).

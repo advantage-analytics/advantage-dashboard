@@ -34,6 +34,10 @@ import {
   setLabelGameType,
   type LabelGameWriteResult,
 } from "@/lib/services/labels/game-operations-session";
+import {
+  restoreLabelSiteRemoval,
+  type LabelSiteRemovalRestoreResult,
+} from "@/lib/services/labels/site-removal-session";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
 
@@ -184,4 +188,16 @@ export async function resetLabelPointAction(
   pointId: string,
 ): Promise<LabelPointStatusResult> {
   return resetLabelPoint(pointId);
+}
+
+/**
+ * Put a stroke the SITE removed (`site_removal`, board 08m's ghost) back into
+ * the rally: `site_removal_restored_at` = now, and nothing else. Refused on a
+ * complete session, on one labelled without marks, and on anything that is
+ * not an unrestored ghost.
+ */
+export async function restoreLabelSiteRemovalAction(
+  shotId: string,
+): Promise<LabelSiteRemovalRestoreResult> {
+  return restoreLabelSiteRemoval(shotId);
 }

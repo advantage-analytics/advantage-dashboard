@@ -33,7 +33,7 @@ import { createLoader } from "./fixtures/vm-modules";
  *
  * The fixture's point 1 has live strokes at 2472.0, 2473.1 and 2474.4 and a
  * tombstone at 2473.6; point 2 has one stroke at 2490.2; point 3 is deleted
- * and point 4 has no strokes.
+ * and point 4's strokes are untimed.
  */
 
 const { P1, P2, P3, P4 } = FIXTURE_POINT_IDS;

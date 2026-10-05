@@ -473,9 +473,11 @@ test.describe("the black point row", () => {
     const row = tag(html, 'data-row="point"');
     expect(row).toContain('data-playing="true"');
     expect(row).toContain("bg-white/[0.08]");
-    // Nothing labelled on it yet.
+    // Nothing labelled on it yet. Its strokes are untimed, and without the
+    // session's marks its ghost is a stroke like any other (the second
+    // serve still decides, and the rally still counts from it).
     expect(inner(html, "data-point-sentence")).toBe("Point 4");
-    expect(inner(html, "data-point-detail")).toBe("serve only");
+    expect(inner(html, "data-point-detail")).toBe("Second Serve · serve only");
 
     const group = tag(html, "data-row-actions");
     expect(group).toContain("opacity-100");

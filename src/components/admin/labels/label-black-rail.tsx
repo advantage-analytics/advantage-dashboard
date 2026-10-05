@@ -84,6 +84,9 @@ export function LabelBlackRail({
   onSetGameType,
   openTombstoneIds = NO_IDS,
   onToggleTombstone,
+  marksEnabled = false,
+  openGhostIds = NO_IDS,
+  onToggleGhost,
   playingPointId = null,
   playingShotId = null,
   playingWindow = null,
@@ -125,6 +128,14 @@ export function LabelBlackRail({
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   openTombstoneIds?: ReadonlySet<string>;
   onToggleTombstone?: (id: string) => void;
+  /**
+   * `session.marksEnabled`: with it, and `marks` built, a stroke the site
+   * removed is drawn as a ghost (board 08m §3); without, an ordinary row.
+   */
+  marksEnabled?: boolean;
+  /** Ghosts shown as their struck-through row (the console's state). */
+  openGhostIds?: ReadonlySet<string>;
+  onToggleGhost?: (id: string) => void;
   playingPointId?: string | null;
   playingShotId?: string | null;
   playingWindow?: PlayingWindow | null;
@@ -143,6 +154,9 @@ export function LabelBlackRail({
     operations: editable ? operations : undefined,
     openTombstoneIds,
     onToggleTombstone,
+    marksEnabled,
+    openGhostIds,
+    onToggleGhost,
     points,
     scores: scores.points,
     playingShotId,

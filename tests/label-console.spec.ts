@@ -281,10 +281,12 @@ test("point rows: who won, then the point, how it ended, its note and status", (
   expect(out).toMatch(
     /L 2 41:30\.2 0–15 Ace First serve 1 Clean ace down the T\. Checked/,
   );
-  // Nothing labelled and no strokes yet: each gap is a dash, named for
-  // assistive technology — and a new game starts at 0–0.
+  // Nothing labelled and no stroke timed: each gap is a dash, named for
+  // assistive technology — and a new game starts at 0–0. The light table
+  // knows nothing of the site's removal: point 4's ghost is a stroke like any
+  // other here, before the second serve the rally counts from.
   expect(out).toMatch(
-    /— 4 — No timed shot 0–0 — Not labelled — No shot 0 — No note To check/,
+    /— 4 — No timed shot 0–0 — Not labelled Second serve 1 — No note To check/,
   );
 });
 

@@ -42,6 +42,12 @@ export interface LabelRowOperations {
     pointNumber: number,
   ) => void;
   onAskResetPoint: (pointId: string) => void;
+  /**
+   * Put a stroke the SITE removed (a ghost, board 08m §3) back into the
+   * rally. Only the black view draws ghosts, so only it asks; the light
+   * table shows them as ordinary rows and never calls this.
+   */
+  onRestoreSiteRemoval: (shotId: string) => void;
 }
 
 /** What every row needs to draw and save its editors. */
@@ -55,6 +61,15 @@ export interface EditContext {
   operations?: LabelRowOperations;
   openTombstoneIds: ReadonlySet<string>;
   onToggleTombstone?: (id: string) => void;
+  /**
+   * `session.marksEnabled`: the session computes the derivation's marks, so
+   * the black view may draw a site-removed stroke as a ghost. Absent (the
+   * light table never sets it) or false, a ghost is an ordinary row.
+   */
+  marksEnabled?: boolean;
+  /** Ghosts folded open to their struck-through row (the black view only). */
+  openGhostIds?: ReadonlySet<string>;
+  onToggleGhost?: (id: string) => void;
   /** Every row, for the move menu's neighbouring games. */
   points: readonly LabelPoint[];
   /** `labelScores(points, adScoring).points`, computed once by the table. */
