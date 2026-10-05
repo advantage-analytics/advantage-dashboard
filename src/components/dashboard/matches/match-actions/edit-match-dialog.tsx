@@ -140,15 +140,23 @@ interface Loaded {
   rebuild: { jobId: string; bookmarks: number } | null;
 }
 
-/** Sets and tiebreaks only: `winner` follows from them. */
+/**
+ * Sets and tiebreaks only: `winner` follows from them. Tiebreaks are read per
+ * set with a missing entry as null, because a stored score may carry no
+ * tiebreak arrays at all while `scoreForSave` always pads them to the sets.
+ */
 function sameScore(a: MatchScore | null, b: MatchScore | null): boolean {
-  const key = (s: MatchScore | null) =>
-    JSON.stringify([
-      s?.player1 ?? [],
+  const key = (s: MatchScore | null) => {
+    const sets = s?.player1 ?? [];
+    const tiebreaks = (arr?: (number | null)[]) =>
+      sets.map((_, i) => arr?.[i] ?? null);
+    return JSON.stringify([
+      sets,
       s?.player2 ?? [],
-      s?.player1_tiebreaks ?? [],
-      s?.player2_tiebreaks ?? [],
+      tiebreaks(s?.player1_tiebreaks),
+      tiebreaks(s?.player2_tiebreaks),
     ]);
+  };
   return key(a) === key(b);
 }
 
@@ -286,10 +294,15 @@ export function EditMatchDialog({
   const [reloadKey, setReloadKey] = useState(0);
 
   /**
-   * The score was saved but the rebuild the viewer asked for failed; the
-   * footer becomes Close / Try again, and the error says what was kept.
+   * The score was saved but the rebuild the viewer asked for did not happen,
+   * and the error says which way. "kept": the server turned it down before
+   * writing anything, so the statistics are as they were and a retry would be
+   * turned down again — Close only. "failed": it broke part-way, and the
+   * footer offers Try again.
    */
-  const [rebuildFailed, setRebuildFailed] = useState(false);
+  const [rebuildFailed, setRebuildFailed] = useState<"kept" | "failed" | null>(
+    null,
+  );
 
   /** Set by the footer's submit buttons just before the form submits. */
   const wantsRebuild = useRef(false);
@@ -306,7 +319,7 @@ export function EditMatchDialog({
     setFieldErrors({});
     setPendingLine(null);
     setPicking(false);
-    setRebuildFailed(false);
+    setRebuildFailed(null);
     Promise.all([
       fetch(`/api/matches/${matchId}`).then(async (res) => {
         const body = await res.json().catch(() => ({}));
@@ -400,8 +413,8 @@ export function EditMatchDialog({
   /**
    * The score in the cells differs from the stored one on a match whose
    * analysis can be rebuilt: the note shows, and Save splits in two. The
-   * analysis is checked against the entered score (and names the players from
-   * it when the camera can't), so a changed score is a reason to rebuild — on
+   * analysis is checked against the entered score (and settles the final
+   * point from it), so a changed score is a reason to rebuild — on
    * request, since a rebuild re-creates every point and bookmarks go with them.
    */
   const draftScore = match
@@ -747,9 +760,9 @@ export function EditMatchDialog({
     if (!jobId) return;
     setSaving(true);
     setError(null);
-    const failed = (message: string) => {
+    const failed = (kind: "kept" | "failed", message: string) => {
       setError(message);
-      setRebuildFailed(true);
+      setRebuildFailed(kind);
       setSaving(false);
       router.refresh();
     };
@@ -758,19 +771,29 @@ export function EditMatchDialog({
         method: "POST",
       });
       if (!res.ok) {
-        failed(
-          "The score is saved, but the statistics couldn't be rebuilt. Try again, or close to keep the statistics as they were.",
-        );
+        const payload: { status?: string } = await res.json().catch(() => ({}));
+        if (payload.status === "completed") {
+          failed(
+            "kept",
+            "The score is saved, but the statistics couldn't be rebuilt against it, so they were kept as they were.",
+          );
+        } else {
+          failed(
+            "failed",
+            "The score is saved, but the statistics couldn't be rebuilt. Try again.",
+          );
+        }
         return;
       }
       setSaving(false);
-      setRebuildFailed(false);
+      setRebuildFailed(null);
       onOpenChange(false);
       push({ tone: "success", title: "Saved and statistics rebuilt" });
       forgetMatchDetails(matchId);
       router.refresh();
     } catch {
       failed(
+        "failed",
         "The score is saved, but the server couldn't be reached, so the statistics may not have been rebuilt. Reload the page to check.",
       );
     }
@@ -928,17 +951,19 @@ export function EditMatchDialog({
                 >
                   Close
                 </button>
-                <button
-                  type="button"
-                  className={advButton("primary")}
-                  disabled={saving}
-                  onClick={() => void rebuildStatistics()}
-                >
-                  {saving && (
-                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                  )}
-                  {saving ? "Rebuilding…" : "Try again"}
-                </button>
+                {rebuildFailed === "failed" && (
+                  <button
+                    type="button"
+                    className={advButton("primary")}
+                    disabled={saving}
+                    onClick={() => void rebuildStatistics()}
+                  >
+                    {saving && (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                    )}
+                    {saving ? "Rebuilding…" : "Try again"}
+                  </button>
+                )}
               </>
             ) : (
               <>

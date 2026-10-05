@@ -11,6 +11,7 @@ import {
 } from "@/lib/services/splitstep/derivation";
 import {
   buildTranscriptForJob,
+  playerMappingFlipped,
   resolveAdScoring,
 } from "@/lib/services/splitstep/persist-transcript";
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -184,5 +185,48 @@ test.describe("buildTranscriptForJob", () => {
       jobId: "job",
     });
     expect(pressure(transcript)).toEqual(pressure(foldedUnder(true)));
+  });
+});
+
+test.describe("playerMappingFlipped: a rebuild may not swap the players", () => {
+  // A rebuild after a score edit re-runs the fold, and the fold names player1
+  // from the entered score before it asks the camera. A score typed from the
+  // opponent's side would move every statistic to the other player with
+  // nothing on screen looking wrong, so persistTranscript refuses it.
+  const points = (servers: boolean[]) =>
+    servers.map((server_is_player1, i) => ({
+      point_number: i + 1,
+      server_is_player1,
+    }));
+  const stored = points([true, true, true, false, false, false, true, true]);
+
+  test("the same mapping is not a flip", () => {
+    expect(playerMappingFlipped(stored, stored)).toBe(false);
+  });
+
+  test("every server reversed is a flip", () => {
+    const reversed = stored.map((p) => ({
+      ...p,
+      server_is_player1: !p.server_is_player1,
+    }));
+    expect(playerMappingFlipped(stored, reversed)).toBe(true);
+  });
+
+  test("a few relabelled servers are not a flip", () => {
+    // A derivation-version change may relabel a frozen stretch.
+    const nudged = stored.map((p, i) =>
+      i < 2 ? { ...p, server_is_player1: !p.server_is_player1 } : p,
+    );
+    expect(playerMappingFlipped(stored, nudged)).toBe(false);
+  });
+
+  test("nothing stored, or no shared point numbers, is not a flip", () => {
+    expect(playerMappingFlipped([], stored)).toBe(false);
+    const elsewhere = stored.map((p) => ({
+      ...p,
+      point_number: p.point_number + 100,
+      server_is_player1: !p.server_is_player1,
+    }));
+    expect(playerMappingFlipped(stored, elsewhere)).toBe(false);
   });
 });

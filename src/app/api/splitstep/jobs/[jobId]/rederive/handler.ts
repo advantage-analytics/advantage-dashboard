@@ -2,8 +2,9 @@
  * The decision half of `/api/splitstep/jobs/[jobId]/rederive` — the "Rebuild
  * statistics" button on a job whose statistics build crashed, and the prompt
  * the edit dialog raises after the entered score of an analysed match changes
- * (derivation checks the analysis against that score, and names the players
- * from it when the camera cannot).
+ * (derivation checks the analysis against that score, and settles the final
+ * point from it). Which player is which is NOT up for change on such a
+ * rebuild: `deriveAndPublish({ rebuild })` pins it to the published rows.
  *
  * A rebuild re-runs `deriveAndPublish()` from the results the vendor already
  * delivered. No vendor call, no allowance spent, no attempt counted, and safe
@@ -42,6 +43,7 @@ export const REDERIVE_DEADLINE_HEADROOM_MS = 8_000;
 /** The columns of `processing_jobs` this decision reads. */
 export interface RederiveJobRow {
   id: string;
+  match_id: string;
   created_by: string | null;
   status: string;
   derivation_version: string | null;
@@ -54,7 +56,10 @@ export interface RederiveJobRow {
   results_object_key: string | null;
 }
 
-export type RederiveOutcome = { ok: true } | { ok: false; reason: string };
+export type RederiveOutcome =
+  | { ok: true }
+  /** `kept`: refused before anything was written; the match is as it was. */
+  | { ok: false; reason: string; kept?: boolean };
 
 /** The statuses a rebuild may start from. */
 export type RebuildableStatus = "derivation_failed" | "completed";
@@ -74,8 +79,17 @@ export interface RederiveDeps {
     jobId: string,
     from: RebuildableStatus,
   ): Promise<{ claimed: boolean; error: string | null }>;
-  /** `deriveAndPublish({ supabase: admin, jobId, deadline })`. */
-  derive(jobId: string, deadline: number): Promise<RederiveOutcome>;
+  /** The id of the newest job for a match, or null when the read failed. */
+  newestJobId(matchId: string): Promise<string | null>;
+  /**
+   * `deriveAndPublish({ supabase: admin, jobId, deadline, rebuild })`, with
+   * `rebuild` set when the job is being rebuilt from `completed`.
+   */
+  derive(
+    jobId: string,
+    deadline: number,
+    from: RebuildableStatus,
+  ): Promise<RederiveOutcome>;
   /** Epoch ms; injectable so the spec can pin the deadline. */
   now?(): number;
 }
@@ -133,6 +147,16 @@ export async function handleRederive(
     );
   }
 
+  // A published match is rebuilt from its newest analysis only. An older
+  // `completed` job (a resubmit superseded it) would put its results back
+  // over the current ones; the dialog never offers one, but a direct POST can.
+  if (
+    from === "completed" &&
+    (await deps.newestJobId(job.match_id)) !== jobId
+  ) {
+    return refuse("A newer analysis of this match exists.", 409);
+  }
+
   const claim = await deps.claimJob(jobId, from);
   if (claim.error) {
     pipelineLog.error(`${LOG} claim failed`, { jobId, error: claim.error });
@@ -142,7 +166,22 @@ export async function handleRederive(
     return refuse("The statistics are already rebuilding.", 409);
   }
 
-  const outcome = await deps.derive(jobId, deadline);
+  const outcome = await deps.derive(jobId, deadline, from);
+  if (!outcome.ok && outcome.kept) {
+    // Turned down before anything was written; the job is `completed` again.
+    pipelineLog.info(`${LOG} rebuild refused, match kept`, {
+      jobId,
+      reason: outcome.reason,
+    });
+    return NextResponse.json(
+      {
+        error:
+          "The statistics couldn't be rebuilt against this score, so they were kept as they were.",
+        status: "completed",
+      },
+      { status: 409 },
+    );
+  }
   if (!outcome.ok) {
     // deriveAndPublish has already settled the row at `derivation_failed`
     // with its own code; the reason is for the log, never the client.

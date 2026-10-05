@@ -170,11 +170,20 @@ async function rebuildFor(
   ) {
     return null;
   }
-  const { count } = await createAdminClient()
+  const { count, error } = await createAdminClient()
     .from("point_bookmarks")
     .select("point_id, points!inner(match_id)", { count: "exact", head: true })
     .eq("points.match_id", matchId);
-  return { jobId: job.id, bookmarks: count ?? 0 };
+  if (error || count === null) {
+    // No offer rather than "0 bookmarks": the note is the only warning a
+    // rebuild gives before it removes them.
+    console.error(
+      "GET /api/matches/[matchId]: failed to count bookmarks",
+      error,
+    );
+    return null;
+  }
+  return { jobId: job.id, bookmarks: count };
 }
 
 async function eventContextFor(
