@@ -1,6 +1,6 @@
 /**
  * The match's set scores as the labelled points make them, held against the
- * score that was entered — the "Score doesn't add up" banner's arithmetic
+ * score that was entered — the "Score doesn't add up" chip's arithmetic
  * (board 08m, `BANNER`).
  *
  * Pure, over `score.ts`: a set's games are its `LabelGameBand`s counted for

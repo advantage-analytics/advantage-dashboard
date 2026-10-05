@@ -8,13 +8,18 @@
  * labeller did not settle amber again. The one stored piece is
  * `label_points.dismissed`; everything else reads the rows' own status.
  *
+ * The one exception to "never deleted" is the pair of score flags
+ * (score-marks.ts): they are read off the labelled score on every render,
+ * so one that no longer disagrees is simply not there. While one is, it has
+ * this life-cycle like any other.
+ *
  * Pure, and importable from the client bundle: nothing from `next/`,
  * `components/` or a server file.
  */
 
-import type { LabelMark, LabelSuggestion } from "./marks";
+import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
 import { fixLabel, MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
-import type { LabelPoint, LabelShot } from "./session";
+import { isGhostShot, type LabelPoint, type LabelShot } from "./session";
 import { addedPointBetween, type SuggestionNeighbour } from "./suggestions";
 
 export type MarkState =
@@ -207,6 +212,113 @@ export function stateHoverParts(
 export function hoverLine({ name, detail }: MarkHoverParts): string {
   const stop = /[.?!]$/.test(name) ? "" : ".";
   return detail ? `${name}${stop} ${detail}` : `${name}${stop}`;
+}
+
+/**
+ * "Out call ignored" is the vendor file's commonest defect — on up to a
+ * third of all strokes — so it is shown on its shot only and never raised to
+ * the point row, nor counted in the match's totals (board 08m).
+ */
+export const SHOT_ONLY_CODE: LabelMark["code"] = "out_ball_rally_continued";
+
+/**
+ * "1 shot removed" stands for the point's ghosts — the strokes the site
+ * removed that are still out of the rally (`isGhostShot`). Restore puts one
+ * back and the chip must follow: it counts the ghosts still live, and goes
+ * when none is (board 08m §3: "Restore … drops the grey mark from the
+ * point"). The mark's `eventIds` are narrowed to the live ghosts' vendor ids
+ * where they line up, so "2 shots removed" reads "1 shot removed" after one
+ * Restore; where they do not, the mark keeps its own count.
+ */
+export function liveGhostFixes(
+  point: Pick<LabelPoint, "shots">,
+  pointMarks: readonly LabelMark[],
+): LabelMark[] {
+  const ghosts = point.shots.filter(isGhostShot);
+  return pointMarks.flatMap((mark): LabelMark[] => {
+    if (mark.code !== "phantom_strokes_dropped") return [mark];
+    if (ghosts.length === 0) return [];
+    const live = new Set(ghosts.map((shot) => shot.eventId));
+    const eventIds = mark.params.eventIds.filter((id) => live.has(id));
+    if (eventIds.length === 0) return [mark];
+    const narrowed: LabelMark = {
+      ...mark,
+      params: { ...mark.params, eventIds },
+    };
+    return [narrowed];
+  });
+}
+
+/**
+ * The marks a point row stands for, as the rail rolls them up: the point's
+ * own (ghost fixes counted for the ghosts still live) and those of its live
+ * strokes, the shot-only code left out.
+ */
+export function pointRowMarkList(
+  point: LabelPoint,
+  marks: LabelMarks,
+): { point: LabelMark[]; shots: LabelMark[] } {
+  return {
+    point: liveGhostFixes(point, marks.points[point.id] ?? []),
+    shots: point.shots
+      // A deleted stroke's row is a tombstone and carries no chip, so its
+      // marks are not counted toward what "open the point" would show.
+      .filter((shot) => shot.status !== "deleted")
+      .flatMap((shot) => marks.shots[shot.id] ?? [])
+      .filter((mark) => mark.code !== SHOT_ONLY_CODE),
+  };
+}
+
+/** What the rail header counts across the match. */
+export interface MarkSummary {
+  /** Flags still open — what is left to check. */
+  open: number;
+  /** Live points carrying at least one open flag. */
+  openPoints: number;
+  /** Automatic fixes, in every state: a ghost still drawn counts, a restored one does not. */
+  fixes: number;
+  /** Live points carrying at least one fix. */
+  fixPoints: number;
+}
+
+/**
+ * The match's totals, over every live point — marks, not points, counted
+ * exactly as the rows roll them up (`pointRowMarkList`, `markStates`).
+ */
+export function markSummary(
+  points: readonly LabelPoint[],
+  marks: LabelMarks,
+): MarkSummary {
+  const summary: MarkSummary = {
+    open: 0,
+    openPoints: 0,
+    fixes: 0,
+    fixPoints: 0,
+  };
+  for (const point of points) {
+    if (point.status === "deleted") continue;
+    const own = pointRowMarkList(point, marks);
+    const states = markStates(
+      own.point,
+      own.shots,
+      point,
+      marks.suggestions,
+      points,
+    );
+    const all = [
+      ...own.point.map((mark, i) => ({ mark, state: states.point[i] })),
+      ...own.shots.map((mark, i) => ({ mark, state: states.shots[i] })),
+    ];
+    const open = all.filter(
+      (m) => m.mark.kind === "flag" && m.state === "open",
+    ).length;
+    const fixes = all.filter((m) => m.mark.kind === "fix").length;
+    summary.open += open;
+    summary.fixes += fixes;
+    if (open > 0) summary.openPoints += 1;
+    if (fixes > 0) summary.fixPoints += 1;
+  }
+  return summary;
 }
 
 /** The states of a point's marks, and whether the labeller changed it. */

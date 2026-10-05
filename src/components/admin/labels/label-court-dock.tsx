@@ -76,9 +76,9 @@ export function LabelCourtDock({
   /** The open point; its live strokes are the marks. Null: an empty court. */
   point: LabelPoint | null;
   names: SideNames;
-  /** The selected stroke and the end and half its next click places. */
+  /** The selected stroke, the end its next click places, and the court's way up. */
   placement: PlacementState;
-  /** Whether a click may write. Read-only: always the whole court. */
+  /** Whether a click may write. Read-only: a picture. */
   editable: boolean;
   /** The stroke on screen in the video — named in the header while nothing is selected. */
   playingShotId?: string | null;
@@ -86,7 +86,7 @@ export function LabelCourtDock({
   clock: VideoClock;
   /** Where the video dock is, to keep clear of it. Null until it is known. */
   video: VideoDockLayout | null;
-  /** A click on the zoomed half, in metres. */
+  /** A click on the court, in metres. */
   onPlace: (point: CourtPoint) => void;
   /** The Contact / Landing switch. */
   onTarget: (target: PlacementTarget) => void;

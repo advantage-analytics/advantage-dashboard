@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, Plus } from "lucide-react";
+import { Check, ChevronRight, Plus } from "lucide-react";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import {
   FloatMenu,
@@ -61,7 +61,7 @@ import {
 /**
  * One point of the console's table — board 08g's `.pr` row.
  *
- * Left to right: the fold caret · the WINNER MARK (a 30px square with the
+ * Left to right: the go-to caret · the WINNER MARK (a 30px square with the
  * player's initial, and the menu that changes who won) · the point's number
  * and the time of its first stroke, in mono · the score before the point ·
  * how it ended (the one select) · the last shot and the rally's length, both
@@ -106,7 +106,6 @@ export function PointRow({
 }) {
   const { operations } = edit;
   const number = point.pointIndex + 1;
-  const shotsId = `label-point-${point.id}-shots`;
   const summary = pointSummary(point);
   const score = edit.scores.get(point.id)?.scoreBefore ?? null;
 
@@ -130,14 +129,15 @@ export function PointRow({
         )}
         style={playing && !open ? { background: PLAYING_WASH } : undefined}
       >
-        {/* The row's one fold control. The row's own click does the same
-            thing for a mouse; this is what a keyboard and a screen reader
-            reach. */}
+        {/* The row's one control of its own: go to the point — seek the
+            video to it, which makes it the current one and unfolds it. The
+            row's own click does the same thing for a mouse; this is what a
+            keyboard and a screen reader reach. Nothing folds: only the
+            current point is unfolded, and this is how a point becomes it. */}
         <button
           type="button"
-          aria-expanded={open}
-          aria-controls={open ? shotsId : undefined}
-          aria-label={`${open ? "Hide" : "Show"} shots for point ${number}`}
+          data-point-go=""
+          aria-label={`Go to point ${number}`}
           onClick={(event) => {
             event.stopPropagation();
             onToggle?.(point.id);
@@ -147,11 +147,8 @@ export function PointRow({
             open ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]",
           )}
         >
-          <ChevronDown
-            className={cn(
-              "size-3 transition-transform duration-200",
-              open && "rotate-180",
-            )}
+          <ChevronRight
+            className="size-3"
             strokeWidth={1.5}
             aria-hidden="true"
           />
@@ -223,7 +220,6 @@ export function PointRow({
 
       {open ? (
         <div
-          id={shotsId}
           data-shots-for={point.id}
           className="-mx-4 mb-2 rounded-b-[var(--radius-element)] bg-[var(--surface-page)] pb-1.5 shadow-[inset_0_1px_0_var(--border-hairline)]"
         >

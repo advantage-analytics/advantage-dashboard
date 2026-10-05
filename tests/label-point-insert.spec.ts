@@ -82,6 +82,7 @@ function marksOf(): LabelMarks {
     points: { [P2]: [sameSideMark()] },
     shots: {},
     suggestions: [SUGGESTION],
+    serveSides: {},
   };
 }
 

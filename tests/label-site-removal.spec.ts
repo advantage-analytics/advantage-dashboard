@@ -407,7 +407,12 @@ function phantomMark(eventIds: number[] = [402]): LabelMark {
 }
 
 function marksOf(point: LabelPoint, pointMarks: LabelMark[]): LabelMarks {
-  return { points: { [point.id]: pointMarks }, shots: {}, suggestions: [] };
+  return {
+    points: { [point.id]: pointMarks },
+    shots: {},
+    suggestions: [],
+    serveSides: {},
+  };
 }
 
 function renderWell(

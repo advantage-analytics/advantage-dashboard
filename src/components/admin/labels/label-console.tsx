@@ -48,6 +48,7 @@ import type { LabelGameShiftResult } from "@/lib/services/labels/game-shift-sess
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import { endingPatchForShotChange } from "@/lib/services/labels/ending-derived";
 import { labelScores } from "@/lib/services/labels/score";
+import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
   applyPointDelete,
   applyPointMove,
@@ -89,7 +90,6 @@ import type { LabelSiteRemovalRestoreResult } from "@/lib/services/labels/site-r
 import { applyDismiss } from "@/lib/services/labels/suggestions";
 import type { LabelDismissSuggestionResult } from "@/lib/services/labels/suggestions-session";
 import {
-  displayedPointId,
   followAffordance,
   type PointFocus,
 } from "@/components/dashboard/matches/match-detail/film/film-timeline";
@@ -102,9 +102,8 @@ import {
 import { cn } from "@/lib/utils";
 import type { CourtPoint } from "./court-geometry";
 import {
-  NO_PLACEMENT,
+  clearPlacement,
   flipPlacement,
-  hitterHalf,
   nextPlacement,
   setPlacementTarget,
   startPlacement,
@@ -139,7 +138,6 @@ import {
   type LabelLayoutMode,
 } from "./label-layout";
 import { LabelLayoutControl } from "./label-layout-control";
-import { shotLoopWindow } from "./label-shot-loop";
 import { sideNames } from "./label-format";
 import {
   LabelPointsTable,
@@ -180,27 +178,36 @@ const FOLLOW: PointFocus = { mode: "follow" };
  * same pure rule the server writes (`lib/services/labels/edit.ts`), so the
  * Edited pill appears with the edit and the server's answer only confirms it.
  *
- * Three pieces of UI state: which point is open (its strokes fold out under
- * it, show on the court, and the video jumps to its first stroke), which
- * stroke is selected (the one a court click places — see court-placement.ts)
- * and the save line.
+ * Three pieces of UI state: which point is current (its strokes fold out
+ * under it, show on the court, and the video jumps to its first stroke),
+ * which stroke is selected (the one a court click places — see
+ * court-placement.ts) and the save line.
  *
- * ── Follow the video, or hold the point being labelled ──────────────────────
+ * ── One point unfolded: the current one ─────────────────────────────────────
  *
- * The open point is the film room's `PointFocus` (film-timeline.ts) read
- * against the playing point, exactly as the Film tab's points rail reads it:
- * in `follow` the PLAYING point is the open one — its strokes unfold, the
- * playing stroke is lit, and `useFollowScroll` keeps that row in view as the
- * table scrolls under the floating video; in `held` the open point stays put
- * while the lit row keeps following the video. A click on a point row, a
- * stroke row or an editor holds (editing is never fought by the video moving
- * on); re-clicking the playing point's row re-follows; a hand scroll of the
- * table — wheel, touch, the scrollbar, a scrolling key — holds too, on the
- * displayed point (T24), with `null` when nothing is open (T25). The way back
- * is the "Now playing · Point N" pill, at the top-centre of the table while
- * held and a point is playing (the video dock keeps the bottom-right corner,
- * the court card the bottom-left); pressing it follows again and the hook
- * jumps the playing row to the top (T26).
+ * Exactly one point is unfolded in every layout — the CURRENT point: the one
+ * the playhead is in, and between points the last one it was in, or the one
+ * the labeller clicked (`restPointId`), so an edit in progress is not folded
+ * away by dead time. A click on a point row seeks to its first stroke, which
+ * makes it current; a click on the current point's own row folds nothing.
+ * Nothing else ever unfolds a second point.
+ *
+ * ── Follow the video, or hold the rail ──────────────────────────────────────
+ *
+ * Whether the table SCROLLS with the video is the film room's `PointFocus`
+ * (film-timeline.ts), exactly as the Film tab's points rail reads it: in
+ * `follow` `useFollowScroll` keeps the playing row in view as the table
+ * scrolls under the floating video; in `held` the rows stay where the
+ * labeller left them while the lit row keeps following the video. A click on
+ * a point row, a stroke row or an editor holds (editing is never fought by
+ * the rail moving on); re-clicking the playing point's row re-follows; a hand
+ * scroll of the table — wheel, touch, the scrollbar, a scrolling key — holds
+ * too (T24, T25). The way back is the "Now playing · Point N" pill, at the
+ * top-centre of the table while held and a point is playing (the video dock
+ * keeps the bottom-right corner, the court card the bottom-left); pressing it
+ * follows again and the hook jumps the playing row to the top (T26). Holding
+ * never unfolds a point of its own: a held rail scrolled away from the
+ * playing point still shows that one point unfolded, wherever it is.
  *
  * ── The page does not scroll; the table does (T19) ──────────────────────────
  *
@@ -213,9 +220,9 @@ const FOLLOW: PointFocus = { mode: "follow" };
  * so where they sit in this tree changes nothing.
  *
  * With nothing playing — before the video moves, or in the dead time between
- * points — following shows the last point that was open (`restPointId`:
- * the first point still to check on arrival), so the court never empties
- * between points and Enter still has a point to check.
+ * points — the current point is the last one that was (`restPointId`: the
+ * first point still to check on arrival), so the court never empties between
+ * points and Enter still has a point to check.
  *
  * Row operations (T7) follow the same optimistic contract through
  * `operations`: delete and Undo, add a stroke, move a point, mark it checked,
@@ -233,8 +240,12 @@ const FOLLOW: PointFocus = { mode: "follow" };
  * the table keeps the screen. As the video plays
  * (or is scrubbed) the table marks the point and the stroke on screen
  * (`playingRowAt`, via the video clock in video-clock.ts). The mark never
- * selects a stroke; whether it opens the point and scrolls to it is the
- * follow-or-hold state above — held, the labeller stays in charge of both.
+ * selects a stroke; it does make the point current, and whether the table
+ * scrolls to it is the follow-or-hold state above.
+ *
+ * Selecting a stroke seeks the video to it and nothing more: the film plays
+ * on if it was playing and rests there if it was paused. Nothing replays a
+ * shot on its own.
  *
  * ── Three layouts (T24) ─────────────────────────────────────────────────────
  *
@@ -270,7 +281,7 @@ const FOLLOW: PointFocus = { mode: "follow" };
  * playhead carries over: once the new element is in, the console seeks it to
  * where the clock says the film was (`seekTo` before metadata sets the
  * element's default start position, which it honours when the metadata
- * lands). Playback resumes paused, and a shot loop lets go.
+ * lands). Playback resumes paused.
  *
  * Outside a control, Space plays and pauses and ← / → step to the previous or
  * next point — the keys the player's own tooltips name.
@@ -375,16 +386,28 @@ export function LabelConsole({
     onSavePoint !== undefined;
 
   const [points, setPoints] = useState<LabelPoint[]>(session.points);
-  // The marks beside those points. State, not a prop read: the page builds
-  // them once per render and later tasks revise them as rows change.
+  // The marks beside those points, as the page built them from the vendor's
+  // file. State, not a prop read: the page builds them once per render.
   const [marks] = useState<LabelMarks | null>(initialMarks);
-  // The two session fields the score banner writes (board 08m), held beside
-  // the rows so an answer re-evaluates the banner at once.
+  // The marks the rail draws: the page's, plus the two score marks read off
+  // the LIVE rows (score-marks.ts) — "Wrong side for the score" and "Same
+  // side twice" follow the labelled score, so a point added or a winner
+  // changed re-reads them at once, and one that agrees is gone. Only with
+  // marks built; the marks-off session has none to add to.
+  const liveMarks = useMemo(
+    () =>
+      marks === null
+        ? null
+        : withLiveScoreMarks(marks, points, session.adScoring),
+    [marks, points, session.adScoring],
+  );
+  // The two session fields the score chip writes (board 08m), held beside
+  // the rows so an answer re-evaluates the chip at once.
   const [sessionFields, setSessionFields] = useState<LabelSessionFields>({
     finalScore: session.finalScore,
     videoEndsEarly: session.videoEndsEarly,
   });
-  // The point open while nothing is playing: see the file comment.
+  // The current point while nothing is playing: see the file comment.
   const [restPointId, setRestPointId] = useState<string | null>(() =>
     initialExpandedPointId !== undefined
       ? initialExpandedPointId
@@ -397,13 +420,10 @@ export function LabelConsole({
     (pointId: string | null) => setPointFocus({ mode: "held", pointId }),
     [],
   );
-  const followPlayback = useCallback(() => {
-    player.current?.loopShot(null);
-    setPointFocus(FOLLOW);
-  }, []);
+  const followPlayback = useCallback(() => setPointFocus(FOLLOW), []);
   const held = pointFocus.mode === "held";
   const [placement, setPlacement] = useState<PlacementState>(() =>
-    placementOf(session.points, initialSelectedShotId),
+    startPlacement(initialSelectedShotId),
   );
   // Where the floating video rests, as it reports it: the court card keeps
   // clear of it (label-court-position.ts).
@@ -643,42 +663,33 @@ export function LabelConsole({
     return stop ? { start: stop.start, end: stop.end } : null;
   }, [stops, playingPointId]);
 
-  // The open point: the held one while held (`null` for none), else the
-  // playing one, else the one that rested open when the video last had a
-  // point — the same read as the film room's well, with the rest as the
-  // fallback the room does without.
-  const openPointId = displayedPointId(
-    pointFocus,
-    playingPointId ?? restPointId,
-  );
-  // Whatever opens, by following or by hand, is where following rests next:
-  // when the video runs into dead time the open point stays, rather than
-  // snapping back to wherever the console arrived. Adjusted during render,
-  // not in an effect: the fallback must never be a render behind the point
-  // it is standing in for.
-  if (openPointId !== null && openPointId !== restPointId) {
-    setRestPointId(openPointId);
+  // The current point: the playing one, else the one that was current when
+  // the video last had a point or the labeller last went to one. The ONE
+  // point that is unfolded, on the court and under Enter.
+  const currentPointId = playingPointId ?? restPointId;
+  // Whatever the video plays into is where the current point rests next:
+  // when the video runs into dead time it stays, rather than snapping back
+  // to wherever the console arrived. Adjusted during render, not in an
+  // effect: the fallback must never be a render behind the point it is
+  // standing in for.
+  if (playingPointId !== null && playingPointId !== restPointId) {
+    setRestPointId(playingPointId);
   }
 
-  // A deleted point is a marker, not an open point: nothing of it on the court.
+  // A deleted point is a marker, not a current point: nothing of it on the court.
   const expanded =
     points.find(
-      (point) => point.id === openPointId && point.status !== "deleted",
+      (point) => point.id === currentPointId && point.status !== "deleted",
     ) ?? null;
   const { checked, total } = labelProgress(points);
 
-  // A row click holds its point — or re-follows, when it is the one already
-  // playing (the way back without the pill) — and seeks to its first stroke,
-  // as it always did. An open row that is NOT playing folds instead: a hold
-  // with nothing held open. The playing point never folds — the table keeps
-  // it unfolded whatever is held — so a click on it is always a re-follow.
+  // A row click makes its point current and seeks to its first stroke; it
+  // holds the rail — or re-follows, when the point is the one already
+  // playing (the way back without the pill). Nothing folds: the current
+  // point's own row clicked again just seeks back to its start.
   function togglePoint(pointId: string) {
-    player.current?.loopShot(null);
-    setPlacement(NO_PLACEMENT);
-    if (pointId === openPointId && pointId !== playingPointId) {
-      holdPoint(null);
-      return;
-    }
+    setPlacement(clearPlacement);
+    setRestPointId(pointId);
     if (pointId === playingPointId) followPlayback();
     else holdPoint(pointId);
     const point = points.find((p) => p.id === pointId);
@@ -688,28 +699,27 @@ export function LabelConsole({
     if (first?.videoTime != null) player.current?.seekTo(first.videoTime);
   }
 
-  // Selecting a stroke is the start of an edit, so it always holds its point
-  // — even the playing one, which following would otherwise swap out from
-  // under the editors as the video crosses into the next point.
+  // Selecting a stroke is the start of an edit, so it holds the rail (the
+  // rows are not scrolled out from under the editors) and seeks the video to
+  // the stroke, which keeps its point current; playback carries on as it
+  // was. The court keeps its view: `startPlacement` only changes which
+  // stroke the next click places.
   function selectShot(shotId: string) {
     const owner = pointOfShot(points, shotId);
     if (owner) holdPoint(owner.id);
     // A draft row cannot be placed or edited until its insert lands; it is
     // selected for placement then (see `addShot`).
     if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
-    setPlacement(placementOf(points, shotId));
-    // A shot click replays that shot alone, on a loop (`label-shot-loop.ts`);
-    // a stroke with no place on the video's clock just lets go of the last.
-    player.current?.loopShot(
-      owner ? shotLoopWindow(owner, shotId, fileOffset, stops) : null,
-    );
+    setPlacement((current) => startPlacement(shotId, current.flipped));
+    const shot = findShot(points, shotId);
+    if (shot?.videoTime != null) player.current?.seekTo(shot.videoTime);
   }
 
   // An editor opening on a point row's own cells (winner, ending, note…) is
   // focus landing in a form control inside that row; the row's click handler
   // deliberately ignores cell clicks, so this is where that edit holds —
-  // an enter only, on the displayed point, like a hand scroll: the open
-  // point stays what it was, and following simply stops moving it.
+  // an enter only, on the current point, like a hand scroll: following
+  // simply stops moving the rows.
   function holdOnEditorFocus(event: FocusEvent<HTMLDivElement>) {
     if (held) return;
     const target = event.target as Element;
@@ -721,7 +731,7 @@ export function LabelConsole({
     )
       return;
     if (!target.closest("[data-point-id]")) return;
-    holdPoint(openPointId);
+    holdPoint(currentPointId);
   }
 
   const patchPoint = useCallback(
@@ -872,7 +882,7 @@ export function LabelConsole({
   function deleteShot(shotId: string, reason: LabelDeleteReason) {
     const before = findShot(points, shotId);
     if (!before || !operations) return;
-    if (placement.shotId === shotId) setPlacement(NO_PLACEMENT);
+    if (placement.shotId === shotId) setPlacement(clearPlacement);
     const owner = pointOfShot(points, shotId);
     const change = (rows: LabelPoint[]) =>
       replaceShot(rows, shotId, (s) => applyShotDelete(s, reason));
@@ -1060,18 +1070,18 @@ export function LabelConsole({
 
   /**
    * "Find the gap": navigation only. The mismatching set's first point is
-   * held open and the video seeks to its first stroke, as a row click does;
-   * the row is then brought to the rail's top (`jumpToPointId`, below). With
-   * no such point — the rows stop before that set — the last labelled point
-   * is where the gap begins. Nothing is written.
+   * made current, the rail held, and the video seeks to its first stroke, as
+   * a row click does; the row is then brought to the rail's top
+   * (`jumpToPointId`, below). With no such point — the rows stop before that
+   * set — the last labelled point is where the gap begins. Nothing is written.
    */
   const jumpToPointId = useRef<string | null>(null);
   function findGap(pointId: string | null) {
     const live = points.filter((point) => point.status !== "deleted");
     const target = pointId ?? live[live.length - 1]?.id ?? null;
     if (target === null) return;
-    player.current?.loopShot(null);
-    setPlacement(NO_PLACEMENT);
+    setPlacement(clearPlacement);
+    setRestPointId(target);
     holdPoint(target);
     const point = live.find((p) => p.id === target);
     const first = point?.shots.find(
@@ -1118,7 +1128,7 @@ export function LabelConsole({
     const before = points.find((point) => point.id === pointId);
     if (!before || !operations) return;
     if (before.shots.some((shot) => shot.id === placement.shotId)) {
-      setPlacement(NO_PLACEMENT);
+      setPlacement(clearPlacement);
     }
     void runOperation(
       (rows) => replacePoint(rows, pointId, applyPointDelete),
@@ -1202,10 +1212,7 @@ export function LabelConsole({
       syncEnding(point, (rows) => insertShot(rows, pointId, result.shot));
       setPlacement((current) =>
         current.shotId === selectedBefore
-          ? placementOf(
-              insertShot(points, pointId, result.shot),
-              result.shot.id,
-            )
+          ? startPlacement(result.shot.id, current.flipped)
           : current,
       );
     });
@@ -1552,9 +1559,9 @@ export function LabelConsole({
     held,
     activePointId: playingPointId,
     activeShotId: playing?.shotId ?? null,
-    // The playing point is always unfolded, so its playing stroke has a row.
+    // The playing point is the current one, so its playing stroke has a row.
     wellOpen: playingPointId !== null,
-    displayedPointId: openPointId,
+    displayedPointId: currentPointId,
     onHoldPoint: holdPoint,
     insets,
     // The point row with its lit stroke: after a seek back to an earlier
@@ -1582,12 +1589,9 @@ export function LabelConsole({
     void patchShot(shot.id, step.patch);
   }
 
-  // The card's Contact / Landing switch: the stored contact, when there is
-  // one, says which half the hitter was on.
+  // The card's Contact / Landing switch: which end the next click places.
   function setTarget(target: PlacementTarget) {
-    const shot =
-      placement.shotId === null ? null : findShot(points, placement.shotId);
-    setPlacement(setPlacementTarget(placement, target, shot?.contactY ?? null));
+    setPlacement(setPlacementTarget(placement, target));
   }
 
   // The table card and the Now-playing pill: one tree, wherever the layout
@@ -1607,7 +1611,7 @@ export function LabelConsole({
           points={points}
           adScoring={session.adScoring}
           names={names}
-          expandedPointId={openPointId}
+          expandedPointId={currentPointId}
           onTogglePoint={togglePoint}
           editable={editable}
           selectedShotId={placement.shotId}
@@ -1654,9 +1658,10 @@ export function LabelConsole({
   // Docked (T24): the dock's inner player and the court card's body, bare,
   // on the court card's own dark ground. The player is the SAME component the
   // floating dock wraps — same `player` ref, transport, clock target — so
-  // Space, ← / →, the shot loop and the progress rule never notice the move.
-  // The court card keeps its blue outline while placing, as the floating one
-  // does; `fill` lets the court centre in whatever height the panel has.
+  // Space, ← / → and the progress rule never notice the move. The court card
+  // keeps its blue outline while placing, as the floating one does; `fill`
+  // lets the court centre in whatever height the panel has. In the black
+  // view the frame is flush to the stage, so nothing in it rounds a corner.
   const placing = isPlacing(expanded, placement, editable);
   const DOCK_CARD =
     "rounded-[var(--radius-card)] bg-[#1A1A1C] shadow-[var(--shadow-card)]";
@@ -1668,6 +1673,7 @@ export function LabelConsole({
       readout={dockedReadout ?? undefined}
       onTime={clock.set}
       clockTargetRef={rootRef}
+      square={black}
     />
   );
   const dockedCourt = (
@@ -1771,8 +1777,8 @@ export function LabelConsole({
             points={points}
             adScoring={session.adScoring}
             names={names}
-            marks={marks}
-            expandedPointId={openPointId}
+            marks={liveMarks}
+            expandedPointId={currentPointId}
             onTogglePoint={togglePoint}
             editable={editable}
             selectedShotId={placement.shotId}
@@ -1889,9 +1895,9 @@ export function LabelConsole({
 
           {/* The court floats too (board 08i): the whole court, read-only,
               until a stroke is selected in an editable session — then the
-              half its next click belongs on. After the video in the DOM, so
-              where the two ever meet the court, the card being worked on, is
-              on top. */}
+              same court as a button for its next click. After the video in
+              the DOM, so where the two ever meet the court, the card being
+              worked on, is on top. */}
           <LabelCourtDock
             point={expanded}
             names={names}
@@ -2042,23 +2048,6 @@ function pointOfShot(
 ): LabelPoint | null {
   return (
     points.find((point) => point.shots.some((s) => s.id === shotId)) ?? null
-  );
-}
-
-/**
- * Selecting a stroke for the court: the first click is its contact, on the
- * half its hitter stood in (court-placement.ts `hitterHalf`).
- */
-function placementOf(
-  points: readonly LabelPoint[],
-  shotId: string | null,
-): PlacementState {
-  const owner = shotId === null ? null : pointOfShot(points, shotId);
-  if (!owner) return startPlacement(shotId);
-  const index = owner.shots.findIndex((shot) => shot.id === shotId);
-  return startPlacement(
-    shotId,
-    hitterHalf(owner.shots[index], owner.shots.slice(0, index)),
   );
 }
 

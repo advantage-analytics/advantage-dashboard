@@ -147,7 +147,6 @@ export function BlackPointRow({
 }) {
   const { operations, names } = edit;
   const number = point.pointIndex + 1;
-  const shotsId = `label-black-point-${point.id}-shots`;
   const checked = point.checkedAt !== null;
   const showNote = edit.editable || point.note !== null;
   // The point as the rail reads it (board 08m §3): without the strokes the
@@ -216,13 +215,13 @@ export function BlackPointRow({
           fresh={fresh}
         />
 
-        {/* The two lines, and the row's fold control for a keyboard and a
-            screen reader — the row's own click does the same for a mouse. */}
+        {/* The two lines, as the row's control for a keyboard and a screen
+            reader — the row's own click does the same for a mouse: go to the
+            point, which makes it the current one and unfolds it. Not a
+            toggle: only the current point is unfolded, and nothing folds it. */}
         <button
           type="button"
-          data-point-fold=""
-          aria-expanded={open}
-          aria-controls={open ? shotsId : undefined}
+          data-point-go=""
           onClick={(event) => {
             event.stopPropagation();
             onToggle?.(point.id);
@@ -361,11 +360,7 @@ export function BlackPointRow({
         ) : null}
       </div>
 
-      {open ? (
-        <div id={shotsId} data-shots-for={point.id}>
-          {children}
-        </div>
-      ) : null}
+      {open ? <div data-shots-for={point.id}>{children}</div> : null}
     </>
   );
 }

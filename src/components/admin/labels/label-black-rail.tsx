@@ -1,9 +1,16 @@
 "use client";
 
-import { Fragment, useMemo, type FocusEvent, type RefObject } from "react";
-import { Minimize2 } from "lucide-react";
+import {
+  Fragment,
+  useMemo,
+  useState,
+  type FocusEvent,
+  type RefObject,
+} from "react";
+import { Flag, Minimize2, WandSparkles } from "lucide-react";
 import type { FollowAffordance } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type {
   LabelPointPatch,
@@ -14,6 +21,17 @@ import {
   type GameOverflow,
 } from "@/lib/services/labels/game-shift";
 import type { LabelMarks } from "@/lib/services/labels/marks";
+import {
+  SCORE_MISMATCH_ANSWERS,
+  SCORE_MISMATCH_LABEL,
+  findGapDescription,
+  fixesLabel,
+  onPointsDetail,
+  scoreMismatchDetail,
+  scoreMismatchText,
+  toCheckLabel,
+} from "@/lib/services/labels/marks-copy";
+import { markSummary } from "@/lib/services/labels/marks-state";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
   labelScores,
@@ -29,9 +47,9 @@ import {
   enteredScore,
   labelSetScores,
   scoreMismatch,
+  type LabelScoreMismatch,
 } from "@/lib/services/labels/set-scores";
 import { cn } from "@/lib/utils";
-import { LabelScoreBanner } from "./label-black-banner";
 import {
   BlackDeletedPoint,
   BlackGameBand,
@@ -55,30 +73,36 @@ import type { SaveStatus } from "./save-status";
  * tab's points list in its dark tone, carrying labels.
  *
  * A 46px header — "{player1} vs {player2}", "{checked} / {total} checked",
- * the save line in its dark tone and the way out (`Minimize2`, "Exit full
- * screen") — then, when the labelled points make a set score the entered one
- * disagrees with, the "Score doesn't add up" banner (`LabelScoreBanner`,
- * board 08m's `BANNER`; only with marks built, and not once the labeller has
- * said the video ends early) — over the ONE scroller
- * (`data-label-rail-scroller`), which is
- * what the console's follow scroll moves: a `BlackGameBand` before each
- * game's first live point, a `BlackPointRow` per point with the score before
- * it and its marks (board 08m, `label-black-mark.tsx`) in its tail, a
- * one-line dark tombstone with its Undo (`BlackDeletedPoint`) for a
- * deleted one, a dashed slot (`BlackSuggestedPoint`, board 08m §5) before a
- * point the marks think is missing a point in front of it, a second dashed
- * slot (`BlackGameOverflow`) before the first row sitting past a game's end
- * — the "Game–30" rows, offered a move into the next game — and the recessed
- * shots well (`BlackShotsWell`) under the open point only. The scroller
- * never scrolls sideways: every row is built to fit the rail from its
- * narrowest (520px), and `overflow-x-hidden` holds that.
+ * then the match's two totals in the same mono (a flag glyph with how many
+ * marks are still to check, a wand with how many automatic fixes the site
+ * made — `markSummary`, only with marks built), then, when the labelled
+ * points make a set score the entered one disagrees with, the score chip
+ * (`ScoreChip`: the labelled pair against the entered one, in amber, opening
+ * the three answers as a dark menu; only with marks built, and not once the
+ * labeller has said the video ends early), the save line in its dark tone
+ * and the way out (`Minimize2`, "Exit full screen") — over the ONE scroller
+ * (`data-label-rail-scroller`), which is what the console's follow scroll
+ * moves: a `BlackGameBand` before each game's first live point, a
+ * `BlackPointRow` per point with the score before it and its marks (board
+ * 08m, `label-black-mark.tsx`) in its tail, a one-line dark tombstone with
+ * its Undo (`BlackDeletedPoint`) for a deleted one, a dashed slot
+ * (`BlackSuggestedPoint`, board 08m §5) before a point the marks think is
+ * missing a point in front of it, a second dashed slot (`BlackGameOverflow`)
+ * before the first row sitting past a game's end — the "Game–30" rows,
+ * offered a move into the next game — and the recessed shots well
+ * (`BlackShotsWell`) under the current point only. The scroller never
+ * scrolls sideways: every row is built to fit the rail from its narrowest
+ * (520px), and `overflow-x-hidden` holds that. Nor does the header push
+ * anything off at 520: the names truncate first, the chip's words give way
+ * to its dot under 600px of header, and everything else keeps its width.
  * The "Now playing" pill is pinned over the scroller's top-centre while held
  * and a point is playing, as it is over the light table.
  *
- * Stateless but for the scoreboard memo, exactly as `LabelPointsTableView`:
- * every callback is the console's, handed down unchanged, so follow and
- * hold, the shot loop, autosave, the row operations and the game menus work
- * here as they do in the light table — only the paint is this file's.
+ * Stateless but for the scoreboard memo and the chip's open state, exactly
+ * as `LabelPointsTableView`: every callback is the console's, handed down
+ * unchanged, so follow and hold, autosave, the row operations and the game
+ * menus work here as they do in the light table — only the paint is this
+ * file's.
  */
 export function LabelBlackRail({
   player1Name,
@@ -169,7 +193,7 @@ export function LabelBlackRail({
   playingShotId?: string | null;
   playingWindow?: PlayingWindow | null;
   /**
-   * The banner's reading (the console's session state): the score the
+   * The score chip's reading (the console's session state): the score the
    * labeller entered, whether they said the video ends early, and the match
    * record's score as the fallback the labelled points are held against.
    */
@@ -177,8 +201,8 @@ export function LabelBlackRail({
   videoEndsEarly?: boolean | null;
   matchScore?: MatchScore | null;
   /**
-   * The banner's answers. Given all three, the banner carries them; absent,
-   * it is words alone. `onFixEnteredScore` gets the labelled sets as
+   * The chip's answers. Given all three, the chip opens a menu of them;
+   * absent, it is words alone. `onFixEnteredScore` gets the labelled sets as
    * `[p1, p2]` pairs — what `final_score` stores.
    */
   onFixEnteredScore?: (finalScore: number[][]) => void;
@@ -189,8 +213,8 @@ export function LabelBlackRail({
     () => labelScores(points, adScoring),
     [points, adScoring],
   );
-  // The banner's arithmetic, over the same rows as the scoreboard: shown
-  // only with marks built (never on a session labelled blind), not once the
+  // The chip's arithmetic, over the same rows as the scoreboard: shown only
+  // with marks built (never on a session labelled blind), not once the
   // labeller has said the video ends early, and only on a disagreement.
   const labelledSets = useMemo(
     () => labelSetScores(points, adScoring),
@@ -200,6 +224,12 @@ export function LabelBlackRail({
     marks !== null && videoEndsEarly !== true
       ? scoreMismatch(labelledSets, enteredScore(finalScore, matchScore))
       : null;
+  // The header's two totals, over every live row — marks, not points, as
+  // the rows roll them up. Nothing on the marks-off session.
+  const summary = useMemo(
+    () => (marks ? markSummary(points, marks) : null),
+    [points, marks],
+  );
   const edit: EditContext = {
     editable,
     names,
@@ -230,9 +260,10 @@ export function LabelBlackRail({
 
   return (
     <TooltipProvider>
+      {/* A size container, for the chip's words (`@min-[600px]`). */}
       <div
         data-label-rail-header=""
-        className="flex h-[46px] shrink-0 items-center gap-[10px] pr-[10px] pl-[14px] shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)]"
+        className="@container flex h-[46px] shrink-0 items-center gap-[10px] pr-[10px] pl-[14px] shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)]"
       >
         <span
           data-label-rail-title=""
@@ -246,6 +277,43 @@ export function LabelBlackRail({
         >
           {checked} <span className="text-white/25">/</span> {total} checked
         </span>
+        {summary ? (
+          <>
+            <RailTotal
+              attr="data-label-rail-to-check"
+              icon={Flag}
+              count={summary.open}
+              label={toCheckLabel(summary.open)}
+              detail={onPointsDetail(summary.openPoints)}
+              className={
+                summary.open > 0 ? "text-[rgba(252,211,77,1)]" : "text-white/45"
+              }
+            />
+            <RailTotal
+              attr="data-label-rail-fixes"
+              icon={WandSparkles}
+              count={summary.fixes}
+              label={fixesLabel(summary.fixes)}
+              detail={onPointsDetail(summary.fixPoints)}
+              className="text-white/55"
+            />
+          </>
+        ) : null}
+        {mismatch ? (
+          <ScoreChip
+            mismatch={mismatch}
+            onFixEnteredScore={
+              onFixEnteredScore && editable
+                ? () =>
+                    onFixEnteredScore(
+                      labelledSets.map((set) => [set.games[0], set.games[1]]),
+                    )
+                : undefined
+            }
+            onVideoEndsEarly={editable ? onVideoEndsEarly : undefined}
+            onFindGap={editable ? onFindGap : undefined}
+          />
+        ) : null}
         <span className="flex-1" />
         <LabelSaveStatus status={saveStatus} tone="dark" />
         <ChromeTooltip label="Exit full screen" side="bottom" align="end">
@@ -264,22 +332,6 @@ export function LabelBlackRail({
           </button>
         </ChromeTooltip>
       </div>
-
-      {mismatch ? (
-        <LabelScoreBanner
-          mismatch={mismatch}
-          onFixEnteredScore={
-            onFixEnteredScore && editable
-              ? () =>
-                  onFixEnteredScore(
-                    labelledSets.map((set) => [set.games[0], set.games[1]]),
-                  )
-              : undefined
-          }
-          onVideoEndsEarly={editable ? onVideoEndsEarly : undefined}
-          onFindGap={editable ? onFindGap : undefined}
-        />
-      ) : null}
 
       {/* The scroller and the pill's positioning context: the pill sits over
           the rows rather than among them, so it stays put while they move. */}
@@ -302,11 +354,9 @@ export function LabelBlackRail({
               const band = bandBefore.get(point.id);
               const slot = slotBefore.get(point.id);
               const overflow = overflowBefore.get(point.id);
-              // The playing point is always unfolded, whatever is held: the
-              // labeller sees its strokes light as they are hit. A held
-              // point stays open beside it.
-              const open =
-                point.id === expandedPointId || point.id === playingPointId;
+              // One point unfolds: the current one (the console's
+              // `currentPointId`, playing or resting). Nothing else does.
+              const open = point.id === expandedPointId;
               return (
                 <Fragment key={point.id}>
                   {band ? (
@@ -379,6 +429,178 @@ export function LabelBlackRail({
         ) : null}
       </div>
     </TooltipProvider>
+  );
+}
+
+/**
+ * One of the header's two totals: a glyph and a count in the progress
+ * line's mono, named for a screen reader and the dark tooltip — the
+ * marks-copy sentence over "On 30 points". Not a control: nothing happens on
+ * a click.
+ */
+function RailTotal({
+  attr,
+  icon: Icon,
+  count,
+  label,
+  detail,
+  className,
+}: {
+  attr: string;
+  icon: typeof Flag;
+  count: number;
+  label: string;
+  detail: string | undefined;
+  className: string;
+}) {
+  return (
+    <ChromeTooltip label={label} detail={detail} side="bottom">
+      <span
+        role="img"
+        aria-label={label}
+        {...{ [attr]: "" }}
+        className={cn(
+          "mono tabular inline-flex shrink-0 items-center gap-1 text-[10px] whitespace-nowrap",
+          className,
+        )}
+      >
+        <Icon className="size-2.5" strokeWidth={1.8} aria-hidden="true" />
+        {count}
+      </span>
+    </ChromeTooltip>
+  );
+}
+
+/**
+ * The score that doesn't add up, as a chip in the header (board 08m's
+ * `BANNER`, folded into one line): the labelled pair against the entered
+ * one — "4–7 · entered 4–6" — in the open flag's amber, an amber dot in
+ * front of it. Under 600px of header the words give way and the dot stands
+ * alone; the hover says everything either way.
+ *
+ * With the three answers it is a `FloatMenu` trigger in the rail's dark
+ * tone, each row saying what choosing it does: "Fix the entered score"
+ * stores the labelled sets as the session's score, "Video ends early" says
+ * the rows stop before the match did, and "Find the gap" goes to the
+ * mismatching set's first point and writes nothing. The answers write ONLY
+ * `label_sessions` (`final_score`, `video_ends_early`) — never `matches`.
+ * Without them (a session that cannot be written) the chip is words alone,
+ * not a control.
+ */
+function ScoreChip({
+  mismatch,
+  onFixEnteredScore,
+  onVideoEndsEarly,
+  onFindGap,
+}: {
+  mismatch: LabelScoreMismatch;
+  /** Store the labelled sets as `final_score`. Absent: no answers at all. */
+  onFixEnteredScore?: () => void;
+  onVideoEndsEarly?: () => void;
+  /** Hold and scroll to the set's first point (null: the rows end before it). */
+  onFindGap?: (pointId: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { setNumber, labelled, entered, firstPointId } = mismatch;
+  const answers = onFixEnteredScore && onVideoEndsEarly && onFindGap;
+  const text = scoreMismatchText(labelled, entered);
+  const detail = scoreMismatchDetail(setNumber, labelled, entered);
+  const chip = cn(
+    "inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full bg-[rgba(253,230,138,0.14)] px-1.5 text-[10px] font-medium whitespace-nowrap text-[rgba(252,211,77,1)]",
+    answers &&
+      "cursor-pointer transition-colors duration-200 hover:bg-[rgba(253,230,138,0.22)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+  );
+  const inside = (
+    <>
+      <span
+        aria-hidden="true"
+        className="size-1.5 shrink-0 rounded-full bg-current"
+      />
+      <span
+        data-label-score-chip-text=""
+        className="mono tabular hidden @min-[600px]:inline"
+      >
+        {text}
+      </span>
+    </>
+  );
+
+  if (!answers) {
+    return (
+      <ChromeTooltip
+        label={SCORE_MISMATCH_LABEL}
+        detail={detail}
+        side="bottom"
+        wrap
+      >
+        <span
+          role="img"
+          data-label-score-chip=""
+          aria-label={`${SCORE_MISMATCH_LABEL}. ${detail}`}
+          className={chip}
+        >
+          {inside}
+        </span>
+      </ChromeTooltip>
+    );
+  }
+
+  return (
+    <ChromeTooltip
+      label={SCORE_MISMATCH_LABEL}
+      detail={detail}
+      side="bottom"
+      hidden={open}
+      wrap
+    >
+      <span className="inline-flex shrink-0">
+        <FloatMenu
+          open={open}
+          onOpenChange={setOpen}
+          align="end"
+          width={272}
+          tone="dark"
+          label={SCORE_MISMATCH_LABEL}
+          trigger={
+            <button
+              type="button"
+              data-label-score-chip=""
+              aria-label={SCORE_MISMATCH_LABEL}
+              aria-haspopup="menu"
+              aria-expanded={open}
+              className={cn(chip, open && "bg-[rgba(253,230,138,0.22)]")}
+            >
+              {inside}
+            </button>
+          }
+        >
+          <FloatMenuItem
+            label={SCORE_MISMATCH_ANSWERS.fix.label}
+            description={SCORE_MISMATCH_ANSWERS.fix.description}
+            onSelect={() => {
+              setOpen(false);
+              onFixEnteredScore();
+            }}
+          />
+          <FloatMenuItem
+            label={SCORE_MISMATCH_ANSWERS.endsEarly.label}
+            description={SCORE_MISMATCH_ANSWERS.endsEarly.description}
+            onSelect={() => {
+              setOpen(false);
+              onVideoEndsEarly();
+            }}
+          />
+          <FloatMenuItem
+            label={SCORE_MISMATCH_ANSWERS.findGap.label}
+            description={findGapDescription(setNumber, firstPointId !== null)}
+            onSelect={() => {
+              setOpen(false);
+              onFindGap(firstPointId);
+            }}
+          />
+        </FloatMenu>
+      </span>
+    </ChromeTooltip>
   );
 }
 

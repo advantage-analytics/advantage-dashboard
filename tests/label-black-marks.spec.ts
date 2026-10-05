@@ -81,7 +81,12 @@ function marksOf(
   shots: Record<string, LabelMark[]> = {},
   suggestions: LabelMarks["suggestions"] = [],
 ): LabelMarks {
-  return { points: { [point.id]: pointMarks }, shots, suggestions };
+  return {
+    points: { [point.id]: pointMarks },
+    shots,
+    suggestions,
+    serveSides: {},
+  };
 }
 
 const noop = () => {};
@@ -799,7 +804,6 @@ test.describe("a mark's hover is the dark tooltip's two lines", () => {
       MARK,
       ROW,
       WELL,
-      "src/components/admin/labels/label-black-banner.tsx",
       "src/components/admin/labels/label-black-view.tsx",
       "src/components/admin/labels/label-rail-resize.tsx",
       "src/components/admin/labels/label-point-menu.tsx",
@@ -895,9 +899,14 @@ test.describe("a session with no marks", () => {
     expect(without).not.toContain(DISPUTED_HOVER);
     expect(pencils(without)).toBe(0);
     // An empty marks object is the same row.
-    expect(renderRow(point, { points: {}, shots: {}, suggestions: [] })).toBe(
-      without,
-    );
+    expect(
+      renderRow(point, {
+        points: {},
+        shots: {},
+        suggestions: [],
+        serveSides: {},
+      }),
+    ).toBe(without);
 
     expect(renderWell(point, null)).not.toContain("data-mark-kind");
 

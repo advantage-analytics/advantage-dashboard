@@ -57,8 +57,72 @@ export function fixLabel(mark: LabelMark): string {
   return MARK_LABEL[mark.code];
 }
 
-/** The vendor's point score ("0-15") as the board writes one ("0–15"). */
+/** A point score ("0-15") as the board writes one ("0–15"). */
 const scoreText = (score: string) => score.replace(/\s*-\s*/g, "–");
+
+// ── The rail header's totals ────────────────────────────────────────────────
+
+/** "41 flags to check" — the header's open-flag count, as a sentence. */
+export function toCheckLabel(count: number): string {
+  if (count === 0) return "Nothing left to check";
+  return `${count} ${count === 1 ? "flag" : "flags"} to check`;
+}
+
+/** "62 automatic fixes" — the header's fix count, as a sentence. */
+export function fixesLabel(count: number): string {
+  if (count === 0) return "No automatic fixes";
+  return `${count} automatic ${count === 1 ? "fix" : "fixes"}`;
+}
+
+/** "On 30 points" — how many points a header count is spread over. */
+export function onPointsDetail(count: number): string | undefined {
+  if (count === 0) return undefined;
+  return `On ${count} ${count === 1 ? "point" : "points"}`;
+}
+
+// ── The score chip ──────────────────────────────────────────────────────────
+
+/** The chip's name: what is wrong, in the frame's own words. */
+export const SCORE_MISMATCH_LABEL = "Score doesn’t add up";
+
+/** The chip's words: the labelled pair, then the entered one. */
+export function scoreMismatchText(labelled: string, entered: string): string {
+  return `${labelled} · entered ${entered}`;
+}
+
+/** The chip's hover sentence — the banner's, in one line. */
+export function scoreMismatchDetail(
+  setNumber: number,
+  labelled: string,
+  entered: string,
+): string {
+  return `These points make ${labelled} in set ${setNumber}. The score entered was ${entered}. Stats are estimates until one of them is fixed.`;
+}
+
+/** The three answers, each with what choosing it does. */
+export const SCORE_MISMATCH_ANSWERS = {
+  fix: {
+    label: "Fix the entered score",
+    description: "Make the entered score what these points say.",
+  },
+  endsEarly: {
+    label: "Video ends early",
+    description: "The points stop before the match did; the score stands.",
+  },
+  findGap: {
+    label: "Find the gap",
+  },
+} as const;
+
+/** "Find the gap"'s second line: where it goes. */
+export function findGapDescription(
+  setNumber: number,
+  reachesSet: boolean,
+): string {
+  return reachesSet
+    ? `Goes to the first point of set ${setNumber}. The entered score is a set total, so the gap can’t be placed at a game.`
+    : `The points never reach set ${setNumber}: goes to the last point labelled.`;
+}
 
 /**
  * The hover line: the board's `tip` for the mark's code, with the players'

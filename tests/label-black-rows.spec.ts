@@ -500,7 +500,8 @@ test.describe("the black point row", () => {
     // Open: its strokes are handed in under it.
     expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P4}"`);
     expect(html).toContain("data-strokes");
-    expect(tag(html, "data-point-fold")).toContain('aria-expanded="true"');
+    // The two lines are the row's control — go to the point — not a fold.
+    expect(tag(html, "data-point-go")).not.toContain("aria-expanded");
     // A playing row with no window is marked, with no rule.
     expect(renderRow(FIXTURE_POINT_IDS.P4, { playing: true })).not.toContain(
       "data-playing-rule",

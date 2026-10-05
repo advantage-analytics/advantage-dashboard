@@ -36,13 +36,15 @@ import type { VideoClock } from "./video-clock";
  *
  * ── Two states ──────────────────────────────────────────────────────────────
  * - **Not placing** (the film is playing, nothing is selected, or the session
- *   is read-only): the WHOLE court, read-only. A click does nothing. There is
+ *   is read-only): the whole court, read-only. A click does nothing. There is
  *   no shot list — the table is the list.
- * - **Placing** (a stroke is selected and the console is editable): the court
- *   ZOOMS to the half the next click belongs on (court-placement.ts), with the
- *   run-off round it clickable for a ball that went out. The foot holds the
- *   Contact / Landing switch — which end the click places — and "Flip side",
- *   for a ball into the net.
+ * - **Placing** (a stroke is selected and the console is editable): the same
+ *   whole court, as a button — a click anywhere in it, apron included for a
+ *   ball that went out, places the end being worked on (court-placement.ts).
+ *   The foot holds the Contact / Landing switch — which end the click places
+ *   — and "Flip side", which draws the court the other way up. Nothing about
+ *   the court changes on a selection: it does not zoom, turn or switch ends
+ *   unless the labeller presses one of those two controls.
  *
  * ── What is on the court ────────────────────────────────────────────────────
  * Never the whole point at once. With nothing selected the marks follow the
@@ -71,9 +73,10 @@ export interface CourtReadout {
 /**
  * The card's two header lines.
  *
- * Placing: "Shot 3 · contact" over whose half is on screen — the hitter's
- * for a contact, the other player's for a landing, and "Flipped to <hitter>'s
- * side · Net" when Flip side has brought a landing back across.
+ * Placing: "Shot 3 · contact" over whose side the end is usually on — the
+ * hitter's for a contact, the other player's for a landing. (A ball into the
+ * net lands on the hitter's own side; the whole court is on screen, so the
+ * click just goes there.)
  *
  * Otherwise: "Point 15" over "Shot 3 of 4 · Ace" for the lit (playing)
  * stroke, or just the stroke count; "Court" with no point open.
@@ -100,12 +103,7 @@ export function courtReadout(
       : "The other side";
     return {
       title: `Shot ${placing} · ${placement.target}`,
-      subtitle:
-        placement.target === "contact"
-          ? own
-          : placement.flipped
-            ? `Flipped to ${hitter ? own : "the hitter’s side"} · Net`
-            : other,
+      subtitle: placement.target === "contact" ? own : other,
     };
   }
 
@@ -145,7 +143,7 @@ export function selectedStroke(
 /**
  * Whether the court is taking clicks: a live stroke of the open point is
  * selected and the console may write. The shell draws its blue outline from
- * this, the body its zoomed half and its foot.
+ * this, the body its button and its foot.
  */
 export function isPlacing(
   point: LabelPoint | null,
@@ -173,19 +171,19 @@ export function LabelCourtPanel({
   /** The open point; its live strokes are the marks. Null: an empty court. */
   point: LabelPoint | null;
   names: SideNames;
-  /** The selected stroke and the end and half its next click places. */
+  /** The selected stroke, the end its next click places, and the court's way up. */
   placement: PlacementState;
-  /** Whether a click may write. Read-only: always the whole court. */
+  /** Whether a click may write. Read-only: a picture. */
   editable: boolean;
   /** The stroke on screen in the video — named in the header while nothing is selected. */
   playingShotId?: string | null;
   /** The console's video clock (analysis seconds): what the marks follow. */
   clock: VideoClock;
-  /** A click on the zoomed half, in metres. */
+  /** A click on the court, in metres. */
   onPlace: (point: CourtPoint) => void;
   /** The Contact / Landing switch. */
   onTarget: (target: PlacementTarget) => void;
-  /** "Flip side". */
+  /** "Flip side": the court the other way up. */
   onFlip: () => void;
   /**
    * Spread onto the header row — the floating shell makes it the drag handle
@@ -289,7 +287,7 @@ export function LabelCourtPanel({
       >
         <LabelCourt
           strokes={strokes}
-          view={placing ? placement.half : "whole"}
+          flipped={placement.flipped}
           targetShotId={placing ? placement.shotId : null}
           target={placing ? placement.target : null}
           prompt={prompt}

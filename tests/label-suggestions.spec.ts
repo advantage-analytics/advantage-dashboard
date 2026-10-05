@@ -142,6 +142,7 @@ function marksOf(point: LabelPoint): LabelMarks {
     points: { [point.id]: [pairMark()] },
     shots: {},
     suggestions: [SUGGESTION],
+    serveSides: {},
   };
 }
 

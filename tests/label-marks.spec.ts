@@ -114,7 +114,13 @@ test.describe("buildLabelMarks on the clean fixture", () => {
   test("a transcript point's flags land on the label point whose vendorRallyIds holds its rally id", () => {
     let flagged = 0;
     for (const point of clean.transcript.points) {
-      const known = point.flags.filter((f) => f in LABEL_MARK_META);
+      // The two score flags are the console's to raise (score-marks.ts).
+      const known = point.flags.filter(
+        (f) =>
+          f in LABEL_MARK_META &&
+          f !== POINT_FLAGS.SERVICE_COURT_REPEAT &&
+          f !== POINT_FLAGS.SCORE_SIDE_MISMATCH,
+      );
       if (known.length === 0) continue;
       flagged += 1;
       const labelId = labelIdOfRally(point.rally_id);
@@ -217,28 +223,45 @@ test.describe("buildLabelMarks on the clean fixture", () => {
     }
   });
 
-  test("service_court_repeat and score_side_mismatch carry the court sides they read", () => {
-    const repeat = clean.transcript.points.find((p) =>
-      p.flags.includes(POINT_FLAGS.SERVICE_COURT_REPEAT),
-    )!;
-    const serve = rallyById.get(repeat.rally_id)!.serves[0];
-    const m = cleanMarks.points[labelIdOfRally(repeat.rally_id)].find(
-      (x) => x.code === "service_court_repeat",
-    );
-    if (m?.code !== "service_court_repeat") throw new Error("missing");
-    expect(m.params.side).toBe(serveCourtSide(serve.playerX, serve.playerY));
+  test("the two score flags are not marks; serveSides carries the side each serve was hit from instead", () => {
+    // The file flags them, the marks do not: the console raises both against
+    // the LABELLED score (score-marks.ts), which the file cannot know.
+    expect(
+      clean.transcript.points.some((p) =>
+        p.flags.includes(POINT_FLAGS.SERVICE_COURT_REPEAT),
+      ),
+    ).toBe(true);
+    for (const marks of Object.values(cleanMarks.points)) {
+      for (const m of marks) {
+        expect(m.code).not.toBe("service_court_repeat");
+        expect(m.code).not.toBe("score_side_mismatch");
+      }
+    }
 
-    const mismatch = clean.transcript.points.find((p) =>
-      p.flags.includes(POINT_FLAGS.SCORE_SIDE_MISMATCH),
-    )!;
-    const mm = cleanMarks.points[labelIdOfRally(mismatch.rally_id)].find(
-      (x) => x.code === "score_side_mismatch",
-    );
-    if (mm?.code !== "score_side_mismatch") throw new Error("missing");
-    expect(mm.params.score).toBe(mismatch.point_score);
-    expect(mm.params.expected).not.toBeNull();
-    expect(mm.params.actual).not.toBeNull();
-    expect(mm.params.expected).not.toBe(mm.params.actual);
+    // Every transcript point with a label row and a serve clear of the
+    // centre mark has its side; the side is the server's stance.
+    let sided = 0;
+    for (const point of clean.transcript.points) {
+      const labelId = labelIdOfRally(point.rally_id);
+      const serve = rallyById.get(point.rally_id)!.serves[0];
+      const expected =
+        serve && Math.abs(serve.playerX ?? 0) >= 0.3
+          ? serveCourtSide(serve.playerX, serve.playerY)
+          : null;
+      if (expected === null) continue;
+      sided += 1;
+      expect(cleanMarks.serveSides[labelId]).toBe(expected);
+    }
+    expect(sided).toBeGreaterThan(20);
+    for (const side of Object.values(cleanMarks.serveSides)) {
+      expect(["deuce", "ad"]).toContain(side);
+    }
+    // A point the labeller added has no vendor rally, so no side.
+    for (const id of Object.keys(cleanMarks.serveSides)) {
+      expect(
+        cleanPoints.find((p) => p.id === id)?.vendorRallyIds.length,
+      ).toBeGreaterThan(0);
+    }
   });
 
   test("a flag whose rally or event has no label row is dropped, and nothing else moves", () => {
@@ -363,40 +386,11 @@ test.describe("buildLabelMarks on the clean fixture", () => {
     });
   });
 
-  test("one missing_point suggestion per service_court_repeat, between the previous point of the game and the flagged one", () => {
-    const suggestions = cleanMarks.suggestions.filter(
-      (s) => s.kind === "missing_point",
-    );
-    const flagged = clean.transcript.points.filter((p) =>
-      p.flags.includes(POINT_FLAGS.SERVICE_COURT_REPEAT),
-    );
-    expect(flagged.length).toBeGreaterThan(0);
-    expect(suggestions).toHaveLength(flagged.length);
-    for (const s of suggestions) {
-      if (s.kind !== "missing_point") throw new Error("narrowing");
-      expect(s.key).toBe("missing_point");
-      const point = clean.transcript.points.find(
-        (p) => labelIdOfRally(p.rally_id) === s.pointId,
-      )!;
-      const before = [...clean.transcript.points]
-        .reverse()
-        .find(
-          (p) =>
-            p.point_number < point.point_number &&
-            p.set_number === point.set_number &&
-            p.game_number === point.game_number,
-        )!;
-      expect(s.beforePointId).toBe(labelIdOfRally(before.rally_id));
-      expect(s.pointNumbers).toEqual([before.point_number, point.point_number]);
-      const serve = rallyById.get(point.rally_id)!.serves[0];
-      expect(s.side).toBe(serveCourtSide(serve.playerX, serve.playerY));
-    }
-    // P3 follows P2 in game 1 from the same court.
-    expect(suggestions[0]).toMatchObject({
-      pointId: "point-2",
-      beforePointId: "point-1",
-      pointNumbers: [2, 3],
-    });
+  test("no missing_point suggestion comes from the file: it is read off the labelled rows (score-marks.ts)", () => {
+    expect(
+      cleanMarks.suggestions.filter((s) => s.kind === "missing_point"),
+    ).toHaveLength(0);
+    expect(cleanMarks.suggestions.length).toBeGreaterThan(0);
   });
 
   test("a rally with exactly one out-called serve and a short tail is a serve_fault; the fold's silence is a pick_winner", () => {
@@ -432,7 +426,12 @@ test.describe("buildLabelMarks on the degraded fixture", () => {
       degraded.analysis.rallies,
       [],
     );
-    expect(marks).toEqual({ points: {}, shots: {}, suggestions: [] });
+    expect(marks).toEqual({
+      points: {},
+      shots: {},
+      suggestions: [],
+      serveSides: {},
+    });
   });
 });
 

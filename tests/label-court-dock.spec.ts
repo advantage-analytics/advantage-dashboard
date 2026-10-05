@@ -3,6 +3,10 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
+  fromCourt,
+  turnScreen,
+} from "@/components/admin/labels/court-geometry";
+import {
   flipPlacement,
   setPlacementTarget,
   startPlacement,
@@ -235,11 +239,15 @@ test.describe("the court card", () => {
     expect(html).not.toContain("Backhand");
   });
 
-  test("placing a contact: the hitter's half, under a blue outline", () => {
-    const html = render({ placement: startPlacement("s-return", "far") });
+  test("placing a contact: the same whole court as a button, under a blue outline", () => {
+    const html = render({ placement: startPlacement("s-return") });
     expect(html).toContain('data-court-placing="true"');
-    expect(html).toContain('data-court-view="far"');
-    expect(html).toContain('viewBox="-10.085 -3.5 20.17 16.224"');
+    expect(html).toMatch(
+      /<button[^>]*data-court-target=""[^>]*data-court-view="whole"/,
+    );
+    expect(html).toContain('viewBox="-7.265 -4.5 14.53 32.77"');
+    expect(html).not.toContain("16.224");
+    expect(html).not.toContain("data-court-flipped");
     expect(html).toContain("shadow-[0_0_0_1.5px_var(--blue)");
     expect(title(html)).toBe("Shot 2 · contact");
     expect(subtitle(html)).toBe("Vargas’s side");
@@ -248,13 +256,10 @@ test.describe("the court card", () => {
     );
   });
 
-  test("placing a landing: the other half; flipped, back on the hitter's for a net ball", () => {
-    const landing = setPlacementTarget(
-      startPlacement("s-return", "far"),
-      "landing",
-    );
+  test("placing a landing: the same court, the other end ringed; Flip side turns it over", () => {
+    const landing = setPlacementTarget(startPlacement("s-return"), "landing");
     const html = render({ placement: landing });
-    expect(html).toContain('data-court-view="near"');
+    expect(html).toContain('data-court-view="whole"');
     expect(title(html)).toBe("Shot 2 · landing");
     expect(subtitle(html)).toBe("Lee’s side");
     expect(html).toMatch(
@@ -263,19 +268,27 @@ test.describe("the court card", () => {
     expect(html).toMatch(/aria-pressed="false" data-court-flip=""/);
     expect(html).toContain('data-selected-ring="landing"');
 
+    // Flipped: still the whole court, turned over — the return's contact
+    // (x 1.8, y 24.49) lands where it would have mirrored through the centre.
     const flipped = render({ placement: flipPlacement(landing) });
-    expect(flipped).toContain('data-court-view="far"');
-    expect(subtitle(flipped)).toBe("Flipped to Vargas’s side · Net");
+    expect(flipped).toContain('data-court-view="whole"');
+    expect(flipped).toContain('data-court-flipped="true"');
+    expect(subtitle(flipped)).toBe("Lee’s side");
     expect(flipped).toMatch(/aria-pressed="true" data-court-flip=""/);
+    const hitAt = turnScreen(fromCourt({ x: 1.8, y: 24.49 }));
+    expect(flipped).toContain(
+      `data-court-hit="" cx="${hitAt.sx.toFixed(2)}%" cy="${hitAt.sy.toFixed(2)}%"`,
+    );
   });
 
-  test("read-only, or a selection that is not in the open point: no zoom", () => {
+  test("read-only, or a selection that is not in the open point: a picture", () => {
     for (const html of [
-      render({ placement: startPlacement("s-return", "far"), editable: false }),
-      render({ placement: startPlacement("somewhere-else", "far") }),
-      render({ placement: startPlacement("s-return", "far"), point: null }),
+      render({ placement: startPlacement("s-return"), editable: false }),
+      render({ placement: startPlacement("somewhere-else") }),
+      render({ placement: startPlacement("s-return"), point: null }),
     ]) {
       expect(html).toContain('data-court-view="whole"');
+      expect(html).not.toContain("data-court-target");
       expect(html).not.toContain("data-court-steps");
     }
     const empty = render({ point: null });

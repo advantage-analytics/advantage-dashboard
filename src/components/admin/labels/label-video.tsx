@@ -32,7 +32,6 @@ import type { LabelPoint, LabelVideo } from "@/lib/services/labels/session";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { labelFilmStops, type LabelFilmStop } from "./label-film-stops";
-import type { ShotLoopWindow } from "./label-shot-loop";
 
 /**
  * The console's video: the labelled job's own file, with the match Video
@@ -75,19 +74,17 @@ import type { ShotLoopWindow } from "./label-shot-loop";
  * table's playing row can draw its progress rule from the same clock without
  * a render (`label-point-row.tsx`).
  *
- * ── The shot loop ───────────────────────────────────────────────────────────
- * `loopShot` is the table's shot click: one stroke's window (FILE seconds,
- * from `label-shot-loop.ts`), played round and round. It is a second window
- * beside the transport's Loop, and it outranks it — while it is held the
- * point loop and Skip dead time stand down, so nothing else moves the
- * playhead out from under it. It is held in a ref and shown nowhere: the
- * Loop button, `looping` and the `L` key still mean "loop the point".
+ * ── Selecting a shot ────────────────────────────────────────────────────────
+ * A shot click in the table is a plain `seekTo` of the shot's time: the film
+ * goes there and then carries on as it was — playing on if it was playing,
+ * resting there if it was paused. Nothing replays a shot on its own; the
+ * Loop button, `looping` and the `L` key mean "loop the point", and that is
+ * the only loop there is.
  *
- * Anything that is the labeller asking to be somewhere else lets go of it:
- * play/pause (Space, the frame, the transport), a seek on the track, the
- * Previous/Next point glyphs and ← / →, and a point-row seek (`seekTo`).
- * Only the loop's own return to `start` keeps it, which is why that goes
- * through `moveTo` and everything else through `seek`.
+ * ── The frame's corners ─────────────────────────────────────────────────────
+ * The frame itself is square; the pending skeleton over it rounds its own
+ * corners (`FilmFramePending`), which suits a card. `square` switches that
+ * off for a frame flush to a black stage (the full-screen view).
  */
 export interface LabelVideoHandle {
   /** Seek to a label's `videoTime` (analysis clock), converted to this file. */
@@ -97,7 +94,7 @@ export interface LabelVideoHandle {
   togglePlay: () => void;
   /** Whether the film is running — read before a remount that would stop it. */
   isPlaying: () => boolean;
-  /** Start the film without touching a shot loop; a no-op while it plays. */
+  /** Start the film; a no-op while it plays. */
   play: () => void;
   /** The previous (-1) or next (1) point, as the transport's glyphs step. */
   step: (direction: -1 | 1) => void;
@@ -105,12 +102,6 @@ export interface LabelVideoHandle {
   toggleLoop: () => void;
   toggleMute: () => void;
   toggleSkipDeadTime: () => void;
-  /**
-   * Replay one shot until told otherwise: seek to the window's `start`, play,
-   * and return to `start` each time the playhead reaches `end` (FILE
-   * seconds). `null` lets go of the window and leaves the playhead alone.
-   */
-  loopShot: (window: ShotLoopWindow | null) => void;
 }
 
 /** What the transport's title row says about the playing point. */
@@ -161,6 +152,13 @@ export const LabelVideoPlayer = forwardRef<
      * an ancestor of whatever else draws from the film's clock.
      */
     clockTargetRef?: RefObject<HTMLElement | null>;
+    /**
+     * Square corners on everything in the frame, the loading skeleton
+     * included — for a frame flush to the full-screen view's black stage.
+     * Off, the skeleton keeps its card radius for the docked and floating
+     * players.
+     */
+    square?: boolean;
   }
 >(function LabelVideoPlayer(
   {
@@ -171,6 +169,7 @@ export const LabelVideoPlayer = forwardRef<
     onPlayingChange,
     initialReady = false,
     clockTargetRef,
+    square = false,
   },
   ref,
 ) {
@@ -178,8 +177,6 @@ export const LabelVideoPlayer = forwardRef<
   const frameRef = useRef<HTMLDivElement>(null);
   /** The point the film was last inside, for Loop (see `film-player.tsx`). */
   const loopStopRef = useRef<LabelFilmStop | null>(null);
-  /** The shot being replayed (`loopShot`), in FILE seconds; null when none. */
-  const shotLoopRef = useRef<ShotLoopWindow | null>(null);
 
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -220,8 +217,8 @@ export const LabelVideoPlayer = forwardRef<
     [onTime, offset, syncClock],
   );
 
-  /** Move the playhead. The loops' own returns use this; people use `seek`. */
-  const moveTo = useCallback(
+  /** Move the playhead, wherever it is read. */
+  const seek = useCallback(
     (seconds: number) => {
       const el = videoRef.current;
       if (!el) return;
@@ -239,19 +236,7 @@ export const LabelVideoPlayer = forwardRef<
     [stops, pushTime],
   );
 
-  /** A seek somebody asked for: it also lets go of the shot being replayed. */
-  const seek = useCallback(
-    (seconds: number) => {
-      shotLoopRef.current = null;
-      moveTo(seconds);
-    },
-    [moveTo],
-  );
-
   const togglePlay = useCallback(() => {
-    // Space, the frame and the transport's glyph all end a shot loop: paused,
-    // the film rests where it is; resumed, it plays on past the shot.
-    shotLoopRef.current = null;
     const el = videoRef.current;
     if (!el) return;
     // A refused `play()` is autoplay policy or a load the next seek
@@ -262,33 +247,12 @@ export const LabelVideoPlayer = forwardRef<
 
   const step = useCallback(
     (direction: -1 | 1) => {
-      shotLoopRef.current = null;
       const now = videoRef.current?.currentTime ?? 0;
       const stop =
         direction === 1 ? nextStop(stops, now) : prevStop(stops, now);
       if (stop) seek(stop.start);
     },
     [stops, seek],
-  );
-
-  const loopShot = useCallback(
-    (window: ShotLoopWindow | null) => {
-      const el = videoRef.current;
-      if (!window || !el) {
-        shotLoopRef.current = null;
-        return;
-      }
-      // An `end` past the film's own would never be reached: the element
-      // would stop on its last frame instead of coming back round.
-      const end =
-        Number.isFinite(el.duration) && el.duration > 0
-          ? Math.min(window.end, el.duration)
-          : window.end;
-      shotLoopRef.current = { start: window.start, end };
-      moveTo(window.start);
-      if (el.paused) void el.play().catch(noop);
-    },
-    [moveTo],
   );
 
   const cycleRate = useCallback(() => {
@@ -315,15 +279,6 @@ export const LabelVideoPlayer = forwardRef<
   const onPlayhead = useCallback(
     (t: number) => {
       pushTime(t);
-      // The shot loop first, and alone: while a shot is held neither the
-      // point loop nor Skip dead time may move the playhead. The return's own
-      // `seeked` reports `start`, which is short of `end` by at least the
-      // window's floor (`SHOT_LOOP_MIN_SECONDS`), so it cannot re-trigger.
-      const shot = shotLoopRef.current;
-      if (shot) {
-        if (t >= shot.end - REACHED_EPSILON_SECONDS) moveTo(shot.start);
-        return;
-      }
       const previous = loopStopRef.current;
       if (
         looping &&
@@ -331,16 +286,16 @@ export const LabelVideoPlayer = forwardRef<
         t >= previous.end - REACHED_EPSILON_SECONDS &&
         t < previous.end + 1
       ) {
-        moveTo(previous.start);
+        seek(previous.start);
         return;
       }
       loopStopRef.current = activeStopAt(stops, t)?.stop ?? null;
       if (skipDead) {
         const jump = deadTimeJump(stops, t);
-        if (jump !== null) moveTo(jump);
+        if (jump !== null) seek(jump);
       }
     },
-    [stops, looping, skipDead, moveTo, pushTime],
+    [stops, looping, skipDead, seek, pushTime],
   );
 
   /** Metadata is in: take the duration and paint the first frame. */
@@ -424,7 +379,6 @@ export const LabelVideoPlayer = forwardRef<
       toggleLoop,
       toggleMute,
       toggleSkipDeadTime,
-      loopShot,
     }),
     [
       offset,
@@ -435,7 +389,6 @@ export const LabelVideoPlayer = forwardRef<
       toggleLoop,
       toggleMute,
       toggleSkipDeadTime,
-      loopShot,
     ],
   );
 
@@ -537,11 +490,16 @@ export const LabelVideoPlayer = forwardRef<
         </video>
 
         {/* Over the element, never instead of it, and `pointer-events-none`:
-            a click still reaches the element, so a slow load never traps one. */}
+            a click still reaches the element, so a slow load never traps one.
+            `square` takes the skeleton's own card radius off every box in it:
+            the frame is then flush to a black stage with nothing to round to. */}
         {!ready && (
           <div
             data-label-video-pending=""
-            className="pointer-events-none absolute inset-0"
+            className={cn(
+              "pointer-events-none absolute inset-0",
+              square && "[&_*]:rounded-none",
+            )}
           >
             <FilmFramePending overlay />
           </div>

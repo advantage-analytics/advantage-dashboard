@@ -207,7 +207,7 @@ export interface LabelSession {
   /**
    * The match's final score as the labeller read it off the video
    * (`label_sessions.final_score`): one `[p1, p2]` games pair per set. Null
-   * until the labeller sets it. What the "Score doesn't add up" banner holds
+   * until the labeller sets it. What the "Score doesn't add up" chip holds
    * the labelled points against.
    */
   finalScore: number[][] | null;

@@ -138,6 +138,7 @@ const FIXTURE_MARKS: LabelMarks = {
   },
   shots: {},
   suggestions: [],
+  serveSides: {},
 };
 
 /**

@@ -13,16 +13,13 @@ import {
   markStates,
   missingPointAdded,
   mostOpen,
+  pointRowMarkList,
   rollupMarks,
   stateHoverParts,
   type MarkHoverParts,
   type MarkState,
 } from "@/lib/services/labels/marks-state";
-import {
-  isGhostShot,
-  type LabelPoint,
-  type LabelShot,
-} from "@/lib/services/labels/session";
+import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import { pointSentence } from "./label-black-format";
 import type { SideNames } from "./label-format";
@@ -228,13 +225,6 @@ export interface PointRowMarks {
   pencil: boolean;
 }
 
-/**
- * "Out call ignored" is the vendor file's commonest defect — on up to a
- * third of all strokes — so it is shown on its shot only and never raised to
- * the point row (board 08m).
- */
-const SHOT_ONLY_CODE = "out_ball_rally_continued";
-
 /** What a chip's hover says: its accessible name and the tooltip's lines. */
 type ChipHover = Pick<MarkChipProps, "hover" | "name" | "detail">;
 
@@ -269,45 +259,19 @@ function chipHover(parts: readonly MarkHoverParts[], many: string): ChipHover {
 }
 
 /**
- * "1 shot removed" stands for the point's ghosts — the strokes the site
- * removed that are still out of the rally (`isGhostShot`). Restore puts one
- * back and the chip must follow: it counts the ghosts still live, and goes
- * when none is (board 08m §3: "Restore … drops the grey mark from the
- * point"). The mark's `eventIds` are narrowed to the live ghosts' vendor ids
- * where they line up, so "2 shots removed" reads "1 shot removed" after one
- * Restore; where they do not, the mark keeps its own count.
- */
-function liveGhostFixes(
-  point: Pick<LabelPoint, "shots">,
-  pointMarks: readonly LabelMark[],
-): LabelMark[] {
-  const ghosts = point.shots.filter(isGhostShot);
-  return pointMarks.flatMap((mark): LabelMark[] => {
-    if (mark.code !== "phantom_strokes_dropped") return [mark];
-    if (ghosts.length === 0) return [];
-    const live = new Set(ghosts.map((shot) => shot.eventId));
-    const eventIds = mark.params.eventIds.filter((id) => live.has(id));
-    if (eventIds.length === 0) return [mark];
-    const narrowed: LabelMark = {
-      ...mark,
-      params: { ...mark.params, eventIds },
-    };
-    return [narrowed];
-  });
-}
-
-/**
  * What the point row draws of its marks — `rollupMarks` over the point's own
- * marks and those of its live strokes — or null when the session has no
- * marks at all, which is the row exactly as it was before them.
+ * marks and those of its live strokes (`pointRowMarkList`, marks-state.ts:
+ * the removed-shot fix counts the ghosts still live, the shot-only code
+ * stays on its shot) — or null when the session has no marks at all, which
+ * is the row exactly as it was before them.
  *
  * `point` is the row as stored, ghosts and all: the life-cycle reads every
- * stroke's status, and the removed-shot fix counts the ghosts still live.
- * `sentence` is the point as the row READS it (`pointSentence` over the
- * point without its ghosts while they are drawn as ghosts), for the settled
- * hover line; by default the point's own. `points` — the rail's rows — lets
- * a "Same side twice" question read settled once a point was added between
- * the two (board 08m §5), with the hover saying so.
+ * stroke's status. `sentence` is the point as the row READS it
+ * (`pointSentence` over the point without its ghosts while they are drawn
+ * as ghosts), for the settled hover line; by default the point's own.
+ * `points` — the rail's rows — lets a "Same side twice" question read
+ * settled once a point was added between the two (board 08m §5), with the
+ * hover saying so.
  *
  * A chip standing for several marks hovers every line it stands for: the
  * open ones while any flag is open, every flag once none is, every fix.
@@ -320,13 +284,10 @@ export function pointRowMarks(
   points?: readonly LabelPoint[],
 ): PointRowMarks | null {
   if (!marks) return null;
-  const pointMarks = liveGhostFixes(point, marks.points[point.id] ?? []);
-  const shotMarks = point.shots
-    // A deleted stroke's row is a tombstone and carries no chip, so its
-    // marks are not counted toward what "open the point" would show.
-    .filter((shot) => shot.status !== "deleted")
-    .flatMap((shot) => marks.shots[shot.id] ?? [])
-    .filter((mark) => mark.code !== SHOT_ONLY_CODE);
+  const { point: pointMarks, shots: shotMarks } = pointRowMarkList(
+    point,
+    marks,
+  );
   const states = markStates(
     pointMarks,
     shotMarks,

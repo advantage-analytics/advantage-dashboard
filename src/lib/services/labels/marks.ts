@@ -15,6 +15,15 @@
  * returner hit back) and `pick_winner` (the fold never settled the winner,
  * which is exactly when the seed left `winner` null).
  *
+ * Two of the derivation's flags are deliberately NOT marks here: "Wrong side
+ * for the score" (`score_side_mismatch`) and "Same side twice"
+ * (`service_court_repeat`) describe the VENDOR's score, which the labeller is
+ * busy correcting. What this module hands over instead is the one fact only
+ * the vendor file knows — `serveSides`, the side each point's opening serve
+ * was actually hit from — and the console raises those two flags from it
+ * against the LIVE labelled score (score-marks.ts), so a corrected winner or
+ * an added point re-reads them at once.
+ *
  * The result is plain data — records and arrays, no Map, Set or class —
  * because it is built in a Server Component and handed to the `"use client"`
  * console across the RSC boundary.
@@ -26,7 +35,6 @@
 
 import {
   lastStrokeWinner,
-  pointsPlayed,
   POINT_FLAGS,
   serveCourtSide,
   SHOT_FLAGS,
@@ -104,7 +112,10 @@ export interface LabelMarkParams {
   reserve_after_in: NoParams;
   service_court_repeat: { side: LabelServeSide | null };
   score_side_mismatch: {
-    /** The point score before the point, server-first, as the vendor read it. */
+    /**
+     * The point score before the point, server-first, as the labelled rows
+     * read it (score.ts's `scoreBefore`).
+     */
     score: string | null;
     expected: LabelServeSide | null;
     actual: LabelServeSide | null;
@@ -168,6 +179,14 @@ export interface LabelMarks {
   /** Label shot id → its marks. */
   shots: Record<string, LabelMark[]>;
   suggestions: LabelSuggestion[];
+  /**
+   * Label point id → the side its opening serve was hit from, read off the
+   * server's stance in the vendor file (`serveCourtSide`). Only points with
+   * a vendor rally and a serve clear of the centre mark; a point the
+   * labeller added is never here. What score-marks.ts holds the labelled
+   * score against.
+   */
+  serveSides: Record<string, LabelServeSide>;
 }
 
 /** What `buildLabelMarks` reads off a session's rows. */
@@ -184,6 +203,13 @@ const isServeShot = (shot: Pick<DerivedShot, "shot_type">) =>
 
 /** A `serve_fault` tail: strokes after the lone serve, at most this many. */
 const SERVE_FAULT_MAX_TAIL = 2;
+
+/**
+ * A server standing within this of the centre mark says nothing reliable
+ * about the side — flags.ts's `SIDE_DEAD_ZONE_M`, the cut its own
+ * `score_side_mismatch` makes.
+ */
+const SIDE_DEAD_ZONE_M = 0.3;
 
 function mark<C extends LabelMarkCode>(
   code: C,
@@ -261,23 +287,6 @@ function pointMarks(
         marks.push(mark(code, { hitter: side(pair[0].is_player1) }));
         break;
       }
-      case POINT_FLAGS.SERVICE_COURT_REPEAT: {
-        marks.push(mark(code, { side: openingServeSide(rally) }));
-        break;
-      }
-      case POINT_FLAGS.SCORE_SIDE_MISMATCH: {
-        const score = rally?.strokes[0]?.predPointScore ?? null;
-        const played = pointsPlayed(score);
-        marks.push(
-          mark(code, {
-            score,
-            expected:
-              played === null ? null : played % 2 === 0 ? "deuce" : "ad",
-            actual: openingServeSide(rally),
-          }),
-        );
-        break;
-      }
       case POINT_FLAGS.PHANTOM_STROKES_DROPPED: {
         if (!rally) break;
         const kept = new Set(point.shots.map((s) => s.event_id));
@@ -302,7 +311,8 @@ function pointMarks(
         break;
       default:
         // A shot-scoped or labels-only code in a point's flags is not a mark
-        // on the point.
+        // on the point — nor are the two score flags, which the console
+        // raises from `serveSides` against the labelled score instead.
         break;
     }
   }
@@ -361,11 +371,17 @@ function samePlayerPairs(
   return pairs;
 }
 
+/**
+ * The side the rally's opening serve was hit from, or null without a serve,
+ * without a position, or with the server too near the centre mark to say.
+ */
 function openingServeSide(
   rally: SplitStepRally | undefined,
 ): LabelServeSide | null {
   const serve = rally?.serves[0];
-  return serve ? serveCourtSide(serve.playerX, serve.playerY) : null;
+  if (!serve) return null;
+  if (Math.abs(serve.playerX ?? 0) < SIDE_DEAD_ZONE_M) return null;
+  return serveCourtSide(serve.playerX, serve.playerY);
 }
 
 /**
@@ -393,14 +409,15 @@ function midpoint(a: number | null, b: number | null): number | null {
  * Build the marks for one session.
  *
  * `points` is the session's rows in `point_index` order, as `getLabelSession`
- * returns them (tombstones included — `missing_point`'s `pointNumbers` are
- * positions in this array plus one, which is how the rail numbers a point). A
- * transcript point lands on the label point whose `vendorRallyIds` holds its
- * `rally_id`; a shot flag on the label shot whose `eventId` is the derived
- * shot's `event_id`. A flag whose rally or event has no label row is dropped:
- * a point the labeller deleted outright, or a session seeded from a payload
- * the derivation now reads differently, draws nothing rather than something
- * on the wrong row.
+ * returns them (tombstones included). A transcript point lands on the label
+ * point whose `vendorRallyIds` holds its `rally_id`; a shot flag on the label
+ * shot whose `eventId` is the derived shot's `event_id`. A flag whose rally
+ * or event has no label row is dropped: a point the labeller deleted
+ * outright, or a session seeded from a payload the derivation now reads
+ * differently, draws nothing rather than something on the wrong row.
+ *
+ * `serveSides` is read off the first transcript point that lands on each
+ * label point — a point built from several rallies opened with the first.
  */
 export function buildLabelMarks(
   transcript: Transcript,
@@ -408,10 +425,8 @@ export function buildLabelMarks(
   points: readonly MarkablePoint[],
 ): LabelMarks {
   const pointIdByRally = new Map<number, string>();
-  const pointNumberById = new Map<string, number>();
   const shotIdByEvent = new Map<number, string>();
-  points.forEach((point, index) => {
-    pointNumberById.set(point.id, index + 1);
+  points.forEach((point) => {
     for (const rallyId of point.vendorRallyIds) {
       if (!pointIdByRally.has(rallyId)) pointIdByRally.set(rallyId, point.id);
     }
@@ -432,7 +447,12 @@ export function buildLabelMarks(
   }
   const player1Label = transcript.reconciliation.player1Label;
 
-  const marks: LabelMarks = { points: {}, shots: {}, suggestions: [] };
+  const marks: LabelMarks = {
+    points: {},
+    shots: {},
+    suggestions: [],
+    serveSides: {},
+  };
   const push = (
     into: Record<string, LabelMark[]>,
     id: string,
@@ -442,23 +462,15 @@ export function buildLabelMarks(
     (into[id] ??= []).push(...list);
   };
 
-  // The previous transcript point of the same game, for `missing_point`.
-  let previousInGame: DerivedPoint | null = null;
-  let previousGame: string | null = null;
-
   for (const point of transcript.points) {
-    const game = `${point.set_number}|${point.game_number}`;
-    if (game !== previousGame) {
-      previousGame = game;
-      previousInGame = null;
-    }
-    const before = previousInGame;
-    previousInGame = point;
-
     const pointId = pointIdByRally.get(point.rally_id);
     if (pointId === undefined) continue;
 
     const rally = rallyById.get(point.rally_id);
+    const serveSide = openingServeSide(rally);
+    if (serveSide && !(pointId in marks.serveSides)) {
+      marks.serveSides[pointId] = serveSide;
+    }
     const sideOf = labelSides(
       rally ?? { rallyId: point.rally_id, strokes: [], server: "", serves: [] },
       shotByEvent,
@@ -488,23 +500,6 @@ export function buildLabelMarks(
           afterShotId,
           hitter: otherSide(side(a.is_player1)),
           videoTime: midpoint(a.video_time, b.video_time),
-        });
-      }
-    }
-
-    if (point.flags.includes(POINT_FLAGS.SERVICE_COURT_REPEAT) && before) {
-      const beforePointId = pointIdByRally.get(before.rally_id);
-      const serveSide = openingServeSide(rally);
-      const a = beforePointId && pointNumberById.get(beforePointId);
-      const b = pointNumberById.get(pointId);
-      if (beforePointId && serveSide && a && b) {
-        marks.suggestions.push({
-          kind: "missing_point",
-          key: "missing_point",
-          pointId,
-          beforePointId,
-          side: serveSide,
-          pointNumbers: [a, b],
         });
       }
     }
