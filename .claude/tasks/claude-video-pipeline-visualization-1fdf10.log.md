@@ -460,3 +460,14 @@ Decisions:
 3. The deleted-point tombstone is the light component on the dark rail.
 4. The rail title truncates before the progress at 520px with long names.
 5. `bandsBeforePoints` is a local copy of the table's loop.
+
+## T34 · Pure marks module: transcript flags → label points and shots, plus Serve fault? / Pick the winner and the two suggestions — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New pure `src/lib/services/labels/marks.ts`: `buildLabelMarks(transcript, rallies, points)` joins the current-code transcript's flags to label points (by rally id) and shots (by event id) as plain objects — 11 review flags plus the labels-only `serve_fault` and `pick_winner`, 5 fixes, and `missing_shot` / `missing_point` suggestions. Unknown codes and flags with no label row are dropped.
+
+**follow-ups:**
+
+1. `missing_point.pointNumbers` assume points are passed in `point_index` order.
+2. Some params are nullable in type only; drop the mark rather than widen the hover copy if that matters.

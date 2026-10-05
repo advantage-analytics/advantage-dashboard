@@ -479,7 +479,7 @@ ready).
 
 ## T34 · Pure marks module: transcript flags → label points and shots, plus Serve fault? / Pick the winner and the two suggestions
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T29
 - **files:** src/lib/services/labels/marks.ts (new), tests/label-marks.spec.ts (new) (guess)
