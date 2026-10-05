@@ -4,6 +4,7 @@
 
 import { FormData, WinnerLoserResult, MatchData, UploadedFile } from "./types";
 import { lastEnteredSet, retiredWinner } from "./score-state";
+import type { StopReason } from "./score-state";
 
 /**
  * Get the number of sets to display/edit.
@@ -188,6 +189,11 @@ export function buildMatchData(
     // The caption over the score ("X Wins", "Retired"), not an outcome. No
     // caption is stored as null, never "": readers fall back to "Final Score".
     result: formData.result || null,
+    // Why it stopped, read off the result the caller settled on — never off
+    // the answer alone, so a reason left over from before the score was
+    // finished does not ride along with a decided match. "Retired" is its own
+    // reason; "Unfinished" carries the wizard's pick, when it made one.
+    stop_reason: stopReasonFor(formData.result, formData.stopReason),
     // Store the picked local date as the leading YYYY-MM-DD so it survives the
     // timestamptz round-trip (PostgREST returns timestamptz normalized to UTC, and the
     // heatmap buckets by date.slice(0,10)). getCurrentDate() already defaults this to
@@ -219,6 +225,24 @@ export function buildMatchData(
     opponent_hand: formData.opponentHand,
     opponent_backhand: formData.opponentBackhand,
   };
+}
+
+/**
+ * The `matches.stop_reason` a settled result writes. Only a stopped result
+ * carries one, and "Unfinished" only the two reasons that ride with it — a
+ * SwingVision import that arrives "Unfinished" has no `stopReason` and so
+ * writes null without the parser knowing the column exists.
+ */
+export function stopReasonFor(
+  result: string,
+  stopReason: StopReason | undefined,
+): StopReason | null {
+  if (result === "Retired") return "retired";
+  if (result === "Unfinished")
+    return stopReason === "clinched" || stopReason === "time_weather"
+      ? stopReason
+      : null;
+  return null;
 }
 
 /**

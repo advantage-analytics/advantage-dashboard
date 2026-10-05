@@ -4,8 +4,10 @@ import {
   asksIfEndedEarly,
   isStoppedResult,
   scoreCheckAnswered,
+  STOP_REASONS,
   retiredWinner,
   firstOpenSet,
+  offersOneSet,
   scoreGames,
   scoreColumns,
   scoreUndecided,
@@ -286,6 +288,25 @@ test.describe("scoreUndecided — when Save asks whether the match ended early",
     );
   });
 
+  test("STOP_REASONS is exactly the three slugs", () => {
+    expect([...STOP_REASONS]).toEqual(["clinched", "time_weather", "retired"]);
+  });
+
+  test("a stop reason is detail on the answer, never the answer", () => {
+    expect(DEFAULT_FORM_DATA.stopReason).toBeUndefined();
+    expect(scoreCheckAnswered({ result: "Unfinished" })).toBe(true);
+    // The form passes its whole state, stopReason included; the check must
+    // read past it.
+    for (const stopReason of STOP_REASONS) {
+      const answered = (result: string) =>
+        scoreCheckAnswered({ ...scoreState({ result, stopReason }) });
+      expect(answered("Unfinished")).toBe(true);
+      // A reason alone, with no result or no retired side, answers nothing.
+      expect(answered("")).toBe(false);
+      expect(answered("Retired")).toBe(false);
+    }
+  });
+
   test("a SwingVision import is never asked", () => {
     expect(asksIfEndedEarly("swing-vision")).toBe(false);
     expect(asksIfEndedEarly("splitstep")).toBe(true);
@@ -335,6 +356,92 @@ test.describe("firstOpenSet — where finishing the score starts", () => {
     expect(
       firstOpenSet({ bestOf: 1, playerScores: [6], opponentScores: [4] }),
     ).toBe(0);
+  });
+});
+
+test.describe('offersOneSet — "No, it was a one-set match"', () => {
+  test("set 1 finished, nothing past it, in a best of 3 or 5", () => {
+    expect(
+      offersOneSet({ bestOf: 3, playerScores: [6], opponentScores: [4] }),
+    ).toBe(true);
+    expect(
+      offersOneSet({ bestOf: 5, playerScores: [3], opponentScores: [6] }),
+    ).toBe(true);
+    // The form pads with empty sets; those are not games typed past set 1.
+    expect(
+      offersOneSet({
+        bestOf: 3,
+        playerScores: [7, null, null],
+        opponentScores: [6, null, null],
+      }),
+    ).toBe(true);
+  });
+
+  test("never for best of 1 — it already is one set", () => {
+    expect(
+      offersOneSet({ bestOf: 1, playerScores: [6], opponentScores: [4] }),
+    ).toBe(false);
+  });
+
+  test("never for a 1-1 split", () => {
+    expect(
+      offersOneSet({ bestOf: 3, playerScores: [6, 3], opponentScores: [4, 6] }),
+    ).toBe(false);
+  });
+
+  test("never for a half-typed second set — the switch would drop it", () => {
+    expect(
+      offersOneSet({
+        bestOf: 3,
+        playerScores: [6, 2],
+        opponentScores: [4, 1],
+      }),
+    ).toBe(false);
+    // One side alone, even a zero, is a game entered past set 1.
+    expect(
+      offersOneSet({
+        bestOf: 3,
+        playerScores: [6, null],
+        opponentScores: [4, 0],
+      }),
+    ).toBe(false);
+  });
+
+  test("never for an undecided first set", () => {
+    expect(
+      offersOneSet({ bestOf: 3, playerScores: [5], opponentScores: [4] }),
+    ).toBe(false);
+    expect(
+      offersOneSet({ bestOf: 3, playerScores: [6], opponentScores: [5] }),
+    ).toBe(false);
+  });
+
+  test("never once the match is decided", () => {
+    expect(
+      offersOneSet({ bestOf: 3, playerScores: [6, 6], opponentScores: [4, 4] }),
+    ).toBe(false);
+  });
+
+  test("when offered, best of 1 decides the score with nothing lost", () => {
+    const form = scoreState({
+      bestOf: "3",
+      playerScores: [6, null, null],
+      opponentScores: [4, null, null],
+    });
+    expect(scoreUndecided(scoreGames(form))).toBe(true);
+    expect(offersOneSet(scoreGames(form))).toBe(true);
+    // What `handleFormatChange("1")` leaves behind.
+    const oneSet = {
+      bestOf: "1",
+      playerScores: form.playerScores.slice(0, 1),
+      opponentScores: form.opponentScores.slice(0, 1),
+    };
+    expect(oneSet.playerScores).toEqual([6]);
+    expect(oneSet.opponentScores).toEqual([4]);
+    expect(scoreUndecided(scoreGames(oneSet))).toBe(false);
+    expect(setWinner(oneSet.playerScores[0], oneSet.opponentScores[0])).toBe(
+      "player",
+    );
   });
 });
 

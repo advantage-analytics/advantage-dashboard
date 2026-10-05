@@ -190,6 +190,26 @@ export function firstOpenSet(input: ScoreGames): number {
 }
 
 /**
+ * Does "did it end early?" offer "No, it was a one-set match"?
+ *
+ * Only when switching the format to best of 1 would decide the match without
+ * losing anything: a best of 3 or 5 with exactly set 1 finished, nobody yet
+ * through, and nothing typed past it. `handleFormatChange("1")` slices every
+ * score array to one set, so a half-typed second set would be silently dropped
+ * — that case is refused rather than offered. Best of 1 is already one set; a
+ * 1-1 split or an undecided first set is not a one-set match.
+ */
+export function offersOneSet(input: ScoreGames): boolean {
+  if (input.bestOf !== 3 && input.bestOf !== 5) return false;
+  const { finished, decided } = progress(input);
+  if (decided || finished !== 1) return false;
+  const cells = (games: Cells) => games.map((v) => v ?? null);
+  return (
+    lastEnteredSet(cells(input.playerScores), cells(input.opponentScores)) === 1
+  );
+}
+
+/**
  * The two ways a match can end without the score deciding it, spelled the way
  * `matches.result` stores them. "Unfinished" is the literal the SwingVision
  * parser already writes, so a typed score and an imported one land on one
@@ -213,6 +233,17 @@ export function isStoppedResult(result: string): result is StoppedResult {
 export function asksIfEndedEarly(provider: ProviderId | null): boolean {
   return provider !== "swing-vision";
 }
+
+/**
+ * Why play stopped — extra detail on a stopped answer, never the answer
+ * itself. `retired` rides with "Retired"; `time_weather` and `clinched` both
+ * ride with "Unfinished": stopped for time or weather, or stopped because the
+ * dual was already decided (a line abandoned once the team result was in). It
+ * only words the settled line; `scoreCheckAnswered` does not read it, and a
+ * SwingVision import that arrives "Unfinished" carries none.
+ */
+export const STOP_REASONS = ["clinched", "time_weather", "retired"] as const;
+export type StopReason = (typeof STOP_REASONS)[number];
 
 /** Which side stopped a Retired match: the uploader's player, or the opponent. */
 export type RetiredSide = "player" | "opponent";
