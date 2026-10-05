@@ -291,6 +291,8 @@ export function EditMatchDialog({
    */
   const [rebuildFailed, setRebuildFailed] = useState(false);
 
+  /** Set by the footer's submit buttons just before the form submits. */
+  const wantsRebuild = useRef(false);
   const p1Ref = useRef<HTMLInputElement>(null);
   const p2Ref = useRef<HTMLInputElement>(null);
   const dateRef = useRef<DateFieldHandle | null>(null);
@@ -574,11 +576,11 @@ export function EditMatchDialog({
     changeFrom.current = null;
   }
 
-  async function submit(e?: React.FormEvent<HTMLFormElement>) {
+  async function submit(e?: React.FormEvent) {
     e?.preventDefault();
     // "Save and rebuild" says so on its button; Enter and Cmd+Enter save only.
-    const submitter = (e?.nativeEvent as SubmitEvent | undefined)?.submitter;
-    const rebuild = submitter?.dataset.rebuild === "true";
+    const rebuild = wantsRebuild.current;
+    wantsRebuild.current = false;
     if (!match || saving || invalidSet || lineupBlocks) return;
     const detailsSent = !linked && !pendingLine;
     // A tournament keeps the match's own round, and its date when that falls
@@ -907,7 +909,7 @@ export function EditMatchDialog({
               <button
                 type="submit"
                 form={FORM_ID}
-                data-rebuild="false"
+                onClick={() => (wantsRebuild.current = false)}
                 disabled={saving || !!invalidSet || lineupBlocks}
                 className="h-9 cursor-pointer text-[12px] font-medium text-[var(--ink-600)] transition-colors hover:text-[var(--ink-900)] disabled:pointer-events-none disabled:opacity-50"
               >
@@ -951,7 +953,7 @@ export function EditMatchDialog({
                 <button
                   type="submit"
                   form={FORM_ID}
-                  data-rebuild={rebuildOffer ? "true" : undefined}
+                  onClick={() => (wantsRebuild.current = rebuildOffer)}
                   // Blue even when bookmarks go: rebuilding is the recommended
                   // path, and the note under the score already states the cost.
                   className={advButton("primary")}
