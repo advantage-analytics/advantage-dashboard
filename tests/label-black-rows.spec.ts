@@ -571,9 +571,554 @@ test.describe("the black game band", () => {
   });
 });
 
+// ── The shots well (T31) ───────────────────────────────────────────────────
+
+const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
+const CELLS = "src/components/admin/labels/label-cells.tsx";
+const LIGHT_SHOT_ROW = "src/components/admin/labels/label-shot-row.tsx";
+
+type WellProps = { point: LabelPoint; edit: Record<string, unknown> };
+
+function well() {
+  return createLoader().load(WELL) as {
+    BlackShotsWell: (props: WellProps) => React.ReactElement;
+  };
+}
+
+/**
+ * The frame's open point, as far as the well reads it: a serve with no
+ * landing, a return, the forehand the frame lights, and a faulted first
+ * serve ahead of them so the numbering and the muting have something to say.
+ */
+function rally(): LabelPoint {
+  return point({
+    id: "p-well",
+    shots: [
+      shot("w-fault", {
+        hitter: "p2",
+        stroke: "first_serve",
+        spin: "flat",
+        result: "net",
+        contactX: -0.6,
+        contactY: 0.72,
+        landingX: 0.4,
+        landingY: 11.2,
+        videoTime: 950.2,
+      }),
+      shot("w-serve", {
+        hitter: "p2",
+        stroke: "second_serve",
+        spin: "topspin",
+        result: "in",
+        contactX: -0.65,
+        contactY: 0.7,
+        videoTime: 958.1,
+      }),
+      shot("w-return", {
+        hitter: "p1",
+        stroke: "forehand",
+        spin: "backspin",
+        result: "in",
+        contactX: 1.76,
+        contactY: 23.34,
+        landingX: 0.77,
+        landingY: 3.9,
+        videoTime: 958.9,
+        status: "edited",
+        // Seeded as a backhand: an edited stroke with a seed can be reset.
+        seed: {
+          hitter: "p1",
+          stroke: "backhand",
+          result: "in",
+          spin: "backspin",
+          contact_x: 1.76,
+          contact_y: 23.34,
+          landing_x: 0.77,
+          landing_y: 3.9,
+          video_time: 958.9,
+        },
+      }),
+      shot("w-gone", {
+        hitter: "p1",
+        stroke: "forehand",
+        status: "deleted",
+        statusBeforeDelete: "kept",
+        deleteReason: "not_a_stroke",
+        videoTime: 959.6,
+      }),
+      shot("w-lit", {
+        hitter: "p2",
+        stroke: "forehand",
+        spin: "flat",
+        result: "in",
+        contactX: -0.31,
+        contactY: -1.82,
+        landingX: -1.23,
+        landingY: 19.59,
+        videoTime: 960.3,
+      }),
+    ],
+  });
+}
+
+function wellEdit(overrides: Record<string, unknown> = {}, editable = true) {
+  return { ...editContext(labelSessionFixture(), editable), ...overrides };
+}
+
+function renderWell(
+  overrides: Record<string, unknown> = {},
+  editable = true,
+): string {
+  const { BlackShotsWell } = well();
+  return renderToStaticMarkup(
+    React.createElement(BlackShotsWell, {
+      point: rally(),
+      edit: wellEdit(overrides, editable),
+    }),
+  );
+}
+
+/** The markup of the stroke row for `shotId`, up to the next row. */
+function shotRow(html: string, shotId: string): string {
+  const at = html.indexOf(`data-shot-id="${shotId}"`);
+  expect(at, shotId).toBeGreaterThan(-1);
+  const start = html.lastIndexOf("<div", at);
+  const candidates = [
+    html.indexOf('<div data-row="shot"', at),
+    html.indexOf("data-well-tombstone", at),
+    html.indexOf("data-add-shot", at),
+  ]
+    .filter((i) => i > -1)
+    .map((i) => html.lastIndexOf("<", i));
+  return html.slice(start, Math.min(html.length, ...candidates));
+}
+
+/** The markup of one coordinate cell of a row. */
+function xy(row: string, end: "hit" | "landed"): string {
+  const at = row.indexOf(`data-xy="${end}"`);
+  expect(at, end).toBeGreaterThan(-1);
+  const next = row.indexOf("data-xy=", at + 1);
+  const stop = row.indexOf("data-calculated", at);
+  return row.slice(at, row.lastIndexOf("<", next > -1 ? next : stop));
+}
+
+test.describe("the black shots well", () => {
+  test("a recessed well with no header row, one row a live stroke, and Add shot", () => {
+    const html = renderWell();
+    const frame = tag(html, "data-shots-well");
+    expect(frame).toContain('data-shots-well="p-well"');
+    for (const cls of [
+      "bg-white/[0.035]",
+      "shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]",
+      "py-1",
+    ]) {
+      expect(frame).toContain(cls);
+    }
+
+    // No header: no eyebrow, and the two column names are never text.
+    expect(html).not.toContain("eyebrow-sm");
+    expect(text(html)).not.toContain("Hit at");
+    expect(text(html)).not.toContain("Landed at");
+    expect(html).not.toContain("--ink-900");
+
+    // Four live strokes, numbered 1…4 as the light table numbers them; the
+    // tombstone between them takes no number and is the light table's own.
+    const ids = [...html.matchAll(/data-shot-id="([^"]+)"/g)].map((m) => m[1]);
+    expect(ids).toEqual(["w-fault", "w-serve", "w-return", "w-lit"]);
+    for (const [index, id] of ids.entries()) {
+      expect(shotRow(html, id)).toContain(
+        `aria-label="Shot ${index + 1} time: `,
+      );
+    }
+    expect(html).toContain('data-tombstone-id="w-gone"');
+    expect(html.indexOf('data-tombstone-id="w-gone"')).toBeGreaterThan(
+      html.indexOf('data-shot-id="w-return"'),
+    );
+    expect(html.indexOf('data-tombstone-id="w-gone"')).toBeLessThan(
+      html.indexOf('data-shot-id="w-lit"'),
+    );
+
+    // Add shot closes the well.
+    const add = tag(html, "data-add-shot");
+    for (const cls of [
+      "grid-cols-[22px_minmax(0,1fr)]",
+      "text-[11px]",
+      "font-medium",
+      "text-white/70",
+    ]) {
+      expect(add).toContain(cls);
+    }
+    expect(html.indexOf("data-add-shot")).toBeGreaterThan(
+      html.indexOf('data-shot-id="w-lit"'),
+    );
+    expect(text(html.slice(html.indexOf("data-add-shot")))).toContain(
+      "Add shot",
+    );
+    expect(html.slice(html.indexOf("data-add-shot"))).toContain("size-2.5");
+  });
+
+  test("Add shot appends to the rally, and only a writable session has it", () => {
+    const added: [string, string | null][] = [];
+    const { BlackShotsWell } = well();
+    const tree = BlackShotsWell({
+      point: rally(),
+      edit: wellEdit({
+        operations: {
+          ...OPERATIONS,
+          onAddShot: (pointId: string, after: string | null) =>
+            added.push([pointId, after]),
+        },
+      }),
+    });
+    const children = React.Children.toArray(
+      (tree.props as { children: React.ReactNode }).children,
+    ) as React.ReactElement<Record<string, unknown>>[];
+    const button = children.find((el) => el.props["data-add-shot"] === "");
+    expect(button).toBeDefined();
+    (button!.props.onClick as () => void)();
+    expect(added).toEqual([["p-well", null]]);
+
+    // Frozen: no button. Editable with nothing to ask: none either.
+    expect(renderWell({}, false)).not.toContain("data-add-shot");
+    expect(renderWell({ operations: undefined })).not.toContain(
+      "data-add-shot",
+    );
+  });
+
+  test("a stroke row: its tracks, its words, and the pencil on a changed one", () => {
+    const html = renderWell();
+    const row = shotRow(html, "w-return");
+    const open = tag(row, 'data-row="shot"');
+    expect(open).toContain(
+      "grid-cols-[22px_48px_54px_80px_52px_88px_88px_88px_minmax(0,1fr)]",
+    );
+    for (const cls of ["gap-x-2", "h-[34px]", "px-[14px]"]) {
+      expect(open).toContain(cls);
+    }
+    expect(open).not.toContain("data-selected");
+    expect(open).not.toContain("data-playing");
+    expect(open).not.toContain("bg-white/[0.12]");
+
+    // Number · time to the tenth · player · stroke · spin · … · placement ·
+    // result. (The positions are read on their own, below.)
+    expect(text(row)).toBe(
+      "3 15:58.9 Lee Forehand Backspin 1.76 23.34 0.77 3.90 Middle In",
+    );
+    expect(row).toContain("color:rgba(255,255,255,0.45)");
+    expect(row).toContain("color:rgba(255,255,255,0.72)");
+    // Edited: the blue pencil closes the row.
+    const result = row.slice(row.indexOf('data-calculated="result"'));
+    expect(result).toContain('aria-label="Changed by you"');
+    expect(result).toContain("text-[var(--blue)]");
+    // A kept stroke has none.
+    expect(shotRow(html, "w-lit")).not.toContain("Changed by you");
+
+    // A serve's topspin is a Kick; with no landing it has no placement.
+    const serve = shotRow(html, "w-serve");
+    expect(text(serve)).toContain("Vargas Second serve Kick");
+    expect(serve.slice(serve.indexOf('data-calculated="placement"'))).toContain(
+      "No placement",
+    );
+
+    // The faulted first serve is muted, as the light table mutes it.
+    const fault = shotRow(html, "w-fault");
+    expect(tag(fault, 'data-row="shot"')).toContain("data-fault");
+    expect(fault).not.toContain("color:rgba(255,255,255,0.72)");
+    expect(fault).toContain("text-white/35");
+    expect(serve).not.toContain("data-fault");
+  });
+
+  test("a coordinate: the ring or the dot, then x and y in slots of their own", () => {
+    const html = renderWell();
+    const lit = shotRow(html, "w-lit");
+
+    const hit = xy(lit, "hit");
+    expect(hit).toContain('aria-label="Hit at"');
+    expect(hit).toContain("size-[7px]");
+    expect(hit).toContain("border-white/50");
+    // Two elements, x then y, each right-aligned in a fixed 32px slot.
+    const numbers = [...hit.matchAll(/<b class="([^"]*)"[^>]*>([^<]*)<\/b>/g)];
+    expect(numbers.map((m) => m[2])).toEqual(["-0.31", "-1.82"]);
+    for (const [, cls] of numbers) {
+      for (const want of ["mono", "tabular", "w-8", "text-right"]) {
+        expect(cls.split(" ")).toContain(want);
+      }
+      expect(cls).toContain("text-[10px]");
+    }
+
+    const landed = xy(lit, "landed");
+    expect(landed).toContain('aria-label="Landed at"');
+    expect(landed).toContain("size-[5px]");
+    expect(landed).toContain("bg-white/50");
+    expect(text(landed.slice(landed.indexOf(">") + 1))).toBe("-1.23 19.59");
+
+    // No landing: one em dash under the dot, and an empty second slot.
+    const none = xy(shotRow(html, "w-serve"), "landed");
+    expect(none).toContain('aria-label="Landed at"');
+    expect(none).toContain("color:rgba(255,255,255,0.25)");
+    expect(text(none.slice(none.indexOf(">") + 1))).toBe("— Not set");
+    expect(none).toMatch(/<b class="[^"]*w-8[^"]*" aria-hidden="true"><\/b>/);
+  });
+
+  test("the selected row is lit and carries its editors; no other row does", () => {
+    const html = renderWell({ selectedShotId: "w-lit" });
+    const lit = shotRow(html, "w-lit");
+    const open = tag(lit, 'data-row="shot"');
+    expect(open).toContain("data-selected");
+    expect(open).toContain("bg-white/[0.12]");
+    // Player, Stroke, Spin are menus; Time and the two positions are inputs.
+    expect(lit.match(/data-select-editor/g)).toHaveLength(3);
+    expect(lit.match(/<input/g)).toHaveLength(3);
+    expect(lit).toContain('value="-0.31, -1.82"');
+    expect(lit).toContain('aria-label="Shot 4 hit at, metres x, y"');
+    // On the dark tone, not the light table's field.
+    expect(lit).toContain("bg-white/[0.08]");
+    expect(lit).not.toContain("--surface-card");
+    // The marks stay while the numbers are fields.
+    expect(lit).toContain('aria-label="Hit at"');
+    expect(lit).toContain('aria-label="Landed at"');
+
+    for (const id of ["w-fault", "w-serve", "w-return"]) {
+      const row = shotRow(html, id);
+      expect(row, id).not.toContain("data-select-editor");
+      expect(row, id).not.toContain("<input");
+      // Text a keyboard can open.
+      expect(row, id).toContain('role="button"');
+    }
+
+    // The playing stroke is lit too, and its stroke reads white.
+    const playing = shotRow(renderWell({ playingShotId: "w-lit" }), "w-lit");
+    expect(tag(playing, 'data-row="shot"')).toContain('data-playing="true"');
+    expect(tag(playing, 'data-row="shot"')).toContain("bg-white/[0.12]");
+    expect(playing).not.toContain("data-select-editor");
+    expect(playing).toMatch(
+      /class="text-\[11px\] font-medium text-white">Forehand</,
+    );
+    expect(shotRow(html, "w-return")).toMatch(
+      /class="text-\[11px\] font-medium" style="color:rgba\(255,255,255,0\.72\)">Forehand</,
+    );
+
+    // Read-only: nothing to open, even on the selected row.
+    const frozen = renderWell({ selectedShotId: "w-lit" }, false);
+    expect(frozen).not.toContain("data-select-editor");
+    expect(frozen).not.toContain("<input");
+    expect(frozen).not.toContain('role="button"');
+  });
+
+  test("a click selects the stroke, and each editor sends the light table's patch", () => {
+    type Props = Record<string, unknown>;
+    type Element = React.ReactElement<Props & { children?: React.ReactNode }>;
+    // Every element under `node`; a component that needs hooks cannot run
+    // outside a render, so its `display`, `editor` and children are walked.
+    function elements(node: React.ReactNode, out: Element[] = []): Element[] {
+      if (Array.isArray(node)) {
+        for (const child of node) elements(child, out);
+        return out;
+      }
+      if (!React.isValidElement(node)) return out;
+      const element = node as Element;
+      out.push(element);
+      if (typeof element.type === "function") {
+        const error = console.error;
+        console.error = () => {};
+        try {
+          const render = element.type as (p: Props) => React.ReactNode;
+          return elements(render(element.props), out);
+        } catch {
+          elements(element.props.editor as React.ReactNode, out);
+        } finally {
+          console.error = error;
+        }
+      }
+      return elements(element.props.children, out);
+    }
+
+    const patches: [string, unknown][] = [];
+    const selected: string[] = [];
+    const { BlackShotsWell } = well();
+    const all = elements(
+      BlackShotsWell({
+        point: rally(),
+        edit: wellEdit({
+          onPatchShot: (id: string, patch: unknown) =>
+            patches.push([id, patch]),
+          onSelectShot: (id: string) => selected.push(id),
+        }),
+      }),
+    );
+
+    const row = all.find((el) => el.props["data-shot-id"] === "w-return");
+    (row!.props.onClick as () => void)();
+    expect(selected).toEqual(["w-return"]);
+
+    const commit = (label: string, value: unknown) => {
+      const input = all.find(
+        (el) => el.props.label === label && "parse" in el.props,
+      );
+      expect(input, label).toBeDefined();
+      expect(input!.props.tone).toBe("dark");
+      (input!.props.onCommit as (v: unknown) => void)(value);
+    };
+    const pick = (label: string, value: string) => {
+      const editor = all.find(
+        (el) =>
+          el.props.label === label &&
+          "options" in el.props &&
+          "tone" in el.props,
+      );
+      expect(editor, label).toBeDefined();
+      expect(editor!.props.tone).toBe("dark");
+      (editor!.props.onChange as (v: string) => void)(value);
+    };
+
+    commit("Shot 3 time", 959.4);
+    pick("Shot 3 player", "p2");
+    pick("Shot 3 stroke", "backhand");
+    pick("Shot 3 spin", "topspin");
+    // Past the singles sideline: the result rides in the same patch.
+    commit("Shot 3 landed at, metres x, y", { x: -5, y: 3.9 });
+    commit("Shot 3 hit at, metres x, y", null);
+    expect(patches).toEqual([
+      ["w-return", { video_time: 959.4 }],
+      ["w-return", { hitter: "p2" }],
+      ["w-return", { stroke: "backhand" }],
+      ["w-return", { spin: "topspin" }],
+      ["w-return", { landing_x: -5, landing_y: 3.9, result: "out" }],
+      ["w-return", { contact_x: null, contact_y: null }],
+    ]);
+  });
+
+  test("Delete and Reset: hidden at rest, there on the selected row, asking the console", () => {
+    const html = renderWell({ selectedShotId: "w-return" });
+    // The edited, seeded stroke, selected: both, Reset before Delete.
+    const edited = shotRow(html, "w-return");
+    const group = tag(edited, "data-shot-actions");
+    expect(group).toContain("opacity-100");
+    expect(group).not.toContain(" opacity-0");
+    expect(edited.indexOf("data-shot-actions")).toBeGreaterThan(
+      edited.indexOf('data-calculated="result"'),
+    );
+    expect(tag(edited, "data-reset-row")).toContain(
+      'aria-label="Reset shot 3"',
+    );
+    const del = tag(edited, "data-delete-row");
+    expect(del).toContain('aria-label="Delete shot 3"');
+    expect(edited.indexOf("data-reset-row")).toBeLessThan(
+      edited.indexOf("data-delete-row"),
+    );
+    expect(edited.slice(edited.indexOf("data-shot-actions"))).toContain(
+      "text-white/[0.45]",
+    );
+
+    // A kept stroke, not selected: Delete alone, hidden until reached.
+    const kept = shotRow(html, "w-lit");
+    expect(kept).toContain('aria-label="Delete shot 4"');
+    expect(kept).not.toContain("data-reset-row");
+    const hidden = tag(kept, "data-shot-actions");
+    expect(hidden).toContain("opacity-0");
+    expect(hidden).toContain("group-hover/row:opacity-100");
+    expect(hidden).toContain("group-focus-within/row:opacity-100");
+    expect(tag(kept, 'data-row="shot"')).toContain("group/row");
+
+    // Read-only, or with nothing to ask: neither.
+    for (const frozen of [
+      renderWell({ selectedShotId: "w-return" }, false),
+      renderWell({ selectedShotId: "w-return", operations: undefined }),
+    ]) {
+      expect(frozen).not.toContain("data-shot-actions");
+      expect(frozen).not.toContain("data-delete-row");
+      expect(frozen).not.toContain("data-reset-row");
+    }
+
+    // Each asks with the light row's arguments, and does not select the row.
+    const asked: unknown[][] = [];
+    const selected: string[] = [];
+    const { BlackShotRow } = createLoader().load(WELL) as {
+      BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
+    };
+    const find = (
+      node: React.ReactNode,
+      attr: string,
+    ): React.ReactElement<Record<string, unknown>> | null => {
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          const hit = find(child, attr);
+          if (hit) return hit;
+        }
+        return null;
+      }
+      if (!React.isValidElement(node)) return null;
+      const el = node as React.ReactElement<Record<string, unknown>>;
+      if (attr in el.props) return el;
+      if (typeof el.type === "function" && el.type.name === "RowAction") {
+        return find(
+          (el.type as (p: unknown) => React.ReactNode)(el.props),
+          attr,
+        );
+      }
+      return find(el.props.children as React.ReactNode, attr);
+    };
+    const row = BlackShotRow({
+      shot: rally().shots.find((s) => s.id === "w-return"),
+      number: 3,
+      pointNumber: 7,
+      edit: wellEdit({
+        onSelectShot: (id: string) => selected.push(id),
+        operations: {
+          ...OPERATIONS,
+          onAskDeleteShot: (...args: unknown[]) =>
+            asked.push(["delete", ...args]),
+          onAskResetShot: (...args: unknown[]) =>
+            asked.push(["reset", ...args]),
+        },
+      }),
+    });
+    const event = { stopPropagation: () => asked.push(["stopped"]) };
+    for (const attr of ["data-reset-row", "data-delete-row"]) {
+      const button = find(row, attr);
+      expect(button, attr).not.toBeNull();
+      (button!.props.onClick as (e: unknown) => void)(event);
+    }
+    expect(asked).toEqual([
+      ["stopped"],
+      ["reset", "w-return", 3, 7],
+      ["stopped"],
+      ["delete", "w-return", 3, 7],
+    ]);
+    expect(selected).toEqual([]);
+  });
+
+  test("the light table's cells are untouched but for exports and a tone", () => {
+    const cells = readFileSync(CELLS, "utf8");
+    // The light chrome, to the class.
+    expect(cells).toContain(
+      '"-ml-[11px] flex h-[30px] w-[calc(100%+11px)] min-w-0 items-center rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)] transition-colors duration-200 focus-within:border-[var(--blue)]"',
+    );
+    expect(cells).toContain(
+      '"-ml-[11px] w-[calc(100%+11px)] min-w-0 shrink px-[10px] text-[13px]"',
+    );
+    expect(cells.match(/tone = "light"/g)).toHaveLength(2);
+    expect(cells.match(/tone\?: EditorTone/g)).toHaveLength(2);
+
+    const light = readFileSync(LIGHT_SHOT_ROW, "utf8");
+    expect(light).not.toMatch(/\btone\b/);
+    expect(light).not.toContain("label-black");
+    for (const name of [
+      "export function isFault(",
+      "export function sideOptions(",
+      "export const STROKE_OPTIONS",
+      "export function positionPatch(",
+      "export function PositionCell(",
+      "export function DeletedShot(",
+    ]) {
+      expect(light).toContain(name);
+    }
+  });
+});
+
 test("the black rows use the palette's tokens and the type scale", () => {
   const scale = new Set([8, 9, 10, 11, 12, 13, 14, 16, 28, 30, 40, 56]);
-  for (const file of [FORMAT, ROW]) {
+  for (const file of [FORMAT, ROW, WELL, CELLS]) {
     const source = readFileSync(file, "utf8");
     expect(source.match(/#[0-9a-fA-F]{6}\b/g), file).toBeNull();
     for (const match of source.matchAll(/text-\[(\d+(?:\.\d+)?)px\]/g)) {

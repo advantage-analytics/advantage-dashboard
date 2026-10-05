@@ -160,6 +160,22 @@ const FIELD =
 const SELECT_TRIGGER =
   "-ml-[11px] w-[calc(100%+11px)] min-w-0 shrink px-[10px] text-[13px]";
 
+/**
+ * The black full-screen view's fields (`label-black-shot-row.tsx`): the same
+ * two boxes on the room's black — a white wash inside a white hairline, 26px
+ * for a 34px row, at the row's own 10/11px. Its tracks are a third the light
+ * table's, so the chrome is 4px of padding (pulled back with `-ml-[5px]`),
+ * runs 2px into the gap after it, and the select drops its chevron: the box
+ * already says it is a control, and the word needs the room.
+ */
+export type EditorTone = "light" | "dark";
+
+const FIELD_DARK =
+  "-ml-[5px] flex h-[26px] w-[calc(100%+7px)] min-w-0 items-center rounded-[var(--radius-button)] border border-white/20 bg-white/[0.08] transition-colors duration-200 focus-within:border-[var(--blue)]";
+
+const SELECT_TRIGGER_DARK =
+  "-ml-[5px] h-[26px] w-[calc(100%+7px)] min-w-0 shrink border-white/20 bg-white/[0.08] px-1 text-[11px] text-white hover:bg-white/[0.14] aria-expanded:border-[var(--blue)] [&>svg]:hidden";
+
 export interface SelectOption {
   value: string;
   label: string;
@@ -224,11 +240,14 @@ export function SelectEditor({
   value,
   options,
   onChange,
+  tone = "light",
 }: {
   label: string;
   value: string | null;
   options: readonly SelectOption[];
   onChange: (value: string | null) => void;
+  /** The trigger's chrome; the menu it opens is the design system's own. */
+  tone?: EditorTone;
 }) {
   return (
     <span
@@ -245,7 +264,7 @@ export function SelectEditor({
         placeholder="—"
         align="start"
         width="trigger"
-        className={SELECT_TRIGGER}
+        className={tone === "dark" ? SELECT_TRIGGER_DARK : SELECT_TRIGGER}
       />
     </span>
   );
@@ -262,6 +281,7 @@ export function TextEditor({
   text,
   parse,
   onCommit,
+  tone = "light",
 }: {
   label: string;
   /** The stored value, formatted. */
@@ -269,6 +289,7 @@ export function TextEditor({
   /** The typed text → a value; `undefined` when it does not parse. */
   parse: (text: string) => unknown;
   onCommit: (value: unknown) => void;
+  tone?: EditorTone;
 }) {
   // Null until something is typed, and again once it is written or thrown
   // away, so the stored value shows through — including one that changes
@@ -288,7 +309,10 @@ export function TextEditor({
 
   return (
     <span
-      className={cn(FIELD, invalid && "border-[var(--danger)]")}
+      className={cn(
+        tone === "dark" ? FIELD_DARK : FIELD,
+        invalid && "border-[var(--danger)]",
+      )}
       data-invalid={invalid ? "" : undefined}
     >
       <input
@@ -312,7 +336,11 @@ export function TextEditor({
             setDraft(null);
           }
         }}
-        className="tabular h-full w-full min-w-0 bg-transparent px-[10px] text-[13px] text-[var(--ink-900)] outline-none"
+        className={
+          tone === "dark"
+            ? "mono tabular h-full w-full min-w-0 bg-transparent px-1 text-[10px] text-white outline-none"
+            : "tabular h-full w-full min-w-0 bg-transparent px-[10px] text-[13px] text-[var(--ink-900)] outline-none"
+        }
       />
     </span>
   );

@@ -139,3 +139,17 @@ export function pointDetail(
 
   return parts.join(" · ");
 }
+
+/**
+ * A stored position as the well's two numbers — ["-0.31", "-1.82"], metres to
+ * two places — or null when either half is missing. Two strings, not
+ * `formatCourtPoint`'s one, because the well right-aligns each in its own
+ * slot so the decimal points of every row sit in one line.
+ */
+export function courtPair(
+  x: number | null,
+  y: number | null,
+): readonly [string, string] | null {
+  if (x === null || y === null) return null;
+  return [x.toFixed(2), y.toFixed(2)];
+}

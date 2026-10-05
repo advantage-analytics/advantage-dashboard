@@ -422,3 +422,16 @@ Decisions:
 2. `pointSummary` still counts ghost strokes in the rally; T38 settles the count.
 3. `BlackGameBand` / the dark winner cell duplicate their light twins; a `tone` prop would remove that.
 4. "serve only" also reads for a one-stroke rally whose stroke is a serve (rally counts the serve).
+
+## T31 · The black shots well: no header, ring-and-dot coordinates, Add shot — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New `label-black-shot-row.tsx` (`BlackShotsWell`, `BlackShotRow`): the recessed well with no header row, the nine-track shot row, coordinates as two right-aligned numbers led by the ring and dot, Add shot on the shot grid, and Delete / Reset revealed on hover or selection through the console's existing ask paths. `SelectEditor` and `TextEditor` gain a dark tone (light unchanged); the note editor uses it; `label-shot-row.tsx` exports three helpers.
+
+**follow-ups:**
+
+1. The opened select menu is still the light `FloatMenu` (`MenuSelect` has no tone).
+2. The deleted-shot tombstone is the light component inside the dark well.
+3. The dark note field types in mono 10px; may want a prose-sized variant.
+4. At a 520px rail the result cell may crowd when its actions are revealed (not measured).

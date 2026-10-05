@@ -436,7 +436,7 @@ ready).
 
 ## T31 · The black shots well: no header, ring-and-dot coordinates, Add shot
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/admin/labels/label-black-shot-row.tsx (new), src/components/admin/labels/label-black-format.ts, tests/label-black-rows.spec.ts (guess)
 - **routes:** /admin/labels/2c862516-2f3b-49e8-b336-0485483839bd

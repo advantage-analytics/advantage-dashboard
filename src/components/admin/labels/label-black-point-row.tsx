@@ -491,21 +491,22 @@ function BlackNoteAction({
           <p className="px-[9px] pt-[7px] pb-[5px] text-[11px] text-white/50">
             Note on point {number}
           </p>
-          {/* The field pulls itself 11px left to sit over a table cell's
-              text; the inset here hands that back. */}
-          <div className="pt-0.5 pr-[9px] pb-[7px] pl-5">
+          {/* The dark field pulls itself 5px left to sit over a cell's text
+              and runs 2px past it; the inset here hands both back. */}
+          <div className="pt-0.5 pr-[11px] pb-[7px] pl-[14px]">
             <EditableCell
               editable={edit.editable}
               rowSelected
               label={label}
               valueText={note ?? "None"}
               display={
-                <span className="-ml-[11px] block text-[12px] whitespace-normal text-white/85">
+                <span className="-ml-[5px] block text-[12px] whitespace-normal text-white/85">
                   {note}
                 </span>
               }
               editor={
                 <TextEditor
+                  tone="dark"
                   label={label}
                   text={note ?? ""}
                   parse={parseNote}

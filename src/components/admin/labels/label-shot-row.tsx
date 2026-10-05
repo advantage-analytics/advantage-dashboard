@@ -123,7 +123,7 @@ export function ShotRows({
 }
 
 /** A serve that did not go in: part of the point, not of the rally. */
-function isFault(shot: Pick<LabelShot, "stroke" | "result">): boolean {
+export function isFault(shot: Pick<LabelShot, "stroke" | "result">): boolean {
   return (
     (shot.stroke === "first_serve" || shot.stroke === "second_serve") &&
     (shot.result === "out" || shot.result === "net")
@@ -153,14 +153,14 @@ export function positionPatch(
   return result === null ? placed : { ...placed, result };
 }
 
-function sideOptions(names: SideNames): SelectOption[] {
+export function sideOptions(names: SideNames): SelectOption[] {
   return [
     { value: "p1", label: names.p1 },
     { value: "p2", label: names.p2 },
   ];
 }
 
-const STROKE_OPTIONS: SelectOption[] = LABEL_STROKES.map((value) => ({
+export const STROKE_OPTIONS: SelectOption[] = LABEL_STROKES.map((value) => ({
   value,
   label: STROKE_LABEL[value],
 }));
