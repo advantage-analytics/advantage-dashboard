@@ -15,8 +15,10 @@ import {
   NET_Y,
   SINGLES_HALF_WIDTH,
   fromCourt,
-  toCourt,
-  turnScreen,
+  fromCourtInHalf,
+  halfCourtViewBox,
+  toCourtInHalf,
+  type CourtHalf,
   type CourtPoint,
   type ScreenPoint,
 } from "./court-geometry";
@@ -28,17 +30,16 @@ import type { PlacementTarget } from "./court-placement";
  * point's strokes marked on it — a hollow ring where the ball was hit, a
  * filled dot where it landed, a dashed line between.
  *
- * One view, the whole court (`COURT_VIEW_BOX`) — a picture of the point as
- * it happens, and, while a stroke is being placed, a button under a
- * crosshair: a click ANYWHERE in the box — lines or apron, for a ball that
- * went out — becomes metres through `toCourt` and goes to `onPlace`. Which
- * end it places is court-placement.ts's sequence; that end of the target
- * stroke carries the `--blue` ring, so the labeller sees what the click will
- * move. The court never zooms or turns on a selection: `flipped` — "Flip
- * side", the labeller's own press — draws it the other way up, far baseline
- * at the bottom, by turning every screen point about the box's centre
- * (`turnScreen`); the art is symmetric about the net, so it is the same
- * picture.
+ * Two views of the same art:
+ *
+ * - `view="whole"` — the whole court (`COURT_VIEW_BOX`), read-only: a
+ *   picture of the point as it happens.
+ * - `view="near" | "far"` — zoomed to that half (`halfCourtViewBox`) with its
+ *   run-off, as a button under a crosshair: a click ANYWHERE in the box —
+ *   lines or surround, for a ball that went out — becomes metres through
+ *   `toCourtInHalf` and goes to `onPlace`. Which end it places is
+ *   court-placement.ts's sequence; that end of the target stroke carries the
+ *   `--blue` ring, so the labeller sees what the click will move.
  *
  * What is drawn is the caller's: each stroke comes with an opacity for each
  * end (`label-court-marks.ts` for the fading rally, 1 for a selected stroke),
@@ -52,6 +53,11 @@ import type { PlacementTarget } from "./court-placement";
  * — the panel's court box — so it shrinks and grows with the dock. The marks
  * are placed in percent and a click is read against the box's own bounding
  * rect, so neither notices the scale.
+ *
+ * Both boxes keep the art's own proportions (0.4434 for the whole court,
+ * 276 × 222 for a half), so a click converts to metres without distortion.
+ * Marks whose end is off the zoomed half are clipped by the box, and their
+ * dashed path runs out to the edge toward it.
  */
 
 /** One step up from the card's ground, for the court's surface. */
@@ -61,10 +67,14 @@ const LINE_THIN = "rgba(255,255,255,0.32)";
 const NET_LINE = "rgba(255,255,255,0.85)";
 const MARK = "rgba(255,255,255,1)";
 
-/** The card's body height. */
+/** The card's body height; both views fill it. */
 const BOX_HEIGHT = 222;
 /** The whole court at that height, in the art's 14.53 × 32.77 proportions. */
 const WHOLE_WIDTH = (BOX_HEIGHT * COURT_WIDTH) / COURT_HEIGHT;
+/** A half at that height: the card's full inner width. */
+const HALF_BOX_WIDTH = 276;
+
+export type CourtView = "whole" | CourtHalf;
 
 /** How strongly each end of a stroke is drawn, 0–1. An end at 0 is not. */
 export interface MarkOpacity {
@@ -87,9 +97,9 @@ interface Mark {
   landed: (ScreenPoint & { opacity: number }) | null;
 }
 
-function marksFor(strokes: readonly CourtStroke[], flipped: boolean): Mark[] {
+function marksFor(strokes: readonly CourtStroke[], view: CourtView): Mark[] {
   const project = (point: CourtPoint) =>
-    flipped ? turnScreen(fromCourt(point)) : fromCourt(point);
+    view === "whole" ? fromCourt(point) : fromCourtInHalf(view, point);
   const marks: Mark[] = [];
   for (const { shot, opacity = FULL_OPACITY } of strokes) {
     if (shot.status === "deleted") continue;
@@ -124,7 +134,7 @@ const markStyle = (opacity: number) => ({
 
 export function LabelCourt({
   strokes,
-  flipped = false,
+  view,
   targetShotId = null,
   target = null,
   prompt = null,
@@ -133,15 +143,15 @@ export function LabelCourt({
 }: {
   /** The strokes to draw, each at its ends' opacities. Tombstones are skipped. */
   strokes: readonly CourtStroke[];
-  /** The court the other way up — far baseline at the bottom. */
-  flipped?: boolean;
+  /** The whole court, or the half a click is being taken on. */
+  view: CourtView;
   /** The stroke being placed: its `target` end carries the ring. */
   targetShotId?: string | null;
   /** The end of the target stroke the next click places; it is ringed. */
   target?: PlacementTarget | null;
   /** "Click where shot 3 was hit" — the button's name while placing. */
   prompt?: string | null;
-  /** A click on the court, in metres. Absent: the court is a picture. */
+  /** A click on a half, in metres. Absent: the court is a picture. */
   onPlace?: (point: CourtPoint) => void;
   /**
    * `false`: the floating card's fixed art box. `true`: scale to fit the
@@ -149,18 +159,23 @@ export function LabelCourt({
    */
   fit?: boolean;
 }) {
-  const marks = marksFor(strokes, flipped);
+  const marks = marksFor(strokes, view);
   const placed = marks.length;
-  const placing = prompt !== null && onPlace !== undefined;
-  const size = { hit: 3, hitStroke: 1.5, landed: 2.5, ring: 6.5 };
+  const zoomed = view !== "whole";
+  const placing = zoomed && prompt !== null && onPlace !== undefined;
+  // Zoomed, a mark covers a fifth more court per pixel, so it is drawn larger.
+  const size = zoomed
+    ? { hit: 4.5, hitStroke: 2, landed: 4, ring: 10 }
+    : { hit: 3, hitStroke: 1.5, landed: 2.5, ring: 6.5 };
   const description =
     placed === 0
       ? "Court with no strokes placed"
       : `Court with ${placed} ${placed === 1 ? "stroke" : "strokes"} placed`;
+  const net = zoomed ? fromCourtInHalf(view, { x: 6.9, y: NET_Y }) : null;
 
   const art = (
     <>
-      <CourtArt />
+      <CourtArt view={view} />
       <svg
         className="absolute inset-0 block h-full w-full"
         aria-hidden="true"
@@ -228,35 +243,49 @@ export function LabelCourt({
           ) : null;
         })}
       </svg>
+      {net ? (
+        <span
+          aria-hidden="true"
+          className="mono pointer-events-none absolute -translate-y-1/2 text-[8px] tracking-[1px] text-white/50 uppercase"
+          style={{ left: pct(net.sx), top: pct(net.sy) }}
+        >
+          Net
+        </span>
+      ) : null}
     </>
   );
 
-  const box = "relative block shrink-0 overflow-hidden";
+  const box = cn(
+    "relative block shrink-0 overflow-hidden",
+    zoomed &&
+      "rounded-[8px] border border-dashed border-white/[0.22] bg-white/[0.07]",
+  );
+  const width = zoomed ? HALF_BOX_WIDTH : WHOLE_WIDTH;
   const style = fit
     ? {
         // "Contain": as wide as the container, unless its height runs out first.
-        width: `min(100cqw, calc(100cqh * ${(WHOLE_WIDTH / BOX_HEIGHT).toFixed(4)}))`,
-        aspectRatio: `${WHOLE_WIDTH.toFixed(2)} / ${BOX_HEIGHT}`,
+        width: `min(100cqw, calc(100cqh * ${(width / BOX_HEIGHT).toFixed(4)}))`,
+        aspectRatio: `${width.toFixed(2)} / ${BOX_HEIGHT}`,
       }
-    : { width: WHOLE_WIDTH, height: BOX_HEIGHT };
+    : { width, height: BOX_HEIGHT };
 
   return placing ? (
     <button
       type="button"
       data-court-target=""
-      data-court-view="whole"
-      data-court-flipped={flipped ? "true" : undefined}
+      data-court-view={view}
       aria-label={`${prompt}. ${description}. Anywhere in the box counts, including outside the lines for a ball that went out. Positions can also be typed in the stroke's row.`}
       onClick={(event) => {
         // A keyboard press has no position to place.
         if (event.detail === 0) return;
         const rect = event.currentTarget.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
-        const screen: ScreenPoint = {
-          sx: ((event.clientX - rect.left) / rect.width) * 100,
-          sy: ((event.clientY - rect.top) / rect.height) * 100,
-        };
-        onPlace(toCourt(flipped ? turnScreen(screen) : screen));
+        onPlace(
+          toCourtInHalf(view, {
+            sx: ((event.clientX - rect.left) / rect.width) * 100,
+            sy: ((event.clientY - rect.top) / rect.height) * 100,
+          }),
+        );
       }}
       className={cn(
         box,
@@ -272,8 +301,7 @@ export function LabelCourt({
       style={style}
       role="img"
       aria-label={description}
-      data-court-view="whole"
-      data-court-flipped={flipped ? "true" : undefined}
+      data-court-view={view}
     >
       {art}
     </div>
@@ -283,14 +311,14 @@ export function LabelCourt({
 /**
  * The court itself, in metres: the court rect runs `y = 0 … 23.77`, drawn
  * top-down in SVG space while the conversions put the near baseline at the
- * bottom; the lines are symmetric about the net, so turning the court the
- * other way up changes nothing here.
+ * bottom; the lines are symmetric about the net, so both frames draw the
+ * same picture — and a half is just a different `viewBox` onto it.
  */
-function CourtArt() {
+function CourtArt({ view }: { view: CourtView }) {
   const lines = { vectorEffect: "non-scaling-stroke" } as const;
   return (
     <svg
-      viewBox={COURT_VIEW_BOX}
+      viewBox={view === "whole" ? COURT_VIEW_BOX : halfCourtViewBox(view)}
       preserveAspectRatio="none"
       className="absolute inset-0 block h-full w-full"
       aria-hidden="true"

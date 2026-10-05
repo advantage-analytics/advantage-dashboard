@@ -124,8 +124,9 @@ import {
 import { cn } from "@/lib/utils";
 import type { CourtPoint } from "./court-geometry";
 import {
-  clearPlacement,
+  NO_PLACEMENT,
   flipPlacement,
+  hitterHalf,
   nextPlacement,
   setPlacementTarget,
   startPlacement,
@@ -490,7 +491,7 @@ export function LabelConsole({
   const followPlayback = useCallback(() => setPointFocus(FOLLOW), []);
   const held = pointFocus.mode === "held";
   const [placement, setPlacement] = useState<PlacementState>(() =>
-    startPlacement(initialSelectedShotId),
+    placementOf(session.points, initialSelectedShotId),
   );
   // Where the floating video rests, as it reports it: the court card keeps
   // clear of it (label-court-position.ts).
@@ -760,7 +761,7 @@ export function LabelConsole({
   // playing (the way back without the pill). Nothing folds: the current
   // point's own row clicked again just seeks back to its start.
   function togglePoint(pointId: string) {
-    setPlacement(clearPlacement);
+    setPlacement(NO_PLACEMENT);
     setRestPointId(pointId);
     if (pointId === playingPointId) followPlayback();
     else holdPoint(pointId);
@@ -770,15 +771,14 @@ export function LabelConsole({
   // Selecting a stroke is the start of an edit, so it holds the rail (the
   // rows are not scrolled out from under the editors) and seeks the video to
   // the stroke, which keeps its point current; playback carries on as it
-  // was. The court keeps its view: `startPlacement` only changes which
-  // stroke the next click places.
+  // was. The court zooms to the half its hitter stood in (`placementOf`).
   function selectShot(shotId: string) {
     const owner = pointOfShot(points, shotId);
     if (owner) holdPoint(owner.id);
     // A draft row cannot be placed or edited until its insert lands; it is
     // selected for placement then (see `addShot`).
     if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
-    setPlacement((current) => startPlacement(shotId, current.flipped));
+    setPlacement(placementOf(points, shotId));
     const shot = findShot(points, shotId);
     if (shot?.videoTime != null) player.current?.seekTo(shot.videoTime);
   }
@@ -969,7 +969,7 @@ export function LabelConsole({
   function deleteShot(shotId: string, reason: LabelDeleteReason) {
     const before = findShot(points, shotId);
     if (!before || !operations) return;
-    if (placement.shotId === shotId) setPlacement(clearPlacement);
+    if (placement.shotId === shotId) setPlacement(NO_PLACEMENT);
     const owner = pointOfShot(points, shotId);
     const change = (rows: LabelPoint[]) =>
       replaceShot(rows, shotId, (s) => applyShotDelete(s, reason));
@@ -1230,7 +1230,7 @@ export function LabelConsole({
     const live = points.filter((point) => point.status !== "deleted");
     const target = pointId ?? live[live.length - 1]?.id ?? null;
     if (target === null) return;
-    setPlacement(clearPlacement);
+    setPlacement(NO_PLACEMENT);
     setRestPointId(target);
     holdPoint(target);
     seekToPointStart(live.find((p) => p.id === target));
@@ -1274,7 +1274,7 @@ export function LabelConsole({
     const before = points.find((point) => point.id === pointId);
     if (!before || !operations) return;
     if (before.shots.some((shot) => shot.id === placement.shotId)) {
-      setPlacement(clearPlacement);
+      setPlacement(NO_PLACEMENT);
     }
     void runOperation(
       (rows) => replacePoint(rows, pointId, applyPointDelete),
@@ -1359,7 +1359,10 @@ export function LabelConsole({
       syncEnding(point, (rows) => insertShot(rows, pointId, result.shot));
       setPlacement((current) =>
         current.shotId === selectedBefore
-          ? startPlacement(result.shot.id, current.flipped)
+          ? placementOf(
+              insertShot(points, pointId, result.shot),
+              result.shot.id,
+            )
           : current,
       );
     });
@@ -1688,9 +1691,12 @@ export function LabelConsole({
     void patchShot(shot.id, step.patch);
   }
 
-  // The card's Contact / Landing switch: which end the next click places.
+  // The card's Contact / Landing switch: the stored contact, when there is
+  // one, says which half the hitter was on.
   function setTarget(target: PlacementTarget) {
-    setPlacement(setPlacementTarget(placement, target));
+    const shot =
+      placement.shotId === null ? null : findShot(points, placement.shotId);
+    setPlacement(setPlacementTarget(placement, target, shot?.contactY ?? null));
   }
 
   // The table card and the Now-playing pill: one tree, wherever the layout
@@ -1986,9 +1992,9 @@ export function LabelConsole({
 
           {/* The court floats too (board 08i): the whole court, read-only,
               until a stroke is selected in an editable session — then the
-              same court as a button for its next click. After the video in
-              the DOM, so where the two ever meet the court, the card being
-              worked on, is on top. */}
+              half its next click belongs on. After the video in the DOM, so
+              where the two ever meet the court, the card being worked on, is
+              on top. */}
           <LabelCourtDock
             point={expanded}
             names={names}
@@ -2161,6 +2167,23 @@ function pointOfShot(
 ): LabelPoint | null {
   return (
     points.find((point) => point.shots.some((s) => s.id === shotId)) ?? null
+  );
+}
+
+/**
+ * Selecting a stroke for the court: the first click is its contact, on the
+ * half its hitter stood in (court-placement.ts `hitterHalf`).
+ */
+function placementOf(
+  points: readonly LabelPoint[],
+  shotId: string | null,
+): PlacementState {
+  const owner = shotId === null ? null : pointOfShot(points, shotId);
+  if (!owner) return startPlacement(shotId);
+  const index = owner.shots.findIndex((shot) => shot.id === shotId);
+  return startPlacement(
+    shotId,
+    hitterHalf(owner.shots[index], owner.shots.slice(0, index)),
   );
 }
 

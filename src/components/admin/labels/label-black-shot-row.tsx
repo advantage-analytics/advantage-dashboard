@@ -140,7 +140,10 @@ export const SHOT_PADDING_PX = 2 * 14;
  * numbers cannot drift apart; its fallback is `SHOT_TAIL_PX` for a row
  * drawn outside the well.
  */
-export const SHOT_TRACKS = `grid-cols-[22px_minmax(44px,0.3fr)_minmax(36px,0.55fr)_minmax(52px,0.8fr)_minmax(30px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(calc(var(--shot-tail,${SHOT_TAIL_PX}px)_+_${SHOT_TAIL_AIR_PX}px),0.35fr)]`;
+// A literal: Tailwind only emits a class it can read whole in the source, so
+// the two numbers (`SHOT_TAIL_PX`, `SHOT_TAIL_AIR_PX`) are written out here.
+export const SHOT_TRACKS =
+  "grid-cols-[22px_minmax(44px,0.3fr)_minmax(36px,0.55fr)_minmax(52px,0.8fr)_minmax(30px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
 
 /** A stroke row: the tracks, the gap, the height and the padding. */
 const ROW_GRID = `relative grid ${SHOT_TRACKS} items-center gap-x-2 h-[34px] px-[14px]`;

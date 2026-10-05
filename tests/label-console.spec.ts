@@ -5,7 +5,10 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { fromCourt } from "@/components/admin/labels/court-geometry";
+import {
+  fromCourt,
+  fromCourtInHalf,
+} from "@/components/admin/labels/court-geometry";
 import type { LabelSession, LabelVideo } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
@@ -506,8 +509,8 @@ test("the court is board 08's art, showing the rally one stroke at a time (T22)"
 });
 
 test("a selected stroke is on the court alone, at full strength (T22)", () => {
-  // Editable: the same whole court, the return's ring and dot and nothing
-  // else — not the serve, not the added forehand.
+  // Editable: the zoomed half, the return's ring and dot and nothing else —
+  // not the serve, not the added forehand.
   const html = render({
     session: labelSessionFixture(),
     video: null,
@@ -516,12 +519,12 @@ test("a selected stroke is on the court alone, at full strength (T22)", () => {
     initialVideoTime: 2477.7,
     ...SAVES,
   });
-  expect(html).toContain('data-court-view="whole"');
+  expect(html).toContain('data-court-view="far"');
   expect(count(html, /data-court-hit/g)).toBe(1);
   expect(count(html, /data-court-landed/g)).toBe(1);
   expect(html).toMatch(/data-court-hit=""[^>]*style="opacity:1;/);
   expect(html).toMatch(/data-court-landed=""[^>]*style="opacity:1;/);
-  const hitAt = fromCourt({ x: 1.8, y: 24.49 });
+  const hitAt = fromCourtInHalf("far", { x: 1.8, y: 24.49 });
   expect(html).toContain(
     `data-court-hit="" cx="${hitAt.sx.toFixed(2)}%" cy="${hitAt.sy.toFixed(2)}%"`,
   );
@@ -1015,7 +1018,7 @@ test.describe("editing (T6)", () => {
     expect(count(html, EDITORS)).toBe(6);
   });
 
-  test("selecting a stroke keeps the whole court, now as a button, and switches nothing", () => {
+  test("selecting a stroke zooms the court to the hitter's half", () => {
     const html = render({
       session: labelSessionFixture(),
       video: null,
@@ -1023,15 +1026,12 @@ test.describe("editing (T6)", () => {
       initialSelectedShotId: "s-return",
       ...SAVES,
     });
-    // The return was hit from the far side (contact_y 24.49) — and the
-    // court does not care: the same whole court, apron and all, is the
-    // control. No zoom, no turn, no second viewBox.
+    // The return was hit from the far side (contact_y 24.49): the far half,
+    // run-off and all, is the control.
     expect(html).toMatch(/<button[^>]*data-court-target/);
-    expect(html).toContain('data-court-view="whole"');
-    expect(html).not.toMatch(/data-court-view="(near|far)"/);
-    expect(html).not.toContain("data-court-flipped");
-    expect(html).toContain('viewBox="-7.265 -4.5 14.53 32.77"');
-    expect(html).not.toContain("16.224");
+    expect(html).toContain('data-court-view="far"');
+    expect(html).toContain('viewBox="-10.085 -3.5 20.17 16.224"');
+    expect(html).not.toContain('viewBox="-7.265 -4.5 14.53 32.77"');
     expect(html).toMatch(/aria-label="Click where shot 2 was hit\. /);
     expect(html).toMatch(/data-court-title="[^"]*"[^>]*>Shot 2 · contact</);
     expect(html).toMatch(/data-court-subtitle="[^"]*"[^>]*>Vargas’s side</);
@@ -1050,7 +1050,7 @@ test.describe("editing (T6)", () => {
     expect(html).toMatch(/aria-pressed="false" data-court-flip=""/);
     expect(html).not.toContain("data-court-legend");
 
-    // The serve was hit from the near side: the same court again.
+    // The serve was hit from the near side: the near half.
     const serve = render({
       session: labelSessionFixture(),
       video: null,
@@ -1058,9 +1058,8 @@ test.describe("editing (T6)", () => {
       initialSelectedShotId: "s-serve",
       ...SAVES,
     });
-    expect(serve).toContain('viewBox="-7.265 -4.5 14.53 32.77"');
-    expect(serve).toContain('data-court-view="whole"');
-    expect(serve).toMatch(/<button[^>]*data-court-target/);
+    expect(serve).toContain('viewBox="-10.085 11.046 20.17 16.224"');
+    expect(serve).toContain('data-court-view="near"');
 
     const none = render({
       session: labelSessionFixture(),
@@ -1596,7 +1595,7 @@ test.describe("layout modes (T24)", () => {
     expect(count(html, /data-label-video-frame/g)).toBe(1);
   });
 
-  test("a selected shot in a docked mode makes the whole court the control, as everywhere", () => {
+  test("a selected shot in a docked mode still zooms the court to its half", () => {
     for (const mode of ["docked-top", "docked-side"] as const) {
       const html = render({
         session: labelSessionFixture(),
@@ -1607,8 +1606,7 @@ test.describe("layout modes (T24)", () => {
         ...SAVES,
       });
       const dock = dockOf(html, mode === "docked-top" ? "top" : "side");
-      expect(dock, mode).toContain('data-court-view="whole"');
-      expect(dock, mode).not.toMatch(/data-court-view="(near|far)"/);
+      expect(dock, mode).toMatch(/data-court-view="(near|far)"/);
       expect(dock, mode).toMatch(/<button[^>]*data-court-target/);
       expect(dock, mode).toContain("data-court-steps");
       expect(dock, mode).toMatch(
@@ -1757,7 +1755,7 @@ test.describe("layout modes (T24)", () => {
         expect(court, mode).not.toContain("height:222px");
       }
 
-      // Placing, docked: the same whole-court box, now a button.
+      // Placing, docked: the half's own 276 × 222 proportions, still a button.
       const placing = render({
         session: labelSessionFixture(),
         video: VIDEO,
@@ -1767,8 +1765,8 @@ test.describe("layout modes (T24)", () => {
         ...SAVES,
       });
       const target = tagOf(placing, "data-court-target");
-      expect(target).toContain("width:min(100cqw, calc(100cqh * 0.4434))");
-      expect(target).toMatch(/aspect-ratio:98\.43 ?\/ ?222/);
+      expect(target).toContain("width:min(100cqw, calc(100cqh * 1.2432))");
+      expect(target).toMatch(/aspect-ratio:276\.00 ?\/ ?222/);
     });
   });
 
@@ -1996,7 +1994,7 @@ test.describe("layout modes (T24)", () => {
       }
     });
 
-    test("a selected shot makes the whole court the control and outlines it; the film's frame stays square", () => {
+    test("a selected shot zooms the court to its half and outlines the court; the film's frame stays square", () => {
       const html = render({
         session: labelSessionFixture(),
         video: VIDEO,
@@ -2006,8 +2004,7 @@ test.describe("layout modes (T24)", () => {
         ...SAVES,
       });
       const black = blackOf(html);
-      expect(black).toContain('data-court-view="whole"');
-      expect(black).not.toMatch(/data-court-view="(near|far)"/);
+      expect(black).toMatch(/data-court-view="(near|far)"/);
       expect(black).toMatch(/<button[^>]*data-court-target/);
       // Full screen: the loading skeleton's card radius is taken off every
       // box in it — the frame is flush to the black stage.

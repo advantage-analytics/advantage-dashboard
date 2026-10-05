@@ -6,8 +6,12 @@ import {
   DOUBLES_HALF_WIDTH,
   NET_Y,
   fromCourt,
+  fromCourtInHalf,
+  halfCourtViewBox,
+  halfOf,
+  otherHalf,
   toCourt,
-  turnScreen,
+  toCourtInHalf,
 } from "@/components/admin/labels/court-geometry";
 
 /**
@@ -84,30 +88,75 @@ test("toCourt inverts fromCourt, both ways", () => {
   }
 });
 
-test.describe("the court the other way up (Flip side)", () => {
-  test("turnScreen is half a turn about the box's centre, and its own inverse", () => {
-    expect(turnScreen({ sx: 0, sy: 0 })).toEqual({ sx: 100, sy: 100 });
-    expect(turnScreen({ sx: 50, sy: 50 })).toEqual({ sx: 50, sy: 50 });
-    expect(turnScreen({ sx: 12.5, sy: 61.25 })).toEqual({
-      sx: 87.5,
-      sy: 38.75,
+test.describe("the half-court zoom (board 08i)", () => {
+  test("each half is a 276 × 222 window with the run-off round it", () => {
+    // 4.6 m beside each doubles sideline; 3.5 m behind the baseline; the
+    // rest of the height runs just past the net.
+    expect(halfCourtViewBox("near")).toBe("-10.085 11.046 20.17 16.224");
+    expect(halfCourtViewBox("far")).toBe("-10.085 -3.5 20.17 16.224");
+    const [, , width, height] = halfCourtViewBox("near").split(" ").map(Number);
+    expect(width / height).toBeCloseTo(276 / 222, 3);
+  });
+
+  test("fixed points land where the board draws them", () => {
+    // Near half: net along the top, baseline 3.5 m above the bottom edge.
+    const nearNet = fromCourtInHalf("near", { x: 0, y: NET_Y });
+    expect(nearNet.sx).toBeCloseTo(50, 9);
+    expect(nearNet.sy).toBeCloseTo(5.17, 2);
+    const nearBase = fromCourtInHalf("near", { x: -DOUBLES_HALF_WIDTH, y: 0 });
+    expect(nearBase.sx).toBeCloseTo(22.81, 2);
+    expect(nearBase.sy).toBeCloseTo(78.43, 2);
+    // Far half: the mirror — far baseline near the top, net along the bottom.
+    const farBase = fromCourtInHalf("far", {
+      x: DOUBLES_HALF_WIDTH,
+      y: COURT_LENGTH,
     });
-    for (const point of [
-      { sx: 0, sy: 0 },
-      { sx: 100, sy: 100 },
-      { sx: 12.5, sy: 61.25 },
-    ]) {
-      expect(turnScreen(turnScreen(point))).toEqual(point);
+    expect(farBase.sx).toBeCloseTo(77.19, 2);
+    expect(farBase.sy).toBeCloseTo(21.57, 2);
+    expect(fromCourtInHalf("far", { x: 0, y: NET_Y }).sy).toBeCloseTo(94.83, 2);
+  });
+
+  test("the surround is court too: a corner of the box is metres off the lines", () => {
+    // Bottom-left of the near half: wide of the sideline, behind the baseline.
+    const out = toCourtInHalf("near", { sx: 0, sy: 100 });
+    expect(out.x).toBeCloseTo(-10.085, 9);
+    expect(out.y).toBeCloseTo(-3.5, 9);
+    // Top-right of the far half: long and wide.
+    const long = toCourtInHalf("far", { sx: 100, sy: 0 });
+    expect(long.x).toBeCloseTo(10.085, 9);
+    expect(long.y).toBeCloseTo(27.27, 9);
+  });
+
+  test("toCourtInHalf inverts fromCourtInHalf, both ways, in both halves", () => {
+    for (const half of ["near", "far"] as const) {
+      for (const point of [
+        { x: 0, y: 0 },
+        { x: -5.485, y: 23.77 },
+        { x: 9.9, y: -3.2 },
+        { x: 1.234, y: 11.885 },
+      ]) {
+        const back = toCourtInHalf(half, fromCourtInHalf(half, point));
+        expect(back.x).toBeCloseTo(point.x, 9);
+        expect(back.y).toBeCloseTo(point.y, 9);
+      }
+      for (const point of [
+        { sx: 0, sy: 0 },
+        { sx: 100, sy: 100 },
+        { sx: 12.5, sy: 61.25 },
+      ]) {
+        const back = fromCourtInHalf(half, toCourtInHalf(half, point));
+        expect(back.sx).toBeCloseTo(point.sx, 9);
+        expect(back.sy).toBeCloseTo(point.sy, 9);
+      }
     }
   });
 
-  test("turned, the near baseline is at the top and the net stays put", () => {
-    const base = turnScreen(fromCourt({ x: 0, y: 0 }));
-    expect(base.sy).toBeCloseTo(13.73, 2);
-    const net = turnScreen(fromCourt({ x: 0, y: NET_Y }));
-    expect(net.sx).toBeCloseTo(50, 9);
-    expect(net.sy).toBeCloseTo(50, 9);
-    // A click at the top of a turned box reads as the near apron.
-    expect(toCourt(turnScreen({ sx: 50, sy: 0 })).y).toBeCloseTo(-4.5, 9);
+  test("a y is in the near half below the net, the far half from it up", () => {
+    expect(halfOf(-2)).toBe("near");
+    expect(halfOf(11.88)).toBe("near");
+    expect(halfOf(NET_Y)).toBe("far");
+    expect(halfOf(24)).toBe("far");
+    expect(otherHalf("near")).toBe("far");
+    expect(otherHalf("far")).toBe("near");
   });
 });

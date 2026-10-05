@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 import * as React from "react";
@@ -1562,5 +1562,40 @@ test("the black rows use the palette's tokens and the type scale", () => {
     for (const match of source.matchAll(/text-\[(\d+(?:\.\d+)?)px\]/g)) {
       expect(scale.has(Number(match[1])), `${file}: ${match[0]}`).toBe(true);
     }
+  }
+});
+
+/**
+ * Tailwind emits a class only when it can read it WHOLE in the source: a
+ * utility whose arbitrary value is put together by a template interpolation —
+ * `grid-cols-[22px_${tail}]`, `right-[${inset}px]`, `w-[calc(${a}+4px)]` —
+ * is never generated, and the element silently loses the rule (the shot row
+ * lost its grid this way). A constant holding the whole class, interpolated
+ * as a unit, is fine; so is a selector string such as
+ * `[data-point-id="${id}"]`, whose bracket does not follow a utility's `-`.
+ */
+const INTERPOLATED_ARBITRARY_CLASS = /[A-Za-z0-9]-\[[^\]\s"'`]*\$\{/;
+
+test("no labels component builds an arbitrary-value class from an interpolation", () => {
+  for (const [source, expected] of [
+    ["`grid ${TRACKS} grid-cols-[22px_${tail}_auto]`", true],
+    ["`right-[${inset}px]`", true],
+    ["`w-[calc(${width}px_+_4px)]`", true],
+    ["`relative grid ${SHOT_TRACKS} items-center h-[34px]`", false],
+    ['`[data-point-id="${id}"]`', false],
+    ["[`Shot ${lit} of ${count}`, name]", false],
+    ['cn("w-[22px]", `text-${tone}`)', false],
+  ] as const) {
+    expect(INTERPOLATED_ARBITRARY_CLASS.test(source), source).toBe(expected);
+  }
+  const dir = "src/components/admin/labels";
+  for (const file of readdirSync(dir)) {
+    const lines = readFileSync(`${dir}/${file}`, "utf8").split("\n");
+    lines.forEach((line, index) => {
+      expect(
+        INTERPOLATED_ARBITRARY_CLASS.test(line),
+        `${file}:${index + 1}: ${line.trim()}`,
+      ).toBe(false);
+    });
   }
 });
