@@ -133,6 +133,59 @@ async function analysisFor(supabase: Supabase, matchId: string) {
   return { analysis: status ? { status } : null, error: null };
 }
 
+/**
+ * Whether saving a new score should offer to rebuild the statistics, and what
+ * the rebuild would cost — null when there is nothing to rebuild.
+ *
+ * Offered on the newest job only when it is `completed` with its results still
+ * stored and was created by this viewer, which is what
+ * `/api/splitstep/jobs/[jobId]/rederive` accepts. A rebuild re-creates every
+ * point and `point_bookmarks` cascades, so the count is every user's
+ * bookmarks on this match, read through the service role: a coach's
+ * bookmarks on a player's match go too, and RLS would hide them.
+ */
+async function rebuildFor(
+  supabase: Supabase,
+  matchId: string,
+  userId: string,
+): Promise<{ jobId: string; bookmarks: number } | null> {
+  const { data } = await supabase
+    .from("processing_jobs")
+    .select("id, status, created_by, results_object_key")
+    .eq("match_id", matchId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const job = data as {
+    id: string;
+    status: string;
+    created_by: string | null;
+    results_object_key: string | null;
+  } | null;
+  if (
+    !job ||
+    job.status !== "completed" ||
+    !job.results_object_key ||
+    job.created_by !== userId
+  ) {
+    return null;
+  }
+  const { count, error } = await createAdminClient()
+    .from("point_bookmarks")
+    .select("point_id, points!inner(match_id)", { count: "exact", head: true })
+    .eq("points.match_id", matchId);
+  if (error || count === null) {
+    // No offer rather than "0 bookmarks": the note is the only warning a
+    // rebuild gives before it removes them.
+    console.error(
+      "GET /api/matches/[matchId]: failed to count bookmarks",
+      error,
+    );
+    return null;
+  }
+  return { jobId: job.id, bookmarks: count };
+}
+
 async function eventContextFor(
   supabase: Supabase,
   entryId: string,
@@ -234,12 +287,13 @@ export async function GET(
   // `detach_match_from_event_line` re-checks both.
   const attachable = !!match.program_id && !match.event_entry_id;
   const detachable = !!match.program_id && !!match.event_entry_id;
-  const [analysisRead, event, workspace] = await Promise.all([
+  const [analysisRead, event, workspace, rebuild] = await Promise.all([
     analysisFor(supabase, matchId),
     match.event_entry_id
       ? eventContextFor(supabase, match.event_entry_id, matchId)
       : Promise.resolve(null),
     attachable || detachable ? getWorkspaceContext() : Promise.resolve(null),
+    rebuildFor(supabase, matchId, user.id),
   ]);
   if (analysisRead.error) {
     return serverError(
@@ -270,6 +324,7 @@ export async function GET(
     canAttach,
     canDetach,
     canEditRound,
+    rebuild,
   });
 }
 

@@ -247,7 +247,10 @@ test.describe("wiring", () => {
   const action = read("src/lib/schedule/attach-line.ts");
 
   test("the GET route returns canDetach beside canAttach", () => {
-    expect(route).toMatch(/canAttach,\s*canDetach,\s*canEditRound,?\s*\}\);/);
+    // `rebuild` rides last: the score-edit rebuild offer (rebuildFor).
+    expect(route).toMatch(
+      /canAttach,\s*canDetach,\s*canEditRound,\s*rebuild,?\s*\}\);/,
+    );
     expect(route).toMatch(
       /const detachable = !!match\.program_id && !!match\.event_entry_id;/,
     );
