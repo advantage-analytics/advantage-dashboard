@@ -9,8 +9,8 @@
  * service-role loader into its bundle.
  *
  * There is deliberately no `flags` field anywhere here: the label tables carry
- * none, and a session in `labelling` must not show the derivation's flags to
- * the person labelling (see the migration's `status` comment).
+ * none. The marks the black rail draws are computed from the raw vendor file
+ * per render, gated by `marksEnabled`, and never stored on a row.
  */
 
 import type {
@@ -72,6 +72,15 @@ export function isLabelSpin(value: unknown): value is LabelSpin {
   );
 }
 
+/**
+ * `label_shots.site_removal`, the CHECK vocabulary
+ * (supabase/migrations/..._label_marks_and_site_removals.sql): why the SITE
+ * removed a vendor stroke before the transcript was built. One reason so far —
+ * played.ts's phantom rule, a non-serve stroke before the point's last serve.
+ * Written by the seed and the backfill only; never by an edit.
+ */
+export type LabelSiteRemoval = "hit_after_fault";
+
 /** One `label_shots` row. Coordinates are metres, near baseline at y = 0. */
 export interface LabelShot {
   id: string;
@@ -96,6 +105,15 @@ export interface LabelShot {
   /** Seconds on the analysis clock — the same clock as `shots.video_time`. */
   videoTime: number | null;
   /**
+   * Set when the site removed this vendor stroke before the transcript was
+   * built ({@link LabelSiteRemoval}); null for a stroke the derivation kept
+   * and for one the labeller added. A labeller's own removal is
+   * `status: "deleted"` instead, so the two are never confused.
+   */
+  siteRemoval: LabelSiteRemoval | null;
+  /** When the labeller put a site-removed stroke back; null until then. */
+  siteRemovalRestoredAt: string | null;
+  /**
    * The value fields as the seed wrote them — what Reset restores and what
    * `kept` is measured against. Null for an added stroke, and for a vendor
    * stroke seeded before the column existed and not yet backfilled.
@@ -103,10 +121,31 @@ export interface LabelShot {
   seed: LabelShotSeedValues | null;
 }
 
+/**
+ * A ghost: a stroke the site removed that the labeller has neither restored
+ * nor deleted themselves. The black rail draws it as a quiet line, not a row,
+ * and the rally count skips it.
+ */
+export function isGhostShot(
+  shot: Pick<LabelShot, "siteRemoval" | "siteRemovalRestoredAt" | "status">,
+): boolean {
+  return (
+    shot.siteRemoval !== null &&
+    shot.siteRemovalRestoredAt === null &&
+    shot.status !== "deleted"
+  );
+}
+
 /** One `label_points` row with its strokes, already in video order. */
 export interface LabelPoint {
   id: string;
   pointIndex: number;
+  /**
+   * The vendor rallies the point was built from (`label_points.vendor_rally_ids`)
+   * — the join key from a derived point's `rally_id` back to this row. Empty
+   * for a point the labeller added.
+   */
+  vendorRallyIds: number[];
   setNumber: number | null;
   gameNumber: number | null;
   server: LabelSide | null;
@@ -125,6 +164,12 @@ export interface LabelPoint {
   checkedAt: string | null;
   /** The labeller's free-text note on the point (`label_points.note`). */
   note: string | null;
+  /**
+   * Suggestion keys the labeller dismissed (`label_points.dismissed`):
+   * `missing_shot:<afterEventId>` or `missing_point`. The one stored piece of
+   * a mark's life-cycle; the rest is derived from the row's status.
+   */
+  dismissed: string[];
   /**
    * The point's own fields as seeded (set, game, server, serve side, won by,
    * ending, ended by) — what Reset restores and what `unchanged` is measured
@@ -151,6 +196,12 @@ export interface LabelSession {
    * `lib/data/labels-server.ts`).
    */
   adScoring: boolean;
+  /**
+   * Whether the console computes the derivation's marks for this session
+   * (`label_sessions.marks_enabled`). False on the ground-truth session,
+   * whose labels were made blind to the derivation and must stay that way.
+   */
+  marksEnabled: boolean;
   /** In `point_index` order. */
   points: LabelPoint[];
 }

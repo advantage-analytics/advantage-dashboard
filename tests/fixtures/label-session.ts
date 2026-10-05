@@ -43,6 +43,8 @@ function shot(
     landingX: null,
     landingY: null,
     videoTime: null,
+    siteRemoval: null,
+    siteRemovalRestoredAt: null,
     seed: null,
     ...fields,
   };
@@ -145,6 +147,8 @@ function point(
   return {
     id,
     pointIndex,
+    // One vendor rally per seeded point, numbered after the point.
+    vendorRallyIds: [1001 + pointIndex],
     setNumber: 1,
     gameNumber: 1,
     server: "p1",
@@ -157,6 +161,7 @@ function point(
     statusBeforeDelete: null,
     checkedAt: null,
     note: null,
+    dismissed: [],
     seed: null,
     shots: [],
     ...fields,
@@ -194,6 +199,7 @@ export function labelSessionFixture(): LabelSession {
     player1Name: "Jordan Lee",
     player2Name: "Elena Vargas",
     adScoring: true,
+    marksEnabled: true,
     points: [
       point(P1, 0, {
         winner: "p2",

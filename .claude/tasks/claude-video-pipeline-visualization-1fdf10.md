@@ -409,7 +409,7 @@ ready).
 
 ## T29 · Migration: marks_enabled, site removals, dismissed — and their types, loader, seed
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/20261005090000_label_marks_and_site_removals.sql (new), src/lib/services/labels/session.ts, src/lib/services/labels/seed.ts, src/lib/data/labels-server.ts, tests/fixtures/label-session.ts, tests/label-seed.spec.ts, tests/label-session-order.spec.ts (guess)
 - **done when:**

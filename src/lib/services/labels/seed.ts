@@ -27,7 +27,12 @@ import {
   type SplitStepStroke,
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
-import { compareNullsLast, isLabelSpin, type LabelSpin } from "./session";
+import {
+  compareNullsLast,
+  isLabelSpin,
+  type LabelSiteRemoval,
+  type LabelSpin,
+} from "./session";
 
 export type LabelSide = "p1" | "p2";
 
@@ -107,6 +112,13 @@ export interface LabelShotSeed {
   landing_y: number | null;
   video_time: number | null;
   unclear: string[];
+  /**
+   * `hit_after_fault` on a stroke the derivation removed before building the
+   * transcript (`droppedShotsByRally`), null on every transcript shot. Not a
+   * value field: it is not in `seed`, not measured for `kept`, and no edit
+   * can reach it (edit.ts `LABEL_SHOT_EDIT_FIELDS`).
+   */
+  site_removal: LabelSiteRemoval | null;
   /** The nine value fields above, frozen — what Reset writes back. */
   seed: LabelShotSeedValues;
 }
@@ -359,6 +371,12 @@ export function buildLabelSeed(
   const dropped = droppedShotsByRally(transcript, rawStrokes);
 
   const points = transcript.points.map((point, index): LabelPointSeed => {
+    // Written unconditionally: a new session defaults to `marks_enabled`, and
+    // the mark is what lets the console tell the site's removal from the
+    // labeller's own (`status = 'deleted'`).
+    const removed = new Set(
+      (dropped.get(point.rally_id) ?? []).map((shot) => shot.event_id),
+    );
     const ordered = inVideoOrder<SeedableShot>([
       ...point.shots,
       ...(dropped.get(point.rally_id) ?? []),
@@ -389,6 +407,7 @@ export function buildLabelSeed(
         status: "kept",
         ...values,
         unclear: [],
+        site_removal: removed.has(shot.event_id) ? "hit_after_fault" : null,
         seed: { ...values },
       };
     });

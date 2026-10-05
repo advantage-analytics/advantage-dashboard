@@ -875,6 +875,8 @@ export function LabelConsole({
       landingX: null,
       landingY: null,
       videoTime: plan.write.video_time,
+      siteRemoval: null,
+      siteRemovalRestoredAt: null,
       seed: null,
     };
     // The new stroke is the one a court click places next — once it is saved.

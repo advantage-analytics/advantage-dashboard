@@ -36,6 +36,7 @@ import {
   type LabelShotResult,
   type LabelShotStatus,
   type LabelSide,
+  type LabelSiteRemoval,
   type LabelSpin,
   type LabelStroke,
   type LabelVideo,
@@ -294,6 +295,8 @@ interface DbSessionRow {
   derivation_version: string;
   /** Null until the labeller sets it — then the job's value stands in. */
   ad_scoring: boolean | null;
+  /** False on the ground-truth session; marks are never computed for it. */
+  marks_enabled: boolean;
 }
 /** The one column of the session's job the console needs. */
 interface DbJobScoringRow {
@@ -302,6 +305,7 @@ interface DbJobScoringRow {
 interface DbPointRow {
   id: string;
   point_index: number;
+  vendor_rally_ids: number[];
   set_number: number | null;
   game_number: number | null;
   server: LabelSide | null;
@@ -314,6 +318,7 @@ interface DbPointRow {
   status_before_delete: Exclude<LabelPointStatus, "deleted"> | null;
   checked_at: string | null;
   note: string | null;
+  dismissed: string[];
   /** jsonb, parsed by `parseLabelPointSeed` before anything trusts it. */
   seed?: unknown;
 }
@@ -334,6 +339,8 @@ interface DbShotRow {
   landing_x: number | null;
   landing_y: number | null;
   video_time: number | null;
+  site_removal: LabelSiteRemoval | null;
+  site_removal_restored_at: string | null;
   /** jsonb, parsed by `parseLabelShotSeed` before anything trusts it. */
   seed?: unknown;
 }
@@ -366,7 +373,9 @@ export async function getLabelSession(
 
   const { data: session, error: sessionError } = await db
     .from("label_sessions")
-    .select("id, job_id, match_id, status, derivation_version, ad_scoring")
+    .select(
+      "id, job_id, match_id, status, derivation_version, ad_scoring, marks_enabled",
+    )
     .eq("id", sessionId)
     .maybeSingle<DbSessionRow>();
   if (sessionError) {
@@ -394,7 +403,7 @@ export async function getLabelSession(
         db
           .from("label_points")
           .select(
-            "id, point_index, set_number, game_number, server, serve_side, winner, ending, ended_by, game_type, status, status_before_delete, checked_at, note, seed",
+            "id, point_index, vendor_rally_ids, set_number, game_number, server, serve_side, winner, ending, ended_by, game_type, status, status_before_delete, checked_at, note, dismissed, seed",
           )
           .eq("session_id", session.id)
           .order("point_index")
@@ -405,7 +414,7 @@ export async function getLabelSession(
         db
           .from("label_shots")
           .select(
-            "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, spin, contact_x, contact_y, landing_x, landing_y, video_time, seed",
+            "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, spin, contact_x, contact_y, landing_x, landing_y, video_time, site_removal, site_removal_restored_at, seed",
           )
           .eq("session_id", session.id)
           .order("id"),
@@ -491,6 +500,8 @@ export function buildLabelSession(
       landingX: row.landing_x,
       landingY: row.landing_y,
       videoTime: row.video_time,
+      siteRemoval: row.site_removal ?? null,
+      siteRemovalRestoredAt: row.site_removal_restored_at ?? null,
       seed: parseLabelShotSeed(row.seed ?? null),
     });
     shotsByPoint.set(row.label_point_id, list);
@@ -501,6 +512,7 @@ export function buildLabelSession(
     .map((row) => ({
       id: row.id,
       pointIndex: row.point_index,
+      vendorRallyIds: row.vendor_rally_ids ?? [],
       setNumber: row.set_number,
       gameNumber: row.game_number,
       server: row.server,
@@ -513,6 +525,7 @@ export function buildLabelSession(
       statusBeforeDelete: row.status_before_delete ?? null,
       checkedAt: row.checked_at,
       note: row.note ?? null,
+      dismissed: row.dismissed ?? [],
       seed: parseLabelPointSeed(row.seed ?? null),
       shots: orderLabelShots(shotsByPoint.get(row.id) ?? []),
     }));
@@ -526,6 +539,7 @@ export function buildLabelSession(
     player1Name: match?.player1_name ?? "Player 1",
     player2Name: match?.player2_name ?? "Player 2",
     adScoring: resolveLabelAdScoring(session.ad_scoring, job?.ad_scoring),
+    marksEnabled: session.marks_enabled,
     points,
   };
 }

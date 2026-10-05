@@ -42,6 +42,8 @@ function stroke(
     landingX: 0,
     landingY: 0,
     videoTime,
+    siteRemoval: null,
+    siteRemovalRestoredAt: null,
     seed: null,
     ...fields,
   };

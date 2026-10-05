@@ -203,6 +203,7 @@ const SESSION_ROW = {
   status: "labelling" as const,
   derivation_version: "0.3.2",
   ad_scoring: null,
+  marks_enabled: true,
 };
 
 test("the loader carries each row's seed, and no seed for a bad one", () => {
@@ -213,6 +214,7 @@ test("the loader carries each row's seed, and no seed for a bad one", () => {
       {
         id: POINT_ID,
         point_index: 0,
+        vendor_rally_ids: [41, 42],
         set_number: 1,
         game_number: 3,
         server: "p1",
@@ -225,6 +227,7 @@ test("the loader carries each row's seed, and no seed for a bad one", () => {
         status_before_delete: null,
         checked_at: null,
         note: "  ",
+        dismissed: ["missing_shot:7"],
         seed: POINT_SEED,
       },
     ],
@@ -239,6 +242,8 @@ test("the loader carries each row's seed, and no seed for a bad one", () => {
         delete_reason: null,
         ...SHOT_SEED,
         stroke: "forehand",
+        site_removal: "hit_after_fault",
+        site_removal_restored_at: "2026-10-05T09:00:00Z",
         seed: SHOT_SEED,
       },
       {
@@ -251,13 +256,26 @@ test("the loader carries each row's seed, and no seed for a bad one", () => {
         delete_reason: null,
         ...SHOT_SEED,
         video_time: 2480,
+        site_removal: null,
+        site_removal_restored_at: null,
         seed: { hitter: "p1" },
       },
     ],
   );
+  expect(session.marksEnabled).toBe(true);
   const [point] = session.points;
   expect(point.seed).toEqual(POINT_SEED);
   expect(point.shots.map((s) => s.seed)).toEqual([SHOT_SEED, null]);
+  // The marks' join key and the one stored piece of their life-cycle.
+  expect(point.vendorRallyIds).toEqual([41, 42]);
+  expect(point.dismissed).toEqual(["missing_shot:7"]);
+  // The site's removal and its restore come through as stored.
+  expect(
+    point.shots.map((s) => [s.siteRemoval, s.siteRemovalRestoredAt]),
+  ).toEqual([
+    ["hit_after_fault", "2026-10-05T09:00:00Z"],
+    [null, null],
+  ]);
   expect(canResetPoint(point)).toBe(true);
   expect(canResetShot(point.shots[0])).toBe(true);
   // The loader maps `spin` from the row, like every other value column.
@@ -290,6 +308,16 @@ test.describe("the session's ad scoring", () => {
         [],
         job,
       ).adScoring;
+    // The ground-truth session has marks off; the loader carries that through.
+    expect(
+      buildLabelSession(
+        { ...SESSION_ROW, marks_enabled: false },
+        null,
+        [],
+        [],
+        null,
+      ).marksEnabled,
+    ).toBe(false);
     // Both sessions live today are null with no-ad jobs: the job stands in.
     expect(build(null, { ad_scoring: false })).toBe(false);
     expect(build(true, { ad_scoring: false })).toBe(true);

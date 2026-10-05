@@ -39,6 +39,8 @@ function shot(fields: Partial<LabelShot>): LabelShot {
     landingX: null,
     landingY: null,
     videoTime: clock,
+    siteRemoval: null,
+    siteRemovalRestoredAt: null,
     seed: null,
     ...fields,
   };

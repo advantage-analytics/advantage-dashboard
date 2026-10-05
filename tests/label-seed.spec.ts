@@ -140,6 +140,27 @@ test.describe("buildLabelSeed", () => {
     }
   });
 
+  test("a stroke the derivation removed is marked as the site's removal; a kept one is not", () => {
+    const derivedIds = new Set(
+      transcript.points.flatMap((p) => p.shots.map((s) => s.event_id)),
+    );
+    let removed = 0;
+    for (const point of seed.points) {
+      for (const shot of point.shots) {
+        if (derivedIds.has(shot.event_id)) {
+          expect(shot.site_removal).toBeNull();
+        } else {
+          removed += 1;
+          expect(shot.site_removal).toBe("hit_after_fault");
+          // The site's removal is a fact about the row, never a value the
+          // labeller edits — so it is not frozen in the seed either.
+          expect("site_removal" in shot.seed).toBe(false);
+        }
+      }
+    }
+    expect(removed).toBeGreaterThan(0);
+  });
+
   test("each shot freezes its raw vendor stroke verbatim and copies the derived geometry", () => {
     const derivedById = new Map(
       transcript.points.flatMap((p) => p.shots.map((s) => [s.event_id, s])),
@@ -559,6 +580,15 @@ test.describe("seedLabelSessionForJob", () => {
       // The `spin` column is written alongside the other value columns.
       expect(shot).toHaveProperty("spin");
     }
+
+    // The site's removal reaches the insert as the seed built it: set on the
+    // strokes the derivation dropped, null on the rest, never absent.
+    const seededShots = seed.points.flatMap((p) => p.shots);
+    expect(shots.map((s) => s.site_removal)).toEqual(
+      seededShots.map((s) => s.site_removal),
+    );
+    expect(shots.some((s) => s.site_removal === "hit_after_fault")).toBe(true);
+    expect(shots.some((s) => s.site_removal === null)).toBe(true);
   });
 
   test("an open session is returned without re-seeding", async () => {

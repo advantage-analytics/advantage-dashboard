@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { labelProgress, orderLabelShots } from "@/lib/services/labels/session";
+import {
+  isGhostShot,
+  labelProgress,
+  orderLabelShots,
+} from "@/lib/services/labels/session";
 import { labelSessionFixture } from "./fixtures/label-session";
 
 /**
@@ -54,5 +58,37 @@ test("progress counts checked points and never a tombstone", () => {
   expect(labelProgress(labelSessionFixture().points)).toEqual({
     checked: 1,
     total: 3,
+  });
+});
+
+test.describe("isGhostShot", () => {
+  const ghost = {
+    siteRemoval: "hit_after_fault" as const,
+    siteRemovalRestoredAt: null,
+    status: "kept" as const,
+  };
+
+  test("a site-removed stroke, not restored and not deleted, is a ghost", () => {
+    expect(isGhostShot(ghost)).toBe(true);
+    // An edited ghost is still a ghost: the site's removal is what counts.
+    expect(isGhostShot({ ...ghost, status: "edited" })).toBe(true);
+  });
+
+  test("a restored stroke is an ordinary row again", () => {
+    expect(
+      isGhostShot({ ...ghost, siteRemovalRestoredAt: "2026-10-05T09:00:00Z" }),
+    ).toBe(false);
+  });
+
+  test("the labeller's own delete wins over the site's removal", () => {
+    expect(isGhostShot({ ...ghost, status: "deleted" })).toBe(false);
+  });
+
+  test("a stroke the site never removed is not a ghost", () => {
+    expect(isGhostShot({ ...ghost, siteRemoval: null })).toBe(false);
+    // Every fixture row is a kept, edited, added or labeller-deleted stroke.
+    for (const point of labelSessionFixture().points) {
+      for (const shot of point.shots) expect(isGhostShot(shot)).toBe(false);
+    }
   });
 });

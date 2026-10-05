@@ -49,6 +49,7 @@ import {
   type LabelShotResult,
   type LabelShotStatus,
   type LabelSide,
+  type LabelSiteRemoval,
   type LabelSpin,
   type LabelStroke,
 } from "./session";
@@ -214,11 +215,13 @@ interface ShotRow {
   landing_x: number | null;
   landing_y: number | null;
   video_time: number | null;
+  site_removal: LabelSiteRemoval | null;
+  site_removal_restored_at: string | null;
   seed: unknown;
 }
 
 const SHOT_COLUMNS =
-  "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, spin, contact_x, contact_y, landing_x, landing_y, video_time, seed";
+  "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, spin, contact_x, contact_y, landing_x, landing_y, video_time, site_removal, site_removal_restored_at, seed";
 
 function toLabelShot(row: ShotRow): LabelShot {
   return {
@@ -238,6 +241,9 @@ function toLabelShot(row: ShotRow): LabelShot {
     landingX: row.landing_x,
     landingY: row.landing_y,
     videoTime: row.video_time,
+    // An inserted stroke is the labeller's, never the site's removal.
+    siteRemoval: row.site_removal ?? null,
+    siteRemovalRestoredAt: row.site_removal_restored_at ?? null,
     // An inserted stroke comes back without one (`seed` is null on it).
     seed: parseLabelShotSeed(row.seed ?? null),
   };

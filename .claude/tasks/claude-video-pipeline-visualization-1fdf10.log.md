@@ -397,3 +397,15 @@ Decisions:
 1. The derived ending can contradict the labelled winner (e.g. last ball out, hit by the labelled winner); flag it or offer to set the winner.
 2. Adding a blank shot usually rewrites the ending, since it becomes the last stroke.
 3. The ending cell updates one round trip after the shot row.
+
+## T29 · Migration: marks_enabled, site removals, dismissed — and their types, loader, seed — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Migration `20261005072656_label_marks_and_site_removals.sql` (applied live) adds `label_sessions.marks_enabled` (default true; false for Ace v Goodman 54097a66), `label_shots.site_removal` / `site_removal_restored_at` and `label_points.dismissed`, and backfills `site_removal = 'hit_after_fault'` on 24 Quan v Harazaki strokes (0 on Ace v Goodman). `LabelShot`, `LabelPoint` and `LabelSession` carry the new fields, the loader selects and maps them (plus `vendor_rally_ids`), `isGhostShot` is new, and `buildLabelSeed` marks every stroke the derivation dropped.
+
+**follow-ups:**
+
+1. `scripts/label-backfill-seed.ts` does not know `site_removal` (harmless; not a seed value).
+2. A second removal reason needs the DB check and `LabelSiteRemoval` grown together.
+3. A grep spec pinning `site_removal` writes to the Restore service once T38 lands.

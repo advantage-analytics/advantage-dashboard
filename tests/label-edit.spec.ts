@@ -78,6 +78,10 @@ test.describe("the allowlists", () => {
     "label_point_id",
     "delete_reason",
     "id",
+    // The site's removal and its restore are written by the seed, the
+    // backfill and the Restore action — never by an edit.
+    "site_removal",
+    "site_removal_restored_at",
   ]) {
     test(`a shot patch reaching "${key}" is rejected whole`, () => {
       const result = parseLabelShotPatch({ result: "out", [key]: "x" });
@@ -93,6 +97,7 @@ test.describe("the allowlists", () => {
     "point_index",
     "vendor_rally_ids",
     "game_type",
+    "dismissed",
   ]) {
     test(`a point patch reaching "${key}" is rejected whole`, () => {
       expect(parseLabelPointPatch({ winner: "p1", [key]: 1 })).toHaveProperty(
